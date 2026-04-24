@@ -1,0 +1,192 @@
+{
+  "execution_map": {
+    "modules": [
+      {
+        "name": "kilo.js",
+        "path": "./kilo.js",
+        "type": "node",
+        "commands": [
+          {
+            "action": "initialize",
+            "command": "node kilo.js",
+            "description": "Initialize the Kilo node system",
+            "expected_output": "Kilo Node initialized successfully"
+          },
+          {
+            "action": "execute_task",
+            "command": "node -e \"require('./kilo').execute('test_task')\"",
+            "description": "Execute a test task through Kilo",
+            "expected_output": "{ status: 'completed', task: 'test_task', ... }"
+          }
+        ],
+        "dependencies": [
+          "./modules/example.js",
+          "./modules/cascade.js"
+        ],
+        "expected_outputs": [
+          "System initialization confirmation",
+          "Task execution results",
+          "Event processing confirmation"
+        ]
+      },
+      {
+        "name": "src/server.js",
+        "path": "./src/server.js",
+        "type": "node",
+        "commands": [
+          {
+            "action": "start_server",
+            "command": "node src/server.js",
+            "description": "Start the Express server with Cascade validation",
+            "expected_output": "Server running on port 3001"
+          },
+          {
+            "action": "health_check",
+            "command": "curl -s http://localhost:3001/health",
+            "description": "Check server health status",
+            "expected_output": "{ status: 'ok', modules: number, events: number }"
+          },
+          {
+            "action": "process_event",
+            "command": "curl -s -X POST http://localhost:3001/process -H \"Content-Type: application/json\" -d '{\"event_id\":\"123e4567-e89b-12d3-a456-426614174000\",\"type\":\"test\",\"source\":\"test\",\"timestamp\":\"2026-04-21T14:05:58-05:00\",\"payload\":{\"test\":\"data\"}}'",
+            "description": "Process a valid event through the server",
+            "expected_output": "{ status: 'processed', eventId: '...', timestamp: '...', validation: { confidence: 1.0, status: 'accepted' } }"
+          }
+        ],
+        "dependencies": [
+          "@supabase/supabase-js",
+          "dotenv",
+          "express",
+          "./modules/cascade.js"
+        ],
+        "expected_outputs": [
+          "HTTP server responses",
+          "Database interaction logs",
+          "Validation results"
+        ]
+      },
+      {
+        "name": "modules/cascade.js",
+        "path": "./modules/cascade.js",
+        "type": "node",
+        "commands": [
+          {
+            "action": "validate_event",
+            "command": "node -e \"const { CascadeValidator } = require('./modules/cascade'); const cv = new CascadeValidator(); console.log(cv.validateEvent({event_id:'123e4567-e89b-12d3-a456-426614174000',type:'test',source:'test',timestamp:new Date().toISOString(),payload:{}}));\"",
+            "description": "Validate a valid event",
+            "expected_output": "{ type: 'cascade_validation_event', status: 'accepted', confidence: 1.0, ... }"
+          },
+          {
+            "action": "validate_invalid_event",
+            "command": "node -e \"const { CascadeValidator } = require('./modules/cascade'); const cv = new CascadeValidator(); console.log(cv.validateEvent({event_id:'12345',type:'test',source:'test',timestamp:new Date().toISOString(),payload:{}}));\"",
+            "description": "Validate an invalid event (non-UUID event_id)",
+            "expected_output": "{ type: 'cascade_validation_event', status: 'rejected', confidence: 0, reason: '...', ... }"
+          }
+        ],
+        "dependencies": [
+          "uuid"
+        ],
+        "expected_outputs": [
+          "Validation event objects",
+          "Confidence scores",
+          "Rejection reasons with fix actions"
+        ]
+      },
+      {
+        "name": "test-system.js",
+        "path": "./test-system.js",
+        "type": "node",
+        "commands": [
+          {
+            "action": "run_system_test",
+            "command": "node test-system.js",
+            "description": "Run the basic system test",
+            "expected_output": "All tests passed! System is operational."
+          }
+        ],
+        "dependencies": [
+          "./kilo.js"
+        ],
+        "expected_outputs": [
+          "Initialization confirmation",
+          "Task execution result",
+          "Event emission confirmation"
+        ]
+      },
+      {
+        "name": "stress_test_validation.js",
+        "path": "./stress_test_validation.js",
+        "type": "node",
+        "commands": [
+          {
+            "action": "run_stress_test",
+            "command": "node stress_test_validation.js",
+            "description": "Run the stress test for validation + event pipeline",
+            "expected_output": "Stress test report saved to: ./stress-test-report.json"
+          }
+        ],
+        "dependencies": [
+          "./modules/cascade.js",
+          "uuid"
+        ],
+        "expected_outputs": [
+          "Stress test results",
+          "Validation latency metrics",
+          "Rejection rates",
+          "Event throughput measurements",
+          "Success condition evaluations"
+        ]
+      },
+      {
+        "name": "test_cascade_validation.js",
+        "path": "./test_cascade_validation.js",
+        "type": "node",
+        "commands": [
+          {
+            "action": "run_validation_test",
+            "command": "node test_cascade_validation.js",
+            "description": "Run the Cascade validation gate test under malformed input",
+            "expected_output": "All invalid events were correctly rejected!"
+          }
+        ],
+        "dependencies": [
+          "./modules/cascade.js"
+        ],
+        "expected_outputs": [
+          "Test results summary",
+          "Accepted/rejected event counts",
+          "Failure reasons",
+          "Success condition verification"
+        ]
+      }
+    ],
+    "system_scripts": [
+      {
+        "name": "package.json",
+        "path": "./package.json",
+        "commands": [
+          {
+            "action": "install_dependencies",
+            "command": "npm install",
+            "description": "Install system dependencies",
+            "expected_output": "added X packages, and audited Y packages in Zs"
+          },
+          {
+            "action": "audit",
+            "command": "npm audit",
+            "description": "Run security audit",
+            "expected_output": "found X vulnerabilities (Y high, Z moderate)"
+          }
+        ],
+        "dependencies": [],
+        "expected_outputs": [
+          "Installed packages",
+          "Audit reports"
+        ]
+      }
+    ]
+  },
+  "generated_at": "2026-04-21T19:08:10.782Z",
+  "version": "1.0.0",
+  "description": "Kilo Execution Map for ProtoForge System - Maps all executable commands, dependencies, and expected outputs"
+}

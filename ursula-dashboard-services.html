@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ursula Service Bundle Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        .service-card {
+            transition: all 0.3s ease;
+        }
+        .service-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+        }
+        .tier-badge {
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.7; }
+            100% { opacity: 1; }
+        }
+        .usage-bar {
+            transition: width 0.5s ease;
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <!-- Header -->
+    <header class="bg-white shadow-sm border-b">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-16">
+                <div class="flex items-center">
+                    <i class="fas fa-cube text-indigo-600 text-2xl mr-3"></i>
+                    <h1 class="text-xl font-semibold text-gray-900">Ursula Service Bundle</h1>
+                </div>
+                <nav class="flex space-x-4">
+                    <button onclick="showSection('services')" class="nav-btn text-gray-700 hover:text-indigo-600 px-3 py-2 rounded-md text-sm font-medium">
+                        <i class="fas fa-th-large mr-1"></i> Services
+                    </button>
+                    <button onclick="showSection('analytics')" class="nav-btn text-gray-700 hover:text-indigo-600 px-3 py-2 rounded-md text-sm font-medium">
+                        <i class="fas fa-chart-line mr-1"></i> Analytics
+                    </button>
+                    <button onclick="showSection('subscriptions')" class="nav-btn text-gray-700 hover:text-indigo-600 px-3 py-2 rounded-md text-sm font-medium">
+                        <i class="fas fa-users mr-1"></i> Subscriptions
+                    </button>
+                    <button onclick="showSection('marketing')" class="nav-btn text-gray-700 hover:text-indigo-600 px-3 py-2 rounded-md text-sm font-medium">
+                        <i class="fas fa-bullhorn mr-1"></i> Marketing
+                    </button>
+                    <button onclick="showSection('settings')" class="nav-btn text-gray-700 hover:text-indigo-600 px-3 py-2 rounded-md text-sm font-medium">
+                        <i class="fas fa-cog mr-1"></i> Settings
+                    </button>
+                </nav>
+                <div class="flex items-center space-x-4">
+                    <span class="text-sm text-gray-600">Admin</span>
+                    <button class="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-indigo-700">
+                        <i class="fas fa-sign-out-alt mr-1"></i> Logout
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <!-- Stats Overview -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+            <div class="bg-white rounded-lg shadow p-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm text-gray-600">Total Revenue</p>
+                        <p class="text-2xl font-semibold text-gray-900" id="totalRevenue">$0</p>
+                    </div>
+                    <div class="bg-green-100 rounded-full p-3">
+                        <i class="fas fa-dollar-sign text-green-600"></i>
+                    </div>
+                </div>
+                <p class="text-sm text-green-600 mt-2">
+                    <i class="fas fa-arrow-up mr-1"></i> <span id="revenueGrowth">0%</span> from last month
+                </p>
+            </div>
+            
+            <div class="bg-white rounded-lg shadow p-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm text-gray-600">Active Subscriptions</p>
+                        <p class="text-2xl font-semibold text-gray-900" id="activeSubscriptions">0</p>
+                    </div>
+                    <div class="bg-blue-100 rounded-full p-3">
+                        <i class="fas fa-users text-blue-600"></i>
+                    </div>
+                </div>
+                <p class="text-sm text-blue-600 mt-2">
+                    <i class="fas fa-arrow-up mr-1"></i> <span id="subscriptionGrowth">0%</span> growth
+                </p>
+            </div>
+            
+            <div class="bg-white rounded-lg shadow p-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm text-gray-600">API Calls Today</p>
+                        <p class="text-2xl font-semibold text-gray-900" id="apiCallsToday">0</p>
+                    </div>
+                    <div class="bg-purple-100 rounded-full p-3">
+                        <i class="fas fa-exchange-alt text-purple-600"></i>
+                    </div>
+                </div>
+                <p class="text-sm text-purple-600 mt-2">
+                    <span id="apiCallsStatus">Normal</span> usage
+                </p>
+            </div>
+            
+            <div class="bg-white rounded-lg shadow p-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm text-gray-600">Active Services</p>
+                        <p class="text-2xl font-semibold text-gray-900">30</p>
+                    </div>
+                    <div class="bg-indigo-100 rounded-full p-3">
+                        <i class="fas fa-server text-indigo-600"></i>
+                    </div>
+                </div>
+                <p class="text-sm text-indigo-600 mt-2">
+                    All systems operational
+                </p>
+            </div>
+        </div>
+
+        <!-- Services Section -->
+        <section id="services-section" class="space-y-6">
+            <div class="flex justify-between items-center">
+                <h2 class="text-lg font-semibold text-gray-900">Service Management</h2>
+                <div class="flex space-x-2">
+                    <select id="tierFilter" class="border rounded-md px-3 py-2 text-sm">
+                        <option value="all">All Tiers</option>
+                        <option value="starter">Starter</option>
+                        <option value="pro">Pro</option>
+                        <option value="enterprise">Enterprise</option>
+                    </select>
+                    <select id="categoryFilter" class="border rounded-md px-3 py-2 text-sm">
+                        <option value="all">All Categories</option>
+                        <option value="content">Content Generation</option>
+                        <option value="data">Data Processing</option>
+                        <option value="automation">Business Automation</option>
+                        <option value="development">Development & Tech</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" id="servicesGrid">
+                <!-- Services will be populated here -->
+            </div>
+        </section>
+
+        <!-- Analytics Section -->
+        <section id="analytics-section" class="hidden space-y-6">
+            <h2 class="text-lg font-semibold text-gray-900">Analytics & Insights</h2>
+            
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h3 class="text-md font-medium text-gray-900 mb-4">Revenue Trend</h3>
+                    <canvas id="revenueChart"></canvas>
+                </div>
+                
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h3 class="text-md font-medium text-gray-900 mb-4">Service Usage Distribution</h3>
+                    <canvas id="usageChart"></canvas>
+                </div>
+                
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h3 class="text-md font-medium text-gray-900 mb-4">Tier Distribution</h3>
+                    <canvas id="tierChart"></canvas>
+                </div>
+                
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h3 class="text-md font-medium text-gray-900 mb-4">Top Services by Revenue</h3>
+                    <div id="topServicesList" class="space-y-3">
+                        <!-- Will be populated -->
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Subscriptions Section -->
+        <section id="subscriptions-section" class="hidden space-y-6">
+            <div class="flex justify-between items-center">
+                <h2 class="text-lg font-semibold text-gray-900">Subscription Management</h2>
+                <button onclick="exportSubscriptions()" class="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-indigo-700">
+                    <i class="fas fa-download mr-1"></i> Export
+                </button>
+            </div>
+            
+            <div class="bg-white shadow rounded-lg overflow-hidden">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tier</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">MRR</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Usage</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="subscriptionsTable" class="bg-white divide-y divide-gray-200">
+                        <!-- Will be populated -->
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- Marketing Section -->
+        <section id="marketing-section" class="hidden space-y-6">
+            <div class="flex justify-between items-center">
+                <h2 class="text-lg font-semibold text-gray-900">Self-Marketing Automation</h2>
+                <button onclick="triggerMarketing()" class="bg-green-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-green-700">
+                    <i class="fas fa-play mr-1"></i> Trigger Campaign
+                </button>
+            </div>
+            
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h3 class="text-md font-medium text-gray-900 mb-4">Marketing Queue</h3>
+                    <div id="marketingQueue" class="space-y-3">
+                        <!-- Will be populated -->
+                    </div>
+                </div>
+                
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h3 class="text-md font-medium text-gray-900 mb-4">Campaign Performance</h3>
+                    <canvas id="marketingChart"></canvas>
+                </div>
+            </div>
+        </section>
+
+        <!-- Settings Section -->
+        <section id="settings-section" class="hidden space-y-6">
+            <h2 class="text-lg font-semibold text-gray-900">System Settings</h2>
+            
+            <div class="bg-white rounded-lg shadow">
+                <div class="p-6 border-b">
+                    <h3 class="text-md font-medium text-gray-900">Local Models Configuration</h3>
+                </div>
+                <div class="p-6 space-y-4">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-sm font-medium text-gray-900">GPT-4 Local</p>
+                            <p class="text-sm text-gray-500">Primary model for content generation</p>
+                        </div>
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" class="sr-only peer" checked>
+                            <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                        </label>
+                    </div>
+                    
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-sm font-medium text-gray-900">Code Specialist</p>
+                            <p class="text-sm text-gray-500">Code review and generation</p>
+                        </div>
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" class="sr-only peer" checked>
+                            <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                        </label>
+                    </div>
+                    
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-sm font-medium text-gray-900">Auto-scaling</p>
+                            <p class="text-sm text-gray-500">Automatically scale based on demand</p>
+                        </div>
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" class="sr-only peer" checked>
+                            <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                        </label>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="bg-white rounded-lg shadow">
+                <div class="p-6 border-b">
+                    <h3 class="text-md font-medium text-gray-900">Billing Configuration</h3>
+                </div>
+                <div class="p-6 space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Stripe Webhook Secret</label>
+                        <input type="password" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm" value="whsec_...">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Overage Pricing</label>
+                        <div class="mt-2 grid grid-cols-3 gap-4">
+                            <div>
+                                <label class="text-xs text-gray-500">Starter ($/call)</label>
+                                <input type="number" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm" value="0.05" step="0.01">
+                            </div>
+                            <div>
+                                <label class="text-xs text-gray-500">Pro ($/call)</label>
+                                <input type="number" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm" value="0.03" step="0.01">
+                            </div>
+                            <div>
+                                <label class="text-xs text-gray-500">Enterprise ($/call)</label>
+                                <input type="number" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm" value="0.01" step="0.01">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        // Service data
+        const services = [
+            { id: 'seo-article-generator', name: 'SEO Article Generator', category: 'content', tier: 'pro', usage: 234, revenue: 3510, status: 'active' },
+            { id: 'social-post-creator', name: 'Social Post Creator', category: 'content', tier: 'starter', usage: 1456, revenue: 2912, status: 'active' },
+            { id: 'document-summarizer', name: 'Document Summarizer', category: 'data', tier: 'starter', usage: 892, revenue: 892, status: 'active' },
+            { id: 'lead-qualifier', name: 'Lead Qualifier', category: 'automation', tier: 'pro', usage: 445, revenue: 890, status: 'active' },
+            { id: 'code-reviewer', name: 'Code Reviewer', category: 'development', tier: 'enterprise', usage: 123, revenue: 2460, status: 'active' },
+            { id: 'email-automator', name: 'Email Automator', category: 'automation', tier: 'pro', usage: 234, revenue: 3510, status: 'active' }
+        ];
+
+        // Initialize dashboard
+        document.addEventListener('DOMContentLoaded', function() {
+            loadServices();
+            loadAnalytics();
+            loadSubscriptions();
+            loadMarketing();
+            updateStats();
+        });
+
+        // Show section
+        function showSection(section) {
+            // Hide all sections
+            document.querySelectorAll('section').forEach(s => s.classList.add('hidden'));
+            
+            // Show selected section
+            document.getElementById(`${section}-section`).classList.remove('hidden');
+            
+            // Update nav buttons
+            document.querySelectorAll('.nav-btn').forEach(btn => {
+                btn.classList.remove('text-indigo-600');
+                btn.classList.add('text-gray-700');
+            });
+            event.target.classList.remove('text-gray-700');
+            event.target.classList.add('text-indigo-600');
+        }
+
+        // Load services
+        function loadServices() {
+            const grid = document.getElementById('servicesGrid');
+            const tierFilter = document.getElementById('tierFilter').value;
+            const categoryFilter = document.getElementById('categoryFilter').value;
+            
+            const filteredServices = services.filter(s => {
+                return (tierFilter === 'all' || s.tier === tierFilter) &&
+                       (categoryFilter === 'all' || s.category === categoryFilter);
+            });
+            
+            grid.innerHTML = filteredServices.map(service => `
+                <div class="service-card bg-white rounded-lg shadow p-6">
+                    <div class="flex justify-between items-start mb-4">
+                        <div>
+                            <h3 class="text-lg font-medium text-gray-900">${service.name}</h3>
+                            <span class="tier-badge inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-${getTierColor(service.tier)}-100 text-${getTierColor(service.tier)}-800">
+                                ${service.tier.charAt(0).toUpperCase() + service.tier.slice(1)}
+                            </span>
+                        </div>
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                            ${service.status}
+                        </span>
+                    </div>
+                    
+                    <div class="space-y-3">
+                        <div>
+                            <div class="flex justify-between text-sm">
+                                <span class="text-gray-600">Usage Today</span>
+                                <span class="font-medium">${service.usage}</span>
+                            </div>
+                            <div class="mt-1 bg-gray-200 rounded-full h-2">
+                                <div class="usage-bar bg-indigo-600 h-2 rounded-full" style="width: ${Math.min(service.usage / 10, 100)}%"></div>
+                            </div>
+                        </div>
+                        
+                        <div class="flex justify-between text-sm">
+                            <span class="text-gray-600">Revenue</span>
+                            <span class="font-medium">$${service.revenue}</span>
+                        </div>
+                        
+                        <div class="flex space-x-2 pt-3">
+                            <button onclick="viewServiceDetails('${service.id}')" class="flex-1 bg-indigo-600 text-white px-3 py-2 rounded text-sm hover:bg-indigo-700">
+                                View Details
+                            </button>
+                            <button onclick="toggleService('${service.id}')" class="px-3 py-2 border border-gray-300 rounded text-sm hover:bg-gray-50">
+                                <i class="fas fa-pause"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Load analytics
+        function loadAnalytics() {
+            // Revenue chart
+            const revenueCtx = document.getElementById('revenueChart').getContext('2d');
+            new Chart(revenueCtx, {
+                type: 'line',
+                data: {
+                    labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
+                    datasets: [{
+                        label: 'Revenue',
+                        data: [12000, 15000, 18000, 22000, 25000, 28000],
+                        borderColor: 'rgb(99, 102, 241)',
+                        tension: 0.1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { display: false }
+                    }
+                }
+            });
+
+            // Usage chart
+            const usageCtx = document.getElementById('usageChart').getContext('2d');
+            new Chart(usageCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Content', 'Data', 'Automation', 'Development'],
+                    datasets: [{
+                        data: [35, 25, 25, 15],
+                        backgroundColor: [
+                            'rgb(99, 102, 241)',
+                            'rgb(34, 197, 94)',
+                            'rgb(251, 146, 60)',
+                            'rgb(147, 51, 234)'
+                        ]
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { position: 'bottom' }
+                    }
+                }
+            });
+
+            // Tier chart
+            const tierCtx = document.getElementById('tierChart').getContext('2d');
+            new Chart(tierCtx, {
+                type: 'bar',
+                data: {
+                    labels: ['Starter', 'Pro', 'Enterprise'],
+                    datasets: [{
+                        label: 'Subscriptions',
+                        data: [120, 85, 25],
+                        backgroundColor: 'rgb(99, 102, 241)'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { display: false }
+                    }
+                }
+            });
+
+            // Top services
+            const topServicesList = document.getElementById('topServicesList');
+            const topServices = services.sort((a, b) => b.revenue - a.revenue).slice(0, 5);
+            
+            topServicesList.innerHTML = topServices.map((service, index) => `
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center">
+                        <span class="text-gray-500 mr-3">${index + 1}</span>
+                        <div>
+                            <p class="text-sm font-medium text-gray-900">${service.name}</p>
+                            <p class="text-xs text-gray-500">${service.usage} uses</p>
+                        </div>
+                    </div>
+                    <span class="text-sm font-medium text-gray-900">$${service.revenue}</span>
+                </div>
+            `).join('');
+        }
+
+        // Load subscriptions
+        function loadSubscriptions() {
+            const table = document.getElementById('subscriptionsTable');
+            const subscriptions = [
+                { customer: 'john@example.com', tier: 'pro', status: 'active', mrr: 149, usage: 65 },
+                { customer: 'sarah@company.com', tier: 'enterprise', status: 'active', mrr: 499, usage: 45 },
+                { customer: 'mike@startup.com', tier: 'starter', status: 'active', mrr: 49, usage: 80 },
+                { customer: 'lisa@agency.com', tier: 'pro', status: 'canceled', mrr: 149, usage: 23 }
+            ];
+            
+            table.innerHTML = subscriptions.map(sub => `
+                <tr>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${sub.customer}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-${getTierColor(sub.tier)}-100 text-${getTierColor(sub.tier)}-800">
+                            ${sub.tier.charAt(0).toUpperCase() + sub.tier.slice(1)}
+                        </span>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-${sub.status === 'active' ? 'green' : 'red'}-100 text-${sub.status === 'active' ? 'green' : 'red'}-800">
+                            ${sub.status}
+                        </span>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">$${sub.mrr}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <div class="flex items-center">
+                            <div class="flex-1 bg-gray-200 rounded-full h-2 mr-2">
+                                <div class="bg-indigo-600 h-2 rounded-full" style="width: ${sub.usage}%"></div>
+                            </div>
+                            <span class="text-sm text-gray-600">${sub.usage}%</span>
+                        </div>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                        <button onclick="viewSubscription('${sub.customer}')" class="text-indigo-600 hover:text-indigo-900 mr-3">View</button>
+                        <button onclick="editSubscription('${sub.customer}')" class="text-gray-600 hover:text-gray-900">Edit</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        // Load marketing
+        function loadMarketing() {
+            const queue = document.getElementById('marketingQueue');
+            const marketingItems = [
+                { platform: 'LinkedIn', content: 'Automate your business with 30 AI services', status: 'scheduled', time: '2:00 PM' },
+                { platform: 'Twitter', content: 'Save 100+ hours monthly with our subscription', status: 'published', time: '1:00 PM' },
+                { platform: 'LinkedIn', content: 'Transform your workflow with local AI models', status: 'pending', time: '3:00 PM' }
+            ];
+            
+            queue.innerHTML = marketingItems.map(item => `
+                <div class="flex items-center justify-between p-3 border rounded-lg">
+                    <div>
+                        <p class="text-sm font-medium text-gray-900">${item.content}</p>
+                        <p class="text-xs text-gray-500">${item.platform} • ${item.time}</p>
+                    </div>
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-${item.status === 'published' ? 'green' : item.status === 'scheduled' ? 'blue' : 'gray'}-100 text-${item.status === 'published' ? 'green' : item.status === 'scheduled' ? 'blue' : 'gray'}-800">
+                        ${item.status}
+                    </span>
+                </div>
+            `).join('');
+
+            // Marketing performance chart
+            const marketingCtx = document.getElementById('marketingChart').getContext('2d');
+            new Chart(marketingCtx, {
+                type: 'line',
+                data: {
+                    labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'],
+                    datasets: [{
+                        label: 'Engagement',
+                        data: [450, 520, 480, 610, 720],
+                        borderColor: 'rgb(34, 197, 94)',
+                        tension: 0.1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { display: false }
+                    }
+                }
+            });
+        }
+
+        // Update stats
+        function updateStats() {
+            document.getElementById('totalRevenue').textContent = '$28,450';
+            document.getElementById('revenueGrowth').textContent = '+15.3%';
+            document.getElementById('activeSubscriptions').textContent = '230';
+            document.getElementById('subscriptionGrowth').textContent = '+12.5%';
+            document.getElementById('apiCallsToday').textContent = '12,456';
+            document.getElementById('apiCallsStatus').textContent = 'High';
+        }
+
+        // Helper functions
+        function getTierColor(tier) {
+            switch(tier) {
+                case 'starter': return 'gray';
+                case 'pro': return 'indigo';
+                case 'enterprise': return 'purple';
+                default: return 'gray';
+            }
+        }
+
+        function viewServiceDetails(serviceId) {
+            console.log('Viewing service:', serviceId);
+        }
+
+        function toggleService(serviceId) {
+            console.log('Toggling service:', serviceId);
+        }
+
+        function viewSubscription(customer) {
+            console.log('Viewing subscription:', customer);
+        }
+
+        function editSubscription(customer) {
+            console.log('Editing subscription:', customer);
+        }
+
+        function exportSubscriptions() {
+            console.log('Exporting subscriptions...');
+        }
+
+        function triggerMarketing() {
+            console.log('Triggering marketing campaign...');
+            fetch('/api/services/marketing/trigger', { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    alert('Marketing campaign triggered successfully!');
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Failed to trigger campaign');
+                });
+        }
+
+        // Filter handlers
+        document.getElementById('tierFilter').addEventListener('change', loadServices);
+        document.getElementById('categoryFilter').addEventListener('change', loadServices);
+    </script>
+</body>
+</html>

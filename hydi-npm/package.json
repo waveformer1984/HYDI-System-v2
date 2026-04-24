@@ -1,0 +1,45 @@
+{
+  "name": "hydi-health-check",
+  "version": "1.0.0",
+  "description": "Supabase health monitoring with auto-healing — trend analysis, escalation, and dashboard",
+  "main": "src/index.js",
+  "bin": {
+    "hydi": "bin/hydi.js"
+  },
+  "files": [
+    "src/",
+    "bin/",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "test": "node test/basic.test.js",
+    "lint": "eslint src/ bin/"
+  },
+  "keywords": [
+    "supabase",
+    "health-check",
+    "monitoring",
+    "postgres",
+    "auto-heal",
+    "trend-analysis"
+  ],
+  "author": "ProtoForge Industries",
+  "license": "MIT",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.39.0",
+    "dotenv": "^16.3.1",
+    "commander": "^11.1.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/protoforge/hydi-health-check.git"
+  },
+  "bugs": {
+    "url": "https://github.com/protoforge/hydi-health-check/issues"
+  },
+  "homepage": "https://hydi.protoforgeindustries.com"
+}

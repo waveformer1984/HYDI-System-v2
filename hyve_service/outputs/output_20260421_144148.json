@@ -1,0 +1,19 @@
+{
+  "event": "hyve_opportunity_detected",
+  "timestamp": "20260421_144148",
+  "event_data": {
+    "event_id": "123",
+    "type": "purchase_intent",
+    "source": "website",
+    "timestamp": "2026-04-21T14:30:00Z",
+    "payload": {
+      "user_id": "user_123",
+      "product": "enterprise_plan",
+      "budget": 50000,
+      "timeline": "urgent",
+      "decision_maker": true
+    }
+  },
+  "status": "revenue_ready",
+  "generated_at": "2026-04-21T14:41:48.895080"
+}

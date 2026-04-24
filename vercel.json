@@ -1,0 +1,42 @@
+{
+  "version": 2,
+  "buildCommand": "npm run prebuild && npm run build",
+  "routes": [
+    {
+      "src": "/api/chat",
+      "dest": "/api/chat/route.js"
+    },
+    {
+      "src": "/api/ws",
+      "dest": "/api/ws/route.js"
+    },
+    {
+      "src": "/api/health",
+      "dest": "/api/health.js"
+    },
+    {
+      "src": "/api/hydi/sync",
+      "dest": "/api/hydi/sync.js"
+    },
+    {
+      "src": "/api/ursula/status",
+      "dest": "/api/ursula/status.js"
+    },
+    {
+      "src": "/events/stream",
+      "dest": "/api/events/stream.js"
+    },
+    {
+      "src": "/chat",
+      "dest": "/ursula-chat-portal.html"
+    },
+    {
+      "src": "/portal",
+      "dest": "/ursula-chat-portal.html"
+    },
+    {
+      "src": "/",
+      "dest": "/ursula-dashboard-prod.html"
+    }
+  ]
+}

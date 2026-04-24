@@ -1,0 +1,17 @@
+{
+  "name": "hydi-monitor",
+  "version": "1.0.0",
+  "description": "HYDI SaaS monitoring dashboard",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start"
+  },
+  "dependencies": {
+    "next": "^14.0.0",
+    "react": "^18.0.0",
+    "react-dom": "^18.0.0",
+    "stripe": "^22.0.0",
+    "@supabase/supabase-js": "^2.32.0"
+  }
+}

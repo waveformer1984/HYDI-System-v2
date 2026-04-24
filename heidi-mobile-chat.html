@@ -1,0 +1,919 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#0a0a0f">
+    <title>Heidi — ProtoForge Command</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #12121a;
+            --bg-elevated: #1a1a24;
+            --accent: #64ffda;
+            --accent-dim: rgba(100, 255, 218, 0.1);
+            --text-primary: #e2e8f0;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --status-ok: #10b981;
+            --status-warning: #f59e0b;
+            --status-critical: #ef4444;
+            --status-unknown: #6b7280;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            height: 100vh;
+            height: 100dvh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Header */
+        .header {
+            background: var(--bg-secondary);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            padding: 12px 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            backdrop-filter: blur(20px);
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .heidi-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--accent), #3b82f6);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            box-shadow: 0 0 20px rgba(100, 255, 218, 0.3);
+        }
+
+        .header-info h1 {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .header-info .status {
+            font-size: 12px;
+            color: var(--text-secondary);
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .status-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--status-ok);
+            animation: pulse 2s infinite;
+        }
+
+        .status-dot.warning { background: var(--status-warning); }
+        .status-dot.critical { background: var(--status-critical); }
+        .status-dot.disconnected { background: var(--status-unknown); animation: none; }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .health-badge {
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .health-badge.ok {
+            background: rgba(16, 185, 129, 0.2);
+            color: var(--status-ok);
+        }
+
+        .health-badge.warning {
+            background: rgba(245, 158, 11, 0.2);
+            color: var(--status-warning);
+        }
+
+        .health-badge.critical {
+            background: rgba(239, 68, 68, 0.2);
+            color: var(--status-critical);
+        }
+
+        /* Health Strip */
+        .health-strip {
+            background: var(--bg-secondary);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            padding: 8px 16px;
+            display: flex;
+            gap: 12px;
+            overflow-x: auto;
+            scrollbar-width: none;
+            -ms-overflow-style: none;
+        }
+
+        .health-strip::-webkit-scrollbar {
+            display: none;
+        }
+
+        .health-metric {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            background: var(--bg-elevated);
+            border-radius: 8px;
+            white-space: nowrap;
+            font-size: 12px;
+        }
+
+        .health-metric .icon {
+            font-size: 14px;
+        }
+
+        .health-metric .value {
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .health-metric .label {
+            color: var(--text-muted);
+        }
+
+        /* Messages Container */
+        .messages-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            scroll-behavior: smooth;
+        }
+
+        .message {
+            max-width: 85%;
+            animation: slideIn 0.3s ease;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .message.user {
+            align-self: flex-end;
+        }
+
+        .message.heidi {
+            align-self: flex-start;
+        }
+
+        .message.system {
+            align-self: center;
+            max-width: 95%;
+        }
+
+        .message-bubble {
+            padding: 12px 16px;
+            border-radius: 18px;
+            font-size: 15px;
+            line-height: 1.5;
+            word-wrap: break-word;
+        }
+
+        .message.user .message-bubble {
+            background: var(--accent);
+            color: #000;
+            border-bottom-right-radius: 4px;
+        }
+
+        .message.heidi .message-bubble {
+            background: var(--bg-elevated);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-bottom-left-radius: 4px;
+        }
+
+        .message.system .message-bubble {
+            background: rgba(100, 255, 218, 0.05);
+            border: 1px solid var(--accent-dim);
+            font-size: 13px;
+            text-align: center;
+        }
+
+        .message-meta {
+            font-size: 11px;
+            color: var(--text-muted);
+            margin-top: 4px;
+            padding: 0 4px;
+        }
+
+        .message.user .message-meta {
+            text-align: right;
+        }
+
+        /* Action Cards */
+        .action-card {
+            background: var(--bg-elevated);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 12px;
+            margin-top: 8px;
+        }
+
+        .action-card-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--accent);
+            margin-bottom: 8px;
+        }
+
+        .action-button {
+            width: 100%;
+            padding: 10px;
+            background: var(--accent-dim);
+            border: 1px solid rgba(100, 255, 218, 0.3);
+            border-radius: 8px;
+            color: var(--accent);
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            margin-top: 8px;
+            transition: all 0.2s;
+        }
+
+        .action-button:active {
+            transform: scale(0.98);
+            background: rgba(100, 255, 218, 0.2);
+        }
+
+        /* Quick Actions */
+        .quick-actions {
+            background: var(--bg-secondary);
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+            padding: 8px 16px;
+            display: flex;
+            gap: 8px;
+            overflow-x: auto;
+            scrollbar-width: none;
+        }
+
+        .quick-actions::-webkit-scrollbar {
+            display: none;
+        }
+
+        .quick-action {
+            padding: 8px 14px;
+            background: var(--bg-elevated);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+            font-size: 13px;
+            color: var(--text-secondary);
+            white-space: nowrap;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .quick-action:active {
+            background: var(--accent-dim);
+            color: var(--accent);
+            border-color: rgba(100, 255, 218, 0.3);
+        }
+
+        /* Input Area */
+        .input-area {
+            background: var(--bg-secondary);
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+            padding: 12px 16px;
+            padding-bottom: max(12px, env(safe-area-inset-bottom));
+        }
+
+        .input-container {
+            display: flex;
+            gap: 10px;
+            align-items: flex-end;
+        }
+
+        .message-input {
+            flex: 1;
+            background: var(--bg-elevated);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            padding: 10px 16px;
+            font-size: 15px;
+            color: var(--text-primary);
+            outline: none;
+            max-height: 100px;
+            resize: none;
+            font-family: inherit;
+        }
+
+        .message-input:focus {
+            border-color: var(--accent);
+        }
+
+        .send-button {
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            background: var(--accent);
+            border: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            flex-shrink: 0;
+        }
+
+        .send-button:active {
+            transform: scale(0.95);
+        }
+
+        .send-button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .send-button svg {
+            width: 20px;
+            height: 20px;
+            fill: #000;
+        }
+
+        /* Typing Indicator */
+        .typing-indicator {
+            display: flex;
+            gap: 4px;
+            padding: 12px 16px;
+            background: var(--bg-elevated);
+            border-radius: 18px;
+            border-bottom-left-radius: 4px;
+            width: fit-content;
+        }
+
+        .typing-indicator span {
+            width: 8px;
+            height: 8px;
+            background: var(--text-muted);
+            border-radius: 50%;
+            animation: typing 1.4s infinite;
+        }
+
+        .typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
+        .typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
+
+        @keyframes typing {
+            0%, 60%, 100% { transform: translateY(0); }
+            30% { transform: translateY(-10px); }
+        }
+
+        /* Connection Alert */
+        .connection-alert {
+            position: fixed;
+            top: 60px;
+            left: 16px;
+            right: 16px;
+            background: var(--status-critical);
+            color: white;
+            padding: 12px 16px;
+            border-radius: 12px;
+            text-align: center;
+            font-size: 14px;
+            font-weight: 500;
+            z-index: 200;
+            transform: translateY(-100px);
+            transition: transform 0.3s ease;
+        }
+
+        .connection-alert.show {
+            transform: translateY(0);
+        }
+
+        /* Model Selector */
+        .model-selector {
+            position: fixed;
+            bottom: 80px;
+            right: 16px;
+            background: var(--bg-elevated);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 8px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            opacity: 0;
+            pointer-events: none;
+            transform: translateY(10px);
+            transition: all 0.2s;
+            z-index: 50;
+        }
+
+        .model-selector.show {
+            opacity: 1;
+            pointer-events: auto;
+            transform: translateY(0);
+        }
+
+        .model-option {
+            padding: 10px 14px;
+            border-radius: 8px;
+            font-size: 13px;
+            color: var(--text-secondary);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .model-option:hover,
+        .model-option.active {
+            background: var(--accent-dim);
+            color: var(--accent);
+        }
+
+        .model-toggle {
+            position: fixed;
+            bottom: 80px;
+            right: 16px;
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            background: var(--bg-elevated);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: var(--text-secondary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            z-index: 40;
+            font-size: 18px;
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="header-left">
+            <div class="heidi-avatar">🧠</div>
+            <div class="header-info">
+                <h1>Heidi</h1>
+                <div class="status">
+                    <span class="status-dot" id="connectionStatus"></span>
+                    <span id="statusText">Connecting...</span>
+                </div>
+            </div>
+        </div>
+        <div class="health-badge ok" id="healthBadge">OK</div>
+    </header>
+
+    <!-- Health Strip -->
+    <div class="health-strip" id="healthStrip">
+        <div class="health-metric">
+            <span class="icon">📊</span>
+            <span class="value" id="queueCount">--</span>
+            <span class="label">queued</span>
+        </div>
+        <div class="health-metric">
+            <span class="icon">📈</span>
+            <span class="value" id="trendStatus">--</span>
+        </div>
+        <div class="health-metric">
+            <span class="icon">🔧</span>
+            <span class="value" id="healCount">--</span>
+            <span class="label">heals</span>
+        </div>
+        <div class="health-metric">
+            <span class="icon">⏱️</span>
+            <span class="value" id="lastCheck">--</span>
+        </div>
+    </div>
+
+    <!-- Messages -->
+    <div class="messages-container" id="messagesContainer">
+        <div class="message system">
+            <div class="message-bubble">
+                🧠 Heidi is online. Connected to HYDI health monitoring and local models.
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="quick-actions" id="quickActions">
+        <div class="quick-action" onclick="sendQuick('status')">System status</div>
+        <div class="quick-action" onclick="sendQuick('health')">Health check</div>
+        <div class="quick-action" onclick="sendQuick('trends')">Trends</div>
+        <div class="quick-action" onclick="sendQuick('heal')">Auto-heal</div>
+        <div class="quick-action" onclick="sendQuick('models')">Models</div>
+    </div>
+
+    <!-- Input -->
+    <div class="input-area">
+        <div class="input-container">
+            <textarea 
+                class="message-input" 
+                id="messageInput" 
+                placeholder="Message Heidi..."
+                rows="1"
+                oninput="autoResize(this)"
+                onkeypress="handleKeyPress(event)"
+            ></textarea>
+            <button class="send-button" id="sendButton" onclick="sendMessage()">
+                <svg viewBox="0 0 24 24">
+                    <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+                </svg>
+            </button>
+        </div>
+    </div>
+
+    <!-- Model Selector -->
+    <div class="model-toggle" onclick="toggleModelSelector()">🤖</div>
+    <div class="model-selector" id="modelSelector">
+        <div class="model-option active" data-model="heidi" onclick="selectModel('heidi')">
+            <span>🧠</span> Heidi (Context)
+        </div>
+        <div class="model-option" data-model="local" onclick="selectModel('local')">
+            <span>💻</span> Local Model
+        </div>
+        <div class="model-option" data-model="ursula" onclick="selectModel('ursula')">
+            <span>🔮</span> Ursula (Events)
+        </div>
+        <div class="model-option" data-model="cascade" onclick="selectModel('cascade')">
+            <span>⚡</span> CASCADE
+        </div>
+    </div>
+
+    <!-- Connection Alert -->
+    <div class="connection-alert" id="connectionAlert">
+        ⚠️ Connection lost. Reconnecting...
+    </div>
+
+    <script>
+        // Configuration
+        const CONFIG = {
+            wsUrl: window.location.protocol === 'https:' 
+                ? 'wss://' + window.location.host + '/ws/heidi'
+                : 'ws://' + window.location.host + '/ws/heidi',
+            apiUrl: '/api/chat',
+            healthPollInterval: 30000, // 30 seconds
+            reconnectInterval: 3000
+        };
+
+        // State
+        let ws = null;
+        let currentModel = 'heidi';
+        let messageHistory = [];
+        let reconnectTimeout = null;
+        let healthPollTimeout = null;
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            connectWebSocket();
+            pollHealthStatus();
+            addMessage('heidi', 'Hello! I\'m Heidi, your ProtoForge system conscience. I can help you monitor system health, analyze trends, or chat with local AI models. What would you like to know?');
+        });
+
+        // WebSocket Connection
+        function connectWebSocket() {
+            if (ws?.readyState === WebSocket.OPEN) return;
+
+            updateStatus('connecting');
+
+            try {
+                ws = new WebSocket(CONFIG.wsUrl);
+
+                ws.onopen = () => {
+                    updateStatus('connected');
+                    hideConnectionAlert();
+                    console.log('[Heidi] WebSocket connected');
+                };
+
+                ws.onmessage = (event) => {
+                    try {
+                        const data = JSON.parse(event.data);
+                        handleMessage(data);
+                    } catch (e) {
+                        addMessage('heidi', event.data);
+                    }
+                };
+
+                ws.onerror = (error) => {
+                    console.error('[Heidi] WebSocket error:', error);
+                    updateStatus('error');
+                };
+
+                ws.onclose = () => {
+                    updateStatus('disconnected');
+                    showConnectionAlert();
+                    
+                    // Attempt reconnect
+                    reconnectTimeout = setTimeout(() => {
+                        if (document.visibilityState !== 'hidden') {
+                            connectWebSocket();
+                        }
+                    }, CONFIG.reconnectInterval);
+                };
+
+            } catch (error) {
+                console.error('[Heidi] Failed to connect:', error);
+                updateStatus('error');
+            }
+        }
+
+        // Health Status Polling
+        async function pollHealthStatus() {
+            try {
+                const response = await fetch('/api/health');
+                if (response.ok) {
+                    const health = await response.json();
+                    updateHealthUI(health);
+                }
+            } catch (error) {
+                console.error('[Heidi] Health poll failed:', error);
+            }
+
+            healthPollTimeout = setTimeout(pollHealthStatus, CONFIG.healthPollInterval);
+        }
+
+        function updateHealthUI(health) {
+            // Update badge
+            const badge = document.getElementById('healthBadge');
+            badge.textContent = health.current_status || 'UNKNOWN';
+            badge.className = 'health-badge ' + (health.current_status?.toLowerCase() || 'unknown');
+
+            // Update metrics
+            document.getElementById('queueCount').textContent = health.jobs_queued ?? '--';
+            document.getElementById('trendStatus').textContent = health.trend_status ?? '--';
+            document.getElementById('healCount').textContent = health.auto_heals_24h ?? '--';
+            document.getElementById('lastCheck').textContent = health.last_check 
+                ? new Date(health.last_check).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})
+                : '--';
+
+            // Update connection status dot
+            const statusDot = document.getElementById('connectionStatus');
+            statusDot.className = 'status-dot ' + (health.current_status === 'CRITICAL' ? 'critical' : 
+                                                   health.current_status === 'WARNING' ? 'warning' : 
+                                                   health.current_status === 'OK' ? '' : 'disconnected');
+        }
+
+        // Message Handling
+        function handleMessage(data) {
+            hideTypingIndicator();
+
+            if (data.type === 'health_update') {
+                updateHealthUI(data.health);
+                return;
+            }
+
+            if (data.type === 'system_alert') {
+                addMessage('system', `🚨 ${data.message}`);
+                return;
+            }
+
+            addMessage(data.sender || 'heidi', data.content, data.actions);
+        }
+
+        // UI Functions
+        function addMessage(sender, content, actions = null) {
+            const container = document.getElementById('messagesContainer');
+            
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${sender}`;
+            
+            const time = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            
+            let html = `
+                <div class="message-bubble">${escapeHtml(content)}</div>
+                <div class="message-meta">${sender === 'user' ? 'You' : capitalize(sender)} • ${time}</div>
+            `;
+
+            if (actions && actions.length > 0) {
+                html += '<div class="action-card">';
+                html += '<div class="action-card-header">⚡ Quick Actions</div>';
+                actions.forEach(action => {
+                    html += `<button class="action-button" onclick="${action.handler}">${action.label}</button>`;
+                });
+                html += '</div>';
+            }
+
+            messageDiv.innerHTML = html;
+            container.appendChild(messageDiv);
+            container.scrollTop = container.scrollHeight;
+
+            // Store in history
+            messageHistory.push({ sender, content, time });
+        }
+
+        function showTypingIndicator() {
+            const container = document.getElementById('messagesContainer');
+            const existing = document.getElementById('typingIndicator');
+            if (existing) return;
+
+            const typingDiv = document.createElement('div');
+            typingDiv.className = 'message heidi';
+            typingDiv.id = 'typingIndicator';
+            typingDiv.innerHTML = `
+                <div class="typing-indicator">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </div>
+            `;
+            container.appendChild(typingDiv);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function hideTypingIndicator() {
+            const indicator = document.getElementById('typingIndicator');
+            if (indicator) indicator.remove();
+        }
+
+        // Send Message
+        async function sendMessage() {
+            const input = document.getElementById('messageInput');
+            const message = input.value.trim();
+            
+            if (!message) return;
+
+            // Add user message
+            addMessage('user', message);
+            input.value = '';
+            autoResize(input);
+
+            // Show typing
+            showTypingIndicator();
+
+            // Send via WebSocket or HTTP fallback
+            if (ws?.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({
+                    type: 'message',
+                    content: message,
+                    model: currentModel,
+                    timestamp: new Date().toISOString()
+                }));
+            } else {
+                // HTTP fallback
+                try {
+                    const response = await fetch(CONFIG.apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            message: message,
+                            system: currentModel === 'heidi' ? 'heidi' : 
+                                   currentModel === 'local' ? 'local-model' : 
+                                   currentModel,
+                            model: currentModel
+                        })
+                    });
+                    
+                    const data = await response.json();
+                    hideTypingIndicator();
+                    addMessage(data.system || 'heidi', data.response);
+                } catch (error) {
+                    hideTypingIndicator();
+                    addMessage('heidi', 'Sorry, I\'m having trouble connecting right now. Please try again in a moment.');
+                }
+            }
+        }
+
+        function sendQuick(command) {
+            const input = document.getElementById('messageInput');
+            
+            const quickCommands = {
+                'status': 'What is the current system status?',
+                'health': 'Run a health check on all systems.',
+                'trends': 'Show me the health trends for the last 20 runs.',
+                'heal': 'Trigger auto-heal for any detected issues.',
+                'models': 'What AI models are available?'
+            };
+
+            input.value = quickCommands[command] || command;
+            autoResize(input);
+            sendMessage();
+        }
+
+        // Model Selection
+        function toggleModelSelector() {
+            const selector = document.getElementById('modelSelector');
+            selector.classList.toggle('show');
+        }
+
+        function selectModel(model) {
+            currentModel = model;
+            
+            // Update UI
+            document.querySelectorAll('.model-option').forEach(opt => {
+                opt.classList.remove('active');
+            });
+            document.querySelector(`[data-model="${model}"]`).classList.add('active');
+            
+            // Hide selector
+            document.getElementById('modelSelector').classList.remove('show');
+            
+            // Notify user
+            const modelNames = {
+                'heidi': 'Heidi (Contextual Conscience)',
+                'local': 'Local Model (LM Studio/Ollama)',
+                'ursula': 'Ursula (Event Stream)',
+                'cascade': 'CASCADE (Event Processing)'
+            };
+            
+            addMessage('system', `Switched to ${modelNames[model]}`);
+        }
+
+        // Utilities
+        function autoResize(textarea) {
+            textarea.style.height = 'auto';
+            textarea.style.height = Math.min(textarea.scrollHeight, 100) + 'px';
+        }
+
+        function handleKeyPress(event) {
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                sendMessage();
+            }
+        }
+
+        function updateStatus(status) {
+            const statusText = document.getElementById('statusText');
+            const statusDot = document.getElementById('connectionStatus');
+            
+            const statuses = {
+                'connecting': { text: 'Connecting...', dot: 'disconnected' },
+                'connected': { text: 'Online', dot: '' },
+                'disconnected': { text: 'Disconnected', dot: 'disconnected' },
+                'error': { text: 'Connection error', dot: 'disconnected' }
+            };
+            
+            const config = statuses[status] || statuses['disconnected'];
+            statusText.textContent = config.text;
+            statusDot.className = 'status-dot ' + config.dot;
+        }
+
+        function showConnectionAlert() {
+            document.getElementById('connectionAlert').classList.add('show');
+        }
+
+        function hideConnectionAlert() {
+            document.getElementById('connectionAlert').classList.remove('show');
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function capitalize(str) {
+            return str.charAt(0).toUpperCase() + str.slice(1);
+        }
+
+        // Visibility handling
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') {
+                if (!ws || ws.readyState !== WebSocket.OPEN) {
+                    connectWebSocket();
+                }
+                pollHealthStatus();
+            }
+        });
+    </script>
+</body>
+</html>
