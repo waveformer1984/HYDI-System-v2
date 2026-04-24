@@ -41,10 +41,8 @@ Write-Host "Saved to .env" -ForegroundColor Green
 Write-Host ""
 Write-Host "=== STEP 2: Update Vercel env var ===" -ForegroundColor Cyan
 
-vercel env rm STRIPE_WEBHOOK_SECRET production --yes 2>$null
-echo $WEBHOOK_SECRET | vercel env add STRIPE_WEBHOOK_SECRET production
-
-Write-Host "Vercel STRIPE_WEBHOOK_SECRET updated" -ForegroundColor Green
+Write-Host "Webhook secret already updated in Vercel (user confirmed)" -ForegroundColor Green
+Write-Host "New webhook secret: $WEBHOOK_SECRET" -ForegroundColor Green
 
 Write-Host ""
 Write-Host "=== STEP 3: Redeploy hydi-monitor ===" -ForegroundColor Cyan
@@ -114,7 +112,7 @@ if ($rows.Count -gt 0) {
 Write-Host ""
 Write-Host "=== FINAL STATUS ===" -ForegroundColor Cyan
 Write-Host "✅ Stripe webhook: $WEBHOOK_ID" -ForegroundColor Green
-Write-Host "✅ Signing secret saved to .env and Vercel" -ForegroundColor Green
+Write-Host "✅ Signing secret saved to .env (Vercel already updated)" -ForegroundColor Green
 Write-Host "✅ hydi-monitor redeployed" -ForegroundColor Green
 Write-Host "✅ All smoke tests complete" -ForegroundColor Green
 Write-Host ""
