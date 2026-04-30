@@ -1,0 +1,223 @@
+-- HYDI Chaos Alerts View
+-- Version: 2.1.2
+-- Description: Scheduled alert surface - returns rows only when action required
+
+-- =============================================================================
+-- CHAOS ALERTS VIEW (Cron/Alerting Surface)
+-- =============================================================================
+
+CREATE OR REPLACE VIEW public.chaos_alerts AS
+WITH base AS (
+  SELECT
+    v.run_id,
+    v.name,
+    v.status,
+    v.verdict,
+    v.runtime_seconds,
+    v.total_instances,
+    v.done_instances,
+    v.error_instances,
+    v.dead_letter_instances,
+    v.duplicate_effect_pairs,
+    v.replay_mismatches,
+    v.started_at,
+    v.finished_at,
+    -- Success ratio
+    CASE
+      WHEN v.total_instances > 0 
+      THEN round((v.done_instances::numeric / v.total_instances::numeric) * 100, 2)
+      ELSE 0
+    END AS passed_ratio,
+    -- Failure classification
+    CASE
+      WHEN v.duplicate_effect_pairs > 0 THEN 'duplicate_side_effects'
+      WHEN v.replay_mismatches > 0 THEN 'replay_divergence'
+      WHEN v.error_instances > 0 THEN 'instance_errors'
+      WHEN v.dead_letter_instances > 0 THEN 'dead_letters_present'
+      WHEN v.verdict = 'FAIL' THEN 'verdict_fail'
+      WHEN v.verdict = 'ABORT' THEN 'test_aborted'
+      WHEN (
+        CASE 
+          WHEN v.total_instances > 0 
+          THEN (v.done_instances::numeric / v.total_instances::numeric) * 100 
+          ELSE 0 
+        END
+      ) < 80 THEN 'success_rate_below_80'
+      ELSE NULL
+    END AS failure_reason,
+    -- Alert severity
+    CASE
+      WHEN v.replay_mismatches > 0 THEN 'critical'
+      WHEN v.duplicate_effect_pairs > 0 THEN 'critical'
+      WHEN v.dead_letter_instances > 0 THEN 'high'
+      WHEN v.error_instances > (v.total_instances * 0.1) THEN 'high'
+      WHEN v.error_instances > 0 THEN 'medium'
+      WHEN v.verdict = 'FAIL' THEN 'medium'
+      WHEN v.verdict = 'ABORT' THEN 'low'
+      WHEN v.passed_ratio < 80 THEN 'medium'
+      ELSE NULL
+    END AS severity,
+    -- Actionable flag
+    CASE
+      WHEN v.replay_mismatches > 0 THEN true
+      WHEN v.duplicate_effect_pairs > 0 THEN true
+      WHEN v.dead_letter_instances > 0 THEN true
+      WHEN v.error_instances > (v.total_instances * 0.1) THEN true
+      WHEN v.verdict = 'FAIL' THEN true
+      WHEN v.verdict = 'ABORT' THEN false
+      WHEN v.passed_ratio < 80 THEN true
+      ELSE false
+    END AS requires_action
+  FROM public.chaos_run_verdict v
+)
+SELECT
+  run_id,
+  name,
+  status,
+  verdict,
+  failure_reason,
+  severity,
+  requires_action,
+  passed_ratio,
+  runtime_seconds,
+  total_instances,
+  done_instances,
+  error_instances,
+  dead_letter_instances,
+  duplicate_effect_pairs,
+  replay_mismatches,
+  started_at,
+  finished_at,
+  -- Alert context for notifications
+  jsonb_build_object(
+    'alert_type', 'chaos_test_failure',
+    'run_id', run_id,
+    'failure_reason', failure_reason,
+    'severity', severity,
+    'passed_ratio', passed_ratio,
+    'runtime_seconds', runtime_seconds,
+    'affected_instances', jsonb_build_object(
+      'total', total_instances,
+      'done', done_instances,
+      'errors', error_instances,
+      'dead_letters', dead_letter_instances
+    ),
+    'anomalies', jsonb_build_object(
+      'duplicate_effects', duplicate_effect_pairs,
+      'replay_mismatches', replay_mismatches
+    ),
+    'dashboard_url', format('https://supabase.com/dashboard/project/akbnfovjdcobifeupvbn/functions/logs?search=%s', run_id)
+  ) AS alert_context
+FROM base
+WHERE failure_reason IS NOT NULL
+  AND started_at >= now() - interval '7 days' -- Last 7 days
+ORDER BY 
+  CASE severity
+    WHEN 'critical' THEN 1
+    WHEN 'high' THEN 2
+    WHEN 'medium' THEN 3
+    WHEN 'low' THEN 4
+  END,
+  started_at DESC NULLS LAST,
+  run_id DESC;
+
+COMMENT ON VIEW public.chaos_alerts IS 'Alert surface - returns rows only when chaos tests need attention';
+
+-- =============================================================================
+-- HELPER: ACTIVE ALERTS COUNT (For Health Checks)
+-- =============================================================================
+
+CREATE OR REPLACE FUNCTION public.active_chaos_alerts_count()
+RETURNS TABLE(
+  critical_count bigint,
+  high_count bigint,
+  medium_count bigint,
+  low_count bigint,
+  total_count bigint
+)
+LANGUAGE sql
+STABLE
+AS $$
+  SELECT
+    COUNT(*) FILTER (WHERE severity = 'critical')::bigint AS critical_count,
+    COUNT(*) FILTER (WHERE severity = 'high')::bigint AS high_count,
+    COUNT(*) FILTER (WHERE severity = 'medium')::bigint AS medium_count,
+    COUNT(*) FILTER (WHERE severity = 'low')::bigint AS low_count,
+    COUNT(*)::bigint AS total_count
+  FROM public.chaos_alerts
+  WHERE requires_action = true;
+$$;
+
+COMMENT ON FUNCTION public.active_chaos_alerts_count IS 'Quick health check for monitoring systems';
+
+-- =============================================================================
+-- HELPER: DEPLOYMENT GATE CHECK
+-- =============================================================================
+
+CREATE OR REPLACE FUNCTION public.chaos_gate_check(
+  p_lookback_hours int DEFAULT 24,
+  p_min_success_rate numeric DEFAULT 80.0,
+  p_allow_critical_failures boolean DEFAULT false
+)
+RETURNS TABLE(
+  gate_passed boolean,
+  failure_reason text,
+  recent_runs_count bigint,
+  success_rate numeric,
+  critical_failures bigint
+)
+LANGUAGE sql
+STABLE
+AS $$
+  WITH recent_runs AS (
+    SELECT 
+      verdict,
+      passed_ratio,
+      CASE 
+        WHEN replay_mismatches > 0 OR duplicate_effect_pairs > 0 THEN true 
+        ELSE false 
+      END AS has_critical_failure
+    FROM public.chaos_run_verdict
+    WHERE started_at >= now() - make_interval(hours => p_lookback_hours)
+      AND status IN ('completed', 'failed')
+  )
+  SELECT
+    CASE 
+      WHEN NOT EXISTS (SELECT 1 FROM recent_runs) THEN false
+      WHEN NOT p_allow_critical_failures AND EXISTS (
+        SELECT 1 FROM recent_runs WHERE has_critical_failure = true
+      ) THEN false
+      WHEN (SELECT AVG(passed_ratio) FROM recent_runs) < p_min_success_rate THEN false
+      ELSE true
+    END AS gate_passed,
+    CASE 
+      WHEN NOT EXISTS (SELECT 1 FROM recent_runs) THEN 'No recent chaos runs found'
+      WHEN NOT p_allow_critical_failures AND EXISTS (
+        SELECT 1 FROM recent_runs WHERE has_critical_failure = true
+      ) THEN 'Critical failures detected in recent runs'
+      WHEN (SELECT AVG(passed_ratio) FROM recent_runs) < p_min_success_rate 
+      THEN format('Success rate %.1f%% below threshold %.1f%%', 
+        (SELECT AVG(passed_ratio) FROM recent_runs), p_min_success_rate)
+      ELSE NULL
+    END AS failure_reason,
+    COUNT(*)::bigint AS recent_runs_count,
+    COALESCE(AVG(passed_ratio), 0)::numeric AS success_rate,
+    COUNT(*) FILTER (WHERE has_critical_failure = true)::bigint AS critical_failures
+  FROM recent_runs;
+$$;
+
+COMMENT ON FUNCTION public.chaos_gate_check IS 'Deployment gate check based on recent chaos test results';
+
+-- =============================================================================
+-- RLS (Read-only for authenticated, service_role full access)
+-- =============================================================================
+
+ALTER VIEW public.chaos_alerts OWNER TO postgres;
+
+-- Grant read access
+GRANT SELECT ON public.chaos_alerts TO authenticated;
+GRANT SELECT ON public.chaos_alerts TO service_role;
+
+-- =============================================================================
+-- MIGRATION COMPLETE
+-- =============================================================================

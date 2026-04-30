@@ -1,14 +1,14 @@
 {
-  "name": "protoforge-kilo-node",
+  "name": "heidi-cascade-production",
   "version": "1.0.0",
-  "description": "ProtoForge System Initialization (Kilo Node)",
-  "main": "src/server.js",
+  "description": "Heidi Production Agent - CASCADE Implementation",
+  "private": true,
   "scripts": {
-    "start": "node src/server.js",
-    "dev": "nodemon src/server.js",
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "prebuild": "rm -rf .vercel && rm -rf node_modules/.cache",
-    "build": "echo 'Build complete'"
+    "dev": "next dev --hostname 0.0.0.0 --port 3000",
+    "prebuild": "echo 'Prebuild complete'",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
   },
   "keywords": [
     "protoforge",
@@ -22,16 +22,25 @@
     "node": ">=20.x"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.32.0",
+    "@supabase/ssr": "^0.10.2",
+    "@supabase/supabase-js": "^2.105.1",
+    "@types/node": "^20.0.0",
+    "@types/react": "^18.0.0",
+    "@types/react-dom": "^18.0.0",
     "axios": "^1.15.2",
-    "dotenv": "^16.3.1",
-    "express": "^4.18.2",
-    "pg": "^8.20.0",
+    "dotenv": "^17.4.2",
+    "express-rate-limit": "^8.4.1",
+    "next": "^14.0.0",
+    "react": "^18.0.0",
+    "react-dom": "^18.0.0",
     "stripe": "^22.1.0",
-    "uuid": "^14.0.0",
-    "ws": "^8.20.0"
+    "typescript": "^5.0.0"
   },
   "devDependencies": {
-    "nodemon": "^3.1.14"
+    "autoprefixer": "^10.5.0",
+    "eslint": "^8.0.0",
+    "eslint-config-next": "^14.0.0",
+    "postcss": "^8.5.12",
+    "tailwindcss": "^3.4.19"
   }
 }

@@ -74,12 +74,14 @@ class UrsulaHeartbeat extends EventEmitter {
         health.lastFailure = new Date();
         
         // Emit for Heidi to notify user
-        this.emit('model_hung', {
-          modelId,
-          requestId: pending.requestId,
-          elapsed: Date.now() - pending.startTime,
-          eta: this.calculateETA(modelId, health)
-        });
+        if (!this.destroyed) {
+          this.emit('model_hung', {
+            modelId,
+            requestId: pending.requestId,
+            elapsed: Date.now() - pending.startTime,
+            eta: this.calculateETA(modelId, health)
+          });
+        }
         
         // Auto-recovery
         await this.recoverModel(modelId);
@@ -146,7 +148,9 @@ class UrsulaHeartbeat extends EventEmitter {
       if (health.consecutiveFailures >= 3) {
         health.status = 'critical';
         console.log(`[HEARTBEAT] 🔴 Model ${modelId} CRITICAL - ${health.consecutiveFailures} consecutive failures`);
-        this.emit('model_critical', { modelId, health });
+        if (!this.destroyed) {
+          this.emit('model_critical', { modelId, health });
+        }
       } else {
         health.status = 'degraded';
       }
@@ -202,13 +206,15 @@ class UrsulaHeartbeat extends EventEmitter {
         console.log(`[HEARTBEAT] 🐌 LATENCY CRITICAL: ${modelId} p95=${p95.toFixed(0)}ms > ${this.latencyWatchdog.criticalThreshold}ms`);
         health.status = 'latency_critical';
         health.latencySpike = { p95, avg, timestamp: Date.now() };
-        this.emit('model_latency_critical', { 
-          modelId, 
-          p95, 
-          avg, 
-          threshold: this.latencyWatchdog.criticalThreshold,
-          samples: times.length 
-        });
+        if (!this.destroyed) {
+          this.emit('model_latency_critical', { 
+            modelId, 
+            p95, 
+            avg, 
+            threshold: this.latencyWatchdog.criticalThreshold,
+            samples: times.length 
+          });
+        }
         // Trigger recovery for ghost models
         this.recoverModel(modelId);
       }
@@ -219,19 +225,23 @@ class UrsulaHeartbeat extends EventEmitter {
           health.status = 'latency_degraded';
         }
         health.latencySpike = { p95, avg, timestamp: Date.now() };
-        this.emit('model_latency_degraded', { 
-          modelId, 
-          p95, 
-          avg, 
-          threshold: this.latencyWatchdog.threshold 
-        });
+        if (!this.destroyed) {
+          this.emit('model_latency_degraded', { 
+            modelId, 
+            p95, 
+            avg, 
+            threshold: this.latencyWatchdog.threshold 
+          });
+        }
       }
       // RECOVERY: latency back to normal
       else if (health.status === 'latency_degraded' && p95 < this.latencyWatchdog.threshold * 0.8) {
         console.log(`[HEARTBEAT] ✅ LATENCY RECOVERED: ${modelId} p95=${p95.toFixed(0)}ms`);
         health.status = 'healthy';
         delete health.latencySpike;
-        this.emit('model_latency_recovered', { modelId, p95, avg });
+        if (!this.destroyed) {
+          this.emit('model_latency_recovered', { modelId, p95, avg });
+        }
       }
       
       this.modelHealth.set(modelId, health);
@@ -262,14 +272,16 @@ class UrsulaHeartbeat extends EventEmitter {
     if (pending && !pending.notified) {
       const eta = this.calculateETA(modelId, health);
       
-      this.emit('user_notification', {
-        userId: pending.userId,
-        type: 'model_recovery',
-        message: `Your request is taking longer than expected. We're restarting the AI engine. ETA: ${Math.ceil(eta / 1000)} seconds.`,
-        eta: eta,
-        modelId,
-        requestId: pending.requestId
-      });
+      if (!this.destroyed) {
+          this.emit('user_notification', {
+            userId: pending.userId,
+            type: 'model_recovery',
+            message: `Your request is taking longer than expected. We're restarting the AI engine. ETA: ${Math.ceil(eta / 1000)} seconds.`,
+            eta: eta,
+            modelId,
+            requestId: pending.requestId
+          });
+        }
       
       pending.notified = true;
     }
@@ -288,18 +300,24 @@ class UrsulaHeartbeat extends EventEmitter {
           health.status = 'healthy';
           health.recoveryAttempts = 0;
           console.log(`[HEARTBEAT] ✅ Model ${modelId} recovered successfully`);
-          this.emit('model_recovered', { modelId });
+          if (!this.destroyed) {
+            this.emit('model_recovered', { modelId });
+          }
         } else {
           health.status = 'failed';
           console.log(`[HEARTBEAT] ❌ Model ${modelId} recovery failed`);
-          this.emit('model_recovery_failed', { modelId });
+          if (!this.destroyed) {
+            this.emit('model_recovery_failed', { modelId });
+          }
         }
       }, 3000);
       
     } catch (error) {
       console.error(`[HEARTBEAT] ❌ Recovery error for ${modelId}:`, error.message);
       health.status = 'failed';
-      this.emit('model_recovery_failed', { modelId, error: error.message });
+      if (!this.destroyed) {
+        this.emit('model_recovery_failed', { modelId, error: error.message });
+      }
     }
     
     this.modelHealth.set(modelId, health);
@@ -383,7 +401,9 @@ class UrsulaHeartbeat extends EventEmitter {
     
     if (cached && (Date.now() - cached.timestamp < this.cacheTTL)) {
       console.log(`[HEARTBEAT] 💾 Cache hit for ${cacheKey}`);
-      this.emit('cache_hit', { serviceId, inputHash, age: Date.now() - cached.timestamp });
+      if (!this.destroyed) {
+        this.emit('cache_hit', { serviceId, inputHash, age: Date.now() - cached.timestamp });
+      }
       return cached.result;
     }
     
@@ -418,7 +438,7 @@ class UrsulaHeartbeat extends EventEmitter {
    * Clean up expired cache entries
    */
   startCacheCleanup() {
-    setInterval(() => {
+    this.cacheCleanupTimer = setInterval(() => {
       const now = Date.now();
       let cleaned = 0;
       
@@ -501,9 +521,16 @@ class UrsulaHeartbeat extends EventEmitter {
    * Stop heartbeat
    */
   stop() {
+    this.destroyed = true;
     if (this.heartbeatTimer) {
       clearInterval(this.heartbeatTimer);
       console.log('[HEARTBEAT] Stopped');
+    }
+    if (this.latencyTimer) {
+      clearInterval(this.latencyTimer);
+    }
+    if (this.cacheCleanupTimer) {
+      clearInterval(this.cacheCleanupTimer);
     }
   }
 }

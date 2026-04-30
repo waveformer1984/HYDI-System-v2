@@ -1,0 +1,28 @@
+{
+  "rules": [
+    {
+      "id": "memory-leak",
+      "pattern": ".*(?i)(memory|leak|out of memory).*",
+      "severity": "high",
+      "description": "Potential memory leak detected"
+    },
+    {
+      "id": "null-pointer",
+      "pattern": ".*(?i)(null pointer|nullreference).*",
+      "severity": "high", 
+      "description": "Null pointer exception risk"
+    },
+    {
+      "id": "sql-injection",
+      "pattern": ".*(?i)(sql injection|union select).*",
+      "severity": "critical",
+      "description": "SQL injection vulnerability"
+    },
+    {
+      "id": "hardcoded-secret",
+      "pattern": ".*(?i)(password|secret|key)\\s*=\\s*[\"'][^\"']+[\"'].*",
+      "severity": "high",
+      "description": "Hardcoded secret detected"
+    }
+  ]
+}

@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Deep Life Architect - Life Flow Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        @keyframes pulse-green {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .pulse-green {
+            animation: pulse-green 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        .efficiency-high { color: #10b981; }
+        .efficiency-medium { color: #f59e0b; }
+        .efficiency-low { color: #ef4444; }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-100 min-h-screen">
+    <!-- Header -->
+    <header class="bg-gray-800 border-b border-gray-700">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                <div class="flex items-center">
+                    <h1 class="text-xl font-bold text-blue-400">Deep Life Architect</h1>
+                    <span class="ml-4 text-sm text-gray-400">Life Flow Analysis Dashboard</span>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <span id="connectionStatus" class="flex items-center">
+                        <span class="w-2 h-2 bg-red-500 rounded-full mr-2"></span>
+                        <span class="text-sm text-gray-400">Disconnected</span>
+                    </span>
+                    <button id="refreshBtn" class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded text-sm">
+                        Refresh
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <!-- Session Controls -->
+        <section class="mb-8">
+            <div class="bg-gray-800 rounded-lg p-6 border border-gray-700">
+                <h2 class="text-lg font-semibold mb-4 text-blue-300">Session Control</h2>
+                <div class="flex items-center space-x-4">
+                    <input 
+                        type="text" 
+                        id="intentInput" 
+                        placeholder="Enter your intent (e.g., 'Deep Work: Coding')"
+                        class="flex-1 bg-gray-700 border border-gray-600 rounded px-4 py-2 text-gray-100 placeholder-gray-400"
+                    />
+                    <button 
+                        id="startSessionBtn" 
+                        class="bg-green-600 hover:bg-green-700 px-6 py-2 rounded font-medium"
+                    >
+                        Start Session
+                    </button>
+                    <button 
+                        id="endSessionBtn" 
+                        class="bg-red-600 hover:bg-red-700 px-6 py-2 rounded font-medium"
+                        disabled
+                    >
+                        End Session
+                    </button>
+                </div>
+                <div id="sessionInfo" class="mt-4 text-sm text-gray-400 hidden">
+                    <span>Session ID: <span id="sessionId" class="text-blue-400"></span></span>
+                    <span class="ml-4">Duration: <span id="sessionDuration" class="text-blue-400"></span></span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Real-time Metrics -->
+        <section class="mb-8 grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div class="bg-gray-800 rounded-lg p-6 border border-gray-700">
+                <h3 class="text-sm font-medium text-gray-400 mb-2">Current Efficiency</h3>
+                <div class="text-3xl font-bold" id="efficiencyScore">--</div>
+                <div class="text-sm text-gray-400 mt-1">Real-time analysis</div>
+            </div>
+            
+            <div class="bg-gray-800 rounded-lg p-6 border border-gray-700">
+                <h3 class="text-sm font-medium text-gray-400 mb-2">Intent Alignment</h3>
+                <div class="text-3xl font-bold" id="intentAlignment">--</div>
+                <div class="text-sm text-gray-400 mt-1">Alignment score</div>
+            </div>
+            
+            <div class="bg-gray-800 rounded-lg p-6 border border-gray-700">
+                <h3 class="text-sm font-medium text-gray-400 mb-2">Life Pillar</h3>
+                <div class="text-3xl font-bold" id="lifePillar">--</div>
+                <div class="text-sm text-gray-400 mt-1">Current activity</div>
+            </div>
+        </section>
+
+        <!-- Hardware Telemetry -->
+        <section class="mb-8">
+            <div class="bg-gray-800 rounded-lg p-6 border border-gray-700">
+                <h2 class="text-lg font-semibold mb-4 text-blue-300">Hardware Telemetry</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div>
+                        <div class="text-sm text-gray-400 mb-1">CPU Usage</div>
+                        <div class="text-xl font-semibold" id="cpuUsage">--</div>
+                    </div>
+                    <div>
+                        <div class="text-sm text-gray-400 mb-1">Memory Usage</div>
+                        <div class="text-xl font-semibold" id="memoryUsage">--</div>
+                    </div>
+                    <div>
+                        <div class="text-sm text-gray-400 mb-1">Thermal State</div>
+                        <div class="text-xl font-semibold" id="thermalState">--</div>
+                    </div>
+                    <div>
+                        <div class="text-sm text-gray-400 mb-1">Power State</div>
+                        <div class="text-xl font-semibold" id="powerState">--</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Charts -->
+        <section class="mb-8 grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div class="bg-gray-800 rounded-lg p-6 border border-gray-700">
+                <h2 class="text-lg font-semibold mb-4 text-blue-300">Efficiency Trend</h2>
+                <canvas id="efficiencyChart" width="400" height="200"></canvas>
+            </div>
+            
+            <div class="bg-gray-800 rounded-lg p-6 border border-gray-700">
+                <h2 class="text-lg font-semibold mb-4 text-blue-300">Life Pillar Distribution</h2>
+                <canvas id="pillarChart" width="400" height="200"></canvas>
+            </div>
+        </section>
+
+        <!-- Weekly Report -->
+        <section class="mb-8">
+            <div class="bg-gray-800 rounded-lg p-6 border border-gray-700">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="text-lg font-semibold text-blue-300">Weekly Report</h2>
+                    <button id="generateReportBtn" class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded text-sm">
+                        Generate Report
+                    </button>
+                </div>
+                <div id="weeklyReport" class="hidden">
+                    <!-- Report content will be inserted here -->
+                </div>
+            </div>
+        </section>
+
+        <!-- Friction Points -->
+        <section class="mb-8">
+            <div class="bg-gray-800 rounded-lg p-6 border border-gray-700">
+                <h2 class="text-lg font-semibold mb-4 text-blue-300">Friction Points</h2>
+                <div id="frictionPoints" class="space-y-2">
+                    <div class="text-gray-400">No friction points detected</div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        // API configuration
+        const API_BASE = '/api/life-flow';
+        
+        // State management
+        let currentSession = null;
+        let updateInterval = null;
+        let efficiencyChart = null;
+        let pillarChart = null;
+        
+        // DOM elements
+        const elements = {
+            connectionStatus: document.getElementById('connectionStatus'),
+            refreshBtn: document.getElementById('refreshBtn'),
+            intentInput: document.getElementById('intentInput'),
+            startSessionBtn: document.getElementById('startSessionBtn'),
+            endSessionBtn: document.getElementById('endSessionBtn'),
+            sessionInfo: document.getElementById('sessionInfo'),
+            sessionId: document.getElementById('sessionId'),
+            sessionDuration: document.getElementById('sessionDuration'),
+            efficiencyScore: document.getElementById('efficiencyScore'),
+            intentAlignment: document.getElementById('intentAlignment'),
+            lifePillar: document.getElementById('lifePillar'),
+            cpuUsage: document.getElementById('cpuUsage'),
+            memoryUsage: document.getElementById('memoryUsage'),
+            thermalState: document.getElementById('thermalState'),
+            powerState: document.getElementById('powerState'),
+            weeklyReport: document.getElementById('weeklyReport'),
+            generateReportBtn: document.getElementById('generateReportBtn'),
+            frictionPoints: document.getElementById('frictionPoints')
+        };
+        
+        // Initialize charts
+        function initCharts() {
+            const chartConfig = {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Efficiency',
+                        data: [],
+                        borderColor: 'rgb(59, 130, 246)',
+                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 1,
+                            ticks: { color: '#9ca3af' },
+                            grid: { color: '#374151' }
+                        },
+                        x: {
+                            ticks: { color: '#9ca3af' },
+                            grid: { color: '#374151' }
+                        }
+                    },
+                    plugins: {
+                        legend: { labels: { color: '#9ca3af' } }
+                    }
+                }
+            };
+            
+            efficiencyChart = new Chart(document.getElementById('efficiencyChart'), chartConfig);
+            
+            pillarChart = new Chart(document.getElementById('pillarChart'), {
+                type: 'doughnut',
+                data: {
+                    labels: ['Cognitive Labor', 'Passive Consumption', 'Administrative Overhead', 'Digital Decay'],
+                    datasets: [{
+                        data: [0, 0, 0, 0],
+                        backgroundColor: [
+                            'rgba(34, 197, 94, 0.8)',
+                            'rgba(59, 130, 246, 0.8)',
+                            'rgba(251, 146, 60, 0.8)',
+                            'rgba(239, 68, 68, 0.8)'
+                        ]
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { 
+                            labels: { color: '#9ca3af' },
+                            position: 'bottom'
+                        }
+                    }
+                }
+            });
+        }
+        
+        // API helper
+        async function apiCall(type, subtype, params = {}) {
+            try {
+                const response = await fetch(API_BASE, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'x-user-id': 'dashboard-user',
+                        'x-session-id': currentSession || 'default'
+                    },
+                    body: JSON.stringify({ type, subtype, params })
+                });
+                
+                const data = await response.json();
+                
+                if (!data.success) {
+                    throw new Error(data.error || 'API call failed');
+                }
+                
+                return data.data;
+            } catch (error) {
+                console.error('API Error:', error);
+                throw error;
+            }
+        }
+        
+        // Update connection status
+        function updateConnectionStatus(connected) {
+            const statusElement = elements.connectionStatus;
+            const indicator = statusElement.querySelector('span:first-child');
+            const text = statusElement.querySelector('span:last-child');
+            
+            if (connected) {
+                indicator.className = 'w-2 h-2 bg-green-500 rounded-full mr-2 pulse-green';
+                text.textContent = 'Connected';
+            } else {
+                indicator.className = 'w-2 h-2 bg-red-500 rounded-full mr-2';
+                text.textContent = 'Disconnected';
+            }
+        }
+        
+        // Start session
+        async function startSession() {
+            const intent = elements.intentInput.value.trim();
+            if (!intent) {
+                alert('Please enter your intent');
+                return;
+            }
+            
+            try {
+                const sessionId = await apiCall('life_flow', 'start_session', { intent });
+                currentSession = sessionId;
+                
+                elements.sessionInfo.classList.remove('hidden');
+                elements.sessionId.textContent = sessionId;
+                elements.startSessionBtn.disabled = true;
+                elements.endSessionBtn.disabled = false;
+                elements.intentInput.disabled = true;
+                
+                // Start real-time updates
+                startRealTimeUpdates();
+                
+                console.log('Session started:', sessionId);
+            } catch (error) {
+                alert('Failed to start session: ' + error.message);
+            }
+        }
+        
+        // End session
+        async function endSession() {
+            if (!currentSession) return;
+            
+            try {
+                await apiCall('life_flow', 'end_session');
+                
+                currentSession = null;
+                elements.sessionInfo.classList.add('hidden');
+                elements.startSessionBtn.disabled = false;
+                elements.endSessionBtn.disabled = true;
+                elements.intentInput.disabled = false;
+                elements.intentInput.value = '';
+                
+                // Stop real-time updates
+                stopRealTimeUpdates();
+                
+                console.log('Session ended');
+            } catch (error) {
+                alert('Failed to end session: ' + error.message);
+            }
+        }
+        
+        // Real-time updates
+        function startRealTimeUpdates() {
+            updateInterval = setInterval(async () => {
+                try {
+                    await updateMetrics();
+                } catch (error) {
+                    console.error('Update error:', error);
+                    updateConnectionStatus(false);
+                }
+            }, 5000);
+        }
+        
+        function stopRealTimeUpdates() {
+            if (updateInterval) {
+                clearInterval(updateInterval);
+                updateInterval = null;
+            }
+        }
+        
+        // Update metrics
+        async function updateMetrics() {
+            if (!currentSession) return;
+            
+            try {
+                // Get real-time analysis
+                const analysis = await apiCall('life_flow', 'real_time_analysis');
+                if (analysis.error) return;
+                
+                // Update main metrics
+                elements.efficiencyScore.textContent = (analysis.efficiency * 100).toFixed(1) + '%';
+                elements.efficiencyScore.className = `text-3xl font-bold ${
+                    analysis.efficiency > 0.7 ? 'efficiency-high' : 
+                    analysis.efficiency > 0.4 ? 'efficiency-medium' : 'efficiency-low'
+                }`;
+                
+                elements.intentAlignment.textContent = (analysis.intentAlignment.score * 100).toFixed(1) + '%';
+                elements.lifePillar.textContent = analysis.lifePillar.primary;
+                
+                // Update session duration
+                if (analysis.sessionDuration) {
+                    const minutes = Math.floor(analysis.sessionDuration / 60000);
+                    const seconds = Math.floor((analysis.sessionDuration % 60000) / 1000);
+                    elements.sessionDuration.textContent = `${minutes}m ${seconds}s`;
+                }
+                
+                // Update hardware telemetry
+                const telemetry = await apiCall('life_flow', 'hardware_telemetry');
+                if (!telemetry.error) {
+                    elements.cpuUsage.textContent = telemetry.cpu?.usage?.user ? 
+                        telemetry.cpu.usage.user.toFixed(1) + '%' : '--';
+                    elements.memoryUsage.textContent = telemetry.memory?.utilization ? 
+                        telemetry.memory.utilization.toFixed(1) + '%' : '--';
+                    elements.thermalState.textContent = telemetry.thermalState || '--';
+                    elements.powerState.textContent = telemetry.powerState || '--';
+                }
+                
+                // Update charts
+                updateCharts(analysis);
+                
+                // Update friction points
+                updateFrictionPoints(analysis.frictionPoints);
+                
+                updateConnectionStatus(true);
+                
+            } catch (error) {
+                console.error('Metrics update error:', error);
+            }
+        }
+        
+        // Update charts
+        function updateCharts(analysis) {
+            if (!efficiencyChart || !pillarChart) return;
+            
+            // Update efficiency chart
+            const now = new Date().toLocaleTimeString();
+            efficiencyChart.data.labels.push(now);
+            efficiencyChart.data.datasets[0].data.push(analysis.efficiency);
+            
+            // Keep only last 20 data points
+            if (efficiencyChart.data.labels.length > 20) {
+                efficiencyChart.data.labels.shift();
+                efficiencyChart.data.datasets[0].data.shift();
+            }
+            
+            efficiencyChart.update('none');
+            
+            // Update pillar chart (simplified - would need cumulative data)
+            const pillarIndex = [
+                'Cognitive Labor', 
+                'Passive Consumption', 
+                'Administrative Overhead', 
+                'Digital Decay'
+            ].indexOf(analysis.lifePillar.primary);
+            
+            if (pillarIndex !== -1) {
+                pillarChart.data.datasets[0].data[pillarIndex] += 1;
+                pillarChart.update('none');
+            }
+        }
+        
+        // Update friction points
+        function updateFrictionPoints(frictionPoints) {
+            const container = elements.frictionPoints;
+            
+            if (!frictionPoints || frictionPoints.length === 0) {
+                container.innerHTML = '<div class="text-gray-400">No friction points detected</div>';
+                return;
+            }
+            
+            container.innerHTML = frictionPoints.map(point => `
+                <div class="flex items-center justify-between p-3 bg-gray-700 rounded border border-gray-600">
+                    <div>
+                        <div class="font-medium">${point.type.replace(/_/g, ' ').toUpperCase()}</div>
+                        <div class="text-sm text-gray-400">${point.description}</div>
+                    </div>
+                    <span class="px-2 py-1 text-xs rounded ${
+                        point.severity === 'high' ? 'bg-red-900 text-red-200' :
+                        point.severity === 'medium' ? 'bg-yellow-900 text-yellow-200' :
+                        'bg-green-900 text-green-200'
+                    }">
+                        ${point.severity}
+                    </span>
+                </div>
+            `).join('');
+        }
+        
+        // Generate weekly report
+        async function generateWeeklyReport() {
+            try {
+                const report = await apiCall('life_flow', 'weekly_report');
+                
+                if (report.error) {
+                    alert(report.error);
+                    return;
+                }
+                
+                elements.weeklyReport.innerHTML = `
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                        <div class="bg-gray-700 rounded p-4">
+                            <div class="text-sm text-gray-400 mb-1">Efficiency Coefficient</div>
+                            <div class="text-2xl font-bold text-blue-400">${(report.efficiencyCoefficient * 100).toFixed(1)}%</div>
+                        </div>
+                        <div class="bg-gray-700 rounded p-4">
+                            <div class="text-sm text-gray-400 mb-1">Total Session Time</div>
+                            <div class="text-2xl font-bold text-green-400">${Math.round(report.totalSessionTime / 3600000)}h</div>
+                        </div>
+                        <div class="bg-gray-700 rounded p-4">
+                            <div class="text-sm text-gray-400 mb-1">Success Time</div>
+                            <div class="text-2xl font-bold text-green-400">${Math.round(report.totalSuccessTime / 3600000)}h</div>
+                        </div>
+                        <div class="bg-gray-700 rounded p-4">
+                            <div class="text-sm text-gray-400 mb-1">Sessions Analyzed</div>
+                            <div class="text-2xl font-bold text-blue-400">${report.sessionsAnalyzed}</div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-6">
+                        <h3 class="text-lg font-semibold mb-3 text-blue-300">Life Pillar Breakdown</h3>
+                        <div class="space-y-2">
+                            ${report.lifePillarBreakdown.map(pillar => `
+                                <div class="flex items-center justify-between">
+                                    <span>${pillar.pillar}</span>
+                                    <div class="flex items-center">
+                                        <div class="w-32 bg-gray-700 rounded-full h-2 mr-3">
+                                            <div class="bg-blue-500 h-2 rounded-full" style="width: ${pillar.percentage}%"></div>
+                                        </div>
+                                        <span class="text-sm">${pillar.percentage.toFixed(1)}%</span>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                    
+                    <div class="mb-6">
+                        <h3 class="text-lg font-semibold mb-3 text-blue-300">Hardware Habits</h3>
+                        <div class="grid grid-cols-2 gap-4 text-sm">
+                            <div>Avg CPU Usage: ${report.hardwareHabits.avgCpuUsage.toFixed(1)}%</div>
+                            <div>Avg Memory Usage: ${report.hardwareHabits.avgMemoryUsage.toFixed(1)}%</div>
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <h3 class="text-lg font-semibold mb-3 text-blue-300">Recommendations</h3>
+                        <div class="space-y-2">
+                            ${report.recommendations.map(rec => `
+                                <div class="p-3 bg-gray-700 rounded border-l-4 ${
+                                    rec.priority === 'high' ? 'border-red-500' :
+                                    rec.priority === 'medium' ? 'border-yellow-500' :
+                                    'border-green-500'
+                                }">
+                                    <div class="font-medium">${rec.title}</div>
+                                    <div class="text-sm text-gray-400 mt-1">${rec.description}</div>
+                                    <div class="text-sm text-blue-400 mt-2">${rec.action}</div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+                
+                elements.weeklyReport.classList.remove('hidden');
+                
+            } catch (error) {
+                alert('Failed to generate report: ' + error.message);
+            }
+        }
+        
+        // Event listeners
+        elements.startSessionBtn.addEventListener('click', startSession);
+        elements.endSessionBtn.addEventListener('click', endSession);
+        elements.generateReportBtn.addEventListener('click', generateWeeklyReport);
+        elements.refreshBtn.addEventListener('click', () => {
+            if (currentSession) {
+                updateMetrics();
+            }
+        });
+        
+        // Enter key to start session
+        elements.intentInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && !elements.startSessionBtn.disabled) {
+                startSession();
+            }
+        });
+        
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            initCharts();
+            updateConnectionStatus(false);
+            console.log('Deep Life Architect Dashboard initialized');
+        });
+        
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', () => {
+            if (currentSession) {
+                endSession();
+            }
+        });
+    </script>
+</body>
+</html>

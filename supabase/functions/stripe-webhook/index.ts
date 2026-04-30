@@ -1,126 +1,119 @@
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import Stripe from 'https://esm.sh/stripe@14.21.0'
+import { createClient } from "npm:@supabase/supabase-js@2.49.8";
+import Stripe from "npm:stripe@14.21.0";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, stripe-signature',
 }
 
-serve(async (req) => {
-  // Handle CORS preflight
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
+Deno.serve(async (req: Request) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers: corsHeaders });
   }
+
+  if (req.method !== "POST") {
+    return new Response(JSON.stringify({ error: "Method not allowed" }), {
+      status: 405,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  const supabase = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    { auth: { persistSession: false, autoRefreshToken: false } }
+  );
+
+  const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY")!, {
+    apiVersion: "2024-04-10",
+  });
+
+  const sig = req.headers.get("stripe-signature");
+  if (!sig) {
+    return new Response(JSON.stringify({ error: "Missing stripe-signature" }), {
+      status: 400,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  // MUST read raw body before any parsing
+  const body = await req.text();
+
+  let event: Stripe.Event;
+  try {
+    // Use async signature verification for Deno/Web Crypto compatibility
+    event = await (stripe.webhooks as any).constructEventAsync(
+      body,
+      sig,
+      Deno.env.get("STRIPE_WEBHOOK_SECRET")!
+    );
+  } catch (err: any) {
+    console.error("[WEBHOOK] Signature verification failed:", err.message);
+    return new Response(
+      JSON.stringify({ error: "Invalid signature", details: err.message }),
+      { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+
+  console.log(`[WEBHOOK] Event: ${event.type} (${event.id})`);
 
   try {
-    // Initialize Supabase
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-    const supabase = createClient(supabaseUrl, supabaseServiceKey)
-
-    // Initialize Stripe
-    const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY')!)
-    const webhookSecret = Deno.env.get('STRIPE_WEBHOOK_SECRET_01')!
-
-    // Get webhook signature
-    const sig = req.headers.get('stripe-signature')
-    if (!sig) {
-      console.error('[WEBHOOK] Missing stripe-signature header')
-      return new Response('Missing stripe-signature header', { status: 400 })
-    }
-
-    // Read body
-    const body = await req.text()
-    
-    // Verify webhook signature
-    let event
-    try {
-      event = stripe.webhooks.constructEvent(body, sig, webhookSecret)
-    } catch (err) {
-      console.error('[WEBHOOK] Signature verification failed:', err.message)
-      return new Response(`Webhook Error: ${err.message}`, { status: 400 })
-    }
-
-    console.log(`[WEBHOOK] Processing event: ${event.type} (ID: ${event.id})`)
-
-    // Idempotent event processing using RPC
-    const { data: eventId, error: claimError } = await supabase.rpc('claim_webhook_event', {
-      p_event_id: event.id,
-      p_type: event.type
-    })
-
-    if (claimError) {
-      console.error('[WEBHOOK] RPC claim error:', claimError)
-      throw new Error(`Failed to claim event: ${claimError.message}`)
-    }
-
-    // Already processed
-    if (!eventId) {
-      console.log(`[WEBHOOK] Event ${event.id} already processed`)
-      return new Response(JSON.stringify({ status: 'duplicate' }), { 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    // Idempotent insert using keymaker_events table
+    const { data: inserted, error: insertErr } = await supabase
+      .from("keymaker_events")
+      .insert({
+        event_id: event.id,
+        type: event.type,
+        source: "stripe",
+        severity: "info",
+        payload: event as any,
+        processed: false,
+        occurred_at: new Date().toISOString(),
       })
+      .select("id")
+      .single();
+
+    if (insertErr) {
+      if (insertErr.message?.includes("duplicate") || insertErr.code === "23505") {
+        console.log(`[WEBHOOK] Duplicate event: ${event.id}`);
+        return new Response(
+          JSON.stringify({ ok: true, duplicate: true }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      throw insertErr;
     }
+
+    const eventId = inserted.id;
 
     // Process the event
-    await processEvent(event, supabase, eventId)
+    await processEvent(event, supabase, eventId);
 
-    // Mark event as completed
-    const { error: updateError } = await supabase
-      .from('webhook_events')
-      .update({ status: 'completed' })
-      .eq('id', eventId)
+    // Mark completed
+    await supabase
+      .from("keymaker_events")
+      .update({ processed: true })
+      .eq("id", eventId);
 
-    if (updateError) {
-      console.error('[WEBHOOK] Failed to mark event completed:', updateError)
-    }
+    console.log(`[WEBHOOK] Completed: ${event.type}`);
 
-    console.log(`[WEBHOOK] Successfully processed event: ${event.type}`)
-
-    return new Response(JSON.stringify({ 
-      received: true, 
-      status: 'processed',
-      event_id: event.id,
-      event_type: event.type
-    }), { 
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-    })
-
-  } catch (error) {
-    console.error('[WEBHOOK] Processing error:', error)
-    
-    // Try to mark event as failed if we have an eventId
-    try {
-      const supabaseUrl = Deno.env.get('SUPABASE_URL')!
-      const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-      const supabase = createClient(supabaseUrl, supabaseServiceKey)
-      
-      // Extract event ID from error context or body
-      const body = await req.text()
-      const tempEvent = JSON.parse(body)
-      
-      await supabase
-        .from('webhook_events')
-        .update({ 
-          status: 'failed',
-          error: error.message
-        })
-        .eq('event_id', tempEvent.id)
-        
-    } catch (markError) {
-      console.error('[WEBHOOK] Failed to mark event as failed:', markError)
-    }
-    
-    return new Response(JSON.stringify({ 
-      error: error.message,
-      status: 'failed'
-    }), { 
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-    })
+    return new Response(
+      JSON.stringify({
+        received: true,
+        status: "processed",
+        event_id: event.id,
+        event_type: event.type,
+      }),
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  } catch (err: any) {
+    console.error("[WEBHOOK] Processing error:", err);
+    return new Response(
+      JSON.stringify({ error: err.message, status: "failed" }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
   }
-})
+});
 
 async function processEvent(event: any, supabase: any, eventId: string) {
   switch (event.type) {
@@ -172,24 +165,17 @@ async function handleCheckoutCompleted(session: any, supabase: any) {
 }
 
 async function handlePaymentSucceeded(invoice: any, supabase: any) {
-  console.log(`[WEBHOOK] Payment succeeded: ${invoice.id}`)
-  
-  // Add revenue tracking
-  const { error } = await supabase
-    .from('revenue_tracking')
-    .insert({
-      customer_id: invoice.customer, // This will need customer lookup
-      stripe_event_id: invoice.id,
-      amount: invoice.amount_paid / 100, // Convert from cents
-      currency: invoice.currency.toLowerCase(),
-      type: 'payment',
-      status: 'completed'
-    })
-    
-  if (error) {
-    console.error('[WEBHOOK] Failed to track revenue:', error)
-    throw error
-  }
+  console.log(`[WEBHOOK] Payment succeeded: ${invoice.id}`);
+  // Revenue tracking simplified - insert into keymaker_events
+  await supabase.from("keymaker_events").insert({
+    event_id: `payment_${invoice.id}`,
+    type: "revenue_payment",
+    source: "stripe_webhook",
+    severity: "info",
+    payload: { invoice_id: invoice.id, amount: invoice.amount_paid, currency: invoice.currency },
+    processed: true,
+    occurred_at: new Date().toISOString(),
+  });
 }
 
 async function handleSubscriptionCreated(subscription: any, supabase: any) {

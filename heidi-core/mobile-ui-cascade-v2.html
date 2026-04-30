@@ -1,0 +1,875 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CASCADE v2 - Governance Engine</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-primary: #0a0a0a;
+            --bg-secondary: #1a1a1a;
+            --bg-tertiary: #2a2a2a;
+            --text-primary: #ffffff;
+            --text-secondary: #a0a0a0;
+            --accent: #00ff88;
+            --accent-hover: #00cc6a;
+            --danger: #ff4444;
+            --warning: #ffaa00;
+            --success: #00ff88;
+            --critical: #ff0066;
+            --strategic: #9966ff;
+            --cash: #00ccff;
+            --execution: #ff6600;
+            --exploration: #6600ff;
+            --optimization: #00ffcc;
+            --governance: #ff9900;
+            --coherence-high: #00ff88;
+            --coherence-medium: #ffaa00;
+            --coherence-low: #ff4444;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Header */
+        .header {
+            background: var(--bg-secondary);
+            padding: 1rem;
+            border-bottom: 1px solid var(--bg-tertiary);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header h1 {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: var(--accent);
+        }
+
+        .cascade-indicator {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.25rem 0.75rem;
+            background: var(--bg-tertiary);
+            border-radius: 1rem;
+            font-size: 0.8rem;
+        }
+
+        .cascade-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--governance);
+            animation: pulse 2s infinite;
+        }
+
+        .coherence-indicator {
+            padding: 0.2rem 0.5rem;
+            border-radius: 0.25rem;
+            font-size: 0.7rem;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+
+        .coherence-high { background: var(--coherence-high); color: var(--bg-primary); }
+        .coherence-medium { background: var(--coherence-medium); color: var(--bg-primary); }
+        .coherence-low { background: var(--coherence-low); color: white; }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        /* Tab Navigation */
+        .tabs {
+            display: flex;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--bg-tertiary);
+        }
+
+        .tab {
+            flex: 1;
+            padding: 1rem;
+            text-align: center;
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 0.9rem;
+        }
+
+        .tab.active {
+            color: var(--accent);
+            background: var(--bg-tertiary);
+        }
+
+        .tab:hover {
+            color: var(--text-primary);
+        }
+
+        /* Content Areas */
+        .content {
+            flex: 1;
+            overflow: hidden;
+            display: none;
+        }
+
+        .content.active {
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Governance Dashboard */
+        .governance-dashboard {
+            background: var(--bg-secondary);
+            border: 1px solid var(--bg-tertiary);
+            border-radius: 0.5rem;
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .governance-dashboard h3 {
+            color: var(--governance);
+            margin-bottom: 0.5rem;
+            font-size: 1.1rem;
+        }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .dashboard-card {
+            background: var(--bg-tertiary);
+            padding: 0.75rem;
+            border-radius: 0.25rem;
+            text-align: center;
+        }
+
+        .dashboard-value {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: var(--text-primary);
+        }
+
+        .dashboard-label {
+            font-size: 0.7rem;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+        }
+
+        /* Strategic Themes */
+        .themes-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .theme-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--bg-tertiary);
+            border-radius: 0.5rem;
+            padding: 1rem;
+        }
+
+        .theme-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.5rem;
+        }
+
+        .theme-name {
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .theme-count {
+            background: var(--accent);
+            color: var(--bg-primary);
+            padding: 0.2rem 0.5rem;
+            border-radius: 0.25rem;
+            font-size: 0.8rem;
+            font-weight: bold;
+        }
+
+        .theme-coverage {
+            width: 100%;
+            background: var(--bg-tertiary);
+            border-radius: 0.25rem;
+            height: 8px;
+            margin-top: 0.5rem;
+            overflow: hidden;
+        }
+
+        .theme-coverage-bar {
+            height: 100%;
+            background: var(--accent);
+            transition: width 0.3s ease;
+        }
+
+        /* Governance Tasks */
+        .governance-task {
+            background: var(--bg-secondary);
+            border: 1px solid var(--bg-tertiary);
+            border-radius: 0.5rem;
+            padding: 1rem;
+            margin-bottom: 0.75rem;
+            position: relative;
+        }
+
+        .task-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 0.5rem;
+        }
+
+        .task-title {
+            font-weight: 600;
+            color: var(--text-primary);
+            flex: 1;
+        }
+
+        .governance-score {
+            background: var(--strategic);
+            color: white;
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.25rem;
+            font-weight: bold;
+            font-size: 0.8rem;
+        }
+
+        .task-meta {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 0.5rem;
+            flex-wrap: wrap;
+        }
+
+        .meta-tag {
+            padding: 0.2rem 0.4rem;
+            border-radius: 0.2rem;
+            font-size: 0.7rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .tag-theme { background: var(--strategic); color: white; }
+        .tag-stage { background: var(--warning); color: var(--bg-primary); }
+        .tag-debt { background: var(--danger); color: white; }
+        .tag-division { background: var(--cash); color: white; }
+
+        .task-description {
+            color: var(--text-primary);
+            font-size: 0.9rem;
+            margin-bottom: 0.75rem;
+            line-height: 1.4;
+        }
+
+        /* Score Breakdown */
+        .score-breakdown {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 0.5rem;
+            flex-wrap: wrap;
+        }
+
+        .score-component {
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+            font-size: 0.7rem;
+            padding: 0.2rem 0.4rem;
+            border-radius: 0.2rem;
+        }
+
+        .score-governance { background: var(--governance); color: var(--bg-primary); }
+        .score-coherence { background: var(--accent); color: var(--bg-primary); }
+        .score-impact { background: var(--strategic); color: white; }
+        .score-existence { background: var(--success); color: var(--bg-primary); }
+
+        /* Status Badge */
+        .status-badge {
+            position: absolute;
+            top: -0.5rem;
+            right: -0.5rem;
+            font-size: 0.7rem;
+            font-weight: bold;
+            text-transform: uppercase;
+            padding: 0.2rem 0.5rem;
+            border-radius: 0.5rem;
+        }
+
+        .status-active { background: var(--success); color: var(--bg-primary); }
+        .status-dormant { background: var(--warning); color: var(--bg-primary); }
+        .status-killed { background: var(--danger); color: white; }
+
+        /* Warnings */
+        .warnings-section {
+            background: var(--bg-secondary);
+            border: 1px solid var(--bg-tertiary);
+            border-radius: 0.5rem;
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .warning-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 0;
+            border-bottom: 1px solid var(--bg-tertiary);
+        }
+
+        .warning-item:last-child {
+            border-bottom: none;
+        }
+
+        .warning-severity {
+            padding: 0.2rem 0.4rem;
+            border-radius: 0.2rem;
+            font-size: 0.7rem;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+
+        .severity-critical { background: var(--danger); color: white; }
+        .severity-warning { background: var(--warning); color: var(--bg-primary); }
+
+        /* Execution Focus */
+        .execution-focus {
+            background: var(--bg-secondary);
+            border: 1px solid var(--bg-tertiary);
+            border-radius: 0.5rem;
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .focus-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.5rem;
+        }
+
+        .focus-header h3 {
+            color: var(--execution);
+            margin-bottom: 0;
+        }
+
+        .focus-limit {
+            background: var(--execution);
+            color: white;
+            padding: 0.2rem 0.5rem;
+            border-radius: 0.25rem;
+            font-size: 0.8rem;
+            font-weight: bold;
+        }
+
+        /* Loading */
+        .loading {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--text-secondary);
+            padding: 2rem;
+            justify-content: center;
+        }
+
+        .spinner {
+            width: 1rem;
+            height: 1rem;
+            border: 2px solid var(--text-secondary);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Mobile Optimizations */
+        @media (max-width: 480px) {
+            .header {
+                padding: 0.75rem;
+            }
+            
+            .header h1 {
+                font-size: 1rem;
+            }
+            
+            .tab {
+                padding: 0.75rem 0.5rem;
+                font-size: 0.8rem;
+            }
+            
+            .dashboard-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <h1>CASCADE v2 - Governance Engine</h1>
+        <div class="cascade-indicator">
+            <div class="cascade-dot"></div>
+            <span id="governanceStatus">Initializing...</span>
+            <div class="coherence-indicator coherence-high" id="coherenceIndicator">HEALTHY</div>
+        </div>
+    </header>
+
+    <!-- Tab Navigation -->
+    <nav class="tabs">
+        <button class="tab active" data-tab="governance">Governance</button>
+        <button class="tab" data-tab="themes">Themes</button>
+        <button class="tab" data-tab="focus">Execution Focus</button>
+        <button class="tab" data-tab="tasks">All Tasks</button>
+    </nav>
+
+    <!-- Governance Content -->
+    <div class="content active" id="governance">
+        <div class="cascade-container" id="governanceContent">
+            <div class="loading">
+                <div class="spinner"></div>
+                <span>Analyzing governance metrics...</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Themes Content -->
+    <div class="content" id="themes">
+        <div class="cascade-container" id="themesContent">
+            <div class="loading">
+                <div class="spinner"></div>
+                <span>Mapping strategic themes...</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Execution Focus Content -->
+    <div class="content" id="focus">
+        <div class="cascade-container" id="focusContent">
+            <div class="loading">
+                <div class="spinner"></div>
+                <span>Enforcing execution focus...</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- All Tasks Content -->
+    <div class="content" id="tasks">
+        <div class="cascade-container" id="tasksContent">
+            <div class="loading">
+                <div class="spinner"></div>
+                <span>Loading governance-scored tasks...</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Configuration
+        const CONFIG = {
+            BASE_URL: 'http://localhost:3458',
+            POLL_INTERVAL: 15000 // 15 seconds for governance updates
+        };
+
+        // State
+        let currentTab = 'governance';
+        let cascadeData = null;
+        let governanceMetrics = null;
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            initializeTabs();
+            loadGovernanceData();
+            setInterval(loadGovernanceData, CONFIG.POLL_INTERVAL);
+        });
+
+        // Tab Navigation
+        function initializeTabs() {
+            const tabs = document.querySelectorAll('.tab');
+            tabs.forEach(tab => {
+                tab.addEventListener('click', () => {
+                    const tabName = tab.dataset.tab;
+                    switchTab(tabName);
+                });
+            });
+        }
+
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelector(`[data-tab="${tabName}"]`).classList.add('active');
+
+            document.querySelectorAll('.content').forEach(c => c.classList.remove('active'));
+            document.getElementById(tabName).classList.add('active');
+
+            currentTab = tabName;
+            displayContent(tabName);
+        }
+
+        // Load Governance Data
+        async function loadGovernanceData() {
+            try {
+                const [tasksResponse, governanceResponse] = await Promise.all([
+                    fetch(`${CONFIG.BASE_URL}/revenue/tasks`),
+                    fetch(`${CONFIG.BASE_URL}/revenue/governance`)
+                ]);
+
+                if (!tasksResponse.ok || !governanceResponse.ok) {
+                    throw new Error('Failed to load governance data');
+                }
+
+                cascadeData = await tasksResponse.json();
+                governanceMetrics = await governanceResponse.json();
+
+                updateGovernanceStatus();
+                displayContent(currentTab);
+            } catch (error) {
+                console.error('Governance data error:', error);
+                updateGovernanceStatus(null);
+            }
+        }
+
+        // Update Status
+        function updateGovernanceStatus() {
+            const statusText = document.getElementById('governanceStatus');
+            const cascadeDot = document.querySelector('.cascade-dot');
+            const coherenceIndicator = document.getElementById('coherenceIndicator');
+            
+            if (!governanceMetrics) {
+                statusText.textContent = 'Offline';
+                cascadeDot.style.background = 'var(--danger)';
+                coherenceIndicator.className = 'coherence-indicator coherence-low';
+                coherenceIndicator.textContent = 'OFFLINE';
+            } else {
+                const coherenceScore = governanceMetrics.strategic_coherence.score;
+                const health = governanceMetrics.governance_health;
+                
+                statusText.textContent = `${health.toUpperCase()}`;
+                cascadeDot.style.background = health === 'healthy' ? 'var(--governance)' : 'var(--warning)';
+                
+                // Update coherence indicator
+                coherenceIndicator.className = `coherence-indicator coherence-${coherenceScore >= 80 ? 'high' : coherenceScore >= 60 ? 'medium' : 'low'}`;
+                coherenceIndicator.textContent = coherenceScore >= 80 ? 'HEALTHY' : coherenceScore >= 60 ? 'WARNING' : 'CRITICAL';
+            }
+        }
+
+        // Display Content
+        function displayContent(tabName) {
+            if (!cascadeData || !governanceMetrics) return;
+
+            if (tabName === 'governance') {
+                displayGovernance();
+            } else if (tabName === 'themes') {
+                displayThemes();
+            } else if (tabName === 'focus') {
+                displayFocus();
+            } else if (tabName === 'tasks') {
+                displayTasks();
+            }
+        }
+
+        function displayGovernance() {
+            const container = document.getElementById('governanceContent');
+            const focusedTasks = cascadeData.focused_tasks || [];
+            
+            container.innerHTML = `
+                <div class="governance-dashboard">
+                    <h3>🏛️ Governance Dashboard</h3>
+                    <div class="dashboard-grid">
+                        <div class="dashboard-card">
+                            <div class="dashboard-value">${governanceMetrics.coherence_score}</div>
+                            <div class="dashboard-label">Coherence Score</div>
+                        </div>
+                        <div class="dashboard-card">
+                            <div class="dashboard-value">${focusedTasks.length}/3</div>
+                            <div class="dashboard-label">Execution Focus</div>
+                        </div>
+                        <div class="dashboard-card">
+                            <div class="dashboard-value">${Object.keys(cascadeData.strategic_themes).length}</div>
+                            <div class="dashboard-label">Active Themes</div>
+                        </div>
+                        <div class="dashboard-card">
+                            <div class="dashboard-value">${governanceMetrics.governance_health}</div>
+                            <div class="dashboard-label">System Health</div>
+                        </div>
+                    </div>
+                </div>
+
+                ${governanceMetrics.warnings && governanceMetrics.warnings.length > 0 ? `
+                    <div class="warnings-section">
+                        <h3>⚠️ Governance Warnings</h3>
+                        ${governanceMetrics.warnings.map(warning => `
+                            <div class="warning-item">
+                                <span class="warning-severity severity-${warning.severity}">${warning.severity}</span>
+                                <span>${warning.message}</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                ` : ''}
+
+                <div class="execution-focus">
+                    <div class="focus-header">
+                        <h3>🎯 Execution Focus (Top 3)</h3>
+                        <div class="focus-limit">LIMIT: 3</div>
+                    </div>
+                    ${focusedTasks.map((task, index) => `
+                        <div class="governance-task">
+                            <div class="status-badge status-active">ACTIVE</div>
+                            <div class="task-header">
+                                <div class="task-title">${escapeHtml(task.title)}</div>
+                                <div class="governance-score">#${index + 1}</div>
+                            </div>
+                            <div class="task-meta">
+                                <span class="meta-tag tag-theme">${task.strategic_theme || 'UNMAPPED'}</span>
+                                <span class="meta-tag tag-stage">${task.evolution_stage}</span>
+                                <span class="meta-tag tag-debt">${task.strategic_debt.level}</span>
+                            </div>
+                            <div class="task-description">${escapeHtml(task.description)}</div>
+                            
+                            <div class="score-breakdown">
+                                <div class="score-component score-governance">Governance: ${Math.round(task.governance_adjusted_score)}</div>
+                                <div class="score-component score-coherence">Coherence: ${task.strategic_coherence_contribution ? Math.round(task.strategic_coherence_contribution * 100) : 0}</div>
+                                <div class="score-component score-impact">Impact: ${task.cross_division_impact.active_divisions} divisions</div>
+                                <div class="score-component score-existence">Purpose: ${task.existence_reason.confidence}%</div>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        }
+
+        function displayThemes() {
+            const container = document.getElementById('themesContent');
+            const themes = cascadeData.strategic_themes || {};
+            const balance = cascadeData.portfolio_balance || {};
+            
+            container.innerHTML = `
+                <div class="governance-dashboard">
+                    <h3>🎨 Strategic Themes</h3>
+                    <div class="dashboard-grid">
+                        <div class="dashboard-card">
+                            <div class="dashboard-value">${Object.keys(themes).length}</div>
+                            <div class="dashboard-label">Active Themes</div>
+                        </div>
+                        <div class="dashboard-card">
+                            <div class="dashboard-value">${balance.balance_score || 0}</div>
+                            <div class="dashboard-label">Balance Score</div>
+                        </div>
+                        <div class="dashboard-card">
+                            <div class="dashboard-value">${balance.needs_rebalancing ? 'YES' : 'NO'}</div>
+                            <div class="dashboard-label">Needs Rebalancing</div>
+                        </div>
+                        <div class="dashboard-card">
+                            <div class="dashboard-value">${governanceMetrics.coherence_score}</div>
+                            <div class="dashboard-label">System Coherence</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="themes-grid">
+                    ${Object.entries(themes).map(([theme, count]) => {
+                        const maxCount = Math.max(...Object.values(themes));
+                        const percentage = (count / maxCount) * 100;
+                        
+                        return `
+                            <div class="theme-card">
+                                <div class="theme-header">
+                                    <div class="theme-name">${theme}</div>
+                                    <div class="theme-count">${count}</div>
+                                </div>
+                                <div class="theme-coverage">
+                                    <div class="theme-coverage-bar" style="width: ${percentage}%"></div>
+                                </div>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+
+                <div class="governance-dashboard">
+                    <h3>📊 Portfolio Balance Targets vs Actual</h3>
+                    ${Object.entries(cascadeEngine.portfolioBalanceTargets).map(([category, target]) => {
+                        const actual = balance.distribution[category] || 0;
+                        const deviation = Math.abs(actual - (target * 100));
+                        const status = deviation > 15 ? 'needs-attention' : 'healthy';
+                        
+                        return `
+                            <div class="dashboard-card" style="border-left: 3px solid ${status === 'healthy' ? 'var(--success)' : 'var(--warning)'}">
+                                <div style="font-weight: 600; color: var(--text-primary);">${category}</div>
+                                <div style="font-size: 0.8rem; color: var(--text-secondary);">Target: ${(target * 100).toFixed(0)}% | Actual: ${actual.toFixed(1)}%</div>
+                                ${deviation > 15 ? `<div style="color: var(--warning); font-size: 0.7rem;">Deviation: ${deviation.toFixed(1)}%</div>` : ''}
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            `;
+        }
+
+        function displayFocus() {
+            const container = document.getElementById('focusContent');
+            const focusedTasks = cascadeData.focused_tasks || [];
+            const actions = cascadeData.recommended_actions || [];
+            
+            container.innerHTML = `
+                <div class="governance-dashboard">
+                    <h3>🎯 Execution Focus Enforcement</h3>
+                    <div class="dashboard-grid">
+                        <div class="dashboard-card">
+                            <div class="dashboard-value">${focusedTasks.length}</div>
+                            <div class="dashboard-label">Active Tasks</div>
+                        </div>
+                        <div class="dashboard-card">
+                            <div class="dashboard-value">3</div>
+                            <div class="dashboard-label">System Limit</div>
+                        </div>
+                        <div class="dashboard-card">
+                            <div class="dashboard-value">${actions.length}</div>
+                            <div class="dashboard-label">Governance Actions</div>
+                        </div>
+                        <div class="dashboard-card">
+                            <div class="dashboard-value">${governanceMetrics.governance_health}</div>
+                            <div class="dashboard-label">System Health</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="execution-focus">
+                    <div class="focus-header">
+                        <h3>🎯 Current Execution Focus</h3>
+                        <div class="focus-limit">LIMIT: 3</div>
+                    </div>
+                    ${focusedTasks.map((task, index) => `
+                        <div class="governance-task">
+                            <div class="status-badge status-active">PRIORITY #${index + 1}</div>
+                            <div class="task-header">
+                                <div class="task-title">${escapeHtml(task.title)}</div>
+                                <div class="governance-score">${task.governance_adjusted_score}</div>
+                            </div>
+                            <div class="task-meta">
+                                <span class="meta-tag tag-theme">${task.strategic_theme || 'UNMAPPED'}</span>
+                                <span class="meta-tag tag-division">${task.cross_division_impact.active_divisions} divisions</span>
+                                <span class="meta-tag tag-stage">${task.evolution_stage}</span>
+                            </div>
+                            <div class="task-description">${escapeHtml(task.description)}</div>
+                            
+                            <div class="score-breakdown">
+                                <div class="score-component score-governance">Governance: ${task.governance_adjusted_score}</div>
+                                <div class="score-component score-existence">Purpose: ${task.existence_reason.confidence}%</div>
+                                <div class="score-component score-impact">Impact: ${task.cross_division_impact.active_divisions} divisions</div>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+
+                ${actions.length > 0 ? `
+                    <div class="warnings-section">
+                        <h3>🔧 Governance Actions Required</h3>
+                        ${actions.slice(0, 5).map(action => `
+                            <div class="warning-item">
+                                <span class="warning-severity severity-${action.priority === 'critical' ? 'critical' : 'warning'}">${action.priority.toUpperCase()}</span>
+                                <span>${action.message}</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                ` : ''}
+            `;
+        }
+
+        function displayTasks() {
+            const container = document.getElementById('tasksContent');
+            const allTasks = cascadeData.tasks || [];
+            
+            container.innerHTML = `
+                <div class="governance-dashboard">
+                    <h3>📊 All Governance-Scored Tasks</h3>
+                    <div class="dashboard-grid">
+                        <div class="dashboard-card">
+                            <div class="dashboard-value">${allTasks.length}</div>
+                            <div class="dashboard-label">Total Tasks</div>
+                        </div>
+                        <div class="dashboard-card">
+                            <div class="dashboard-value">${allTasks.filter(t => t.status === 'active').length}</div>
+                            <div class="dashboard-label">Active</div>
+                        </div>
+                        <div class="dashboard-card">
+                            <div class="dashboard-value">${allTasks.filter(t => t.status === 'killed').length}</div>
+                            <div class="dashboard-label">Killed</div>
+                        </div>
+                        <div class="dashboard-card">
+                            <div class="dashboard-value">${allTasks.filter(t => t.status === 'dormant').length}</div>
+                            <div class="dashboard-label">Dormant</div>
+                        </div>
+                    </div>
+                </div>
+
+                ${allTasks.map(task => createGovernanceTaskCard(task)).join('')}
+            `;
+        }
+
+        function createGovernanceTaskCard(task) {
+            const statusClass = `status-${task.status}`;
+            
+            return `
+                <div class="governance-task">
+                    <div class="status-badge ${statusClass}">${task.status.toUpperCase()}</div>
+                    <div class="task-header">
+                        <div class="task-title">${escapeHtml(task.title)}</div>
+                        <div class="governance-score">${task.governance_adjusted_score}</div>
+                    </div>
+                    <div class="task-meta">
+                        <span class="meta-tag tag-theme">${task.strategic_theme || 'UNMAPPED'}</span>
+                        <span class="meta-tag tag-stage">${task.evolution_stage}</span>
+                        <span class="meta-tag tag-debt">${task.strategic_debt.level}</span>
+                        <span class="meta-tag tag-division">${task.cross_division_impact.active_divisions} divisions</span>
+                    </div>
+                    <div class="task-description">${escapeHtml(task.description)}</div>
+                    
+                    <div class="score-breakdown">
+                        <div class="score-component score-governance">Governance: ${task.governance_adjusted_score}</div>
+                        <div class="score-component score-coherence">Coherence: ${task.strategic_coherence_contribution ? Math.round(task.strategic_coherence_contribution * 100) : 0}</div>
+                        <div class="score-component score-impact">Impact: ${task.cross_division_impact.active_divisions} divisions</div>
+                        <div class="score-component score-existence">Purpose: ${task.existence_reason.confidence}%</div>
+                        <div class="score-component score-debt">Debt: ${Math.round(task.strategic_debt.score * 100)}%</div>
+                    </div>
+
+                    ${task.existence_reason && !task.existence_reason.valid ? `
+                        <div style="margin-top: 0.5rem; padding: 0.5rem; background: var(--bg-tertiary); border-radius: 0.25rem;">
+                            <div style="color: var(--danger); font-size: 0.8rem; font-weight: bold;">⚠️ PURPOSE INVALID</div>
+                            <div style="color: var(--text-secondary); font-size: 0.8rem; margin-top: 0.25rem;">${task.existence_reason.message}</div>
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+        }
+
+        // Utility
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+    </script>
+</body>
+</html>

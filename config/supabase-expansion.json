@@ -1,0 +1,217 @@
+{
+  "expansion_config": {
+    "version": "1.0.0",
+    "description": "HYDI Local to Supabase Expansion Configuration",
+    "created": "2026-04-30T10:48:00.000Z"
+  },
+  "local_to_supabase": {
+    "sync_directions": ["local_to_remote", "remote_to_local", "bidirectional"],
+    "default_sync_mode": "bidirectional",
+    "conflict_resolution": "local_wins",
+    "sync_intervals": {
+      "events": "realtime",
+      "models": "on_change",
+      "configurations": "on_demand"
+    }
+  },
+  "database_config": {
+    "primary_schema": "public",
+    "tables": {
+      "hydi_events": {
+        "sync_enabled": true,
+        "sync_direction": "bidirectional",
+        "local_cache": true,
+        "retention_days": 30
+      },
+      "hydi_models": {
+        "sync_enabled": true,
+        "sync_direction": "local_to_remote",
+        "local_cache": false,
+        "encryption": true
+      },
+      "hydi_configurations": {
+        "sync_enabled": true,
+        "sync_direction": "bidirectional",
+        "version_control": true
+      },
+      "hydi_metrics": {
+        "sync_enabled": true,
+        "sync_direction": "local_to_remote",
+        "aggregation": "hourly"
+      }
+    },
+    "realtime_subscriptions": [
+      "hydi_events",
+      "hydi_models",
+      "hydi_configurations"
+    ]
+  },
+  "auth_config": {
+    "local_auth": {
+      "enabled": true,
+      "method": "api_key",
+      "key_rotation_interval": "24h"
+    },
+    "supabase_auth": {
+      "enabled": true,
+      "provider": "supabase_auth",
+      "auto_refresh": true,
+      "session_timeout": "1h"
+    }
+  },
+  "storage_config": {
+    "local_storage": {
+      "enabled": true,
+      "path": "./data/local",
+      "max_size_gb": 10,
+      "cleanup_policy": "lru"
+    },
+    "supabase_storage": {
+      "enabled": true,
+      "bucket": "hydi-data",
+      "auto_upload": true,
+      "compression": true
+    }
+  },
+  "functions_config": {
+    "edge_functions": {
+      "enabled": true,
+      "functions": [
+        {
+          "name": "hydi-event-processor",
+          "trigger": "webhook",
+          "local_fallback": true
+        },
+        {
+          "name": "hydi-model-sync",
+          "trigger": "cron",
+          "schedule": "0 */6 * * *"
+        },
+        {
+          "name": "hydi-health-monitor",
+          "trigger": "http",
+          "endpoint": "/monitoring-health"
+        }
+      ]
+    }
+  },
+  "cascade_integration": {
+    "enabled": true,
+    "event_bridge": {
+      "local_events": ["hydi.*", "cascade.*"],
+      "remote_events": ["supabase.*", "database.*"],
+      "filter_rules": {
+        "exclude_sensitive": true,
+        "include_metrics": true
+      }
+    },
+    "message_routing": {
+      "local_to_remote": "supabase_realtime",
+      "remote_to_local": "local_event_bus",
+      "fallback_queue": "local_pending_tasks"
+    }
+  },
+  "world_connectivity": {
+    "webhooks": {
+      "enabled": true,
+      "endpoints": [
+        {
+          "name": "stripe_webhook",
+          "url": "/functions/v1/stripe-webhook",
+          "events": ["payment_intent.succeeded", "payment_intent.payment_failed"],
+          "retry_policy": "exponential_backoff"
+        },
+        {
+          "name": "hydi_events",
+          "url": "/functions/v1/events-stream",
+          "events": ["hydi.*"],
+          "authentication": "api_key"
+        }
+      ]
+    },
+    "external_apis": {
+      "stripe": {
+        "enabled": true,
+        "webhooks_enabled": true,
+        "connect_enabled": true,
+        "local_fallback": true
+      },
+      "monitoring": {
+        "enabled": true,
+        "endpoint": "/functions/v1/monitoring-health",
+        "health_checks": true
+      }
+    }
+  },
+  "health_monitoring": {
+    "local_checks": {
+      "server_health": {
+        "endpoint": "/health",
+        "interval": "30s",
+        "timeout": "5s"
+      },
+      "model_health": {
+        "endpoint": "/models/status",
+        "interval": "60s",
+        "timeout": "10s"
+      }
+    },
+    "remote_checks": {
+      "supabase_health": {
+        "endpoint": "/rest/v1/",
+        "interval": "60s",
+        "timeout": "10s"
+      },
+      "functions_health": {
+        "endpoint": "/functions/v1/monitoring-health",
+        "interval": "300s",
+        "timeout": "15s"
+      }
+    },
+    "alerting": {
+      "enabled": true,
+      "channels": ["local_log", "supabase_notification"],
+      "thresholds": {
+        "error_rate": 0.05,
+        "response_time_ms": 5000,
+        "failure_count": 3
+      }
+    }
+  },
+  "backup_recovery": {
+    "local_backup": {
+      "enabled": true,
+      "schedule": "0 2 * * *",
+      "retention_days": 7,
+      "compression": true
+    },
+    "supabase_backup": {
+      "enabled": true,
+      "schedule": "0 3 * * *",
+      "point_in_time_recovery": true,
+      "retention_days": 30
+    }
+  },
+  "expansion_phases": {
+    "phase_1_local": {
+      "description": "Initialize local HYDI system",
+      "components": ["server", "models", "event_bus", "modules"],
+      "prerequisites": ["node", "npm", "local_dependencies"]
+    },
+    "phase_2_supabase": {
+      "description": "Connect to Supabase for persistence",
+      "components": ["database", "auth", "storage"],
+      "prerequisites": ["phase_1_local", "supabase_credentials"]
+    },
+    "phase_3_cascade": {
+      "description": "Enable Cascade integration",
+      "components": ["event_bridge", "message_routing"],
+      "prerequisites": ["phase_2_supabase", "cascade_modules"]
+    },
+    "phase_4_world": {
+      "description": "Connect to external world",
+      "components": ["webhooks", "external_apis", "monitoring"],
+      "prerequisites": ["phase_3_cascade", "external_credentials"]
+    }
+  }
+}

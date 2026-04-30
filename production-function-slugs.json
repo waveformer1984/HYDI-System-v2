@@ -1,0 +1,90 @@
+{
+  "canonical_slugs": {
+    "web_services": [
+      "api-gateway",
+      "user-management", 
+      "payment-processing",
+      "notification-service",
+      "analytics-service",
+      "file-storage",
+      "search-service",
+      "cache-service"
+    ],
+    "marketing_services": [
+      "marketing-automation",
+      "lead-generation",
+      "content-management",
+      "email-marketing",
+      "social-media",
+      "customer-segments",
+      "campaign-analytics",
+      "brand-awareness"
+    ],
+    "passive_services": [
+      "events-stream",
+      "jobs-processor",
+      "monitoring-health",
+      "stripe-webhook"
+    ],
+    "revenue_services": [
+      "revenue-tracker",
+      "billing-engine",
+      "usage-monitor",
+      "invoice-generator",
+      "subscription-manager",
+      "payment-processor"
+    ],
+    "existing_functions": [
+      "toby-llm",
+      "stripe-setup",
+      "stripe-webhook",
+      "stripe-worker",
+      "worker-orchestrator",
+      "keymaker-router",
+      "chaos-runner",
+      "hydi-transition",
+      "publish-event",
+      "claim-work",
+      "submit-approval-decision",
+      "emit-risk-alert",
+      "governed-execute",
+      "stripe-connect-webhook",
+      "stripe-connect-admin",
+      "monthly-payout-calculation",
+      "keeper",
+      "keeper-break-glass",
+      "keeper-break-glass-simple",
+      "stripe-transfer-payout"
+    ]
+  },
+  "jwt_required": [
+    "user-management",
+    "payment-processing",
+    "analytics-service",
+    "file-storage",
+    "events-stream",
+    "jobs-processor",
+    "monitoring-health",
+    "revenue-tracker",
+    "billing-engine",
+    "usage-monitor",
+    "invoice-generator",
+    "subscription-manager",
+    "payment-processor"
+  ],
+  "public_access": [
+    "api-gateway",
+    "notification-service",
+    "search-service",
+    "cache-service",
+    "marketing-automation",
+    "lead-generation",
+    "content-management",
+    "email-marketing",
+    "social-media",
+    "customer-segments",
+    "campaign-analytics",
+    "brand-awareness",
+    "stripe-webhook"
+  ]
+}

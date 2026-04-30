@@ -4,13 +4,13 @@
  */
 
 const Stripe = require('stripe');
-const UrsulaServiceBundle = require('../../modules/ursula-service-bundle');
+// const UrsulaServiceBundle = require('../../modules/ursula-service-bundle'); // Temporarily disabled due to syntax errors
 const { supabase } = require('../database');
 
 class SubscriptionManager {
   constructor() {
     this.stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
-    this.serviceBundle = new UrsulaServiceBundle();
+    // this.serviceBundle = new UrsulaServiceBundle(); // Temporarily disabled
     this.setupEventHandlers();
   }
 
@@ -18,17 +18,17 @@ class SubscriptionManager {
    * Setup event handlers for the service bundle
    */
   setupEventHandlers() {
-    this.serviceBundle.on('service_used', async (data) => {
-      await this.recordServiceUsage(data);
-    });
+    // this.serviceBundle.on('service_used', async (data) => {
+    //   await this.recordServiceUsage(data);
+    // });
 
-    this.serviceBundle.on('subscription_created', async (data) => {
-      await this.handleNewSubscription(data);
-    });
+    // this.serviceBundle.on('subscription_created', async (data) => {
+    //   await this.handleNewSubscription(data);
+    // });
 
-    this.serviceBundle.on('marketing_content_generated', async (data) => {
-      await this.publishMarketingContent(data);
-    });
+    // this.serviceBundle.on('marketing_content_generated', async (data) => {
+    //   await this.publishMarketingContent(data);
+    // });
   }
 
   /**
@@ -36,9 +36,9 @@ class SubscriptionManager {
    */
   async createCheckoutSession(customerId, tier, successUrl, cancelUrl) {
     const priceMap = {
-      starter: 'price_1Oxxxx', // Replace with actual Stripe price IDs
-      pro: 'price_1Oyyyy',
-      enterprise: 'price_1Ozzzz'
+      starter: process.env.STRIPE_HYDI_STARTER_PRICE_ID,
+      pro: process.env.STRIPE_HYDI_PRO_PRICE_ID,
+      enterprise: process.env.STRIPE_HYDI_ENTERPRISE_PRICE_ID
     };
 
     const session = await this.stripe.checkout.sessions.create({

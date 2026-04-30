@@ -1,5 +1,12 @@
 import Stripe from 'stripe';
 import { createClient } from '@supabase/supabase-js';
+import { buffer } from 'micro';
+
+export const config = {
+  api: {
+    bodyParser: false,
+  },
+};
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 const supabase = createClient(
@@ -8,32 +15,50 @@ const supabase = createClient(
 );
 
 export default async function handler(req, res) {
+  console.log('=== WEBHOOK ENTRY ===');
+  console.log('Method:', req.method);
+  console.log('Path:', req.url);
+  console.log('Headers count:', Object.keys(req.headers).length);
+  console.log('Has stripe-signature:', !!req.headers['stripe-signature']);
+  
   if (req.method !== 'POST') return res.status(405).end();
 
   const sig = req.headers['stripe-signature'];
+  console.log('Signature:', sig);
+  console.log('Webhook Secret:', process.env.STRIPE_WEBHOOK_SECRET?.slice(0, 10));
+  
   let event;
 
   try {
-    event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
+    const rawBody = await buffer(req);
+    console.log('Raw body length:', rawBody.length);
+    event = stripe.webhooks.constructEvent(rawBody, sig, process.env.STRIPE_WEBHOOK_SECRET);
+    console.log('✅ Verified event:', event.type);
   } catch (err) {
-    console.error('Webhook signature verification failed:', err.message);
+    console.error('❌ Signature verification failed:', err.message);
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
 
   // Store webhook event first
   try {
-    const { error: insertError } = await supabase
-      .from('webhook_events')
-      .insert({
-        stripe_event_id: event.id,
-        event_type: event.type,
-        payload: event.data.object,
-        processed: false
-      });
+    const row = {
+      event_id: event.id,                 // required
+      type: event.type,                   // or event_type (both now supported)
+      event_type: event.type,             // keep both for compatibility
+      status: 'received',
+      processed: false,
+      provider: 'stripe',
+      payload: event
+    };
 
-    if (insertError) {
-      console.error('Failed to store webhook event:', insertError);
-      return res.status(500).json({ error: 'Failed to store webhook event' });
+    const { data, error } = await supabase
+      .from('webhook_events')
+      .upsert(row, { onConflict: 'event_id' })
+      .select();
+
+    if (error) {
+      console.error('webhook insert error:', error);
+      return res.status(500).json({ error: error.message, details: error });
     }
   } catch (error) {
     console.error('Webhook storage failed:', error);
@@ -63,10 +88,11 @@ export default async function handler(req, res) {
     await supabase
       .from('webhook_events')
       .update({ 
+        status: 'processed',
         processed: true, 
         processed_at: new Date().toISOString() 
       })
-      .eq('stripe_event_id', event.id);
+      .eq('event_id', event.id);
 
     res.status(200).json({ received: true });
   } catch (error) {
@@ -76,11 +102,12 @@ export default async function handler(req, res) {
     await supabase
       .from('webhook_events')
       .update({ 
+        status: 'failed',
         processed: false, 
         error_message: error.message,
         processed_at: new Date().toISOString() 
       })
-      .eq('stripe_event_id', event.id);
+      .eq('event_id', event.id);
     
     res.status(500).json({ error: 'Webhook processing failed' });
   }

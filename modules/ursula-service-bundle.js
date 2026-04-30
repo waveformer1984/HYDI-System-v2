@@ -326,7 +326,7 @@ class UrsulaServiceBundle extends EventEmitter {
       outputSchema: { vulnerabilities: 'array', riskScore: 'number', fixes: 'array' },
       pricing: { perAudit: 200, monthlyLimit: 5 }
     });
-  }
+
     // Content Generation Services (1-8)
     this.registerService('seo-article-generator', {
       category: 'content',

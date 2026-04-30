@@ -1,0 +1,66 @@
+{
+  "created_at": "2026-04-29T23:48:10.641Z",
+  "version": "1.0",
+  "config": {
+    "DRIFT_THRESHOLD": 0.7,
+    "CONFIDENCE_THRESHOLD": 0.7,
+    "HEARTBEAT_INTERVAL": 60000,
+    "BOOT_TIMEOUT": 30000,
+    "MAX_RETRY_ATTEMPTS": 3,
+    "SAFE_MODE_RATE_LIMIT": 5,
+    "REQUIRED_ENV_VARS": [
+      "NODE_ENV",
+      "MODEL_BASE_PATH",
+      "CONFIG_BASE_PATH",
+      "DATA_BASE_PATH"
+    ],
+    "CORE_MODULES": [
+      "DriftMonitor",
+      "TaskEngine",
+      "ReflectionModule",
+      "Scheduler",
+      "LoggingSystem"
+    ],
+    "_checksum": "fa8a0224ab2f5ef590106140fc9ee5a1534dbb8619901f869785fce11bda9b41",
+    "_created_at": "2026-04-29T23:48:10.625Z"
+  },
+  "memory_snapshots": {
+    "system_identity": {
+      "timestamp": "2026-04-29T23:48:10.638Z",
+      "data": "{\"system_name\":\"HEIDI\",\"version\":\"1.0\",\"architecture\":\"4-layer-self-awareness\",\"launch_protocol\":\"HSLP-v1.0\"}",
+      "checksum": "d7dcbcb0a917111bb26de3217a65b927efe84028e8fb0e118de5ac0bc90deaa9",
+      "type": "identity"
+    },
+    "performance_baseline": {
+      "timestamp": "2026-04-29T23:48:10.638Z",
+      "data": "{\"cpu_usage\":0,\"memory_usage\":0,\"task_completion_rate\":1,\"response_time_baseline\":100,\"error_rate\":0}",
+      "checksum": "3f5c79bf747d012eb4b6c70d6bd5e2e3af30d37ed69178d89d4ee4717fb9bb5f",
+      "type": "performance"
+    },
+    "integrity_baseline": {
+      "timestamp": "2026-04-29T23:48:10.638Z",
+      "data": "{\"drift_score\":0,\"integrity_score\":1,\"last_validation\":\"2026-04-29T23:48:10.638Z\",\"validation_history\":[]}",
+      "checksum": "f3bf12d2b7e8d57bf8726d085c4585366850976ec455d88ec769c00e36548193",
+      "type": "integrity"
+    },
+    "state_machine_baseline": {
+      "timestamp": "2026-04-29T23:48:10.639Z",
+      "data": "{\"current_state\":\"BASELINE\",\"state_history\":[\"BASELINE\"],\"transition_rules\":{\"BASELINE\":[\"INITIALIZING\",\"SAFE_MODE\"],\"INITIALIZING\":[\"OPERATIONAL\",\"DEGRADED\"],\"OPERATIONAL\":[\"ACTIVE\",\"DEGRADED\",\"SHUTDOWN\"],\"DEGRADED\":[\"RECOVERY\",\"SHUTDOWN\"],\"RECOVERY\":[\"OPERATIONAL\",\"DEGRADED\"],\"SAFE_MODE\":[\"INITIALIZING\",\"SHUTDOWN\"],\"SHUTDOWN\":[\"BASELINE\"]}}",
+      "checksum": "d0a11d94253d10b76db284ced480f6750c7c372abcff75fede7874e6a80fc0de",
+      "type": "state_machine"
+    }
+  },
+  "integrity_checksums": {
+    "config": "c0a45c957345ab824ca4c20e60ad5b5fc850278701e70847c5b9dae7e7e18930",
+    "snapshots": "1a52168147521601d508837a66377cb62b297ef50ee86a537d99e8547cfa4599",
+    "combined": "37ab2de51b7528da6003ce43dcdf20724c787d433e4c2a3ed82dc5f18085e511",
+    "algorithm": "SHA-256",
+    "created_at": "2026-04-29T23:48:10.641Z"
+  },
+  "system_state": {
+    "drift_score": 0,
+    "boot_phase": 0,
+    "HEIDI_STATUS": "BASELINE_ESTABLISHED",
+    "MODE": "VERIFIED"
+  }
+}

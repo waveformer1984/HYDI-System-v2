@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ProtoHub - Autonomous HQ Control Center</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        @keyframes pulse-glow {
+            0%, 100% { box-shadow: 0 0 20px rgba(59, 130, 246, 0.5); }
+            50% { box-shadow: 0 0 40px rgba(59, 130, 246, 0.8); }
+        }
+        
+        .glow-active {
+            animation: pulse-glow 2s infinite;
+        }
+        
+        .cyberpunk-grid {
+            background-image: 
+                linear-gradient(rgba(59, 130, 246, 0.1) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(59, 130, 246, 0.1) 1px, transparent 1px);
+            background-size: 50px 50px;
+        }
+        
+        .neon-text {
+            text-shadow: 0 0 10px rgba(59, 130, 246, 0.8);
+        }
+        
+        .status-online { background: linear-gradient(45deg, #10b981, #34d399); }
+        .status-busy { background: linear-gradient(45deg, #f59e0b, #fbbf24); }
+        .status-offline { background: linear-gradient(45deg, #ef4444, #f87171); }
+        
+        .rotate-slow {
+            animation: rotate 20s linear infinite;
+        }
+        
+        @keyframes rotate {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-100 min-h-screen cyberpunk-grid">
+    <!-- Header -->
+    <header class="bg-gray-800 border-b border-blue-500/30 backdrop-blur-lg">
+        <div class="container mx-auto px-4 py-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-4">
+                    <div class="relative">
+                        <div class="w-12 h-12 bg-blue-500 rounded-lg flex items-center justify-center rotate-slow">
+                            <i data-lucide="hexagon" class="w-8 h-8 text-white"></i>
+                        </div>
+                        <div class="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full glow-active"></div>
+                    </div>
+                    <div>
+                        <h1 class="text-2xl font-bold neon-text">ProtoHub</h1>
+                        <p class="text-sm text-gray-400">Autonomous HQ Control Center</p>
+                    </div>
+                </div>
+                
+                <div class="flex items-center space-x-6">
+                    <!-- System Status -->
+                    <div class="flex items-center space-x-2">
+                        <div class="w-3 h-3 bg-green-500 rounded-full glow-active"></div>
+                        <span class="text-sm">System Online</span>
+                    </div>
+                    
+                    <!-- Autonomy Level -->
+                    <div class="bg-gray-700 px-3 py-1 rounded-full">
+                        <span class="text-xs text-blue-400">Autonomy: Level 2</span>
+                    </div>
+                    
+                    <!-- Human Approvals -->
+                    <button class="bg-orange-500 hover:bg-orange-600 px-4 py-2 rounded-lg flex items-center space-x-2 transition-colors">
+                        <i data-lucide="user-check" class="w-4 h-4"></i>
+                        <span class="text-sm">Approvals (3)</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="container mx-auto px-4 py-6">
+        <!-- Key Metrics -->
+        <section class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            <div class="bg-gray-800 border border-blue-500/30 rounded-lg p-4">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-gray-400 text-sm">Active Agents</span>
+                    <i data-lucide="users" class="w-4 h-4 text-blue-400"></i>
+                </div>
+                <div class="text-2xl font-bold text-blue-400">15</div>
+                <div class="text-xs text-green-400 mt-1">All Operational</div>
+            </div>
+            
+            <div class="bg-gray-800 border border-blue-500/30 rounded-lg p-4">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-gray-400 text-sm">Tasks Completed</span>
+                    <i data-lucide="check-circle" class="w-4 h-4 text-green-400"></i>
+                </div>
+                <div class="text-2xl font-bold text-green-400">247</div>
+                <div class="text-xs text-gray-400 mt-1">+12 today</div>
+            </div>
+            
+            <div class="bg-gray-800 border border-blue-500/30 rounded-lg p-4">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-gray-400 text-sm">System Efficiency</span>
+                    <i data-lucide="zap" class="w-4 h-4 text-yellow-400"></i>
+                </div>
+                <div class="text-2xl font-bold text-yellow-400">94.2%</div>
+                <div class="text-xs text-gray-400 mt-1">+2.3% this week</div>
+            </div>
+            
+            <div class="bg-gray-800 border border-blue-500/30 rounded-lg p-4">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-gray-400 text-sm">Cash Runway</span>
+                    <i data-lucide="trending-up" class="w-4 h-4 text-purple-400"></i>
+                </div>
+                <div class="text-2xl font-bold text-purple-400">8.4</div>
+                <div class="text-xs text-gray-400 mt-1">months</div>
+            </div>
+        </section>
+
+        <!-- Main Grid -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- Left Column - Agent Status & Tasks -->
+            <div class="space-y-6">
+                <!-- Agent Status -->
+                <section class="bg-gray-800 border border-blue-500/30 rounded-lg p-4">
+                    <h2 class="text-lg font-semibold mb-4 flex items-center">
+                        <i data-lucide="cpu" class="w-5 h-5 mr-2 text-blue-400"></i>
+                        Agent Status
+                    </h2>
+                    
+                    <div class="space-y-3">
+                        <!-- Strategic Agents -->
+                        <div class="border-l-4 border-purple-500 pl-3">
+                            <div class="text-sm font-medium text-purple-400 mb-2">Strategic Agents</div>
+                            <div class="space-y-2">
+                                <div class="flex items-center justify-between">
+                                    <span class="text-xs">Architect Agent</span>
+                                    <div class="w-2 h-2 bg-green-500 rounded-full"></div>
+                                </div>
+                                <div class="flex items-center justify-between">
+                                    <span class="text-xs">Energy Systems Agent</span>
+                                    <div class="w-2 h-2 bg-green-500 rounded-full"></div>
+                                </div>
+                                <div class="flex items-center justify-between">
+                                    <span class="text-xs">AI Systems Agent</span>
+                                    <div class="w-2 h-2 bg-yellow-500 rounded-full"></div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Execution Agents -->
+                        <div class="border-l-4 border-blue-500 pl-3">
+                            <div class="text-sm font-medium text-blue-400 mb-2">Execution Agents</div>
+                            <div class="space-y-2">
+                                <div class="flex items-center justify-between">
+                                    <span class="text-xs">Procurement Agent</span>
+                                    <div class="w-2 h-2 bg-green-500 rounded-full"></div>
+                                </div>
+                                <div class="flex items-center justify-between">
+                                    <span class="text-xs">Construction Agent</span>
+                                    <div class="w-2 h-2 bg-green-500 rounded-full"></div>
+                                </div>
+                                <div class="flex items-center justify-between">
+                                    <span class="text-xs">Fabrication Agent</span>
+                                    <div class="w-2 h-2 bg-yellow-500 rounded-full"></div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Business Agents -->
+                        <div class="border-l-4 border-green-500 pl-3">
+                            <div class="text-sm font-medium text-green-400 mb-2">Business Agents</div>
+                            <div class="space-y-2">
+                                <div class="flex items-center justify-between">
+                                    <span class="text-xs">Finance Agent</span>
+                                    <div class="w-2 h-2 bg-green-500 rounded-full"></div>
+                                </div>
+                                <div class="flex items-center justify-between">
+                                    <span class="text-xs">Funding Agent</span>
+                                    <div class="w-2 h-2 bg-green-500 rounded-full"></div>
+                                </div>
+                                <div class="flex items-center justify-between">
+                                    <span class="text-xs">Revenue Agent</span>
+                                    <div class="w-2 h-2 bg-green-500 rounded-full"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Active Tasks -->
+                <section class="bg-gray-800 border border-blue-500/30 rounded-lg p-4">
+                    <h2 class="text-lg font-semibold mb-4 flex items-center">
+                        <i data-lucide="list-checks" class="w-5 h-5 mr-2 text-blue-400"></i>
+                        Active Tasks
+                    </h2>
+                    
+                    <div class="space-y-3">
+                        <div class="bg-gray-700 rounded-lg p-3">
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-sm font-medium">Container Module Design</span>
+                                <span class="text-xs bg-blue-500/20 text-blue-400 px-2 py-1 rounded">Architect</span>
+                            </div>
+                            <div class="w-full bg-gray-600 rounded-full h-2">
+                                <div class="bg-blue-500 h-2 rounded-full" style="width: 75%"></div>
+                            </div>
+                            <div class="text-xs text-gray-400 mt-1">75% Complete</div>
+                        </div>
+                        
+                        <div class="bg-gray-700 rounded-lg p-3">
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-sm font-medium">Steel Sourcing</span>
+                                <span class="text-xs bg-green-500/20 text-green-400 px-2 py-1 rounded">Procurement</span>
+                            </div>
+                            <div class="w-full bg-gray-600 rounded-full h-2">
+                                <div class="bg-green-500 h-2 rounded-full" style="width: 90%"></div>
+                            </div>
+                            <div class="text-xs text-gray-400 mt-1">90% Complete</div>
+                        </div>
+                        
+                        <div class="bg-gray-700 rounded-lg p-3">
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-sm font-medium">Grant Application</span>
+                                <span class="text-xs bg-purple-500/20 text-purple-400 px-2 py-1 rounded">Funding</span>
+                            </div>
+                            <div class="w-full bg-gray-600 rounded-full h-2">
+                                <div class="bg-purple-500 h-2 rounded-full" style="width: 45%"></div>
+                            </div>
+                            <div class="text-xs text-gray-400 mt-1">45% Complete</div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+
+            <!-- Center Column - System Visualization -->
+            <div class="space-y-6">
+                <!-- System Architecture Visualization -->
+                <section class="bg-gray-800 border border-blue-500/30 rounded-lg p-4">
+                    <h2 class="text-lg font-semibold mb-4 flex items-center">
+                        <i data-lucide="network" class="w-5 h-5 mr-2 text-blue-400"></i>
+                        System Architecture
+                    </h2>
+                    
+                    <div class="relative h-64 bg-gray-900 rounded-lg flex items-center justify-center">
+                        <!-- Heidi Executive Orchestrator -->
+                        <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2">
+                            <div class="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-500 rounded-lg flex items-center justify-center glow-active">
+                                <i data-lucide="brain" class="w-8 h-8 text-white"></i>
+                            </div>
+                            <div class="text-xs text-center mt-1 neon-text">Heidi</div>
+                        </div>
+                        
+                        <!-- Agent Connections -->
+                        <div class="absolute top-1/4 left-1/4 w-8 h-8 bg-purple-500 rounded flex items-center justify-center">
+                            <i data-lucide="box" class="w-4 h-4 text-white"></i>
+                        </div>
+                        
+                        <div class="absolute top-1/4 right-1/4 w-8 h-8 bg-blue-500 rounded flex items-center justify-center">
+                            <i data-lucide="wrench" class="w-4 h-4 text-white"></i>
+                        </div>
+                        
+                        <div class="absolute bottom-1/4 left-1/4 w-8 h-8 bg-green-500 rounded flex items-center justify-center">
+                            <i data-lucide="dollar-sign" class="w-4 h-4 text-white"></i>
+                        </div>
+                        
+                        <div class="absolute bottom-1/4 right-1/4 w-8 h-8 bg-yellow-500 rounded flex items-center justify-center">
+                            <i data-lucide="users" class="w-4 h-4 text-white"></i>
+                        </div>
+                        
+                        <!-- Connection Lines -->
+                        <svg class="absolute inset-0 w-full h-full pointer-events-none">
+                            <line x1="50%" y1="50%" x2="25%" y2="25%" stroke="rgba(59, 130, 246, 0.3)" stroke-width="2"/>
+                            <line x1="50%" y1="50%" x2="75%" y2="25%" stroke="rgba(59, 130, 246, 0.3)" stroke-width="2"/>
+                            <line x1="50%" y1="50%" x2="25%" y2="75%" stroke="rgba(59, 130, 246, 0.3)" stroke-width="2"/>
+                            <line x1="50%" y1="50%" x2="75%" y2="75%" stroke="rgba(59, 130, 246, 0.3)" stroke-width="2"/>
+                        </svg>
+                    </div>
+                </section>
+
+                <!-- Event Stream -->
+                <section class="bg-gray-800 border border-blue-500/30 rounded-lg p-4">
+                    <h2 class="text-lg font-semibold mb-4 flex items-center">
+                        <i data-lucide="activity" class="w-5 h-5 mr-2 text-blue-400"></i>
+                        Event Stream
+                    </h2>
+                    
+                    <div class="space-y-2 max-h-48 overflow-y-auto">
+                        <div class="flex items-center space-x-2 text-xs">
+                            <span class="text-gray-500">14:32:15</span>
+                            <span class="bg-green-500/20 text-green-400 px-2 py-1 rounded">SUCCESS</span>
+                            <span>Architect Agent completed container design</span>
+                        </div>
+                        
+                        <div class="flex items-center space-x-2 text-xs">
+                            <span class="text-gray-500">14:31:42</span>
+                            <span class="bg-blue-500/20 text-blue-400 px-2 py-1 rounded">INFO</span>
+                            <span>Finance Agent updated cash flow forecast</span>
+                        </div>
+                        
+                        <div class="flex items-center space-x-2 text-xs">
+                            <span class="text-gray-500">14:30:28</span>
+                            <span class="bg-yellow-500/20 text-yellow-400 px-2 py-1 rounded">WARNING</span>
+                            <span>Construction Agent: Weather delay risk detected</span>
+                        </div>
+                        
+                        <div class="flex items-center space-x-2 text-xs">
+                            <span class="text-gray-500">14:29:15</span>
+                            <span class="bg-purple-500/20 text-purple-400 px-2 py-1 rounded">DECISION</span>
+                            <span>Heidi routed task to Procurement Agent</span>
+                        </div>
+                        
+                        <div class="flex items-center space-x-2 text-xs">
+                            <span class="text-gray-500">14:28:03</span>
+                            <span class="bg-green-500/20 text-green-400 px-2 py-1 rounded">SUCCESS</span>
+                            <span>Funding Agent submitted DOE grant application</span>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Financial Overview -->
+                <section class="bg-gray-800 border border-blue-500/30 rounded-lg p-4">
+                    <h2 class="text-lg font-semibold mb-4 flex items-center">
+                        <i data-lucide="pie-chart" class="w-5 h-5 mr-2 text-blue-400"></i>
+                        Financial Overview
+                    </h2>
+                    
+                    <div class="grid grid-cols-2 gap-4 mb-4">
+                        <div>
+                            <div class="text-xs text-gray-400">Total Revenue</div>
+                            <div class="text-lg font-bold text-green-400">$124,500</div>
+                        </div>
+                        <div>
+                            <div class="text-xs text-gray-400">Total Expenses</div>
+                            <div class="text-lg font-bold text-red-400">$87,200</div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-4">
+                        <div class="flex justify-between text-xs mb-1">
+                            <span>Budget Utilization</span>
+                            <span>71%</span>
+                        </div>
+                        <div class="w-full bg-gray-600 rounded-full h-2">
+                            <div class="bg-gradient-to-r from-green-500 to-yellow-500 h-2 rounded-full" style="width: 71%"></div>
+                        </div>
+                    </div>
+                    
+                    <div class="text-center">
+                        <div class="text-xs text-gray-400">Net Income</div>
+                        <div class="text-2xl font-bold text-blue-400">$37,300</div>
+                        <div class="text-xs text-green-400">+15.2% vs last month</div>
+                    </div>
+                </section>
+            </div>
+
+            <!-- Right Column - Controls & Approvals -->
+            <div class="space-y-6">
+                <!-- Human Approvals -->
+                <section class="bg-gray-800 border border-orange-500/30 rounded-lg p-4">
+                    <h2 class="text-lg font-semibold mb-4 flex items-center">
+                        <i data-lucide="user-check" class="w-5 h-5 mr-2 text-orange-400"></i>
+                        Human Approvals Required
+                    </h2>
+                    
+                    <div class="space-y-3">
+                        <div class="bg-gray-700 rounded-lg p-3 border border-orange-500/30">
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-sm font-medium">Structural Modification</span>
+                                <span class="text-xs bg-orange-500/20 text-orange-400 px-2 py-1 rounded">HIGH</span>
+                            </div>
+                            <div class="text-xs text-gray-400 mb-2">Architect Agent requests approval for load-bearing wall modification</div>
+                            <div class="flex space-x-2">
+                                <button class="flex-1 bg-green-500 hover:bg-green-600 text-white text-xs py-1 rounded transition-colors">
+                                    Approve
+                                </button>
+                                <button class="flex-1 bg-red-500 hover:bg-red-600 text-white text-xs py-1 rounded transition-colors">
+                                    Reject
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <div class="bg-gray-700 rounded-lg p-3 border border-yellow-500/30">
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-sm font-medium">Large Purchase</span>
+                                <span class="text-xs bg-yellow-500/20 text-yellow-400 px-2 py-1 rounded">MEDIUM</span>
+                            </div>
+                            <div class="text-xs text-gray-400 mb-2">Procurement Agent: $12,500 steel order exceeds threshold</div>
+                            <div class="flex space-x-2">
+                                <button class="flex-1 bg-green-500 hover:bg-green-600 text-white text-xs py-1 rounded transition-colors">
+                                    Approve
+                                </button>
+                                <button class="flex-1 bg-red-500 hover:bg-red-600 text-white text-xs py-1 rounded transition-colors">
+                                    Reject
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <div class="bg-gray-700 rounded-lg p-3 border border-blue-500/30">
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-sm font-medium">Partnership Agreement</span>
+                                <span class="text-xs bg-blue-500/20 text-blue-400 px-2 py-1 rounded">LOW</span>
+                            </div>
+                            <div class="text-xs text-gray-400 mb-2">Outreach Agent: Partnership term review required</div>
+                            <div class="flex space-x-2">
+                                <button class="flex-1 bg-green-500 hover:bg-green-600 text-white text-xs py-1 rounded transition-colors">
+                                    Approve
+                                </button>
+                                <button class="flex-1 bg-red-500 hover:bg-red-600 text-white text-xs py-1 rounded transition-colors">
+                                    Reject
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- System Controls -->
+                <section class="bg-gray-800 border border-blue-500/30 rounded-lg p-4">
+                    <h2 class="text-lg font-semibold mb-4 flex items-center">
+                        <i data-lucide="settings" class="w-5 h-5 mr-2 text-blue-400"></i>
+                        System Controls
+                    </h2>
+                    
+                    <div class="space-y-4">
+                        <!-- Autonomy Level -->
+                        <div>
+                            <label class="text-sm text-gray-400 block mb-2">Autonomy Level</label>
+                            <select class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm">
+                                <option value="0">Level 0 - OBSERVE</option>
+                                <option value="1">Level 1 - ASSIST</option>
+                                <option value="2" selected>Level 2 - EXECUTE WITH APPROVAL</option>
+                                <option value="3">Level 3 - CONDITIONAL AUTONOMY</option>
+                                <option value="4">Level 4 - FULL AUTONOMY</option>
+                            </select>
+                        </div>
+                        
+                        <!-- Task Submission -->
+                        <div>
+                            <label class="text-sm text-gray-400 block mb-2">Submit Task</label>
+                            <div class="flex space-x-2">
+                                <input type="text" placeholder="Task description..." class="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm">
+                                <button class="bg-blue-500 hover:bg-blue-600 px-4 py-2 rounded-lg transition-colors">
+                                    <i data-lucide="send" class="w-4 h-4"></i>
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <!-- Emergency Controls -->
+                        <div class="border-t border-gray-700 pt-4">
+                            <div class="text-sm text-gray-400 mb-2">Emergency Controls</div>
+                            <div class="grid grid-cols-2 gap-2">
+                                <button class="bg-red-500/20 hover:bg-red-500/30 text-red-400 px-3 py-2 rounded text-xs transition-colors">
+                                    Pause All
+                                </button>
+                                <button class="bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-400 px-3 py-2 rounded text-xs transition-colors">
+                                    Safe Mode
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Risk Alerts -->
+                <section class="bg-gray-800 border border-red-500/30 rounded-lg p-4">
+                    <h2 class="text-lg font-semibold mb-4 flex items-center">
+                        <i data-lucide="alert-triangle" class="w-5 h-5 mr-2 text-red-400"></i>
+                        Risk Alerts
+                    </h2>
+                    
+                    <div class="space-y-2">
+                        <div class="flex items-center space-x-2 text-xs">
+                            <div class="w-2 h-2 bg-red-500 rounded-full"></div>
+                            <span>Weather delay risk: 70% chance of rain next week</span>
+                        </div>
+                        <div class="flex items-center space-x-2 text-xs">
+                            <div class="w-2 h-2 bg-yellow-500 rounded-full"></div>
+                            <span>Supply chain: Steel delivery delayed 3 days</span>
+                        </div>
+                        <div class="flex items-center space-x-2 text-xs">
+                            <div class="w-2 h-2 bg-yellow-500 rounded-full"></div>
+                            <span>Budget: Construction approaching 85% allocation</span>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-gray-800 border-t border-blue-500/30 mt-8">
+        <div class="container mx-auto px-4 py-4">
+            <div class="flex items-center justify-between text-sm text-gray-400">
+                <div>ProtoForge Autonomous HQ © 2026</div>
+                <div class="flex items-center space-x-4">
+                    <span>System Uptime: 14d 7h 23m</span>
+                    <span>•</span>
+                    <span>Last Update: 2 minutes ago</span>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // Initialize Lucide icons
+        lucide.createIcons();
+        
+        // Simulated real-time updates
+        function updateMetrics() {
+            // Update task progress
+            const progressBars = document.querySelectorAll('.bg-blue-500, .bg-green-500, .bg-purple-500');
+            progressBars.forEach(bar => {
+                const currentWidth = parseInt(bar.style.width);
+                const newWidth = Math.min(100, currentWidth + Math.random() * 2);
+                bar.style.width = newWidth + '%';
+            });
+            
+            // Update event stream
+            const eventStream = document.querySelector('.space-y-2.max-h-48');
+            if (eventStream && Math.random() > 0.7) {
+                const newEvent = document.createElement('div');
+                newEvent.className = 'flex items-center space-x-2 text-xs';
+                newEvent.innerHTML = `
+                    <span class="text-gray-500">${new Date().toLocaleTimeString()}</span>
+                    <span class="bg-blue-500/20 text-blue-400 px-2 py-1 rounded">INFO</span>
+                    <span>System update: Performance optimization completed</span>
+                `;
+                eventStream.insertBefore(newEvent, eventStream.firstChild);
+                
+                // Remove old events
+                while (eventStream.children.length > 10) {
+                    eventStream.removeChild(eventStream.lastChild);
+                }
+            }
+        }
+        
+        // Update every 3 seconds
+        setInterval(updateMetrics, 3000);
+        
+        // Handle approval buttons
+        document.querySelectorAll('button').forEach(button => {
+            if (button.textContent === 'Approve' || button.textContent === 'Reject') {
+                button.addEventListener('click', function() {
+                    const card = this.closest('.bg-gray-700');
+                    if (card) {
+                        card.style.opacity = '0.5';
+                        this.disabled = true;
+                        this.textContent = 'Processed';
+                    }
+                });
+            }
+        });
+        
+        // Handle autonomy level change
+        document.querySelector('select').addEventListener('change', function() {
+            const level = this.value;
+            const levelNames = {
+                '0': 'OBSERVE',
+                '1': 'ASSIST', 
+                '2': 'EXECUTE_WITH_APPROVAL',
+                '3': 'CONDITIONAL_AUTONOMY',
+                '4': 'FULL_AUTONOMY'
+            };
+            
+            // Update display
+            document.querySelector('.bg-gray-700.px-3.py-1.rounded span').textContent = `Autonomy: Level ${level}`;
+            
+            console.log(`Autonomy level changed to: ${levelNames[level]}`);
+        });
+        
+        // Handle task submission
+        document.querySelector('input[type="text"]').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                const taskDescription = this.value.trim();
+                if (taskDescription) {
+                    console.log('Task submitted:', taskDescription);
+                    this.value = '';
+                    
+                    // Add to active tasks (simulation)
+                    const activeTasks = document.querySelector('.space-y-3');
+                    if (activeTasks) {
+                        const newTask = document.createElement('div');
+                        newTask.className = 'bg-gray-700 rounded-lg p-3';
+                        newTask.innerHTML = `
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-sm font-medium">${taskDescription}</span>
+                                <span class="text-xs bg-blue-500/20 text-blue-400 px-2 py-1 rounded">New</span>
+                            </div>
+                            <div class="w-full bg-gray-600 rounded-full h-2">
+                                <div class="bg-blue-500 h-2 rounded-full" style="width: 10%"></div>
+                            </div>
+                            <div class="text-xs text-gray-400 mt-1">10% Complete</div>
+                        `;
+                        activeTasks.insertBefore(newTask, activeTasks.firstChild);
+                    }
+                }
+            }
+        });
+        
+        // Handle emergency controls
+        document.querySelectorAll('.bg-red-500\\/20, .bg-yellow-500\\/20').forEach(button => {
+            button.addEventListener('click', function() {
+                if (this.textContent.includes('Pause All')) {
+                    console.log('Emergency: Pausing all agents');
+                    this.textContent = 'Resumed';
+                    this.classList.remove('bg-red-500/20', 'text-red-400');
+                    this.classList.add('bg-green-500/20', 'text-green-400');
+                } else if (this.textContent.includes('Safe Mode')) {
+                    console.log('Emergency: Activating safe mode');
+                    this.textContent = 'Safe Mode ON';
+                    this.classList.add('glow-active');
+                }
+            });
+        });
+        
+        // Initialize charts (if needed)
+        function initCharts() {
+            // Chart initialization would go here
+            console.log('Charts initialized');
+        }
+        
+        // Initialize on load
+        window.addEventListener('load', function() {
+            initCharts();
+            console.log('ProtoHub Dashboard initialized');
+        });
+    </script>
+</body>
+</html>

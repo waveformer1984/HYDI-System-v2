@@ -1,0 +1,26 @@
+{
+  "system_identity": {
+    "timestamp": "2026-04-29T23:48:10.638Z",
+    "data": "{\"system_name\":\"HEIDI\",\"version\":\"1.0\",\"architecture\":\"4-layer-self-awareness\",\"launch_protocol\":\"HSLP-v1.0\"}",
+    "checksum": "d7dcbcb0a917111bb26de3217a65b927efe84028e8fb0e118de5ac0bc90deaa9",
+    "type": "identity"
+  },
+  "performance_baseline": {
+    "timestamp": "2026-04-29T23:48:10.638Z",
+    "data": "{\"cpu_usage\":0,\"memory_usage\":0,\"task_completion_rate\":1,\"response_time_baseline\":100,\"error_rate\":0}",
+    "checksum": "3f5c79bf747d012eb4b6c70d6bd5e2e3af30d37ed69178d89d4ee4717fb9bb5f",
+    "type": "performance"
+  },
+  "integrity_baseline": {
+    "timestamp": "2026-04-29T23:48:10.638Z",
+    "data": "{\"drift_score\":0,\"integrity_score\":1,\"last_validation\":\"2026-04-29T23:48:10.638Z\",\"validation_history\":[]}",
+    "checksum": "f3bf12d2b7e8d57bf8726d085c4585366850976ec455d88ec769c00e36548193",
+    "type": "integrity"
+  },
+  "state_machine_baseline": {
+    "timestamp": "2026-04-29T23:48:10.639Z",
+    "data": "{\"current_state\":\"BASELINE\",\"state_history\":[\"BASELINE\"],\"transition_rules\":{\"BASELINE\":[\"INITIALIZING\",\"SAFE_MODE\"],\"INITIALIZING\":[\"OPERATIONAL\",\"DEGRADED\"],\"OPERATIONAL\":[\"ACTIVE\",\"DEGRADED\",\"SHUTDOWN\"],\"DEGRADED\":[\"RECOVERY\",\"SHUTDOWN\"],\"RECOVERY\":[\"OPERATIONAL\",\"DEGRADED\"],\"SAFE_MODE\":[\"INITIALIZING\",\"SHUTDOWN\"],\"SHUTDOWN\":[\"BASELINE\"]}}",
+    "checksum": "d0a11d94253d10b76db284ced480f6750c7c372abcff75fede7874e6a80fc0de",
+    "type": "state_machine"
+  }
+}

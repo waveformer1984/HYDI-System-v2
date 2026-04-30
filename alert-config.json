@@ -1,0 +1,25 @@
+{
+  "alertMethods": {
+    "webhook": {
+      "enabled": true,
+      "url": "https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK",
+      "fallback": "log"
+    },
+    "email": {
+      "enabled": false,
+      "smtp": "smtp.gmail.com",
+      "port": 587,
+      "from": "alerts@hydi.system",
+      "to": "admin@example.com"
+    },
+    "log": {
+      "enabled": true,
+      "file": "critical-alerts.log"
+    }
+  },
+  "thresholds": {
+    "consecutiveFailures": 3,
+    "healthCheckTimeout": 30,
+    "payoutFailureCount": 1
+  }
+}

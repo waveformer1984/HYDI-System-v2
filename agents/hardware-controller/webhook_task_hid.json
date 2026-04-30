@@ -1,0 +1,21 @@
+{
+  "stripe_email": "EDIT_THIS@example.com",
+  "stripe_password": "EDIT_THIS",
+  "vercel_email": "EDIT_THIS@example.com",
+  "vercel_password": "EDIT_THIS",
+  "vercel_project": "heidi-chat-portal",
+  "webhook_endpoint_url": "https://heidi-chat-portal.vercel.app/api/webhooks/stripe",
+  "webhook_events": [
+    "payment_intent.succeeded",
+    "payment_intent.payment_failed",
+    "charge.refunded"
+  ],
+  "contract": {
+    "mode": "hid_required",
+    "requires_human_confirmation": true,
+    "min_vision_confidence": 0.92,
+    "rollback_strategy": "revert_webhook",
+    "snapshot_before": true,
+    "max_retries": 1
+  }
+}

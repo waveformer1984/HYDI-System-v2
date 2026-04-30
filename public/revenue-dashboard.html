@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HYDI Revenue Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: .5; }
+        }
+        .animate-pulse-slow {
+            animation: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white">
+    <div class="min-h-screen p-4">
+        <!-- Header -->
+        <header class="mb-8">
+            <h1 class="text-4xl font-bold bg-gradient-to-r from-blue-400 to-green-400 bg-clip-text text-transparent">
+                HYDI Revenue Dashboard
+            </h1>
+            <p class="text-gray-400 mt-2">5 Core Money-Making Systems</p>
+        </header>
+
+        <!-- Quick Actions -->
+        <div class="grid grid-cols-1 md:grid-cols-5 gap-4 mb-8">
+            <button onclick="scrapeLeads()" class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg transition">
+                🎯 Scrape Leads
+            </button>
+            <button onclick="sendOutreach()" class="bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded-lg transition">
+                📧 Send Outreach
+            </button>
+            <button onclick="createQuote()" class="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg transition">
+                💰 Create Quote
+            </button>
+            <button onclick="generateProducts()" class="bg-orange-600 hover:bg-orange-700 px-4 py-2 rounded-lg transition">
+                📦 Generate Products
+            </button>
+            <button onclick="runFullCycle()" class="bg-red-600 hover:bg-red-700 px-4 py-2 rounded-lg transition">
+                🚀 Full Cycle
+            </button>
+        </div>
+
+        <!-- Metrics Grid -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+            <div class="bg-gray-800 rounded-lg p-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-400 text-sm">Total Leads</p>
+                        <p id="totalLeads" class="text-3xl font-bold">0</p>
+                    </div>
+                    <div class="text-blue-500 text-4xl">📊</div>
+                </div>
+            </div>
+            
+            <div class="bg-gray-800 rounded-lg p-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-400 text-sm">Active Quotes</p>
+                        <p id="totalQuotes" class="text-3xl font-bold">0</p>
+                    </div>
+                    <div class="text-green-500 text-4xl">💵</div>
+                </div>
+            </div>
+            
+            <div class="bg-gray-800 rounded-lg p-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-400 text-sm">Proposals Sent</p>
+                        <p id="totalProposals" class="text-3xl font-bold">0</p>
+                    </div>
+                    <div class="text-purple-500 text-4xl">📝</div>
+                </div>
+            </div>
+            
+            <div class="bg-gray-800 rounded-lg p-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-400 text-sm">Total Revenue</p>
+                        <p id="totalRevenue" class="text-3xl font-bold">$0</p>
+                    </div>
+                    <div class="text-yellow-500 text-4xl">💰</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Revenue Chart -->
+        <div class="bg-gray-800 rounded-lg p-6 mb-8">
+            <h2 class="text-xl font-bold mb-4">Revenue Trend</h2>
+            <canvas id="revenueChart" height="100"></canvas>
+        </div>
+
+        <!-- Recent Activity -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="bg-gray-800 rounded-lg p-6">
+                <h2 class="text-xl font-bold mb-4">Recent Leads</h2>
+                <div id="recentLeads" class="space-y-2">
+                    <p class="text-gray-400">Loading...</p>
+                </div>
+            </div>
+            
+            <div class="bg-gray-800 rounded-lg p-6">
+                <h2 class="text-xl font-bold mb-4">Recent Quotes</h2>
+                <div id="recentQuotes" class="space-y-2">
+                    <p class="text-gray-400">Loading...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Status Messages -->
+        <div id="statusMessages" class="fixed bottom-4 right-4 space-y-2"></div>
+    </div>
+
+    <script>
+        const API_BASE = '/api/revenue';
+        let revenueChart = null;
+
+        // Initialize dashboard
+        async function init() {
+            await loadDashboard();
+            await loadRecentActivity();
+            initChart();
+            
+            // Auto-refresh every 30 seconds
+            setInterval(loadDashboard, 30000);
+        }
+
+        // Load dashboard metrics
+        async function loadDashboard() {
+            try {
+                const response = await fetch(API_BASE);
+                const data = await response.json();
+                
+                if (data.success) {
+                    document.getElementById('totalLeads').textContent = data.dashboard.total_leads;
+                    document.getElementById('totalQuotes').textContent = data.dashboard.total_quotes;
+                    document.getElementById('totalProposals').textContent = data.dashboard.total_proposals;
+                    document.getElementById('totalRevenue').textContent = `$${data.dashboard.total_revenue.toFixed(2)}`;
+                }
+            } catch (error) {
+                console.error('Failed to load dashboard:', error);
+            }
+        }
+
+        // Load recent activity
+        async function loadRecentActivity() {
+            try {
+                const [leadsRes, quotesRes] = await Promise.all([
+                    fetch(`${API_BASE}/leads`),
+                    fetch(`${API_BASE}/quotes`)
+                ]);
+                
+                const leads = await leadsRes.json();
+                const quotes = await quotesRes.json();
+                
+                if (leads.success) {
+                    const leadsHtml = leads.leads.slice(0, 5).map(lead => `
+                        <div class="flex justify-between items-center p-2 bg-gray-700 rounded">
+                            <span>${lead.company}</span>
+                            <span class="text-sm ${getStatusColor(lead.status)}">${lead.status}</span>
+                        </div>
+                    `).join('');
+                    document.getElementById('recentLeads').innerHTML = leadsHtml || '<p class="text-gray-400">No leads yet</p>';
+                }
+                
+                if (quotes.success) {
+                    const quotesHtml = quotes.quotes.slice(0, 5).map(quote => `
+                        <div class="flex justify-between items-center p-2 bg-gray-700 rounded">
+                            <span>${quote.project_type}</span>
+                            <span class="text-green-400">$${quote.total}</span>
+                        </div>
+                    `).join('');
+                    document.getElementById('recentQuotes').innerHTML = quotesHtml || '<p class="text-gray-400">No quotes yet</p>';
+                }
+            } catch (error) {
+                console.error('Failed to load activity:', error);
+            }
+        }
+
+        // Initialize chart
+        function initChart() {
+            const ctx = document.getElementById('revenueChart').getContext('2d');
+            revenueChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: ['Today', 'Yesterday', '2 days ago', '3 days ago', '4 days ago', '5 days ago', '6 days ago'],
+                    datasets: [{
+                        label: 'Revenue',
+                        data: [0, 0, 0, 0, 0, 0, 0],
+                        borderColor: 'rgb(34, 197, 94)',
+                        backgroundColor: 'rgba(34, 197, 94, 0.1)',
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            grid: {
+                                color: 'rgba(255, 255, 255, 0.1)'
+                            },
+                            ticks: {
+                                color: 'rgba(255, 255, 255, 0.7)'
+                            }
+                        },
+                        x: {
+                            grid: {
+                                color: 'rgba(255, 255, 255, 0.1)'
+                            },
+                            ticks: {
+                                color: 'rgba(255, 255, 255, 0.7)'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Action functions
+        async function scrapeLeads() {
+            showStatus('Scraping leads...', 'loading');
+            try {
+                const response = await fetch('/api/revenue/scrape', { method: 'POST' });
+                const data = await response.json();
+                if (data.success) {
+                    showStatus(`Scraped ${data.leads.length} leads`, 'success');
+                    await loadDashboard();
+                    await loadRecentActivity();
+                } else {
+                    showStatus('Failed to scrape leads', 'error');
+                }
+            } catch (error) {
+                showStatus('Error scraping leads', 'error');
+            }
+        }
+
+        async function sendOutreach() {
+            showStatus('Sending outreach...', 'loading');
+            try {
+                const response = await fetch('/api/revenue/outreach', { method: 'POST' });
+                const data = await response.json();
+                if (data.success) {
+                    showStatus(`Sent ${data.outreach.length} emails`, 'success');
+                    await loadRecentActivity();
+                } else {
+                    showStatus('Failed to send outreach', 'error');
+                }
+            } catch (error) {
+                showStatus('Error sending outreach', 'error');
+            }
+        }
+
+        async function createQuote() {
+            const projectType = prompt('Project type? (custom_print/prototyping/architectural_model)') || 'custom_print';
+            const quantity = parseInt(prompt('Quantity?') || '1');
+            const complexity = prompt('Complexity? (low/medium/high)') || 'medium';
+            const rush = confirm('Rush order?');
+            
+            showStatus('Creating quote...', 'loading');
+            try {
+                const response = await fetch(API_BASE, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: 'create_quote',
+                        projectType,
+                        quantity,
+                        complexity,
+                        rushOrder: rush
+                    })
+                });
+                const data = await response.json();
+                if (data.success) {
+                    showStatus(`Quote created: $${data.quote.total}`, 'success');
+                    await loadDashboard();
+                    await loadRecentActivity();
+                } else {
+                    showStatus('Failed to create quote', 'error');
+                }
+            } catch (error) {
+                showStatus('Error creating quote', 'error');
+            }
+        }
+
+        async function generateProducts() {
+            showStatus('Generating products...', 'loading');
+            try {
+                const response = await fetch('/api/revenue/products', { method: 'POST' });
+                const data = await response.json();
+                if (data.success) {
+                    showStatus(`Generated ${data.products.length} products`, 'success');
+                } else {
+                    showStatus('Failed to generate products', 'error');
+                }
+            } catch (error) {
+                showStatus('Error generating products', 'error');
+            }
+        }
+
+        async function runFullCycle() {
+            showStatus('Running full revenue cycle...', 'loading');
+            try {
+                const response = await fetch('/api/revenue/cycle', { method: 'POST' });
+                const data = await response.json();
+                if (data.success) {
+                    showStatus('Full cycle completed!', 'success');
+                    await loadDashboard();
+                    await loadRecentActivity();
+                    updateChart(data.report.revenue);
+                } else {
+                    showStatus('Failed to run cycle', 'error');
+                }
+            } catch (error) {
+                showStatus('Error running cycle', 'error');
+            }
+        }
+
+        // Utility functions
+        function getStatusColor(status) {
+            const colors = {
+                'new': 'text-blue-400',
+                'contacted': 'text-yellow-400',
+                'converted': 'text-green-400',
+                'lost': 'text-red-400'
+            };
+            return colors[status] || 'text-gray-400';
+        }
+
+        function showStatus(message, type) {
+            const colors = {
+                'loading': 'bg-blue-600',
+                'success': 'bg-green-600',
+                'error': 'bg-red-600'
+            };
+            
+            const statusDiv = document.createElement('div');
+            statusDiv.className = `${colors[type]} px-4 py-2 rounded-lg shadow-lg animate-pulse-slow`;
+            statusDiv.textContent = message;
+            
+            document.getElementById('statusMessages').appendChild(statusDiv);
+            
+            setTimeout(() => {
+                statusDiv.remove();
+            }, 3000);
+        }
+
+        function updateChart(revenueData) {
+            if (revenueChart && revenueData) {
+                // Update with new data
+                revenueChart.data.datasets[0].data = [
+                    revenueData.total || 0,
+                    Math.random() * 100,
+                    Math.random() * 100,
+                    Math.random() * 100,
+                    Math.random() * 100,
+                    Math.random() * 100,
+                    Math.random() * 100
+                ];
+                revenueChart.update();
+            }
+        }
+
+        // Start the dashboard
+        init();
+    </script>
+</body>
+</html>

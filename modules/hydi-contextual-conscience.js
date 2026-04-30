@@ -6,6 +6,11 @@ const { EventEmitter } = require('events');
 const { v4: uuidv4 } = require('uuid');
 const { supabase } = require('../src/database');
 
+// Import new Heidi modules for self-awareness capabilities
+const HeidiReflectionEngine = require('./heidi-reflection-engine');
+const HeidiSelfStateModel = require('./heidi-self-state-model');
+const HeidiDecisionEngine = require('./heidi-decision-engine');
+
 class HydiContextualConscience extends EventEmitter {
   constructor() {
     super();
@@ -33,9 +38,17 @@ class HydiContextualConscience extends EventEmitter {
     this.violationHistory = [];
     this.successPatterns = new Map();
     
+    // NEW: Self-awareness modules
+    this.selfState = new HeidiSelfStateModel();
+    this.reflectionEngine = new HeidiReflectionEngine(this);
+    this.decisionEngine = new HeidiDecisionEngine(this.selfState);
+    
     // Initialize consciousness
     this.initializeBehavioralTracking();
     this.startSurvivalLoop();
+    
+    // Initialize self-awareness capabilities
+    this.initializeSelfAwareness();
   }
   
   /**
@@ -591,6 +604,185 @@ class HydiContextualConscience extends EventEmitter {
       wasteDetected: Array.from(this.resourcePreservation.wastePrevention.values()),
       totalPotentialSavings: this.calculateTotalPotentialSavings()
     };
+  }
+  
+  /**
+   * Initialize self-awareness capabilities
+   */
+  initializeSelfAwareness() {
+    console.log('[HEIDI] Self-awareness capabilities initializing...');
+    console.log('[HEIDI] Reflection engine: ACTIVE');
+    console.log('[HEIDI] Self-state model: ACTIVE');
+    console.log('[HEIDI] Decision engine: ACTIVE');
+    
+    // Setup cross-module event integration
+    this.setupSelfAwarenessIntegration();
+    
+    // Enable reflection capabilities
+    this.selfState.setCapability('reflection_active', true);
+    
+    console.log('[HEIDI] Self-awareness fully operational');
+  }
+  
+  /**
+   * Setup integration between self-awareness modules
+   */
+  setupSelfAwarenessIntegration() {
+    // Reflection engine insights update self-state
+    this.reflectionEngine.on('performance_update', (metrics) => {
+      this.selfState.updateConfidence({
+        successRate: metrics.taskSuccessRate,
+        errorRate: metrics.errorFrequency.size > 0 ? 0.1 : 0,
+        responseTime: 1000
+      });
+    });
+    
+    // Decision engine decisions affect self-state
+    this.decisionEngine.on('decision_made', (decision) => {
+      if (decision.result === 'autonomous') {
+        this.selfState.setFocus(decision.action, 'autonomous');
+      } else if (decision.escalation) {
+        this.selfState.recordError(new Error('Decision escalated'), {
+          action: decision.action,
+          reason: decision.reasoning.find(r => r.step === 'final_decision')?.reason
+        });
+      }
+    });
+    
+    // Self-state health alerts trigger reflection
+    this.selfState.on('health_alert', (alert) => {
+      this.reflectionEngine.queueReflection('health_alert', alert);
+      
+      // Reduce autonomy on health alerts
+      if (alert.status === 'critical') {
+        this.decisionEngine.updateAutonomyLevel(0.3);
+      } else if (alert.status === 'degraded') {
+        this.decisionEngine.updateAutonomyLevel(0.5);
+      }
+    });
+    
+    // System adaptations require decision approval
+    this.reflectionEngine.on('adaptation_required', (adaptation) => {
+      this.handleSystemAdaptation(adaptation);
+    });
+  }
+  
+  /**
+   * Handle system adaptations with decision engine approval
+   */
+  async handleSystemAdaptation(adaptation) {
+    try {
+      // Use decision engine to evaluate adaptation
+      const decision = await this.decisionEngine.makeDecision('apply_adaptation', {
+        adaptation,
+        priority: adaptation.strategy.priority
+      });
+      
+      if (decision.result === 'autonomous') {
+        console.log(`[HEIDI] Applying autonomous adaptation: ${adaptation.pattern}`);
+        await this.applyAdaptation(adaptation);
+      } else {
+        console.log(`[HEIDI] Adaptation requires approval: ${adaptation.pattern}`);
+        this.emit('adaptation_approval_required', {
+          adaptation,
+          decision
+        });
+      }
+    } catch (error) {
+      console.error('[HEIDI] Adaptation handling error:', error);
+      this.selfState.recordError(error, { adaptation });
+    }
+  }
+  
+  /**
+   * Apply system adaptation
+   */
+  async applyAdaptation(adaptation) {
+    const strategy = adaptation.strategy;
+    
+    switch (strategy.action) {
+      case 'interface_optimization':
+        console.log('[HEIDI] Implementing interface optimization...');
+        // Would integrate with actual UI system
+        break;
+        
+      case 'stress_intervention':
+        console.log('[HEIDI] Activating stress intervention...');
+        // Would trigger stress reduction protocols
+        break;
+        
+      case 'alert_system_overhaul':
+        console.log('[HEIDI] Initiating alert system overhaul...');
+        // Would modify alert prioritization
+        break;
+        
+      case 'systemic_intervention':
+        console.log('[HEIDI] Applying systemic intervention...');
+        // Would implement automated safeguards
+        break;
+        
+      default:
+        console.log(`[HEIDI] Unknown adaptation strategy: ${strategy.action}`);
+    }
+    
+    // Record successful adaptation
+    this.reflectionEngine.queueReflection('adaptation_applied', {
+      pattern: adaptation.pattern,
+      strategy: strategy.action,
+      timestamp: new Date().toISOString()
+    });
+  }
+  
+  /**
+   * Get comprehensive self-awareness status
+   */
+  getSelfAwarenessStatus() {
+    return {
+      self_state: this.selfState.getStateSummary(),
+      reflection: {
+        active: this.reflectionEngine.getCurrentReflection() !== null,
+        performance_metrics: this.reflectionEngine.getPerformanceMetrics(),
+        adaptive_patterns: this.reflectionEngine.getAdaptivePatterns().length
+      },
+      decision_engine: this.decisionEngine.getDecisionStats(),
+      capabilities: {
+        learning_enabled: this.selfState.state.capabilities.learning_mode === 'active',
+        adaptation_enabled: this.selfState.state.capabilities.adaptation_enabled,
+        current_autonomy: this.decisionEngine.boundaries.autonomy_level
+      }
+    };
+  }
+  
+  /**
+   * Perform autonomous action with decision approval
+   */
+  async performAutonomousAction(action, context = {}) {
+    return await this.decisionEngine.executeAutonomousAction(action, context, async (action, context) => {
+      // Execute the action based on type
+      switch (action) {
+        case 'perform_reflection':
+          await this.reflectionEngine.triggerManualReflection();
+          return { status: 'reflection_triggered' };
+          
+        case 'update_state':
+          this.selfState.updateState();
+          return { status: 'state_updated' };
+          
+        case 'emit_status_update':
+          this.emit('self_status_update', this.getSelfAwarenessStatus());
+          return { status: 'status_emitted' };
+          
+        default:
+          throw new Error(`Unknown autonomous action: ${action}`);
+      }
+    });
+  }
+  
+  /**
+   * Request human approval for restricted action
+   */
+  async requestHumanApproval(action, context = {}) {
+    return await this.decisionEngine.requestApproval(action, context);
   }
 }
 

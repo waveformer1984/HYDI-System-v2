@@ -8,10 +8,11 @@
     "start": "next start"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.32.0",
+    "micro": "^10.0.1",
     "next": "^14.0.0",
     "react": "^18.0.0",
     "react-dom": "^18.0.0",
-    "stripe": "^22.0.0",
-    "@supabase/supabase-js": "^2.32.0"
+    "stripe": "^22.0.0"
   }
 }

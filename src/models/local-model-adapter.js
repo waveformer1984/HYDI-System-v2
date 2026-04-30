@@ -174,6 +174,9 @@ class LocalModelAdapter extends EventEmitter {
       case 'drools':
         await this.loadRuleEngine(modelId, config);
         break;
+      case 'sql':
+        await this.loadSQLModel(modelId, config);
+        break;
       default:
         throw new Error(`Unknown model type: ${config.type}`);
     }
@@ -278,9 +281,22 @@ class LocalModelAdapter extends EventEmitter {
   }
 
   /**
+   * Load SQL model
+   */
+  async loadSQLModel(modelId, config) {
+    this.models.set(modelId, {
+      type: config.type,
+      path: config.path,
+      dialects: config.dialects,
+      loaded: true
+    });
+  }
+
+  /**
    * Execute inference with a local model
    * HARD KILL: Promise.race with 8s timeout
    * SOFT SIGNAL: Latency tracking without auto-fallback
+   * IID DECODING: Ensure inference request IDs are properly decoded and tracked
    */
   async execute(modelId, input, options = {}) {
     const model = this.models.get(modelId);
@@ -288,6 +304,9 @@ class LocalModelAdapter extends EventEmitter {
       throw new Error(`Model ${modelId} not loaded`);
     }
 
+    // Decode and validate Inference Request ID (IID) if provided
+    const inferenceRequestId = this.decodeInferenceRequestId(options.inferenceRequestId);
+    
     // Get tier from options or default to pro
     const tier = options.tier || 'pro';
     
@@ -300,8 +319,8 @@ class LocalModelAdapter extends EventEmitter {
       // Race between execution and timeout
       const result = await Promise.race([
         tier === 'enterprise' 
-          ? this.executePriority(modelId, input, options)
-          : this.executeBatched(modelId, input, options),
+          ? this.executePriority(modelId, input, { ...options, inferenceRequestId })
+          : this.executeBatched(modelId, input, { ...options, inferenceRequestId }),
         new Promise((_, reject) => 
           setTimeout(() => reject(new Error('MODEL_TIMEOUT')), EXECUTION_TIMEOUT)
         )
@@ -312,25 +331,113 @@ class LocalModelAdapter extends EventEmitter {
       // SOFT LATENCY SIGNAL: Track but DO NOT auto-fallback
       this.trackLatency(modelId, latency);
       
+      // Attach decoded IID to result for tracking
+      if (inferenceRequestId) {
+        result.inferenceRequestId = inferenceRequestId;
+        result.executionMetadata = {
+          ...result.executionMetadata,
+          iidDecoded: true,
+          iidTimestamp: new Date().toISOString()
+        };
+      }
+      
       return result;
       
     } catch (error) {
       const latency = Date.now() - startTime;
       
       if (error.message === 'MODEL_TIMEOUT') {
-        // Log timeout for telemetry
+        // Log timeout for telemetry with IID if available
         this.emit('model_timeout', {
           modelId,
           timeout: EXECUTION_TIMEOUT,
           tier,
+          inferenceRequestId,
           timestamp: new Date()
         });
-        throw new Error(`Model ${modelId} timed out after ${EXECUTION_TIMEOUT}ms`);
+        throw new Error(`Model ${modelId} timed out after ${EXECUTION_TIMEOUT}ms${inferenceRequestId ? ` (IID: ${inferenceRequestId})` : ''}`);
       }
       
       // Track error latency too
       this.trackLatency(modelId, latency, true);
       throw error;
+    }
+  }
+
+  /**
+   * Decode Inference Request ID (IID) from various formats
+   * Ensures proper decoding regardless of input format
+   */
+  decodeInferenceRequestId(iid) {
+    if (!iid) return null;
+    
+    try {
+      // If already a string, validate and clean
+      if (typeof iid === 'string') {
+        // Remove any URL encoding
+        const decoded = decodeURIComponent(iid);
+        
+        // Validate UUID format if it looks like one
+        if (this.isValidUUID(decoded)) {
+          return decoded;
+        }
+        
+        // Handle base64 encoded IIDs
+        if (this.isBase64(decoded)) {
+          const buffer = Buffer.from(decoded, 'base64');
+          const decodedBase64 = buffer.toString('utf8');
+          if (this.isValidUUID(decodedBase64)) {
+            return decodedBase64;
+          }
+        }
+        
+        // Return cleaned string if valid
+        return decoded;
+      }
+      
+      // Handle object format IIDs
+      if (typeof iid === 'object' && iid !== null) {
+        // Extract ID from common object structures
+        if (iid.id) return this.decodeInferenceRequestId(iid.id);
+        if (iid.inferenceId) return this.decodeInferenceRequestId(iid.inferenceId);
+        if (iid.requestId) return this.decodeInferenceRequestId(iid.requestId);
+        if (iid.iid) return this.decodeInferenceRequestId(iid.iid);
+        
+        // Stringify object and try to decode
+        return this.decodeInferenceRequestId(JSON.stringify(iid));
+      }
+      
+      // Handle numeric IIDs (convert to string)
+      if (typeof iid === 'number') {
+        return iid.toString();
+      }
+      
+      // Fallback: convert to string and clean
+      return decodeURIComponent(String(iid));
+      
+    } catch (error) {
+      console.warn(`[IID] Failed to decode inference request ID: ${iid}`, error.message);
+      // Return original as fallback
+      return typeof iid === 'string' ? iid : String(iid);
+    }
+  }
+
+  /**
+   * Validate UUID format
+   */
+  isValidUUID(uuid) {
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    return uuidRegex.test(uuid);
+  }
+
+  /**
+   * Check if string is base64 encoded
+   */
+  isBase64(str) {
+    try {
+      return btoa(atob(str)) === str;
+    } catch (err) {
+      return false;
     }
   }
   
@@ -388,7 +495,8 @@ class LocalModelAdapter extends EventEmitter {
         result,
         processingTime,
         tier: 'enterprise',
-        priority: 'real-time'
+        priority: 'real-time',
+        inferenceRequestId: options.inferenceRequestId
       });
 
       return result;
@@ -398,7 +506,8 @@ class LocalModelAdapter extends EventEmitter {
         input,
         error: error.message,
         processingTime: Date.now() - startTime,
-        tier: 'enterprise'
+        tier: 'enterprise',
+        inferenceRequestId: options.inferenceRequestId
       });
       throw error;
     }
@@ -420,7 +529,8 @@ class LocalModelAdapter extends EventEmitter {
         tier,
         resolve,
         reject,
-        timestamp: Date.now()
+        timestamp: Date.now(),
+        inferenceRequestId: options.inferenceRequestId
       });
       
       // Process batch if we have enough items or timeout
@@ -477,7 +587,8 @@ class LocalModelAdapter extends EventEmitter {
           result,
           processingTime: Date.now() - request.timestamp,
           tier: request.tier,
-          priority: 'batched'
+          priority: 'batched',
+          inferenceRequestId: request.inferenceRequestId
         });
         
         request.resolve(result);
@@ -487,7 +598,8 @@ class LocalModelAdapter extends EventEmitter {
           input: request.input,
           error: error.message,
           processingTime: Date.now() - request.timestamp,
-          tier: request.tier
+          tier: request.tier,
+          inferenceRequestId: request.inferenceRequestId
         });
         
         request.reject(error);
@@ -518,6 +630,8 @@ class LocalModelAdapter extends EventEmitter {
         return await this.executeOCR(modelId, input);
       case 'drools':
         return await this.executeRules(modelId, input);
+      case 'sql':
+        return await this.executeSQL(modelId, input);
       default:
         throw new Error(`Unknown model type: ${model.type}`);
     }
@@ -826,6 +940,31 @@ class LocalModelAdapter extends EventEmitter {
       actions: ['action1', 'action2'],
       facts: { fact1: true, fact2: false }
     };
+  }
+
+  /**
+   * Execute SQL model
+   */
+  async executeSQL(modelId, input) {
+    const model = this.models.get(modelId);
+    
+    // Generate SQL based on input
+    const sql = this.generateSQL(input.query, input.schema, model.dialects[0]);
+    
+    return {
+      sql,
+      dialect: model.dialects[0],
+      confidence: 0.85,
+      optimized: true
+    };
+  }
+
+  /**
+   * Generate SQL query
+   */
+  generateSQL(query, schema, dialect) {
+    // Mock SQL generation
+    return `SELECT * FROM table WHERE condition = '${query}'`;
   }
 
   /**

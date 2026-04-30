@@ -1,0 +1,82 @@
+/**
+ * MODULE LOADER HOOK - Runtime Import Enforcement
+ * 
+ * This hooks into Node.js module loading to enforce registration
+ * before imports resolve. This is the turnstile that prevents
+ * unregistered modules from entering the building.
+ * 
+ * Usage: require('./module-hook').install();
+ */
+
+const RuntimeEnforcer = require('./RuntimeEnforcer');
+
+let enforcer = null;
+
+/**
+ * Install the module hook
+ */
+function install() {
+  if (enforcer) {
+    console.log('[MODULE HOOK] Already installed');
+    return;
+  }
+  
+  enforcer = new RuntimeEnforcer({
+    manifestPath: require('path').resolve(__dirname, '../../system-manifest.json'),
+    enforcementMode: 'strict',
+    enableModuleHooking: true,
+    validateImports: true,
+    enableServiceValidation: true
+  });
+  
+  // Load manifest
+  enforcer.loadManifest().then(() => {
+    console.log('[MODULE HOOK] Runtime enforcement active');
+  }).catch(error => {
+    console.error('[MODULE HOOK] Failed to load manifest:', error.message);
+  });
+  
+  console.log('[MODULE HOOK] Installed');
+}
+
+/**
+ * Get the runtime enforcer instance
+ */
+function getEnforcer() {
+  return enforcer;
+}
+
+/**
+ * Validate an import before it resolves
+ */
+function validateImport(request, parent) {
+  if (!enforcer) {
+    return { allowed: true, reason: 'Module hook not installed' };
+  }
+  
+  return enforcer.validateImport(request, parent);
+}
+
+/**
+ * Create a service proxy with runtime validation
+ */
+function createServiceProxy(serviceName) {
+  if (!enforcer) {
+    throw new Error('Module hook not installed');
+  }
+  
+  return enforcer.createServiceProxy(serviceName);
+}
+
+// Auto-install if this module is required
+if (require.main === module) {
+  console.log('[MODULE HOOK] Auto-installing module hook...');
+  install();
+}
+
+module.exports = {
+  install,
+  getEnforcer,
+  validateImport,
+  createServiceProxy
+};

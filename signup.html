@@ -428,13 +428,33 @@
             btn.textContent = 'Processing...';
             btn.disabled = true;
 
-            // Simulate payment processing
-            setTimeout(() => {
-                const token = 'hydi_' + btoa(Date.now()).substring(0, 32);
-                document.getElementById('payment-form').style.display = 'none';
-                document.getElementById('token-display').style.display = 'block';
-                document.getElementById('token-code').textContent = `hydi init ${token}`;
-            }, 1500);
+            const email = document.getElementById('email').value;
+            
+            try {
+                const response = await fetch('/api/checkout', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        tier: selectedTier,
+                        email: email,
+                        company: email.split('@')[1] // Use domain as company
+                    })
+                });
+
+                const data = await response.json();
+                
+                if (data.url) {
+                    // Redirect to Stripe Checkout
+                    window.location.href = data.url;
+                } else {
+                    throw new Error(data.error || 'Payment failed');
+                }
+            } catch (error) {
+                console.error('Payment error:', error);
+                btn.textContent = 'Subscribe Now';
+                btn.disabled = false;
+                alert('Payment failed: ' + error.message);
+            }
         });
 
         function copyToken() {
