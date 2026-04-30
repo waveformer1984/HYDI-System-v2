@@ -1,0 +1,231 @@
+-- HYDI Chaos Verdict Views
+-- Version: 2.1.1
+-- Description: Aggregated views for chaos test monitoring and failure analysis
+
+-- =============================================================================
+-- 1) CHAOS RUN VERDICT (Primary Dashboard View)
+-- =============================================================================
+
+CREATE OR REPLACE VIEW public.chaos_run_verdict AS
+SELECT
+  cr.id AS run_id,
+  cr.name,
+  cr.status,
+  cr.started_at,
+  cr.finished_at,
+  cr.total_runs AS total_instances,
+  cr.concurrency,
+  cr.failure_rate,
+  cr.duplicate_event_rate,
+  cr.stall_probability,
+  
+  -- Instance counts by state
+  COALESCE(done.count, 0) AS done_instances,
+  COALESCE(err.count, 0) AS error_instances,
+  COALESCE(dl.count, 0) AS dead_letter_instances,
+  
+  -- Effect metrics
+  COALESCE(dup.effect_pairs, 0) AS duplicate_effect_pairs,
+  COALESCE(repl.mismatches, 0) AS replay_mismatches,
+  
+  -- Timing
+  CASE 
+    WHEN cr.started_at IS NOT NULL AND cr.finished_at IS NOT NULL 
+    THEN EXTRACT(EPOCH FROM (cr.finished_at - cr.started_at))::numeric(10,2)
+    ELSE NULL 
+  END AS runtime_seconds,
+  
+  -- Verdict
+  CASE
+    WHEN cr.status = 'completed' 
+      AND COALESCE(err.count, 0) = 0
+      AND COALESCE(dl.count, 0) = 0
+      AND COALESCE(dup.effect_pairs, 0) = 0
+      AND COALESCE(repl.mismatches, 0) = 0
+      AND COALESCE(done.count, 0) >= (cr.total_runs * 0.8)
+    THEN 'PASS'
+    WHEN cr.status = 'failed' THEN 'FAIL'
+    WHEN cr.status = 'aborted' THEN 'ABORT'
+    WHEN cr.status = 'running' THEN 'RUNNING'
+    ELSE 'PARTIAL'
+  END AS verdict,
+  
+  -- Raw details for debugging
+  jsonb_build_object(
+    'seed', cr.seed,
+    'latency_profile', cr.latency_profile_ms,
+    'done_ratio', CASE WHEN cr.total_runs > 0 
+      THEN COALESCE(done.count, 0)::numeric / cr.total_runs 
+      ELSE 0 
+    END,
+    'error_ratio', CASE WHEN cr.total_runs > 0 
+      THEN COALESCE(err.count, 0)::numeric / cr.total_runs 
+      ELSE 0 
+    END
+  ) AS details
+
+FROM public.chaos_runs cr
+
+-- Done instances
+LEFT JOIN (
+  SELECT chaos_run_id, count(*) AS count
+  FROM public.chaos_run_instances
+  WHERE state = 'done'
+  GROUP BY chaos_run_id
+) done ON done.chaos_run_id = cr.id
+
+-- Error instances
+LEFT JOIN (
+  SELECT chaos_run_id, count(*) AS count
+  FROM public.chaos_run_instances
+  WHERE state = 'error'
+  GROUP BY chaos_run_id
+) err ON err.chaos_run_id = cr.id
+
+-- Dead letter instances
+LEFT JOIN (
+  SELECT chaos_run_id, count(*) AS count
+  FROM public.chaos_run_instances
+  WHERE state = 'dead_letter'
+  GROUP BY chaos_run_id
+) dl ON dl.chaos_run_id = cr.id
+
+-- Duplicate side effects (from ledger)
+LEFT JOIN (
+  SELECT run_id, count(*) AS effect_pairs
+  FROM public.side_effect_ledger
+  WHERE status = 'succeeded'
+  GROUP BY run_id
+  HAVING count(*) > 1
+) dup ON dup.run_id = (
+  -- Map chaos run to a synthetic run_id pattern
+  SELECT DISTINCT cr2.id::text
+  FROM public.chaos_run_instances cri
+  WHERE cri.chaos_run_id = cr.id
+  LIMIT 1
+)
+
+-- Replay mismatches
+LEFT JOIN (
+  SELECT run_id, count(*) AS mismatches
+  FROM public.replay_integrity_checks
+  WHERE match = false
+  GROUP BY run_id
+) repl ON repl.run_id = cr.id::text;
+
+COMMENT ON VIEW public.chaos_run_verdict IS 'Aggregated chaos test results with PASS/FAIL/PARTIAL verdicts';
+
+-- =============================================================================
+-- 2) FAILED RUNS CONCISE VIEW (For Alerting/Debugging)
+-- =============================================================================
+
+CREATE OR REPLACE VIEW public.chaos_run_failures AS
+SELECT
+  cv.run_id,
+  cv.name,
+  cv.verdict,
+  cv.status,
+  cv.runtime_seconds,
+  cv.started_at,
+  cv.finished_at,
+  
+  -- Concise failure reason
+  CASE
+    WHEN cv.error_instances > 0 AND cv.dead_letter_instances > 0 
+      THEN format('%s errors, %s dead letters (%.1f%% failure rate)', 
+        cv.error_instances, cv.dead_letter_instances,
+        (cv.error_instances + cv.dead_letter_instances)::numeric / NULLIF(cv.total_instances, 0) * 100)
+    WHEN cv.error_instances > 0 
+      THEN format('%s instance errors (%.1f%%)', 
+        cv.error_instances, cv.error_instances::numeric / NULLIF(cv.total_instances, 0) * 100)
+    WHEN cv.dead_letter_instances > 0 
+      THEN format('%s dead letters (%.1f%%)', 
+        cv.dead_letter_instances, cv.dead_letter_instances::numeric / NULLIF(cv.total_instances, 0) * 100)
+    WHEN cv.duplicate_effect_pairs > 0 
+      THEN format('%s duplicate side effects detected', cv.duplicate_effect_pairs)
+    WHEN cv.replay_mismatches > 0 
+      THEN format('%s replay fidelity mismatches', cv.replay_mismatches)
+    WHEN cv.done_instances < cv.total_instances * 0.8 
+      THEN format('Under threshold: %s/%s done (%.1f%% < 80%%)', 
+        cv.done_instances, cv.total_instances,
+        cv.done_instances::numeric / NULLIF(cv.total_instances, 0) * 100)
+    WHEN cv.verdict = 'ABORT' THEN 'Test aborted by operator or timeout'
+    ELSE 'Unknown failure - check instance logs'
+  END AS failure_reason,
+  
+  -- Quick context
+  jsonb_build_object(
+    'total', cv.total_instances,
+    'done', cv.done_instances,
+    'errors', cv.error_instances,
+    'dead_letters', cv.dead_letter_instances,
+    'duplicates', cv.duplicate_effect_pairs,
+    'replay_mismatches', cv.replay_mismatches,
+    'concurrency', cv.concurrency,
+    'failure_rate_config', cv.failure_rate
+  ) AS context,
+  
+  -- Last errors from instances
+  (
+    SELECT jsonb_agg(jsonb_build_object(
+      'scenario', cri.scenario_key,
+      'error', cri.last_error,
+      'attempts', cri.attempt_count
+    ) ORDER BY cri.updated_at DESC)
+    FROM public.chaos_run_instances cri
+    WHERE cri.chaos_run_id = cv.run_id
+      AND cri.state = 'error'
+    LIMIT 5
+  ) AS recent_errors
+
+FROM public.chaos_run_verdict cv
+WHERE cv.verdict IN ('FAIL', 'PARTIAL', 'ABORT')
+ORDER BY cv.started_at DESC NULLS LAST;
+
+COMMENT ON VIEW public.chaos_run_failures IS 'Concise failure analysis for non-passing chaos test runs';
+
+-- =============================================================================
+-- 3) RLS (Read-only for authenticated, service_role full access)
+-- =============================================================================
+
+ALTER VIEW public.chaos_run_verdict OWNER TO postgres;
+ALTER VIEW public.chaos_run_failures OWNER TO postgres;
+
+-- Grant read access
+GRANT SELECT ON public.chaos_run_verdict TO authenticated;
+GRANT SELECT ON public.chaos_run_failures TO authenticated;
+GRANT SELECT ON public.chaos_run_verdict TO service_role;
+GRANT SELECT ON public.chaos_run_failures TO service_role;
+
+-- =============================================================================
+-- 4) HELPER FUNCTION: Quick Verdict Check
+-- =============================================================================
+
+CREATE OR REPLACE FUNCTION public.check_chaos_verdict(p_run_id uuid)
+RETURNS TABLE(
+  verdict text,
+  failure_reason text,
+  runtime_seconds numeric,
+  passed_ratio numeric
+)
+LANGUAGE sql
+STABLE
+AS $$
+  SELECT 
+    cv.verdict,
+    COALESCE(cf.failure_reason, 'No failures detected'),
+    cv.runtime_seconds,
+    CASE WHEN cv.total_instances > 0 
+      THEN cv.done_instances::numeric / cv.total_instances 
+      ELSE 0 
+    END
+  FROM public.chaos_run_verdict cv
+  LEFT JOIN public.chaos_run_failures cf ON cf.run_id = cv.run_id
+  WHERE cv.run_id = p_run_id;
+$$;
+
+COMMENT ON FUNCTION public.check_chaos_verdict IS 'Quick verdict lookup for a single chaos run';
+
+-- =============================================================================
+-- MIGRATION COMPLETE
+-- =============================================================================

@@ -1,0 +1,36 @@
+package com.hydi.business.rules
+
+rule "Starter Tier Rate Limit"
+    when
+        $tier: Tier(name == "starter")
+        $requestCount: Number(intValue > 1000) from $requestCount
+    then
+        System.out.println("Rate limit exceeded for starter tier");
+        actions.throttle();
+end
+
+rule "Pro Tier Enhanced Features"
+    when
+        $tier: Tier(name == "pro")
+        $feature: Feature(name in ["advanced-local-models", "priority-support"])
+    then
+        System.out.println("Pro tier feature access granted");
+        actions.grantFeatureAccess($feature);
+end
+
+rule "Enterprise Priority Processing"
+    when
+        $tier: Tier(name == "enterprise")
+        $request: Request(priority == "high")
+    then
+        System.out.println("Enterprise priority processing activated");
+        actions.processWithPriority($request);
+end
+
+rule "Model Circuit Breaker"
+    when
+        $model: Model(failureCount >= 5, lastFailure < 60000)
+    then
+        System.out.println("Model circuit breaker triggered: " + $model.getId());
+        actions.disableModel($model);
+end

@@ -1,0 +1,726 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HEIDI Portfolio Engine</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-primary: #0a0a0a;
+            --bg-secondary: #1a1a1a;
+            --bg-tertiary: #2a2a2a;
+            --text-primary: #ffffff;
+            --text-secondary: #a0a0a0;
+            --accent: #00ff88;
+            --accent-hover: #00cc6a;
+            --danger: #ff4444;
+            --warning: #ffaa00;
+            --success: #00ff88;
+            --critical: #ff0066;
+            --strategic: #9966ff;
+            --cash: #00ccff;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Header */
+        .header {
+            background: var(--bg-secondary);
+            padding: 1rem;
+            border-bottom: 1px solid var(--bg-tertiary);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header h1 {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: var(--accent);
+        }
+
+        .portfolio-indicator {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.25rem 0.75rem;
+            background: var(--bg-tertiary);
+            border-radius: 1rem;
+            font-size: 0.8rem;
+        }
+
+        .portfolio-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--strategic);
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        /* Tab Navigation */
+        .tabs {
+            display: flex;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--bg-tertiary);
+        }
+
+        .tab {
+            flex: 1;
+            padding: 1rem;
+            text-align: center;
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 0.9rem;
+        }
+
+        .tab.active {
+            color: var(--accent);
+            background: var(--bg-tertiary);
+        }
+
+        .tab:hover {
+            color: var(--text-primary);
+        }
+
+        /* Content Areas */
+        .content {
+            flex: 1;
+            overflow: hidden;
+            display: none;
+        }
+
+        .content.active {
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Portfolio Container */
+        .portfolio-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 1rem;
+        }
+
+        /* Strategy Overview */
+        .strategy-overview {
+            background: var(--bg-secondary);
+            border: 1px solid var(--bg-tertiary);
+            border-radius: 0.5rem;
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .strategy-overview h3 {
+            color: var(--accent);
+            margin-bottom: 0.5rem;
+            font-size: 1.1rem;
+        }
+
+        .strategy-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .strategy-card {
+            background: var(--bg-tertiary);
+            padding: 0.75rem;
+            border-radius: 0.25rem;
+            border-left: 3px solid var(--accent);
+        }
+
+        .strategy-card h4 {
+            color: var(--text-primary);
+            font-size: 0.9rem;
+            margin-bottom: 0.25rem;
+        }
+
+        .strategy-card p {
+            color: var(--text-secondary);
+            font-size: 0.8rem;
+        }
+
+        /* Portfolio Task Cards */
+        .portfolio-task {
+            background: var(--bg-secondary);
+            border: 1px solid var(--bg-tertiary);
+            border-radius: 0.5rem;
+            padding: 1rem;
+            margin-bottom: 0.75rem;
+            position: relative;
+        }
+
+        .task-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 0.5rem;
+        }
+
+        .task-title {
+            font-weight: 600;
+            color: var(--text-primary);
+            flex: 1;
+        }
+
+        .portfolio-score {
+            background: var(--strategic);
+            color: white;
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.25rem;
+            font-weight: bold;
+            font-size: 0.8rem;
+        }
+
+        .task-category {
+            color: var(--text-secondary);
+            font-size: 0.8rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .task-description {
+            color: var(--text-primary);
+            font-size: 0.9rem;
+            margin-bottom: 0.75rem;
+            line-height: 1.4;
+        }
+
+        /* Score Breakdown */
+        .score-breakdown {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 0.5rem;
+            flex-wrap: wrap;
+        }
+
+        .score-component {
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+            font-size: 0.7rem;
+            padding: 0.2rem 0.4rem;
+            border-radius: 0.2rem;
+        }
+
+        .score-revenue {
+            background: var(--success);
+            color: var(--bg-primary);
+        }
+
+        .score-defensibility {
+            background: var(--strategic);
+            color: white;
+        }
+
+        .score-synergy {
+            background: var(--warning);
+            color: var(--bg-primary);
+        }
+
+        .score-cashflow {
+            background: var(--cash);
+            color: var(--bg-primary);
+        }
+
+        /* Founder Intent Badge */
+        .founder-intent {
+            position: absolute;
+            top: -0.5rem;
+            right: -0.5rem;
+            font-size: 0.7rem;
+            font-weight: bold;
+            text-transform: uppercase;
+            padding: 0.2rem 0.5rem;
+            border-radius: 0.5rem;
+        }
+
+        .intent-own {
+            background: var(--strategic);
+            color: white;
+        }
+
+        .intent-extract {
+            background: var(--cash);
+            color: white;
+        }
+
+        .intent-hybrid {
+            background: var(--accent);
+            color: var(--bg-primary);
+        }
+
+        /* Synergies Section */
+        .synergies-section {
+            margin-top: 0.5rem;
+            padding-top: 0.5rem;
+            border-top: 1px solid var(--bg-tertiary);
+        }
+
+        .synergies-section h5 {
+            color: var(--text-secondary);
+            font-size: 0.8rem;
+            margin-bottom: 0.25rem;
+        }
+
+        .synergy-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.25rem 0;
+            font-size: 0.8rem;
+        }
+
+        .synergy-title {
+            color: var(--text-primary);
+        }
+
+        .synergy-score {
+            color: var(--warning);
+            font-weight: bold;
+        }
+
+        /* Cashflow Timeline */
+        .timeline-section {
+            background: var(--bg-secondary);
+            border: 1px solid var(--bg-tertiary);
+            border-radius: 0.5rem;
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .timeline-section h3 {
+            color: var(--accent);
+            margin-bottom: 0.5rem;
+        }
+
+        .timeline-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.5rem 0;
+            border-bottom: 1px solid var(--bg-tertiary);
+        }
+
+        .timeline-item:last-child {
+            border-bottom: none;
+        }
+
+        .timeline-horizon {
+            color: var(--warning);
+            font-weight: bold;
+            font-size: 0.9rem;
+        }
+
+        .timeline-tasks {
+            color: var(--text-secondary);
+            font-size: 0.8rem;
+        }
+
+        /* Loading */
+        .loading {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--text-secondary);
+            padding: 2rem;
+            justify-content: center;
+        }
+
+        .spinner {
+            width: 1rem;
+            height: 1rem;
+            border: 2px solid var(--text-secondary);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Mobile Optimizations */
+        @media (max-width: 480px) {
+            .header {
+                padding: 0.75rem;
+            }
+            
+            .header h1 {
+                font-size: 1rem;
+            }
+            
+            .tab {
+                padding: 0.75rem 0.5rem;
+                font-size: 0.8rem;
+            }
+            
+            .strategy-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <h1>HEIDI Portfolio Engine</h1>
+        <div class="portfolio-indicator">
+            <div class="portfolio-dot"></div>
+            <span id="portfolioStatus">Constructing...</span>
+        </div>
+    </header>
+
+    <!-- Tab Navigation -->
+    <nav class="tabs">
+        <button class="tab active" data-tab="strategy">Strategy</button>
+        <button class="tab" data-tab="portfolio">Portfolio</button>
+        <button class="tab" data-tab="synergies">Synergies</button>
+        <button class="tab" data-tab="cashflow">Cashflow</button>
+    </nav>
+
+    <!-- Strategy Content -->
+    <div class="content active" id="strategy">
+        <div class="portfolio-container" id="strategyContent">
+            <div class="loading">
+                <div class="spinner"></div>
+                <span>Constructing portfolio strategy...</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Portfolio Content -->
+    <div class="content" id="portfolio">
+        <div class="portfolio-container" id="portfolioContent">
+            <div class="loading">
+                <div class="spinner"></div>
+                <span>Loading portfolio...</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Synergies Content -->
+    <div class="content" id="synergies">
+        <div class="portfolio-container" id="synergiesContent">
+            <div class="loading">
+                <div class="spinner"></div>
+                <span>Mapping synergies...</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cashflow Content -->
+    <div class="content" id="cashflow">
+        <div class="portfolio-container" id="cashflowContent">
+            <div class="loading">
+                <div class="spinner"></div>
+                <span>Building cashflow timeline...</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Configuration
+        const CONFIG = {
+            BASE_URL: 'http://localhost:3458',
+            POLL_INTERVAL: 15000
+        };
+
+        // State
+        let currentTab = 'strategy';
+        let portfolioData = null;
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            initializeTabs();
+            loadPortfolioData();
+            setInterval(loadPortfolioData, CONFIG.POLL_INTERVAL);
+        });
+
+        // Tab Navigation
+        function initializeTabs() {
+            const tabs = document.querySelectorAll('.tab');
+            tabs.forEach(tab => {
+                tab.addEventListener('click', () => {
+                    const tabName = tab.dataset.tab;
+                    switchTab(tabName);
+                });
+            });
+        }
+
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelector(`[data-tab="${tabName}"]`).classList.add('active');
+
+            document.querySelectorAll('.content').forEach(c => c.classList.remove('active'));
+            document.getElementById(tabName).classList.add('active');
+
+            currentTab = tabName;
+            displayContent(tabName);
+        }
+
+        // Load Portfolio Data
+        async function loadPortfolioData() {
+            try {
+                const response = await fetch(`${CONFIG.BASE_URL}/portfolio/construct`);
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                
+                portfolioData = await response.json();
+                updatePortfolioStatus();
+                displayContent(currentTab);
+            } catch (error) {
+                console.error('Portfolio data error:', error);
+                updatePortfolioStatus(null);
+            }
+        }
+
+        // Update Status
+        function updatePortfolioStatus() {
+            const statusText = document.getElementById('portfolioStatus');
+            const portfolioDot = document.querySelector('.portfolio-dot');
+            
+            if (!portfolioData) {
+                statusText.textContent = 'Offline';
+                portfolioDot.style.background = 'var(--danger)';
+            } else {
+                const criticalCount = portfolioData.portfolio_construction.immediate_focus.length;
+                statusText.textContent = `${criticalCount} Priority`;
+                portfolioDot.style.background = criticalCount > 0 ? 'var(--strategic)' : 'var(--success)';
+            }
+        }
+
+        // Display Content
+        function displayContent(tabName) {
+            if (!portfolioData) return;
+
+            if (tabName === 'strategy') {
+                displayStrategy();
+            } else if (tabName === 'portfolio') {
+                displayPortfolio();
+            } else if (tabName === 'synergies') {
+                displaySynergies();
+            } else if (tabName === 'cashflow') {
+                displayCashflow();
+            }
+        }
+
+        function displayStrategy() {
+            const container = document.getElementById('strategyContent');
+            const strategy = portfolioData.portfolio_construction;
+            
+            container.innerHTML = `
+                <div class="strategy-overview">
+                    <h3>🎯 Portfolio Construction Strategy</h3>
+                    <div class="strategy-grid">
+                        <div class="strategy-card">
+                            <h4>Immediate Focus</h4>
+                            <p>${strategy.immediate_focus.length} critical opportunities</p>
+                        </div>
+                        <div class="strategy-card">
+                            <h4>Growth Pipeline</h4>
+                            <p>${strategy.growth_pipeline.length} high-potential projects</p>
+                        </div>
+                        <div class="strategy-card">
+                            <h4>Strategic Reserve</h4>
+                            <p>${strategy.strategic_reserve.length} long-term assets</p>
+                        </div>
+                        <div class="strategy-card">
+                            <h4>Portfolio Balance</h4>
+                            <p>${strategy.portfolio_balance.cash_generating} cash, ${strategy.portfolio_balance.asset_building} assets</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="strategy-overview">
+                    <h3>🔥 Immediate Focus (Next 90 Days)</h3>
+                    ${strategy.immediate_focus.map(task => createPortfolioTaskCard(task, true)).join('')}
+                </div>
+
+                <div class="strategy-overview">
+                    <h3>📈 Growth Pipeline (90-180 Days)</h3>
+                    ${strategy.growth_pipeline.slice(0, 3).map(task => createPortfolioTaskCard(task, false)).join('')}
+                    ${strategy.growth_pipeline.length > 3 ? `<div style="text-align: center; color: var(--text-secondary); padding: 1rem;">... and ${strategy.growth_pipeline.length - 3} more</div>` : ''}
+                </div>
+            `;
+        }
+
+        function displayPortfolio() {
+            const container = document.getElementById('portfolioContent');
+            const allTasks = portfolioData.tasks;
+            
+            container.innerHTML = `
+                <div class="strategy-overview">
+                    <h3>📊 Complete Portfolio (Ranked by Strategic Value)</h3>
+                    <div class="strategy-grid">
+                        <div class="strategy-card">
+                            <h4>Total Opportunities</h4>
+                            <p>${allTasks.length} revenue streams</p>
+                        </div>
+                        <div class="strategy-card">
+                            <h4>Avg Portfolio Score</h4>
+                            <p>${Math.round(allTasks.reduce((sum, t) => sum + t.portfolio_score.score, 0) / allTasks.length)}</p>
+                        </div>
+                        <div class="strategy-card">
+                            <h4>Defensible Assets</h4>
+                            <p>${allTasks.filter(t => t.defensibility.score > 70).length} high-score</p>
+                        </div>
+                        <div class="strategy-card">
+                            <h4>Synergistic Plays</h4>
+                            <p>${allTasks.filter(t => t.synergy.score > 50).length} connected</p>
+                        </div>
+                    </div>
+                </div>
+                ${allTasks.map(task => createPortfolioTaskCard(task, false)).join('')}
+            `;
+        }
+
+        function displaySynergies() {
+            const container = document.getElementById('synergiesContent');
+            const synergies = portfolioData.synergy_map;
+            
+            const synergyList = Object.entries(synergies)
+                .filter(([id, data]) => data.synergies.length > 0)
+                .sort((a, b) => b[1].synergies.length - a[1].synergies.length);
+
+            container.innerHTML = `
+                <div class="strategy-overview">
+                    <h3>🔗 Synergy Network</h3>
+                    <div class="strategy-grid">
+                        <div class="strategy-card">
+                            <h4>Connected Tasks</h4>
+                            <p>${synergyList.length} with synergies</p>
+                        </div>
+                        <div class="strategy-card">
+                            <h4>Total Connections</h4>
+                            <p>${synergyList.reduce((sum, [id, data]) => sum + data.synergies.length, 0)} links</p>
+                        </div>
+                    </div>
+                </div>
+                ${synergyList.map(([id, data]) => `
+                    <div class="portfolio-task">
+                        <div class="task-header">
+                            <div class="task-title">${escapeHtml(data.title)}</div>
+                            <div class="portfolio-score">${data.synergies.length} Links</div>
+                        </div>
+                        <div class="synergies-section">
+                            <h5>Connected Opportunities:</h5>
+                            ${data.synergies.map(synergy => `
+                                <div class="synergy-item">
+                                    <span class="synergy-title">${escapeHtml(synergy.title)}</span>
+                                    <span class="synergy-score">${Math.round(synergy.score * 100)}%</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `).join('')}
+            `;
+        }
+
+        function displayCashflow() {
+            const container = document.getElementById('cashflowContent');
+            const timeline = portfolioData.cashflow_timeline;
+            
+            container.innerHTML = `
+                <div class="strategy-overview">
+                    <h3>💰 Cashflow Timeline</h3>
+                    <div class="strategy-grid">
+                        <div class="strategy-card">
+                            <h4>Quick Cash (3-6mo)</h4>
+                            <p>${(timeline['3-6 months'] || []).length} opportunities</p>
+                        </div>
+                        <div class="strategy-card">
+                            <h4>Growth Cash (6-12mo)</h4>
+                            <p>${(timeline['6-12 months'] || []).length} opportunities</p>
+                        </div>
+                        <div class="strategy-card">
+                            <h4>Asset Building (12-24mo)</h4>
+                            <p>${(timeline['12-24 months'] || []).length} opportunities</p>
+                        </div>
+                        <div class="strategy-card">
+                            <h4>Strategic (24mo+)</h4>
+                            <p>${(timeline['24+ months'] || []).length} opportunities</p>
+                        </div>
+                    </div>
+                </div>
+                ${Object.entries(timeline).map(([horizon, tasks]) => `
+                    <div class="timeline-section">
+                        <h3>${horizon}</h3>
+                        ${tasks.map(task => `
+                            <div class="timeline-item">
+                                <div>
+                                    <div class="timeline-horizon">${escapeHtml(task.title)}</div>
+                                    <div class="timeline-tasks">${task.cashflow_type} • Score: ${task.portfolio_score}</div>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                `).join('')}
+            `;
+        }
+
+        function createPortfolioTaskCard(task, showIntentBadge) {
+            const intentBadge = showIntentBadge && task.founder_intent ? 
+                `<div class="founder-intent intent-${task.founder_intent.intent.replace('_', '-')}">${task.founder_intent.intent}</div>` : '';
+
+            return `
+                <div class="portfolio-task">
+                    ${intentBadge}
+                    <div class="task-header">
+                        <div class="task-title">${escapeHtml(task.title)}</div>
+                        <div class="portfolio-score">${task.portfolio_score.score}</div>
+                    </div>
+                    <div class="task-category">${escapeHtml(task.category)}</div>
+                    <div class="task-description">${escapeHtml(task.description)}</div>
+                    
+                    <div class="score-breakdown">
+                        <div class="score-component score-revenue">Revenue: ${task.portfolio_score.breakdown.revenue}</div>
+                        <div class="score-component score-defensibility">Defense: ${task.portfolio_score.breakdown.defensibility}</div>
+                        <div class="score-component score-synergy">Synergy: ${task.portfolio_score.breakdown.synergy}</div>
+                        <div class="score-component score-cashflow">Cash: ${task.portfolio_score.breakdown.cashflow}</div>
+                    </div>
+
+                    ${task.synergy.synergies.length > 0 ? `
+                        <div class="synergies-section">
+                            <h5>Top Synergies:</h5>
+                            ${task.synergy.synergies.slice(0, 2).map(synergy => `
+                                <div class="synergy-item">
+                                    <span class="synergy-title">${escapeHtml(synergy.title)}</span>
+                                    <span class="synergy-score">${Math.round(synergy.score * 100)}%</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+        }
+
+        // Utility
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,868 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CASCADE - HEIDI COO Engine</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-primary: #0a0a0a;
+            --bg-secondary: #1a1a1a;
+            --bg-tertiary: #2a2a2a;
+            --text-primary: #ffffff;
+            --text-secondary: #a0a0a0;
+            --accent: #00ff88;
+            --accent-hover: #00cc6a;
+            --danger: #ff4444;
+            --warning: #ffaa00;
+            --success: #00ff88;
+            --critical: #ff0066;
+            --strategic: #9966ff;
+            --cash: #00ccff;
+            --execution: #ff6600;
+            --exploration: #6600ff;
+            --optimization: #00ffcc;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Header */
+        .header {
+            background: var(--bg-secondary);
+            padding: 1rem;
+            border-bottom: 1px solid var(--bg-tertiary);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header h1 {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: var(--accent);
+        }
+
+        .cascade-indicator {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.25rem 0.75rem;
+            background: var(--bg-tertiary);
+            border-radius: 1rem;
+            font-size: 0.8rem;
+        }
+
+        .cascade-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--strategic);
+            animation: pulse 2s infinite;
+        }
+
+        .mode-badge {
+            padding: 0.2rem 0.5rem;
+            border-radius: 0.25rem;
+            font-size: 0.7rem;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+
+        .mode-execution { background: var(--execution); color: white; }
+        .mode-exploration { background: var(--exploration); color: white; }
+        .mode-optimization { background: var(--optimization); color: var(--bg-primary); }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        /* Tab Navigation */
+        .tabs {
+            display: flex;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--bg-tertiary);
+        }
+
+        .tab {
+            flex: 1;
+            padding: 1rem;
+            text-align: center;
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 0.9rem;
+        }
+
+        .tab.active {
+            color: var(--accent);
+            background: var(--bg-tertiary);
+        }
+
+        .tab:hover {
+            color: var(--text-primary);
+        }
+
+        /* Content Areas */
+        .content {
+            flex: 1;
+            overflow: hidden;
+            display: none;
+        }
+
+        .content.active {
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Mode Controls */
+        .mode-controls {
+            padding: 1rem;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--bg-tertiary);
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+        }
+
+        .mode-btn {
+            padding: 0.4rem 0.8rem;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--bg-primary);
+            border-radius: 0.25rem;
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 0.8rem;
+        }
+
+        .mode-btn.active {
+            color: white;
+        }
+
+        .mode-btn.execution.active { background: var(--execution); }
+        .mode-btn.exploration.active { background: var(--exploration); }
+        .mode-btn.optimization.active { background: var(--optimization); color: var(--bg-primary); }
+
+        /* Cascade Container */
+        .cascade-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 1rem;
+        }
+
+        /* Executive Dashboard */
+        .executive-dashboard {
+            background: var(--bg-secondary);
+            border: 1px solid var(--bg-tertiary);
+            border-radius: 0.5rem;
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .executive-dashboard h3 {
+            color: var(--accent);
+            margin-bottom: 0.5rem;
+            font-size: 1.1rem;
+        }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .dashboard-card {
+            background: var(--bg-tertiary);
+            padding: 0.75rem;
+            border-radius: 0.25rem;
+            text-align: center;
+        }
+
+        .dashboard-value {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: var(--text-primary);
+        }
+
+        .dashboard-label {
+            font-size: 0.7rem;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+        }
+
+        /* Priority Actions */
+        .priority-actions {
+            background: var(--bg-secondary);
+            border: 1px solid var(--bg-tertiary);
+            border-radius: 0.5rem;
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .priority-actions h3 {
+            color: var(--warning);
+            margin-bottom: 0.5rem;
+        }
+
+        .action-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.5rem 0;
+            border-bottom: 1px solid var(--bg-tertiary);
+        }
+
+        .action-item:last-child {
+            border-bottom: none;
+        }
+
+        .action-priority {
+            background: var(--warning);
+            color: var(--bg-primary);
+            padding: 0.2rem 0.4rem;
+            border-radius: 0.2rem;
+            font-size: 0.7rem;
+            font-weight: bold;
+        }
+
+        .action-title {
+            flex: 1;
+            margin: 0 0.5rem;
+            font-size: 0.9rem;
+        }
+
+        .action-timeline {
+            color: var(--text-secondary);
+            font-size: 0.8rem;
+        }
+
+        /* Cascade Task Cards */
+        .cascade-task {
+            background: var(--bg-secondary);
+            border: 1px solid var(--bg-tertiary);
+            border-radius: 0.5rem;
+            padding: 1rem;
+            margin-bottom: 0.75rem;
+            position: relative;
+        }
+
+        .task-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 0.5rem;
+        }
+
+        .task-title {
+            font-weight: 600;
+            color: var(--text-primary);
+            flex: 1;
+        }
+
+        .cascade-score {
+            background: var(--strategic);
+            color: white;
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.25rem;
+            font-weight: bold;
+            font-size: 0.8rem;
+        }
+
+        .task-category {
+            color: var(--text-secondary);
+            font-size: 0.8rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .task-description {
+            color: var(--text-primary);
+            font-size: 0.9rem;
+            margin-bottom: 0.75rem;
+            line-height: 1.4;
+        }
+
+        /* Advanced Score Breakdown */
+        .score-breakdown {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 0.5rem;
+            flex-wrap: wrap;
+        }
+
+        .score-component {
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+            font-size: 0.7rem;
+            padding: 0.2rem 0.4rem;
+            border-radius: 0.2rem;
+        }
+
+        .score-profit { background: var(--success); color: var(--bg-primary); }
+        .score-defensibility { background: var(--strategic); color: white; }
+        .score-scalability { background: var(--cash); color: white; }
+        .score-risk { background: var(--danger); color: white; }
+        .score-confidence { background: var(--accent); color: var(--bg-primary); }
+        .score-cashflow { background: var(--warning); color: var(--bg-primary); }
+
+        /* Status Badge */
+        .status-badge {
+            position: absolute;
+            top: -0.5rem;
+            right: -0.5rem;
+            font-size: 0.7rem;
+            font-weight: bold;
+            text-transform: uppercase;
+            padding: 0.2rem 0.5rem;
+            border-radius: 0.5rem;
+        }
+
+        .status-active { background: var(--success); color: var(--bg-primary); }
+        .status-dormant { background: var(--warning); color: var(--bg-primary); }
+        .status-killed { background: var(--danger); color: white; }
+
+        /* Dependencies */
+        .dependencies-section {
+            margin-top: 0.5rem;
+            padding-top: 0.5rem;
+            border-top: 1px solid var(--bg-tertiary);
+        }
+
+        .dependencies-section h5 {
+            color: var(--text-secondary);
+            font-size: 0.8rem;
+            margin-bottom: 0.25rem;
+        }
+
+        .dependency-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.2rem 0;
+            font-size: 0.8rem;
+        }
+
+        .dependency-type {
+            padding: 0.1rem 0.3rem;
+            border-radius: 0.2rem;
+            font-size: 0.7rem;
+        }
+
+        .dep-enables { background: var(--success); color: var(--bg-primary); }
+        .dep-depends { background: var(--warning); color: var(--bg-primary); }
+        .dep-competes { background: var(--danger); color: white; }
+
+        /* Risk Summary */
+        .risk-summary {
+            background: var(--bg-secondary);
+            border: 1px solid var(--bg-tertiary);
+            border-radius: 0.5rem;
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .risk-level {
+            display: inline-block;
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.25rem;
+            font-weight: bold;
+            font-size: 0.8rem;
+            text-transform: uppercase;
+        }
+
+        .risk-low { background: var(--success); color: var(--bg-primary); }
+        .risk-medium { background: var(--warning); color: var(--bg-primary); }
+        .risk-high { background: var(--danger); color: white; }
+
+        /* Loading */
+        .loading {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--text-secondary);
+            padding: 2rem;
+            justify-content: center;
+        }
+
+        .spinner {
+            width: 1rem;
+            height: 1rem;
+            border: 2px solid var(--text-secondary);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Mobile Optimizations */
+        @media (max-width: 480px) {
+            .header {
+                padding: 0.75rem;
+            }
+            
+            .header h1 {
+                font-size: 1rem;
+            }
+            
+            .tab {
+                padding: 0.75rem 0.5rem;
+                font-size: 0.8rem;
+            }
+            
+            .dashboard-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <h1>CASCADE - HEIDI COO Engine</h1>
+        <div class="cascade-indicator">
+            <div class="cascade-dot"></div>
+            <span id="cascadeStatus">Initializing...</span>
+            <div class="mode-badge" id="modeBadge">EXECUTION</div>
+        </div>
+    </header>
+
+    <!-- Tab Navigation -->
+    <nav class="tabs">
+        <button class="tab active" data-tab="executive">Executive</button>
+        <button class="tab" data-tab="portfolio">Portfolio</button>
+        <button class="tab" data-tab="dependencies">Dependencies</button>
+        <button class="tab" data-tab="suppressed">Suppressed</button>
+    </nav>
+
+    <!-- Mode Controls -->
+    <div class="mode-controls">
+        <span style="color: var(--text-secondary); font-size: 0.8rem;">CASCADE Mode:</span>
+        <button class="mode-btn execution active" data-mode="execution">Execution</button>
+        <button class="mode-btn exploration" data-mode="exploration">Exploration</button>
+        <button class="mode-btn optimization" data-mode="optimization">Optimization</button>
+    </div>
+
+    <!-- Executive Content -->
+    <div class="content active" id="executive">
+        <div class="cascade-container" id="executiveContent">
+            <div class="loading">
+                <div class="spinner"></div>
+                <span>Analyzing portfolio...</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Portfolio Content -->
+    <div class="content" id="portfolio">
+        <div class="cascade-container" id="portfolioContent">
+            <div class="loading">
+                <div class="spinner"></div>
+                <span>Building portfolio view...</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Dependencies Content -->
+    <div class="content" id="dependencies">
+        <div class="cascade-container" id="dependenciesContent">
+            <div class="loading">
+                <div class="spinner"></div>
+                <span>Mapping dependencies...</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Suppressed Content -->
+    <div class="content" id="suppressed">
+        <div class="cascade-container" id="suppressedContent">
+            <div class="loading">
+                <div class="spinner"></div>
+                <span>Reviewing suppressed tasks...</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Configuration
+        const CONFIG = {
+            BASE_URL: 'http://localhost:3458',
+            POLL_INTERVAL: 10000 // 10 seconds for auto-reprioritization
+        };
+
+        // State
+        let currentTab = 'executive';
+        let cascadeData = null;
+        let currentMode = 'execution';
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            initializeTabs();
+            initializeModeControls();
+            loadCascadeData();
+            setInterval(loadCascadeData, CONFIG.POLL_INTERVAL);
+        });
+
+        // Tab Navigation
+        function initializeTabs() {
+            const tabs = document.querySelectorAll('.tab');
+            tabs.forEach(tab => {
+                tab.addEventListener('click', () => {
+                    const tabName = tab.dataset.tab;
+                    switchTab(tabName);
+                });
+            });
+        }
+
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelector(`[data-tab="${tabName}"]`).classList.add('active');
+
+            document.querySelectorAll('.content').forEach(c => c.classList.remove('active'));
+            document.getElementById(tabName).classList.add('active');
+
+            currentTab = tabName;
+            displayContent(tabName);
+        }
+
+        // Mode Controls
+        function initializeModeControls() {
+            const modeBtns = document.querySelectorAll('.mode-btn');
+            modeBtns.forEach(btn => {
+                btn.addEventListener('click', async () => {
+                    const newMode = btn.dataset.mode;
+                    await setMode(newMode);
+                });
+            });
+        }
+
+        async function setMode(mode) {
+            try {
+                const response = await fetch(`${CONFIG.BASE_URL}/revenue/mode`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ mode })
+                });
+
+                if (response.ok) {
+                    const result = await response.json();
+                    currentMode = result.mode;
+                    updateModeDisplay();
+                    await loadCascadeData(); // Refresh data with new mode
+                }
+            } catch (error) {
+                console.error('Mode change error:', error);
+            }
+        }
+
+        function updateModeDisplay() {
+            const modeBtns = document.querySelectorAll('.mode-btn');
+            modeBtns.forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.mode === currentMode);
+            });
+
+            const modeBadge = document.getElementById('modeBadge');
+            modeBadge.textContent = currentMode.toUpperCase();
+            modeBadge.className = `mode-badge mode-${currentMode}`;
+        }
+
+        // Load Cascade Data
+        async function loadCascadeData() {
+            try {
+                const response = await fetch(`${CONFIG.BASE_URL}/revenue/portfolio`);
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                
+                cascadeData = await response.json();
+                updateCascadeStatus();
+                displayContent(currentTab);
+            } catch (error) {
+                console.error('Cascade data error:', error);
+                updateCascadeStatus(null);
+            }
+        }
+
+        // Update Status
+        function updateCascadeStatus() {
+            const statusText = document.getElementById('cascadeStatus');
+            const cascadeDot = document.querySelector('.cascade-dot');
+            
+            if (!cascadeData) {
+                statusText.textContent = 'Offline';
+                cascadeDot.style.background = 'var(--danger)';
+            } else {
+                const activeTasks = cascadeData.tasks.filter(t => t.status === 'active');
+                const highPriority = activeTasks.filter(t => t.mode_adjusted_score > 80);
+                
+                statusText.textContent = `${highPriority.length} Priority`;
+                cascadeDot.style.background = highPriority.length > 0 ? 'var(--strategic)' : 'var(--success)';
+            }
+        }
+
+        // Display Content
+        function displayContent(tabName) {
+            if (!cascadeData) return;
+
+            if (tabName === 'executive') {
+                displayExecutive();
+            } else if (tabName === 'portfolio') {
+                displayPortfolio();
+            } else if (tabName === 'dependencies') {
+                displayDependencies();
+            } else if (tabName === 'suppressed') {
+                displaySuppressed();
+            }
+        }
+
+        function displayExecutive() {
+            const container = document.getElementById('executiveContent');
+            const activeTasks = cascadeData.tasks.filter(t => t.status === 'active');
+            
+            container.innerHTML = `
+                <div class="executive-dashboard">
+                    <h3>🎯 Executive Dashboard</h3>
+                    <div class="dashboard-grid">
+                        <div class="dashboard-card">
+                            <div class="dashboard-value">${activeTasks.length}</div>
+                            <div class="dashboard-label">Active Tasks</div>
+                        </div>
+                        <div class="dashboard-card">
+                            <div class="dashboard-value">${cascadeData.risk_summary.overall_confidence}%</div>
+                            <div class="dashboard-label">Confidence</div>
+                        </div>
+                        <div class="dashboard-card">
+                            <div class="dashboard-value">${cascadeData.top_clusters.length}</div>
+                            <div class="dashboard-label">Revenue Clusters</div>
+                        </div>
+                        <div class="dashboard-card">
+                            <div class="dashboard-value">${cascadeData.recommended_actions.length}</div>
+                            <div class="dashboard-label">Actions</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="priority-actions">
+                    <h3>🔥 Priority Actions (Next 90 Days)</h3>
+                    ${cascadeData.recommended_actions.slice(0, 5).map(action => `
+                        <div class="action-item">
+                            <span class="action-priority">#${action.priority}</span>
+                            <span class="action-title">${escapeHtml(action.title)}</span>
+                            <span class="action-timeline">${action.timeline}</span>
+                        </div>
+                    `).join('')}
+                </div>
+
+                <div class="executive-dashboard">
+                    <h3>📊 Top Priority Tasks</h3>
+                </div>
+                ${activeTasks.slice(0, 3).map(task => createCascadeTaskCard(task)).join('')}
+            `;
+        }
+
+        function displayPortfolio() {
+            const container = document.getElementById('portfolioContent');
+            
+            container.innerHTML = `
+                <div class="executive-dashboard">
+                    <h3>📈 Portfolio View - Business Units</h3>
+                    <div class="dashboard-grid">
+                        <div class="dashboard-card">
+                            <div class="dashboard-value">${cascadeData.top_clusters.length}</div>
+                            <div class="dashboard-label">Revenue Clusters</div>
+                        </div>
+                        <div class="dashboard-card">
+                            <div class="dashboard-value">$${Math.round(cascadeData.top_clusters.reduce((sum, c) => sum + c.monthly_value, 0)).toLocaleString()}</div>
+                            <div class="dashboard-label">Monthly Value</div>
+                        </div>
+                        <div class="dashboard-card">
+                            <div class="dashboard-value">${cascadeData.risk_summary.risk_rating}</div>
+                            <div class="dashboard-label">Risk Rating</div>
+                        </div>
+                        <div class="dashboard-card">
+                            <div class="dashboard-value">${cascadeData.tasks.filter(t => t.recurring_revenue).length}</div>
+                            <div class="dashboard-label">Recurring Revenue</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="executive-dashboard">
+                    <h3>💰 Revenue Clusters</h3>
+                </div>
+                ${cascadeData.top_clusters.map(cluster => `
+                    <div class="cascade-task">
+                        <div class="task-header">
+                            <div class="task-title">${cluster.id}: ${cluster.tasks.length} opportunities</div>
+                            <div class="cascade-score">$${Math.round(cluster.monthly_value).toLocaleString()}/mo</div>
+                        </div>
+                        <div class="task-description">
+                            Risk Level: <span class="risk-level risk-${cluster.risk_level.toLowerCase()}">${cluster.risk_level}</span>
+                        </div>
+                        <div class="dependencies-section">
+                            <h5>Cluster Tasks:</h5>
+                            ${cluster.tasks.map(taskId => {
+                                const task = cascadeData.tasks.find(t => t.id === taskId);
+                                return task ? `<div class="dependency-item">
+                                    <span>${escapeHtml(task.title)}</span>
+                                    <span class="action-timeline">Score: ${task.mode_adjusted_score}</span>
+                                </div>` : '';
+                            }).join('')}
+                        </div>
+                    </div>
+                `).join('')}
+            `;
+        }
+
+        function displayDependencies() {
+            const container = document.getElementById('dependenciesContent');
+            
+            container.innerHTML = `
+                <div class="executive-dashboard">
+                    <h3>🔗 Dependency Network</h3>
+                    <div class="dashboard-grid">
+                        <div class="dashboard-card">
+                            <div class="dashboard-value">${cascadeData.tasks.filter(t => t.graph_relationships.depends_on.length > 0).length}</div>
+                            <div class="dashboard-label">Has Dependencies</div>
+                        </div>
+                        <div class="dashboard-card">
+                            <div class="dashboard-value">${cascadeData.tasks.filter(t => t.graph_relationships.enables.length > 0).length}</div>
+                            <div class="dashboard-label">Enables Others</div>
+                        </div>
+                        <div class="dashboard-card">
+                            <div class="dashboard-value">${cascadeData.tasks.filter(t => t.graph_relationships.competes_with.length > 0).length}</div>
+                            <div class="dashboard-label">Competing Tasks</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="executive-dashboard">
+                    <h3>⚠️ Critical Dependencies</h3>
+                </div>
+                ${cascadeData.tasks
+                    .filter(task => task.graph_relationships.depends_on.length > 0 || task.graph_relationships.enables.length > 2)
+                    .sort((a, b) => (b.graph_relationships.depends_on.length + b.graph_relationships.enables.length) - (a.graph_relationships.depends_on.length + a.graph_relationships.enables.length))
+                    .map(task => createCascadeTaskCard(task, true)).join('')}
+            `;
+        }
+
+        function displaySuppressed() {
+            const container = document.getElementById('suppressedContent');
+            const killed = cascadeData.tasks.filter(t => t.status === 'killed');
+            const dormant = cascadeData.tasks.filter(t => t.status === 'dormant');
+            
+            container.innerHTML = `
+                <div class="executive-dashboard">
+                    <h3>🚫 Suppressed Tasks</h3>
+                    <div class="dashboard-grid">
+                        <div class="dashboard-card">
+                            <div class="dashboard-value">${killed.length}</div>
+                            <div class="dashboard-label">Killed</div>
+                        </div>
+                        <div class="dashboard-card">
+                            <div class="dashboard-value">${dormant.length}</div>
+                            <div class="dashboard-label">Dormant</div>
+                        </div>
+                        <div class="dashboard-card">
+                            <div class="dashboard-value">${killed.length + dormant.length}</div>
+                            <div class="dashboard-label">Total Suppressed</div>
+                        </div>
+                    </div>
+                </div>
+
+                ${killed.length > 0 ? `
+                    <div class="executive-dashboard">
+                        <h3>💀 Killed Tasks (Low Value/High Risk)</h3>
+                    </div>
+                    ${killed.map(task => createCascadeTaskCard(task)).join('')}
+                ` : ''}
+
+                ${dormant.length > 0 ? `
+                    <div class="executive-dashboard">
+                        <h3>⏸️ Dormant Tasks (High Risk)</h3>
+                    </div>
+                    ${dormant.map(task => createCascadeTaskCard(task)).join('')}
+                ` : ''}
+
+                ${(killed.length === 0 && dormant.length === 0) ? `
+                    <div style="text-align: center; color: var(--text-secondary); padding: 2rem;">
+                        No suppressed tasks - all opportunities are active
+                    </div>
+                ` : ''}
+            `;
+        }
+
+        function createCascadeTaskCard(task, showDependencies = false) {
+            const statusClass = `status-${task.status}`;
+            
+            return `
+                <div class="cascade-task">
+                    <div class="status-badge ${statusClass}">${task.status}</div>
+                    <div class="task-header">
+                        <div class="task-title">${escapeHtml(task.title)}</div>
+                        <div class="cascade-score">${task.mode_adjusted_score}</div>
+                    </div>
+                    <div class="task-category">${escapeHtml(task.category)}</div>
+                    <div class="task-description">${escapeHtml(task.description)}</div>
+                    
+                    <div class="score-breakdown">
+                        <div class="score-component score-profit">Profit: ${task.advanced_score.breakdown.profit_potential}</div>
+                        <div class="score-component score-defensibility">Defense: ${task.advanced_score.breakdown.defensibility}</div>
+                        <div class="score-component score-scalability">Scale: ${task.advanced_score.breakdown.scalability}</div>
+                        <div class="score-component score-risk">Risk: ${task.advanced_score.breakdown.dependency_risk}</div>
+                        <div class="score-component score-confidence">Conf: ${task.advanced_score.confidence_score}</div>
+                        <div class="score-component score-cashflow">Cash: ${task.advanced_score.breakdown.cashflow_type}</div>
+                    </div>
+
+                    ${showDependencies ? `
+                        <div class="dependencies-section">
+                            <h5>Relationships:</h5>
+                            ${task.graph_relationships.depends_on.map(depId => `
+                                <div class="dependency-item">
+                                    <span class="dependency-type dep-depends">DEPENDS ON</span>
+                                    <span>${depId}</span>
+                                </div>
+                            `).join('')}
+                            ${task.graph_relationships.enables.map(enId => `
+                                <div class="dependency-item">
+                                    <span class="dependency-type dep-enables">ENABLES</span>
+                                    <span>${enId}</span>
+                                </div>
+                            `).join('')}
+                            ${task.graph_relationships.competes_with.map(compId => `
+                                <div class="dependency-item">
+                                    <span class="dependency-type dep-competes">COMPETES WITH</span>
+                                    <span>${compId}</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+        }
+
+        // Utility
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+    </script>
+</body>
+</html>

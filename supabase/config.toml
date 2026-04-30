@@ -1,0 +1,89 @@
+# Supabase Functions Configuration
+# Production deployment settings with JWT enforcement
+
+
+[functions.api-gateway]
+verify_jwt = false
+
+[functions.user-management]
+verify_jwt = true
+
+[functions.payment-processing]
+verify_jwt = true
+
+[functions.notification-service]
+verify_jwt = false
+
+[functions.analytics-service]
+verify_jwt = true
+
+[functions.file-storage]
+verify_jwt = true
+
+[functions.search-service]
+verify_jwt = false
+
+[functions.cache-service]
+verify_jwt = false
+
+# Marketing Services (Public)
+[functions.marketing-automation]
+verify_jwt = false
+
+[functions.lead-generation]
+verify_jwt = false
+
+[functions.content-management]
+verify_jwt = false
+
+[functions.email-marketing]
+verify_jwt = false
+
+[functions.social-media]
+verify_jwt = false
+
+[functions.customer-segments]
+verify_jwt = false
+
+[functions.campaign-analytics]
+verify_jwt = false
+
+[functions.brand-awareness]
+verify_jwt = false
+
+# Passive Services (JWT Required)
+[functions.events-stream]
+verify_jwt = true
+
+[functions.jobs-processor]
+verify_jwt = true
+
+[functions.monitoring-health]
+verify_jwt = true
+
+# Webhook Services (Public)
+[functions.stripe-webhook]
+verify_jwt = false
+
+# Revenue Services (JWT Required)
+[functions.revenue-tracker]
+verify_jwt = true
+
+[functions.billing-engine]
+verify_jwt = true
+
+[functions.usage-monitor]
+verify_jwt = true
+
+[functions.invoice-generator]
+verify_jwt = true
+
+[functions.subscription-manager]
+verify_jwt = true
+
+[functions.payment-processor]
+verify_jwt = true
+
+# Heidi Reflection Service (Header-based auth)
+[functions.heidi-reflect]
+verify_jwt = false

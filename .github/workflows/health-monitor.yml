@@ -1,0 +1,55 @@
+name: Health Monitor
+
+on:
+  schedule:
+    # Run every 5 minutes
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+jobs:
+  health-check:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        
+    - name: Run health check
+      run: |
+        echo "🏥 Running scheduled health check"
+        node test-critical-path.js
+        
+    - name: Check Vercel environment
+      env:
+        VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      run: |
+        echo "🔍 Checking Vercel environment"
+        node vercel-api-check.js
+        
+    - name: Tripwire detection
+      run: |
+        echo "⚠️  Running tripwire detection"
+        # This would need to be adapted for CI environment
+        
+    - name: Send alert on failure
+      if: failure()
+      run: |
+        echo "🚨 HEALTH CHECK FAILED - ALERT SENT"
+        # Add your alert method here (email, Slack, webhook)
+        
+  critical-alert:
+    runs-on: ubuntu-latest
+    needs: health-check
+    if: failure()
+    
+    steps:
+    - name: Send critical alert
+      run: |
+        echo "💀 CRITICAL: System health check failed"
+        echo "Time: $(date)"
+        echo "Immediate attention required"

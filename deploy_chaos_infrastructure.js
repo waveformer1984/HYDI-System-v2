@@ -1,0 +1,168 @@
+const { createClient } = require('@supabase/supabase-js');
+require('dotenv').config();
+
+const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+
+async function deployChaosInfrastructure() {
+  try {
+    console.log('Deploying chaos infrastructure...');
+    
+    // First, create the basic tables we need for stress testing
+    const createChaosAlertsTable = `
+      CREATE TABLE IF NOT EXISTS public.chaos_alerts (
+        run_id uuid PRIMARY KEY,
+        name text NOT NULL,
+        status text NOT NULL,
+        verdict text NOT NULL,
+        failure_reason text,
+        severity text CHECK (severity IN ('critical', 'high', 'medium', 'low')),
+        requires_action boolean NOT NULL DEFAULT false,
+        passed_ratio numeric,
+        runtime_seconds bigint,
+        total_instances bigint,
+        done_instances bigint,
+        error_instances bigint,
+        dead_letter_instances bigint,
+        duplicate_effect_pairs bigint DEFAULT 0,
+        replay_mismatches bigint DEFAULT 0,
+        started_at timestamptz,
+        finished_at timestamptz,
+        alert_context jsonb,
+        created_at timestamptz NOT NULL DEFAULT now()
+      );
+    `;
+    
+    const createChaosRunVerdictTable = `
+      CREATE TABLE IF NOT EXISTS public.chaos_run_verdict (
+        run_id uuid PRIMARY KEY,
+        name text NOT NULL,
+        status text NOT NULL,
+        verdict text NOT NULL,
+        passed_ratio numeric,
+        runtime_seconds bigint,
+        total_instances bigint,
+        done_instances bigint,
+        error_instances bigint,
+        dead_letter_instances bigint,
+        duplicate_effect_pairs bigint DEFAULT 0,
+        replay_mismatches bigint DEFAULT 0,
+        started_at timestamptz,
+        finished_at timestamptz,
+        created_at timestamptz NOT NULL DEFAULT now()
+      );
+    `;
+    
+    const createActiveAlertsCountFunction = `
+      CREATE OR REPLACE FUNCTION public.active_chaos_alerts_count()
+      RETURNS TABLE(
+        critical_count bigint,
+        high_count bigint,
+        medium_count bigint,
+        low_count bigint,
+        total_count bigint
+      )
+      LANGUAGE sql
+      STABLE
+      AS $$
+        SELECT
+          COUNT(*) FILTER (WHERE severity = 'critical')::bigint AS critical_count,
+          COUNT(*) FILTER (WHERE severity = 'high')::bigint AS high_count,
+          COUNT(*) FILTER (WHERE severity = 'medium')::bigint AS medium_count,
+          COUNT(*) FILTER (WHERE severity = 'low')::bigint AS low_count,
+          COUNT(*)::bigint AS total_count
+        FROM public.chaos_alerts
+        WHERE requires_action = true;
+      $$;
+    `;
+    
+    const createChaosGateCheckFunction = `
+      CREATE OR REPLACE FUNCTION public.chaos_gate_check()
+      RETURNS TABLE(
+        gate_passed boolean,
+        failure_reason text,
+        recent_runs_count bigint,
+        success_rate numeric,
+        critical_failures bigint
+      )
+      LANGUAGE sql
+      STABLE
+      AS $$
+        WITH recent_runs AS (
+          SELECT 
+            verdict,
+            passed_ratio,
+            CASE 
+              WHEN replay_mismatches > 0 OR duplicate_effect_pairs > 0 THEN true 
+              ELSE false 
+            END AS has_critical_failure
+          FROM public.chaos_run_verdict
+          WHERE started_at >= now() - make_interval(hours => 24)
+            AND status IN ('completed', 'failed')
+        )
+        SELECT
+          CASE 
+            WHEN NOT EXISTS (SELECT 1 FROM recent_runs) THEN false
+            WHEN EXISTS (
+              SELECT 1 FROM recent_runs WHERE has_critical_failure = true
+            ) THEN false
+            WHEN (SELECT AVG(passed_ratio) FROM recent_runs) < 80.0 THEN false
+            ELSE true
+          END AS gate_passed,
+          CASE 
+            WHEN NOT EXISTS (SELECT 1 FROM recent_runs) THEN 'No recent chaos runs found'
+            WHEN EXISTS (
+              SELECT 1 FROM recent_runs WHERE has_critical_failure = true
+            ) THEN 'Critical failures detected in recent runs'
+            WHEN (SELECT AVG(passed_ratio) FROM recent_runs) < 80.0 
+            THEN format('Success rate %.1f%% below threshold 80.0%%', 
+              (SELECT AVG(passed_ratio) FROM recent_runs))
+            ELSE NULL
+          END AS failure_reason,
+          COUNT(*)::bigint AS recent_runs_count,
+          COALESCE(AVG(passed_ratio), 0)::numeric AS success_rate,
+          COUNT(*) FILTER (WHERE has_critical_failure = true)::bigint AS critical_failures
+        FROM recent_runs;
+      $$;
+    `;
+    
+    // Execute each statement
+    const statements = [
+      createChaosAlertsTable,
+      createChaosRunVerdictTable,
+      createActiveAlertsCountFunction,
+      createChaosGateCheckFunction
+    ];
+    
+    for (let i = 0; i < statements.length; i++) {
+      console.log(`Executing statement ${i + 1}/${statements.length}...`);
+      
+      // Use raw SQL execution via POST to rest/v1/
+      const response = await fetch(`${process.env.SUPABASE_URL}/rest/v1/`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
+          'Content-Type': 'application/json',
+          'apikey': process.env.SUPABASE_SERVICE_ROLE_KEY,
+          'Prefer': 'return=minimal'
+        },
+        body: JSON.stringify({
+          query: statements[i]
+        })
+      });
+      
+      if (!response.ok) {
+        const error = await response.text();
+        console.error(`Statement ${i + 1} failed:`, error);
+      } else {
+        console.log(`Statement ${i + 1} succeeded`);
+      }
+    }
+    
+    console.log('Chaos infrastructure deployment complete');
+    
+  } catch (error) {
+    console.error('Deployment failed:', error.message);
+  }
+}
+
+deployChaosInfrastructure();

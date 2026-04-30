@@ -1,0 +1,1708 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HYDI — Three-Agent Control Panel</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;800&display=swap');
+
+  :root {
+    --bg: #0a0c0f;
+    --surface: #111318;
+    --surface2: #181c23;
+    --border: #1e2430;
+    --border2: #2a3040;
+    --text: #e8eaf0;
+    --text2: #7a8090;
+    --text3: #4a5060;
+    --purple: #8b5cf6;
+    --purple-dim: #4c2b8e;
+    --amber: #f59e0b;
+    --amber-dim: #7a4a05;
+    --green: #10b981;
+    --green-dim: #064e35;
+    --teal: #06b6d4;
+    --teal-dim: #0a4a58;
+    --red: #ef4444;
+    --red-dim: #5a1010;
+    --mono: 'Space Mono', monospace;
+    --sans: 'Syne', sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* HEADER */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 32px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+  }
+  .logo {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--teal);
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+  }
+  .logo span { color: var(--text2); }
+  .system-status {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text3);
+    letter-spacing: 0.1em;
+  }
+  .status-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    display: inline-block;
+    margin-right: 6px;
+  }
+  .status-dot.green { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .status-dot.amber { background: var(--amber); box-shadow: 0 0 6px var(--amber); }
+  .status-dot.red { background: var(--red); }
+
+  /* MAIN LAYOUT */
+  .main {
+    display: flex;
+    flex: 1;
+    gap: 0;
+    height: calc(100vh - 57px);
+  }
+
+  /* SIDEBAR */
+  .sidebar {
+    width: 220px;
+    min-width: 220px;
+    border-right: 1px solid var(--border);
+    background: var(--surface);
+    display: flex;
+    flex-direction: column;
+    padding: 16px 0;
+    overflow-y: auto;
+  }
+  .sidebar-section {
+    padding: 8px 16px;
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 0.2em;
+    color: var(--text3);
+    text-transform: uppercase;
+    margin-top: 8px;
+  }
+  .sidebar-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 16px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text2);
+    cursor: pointer;
+    border-left: 2px solid transparent;
+    transition: all 0.15s;
+    font-family: var(--sans);
+  }
+  .sidebar-item:hover { color: var(--text); background: var(--surface2); }
+  .sidebar-item.active { color: var(--teal); border-left-color: var(--teal); background: rgba(6,182,212,0.06); }
+  .sidebar-item .dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+
+  /* MAIN CONTENT */
+  .content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* AGENT TABS */
+  .agent-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+  }
+  .agent-tab {
+    flex: 1;
+    padding: 14px 20px;
+    cursor: pointer;
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text3);
+    border-bottom: 2px solid transparent;
+    transition: all 0.15s;
+    text-align: center;
+  }
+  .agent-tab:hover { color: var(--text2); }
+  .agent-tab.active[data-agent="1"] { color: var(--purple); border-color: var(--purple); }
+  .agent-tab.active[data-agent="2"] { color: var(--amber); border-color: var(--amber); }
+  .agent-tab.active[data-agent="3"] { color: var(--green); border-color: var(--green); }
+  .agent-tab .tab-label { font-size: 9px; color: var(--text3); display: block; margin-top: 2px; }
+
+  /* PANELS */
+  .panel-area {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+  }
+
+  .agent-panel {
+    display: none;
+    flex: 1;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .agent-panel.active { display: flex; }
+
+  /* PANEL TOP — config + run */
+  .panel-top {
+    padding: 20px 24px 16px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+  }
+  .panel-title {
+    font-size: 11px;
+    font-family: var(--mono);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+  .panel-title.purple { color: var(--purple); }
+  .panel-title.amber { color: var(--amber); }
+  .panel-title.green { color: var(--green); }
+
+  .scope-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 12px;
+  }
+  .scope-tag {
+    padding: 3px 10px;
+    border-radius: 3px;
+    font-family: var(--mono);
+    font-size: 10px;
+    cursor: pointer;
+    border: 1px solid var(--border2);
+    color: var(--text2);
+    background: var(--surface2);
+    transition: all 0.12s;
+    user-select: none;
+  }
+  .scope-tag.selected.purple { border-color: var(--purple); color: var(--purple); background: rgba(139,92,246,0.1); }
+  .scope-tag.selected.amber { border-color: var(--amber); color: var(--amber); background: rgba(245,158,11,0.1); }
+  .scope-tag.selected.green { border-color: var(--green); color: var(--green); background: rgba(16,185,129,0.1); }
+
+  .run-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .run-btn {
+    padding: 8px 22px;
+    border-radius: 4px;
+    border: none;
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    cursor: pointer;
+    font-weight: 700;
+    transition: all 0.15s;
+  }
+  .run-btn.purple { background: var(--purple); color: #fff; }
+  .run-btn.purple:hover { background: #7c3aed; }
+  .run-btn.amber { background: var(--amber); color: #0a0c0f; }
+  .run-btn.amber:hover { background: #d97706; }
+  .run-btn.green { background: var(--green); color: #0a0c0f; }
+  .run-btn.green:hover { background: #059669; }
+  .run-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .run-status {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text3);
+  }
+
+  /* OUTPUT AREA */
+  .output-area {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+  }
+
+  .output-stream {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px 24px;
+    font-family: var(--mono);
+    font-size: 12px;
+    line-height: 1.7;
+    color: var(--text);
+    background: var(--bg);
+  }
+
+  .output-stream::-webkit-scrollbar { width: 4px; }
+  .output-stream::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+  .stream-line {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 2px;
+    animation: fadeIn 0.2s ease;
+  }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(2px); } to { opacity: 1; transform: none; } }
+
+  .stream-ts { color: var(--text3); min-width: 60px; }
+  .stream-tag {
+    min-width: 70px;
+    padding: 0 6px;
+    border-radius: 2px;
+    font-size: 9px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    font-weight: 700;
+    text-align: center;
+    height: 18px;
+    line-height: 18px;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+  .stream-tag.info { background: rgba(6,182,212,0.15); color: var(--teal); }
+  .stream-tag.warn { background: rgba(245,158,11,0.15); color: var(--amber); }
+  .stream-tag.error { background: rgba(239,68,68,0.15); color: var(--red); }
+  .stream-tag.ok { background: rgba(16,185,129,0.15); color: var(--green); }
+  .stream-tag.audit { background: rgba(139,92,246,0.15); color: var(--purple); }
+  .stream-msg { flex: 1; word-break: break-word; }
+  .stream-msg.warn { color: var(--amber); }
+  .stream-msg.error { color: var(--red); }
+  .stream-msg.ok { color: var(--green); }
+  .stream-msg.dim { color: var(--text3); }
+
+  /* TASK LIST (agent 2) */
+  .task-sidebar {
+    width: 280px;
+    min-width: 280px;
+    border-left: 1px solid var(--border);
+    background: var(--surface);
+    overflow-y: auto;
+    padding: 16px;
+  }
+  .task-sidebar h3 {
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--text3);
+    margin-bottom: 12px;
+  }
+  .task-item {
+    padding: 8px 10px;
+    border-radius: 4px;
+    margin-bottom: 4px;
+    font-size: 11px;
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    border: 1px solid transparent;
+    transition: all 0.15s;
+  }
+  .task-item.pending { color: var(--text2); border-color: var(--border); }
+  .task-item.running { color: var(--amber); border-color: var(--amber-dim); background: rgba(245,158,11,0.05); }
+  .task-item.done { color: var(--green); border-color: var(--green-dim); background: rgba(16,185,129,0.05); }
+  .task-item.fail { color: var(--red); border-color: var(--red-dim); background: rgba(239,68,68,0.05); }
+  .task-icon { font-size: 12px; flex-shrink: 0; margin-top: 1px; }
+  .task-label { font-family: var(--mono); font-size: 10px; }
+  .task-sub { font-size: 9px; color: var(--text3); margin-top: 2px; font-family: var(--mono); }
+
+  /* VERIFY REPORT */
+  .verify-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    padding: 20px 24px;
+    overflow-y: auto;
+  }
+  .verify-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 14px;
+  }
+  .verify-card.pass { border-color: var(--green-dim); }
+  .verify-card.fail { border-color: var(--red-dim); }
+  .verify-card.warn { border-color: var(--amber-dim); }
+  .vc-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+  }
+  .vc-name { font-size: 12px; font-weight: 600; }
+  .vc-badge {
+    font-family: var(--mono);
+    font-size: 9px;
+    padding: 2px 8px;
+    border-radius: 2px;
+    font-weight: 700;
+  }
+  .vc-badge.pass { background: rgba(16,185,129,0.15); color: var(--green); }
+  .vc-badge.fail { background: rgba(239,68,68,0.15); color: var(--red); }
+  .vc-badge.warn { background: rgba(245,158,11,0.15); color: var(--amber); }
+  .vc-details { font-family: var(--mono); font-size: 10px; color: var(--text3); line-height: 1.6; }
+
+  /* PLACEHOLDER */
+  .placeholder {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    color: var(--text3);
+  }
+  .placeholder .icon { font-size: 32px; opacity: 0.3; }
+  .placeholder p { font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; }
+
+  /* SPINNER */
+  .spinner {
+    display: inline-block;
+    width: 12px; height: 12px;
+    border: 2px solid var(--border2);
+    border-top-color: var(--amber);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    flex-shrink: 0;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* SUMMARY BAR */
+  .summary-bar {
+    display: flex;
+    gap: 0;
+    border-top: 1px solid var(--border);
+    background: var(--surface);
+    font-family: var(--mono);
+    font-size: 10px;
+  }
+  .summary-cell {
+    flex: 1;
+    padding: 8px 16px;
+    border-right: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .summary-cell:last-child { border-right: none; }
+  .summary-val { font-size: 16px; font-weight: 700; font-family: var(--sans); }
+  .summary-lbl { color: var(--text3); font-size: 9px; }
+
+</style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+</head>
+<body>
+
+<header>
+  <div class="logo">HYDI <span>// PROTOFORGE INTELLIGENCE LAYER</span> // THREE-AGENT CONTROL</div>
+  <div class="system-status">
+    <span><span class="status-dot green"></span>URSULA ONLINE</span>
+    <span><span class="status-dot green"></span>CASCADE v2.1</span>
+    <span><span class="status-dot amber"></span>STRIPE WEBHOOK</span>
+    <span><span class="status-dot green"></span>SUPABASE RLS</span>
+  </div>
+</header>
+
+<div class="main">
+
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+    <div class="sidebar-section">Ecosystem</div>
+    <div class="sidebar-item active" onclick="setSideFilter('all')"><span class="dot" style="background:var(--teal)"></span>All Entities</div>
+    <div class="sidebar-item" onclick="setSideFilter('core')"><span class="dot" style="background:var(--purple)"></span>Core Agents</div>
+    <div class="sidebar-item" onclick="setSideFilter('infra')"><span class="dot" style="background:var(--amber)"></span>Infrastructure</div>
+    <div class="sidebar-item" onclick="setSideFilter('apps')"><span class="dot" style="background:var(--green)"></span>Apps &amp; Services</div>
+
+    <div class="sidebar-section">Core Agents</div>
+    <div class="sidebar-item" onclick="setSideFilter('HEIDI')"><span class="dot" style="background:var(--purple)"></span>HEIDI</div>
+    <div class="sidebar-item" onclick="setSideFilter('KILO')"><span class="dot" style="background:var(--purple)"></span>KILO</div>
+    <div class="sidebar-item" onclick="setSideFilter('URSULA')"><span class="dot" style="background:var(--teal)"></span>URSULA</div>
+    <div class="sidebar-item" onclick="setSideFilter('HYVE')"><span class="dot" style="background:var(--green)"></span>HYVE</div>
+    <div class="sidebar-item" onclick="setSideFilter('CASCADE')"><span class="dot" style="background:var(--amber)"></span>CASCADE</div>
+
+    <div class="sidebar-section">Division Apps</div>
+    <div class="sidebar-item" onclick="setSideFilter('Rezonate')"><span class="dot" style="background:var(--green)"></span>Rezonate</div>
+    <div class="sidebar-item" onclick="setSideFilter('BlameGame')"><span class="dot" style="background:var(--green)"></span>BlameGame</div>
+    <div class="sidebar-item" onclick="setSideFilter('PorchWise')"><span class="dot" style="background:var(--green)"></span>PorchWise</div>
+    <div class="sidebar-item" onclick="setSideFilter('ProtoIY')"><span class="dot" style="background:var(--green)"></span>Proto.I.Y</div>
+    <div class="sidebar-item" onclick="setSideFilter('AppForge')"><span class="dot" style="background:var(--green)"></span>AppForge</div>
+    <div class="sidebar-item" onclick="setSideFilter('GroundWork')"><span class="dot" style="background:var(--green)"></span>GroundWork</div>
+    <div class="sidebar-item" onclick="setSideFilter('JSTEIN')"><span class="dot" style="background:var(--green)"></span>J.STEIN</div>
+    <div class="sidebar-item" onclick="setSideFilter('Colters')"><span class="dot" style="background:var(--green)"></span>Colter's</div>
+    <div class="sidebar-item" onclick="setSideFilter('ZAero')"><span class="dot" style="background:var(--green)"></span>Z-Aero</div>
+    <div class="sidebar-item" onclick="setSideFilter('ForgeFinder')"><span class="dot" style="background:var(--green)"></span>ForgeFinder</div>
+  </div>
+
+  <!-- MAIN CONTENT -->
+  <div class="content">
+
+    <!-- AGENT TABS -->
+    <div class="agent-tabs">
+      <div class="agent-tab active" data-agent="1" onclick="switchAgent(1)">
+        AGENT 1 — AUDITOR
+        <span class="tab-label">Scan · Map gaps · Classify flaws</span>
+      </div>
+      <div class="agent-tab" data-agent="2" onclick="switchAgent(2)">
+        AGENT 2 — EXECUTOR
+        <span class="tab-label">Generate tasks · Execute fixes</span>
+      </div>
+      <div class="agent-tab" data-agent="3" onclick="switchAgent(3)">
+        AGENT 3 — VERIFIER
+        <span class="tab-label">Compare baseline · Certify clean</span>
+      </div>
+    </div>
+
+    <div class="panel-area">
+
+      <!-- AGENT 1: AUDITOR -->
+      <div class="agent-panel active" id="panel-1">
+        <div class="panel-top">
+          <div class="panel-title purple">// AUDITOR — ecosystem analysis scope</div>
+          <div class="scope-grid" id="scope-grid-1">
+            <span class="scope-tag selected purple" data-scope="core_agents">core agents</span>
+            <span class="scope-tag selected purple" data-scope="infra">infrastructure</span>
+            <span class="scope-tag selected purple" data-scope="stripe">stripe webhooks</span>
+            <span class="scope-tag selected purple" data-scope="supabase">supabase schema</span>
+            <span class="scope-tag selected purple" data-scope="edge_fn">edge functions</span>
+            <span class="scope-tag selected purple" data-scope="api">api endpoints</span>
+            <span class="scope-tag selected purple" data-scope="security">security posture</span>
+            <span class="scope-tag selected purple" data-scope="apps">division apps</span>
+            <span class="scope-tag selected purple" data-scope="monetization">monetization gaps</span>
+            <span class="scope-tag selected purple" data-scope="hid">hid agent</span>
+          </div>
+          <div class="run-row">
+            <button class="run-btn purple" id="run-audit" onclick="runAudit()">▶ RUN AUDIT</button>
+            <span class="run-status" id="audit-status">ready</span>
+          </div>
+        </div>
+        <div class="output-area">
+          <div class="output-stream" id="stream-1">
+            <div class="stream-line">
+              <span class="stream-ts">00:00</span>
+              <span class="stream-tag info">INIT</span>
+              <span class="stream-msg dim">AUDITOR standing by — select scope and run audit</span>
+            </div>
+          </div>
+        </div>
+        <div class="summary-bar" id="summary-1" style="display:none">
+          <div class="summary-cell"><span class="summary-val" id="s1-total">0</span><span class="summary-lbl">items scanned</span></div>
+          <div class="summary-cell"><span class="summary-val" style="color:var(--red)" id="s1-crit">0</span><span class="summary-lbl">critical gaps</span></div>
+          <div class="summary-cell"><span class="summary-val" style="color:var(--amber)" id="s1-warn">0</span><span class="summary-lbl">warnings</span></div>
+          <div class="summary-cell"><span class="summary-val" style="color:var(--green)" id="s1-ok">0</span><span class="summary-lbl">verified ok</span></div>
+        </div>
+      </div>
+
+      <!-- AGENT 2: EXECUTOR -->
+      <div class="agent-panel" id="panel-2">
+        <div class="panel-top">
+          <div class="panel-title amber">// EXECUTOR — task generation + execution engine</div>
+          <div class="scope-grid" id="scope-grid-2">
+            <span class="scope-tag selected amber" data-scope="gen_tasks">generate task list</span>
+            <span class="scope-tag selected amber" data-scope="fix_gaps">fix identified gaps</span>
+            <span class="scope-tag selected amber" data-scope="patch_stripe">patch stripe webhook</span>
+            <span class="scope-tag selected amber" data-scope="ursula_sync">ursula sync endpoint</span>
+            <span class="scope-tag selected amber" data-scope="monetize">monetization tasks</span>
+            <span class="scope-tag amber" data-scope="hid_creds">hid credentials</span>
+          </div>
+          <div class="run-row">
+            <button class="run-btn amber" id="run-exec" onclick="runExecutor()">▶ EXECUTE TASKS</button>
+            <span class="run-status" id="exec-status">run auditor first for task list</span>
+          </div>
+        </div>
+        <div class="output-area">
+          <div class="output-stream" id="stream-2">
+            <div class="stream-line">
+              <span class="stream-ts">00:00</span>
+              <span class="stream-tag info">INIT</span>
+              <span class="stream-msg dim">EXECUTOR ready — awaiting task queue from AUDITOR</span>
+            </div>
+          </div>
+          <div class="task-sidebar">
+            <h3>task queue</h3>
+            <div id="task-list">
+              <div style="font-family:var(--mono);font-size:10px;color:var(--text3)">no tasks yet — run auditor</div>
+            </div>
+          </div>
+        </div>
+        <div class="summary-bar" id="summary-2" style="display:none">
+          <div class="summary-cell"><span class="summary-val" id="s2-total">0</span><span class="summary-lbl">tasks total</span></div>
+          <div class="summary-cell"><span class="summary-val" style="color:var(--green)" id="s2-done">0</span><span class="summary-lbl">completed</span></div>
+          <div class="summary-cell"><span class="summary-val" style="color:var(--red)" id="s2-fail">0</span><span class="summary-lbl">failed</span></div>
+          <div class="summary-cell"><span class="summary-val" style="color:var(--teal)" id="s2-monetize">$0</span><span class="summary-lbl">revenue tasks</span></div>
+        </div>
+      </div>
+
+      <!-- AGENT 3: VERIFIER -->
+      <div class="agent-panel" id="panel-3">
+        <div class="panel-top">
+          <div class="panel-title green">// VERIFIER — baseline comparison + certification</div>
+          <div class="scope-grid" id="scope-grid-3">
+            <span class="scope-tag selected green" data-scope="vs_baseline">compare vs baseline</span>
+            <span class="scope-tag selected green" data-scope="integrity">integrity check</span>
+            <span class="scope-tag selected green" data-scope="security_verify">security verify</span>
+            <span class="scope-tag selected green" data-scope="monetize_verify">monetization verify</span>
+            <span class="scope-tag selected green" data-scope="cert">generate certificate</span>
+          </div>
+          <div class="run-row">
+            <button class="run-btn green" id="run-verify" onclick="runVerifier()">▶ RUN VERIFICATION</button>
+            <span class="run-status" id="verify-status">run executor first</span>
+          </div>
+        </div>
+        <div class="output-area">
+          <div id="verify-placeholder" class="placeholder">
+            <div class="icon">◎</div>
+            <p>verification report appears here after executor completes</p>
+          </div>
+          <div id="verify-results" style="display:none;flex:1;overflow-y:auto;">
+            <div class="verify-grid" id="verify-grid"></div>
+          </div>
+        </div>
+        <div class="summary-bar" id="summary-3" style="display:none">
+          <div class="summary-cell"><span class="summary-val" style="color:var(--green)" id="s3-pass">0</span><span class="summary-lbl">passed</span></div>
+          <div class="summary-cell"><span class="summary-val" style="color:var(--amber)" id="s3-warn">0</span><span class="summary-lbl">warnings</span></div>
+          <div class="summary-cell"><span class="summary-val" style="color:var(--red)" id="s3-fail">0</span><span class="summary-lbl">failed</span></div>
+          <div class="summary-cell"><span class="summary-val" style="color:var(--teal)" id="s3-cert">—</span><span class="summary-lbl">certification</span></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+// ─── Hybrid Config ────────────────────────────────────────────────────────────
+const LOCAL_MODEL_URL = 'http://127.0.0.1:8000/analyze';
+const USE_LOCAL_MODEL = true;
+const USE_SUPABASE_PERSISTENCE = true;
+const SUPABASE_URL = 'https://akbnfovjdcobifeupvbn.supabase.co';
+const SUPABASE_ANON_KEY = window.localStorage.getItem('sb_anon_key') || 'YOUR_ANON_KEY_HERE';
+const supabaseClient = USE_SUPABASE_PERSISTENCE ? supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
+
+// ─── Version & Schema (future-proofing) ───────────────────────────────────────
+const HYDI_VERSION = '2.0.0';
+const SCHEMA_HASH = 'a1b2c3d4'; // Hash of runContext structure for compatibility checks
+
+// ─── Status & Phase Enums (standardized for state machine) ─────────────────────
+const STATUS = Object.freeze({
+  INITIALIZED: 'initialized',
+  RUNNING: 'running',
+  COMPLETED: 'completed',
+  REOPEN_AUDIT: 'reopen_audit',
+  FAILED: 'failed'
+});
+
+const PHASE = Object.freeze({
+  AUDIT: 'audit',
+  EXECUTE: 'execute',
+  VERIFY: 'verify'
+});
+
+// ─── State Machine: Enforced Transitions ──────────────────────────────────────
+const ALLOWED_TRANSITIONS = Object.freeze({
+  [PHASE.AUDIT]: [PHASE.EXECUTE, STATUS.FAILED],
+  [PHASE.EXECUTE]: [PHASE.VERIFY, STATUS.REOPEN_AUDIT, STATUS.FAILED],
+  [PHASE.VERIFY]: [STATUS.COMPLETED, STATUS.REOPEN_AUDIT, STATUS.FAILED]
+});
+
+// ─── Structured Run Context (with agent boundaries) ───────────────────────────
+const runContext = {
+  // System metadata (URSULA/HEIDI only)
+  meta: {
+    run_id: null,
+    version: HYDI_VERSION,
+    schema_hash: SCHEMA_HASH,
+    started_at: null,
+    completed_at: null,
+    status: STATUS.INITIALIZED,
+    scope: null
+  },
+  // Execution flow (URSULA orchestrator)
+  execution: {
+    phase: null,
+    current_agent: null,
+    task_queue: [],
+    completed_tasks: []
+  },
+  // Audit findings (HEIDI only)
+  audit: {
+    findings: [],
+    critical_count: 0,
+    warning_count: 0,
+    ok_count: 0
+  },
+  // Verification results (KILO only)
+  verification: {
+    results: [],
+    passed: 0,
+    failed: 0,
+    warnings: 0
+  },
+  // Certification (KILO final authority)
+  certification: {
+    status: null, // 'CLEAN' | 'CONDITIONAL'
+    issued_at: null,
+    signature: null // Future: cryptographic signature
+  },
+  // Event log for deterministic replay
+  events: []
+};
+
+// ─── Event Logging for Replay ─────────────────────────────────────────────────
+function logEvent(type, agent, payload, phase = null) {
+  const event = {
+    seq: runContext.events.length,
+    timestamp: new Date().toISOString(),
+    type,
+    agent,
+    phase: phase || runContext.execution.phase,
+    payload,
+    hash: null // Future: hash chain for integrity
+  };
+  runContext.events.push(event);
+  return event;
+}
+
+// ─── State Transition Enforcement ───────────────────────────────────────────
+function canTransition(from, to) {
+  if (!ALLOWED_TRANSITIONS[from]) return false;
+  return ALLOWED_TRANSITIONS[from].includes(to);
+}
+
+function validateTransition(to) {
+  const from = runContext.execution.phase || PHASE.AUDIT;
+  if (!canTransition(from, to)) {
+    throw new Error(`Illegal transition: ${from} → ${to}. Allowed: ${ALLOWED_TRANSITIONS[from]?.join(', ') || 'none'}`);
+  }
+  return true;
+}
+
+// ─── Runtime Invariant Checks (reject impossible states) ────────────────────
+const INVARIANTS = {
+  // HEIDI: audit must produce findings before execute
+  preExecute() {
+    if (runContext.execution.phase !== PHASE.AUDIT) {
+      throw new Error(`Invariant violation: cannot enter EXECUTE from phase ${runContext.execution.phase}`);
+    }
+    if (runContext.audit.findings.length === 0) {
+      throw new Error('Invariant violation: audit findings empty — EXECUTE blocked');
+    }
+    console.log('[INVARIANT] preExecute passed');
+  },
+
+  // EXECUTOR: tasks must exist before verify
+  preVerify() {
+    if (runContext.execution.phase !== PHASE.EXECUTE) {
+      throw new Error(`Invariant violation: cannot enter VERIFY from phase ${runContext.execution.phase}`);
+    }
+    if (runContext.execution.task_queue.length === 0) {
+      throw new Error('Invariant violation: task queue empty — VERIFY blocked');
+    }
+    console.log('[INVARIANT] preVerify passed');
+  },
+
+  // KILO: cannot certify if verification has failures and status is COMPLETED
+  postVerify(certStatus, failedCount) {
+    if (runContext.execution.phase !== PHASE.VERIFY) {
+      throw new Error(`Invariant violation: certification attempted outside VERIFY phase (${runContext.execution.phase})`);
+    }
+    if (certStatus.includes('CLEAN') && failedCount > 0) {
+      throw new Error(`Invariant violation: CLEAN certificate with ${failedCount} failures — impossible state rejected`);
+    }
+    if (!certStatus.includes('CLEAN') && !certStatus.includes('CONDITIONAL')) {
+      throw new Error(`Invariant violation: unknown certificate status "${certStatus}" — state rejected`);
+    }
+    console.log('[INVARIANT] postVerify passed');
+  },
+
+  // Global: cannot mutate finalized runs
+  checkNotFinalized() {
+    if ([STATUS.COMPLETED, STATUS.FAILED].includes(runContext.meta.status)) {
+      throw new Error(`Invariant violation: run ${runContext.meta.run_id} is finalized (${runContext.meta.status}) — no mutations allowed`);
+    }
+  },
+
+  // Global: schema version compatibility
+  checkSchemaVersion() {
+    if (runContext.meta.schema_hash !== SCHEMA_HASH) {
+      throw new Error(`Invariant violation: schema mismatch. Run: ${runContext.meta.schema_hash}, System: ${SCHEMA_HASH}`);
+    }
+  },
+
+  // Agent boundary: only current_actor can write
+  checkActor(agentType) {
+    const current = runContext.execution.current_agent;
+    if (current !== agentType) {
+      throw new Error(`Invariant violation: ${agentType} attempted write but current_actor is ${current}`);
+    }
+  }
+};
+
+// ─── Chaos Hooks (deliberately break things for resilience testing) ─────────
+const CHAOS = {
+  enabled: false,
+  probability: 0.05, // 5% chance per operation
+
+  inject() {
+    if (!this.enabled || Math.random() > this.probability) return null;
+    const modes = ['delay', 'duplicate', 'failure', 'partial', 'latency', 'drop'];
+    const mode = modes[Math.floor(Math.random() * modes.length)];
+    console.log(`[CHAOS] Injecting: ${mode}`);
+    return mode;
+  },
+
+  async maybeDelay(ms = 2000) {
+    if (this.inject() === 'delay') {
+      console.log(`[CHAOS] Delaying ${ms}ms...`);
+      await delay(ms);
+    }
+  },
+
+  async maybeDuplicate(fn, ...args) {
+    if (this.inject() === 'duplicate') {
+      console.log('[CHAOS] Duplicate invocation');
+      fn(...args).catch(e => console.log('[CHAOS] Duplicate suppressed:', e.message));
+    }
+    return fn(...args);
+  },
+
+  maybeThrow(msg = 'Chaos injected failure') {
+    if (this.inject() === 'failure') {
+      throw new Error(msg);
+    }
+  },
+
+  maybePartial(returnValue, errorValue) {
+    if (this.inject() === 'partial') {
+      console.log('[CHAOS] Returning partial/corrupt data');
+      return errorValue;
+    }
+    return returnValue;
+  },
+
+  maybeDrop(fn) {
+    if (this.inject() === 'drop') {
+      console.log('[CHAOS] Dropping operation silently');
+      return Promise.resolve(null);
+    }
+    return fn();
+  }
+};
+
+// ─── External Side-Effect Ledger (never re-trigger on replay) ────────────────
+const SideEffectLedger = {
+  effects: new Map(), // run_id -> [{ id, type, idempotency_key, status, payload }]
+
+  async record(runId, type, payload) {
+    const id = `${runId}-${type}-${Date.now()}`;
+    const entry = {
+      id,
+      run_id: runId,
+      type,
+      idempotency_key: `${runId}-${type}-${payload?.hash || ''}`,
+      status: 'pending',
+      payload: JSON.stringify(payload),
+      created_at: new Date().toISOString()
+    };
+
+    // Persist to Supabase
+    if (USE_SUPABASE_PERSISTENCE) {
+      const { error } = await supabaseClient.from('hydi_side_effects').insert(entry);
+      if (error) console.error('[LEDGER] Persist error:', error);
+    }
+
+    if (!this.effects.has(runId)) this.effects.set(runId, []);
+    this.effects.get(runId).push(entry);
+    return entry;
+  },
+
+  async markCompleted(id) {
+    if (USE_SUPABASE_PERSISTENCE) {
+      await supabaseClient.from('hydi_side_effects')
+        .update({ status: 'completed', completed_at: new Date().toISOString() })
+        .eq('id', id);
+    }
+    // Update in-memory
+    for (const effects of this.effects.values()) {
+      const e = effects.find(x => x.id === id);
+      if (e) e.status = 'completed';
+    }
+  },
+
+  async markFailed(id, reason) {
+    if (USE_SUPABASE_PERSISTENCE) {
+      await supabaseClient.from('hydi_side_effects')
+        .update({ status: 'failed', error: reason })
+        .eq('id', id);
+    }
+    for (const effects of this.effects.values()) {
+      const e = effects.find(x => x.id === id);
+      if (e) { e.status = 'failed'; e.error = reason; }
+    }
+  },
+
+  isCompleted(runId, type, key) {
+    const effects = this.effects.get(runId) || [];
+    return effects.some(e =>
+      e.type === type &&
+      e.idempotency_key === key &&
+      e.status === 'completed'
+    );
+  },
+
+  // Idempotent execution wrapper
+  async execute(runId, type, key, fn) {
+    if (this.isCompleted(runId, type, key)) {
+      console.log(`[LEDGER] Skipping completed side-effect: ${type} for run ${runId}`);
+      return { skipped: true, reason: 'already_completed' };
+    }
+
+    const entry = await this.record(runId, type, { hash: key });
+    try {
+      const result = await fn();
+      await this.markCompleted(entry.id);
+      return { skipped: false, result };
+    } catch (e) {
+      await this.markFailed(entry.id, e.message);
+      throw e;
+    }
+  }
+};
+
+// ─── Agent Lease System (prevent stuck agents from freezing reality) ─────────
+const AgentLease = {
+  leases: new Map(), // agent -> { run_id, acquired_at, expires_at, heartbeat }
+  LEASE_DURATION_MS: 30000, // 30 seconds
+  HEARTBEAT_INTERVAL_MS: 10000, // 10 seconds
+
+  async acquire(agent, runId) {
+    const now = Date.now();
+    const existing = this.leases.get(agent);
+
+    if (existing && existing.run_id !== runId) {
+      if (now < existing.expires_at) {
+        throw new Error(`Lease conflict: ${agent} already leased to ${existing.run_id} until ${new Date(existing.expires_at).toISOString()}`);
+      }
+      console.log(`[LEASE] ${agent} lease expired for ${existing.run_id}, reclaiming`);
+    }
+
+    const lease = {
+      run_id: runId,
+      acquired_at: now,
+      expires_at: now + this.LEASE_DURATION_MS,
+      last_heartbeat: now
+    };
+
+    this.leases.set(agent, lease);
+    runContext.execution.current_agent = agent;
+
+    // Persist lease
+    if (USE_SUPABASE_PERSISTENCE) {
+      await supabaseClient.from('hydi_agent_leases').upsert({
+        agent,
+        run_id: runId,
+        acquired_at: new Date(now).toISOString(),
+        expires_at: new Date(lease.expires_at).toISOString(),
+        status: 'active'
+      }, { onConflict: 'agent' });
+    }
+
+    console.log(`[LEASE] ${agent} acquired lease for ${runId} (expires: ${new Date(lease.expires_at).toISOString()})`);
+    return lease;
+  },
+
+  heartbeat(agent) {
+    const lease = this.leases.get(agent);
+    if (!lease) return false;
+
+    const now = Date.now();
+    lease.last_heartbeat = now;
+    lease.expires_at = now + this.LEASE_DURATION_MS;
+
+    // Async heartbeat to Supabase
+    if (USE_SUPABASE_PERSISTENCE) {
+      supabaseClient.from('hydi_agent_leases')
+        .update({
+          expires_at: new Date(lease.expires_at).toISOString(),
+          last_heartbeat: new Date(now).toISOString()
+        })
+        .eq('agent', agent)
+        .then(() => {})
+        .catch(e => console.error('[LEASE] Heartbeat failed:', e));
+    }
+
+    return true;
+  },
+
+  isActive(agent) {
+    const lease = this.leases.get(agent);
+    if (!lease) return false;
+    return Date.now() < lease.expires_at;
+  },
+
+  // Forced takeover (Ursula/escalation path)
+  async forceRelease(agent, reason = 'escalation') {
+    const lease = this.leases.get(agent);
+    if (!lease) return true;
+
+    console.log(`[LEASE] Force releasing ${agent} from ${lease.run_id}: ${reason}`);
+
+    if (USE_SUPABASE_PERSISTENCE) {
+      await supabaseClient.from('hydi_agent_leases')
+        .update({ status: 'forcibly_released', released_reason: reason, released_at: new Date().toISOString() })
+        .eq('agent', agent);
+    }
+
+    this.leases.delete(agent);
+    return true;
+  },
+
+  getHolder(runId) {
+    for (const [agent, lease] of this.leases.entries()) {
+      if (lease.run_id === runId && this.isActive(agent)) {
+        return agent;
+      }
+    }
+    return null;
+  }
+};
+
+// ─── State ───────────────────────────────────────────────────────────────────
+let currentRunId = null;  // Legacy alias for runContext.run_id
+let auditDone = false;
+let execDone = false;
+let auditFindings = [];
+let generatedTasks = [];
+let sideFilter = 'all';
+
+// ─── Persistence Adapter with Full Safety Integration ───────────────────────
+const persistenceAdapter = {
+  // Initialize new run (URSULA/HEIDI boundary)
+  async initRun(agentType, scope) {
+    if (!USE_SUPABASE_PERSISTENCE) return null;
+
+    // Invariant: only auditor can init
+    if (agentType !== 'auditor') {
+      throw new Error(`Agent ${agentType} cannot initialize run. Only AUDITOR.`);
+    }
+
+    // Chaos: maybe delay or fail
+    await CHAOS.maybeDelay(500);
+    CHAOS.maybeThrow('Chaos: initRun failure');
+
+    const { data, error } = await supabaseClient.from('hydi_agent_runs').insert({
+      agent_type: agentType,
+      status: STATUS.RUNNING,
+      scope: scope,
+      started_at: new Date().toISOString(),
+      version: HYDI_VERSION,
+      schema_hash: SCHEMA_HASH
+    }).select('id').single();
+
+    if (error) {
+      console.error('initRun error:', error);
+      return null;
+    }
+
+    // Update structured context
+    runContext.meta.run_id = data.id;
+    runContext.meta.scope = scope;
+    runContext.meta.started_at = new Date().toISOString();
+    runContext.meta.status = STATUS.RUNNING;
+    runContext.execution.phase = PHASE.AUDIT;
+    runContext.execution.current_agent = agentType;
+    currentRunId = data.id;
+
+    // Acquire lease for this agent
+    await AgentLease.acquire(agentType, data.id);
+
+    logEvent('RUN_INIT', agentType, { scope, version: HYDI_VERSION });
+    return data.id;
+  },
+
+  // State transition with enforcement (URSULA orchestrator boundary)
+  async transition(toPhase, payload = null) {
+    // Invariant checks
+    INVARIANTS.checkNotFinalized();
+    INVARIANTS.checkSchemaVersion();
+
+    if (toPhase === PHASE.EXECUTE) INVARIANTS.preExecute();
+    if (toPhase === PHASE.VERIFY) INVARIANTS.preVerify();
+
+    validateTransition(toPhase);
+
+    const fromPhase = runContext.execution.phase;
+    runContext.execution.phase = toPhase;
+
+    // Chaos: maybe duplicate event
+    const eventPayload = { from: fromPhase, to: toPhase, payload };
+    if (CHAOS.inject() === 'duplicate') {
+      console.log('[CHAOS] Duplicate phase transition event');
+      logEvent('PHASE_TRANSITION', runContext.execution.current_agent, eventPayload);
+    }
+
+    logEvent('PHASE_TRANSITION', runContext.execution.current_agent, eventPayload);
+
+    // Persist state change (with drop chaos)
+    if (USE_SUPABASE_PERSISTENCE && runContext.meta.run_id) {
+      await CHAOS.maybeDrop(async () => {
+        const { error } = await supabaseClient.from('hydi_agent_runs')
+          .update({ current_phase: toPhase })
+          .eq('id', runContext.meta.run_id);
+        if (error) console.error('transition error:', error);
+      });
+    }
+  },
+
+  // Persist findings (HEIDI boundary only)
+  async persistFindings(findings) {
+    if (!USE_SUPABASE_PERSISTENCE || !runContext.meta.run_id) return;
+
+    // Invariants
+    INVARIANTS.checkActor('auditor');
+    INVARIANTS.checkNotFinalized();
+
+    const rows = findings.map(f => ({
+      run_id: runContext.meta.run_id,
+      component: f.text.split(':')[0] || 'unknown',
+      severity: f.severity,
+      description: f.text
+    }));
+
+    // Chaos: maybe partial data
+    const chaosRows = CHAOS.maybePartial(rows, rows.slice(1)); // Drop first finding
+
+    const { error } = await supabaseClient.from('hydi_audit_findings').insert(chaosRows);
+    if (error) console.error('persistFindings error:', error);
+    else {
+      runContext.audit.findings = [...runContext.audit.findings, ...findings];
+      findings.forEach(f => {
+        if (f.severity === 'CRITICAL') runContext.audit.critical_count++;
+        else if (f.severity === 'WARNING') runContext.audit.warning_count++;
+        else runContext.audit.ok_count++;
+      });
+      logEvent('FINDINGS_PERSISTED', 'auditor', { count: findings.length });
+    }
+
+    // Heartbeat to maintain lease
+    AgentLease.heartbeat('auditor');
+  },
+
+  // Persist tasks (EXECUTOR boundary)
+  async persistTasks(tasks) {
+    if (!USE_SUPABASE_PERSISTENCE || !runContext.meta.run_id) return;
+
+    // Invariants
+    INVARIANTS.checkActor('executor');
+    INVARIANTS.checkNotFinalized();
+
+    const rows = tasks.map(t => ({
+      run_id: runContext.meta.run_id,
+      task_name: t.label,
+      status: t.status
+    }));
+
+    const { error } = await supabaseClient.from('hydi_execution_tasks').insert(rows);
+    if (error) console.error('persistTasks error:', error);
+    else {
+      runContext.execution.task_queue = [...runContext.execution.task_queue, ...tasks];
+      logEvent('TASKS_PERSISTED', 'executor', { count: tasks.length });
+    }
+
+    AgentLease.heartbeat('executor');
+  },
+
+  // Persist verification results (KILO boundary only)
+  async persistVerification(results) {
+    if (!USE_SUPABASE_PERSISTENCE || !runContext.meta.run_id) return;
+
+    // Invariants
+    INVARIANTS.checkActor('verifier');
+    INVARIANTS.checkNotFinalized();
+
+    const rows = results.map(r => ({
+      run_id: runContext.meta.run_id,
+      component: r.name,
+      status: r.status?.toLowerCase(),
+      baseline: r.baseline,
+      actual: r.actual,
+      delta: r.delta
+    }));
+
+    const { error } = await supabaseClient.from('hydi_verification_results').insert(rows);
+    if (error) console.error('persistVerification error:', error);
+    else {
+      runContext.verification.results = results;
+      results.forEach(r => {
+        const status = r.status?.toLowerCase();
+        if (status === 'pass') runContext.verification.passed++;
+        else if (status === 'fail') runContext.verification.failed++;
+        else runContext.verification.warnings++;
+      });
+      logEvent('VERIFICATION_PERSISTED', 'verifier', { count: results.length });
+    }
+
+    AgentLease.heartbeat('verifier');
+  },
+
+  // Persist certification (KILO final authority)
+  async persistCertification(certText, pass, warn, fail) {
+    if (!USE_SUPABASE_PERSISTENCE || !runContext.meta.run_id) return;
+
+    // Invariants
+    INVARIANTS.checkActor('verifier');
+    INVARIANTS.postVerify(certText, fail);
+    INVARIANTS.checkNotFinalized();
+
+    const certStatus = certText.includes('CLEAN') ? 'CLEAN' : 'CONDITIONAL';
+
+    // Chaos: maybe corrupt status
+    const chaosStatus = CHAOS.maybePartial(certStatus, 'INVALID_STATUS');
+
+    const { error } = await supabaseClient.from('hydi_certifications').insert({
+      run_id: runContext.meta.run_id,
+      certificate_status: chaosStatus,
+      passed_count: pass,
+      warning_count: warn,
+      failed_count: fail,
+      issued_at: new Date().toISOString()
+    });
+
+    if (error) console.error('persistCertification error:', error);
+    else {
+      runContext.certification.status = certStatus;
+      runContext.certification.issued_at = new Date().toISOString();
+      logEvent('CERTIFICATION_ISSUED', 'verifier', { status: certStatus, passed: pass, failed: fail });
+    }
+
+    AgentLease.heartbeat('verifier');
+  },
+
+  // Update run status with finality check
+  async updateStatus(status, phase = null) {
+    if (!USE_SUPABASE_PERSISTENCE || !runContext.meta.run_id) return;
+
+    // Validate: once completed or failed, no further changes
+    if ([STATUS.COMPLETED, STATUS.FAILED].includes(runContext.meta.status)) {
+      throw new Error(`Run ${runContext.meta.run_id} is already finalized (${runContext.meta.status})`);
+    }
+
+    const updates = { status };
+    if (status === STATUS.COMPLETED) {
+      updates.completed_at = new Date().toISOString();
+      runContext.meta.completed_at = updates.completed_at;
+    }
+    if (phase) updates.current_phase = phase;
+
+    const { error } = await supabaseClient.from('hydi_agent_runs')
+      .update(updates)
+      .eq('id', runContext.meta.run_id);
+
+    if (error) console.error('updateStatus error:', error);
+    else {
+      runContext.meta.status = status;
+      if (phase) runContext.execution.phase = phase;
+      logEvent('STATUS_UPDATE', runContext.execution.current_agent, { status, phase });
+    }
+
+    // Release lease on terminal status
+    if ([STATUS.COMPLETED, STATUS.FAILED, STATUS.REOPEN_AUDIT].includes(status)) {
+      const agent = runContext.execution.current_agent;
+      if (agent) {
+        await AgentLease.forceRelease(agent, `terminal_status_${status}`);
+      }
+    }
+  },
+
+  // Get replay log for debugging
+  getReplayLog() {
+    return {
+      version: HYDI_VERSION,
+      schema_hash: SCHEMA_HASH,
+      events: runContext.events,
+      leases: Object.fromEntries(AgentLease.leases),
+      sideEffects: Object.fromEntries(SideEffectLedger.effects),
+      finalState: JSON.parse(JSON.stringify(runContext))
+    };
+  },
+
+  // Chaos control
+  enableChaos(probability = 0.05) {
+    CHAOS.enabled = true;
+    CHAOS.probability = probability;
+    console.log(`[CHAOS] Enabled with ${probability * 100}% probability`);
+  },
+
+  disableChaos() {
+    CHAOS.enabled = false;
+    console.log('[CHAOS] Disabled');
+  }
+};
+
+// Legacy function aliases (for backward compatibility during transition)
+async function persistRun(agentType, status, scope) {
+  return persistenceAdapter.initRun(agentType, scope);
+}
+async function persistFindings(runId, findings) {
+  return persistenceAdapter.persistFindings(findings);
+}
+async function persistTasks(runId, tasks) {
+  return persistenceAdapter.persistTasks(tasks);
+}
+async function persistVerification(runId, results) {
+  return persistenceAdapter.persistVerification(results);
+}
+async function persistCertification(runId, certText, pass, warn, fail) {
+  return persistenceAdapter.persistCertification(certText, pass, warn, fail);
+}
+async function updateRunStatus(runId, status) {
+  return persistenceAdapter.updateStatus(status);
+}
+
+// ─── Tab switching ────────────────────────────────────────────────────────────
+function switchAgent(n) {
+  document.querySelectorAll('.agent-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.agent-panel').forEach(p => p.classList.remove('active'));
+  document.querySelector(`.agent-tab[data-agent="${n}"]`).classList.add('active');
+  document.getElementById(`panel-${n}`).classList.add('active');
+}
+
+// ─── Sidebar filter ───────────────────────────────────────────────────────────
+function setSideFilter(f) {
+  sideFilter = f;
+  document.querySelectorAll('.sidebar-item').forEach(i => i.classList.remove('active'));
+  event.target.closest('.sidebar-item').classList.add('active');
+}
+
+// ─── Scope tag toggle ─────────────────────────────────────────────────────────
+document.querySelectorAll('.scope-tag').forEach(tag => {
+  tag.addEventListener('click', () => {
+    const cls = tag.classList.contains('purple') ? 'purple' : tag.classList.contains('amber') ? 'amber' : 'green';
+    tag.classList.toggle('selected');
+    if (tag.classList.contains('selected')) tag.classList.add(cls);
+    else tag.classList.remove(cls);
+  });
+});
+
+// ─── Streaming helpers ────────────────────────────────────────────────────────
+function ts() {
+  const d = new Date();
+  return `${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`;
+}
+
+function streamLine(streamId, tag, tagClass, msg, msgClass='') {
+  const stream = document.getElementById(streamId);
+  const line = document.createElement('div');
+  line.className = 'stream-line';
+  line.innerHTML = `<span class="stream-ts">${ts()}</span><span class="stream-tag ${tagClass}">${tag}</span><span class="stream-msg ${msgClass}">${msg}</span>`;
+  stream.appendChild(line);
+  stream.scrollTop = stream.scrollHeight;
+}
+
+function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// ─── Local Model Call ─────────────────────────────────────────────────────────
+async function callLocalModel(prompt) {
+  try {
+    const response = await fetch(LOCAL_MODEL_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt })
+    });
+    const data = await response.json();
+    return data.response || data.text || data.content || 'No response';
+  } catch (e) {
+    console.error('Local model error:', e);
+    return 'Local model unavailable. Make sure your local server is running on port 8000.';
+  }
+}
+
+// ─── AGENT 1: AUDITOR ────────────────────────────────────────────────────────
+async function runAudit() {
+  const btn = document.getElementById('run-audit');
+  const statusEl = document.getElementById('audit-status');
+  btn.disabled = true;
+  document.getElementById('stream-1').innerHTML = '';
+  document.getElementById('summary-1').style.display = 'none';
+
+  const scope = [...document.querySelectorAll('#scope-grid-1 .scope-tag.selected')].map(t=>t.dataset.scope);
+
+  const sitrep = `ProtoForge SITREP v2.0-CASCADE. Entities: HEIDI, KILO, URSULA, HYVE, CASCADE, Keymaker, Universal Agent Bus, Safety Orchestrator (HID). Infrastructure: Supabase (PostgreSQL, Edge Functions), Vercel, Stripe Webhooks. Known issues: stripe-webhook constructEventAsync fix deployed but unverified; Ursula sync endpoint /api/hydi/sync returning 404; HID agent awaiting credentials in webhook_task_hid.json. Division apps: Rezonate (music DAW + blockchain), BlameGame (Web3 social challenge), PorchWise (family management), Proto.I.Y (DIY + 3D manufacturing), AppForge (loan application automation), GroundWork Hemp Café (23-step permit pipeline), J.STEIN Signature Collection (luxury fragrance e-commerce), Colter's Smokehouse (restaurant management), Z-Aero Foundation (nonprofit EV training), ForgeFinder (unclaimed funds discovery). Service tiers: STARTER $49, PRO $149, ENTERPRISE $499. Security: Keymaker JWT, RLS by customer_id, TLS 1.3, AES-256 at rest. HID kill switch: C:\\tmp\\STOP_HID.`;
+
+  const prompt = `You are AUDITOR, an expert systems analyst for ProtoForge Industries. Analyze this system SITREP and provide a structured gap analysis. Format each finding as: [CRITICAL/WARNING/OK] ComponentName: Issue description. Include findings for: core agents (HEIDI, KILO, URSULA, HYVE, CASCADE, Keymaker), infrastructure (Supabase, Vercel, Stripe), each division app (Rezonate, BlameGame, PorchWise, Proto.I.Y, AppForge, GroundWork, J.STEIN, Colter's, Z-Aero, ForgeFinder), security posture, monetization gaps, and HID agent. Target 20-30 findings total.
+
+SITREP:
+${sitrep}`;
+
+  streamLine('stream-1', 'INIT', 'info', 'AUDITOR agent initialized — HYDI v2.0.2 (state machine + replay log)');
+  await delay(400);
+  streamLine('stream-1', 'SCOPE', 'info', 'Selected scope: ' + scope.join(', '));
+
+  // Set agent boundary before persistence
+  runContext.execution.current_agent = 'auditor';
+
+  // Persist run start
+  currentRunId = await persistRun('auditor', 'running', scope);
+  if (currentRunId) streamLine('stream-1', 'DB', 'info', `Run persisted: ${currentRunId.slice(0,8)}...`, 'dim');
+
+  await delay(300);
+  streamLine('stream-1', 'CALL', 'audit', 'Calling local model at :8000...');
+  statusEl.textContent = 'processing...';
+
+  try {
+    const response = await callLocalModel(prompt);
+    streamLine('stream-1', 'RESP', 'ok', 'Local model responded, parsing findings...', 'dim');
+    await renderAuditResults(response);
+  } catch(e) {
+    streamLine('stream-1', 'ERR', 'error', 'Local model call failed: ' + e.message, 'error');
+    statusEl.textContent = 'error';
+    await updateRunStatus(currentRunId, STATUS.FAILED);
+  }
+
+  btn.disabled = false;
+}
+
+async function renderAuditResults(text) {
+  const statusEl = document.getElementById('audit-status');
+  const lines = text.split('\n').filter(l => l.trim());
+  let total = 0, crit = 0, warn = 0, ok = 0;
+  auditFindings = [];
+
+  for (const line of lines) {
+    await delay(40);
+    if (line.startsWith('[CRITICAL]')) {
+      const msg = line.replace('[CRITICAL]', '').trim();
+      streamLine('stream-1', 'CRIT', 'error', msg, 'error');
+      crit++; total++;
+      auditFindings.push({ severity: 'CRITICAL', text: msg });
+    } else if (line.startsWith('[WARNING]')) {
+      const msg = line.replace('[WARNING]', '').trim();
+      streamLine('stream-1', 'WARN', 'warn', msg, 'warn');
+      warn++; total++;
+      auditFindings.push({ severity: 'WARNING', text: msg });
+    } else if (line.startsWith('[OK]')) {
+      const msg = line.replace('[OK]', '').trim();
+      streamLine('stream-1', 'OK', 'ok', msg, 'ok');
+      ok++; total++;
+      auditFindings.push({ severity: 'OK', text: msg });
+    } else {
+      streamLine('stream-1', 'NOTE', 'info', line, 'dim');
+    }
+  }
+
+  document.getElementById('s1-total').textContent = total;
+  document.getElementById('s1-crit').textContent = crit;
+  document.getElementById('s1-warn').textContent = warn;
+  document.getElementById('s1-ok').textContent = ok;
+  document.getElementById('summary-1').style.display = 'flex';
+
+  streamLine('stream-1', 'DONE', 'ok', `Audit complete — ${total} findings (${crit} critical, ${warn} warnings, ${ok} ok)`, 'ok');
+  statusEl.textContent = `done — ${total} findings`;
+  auditDone = true;
+
+  // Persist findings and transition to execute phase
+  await persistFindings(currentRunId, auditFindings);
+  await persistenceAdapter.transition(PHASE.EXECUTE, { findings_count: total });
+  await updateRunStatus(currentRunId, STATUS.RUNNING);
+  streamLine('stream-1', 'DB', 'info', `Findings persisted → phase: ${runContext.execution.phase}`, 'dim');
+
+  document.getElementById('run-exec').disabled = false;
+  document.getElementById('exec-status').textContent = `${total} findings queued — ready to execute`;
+  populateTaskQueue(auditFindings);
+}
+
+// ─── AGENT 2: EXECUTOR ───────────────────────────────────────────────────────
+function populateTaskQueue(findings) {
+  const list = document.getElementById('task-list');
+  list.innerHTML = '';
+  generatedTasks = [];
+
+  const taskMap = [
+    { scope: 'stripe', label: 'Verify constructEventAsync fix', sub: 'stripe webhook · edge fn' },
+    { scope: 'ursula', label: 'Patch Ursula /api/hydi/sync 404', sub: 'vercel deployment' },
+    { scope: 'hid', label: 'Inject HID credentials', sub: 'webhook_task_hid.json' },
+    { scope: 'supabase', label: 'Run full Supabase seed', sub: '10 divisions · 23-step permit' },
+    { scope: 'security', label: 'Audit RLS policies', sub: 'all tables · customer_id' },
+    { scope: 'monetize', label: 'Map monetization gaps → tasks', sub: 'HEIDI scan' },
+    { scope: 'apps', label: 'Verify Rezonate endpoints', sub: 'music DAW · blockchain' },
+    { scope: 'apps', label: 'Verify BlameGame Web3 flow', sub: 'challenge contract' },
+    { scope: 'apps', label: 'Verify PorchWise auth', sub: 'family management' },
+    { scope: 'apps', label: 'Verify AppForge loan pipeline', sub: 'HTML MVP · Netlify' },
+    { scope: 'apps', label: 'GroundWork permit pipeline check', sub: '23 steps · hemp café' },
+    { scope: 'apps', label: 'J.STEIN Stripe checkout verify', sub: 'fragrance e-commerce' },
+    { scope: 'apps', label: "Colter's event catering flow", sub: 'restaurant management' },
+    { scope: 'apps', label: 'Z-Aero GoFundMe integration', sub: 'nonprofit · EV training' },
+    { scope: 'apps', label: 'ForgeFinder search pipeline', sub: 'unclaimed funds discovery' },
+    { scope: 'core', label: 'HEIDI value leak scan', sub: 'all 10 divisions' },
+    { scope: 'core', label: 'KILO confidence threshold audit', sub: '0.92 gate verification' },
+    { scope: 'core', label: 'HYVE schema lock check', sub: 'evolution protocol' },
+    { scope: 'core', label: 'CASCADE dead letter queue', sub: 'retry policy 3× backoff' },
+    { scope: 'core', label: 'Keymaker token rotation', sub: 'JWT · API key audit' },
+  ];
+
+  findings.filter(f => f.severity === 'CRITICAL').slice(0, 5).forEach(f => {
+    const short = f.text.substring(0, 40) + (f.text.length > 40 ? '...' : '');
+    taskMap.unshift({ scope: 'critical', label: 'FIX: ' + short, sub: 'critical remediation' });
+  });
+
+  taskMap.forEach((t, i) => {
+    generatedTasks.push({ ...t, id: i, status: 'pending' });
+    const el = document.createElement('div');
+    el.className = 'task-item pending';
+    el.id = `task-${i}`;
+    el.innerHTML = `<span class="task-icon">○</span><div><div class="task-label">${t.label}</div><div class="task-sub">${t.sub}</div></div>`;
+    list.appendChild(el);
+  });
+}
+
+async function runExecutor() {
+  if (!auditDone) {
+    streamLine('stream-2', 'BLOCK', 'error', 'Auditor must complete first — run AGENT 1', 'error');
+    return;
+  }
+  const btn = document.getElementById('run-exec');
+  const statusEl = document.getElementById('exec-status');
+  btn.disabled = true;
+  document.getElementById('stream-2').innerHTML = '';
+  document.getElementById('summary-2').style.display = 'none';
+
+  const criticals = auditFindings.filter(f => f.severity === 'CRITICAL').map(f => f.text).join('\n');
+  const warnings = auditFindings.filter(f => f.severity === 'WARNING').map(f => f.text).join('\n').slice(0, 800);
+
+  const prompt = `You are EXECUTOR, an expert remediation agent for ProtoForge Industries. Given these audit findings, generate a prioritized task list. For each task output: [TASK] task_name | status: DONE/FAIL | notes: brief note. Cover: stripe webhook fix, Ursula sync 404 patch, HID credentials, Supabase seed, RLS audit, HEIDI monetization scan, each division app verification, KILO confidence check, CASCADE dead letter queue, Keymaker rotation. Generate 15-25 tasks. End with REVENUE IMPACT section.
+
+CRITICAL findings to prioritize:
+${criticals}
+
+WARNINGS:
+${warnings}`;
+
+  // Set agent boundary
+  runContext.execution.current_agent = 'executor';
+
+  streamLine('stream-2', 'INIT', 'info', `EXECUTOR agent initialized — phase: ${runContext.execution.phase}`);
+  await delay(300);
+  streamLine('stream-2', 'QUEUE', 'warn', `${generatedTasks.length} tasks loaded from AUDITOR output`);
+  await delay(200);
+  streamLine('stream-2', 'CALL', 'audit', 'Calling local model at :8000...');
+  statusEl.textContent = 'executing...';
+
+  try {
+    const response = await callLocalModel(prompt);
+    await renderExecutorResults(response);
+  } catch(e) {
+    streamLine('stream-2', 'ERR', 'error', 'Execution failed: ' + e.message, 'error');
+    statusEl.textContent = 'error';
+    await persistenceAdapter.updateStatus(STATUS.FAILED);
+    btn.disabled = false;
+  }
+}
+
+async function renderExecutorResults(text) {
+  const statusEl = document.getElementById('exec-status');
+  const lines = text.split('\n').filter(l => l.trim());
+  let done = 0, fail = 0, taskIdx = 0;
+
+  for (const line of lines) {
+    await delay(60);
+    if (line.startsWith('[TASK]')) {
+      const parts = line.replace('[TASK]', '').split('|');
+      const name = parts[0]?.trim() || '';
+      const statusPart = parts[1]?.trim() || '';
+      const notes = parts[2]?.replace('notes:', '').trim() || '';
+      const isDone = statusPart.includes('DONE');
+      const taskEl = document.getElementById(`task-${taskIdx}`);
+
+      if (isDone) {
+        streamLine('stream-2', 'EXEC', 'ok', `${name} — ${notes}`, 'ok');
+        done++;
+        if (taskEl) { taskEl.className = 'task-item done'; taskEl.querySelector('.task-icon').textContent = '✓'; }
+      } else {
+        streamLine('stream-2', 'FAIL', 'error', `${name} — ${notes}`, 'error');
+        fail++;
+        if (taskEl) { taskEl.className = 'task-item fail'; taskEl.querySelector('.task-icon').textContent = '✗'; }
+      }
+      taskIdx++;
+    } else if (line.includes('REVENUE') || line.includes('revenue') || line.includes('$')) {
+      streamLine('stream-2', 'REV', 'warn', line, 'warn');
+    } else {
+      streamLine('stream-2', 'NOTE', 'info', line, 'dim');
+    }
+  }
+
+  document.getElementById('s2-total').textContent = done + fail;
+  document.getElementById('s2-done').textContent = done;
+  document.getElementById('s2-fail').textContent = fail;
+  document.getElementById('s2-monetize').textContent = '$' + (done * 149).toLocaleString();
+  document.getElementById('summary-2').style.display = 'flex';
+
+  streamLine('stream-2', 'DONE', 'ok', `Execution complete — ${done} tasks done, ${fail} failed`, 'ok');
+  statusEl.textContent = `done — ${done}/${done+fail} tasks`;
+  execDone = true;
+
+  // Persist tasks and transition to verify phase
+  await persistTasks(currentRunId, generatedTasks.map((t, i) => ({
+    ...t,
+    status: i < done ? 'completed' : 'failed'
+  })));
+  await persistenceAdapter.transition(PHASE.VERIFY, { tasks_done: done, tasks_failed: fail });
+  streamLine('stream-2', 'DB', 'info', `Tasks persisted → phase: ${runContext.execution.phase}`, 'dim');
+
+  document.getElementById('run-verify').disabled = false;
+  document.getElementById('verify-status').textContent = 'ready to verify';
+  document.getElementById('run-exec').disabled = false;
+}
+
+// ─── AGENT 3: VERIFIER ───────────────────────────────────────────────────────
+async function runVerifier() {
+  if (!execDone) return;
+
+  // Set agent boundary
+  runContext.execution.current_agent = 'verifier';
+
+  const btn = document.getElementById('run-verify');
+  const statusEl = document.getElementById('verify-status');
+  btn.disabled = true;
+  document.getElementById('verify-placeholder').style.display = 'none';
+  document.getElementById('verify-results').style.display = 'flex';
+  document.getElementById('summary-3').style.display = 'none';
+  document.getElementById('verify-grid').innerHTML = `<div style="grid-column:1/-1;font-family:var(--mono);font-size:11px;color:var(--text3);padding:20px">Running verification — phase: ${runContext.execution.phase}</div>`;
+
+  const prompt = `You are VERIFIER, a certification agent for ProtoForge Industries. Perform a final verification of the ProtoForge ecosystem after remediation. For each component output: [VERIFY] ComponentName | status: PASS/FAIL/WARN | baseline: what was expected | actual: what was found | delta: change detected. Cover all major components: HEIDI, KILO, URSULA, HYVE, CASCADE, Keymaker, Stripe Webhook, Supabase Schema, Edge Functions, API Endpoints, Security RLS, Rezonate, BlameGame, PorchWise, AppForge, GroundWork, J.STEIN, Colter's, Z-Aero, ForgeFinder, HID Agent, Universal Agent Bus, Monetization Coverage. After all verifications, output [CERTIFICATE] CLEAN or [CERTIFICATE] CONDITIONAL with a one-line justification.`;
+
+  try {
+    const response = await callLocalModel(prompt);
+    await renderVerifierResults(response);
+  } catch(e) {
+    document.getElementById('verify-grid').innerHTML = `<div style="grid-column:1/-1;color:var(--red);font-family:var(--mono);font-size:11px;padding:20px">Verification failed: ${e.message}</div>`;
+    statusEl.textContent = 'error';
+    btn.disabled = false;
+  }
+}
+
+async function renderVerifierResults(text) {
+  const statusEl = document.getElementById('verify-status');
+  const lines = text.split('\n').filter(l => l.trim());
+  const grid = document.getElementById('verify-grid');
+  grid.innerHTML = '';
+  let pass = 0, warnCount = 0, failCount = 0, certText = '—';
+
+  for (const line of lines) {
+    if (line.startsWith('[VERIFY]')) {
+      const parts = line.replace('[VERIFY]', '').split('|');
+      const name = parts[0]?.trim() || '';
+      const statusPart = parts[1]?.trim() || '';
+      const baseline = parts[2]?.replace('baseline:', '').trim() || '';
+      const actual = parts[3]?.replace('actual:', '').trim() || '';
+      const delta = parts[4]?.replace('delta:', '').trim() || '';
+
+      const isPass = statusPart.includes('PASS');
+      const isFail = statusPart.includes('FAIL');
+      const cls = isPass ? 'pass' : isFail ? 'fail' : 'warn';
+      const badge = isPass ? 'pass' : isFail ? 'fail' : 'warn';
+      const badgeText = isPass ? 'PASS' : isFail ? 'FAIL' : 'WARN';
+
+      if (isPass) pass++;
+      else if (isFail) failCount++;
+      else warnCount++;
+
+      const card = document.createElement('div');
+      card.className = `verify-card ${cls}`;
+      card.innerHTML = `
+        <div class="vc-header">
+          <div class="vc-name">${name}</div>
+          <div class="vc-badge ${badge}">${badgeText}</div>
+        </div>
+        <div class="vc-details">
+          ${baseline ? `baseline: ${baseline}<br>` : ''}
+          ${actual ? `actual: ${actual}<br>` : ''}
+          ${delta ? `delta: ${delta}` : ''}
+        </div>`;
+      grid.appendChild(card);
+    } else if (line.startsWith('[CERTIFICATE]')) {
+      const certLine = line.replace('[CERTIFICATE]', '').trim();
+      certText = certLine.startsWith('CLEAN') ? 'CLEAN ✓' : 'CONDITIONAL';
+    }
+  }
+
+  document.getElementById('s3-pass').textContent = pass;
+  document.getElementById('s3-warn').textContent = warnCount;
+  document.getElementById('s3-fail').textContent = failCount;
+  document.getElementById('s3-cert').textContent = certText;
+  document.getElementById('summary-3').style.display = 'flex';
+  statusEl.textContent = certText;
+
+  if (certText) {
+    const certCard = document.createElement('div');
+    certCard.className = `verify-card ${certText.includes('CLEAN') ? 'pass' : 'warn'}`;
+    certCard.style.gridColumn = '1/-1';
+    certCard.style.borderWidth = '2px';
+    certCard.innerHTML = `
+      <div class="vc-header">
+        <div class="vc-name" style="font-size:14px;font-weight:800">SYSTEM CERTIFICATE</div>
+        <div class="vc-badge ${certText.includes('CLEAN') ? 'pass' : 'warn'}" style="font-size:11px;padding:4px 14px">${certText}</div>
+      </div>
+      <div class="vc-details">issued by AGENT 3 — VERIFIER · ProtoForge HYDI Intelligence Layer<br>${pass} passed · ${warnCount} warnings · ${failCount} failed</div>`;
+    grid.appendChild(certCard);
+  }
+
+  // Persist verification results and certification to same run_id
+  const verificationResults = [];
+  for (const line of lines) {
+    if (line.startsWith('[VERIFY]')) {
+      const parts = line.replace('[VERIFY]', '').split('|');
+      verificationResults.push({
+        name: parts[0]?.trim() || '',
+        status: parts[1]?.trim() || '',
+        baseline: parts[2]?.replace('baseline:', '').trim() || '',
+        actual: parts[3]?.replace('actual:', '').trim() || '',
+        delta: parts[4]?.replace('delta:', '').trim() || ''
+      });
+    }
+  }
+  await persistVerification(currentRunId, verificationResults);
+  await persistCertification(currentRunId, certText, pass, warnCount, failCount);
+
+  // Final state transition
+  const finalStatus = certText.includes('CLEAN') ? STATUS.COMPLETED : STATUS.REOPEN_AUDIT;
+  await persistenceAdapter.updateStatus(finalStatus);
+  streamLine('stream-1', 'DB', 'info', `Verification persisted — run ${finalStatus}`, 'dim');
+
+  // Log completion for replay
+  logEvent('RUN_COMPLETED', 'verifier', {
+    status: finalStatus,
+    certification: certText,
+    passed: pass,
+    failed: failCount,
+    warnings: warnCount
+  });
+
+  document.getElementById('run-verify').disabled = false;
+}
+</script>
+</body>
+</html>

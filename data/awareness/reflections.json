@@ -1,0 +1,3362 @@
+[
+  {
+    "id": "reflection_1777567639392",
+    "timestamp": 1777567639392,
+    "duration": 1,
+    "whatWorked": {
+      "message": "No successful actions to analyze"
+    },
+    "whatFailed": {
+      "totalFailed": 1,
+      "failureRate": 1,
+      "commonFailures": {
+        "models": {
+          "value": "unknown",
+          "count": 1
+        },
+        "strategies": {
+          "value": "unknown",
+          "count": 1
+        },
+        "types": {
+          "value": "question",
+          "count": 1
+        },
+        "reasons": {
+          "value": "Cannot read properties of undefined (reading 'map')",
+          "count": 1
+        }
+      },
+      "insights": [
+        "Most common failure: Cannot read properties of undefined (reading 'map')"
+      ]
+    },
+    "patterns": [
+      {
+        "type": "temporal",
+        "pattern": "low_success_hour",
+        "hour": 11,
+        "successRate": 0,
+        "recommendation": "avoid_actions_during_hour"
+      },
+      {
+        "type": "model",
+        "pattern": "low_model_performance",
+        "model": "unknown",
+        "successRate": 0,
+        "recommendation": "reduce_model_usage"
+      }
+    ],
+    "contradictions": [],
+    "recommendations": [
+      {
+        "priority": "high",
+        "action": "improve_success_rate",
+        "reason": "Success rate is 0.00"
+      }
+    ],
+    "selfAssessment": {
+      "overallLevel": "critical",
+      "confidence": 0.6666666666666666,
+      "capabilities": {
+        "reasoning": true,
+        "execution": false,
+        "adaptation": true,
+        "learning": false,
+        "selfAwareness": true
+      },
+      "limitations": [
+        "Task execution reliability needs improvement"
+      ],
+      "healthScore": 0.5
+    },
+    "adaptations": [
+      {
+        "type": "model_preference",
+        "action": "decrease_usage",
+        "target": "unknown",
+        "reason": "Low success rate: 0.00"
+      }
+    ]
+  },
+  {
+    "id": "reflection_1777567789440",
+    "timestamp": 1777567789440,
+    "duration": 2,
+    "whatWorked": {
+      "message": "No successful actions to analyze"
+    },
+    "whatFailed": {
+      "totalFailed": 1,
+      "failureRate": 1,
+      "commonFailures": {
+        "models": {
+          "value": "unknown",
+          "count": 1
+        },
+        "strategies": {
+          "value": "unknown",
+          "count": 1
+        },
+        "types": {
+          "value": "question",
+          "count": 1
+        },
+        "reasons": {
+          "value": "Cannot read properties of undefined (reading 'map')",
+          "count": 1
+        }
+      },
+      "insights": [
+        "Most common failure: Cannot read properties of undefined (reading 'map')"
+      ]
+    },
+    "patterns": [
+      {
+        "type": "temporal",
+        "pattern": "low_success_hour",
+        "hour": 11,
+        "successRate": 0,
+        "recommendation": "avoid_actions_during_hour"
+      },
+      {
+        "type": "model",
+        "pattern": "low_model_performance",
+        "model": "unknown",
+        "successRate": 0,
+        "recommendation": "reduce_model_usage"
+      }
+    ],
+    "contradictions": [],
+    "recommendations": [
+      {
+        "priority": "high",
+        "action": "improve_success_rate",
+        "reason": "Success rate is 0.00"
+      }
+    ],
+    "selfAssessment": {
+      "overallLevel": "critical",
+      "confidence": 0.6666666666666666,
+      "capabilities": {
+        "reasoning": true,
+        "execution": false,
+        "adaptation": true,
+        "learning": true,
+        "selfAwareness": true
+      },
+      "limitations": [
+        "Task execution reliability needs improvement"
+      ],
+      "healthScore": 0.5
+    },
+    "adaptations": [
+      {
+        "type": "model_preference",
+        "action": "decrease_usage",
+        "target": "unknown",
+        "reason": "Low success rate: 0.00"
+      }
+    ]
+  },
+  {
+    "id": "reflection_1777567866271",
+    "timestamp": 1777567866271,
+    "duration": 3,
+    "whatWorked": {
+      "message": "No successful actions to analyze"
+    },
+    "whatFailed": {
+      "totalFailed": 1,
+      "failureRate": 1,
+      "commonFailures": {
+        "models": {
+          "value": "unknown",
+          "count": 1
+        },
+        "strategies": {
+          "value": "unknown",
+          "count": 1
+        },
+        "types": {
+          "value": "question",
+          "count": 1
+        },
+        "reasons": {
+          "value": "Cannot read properties of undefined (reading 'map')",
+          "count": 1
+        }
+      },
+      "insights": [
+        "Most common failure: Cannot read properties of undefined (reading 'map')"
+      ]
+    },
+    "patterns": [
+      {
+        "type": "temporal",
+        "pattern": "low_success_hour",
+        "hour": 11,
+        "successRate": 0,
+        "recommendation": "avoid_actions_during_hour"
+      },
+      {
+        "type": "model",
+        "pattern": "low_model_performance",
+        "model": "unknown",
+        "successRate": 0,
+        "recommendation": "reduce_model_usage"
+      }
+    ],
+    "contradictions": [],
+    "recommendations": [
+      {
+        "priority": "high",
+        "action": "improve_success_rate",
+        "reason": "Success rate is 0.00"
+      }
+    ],
+    "selfAssessment": {
+      "overallLevel": "critical",
+      "confidence": 0.6666666666666666,
+      "capabilities": {
+        "reasoning": true,
+        "execution": false,
+        "adaptation": true,
+        "learning": true,
+        "selfAwareness": true
+      },
+      "limitations": [
+        "Task execution reliability needs improvement"
+      ],
+      "healthScore": 0.5
+    },
+    "adaptations": [
+      {
+        "type": "model_preference",
+        "action": "decrease_usage",
+        "target": "unknown",
+        "reason": "Low success rate: 0.00"
+      }
+    ]
+  },
+  {
+    "id": "reflection_1777568573183",
+    "timestamp": 1777568573183,
+    "duration": 4,
+    "whatWorked": {
+      "message": "No successful actions to analyze"
+    },
+    "whatFailed": {
+      "totalFailed": 1,
+      "failureRate": 1,
+      "commonFailures": {
+        "models": {
+          "value": "unknown",
+          "count": 1
+        },
+        "strategies": {
+          "value": "unknown",
+          "count": 1
+        },
+        "types": {
+          "value": "question",
+          "count": 1
+        },
+        "reasons": {
+          "value": "Cannot read properties of undefined (reading 'map')",
+          "count": 1
+        }
+      },
+      "insights": [
+        "Most common failure: Cannot read properties of undefined (reading 'map')"
+      ]
+    },
+    "patterns": [
+      {
+        "type": "temporal",
+        "pattern": "low_success_hour",
+        "hour": 12,
+        "successRate": 0,
+        "recommendation": "avoid_actions_during_hour"
+      },
+      {
+        "type": "model",
+        "pattern": "low_model_performance",
+        "model": "unknown",
+        "successRate": 0,
+        "recommendation": "reduce_model_usage"
+      }
+    ],
+    "contradictions": [],
+    "recommendations": [
+      {
+        "priority": "high",
+        "action": "improve_success_rate",
+        "reason": "Success rate is 0.00"
+      }
+    ],
+    "selfAssessment": {
+      "overallLevel": "critical",
+      "confidence": 0.6666666666666666,
+      "capabilities": {
+        "reasoning": true,
+        "execution": false,
+        "adaptation": true,
+        "learning": true,
+        "selfAwareness": true
+      },
+      "limitations": [
+        "Task execution reliability needs improvement"
+      ],
+      "healthScore": 0.5
+    },
+    "adaptations": [
+      {
+        "type": "model_preference",
+        "action": "decrease_usage",
+        "target": "unknown",
+        "reason": "Low success rate: 0.00"
+      }
+    ]
+  },
+  {
+    "id": "reflection_1777568629941",
+    "timestamp": 1777568629941,
+    "duration": 2,
+    "whatWorked": {
+      "message": "No successful actions to analyze"
+    },
+    "whatFailed": {
+      "totalFailed": 1,
+      "failureRate": 1,
+      "commonFailures": {
+        "models": {
+          "value": "unknown",
+          "count": 1
+        },
+        "strategies": {
+          "value": "unknown",
+          "count": 1
+        },
+        "types": {
+          "value": "question",
+          "count": 1
+        },
+        "reasons": {
+          "value": "Cannot read properties of undefined (reading 'map')",
+          "count": 1
+        }
+      },
+      "insights": [
+        "Most common failure: Cannot read properties of undefined (reading 'map')"
+      ]
+    },
+    "patterns": [
+      {
+        "type": "temporal",
+        "pattern": "low_success_hour",
+        "hour": 12,
+        "successRate": 0,
+        "recommendation": "avoid_actions_during_hour"
+      },
+      {
+        "type": "model",
+        "pattern": "low_model_performance",
+        "model": "unknown",
+        "successRate": 0,
+        "recommendation": "reduce_model_usage"
+      }
+    ],
+    "contradictions": [],
+    "recommendations": [
+      {
+        "priority": "high",
+        "action": "improve_success_rate",
+        "reason": "Success rate is 0.00"
+      }
+    ],
+    "selfAssessment": {
+      "overallLevel": "critical",
+      "confidence": 0.6666666666666666,
+      "capabilities": {
+        "reasoning": true,
+        "execution": false,
+        "adaptation": true,
+        "learning": true,
+        "selfAwareness": true
+      },
+      "limitations": [
+        "Task execution reliability needs improvement"
+      ],
+      "healthScore": 0.5
+    },
+    "adaptations": [
+      {
+        "type": "model_preference",
+        "action": "decrease_usage",
+        "target": "unknown",
+        "reason": "Low success rate: 0.00"
+      }
+    ]
+  },
+  {
+    "id": "reflection_1777568718998",
+    "timestamp": 1777568718998,
+    "duration": 3,
+    "whatWorked": {
+      "message": "No successful actions to analyze"
+    },
+    "whatFailed": {
+      "totalFailed": 1,
+      "failureRate": 1,
+      "commonFailures": {
+        "models": {
+          "value": "unknown",
+          "count": 1
+        },
+        "strategies": {
+          "value": "unknown",
+          "count": 1
+        },
+        "types": {
+          "value": "question",
+          "count": 1
+        },
+        "reasons": {
+          "value": "Cannot read properties of undefined (reading 'push')",
+          "count": 1
+        }
+      },
+      "insights": [
+        "Most common failure: Cannot read properties of undefined (reading 'push')"
+      ]
+    },
+    "patterns": [
+      {
+        "type": "temporal",
+        "pattern": "low_success_hour",
+        "hour": 12,
+        "successRate": 0,
+        "recommendation": "avoid_actions_during_hour"
+      },
+      {
+        "type": "model",
+        "pattern": "low_model_performance",
+        "model": "unknown",
+        "successRate": 0,
+        "recommendation": "reduce_model_usage"
+      }
+    ],
+    "contradictions": [],
+    "recommendations": [
+      {
+        "priority": "high",
+        "action": "improve_success_rate",
+        "reason": "Success rate is 0.00"
+      }
+    ],
+    "selfAssessment": {
+      "overallLevel": "critical",
+      "confidence": 0.6666666666666666,
+      "capabilities": {
+        "reasoning": true,
+        "execution": false,
+        "adaptation": true,
+        "learning": true,
+        "selfAwareness": true
+      },
+      "limitations": [
+        "Task execution reliability needs improvement"
+      ],
+      "healthScore": 0.5
+    },
+    "adaptations": [
+      {
+        "type": "model_preference",
+        "action": "decrease_usage",
+        "target": "unknown",
+        "reason": "Low success rate: 0.00"
+      }
+    ]
+  },
+  {
+    "id": "reflection_1777568766284",
+    "timestamp": 1777568766286,
+    "duration": 16,
+    "whatWorked": {
+      "message": "No successful actions to analyze"
+    },
+    "whatFailed": {
+      "totalFailed": 1,
+      "failureRate": 1,
+      "commonFailures": {
+        "models": {
+          "value": "unknown",
+          "count": 1
+        },
+        "strategies": {
+          "value": "unknown",
+          "count": 1
+        },
+        "types": {
+          "value": "question",
+          "count": 1
+        },
+        "reasons": {
+          "value": "Cannot read properties of undefined (reading 'map')",
+          "count": 1
+        }
+      },
+      "insights": [
+        "Most common failure: Cannot read properties of undefined (reading 'map')"
+      ]
+    },
+    "patterns": [
+      {
+        "type": "temporal",
+        "pattern": "low_success_hour",
+        "hour": 11,
+        "successRate": 0,
+        "recommendation": "avoid_actions_during_hour"
+      },
+      {
+        "type": "model",
+        "pattern": "low_model_performance",
+        "model": "unknown",
+        "successRate": 0,
+        "recommendation": "reduce_model_usage"
+      }
+    ],
+    "contradictions": [],
+    "recommendations": [
+      {
+        "priority": "high",
+        "action": "improve_success_rate",
+        "reason": "Success rate is 0.00"
+      }
+    ],
+    "selfAssessment": {
+      "overallLevel": "critical",
+      "confidence": 0.6666666666666666,
+      "capabilities": {
+        "reasoning": true,
+        "execution": false,
+        "adaptation": true,
+        "learning": true,
+        "selfAwareness": true
+      },
+      "limitations": [
+        "Task execution reliability needs improvement"
+      ],
+      "healthScore": 0.5
+    },
+    "adaptations": [
+      {
+        "type": "model_preference",
+        "action": "decrease_usage",
+        "target": "unknown",
+        "reason": "Low success rate: 0.00"
+      }
+    ]
+  },
+  {
+    "id": "reflection_1777569109974",
+    "timestamp": 1777569109975,
+    "duration": 1,
+    "whatWorked": {
+      "message": "No successful actions to analyze"
+    },
+    "whatFailed": {
+      "totalFailed": 1,
+      "failureRate": 1,
+      "commonFailures": {
+        "models": {
+          "value": "unknown",
+          "count": 1
+        },
+        "strategies": {
+          "value": "unknown",
+          "count": 1
+        },
+        "types": {
+          "value": "question",
+          "count": 1
+        },
+        "reasons": {
+          "value": "Cannot read properties of undefined (reading 'push')",
+          "count": 1
+        }
+      },
+      "insights": [
+        "Most common failure: Cannot read properties of undefined (reading 'push')"
+      ]
+    },
+    "patterns": [
+      {
+        "type": "temporal",
+        "pattern": "low_success_hour",
+        "hour": 12,
+        "successRate": 0,
+        "recommendation": "avoid_actions_during_hour"
+      },
+      {
+        "type": "model",
+        "pattern": "low_model_performance",
+        "model": "unknown",
+        "successRate": 0,
+        "recommendation": "reduce_model_usage"
+      }
+    ],
+    "contradictions": [],
+    "recommendations": [
+      {
+        "priority": "high",
+        "action": "improve_success_rate",
+        "reason": "Success rate is 0.00"
+      }
+    ],
+    "selfAssessment": {
+      "overallLevel": "critical",
+      "confidence": 0.6666666666666666,
+      "capabilities": {
+        "reasoning": true,
+        "execution": false,
+        "adaptation": true,
+        "learning": true,
+        "selfAwareness": true
+      },
+      "limitations": [
+        "Task execution reliability needs improvement"
+      ],
+      "healthScore": 0.5
+    },
+    "adaptations": [
+      {
+        "type": "model_preference",
+        "action": "decrease_usage",
+        "target": "unknown",
+        "reason": "Low success rate: 0.00"
+      }
+    ]
+  },
+  {
+    "id": "reflection_1777569529966",
+    "timestamp": 1777569529969,
+    "duration": 17,
+    "whatWorked": {
+      "message": "No successful actions to analyze"
+    },
+    "whatFailed": {
+      "totalFailed": 1,
+      "failureRate": 1,
+      "commonFailures": {
+        "models": {
+          "value": "unknown",
+          "count": 1
+        },
+        "strategies": {
+          "value": "unknown",
+          "count": 1
+        },
+        "types": {
+          "value": "question",
+          "count": 1
+        },
+        "reasons": {
+          "value": "Cannot read properties of undefined (reading 'map')",
+          "count": 1
+        }
+      },
+      "insights": [
+        "Most common failure: Cannot read properties of undefined (reading 'map')"
+      ]
+    },
+    "patterns": [
+      {
+        "type": "temporal",
+        "pattern": "low_success_hour",
+        "hour": 12,
+        "successRate": 0,
+        "recommendation": "avoid_actions_during_hour"
+      },
+      {
+        "type": "model",
+        "pattern": "low_model_performance",
+        "model": "unknown",
+        "successRate": 0,
+        "recommendation": "reduce_model_usage"
+      }
+    ],
+    "contradictions": [],
+    "recommendations": [
+      {
+        "priority": "high",
+        "action": "improve_success_rate",
+        "reason": "Success rate is 0.00"
+      }
+    ],
+    "selfAssessment": {
+      "overallLevel": "critical",
+      "confidence": 0.6666666666666666,
+      "capabilities": {
+        "reasoning": true,
+        "execution": false,
+        "adaptation": true,
+        "learning": true,
+        "selfAwareness": true
+      },
+      "limitations": [
+        "Task execution reliability needs improvement"
+      ],
+      "healthScore": 0.5
+    },
+    "adaptations": [
+      {
+        "type": "model_preference",
+        "action": "decrease_usage",
+        "target": "unknown",
+        "reason": "Low success rate: 0.00"
+      }
+    ]
+  },
+  {
+    "id": "reflection_1777569560672",
+    "timestamp": 1777569560672,
+    "duration": 2,
+    "whatWorked": {
+      "message": "No successful actions to analyze"
+    },
+    "whatFailed": {
+      "totalFailed": 1,
+      "failureRate": 1,
+      "commonFailures": {
+        "models": {
+          "value": "unknown",
+          "count": 1
+        },
+        "strategies": {
+          "value": "unknown",
+          "count": 1
+        },
+        "types": {
+          "value": "question",
+          "count": 1
+        },
+        "reasons": {
+          "value": "Cannot read properties of undefined (reading 'push')",
+          "count": 1
+        }
+      },
+      "insights": [
+        "Most common failure: Cannot read properties of undefined (reading 'push')"
+      ]
+    },
+    "patterns": [
+      {
+        "type": "temporal",
+        "pattern": "low_success_hour",
+        "hour": 12,
+        "successRate": 0,
+        "recommendation": "avoid_actions_during_hour"
+      },
+      {
+        "type": "model",
+        "pattern": "low_model_performance",
+        "model": "unknown",
+        "successRate": 0,
+        "recommendation": "reduce_model_usage"
+      }
+    ],
+    "contradictions": [],
+    "recommendations": [
+      {
+        "priority": "high",
+        "action": "improve_success_rate",
+        "reason": "Success rate is 0.00"
+      }
+    ],
+    "selfAssessment": {
+      "overallLevel": "critical",
+      "confidence": 0.6666666666666666,
+      "capabilities": {
+        "reasoning": true,
+        "execution": false,
+        "adaptation": true,
+        "learning": true,
+        "selfAwareness": true
+      },
+      "limitations": [
+        "Task execution reliability needs improvement"
+      ],
+      "healthScore": 0.5
+    },
+    "adaptations": [
+      {
+        "type": "model_preference",
+        "action": "decrease_usage",
+        "target": "unknown",
+        "reason": "Low success rate: 0.00"
+      }
+    ]
+  },
+  {
+    "id": "reflection_1777569666323",
+    "timestamp": 1777569666324,
+    "duration": 2,
+    "whatWorked": {
+      "message": "No successful actions to analyze"
+    },
+    "whatFailed": {
+      "totalFailed": 1,
+      "failureRate": 1,
+      "commonFailures": {
+        "models": {
+          "value": "unknown",
+          "count": 1
+        },
+        "strategies": {
+          "value": "unknown",
+          "count": 1
+        },
+        "types": {
+          "value": "question",
+          "count": 1
+        },
+        "reasons": {
+          "value": "Cannot read properties of undefined (reading 'map')",
+          "count": 1
+        }
+      },
+      "insights": [
+        "Most common failure: Cannot read properties of undefined (reading 'map')"
+      ]
+    },
+    "patterns": [
+      {
+        "type": "temporal",
+        "pattern": "low_success_hour",
+        "hour": 11,
+        "successRate": 0,
+        "recommendation": "avoid_actions_during_hour"
+      },
+      {
+        "type": "model",
+        "pattern": "low_model_performance",
+        "model": "unknown",
+        "successRate": 0,
+        "recommendation": "reduce_model_usage"
+      }
+    ],
+    "contradictions": [],
+    "recommendations": [
+      {
+        "priority": "high",
+        "action": "improve_success_rate",
+        "reason": "Success rate is 0.00"
+      }
+    ],
+    "selfAssessment": {
+      "overallLevel": "critical",
+      "confidence": 0.6666666666666666,
+      "capabilities": {
+        "reasoning": true,
+        "execution": false,
+        "adaptation": true,
+        "learning": true,
+        "selfAwareness": true
+      },
+      "limitations": [
+        "Task execution reliability needs improvement"
+      ],
+      "healthScore": 0.5
+    },
+    "adaptations": [
+      {
+        "type": "model_preference",
+        "action": "decrease_usage",
+        "target": "unknown",
+        "reason": "Low success rate: 0.00"
+      }
+    ]
+  },
+  {
+    "id": "reflection_1777569682914",
+    "timestamp": 1777569682914,
+    "duration": 3,
+    "whatWorked": {
+      "message": "No successful actions to analyze"
+    },
+    "whatFailed": {
+      "totalFailed": 1,
+      "failureRate": 1,
+      "commonFailures": {
+        "models": {
+          "value": "unknown",
+          "count": 1
+        },
+        "strategies": {
+          "value": "unknown",
+          "count": 1
+        },
+        "types": {
+          "value": "question",
+          "count": 1
+        },
+        "reasons": {
+          "value": "Cannot read properties of undefined (reading 'push')",
+          "count": 1
+        }
+      },
+      "insights": [
+        "Most common failure: Cannot read properties of undefined (reading 'push')"
+      ]
+    },
+    "patterns": [
+      {
+        "type": "temporal",
+        "pattern": "low_success_hour",
+        "hour": 12,
+        "successRate": 0,
+        "recommendation": "avoid_actions_during_hour"
+      },
+      {
+        "type": "model",
+        "pattern": "low_model_performance",
+        "model": "unknown",
+        "successRate": 0,
+        "recommendation": "reduce_model_usage"
+      }
+    ],
+    "contradictions": [],
+    "recommendations": [
+      {
+        "priority": "high",
+        "action": "improve_success_rate",
+        "reason": "Success rate is 0.00"
+      }
+    ],
+    "selfAssessment": {
+      "overallLevel": "critical",
+      "confidence": 0.6666666666666666,
+      "capabilities": {
+        "reasoning": true,
+        "execution": false,
+        "adaptation": true,
+        "learning": true,
+        "selfAwareness": true
+      },
+      "limitations": [
+        "Task execution reliability needs improvement"
+      ],
+      "healthScore": 0.5
+    },
+    "adaptations": [
+      {
+        "type": "model_preference",
+        "action": "decrease_usage",
+        "target": "unknown",
+        "reason": "Low success rate: 0.00"
+      }
+    ]
+  },
+  {
+    "id": "reflection_1777570430191",
+    "timestamp": 1777570430191,
+    "duration": 3,
+    "whatWorked": {
+      "message": "No successful actions to analyze"
+    },
+    "whatFailed": {
+      "totalFailed": 1,
+      "failureRate": 1,
+      "commonFailures": {
+        "models": {
+          "value": "unknown",
+          "count": 1
+        },
+        "strategies": {
+          "value": "unknown",
+          "count": 1
+        },
+        "types": {
+          "value": "question",
+          "count": 1
+        },
+        "reasons": {
+          "value": "Cannot read properties of undefined (reading 'map')",
+          "count": 1
+        }
+      },
+      "insights": [
+        "Most common failure: Cannot read properties of undefined (reading 'map')"
+      ]
+    },
+    "patterns": [
+      {
+        "type": "temporal",
+        "pattern": "low_success_hour",
+        "hour": 12,
+        "successRate": 0,
+        "recommendation": "avoid_actions_during_hour"
+      },
+      {
+        "type": "model",
+        "pattern": "low_model_performance",
+        "model": "unknown",
+        "successRate": 0,
+        "recommendation": "reduce_model_usage"
+      }
+    ],
+    "contradictions": [],
+    "recommendations": [
+      {
+        "priority": "high",
+        "action": "improve_success_rate",
+        "reason": "Success rate is 0.00"
+      }
+    ],
+    "selfAssessment": {
+      "overallLevel": "critical",
+      "confidence": 0.6666666666666666,
+      "capabilities": {
+        "reasoning": true,
+        "execution": false,
+        "adaptation": true,
+        "learning": true,
+        "selfAwareness": true
+      },
+      "limitations": [
+        "Task execution reliability needs improvement"
+      ],
+      "healthScore": 0.5
+    },
+    "adaptations": [
+      {
+        "type": "model_preference",
+        "action": "decrease_usage",
+        "target": "unknown",
+        "reason": "Low success rate: 0.00"
+      }
+    ]
+  },
+  {
+    "id": "reflection_1777570460683",
+    "timestamp": 1777570460685,
+    "duration": 7,
+    "whatWorked": {
+      "message": "No successful actions to analyze"
+    },
+    "whatFailed": {
+      "totalFailed": 1,
+      "failureRate": 1,
+      "commonFailures": {
+        "models": {
+          "value": "unknown",
+          "count": 1
+        },
+        "strategies": {
+          "value": "unknown",
+          "count": 1
+        },
+        "types": {
+          "value": "question",
+          "count": 1
+        },
+        "reasons": {
+          "value": "Cannot read properties of undefined (reading 'push')",
+          "count": 1
+        }
+      },
+      "insights": [
+        "Most common failure: Cannot read properties of undefined (reading 'push')"
+      ]
+    },
+    "patterns": [
+      {
+        "type": "temporal",
+        "pattern": "low_success_hour",
+        "hour": 12,
+        "successRate": 0,
+        "recommendation": "avoid_actions_during_hour"
+      },
+      {
+        "type": "model",
+        "pattern": "low_model_performance",
+        "model": "unknown",
+        "successRate": 0,
+        "recommendation": "reduce_model_usage"
+      }
+    ],
+    "contradictions": [],
+    "recommendations": [
+      {
+        "priority": "high",
+        "action": "improve_success_rate",
+        "reason": "Success rate is 0.00"
+      }
+    ],
+    "selfAssessment": {
+      "overallLevel": "critical",
+      "confidence": 0.6666666666666666,
+      "capabilities": {
+        "reasoning": true,
+        "execution": false,
+        "adaptation": true,
+        "learning": true,
+        "selfAwareness": true
+      },
+      "limitations": [
+        "Task execution reliability needs improvement"
+      ],
+      "healthScore": 0.5
+    },
+    "adaptations": [
+      {
+        "type": "model_preference",
+        "action": "decrease_usage",
+        "target": "unknown",
+        "reason": "Low success rate: 0.00"
+      }
+    ]
+  },
+  {
+    "id": "reflection_1777570566337",
+    "timestamp": 1777570566338,
+    "duration": 5,
+    "whatWorked": {
+      "message": "No successful actions to analyze"
+    },
+    "whatFailed": {
+      "totalFailed": 1,
+      "failureRate": 1,
+      "commonFailures": {
+        "models": {
+          "value": "unknown",
+          "count": 1
+        },
+        "strategies": {
+          "value": "unknown",
+          "count": 1
+        },
+        "types": {
+          "value": "question",
+          "count": 1
+        },
+        "reasons": {
+          "value": "Cannot read properties of undefined (reading 'map')",
+          "count": 1
+        }
+      },
+      "insights": [
+        "Most common failure: Cannot read properties of undefined (reading 'map')"
+      ]
+    },
+    "patterns": [
+      {
+        "type": "temporal",
+        "pattern": "low_success_hour",
+        "hour": 11,
+        "successRate": 0,
+        "recommendation": "avoid_actions_during_hour"
+      },
+      {
+        "type": "model",
+        "pattern": "low_model_performance",
+        "model": "unknown",
+        "successRate": 0,
+        "recommendation": "reduce_model_usage"
+      }
+    ],
+    "contradictions": [],
+    "recommendations": [
+      {
+        "priority": "high",
+        "action": "improve_success_rate",
+        "reason": "Success rate is 0.00"
+      }
+    ],
+    "selfAssessment": {
+      "overallLevel": "critical",
+      "confidence": 0.6666666666666666,
+      "capabilities": {
+        "reasoning": true,
+        "execution": false,
+        "adaptation": true,
+        "learning": true,
+        "selfAwareness": true
+      },
+      "limitations": [
+        "Task execution reliability needs improvement"
+      ],
+      "healthScore": 0.5
+    },
+    "adaptations": [
+      {
+        "type": "model_preference",
+        "action": "decrease_usage",
+        "target": "unknown",
+        "reason": "Low success rate: 0.00"
+      }
+    ]
+  },
+  {
+    "id": "reflection_1777570582972",
+    "timestamp": 1777570582977,
+    "duration": 12,
+    "whatWorked": {
+      "message": "No successful actions to analyze"
+    },
+    "whatFailed": {
+      "totalFailed": 1,
+      "failureRate": 1,
+      "commonFailures": {
+        "models": {
+          "value": "unknown",
+          "count": 1
+        },
+        "strategies": {
+          "value": "unknown",
+          "count": 1
+        },
+        "types": {
+          "value": "question",
+          "count": 1
+        },
+        "reasons": {
+          "value": "Cannot read properties of undefined (reading 'push')",
+          "count": 1
+        }
+      },
+      "insights": [
+        "Most common failure: Cannot read properties of undefined (reading 'push')"
+      ]
+    },
+    "patterns": [
+      {
+        "type": "temporal",
+        "pattern": "low_success_hour",
+        "hour": 12,
+        "successRate": 0,
+        "recommendation": "avoid_actions_during_hour"
+      },
+      {
+        "type": "model",
+        "pattern": "low_model_performance",
+        "model": "unknown",
+        "successRate": 0,
+        "recommendation": "reduce_model_usage"
+      }
+    ],
+    "contradictions": [],
+    "recommendations": [
+      {
+        "priority": "high",
+        "action": "improve_success_rate",
+        "reason": "Success rate is 0.00"
+      }
+    ],
+    "selfAssessment": {
+      "overallLevel": "critical",
+      "confidence": 0.6666666666666666,
+      "capabilities": {
+        "reasoning": true,
+        "execution": false,
+        "adaptation": true,
+        "learning": true,
+        "selfAwareness": true
+      },
+      "limitations": [
+        "Task execution reliability needs improvement"
+      ],
+      "healthScore": 0.5
+    },
+    "adaptations": [
+      {
+        "type": "model_preference",
+        "action": "decrease_usage",
+        "target": "unknown",
+        "reason": "Low success rate: 0.00"
+      }
+    ]
+  },
+  {
+    "id": "reflection_1777571330210",
+    "timestamp": 1777571330210,
+    "duration": 0,
+    "whatWorked": {
+      "message": "No successful actions to analyze"
+    },
+    "whatFailed": {
+      "totalFailed": 1,
+      "failureRate": 1,
+      "commonFailures": {
+        "models": {
+          "value": "unknown",
+          "count": 1
+        },
+        "strategies": {
+          "value": "unknown",
+          "count": 1
+        },
+        "types": {
+          "value": "question",
+          "count": 1
+        },
+        "reasons": {
+          "value": "Cannot read properties of undefined (reading 'map')",
+          "count": 1
+        }
+      },
+      "insights": [
+        "Most common failure: Cannot read properties of undefined (reading 'map')"
+      ]
+    },
+    "patterns": [
+      {
+        "type": "temporal",
+        "pattern": "low_success_hour",
+        "hour": 12,
+        "successRate": 0,
+        "recommendation": "avoid_actions_during_hour"
+      },
+      {
+        "type": "model",
+        "pattern": "low_model_performance",
+        "model": "unknown",
+        "successRate": 0,
+        "recommendation": "reduce_model_usage"
+      }
+    ],
+    "contradictions": [],
+    "recommendations": [
+      {
+        "priority": "high",
+        "action": "improve_success_rate",
+        "reason": "Success rate is 0.00"
+      }
+    ],
+    "selfAssessment": {
+      "overallLevel": "critical",
+      "confidence": 0.6666666666666666,
+      "capabilities": {
+        "reasoning": true,
+        "execution": false,
+        "adaptation": true,
+        "learning": true,
+        "selfAwareness": true
+      },
+      "limitations": [
+        "Task execution reliability needs improvement"
+      ],
+      "healthScore": 0.5
+    },
+    "adaptations": [
+      {
+        "type": "model_preference",
+        "action": "decrease_usage",
+        "target": "unknown",
+        "reason": "Low success rate: 0.00"
+      }
+    ]
+  },
+  {
+    "id": "reflection_1777571360711",
+    "timestamp": 1777571360711,
+    "duration": 0,
+    "whatWorked": {
+      "message": "No successful actions to analyze"
+    },
+    "whatFailed": {
+      "totalFailed": 1,
+      "failureRate": 1,
+      "commonFailures": {
+        "models": {
+          "value": "unknown",
+          "count": 1
+        },
+        "strategies": {
+          "value": "unknown",
+          "count": 1
+        },
+        "types": {
+          "value": "question",
+          "count": 1
+        },
+        "reasons": {
+          "value": "Cannot read properties of undefined (reading 'push')",
+          "count": 1
+        }
+      },
+      "insights": [
+        "Most common failure: Cannot read properties of undefined (reading 'push')"
+      ]
+    },
+    "patterns": [
+      {
+        "type": "temporal",
+        "pattern": "low_success_hour",
+        "hour": 12,
+        "successRate": 0,
+        "recommendation": "avoid_actions_during_hour"
+      },
+      {
+        "type": "model",
+        "pattern": "low_model_performance",
+        "model": "unknown",
+        "successRate": 0,
+        "recommendation": "reduce_model_usage"
+      }
+    ],
+    "contradictions": [],
+    "recommendations": [
+      {
+        "priority": "high",
+        "action": "improve_success_rate",
+        "reason": "Success rate is 0.00"
+      }
+    ],
+    "selfAssessment": {
+      "overallLevel": "critical",
+      "confidence": 0.6666666666666666,
+      "capabilities": {
+        "reasoning": true,
+        "execution": false,
+        "adaptation": true,
+        "learning": true,
+        "selfAwareness": true
+      },
+      "limitations": [
+        "Task execution reliability needs improvement"
+      ],
+      "healthScore": 0.5
+    },
+    "adaptations": [
+      {
+        "type": "model_preference",
+        "action": "decrease_usage",
+        "target": "unknown",
+        "reason": "Low success rate: 0.00"
+      }
+    ]
+  },
+  {
+    "id": "reflection_1777571466348",
+    "timestamp": 1777571466348,
+    "duration": 1,
+    "whatWorked": {
+      "message": "No successful actions to analyze"
+    },
+    "whatFailed": {
+      "totalFailed": 1,
+      "failureRate": 1,
+      "commonFailures": {
+        "models": {
+          "value": "unknown",
+          "count": 1
+        },
+        "strategies": {
+          "value": "unknown",
+          "count": 1
+        },
+        "types": {
+          "value": "question",
+          "count": 1
+        },
+        "reasons": {
+          "value": "Cannot read properties of undefined (reading 'map')",
+          "count": 1
+        }
+      },
+      "insights": [
+        "Most common failure: Cannot read properties of undefined (reading 'map')"
+      ]
+    },
+    "patterns": [
+      {
+        "type": "temporal",
+        "pattern": "low_success_hour",
+        "hour": 11,
+        "successRate": 0,
+        "recommendation": "avoid_actions_during_hour"
+      },
+      {
+        "type": "model",
+        "pattern": "low_model_performance",
+        "model": "unknown",
+        "successRate": 0,
+        "recommendation": "reduce_model_usage"
+      }
+    ],
+    "contradictions": [],
+    "recommendations": [
+      {
+        "priority": "high",
+        "action": "improve_success_rate",
+        "reason": "Success rate is 0.00"
+      }
+    ],
+    "selfAssessment": {
+      "overallLevel": "critical",
+      "confidence": 0.6666666666666666,
+      "capabilities": {
+        "reasoning": true,
+        "execution": false,
+        "adaptation": true,
+        "learning": true,
+        "selfAwareness": true
+      },
+      "limitations": [
+        "Task execution reliability needs improvement"
+      ],
+      "healthScore": 0.5
+    },
+    "adaptations": [
+      {
+        "type": "model_preference",
+        "action": "decrease_usage",
+        "target": "unknown",
+        "reason": "Low success rate: 0.00"
+      }
+    ]
+  },
+  {
+    "id": "reflection_1777571483001",
+    "timestamp": 1777571483001,
+    "duration": 0,
+    "whatWorked": {
+      "message": "No successful actions to analyze"
+    },
+    "whatFailed": {
+      "totalFailed": 1,
+      "failureRate": 1,
+      "commonFailures": {
+        "models": {
+          "value": "unknown",
+          "count": 1
+        },
+        "strategies": {
+          "value": "unknown",
+          "count": 1
+        },
+        "types": {
+          "value": "question",
+          "count": 1
+        },
+        "reasons": {
+          "value": "Cannot read properties of undefined (reading 'push')",
+          "count": 1
+        }
+      },
+      "insights": [
+        "Most common failure: Cannot read properties of undefined (reading 'push')"
+      ]
+    },
+    "patterns": [
+      {
+        "type": "temporal",
+        "pattern": "low_success_hour",
+        "hour": 12,
+        "successRate": 0,
+        "recommendation": "avoid_actions_during_hour"
+      },
+      {
+        "type": "model",
+        "pattern": "low_model_performance",
+        "model": "unknown",
+        "successRate": 0,
+        "recommendation": "reduce_model_usage"
+      }
+    ],
+    "contradictions": [],
+    "recommendations": [
+      {
+        "priority": "high",
+        "action": "improve_success_rate",
+        "reason": "Success rate is 0.00"
+      }
+    ],
+    "selfAssessment": {
+      "overallLevel": "critical",
+      "confidence": 0.6666666666666666,
+      "capabilities": {
+        "reasoning": true,
+        "execution": false,
+        "adaptation": true,
+        "learning": true,
+        "selfAwareness": true
+      },
+      "limitations": [
+        "Task execution reliability needs improvement"
+      ],
+      "healthScore": 0.5
+    },
+    "adaptations": [
+      {
+        "type": "model_preference",
+        "action": "decrease_usage",
+        "target": "unknown",
+        "reason": "Low success rate: 0.00"
+      }
+    ]
+  },
+  {
+    "id": "reflection_1777572230226",
+    "timestamp": 1777572230234,
+    "duration": 1,
+    "whatWorked": {
+      "message": "No successful actions to analyze"
+    },
+    "whatFailed": {
+      "totalFailed": 1,
+      "failureRate": 1,
+      "commonFailures": {
+        "models": {
+          "value": "unknown",
+          "count": 1
+        },
+        "strategies": {
+          "value": "unknown",
+          "count": 1
+        },
+        "types": {
+          "value": "question",
+          "count": 1
+        },
+        "reasons": {
+          "value": "Cannot read properties of undefined (reading 'map')",
+          "count": 1
+        }
+      },
+      "insights": [
+        "Most common failure: Cannot read properties of undefined (reading 'map')"
+      ]
+    },
+    "patterns": [
+      {
+        "type": "temporal",
+        "pattern": "low_success_hour",
+        "hour": 12,
+        "successRate": 0,
+        "recommendation": "avoid_actions_during_hour"
+      },
+      {
+        "type": "model",
+        "pattern": "low_model_performance",
+        "model": "unknown",
+        "successRate": 0,
+        "recommendation": "reduce_model_usage"
+      }
+    ],
+    "contradictions": [],
+    "recommendations": [
+      {
+        "priority": "high",
+        "action": "improve_success_rate",
+        "reason": "Success rate is 0.00"
+      }
+    ],
+    "selfAssessment": {
+      "overallLevel": "critical",
+      "confidence": 0.6666666666666666,
+      "capabilities": {
+        "reasoning": true,
+        "execution": false,
+        "adaptation": true,
+        "learning": true,
+        "selfAwareness": true
+      },
+      "limitations": [
+        "Task execution reliability needs improvement"
+      ],
+      "healthScore": 0.5
+    },
+    "adaptations": [
+      {
+        "type": "model_preference",
+        "action": "decrease_usage",
+        "target": "unknown",
+        "reason": "Low success rate: 0.00"
+      }
+    ]
+  },
+  {
+    "id": "reflection_1777572260718",
+    "timestamp": 1777572260719,
+    "duration": 0,
+    "whatWorked": {
+      "message": "No successful actions to analyze"
+    },
+    "whatFailed": {
+      "totalFailed": 1,
+      "failureRate": 1,
+      "commonFailures": {
+        "models": {
+          "value": "unknown",
+          "count": 1
+        },
+        "strategies": {
+          "value": "unknown",
+          "count": 1
+        },
+        "types": {
+          "value": "question",
+          "count": 1
+        },
+        "reasons": {
+          "value": "Cannot read properties of undefined (reading 'push')",
+          "count": 1
+        }
+      },
+      "insights": [
+        "Most common failure: Cannot read properties of undefined (reading 'push')"
+      ]
+    },
+    "patterns": [
+      {
+        "type": "temporal",
+        "pattern": "low_success_hour",
+        "hour": 12,
+        "successRate": 0,
+        "recommendation": "avoid_actions_during_hour"
+      },
+      {
+        "type": "model",
+        "pattern": "low_model_performance",
+        "model": "unknown",
+        "successRate": 0,
+        "recommendation": "reduce_model_usage"
+      }
+    ],
+    "contradictions": [],
+    "recommendations": [
+      {
+        "priority": "high",
+        "action": "improve_success_rate",
+        "reason": "Success rate is 0.00"
+      }
+    ],
+    "selfAssessment": {
+      "overallLevel": "critical",
+      "confidence": 0.6666666666666666,
+      "capabilities": {
+        "reasoning": true,
+        "execution": false,
+        "adaptation": true,
+        "learning": true,
+        "selfAwareness": true
+      },
+      "limitations": [
+        "Task execution reliability needs improvement"
+      ],
+      "healthScore": 0.5
+    },
+    "adaptations": [
+      {
+        "type": "model_preference",
+        "action": "decrease_usage",
+        "target": "unknown",
+        "reason": "Low success rate: 0.00"
+      }
+    ]
+  },
+  {
+    "id": "reflection_1777572366358",
+    "timestamp": 1777572366358,
+    "duration": 2,
+    "whatWorked": {
+      "message": "No successful actions to analyze"
+    },
+    "whatFailed": {
+      "totalFailed": 1,
+      "failureRate": 1,
+      "commonFailures": {
+        "models": {
+          "value": "unknown",
+          "count": 1
+        },
+        "strategies": {
+          "value": "unknown",
+          "count": 1
+        },
+        "types": {
+          "value": "question",
+          "count": 1
+        },
+        "reasons": {
+          "value": "Cannot read properties of undefined (reading 'map')",
+          "count": 1
+        }
+      },
+      "insights": [
+        "Most common failure: Cannot read properties of undefined (reading 'map')"
+      ]
+    },
+    "patterns": [
+      {
+        "type": "temporal",
+        "pattern": "low_success_hour",
+        "hour": 11,
+        "successRate": 0,
+        "recommendation": "avoid_actions_during_hour"
+      },
+      {
+        "type": "model",
+        "pattern": "low_model_performance",
+        "model": "unknown",
+        "successRate": 0,
+        "recommendation": "reduce_model_usage"
+      }
+    ],
+    "contradictions": [],
+    "recommendations": [
+      {
+        "priority": "high",
+        "action": "improve_success_rate",
+        "reason": "Success rate is 0.00"
+      }
+    ],
+    "selfAssessment": {
+      "overallLevel": "critical",
+      "confidence": 0.6666666666666666,
+      "capabilities": {
+        "reasoning": true,
+        "execution": false,
+        "adaptation": true,
+        "learning": true,
+        "selfAwareness": true
+      },
+      "limitations": [
+        "Task execution reliability needs improvement"
+      ],
+      "healthScore": 0.5
+    },
+    "adaptations": [
+      {
+        "type": "model_preference",
+        "action": "decrease_usage",
+        "target": "unknown",
+        "reason": "Low success rate: 0.00"
+      }
+    ]
+  },
+  {
+    "id": "reflection_1777572383016",
+    "timestamp": 1777572383017,
+    "duration": 0,
+    "whatWorked": {
+      "message": "No successful actions to analyze"
+    },
+    "whatFailed": {
+      "totalFailed": 1,
+      "failureRate": 1,
+      "commonFailures": {
+        "models": {
+          "value": "unknown",
+          "count": 1
+        },
+        "strategies": {
+          "value": "unknown",
+          "count": 1
+        },
+        "types": {
+          "value": "question",
+          "count": 1
+        },
+        "reasons": {
+          "value": "Cannot read properties of undefined (reading 'push')",
+          "count": 1
+        }
+      },
+      "insights": [
+        "Most common failure: Cannot read properties of undefined (reading 'push')"
+      ]
+    },
+    "patterns": [
+      {
+        "type": "temporal",
+        "pattern": "low_success_hour",
+        "hour": 12,
+        "successRate": 0,
+        "recommendation": "avoid_actions_during_hour"
+      },
+      {
+        "type": "model",
+        "pattern": "low_model_performance",
+        "model": "unknown",
+        "successRate": 0,
+        "recommendation": "reduce_model_usage"
+      }
+    ],
+    "contradictions": [],
+    "recommendations": [
+      {
+        "priority": "high",
+        "action": "improve_success_rate",
+        "reason": "Success rate is 0.00"
+      }
+    ],
+    "selfAssessment": {
+      "overallLevel": "critical",
+      "confidence": 0.6666666666666666,
+      "capabilities": {
+        "reasoning": true,
+        "execution": false,
+        "adaptation": true,
+        "learning": true,
+        "selfAwareness": true
+      },
+      "limitations": [
+        "Task execution reliability needs improvement"
+      ],
+      "healthScore": 0.5
+    },
+    "adaptations": [
+      {
+        "type": "model_preference",
+        "action": "decrease_usage",
+        "target": "unknown",
+        "reason": "Low success rate: 0.00"
+      }
+    ]
+  },
+  {
+    "id": "reflection_1777573130256",
+    "timestamp": 1777573130256,
+    "duration": 1,
+    "whatWorked": {
+      "message": "No successful actions to analyze"
+    },
+    "whatFailed": {
+      "totalFailed": 1,
+      "failureRate": 1,
+      "commonFailures": {
+        "models": {
+          "value": "unknown",
+          "count": 1
+        },
+        "strategies": {
+          "value": "unknown",
+          "count": 1
+        },
+        "types": {
+          "value": "question",
+          "count": 1
+        },
+        "reasons": {
+          "value": "Cannot read properties of undefined (reading 'map')",
+          "count": 1
+        }
+      },
+      "insights": [
+        "Most common failure: Cannot read properties of undefined (reading 'map')"
+      ]
+    },
+    "patterns": [
+      {
+        "type": "temporal",
+        "pattern": "low_success_hour",
+        "hour": 12,
+        "successRate": 0,
+        "recommendation": "avoid_actions_during_hour"
+      },
+      {
+        "type": "model",
+        "pattern": "low_model_performance",
+        "model": "unknown",
+        "successRate": 0,
+        "recommendation": "reduce_model_usage"
+      }
+    ],
+    "contradictions": [],
+    "recommendations": [
+      {
+        "priority": "high",
+        "action": "improve_success_rate",
+        "reason": "Success rate is 0.00"
+      }
+    ],
+    "selfAssessment": {
+      "overallLevel": "critical",
+      "confidence": 0.6666666666666666,
+      "capabilities": {
+        "reasoning": true,
+        "execution": false,
+        "adaptation": true,
+        "learning": true,
+        "selfAwareness": true
+      },
+      "limitations": [
+        "Task execution reliability needs improvement"
+      ],
+      "healthScore": 0.5
+    },
+    "adaptations": [
+      {
+        "type": "model_preference",
+        "action": "decrease_usage",
+        "target": "unknown",
+        "reason": "Low success rate: 0.00"
+      }
+    ]
+  },
+  {
+    "id": "reflection_1777573160855",
+    "timestamp": 1777573160855,
+    "duration": 1,
+    "whatWorked": {
+      "message": "No successful actions to analyze"
+    },
+    "whatFailed": {
+      "totalFailed": 1,
+      "failureRate": 1,
+      "commonFailures": {
+        "models": {
+          "value": "unknown",
+          "count": 1
+        },
+        "strategies": {
+          "value": "unknown",
+          "count": 1
+        },
+        "types": {
+          "value": "question",
+          "count": 1
+        },
+        "reasons": {
+          "value": "Cannot read properties of undefined (reading 'push')",
+          "count": 1
+        }
+      },
+      "insights": [
+        "Most common failure: Cannot read properties of undefined (reading 'push')"
+      ]
+    },
+    "patterns": [
+      {
+        "type": "temporal",
+        "pattern": "low_success_hour",
+        "hour": 12,
+        "successRate": 0,
+        "recommendation": "avoid_actions_during_hour"
+      },
+      {
+        "type": "model",
+        "pattern": "low_model_performance",
+        "model": "unknown",
+        "successRate": 0,
+        "recommendation": "reduce_model_usage"
+      }
+    ],
+    "contradictions": [],
+    "recommendations": [
+      {
+        "priority": "high",
+        "action": "improve_success_rate",
+        "reason": "Success rate is 0.00"
+      }
+    ],
+    "selfAssessment": {
+      "overallLevel": "critical",
+      "confidence": 0.6666666666666666,
+      "capabilities": {
+        "reasoning": true,
+        "execution": false,
+        "adaptation": true,
+        "learning": true,
+        "selfAwareness": true
+      },
+      "limitations": [
+        "Task execution reliability needs improvement"
+      ],
+      "healthScore": 0.5
+    },
+    "adaptations": [
+      {
+        "type": "model_preference",
+        "action": "decrease_usage",
+        "target": "unknown",
+        "reason": "Low success rate: 0.00"
+      }
+    ]
+  },
+  {
+    "id": "reflection_1777573266378",
+    "timestamp": 1777573266379,
+    "duration": 0,
+    "whatWorked": {
+      "message": "No successful actions to analyze"
+    },
+    "whatFailed": {
+      "totalFailed": 1,
+      "failureRate": 1,
+      "commonFailures": {
+        "models": {
+          "value": "unknown",
+          "count": 1
+        },
+        "strategies": {
+          "value": "unknown",
+          "count": 1
+        },
+        "types": {
+          "value": "question",
+          "count": 1
+        },
+        "reasons": {
+          "value": "Cannot read properties of undefined (reading 'map')",
+          "count": 1
+        }
+      },
+      "insights": [
+        "Most common failure: Cannot read properties of undefined (reading 'map')"
+      ]
+    },
+    "patterns": [
+      {
+        "type": "temporal",
+        "pattern": "low_success_hour",
+        "hour": 11,
+        "successRate": 0,
+        "recommendation": "avoid_actions_during_hour"
+      },
+      {
+        "type": "model",
+        "pattern": "low_model_performance",
+        "model": "unknown",
+        "successRate": 0,
+        "recommendation": "reduce_model_usage"
+      }
+    ],
+    "contradictions": [],
+    "recommendations": [
+      {
+        "priority": "high",
+        "action": "improve_success_rate",
+        "reason": "Success rate is 0.00"
+      }
+    ],
+    "selfAssessment": {
+      "overallLevel": "critical",
+      "confidence": 0.6666666666666666,
+      "capabilities": {
+        "reasoning": true,
+        "execution": false,
+        "adaptation": true,
+        "learning": true,
+        "selfAwareness": true
+      },
+      "limitations": [
+        "Task execution reliability needs improvement"
+      ],
+      "healthScore": 0.5
+    },
+    "adaptations": [
+      {
+        "type": "model_preference",
+        "action": "decrease_usage",
+        "target": "unknown",
+        "reason": "Low success rate: 0.00"
+      }
+    ]
+  },
+  {
+    "id": "reflection_1777573283029",
+    "timestamp": 1777573283029,
+    "duration": 1,
+    "whatWorked": {
+      "message": "No successful actions to analyze"
+    },
+    "whatFailed": {
+      "totalFailed": 1,
+      "failureRate": 1,
+      "commonFailures": {
+        "models": {
+          "value": "unknown",
+          "count": 1
+        },
+        "strategies": {
+          "value": "unknown",
+          "count": 1
+        },
+        "types": {
+          "value": "question",
+          "count": 1
+        },
+        "reasons": {
+          "value": "Cannot read properties of undefined (reading 'push')",
+          "count": 1
+        }
+      },
+      "insights": [
+        "Most common failure: Cannot read properties of undefined (reading 'push')"
+      ]
+    },
+    "patterns": [
+      {
+        "type": "temporal",
+        "pattern": "low_success_hour",
+        "hour": 12,
+        "successRate": 0,
+        "recommendation": "avoid_actions_during_hour"
+      },
+      {
+        "type": "model",
+        "pattern": "low_model_performance",
+        "model": "unknown",
+        "successRate": 0,
+        "recommendation": "reduce_model_usage"
+      }
+    ],
+    "contradictions": [],
+    "recommendations": [
+      {
+        "priority": "high",
+        "action": "improve_success_rate",
+        "reason": "Success rate is 0.00"
+      }
+    ],
+    "selfAssessment": {
+      "overallLevel": "critical",
+      "confidence": 0.6666666666666666,
+      "capabilities": {
+        "reasoning": true,
+        "execution": false,
+        "adaptation": true,
+        "learning": true,
+        "selfAwareness": true
+      },
+      "limitations": [
+        "Task execution reliability needs improvement"
+      ],
+      "healthScore": 0.5
+    },
+    "adaptations": [
+      {
+        "type": "model_preference",
+        "action": "decrease_usage",
+        "target": "unknown",
+        "reason": "Low success rate: 0.00"
+      }
+    ]
+  },
+  {
+    "id": "reflection_1777574030269",
+    "timestamp": 1777574030269,
+    "duration": 0,
+    "whatWorked": {
+      "message": "No successful actions to analyze"
+    },
+    "whatFailed": {
+      "totalFailed": 1,
+      "failureRate": 1,
+      "commonFailures": {
+        "models": {
+          "value": "unknown",
+          "count": 1
+        },
+        "strategies": {
+          "value": "unknown",
+          "count": 1
+        },
+        "types": {
+          "value": "question",
+          "count": 1
+        },
+        "reasons": {
+          "value": "Cannot read properties of undefined (reading 'map')",
+          "count": 1
+        }
+      },
+      "insights": [
+        "Most common failure: Cannot read properties of undefined (reading 'map')"
+      ]
+    },
+    "patterns": [
+      {
+        "type": "temporal",
+        "pattern": "low_success_hour",
+        "hour": 12,
+        "successRate": 0,
+        "recommendation": "avoid_actions_during_hour"
+      },
+      {
+        "type": "model",
+        "pattern": "low_model_performance",
+        "model": "unknown",
+        "successRate": 0,
+        "recommendation": "reduce_model_usage"
+      }
+    ],
+    "contradictions": [],
+    "recommendations": [
+      {
+        "priority": "high",
+        "action": "improve_success_rate",
+        "reason": "Success rate is 0.00"
+      }
+    ],
+    "selfAssessment": {
+      "overallLevel": "critical",
+      "confidence": 0.6666666666666666,
+      "capabilities": {
+        "reasoning": true,
+        "execution": false,
+        "adaptation": true,
+        "learning": true,
+        "selfAwareness": true
+      },
+      "limitations": [
+        "Task execution reliability needs improvement"
+      ],
+      "healthScore": 0.5
+    },
+    "adaptations": [
+      {
+        "type": "model_preference",
+        "action": "decrease_usage",
+        "target": "unknown",
+        "reason": "Low success rate: 0.00"
+      }
+    ]
+  },
+  {
+    "id": "reflection_1777574060870",
+    "timestamp": 1777574060870,
+    "duration": 2,
+    "whatWorked": {
+      "message": "No successful actions to analyze"
+    },
+    "whatFailed": {
+      "totalFailed": 1,
+      "failureRate": 1,
+      "commonFailures": {
+        "models": {
+          "value": "unknown",
+          "count": 1
+        },
+        "strategies": {
+          "value": "unknown",
+          "count": 1
+        },
+        "types": {
+          "value": "question",
+          "count": 1
+        },
+        "reasons": {
+          "value": "Cannot read properties of undefined (reading 'push')",
+          "count": 1
+        }
+      },
+      "insights": [
+        "Most common failure: Cannot read properties of undefined (reading 'push')"
+      ]
+    },
+    "patterns": [
+      {
+        "type": "temporal",
+        "pattern": "low_success_hour",
+        "hour": 12,
+        "successRate": 0,
+        "recommendation": "avoid_actions_during_hour"
+      },
+      {
+        "type": "model",
+        "pattern": "low_model_performance",
+        "model": "unknown",
+        "successRate": 0,
+        "recommendation": "reduce_model_usage"
+      }
+    ],
+    "contradictions": [],
+    "recommendations": [
+      {
+        "priority": "high",
+        "action": "improve_success_rate",
+        "reason": "Success rate is 0.00"
+      }
+    ],
+    "selfAssessment": {
+      "overallLevel": "critical",
+      "confidence": 0.6666666666666666,
+      "capabilities": {
+        "reasoning": true,
+        "execution": false,
+        "adaptation": true,
+        "learning": true,
+        "selfAwareness": true
+      },
+      "limitations": [
+        "Task execution reliability needs improvement"
+      ],
+      "healthScore": 0.5
+    },
+    "adaptations": [
+      {
+        "type": "model_preference",
+        "action": "decrease_usage",
+        "target": "unknown",
+        "reason": "Low success rate: 0.00"
+      }
+    ]
+  },
+  {
+    "id": "reflection_1777574166383",
+    "timestamp": 1777574166384,
+    "duration": 0,
+    "whatWorked": {
+      "message": "No successful actions to analyze"
+    },
+    "whatFailed": {
+      "totalFailed": 1,
+      "failureRate": 1,
+      "commonFailures": {
+        "models": {
+          "value": "unknown",
+          "count": 1
+        },
+        "strategies": {
+          "value": "unknown",
+          "count": 1
+        },
+        "types": {
+          "value": "question",
+          "count": 1
+        },
+        "reasons": {
+          "value": "Cannot read properties of undefined (reading 'map')",
+          "count": 1
+        }
+      },
+      "insights": [
+        "Most common failure: Cannot read properties of undefined (reading 'map')"
+      ]
+    },
+    "patterns": [
+      {
+        "type": "temporal",
+        "pattern": "low_success_hour",
+        "hour": 11,
+        "successRate": 0,
+        "recommendation": "avoid_actions_during_hour"
+      },
+      {
+        "type": "model",
+        "pattern": "low_model_performance",
+        "model": "unknown",
+        "successRate": 0,
+        "recommendation": "reduce_model_usage"
+      }
+    ],
+    "contradictions": [],
+    "recommendations": [
+      {
+        "priority": "high",
+        "action": "improve_success_rate",
+        "reason": "Success rate is 0.00"
+      }
+    ],
+    "selfAssessment": {
+      "overallLevel": "critical",
+      "confidence": 0.6666666666666666,
+      "capabilities": {
+        "reasoning": true,
+        "execution": false,
+        "adaptation": true,
+        "learning": true,
+        "selfAwareness": true
+      },
+      "limitations": [
+        "Task execution reliability needs improvement"
+      ],
+      "healthScore": 0.5
+    },
+    "adaptations": [
+      {
+        "type": "model_preference",
+        "action": "decrease_usage",
+        "target": "unknown",
+        "reason": "Low success rate: 0.00"
+      }
+    ]
+  },
+  {
+    "id": "reflection_1777574183048",
+    "timestamp": 1777574183048,
+    "duration": 1,
+    "whatWorked": {
+      "message": "No successful actions to analyze"
+    },
+    "whatFailed": {
+      "totalFailed": 1,
+      "failureRate": 1,
+      "commonFailures": {
+        "models": {
+          "value": "unknown",
+          "count": 1
+        },
+        "strategies": {
+          "value": "unknown",
+          "count": 1
+        },
+        "types": {
+          "value": "question",
+          "count": 1
+        },
+        "reasons": {
+          "value": "Cannot read properties of undefined (reading 'push')",
+          "count": 1
+        }
+      },
+      "insights": [
+        "Most common failure: Cannot read properties of undefined (reading 'push')"
+      ]
+    },
+    "patterns": [
+      {
+        "type": "temporal",
+        "pattern": "low_success_hour",
+        "hour": 12,
+        "successRate": 0,
+        "recommendation": "avoid_actions_during_hour"
+      },
+      {
+        "type": "model",
+        "pattern": "low_model_performance",
+        "model": "unknown",
+        "successRate": 0,
+        "recommendation": "reduce_model_usage"
+      }
+    ],
+    "contradictions": [],
+    "recommendations": [
+      {
+        "priority": "high",
+        "action": "improve_success_rate",
+        "reason": "Success rate is 0.00"
+      }
+    ],
+    "selfAssessment": {
+      "overallLevel": "critical",
+      "confidence": 0.6666666666666666,
+      "capabilities": {
+        "reasoning": true,
+        "execution": false,
+        "adaptation": true,
+        "learning": true,
+        "selfAwareness": true
+      },
+      "limitations": [
+        "Task execution reliability needs improvement"
+      ],
+      "healthScore": 0.5
+    },
+    "adaptations": [
+      {
+        "type": "model_preference",
+        "action": "decrease_usage",
+        "target": "unknown",
+        "reason": "Low success rate: 0.00"
+      }
+    ]
+  },
+  {
+    "id": "reflection_1777574930537",
+    "timestamp": 1777574930537,
+    "duration": 1,
+    "whatWorked": {
+      "message": "No successful actions to analyze"
+    },
+    "whatFailed": {
+      "totalFailed": 1,
+      "failureRate": 1,
+      "commonFailures": {
+        "models": {
+          "value": "unknown",
+          "count": 1
+        },
+        "strategies": {
+          "value": "unknown",
+          "count": 1
+        },
+        "types": {
+          "value": "question",
+          "count": 1
+        },
+        "reasons": {
+          "value": "Cannot read properties of undefined (reading 'map')",
+          "count": 1
+        }
+      },
+      "insights": [
+        "Most common failure: Cannot read properties of undefined (reading 'map')"
+      ]
+    },
+    "patterns": [
+      {
+        "type": "temporal",
+        "pattern": "low_success_hour",
+        "hour": 12,
+        "successRate": 0,
+        "recommendation": "avoid_actions_during_hour"
+      },
+      {
+        "type": "model",
+        "pattern": "low_model_performance",
+        "model": "unknown",
+        "successRate": 0,
+        "recommendation": "reduce_model_usage"
+      }
+    ],
+    "contradictions": [],
+    "recommendations": [
+      {
+        "priority": "high",
+        "action": "improve_success_rate",
+        "reason": "Success rate is 0.00"
+      }
+    ],
+    "selfAssessment": {
+      "overallLevel": "critical",
+      "confidence": 0.6666666666666666,
+      "capabilities": {
+        "reasoning": true,
+        "execution": false,
+        "adaptation": true,
+        "learning": true,
+        "selfAwareness": true
+      },
+      "limitations": [
+        "Task execution reliability needs improvement"
+      ],
+      "healthScore": 0.5
+    },
+    "adaptations": [
+      {
+        "type": "model_preference",
+        "action": "decrease_usage",
+        "target": "unknown",
+        "reason": "Low success rate: 0.00"
+      }
+    ]
+  },
+  {
+    "id": "reflection_1777574960887",
+    "timestamp": 1777574960887,
+    "duration": 1,
+    "whatWorked": {
+      "message": "No successful actions to analyze"
+    },
+    "whatFailed": {
+      "totalFailed": 1,
+      "failureRate": 1,
+      "commonFailures": {
+        "models": {
+          "value": "unknown",
+          "count": 1
+        },
+        "strategies": {
+          "value": "unknown",
+          "count": 1
+        },
+        "types": {
+          "value": "question",
+          "count": 1
+        },
+        "reasons": {
+          "value": "Cannot read properties of undefined (reading 'push')",
+          "count": 1
+        }
+      },
+      "insights": [
+        "Most common failure: Cannot read properties of undefined (reading 'push')"
+      ]
+    },
+    "patterns": [
+      {
+        "type": "temporal",
+        "pattern": "low_success_hour",
+        "hour": 12,
+        "successRate": 0,
+        "recommendation": "avoid_actions_during_hour"
+      },
+      {
+        "type": "model",
+        "pattern": "low_model_performance",
+        "model": "unknown",
+        "successRate": 0,
+        "recommendation": "reduce_model_usage"
+      }
+    ],
+    "contradictions": [],
+    "recommendations": [
+      {
+        "priority": "high",
+        "action": "improve_success_rate",
+        "reason": "Success rate is 0.00"
+      }
+    ],
+    "selfAssessment": {
+      "overallLevel": "critical",
+      "confidence": 0.6666666666666666,
+      "capabilities": {
+        "reasoning": true,
+        "execution": false,
+        "adaptation": true,
+        "learning": true,
+        "selfAwareness": true
+      },
+      "limitations": [
+        "Task execution reliability needs improvement"
+      ],
+      "healthScore": 0.5
+    },
+    "adaptations": [
+      {
+        "type": "model_preference",
+        "action": "decrease_usage",
+        "target": "unknown",
+        "reason": "Low success rate: 0.00"
+      }
+    ]
+  },
+  {
+    "id": "reflection_1777575066391",
+    "timestamp": 1777575066391,
+    "duration": 0,
+    "whatWorked": {
+      "message": "No successful actions to analyze"
+    },
+    "whatFailed": {
+      "totalFailed": 1,
+      "failureRate": 1,
+      "commonFailures": {
+        "models": {
+          "value": "unknown",
+          "count": 1
+        },
+        "strategies": {
+          "value": "unknown",
+          "count": 1
+        },
+        "types": {
+          "value": "question",
+          "count": 1
+        },
+        "reasons": {
+          "value": "Cannot read properties of undefined (reading 'map')",
+          "count": 1
+        }
+      },
+      "insights": [
+        "Most common failure: Cannot read properties of undefined (reading 'map')"
+      ]
+    },
+    "patterns": [
+      {
+        "type": "temporal",
+        "pattern": "low_success_hour",
+        "hour": 11,
+        "successRate": 0,
+        "recommendation": "avoid_actions_during_hour"
+      },
+      {
+        "type": "model",
+        "pattern": "low_model_performance",
+        "model": "unknown",
+        "successRate": 0,
+        "recommendation": "reduce_model_usage"
+      }
+    ],
+    "contradictions": [],
+    "recommendations": [
+      {
+        "priority": "high",
+        "action": "improve_success_rate",
+        "reason": "Success rate is 0.00"
+      }
+    ],
+    "selfAssessment": {
+      "overallLevel": "critical",
+      "confidence": 0.6666666666666666,
+      "capabilities": {
+        "reasoning": true,
+        "execution": false,
+        "adaptation": true,
+        "learning": true,
+        "selfAwareness": true
+      },
+      "limitations": [
+        "Task execution reliability needs improvement"
+      ],
+      "healthScore": 0.5
+    },
+    "adaptations": [
+      {
+        "type": "model_preference",
+        "action": "decrease_usage",
+        "target": "unknown",
+        "reason": "Low success rate: 0.00"
+      }
+    ]
+  },
+  {
+    "id": "reflection_1777575083066",
+    "timestamp": 1777575083069,
+    "duration": 2,
+    "whatWorked": {
+      "message": "No successful actions to analyze"
+    },
+    "whatFailed": {
+      "totalFailed": 1,
+      "failureRate": 1,
+      "commonFailures": {
+        "models": {
+          "value": "unknown",
+          "count": 1
+        },
+        "strategies": {
+          "value": "unknown",
+          "count": 1
+        },
+        "types": {
+          "value": "question",
+          "count": 1
+        },
+        "reasons": {
+          "value": "Cannot read properties of undefined (reading 'push')",
+          "count": 1
+        }
+      },
+      "insights": [
+        "Most common failure: Cannot read properties of undefined (reading 'push')"
+      ]
+    },
+    "patterns": [
+      {
+        "type": "temporal",
+        "pattern": "low_success_hour",
+        "hour": 12,
+        "successRate": 0,
+        "recommendation": "avoid_actions_during_hour"
+      },
+      {
+        "type": "model",
+        "pattern": "low_model_performance",
+        "model": "unknown",
+        "successRate": 0,
+        "recommendation": "reduce_model_usage"
+      }
+    ],
+    "contradictions": [],
+    "recommendations": [
+      {
+        "priority": "high",
+        "action": "improve_success_rate",
+        "reason": "Success rate is 0.00"
+      }
+    ],
+    "selfAssessment": {
+      "overallLevel": "critical",
+      "confidence": 0.6666666666666666,
+      "capabilities": {
+        "reasoning": true,
+        "execution": false,
+        "adaptation": true,
+        "learning": true,
+        "selfAwareness": true
+      },
+      "limitations": [
+        "Task execution reliability needs improvement"
+      ],
+      "healthScore": 0.5
+    },
+    "adaptations": [
+      {
+        "type": "model_preference",
+        "action": "decrease_usage",
+        "target": "unknown",
+        "reason": "Low success rate: 0.00"
+      }
+    ]
+  },
+  {
+    "id": "reflection_1777575830620",
+    "timestamp": 1777575830620,
+    "duration": 0,
+    "whatWorked": {
+      "message": "No successful actions to analyze"
+    },
+    "whatFailed": {
+      "totalFailed": 1,
+      "failureRate": 1,
+      "commonFailures": {
+        "models": {
+          "value": "unknown",
+          "count": 1
+        },
+        "strategies": {
+          "value": "unknown",
+          "count": 1
+        },
+        "types": {
+          "value": "question",
+          "count": 1
+        },
+        "reasons": {
+          "value": "Cannot read properties of undefined (reading 'map')",
+          "count": 1
+        }
+      },
+      "insights": [
+        "Most common failure: Cannot read properties of undefined (reading 'map')"
+      ]
+    },
+    "patterns": [
+      {
+        "type": "temporal",
+        "pattern": "low_success_hour",
+        "hour": 12,
+        "successRate": 0,
+        "recommendation": "avoid_actions_during_hour"
+      },
+      {
+        "type": "model",
+        "pattern": "low_model_performance",
+        "model": "unknown",
+        "successRate": 0,
+        "recommendation": "reduce_model_usage"
+      }
+    ],
+    "contradictions": [],
+    "recommendations": [
+      {
+        "priority": "high",
+        "action": "improve_success_rate",
+        "reason": "Success rate is 0.00"
+      }
+    ],
+    "selfAssessment": {
+      "overallLevel": "critical",
+      "confidence": 0.6666666666666666,
+      "capabilities": {
+        "reasoning": true,
+        "execution": false,
+        "adaptation": true,
+        "learning": true,
+        "selfAwareness": true
+      },
+      "limitations": [
+        "Task execution reliability needs improvement"
+      ],
+      "healthScore": 0.5
+    },
+    "adaptations": [
+      {
+        "type": "model_preference",
+        "action": "decrease_usage",
+        "target": "unknown",
+        "reason": "Low success rate: 0.00"
+      }
+    ]
+  },
+  {
+    "id": "reflection_1777575860901",
+    "timestamp": 1777575860901,
+    "duration": 0,
+    "whatWorked": {
+      "message": "No successful actions to analyze"
+    },
+    "whatFailed": {
+      "totalFailed": 1,
+      "failureRate": 1,
+      "commonFailures": {
+        "models": {
+          "value": "unknown",
+          "count": 1
+        },
+        "strategies": {
+          "value": "unknown",
+          "count": 1
+        },
+        "types": {
+          "value": "question",
+          "count": 1
+        },
+        "reasons": {
+          "value": "Cannot read properties of undefined (reading 'push')",
+          "count": 1
+        }
+      },
+      "insights": [
+        "Most common failure: Cannot read properties of undefined (reading 'push')"
+      ]
+    },
+    "patterns": [
+      {
+        "type": "temporal",
+        "pattern": "low_success_hour",
+        "hour": 12,
+        "successRate": 0,
+        "recommendation": "avoid_actions_during_hour"
+      },
+      {
+        "type": "model",
+        "pattern": "low_model_performance",
+        "model": "unknown",
+        "successRate": 0,
+        "recommendation": "reduce_model_usage"
+      }
+    ],
+    "contradictions": [],
+    "recommendations": [
+      {
+        "priority": "high",
+        "action": "improve_success_rate",
+        "reason": "Success rate is 0.00"
+      }
+    ],
+    "selfAssessment": {
+      "overallLevel": "critical",
+      "confidence": 0.6666666666666666,
+      "capabilities": {
+        "reasoning": true,
+        "execution": false,
+        "adaptation": true,
+        "learning": true,
+        "selfAwareness": true
+      },
+      "limitations": [
+        "Task execution reliability needs improvement"
+      ],
+      "healthScore": 0.5
+    },
+    "adaptations": [
+      {
+        "type": "model_preference",
+        "action": "decrease_usage",
+        "target": "unknown",
+        "reason": "Low success rate: 0.00"
+      }
+    ]
+  },
+  {
+    "id": "reflection_1777575966407",
+    "timestamp": 1777575966408,
+    "duration": 0,
+    "whatWorked": {
+      "message": "No successful actions to analyze"
+    },
+    "whatFailed": {
+      "totalFailed": 1,
+      "failureRate": 1,
+      "commonFailures": {
+        "models": {
+          "value": "unknown",
+          "count": 1
+        },
+        "strategies": {
+          "value": "unknown",
+          "count": 1
+        },
+        "types": {
+          "value": "question",
+          "count": 1
+        },
+        "reasons": {
+          "value": "Cannot read properties of undefined (reading 'map')",
+          "count": 1
+        }
+      },
+      "insights": [
+        "Most common failure: Cannot read properties of undefined (reading 'map')"
+      ]
+    },
+    "patterns": [
+      {
+        "type": "temporal",
+        "pattern": "low_success_hour",
+        "hour": 11,
+        "successRate": 0,
+        "recommendation": "avoid_actions_during_hour"
+      },
+      {
+        "type": "model",
+        "pattern": "low_model_performance",
+        "model": "unknown",
+        "successRate": 0,
+        "recommendation": "reduce_model_usage"
+      }
+    ],
+    "contradictions": [],
+    "recommendations": [
+      {
+        "priority": "high",
+        "action": "improve_success_rate",
+        "reason": "Success rate is 0.00"
+      }
+    ],
+    "selfAssessment": {
+      "overallLevel": "critical",
+      "confidence": 0.6666666666666666,
+      "capabilities": {
+        "reasoning": true,
+        "execution": false,
+        "adaptation": true,
+        "learning": true,
+        "selfAwareness": true
+      },
+      "limitations": [
+        "Task execution reliability needs improvement"
+      ],
+      "healthScore": 0.5
+    },
+    "adaptations": [
+      {
+        "type": "model_preference",
+        "action": "decrease_usage",
+        "target": "unknown",
+        "reason": "Low success rate: 0.00"
+      }
+    ]
+  },
+  {
+    "id": "reflection_1777575983091",
+    "timestamp": 1777575983092,
+    "duration": 0,
+    "whatWorked": {
+      "message": "No successful actions to analyze"
+    },
+    "whatFailed": {
+      "totalFailed": 1,
+      "failureRate": 1,
+      "commonFailures": {
+        "models": {
+          "value": "unknown",
+          "count": 1
+        },
+        "strategies": {
+          "value": "unknown",
+          "count": 1
+        },
+        "types": {
+          "value": "question",
+          "count": 1
+        },
+        "reasons": {
+          "value": "Cannot read properties of undefined (reading 'push')",
+          "count": 1
+        }
+      },
+      "insights": [
+        "Most common failure: Cannot read properties of undefined (reading 'push')"
+      ]
+    },
+    "patterns": [
+      {
+        "type": "temporal",
+        "pattern": "low_success_hour",
+        "hour": 12,
+        "successRate": 0,
+        "recommendation": "avoid_actions_during_hour"
+      },
+      {
+        "type": "model",
+        "pattern": "low_model_performance",
+        "model": "unknown",
+        "successRate": 0,
+        "recommendation": "reduce_model_usage"
+      }
+    ],
+    "contradictions": [],
+    "recommendations": [
+      {
+        "priority": "high",
+        "action": "improve_success_rate",
+        "reason": "Success rate is 0.00"
+      }
+    ],
+    "selfAssessment": {
+      "overallLevel": "critical",
+      "confidence": 0.6666666666666666,
+      "capabilities": {
+        "reasoning": true,
+        "execution": false,
+        "adaptation": true,
+        "learning": true,
+        "selfAwareness": true
+      },
+      "limitations": [
+        "Task execution reliability needs improvement"
+      ],
+      "healthScore": 0.5
+    },
+    "adaptations": [
+      {
+        "type": "model_preference",
+        "action": "decrease_usage",
+        "target": "unknown",
+        "reason": "Low success rate: 0.00"
+      }
+    ]
+  },
+  {
+    "id": "reflection_1777576730781",
+    "timestamp": 1777576730781,
+    "duration": 1,
+    "whatWorked": {
+      "message": "No successful actions to analyze"
+    },
+    "whatFailed": {
+      "totalFailed": 1,
+      "failureRate": 1,
+      "commonFailures": {
+        "models": {
+          "value": "unknown",
+          "count": 1
+        },
+        "strategies": {
+          "value": "unknown",
+          "count": 1
+        },
+        "types": {
+          "value": "question",
+          "count": 1
+        },
+        "reasons": {
+          "value": "Cannot read properties of undefined (reading 'map')",
+          "count": 1
+        }
+      },
+      "insights": [
+        "Most common failure: Cannot read properties of undefined (reading 'map')"
+      ]
+    },
+    "patterns": [
+      {
+        "type": "temporal",
+        "pattern": "low_success_hour",
+        "hour": 12,
+        "successRate": 0,
+        "recommendation": "avoid_actions_during_hour"
+      },
+      {
+        "type": "model",
+        "pattern": "low_model_performance",
+        "model": "unknown",
+        "successRate": 0,
+        "recommendation": "reduce_model_usage"
+      }
+    ],
+    "contradictions": [],
+    "recommendations": [
+      {
+        "priority": "high",
+        "action": "improve_success_rate",
+        "reason": "Success rate is 0.00"
+      }
+    ],
+    "selfAssessment": {
+      "overallLevel": "critical",
+      "confidence": 0.6666666666666666,
+      "capabilities": {
+        "reasoning": true,
+        "execution": false,
+        "adaptation": true,
+        "learning": true,
+        "selfAwareness": true
+      },
+      "limitations": [
+        "Task execution reliability needs improvement"
+      ],
+      "healthScore": 0.5
+    },
+    "adaptations": [
+      {
+        "type": "model_preference",
+        "action": "decrease_usage",
+        "target": "unknown",
+        "reason": "Low success rate: 0.00"
+      }
+    ]
+  },
+  {
+    "id": "reflection_1777576760935",
+    "timestamp": 1777576760935,
+    "duration": 1,
+    "whatWorked": {
+      "message": "No successful actions to analyze"
+    },
+    "whatFailed": {
+      "totalFailed": 1,
+      "failureRate": 1,
+      "commonFailures": {
+        "models": {
+          "value": "unknown",
+          "count": 1
+        },
+        "strategies": {
+          "value": "unknown",
+          "count": 1
+        },
+        "types": {
+          "value": "question",
+          "count": 1
+        },
+        "reasons": {
+          "value": "Cannot read properties of undefined (reading 'push')",
+          "count": 1
+        }
+      },
+      "insights": [
+        "Most common failure: Cannot read properties of undefined (reading 'push')"
+      ]
+    },
+    "patterns": [
+      {
+        "type": "temporal",
+        "pattern": "low_success_hour",
+        "hour": 12,
+        "successRate": 0,
+        "recommendation": "avoid_actions_during_hour"
+      },
+      {
+        "type": "model",
+        "pattern": "low_model_performance",
+        "model": "unknown",
+        "successRate": 0,
+        "recommendation": "reduce_model_usage"
+      }
+    ],
+    "contradictions": [],
+    "recommendations": [
+      {
+        "priority": "high",
+        "action": "improve_success_rate",
+        "reason": "Success rate is 0.00"
+      }
+    ],
+    "selfAssessment": {
+      "overallLevel": "critical",
+      "confidence": 0.6666666666666666,
+      "capabilities": {
+        "reasoning": true,
+        "execution": false,
+        "adaptation": true,
+        "learning": true,
+        "selfAwareness": true
+      },
+      "limitations": [
+        "Task execution reliability needs improvement"
+      ],
+      "healthScore": 0.5
+    },
+    "adaptations": [
+      {
+        "type": "model_preference",
+        "action": "decrease_usage",
+        "target": "unknown",
+        "reason": "Low success rate: 0.00"
+      }
+    ]
+  }
+]

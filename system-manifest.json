@@ -1,0 +1,309 @@
+{
+  "manifest": {
+    "version": "1.0.0",
+    "lastUpdated": "2026-04-29T21:40:00Z",
+    "description": "HYDI System Single Source of Truth",
+    "governance": {
+      "registrationRequired": true,
+      "duplicateDetection": true,
+      "dependencyTracking": true,
+      "auditFrequency": "daily"
+    }
+  },
+  "services": {
+    "core": {
+      "HYDISystem": {
+        "type": "orchestrator",
+        "location": "src/HYDISystem.js",
+        "purpose": "Main system integration and coordination",
+        "triggers": ["manual", "api_request"],
+        "dataAccess": ["supabase", "stripe", "local_files"],
+        "dependencies": ["HeidiControlPlane", "HybridModelStack", "HeidiMemorySystem"],
+        "status": "active",
+        "lastModified": "2026-04-29T21:40:00Z"
+      },
+      "HeidiControlPlane": {
+        "type": "governance",
+        "location": "src/control/HeidiControlPlane.js",
+        "purpose": "Decision authority and constraint enforcement",
+        "triggers": ["model_selection", "action_gating"],
+        "dataAccess": ["local_memory"],
+        "dependencies": ["GlobalConstraintEnforcer"],
+        "status": "active",
+        "lastModified": "2026-04-29T21:40:00Z"
+      },
+      "GlobalConstraintEnforcer": {
+        "type": "governance",
+        "location": "src/control/GlobalConstraintEnforcer.js",
+        "purpose": "System stability and long-term constraints",
+        "triggers": ["decision_authorization", "action_gating"],
+        "dataAccess": ["local_memory"],
+        "dependencies": [],
+        "status": "active",
+        "lastModified": "2026-04-29T21:40:00Z"
+      },
+      "HeidiCoreLoop": {
+        "type": "orchestration",
+        "location": "src/core/HeidiCoreLoop.js",
+        "purpose": "Continuous improvement cycle",
+        "triggers": ["cron", "system_startup"],
+        "dataAccess": ["local_memory"],
+        "dependencies": ["HeidiOrchestrator", "HybridModelStack"],
+        "status": "active",
+        "lastModified": "2026-04-29T21:40:00Z"
+      }
+    },
+    "intelligence": {
+      "HybridModelStack": {
+        "type": "model_router",
+        "location": "src/models/HybridModelStack.js",
+        "purpose": "Model selection and execution",
+        "triggers": ["intelligence_request", "task_processing"],
+        "dataAccess": ["local_models", "external_apis"],
+        "dependencies": ["LocalModelAdapter"],
+        "status": "active",
+        "lastModified": "2026-04-29T21:40:00Z"
+      },
+      "LocalModelAdapter": {
+        "type": "model_interface",
+        "location": "src/models/local-model-adapter.js",
+        "purpose": "Local model management and execution",
+        "triggers": ["model_request"],
+        "dataAccess": ["local_models"],
+        "dependencies": [],
+        "status": "active",
+        "lastModified": "2026-04-29T21:40:00Z"
+      },
+      "HeidiOrchestrator": {
+        "type": "task_router",
+        "location": "src/orchestrator/HeidiOrchestrator.js",
+        "purpose": "Task routing and decision making",
+        "triggers": ["task_request"],
+        "dataAccess": ["local_memory"],
+        "dependencies": ["HybridModelStack"],
+        "status": "active",
+        "lastModified": "2026-04-29T21:40:00Z"
+      }
+    },
+    "memory": {
+      "HeidiMemorySystem": {
+        "type": "memory_manager",
+        "location": "src/memory/HeidiMemorySystem.js",
+        "purpose": "Session, database, and reflective memory",
+        "triggers": ["data_storage", "data_retrieval", "reflection_cycle"],
+        "dataAccess": ["supabase", "local_files"],
+        "dependencies": [],
+        "status": "active",
+        "lastModified": "2026-04-29T21:40:00Z"
+      },
+      "HeidiSelfAwareness": {
+        "type": "self_monitoring",
+        "location": "src/awareness/HeidiSelfAwareness.js",
+        "purpose": "Drift detection and reflection engine",
+        "triggers": ["performance_tracking", "reflection_cycle"],
+        "dataAccess": ["local_memory"],
+        "dependencies": [],
+        "status": "active",
+        "lastModified": "2026-04-29T21:40:00Z"
+      }
+    },
+    "actions": {
+      "HeidiActionLayer": {
+        "type": "action_executor",
+        "location": "src/actions/HeidiActionLayer.js",
+        "purpose": "Execute system actions (payments, emails, etc)",
+        "triggers": ["action_request"],
+        "dataAccess": ["stripe", "email_services", "supabase"],
+        "dependencies": [],
+        "status": "active",
+        "lastModified": "2026-04-29T21:40:00Z"
+      },
+      "HeidiRevenueEngine": {
+        "type": "revenue_manager",
+        "location": "src/revenue/HeidiRevenueEngine.js",
+        "purpose": "Revenue generation and tracking",
+        "triggers": ["revenue_request", "stripe_webhook"],
+        "dataAccess": ["stripe", "supabase"],
+        "dependencies": ["HeidiActionLayer"],
+        "status": "active",
+        "lastModified": "2026-04-29T21:40:00Z"
+      }
+    },
+    "infrastructure": {
+      "server": {
+        "type": "api_server",
+        "location": "src/server.js",
+        "purpose": "Main HTTP server and API endpoints",
+        "triggers": ["http_request", "system_startup"],
+        "dataAccess": ["supabase", "local_files"],
+        "dependencies": ["HYDISystem"],
+        "status": "active",
+        "lastModified": "2026-04-29T21:40:00Z"
+      },
+      "database": {
+        "type": "data_store",
+        "location": "supabase",
+        "purpose": "Persistent data storage",
+        "triggers": ["data_operations"],
+        "dataAccess": ["supabase"],
+        "dependencies": [],
+        "status": "external",
+        "lastModified": "2026-04-29T21:40:00Z"
+      },
+      "stripe": {
+        "type": "payment_processor",
+        "location": "stripe_api",
+        "purpose": "Payment processing and webhooks",
+        "triggers": ["payment_request", "stripe_webhook"],
+        "dataAccess": ["stripe_api"],
+        "dependencies": [],
+        "status": "external",
+        "lastModified": "2026-04-29T21:40:00Z"
+      }
+    }
+  },
+  "external_integrations": {
+    "stripe": {
+      "type": "payment",
+      "purpose": "Payment processing",
+      "endpoints": ["payments", "webhooks", "checkout"],
+      "auth_method": "api_key",
+      "status": "active"
+    },
+    "supabase": {
+      "type": "database",
+      "purpose": "Data persistence",
+      "tables": ["user_profiles", "decisions", "revenue_events", "system_performance"],
+      "auth_method": "service_key",
+      "status": "active"
+    },
+    "openai": {
+      "type": "ai_model",
+      "purpose": "External AI model access",
+      "models": ["gpt-4", "gpt-3.5-turbo"],
+      "auth_method": "api_key",
+      "status": "configured"
+    },
+    "anthropic": {
+      "type": "ai_model",
+      "purpose": "External AI model access",
+      "models": ["claude-3"],
+      "auth_method": "api_key",
+      "status": "configured"
+    }
+  },
+  "data_flows": {
+    "user_request": {
+      "trigger": "api_request",
+      "flow": ["server", "HYDISystem", "HeidiControlPlane", "HybridModelStack", "LocalModelAdapter"],
+      "data_types": ["text", "context"],
+      "storage": ["HeidiMemorySystem"]
+    },
+    "model_execution": {
+      "trigger": "intelligence_request",
+      "flow": ["HybridModelStack", "LocalModelAdapter", "local_models"],
+      "data_types": ["prompt", "response"],
+      "storage": ["HeidiMemorySystem"]
+    },
+    "payment_processing": {
+      "trigger": "revenue_request",
+      "flow": ["HeidiRevenueEngine", "stripe", "HeidiActionLayer"],
+      "data_types": ["payment_data", "webhook_events"],
+      "storage": ["supabase"]
+    },
+    "self_monitoring": {
+      "trigger": "performance_tracking",
+      "flow": ["HeidiSelfAwareness", "HeidiMemorySystem", "GlobalConstraintEnforcer"],
+      "data_types": ["performance_metrics", "drift_scores"],
+      "storage": ["local_files"]
+    }
+  },
+  "scheduled_jobs": {
+    "core_loop": {
+      "schedule": "every_1_minute",
+      "service": "HeidiCoreLoop",
+      "purpose": "Continuous improvement cycle",
+      "status": "active"
+    },
+    "reflection_cycle": {
+      "schedule": "every_15_minutes",
+      "service": "HeidiSelfAwareness",
+      "purpose": "Self-reflection and drift detection",
+      "status": "active"
+    },
+    "revenue_monitoring": {
+      "schedule": "every_5_minutes",
+      "service": "HeidiRevenueEngine",
+      "purpose": "Revenue tracking and monitoring",
+      "status": "active"
+    },
+    "system_audit": {
+      "schedule": "daily",
+      "service": "SystemAuditor",
+      "purpose": "System audit and redundancy detection",
+      "status": "pending_implementation"
+    }
+  },
+  "webhooks": {
+    "stripe_webhook": {
+      "provider": "stripe",
+      "endpoint": "/webhooks/stripe",
+      "service": "HeidiRevenueEngine",
+      "events": ["payment_intent.succeeded", "payment_intent.failed", "checkout.session.completed"],
+      "status": "active"
+    }
+  },
+  "api_endpoints": {
+    "health": {
+      "path": "/health",
+      "method": "GET",
+      "service": "server",
+      "purpose": "System health check",
+      "status": "active"
+    },
+    "process": {
+      "path": "/api/process",
+      "method": "POST",
+      "service": "HYDISystem",
+      "purpose": "Main request processing",
+      "status": "active"
+    },
+    "status": {
+      "path": "/api/status",
+      "method": "GET",
+      "service": "HYDISystem",
+      "purpose": "System status and metrics",
+      "status": "active"
+    }
+  },
+  "redundancy_detection": {
+    "patterns": [
+      "checkout",
+      "webhook", 
+      "reflect",
+      "drift",
+      "audit",
+      "payment",
+      "model_selection",
+      "action_gating",
+      "revenue_tracking"
+    ],
+    "duplicates_found": [],
+    "last_scan": "2026-04-29T21:40:00Z"
+  },
+  "dependencies": {
+    "core": {
+      "HYDISystem": ["HeidiControlPlane", "HybridModelStack", "HeidiMemorySystem", "HeidiActionLayer"],
+      "HeidiControlPlane": ["GlobalConstraintEnforcer"],
+      "HeidiCoreLoop": ["HeidiOrchestrator", "HybridModelStack"]
+    },
+    "circular_dependencies": [],
+    "orphan_dependencies": []
+  },
+  "audit_log": {
+    "last_audit": "2026-04-29T21:40:00Z",
+    "findings": [],
+    "recommendations": [],
+    "violations": []
+  }
+}

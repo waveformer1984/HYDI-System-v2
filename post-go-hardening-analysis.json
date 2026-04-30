@@ -1,0 +1,1092 @@
+{
+  "timestamp": "2026-04-26T16:49:49.017Z",
+  "analysis": {
+    "searchPathWarnings": [
+      {
+        "type": "function_search_path_mutable",
+        "description": "Functions with mutable search_path can be exploited for privilege escalation",
+        "impact": "Security",
+        "recommendation": "Review and secure functions with mutable search_path"
+      },
+      {
+        "type": "function_search_path_mutable",
+        "description": "Functions with mutable search_path can be exploited for privilege escalation",
+        "impact": "Security",
+        "recommendation": "Review and secure functions with mutable search_path"
+      },
+      {
+        "type": "function_search_path_mutable",
+        "description": "Functions with mutable search_path can be exploited for privilege escalation",
+        "impact": "Security",
+        "recommendation": "Review and secure functions with mutable search_path"
+      },
+      {
+        "type": "function_search_path_mutable",
+        "description": "Functions with mutable search_path can be exploited for privilege escalation",
+        "impact": "Security",
+        "recommendation": "Review and secure functions with mutable search_path"
+      },
+      {
+        "type": "function_search_path_mutable",
+        "description": "Functions with mutable search_path can be exploited for privilege escalation",
+        "impact": "Security",
+        "recommendation": "Review and secure functions with mutable search_path"
+      },
+      {
+        "type": "function_search_path_mutable",
+        "description": "Functions with mutable search_path can be exploited for privilege escalation",
+        "impact": "Security",
+        "recommendation": "Review and secure functions with mutable search_path"
+      },
+      {
+        "type": "function_search_path_mutable",
+        "description": "Functions with mutable search_path can be exploited for privilege escalation",
+        "impact": "Security",
+        "recommendation": "Review and secure functions with mutable search_path"
+      },
+      {
+        "type": "function_search_path_mutable",
+        "description": "Functions with mutable search_path can be exploited for privilege escalation",
+        "impact": "Security",
+        "recommendation": "Review and secure functions with mutable search_path"
+      },
+      {
+        "type": "function_search_path_mutable",
+        "description": "Functions with mutable search_path can be exploited for privilege escalation",
+        "impact": "Security",
+        "recommendation": "Review and secure functions with mutable search_path"
+      },
+      {
+        "type": "function_search_path_mutable",
+        "description": "Functions with mutable search_path can be exploited for privilege escalation",
+        "impact": "Security",
+        "recommendation": "Review and secure functions with mutable search_path"
+      },
+      {
+        "type": "function_search_path_mutable",
+        "description": "Functions with mutable search_path can be exploited for privilege escalation",
+        "impact": "Security",
+        "recommendation": "Review and secure functions with mutable search_path"
+      },
+      {
+        "type": "function_search_path_mutable",
+        "description": "Functions with mutable search_path can be exploited for privilege escalation",
+        "impact": "Security",
+        "recommendation": "Review and secure functions with mutable search_path"
+      },
+      {
+        "type": "function_search_path_mutable",
+        "description": "Functions with mutable search_path can be exploited for privilege escalation",
+        "impact": "Security",
+        "recommendation": "Review and secure functions with mutable search_path"
+      },
+      {
+        "type": "function_search_path_mutable",
+        "description": "Functions with mutable search_path can be exploited for privilege escalation",
+        "impact": "Security",
+        "recommendation": "Review and secure functions with mutable search_path"
+      },
+      {
+        "type": "function_search_path_mutable",
+        "description": "Functions with mutable search_path can be exploited for privilege escalation",
+        "impact": "Security",
+        "recommendation": "Review and secure functions with mutable search_path"
+      },
+      {
+        "type": "function_search_path_mutable",
+        "description": "Functions with mutable search_path can be exploited for privilege escalation",
+        "impact": "Security",
+        "recommendation": "Review and secure functions with mutable search_path"
+      },
+      {
+        "type": "function_search_path_mutable",
+        "description": "Functions with mutable search_path can be exploited for privilege escalation",
+        "impact": "Security",
+        "recommendation": "Review and secure functions with mutable search_path"
+      },
+      {
+        "type": "function_search_path_mutable",
+        "description": "Functions with mutable search_path can be exploited for privilege escalation",
+        "impact": "Security",
+        "recommendation": "Review and secure functions with mutable search_path"
+      },
+      {
+        "type": "function_search_path_mutable",
+        "description": "Functions with mutable search_path can be exploited for privilege escalation",
+        "impact": "Security",
+        "recommendation": "Review and secure functions with mutable search_path"
+      },
+      {
+        "type": "function_search_path_mutable",
+        "description": "Functions with mutable search_path can be exploited for privilege escalation",
+        "impact": "Security",
+        "recommendation": "Review and secure functions with mutable search_path"
+      },
+      {
+        "type": "function_search_path_mutable",
+        "description": "Functions with mutable search_path can be exploited for privilege escalation",
+        "impact": "Security",
+        "recommendation": "Review and secure functions with mutable search_path"
+      },
+      {
+        "type": "function_search_path_mutable",
+        "description": "Functions with mutable search_path can be exploited for privilege escalation",
+        "impact": "Security",
+        "recommendation": "Review and secure functions with mutable search_path"
+      },
+      {
+        "type": "function_search_path_mutable",
+        "description": "Functions with mutable search_path can be exploited for privilege escalation",
+        "impact": "Security",
+        "recommendation": "Review and secure functions with mutable search_path"
+      },
+      {
+        "type": "function_search_path_mutable",
+        "description": "Functions with mutable search_path can be exploited for privilege escalation",
+        "impact": "Security",
+        "recommendation": "Review and secure functions with mutable search_path"
+      },
+      {
+        "type": "function_search_path_mutable",
+        "description": "Functions with mutable search_path can be exploited for privilege escalation",
+        "impact": "Security",
+        "recommendation": "Review and secure functions with mutable search_path"
+      },
+      {
+        "type": "function_search_path_mutable",
+        "description": "Functions with mutable search_path can be exploited for privilege escalation",
+        "impact": "Security",
+        "recommendation": "Review and secure functions with mutable search_path"
+      },
+      {
+        "type": "function_search_path_mutable",
+        "description": "Functions with mutable search_path can be exploited for privilege escalation",
+        "impact": "Security",
+        "recommendation": "Review and secure functions with mutable search_path"
+      },
+      {
+        "type": "function_search_path_mutable",
+        "description": "Functions with mutable search_path can be exploited for privilege escalation",
+        "impact": "Security",
+        "recommendation": "Review and secure functions with mutable search_path"
+      },
+      {
+        "type": "function_search_path_mutable",
+        "description": "Functions with mutable search_path can be exploited for privilege escalation",
+        "impact": "Security",
+        "recommendation": "Review and secure functions with mutable search_path"
+      },
+      {
+        "type": "function_search_path_mutable",
+        "description": "Functions with mutable search_path can be exploited for privilege escalation",
+        "impact": "Security",
+        "recommendation": "Review and secure functions with mutable search_path"
+      },
+      {
+        "type": "function_search_path_mutable",
+        "description": "Functions with mutable search_path can be exploited for privilege escalation",
+        "impact": "Security",
+        "recommendation": "Review and secure functions with mutable search_path"
+      },
+      {
+        "type": "function_search_path_mutable",
+        "description": "Functions with mutable search_path can be exploited for privilege escalation",
+        "impact": "Security",
+        "recommendation": "Review and secure functions with mutable search_path"
+      },
+      {
+        "type": "function_search_path_mutable",
+        "description": "Functions with mutable search_path can be exploited for privilege escalation",
+        "impact": "Security",
+        "recommendation": "Review and secure functions with mutable search_path"
+      },
+      {
+        "type": "function_search_path_mutable",
+        "description": "Functions with mutable search_path can be exploited for privilege escalation",
+        "impact": "Security",
+        "recommendation": "Review and secure functions with mutable search_path"
+      },
+      {
+        "type": "function_search_path_mutable",
+        "description": "Functions with mutable search_path can be exploited for privilege escalation",
+        "impact": "Security",
+        "recommendation": "Review and secure functions with mutable search_path"
+      },
+      {
+        "type": "function_search_path_mutable",
+        "description": "Functions with mutable search_path can be exploited for privilege escalation",
+        "impact": "Security",
+        "recommendation": "Review and secure functions with mutable search_path"
+      },
+      {
+        "type": "function_search_path_mutable",
+        "description": "Functions with mutable search_path can be exploited for privilege escalation",
+        "impact": "Security",
+        "recommendation": "Review and secure functions with mutable search_path"
+      },
+      {
+        "type": "function_search_path_mutable",
+        "description": "Functions with mutable search_path can be exploited for privilege escalation",
+        "impact": "Security",
+        "recommendation": "Review and secure functions with mutable search_path"
+      },
+      {
+        "type": "function_search_path_mutable",
+        "description": "Functions with mutable search_path can be exploited for privilege escalation",
+        "impact": "Security",
+        "recommendation": "Review and secure functions with mutable search_path"
+      },
+      {
+        "type": "function_search_path_mutable",
+        "description": "Functions with mutable search_path can be exploited for privilege escalation",
+        "impact": "Security",
+        "recommendation": "Review and secure functions with mutable search_path"
+      },
+      {
+        "type": "function_search_path_mutable",
+        "description": "Functions with mutable search_path can be exploited for privilege escalation",
+        "impact": "Security",
+        "recommendation": "Review and secure functions with mutable search_path"
+      },
+      {
+        "type": "function_search_path_mutable",
+        "description": "Functions with mutable search_path can be exploited for privilege escalation",
+        "impact": "Security",
+        "recommendation": "Review and secure functions with mutable search_path"
+      },
+      {
+        "type": "function_search_path_mutable",
+        "description": "Functions with mutable search_path can be exploited for privilege escalation",
+        "impact": "Security",
+        "recommendation": "Review and secure functions with mutable search_path"
+      },
+      {
+        "type": "function_search_path_mutable",
+        "description": "Functions with mutable search_path can be exploited for privilege escalation",
+        "impact": "Security",
+        "recommendation": "Review and secure functions with mutable search_path"
+      },
+      {
+        "type": "function_search_path_mutable",
+        "description": "Functions with mutable search_path can be exploited for privilege escalation",
+        "impact": "Security",
+        "recommendation": "Review and secure functions with mutable search_path"
+      },
+      {
+        "type": "function_search_path_mutable",
+        "description": "Functions with mutable search_path can be exploited for privilege escalation",
+        "impact": "Security",
+        "recommendation": "Review and secure functions with mutable search_path"
+      },
+      {
+        "type": "function_search_path_mutable",
+        "description": "Functions with mutable search_path can be exploited for privilege escalation",
+        "impact": "Security",
+        "recommendation": "Review and secure functions with mutable search_path"
+      },
+      {
+        "type": "function_search_path_mutable",
+        "description": "Functions with mutable search_path can be exploited for privilege escalation",
+        "impact": "Security",
+        "recommendation": "Review and secure functions with mutable search_path"
+      },
+      {
+        "type": "function_search_path_mutable",
+        "description": "Functions with mutable search_path can be exploited for privilege escalation",
+        "impact": "Security",
+        "recommendation": "Review and secure functions with mutable search_path"
+      },
+      {
+        "type": "function_search_path_mutable",
+        "description": "Functions with mutable search_path can be exploited for privilege escalation",
+        "impact": "Security",
+        "recommendation": "Review and secure functions with mutable search_path"
+      },
+      {
+        "type": "function_search_path_mutable",
+        "description": "Functions with mutable search_path can be exploited for privilege escalation",
+        "impact": "Security",
+        "recommendation": "Review and secure functions with mutable search_path"
+      },
+      {
+        "type": "function_search_path_mutable",
+        "description": "Functions with mutable search_path can be exploited for privilege escalation",
+        "impact": "Security",
+        "recommendation": "Review and secure functions with mutable search_path"
+      },
+      {
+        "type": "function_search_path_mutable",
+        "description": "Functions with mutable search_path can be exploited for privilege escalation",
+        "impact": "Security",
+        "recommendation": "Review and secure functions with mutable search_path"
+      },
+      {
+        "type": "function_search_path_mutable",
+        "description": "Functions with mutable search_path can be exploited for privilege escalation",
+        "impact": "Security",
+        "recommendation": "Review and secure functions with mutable search_path"
+      },
+      {
+        "type": "function_search_path_mutable",
+        "description": "Functions with mutable search_path can be exploited for privilege escalation",
+        "impact": "Security",
+        "recommendation": "Review and secure functions with mutable search_path"
+      },
+      {
+        "type": "function_search_path_mutable",
+        "description": "Functions with mutable search_path can be exploited for privilege escalation",
+        "impact": "Security",
+        "recommendation": "Review and secure functions with mutable search_path"
+      },
+      {
+        "type": "function_search_path_mutable",
+        "description": "Functions with mutable search_path can be exploited for privilege escalation",
+        "impact": "Security",
+        "recommendation": "Review and secure functions with mutable search_path"
+      },
+      {
+        "type": "function_search_path_mutable",
+        "description": "Functions with mutable search_path can be exploited for privilege escalation",
+        "impact": "Security",
+        "recommendation": "Review and secure functions with mutable search_path"
+      },
+      {
+        "type": "function_search_path_mutable",
+        "description": "Functions with mutable search_path can be exploited for privilege escalation",
+        "impact": "Security",
+        "recommendation": "Review and secure functions with mutable search_path"
+      },
+      {
+        "type": "function_search_path_mutable",
+        "description": "Functions with mutable search_path can be exploited for privilege escalation",
+        "impact": "Security",
+        "recommendation": "Review and secure functions with mutable search_path"
+      },
+      {
+        "type": "function_search_path_mutable",
+        "description": "Functions with mutable search_path can be exploited for privilege escalation",
+        "impact": "Security",
+        "recommendation": "Review and secure functions with mutable search_path"
+      },
+      {
+        "type": "function_search_path_mutable",
+        "description": "Functions with mutable search_path can be exploited for privilege escalation",
+        "impact": "Security",
+        "recommendation": "Review and secure functions with mutable search_path"
+      },
+      {
+        "type": "function_search_path_mutable",
+        "description": "Functions with mutable search_path can be exploited for privilege escalation",
+        "impact": "Security",
+        "recommendation": "Review and secure functions with mutable search_path"
+      },
+      {
+        "type": "function_search_path_mutable",
+        "description": "Functions with mutable search_path can be exploited for privilege escalation",
+        "impact": "Security",
+        "recommendation": "Review and secure functions with mutable search_path"
+      },
+      {
+        "type": "function_search_path_mutable",
+        "description": "Functions with mutable search_path can be exploited for privilege escalation",
+        "impact": "Security",
+        "recommendation": "Review and secure functions with mutable search_path"
+      },
+      {
+        "type": "function_search_path_mutable",
+        "description": "Functions with mutable search_path can be exploited for privilege escalation",
+        "impact": "Security",
+        "recommendation": "Review and secure functions with mutable search_path"
+      },
+      {
+        "type": "function_search_path_mutable",
+        "description": "Functions with mutable search_path can be exploited for privilege escalation",
+        "impact": "Security",
+        "recommendation": "Review and secure functions with mutable search_path"
+      },
+      {
+        "type": "function_search_path_mutable",
+        "description": "Functions with mutable search_path can be exploited for privilege escalation",
+        "impact": "Security",
+        "recommendation": "Review and secure functions with mutable search_path"
+      },
+      {
+        "type": "function_search_path_mutable",
+        "description": "Functions with mutable search_path can be exploited for privilege escalation",
+        "impact": "Security",
+        "recommendation": "Review and secure functions with mutable search_path"
+      },
+      {
+        "type": "function_search_path_mutable",
+        "description": "Functions with mutable search_path can be exploited for privilege escalation",
+        "impact": "Security",
+        "recommendation": "Review and secure functions with mutable search_path"
+      },
+      {
+        "type": "function_search_path_mutable",
+        "description": "Functions with mutable search_path can be exploited for privilege escalation",
+        "impact": "Security",
+        "recommendation": "Review and secure functions with mutable search_path"
+      },
+      {
+        "type": "function_search_path_mutable",
+        "description": "Functions with mutable search_path can be exploited for privilege escalation",
+        "impact": "Security",
+        "recommendation": "Review and secure functions with mutable search_path"
+      },
+      {
+        "type": "function_search_path_mutable",
+        "description": "Functions with mutable search_path can be exploited for privilege escalation",
+        "impact": "Security",
+        "recommendation": "Review and secure functions with mutable search_path"
+      },
+      {
+        "type": "function_search_path_mutable",
+        "description": "Functions with mutable search_path can be exploited for privilege escalation",
+        "impact": "Security",
+        "recommendation": "Review and secure functions with mutable search_path"
+      },
+      {
+        "type": "function_search_path_mutable",
+        "description": "Functions with mutable search_path can be exploited for privilege escalation",
+        "impact": "Security",
+        "recommendation": "Review and secure functions with mutable search_path"
+      },
+      {
+        "type": "function_search_path_mutable",
+        "description": "Functions with mutable search_path can be exploited for privilege escalation",
+        "impact": "Security",
+        "recommendation": "Review and secure functions with mutable search_path"
+      },
+      {
+        "type": "function_search_path_mutable",
+        "description": "Functions with mutable search_path can be exploited for privilege escalation",
+        "impact": "Security",
+        "recommendation": "Review and secure functions with mutable search_path"
+      },
+      {
+        "type": "function_search_path_mutable",
+        "description": "Functions with mutable search_path can be exploited for privilege escalation",
+        "impact": "Security",
+        "recommendation": "Review and secure functions with mutable search_path"
+      },
+      {
+        "type": "function_search_path_mutable",
+        "description": "Functions with mutable search_path can be exploited for privilege escalation",
+        "impact": "Security",
+        "recommendation": "Review and secure functions with mutable search_path"
+      },
+      {
+        "type": "function_search_path_mutable",
+        "description": "Functions with mutable search_path can be exploited for privilege escalation",
+        "impact": "Security",
+        "recommendation": "Review and secure functions with mutable search_path"
+      },
+      {
+        "type": "function_search_path_mutable",
+        "description": "Functions with mutable search_path can be exploited for privilege escalation",
+        "impact": "Security",
+        "recommendation": "Review and secure functions with mutable search_path"
+      },
+      {
+        "type": "function_search_path_mutable",
+        "description": "Functions with mutable search_path can be exploited for privilege escalation",
+        "impact": "Security",
+        "recommendation": "Review and secure functions with mutable search_path"
+      },
+      {
+        "type": "function_search_path_mutable",
+        "description": "Functions with mutable search_path can be exploited for privilege escalation",
+        "impact": "Security",
+        "recommendation": "Review and secure functions with mutable search_path"
+      },
+      {
+        "type": "function_search_path_mutable",
+        "description": "Functions with mutable search_path can be exploited for privilege escalation",
+        "impact": "Security",
+        "recommendation": "Review and secure functions with mutable search_path"
+      },
+      {
+        "type": "function_search_path_mutable",
+        "description": "Functions with mutable search_path can be exploited for privilege escalation",
+        "impact": "Security",
+        "recommendation": "Review and secure functions with mutable search_path"
+      },
+      {
+        "type": "function_search_path_mutable",
+        "description": "Functions with mutable search_path can be exploited for privilege escalation",
+        "impact": "Security",
+        "recommendation": "Review and secure functions with mutable search_path"
+      },
+      {
+        "type": "function_search_path_mutable",
+        "description": "Functions with mutable search_path can be exploited for privilege escalation",
+        "impact": "Security",
+        "recommendation": "Review and secure functions with mutable search_path"
+      }
+    ],
+    "graphqlWarnings": [
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      },
+      {
+        "type": "pg_graphql_anon_table_exposed",
+        "description": "GraphQL tables exposed to anonymous users",
+        "impact": "Data Exposure",
+        "recommendation": "Restrict GraphQL schema visibility for anonymous users"
+      }
+    ],
+    "policyPerformanceWarnings": [],
+    "recommendations": []
+  },
+  "status": "PRODUCTION_READY_WITH_OPTIONAL_IMPROVEMENTS"
+}

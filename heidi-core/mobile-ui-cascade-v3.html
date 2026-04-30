@@ -1,0 +1,1164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CASCADE v3 - Anti-Misalignment Engine</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-primary: #0a0a0a;
+            --bg-secondary: #1a1a1a;
+            --bg-tertiary: #2a2a2a;
+            --text-primary: #ffffff;
+            --text-secondary: #a0a0a0;
+            --accent: #00ff88;
+            --accent-hover: #00cc6a;
+            --danger: #ff4444;
+            --warning: #ffaa00;
+            --success: #00ff88;
+            --critical: #ff0066;
+            --strategic: #9966ff;
+            --cash: #00ccff;
+            --execution: #ff6600;
+            --exploration: #6600ff;
+            --optimization: #00ffcc;
+            --governance: #ff9900;
+            --anti-misalignment: #ff3366;
+            --structural: #00aaff;
+            --inertia: #ff6600;
+            --meta-strategy: #cc00ff;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Header */
+        .header {
+            background: var(--bg-secondary);
+            padding: 1rem;
+            border-bottom: 1px solid var(--bg-tertiary);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header h1 {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: var(--accent);
+        }
+
+        .cascade-indicator {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.25rem 0.75rem;
+            background: var(--bg-tertiary);
+            border-radius: 1rem;
+            font-size: 0.8rem;
+        }
+
+        .cascade-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--anti-misalignment);
+            animation: pulse 2s infinite;
+        }
+
+        .health-indicator {
+            padding: 0.2rem 0.5rem;
+            border-radius: 0.25rem;
+            font-size: 0.7rem;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+
+        .health-excellent { background: var(--success); color: var(--bg-primary); }
+        .health-good { background: var(--warning); color: var(--bg-primary); }
+        .health-concerning { background: var(--danger); color: white; }
+        .health-critical { background: var(--critical); color: white; }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        /* Tab Navigation */
+        .tabs {
+            display: flex;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--bg-tertiary);
+        }
+
+        .tab {
+            flex: 1;
+            padding: 1rem;
+            text-align: center;
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 0.9rem;
+        }
+
+        .tab.active {
+            color: var(--accent);
+            background: var(--bg-tertiary);
+        }
+
+        .tab:hover {
+            color: var(--text-primary);
+        }
+
+        /* Content Areas */
+        .content {
+            flex: 1;
+            overflow: hidden;
+            display: none;
+        }
+
+        .content.active {
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Anti-Misalignment Dashboard */
+        .anti-misalignment-dashboard {
+            background: var(--bg-secondary);
+            border: 1px solid var(--bg-tertiary);
+            border-radius: 0.5rem;
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .anti-misalignment-dashboard h3 {
+            color: var(--anti-misalignment);
+            margin-bottom: 0.5rem;
+            font-size: 1.1rem;
+        }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .dashboard-card {
+            background: var(--bg-tertiary);
+            padding: 0.75rem;
+            border-radius: 0.25rem;
+            text-align: center;
+        }
+
+        .dashboard-value {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: var(--text-primary);
+        }
+
+        .dashboard-label {
+            font-size: 0.7rem;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+        }
+
+        /* Structural Health */
+        .structural-health {
+            background: var(--bg-secondary);
+            border: 1px solid var(--bg-tertiary);
+            border-radius: 0.5rem;
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .structural-health h3 {
+            color: var(--structural);
+            margin-bottom: 0.5rem;
+        }
+
+        .health-bar {
+            width: 100%;
+            background: var(--bg-tertiary);
+            border-radius: 0.25rem;
+            height: 12px;
+            margin: 0.5rem 0;
+            overflow: hidden;
+        }
+
+        .health-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--danger) 0%, var(--warning) 50%, var(--success) 100%);
+            transition: width 0.3s ease;
+        }
+
+        /* Strategic Inertia */
+        .inertia-alert {
+            background: var(--bg-secondary);
+            border: 1px solid var(--bg-tertiary);
+            border-radius: 0.5rem;
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .inertia-alert h3 {
+            color: var(--inertia);
+            margin-bottom: 0.5rem;
+        }
+
+        .inertia-metrics {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        /* Forbidden Patterns */
+        .forbidden-patterns {
+            background: var(--bg-secondary);
+            border: 1px solid var(--bg-tertiary);
+            border-radius: 0.5rem;
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .forbidden-patterns h3 {
+            color: var(--danger);
+            margin-bottom: 0.5rem;
+        }
+
+        .pattern-violation {
+            background: var(--bg-tertiary);
+            border-left: 3px solid var(--danger);
+            padding: 0.75rem;
+            margin-bottom: 0.5rem;
+            border-radius: 0.25rem;
+        }
+
+        .pattern-name {
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 0.25rem;
+        }
+
+        .pattern-reason {
+            color: var(--text-secondary);
+            font-size: 0.8rem;
+        }
+
+        /* Meta-Strategy Alignment */
+        .meta-strategy {
+            background: var(--bg-secondary);
+            border: 1px solid var(--bg-tertiary);
+            border-radius: 0.5rem;
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .meta-strategy h3 {
+            color: var(--meta-strategy);
+            margin-bottom: 0.5rem;
+        }
+
+        .meta-strategy-statement {
+            background: var(--bg-tertiary);
+            padding: 0.75rem;
+            border-radius: 0.25rem;
+            font-style: italic;
+            margin: 0.5rem 0;
+            color: var(--text-primary);
+        }
+
+        /* v3 Tasks */
+        .v3-task {
+            background: var(--bg-secondary);
+            border: 1px solid var(--bg-tertiary);
+            border-radius: 0.5rem;
+            padding: 1rem;
+            margin-bottom: 0.75rem;
+            position: relative;
+        }
+
+        .task-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 0.5rem;
+        }
+
+        .task-title {
+            font-weight: 600;
+            color: var(--text-primary);
+            flex: 1;
+        }
+
+        .v3-score {
+            background: var(--anti-misalignment);
+            color: white;
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.25rem;
+            font-weight: bold;
+            font-size: 0.8rem;
+        }
+
+        .task-meta {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 0.5rem;
+            flex-wrap: wrap;
+        }
+
+        .meta-tag {
+            padding: 0.2rem 0.4rem;
+            border-radius: 0.2rem;
+            font-size: 0.7rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .tag-forbidden { background: var(--danger); color: white; }
+        .tag-alignment { background: var(--meta-strategy); color: white; }
+        .tag-optionality { background: var(--strategic); color: white; }
+        .tag-reversibility { background: var(--warning); color: var(--bg-primary); }
+        .tag-inertia { background: var(--inertia); color: white; }
+
+        .task-description {
+            color: var(--text-primary);
+            font-size: 0.9rem;
+            margin-bottom: 0.75rem;
+            line-height: 1.4;
+        }
+
+        /* Score Breakdown */
+        .score-breakdown {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 0.5rem;
+            flex-wrap: wrap;
+        }
+
+        .score-component {
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+            font-size: 0.7rem;
+            padding: 0.2rem 0.4rem;
+            border-radius: 0.2rem;
+        }
+
+        .score-anti-misalignment { background: var(--anti-misalignment); color: white; }
+        .score-structural { background: var(--structural); color: white; }
+        .score-intent { background: var(--accent); color: var(--bg-primary); }
+        .score-optionality { background: var(--strategic); color: white; }
+        .score-reversibility { background: var(--warning); color: var(--bg-primary); }
+        .score-meta { background: var(--meta-strategy); color: white; }
+
+        /* Status Badge */
+        .status-badge {
+            position: absolute;
+            top: -0.5rem;
+            right: -0.5rem;
+            font-size: 0.7rem;
+            font-weight: bold;
+            text-transform: uppercase;
+            padding: 0.2rem 0.5rem;
+            border-radius: 0.5rem;
+        }
+
+        .status-active { background: var(--success); color: var(--bg-primary); }
+        .status-dormant { background: var(--warning); color: var(--bg-primary); }
+        .status-killed { background: var(--danger); color: white; }
+        .status-blocked { background: var(--critical); color: white; }
+
+        /* Warnings */
+        .warning-section {
+            background: var(--bg-secondary);
+            border: 1px solid var(--bg-tertiary);
+            border-radius: 0.5rem;
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .warning-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 0;
+            border-bottom: 1px solid var(--bg-tertiary);
+        }
+
+        .warning-item:last-child {
+            border-bottom: none;
+        }
+
+        .warning-severity {
+            padding: 0.2rem 0.4rem;
+            border-radius: 0.2rem;
+            font-size: 0.7rem;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+
+        .severity-critical { background: var(--critical); color: white; }
+        .severity-warning { background: var(--warning); color: var(--bg-primary); }
+        .severity-info { background: var(--structural); color: white; }
+
+        /* Loading */
+        .loading {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--text-secondary);
+            padding: 2rem;
+            justify-content: center;
+        }
+
+        .spinner {
+            width: 1rem;
+            height: 1rem;
+            border: 2px solid var(--text-secondary);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Mobile Optimizations */
+        @media (max-width: 480px) {
+            .header {
+                padding: 0.75rem;
+            }
+            
+            .header h1 {
+                font-size: 1rem;
+            }
+            
+            .tab {
+                padding: 0.75rem 0.5rem;
+                font-size: 0.8rem;
+            }
+            
+            .dashboard-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <h1>CASCADE v3 - Anti-Misalignment Engine</h1>
+        <div class="cascade-indicator">
+            <div class="cascade-dot"></div>
+            <span id="misalignmentStatus">Initializing...</span>
+            <div class="health-indicator health-excellent" id="healthIndicator">HEALTHY</div>
+        </div>
+    </header>
+
+    <!-- Tab Navigation -->
+    <nav class="tabs">
+        <button class="tab active" data-tab="anti-misalignment">Anti-Misalignment</button>
+        <button class="tab" data-tab="structural">Structural Health</button>
+        <button class="tab" data-tab="inertia">Strategic Inertia</button>
+        <button class="tab" data-tab="forbidden">Forbidden Patterns</button>
+        <button class="tab" data-tab="meta-strategy">Meta-Strategy</button>
+        <button class="tab" data-tab="tasks">All Tasks</button>
+    </nav>
+
+    <!-- Anti-Misalignment Content -->
+    <div class="content active" id="anti-misalignment">
+        <div class="cascade-container" id="antiMisalignmentContent">
+            <div class="loading">
+                <div class="spinner"></div>
+                <span>Analyzing anti-misalignment metrics...</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Structural Health Content -->
+    <div class="content" id="structural">
+        <div class="cascade-container" id="structuralContent">
+            <div class="loading">
+                <div class="spinner"></div>
+                <span>Assessing structural health...</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Strategic Inertia Content -->
+    <div class="content" id="inertia">
+        <div class="cascade-container" id="inertiaContent">
+            <div class="loading">
+                <div class="spinner"></div>
+                <span>Detecting strategic inertia...</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Forbidden Patterns Content -->
+    <div class="content" id="forbidden">
+        <div class="cascade-container" id="forbiddenContent">
+            <div class="loading">
+                <div class="spinner"></div>
+                <span>Checking forbidden patterns...</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Meta-Strategy Content -->
+    <div class="content" id="meta-strategy">
+        <div class="cascade-container" id="metaStrategyContent">
+            <div class="loading">
+                <div class="spinner"></div>
+                <span>Evaluating meta-strategy alignment...</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- All Tasks Content -->
+    <div class="content" id="tasks">
+        <div class="cascade-container" id="tasksContent">
+            <div class="loading">
+                <div class="spinner"></div>
+                <span>Loading anti-misalignment scored tasks...</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Configuration
+        const CONFIG = {
+            BASE_URL: 'http://localhost:3458',
+            POLL_INTERVAL: 20000 // 20 seconds for anti-misalignment updates
+        };
+
+        // State
+        let currentTab = 'anti-misalignment';
+        let cascadeData = null;
+        let antiMisalignmentMetrics = null;
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            initializeTabs();
+            loadAntiMisalignmentData();
+            setInterval(loadAntiMisalignmentData, CONFIG.POLL_INTERVAL);
+        });
+
+        // Tab Navigation
+        function initializeTabs() {
+            const tabs = document.querySelectorAll('.tab');
+            tabs.forEach(tab => {
+                tab.addEventListener('click', () => {
+                    const tabName = tab.dataset.tab;
+                    switchTab(tabName);
+                });
+            });
+        }
+
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelector(`[data-tab="${tabName}"]`).classList.add('active');
+
+            document.querySelectorAll('.content').forEach(c => c.classList.remove('active'));
+            document.getElementById(tabName).classList.add('active');
+
+            currentTab = tabName;
+            displayContent(tabName);
+        }
+
+        // Load Anti-Misalignment Data
+        async function loadAntiMisalignmentData() {
+            try {
+                const [tasksResponse, metricsResponse, healthResponse, inertiaResponse] = await Promise.all([
+                    fetch(`${CONFIG.BASE_URL}/revenue/tasks`),
+                    fetch(`${CONFIG.BASE_URL}/revenue/anti-misalignment`),
+                    fetch(`${CONFIG.BASE_URL}/revenue/structural-health`),
+                    fetch(`${CONFIG.BASE_URL}/revenue/inertia`)
+                ]);
+
+                if (!tasksResponse.ok || !metricsResponse.ok || !healthResponse.ok || !inertiaResponse.ok) {
+                    throw new Error('Failed to load anti-misalignment data');
+                }
+
+                cascadeData = await tasksResponse.json();
+                antiMisalignmentMetrics = await metricsResponse.json();
+                structuralHealth = await healthResponse.json();
+                strategicInertia = await inertiaResponse.json();
+
+                updateMisalignmentStatus();
+                displayContent(currentTab);
+            } catch (error) {
+                console.error('Anti-misalignment data error:', error);
+                updateMisalignmentStatus(null);
+            }
+        }
+
+        // Update Status
+        function updateMisalignmentStatus() {
+            const statusText = document.getElementById('misalignmentStatus');
+            const cascadeDot = document.querySelector('.cascade-dot');
+            const healthIndicator = document.getElementById('healthIndicator');
+            
+            if (!antiMisalignmentMetrics) {
+                statusText.textContent = 'Offline';
+                cascadeDot.style.background = 'var(--danger)';
+                healthIndicator.className = 'health-indicator health-critical';
+                healthIndicator.textContent = 'OFFLINE';
+            } else {
+                const structuralHealth = antiMisalignmentMetrics.structural_health;
+                const healthScore = structuralHealth.score;
+                const healthRating = structuralHealth.health_rating;
+                
+                statusText.textContent = `${healthRating.toUpperCase()}`;
+                cascadeDot.style.background = healthScore >= 70 ? 'var(--anti-misalignment)' : 'var(--warning)';
+                
+                // Update health indicator
+                const healthClass = `health-${healthRating}`;
+                healthIndicator.className = `health-indicator ${healthClass}`;
+                healthIndicator.textContent = healthRating.toUpperCase();
+            }
+        }
+
+        // Display Content
+        function displayContent(tabName) {
+            if (!cascadeData || !antiMisalignmentMetrics) return;
+
+            if (tabName === 'anti-misalignment') {
+                displayAntiMisalignment();
+            } else if (tabName === 'structural') {
+                displayStructuralHealth();
+            } else if (tabName === 'inertia') {
+                displayStrategicInertia();
+            } else if (tabName === 'forbidden') {
+                displayForbiddenPatterns();
+            } else if (tabName === 'meta-strategy') {
+                displayMetaStrategy();
+            } else if (tabName === 'tasks') {
+                displayTasks();
+            }
+        }
+
+        function displayAntiMisalignment() {
+            const container = document.getElementById('antiMisalignmentContent');
+            const focusedTasks = cascadeData.focused_tasks || [];
+            
+            container.innerHTML = `
+                <div class="anti-misalignment-dashboard">
+                    <h3>🛡️ Anti-Misalignment Dashboard</h3>
+                    <div class="dashboard-grid">
+                        <div class="dashboard-card">
+                            <div class="dashboard-value">${antiMisalignmentMetrics.structural_health.score}</div>
+                            <div class="dashboard-label">Structural Health</div>
+                        </div>
+                        <div class="dashboard-card">
+                            <div class="dashboard-value">${Math.round(antiMisalignmentMetrics.intent_consistency_score * 100)}%</div>
+                            <div class="dashboard-label">Intent Consistency</div>
+                        </div>
+                        <div class="dashboard-card">
+                            <div class="dashboard-value">${antiMisalignmentMetrics.forbidden_pattern_violations}</div>
+                            <div class="dashboard-label">Forbidden Violations</div>
+                        </div>
+                        <div class="dashboard-card">
+                            <div class="dashboard-value">${Math.round(antiMisalignmentMetrics.meta_strategy_alignment_score * 100)}%</div>
+                            <div class="dashboard-label">Meta-Strategy Alignment</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="structural-health">
+                    <h3>🏗️ System Structural Health</h3>
+                    <div class="health-bar">
+                        <div class="health-fill" style="width: ${antiMisalignmentMetrics.structural_health.score}%"></div>
+                    </div>
+                    <div style="font-size: 0.9rem; color: var(--text-secondary); margin-top: 0.5rem;">
+                        Health Rating: ${antiMisalignmentMetrics.structural_health.health_rating.toUpperCase()}
+                    </div>
+                    ${antiMisalignmentMetrics.structural_health.issues.length > 0 ? `
+                        <div style="margin-top: 1rem;">
+                            <strong>Issues:</strong>
+                            ${antiMisalignmentMetrics.structural_health.issues.map(issue => `
+                                <div style="color: var(--warning); font-size: 0.8rem; margin-top: 0.25rem;">⚠️ ${issue}</div>
+                            `).join('')}
+                        </div>
+                    ` : ''}
+                </div>
+
+                <div class="execution-focus">
+                    <div class="focus-header">
+                        <h3>🎯 Anti-Misalignment Protected Focus</h3>
+                        <div class="focus-limit">3 TASKS</div>
+                    </div>
+                    ${focusedTasks.map((task, index) => `
+                        <div class="v3-task">
+                            <div class="status-badge status-active">PRIORITY #${index + 1}</div>
+                            <div class="task-header">
+                                <div class="task-title">${escapeHtml(task.title)}</div>
+                                <div class="v3-score">${task.v3_adjusted_score}</div>
+                            </div>
+                            <div class="task-meta">
+                                <span class="meta-tag tag-alignment">${task.meta_strategy_alignment.aligned ? 'ALIGNED' : 'MISALIGNED'}</span>
+                                <span class="meta-tag tag-optionality">${task.optionality_score.future_option_value}</span>
+                                <span class="meta-tag tag-reversibility">${task.reversibility.level}</span>
+                                ${task.forbidden_patterns.has_violations ? '<span class="meta-tag tag-forbidden">VIOLATION</span>' : ''}
+                            </div>
+                            <div class="task-description">${escapeHtml(task.description)}</div>
+                            
+                            <div class="score-breakdown">
+                                <div class="score-component score-anti-misalignment">Anti-Misalignment: ${Math.round(task.anti_misalignment_score * 100)}</div>
+                                <div class="score-component score-intent">Intent: ${Math.round(task.intent_alignment.score * 100)}</div>
+                                <div class="score-component score-optionality">Optionality: ${Math.round(task.optionality_score.score * 100)}</div>
+                                <div class="score-component score-meta">Meta-Strategy: ${Math.round(task.meta_strategy_alignment.score * 100)}</div>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        }
+
+        function displayStructuralHealth() {
+            const container = document.getElementById('structuralContent');
+            const health = antiMisalignmentMetrics.structural_health;
+            
+            container.innerHTML = `
+                <div class="structural-health">
+                    <h3>🏗️ Structural Health Analysis</h3>
+                    <div class="health-bar">
+                        <div class="health-fill" style="width: ${health.score}%"></div>
+                    </div>
+                    <div style="font-size: 1.2rem; font-weight: bold; margin: 0.5rem 0;">
+                        ${health.score}/100 - ${health.health_rating.toUpperCase()}
+                    </div>
+                    
+                    ${health.issues.length > 0 ? `
+                        <div style="margin-top: 1rem;">
+                            <strong>Structural Issues Detected:</strong>
+                            ${health.issues.map(issue => `
+                                <div style="background: var(--bg-tertiary); padding: 0.5rem; margin: 0.5rem 0; border-radius: 0.25rem; border-left: 3px solid var(--warning);">
+                                    ⚠️ ${issue}
+                                </div>
+                            `).join('')}
+                        </div>
+                    ` : `
+                        <div style="color: var(--success); margin-top: 1rem;">
+                            ✅ No structural issues detected
+                        </div>
+                    `}
+                </div>
+
+                <div class="anti-misalignment-dashboard">
+                    <h3>📊 Health Metrics Breakdown</h3>
+                    <div class="dashboard-grid">
+                        <div class="dashboard-card">
+                            <div class="dashboard-value">${health.score >= 80 ? 'Excellent' : health.score >= 60 ? 'Good' : health.score >= 40 ? 'Concerning' : 'Critical'}</div>
+                            <div class="dashboard-label">Overall Rating</div>
+                        </div>
+                        <div class="dashboard-card">
+                            <div class="dashboard-value">${cascadeData.tasks.filter(t => t.strategic_debt.level === 'high').length}</div>
+                            <div class="dashboard-label">High Debt Tasks</div>
+                        </div>
+                        <div class="dashboard-card">
+                            <div class="dashboard-value">${cascadeData.tasks.filter(t => t.cross_division_impact.active_divisions > 3).length}</div>
+                            <div class="dashboard-label">High Coupling</div>
+                        </div>
+                        <div class="dashboard-card">
+                            <div class="dashboard-value">${cascadeData.tasks.filter(t => t.failure_simulation.overall_risk > 0.7).length}</div>
+                            <div class="dashboard-label">High Risk Tasks</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="warning-section">
+                    <h3>⚠️ Structural Health Warnings</h3>
+                    ${generateStructuralWarnings(health)}
+                </div>
+            `;
+        }
+
+        function displayStrategicInertia() {
+            const container = document.getElementById('inertiaContent');
+            const inertia = antiMisalignmentMetrics.strategic_inertia;
+            
+            container.innerHTML = `
+                <div class="inertia-alert">
+                    <h3>🔄 Strategic Inertia Analysis</h3>
+                    <div class="inertia-metrics">
+                        <div class="dashboard-card">
+                            <div class="dashboard-value">${Math.round(inertia.overall_inertia * 100)}%</div>
+                            <div class="dashboard-label">Overall Inertia</div>
+                        </div>
+                        <div class="dashboard-card">
+                            <div class="dashboard-value">${Math.round(inertia.task_type_repetition * 100)}%</div>
+                            <div class="dashboard-label">Task Type Repetition</div>
+                        </div>
+                        <div class="dashboard-card">
+                            <div class="dashboard-value">${Math.round(inertia.revenue_stream_focus * 100)}%</div>
+                            <div class="dashboard-label">Revenue Stream Focus</div>
+                        </div>
+                        <div class="dashboard-card">
+                            <div class="dashboard-value">${Math.round(inertia.category_expansion * 100)}%</div>
+                            <div class="dashboard-label">Category Expansion</div>
+                        </div>
+                    </div>
+                    
+                    <div style="margin-top: 1rem; padding: 0.75rem; background: ${inertia.inertia_alert ? 'var(--bg-tertiary)' : 'var(--success)'}; border-radius: 0.25rem;">
+                        <div style="font-weight: bold; color: ${inertia.inertia_alert ? 'var(--warning)' : 'var(--text-primary)'};">
+                            ${inertia.inertia_alert ? '⚠️ STRATEGIC INERTIA DETECTED' : '✅ HEALTHY STRATEGIC DIVERSITY'}
+                        </div>
+                        ${inertia.forced_exploration ? '<div style="color: var(--warning); font-size: 0.8rem; margin-top: 0.25rem;">Forced exploration mode activated</div>' : ''}
+                    </div>
+                </div>
+
+                <div class="warning-section">
+                    <h3>🧭 Inertia Analysis</h3>
+                    ${generateInertiaAnalysis(inertia)}
+                </div>
+
+                ${inertia.inertia_alert ? `
+                    <div class="warning-section">
+                        <h3>🔧 Recommended Actions</h3>
+                        <div class="warning-item">
+                            <span class="warning-severity severity-warning">ACTION</span>
+                            <span>Explore new task categories to reduce repetition</span>
+                        </div>
+                        <div class="warning-item">
+                            <span class="warning-severity severity-info">INFO</span>
+                            <span>Consider diversifying revenue stream focus</span>
+                        </div>
+                        ${inertia.forced_exploration ? `
+                            <div class="warning-item">
+                                <span class="warning-severity severity-critical">FORCED</span>
+                                <span>System has forced exploration mode to combat inertia</span>
+                            </div>
+                        ` : ''}
+                    </div>
+                ` : ''}
+            `;
+        }
+
+        function displayForbiddenPatterns() {
+            const container = document.getElementById('forbiddenContent');
+            const violations = cascadeData.tasks.filter(t => t.forbidden_patterns.has_violations);
+            
+            container.innerHTML = `
+                <div class="forbidden-patterns">
+                    <h3>🚫 Forbidden Pattern Violations</h3>
+                    <div class="dashboard-grid">
+                        <div class="dashboard-card">
+                            <div class="dashboard-value">${violations.length}</div>
+                            <div class="dashboard-label">Total Violations</div>
+                        </div>
+                        <div class="dashboard-card">
+                            <div class="dashboard-value">${violations.filter(t => t.forbidden_patterns.blocked).length}</div>
+                            <div class="dashboard-label">Blocked Tasks</div>
+                        </div>
+                        <div class="dashboard-card">
+                            <div class="dashboard-value">${violations.filter(t => !t.forbidden_patterns.blocked).length}</div>
+                            <div class="dashboard-label">Penalized Tasks</div>
+                        </div>
+                        <div class="dashboard-card">
+                            <div class="dashboard-value">${5}</div>
+                            <div class="dashboard-label">Forbidden Patterns</div>
+                        </div>
+                    </div>
+                </div>
+
+                ${violations.length > 0 ? `
+                    <div style="margin-bottom: 1rem;">
+                        <h4 style="color: var(--text-primary); margin-bottom: 0.5rem;">🚨 Violations Detected:</h4>
+                        ${violations.map(task => `
+                            <div class="v3-task">
+                                <div class="status-badge ${task.forbidden_patterns.blocked ? 'status-blocked' : 'status-killed'}">
+                                    ${task.forbidden_patterns.blocked ? 'BLOCKED' : 'PENALIZED'}
+                                </div>
+                                <div class="task-header">
+                                    <div class="task-title">${escapeHtml(task.title)}</div>
+                                    <div class="v3-score">${task.v3_adjusted_score}</div>
+                                </div>
+                                
+                                ${task.forbidden_patterns.violations.map(violation => `
+                                    <div class="pattern-violation">
+                                        <div class="pattern-name">${violation.name}</div>
+                                        <div class="pattern-reason">${violation.reason}</div>
+                                        <div style="color: var(--warning); font-size: 0.7rem; margin-top: 0.25rem;">
+                                            Penalty: ${Math.round(violation.penalty * 100)}%
+                                        </div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        `).join('')}
+                    </div>
+                ` : `
+                    <div style="text-align: center; color: var(--success); padding: 2rem;">
+                        ✅ No forbidden pattern violations detected
+                    </div>
+                `}
+
+                <div class="forbidden-patterns">
+                    <h3>📋 Forbidden Patterns (Active)</h3>
+                    ${generateForbiddenPatternsList()}
+                </div>
+            `;
+        }
+
+        function displayMetaStrategy() {
+            const container = document.getElementById('metaStrategyContent');
+            const metaStrategy = cascadeData.meta_strategy;
+            const alignmentScore = antiMisalignmentMetrics.meta_strategy_alignment_score;
+            
+            container.innerHTML = `
+                <div class="meta-strategy">
+                    <h3>🎯 Meta-Strategy Alignment</h3>
+                    <div class="meta-strategy-statement">
+                        "${metaStrategy}"
+                    </div>
+                    <div style="margin-top: 1rem;">
+                        <strong>Overall Alignment Score:</strong> ${Math.round(alignmentScore * 100)}%
+                    </div>
+                    <div class="health-bar" style="margin-top: 0.5rem;">
+                        <div class="health-fill" style="width: ${alignmentScore * 100}%"></div>
+                    </div>
+                </div>
+
+                <div class="anti-misalignment-dashboard">
+                    <h3>📊 Meta-Strategy Metrics</h3>
+                    <div class="dashboard-grid">
+                        <div class="dashboard-card">
+                            <div class="dashboard-value">${cascadeData.tasks.filter(t => t.meta_strategy_alignment.aligned).length}</div>
+                            <div class="dashboard-label">Aligned Tasks</div>
+                        </div>
+                        <div class="dashboard-card">
+                            <div class="dashboard-value">${cascadeData.tasks.filter(t => !t.meta_strategy_alignment.aligned).length}</div>
+                            <div class="dashboard-label">Misaligned Tasks</div>
+                        </div>
+                        <div class="dashboard-card">
+                            <div class="dashboard-value">${cascadeData.tasks.filter(t => t.meta_strategy_alignment.supports_platform_transition).length}</div>
+                            <div class="dashboard-label">Platform Support</div>
+                        </div>
+                        <div class="dashboard-card">
+                            <div class="dashboard-value">${Math.round(alignmentScore * 100)}%</div>
+                            <div class="dashboard-label">Alignment Score</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div style="margin-bottom: 1rem;">
+                    <h4 style="color: var(--text-primary); margin-bottom: 0.5rem;">🎯 Top Aligned Tasks:</h4>
+                    ${cascadeData.tasks
+                        .filter(t => t.meta_strategy_alignment.aligned)
+                        .sort((a, b) => b.meta_strategy_alignment.score - a.meta_strategy_alignment.score)
+                        .slice(0, 3)
+                        .map(task => `
+                            <div class="v3-task">
+                                <div class="status-badge status-active">ALIGNED</div>
+                                <div class="task-header">
+                                    <div class="task-title">${escapeHtml(task.title)}</div>
+                                    <div class="v3-score">${Math.round(task.meta_strategy_alignment.score * 100)}%</div>
+                                </div>
+                                <div class="task-description">${escapeHtml(task.meta_strategy_alignment.justification)}</div>
+                                <div class="task-meta">
+                                    <span class="meta-tag tag-alignment">KEYWORDS: ${task.meta_strategy_alignment.keyword_matches.join(', ') || 'NONE'}</span>
+                                    ${task.meta_strategy_alignment.supports_platform_transition ? '<span class="meta-tag tag-optionality">PLATFORM SUPPORT</span>' : ''}
+                                </div>
+                            </div>
+                        `).join('')}
+                </div>
+
+                ${cascadeData.tasks.filter(t => !t.meta_strategy_alignment.aligned).length > 0 ? `
+                    <div>
+                        <h4 style="color: var(--warning); margin-bottom: 0.5rem;">⚠️ Misaligned Tasks:</h4>
+                        ${cascadeData.tasks
+                            .filter(t => !t.meta_strategy_alignment.aligned)
+                            .slice(0, 3)
+                            .map(task => `
+                                <div class="v3-task">
+                                    <div class="status-badge status-dormant">MISALIGNED</div>
+                                    <div class="task-header">
+                                        <div class="task-title">${escapeHtml(task.title)}</div>
+                                        <div class="v3-score">${Math.round(task.meta_strategy_alignment.score * 100)}%</div>
+                                    </div>
+                                    <div class="task-description">${escapeHtml(task.meta_strategy_alignment.justification)}</div>
+                                </div>
+                            `).join('')}
+                    </div>
+                ` : ''}
+            `;
+        }
+
+        function displayTasks() {
+            const container = document.getElementById('tasksContent');
+            const allTasks = cascadeData.tasks || [];
+            
+            container.innerHTML = `
+                <div class="anti-misalignment-dashboard">
+                    <h3>📊 All Anti-Misalignment Scored Tasks</h3>
+                    <div class="dashboard-grid">
+                        <div class="dashboard-card">
+                            <div class="dashboard-value">${allTasks.length}</div>
+                            <div class="dashboard-label">Total Tasks</div>
+                        </div>
+                        <div class="dashboard-card">
+                            <div class="dashboard-value">${allTasks.filter(t => t.status === 'active').length}</div>
+                            <div class="dashboard-label">Active</div>
+                        </div>
+                        <div class="dashboard-card">
+                            <div class="dashboard-value">${allTasks.filter(t => t.forbidden_patterns.blocked).length}</div>
+                            <div class="dashboard-label">Blocked</div>
+                        </div>
+                        <div class="dashboard-card">
+                            <div class="dashboard-value">${Math.round(allTasks.reduce((sum, t) => sum + t.anti_misalignment_score, 0) / allTasks.length * 100)}%</div>
+                            <div class="dashboard-label">Avg Anti-Misalignment</div>
+                        </div>
+                    </div>
+                </div>
+
+                ${allTasks.map(task => createV3TaskCard(task)).join('')}
+            `;
+        }
+
+        function createV3TaskCard(task) {
+            const statusClass = task.forbidden_patterns.blocked ? 'status-blocked' : `status-${task.status}`;
+            
+            return `
+                <div class="v3-task">
+                    <div class="status-badge ${statusClass}">${task.forbidden_patterns.blocked ? 'BLOCKED' : task.status.toUpperCase()}</div>
+                    <div class="task-header">
+                        <div class="task-title">${escapeHtml(task.title)}</div>
+                        <div class="v3-score">${task.v3_adjusted_score}</div>
+                    </div>
+                    <div class="task-meta">
+                        <span class="meta-tag tag-alignment">${task.meta_strategy_alignment.aligned ? 'ALIGNED' : 'MISALIGNED'}</span>
+                        <span class="meta-tag tag-optionality">${task.optionality_score.future_option_value}</span>
+                        <span class="meta-tag tag-reversibility">${task.reversibility.level}</span>
+                        ${task.forbidden_patterns.has_violations ? '<span class="meta-tag tag-forbidden">VIOLATION</span>' : ''}
+                        ${task.false_optimization.optimization_warning ? '<span class="meta-tag tag-inertia">FALSE OPT</span>' : ''}
+                    </div>
+                    <div class="task-description">${escapeHtml(task.description)}</div>
+                    
+                    <div class="score-breakdown">
+                        <div class="score-component score-anti-misalignment">Anti-Misalignment: ${Math.round(task.anti_misalignment_score * 100)}</div>
+                        <div class="score-component score-intent">Intent: ${Math.round(task.intent_alignment.score * 100)}</div>
+                        <div class="score-component score-optionality">Optionality: ${Math.round(task.optionality_score.score * 100)}</div>
+                        <div class="score-component score-reversibility">Reversibility: ${Math.round(task.reversibility.score * 100)}</div>
+                        <div class="score-component score-meta">Meta-Strategy: ${Math.round(task.meta_strategy_alignment.score * 100)}</div>
+                    </div>
+
+                    ${task.forbidden_patterns.has_violations ? `
+                        <div style="margin-top: 0.5rem; padding: 0.5rem; background: var(--bg-tertiary); border-radius: 0.25rem;">
+                            <div style="color: var(--danger); font-size: 0.8rem; font-weight: bold;">🚫 FORBIDDEN PATTERN VIOLATIONS</div>
+                            ${task.forbidden_patterns.violations.map(v => `
+                                <div style="color: var(--text-secondary); font-size: 0.8rem; margin-top: 0.25rem;">
+                                    • ${v.name}: ${v.reason}
+                                </div>
+                            `).join('')}
+                        </div>
+                    ` : ''}
+
+                    ${task.false_optimization.optimization_warning ? `
+                        <div style="margin-top: 0.5rem; padding: 0.5rem; background: var(--bg-tertiary); border-radius: 0.25rem;">
+                            <div style="color: var(--warning); font-size: 0.8rem; font-weight: bold;">⚠️ FALSE OPTIMIZATION DETECTED</div>
+                            ${task.false_optimization.warnings.map(w => `
+                                <div style="color: var(--text-secondary); font-size: 0.8rem; margin-top: 0.25rem;">
+                                    • ${w.description}
+                                </div>
+                            `).join('')}
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+        }
+
+        // Helper functions
+        function generateStructuralWarnings(health) {
+            if (health.issues.length === 0) {
+                return '<div style="color: var(--success);">✅ No structural warnings</div>';
+            }
+            
+            return health.issues.map(issue => `
+                <div class="warning-item">
+                    <span class="warning-severity severity-warning">WARNING</span>
+                    <span>${issue}</span>
+                </div>
+            `).join('');
+        }
+
+        function generateInertiaAnalysis(inertia) {
+            const analyses = [];
+            
+            if (inertia.task_type_repetition > 0.7) {
+                analyses.push({
+                    type: 'warning',
+                    message: `High task type repetition (${Math.round(inertia.task_type_repetition * 100)}%) suggests strategic narrowness`
+                });
+            }
+            
+            if (inertia.revenue_stream_focus > 0.8) {
+                analyses.push({
+                    type: 'info',
+                    message: `Revenue stream focus is concentrated (${Math.round(inertia.revenue_stream_focus * 100)}%)`
+                });
+            }
+            
+            if (inertia.category_expansion < 0.3) {
+                analyses.push({
+                    type: 'warning',
+                    message: `Low category expansion (${Math.round(inertia.category_expansion * 100)}%) indicates limited exploration`
+                });
+            }
+            
+            if (analyses.length === 0) {
+                analyses.push({
+                    type: 'success',
+                    message: 'Healthy strategic diversity with balanced task distribution'
+                });
+            }
+            
+            return analyses.map(analysis => `
+                <div class="warning-item">
+                    <span class="warning-severity severity-${analysis.type}">${analysis.type.toUpperCase()}</span>
+                    <span>${analysis.message}</span>
+                </div>
+            `).join('');
+        }
+
+        function generateForbiddenPatternsList() {
+            const patterns = [
+                'Revenue Without Defensibility - High revenue with no competitive moat',
+                'Dependency-Heavy Single-Point SaaS - SaaS with excessive external dependencies',
+                'High Complexity / Low Differentiation - Complex systems without unique value',
+                'Platform Lock-in Risk Without Ownership - Platform plays without control',
+                'Duplicate Monetization Across Divisions - Internal competition for revenue'
+            ];
+            
+            return patterns.map(pattern => `
+                <div class="pattern-violation">
+                    <div class="pattern-name">${pattern.split(' - ')[0]}</div>
+                    <div class="pattern-reason">${pattern.split(' - ')[1]}</div>
+                </div>
+            `).join('');
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+    </script>
+</body>
+</html>

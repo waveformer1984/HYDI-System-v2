@@ -1,0 +1,66 @@
+{
+  "tasks": [
+    {
+      "id": "rev_001",
+      "category": "Core AI / SaaS Revenue Systems",
+      "title": "SaaS Idea Validator",
+      "description": "Build AI system that scores business ideas by revenue probability",
+      "complexity": "medium",
+      "time_to_revenue": "2-3 months",
+      "profit_potential": "high"
+    },
+    {
+      "id": "rev_002", 
+      "category": "Core AI / SaaS Revenue Systems",
+      "title": "Subscription Pricing Optimizer",
+      "description": "Build dynamic pricing optimizer for ProtoForge services",
+      "complexity": "high",
+      "time_to_revenue": "3-4 months", 
+      "profit_potential": "very_high"
+    },
+    {
+      "id": "rev_003",
+      "category": "3D Printing / Manufacturing Revenue",
+      "title": "Print-on-Demand Catalog",
+      "description": "Generate automated product catalog for ProtoForge 3D printing",
+      "complexity": "medium",
+      "time_to_revenue": "1-2 months",
+      "profit_potential": "medium"
+    },
+    {
+      "id": "rev_004",
+      "category": "HEIDI / AI PRODUCTIZATION", 
+      "title": "HEIDI Paid API Product",
+      "description": "Turn HEIDI into tiered API service with usage billing",
+      "complexity": "low",
+      "time_to_revenue": "1 month",
+      "profit_potential": "high"
+    },
+    {
+      "id": "rev_005",
+      "category": "Music / Waveformer Revenue Engine",
+      "title": "Beat Licensing Marketplace", 
+      "description": "Build automated beat licensing and royalty system",
+      "complexity": "high",
+      "time_to_revenue": "4-6 months",
+      "profit_potential": "very_high"
+    }
+  ],
+  "scoring_weights": {
+    "profit_potential": {"very_high": 10, "high": 8, "medium": 5, "low": 3},
+    "time_to_revenue": {"1 month": 10, "1-2 months": 8, "2-3 months": 6, "3-4 months": 4, "4-6 months": 2},
+    "complexity": {"low": 8, "medium": 5, "high": 3}
+  },
+  "categories": [
+    "Core AI / SaaS Revenue Systems",
+    "3D Printing / Manufacturing Revenue", 
+    "ProtoForge Industrial Systems",
+    "Music / Waveformer Revenue Engine",
+    "HEIDI / AI PRODUCTIZATION",
+    "Automation & Micro-SaaS Ideas",
+    "R&D / Grant / Funding Systems",
+    "Physical Systems / Mobility / Hardware",
+    "Platform / Ecosystem Expansion",
+    "Growth / Marketing / Revenue Ops"
+  ]
+}

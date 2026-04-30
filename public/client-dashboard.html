@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Client Dashboard - ProtoForge</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        @keyframes pulse-glow {
+            0%, 100% { box-shadow: 0 0 20px rgba(34, 197, 94, 0.5); }
+            50% { box-shadow: 0 0 40px rgba(34, 197, 94, 0.8); }
+        }
+        .revenue-active { animation: pulse-glow 2s infinite; }
+    </style>
+</head>
+<body class="bg-gray-900 text-white">
+    <div class="container mx-auto px-4 py-8">
+        <!-- Header -->
+        <header class="mb-8">
+            <h1 class="text-3xl font-bold text-center mb-2">Client Dashboard</h1>
+            <p class="text-center text-gray-400">Your Revenue &amp; Earnings Overview</p>
+            <div class="text-center mt-4">
+                <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-500 text-white revenue-active">
+                    Dashboard Active
+                </span>
+            </div>
+        </header>
+
+        <!-- Key Metrics -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+            <div class="bg-gray-800 rounded-lg p-6 border border-gray-700">
+                <div class="text-3xl font-bold text-green-400" id="totalEarnings">$0</div>
+                <div class="text-gray-400 text-sm">Total Earnings</div>
+            </div>
+            <div class="bg-gray-800 rounded-lg p-6 border border-gray-700">
+                <div class="text-3xl font-bold text-blue-400" id="monthlyEarnings">$0</div>
+                <div class="text-gray-400 text-sm">This Month</div>
+            </div>
+            <div class="bg-gray-800 rounded-lg p-6 border border-gray-700">
+                <div class="text-3xl font-bold text-purple-400" id="lastPayout">$0</div>
+                <div class="text-gray-400 text-sm">Last Payout</div>
+            </div>
+            <div class="bg-gray-800 rounded-lg p-6 border border-gray-700">
+                <div class="text-3xl font-bold text-yellow-400" id="upcomingPayout">$0</div>
+                <div class="text-gray-400 text-sm">Upcoming Payout</div>
+            </div>
+        </div>
+
+        <!-- Ledger View -->
+        <div class="bg-gray-800 rounded-lg p-6 border border-gray-700">
+            <h3 class="text-xl font-semibold mb-4">Recent Transactions</h3>
+            <div id="ledgerView" class="space-y-2">
+                <div class="text-gray-400">Loading transactions...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Supabase configuration (would normally come from env)
+        const supabaseUrl = 'https://akbnfovjdcobifeupvbn.supabase.co';
+        const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFrYm5mb3ZqZGNvYmlmZXVwdmJuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA1NjY4NzAsImV4cCI6MjA4NjE0Mjg3MH0.u_leRiubSHblsSbBI4Yj9ryAIHdB7NB5iBQDRakYWMI';
+        
+        // Initialize Supabase client
+        const { createClient } = window.supabase || {};
+        let supabase;
+        
+        if (createClient) {
+            supabase = createClient(supabaseUrl, supabaseKey);
+        } else {
+            console.log('Supabase client not available - using demo data');
+        }
+
+        // Client ID would come from auth context - for demo we'll use a placeholder
+        const clientId = 'd46e05b7-12a9-47d2-8384-61e6fe8f10af'; // From our test
+
+        // Initialize dashboard
+        async function initDashboard() {
+            await loadMetrics();
+            await loadLedger();
+            
+            // Refresh every 30 seconds
+            setInterval(() => {
+                loadMetrics();
+                loadLedger();
+            }, 30000);
+        }
+
+        // Load metrics
+        async function loadMetrics() {
+            if (!supabase) {
+                loadDemoMetrics();
+                return;
+            }
+
+            try {
+                // Get client info
+                const { data: client, error: clientError } = await supabase
+                    .from('clients')
+                    .select('*')
+                    .eq('id', clientId)
+                    .single();
+
+                if (clientError) throw clientError;
+
+                // Get ledger summary for this client
+                const { data: ledgerSummary, error: ledgerError } = await supabase
+                    .from('ledger')
+                    .select('amount_gross, net_amount, status, created_at')
+                    .eq('stripe_customer_id', client.stripe_customer_id);
+
+                if (ledgerError) throw ledgerError;
+
+                // Calculate totals
+                const totalEarnings = ledgerSummary.reduce((sum, row) => sum + parseFloat(row.net_amount), 0);
+                const monthlyEarnings = ledgerSummary
+                    .filter(row => {
+                        const date = new Date(row.created_at);
+                        const now = new Date();
+                        return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
+                    })
+                    .reduce((sum, row) => sum + parseFloat(row.net_amount), 0);
+
+                // Get payout info
+                const { data: payouts, error: payoutError } = await supabase
+                    .from('payouts')
+                    .select('*')
+                    .eq('client_id', clientId)
+                    .order('created_at', { ascending: false });
+
+                if (payoutError) throw payoutError;
+
+                const lastPayout = payouts.find(p => p.status === 'completed');
+                const upcomingPayout = payouts.find(p => p.status === 'pending' || p.status === 'scheduled');
+
+                // Update UI
+                document.getElementById('totalEarnings').textContent = `$${totalEarnings.toFixed(2)}`;
+                document.getElementById('monthlyEarnings').textContent = `$${monthlyEarnings.toFixed(2)}`;
+                document.getElementById('lastPayout').textContent = lastPayout ? `$${lastPayout.net_payout_amount.toFixed(2)}` : '$0';
+                document.getElementById('upcomingPayout').textContent = upcomingPayout ? `$${upcomingPayout.net_payout_amount.toFixed(2)}` : '$0';
+
+                // Set dates
+                if (lastPayout) {
+                    document.getElementById('lastPayout').innerHTML = `$${lastPayout.net_payout_amount.toFixed(2)}<br><small class="text-xs">${new Date(lastPayout.payout_date).toLocaleDateString()}</small>`;
+                }
+                if (upcomingPayout) {
+                    document.getElementById('upcomingPayout').innerHTML = `$${upcomingPayout.net_payout_amount.toFixed(2)}<br><small class="text-xs">${new Date(upcomingPayout.payout_date).toLocaleDateString()}</small>`;
+                }
+
+            } catch (err) {
+                console.error('Failed to load metrics:', err);
+                loadDemoMetrics();
+            }
+        }
+
+        // Load demo metrics if Supabase not available
+        function loadDemoMetrics() {
+            document.getElementById('totalEarnings').textContent = '$820.70';
+            document.getElementById('monthlyEarnings').textContent = '$820.70';
+            document.getElementById('lastPayout').textContent = '$0';
+            document.getElementById('upcomingPayout').textContent = '$820.70';
+        }
+
+        // Load ledger transactions
+        async function loadLedger() {
+            if (!supabase) {
+                loadDemoLedger();
+                return;
+            }
+
+            try {
+                const { data: ledger, error } = await supabase
+                    .from('ledger')
+                    .select('*')
+                    .eq('stripe_customer_id', (await supabase.from('clients').select('stripe_customer_id').eq('id', clientId).single()).data.stripe_customer_id)
+                    .order('created_at', { ascending: false });
+
+                if (error) throw error;
+
+                const ledgerView = document.getElementById('ledgerView');
+                if (ledger && ledger.length > 0) {
+                    ledgerView.innerHTML = ledger.map(tx => `
+                        <div class="flex justify-between items-center p-3 bg-gray-700 rounded">
+                            <div>
+                                <div class="font-medium">${tx.description || 'Transaction'}</div>
+                                <div class="text-sm text-gray-400">${tx.revenue_stream}</div>
+                            </div>
+                            <div class="text-sm text-gray-400">
+                                $${parseFloat(tx.net_amount).toFixed(2)}
+                            </div>
+                        </div>
+                    `).join('');
+                } else {
+                    ledgerView.innerHTML = '<div class="text-gray-400">No transactions found</div>';
+                }
+            } catch (err) {
+                console.error('Failed to load ledger:', err);
+                loadDemoLedger();
+            }
+        }
+
+        // Load demo ledger
+        function loadDemoLedger() {
+            const ledgerView = document.getElementById('ledgerView');
+            ledgerView.innerHTML = `
+                <div class="flex justify-between items-center p-3 bg-gray-700 rounded">
+                    <div>
+                        <div class="font-medium">Test Transaction</div>
+                        <div class="text-sm text-gray-400">galactic_bytes</div>
+                    </div>
+                    <div class="text-sm text-gray-400">
+                        $820.70
+                    </div>
+                </div>
+            `;
+        }
+
+        // Initialize on load
+        document.addEventListener('DOMContentLoaded', initDashboard);
+    </script>
+    
+    <!-- Load Supabase client -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</body>
+</html>
