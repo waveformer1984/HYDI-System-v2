@@ -1,0 +1,53 @@
+{
+  "timestamp": "2026-04-21T18:06:30.109Z",
+  "status": {
+    "initialized": false,
+    "lastUpdate": null,
+    "systemHealth": {
+      "heidi": "unknown",
+      "eventPipeline": "unknown",
+      "ursula": "unknown",
+      "knowledgeBase": "unknown"
+    },
+    "moduleStatus": {},
+    "eventThroughput": {
+      "total": 0,
+      "perSecond": 0,
+      "lastMinute": 0,
+      "lastHour": 0
+    },
+    "performance": {
+      "avgResponseTime": 0,
+      "totalResponseTime": 0,
+      "responseCount": 0
+    },
+    "errors": [],
+    "alerts": [],
+    "components": {
+      "heidi": null,
+      "eventPipeline": null,
+      "ursula": null,
+      "systemMap": null
+    },
+    "timestamp": "2026-04-21T18:06:30.104Z"
+  },
+  "systemHealth": {
+    "heidi": "unknown",
+    "eventPipeline": "unknown",
+    "ursula": "unknown",
+    "knowledgeBase": "unknown"
+  },
+  "moduleStatus": {},
+  "eventThroughput": {
+    "total": 0,
+    "perSecond": 0,
+    "lastMinute": 0,
+    "lastHour": 0
+  },
+  "performance": {
+    "avgResponseTime": 0,
+    "totalResponseTime": 0,
+    "responseCount": 0
+  },
+  "alerts": []
+}

@@ -1,0 +1,79 @@
+groups:
+  - name: hydi_system
+    rules:
+      # Persistence Latency Alert
+      - alert: HighPersistenceLatency
+        expr: hydi_persistence_latency_seconds > 0.5
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High persistence latency detected"
+          description: "Event persistence latency is {{ $value }}s (>500ms threshold)"
+          runbook_url: "https://docs.hydi.systems/runbooks/persistence-latency"
+          
+      # SSE Connection Drop Alert
+      - alert: SSEConnectionDrop
+        expr: rate(hydi_sse_connections_dropped_total[1m]) > 0.05
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "SSE connection drops increasing"
+          description: "SSE connections dropping at {{ $value | humanizePercentage }} per minute (>5% threshold)"
+          runbook_url: "https://docs.hydi.systems/runbooks/sse-drops"
+          
+      # Retry Exhaustion Alert
+      - alert: RetryExhaustion
+        expr: increase(hydi_events_retries_exhausted_total[5m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Event retry exhaustion detected"
+          description: "{{ $value }} events have exhausted retry attempts in the last 5 minutes"
+          runbook_url: "https://docs.hydi.systems/runbooks/retry-exhaustion"
+          
+      # Database Connection Pool Alert
+      - alert: DatabaseConnectionPoolHigh
+        expr: supabase_db_connection_pool_active / supabase_db_connection_pool_max > 0.8
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Database connection pool usage high"
+          description: "Database connection pool is {{ $value | humanizePercentage }} full (>80% threshold)"
+          runbook_url: "https://docs.hydi.systems/runbooks/db-pool"
+          
+      # Memory Usage Alert
+      - alert: HighMemoryUsage
+        expr: container_memory_usage_bytes / container_spec_memory_limit_bytes > 0.85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage in container"
+          description: "Container {{ $labels.container }} is using {{ $value | humanizePercentage }} memory"
+          runbook_url: "https://docs.hydi.systems/runbooks/memory"
+          
+      # Event Queue Backlog Alert
+      - alert: EventQueueBacklog
+        expr: hydi_events_pending_total > 1000
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Event queue backlog growing"
+          description: "{{ $value }} events are pending processing (>1000 threshold)"
+          runbook_url: "https://docs.hydi.systems/runbooks/backlog"
+          
+      # Service Health Alert
+      - alert: ServiceUnhealthy
+        expr: up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Service is down"
+          description: "Service {{ $labels.job }} on {{ $labels.instance }} has been down for more than 1 minute"
+          runbook_url: "https://docs.hydi.systems/runbooks/service-down"

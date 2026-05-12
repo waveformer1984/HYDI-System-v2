@@ -1,0 +1,33 @@
+{
+  "protoforge": {
+    "name": "ProtoForge System",
+    "version": "1.0.0",
+    "description": "Digital Asset Discovery and Recovery System",
+    "capabilities": [
+      "scan",
+      "scrape",
+      "score",
+      "recover"
+    ]
+  },
+  "cascade": {
+    "name": "Cascade Node",
+    "version": "1.0.0",
+    "description": "System Controller and Orchestrator",
+    "capabilities": [
+      "orchestrate",
+      "monitor",
+      "coordinate"
+    ]
+  },
+  "ursula": {
+    "name": "Ursula Dashboard",
+    "version": "1.0.0",
+    "description": "Real-time Monitoring Dashboard",
+    "capabilities": [
+      "visualize",
+      "monitor",
+      "alert"
+    ]
+  }
+}

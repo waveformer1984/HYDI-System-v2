@@ -1,0 +1,35 @@
+FROM node:18-alpine AS builder
+
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm ci --only=production
+
+COPY hydi-processor.js ./
+COPY core/ ./core/
+
+FROM node:18-alpine AS production
+
+RUN addgroup -g 1001 -S nodejs
+RUN adduser -S hydi -u 1001
+
+WORKDIR /app
+
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/*.js ./
+COPY --from=builder /app/core ./core
+
+RUN chown -R hydi:nodejs /app
+USER hydi
+
+# Resource limits
+# Limit memory usage to prevent memory leaks
+# Add these to docker-compose if needed:
+# deploy:
+#   resources:
+#     limits:
+#       memory: 512M
+#     reservations:
+#       memory: 256M
+
+CMD ["node", "-e", "const { processEvent } = require('./hydi-processor'); console.log('HYDI Processor ready'); setInterval(() => console.log('Processor heartbeat'), 30000)"]

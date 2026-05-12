@@ -1,0 +1,41 @@
+{
+  "timestamp": "2026-05-11T19:41:14.703Z",
+  "status": {
+    "initialized": true,
+    "models_loaded": true,
+    "kb_loaded": true,
+    "modules_loaded": true,
+    "events_connected": false
+  },
+  "models": [
+    {
+      "name": "config",
+      "type": "object"
+    },
+    {
+      "name": "protoforge",
+      "type": "object"
+    }
+  ],
+  "knowledgeBase": [
+    {
+      "name": "protoforge-overview.md",
+      "type": "object"
+    }
+  ],
+  "modules": [
+    {
+      "name": "protoforge-recovery",
+      "type": "object"
+    },
+    {
+      "name": "protoforge-scanner",
+      "type": "object"
+    },
+    {
+      "name": "protoforge-scorer",
+      "type": "object"
+    }
+  ],
+  "eventStream": 0
+}

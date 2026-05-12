@@ -1,0 +1,72 @@
+{
+  "name": "hydi-system",
+  "version": "2.1.0",
+  "description": "Production-Ready Resilient Event Processing System",
+  "main": "production-orchestrator.js",
+  "scripts": {
+    "start": "node production-orchestrator.js health",
+    "audit": "node production-orchestrator.js audit",
+    "test": "node complete-readiness-suite.js quick",
+    "test-complete": "node complete-readiness-suite.js complete",
+    "process": "node production-orchestrator.js process",
+    "replay": "node production-orchestrator.js replay --dry-run",
+    "replay-live": "node production-orchestrator.js replay",
+    "cleanup": "node idempotency-layer.js cleanup",
+    "stats": "node production-orchestrator.js stats",
+    "health": "node production-orchestrator.js health",
+    "source": "node source-of-truth.js enforce",
+    "contracts": "node event-contracts.js validate",
+    "setup-db": "node setup-production-database.js",
+    "preflight": "node enhanced-preflight-check.js enhanced",
+    "preflight-fix": "node enhanced-preflight-check.js fix",
+    "pipeline": "node complete-event-pipeline.js test",
+    "side-effects": "node side-effect-guards.js test",
+    "deploy": "node production-deployment.js deploy",
+    "deploy-quick": "node production-deployment.js quick",
+    "deploy-validate": "node production-deployment.js validate",
+    "deploy-schema": "node production-deployment.js schema",
+    "deploy-health": "node production-deployment.js health",
+    "performance": "node performance-benchmarks.js warm",
+    "chaos": "node chaos-engine.js suite",
+    "idempotency": "node test-idempotency.js",
+    "protoforge": "node protoforge-mock.js",
+    "ursula": "node ursula-dashboard.js",
+    "legacy": "node hydi-cli.js",
+    "burst": "node test-burst.js",
+    "status": "node -e \"console.log('Current directory:', process.cwd()); console.log('Files:', require('fs').readdirSync('.').filter(f => f.endsWith('.js')).join(', '))\""
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.104.0",
+    "chalk": "^5.6.2",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "uuid": "^14.0.0",
+    "ws": "^8.20.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [
+    "event-processing",
+    "resilient",
+    "orchestration",
+    "supabase",
+    "vercel",
+    "cli-first",
+    "idempotency",
+    "replay",
+    "event-contracts",
+    "source-of-truth",
+    "production-ready",
+    "chaos-engineering",
+    "side-effects",
+    "deployment-automation"
+  ],
+  "author": "HYDI Team",
+  "license": "MIT",
+  "repository": "https://github.com/your-org/hydi-system"
+}

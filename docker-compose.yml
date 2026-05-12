@@ -1,0 +1,174 @@
+version: '3.8'
+
+services:
+  # BLUE ENVIRONMENT (Current Production)
+  protoforge-blue:
+    build:
+      context: .
+      dockerfile: Dockerfile.protoforge
+    environment:
+      - NODE_ENV=production
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+      - PORT=3001
+      - ENVIRONMENT=blue
+    ports:
+      - "3001:3001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - hydi-network
+
+  hydi-processor-blue:
+    build:
+      context: .
+      dockerfile: Dockerfile.processor
+    environment:
+      - NODE_ENV=production
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+      - ENVIRONMENT=blue
+      - CHAOS_MODE=NONE
+    depends_on:
+      protoforge-blue:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - hydi-network
+
+  ursula-dashboard-blue:
+    build:
+      context: .
+      dockerfile: Dockerfile.ursula
+    environment:
+      - NODE_ENV=production
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+      - DASHBOARD_PORT=3002
+      - ENVIRONMENT=blue
+    ports:
+      - "3002:3002"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - hydi-network
+
+  # GREEN ENVIRONMENT (New Production)
+  protoforge-green:
+    build:
+      context: .
+      dockerfile: Dockerfile.protoforge
+    environment:
+      - NODE_ENV=production
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+      - PORT=3001
+      - ENVIRONMENT=green
+    ports:
+      - "3003:3001"  # Different port for green
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    profiles:
+      - green
+    networks:
+      - hydi-network
+
+  hydi-processor-green:
+    build:
+      context: .
+      dockerfile: Dockerfile.processor
+    environment:
+      - NODE_ENV=production
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+      - ENVIRONMENT=green
+      - CHAOS_MODE=NONE
+    depends_on:
+      protoforge-green:
+        condition: service_healthy
+    restart: unless-stopped
+    profiles:
+      - green
+    networks:
+      - hydi-network
+
+  ursula-dashboard-green:
+    build:
+      context: .
+      dockerfile: Dockerfile.ursula
+    environment:
+      - NODE_ENV=production
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+      - DASHBOARD_PORT=3002
+      - ENVIRONMENT=green
+    ports:
+      - "3004:3002"  # Different port for green
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    profiles:
+      - green
+    networks:
+      - hydi-network
+
+  # LOAD BALANCER (Nginx)
+  nginx-lb:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - protoforge-blue
+      - ursula-dashboard-blue
+    restart: unless-stopped
+    networks:
+      - hydi-network
+
+  # MONITORING
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    restart: unless-stopped
+    networks:
+      - hydi-network
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD}
+    volumes:
+      - grafana-storage:/var/lib/grafana
+    restart: unless-stopped
+    networks:
+      - hydi-network
+
+volumes:
+  grafana-storage:
+
+networks:
+  hydi-network:
+    driver: bridge

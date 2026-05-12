@@ -1,0 +1,35 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - "hydi_alerts.yml"
+
+scrape_configs:
+  - job_name: 'hydi-protoforge'
+    static_configs:
+      - targets: ['protoforge-blue:3001', 'protoforge-green:3001']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+    
+  - job_name: 'hydi-ursula'
+    static_configs:
+      - targets: ['ursula-dashboard-blue:3002', 'ursula-dashboard-green:3002']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+    
+  - job_name: 'nginx'
+    static_configs:
+      - targets: ['nginx-lb:9113']
+    scrape_interval: 10s
+    
+  - job_name: 'supabase'
+    static_configs:
+      - targets: ['your-supabase-url:3000']
+    scrape_interval: 30s
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          - alertmanager:9093

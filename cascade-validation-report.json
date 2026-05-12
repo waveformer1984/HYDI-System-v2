@@ -1,0 +1,22 @@
+{
+  "timestamp": "2026-04-21T19:03:38.170Z",
+  "stats": {
+    "eventsValidated": 0,
+    "eventsRejected": 0,
+    "lastValidation": null,
+    "startTime": "2026-04-21T18:53:39.338Z"
+  },
+  "validationRules": {
+    "requiredFields": [
+      "event_id",
+      "type",
+      "source",
+      "timestamp",
+      "payload"
+    ],
+    "eventIdFormat": {},
+    "allowedSources": {},
+    "maxPayloadSize": 1000000
+  },
+  "uptime": 598832
+}

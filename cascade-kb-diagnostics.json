@@ -1,0 +1,30 @@
+{
+  "timestamp": "2026-04-21T18:24:16.351Z",
+  "diagnostics": {
+    "filesScanned": 109,
+    "filesIngested": 109,
+    "totalTokens": 23356,
+    "functionsFound": 529,
+    "modulesFound": 232,
+    "eventsFound": 3266,
+    "relationshipsFound": 0,
+    "errors": [
+      {
+        "type": "scan_error",
+        "path": "F:\\HYDI_System\\Services\\distributed",
+        "error": "UNKNOWN: unknown error, scandir 'F:\\HYDI_System\\Services\\distributed'"
+      }
+    ]
+  },
+  "summary": {
+    "totalFiles": 109,
+    "ingestedFiles": 109,
+    "totalTokens": 23356,
+    "uniqueTokens": 7766,
+    "functionsFound": 529,
+    "modulesFound": 232,
+    "eventsFound": 3266,
+    "relationshipsFound": 0,
+    "errors": 1
+  }
+}

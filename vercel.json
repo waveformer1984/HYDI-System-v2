@@ -1,0 +1,108 @@
+{
+  "version": 2,
+  "name": "hydi-system",
+  "builds": [
+    {
+      "src": "protoforge-mock.js",
+      "use": "@vercel/node"
+    },
+    {
+      "src": "hydi-processor.js",
+      "use": "@vercel/node"
+    },
+    {
+      "src": "ursula-dashboard.js",
+      "use": "@vercel/node"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "/protoforge-mock.js"
+    },
+    {
+      "src": "/events/(.*)",
+      "dest": "/hydi-processor.js"
+    },
+    {
+      "src": "/dashboard/(.*)",
+      "dest": "/ursula-dashboard.js"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/ursula-dashboard.js"
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/api/error",
+      "destination": "/protoforge-mock.js"
+    },
+    {
+      "source": "/api/task", 
+      "destination": "/protoforge-mock.js"
+    },
+    {
+      "source": "/api/info",
+      "destination": "/protoforge-mock.js"
+    },
+    {
+      "source": "/events/stream",
+      "destination": "/ursula-dashboard.js"
+    },
+    {
+      "source": "/health",
+      "destination": "/protoforge-mock.js"
+    }
+  ],
+  "env": {
+    "SUPABASE_URL": "@supabase_url",
+    "SUPABASE_SERVICE_ROLE_KEY": "@supabase_service_role_key",
+    "SUPABASE_ANON_KEY": "@supabase_anon_key",
+    "NODE_ENV": "production",
+    "CHAOS_MODE": "NONE"
+  },
+  "functions": {
+    "protoforge-mock.js": {
+      "maxDuration": 10
+    },
+    "hydi-processor.js": {
+      "maxDuration": 30
+    },
+    "ursula-dashboard.js": {
+      "maxDuration": 15
+    }
+  },
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "Access-Control-Allow-Origin",
+          "value": "*"
+        },
+        {
+          "key": "Access-Control-Allow-Methods",
+          "value": "GET, POST, PUT, DELETE, OPTIONS"
+        },
+        {
+          "key": "Access-Control-Allow-Headers",
+          "value": "Content-Type, Authorization"
+        }
+      ]
+    },
+    {
+      "source": "/events/stream",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-cache, no-store, must-revalidate"
+        },
+        {
+          "key": "Connection",
+          "value": "keep-alive"
+        }
+      ]
+    }
+  ]
+}

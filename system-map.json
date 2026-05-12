@@ -1,0 +1,185 @@
+{
+  "paths": {
+    "modules": {
+      "path": "F:\\HYDI_System\\modules",
+      "exists": true,
+      "type": "directory",
+      "size": 0,
+      "modified": "2026-04-21T17:55:30.107Z",
+      "discovered": "2026-04-21T17:59:20.572Z",
+      "fileCount": 3
+    },
+    "knowledge_base": {
+      "path": "F:\\HYDI_System\\knowledge_base",
+      "exists": true,
+      "type": "directory",
+      "size": 0,
+      "modified": "2026-04-21T17:55:30.065Z",
+      "discovered": "2026-04-21T17:59:20.584Z",
+      "fileCount": 1
+    },
+    "cascade": {
+      "path": "F:\\HYDI_System\\cascade",
+      "exists": false,
+      "type": "directory",
+      "discovered": "2026-04-21T17:59:20.586Z"
+    },
+    "kilo": {
+      "path": "F:\\HYDI_System\\kilo",
+      "exists": false,
+      "type": "directory",
+      "discovered": "2026-04-21T17:59:20.586Z"
+    },
+    "ursula": {
+      "path": "F:\\HYDI_System\\ursula",
+      "exists": false,
+      "type": "directory",
+      "discovered": "2026-04-21T17:59:20.587Z"
+    },
+    "core": {
+      "path": "F:\\HYDI_System\\core",
+      "exists": true,
+      "type": "directory",
+      "size": 0,
+      "modified": "2026-04-21T15:56:39.936Z",
+      "discovered": "2026-04-21T17:59:20.587Z",
+      "fileCount": 7
+    },
+    "apps": {
+      "path": "F:\\HYDI_System\\apps",
+      "exists": true,
+      "type": "directory",
+      "size": 0,
+      "modified": "2026-04-21T03:02:37.201Z",
+      "discovered": "2026-04-21T17:59:20.589Z",
+      "fileCount": 2
+    },
+    "Services": {
+      "path": "F:\\HYDI_System\\Services",
+      "exists": true,
+      "type": "directory",
+      "size": 0,
+      "modified": "2026-04-21T03:06:28.277Z",
+      "discovered": "2026-04-21T17:59:20.590Z",
+      "fileCount": 2
+    }
+  },
+  "modules": {
+    "protoforge-recovery.js": {
+      "path": "F:\\HYDI_System\\modules\\protoforge-recovery.js",
+      "type": "module",
+      "size": 276,
+      "modified": "2026-04-21T17:55:30.107Z",
+      "loaded": false,
+      "discovered": "2026-04-21T17:59:20.596Z"
+    },
+    "protoforge-scanner.js": {
+      "path": "F:\\HYDI_System\\modules\\protoforge-scanner.js",
+      "type": "module",
+      "size": 271,
+      "modified": "2026-04-21T17:55:30.090Z",
+      "loaded": false,
+      "discovered": "2026-04-21T17:59:20.596Z"
+    },
+    "protoforge-scorer.js": {
+      "path": "F:\\HYDI_System\\modules\\protoforge-scorer.js",
+      "type": "module",
+      "size": 257,
+      "modified": "2026-04-21T17:55:30.099Z",
+      "loaded": false,
+      "discovered": "2026-04-21T17:59:20.597Z"
+    }
+  },
+  "services": {
+    "cascade-node.js": {
+      "path": "F:\\HYDI_System\\cascade-node.js",
+      "type": "service",
+      "size": 20745,
+      "modified": "2026-04-21T17:55:01.125Z",
+      "status": "discovered",
+      "discovered": "2026-04-21T17:59:20.598Z"
+    },
+    "cascade-node-simple.js": {
+      "path": "F:\\HYDI_System\\cascade-node-simple.js",
+      "type": "service",
+      "size": 18278,
+      "modified": "2026-04-21T17:55:23.193Z",
+      "status": "discovered",
+      "discovered": "2026-04-21T17:59:20.599Z"
+    },
+    "ursula-dashboard.js": {
+      "path": "F:\\HYDI_System\\ursula-dashboard.js",
+      "type": "service",
+      "size": 5776,
+      "modified": "2026-04-21T17:00:49.337Z",
+      "status": "discovered",
+      "discovered": "2026-04-21T17:59:20.599Z"
+    },
+    "protoforge-mock.js": {
+      "path": "F:\\HYDI_System\\protoforge-mock.js",
+      "type": "service",
+      "size": 1882,
+      "modified": "2026-04-21T16:16:40.048Z",
+      "status": "discovered",
+      "discovered": "2026-04-21T17:59:20.599Z"
+    },
+    "hydi-orchestrator.js": {
+      "path": "F:\\HYDI_System\\hydi-orchestrator.js",
+      "type": "service",
+      "size": 17335,
+      "modified": "2026-04-21T17:09:23.947Z",
+      "status": "discovered",
+      "discovered": "2026-04-21T17:59:20.600Z"
+    },
+    "production-orchestrator.js": {
+      "path": "F:\\HYDI_System\\production-orchestrator.js",
+      "type": "service",
+      "size": 16725,
+      "modified": "2026-04-21T17:33:28.830Z",
+      "status": "discovered",
+      "discovered": "2026-04-21T17:59:20.600Z"
+    },
+    "Ursula Dashboard": {
+      "port": 3002,
+      "path": "/events/stream",
+      "type": "running_service",
+      "status": "stopped",
+      "discovered": "2026-04-21T17:59:20.649Z",
+      "details": {
+        "running": false,
+        "error": "Connection failed"
+      }
+    },
+    "ProtoForge": {
+      "port": 3001,
+      "path": "/",
+      "type": "running_service",
+      "status": "running",
+      "discovered": "2026-04-21T17:59:20.803Z",
+      "details": {
+        "running": true,
+        "status": 404
+      }
+    },
+    "HYDI System": {
+      "port": 3000,
+      "path": "/health",
+      "type": "running_service",
+      "status": "stopped",
+      "discovered": "2026-04-21T17:59:20.807Z",
+      "details": {
+        "running": false,
+        "error": "Connection failed"
+      }
+    }
+  },
+  "discovered": true,
+  "summary": {
+    "totalPaths": 8,
+    "existingPaths": 5,
+    "totalModules": 3,
+    "totalServices": 9,
+    "runningServices": 1,
+    "discovered": "2026-04-21T17:59:20.808Z"
+  }
+}

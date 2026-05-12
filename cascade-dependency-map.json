@@ -1,0 +1,823 @@
+{
+  "timestamp": "2026-04-21T18:51:03.766Z",
+  "summary": {
+    "totalDependencies": 91,
+    "circularDependencies": 0,
+    "orphanModules": 91
+  },
+  "direct": {
+    "F:\\HYDI_System\\bypass-cache-oracle.js": [
+      "dotenv",
+      "@supabase/supabase-js"
+    ],
+    "F:\\HYDI_System\\cascade-intelligence-test.js": [
+      "dotenv",
+      "fs",
+      "path"
+    ],
+    "F:\\HYDI_System\\cascade-knowledge-expansion.js": [
+      "dotenv",
+      "fs",
+      "path"
+    ],
+    "F:\\HYDI_System\\cascade-node-simple.js": [
+      "dotenv",
+      "fs",
+      "path",
+      "./cascade-node",
+      "http"
+    ],
+    "F:\\HYDI_System\\cascade-node.js": [
+      "dotenv",
+      "fs",
+      "path",
+      "./cascade-node",
+      "http"
+    ],
+    "F:\\HYDI_System\\cascade-system-graph.js": [
+      "dotenv",
+      "fs",
+      "path"
+    ],
+    "F:\\HYDI_System\\chaos-engine.js": [
+      "dotenv",
+      "@supabase/supabase-js",
+      "./production-orchestrator"
+    ],
+    "F:\\HYDI_System\\chaos-engineering.js": [
+      "dotenv",
+      "./core/ai-analyzer",
+      "fs"
+    ],
+    "F:\\HYDI_System\\chaos-test.js": [
+      "dotenv",
+      "./core/pipeline"
+    ],
+    "F:\\HYDI_System\\check-table.js": [
+      "dotenv",
+      "@supabase/supabase-js"
+    ],
+    "F:\\HYDI_System\\complete-event-pipeline.js": [
+      "dotenv",
+      "@supabase/supabase-js",
+      "./event-contracts",
+      "./side-effect-guards",
+      "./idempotency-layer"
+    ],
+    "F:\\HYDI_System\\complete-readiness-suite.js": [
+      "dotenv",
+      "./enhanced-preflight-check",
+      "./complete-event-pipeline",
+      "./production-orchestrator",
+      "./production-deployment",
+      "./performance-benchmarks",
+      "./chaos-engine"
+    ],
+    "F:\\HYDI_System\\controlled-chaos-test.js": [
+      "dotenv",
+      "child_process",
+      "@supabase/supabase-js"
+    ],
+    "F:\\HYDI_System\\core\\ai-analyzer.js": [
+      "http"
+    ],
+    "F:\\HYDI_System\\core\\chaos-proxy.js": [
+      "@supabase/supabase-js"
+    ],
+    "F:\\HYDI_System\\core\\event-schema.js": [
+      "uuid"
+    ],
+    "F:\\HYDI_System\\core\\event-writer.js": [
+      "dotenv",
+      "./chaos-proxy"
+    ],
+    "F:\\HYDI_System\\core\\hydi-router.js": [],
+    "F:\\HYDI_System\\core\\pipeline.js": [
+      "dotenv",
+      "./event-schema",
+      "./hydi-router",
+      "./ai-analyzer",
+      "./event-writer"
+    ],
+    "F:\\HYDI_System\\core\\priority-queue.js": [
+      "dotenv"
+    ],
+    "F:\\HYDI_System\\direct-sql-executor.js": [
+      "dotenv",
+      "@supabase/supabase-js"
+    ],
+    "F:\\HYDI_System\\ecosystem.config.js": [],
+    "F:\\HYDI_System\\enhanced-preflight-check.js": [
+      "dotenv",
+      "@supabase/supabase-js"
+    ],
+    "F:\\HYDI_System\\event-contracts.js": [
+      "uuid"
+    ],
+    "F:\\HYDI_System\\event-pipeline.js": [
+      "dotenv"
+    ],
+    "F:\\HYDI_System\\event-stream-complete.js": [
+      "dotenv",
+      "http",
+      "url"
+    ],
+    "F:\\HYDI_System\\event-stream-restoration.js": [
+      "dotenv",
+      "http",
+      "net",
+      "child_process",
+      "url",
+      "./event-pipeline"
+    ],
+    "F:\\HYDI_System\\failure-gauntlet.js": [
+      "dotenv",
+      "@supabase/supabase-js",
+      "./production-orchestrator"
+    ],
+    "F:\\HYDI_System\\final-acceptance-test.js": [
+      "dotenv",
+      "@supabase/supabase-js"
+    ],
+    "F:\\HYDI_System\\final-chaos-test.js": [
+      "dotenv",
+      "./core/pipeline"
+    ],
+    "F:\\HYDI_System\\focused-chaos.js": [
+      "dotenv"
+    ],
+    "F:\\HYDI_System\\force-schema-fix.js": [
+      "dotenv",
+      "@supabase/supabase-js",
+      "uuid"
+    ],
+    "F:\\HYDI_System\\ghost-producer.js": [
+      "dotenv",
+      "./hydi-processor"
+    ],
+    "F:\\HYDI_System\\git-wrapper.js": [
+      "child_process",
+      "fs",
+      "path"
+    ],
+    "F:\\HYDI_System\\heartbeat.js": [
+      "dotenv",
+      "./hydi-processor"
+    ],
+    "F:\\HYDI_System\\heidi-cli.js": [
+      "dotenv",
+      "./heidi-core",
+      "readline"
+    ],
+    "F:\\HYDI_System\\heidi-core.js": [
+      "dotenv",
+      "fs",
+      "path",
+      "./system-discovery",
+      "./cascade-node-simple"
+    ],
+    "F:\\HYDI_System\\heidi-live-intelligence.js": [
+      "dotenv",
+      "fs",
+      "path",
+      "./event-pipeline",
+      "readline"
+    ],
+    "F:\\HYDI_System\\hydi-cli.js": [
+      "dotenv",
+      "./core/pipeline",
+      "http"
+    ],
+    "F:\\HYDI_System\\hydi-master-cli.js": [
+      "dotenv",
+      "fs",
+      "path",
+      "child_process",
+      "archiver",
+      "@supabase/supabase-js",
+      "./preflight-check"
+    ],
+    "F:\\HYDI_System\\hydi-orchestrator.js": [
+      "dotenv",
+      "fs",
+      "path",
+      "child_process",
+      "uuid",
+      "@supabase/supabase-js"
+    ],
+    "F:\\HYDI_System\\hydi-processor.js": [
+      "dotenv",
+      "@supabase/supabase-js",
+      "uuid",
+      "./core/chaos-proxy"
+    ],
+    "F:\\HYDI_System\\idempotency-layer.js": [
+      "dotenv",
+      "@supabase/supabase-js",
+      "./event-contracts"
+    ],
+    "F:\\HYDI_System\\immutable-replay.js": [
+      "dotenv",
+      "@supabase/supabase-js",
+      "./event-contracts"
+    ],
+    "F:\\HYDI_System\\kill-switch.js": [
+      "dotenv",
+      "fs",
+      "path",
+      "./hydi-processor"
+    ],
+    "F:\\HYDI_System\\kilo-execution-engine.js": [
+      "dotenv",
+      "child_process",
+      "fs",
+      "path",
+      "./event-pipeline",
+      "http"
+    ],
+    "F:\\HYDI_System\\knowledge-base-upgrade.js": [
+      "dotenv",
+      "fs",
+      "path"
+    ],
+    "F:\\HYDI_System\\modules\\protoforge-recovery.js": [],
+    "F:\\HYDI_System\\modules\\protoforge-scanner.js": [],
+    "F:\\HYDI_System\\modules\\protoforge-scorer.js": [],
+    "F:\\HYDI_System\\performance-benchmarks.js": [
+      "dotenv",
+      "@supabase/supabase-js",
+      "./event-contracts"
+    ],
+    "F:\\HYDI_System\\persistence-monitor.js": [
+      "dotenv",
+      "@supabase/supabase-js"
+    ],
+    "F:\\HYDI_System\\preflight-check.js": [
+      "dotenv",
+      "fs",
+      "@supabase/supabase-js"
+    ],
+    "F:\\HYDI_System\\preflight-schema-check.js": [
+      "dotenv",
+      "@supabase/supabase-js"
+    ],
+    "F:\\HYDI_System\\prewarm.js": [
+      "dotenv",
+      "./hydi-processor"
+    ],
+    "F:\\HYDI_System\\production-deployment.js": [
+      "dotenv",
+      "child_process",
+      "fs",
+      "path",
+      "./complete-event-pipeline",
+      "./enhanced-preflight-check",
+      "./production-orchestrator",
+      "./performance-benchmarks",
+      "./chaos-engine",
+      "./production-readiness-test"
+    ],
+    "F:\\HYDI_System\\production-orchestrator.js": [
+      "dotenv",
+      "uuid",
+      "@supabase/supabase-js",
+      "./event-contracts",
+      "./replay-engine",
+      "./source-of-truth",
+      "./idempotency-layer",
+      "./preflight-schema-check"
+    ],
+    "F:\\HYDI_System\\production-readiness-test.js": [
+      "dotenv",
+      "./production-orchestrator",
+      "./event-contracts",
+      "./source-of-truth",
+      "./idempotency-layer",
+      "./replay-engine",
+      "@supabase/supabase-js"
+    ],
+    "F:\\HYDI_System\\protoforge-mock.js": [
+      "dotenv",
+      "express",
+      "./hydi-processor"
+    ],
+    "F:\\HYDI_System\\query-specific-event.js": [
+      "dotenv",
+      "@supabase/supabase-js"
+    ],
+    "F:\\HYDI_System\\real-chaos-test.js": [
+      "dotenv",
+      "@supabase/supabase-js"
+    ],
+    "F:\\HYDI_System\\replay-engine.js": [
+      "dotenv",
+      "@supabase/supabase-js",
+      "./event-contracts"
+    ],
+    "F:\\HYDI_System\\runtime-schema-drift.js": [
+      "dotenv",
+      "@supabase/supabase-js",
+      "crypto"
+    ],
+    "F:\\HYDI_System\\schema-validator.js": [
+      "dotenv",
+      "@supabase/supabase-js",
+      "uuid"
+    ],
+    "F:\\HYDI_System\\security-audit.js": [
+      "dotenv",
+      "fs",
+      "path"
+    ],
+    "F:\\HYDI_System\\self-aware-state-simple.js": [
+      "dotenv",
+      "./heidi-core",
+      "./event-pipeline",
+      "./ursula-compatibility",
+      "fs",
+      "path"
+    ],
+    "F:\\HYDI_System\\self-aware-state.js": [
+      "dotenv",
+      "./heidi-core",
+      "./event-pipeline",
+      "./ursula-compatibility",
+      "fs",
+      "path"
+    ],
+    "F:\\HYDI_System\\shadow-launch.js": [
+      "dotenv",
+      "./hydi-processor"
+    ],
+    "F:\\HYDI_System\\side-effect-guards.js": [
+      "dotenv",
+      "./event-contracts"
+    ],
+    "F:\\HYDI_System\\simple-read-test.js": [
+      "dotenv",
+      "@supabase/supabase-js"
+    ],
+    "F:\\HYDI_System\\simple-schema-fix.js": [
+      "dotenv",
+      "@supabase/supabase-js",
+      "uuid"
+    ],
+    "F:\\HYDI_System\\simulate-sql-execution.js": [
+      "dotenv",
+      "@supabase/supabase-js"
+    ],
+    "F:\\HYDI_System\\source-of-truth.js": [
+      "dotenv",
+      "@supabase/supabase-js"
+    ],
+    "F:\\HYDI_System\\sse-server-simple.js": [
+      "dotenv",
+      "http",
+      "url"
+    ],
+    "F:\\HYDI_System\\system-discovery.js": [
+      "dotenv",
+      "fs",
+      "path",
+      "http"
+    ],
+    "F:\\HYDI_System\\test-burst.js": [
+      "dotenv"
+    ],
+    "F:\\HYDI_System\\test-failure.js": [
+      "dotenv",
+      "./core/pipeline"
+    ],
+    "F:\\HYDI_System\\test-idempotency.js": [
+      "dotenv",
+      "@supabase/supabase-js"
+    ],
+    "F:\\HYDI_System\\test-reality.js": [
+      "dotenv",
+      "./core/pipeline"
+    ],
+    "F:\\HYDI_System\\test-sse-connection.js": [
+      "dotenv",
+      "http"
+    ],
+    "F:\\HYDI_System\\truth-reconciliation.js": [
+      "dotenv",
+      "@supabase/supabase-js",
+      "crypto"
+    ],
+    "F:\\HYDI_System\\ursula-compatibility.js": [
+      "dotenv",
+      "http",
+      "./event-pipeline"
+    ],
+    "F:\\HYDI_System\\ursula-dashboard.js": [
+      "dotenv",
+      "express",
+      "@supabase/supabase-js",
+      "./hydi-processor"
+    ],
+    "F:\\HYDI_System\\ursula-mock.js": [
+      "dotenv",
+      "express",
+      "@supabase/supabase-js",
+      "http"
+    ],
+    "F:\\HYDI_System\\verify-battle-ready.js": [
+      "dotenv",
+      "@supabase/supabase-js"
+    ],
+    "F:\\HYDI_System\\verify-chaos-results.js": [
+      "dotenv",
+      "@supabase/supabase-js"
+    ],
+    "F:\\HYDI_System\\verify-dashboard.js": [
+      "dotenv",
+      "@supabase/supabase-js"
+    ],
+    "F:\\HYDI_System\\verify-events.js": [
+      "dotenv",
+      "@supabase/supabase-js"
+    ],
+    "F:\\HYDI_System\\verify-real-write.js": [
+      "dotenv",
+      "@supabase/supabase-js"
+    ],
+    "F:\\HYDI_System\\verify-stress-test.js": [
+      "dotenv",
+      "@supabase/supabase-js"
+    ],
+    "F:\\HYDI_System\\verify-unified-system.js": [
+      "dotenv",
+      "@supabase/supabase-js"
+    ]
+  },
+  "transitive": {
+    "F:\\HYDI_System\\bypass-cache-oracle.js": [
+      "F:\\HYDI_System\\bypass-cache-oracle.js"
+    ],
+    "F:\\HYDI_System\\cascade-intelligence-test.js": [
+      "F:\\HYDI_System\\cascade-intelligence-test.js"
+    ],
+    "F:\\HYDI_System\\cascade-knowledge-expansion.js": [
+      "F:\\HYDI_System\\cascade-knowledge-expansion.js"
+    ],
+    "F:\\HYDI_System\\cascade-node-simple.js": [
+      "F:\\HYDI_System\\cascade-node-simple.js"
+    ],
+    "F:\\HYDI_System\\cascade-node.js": [
+      "F:\\HYDI_System\\cascade-node.js"
+    ],
+    "F:\\HYDI_System\\cascade-system-graph.js": [
+      "F:\\HYDI_System\\cascade-system-graph.js"
+    ],
+    "F:\\HYDI_System\\chaos-engine.js": [
+      "F:\\HYDI_System\\chaos-engine.js"
+    ],
+    "F:\\HYDI_System\\chaos-engineering.js": [
+      "F:\\HYDI_System\\chaos-engineering.js"
+    ],
+    "F:\\HYDI_System\\chaos-test.js": [
+      "F:\\HYDI_System\\chaos-test.js"
+    ],
+    "F:\\HYDI_System\\check-table.js": [
+      "F:\\HYDI_System\\check-table.js"
+    ],
+    "F:\\HYDI_System\\complete-event-pipeline.js": [
+      "F:\\HYDI_System\\complete-event-pipeline.js"
+    ],
+    "F:\\HYDI_System\\complete-readiness-suite.js": [
+      "F:\\HYDI_System\\complete-readiness-suite.js"
+    ],
+    "F:\\HYDI_System\\controlled-chaos-test.js": [
+      "F:\\HYDI_System\\controlled-chaos-test.js"
+    ],
+    "F:\\HYDI_System\\core\\ai-analyzer.js": [
+      "F:\\HYDI_System\\core\\ai-analyzer.js"
+    ],
+    "F:\\HYDI_System\\core\\chaos-proxy.js": [
+      "F:\\HYDI_System\\core\\chaos-proxy.js"
+    ],
+    "F:\\HYDI_System\\core\\event-schema.js": [
+      "F:\\HYDI_System\\core\\event-schema.js"
+    ],
+    "F:\\HYDI_System\\core\\event-writer.js": [
+      "F:\\HYDI_System\\core\\event-writer.js"
+    ],
+    "F:\\HYDI_System\\core\\hydi-router.js": [
+      "F:\\HYDI_System\\core\\hydi-router.js"
+    ],
+    "F:\\HYDI_System\\core\\pipeline.js": [
+      "F:\\HYDI_System\\core\\pipeline.js"
+    ],
+    "F:\\HYDI_System\\core\\priority-queue.js": [
+      "F:\\HYDI_System\\core\\priority-queue.js"
+    ],
+    "F:\\HYDI_System\\direct-sql-executor.js": [
+      "F:\\HYDI_System\\direct-sql-executor.js"
+    ],
+    "F:\\HYDI_System\\ecosystem.config.js": [
+      "F:\\HYDI_System\\ecosystem.config.js"
+    ],
+    "F:\\HYDI_System\\enhanced-preflight-check.js": [
+      "F:\\HYDI_System\\enhanced-preflight-check.js"
+    ],
+    "F:\\HYDI_System\\event-contracts.js": [
+      "F:\\HYDI_System\\event-contracts.js"
+    ],
+    "F:\\HYDI_System\\event-pipeline.js": [
+      "F:\\HYDI_System\\event-pipeline.js"
+    ],
+    "F:\\HYDI_System\\event-stream-complete.js": [
+      "F:\\HYDI_System\\event-stream-complete.js"
+    ],
+    "F:\\HYDI_System\\event-stream-restoration.js": [
+      "F:\\HYDI_System\\event-stream-restoration.js"
+    ],
+    "F:\\HYDI_System\\failure-gauntlet.js": [
+      "F:\\HYDI_System\\failure-gauntlet.js"
+    ],
+    "F:\\HYDI_System\\final-acceptance-test.js": [
+      "F:\\HYDI_System\\final-acceptance-test.js"
+    ],
+    "F:\\HYDI_System\\final-chaos-test.js": [
+      "F:\\HYDI_System\\final-chaos-test.js"
+    ],
+    "F:\\HYDI_System\\focused-chaos.js": [
+      "F:\\HYDI_System\\focused-chaos.js"
+    ],
+    "F:\\HYDI_System\\force-schema-fix.js": [
+      "F:\\HYDI_System\\force-schema-fix.js"
+    ],
+    "F:\\HYDI_System\\ghost-producer.js": [
+      "F:\\HYDI_System\\ghost-producer.js"
+    ],
+    "F:\\HYDI_System\\git-wrapper.js": [
+      "F:\\HYDI_System\\git-wrapper.js"
+    ],
+    "F:\\HYDI_System\\heartbeat.js": [
+      "F:\\HYDI_System\\heartbeat.js"
+    ],
+    "F:\\HYDI_System\\heidi-cli.js": [
+      "F:\\HYDI_System\\heidi-cli.js"
+    ],
+    "F:\\HYDI_System\\heidi-core.js": [
+      "F:\\HYDI_System\\heidi-core.js"
+    ],
+    "F:\\HYDI_System\\heidi-live-intelligence.js": [
+      "F:\\HYDI_System\\heidi-live-intelligence.js"
+    ],
+    "F:\\HYDI_System\\hydi-cli.js": [
+      "F:\\HYDI_System\\hydi-cli.js"
+    ],
+    "F:\\HYDI_System\\hydi-master-cli.js": [
+      "F:\\HYDI_System\\hydi-master-cli.js"
+    ],
+    "F:\\HYDI_System\\hydi-orchestrator.js": [
+      "F:\\HYDI_System\\hydi-orchestrator.js"
+    ],
+    "F:\\HYDI_System\\hydi-processor.js": [
+      "F:\\HYDI_System\\hydi-processor.js"
+    ],
+    "F:\\HYDI_System\\idempotency-layer.js": [
+      "F:\\HYDI_System\\idempotency-layer.js"
+    ],
+    "F:\\HYDI_System\\immutable-replay.js": [
+      "F:\\HYDI_System\\immutable-replay.js"
+    ],
+    "F:\\HYDI_System\\kill-switch.js": [
+      "F:\\HYDI_System\\kill-switch.js"
+    ],
+    "F:\\HYDI_System\\kilo-execution-engine.js": [
+      "F:\\HYDI_System\\kilo-execution-engine.js"
+    ],
+    "F:\\HYDI_System\\knowledge-base-upgrade.js": [
+      "F:\\HYDI_System\\knowledge-base-upgrade.js"
+    ],
+    "F:\\HYDI_System\\modules\\protoforge-recovery.js": [
+      "F:\\HYDI_System\\modules\\protoforge-recovery.js"
+    ],
+    "F:\\HYDI_System\\modules\\protoforge-scanner.js": [
+      "F:\\HYDI_System\\modules\\protoforge-scanner.js"
+    ],
+    "F:\\HYDI_System\\modules\\protoforge-scorer.js": [
+      "F:\\HYDI_System\\modules\\protoforge-scorer.js"
+    ],
+    "F:\\HYDI_System\\performance-benchmarks.js": [
+      "F:\\HYDI_System\\performance-benchmarks.js"
+    ],
+    "F:\\HYDI_System\\persistence-monitor.js": [
+      "F:\\HYDI_System\\persistence-monitor.js"
+    ],
+    "F:\\HYDI_System\\preflight-check.js": [
+      "F:\\HYDI_System\\preflight-check.js"
+    ],
+    "F:\\HYDI_System\\preflight-schema-check.js": [
+      "F:\\HYDI_System\\preflight-schema-check.js"
+    ],
+    "F:\\HYDI_System\\prewarm.js": [
+      "F:\\HYDI_System\\prewarm.js"
+    ],
+    "F:\\HYDI_System\\production-deployment.js": [
+      "F:\\HYDI_System\\production-deployment.js"
+    ],
+    "F:\\HYDI_System\\production-orchestrator.js": [
+      "F:\\HYDI_System\\production-orchestrator.js"
+    ],
+    "F:\\HYDI_System\\production-readiness-test.js": [
+      "F:\\HYDI_System\\production-readiness-test.js"
+    ],
+    "F:\\HYDI_System\\protoforge-mock.js": [
+      "F:\\HYDI_System\\protoforge-mock.js"
+    ],
+    "F:\\HYDI_System\\query-specific-event.js": [
+      "F:\\HYDI_System\\query-specific-event.js"
+    ],
+    "F:\\HYDI_System\\real-chaos-test.js": [
+      "F:\\HYDI_System\\real-chaos-test.js"
+    ],
+    "F:\\HYDI_System\\replay-engine.js": [
+      "F:\\HYDI_System\\replay-engine.js"
+    ],
+    "F:\\HYDI_System\\runtime-schema-drift.js": [
+      "F:\\HYDI_System\\runtime-schema-drift.js"
+    ],
+    "F:\\HYDI_System\\schema-validator.js": [
+      "F:\\HYDI_System\\schema-validator.js"
+    ],
+    "F:\\HYDI_System\\security-audit.js": [
+      "F:\\HYDI_System\\security-audit.js"
+    ],
+    "F:\\HYDI_System\\self-aware-state-simple.js": [
+      "F:\\HYDI_System\\self-aware-state-simple.js"
+    ],
+    "F:\\HYDI_System\\self-aware-state.js": [
+      "F:\\HYDI_System\\self-aware-state.js"
+    ],
+    "F:\\HYDI_System\\shadow-launch.js": [
+      "F:\\HYDI_System\\shadow-launch.js"
+    ],
+    "F:\\HYDI_System\\side-effect-guards.js": [
+      "F:\\HYDI_System\\side-effect-guards.js"
+    ],
+    "F:\\HYDI_System\\simple-read-test.js": [
+      "F:\\HYDI_System\\simple-read-test.js"
+    ],
+    "F:\\HYDI_System\\simple-schema-fix.js": [
+      "F:\\HYDI_System\\simple-schema-fix.js"
+    ],
+    "F:\\HYDI_System\\simulate-sql-execution.js": [
+      "F:\\HYDI_System\\simulate-sql-execution.js"
+    ],
+    "F:\\HYDI_System\\source-of-truth.js": [
+      "F:\\HYDI_System\\source-of-truth.js"
+    ],
+    "F:\\HYDI_System\\sse-server-simple.js": [
+      "F:\\HYDI_System\\sse-server-simple.js"
+    ],
+    "F:\\HYDI_System\\system-discovery.js": [
+      "F:\\HYDI_System\\system-discovery.js"
+    ],
+    "F:\\HYDI_System\\test-burst.js": [
+      "F:\\HYDI_System\\test-burst.js"
+    ],
+    "F:\\HYDI_System\\test-failure.js": [
+      "F:\\HYDI_System\\test-failure.js"
+    ],
+    "F:\\HYDI_System\\test-idempotency.js": [
+      "F:\\HYDI_System\\test-idempotency.js"
+    ],
+    "F:\\HYDI_System\\test-reality.js": [
+      "F:\\HYDI_System\\test-reality.js"
+    ],
+    "F:\\HYDI_System\\test-sse-connection.js": [
+      "F:\\HYDI_System\\test-sse-connection.js"
+    ],
+    "F:\\HYDI_System\\truth-reconciliation.js": [
+      "F:\\HYDI_System\\truth-reconciliation.js"
+    ],
+    "F:\\HYDI_System\\ursula-compatibility.js": [
+      "F:\\HYDI_System\\ursula-compatibility.js"
+    ],
+    "F:\\HYDI_System\\ursula-dashboard.js": [
+      "F:\\HYDI_System\\ursula-dashboard.js"
+    ],
+    "F:\\HYDI_System\\ursula-mock.js": [
+      "F:\\HYDI_System\\ursula-mock.js"
+    ],
+    "F:\\HYDI_System\\verify-battle-ready.js": [
+      "F:\\HYDI_System\\verify-battle-ready.js"
+    ],
+    "F:\\HYDI_System\\verify-chaos-results.js": [
+      "F:\\HYDI_System\\verify-chaos-results.js"
+    ],
+    "F:\\HYDI_System\\verify-dashboard.js": [
+      "F:\\HYDI_System\\verify-dashboard.js"
+    ],
+    "F:\\HYDI_System\\verify-events.js": [
+      "F:\\HYDI_System\\verify-events.js"
+    ],
+    "F:\\HYDI_System\\verify-real-write.js": [
+      "F:\\HYDI_System\\verify-real-write.js"
+    ],
+    "F:\\HYDI_System\\verify-stress-test.js": [
+      "F:\\HYDI_System\\verify-stress-test.js"
+    ],
+    "F:\\HYDI_System\\verify-unified-system.js": [
+      "F:\\HYDI_System\\verify-unified-system.js"
+    ]
+  },
+  "circular": [],
+  "orphans": [
+    "F:\\HYDI_System\\bypass-cache-oracle.js",
+    "F:\\HYDI_System\\cascade-intelligence-test.js",
+    "F:\\HYDI_System\\cascade-knowledge-expansion.js",
+    "F:\\HYDI_System\\cascade-node-simple.js",
+    "F:\\HYDI_System\\cascade-node.js",
+    "F:\\HYDI_System\\cascade-system-graph.js",
+    "F:\\HYDI_System\\chaos-engine.js",
+    "F:\\HYDI_System\\chaos-engineering.js",
+    "F:\\HYDI_System\\chaos-test.js",
+    "F:\\HYDI_System\\check-table.js",
+    "F:\\HYDI_System\\complete-event-pipeline.js",
+    "F:\\HYDI_System\\complete-readiness-suite.js",
+    "F:\\HYDI_System\\controlled-chaos-test.js",
+    "F:\\HYDI_System\\core\\ai-analyzer.js",
+    "F:\\HYDI_System\\core\\chaos-proxy.js",
+    "F:\\HYDI_System\\core\\event-schema.js",
+    "F:\\HYDI_System\\core\\event-writer.js",
+    "F:\\HYDI_System\\core\\hydi-router.js",
+    "F:\\HYDI_System\\core\\pipeline.js",
+    "F:\\HYDI_System\\core\\priority-queue.js",
+    "F:\\HYDI_System\\direct-sql-executor.js",
+    "F:\\HYDI_System\\ecosystem.config.js",
+    "F:\\HYDI_System\\enhanced-preflight-check.js",
+    "F:\\HYDI_System\\event-contracts.js",
+    "F:\\HYDI_System\\event-pipeline.js",
+    "F:\\HYDI_System\\event-stream-complete.js",
+    "F:\\HYDI_System\\event-stream-restoration.js",
+    "F:\\HYDI_System\\failure-gauntlet.js",
+    "F:\\HYDI_System\\final-acceptance-test.js",
+    "F:\\HYDI_System\\final-chaos-test.js",
+    "F:\\HYDI_System\\focused-chaos.js",
+    "F:\\HYDI_System\\force-schema-fix.js",
+    "F:\\HYDI_System\\ghost-producer.js",
+    "F:\\HYDI_System\\git-wrapper.js",
+    "F:\\HYDI_System\\heartbeat.js",
+    "F:\\HYDI_System\\heidi-cli.js",
+    "F:\\HYDI_System\\heidi-core.js",
+    "F:\\HYDI_System\\heidi-live-intelligence.js",
+    "F:\\HYDI_System\\hydi-cli.js",
+    "F:\\HYDI_System\\hydi-master-cli.js",
+    "F:\\HYDI_System\\hydi-orchestrator.js",
+    "F:\\HYDI_System\\hydi-processor.js",
+    "F:\\HYDI_System\\idempotency-layer.js",
+    "F:\\HYDI_System\\immutable-replay.js",
+    "F:\\HYDI_System\\kill-switch.js",
+    "F:\\HYDI_System\\kilo-execution-engine.js",
+    "F:\\HYDI_System\\knowledge-base-upgrade.js",
+    "F:\\HYDI_System\\modules\\protoforge-recovery.js",
+    "F:\\HYDI_System\\modules\\protoforge-scanner.js",
+    "F:\\HYDI_System\\modules\\protoforge-scorer.js",
+    "F:\\HYDI_System\\performance-benchmarks.js",
+    "F:\\HYDI_System\\persistence-monitor.js",
+    "F:\\HYDI_System\\preflight-check.js",
+    "F:\\HYDI_System\\preflight-schema-check.js",
+    "F:\\HYDI_System\\prewarm.js",
+    "F:\\HYDI_System\\production-deployment.js",
+    "F:\\HYDI_System\\production-orchestrator.js",
+    "F:\\HYDI_System\\production-readiness-test.js",
+    "F:\\HYDI_System\\protoforge-mock.js",
+    "F:\\HYDI_System\\query-specific-event.js",
+    "F:\\HYDI_System\\real-chaos-test.js",
+    "F:\\HYDI_System\\replay-engine.js",
+    "F:\\HYDI_System\\runtime-schema-drift.js",
+    "F:\\HYDI_System\\schema-validator.js",
+    "F:\\HYDI_System\\security-audit.js",
+    "F:\\HYDI_System\\self-aware-state-simple.js",
+    "F:\\HYDI_System\\self-aware-state.js",
+    "F:\\HYDI_System\\shadow-launch.js",
+    "F:\\HYDI_System\\side-effect-guards.js",
+    "F:\\HYDI_System\\simple-read-test.js",
+    "F:\\HYDI_System\\simple-schema-fix.js",
+    "F:\\HYDI_System\\simulate-sql-execution.js",
+    "F:\\HYDI_System\\source-of-truth.js",
+    "F:\\HYDI_System\\sse-server-simple.js",
+    "F:\\HYDI_System\\system-discovery.js",
+    "F:\\HYDI_System\\test-burst.js",
+    "F:\\HYDI_System\\test-failure.js",
+    "F:\\HYDI_System\\test-idempotency.js",
+    "F:\\HYDI_System\\test-reality.js",
+    "F:\\HYDI_System\\test-sse-connection.js",
+    "F:\\HYDI_System\\truth-reconciliation.js",
+    "F:\\HYDI_System\\ursula-compatibility.js",
+    "F:\\HYDI_System\\ursula-dashboard.js",
+    "F:\\HYDI_System\\ursula-mock.js",
+    "F:\\HYDI_System\\verify-battle-ready.js",
+    "F:\\HYDI_System\\verify-chaos-results.js",
+    "F:\\HYDI_System\\verify-dashboard.js",
+    "F:\\HYDI_System\\verify-events.js",
+    "F:\\HYDI_System\\verify-real-write.js",
+    "F:\\HYDI_System\\verify-stress-test.js",
+    "F:\\HYDI_System\\verify-unified-system.js"
+  ]
+}

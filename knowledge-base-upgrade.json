@@ -1,0 +1,682 @@
+{
+  "timestamp": "2026-04-21T18:00:23.799Z",
+  "stats": {
+    "entries": 1,
+    "indexed": true,
+    "tokenized": true,
+    "searchTokens": 52,
+    "totalWords": 68,
+    "avgWordsPerEntry": 68
+  },
+  "entries": [
+    {
+      "name": "protoforge-overview.md",
+      "metadata": {
+        "name": "protoforge-overview.md",
+        "path": "F:\\HYDI_System\\knowledge_base\\protoforge-overview.md",
+        "type": "markdown",
+        "size": 790,
+        "modified": "2026-04-21T17:55:30.065Z"
+      },
+      "indexed": true,
+      "tokenized": true,
+      "wordCount": 68,
+      "fullTextLength": 598,
+      "upgraded": true
+    }
+  ],
+  "searchIndex": [
+    {
+      "token": "protoforge",
+      "resultCount": 2,
+      "results": [
+        {
+          "file": "protoforge-overview.md",
+          "frequency": 2,
+          "relevance": null
+        },
+        {
+          "file": "protoforge-overview.md",
+          "frequency": 2,
+          "relevance": 0
+        }
+      ]
+    },
+    {
+      "token": "system",
+      "resultCount": 2,
+      "results": [
+        {
+          "file": "protoforge-overview.md",
+          "frequency": 2,
+          "relevance": null
+        },
+        {
+          "file": "protoforge-overview.md",
+          "frequency": 2,
+          "relevance": 0
+        }
+      ]
+    },
+    {
+      "token": "overview",
+      "resultCount": 1,
+      "results": [
+        {
+          "file": "protoforge-overview.md",
+          "frequency": 1,
+          "relevance": null
+        }
+      ]
+    },
+    {
+      "token": "the",
+      "resultCount": 1,
+      "results": [
+        {
+          "file": "protoforge-overview.md",
+          "frequency": 1,
+          "relevance": null
+        }
+      ]
+    },
+    {
+      "token": "designed",
+      "resultCount": 1,
+      "results": [
+        {
+          "file": "protoforge-overview.md",
+          "frequency": 1,
+          "relevance": null
+        }
+      ]
+    },
+    {
+      "token": "discover",
+      "resultCount": 1,
+      "results": [
+        {
+          "file": "protoforge-overview.md",
+          "frequency": 1,
+          "relevance": null
+        }
+      ]
+    },
+    {
+      "token": "distressed",
+      "resultCount": 1,
+      "results": [
+        {
+          "file": "protoforge-overview.md",
+          "frequency": 1,
+          "relevance": null
+        }
+      ]
+    },
+    {
+      "token": "digital",
+      "resultCount": 1,
+      "results": [
+        {
+          "file": "protoforge-overview.md",
+          "frequency": 1,
+          "relevance": null
+        }
+      ]
+    },
+    {
+      "token": "assets",
+      "resultCount": 1,
+      "results": [
+        {
+          "file": "protoforge-overview.md",
+          "frequency": 1,
+          "relevance": null
+        }
+      ]
+    },
+    {
+      "token": "and",
+      "resultCount": 5,
+      "results": [
+        {
+          "file": "protoforge-overview.md",
+          "frequency": 5,
+          "relevance": null
+        },
+        {
+          "file": "protoforge-overview.md",
+          "frequency": 5,
+          "relevance": 0
+        },
+        {
+          "file": "protoforge-overview.md",
+          "frequency": 5,
+          "relevance": -0.050966704452937155
+        },
+        {
+          "file": "protoforge-overview.md",
+          "frequency": 5,
+          "relevance": -0.08078031534324337
+        },
+        {
+          "file": "protoforge-overview.md",
+          "frequency": 5,
+          "relevance": -0.10193340890587431
+        }
+      ]
+    },
+    {
+      "token": "facilitate",
+      "resultCount": 1,
+      "results": [
+        {
+          "file": "protoforge-overview.md",
+          "frequency": 1,
+          "relevance": null
+        }
+      ]
+    },
+    {
+      "token": "their",
+      "resultCount": 1,
+      "results": [
+        {
+          "file": "protoforge-overview.md",
+          "frequency": 1,
+          "relevance": null
+        }
+      ]
+    },
+    {
+      "token": "recovery",
+      "resultCount": 5,
+      "results": [
+        {
+          "file": "protoforge-overview.md",
+          "frequency": 5,
+          "relevance": null
+        },
+        {
+          "file": "protoforge-overview.md",
+          "frequency": 5,
+          "relevance": 0
+        },
+        {
+          "file": "protoforge-overview.md",
+          "frequency": 5,
+          "relevance": -0.050966704452937155
+        },
+        {
+          "file": "protoforge-overview.md",
+          "frequency": 5,
+          "relevance": -0.08078031534324337
+        },
+        {
+          "file": "protoforge-overview.md",
+          "frequency": 5,
+          "relevance": -0.10193340890587431
+        }
+      ]
+    },
+    {
+      "token": "capabilities",
+      "resultCount": 1,
+      "results": [
+        {
+          "file": "protoforge-overview.md",
+          "frequency": 1,
+          "relevance": null
+        }
+      ]
+    },
+    {
+      "token": "asset",
+      "resultCount": 4,
+      "results": [
+        {
+          "file": "protoforge-overview.md",
+          "frequency": 4,
+          "relevance": null
+        },
+        {
+          "file": "protoforge-overview.md",
+          "frequency": 4,
+          "relevance": 0
+        },
+        {
+          "file": "protoforge-overview.md",
+          "frequency": 4,
+          "relevance": -0.04077336356234972
+        },
+        {
+          "file": "protoforge-overview.md",
+          "frequency": 4,
+          "relevance": -0.06462425227459469
+        }
+      ]
+    },
+    {
+      "token": "discovery",
+      "resultCount": 1,
+      "results": [
+        {
+          "file": "protoforge-overview.md",
+          "frequency": 1,
+          "relevance": null
+        }
+      ]
+    },
+    {
+      "token": "scan",
+      "resultCount": 1,
+      "results": [
+        {
+          "file": "protoforge-overview.md",
+          "frequency": 1,
+          "relevance": null
+        }
+      ]
+    },
+    {
+      "token": "websites",
+      "resultCount": 1,
+      "results": [
+        {
+          "file": "protoforge-overview.md",
+          "frequency": 1,
+          "relevance": null
+        }
+      ]
+    },
+    {
+      "token": "for",
+      "resultCount": 1,
+      "results": [
+        {
+          "file": "protoforge-overview.md",
+          "frequency": 1,
+          "relevance": null
+        }
+      ]
+    },
+    {
+      "token": "technical",
+      "resultCount": 1,
+      "results": [
+        {
+          "file": "protoforge-overview.md",
+          "frequency": 1,
+          "relevance": null
+        }
+      ]
+    },
+    {
+      "token": "distress",
+      "resultCount": 1,
+      "results": [
+        {
+          "file": "protoforge-overview.md",
+          "frequency": 1,
+          "relevance": null
+        }
+      ]
+    },
+    {
+      "token": "indicators",
+      "resultCount": 1,
+      "results": [
+        {
+          "file": "protoforge-overview.md",
+          "frequency": 1,
+          "relevance": null
+        }
+      ]
+    },
+    {
+      "token": "scraping",
+      "resultCount": 1,
+      "results": [
+        {
+          "file": "protoforge-overview.md",
+          "frequency": 1,
+          "relevance": null
+        }
+      ]
+    },
+    {
+      "token": "extract",
+      "resultCount": 1,
+      "results": [
+        {
+          "file": "protoforge-overview.md",
+          "frequency": 1,
+          "relevance": null
+        }
+      ]
+    },
+    {
+      "token": "detailed",
+      "resultCount": 1,
+      "results": [
+        {
+          "file": "protoforge-overview.md",
+          "frequency": 1,
+          "relevance": null
+        }
+      ]
+    },
+    {
+      "token": "information",
+      "resultCount": 1,
+      "results": [
+        {
+          "file": "protoforge-overview.md",
+          "frequency": 1,
+          "relevance": null
+        }
+      ]
+    },
+    {
+      "token": "scoring",
+      "resultCount": 1,
+      "results": [
+        {
+          "file": "protoforge-overview.md",
+          "frequency": 1,
+          "relevance": null
+        }
+      ]
+    },
+    {
+      "token": "calculate",
+      "resultCount": 1,
+      "results": [
+        {
+          "file": "protoforge-overview.md",
+          "frequency": 1,
+          "relevance": null
+        }
+      ]
+    },
+    {
+      "token": "value",
+      "resultCount": 1,
+      "results": [
+        {
+          "file": "protoforge-overview.md",
+          "frequency": 1,
+          "relevance": null
+        }
+      ]
+    },
+    {
+      "token": "priority",
+      "resultCount": 1,
+      "results": [
+        {
+          "file": "protoforge-overview.md",
+          "frequency": 1,
+          "relevance": null
+        }
+      ]
+    },
+    {
+      "token": "automated",
+      "resultCount": 2,
+      "results": [
+        {
+          "file": "protoforge-overview.md",
+          "frequency": 2,
+          "relevance": null
+        },
+        {
+          "file": "protoforge-overview.md",
+          "frequency": 2,
+          "relevance": 0
+        }
+      ]
+    },
+    {
+      "token": "outreach",
+      "resultCount": 2,
+      "results": [
+        {
+          "file": "protoforge-overview.md",
+          "frequency": 2,
+          "relevance": null
+        },
+        {
+          "file": "protoforge-overview.md",
+          "frequency": 2,
+          "relevance": 0
+        }
+      ]
+    },
+    {
+      "token": "generate",
+      "resultCount": 1,
+      "results": [
+        {
+          "file": "protoforge-overview.md",
+          "frequency": 1,
+          "relevance": null
+        }
+      ]
+    },
+    {
+      "token": "personalized",
+      "resultCount": 1,
+      "results": [
+        {
+          "file": "protoforge-overview.md",
+          "frequency": 1,
+          "relevance": null
+        }
+      ]
+    },
+    {
+      "token": "templates",
+      "resultCount": 1,
+      "results": [
+        {
+          "file": "protoforge-overview.md",
+          "frequency": 1,
+          "relevance": null
+        }
+      ]
+    },
+    {
+      "token": "architecture",
+      "resultCount": 1,
+      "results": [
+        {
+          "file": "protoforge-overview.md",
+          "frequency": 1,
+          "relevance": null
+        }
+      ]
+    },
+    {
+      "token": "scanner",
+      "resultCount": 1,
+      "results": [
+        {
+          "file": "protoforge-overview.md",
+          "frequency": 1,
+          "relevance": null
+        }
+      ]
+    },
+    {
+      "token": "module",
+      "resultCount": 2,
+      "results": [
+        {
+          "file": "protoforge-overview.md",
+          "frequency": 2,
+          "relevance": null
+        },
+        {
+          "file": "protoforge-overview.md",
+          "frequency": 2,
+          "relevance": 0
+        }
+      ]
+    },
+    {
+      "token": "web",
+      "resultCount": 1,
+      "results": [
+        {
+          "file": "protoforge-overview.md",
+          "frequency": 1,
+          "relevance": null
+        }
+      ]
+    },
+    {
+      "token": "crawling",
+      "resultCount": 1,
+      "results": [
+        {
+          "file": "protoforge-overview.md",
+          "frequency": 1,
+          "relevance": null
+        }
+      ]
+    },
+    {
+      "token": "analysis",
+      "resultCount": 1,
+      "results": [
+        {
+          "file": "protoforge-overview.md",
+          "frequency": 1,
+          "relevance": null
+        }
+      ]
+    },
+    {
+      "token": "scorer",
+      "resultCount": 1,
+      "results": [
+        {
+          "file": "protoforge-overview.md",
+          "frequency": 1,
+          "relevance": null
+        }
+      ]
+    },
+    {
+      "token": "valuation",
+      "resultCount": 1,
+      "results": [
+        {
+          "file": "protoforge-overview.md",
+          "frequency": 1,
+          "relevance": null
+        }
+      ]
+    },
+    {
+      "token": "ranking",
+      "resultCount": 1,
+      "results": [
+        {
+          "file": "protoforge-overview.md",
+          "frequency": 1,
+          "relevance": null
+        }
+      ]
+    },
+    {
+      "token": "engine",
+      "resultCount": 1,
+      "results": [
+        {
+          "file": "protoforge-overview.md",
+          "frequency": 1,
+          "relevance": null
+        }
+      ]
+    },
+    {
+      "token": "procedures",
+      "resultCount": 1,
+      "results": [
+        {
+          "file": "protoforge-overview.md",
+          "frequency": 1,
+          "relevance": null
+        }
+      ]
+    },
+    {
+      "token": "dashboard",
+      "resultCount": 1,
+      "results": [
+        {
+          "file": "protoforge-overview.md",
+          "frequency": 1,
+          "relevance": null
+        }
+      ]
+    },
+    {
+      "token": "integration",
+      "resultCount": 1,
+      "results": [
+        {
+          "file": "protoforge-overview.md",
+          "frequency": 1,
+          "relevance": null
+        }
+      ]
+    },
+    {
+      "token": "realtime",
+      "resultCount": 1,
+      "results": [
+        {
+          "file": "protoforge-overview.md",
+          "frequency": 1,
+          "relevance": null
+        }
+      ]
+    },
+    {
+      "token": "monitoring",
+      "resultCount": 1,
+      "results": [
+        {
+          "file": "protoforge-overview.md",
+          "frequency": 1,
+          "relevance": null
+        }
+      ]
+    },
+    {
+      "token": "control",
+      "resultCount": 1,
+      "results": [
+        {
+          "file": "protoforge-overview.md",
+          "frequency": 1,
+          "relevance": null
+        }
+      ]
+    },
+    {
+      "token": "usage",
+      "resultCount": 1,
+      "results": [
+        {
+          "file": "protoforge-overview.md",
+          "frequency": 1,
+          "relevance": null
+        }
+      ]
+    }
+  ]
+}

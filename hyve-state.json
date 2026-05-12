@@ -1,0 +1,13 @@
+{
+  "intake": [],
+  "classified": [],
+  "monetizable": [],
+  "active": true,
+  "stats": {
+    "opportunitiesGenerated": 0,
+    "opportunitiesPassedToKilo": 0,
+    "pipelineLatency": 0,
+    "lastOpportunityTime": null,
+    "startTime": "2026-04-21T19:12:01.499Z"
+  }
+}
