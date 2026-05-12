@@ -1,0 +1,12 @@
+node_modules/
+.env
+.env.*
+dist/
+build/
+*.log
+*.zip
+*.tar.gz
+hydi-system-*.zip
+hydi-system-*.tar.gz
+logs.txt
+.DS_Store
