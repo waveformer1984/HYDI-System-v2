@@ -401,23 +401,43 @@ help                 this list
 exit / quit          stop Hydi"""
 
 # ── TTS ──────────────────────────────────────────────────
-_tts_ok = True   # flipped to False on first failure so we never hang again
+# Disabled by default; probe_tts() enables it only if the binary responds fast.
+# Override: export HYDI_TTS=1 to force-enable, HYDI_TTS=0 to force-disable.
+_tts_ok = False
+
+def probe_tts():
+    """Quick startup check — enables TTS only if termux-tts-speak is responsive."""
+    global _tts_ok
+    env = os.environ.get("HYDI_TTS", "")
+    if env == "0":
+        return
+    if env == "1":
+        _tts_ok = True
+        return
+    try:
+        subprocess.run(
+            ["termux-tts-speak", ""],
+            timeout=2,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        _tts_ok = True
+    except Exception:
+        _tts_ok = False
 
 def speak(text):
     global _tts_ok
     if not _tts_ok:
         return
     try:
-        r = subprocess.run(
+        subprocess.run(
             ["termux-tts-speak", text[:200]],
             timeout=5,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
-        if r.returncode != 0:
-            _tts_ok = False
     except Exception:
-        _tts_ok = False   # timeout or missing binary — skip TTS from now on
+        _tts_ok = False
 
 def speak_async(text):
     if _tts_ok:
@@ -821,6 +841,8 @@ def start_server(port=3006, host="0.0.0.0"):
 
 # ── Entry ─────────────────────────────────────────────────
 def main():
+    probe_tts()   # quick 2s check; TTS stays off if unresponsive
+
     # Check Groq first (fast, phone-friendly)
     print("Checking Groq... ", end=" ", flush=True)
     if detect_groq():
