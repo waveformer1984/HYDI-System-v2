@@ -401,19 +401,27 @@ help                 this list
 exit / quit          stop Hydi"""
 
 # ── TTS ──────────────────────────────────────────────────
+_tts_ok = True   # flipped to False on first failure so we never hang again
+
 def speak(text):
+    global _tts_ok
+    if not _tts_ok:
+        return
     try:
-        subprocess.run(
+        r = subprocess.run(
             ["termux-tts-speak", text[:200]],
-            timeout=15,
+            timeout=5,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
+        if r.returncode != 0:
+            _tts_ok = False
     except Exception:
-        pass
+        _tts_ok = False   # timeout or missing binary — skip TTS from now on
 
 def speak_async(text):
-    threading.Thread(target=speak, args=(text,), daemon=True).start()
+    if _tts_ok:
+        threading.Thread(target=speak, args=(text,), daemon=True).start()
 
 # ── Utilities ─────────────────────────────────────────────
 def uptime_str():
