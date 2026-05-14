@@ -1,0 +1,2029 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Hydi">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#0a0a0f">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="apple-touch-icon" href="/icons/icon-192.png">
+  <title>Hydi — ProtoForge Command</title>
+  <style>
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    :root {
+      --bg0: #08080e;
+      --bg1: #0f0f18;
+      --bg2: #161622;
+      --bg3: #1e1e2e;
+      --accent: #64ffda;
+      --accent2: #7c6aff;
+      --accent3: #ff6ac1;
+      --accent-glow: rgba(100, 255, 218, 0.15);
+      --txt0: #e2e8f0;
+      --txt1: #94a3b8;
+      --txt2: #64748b;
+      --ok: #10b981;
+      --warn: #f59e0b;
+      --crit: #ef4444;
+      --info: #3b82f6;
+      --tab-h: 60px;
+      --header-h: 64px;
+      --safe-bottom: env(safe-area-inset-bottom, 0px);
+      --safe-top: env(safe-area-inset-top, 0px);
+    }
+
+    html, body {
+      height: 100%;
+      width: 100%;
+      overflow: hidden;
+      background: var(--bg0);
+      color: var(--txt0);
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ═══ LAYOUT ═══ */
+    #app {
+      display: flex;
+      flex-direction: column;
+      height: 100dvh;
+      padding-top: var(--safe-top);
+    }
+
+    /* ═══ HEADER ═══ */
+    .header {
+      height: var(--header-h);
+      background: var(--bg1);
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px;
+      flex-shrink: 0;
+      position: relative;
+      z-index: 10;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .brand-orb {
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      background: conic-gradient(from 180deg, var(--accent), var(--accent2), var(--accent3), var(--accent));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      box-shadow: 0 0 18px var(--accent-glow);
+      animation: orb-spin 8s linear infinite;
+      flex-shrink: 0;
+    }
+
+    @keyframes orb-spin {
+      to { filter: hue-rotate(360deg); }
+    }
+
+    .brand-text h1 {
+      font-size: 17px;
+      font-weight: 700;
+      letter-spacing: -0.3px;
+      color: var(--txt0);
+    }
+
+    .brand-text .tagline {
+      font-size: 11px;
+      color: var(--txt2);
+      letter-spacing: 0.3px;
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .conn-badge {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      padding: 5px 10px;
+      border-radius: 100px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      background: rgba(16,185,129,0.12);
+      color: var(--ok);
+      border: 1px solid rgba(16,185,129,0.25);
+      transition: all 0.3s;
+    }
+
+    .conn-badge.warn { background: rgba(245,158,11,0.12); color: var(--warn); border-color: rgba(245,158,11,0.25); }
+    .conn-badge.crit { background: rgba(239,68,68,0.12); color: var(--crit); border-color: rgba(239,68,68,0.25); }
+    .conn-badge.off  { background: rgba(100,116,139,0.12); color: var(--txt2); border-color: rgba(100,116,139,0.25); }
+
+    .conn-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: currentColor;
+      animation: blink 2s infinite;
+    }
+
+    @keyframes blink {
+      0%,100% { opacity:1; }
+      50% { opacity: 0.4; }
+    }
+
+    .menu-btn {
+      width: 34px;
+      height: 34px;
+      border-radius: 8px;
+      background: var(--bg2);
+      border: 1px solid rgba(255,255,255,0.06);
+      color: var(--txt1);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 16px;
+    }
+
+    /* ═══ TAB PANELS ═══ */
+    .panels {
+      flex: 1;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .panel {
+      position: absolute;
+      inset: 0;
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding: 16px;
+      display: none;
+      flex-direction: column;
+      gap: 12px;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .panel.active {
+      display: flex;
+    }
+
+    /* ═══ BOTTOM NAV ═══ */
+    .bottom-nav {
+      height: var(--tab-h);
+      background: var(--bg1);
+      border-top: 1px solid rgba(255,255,255,0.06);
+      display: flex;
+      align-items: stretch;
+      padding-bottom: var(--safe-bottom);
+      flex-shrink: 0;
+    }
+
+    .nav-tab {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 3px;
+      cursor: pointer;
+      color: var(--txt2);
+      transition: color 0.2s;
+      position: relative;
+      -webkit-tap-highlight-color: transparent;
+      padding-bottom: 2px;
+    }
+
+    .nav-tab.active {
+      color: var(--accent);
+    }
+
+    .nav-tab.active::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 20%;
+      right: 20%;
+      height: 2px;
+      background: var(--accent);
+      border-radius: 0 0 2px 2px;
+    }
+
+    .nav-icon {
+      font-size: 20px;
+      line-height: 1;
+    }
+
+    .nav-label {
+      font-size: 10px;
+      font-weight: 500;
+      letter-spacing: 0.3px;
+      text-transform: uppercase;
+    }
+
+    .nav-badge {
+      position: absolute;
+      top: 6px;
+      right: calc(50% - 16px);
+      background: var(--crit);
+      color: white;
+      font-size: 9px;
+      font-weight: 700;
+      padding: 1px 5px;
+      border-radius: 100px;
+      min-width: 16px;
+      text-align: center;
+    }
+
+    /* ═══ SHARED CARD ═══ */
+    .card {
+      background: var(--bg2);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 14px;
+      padding: 14px;
+    }
+
+    .card-title {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--txt2);
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      margin-bottom: 10px;
+    }
+
+    /* ═══ CHAT PANEL ═══ */
+    #panel-chat {
+      padding: 0;
+      gap: 0;
+    }
+
+    .chat-messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .msg {
+      max-width: 82%;
+      animation: msg-in 0.25s ease;
+    }
+
+    @keyframes msg-in {
+      from { opacity:0; transform: translateY(8px); }
+      to   { opacity:1; transform: translateY(0); }
+    }
+
+    .msg.user  { align-self: flex-end; }
+    .msg.hydi  { align-self: flex-start; }
+    .msg.sys   { align-self: center; max-width: 94%; }
+
+    .bubble {
+      padding: 11px 15px;
+      border-radius: 18px;
+      font-size: 15px;
+      line-height: 1.5;
+      word-break: break-word;
+      white-space: pre-wrap;
+    }
+
+    .msg.user .bubble {
+      background: var(--accent);
+      color: #000;
+      border-bottom-right-radius: 5px;
+      font-weight: 500;
+    }
+
+    .msg.hydi .bubble {
+      background: var(--bg3);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-bottom-left-radius: 5px;
+    }
+
+    .msg.sys .bubble {
+      background: rgba(100,255,218,0.06);
+      border: 1px solid rgba(100,255,218,0.15);
+      font-size: 12px;
+      text-align: center;
+      color: var(--txt1);
+    }
+
+    .msg-time {
+      font-size: 10px;
+      color: var(--txt2);
+      margin-top: 3px;
+      padding: 0 5px;
+    }
+
+    .msg.user .msg-time { text-align: right; }
+
+    .typing-wrap {
+      align-self: flex-start;
+    }
+
+    .typing-dots {
+      background: var(--bg3);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-bottom-left-radius: 5px;
+      border-radius: 18px;
+      padding: 12px 18px;
+      display: flex;
+      gap: 5px;
+    }
+
+    .typing-dots span {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--txt2);
+      animation: tdot 1.2s infinite;
+    }
+
+    .typing-dots span:nth-child(2) { animation-delay: 0.2s; }
+    .typing-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+    @keyframes tdot {
+      0%,80%,100% { transform: scale(0.7); opacity:0.5; }
+      40% { transform: scale(1); opacity:1; }
+    }
+
+    /* Suggested chips */
+    .suggestions {
+      display: flex;
+      gap: 7px;
+      padding: 8px 14px;
+      overflow-x: auto;
+      scrollbar-width: none;
+      background: var(--bg1);
+      border-top: 1px solid rgba(255,255,255,0.04);
+    }
+
+    .suggestions::-webkit-scrollbar { display: none; }
+
+    .chip {
+      padding: 6px 13px;
+      border-radius: 100px;
+      background: var(--bg2);
+      border: 1px solid rgba(255,255,255,0.08);
+      font-size: 12px;
+      color: var(--txt1);
+      white-space: nowrap;
+      cursor: pointer;
+      flex-shrink: 0;
+      transition: all 0.15s;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .chip:active {
+      background: var(--accent-glow);
+      border-color: rgba(100,255,218,0.3);
+      color: var(--accent);
+    }
+
+    /* Chat input */
+    .chat-input-area {
+      background: var(--bg1);
+      border-top: 1px solid rgba(255,255,255,0.06);
+      padding: 10px 14px;
+      padding-bottom: max(10px, var(--safe-bottom));
+    }
+
+    .chat-input-row {
+      display: flex;
+      gap: 9px;
+      align-items: flex-end;
+    }
+
+    .chat-textarea {
+      flex: 1;
+      background: var(--bg2);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 20px;
+      padding: 10px 15px;
+      font-size: 15px;
+      color: var(--txt0);
+      resize: none;
+      max-height: 100px;
+      outline: none;
+      font-family: inherit;
+      line-height: 1.4;
+      transition: border-color 0.2s;
+    }
+
+    .chat-textarea:focus {
+      border-color: rgba(100,255,218,0.4);
+    }
+
+    .chat-textarea::placeholder { color: var(--txt2); }
+
+    .send-btn {
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      background: var(--accent);
+      border: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      flex-shrink: 0;
+      transition: transform 0.15s, opacity 0.15s;
+    }
+
+    .send-btn:active { transform: scale(0.92); }
+    .send-btn:disabled { opacity: 0.4; cursor: default; }
+
+    .send-btn svg { width: 18px; height: 18px; fill: #000; }
+
+    /* ═══ AGENTS PANEL ═══ */
+    .agent-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .agent-card {
+      background: var(--bg2);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 12px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      position: relative;
+      overflow: hidden;
+      cursor: pointer;
+      transition: border-color 0.2s;
+    }
+
+    .agent-card:active { border-color: rgba(100,255,218,0.3); }
+
+    .agent-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: var(--agent-color, var(--accent));
+      opacity: 0.6;
+    }
+
+    .agent-card.running::before { animation: bar-pulse 1.5s infinite; }
+
+    @keyframes bar-pulse {
+      0%,100% { opacity:0.6; }
+      50% { opacity:1; }
+    }
+
+    .agent-icon { font-size: 22px; }
+
+    .agent-name {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--txt0);
+      line-height: 1.2;
+    }
+
+    .agent-role {
+      font-size: 10px;
+      color: var(--txt2);
+      line-height: 1.3;
+    }
+
+    .agent-status-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 4px;
+    }
+
+    .agent-status-pill {
+      font-size: 9px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      padding: 2px 7px;
+      border-radius: 100px;
+    }
+
+    .pill-running { background: rgba(16,185,129,0.15); color: var(--ok); }
+    .pill-idle    { background: rgba(100,116,139,0.15); color: var(--txt2); }
+    .pill-paused  { background: rgba(245,158,11,0.15); color: var(--warn); }
+    .pill-error   { background: rgba(239,68,68,0.15); color: var(--crit); }
+
+    .agent-actions-row {
+      display: flex;
+      gap: 6px;
+      margin-top: 4px;
+    }
+
+    .agent-btn {
+      flex: 1;
+      padding: 6px 0;
+      background: var(--bg3);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 7px;
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--txt1);
+      cursor: pointer;
+      text-align: center;
+      transition: all 0.15s;
+    }
+
+    .agent-btn:active {
+      background: var(--accent-glow);
+      color: var(--accent);
+      border-color: rgba(100,255,218,0.25);
+    }
+
+    /* ═══ APPROVE PANEL ═══ */
+    .approval-item {
+      background: var(--bg2);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 14px;
+      overflow: hidden;
+      animation: msg-in 0.3s ease;
+    }
+
+    .approval-header {
+      padding: 12px 14px;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .approval-priority {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .priority-high { background: var(--crit); }
+    .priority-med  { background: var(--warn); }
+    .priority-low  { background: var(--ok); }
+
+    .approval-agent {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .approval-ts {
+      margin-left: auto;
+      font-size: 10px;
+      color: var(--txt2);
+    }
+
+    .approval-body {
+      padding: 12px 14px;
+    }
+
+    .approval-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--txt0);
+      margin-bottom: 5px;
+    }
+
+    .approval-desc {
+      font-size: 13px;
+      color: var(--txt1);
+      line-height: 1.45;
+    }
+
+    .approval-meta {
+      margin-top: 8px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .meta-tag {
+      padding: 3px 8px;
+      border-radius: 5px;
+      background: var(--bg3);
+      font-size: 10px;
+      color: var(--txt2);
+      font-family: 'SF Mono', monospace;
+    }
+
+    .approval-actions {
+      display: flex;
+      gap: 8px;
+      padding: 12px 14px;
+      border-top: 1px solid rgba(255,255,255,0.06);
+    }
+
+    .approve-btn {
+      flex: 1;
+      padding: 11px;
+      border-radius: 10px;
+      border: none;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 0.15s;
+    }
+
+    .approve-btn:active { transform: scale(0.97); }
+
+    .btn-approve {
+      background: rgba(16,185,129,0.2);
+      color: var(--ok);
+      border: 1px solid rgba(16,185,129,0.35);
+    }
+
+    .btn-reject {
+      background: rgba(239,68,68,0.1);
+      color: var(--crit);
+      border: 1px solid rgba(239,68,68,0.25);
+    }
+
+    .btn-defer {
+      background: rgba(100,116,139,0.12);
+      color: var(--txt1);
+      border: 1px solid rgba(100,116,139,0.2);
+      flex: 0.6;
+    }
+
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      padding: 48px 24px;
+      text-align: center;
+    }
+
+    .empty-icon { font-size: 40px; }
+    .empty-title { font-size: 15px; font-weight: 600; color: var(--txt1); }
+    .empty-sub   { font-size: 13px; color: var(--txt2); line-height: 1.4; }
+
+    /* ═══ GROW PANEL ═══ */
+    .level-display {
+      text-align: center;
+      padding: 20px 14px;
+    }
+
+    .level-orb {
+      width: 90px;
+      height: 90px;
+      border-radius: 50%;
+      margin: 0 auto 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 36px;
+      position: relative;
+    }
+
+    .level-orb::before {
+      content: '';
+      position: absolute;
+      inset: -3px;
+      border-radius: 50%;
+      background: conic-gradient(var(--accent) var(--progress, 40%), transparent 0%);
+      -webkit-mask: radial-gradient(circle at center, transparent 42px, black 43px);
+      mask: radial-gradient(circle at center, transparent 42px, black 43px);
+      animation: level-spin 3s linear infinite;
+    }
+
+    @keyframes level-spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .level-orb-inner {
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      background: var(--bg2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 30px;
+      z-index: 1;
+    }
+
+    .level-name {
+      font-size: 16px;
+      font-weight: 800;
+      color: var(--accent);
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+
+    .level-desc {
+      font-size: 12px;
+      color: var(--txt1);
+      margin-top: 4px;
+    }
+
+    .autonomy-steps {
+      display: flex;
+      justify-content: space-between;
+      gap: 6px;
+      margin-top: 14px;
+    }
+
+    .auton-step {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 5px;
+      cursor: pointer;
+      padding: 8px 4px;
+      border-radius: 10px;
+      border: 1px solid rgba(255,255,255,0.06);
+      background: var(--bg2);
+      transition: all 0.2s;
+    }
+
+    .auton-step.active {
+      background: rgba(100,255,218,0.08);
+      border-color: rgba(100,255,218,0.3);
+    }
+
+    .auton-step:active { transform: scale(0.95); }
+
+    .step-num {
+      font-size: 13px;
+      font-weight: 800;
+      color: var(--txt2);
+    }
+
+    .auton-step.active .step-num { color: var(--accent); }
+
+    .step-label {
+      font-size: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      color: var(--txt2);
+      text-align: center;
+      line-height: 1.2;
+    }
+
+    .auton-step.active .step-label { color: var(--accent); }
+
+    /* Grow actions */
+    .grow-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .grow-action-card {
+      background: var(--bg2);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 12px;
+      padding: 14px;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .grow-action-card:active {
+      border-color: rgba(100,255,218,0.3);
+      background: rgba(100,255,218,0.04);
+      transform: scale(0.97);
+    }
+
+    .grow-action-icon { font-size: 24px; }
+    .grow-action-title { font-size: 13px; font-weight: 700; color: var(--txt0); }
+    .grow-action-desc  { font-size: 11px; color: var(--txt2); line-height: 1.3; }
+
+    /* ═══ STATS PANEL ═══ */
+    .stats-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .stat-card {
+      background: var(--bg2);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 12px;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .stat-label {
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--txt2);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .stat-value {
+      font-size: 22px;
+      font-weight: 800;
+      color: var(--txt0);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .stat-sub {
+      font-size: 11px;
+      color: var(--txt2);
+    }
+
+    .stat-trend {
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .trend-up   { color: var(--ok); }
+    .trend-down { color: var(--crit); }
+    .trend-flat { color: var(--txt2); }
+
+    /* Sparkline placeholder */
+    .spark-bar {
+      display: flex;
+      align-items: flex-end;
+      gap: 2px;
+      height: 24px;
+      margin-top: 6px;
+    }
+
+    .spark-bar span {
+      flex: 1;
+      background: rgba(100,255,218,0.25);
+      border-radius: 2px;
+      animation: spark-in 0.5s ease both;
+    }
+
+    @keyframes spark-in {
+      from { height: 0; }
+    }
+
+    .timeline-card {
+      background: var(--bg2);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 14px;
+      overflow: hidden;
+    }
+
+    .timeline-header {
+      padding: 12px 14px;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--txt2);
+      text-transform: uppercase;
+      letter-spacing: 0.7px;
+    }
+
+    .timeline-item {
+      padding: 11px 14px;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+    }
+
+    .timeline-item:last-child { border-bottom: none; }
+
+    .tl-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      margin-top: 4px;
+    }
+
+    .tl-content { flex: 1; }
+    .tl-text { font-size: 13px; color: var(--txt0); line-height: 1.4; }
+    .tl-time { font-size: 11px; color: var(--txt2); margin-top: 2px; }
+
+    /* ═══ TOAST ═══ */
+    #toast-container {
+      position: fixed;
+      bottom: calc(var(--tab-h) + var(--safe-bottom) + 12px);
+      left: 16px;
+      right: 16px;
+      z-index: 999;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      pointer-events: none;
+    }
+
+    .toast {
+      background: var(--bg3);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 12px;
+      padding: 12px 16px;
+      font-size: 13px;
+      color: var(--txt0);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      animation: toast-in 0.3s ease;
+      backdrop-filter: blur(20px);
+    }
+
+    @keyframes toast-in {
+      from { opacity:0; transform: translateY(20px); }
+      to   { opacity:1; transform: translateY(0); }
+    }
+
+    .toast.fade-out {
+      animation: toast-out 0.3s ease forwards;
+    }
+
+    @keyframes toast-out {
+      to { opacity:0; transform: translateY(10px); }
+    }
+
+    /* ═══ MODAL OVERLAY ═══ */
+    #overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.7);
+      z-index: 200;
+      display: none;
+      align-items: flex-end;
+      backdrop-filter: blur(4px);
+    }
+
+    #overlay.show { display: flex; }
+
+    .sheet {
+      width: 100%;
+      background: var(--bg2);
+      border-top: 1px solid rgba(255,255,255,0.1);
+      border-radius: 20px 20px 0 0;
+      padding: 20px;
+      padding-bottom: max(20px, var(--safe-bottom));
+      animation: sheet-in 0.3s ease;
+    }
+
+    @keyframes sheet-in {
+      from { transform: translateY(100%); }
+      to   { transform: translateY(0); }
+    }
+
+    .sheet-handle {
+      width: 40px;
+      height: 4px;
+      background: rgba(255,255,255,0.2);
+      border-radius: 2px;
+      margin: 0 auto 16px;
+    }
+
+    .sheet-title {
+      font-size: 17px;
+      font-weight: 700;
+      margin-bottom: 16px;
+      color: var(--txt0);
+    }
+
+    .sheet-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .sheet-action {
+      padding: 14px;
+      background: var(--bg3);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      cursor: pointer;
+      color: var(--txt0);
+      font-size: 15px;
+      transition: background 0.15s;
+    }
+
+    .sheet-action:active { background: var(--accent-glow); }
+    .sheet-action-icon   { font-size: 20px; }
+    .sheet-action-text   { flex: 1; }
+    .sheet-action-sub    { font-size: 12px; color: var(--txt2); margin-top: 2px; }
+
+    /* Connection banner */
+    #conn-banner {
+      background: rgba(239,68,68,0.15);
+      border-bottom: 1px solid rgba(239,68,68,0.3);
+      color: var(--crit);
+      font-size: 12px;
+      font-weight: 600;
+      text-align: center;
+      padding: 8px;
+      display: none;
+    }
+
+    #conn-banner.show { display: block; }
+
+    /* ─── Agent detail panel ─── */
+    .agent-detail-metrics {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .detail-metric {
+      background: var(--bg3);
+      border-radius: 8px;
+      padding: 10px;
+    }
+
+    .detail-metric-label { font-size: 10px; color: var(--txt2); text-transform: uppercase; letter-spacing: 0.5px; }
+    .detail-metric-value { font-size: 18px; font-weight: 700; color: var(--txt0); margin-top: 2px; }
+  </style>
+</head>
+<body>
+<div id="app">
+
+  <!-- CONNECTION BANNER -->
+  <div id="conn-banner">⚠ Offline — reconnecting to Hydi...</div>
+
+  <!-- HEADER -->
+  <header class="header">
+    <div class="brand">
+      <div class="brand-orb">🧠</div>
+      <div class="brand-text">
+        <h1>Hydi</h1>
+        <div class="tagline">ProtoForge Command</div>
+      </div>
+    </div>
+    <div class="header-right">
+      <div class="conn-badge" id="connBadge">
+        <span class="conn-dot"></span>
+        <span id="connText">Online</span>
+      </div>
+      <div class="menu-btn" onclick="openMenu()">⚙</div>
+    </div>
+  </header>
+
+  <!-- PANELS -->
+  <div class="panels">
+
+    <!-- ── CHAT ── -->
+    <div class="panel active" id="panel-chat">
+      <div class="chat-messages" id="chatMessages">
+        <div class="msg sys">
+          <div class="bubble">🧠 Hydi online — ProtoForge Command ready. How can I help you grow the system today?</div>
+        </div>
+      </div>
+
+      <div class="suggestions">
+        <span class="chip" onclick="sendChip('System status')">System status</span>
+        <span class="chip" onclick="sendChip('Start all agents')">Start all agents</span>
+        <span class="chip" onclick="sendChip('Show approval queue')">Approvals</span>
+        <span class="chip" onclick="sendChip('Scale to level 3')">Scale up</span>
+        <span class="chip" onclick="sendChip('Financial report')">Financials</span>
+        <span class="chip" onclick="sendChip('Health check')">Health</span>
+        <span class="chip" onclick="sendChip('Grow ProtoForge')">Grow</span>
+      </div>
+
+      <div class="chat-input-area">
+        <div class="chat-input-row">
+          <textarea
+            id="chatInput"
+            class="chat-textarea"
+            placeholder="Message Hydi..."
+            rows="1"
+            oninput="autoResize(this)"
+            onkeydown="handleKey(event)"
+          ></textarea>
+          <button class="send-btn" id="sendBtn" onclick="sendChat()">
+            <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── AGENTS ── -->
+    <div class="panel" id="panel-agents">
+      <div class="card" style="padding:12px 14px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0">
+          <span style="font-size:12px;color:var(--txt2);font-weight:700;text-transform:uppercase;letter-spacing:0.6px">15 Agents</span>
+          <div style="display:flex;gap:6px">
+            <button class="agent-btn" style="padding:6px 12px;border-radius:8px;flex:none" onclick="agentBroadcast('start')">▶ All</button>
+            <button class="agent-btn" style="padding:6px 12px;border-radius:8px;flex:none" onclick="agentBroadcast('pause')">⏸ All</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="agent-grid" id="agentGrid">
+        <!-- populated by JS -->
+      </div>
+    </div>
+
+    <!-- ── APPROVE ── -->
+    <div class="panel" id="panel-approve">
+      <div class="card" style="padding:10px 14px">
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <span style="font-size:12px;color:var(--txt2);font-weight:700;text-transform:uppercase;letter-spacing:0.6px">Pending Approvals</span>
+          <span id="queueCountBadge" style="font-size:12px;font-weight:700;color:var(--accent)">0 items</span>
+        </div>
+      </div>
+      <div id="approvalList">
+        <div class="empty-state">
+          <div class="empty-icon">✅</div>
+          <div class="empty-title">All clear</div>
+          <div class="empty-sub">No pending approvals. ProtoForge is running within its authorized parameters.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── GROW ── -->
+    <div class="panel" id="panel-grow">
+
+      <div class="card">
+        <div class="card-title">Autonomy Level</div>
+        <div class="level-display" style="padding:0 0 8px">
+          <div class="level-orb">
+            <div class="level-orb-inner" id="levelOrbInner">⚡</div>
+          </div>
+          <div class="level-name" id="levelName">EXECUTE WITH APPROVAL</div>
+          <div class="level-desc" id="levelDesc">Agents act after your confirmation</div>
+        </div>
+
+        <div class="autonomy-steps">
+          <div class="auton-step" data-lvl="0" onclick="setAutonomy(0)">
+            <span class="step-num">0</span>
+            <span class="step-label">Observe</span>
+          </div>
+          <div class="auton-step" data-lvl="1" onclick="setAutonomy(1)">
+            <span class="step-num">1</span>
+            <span class="step-label">Assist</span>
+          </div>
+          <div class="auton-step active" data-lvl="2" onclick="setAutonomy(2)">
+            <span class="step-num">2</span>
+            <span class="step-label">Approve</span>
+          </div>
+          <div class="auton-step" data-lvl="3" onclick="setAutonomy(3)">
+            <span class="step-num">3</span>
+            <span class="step-label">Conditional</span>
+          </div>
+          <div class="auton-step" data-lvl="4" onclick="setAutonomy(4)">
+            <span class="step-num">4</span>
+            <span class="step-label">Full Auto</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="card-title" style="margin:4px 0 -4px;padding:0 2px">Growth Actions</div>
+      <div class="grow-actions">
+        <div class="grow-action-card" onclick="growAction('scale_agents')">
+          <div class="grow-action-icon">🚀</div>
+          <div class="grow-action-title">Scale Agents</div>
+          <div class="grow-action-desc">Spin up additional worker agents to handle more tasks.</div>
+        </div>
+        <div class="grow-action-card" onclick="growAction('financial_round')">
+          <div class="grow-action-icon">💰</div>
+          <div class="grow-action-title">Finance Round</div>
+          <div class="grow-action-desc">Initiate a capital allocation cycle through the financial engine.</div>
+        </div>
+        <div class="grow-action-card" onclick="growAction('prime_directive')">
+          <div class="grow-action-icon">🎯</div>
+          <div class="grow-action-title">Prime Directive</div>
+          <div class="grow-action-desc">Re-align all agents to core ProtoForge mission objectives.</div>
+        </div>
+        <div class="grow-action-card" onclick="growAction('evolution_cycle')">
+          <div class="grow-action-icon">🧬</div>
+          <div class="grow-action-title">Evolution Cycle</div>
+          <div class="grow-action-desc">Run CASCADE evolution protocol to optimize agent policies.</div>
+        </div>
+        <div class="grow-action-card" onclick="growAction('infrastructure')">
+          <div class="grow-action-icon">🏗️</div>
+          <div class="grow-action-title">Infrastructure</div>
+          <div class="grow-action-desc">Provision or expand compute and data infrastructure.</div>
+        </div>
+        <div class="grow-action-card" onclick="growAction('trust_audit')">
+          <div class="grow-action-icon">🔐</div>
+          <div class="grow-action-title">Trust Audit</div>
+          <div class="grow-action-desc">Review agent trust scores and tighten guardrail boundaries.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── STATS ── -->
+    <div class="panel" id="panel-stats">
+
+      <div class="stats-row">
+        <div class="stat-card">
+          <div class="stat-label">Capital Deployed</div>
+          <div class="stat-value" id="statCapital">$—</div>
+          <div class="stat-trend trend-up" id="statCapitalTrend">— </div>
+          <div class="spark-bar" id="sparkCapital"></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Agent Actions</div>
+          <div class="stat-value" id="statActions">—</div>
+          <div class="stat-sub">last 24 h</div>
+          <div class="spark-bar" id="sparkActions"></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Success Rate</div>
+          <div class="stat-value" id="statSuccess">—%</div>
+          <div class="stat-trend" id="statSuccessTrend">—</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Trust Score</div>
+          <div class="stat-value" id="statTrust">—</div>
+          <div class="stat-sub">avg across agents</div>
+        </div>
+      </div>
+
+      <div class="timeline-card">
+        <div class="timeline-header">Recent Events</div>
+        <div id="eventTimeline">
+          <div class="timeline-item">
+            <div class="tl-dot" style="background:var(--txt2)"></div>
+            <div class="tl-content">
+              <div class="tl-text" style="color:var(--txt2)">Awaiting first event...</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">System Health</div>
+        <div class="agent-detail-metrics">
+          <div class="detail-metric">
+            <div class="detail-metric-label">Jobs Queued</div>
+            <div class="detail-metric-value" id="hJobs">—</div>
+          </div>
+          <div class="detail-metric">
+            <div class="detail-metric-label">Trend</div>
+            <div class="detail-metric-value" id="hTrend">—</div>
+          </div>
+          <div class="detail-metric">
+            <div class="detail-metric-label">Auto-Heals 24h</div>
+            <div class="detail-metric-value" id="hHeals">—</div>
+          </div>
+          <div class="detail-metric">
+            <div class="detail-metric-label">Last Check</div>
+            <div class="detail-metric-value" id="hLast" style="font-size:13px">—</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /panels -->
+
+  <!-- BOTTOM NAV -->
+  <nav class="bottom-nav">
+    <div class="nav-tab active" id="tab-chat" onclick="switchTab('chat')">
+      <span class="nav-icon">💬</span>
+      <span class="nav-label">Chat</span>
+    </div>
+    <div class="nav-tab" id="tab-agents" onclick="switchTab('agents')">
+      <span class="nav-icon">🤖</span>
+      <span class="nav-label">Agents</span>
+    </div>
+    <div class="nav-tab" id="tab-approve" onclick="switchTab('approve')">
+      <span class="nav-icon">✅</span>
+      <span class="nav-label">Approve</span>
+      <span class="nav-badge" id="approveBadge" style="display:none">0</span>
+    </div>
+    <div class="nav-tab" id="tab-grow" onclick="switchTab('grow')">
+      <span class="nav-icon">🚀</span>
+      <span class="nav-label">Grow</span>
+    </div>
+    <div class="nav-tab" id="tab-stats" onclick="switchTab('stats')">
+      <span class="nav-icon">📊</span>
+      <span class="nav-label">Stats</span>
+    </div>
+  </nav>
+
+</div><!-- /app -->
+
+<!-- TOAST CONTAINER -->
+<div id="toast-container"></div>
+
+<!-- OVERLAY / BOTTOM SHEET -->
+<div id="overlay" onclick="closeOverlay(event)">
+  <div class="sheet" id="bottomSheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title" id="sheetTitle">Options</div>
+    <div class="sheet-actions" id="sheetActions"></div>
+  </div>
+</div>
+
+<script>
+/* ═══════════════════════════════════════════════════════
+   HYDI MOBILE PROTOFORGE — CLIENT SCRIPT
+═══════════════════════════════════════════════════════ */
+
+// ── CONFIG ──────────────────────────────────────────────
+const CFG = {
+  wsUrl: (location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + location.host + '/ws/hydi',
+  apiBase: '',
+  reconnectDelay: 3000,
+  healthInterval: 30000,
+};
+
+// ── STATE ────────────────────────────────────────────────
+const STATE = {
+  ws: null,
+  connected: false,
+  autonomyLevel: 2,
+  approvals: [],
+  agents: [],
+  events: [],
+  stats: { capital: 0, actions: 0, success: 0, trust: 0 },
+  messageHistory: [],
+  pendingApprovals: 0,
+};
+
+// ── AGENTS DATA ──────────────────────────────────────────
+const AGENT_DEFS = [
+  { id:'architect',   icon:'🏗️', name:'Architect',     role:'System design & planning',         color:'#64ffda', status:'running' },
+  { id:'engineer',    icon:'⚙️', name:'Engineer',      role:'Core build & implementation',      color:'#7c6aff', status:'running' },
+  { id:'finance',     icon:'💰', name:'FinanceAI',     role:'Capital & revenue management',     color:'#10b981', status:'running' },
+  { id:'legal',       icon:'⚖️', name:'LegalGuard',   role:'Compliance & risk boundaries',     color:'#f59e0b', status:'idle' },
+  { id:'marketing',   icon:'📣', name:'MarketForge',  role:'Outreach & growth campaigns',      color:'#ef4444', status:'idle' },
+  { id:'ops',         icon:'🔧', name:'OpsCore',       role:'Infrastructure & deployment',      color:'#3b82f6', status:'running' },
+  { id:'analytics',   icon:'📊', name:'DataMind',      role:'Metrics, KPIs, trend analysis',   color:'#a78bfa', status:'running' },
+  { id:'cascade',     icon:'⚡', name:'CASCADE',       role:'Event processing & routing',       color:'#f97316', status:'running' },
+  { id:'heidi',       icon:'🧠', name:'Heidi',         role:'Contextual conscience & decisions',color:'#06b6d4', status:'running' },
+  { id:'ursula',      icon:'🔮', name:'Ursula',        role:'Event stream intelligence',        color:'#8b5cf6', status:'idle' },
+  { id:'security',    icon:'🔐', name:'SecureOps',     role:'Auth, audit & threat detection',   color:'#ef4444', status:'running' },
+  { id:'realtime',    icon:'📡', name:'RealtimeIO',   role:'WebSocket & live data feeds',      color:'#10b981', status:'running' },
+  { id:'outreach',    icon:'🤝', name:'OutreachAI',   role:'Client acquisition & CRM',         color:'#ec4899', status:'idle' },
+  { id:'memory',      icon:'💾', name:'MemoryLayer',  role:'Long-term context & recall',       color:'#84cc16', status:'idle' },
+  { id:'executive',   icon:'👔', name:'Executive',    role:'High-level orchestration & KPIs',  color:'#fbbf24', status:'running' },
+];
+
+const AUTONOMY_DEFS = [
+  { level:0, icon:'👁',  name:'OBSERVE',               desc:'Agents collect data only — no actions taken' },
+  { level:1, icon:'💡',  name:'ASSIST',                desc:'Agents recommend actions for your review' },
+  { level:2, icon:'⚡',  name:'EXECUTE WITH APPROVAL', desc:'Agents act after your confirmation' },
+  { level:3, icon:'🚀',  name:'CONDITIONAL AUTONOMY',  desc:'Agents act within predefined constraints' },
+  { level:4, icon:'🌐',  name:'FULL AUTONOMY',         desc:'Agents operate independently (except critical)' },
+];
+
+// ── INIT ─────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', () => {
+  renderAgents();
+  renderSparkbars();
+  connectWS();
+  pollHealth();
+  scheduleMockEvents();
+
+  // PWA service worker
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+  }
+});
+
+// ── WebSocket ────────────────────────────────────────────
+function connectWS() {
+  if (STATE.ws?.readyState === WebSocket.OPEN) return;
+
+  try {
+    STATE.ws = new WebSocket(CFG.wsUrl);
+
+    STATE.ws.onopen = () => {
+      STATE.connected = true;
+      setBadge('ok', 'Online');
+      document.getElementById('conn-banner').classList.remove('show');
+    };
+
+    STATE.ws.onmessage = (e) => {
+      try { handleWsMsg(JSON.parse(e.data)); }
+      catch { addChatMsg('hydi', e.data); }
+    };
+
+    STATE.ws.onerror = () => {
+      setBadge('crit', 'Error');
+    };
+
+    STATE.ws.onclose = () => {
+      STATE.connected = false;
+      setBadge('off', 'Offline');
+      document.getElementById('conn-banner').classList.add('show');
+      setTimeout(() => { if (!STATE.connected) connectWS(); }, CFG.reconnectDelay);
+    };
+
+  } catch {
+    setBadge('crit', 'Error');
+    setTimeout(connectWS, CFG.reconnectDelay);
+  }
+}
+
+function handleWsMsg(data) {
+  hideTyping();
+
+  switch (data.type) {
+    case 'health_update':
+      updateHealthUI(data.health); break;
+    case 'chat_response':
+      addChatMsg(data.sender || 'hydi', data.content || data.response, data.actions); break;
+    case 'agent_update':
+      updateAgentStatus(data.agentId, data.status); break;
+    case 'approval_request':
+      addApproval(data); break;
+    case 'system_alert':
+      addChatMsg('sys', '🚨 ' + data.message);
+      addEventEntry(data.message, 'crit'); break;
+    case 'protoforge_event':
+      addEventEntry(data.message, data.severity || 'ok'); break;
+    default:
+      if (data.content || data.response)
+        addChatMsg(data.sender || 'hydi', data.content || data.response);
+  }
+}
+
+function wsSend(obj) {
+  if (STATE.ws?.readyState === WebSocket.OPEN) {
+    STATE.ws.send(JSON.stringify(obj));
+    return true;
+  }
+  return false;
+}
+
+// ── HEALTH POLL ──────────────────────────────────────────
+async function pollHealth() {
+  try {
+    const r = await fetch(CFG.apiBase + '/api/health');
+    if (r.ok) updateHealthUI(await r.json());
+  } catch {}
+  setTimeout(pollHealth, CFG.healthInterval);
+}
+
+function updateHealthUI(h) {
+  if (!h) return;
+  document.getElementById('hJobs').textContent   = h.jobs_queued ?? '—';
+  document.getElementById('hTrend').textContent  = h.trend_status ?? '—';
+  document.getElementById('hHeals').textContent  = h.auto_heals_24h ?? '—';
+  document.getElementById('hLast').textContent   = h.last_check
+    ? new Date(h.last_check).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})
+    : '—';
+
+  if (h.current_status === 'CRITICAL') setBadge('crit', 'Critical');
+  else if (h.current_status === 'WARNING') setBadge('warn', 'Warning');
+  else if (h.current_status === 'OK') setBadge('ok', 'Online');
+}
+
+// ── TAB NAVIGATION ───────────────────────────────────────
+function switchTab(name) {
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  document.getElementById('panel-' + name).classList.add('active');
+
+  if (name === 'agents') refreshAgentStatus();
+  if (name === 'stats')  refreshStats();
+}
+
+// ── CHAT ─────────────────────────────────────────────────
+function addChatMsg(sender, text, actions = null) {
+  const box  = document.getElementById('chatMessages');
+  const div  = document.createElement('div');
+  div.className = 'msg ' + sender;
+
+  const time = new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+
+  let html = `<div class="bubble">${escHtml(text)}</div>
+              <div class="msg-time">${sender==='user'?'You':cap(sender)} · ${time}</div>`;
+
+  if (actions?.length) {
+    html += '<div style="margin-top:8px;display:flex;flex-direction:column;gap:6px">';
+    actions.forEach(a => {
+      html += `<button onclick="${escHtml(a.handler)}"
+               style="width:100%;padding:10px;background:rgba(100,255,218,0.08);
+                      border:1px solid rgba(100,255,218,0.25);border-radius:9px;
+                      color:var(--accent);font-size:13px;font-weight:600;cursor:pointer">
+               ${escHtml(a.label)}</button>`;
+    });
+    html += '</div>';
+  }
+
+  div.innerHTML = html;
+  box.appendChild(div);
+  box.scrollTop = box.scrollHeight;
+  STATE.messageHistory.push({sender, text, time});
+}
+
+function showTyping() {
+  if (document.getElementById('typingMsg')) return;
+  const box = document.getElementById('chatMessages');
+  const d = document.createElement('div');
+  d.className = 'msg hydi typing-wrap';
+  d.id = 'typingMsg';
+  d.innerHTML = `<div class="typing-dots"><span></span><span></span><span></span></div>`;
+  box.appendChild(d);
+  box.scrollTop = box.scrollHeight;
+}
+
+function hideTyping() {
+  document.getElementById('typingMsg')?.remove();
+}
+
+async function sendChat() {
+  const input = document.getElementById('chatInput');
+  const text  = input.value.trim();
+  if (!text) return;
+
+  addChatMsg('user', text);
+  input.value = '';
+  autoResize(input);
+  showTyping();
+
+  // Try WebSocket first; fall back to HTTP
+  const sent = wsSend({ type: 'message', content: text, model: 'hydi', timestamp: new Date().toISOString() });
+
+  if (!sent) {
+    // HTTP fallback
+    try {
+      const r = await fetch(CFG.apiBase + '/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: text, model: 'hydi' })
+      });
+      hideTyping();
+      if (r.ok) {
+        const d = await r.json();
+        addChatMsg(d.system || 'hydi', d.response || d.message || 'Processing...');
+      } else {
+        addChatMsg('hydi', buildOfflineReply(text));
+      }
+    } catch {
+      hideTyping();
+      addChatMsg('hydi', buildOfflineReply(text));
+    }
+  }
+}
+
+function sendChip(text) {
+  switchTab('chat');
+  document.getElementById('chatInput').value = text;
+  sendChat();
+}
+
+function buildOfflineReply(text) {
+  const t = text.toLowerCase();
+  if (t.includes('status') || t.includes('health'))
+    return 'System is running in offline mode. Reconnecting to HYDI core... ProtoForge agents last reported nominal status.';
+  if (t.includes('grow') || t.includes('scale'))
+    return 'Growth command queued. Once reconnected to the WebSocket server, ProtoForge will execute the scaling directive.';
+  if (t.includes('agent'))
+    return 'All 15 agents are registered. Detailed status requires a live connection to the HYDI backend.';
+  if (t.includes('financ') || t.includes('capital') || t.includes('revenue'))
+    return 'Financial engine is running. Last capital deployment: initializing. Connect to backend for live figures.';
+  if (t.includes('approval') || t.includes('queue'))
+    return 'Approval queue check requires live backend. Switching to Approve tab will show cached items.';
+  return 'Hydi is in offline mode. I can answer cached queries — connect to HYDI backend for live ProtoForge control.';
+}
+
+// ── AGENTS ───────────────────────────────────────────────
+function renderAgents() {
+  STATE.agents = AGENT_DEFS.map(a => ({...a}));
+  const grid = document.getElementById('agentGrid');
+  grid.innerHTML = STATE.agents.map(renderAgentCard).join('');
+}
+
+function renderAgentCard(a) {
+  const pill = { running:'pill-running', idle:'pill-idle', paused:'pill-paused', error:'pill-error' }[a.status] || 'pill-idle';
+  const label = { running:'Running', idle:'Idle', paused:'Paused', error:'Error' }[a.status] || a.status;
+  return `
+    <div class="agent-card ${a.status==='running'?'running':''}" data-agent="${a.id}"
+         style="--agent-color:${a.color}" onclick="openAgentSheet('${a.id}')">
+      <div class="agent-icon">${a.icon}</div>
+      <div class="agent-name">${a.name}</div>
+      <div class="agent-role">${a.role}</div>
+      <div class="agent-status-row">
+        <span class="agent-status-pill ${pill}">${label}</span>
+      </div>
+      <div class="agent-actions-row">
+        <button class="agent-btn" onclick="agentCmd(event,'${a.id}','start')">▶</button>
+        <button class="agent-btn" onclick="agentCmd(event,'${a.id}','pause')">⏸</button>
+        <button class="agent-btn" onclick="agentCmd(event,'${a.id}','restart')">↺</button>
+      </div>
+    </div>`;
+}
+
+function agentCmd(e, id, cmd) {
+  e.stopPropagation();
+  wsSend({ type: 'agent_command', agentId: id, command: cmd });
+  const idx = STATE.agents.findIndex(a => a.id === id);
+  if (idx >= 0) {
+    STATE.agents[idx].status = cmd === 'pause' ? 'paused' : 'running';
+    document.getElementById('agentGrid').innerHTML = STATE.agents.map(renderAgentCard).join('');
+  }
+  toast(`${cap(cmd)} → ${id}`, cmd === 'pause' ? 'warn' : 'ok');
+}
+
+function agentBroadcast(cmd) {
+  STATE.agents.forEach(a => {
+    a.status = cmd === 'pause' ? 'paused' : 'running';
+    wsSend({ type: 'agent_command', agentId: a.id, command: cmd });
+  });
+  document.getElementById('agentGrid').innerHTML = STATE.agents.map(renderAgentCard).join('');
+  toast(`${cap(cmd)} all agents`, cmd === 'pause' ? 'warn' : 'ok');
+}
+
+function updateAgentStatus(id, status) {
+  const idx = STATE.agents.findIndex(a => a.id === id);
+  if (idx >= 0) {
+    STATE.agents[idx].status = status;
+    document.getElementById('agentGrid').innerHTML = STATE.agents.map(renderAgentCard).join('');
+  }
+}
+
+function refreshAgentStatus() {
+  wsSend({ type: 'request', resource: 'agent_status' });
+}
+
+function openAgentSheet(id) {
+  const a = STATE.agents.find(x => x.id === id);
+  if (!a) return;
+  openSheet(a.name + ' ' + a.icon, `
+    <div style="margin-bottom:10px;font-size:13px;color:var(--txt1)">${a.role}</div>
+    <div class="agent-detail-metrics">
+      <div class="detail-metric"><div class="detail-metric-label">Status</div>
+        <div class="detail-metric-value">${cap(a.status)}</div></div>
+      <div class="detail-metric"><div class="detail-metric-label">Autonomy</div>
+        <div class="detail-metric-value">L${STATE.autonomyLevel}</div></div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:14px">
+      <button class="approve-btn btn-approve" style="flex:1"
+              onclick="agentCmd({stopPropagation:()=>{}},'${id}','start');closeOverlay()">▶ Start</button>
+      <button class="approve-btn btn-reject" style="flex:1"
+              onclick="agentCmd({stopPropagation:()=>{}},'${id}','pause');closeOverlay()">⏸ Pause</button>
+    </div>
+    <button class="approve-btn btn-defer" style="width:100%;margin-top:8px"
+            onclick="agentCmd({stopPropagation:()=>{}},'${id}','restart');closeOverlay()">↺ Restart</button>
+  `);
+}
+
+// ── APPROVALS ────────────────────────────────────────────
+function addApproval(item) {
+  STATE.approvals.unshift(item);
+  STATE.pendingApprovals++;
+  updateApproveBadge();
+  renderApprovals();
+  addEventEntry(`Approval needed: ${item.title || 'action'}`, 'warn');
+  toast('New approval request from ' + (item.agent || 'agent'), 'warn');
+}
+
+function updateApproveBadge() {
+  const badge = document.getElementById('approveBadge');
+  const n = STATE.pendingApprovals;
+  badge.textContent = n;
+  badge.style.display = n > 0 ? 'block' : 'none';
+  document.getElementById('queueCountBadge').textContent = n + ' item' + (n!==1?'s':'');
+}
+
+function renderApprovals() {
+  const list = document.getElementById('approvalList');
+  if (!STATE.approvals.length) {
+    list.innerHTML = `<div class="empty-state">
+      <div class="empty-icon">✅</div>
+      <div class="empty-title">All clear</div>
+      <div class="empty-sub">No pending approvals. ProtoForge is running within its authorized parameters.</div>
+    </div>`;
+    return;
+  }
+
+  list.innerHTML = STATE.approvals.map((item, idx) => {
+    const pri = item.priority || 'low';
+    const priDot = { high:'priority-high', med:'priority-med', low:'priority-low' }[pri] || 'priority-low';
+    const ts = item.timestamp ? new Date(item.timestamp).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}) : 'now';
+    const metas = (item.meta || []).map(m => `<span class="meta-tag">${escHtml(m)}</span>`).join('');
+
+    return `<div class="approval-item" id="approval-${idx}">
+      <div class="approval-header">
+        <div class="approval-priority ${priDot}"></div>
+        <span class="approval-agent">${escHtml(item.agent || 'ProtoForge')}</span>
+        <span class="approval-ts">${ts}</span>
+      </div>
+      <div class="approval-body">
+        <div class="approval-title">${escHtml(item.title || 'Action Request')}</div>
+        <div class="approval-desc">${escHtml(item.description || item.message || '')}</div>
+        ${metas ? `<div class="approval-meta">${metas}</div>` : ''}
+      </div>
+      <div class="approval-actions">
+        <button class="approve-btn btn-approve" onclick="resolveApproval(${idx},'approve')">✓ Approve</button>
+        <button class="approve-btn btn-reject"  onclick="resolveApproval(${idx},'reject')">✗ Reject</button>
+        <button class="approve-btn btn-defer"   onclick="resolveApproval(${idx},'defer')">⏸ Defer</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function resolveApproval(idx, decision) {
+  const item = STATE.approvals[idx];
+  if (!item) return;
+
+  wsSend({ type: 'approval_response', approvalId: item.id, decision, timestamp: new Date().toISOString() });
+
+  STATE.approvals.splice(idx, 1);
+  STATE.pendingApprovals = Math.max(0, STATE.pendingApprovals - 1);
+  updateApproveBadge();
+  renderApprovals();
+
+  const emoji = { approve:'✅', reject:'🚫', defer:'⏸' }[decision];
+  toast(`${emoji} ${cap(decision)}d: ${item.title || 'request'}`, decision === 'approve' ? 'ok' : 'warn');
+  addEventEntry(`${cap(decision)}d: ${item.title || 'action request'}`, decision === 'approve' ? 'ok' : 'warn');
+}
+
+// ── AUTONOMY / GROW ──────────────────────────────────────
+function setAutonomy(level) {
+  const def = AUTONOMY_DEFS[level];
+  STATE.autonomyLevel = level;
+
+  // Update orb
+  document.getElementById('levelOrbInner').textContent = def.icon;
+  document.getElementById('levelName').textContent = def.name;
+  document.getElementById('levelDesc').textContent = def.desc;
+
+  // Update ring progress
+  const pct = (level / 4) * 100;
+  document.querySelector('.level-orb').style.setProperty('--progress', pct + '%');
+
+  // Update step buttons
+  document.querySelectorAll('.auton-step').forEach(s => {
+    s.classList.toggle('active', parseInt(s.dataset.lvl) === level);
+  });
+
+  // Send to server
+  wsSend({ type: 'set_autonomy', level, timestamp: new Date().toISOString() });
+  toast(`Autonomy → Level ${level}: ${def.name}`, level >= 3 ? 'warn' : 'ok');
+  addEventEntry(`Autonomy set to Level ${level} — ${def.name}`, level >= 3 ? 'warn' : 'ok');
+
+  // Confirm high-autonomy via chat
+  if (level >= 3) {
+    switchTab('chat');
+    setTimeout(() => addChatMsg('hydi',
+      `⚠️ Autonomy raised to Level ${level} (${def.name}). ${def.desc}. I'll operate with minimal confirmation — you can lower this any time from the Grow tab.`
+    ), 400);
+  }
+}
+
+function growAction(action) {
+  const labels = {
+    scale_agents:    '🚀 Scaling agent pool...',
+    financial_round: '💰 Initiating financial allocation round...',
+    prime_directive: '🎯 Re-aligning agents to Prime Directive...',
+    evolution_cycle: '🧬 Running CASCADE evolution protocol...',
+    infrastructure:  '🏗️ Provisioning infrastructure expansion...',
+    trust_audit:     '🔐 Running agent trust audit...',
+  };
+
+  wsSend({ type: 'grow_action', action, timestamp: new Date().toISOString() });
+  toast(labels[action] || 'Action queued', 'ok');
+  addEventEntry(labels[action] || action, 'ok');
+
+  switchTab('chat');
+  setTimeout(() => {
+    showTyping();
+    setTimeout(() => {
+      hideTyping();
+      addChatMsg('hydi', `${labels[action] || 'Growth action initiated.'} Monitoring for confirmation from the agent mesh. I'll notify you of any approvals needed.`);
+    }, 1800);
+  }, 300);
+}
+
+// ── STATS ────────────────────────────────────────────────
+function refreshStats() {
+  fetch(CFG.apiBase + '/api/protoforge/stats')
+    .then(r => r.json())
+    .then(applyStats)
+    .catch(() => applyStats(mockStats()));
+}
+
+function mockStats() {
+  return {
+    capital_deployed: 248500 + Math.random() * 5000,
+    agent_actions: 1247 + Math.floor(Math.random() * 50),
+    success_rate: 0.947,
+    trust_score: 0.82,
+  };
+}
+
+function applyStats(d) {
+  document.getElementById('statCapital').textContent    = '$' + (d.capital_deployed || 0).toLocaleString(undefined,{maximumFractionDigits:0});
+  document.getElementById('statCapitalTrend').textContent = '▲ growing';
+  document.getElementById('statActions').textContent    = (d.agent_actions || 0).toLocaleString();
+  document.getElementById('statSuccess').textContent    = Math.round((d.success_rate || 0) * 100) + '%';
+  document.getElementById('statSuccessTrend').textContent = '▲ strong';
+  document.getElementById('statSuccessTrend').className = 'stat-trend trend-up';
+  document.getElementById('statTrust').textContent      = ((d.trust_score || 0) * 100).toFixed(0) + '%';
+}
+
+function renderSparkbars() {
+  ['sparkCapital','sparkActions'].forEach(id => {
+    const bar = document.getElementById(id);
+    const heights = Array.from({length:7}, () => 20 + Math.random() * 80);
+    bar.innerHTML = heights.map((h,i) =>
+      `<span style="height:${h}%;animation-delay:${i*0.05}s"></span>`
+    ).join('');
+  });
+}
+
+// ── EVENT TIMELINE ───────────────────────────────────────
+function addEventEntry(text, severity = 'ok') {
+  const colors = { ok:'var(--ok)', warn:'var(--warn)', crit:'var(--crit)', info:'var(--info)' };
+  const tl = document.getElementById('eventTimeline');
+
+  // Clear placeholder
+  if (tl.querySelector('.tl-text')?.style.color === 'var(--txt2)' && STATE.events.length === 0) {
+    tl.innerHTML = '';
+  }
+
+  const ts = new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+  const item = document.createElement('div');
+  item.className = 'timeline-item';
+  item.innerHTML = `
+    <div class="tl-dot" style="background:${colors[severity]||colors.ok}"></div>
+    <div class="tl-content">
+      <div class="tl-text">${escHtml(text)}</div>
+      <div class="tl-time">${ts}</div>
+    </div>`;
+  tl.insertBefore(item, tl.firstChild);
+
+  STATE.events.unshift({text, severity, ts});
+  if (STATE.events.length > 20) {
+    STATE.events.pop();
+    tl.lastElementChild?.remove();
+  }
+}
+
+// ── MOCK EVENTS (demo / offline) ─────────────────────────
+function scheduleMockEvents() {
+  const demo = [
+    { d:1500, fn: () => { addEventEntry('ProtoForge boot sequence complete', 'ok'); refreshStats(); } },
+    { d:3000, fn: () => addEventEntry('CASCADE event bus initialized — 15 agents registered', 'ok') },
+    { d:5000, fn: () => addMockApproval() },
+    { d:8000, fn: () => addEventEntry('Financial engine: capital baseline set', 'ok') },
+    { d:12000, fn: () => addEventEntry('Trust scores loaded for all agents', 'info') },
+  ];
+
+  demo.forEach(({d, fn}) => setTimeout(fn, d));
+}
+
+function addMockApproval() {
+  addApproval({
+    id: 'mock-001',
+    agent: 'FinanceAI',
+    title: 'Initial Capital Allocation',
+    description: 'Deploy $50,000 seed capital across infrastructure, marketing, and operations budgets.',
+    priority: 'high',
+    meta: ['$50,000', 'seed-round', 'level-2-required'],
+    timestamp: new Date().toISOString(),
+  });
+}
+
+// ── MENU SHEET ───────────────────────────────────────────
+function openMenu() {
+  openSheet('ProtoForge Settings', `
+    <div class="sheet-action" onclick="toast('Reconnecting...','ok');connectWS();closeOverlay()">
+      <span class="sheet-action-icon">🔄</span>
+      <div class="sheet-action-text">
+        <div>Reconnect to HYDI</div>
+        <div class="sheet-action-sub">Force reconnect WebSocket</div>
+      </div>
+    </div>
+    <div class="sheet-action" onclick="clearChat();closeOverlay()">
+      <span class="sheet-action-icon">🗑</span>
+      <div class="sheet-action-text">
+        <div>Clear Chat</div>
+        <div class="sheet-action-sub">Reset conversation history</div>
+      </div>
+    </div>
+    <div class="sheet-action" onclick="installPWA();closeOverlay()">
+      <span class="sheet-action-icon">📲</span>
+      <div class="sheet-action-text">
+        <div>Install App</div>
+        <div class="sheet-action-sub">Add to home screen</div>
+      </div>
+    </div>
+    <div class="sheet-action" onclick="switchTab('stats');closeOverlay()">
+      <span class="sheet-action-icon">📊</span>
+      <div class="sheet-action-text">
+        <div>System Stats</div>
+        <div class="sheet-action-sub">View live ProtoForge metrics</div>
+      </div>
+    </div>
+  `);
+}
+
+let deferredInstall = null;
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  deferredInstall = e;
+});
+
+function installPWA() {
+  if (deferredInstall) {
+    deferredInstall.prompt();
+    deferredInstall.userChoice.then(() => { deferredInstall = null; });
+  } else {
+    toast('Open in Safari → Share → Add to Home Screen', 'info');
+  }
+}
+
+function clearChat() {
+  const box = document.getElementById('chatMessages');
+  box.innerHTML = `<div class="msg sys"><div class="bubble">🧠 Chat cleared. Hydi is ready.</div></div>`;
+  STATE.messageHistory = [];
+}
+
+// ── BOTTOM SHEET ─────────────────────────────────────────
+function openSheet(title, actionsHtml) {
+  document.getElementById('sheetTitle').textContent = title;
+  document.getElementById('sheetActions').innerHTML = actionsHtml;
+  document.getElementById('overlay').classList.add('show');
+}
+
+function closeOverlay(e) {
+  if (!e || e.target === document.getElementById('overlay'))
+    document.getElementById('overlay').classList.remove('show');
+}
+
+// ── TOAST ─────────────────────────────────────────────────
+function toast(msg, type = 'ok') {
+  const icons = { ok:'✅', warn:'⚠️', crit:'🚨', info:'ℹ️' };
+  const container = document.getElementById('toast-container');
+  const el = document.createElement('div');
+  el.className = 'toast';
+  el.innerHTML = `<span>${icons[type]||'ℹ️'}</span><span>${escHtml(msg)}</span>`;
+  container.appendChild(el);
+  setTimeout(() => {
+    el.classList.add('fade-out');
+    setTimeout(() => el.remove(), 300);
+  }, 3200);
+}
+
+// ── BADGE ────────────────────────────────────────────────
+function setBadge(type, text) {
+  const badge = document.getElementById('connBadge');
+  const label = document.getElementById('connText');
+  badge.className = 'conn-badge ' + (type === 'ok' ? '' : type);
+  label.textContent = text;
+}
+
+// ── UTILS ────────────────────────────────────────────────
+function autoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 100) + 'px';
+}
+
+function handleKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendChat();
+  }
+}
+
+function escHtml(str) {
+  return String(str)
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;');
+}
+
+function cap(s) {
+  return s ? s.charAt(0).toUpperCase() + s.slice(1) : '';
+}
+
+// Visibility — reconnect on return
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && !STATE.connected) connectWS();
+});
+</script>
+</body>
+</html>
