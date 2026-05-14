@@ -2,6 +2,7 @@
 /**
  * Hydi Mobile — ProtoForge Command Server
  * Serves the mobile PWA and provides HTTP + WebSocket APIs for ProtoForge control.
+ * Uses Ollama for AI replies when available; falls back to scripted responses.
  */
 
 const express = require('express');
@@ -9,6 +10,175 @@ const http    = require('http');
 const path    = require('path');
 const WebSocket = require('ws');
 require('dotenv').config();
+
+// ── Ollama integration ────────────────────────────────────
+const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434';
+const PREFERRED_MODELS = [
+  'llama3.2','llama3.1','llama3','llama2',
+  'mistral','mixtral','phi3','phi4',
+  'gemma3','gemma2','gemma',
+  'qwen2.5','qwen2','deepseek-r1',
+];
+
+let ollamaModel  = null;
+const chatHistories = new Map(); // sessionId -> [{role,content}]
+const MAX_HISTORY = 20;
+
+async function detectOllama() {
+  try {
+    const r = await fetch(`${OLLAMA_URL}/api/tags`, { signal: AbortSignal.timeout(3000) });
+    if (!r.ok) return null;
+    const data = await r.json();
+    const models = (data.models || []).map(m => m.name);
+    if (!models.length) return null;
+    for (const pref of PREFERRED_MODELS) {
+      const hit = models.find(m => m.toLowerCase().includes(pref));
+      if (hit) { ollamaModel = hit; return hit; }
+    }
+    ollamaModel = models[0];
+    return ollamaModel;
+  } catch { return null; }
+}
+
+async function ollamaChat(messages) {
+  if (!ollamaModel) return null;
+  try {
+    const r = await fetch(`${OLLAMA_URL}/api/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: ollamaModel,
+        messages,
+        stream: false,
+        options: { temperature: 0.7, num_predict: 512 },
+      }),
+      signal: AbortSignal.timeout(60000),
+    });
+    if (!r.ok) return null;
+    const data = await r.json();
+    return data?.message?.content?.trim() || null;
+  } catch { return null; }
+}
+
+function buildSystemPrompt() {
+  const running = PF.agents.filter(a => a.status === 'running').length;
+  const idle    = PF.agents.filter(a => a.status === 'idle').length;
+  const level   = PF.autonomyLevel;
+  const levelNames = {
+    0:'OBSERVE', 1:'ASSIST', 2:'EXECUTE WITH APPROVAL',
+    3:'CONDITIONAL AUTONOMY', 4:'FULL AUTONOMY',
+  };
+  return (
+    'You are Hydi, the AI brain and contextual conscience of ProtoForge — ' +
+    'a 15-agent autonomous orchestration system designed to build, fund, and grow ' +
+    'a rotating cyberpunk container skyscraper project.\n\n' +
+    'Your personality: calm, precise, proactive, slightly futuristic. ' +
+    'Keep responses concise (3-8 lines) — the user is on mobile.\n\n' +
+    `Current system state:\n` +
+    `  Autonomy level: ${level} — ${levelNames[level]}\n` +
+    `  Agents: ${running} running, ${idle} idle (15 total)\n` +
+    `  Capital deployed: $${PF.stats.capital_deployed.toLocaleString()}\n` +
+    `  Approvals pending: ${PF.approvalQueue.length}\n` +
+    `  Success rate: ${Math.round(PF.stats.success_rate * 100)}%\n\n` +
+    'When the user asks you to take an action, confirm what you\'re doing and ' +
+    'briefly describe the effect. Always stay in character as Hydi.'
+  );
+}
+
+async function hydiReply(msg, sessionId = 'default') {
+  // Handle state-mutating commands first
+  const scripted = handleCommand(msg);
+
+  if (ollamaModel) {
+    const history = chatHistories.get(sessionId) || [];
+    history.push({ role: 'user', content: msg });
+
+    const messages = [{ role: 'system', content: buildSystemPrompt() }, ...history.slice(-MAX_HISTORY)];
+
+    if (scripted) {
+      messages.push({
+        role: 'system',
+        content: `[System executed command. Result: ${scripted}. Acknowledge naturally in 1-2 sentences.]`,
+      });
+    }
+
+    const ai = await ollamaChat(messages);
+    if (ai) {
+      history.push({ role: 'assistant', content: ai });
+      if (history.length > MAX_HISTORY * 2) history.splice(0, history.length - MAX_HISTORY);
+      chatHistories.set(sessionId, history);
+      return ai;
+    }
+  }
+
+  return scripted || buildScriptedReply(msg);
+}
+
+function handleCommand(msg) {
+  const t = msg.toLowerCase().trim();
+
+  if (t.includes('start all') || t.includes('start agents') || t.includes('grow agents')) {
+    const started = PF.agents.filter(a => a.status === 'idle').map(a => a.id);
+    started.forEach(id => { const a = PF.agents.find(x => x.id === id); if (a) a.status = 'running'; });
+    PF.stats.agent_actions += started.length;
+    return started.length
+      ? `Started ${started.length} agents: ${started.join(', ')}. All 15 now running.`
+      : 'All agents were already running.';
+  }
+
+  if (t.includes('grow finance') || t.includes('finance round')) {
+    PF.stats.capital_deployed += 10000;
+    PF.stats.agent_actions += 5;
+    return `Capital allocation round complete. Deployed: $${PF.stats.capital_deployed.toLocaleString()}.`;
+  }
+
+  if (t.includes('grow autonomy') || (t.includes('autonomy') && /raise|increase|up|higher/.test(t))) {
+    if (PF.autonomyLevel < 4) PF.autonomyLevel++;
+    const names = {0:'OBSERVE',1:'ASSIST',2:'EXECUTE WITH APPROVAL',3:'CONDITIONAL AUTONOMY',4:'FULL AUTONOMY'};
+    return `Autonomy raised to Level ${PF.autonomyLevel}: ${names[PF.autonomyLevel]}.`;
+  }
+
+  if (t.includes('grow evolution') || t.includes('evolution cycle')) {
+    PF.stats.agent_actions += 20;
+    return 'CASCADE evolution protocol running. Agent policies optimising across all 15 nodes.';
+  }
+
+  const setMatch = t.match(/^set autonomy (\d)$/);
+  if (setMatch) {
+    const lvl = parseInt(setMatch[1]);
+    if (lvl >= 0 && lvl <= 4) {
+      PF.autonomyLevel = lvl;
+      const names = {0:'OBSERVE',1:'ASSIST',2:'EXECUTE WITH APPROVAL',3:'CONDITIONAL AUTONOMY',4:'FULL AUTONOMY'};
+      return `Autonomy set to Level ${lvl}: ${names[lvl]}.`;
+    }
+  }
+
+  return null; // not a state-mutating command
+}
+
+function buildScriptedReply(msg) {
+  const t = msg.toLowerCase();
+  const running = PF.agents.filter(a => a.status === 'running');
+
+  if (/status|health|how are/.test(t))
+    return `System: OPERATIONAL\nAgents: ${running.length}/15 running\nAutonomy: Level ${PF.autonomyLevel}\nCapital: $${PF.stats.capital_deployed.toLocaleString()}\nApprovals pending: ${PF.approvalQueue.length}`;
+
+  if (/grow|scale|expand/.test(t))
+    return 'Growth options:\n  start all agents\n  grow finance\n  grow autonomy\n  grow evolution';
+
+  if (t.includes('agent'))
+    return `Running (${running.length}): ${running.map(a=>a.id).join(', ')}\nIdle: ${PF.agents.filter(a=>a.status==='idle').map(a=>a.id).join(', ')}`;
+
+  if (/financ|capital|revenue/.test(t))
+    return `Capital deployed: $${PF.stats.capital_deployed.toLocaleString()}\nActions: ${PF.stats.agent_actions}  Success: ${Math.round(PF.stats.success_rate*100)}%`;
+
+  if (/approval|queue|pending/.test(t))
+    return PF.approvalQueue.length
+      ? `${PF.approvalQueue.length} approvals pending. Check the Approve tab.`
+      : 'No pending approvals. All agents within authorised parameters.';
+
+  return `Processing: "${msg.slice(0,60)}"\n${running.length} agents ready.\n(Tip: install Ollama for AI replies — ollama.com)`;
+}
 
 // ── Config ───────────────────────────────────────────────
 const PORT = process.env.HYDI_PORT || process.env.HEIDI_PORT || 3006;
@@ -147,11 +317,29 @@ app.post('/api/protoforge/approval', (req, res) => {
   res.json({ approvalId, decision });
 });
 
-// Chat (HTTP fallback)
+// Active model info
+app.get('/api/models', (req, res) => {
+  res.json({
+    ollama_url:    OLLAMA_URL,
+    active_model:  ollamaModel,
+    ollama_online: ollamaModel !== null,
+    mode:          ollamaModel ? 'ai' : 'scripted',
+  });
+});
+
+// Reload / re-detect Ollama
+app.post('/api/ollama/reload', async (req, res) => {
+  const model = await detectOllama();
+  res.json({ active_model: model, ollama_online: model !== null });
+});
+
+// Chat (HTTP fallback + Ollama)
 app.post('/api/chat', async (req, res) => {
-  const { message = '', model = 'hydi' } = req.body;
-  const reply = buildHydiReply(message, model);
-  res.json({ response: reply, system: 'hydi', timestamp: new Date().toISOString() });
+  const { message = '' } = req.body;
+  const sessionId = req.headers['x-session-id'] || 'default';
+  const reply = await hydiReply(message, sessionId);
+  logEvent(`Chat: ${message.slice(0, 50)}`, 'info');
+  res.json({ response: reply, system: 'hydi', model: ollamaModel || 'scripted', timestamp: new Date().toISOString() });
 });
 
 // PWA routes
@@ -162,61 +350,6 @@ app.get('/hydi', (req, res) =>
 app.get('/heidi-mobile', (req, res) =>
   res.sendFile(path.join(__dirname, 'heidi-mobile-chat.html')));
 
-// ── Hydi reply engine ─────────────────────────────────────
-function buildHydiReply(msg, model) {
-  const t = msg.toLowerCase();
-
-  if (t.includes('grow') || t.includes('scale'))
-    return `ProtoForge growth directive received. Current autonomy: Level ${PF.autonomyLevel}. ` +
-      `${PF.agents.filter(a=>a.status==='running').length} agents active. ` +
-      `To accelerate growth, increase autonomy level from the Grow tab or specify a target metric.`;
-
-  if (t.includes('status') || t.includes('health'))
-    return `System Status: ✅ Operational\n` +
-      `• ${PF.agents.filter(a=>a.status==='running').length}/${PF.agents.length} agents running\n` +
-      `• Autonomy: Level ${PF.autonomyLevel}\n` +
-      `• Approvals pending: ${PF.approvalQueue.length}\n` +
-      `• Actions today: ${PF.stats.agent_actions}\n` +
-      `• Success rate: ${Math.round(PF.stats.success_rate * 100)}%`;
-
-  if (t.includes('agent'))
-    return `15 agents registered in the ProtoForge mesh.\n` +
-      `Running: ${PF.agents.filter(a=>a.status==='running').map(a=>a.id).join(', ')}\n` +
-      `Idle: ${PF.agents.filter(a=>a.status==='idle').map(a=>a.id).join(', ')}`;
-
-  if (t.includes('financ') || t.includes('capital') || t.includes('revenue'))
-    return `Financial Engine Status:\n` +
-      `• Capital deployed: $${PF.stats.capital_deployed.toLocaleString()}\n` +
-      `• Agent actions driving revenue: ${PF.stats.agent_actions}\n` +
-      `• Trust score: ${Math.round(PF.stats.trust_score * 100)}%\n` +
-      `Use the Finance Round action in the Grow tab to initiate a new capital allocation cycle.`;
-
-  if (t.includes('approval') || t.includes('queue'))
-    return PF.approvalQueue.length > 0
-      ? `${PF.approvalQueue.length} approval(s) pending. Switch to the Approve tab to review and act on them.`
-      : `No pending approvals. All agents are operating within approved parameters.`;
-
-  if (t.includes('autonomy') || t.includes('level'))
-    return `Current autonomy: Level ${PF.autonomyLevel}.\n` +
-      `0=Observe · 1=Assist · 2=Approve · 3=Conditional · 4=Full Auto\n` +
-      `Use the Grow tab to adjust. Levels 3+ allow agents to act without per-action confirmation.`;
-
-  if (t.includes('start all') || t.includes('start agents'))
-    return `Starting all idle agents. Broadcasting activation signal to the agent mesh...`;
-
-  if (t.includes('cascade'))
-    return `CASCADE event bus is ${PF.agents.find(a=>a.id==='cascade')?.status || 'unknown'}.\n` +
-      `Event pipeline: INTAKE → VALIDATION → CLASSIFICATION → EMISSION.\n` +
-      `All events are deterministically logged with integrity fingerprints.`;
-
-  if (t.includes('prime directive'))
-    return `Prime Directive: Build, fund, operate, and grow ProtoForge as a self-sustaining autonomous system — with human oversight at every critical decision point.\n` +
-      `Currently at autonomy Level ${PF.autonomyLevel}. Use the Grow tab to raise or lower this.`;
-
-  return `Understood. Processing "${msg.slice(0,60)}${msg.length>60?'...':''}"\n` +
-    `ProtoForge has ${PF.agents.filter(a=>a.status==='running').length} active agents ready to execute. ` +
-    `What would you like to prioritize?`;
-}
 
 // ── HTTP Server ──────────────────────────────────────────
 const server = http.createServer(app);
@@ -266,12 +399,10 @@ function handleWsMessage(clientId, ws, msg) {
   const { type } = msg;
 
   if (type === 'message') {
-    // Chat message
-    const reply = buildHydiReply(msg.content || '', msg.model || 'hydi');
-    // Simulate Hydi thinking delay
-    setTimeout(() => {
-      send(ws, { type: 'chat_response', sender: 'hydi', content: reply });
-    }, 600 + Math.random() * 800);
+    const sessionId = msg.sessionId || clientId;
+    hydiReply(msg.content || '', sessionId).then(reply => {
+      send(ws, { type: 'chat_response', sender: 'hydi', content: reply, model: ollamaModel || 'scripted' });
+    });
     logEvent(`Chat: "${(msg.content||'').slice(0,50)}"`, 'info');
     return;
   }
@@ -377,22 +508,35 @@ app.get('/api/stats', (req, res) => res.json({
 }));
 
 // ── Start ─────────────────────────────────────────────────
-server.listen(PORT, HOST, () => {
-  const local = `http://localhost:${PORT}`;
-  console.log('\n🧠  HYDI — ProtoForge Mobile Command Server');
-  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-  console.log(`📱  Mobile PWA:   ${local}/`);
-  console.log(`💬  Chat (legacy):${local}/heidi-mobile`);
-  console.log(`🔌  WebSocket:    ws://localhost:${PORT}/ws/hydi`);
-  console.log(`📊  Health API:   ${local}/api/health`);
-  console.log(`🤖  Agents API:   ${local}/api/protoforge/agents`);
-  console.log(`📈  Stats API:    ${local}/api/protoforge/stats`);
-  console.log(`⚙️   Server stats: ${local}/api/stats`);
-  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-  console.log(`   Supabase:  ${process.env.SUPABASE_URL ? '✅ Configured' : '⚠️  Not configured (offline mode)'}`);
-  console.log(`   Autonomy:  Level ${PF.autonomyLevel} (EXECUTE_WITH_APPROVAL)`);
-  console.log(`   Agents:    ${PF.agents.filter(a=>a.status==='running').length}/${PF.agents.length} running\n`);
-});
+async function startServer() {
+  // Detect Ollama before accepting connections
+  process.stdout.write('Checking Ollama... ');
+  const model = await detectOllama();
+  console.log(model ? `✅ ${model}` : 'not found (scripted mode)');
+
+  server.listen(PORT, HOST, () => {
+    const local = `http://localhost:${PORT}`;
+    console.log('\n🧠  HYDI — ProtoForge Mobile Command Server');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log(`📱  Mobile PWA:   ${local}/`);
+    console.log(`🔌  WebSocket:    ws://localhost:${PORT}/ws/hydi`);
+    console.log(`🤖  Models API:   ${local}/api/models`);
+    console.log(`📊  Stats API:    ${local}/api/protoforge/stats`);
+    console.log(`⚙️   Server stats: ${local}/api/stats`);
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    if (model) {
+      console.log(`   AI model:  ✅ ${model}`);
+    } else {
+      console.log('   AI model:  📝 Scripted (install Ollama for AI replies)');
+      console.log('              → https://ollama.com  then: ollama pull llama3.2');
+    }
+    console.log(`   Supabase:  ${process.env.SUPABASE_URL ? '✅ Configured' : '⚠️  Not configured'}`);
+    console.log(`   Autonomy:  Level ${PF.autonomyLevel}`);
+    console.log(`   Agents:    ${PF.agents.filter(a=>a.status==='running').length}/${PF.agents.length} running\n`);
+  });
+}
+
+startServer();
 
 // ── Graceful shutdown ─────────────────────────────────────
 function shutdown(signal) {

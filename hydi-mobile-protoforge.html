@@ -1084,6 +1084,9 @@
       </div>
     </div>
     <div class="header-right">
+      <div class="conn-badge" id="modelBadge" style="display:none">
+        <span id="modelText">AI</span>
+      </div>
       <div class="conn-badge" id="connBadge">
         <span class="conn-dot"></span>
         <span id="connText">Online</span>
@@ -1351,6 +1354,7 @@ const CFG = {
   apiBase: '',
   reconnectDelay: 3000,
   healthInterval: 30000,
+  sessionId: 'sess_' + Math.random().toString(36).slice(2, 10),
 };
 
 // ── STATE ────────────────────────────────────────────────
@@ -1405,6 +1409,24 @@ window.addEventListener('DOMContentLoaded', () => {
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw.js').catch(() => {});
   }
+
+  // Load Ollama model info
+  fetch('/api/models').then(r => r.json()).then(d => {
+    const badge = document.getElementById('modelBadge');
+    const text  = document.getElementById('modelText');
+    badge.style.display = 'flex';
+    if (d.ollama_online) {
+      text.textContent = '🤖 ' + d.active_model.split(':')[0];
+      badge.className = 'conn-badge';
+      addChatMsg('hydi',
+        `AI model online: ${d.active_model}. I'm thinking, not scripted — ask me anything about ProtoForge.`);
+    } else {
+      text.textContent = '📝 Scripted';
+      badge.className = 'conn-badge off';
+      addChatMsg('hydi',
+        'Running in scripted mode. Install Ollama (ollama.com) then run:\n  ollama pull llama3.2\nRestart Hydi to enable AI replies.');
+    }
+  }).catch(() => {});
 });
 
 // ── WebSocket ────────────────────────────────────────────
@@ -1562,14 +1584,14 @@ async function sendChat() {
   showTyping();
 
   // Try WebSocket first; fall back to HTTP
-  const sent = wsSend({ type: 'message', content: text, model: 'hydi', timestamp: new Date().toISOString() });
+  const sent = wsSend({ type: 'message', content: text, model: 'hydi', sessionId: CFG.sessionId, timestamp: new Date().toISOString() });
 
   if (!sent) {
     // HTTP fallback
     try {
       const r = await fetch(CFG.apiBase + '/api/chat', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-Session-Id': CFG.sessionId },
         body: JSON.stringify({ message: text, model: 'hydi' })
       });
       hideTyping();
