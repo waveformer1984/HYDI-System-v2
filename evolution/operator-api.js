@@ -6,7 +6,7 @@
  *
  * Mount in any Express app:
  *   const { createOperatorRouter } = require('./evolution/operator-api');
- *   app.use('/nexus', createOperatorRouter({ nexus, goalEngine, forecast }));
+ *   app.use('/nexus', createOperatorRouter({ nexus, goals, forecast }));
  *
  * Endpoints:
  *   GET  /nexus/brief           — Plain-English system status
@@ -25,7 +25,7 @@
 
 const express = require('express');
 
-function createOperatorRouter({ nexus, goalEngine, forecast } = {}) {
+function createOperatorRouter({ nexus, goals: goalEngine, forecast } = {}) {
   const router = express.Router();
 
   // ─── Brief ──────────────────────────────────────────────────────────────

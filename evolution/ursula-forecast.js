@@ -22,7 +22,7 @@ const THRESHOLDS = {
 
 const WINDOW_SIZES = { short: 5, medium: 15, long: 60 }; // minutes
 
-class UrsullaForecast {
+class UrsulaForecast {
   constructor(config = {}) {
     this.snapshots = [];                              // { ts, metrics }
     this.maxHistory = config.maxHistory || 1440;     // 24h at 1/min
@@ -205,4 +205,4 @@ class UrsullaForecast {
   }
 }
 
-module.exports = UrsullaForecast;
+module.exports = UrsulaForecast;

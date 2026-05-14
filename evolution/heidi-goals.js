@@ -174,9 +174,11 @@ class HeidiGoalEngine {
 Return ONLY a JSON array of strings — no explanations, no markdown.
 Objective: "${objective}"`;
         const result = await this.brain.generate(prompt, { maxTokens: 400, temperature: 0.3 });
-        const match = result.text?.match(/\[[\s\S]*?\]/);
+        // greedy match: captures outermost [...] even when LLM wraps it in prose
+        const match = result.text?.match(/\[[\s\S]*\]/);
         if (match) {
-          rawTasks = JSON.parse(match[0]);
+          const parsed = JSON.parse(match[0]);
+          if (Array.isArray(parsed) && parsed.length) rawTasks = parsed;
         }
       } catch (_) {
         // fall through to default decomposition
