@@ -1,0 +1,42 @@
+{
+  "name": "Hydi — ProtoForge Command",
+  "short_name": "Hydi",
+  "description": "Mobile command center for interacting with and growing the ProtoForge autonomous agent system.",
+  "start_url": "/hydi-mobile-protoforge.html",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0a0a0f",
+  "theme_color": "#0a0a0f",
+  "categories": ["productivity", "utilities"],
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "screenshots": [],
+  "shortcuts": [
+    {
+      "name": "Chat with Hydi",
+      "short_name": "Chat",
+      "description": "Open the Hydi chat interface",
+      "url": "/hydi-mobile-protoforge.html#chat",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Approve Queue",
+      "short_name": "Approve",
+      "description": "Review pending ProtoForge approvals",
+      "url": "/hydi-mobile-protoforge.html#approve",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    }
+  ]
+}
