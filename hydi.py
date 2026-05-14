@@ -1,7 +1,12 @@
 #!/usr/bin/env python3
 """
 hydi.py — ProtoForge command interface for Termux / mobile.
-Pure Python 3 stdlib. Uses Ollama when available, falls back to scripted replies.
+Pure Python 3 stdlib. No external packages required.
+
+AI priority order:
+  1. Groq API  (fastest, free, phone-friendly) — set GROQ_API_KEY
+  2. Ollama    (local, no internet needed)      — set OLLAMA_URL or run locally
+  3. Scripted  (always works, zero deps)
 
 Usage:
     python hydi.py              # HTTP server (mobile PWA) on :3006
@@ -46,22 +51,85 @@ AUTONOMY_NAMES = {
     4: "FULL AUTONOMY",
 }
 
-# ── Ollama ────────────────────────────────────────────────
-OLLAMA_URL   = os.environ.get("OLLAMA_URL", "http://localhost:11434")
-OLLAMA_MODEL = None          # resolved at startup
-CHAT_HISTORY = {}            # session_id -> list of {role, content}
-MAX_HISTORY  = 20            # messages to keep per session
+# ── Groq (cloud, free tier, phone-friendly) ──────────────
+GROQ_API_KEY   = os.environ.get("GROQ_API_KEY", "")
+GROQ_API_URL   = "https://api.groq.com/openai/v1/chat/completions"
+# Best free Groq models in preference order
+GROQ_MODELS    = [
+    "llama-3.3-70b-versatile",   # best quality
+    "llama-3.1-8b-instant",      # fastest
+    "mixtral-8x7b-32768",        # good balance
+    "llama3-70b-8192",
+    "llama3-8b-8192",
+]
+GROQ_MODEL     = None  # confirmed at startup
 
+def detect_groq():
+    """Verify the API key works and pick the best available Groq model."""
+    global GROQ_MODEL
+    if not GROQ_API_KEY:
+        return None
+    # Try each model preference until one responds
+    for model in GROQ_MODELS:
+        try:
+            payload = json.dumps({
+                "model": model,
+                "messages": [{"role": "user", "content": "hi"}],
+                "max_tokens": 5,
+            }).encode()
+            req = Request(
+                GROQ_API_URL,
+                data=payload,
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {GROQ_API_KEY}",
+                },
+            )
+            with urlopen(req, timeout=8) as r:
+                json.loads(r.read())  # confirm valid JSON back
+            GROQ_MODEL = model
+            return model
+        except Exception:
+            continue
+    return None
+
+def groq_chat(messages):
+    """Call Groq OpenAI-compatible API. Returns reply string or None."""
+    if not GROQ_MODEL or not GROQ_API_KEY:
+        return None
+    payload = json.dumps({
+        "model": GROQ_MODEL,
+        "messages": messages,
+        "max_tokens": 512,
+        "temperature": 0.7,
+    }).encode()
+    req = Request(
+        GROQ_API_URL,
+        data=payload,
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {GROQ_API_KEY}",
+        },
+    )
+    try:
+        with urlopen(req, timeout=30) as r:
+            result = json.loads(r.read())
+        return result["choices"][0]["message"]["content"].strip()
+    except Exception:
+        return None
+
+# ── Ollama (local, no internet needed) ───────────────────
+OLLAMA_URL   = os.environ.get("OLLAMA_URL", "http://localhost:11434")
+OLLAMA_MODEL = None
 PREFERRED_MODELS = [
     "llama3.2", "llama3.1", "llama3", "llama2",
     "mistral", "mixtral", "phi3", "phi4",
     "gemma3", "gemma2", "gemma",
     "qwen2.5", "qwen2", "deepseek-r1",
-    "codellama", "vicuna", "orca-mini",
 ]
 
 def detect_ollama():
-    """Return the best available model name, or None if Ollama is unreachable."""
+    """Return the best available Ollama model name, or None."""
     global OLLAMA_MODEL
     try:
         with urlopen(f"{OLLAMA_URL}/api/tags", timeout=3) as r:
@@ -79,13 +147,12 @@ def detect_ollama():
     except Exception:
         return None
 
-def ollama_chat(messages, model=None):
-    """Call Ollama /api/chat. Returns reply string or None on failure."""
-    m = model or OLLAMA_MODEL
-    if not m:
+def ollama_chat(messages):
+    """Call Ollama /api/chat. Returns reply string or None."""
+    if not OLLAMA_MODEL:
         return None
     payload = json.dumps({
-        "model": m,
+        "model": OLLAMA_MODEL,
         "messages": messages,
         "stream": False,
         "options": {"temperature": 0.7, "num_predict": 512},
@@ -101,6 +168,25 @@ def ollama_chat(messages, model=None):
         return result.get("message", {}).get("content", "").strip()
     except Exception:
         return None
+
+# ── Shared chat history ───────────────────────────────────
+CHAT_HISTORY = {}   # session_id -> [{role, content}]
+MAX_HISTORY  = 20
+
+def active_ai_label():
+    """Human-readable label for the active AI backend."""
+    if GROQ_MODEL:
+        return f"groq/{GROQ_MODEL.split('-')[0]}"
+    if OLLAMA_MODEL:
+        return f"ollama/{OLLAMA_MODEL.split(':')[0]}"
+    return "scripted"
+
+def ai_chat(messages):
+    """Call the best available AI backend. Groq → Ollama → None."""
+    reply = groq_chat(messages)
+    if reply:
+        return reply
+    return ollama_chat(messages)
 
 def build_system_prompt():
     running = sum(1 for s in PF["agents"].values() if s == "running")
@@ -124,33 +210,32 @@ def build_system_prompt():
     )
 
 def hydi_reply_ai(msg, session_id="default"):
-    """Try Ollama first; fall back to scripted reply."""
-    # Intercept state-mutating commands before AI
+    """Route message through Groq → Ollama → scripted, in that order."""
+    ai_available = bool(GROQ_MODEL or OLLAMA_MODEL)
     scripted = _handle_command(msg)
+
     if scripted is not None:
-        # Still pass context to AI for a natural wrapper if Ollama is up
-        if OLLAMA_MODEL:
+        if ai_available:
             history = CHAT_HISTORY.setdefault(session_id, [])
             history.append({"role": "user", "content": msg})
-            messages = [{"role": "system", "content": build_system_prompt()}] + history[-MAX_HISTORY:]
-            # Inject the scripted result as a tool note
-            messages.append({
-                "role": "system",
-                "content": f"[System executed the command. Result: {scripted}. "
-                           f"Acknowledge this naturally in 1-2 sentences.]"
-            })
-            ai = ollama_chat(messages)
+            messages = (
+                [{"role": "system", "content": build_system_prompt()}]
+                + history[-MAX_HISTORY:]
+                + [{"role": "system",
+                    "content": f"[Command executed. Result: {scripted}. "
+                               f"Acknowledge naturally in 1-2 sentences.]"}]
+            )
+            ai = ai_chat(messages)
             if ai:
                 history.append({"role": "assistant", "content": ai})
                 return ai
         return scripted
 
-    # Pure conversational — go to AI or scripted fallback
-    if OLLAMA_MODEL:
+    if ai_available:
         history = CHAT_HISTORY.setdefault(session_id, [])
         history.append({"role": "user", "content": msg})
         messages = [{"role": "system", "content": build_system_prompt()}] + history[-MAX_HISTORY:]
-        ai = ollama_chat(messages)
+        ai = ai_chat(messages)
         if ai:
             history.append({"role": "assistant", "content": ai})
             if len(history) > MAX_HISTORY * 2:
@@ -378,10 +463,13 @@ class HydiHandler(BaseHTTPRequestHandler):
             self._json(PF["events"][:20])
         elif p == "/api/models":
             self._json({
-                "ollama_url":    OLLAMA_URL,
-                "active_model":  OLLAMA_MODEL,
+                "groq_model":    GROQ_MODEL,
+                "ollama_model":  OLLAMA_MODEL,
+                "active_model":  GROQ_MODEL or OLLAMA_MODEL,
+                "active_label":  active_ai_label(),
+                "groq_online":   GROQ_MODEL is not None,
                 "ollama_online": OLLAMA_MODEL is not None,
-                "mode":          "ai" if OLLAMA_MODEL else "scripted",
+                "mode":          "ai" if (GROQ_MODEL or OLLAMA_MODEL) else "scripted",
             })
         elif p == "/manifest.json":
             self._raw(MANIFEST_JSON.encode(), "application/manifest+json")
@@ -436,8 +524,13 @@ class HydiHandler(BaseHTTPRequestHandler):
             self._json({"approvalId": aid, "decision": decision})
 
         elif p == "/api/ollama/reload":
-            model = detect_ollama()
-            self._json({"active_model": model, "ollama_online": model is not None})
+            detect_groq()
+            detect_ollama()
+            self._json({
+                "groq_model": GROQ_MODEL, "ollama_model": OLLAMA_MODEL,
+                "active_label": active_ai_label(),
+                "mode": "ai" if (GROQ_MODEL or OLLAMA_MODEL) else "scripted",
+            })
 
         else:
             self.send_response(404); self.end_headers()
@@ -648,11 +741,14 @@ BANNER = """
 
 def cli_loop():
     print(BANNER)
-    if OLLAMA_MODEL:
-        print(f"  🤖 AI model: {OLLAMA_MODEL}")
+    if GROQ_MODEL:
+        print(f"  🤖 Groq AI : {GROQ_MODEL}")
+    elif OLLAMA_MODEL:
+        print(f"  🤖 Ollama  : {OLLAMA_MODEL}")
     else:
-        print("  📝 Scripted mode (Ollama not detected)")
-        print(f"     Install: https://ollama.com  then: ollama pull llama3.2")
+        print("  📝 Scripted mode — no AI backend detected")
+        print("     Groq (free, phone-friendly): console.groq.com → get API key")
+        print("     then: export GROQ_API_KEY=gsk_xxx  and restart hydi")
     print("  Type 'help' for commands, 'exit' to quit.\n")
 
     while True:
@@ -680,18 +776,20 @@ def start_server(port=3006, host="0.0.0.0"):
     ip = local_ip()
 
     print(BANNER)
-    if OLLAMA_MODEL:
-        print(f"  🤖 AI model : {OLLAMA_MODEL}")
+    if GROQ_MODEL:
+        print(f"  🤖 Groq AI : {GROQ_MODEL}  (cloud, fast)")
+    elif OLLAMA_MODEL:
+        print(f"  🤖 Ollama  : {OLLAMA_MODEL}  (local)")
     else:
-        print("  📝 Scripted mode — install Ollama for AI replies")
-        print(f"     ollama.com  →  ollama pull llama3.2")
+        print("  📝 Scripted mode — no AI backend detected")
+        print("     → Get a free Groq API key at console.groq.com")
+        print("     → export GROQ_API_KEY=gsk_xxx  then restart hydi")
     print()
-    print(f"  📱 Mobile PWA : http://{ip}:{port}/")
-    print(f"  💻 Local      : http://localhost:{port}/")
-    print(f"  🤖 Models API : http://localhost:{port}/api/models")
-    print(f"  📊 Stats API  : http://localhost:{port}/api/protoforge/stats")
+    print(f"  📱 Open on your phone : http://{ip}:{port}/")
+    print(f"  💻 Local              : http://localhost:{port}/")
+    print(f"  🔑 Models             : http://localhost:{port}/api/models")
     print()
-    print("  Open the URL above → Share → Add to Home Screen to install.")
+    print("  Share → Add to Home Screen to install as an app.")
     print("  Ctrl+C to stop.\n")
 
     # Demo approval after 5s
@@ -715,12 +813,19 @@ def start_server(port=3006, host="0.0.0.0"):
 
 # ── Entry ─────────────────────────────────────────────────
 def main():
-    print("Checking Ollama...", end=" ", flush=True)
-    model = detect_ollama()
-    if model:
-        print(f"✅ {model}")
+    # Check Groq first (fast, phone-friendly)
+    print("Checking Groq... ", end=" ", flush=True)
+    if detect_groq():
+        print(f"✅ {GROQ_MODEL}")
     else:
-        print("not found (scripted mode)")
+        reason = "no GROQ_API_KEY set" if not GROQ_API_KEY else "key invalid or network error"
+        print(f"not available ({reason})")
+        # Fall back to Ollama
+        print("Checking Ollama...", end=" ", flush=True)
+        if detect_ollama():
+            print(f"✅ {OLLAMA_MODEL}")
+        else:
+            print("not found → scripted mode")
 
     args = sys.argv[1:]
     if not args:
