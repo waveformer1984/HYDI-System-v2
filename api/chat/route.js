@@ -1,7 +1,7 @@
 // Universal Chat Router - Routes messages to appropriate systems
 // Fixed for Node.js/Express (not Next.js)
 
-// Import Supabase for health checks
+import { createHmac, timingSafeEqual } from 'crypto';
 import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(
@@ -9,7 +9,39 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
-// System handlers
+// ── Service token guard ───────────────────────────────────────────────────────
+// Replaces bare x-user-id header trust. Callers must present an HMAC-SHA256
+// token in x-hydi-service-token signed with the shared HYDI_SERVICE_SECRET.
+
+const SERVICE_TOKEN_WINDOW_MS = 5 * 60 * 1000
+
+function checkServiceToken(token) {
+  const secret = process.env.HYDI_SERVICE_SECRET
+  if (!token) return { valid: false, reason: 'missing token' }
+  if (!secret) return { valid: false, reason: 'service secret not configured' }
+  const parts = token.split('.')
+  if (parts.length !== 4) return { valid: false, reason: 'malformed token' }
+  const [ts, requestId, service, sig] = parts
+  const timestamp = parseInt(ts, 10)
+  if (isNaN(timestamp) || Math.abs(Date.now() - timestamp) > SERVICE_TOKEN_WINDOW_MS) {
+    return { valid: false, reason: 'token expired or clock skew exceeds 5 minutes' }
+  }
+  const payload = `${ts}:${requestId}:${service}`
+  const expected = createHmac('sha256', secret).update(payload).digest('hex')
+  try {
+    const expectedBuf = Buffer.from(expected, 'hex')
+    const sigBuf = Buffer.from(sig, 'hex')
+    if (expectedBuf.length !== sigBuf.length || !timingSafeEqual(expectedBuf, sigBuf)) {
+      return { valid: false, reason: 'signature mismatch' }
+    }
+  } catch (_) {
+    return { valid: false, reason: 'invalid signature encoding' }
+  }
+  return { valid: true, service, requestId }
+}
+
+// ── System handlers ───────────────────────────────────────────────────────────
+
 const systemHandlers = {
   ursula: handleUrsulaMessage,
   heidi: handleHeidiMessage,
@@ -21,6 +53,12 @@ const systemHandlers = {
 };
 
 export default async function handler(req, res) {
+  // Verify service token before processing any request
+  const { valid, reason } = checkServiceToken(req.headers['x-hydi-service-token'])
+  if (!valid) {
+    return res.status(401).json({ error: 'Unauthorized', reason })
+  }
+
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
@@ -34,16 +72,14 @@ export default async function handler(req, res) {
       });
     }
     
-    // Get the appropriate handler
-    const handler = systemHandlers[system];
-    if (!handler) {
+    const systemHandler = systemHandlers[system];
+    if (!systemHandler) {
       return res.status(400).json({
         error: `Unknown system: ${system}`
       });
     }
     
-    // Route message to system
-    const response = await handler(message, req);
+    const response = await systemHandler(message, req);
     
     return res.status(200).json({
       response: response,
@@ -59,18 +95,15 @@ export default async function handler(req, res) {
   }
 }
 
-// System handlers
+// ── Individual system handlers ────────────────────────────────────────────────
 
 async function handleUrsulaMessage(message, request) {
   const lowerMessage = message.toLowerCase();
   
-  // Handle system status queries
   if (lowerMessage.includes('system status') || lowerMessage.includes('status')) {
     try {
-      // Run auto-heal and get trends
-      const { data: heal, error: healError } = await supabase.rpc('auto_heal_from_trends');
+      const { data: heal } = await supabase.rpc('auto_heal_from_trends');
       
-      // Fetch from Supabase system_dashboard view
       const { data: dash, error: dashError } = await supabase
         .from('system_dashboard')
         .select('*')
@@ -125,7 +158,6 @@ async function handleHeidiMessage(message, request) {
 }
 
 async function handleCascadeMessage(message, request) {
-  // CASCADE processes events
   const lowerMessage = message.toLowerCase();
   
   if (lowerMessage.includes('process')) {
@@ -148,7 +180,6 @@ async function handleCascadeMessage(message, request) {
 }
 
 async function handleKiloMessage(message, request) {
-  // KILO generates repair hypotheses
   const lowerMessage = message.toLowerCase();
   
   if (lowerMessage.includes('hypothesis') || lowerMessage.includes('repair')) {
@@ -167,7 +198,6 @@ async function handleKiloMessage(message, request) {
 }
 
 async function handleProtoForgeMessage(message, request) {
-  // ProtoForge core system
   const lowerMessage = message.toLowerCase();
   
   if (lowerMessage.includes('status')) {
@@ -186,7 +216,6 @@ async function handleProtoForgeMessage(message, request) {
 }
 
 async function handleHyveMessage(message, request) {
-  // Hyve opportunity collective
   const lowerMessage = message.toLowerCase();
   
   if (lowerMessage.includes('opportunity')) {
@@ -205,11 +234,9 @@ async function handleHyveMessage(message, request) {
 }
 
 async function handleInfrastructureMessage(message, request) {
-  // Infrastructure monitoring - integrated with Supabase health system
   const lowerMessage = message.toLowerCase();
   
   try {
-    // Fetch real health data from Supabase
     const { data: dash, error } = await supabase
       .from('system_dashboard')
       .select('*')
@@ -252,37 +279,11 @@ async function handleInfrastructureMessage(message, request) {
   }
 }
 
-// Helper functions (simplified implementations)
-function getSubscriberCount() {
-  return Math.floor(Math.random() * 10) + 1;
-}
-
-function getLastEventTime() {
-  return new Date().toISOString();
-}
+// ── Helper stubs ──────────────────────────────────────────────────────────────
 
 function extractEventFromMessage(message) {
-  // Simple extraction - in real implementation, parse more carefully
   const match = message.match(/event[:\s]+(.+)$/i);
   return match ? match[1].trim() : null;
-}
-
-function broadcastEvent(event) {
-  // In real implementation, broadcast to SSE clients
-  console.log('Broadcasting event:', event);
-}
-
-function getCurrentRiskLevel() {
-  const levels = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
-  return levels[Math.floor(Math.random() * levels.length)];
-}
-
-function getLastViolation() {
-  return 'None in last hour';
-}
-
-function getRecommendation() {
-  return 'Continue monitoring system integrity';
 }
 
 function getContextIntegrity() {
@@ -290,65 +291,20 @@ function getContextIntegrity() {
 }
 
 async function processCascadeEvent(event) {
-  // Simulate CASCADE processing
   return {
     classification: 'INFRA_FAILURE',
     confidence: (Math.random() * 0.5 + 0.5).toFixed(2)
   };
 }
 
-function getCascadeStatus() {
-  return 'Processing events normally. Queue: 0';
-}
-
-function getQuarantineStatus() {
-  return '2 events quarantined';
-}
-
-function generateHypothesis() {
-  return 'Hypothesis: Database connection pool exhaustion';
-}
-
-function getValidationResult() {
-  return 'Hypothesis validated with 85% confidence';
-}
-
-function getRepairManifest() {
-  return 'Manifest ready for INFRA_FAILURE';
-}
-
-function getProtoForgeStatus() {
-  return 'All systems operational';
-}
-
-function getActiveModules() {
-  return 'CASCADE, KILO, Heidi, Ursula, Hyve';
-}
-
-function getGovernanceStatus() {
-  return 'All policies compliant';
-}
-
-function getOpportunities() {
-  return '3 optimization opportunities detected';
-}
-
-function getCollectiveStatus() {
-  return 'Swarm intelligence: ACTIVE';
-}
-
-function getSwarmStatus() {
-  return '12 agents collaborating';
-}
-
-function getHealthStatus() {
-  return 'All systems green';
-}
-
-function getResourceUsage() {
-  return `CPU: ${Math.floor(Math.random() * 50)}%, RAM: ${Math.floor(Math.random() * 60)}%`;
-}
-
-function getActiveAlerts() {
-  return 'No active alerts';
-}
+function getCascadeStatus() { return 'Processing events normally. Queue: 0'; }
+function getQuarantineStatus() { return '2 events quarantined'; }
+function generateHypothesis() { return 'Hypothesis: Database connection pool exhaustion'; }
+function getValidationResult() { return 'Hypothesis validated with 85% confidence'; }
+function getRepairManifest() { return 'Manifest ready for INFRA_FAILURE'; }
+function getProtoForgeStatus() { return 'All systems operational'; }
+function getActiveModules() { return 'CASCADE, KILO, Heidi, Ursula, Hyve'; }
+function getGovernanceStatus() { return 'All policies compliant'; }
+function getOpportunities() { return '3 optimization opportunities detected'; }
+function getCollectiveStatus() { return 'Swarm intelligence: ACTIVE'; }
+function getSwarmStatus() { return '12 agents collaborating'; }
