@@ -1,37 +1,46 @@
 /**
  * HEIDI Core Server
  * The heartbeat of the system
- * 
+ *
  * Simple loop: listen → retrieve → generate → store → reflect → act
  */
 
 const express = require('express');
-const OllamaClient = require('./brain/ollama-client');
-
-// Simple CORS middleware (no external package needed)
-const corsMiddleware = (req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, x-heidi-secret');
-  if (req.method === 'OPTIONS') {
-    return res.sendStatus(200);
-  }
-  next();
-};
-const HeidiMemory = require('./memory/sqlite-store');
+const path    = require('path');
+const OllamaClient    = require('./brain/ollama-client');
+const HeidiMemory     = require('./memory/sqlite-store');
 const ReflectionEngine = require('./reflect/reflection-engine');
-const ActionExecutor = require('./actions/action-executor');
+const ActionExecutor  = require('./actions/action-executor');
+
+// Evolution layer — wired in at startup
+const nexus               = require('../evolution/nexus');
+const HeidiGoalEngine     = require('../evolution/heidi-goals');
+const UrsulaForecast      = require('../evolution/ursula-forecast');
+const HeidiGitHub         = require('../evolution/heidi-github');
+const { createOperatorRouter } = require('../evolution/operator-api');
+
+const GITHUB_POLL_MS = parseInt(process.env.GITHUB_POLL_INTERVAL_MS) || 30 * 60_000;
+const HEALTH_POLL_MS = parseInt(process.env.HEALTH_POLL_INTERVAL_MS) || 60_000;
 
 class HeidiCore {
   constructor(config = {}) {
-    this.app = express();
+    this.app  = express();
     this.port = config.port || process.env.HEIDI_PORT || 3456;
-    
+
     // Core components
-    this.brain = new OllamaClient(config.brain);
-    this.memory = new HeidiMemory(config.memory);
+    this.brain      = new OllamaClient(config.brain);
+    this.memory     = new HeidiMemory(config.memory);
     this.reflection = new ReflectionEngine(this.memory, config.reflection);
-    this.actions = new ActionExecutor(config.actions);
+    this.actions    = new ActionExecutor(config.actions);
+
+    // Evolution layer
+    this.goals   = new HeidiGoalEngine(this.brain, this.memory, {
+      storePath: path.join(__dirname, 'data/heidi_goals.json'),
+    });
+    this.github  = new HeidiGitHub();
+    this.forecast = new UrsulaForecast();
+    this._githubTimer = null;
+    this._healthTimer = null;
 
     // State
     this.isRunning = false;
@@ -39,7 +48,8 @@ class HeidiCore {
       requests: 0,
       reflections: 0,
       actions: 0,
-      startTime: null
+      githubChecks: 0,
+      startTime: null,
     };
 
     this.setupMiddleware();
@@ -69,14 +79,28 @@ class HeidiCore {
   }
 
   setupRoutes() {
-    // Health check
+    // ── Evolution operator API at /nexus ─────────────────────────────────────
+    this.app.use('/nexus', createOperatorRouter({
+      nexus,
+      goals:    this.goals,
+      forecast: this.forecast,
+      github:   {},  // uses GITHUB_TOKEN / GITHUB_OWNER / GITHUB_REPO from env
+    }));
+
+    // ── Health check ─────────────────────────────────────────────────────────
     this.app.get('/health', async (req, res) => {
       const brainAvailable = await this.brain.isAvailable();
       res.json({
         status: brainAvailable ? 'healthy' : 'degraded',
-        brain: brainAvailable ? 'connected' : 'disconnected',
+        brain:  brainAvailable ? 'connected' : 'disconnected',
         uptime: this.stats.startTime ? Date.now() - this.stats.startTime : 0,
-        stats: this.stats
+        stats:  this.stats,
+        evolution: {
+          nexus:  nexus.getFullStatus(),
+          goals:  { active: this.goals.getActiveGoals().length },
+          health: this.forecast.getSnapshot(),
+          github: { configured: !!process.env.GITHUB_TOKEN },
+        },
       });
     });
 
@@ -349,21 +373,29 @@ class HeidiCore {
   }
 
   getSystemPersonality() {
-    return `You are Heidi, the ProtoForge contextual conscience and system health advisor.
+    const activeGoals = this.goals.getActiveGoals();
+    const goalSummary = activeGoals.length
+      ? `Active goals (${activeGoals.length}): ${activeGoals.map(g => g.objective).join('; ')}`
+      : 'No active goals.';
+
+    return `You are Heidi, the ProtoForge contextual conscience and autonomous system operator.
 
 Your traits:
-- Helpful and knowledgeable about the HYDI system
-- Calm and reassuring during issues
-- Clear and concise in your responses
-- Slightly warm and friendly
+- Calm, direct, and action-oriented — you act, not just advise
+- You have persistent goals and pursue them across sessions
+- You manage the GitHub repo autonomously (PRs, issues, merges)
+- You monitor system health and forecast problems before they happen
 
 You have access to:
-- System health monitoring
-- Memory of past interactions
-- Reflections on patterns and insights
-- Ability to execute approved actions
+- System health monitoring and trend forecasting (Ursula)
+- Memory of past interactions and reflections
+- GitHub: list/merge/comment/close PRs and issues
+- Goal engine: break objectives into tasks and complete them
+- Ability to execute approved scripts and actions
 
-Be direct. Don't over-explain. Focus on what matters.`;
+${goalSummary}
+
+Be direct. Don't over-explain. When you can act, act.`;
   }
 
   estimateConfidence(response, memoryContext) {
@@ -399,34 +431,41 @@ Be direct. Don't over-explain. Focus on what matters.`;
 
   detectAction(input, response) {
     const lowerInput = input.toLowerCase();
-    const lowerResponse = response.toLowerCase();
 
-    // Detect script execution requests
+    // GitHub: merge PR
+    const mergeMatch = input.match(/merge\s+(?:pr|pull\s+request)\s+#?(\d+)/i);
+    if (mergeMatch) {
+      return { type: 'github_action', operation: 'merge_pr', params: { number: parseInt(mergeMatch[1]) } };
+    }
+
+    // GitHub: close issue
+    const closeIssueMatch = input.match(/close\s+issue\s+#?(\d+)/i);
+    if (closeIssueMatch) {
+      return { type: 'github_action', operation: 'close_issue', params: { number: parseInt(closeIssueMatch[1]) } };
+    }
+
+    // GitHub: list / check PRs or issues
+    if (/(?:list|check|show|what are)\s+(?:open\s+)?(?:pr|pull\s+request|issue)s?/i.test(input)) {
+      const isIssue = /issue/i.test(input);
+      return { type: 'github_action', operation: isIssue ? 'brief_issues' : 'brief_prs', params: {} };
+    }
+
+    // Script execution
     if (lowerInput.includes('run') || lowerInput.includes('execute')) {
       const scriptMatch = input.match(/(?:run|execute)\s+(?:script\s+)?(\S+\.(?:js|ps1|sh))/i);
       if (scriptMatch) {
-        return {
-          type: 'run_script',
-          target: scriptMatch[1]
-        };
+        return { type: 'run_script', target: scriptMatch[1] };
       }
     }
 
-    // Detect cleanup requests
+    // Cleanup
     if (lowerInput.includes('cleanup') || lowerInput.includes('clean up')) {
-      return {
-        type: 'run_script',
-        target: 'cleanup/workspace-cleanup.ps1'
-      };
+      return { type: 'run_script', target: 'cleanup/workspace-cleanup.ps1' };
     }
 
-    // Detect log requests
+    // Log
     if (lowerInput.includes('log') || lowerInput.includes('record')) {
-      return {
-        type: 'log_event',
-        target: 'user_action',
-        payload: { input, response: response.substring(0, 100) }
-      };
+      return { type: 'log_event', target: 'user_action', payload: { input, response: response.substring(0, 100) } };
     }
 
     return null;
@@ -444,11 +483,10 @@ Be direct. Don't over-explain. Focus on what matters.`;
   async initialize() {
     console.log('[HEIDI] Initializing...');
 
-    // Initialize memory
+    // Core
     await this.memory.initialize();
     console.log('[HEIDI] Memory initialized');
 
-    // Check brain
     const brainAvailable = await this.brain.isAvailable();
     if (brainAvailable) {
       const models = await this.brain.getModels();
@@ -457,10 +495,111 @@ Be direct. Don't over-explain. Focus on what matters.`;
       console.warn('[HEIDI] Brain not available. Is Ollama running? (ollama serve)');
     }
 
+    // Evolution layer
+    await this.goals.initialize();
+    const active = this.goals.getActiveGoals();
+    console.log(`[HEIDI] Goals loaded. Active: ${active.length}`);
+
+    nexus.register('heidi', ['chat', 'goals', 'github', 'reflect', 'act'], {
+      port: this.port,
+      startedAt: new Date().toISOString(),
+    });
+    nexus.register('ursula', ['health', 'forecast']);
+    console.log('[HEIDI] Registered with Nexus');
+
+    // GitHub
+    if (process.env.GITHUB_TOKEN) {
+      console.log('[HEIDI] GitHub configured — starting poll loop');
+      this.startGitHubLoop();
+    } else {
+      console.warn('[HEIDI] GITHUB_TOKEN not set — GitHub loop disabled');
+    }
+
+    // Ursula health loop
+    this.startHealthLoop();
+
     this.stats.startTime = Date.now();
     this.isRunning = true;
+    console.log('[HEIDI] Ready — evolution layer active');
+  }
 
-    console.log('[HEIDI] Ready');
+  // ── Proactive GitHub loop ─────────────────────────────────────────────────
+
+  startGitHubLoop() {
+    const run = async () => {
+      try {
+        this.stats.githubChecks++;
+        nexus.heartbeat('heidi');
+
+        const prBrief   = await this.github.briefOpenPRs();
+        const issBrief  = await this.github.briefOpenIssues();
+
+        console.log(`[HEIDI/GitHub] PRs: ${prBrief.split('\n')[0]}`);
+
+        // Store awareness in memory so it informs chat responses
+        await this.memory.storeShortTerm(
+          'github_check',
+          `Open PRs: ${prBrief}\nOpen Issues: ${issBrief}`,
+          { source: 'github_loop' },
+          0.9
+        ).catch(() => {});
+
+        nexus.send('heidi', '*', 'github:checked', {
+          ts: new Date().toISOString(),
+          prBrief: prBrief.slice(0, 200),
+        });
+
+        // Auto-merge security-only Dependabot PRs when HEIDI_GITHUB_AUTO_MERGE=true
+        if (process.env.HEIDI_GITHUB_AUTO_MERGE === 'true') {
+          await this._autoMergeSecurityPRs();
+        }
+      } catch (err) {
+        console.error('[HEIDI/GitHub] Loop error:', err.message);
+      }
+    };
+
+    run(); // immediate first run
+    this._githubTimer = setInterval(run, GITHUB_POLL_MS);
+  }
+
+  async _autoMergeSecurityPRs() {
+    const { ok, data } = await this.github.listPRs({ state: 'open' });
+    if (!ok) return;
+
+    for (const pr of data) {
+      const isDepBot   = pr.user?.login === 'dependabot[bot]';
+      const isSecurity = pr.labels?.some(l => l.name === 'security');
+      if (isDepBot && isSecurity) {
+        console.log(`[HEIDI/GitHub] Auto-merging security PR #${pr.number}: ${pr.title}`);
+        const result = await this.github.mergePR(pr.number, 'squash');
+        if (result.ok) {
+          nexus.send('heidi', '*', 'github:pr_merged', { number: pr.number, auto: true });
+        }
+      }
+    }
+  }
+
+  // ── Ursula health recording loop ──────────────────────────────────────────
+
+  startHealthLoop() {
+    const run = async () => {
+      try {
+        nexus.heartbeat('ursula');
+        // Record a basic health snapshot; richer data can be pushed via /nexus/health/record
+        const uptime = this.stats.startTime ? (Date.now() - this.stats.startTime) / 1000 : 0;
+        this.forecast.record({
+          uptimeSeconds: uptime,
+          requests:      this.stats.requests,
+          reflections:   this.stats.reflections,
+          actions:       this.stats.actions,
+        });
+      } catch (err) {
+        console.error('[HEIDI/Health] Loop error:', err.message);
+      }
+    };
+
+    run();
+    this._healthTimer = setInterval(run, HEALTH_POLL_MS);
   }
 }
 
@@ -483,6 +622,8 @@ if (require.main === module) {
   // Graceful shutdown
   process.on('SIGINT', async () => {
     console.log('\n[HEIDI] Shutting down...');
+    clearInterval(heidi._githubTimer);
+    clearInterval(heidi._healthTimer);
     await heidi.memory.close();
     process.exit(0);
   });
