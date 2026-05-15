@@ -833,10 +833,46 @@ class HeidiCoreLoop extends EventEmitter {
     console.log(`[CORE LOOP] Inference completed: ${event.requestId}`);
   }
   
+  // ── Evaluation helpers ────────────────────────────────────────────────────
+
+  calculateTaskConfidence(task, observation) {
+    const priorityScore = { critical: 0.9, high: 0.8, medium: 0.7, low: 0.6 }[task.priority] ?? 0.7;
+    return priorityScore;
+  }
+
+  calculateTaskRisk(task, observation) {
+    const riskByType = { revenue: 0.3, communication: 0.2, optimization: 0.4, analysis: 0.1 };
+    return riskByType[task.type] ?? 0.3;
+  }
+
+  identifyOpportunity(task, observation) {
+    return task.priority === 'high' || task.priority === 'critical' ? 0.8 : 0.5;
+  }
+
+  assessUrgency(task, observation) {
+    return task.priority === 'critical' ? 0.9 : task.priority === 'high' ? 0.7 : 0.4;
+  }
+
+  assessFeasibility(task, observation) {
+    return 0.8;
+  }
+
+  generateRecommendation(task, observation) {
+    return 'proceed';
+  }
+
+  updateMetrics(result, loopTime) {
+    this.metrics.loopsCompleted++;
+    const prev = this.metrics.avgLoopTime;
+    const n = this.metrics.loopsCompleted;
+    this.metrics.avgLoopTime = prev + (loopTime - prev) / n;
+    if (result && result.action) this.metrics.actions++;
+  }
+
   /**
    * STATUS AND MONITORING
    */
-  
+
   getStatus() {
     return {
       running: this.isRunning,
