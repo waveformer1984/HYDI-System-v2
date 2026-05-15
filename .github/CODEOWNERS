@@ -1,0 +1,17 @@
+# Global owner — reviews all PRs by default
+* @waveformer1984
+
+# AI subsystem core
+src/orchestrator/   @waveformer1984
+src/models/         @waveformer1984
+src/memory/         @waveformer1984
+src/actions/        @waveformer1984
+src/core/           @waveformer1984
+
+# Tests — require review when modified
+tests/              @waveformer1984
+
+# CI/CD and config — always require review
+.github/            @waveformer1984
+package.json        @waveformer1984
+jest.config.js      @waveformer1984
