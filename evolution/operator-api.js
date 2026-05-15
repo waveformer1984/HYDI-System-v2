@@ -24,8 +24,10 @@
  */
 
 const express = require('express');
+const HeidiGitHub = require('./heidi-github');
 
-function createOperatorRouter({ nexus, goals: goalEngine, forecast } = {}) {
+function createOperatorRouter({ nexus, goals: goalEngine, forecast, github: githubConfig } = {}) {
+  const gh = new HeidiGitHub(githubConfig || {});
   const router = express.Router();
 
   // ─── Brief ──────────────────────────────────────────────────────────────
@@ -167,6 +169,90 @@ function createOperatorRouter({ nexus, goals: goalEngine, forecast } = {}) {
     const limit = Math.min(parseInt(req.query.limit) || 50, 200);
     const messages = nexus.messageLog.slice(-limit);
     res.json({ messages, total: nexus.messageLog.length });
+  });
+
+  // ─── GitHub (Heidi's repo management) ────────────────────────────────────
+  //
+  // Heidi manages the repo through these endpoints. All write operations
+  // respect GITHUB_DRY_RUN=true for safe testing.
+  //
+  //   GET  /nexus/github/prs                        — list open PRs
+  //   GET  /nexus/github/prs/brief                  — plain-English PR summary
+  //   GET  /nexus/github/prs/:number                — single PR detail
+  //   POST /nexus/github/prs/:number/merge          — merge PR { method?, commitTitle? }
+  //   POST /nexus/github/prs/:number/comment        — comment { body }
+  //   POST /nexus/github/prs/:number/close          — close PR
+  //   GET  /nexus/github/issues                     — list open issues
+  //   GET  /nexus/github/issues/brief               — plain-English issue summary
+  //   GET  /nexus/github/issues/:number             — single issue
+  //   POST /nexus/github/issues/:number/comment     — comment { body }
+  //   POST /nexus/github/issues/:number/close       — close { reason? }
+
+  router.get('/github/prs/brief', async (req, res) => {
+    const text = await gh.briefOpenPRs();
+    res.type('text/plain').send(text);
+  });
+
+  router.get('/github/prs', async (req, res) => {
+    const { ok, data, error } = await gh.listPRs({ state: req.query.state || 'open' });
+    ok ? res.json(data) : res.status(502).json({ error });
+  });
+
+  router.get('/github/prs/:number', async (req, res) => {
+    const { ok, data, error } = await gh.getPR(Number(req.params.number));
+    ok ? res.json(data) : res.status(502).json({ error });
+  });
+
+  router.post('/github/prs/:number/merge', async (req, res) => {
+    const { method, commitTitle, commitMessage } = req.body || {};
+    const { ok, data, error } = await gh.mergePR(
+      Number(req.params.number),
+      method || 'squash',
+      { commitTitle, commitMessage }
+    );
+    if (nexus) nexus.send('heidi', '*', 'github:pr_merged', { number: req.params.number, method });
+    ok ? res.json(data) : res.status(502).json({ error });
+  });
+
+  router.post('/github/prs/:number/comment', async (req, res) => {
+    const { body } = req.body || {};
+    if (!body) return res.status(400).json({ error: 'body is required' });
+    const { ok, data, error } = await gh.commentOnPR(Number(req.params.number), body);
+    ok ? res.json(data) : res.status(502).json({ error });
+  });
+
+  router.post('/github/prs/:number/close', async (req, res) => {
+    const { ok, data, error } = await gh.closePR(Number(req.params.number));
+    ok ? res.json(data) : res.status(502).json({ error });
+  });
+
+  router.get('/github/issues/brief', async (req, res) => {
+    const text = await gh.briefOpenIssues();
+    res.type('text/plain').send(text);
+  });
+
+  router.get('/github/issues', async (req, res) => {
+    const { ok, data, error } = await gh.listIssues({ state: req.query.state || 'open' });
+    ok ? res.json(data) : res.status(502).json({ error });
+  });
+
+  router.get('/github/issues/:number', async (req, res) => {
+    const { ok, data, error } = await gh.getIssue(Number(req.params.number));
+    ok ? res.json(data) : res.status(502).json({ error });
+  });
+
+  router.post('/github/issues/:number/comment', async (req, res) => {
+    const { body } = req.body || {};
+    if (!body) return res.status(400).json({ error: 'body is required' });
+    const { ok, data, error } = await gh.commentOnIssue(Number(req.params.number), body);
+    ok ? res.json(data) : res.status(502).json({ error });
+  });
+
+  router.post('/github/issues/:number/close', async (req, res) => {
+    const { reason } = req.body || {};
+    const { ok, data, error } = await gh.closeIssue(Number(req.params.number), reason);
+    if (nexus) nexus.send('heidi', '*', 'github:issue_closed', { number: req.params.number });
+    ok ? res.json(data) : res.status(502).json({ error });
   });
 
   return router;

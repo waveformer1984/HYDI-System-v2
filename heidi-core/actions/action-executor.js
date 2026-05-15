@@ -17,7 +17,8 @@ class ActionExecutor {
       'write_file',
       'read_file',
       'api_call',
-      'log_event'
+      'log_event',
+      'github_action',
     ]);
 
     // Approved script directories
@@ -43,7 +44,8 @@ class ActionExecutor {
     // Approved API domains
     this.approvedDomains = config.approvedDomains || [
       'localhost',
-      '127.0.0.1'
+      '127.0.0.1',
+      'api.github.com',
     ];
 
     this.executionLog = [];
@@ -87,6 +89,9 @@ class ActionExecutor {
           break;
         case 'log_event':
           result = await this.logEvent(action.target, action.payload);
+          break;
+        case 'github_action':
+          result = await this.githubAction(action.operation, action.params);
           break;
         default:
           throw new Error(`Unknown action type: ${action.type}`);
@@ -295,6 +300,54 @@ class ActionExecutor {
 
     console.log('[HEIDI Event]', JSON.stringify(event));
     return { logged: true };
+  }
+
+  /**
+   * GitHub operations — Heidi's autonomous repo management capability.
+   * Requires GITHUB_TOKEN, GITHUB_OWNER, GITHUB_REPO env vars.
+   *
+   * Supported operations:
+   *   list_prs      { state? }
+   *   get_pr        { number }
+   *   merge_pr      { number, method?, commitTitle?, commitMessage? }
+   *   comment_pr    { number, body }
+   *   close_pr      { number }
+   *   list_issues   { state?, labels? }
+   *   get_issue     { number }
+   *   comment_issue { number, body }
+   *   close_issue   { number, reason? }
+   *   brief_prs     {}
+   *   brief_issues  {}
+   */
+  async githubAction(operation, params = {}) {
+    const HeidiGitHub = require('../../evolution/heidi-github');
+    const gh = new HeidiGitHub();
+
+    const ops = {
+      list_prs:      () => gh.listPRs(params),
+      get_pr:        () => gh.getPR(params.number),
+      get_pr_files:  () => gh.getPRFiles(params.number),
+      get_pr_checks: () => gh.getPRChecks(params.number),
+      merge_pr:      () => gh.mergePR(params.number, params.method, params),
+      comment_pr:    () => gh.commentOnPR(params.number, params.body),
+      close_pr:      () => gh.closePR(params.number),
+      list_issues:   () => gh.listIssues(params),
+      get_issue:     () => gh.getIssue(params.number),
+      comment_issue: () => gh.commentOnIssue(params.number, params.body),
+      close_issue:   () => gh.closeIssue(params.number, params.reason),
+      brief_prs:     () => gh.briefOpenPRs().then(text => ({ text })),
+      brief_issues:  () => gh.briefOpenIssues().then(text => ({ text })),
+    };
+
+    if (!ops[operation]) {
+      throw new Error(`Unknown GitHub operation: ${operation}. Valid: ${Object.keys(ops).join(', ')}`);
+    }
+
+    const result = await ops[operation]();
+    if (!result.ok && result.ok !== undefined) {
+      throw new Error(`GitHub ${operation} failed: ${result.error}`);
+    }
+    return result.data ?? result;
   }
 
   /**

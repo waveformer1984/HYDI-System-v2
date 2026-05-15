@@ -136,15 +136,55 @@ test('Ursula Forecast: emits proactive alert before threshold breach', () => {
   assert.ok(briefing.includes('FORECAST'), 'briefing should include FORECAST label');
 });
 
-// ─── Auth guard warning (informational) ──────────────────────────────────────
+// ─── 7. HeidiGitHub: dry-run merge ───────────────────────────────────────────
+
+const HeidiGitHub = require('./heidi-github');
+
+async function testGitHubDryRun() {
+  return test('HeidiGitHub: dry-run merge returns ok without hitting API', async () => {
+    const gh = new HeidiGitHub({
+      token: 'dry-run-token',
+      owner: 'waveformer1984',
+      repo:  'hydi-system-v2',
+      dryRun: true,
+    });
+
+    // briefOpenPRs with no token will try the API and fail — test client shape instead
+    assert.ok(typeof gh.listPRs === 'function');
+    assert.ok(typeof gh.mergePR === 'function');
+    assert.ok(typeof gh.commentOnIssue === 'function');
+    assert.ok(typeof gh.briefOpenPRs === 'function');
+
+    // Dry-run merge should return ok=true without network call
+    const result = await gh.mergePR(99, 'squash');
+    assert.strictEqual(result.ok, true);
+    assert.strictEqual(result.data.dry_run, true);
+    assert.strictEqual(result.data.method, 'squash');
+  });
+}
+
+// ─── 8. ActionExecutor: github_action in approved set ────────────────────────
+
+const ActionExecutor = require('../heidi-core/actions/action-executor');
+
+test('ActionExecutor: github_action is in approved action types', () => {
+  const executor = new ActionExecutor();
+  assert.ok(executor.approvedActions.has('github_action'), 'github_action should be approved');
+  assert.ok(executor.approvedDomains.includes('api.github.com'), 'api.github.com should be approved domain');
+});
+
+// ─── Warnings (informational) ─────────────────────────────────────────────────
 
 if (!process.env.NEXUS_OPERATOR_SECRET) {
   console.warn('\n  [WARN] NEXUS_OPERATOR_SECRET not set — operator-api auth guard will reject all requests');
 }
+if (!process.env.GITHUB_TOKEN) {
+  console.warn('  [WARN] GITHUB_TOKEN not set — Heidi GitHub write operations will fail at runtime');
+}
 
 // ─── Run ──────────────────────────────────────────────────────────────────────
 
-Promise.all([testGoalCreation(), testTaskCompletion()]).then(() => {
+Promise.all([testGoalCreation(), testTaskCompletion(), testGitHubDryRun()]).then(() => {
   console.log(`\n  ${passed} passed, ${failed} failed\n`);
   process.exit(failed > 0 ? 1 : 0);
 });
