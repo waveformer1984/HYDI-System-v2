@@ -65,9 +65,12 @@ class HeidiMemorySystem extends EventEmitter {
       lastReflection: Date.now()
     };
     
+    // Drift score (also stored in reflectiveMemory.driftScore, but tracked here too)
+    this.driftScore = 0;
+
     // Initialize storage
     this.initialize();
-    
+
     // Start maintenance tasks
     this.startMaintenanceTasks();
     
@@ -974,7 +977,8 @@ class HeidiMemorySystem extends EventEmitter {
       adaptations: [],
       lastReflection: Date.now()
     };
-    
+    this.driftScore = 0;
+
     console.log('[MEMORY] Memory system reset completed');
   }
 }
