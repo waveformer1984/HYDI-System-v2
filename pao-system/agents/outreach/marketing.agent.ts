@@ -31,13 +31,8 @@ export class MarketingAgent extends BaseAgent {
 
   private async handleBrandAwarenessCampaign(event: any): Promise<void> {
     console.log('[Marketing Agent] Processing brand awareness campaign');
-    
-    // Create campaign strategy
     const campaignStrategy = this.createBrandAwarenessStrategy(event.payload);
-    
-    // Execute campaign
     await this.executeBrandAwarenessCampaign(campaignStrategy);
-    
     this.emit_event('BRAND_AWARENESS_CAMPAIGN_EXECUTED', {
       campaign_id: event.payload.campaign_id,
       strategy: campaignStrategy,
@@ -48,13 +43,8 @@ export class MarketingAgent extends BaseAgent {
 
   private async handleProductLaunch(event: any): Promise<void> {
     console.log('[Marketing Agent] Processing product launch');
-    
-    // Create launch plan
     const launchPlan = this.createProductLaunchPlan(event.payload);
-    
-    // Execute launch
     await this.executeProductLaunch(launchPlan);
-    
     this.emit_event('PRODUCT_LAUNCH_EXECUTED', {
       product_id: event.payload.product_id,
       launch_plan: launchPlan,
@@ -65,13 +55,8 @@ export class MarketingAgent extends BaseAgent {
 
   private async handleContentCreationRequest(event: any): Promise<void> {
     console.log('[Marketing Agent] Processing content creation request');
-    
-    // Create content based on request
     const content = this.createContent(event.payload);
-    
-    // Distribute content
     await this.distributeContent(content, event.payload.channels);
-    
     this.emit_event('CONTENT_CREATED_AND_DISTRIBUTED', {
       request_id: event.payload.request_id,
       content_id: content.id,
@@ -83,10 +68,7 @@ export class MarketingAgent extends BaseAgent {
 
   private async handleMarketAnalysisNeeded(event: any): Promise<void> {
     console.log('[Marketing Agent] Processing market analysis request');
-    
-    // Perform market analysis
     const analysis = this.performMarketAnalysis(event.payload);
-    
     this.emit_event('MARKET_ANALYSIS_COMPLETE', {
       request_id: event.payload.request_id,
       analysis: analysis,
@@ -97,13 +79,8 @@ export class MarketingAgent extends BaseAgent {
 
   private async handleCampaignPerformanceReview(event: any): Promise<void> {
     console.log('[Marketing Agent] Processing campaign performance review');
-    
-    // Analyze campaign performance
     const performance = this.analyzeCampaignPerformance(event.payload);
-    
-    // Provide optimization recommendations
     const recommendations = this.generateOptimizationRecommendations(performance);
-    
     this.emit_event('CAMPAIGN_PERFORMANCE_REVIEWED', {
       campaign_id: event.payload.campaign_id,
       performance: performance,
@@ -114,7 +91,6 @@ export class MarketingAgent extends BaseAgent {
   }
 
   private createBrandAwarenessStrategy(payload: any): any {
-    // Simplified brand awareness strategy
     return {
       campaign_id: payload.campaign_id,
       target_audience: payload.target_audience || 'general_tech',
@@ -130,7 +106,7 @@ export class MarketingAgent extends BaseAgent {
     };
   }
 
-  private generateBrandMessaging(payload: any): any {
+  private generateBrandMessaging(_payload: any): any {
     return {
       primary_message: `ProtoForge: Building autonomous systems for human capability`,
       secondary_messages: [
@@ -145,34 +121,18 @@ export class MarketingAgent extends BaseAgent {
 
   private async executeBrandAwarenessCampaign(strategy: any): Promise<void> {
     console.log(`[Marketing Agent] Executing brand awareness campaign: ${strategy.campaign_id}`);
-    
-    // In real system, this would launch ads, create content, outreach, etc.
     await new Promise(resolve => setTimeout(resolve, 2000));
-    
     console.log(`[Marketing Agent] Brand awareness campaign executed: ${strategy.campaign_id}`);
   }
 
   private createProductLaunchPlan(payload: any): any {
-    // Simplified product launch plan
     return {
       product_id: payload.product_id,
       launch_date: payload.launch_date || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
       phases: [
-        {
-          name: 'teaser',
-          duration_days: 7,
-          activities: ['social_teasers', 'email_teasers', 'press_releases']
-        },
-        {
-          name: 'launch',
-          duration_days: 1,
-          activities: ['live_event', 'product_demo', 'press_kit_distribution']
-        },
-        {
-          name: 'post_launch',
-          duration_days: 14,
-          activities: ['customer_onboarding', 'support_materials', 'feedback_collection']
-        }
+        { name: 'teaser', duration_days: 7, activities: ['social_teasers', 'email_teasers', 'press_releases'] },
+        { name: 'launch', duration_days: 1, activities: ['live_event', 'product_demo', 'press_kit_distribution'] },
+        { name: 'post_launch', duration_days: 14, activities: ['customer_onboarding', 'support_materials', 'feedback_collection'] }
       ],
       budget: payload.budget || 50000,
       target_metrics: {
@@ -185,15 +145,11 @@ export class MarketingAgent extends BaseAgent {
 
   private async executeProductLaunch(plan: any): Promise<void> {
     console.log(`[Marketing Agent] Executing product launch: ${plan.product_id}`);
-    
-    // In real system, this would coordinate launch activities
     await new Promise(resolve => setTimeout(resolve, 3000));
-    
     console.log(`[Marketing Agent] Product launch executed: ${plan.product_id}`);
   }
 
   private createContent(payload: any): any {
-    // Simplified content creation
     return {
       id: `content_${Date.now()}`,
       type: payload.type || 'article',
@@ -208,24 +164,20 @@ export class MarketingAgent extends BaseAgent {
 
   private async distributeContent(content: any, channels: string[]): Promise<void> {
     console.log(`[Marketing Agent] Distributing content: ${content.id} to channels: ${channels.join(', ')}`);
-    
-    // In real system, this would post to social media, send emails, update website, etc.
     await new Promise(resolve => setTimeout(resolve, 1000));
-    
     console.log(`[Marketing Agent] Content distributed: ${content.id}`);
   }
 
   private performMarketAnalysis(payload: any): any {
-    // Simplified market analysis
     return {
       analysis_id: `analysis_${Date.now()}`,
       market_segment: payload.market_segment || 'autonomous_systems',
       market_size: {
-        total_addressable_market: Math.random() * 1000000000 + 500000000, // $500M-1.5B
-        serviceable_addressable_market: Math.random() * 100000000 + 50000000, // $50M-150M
-        serviceable_obtainable_market: Math.random() * 20000000 + 5000000 // $5M-25M
+        total_addressable_market: Math.random() * 1000000000 + 500000000,
+        serviceable_addressable_market: Math.random() * 100000000 + 50000000,
+        serviceable_obtainable_market: Math.random() * 20000000 + 5000000
       },
-      growth_rate: `${(Math.random() * 20 + 10).toFixed(1)}%`, // 10-30% growth
+      growth_rate: `${(Math.random() * 20 + 10).toFixed(1)}%`,
       key_trends: [
         'Increasing demand for AI-integrated systems',
         'Growth in modular and prefabricated construction',
@@ -252,7 +204,6 @@ export class MarketingAgent extends BaseAgent {
   }
 
   private analyzeCampaignPerformance(payload: any): any {
-    // Simplified campaign performance analysis
     return {
       campaign_id: payload.campaign_id,
       impressions: payload.impressions || Math.floor(Math.random() * 50000),
@@ -273,24 +224,23 @@ export class MarketingAgent extends BaseAgent {
   }
 
   private generateOptimizationRecommendations(performance: any): string[] {
-    const recommendations = [];
+    const recommendations: string[] = [];
     
     if (parseFloat(performance.click_through_rate) < 1.0) {
-      recommendations.add('Improve ad creatives and targeting to increase CTR');
+      recommendations.push('Improve ad creatives and targeting to increase CTR');
     }
     
     if (parseFloat(performance.conversion_rate) < 2.0) {
-      recommendations.add('Optimize landing pages and conversion funnels');
+      recommendations.push('Optimize landing pages and conversion funnels');
     }
     
     if (parseFloat(performance.return_on_ad_spend) < 2.0) {
-      recommendations.add('Review bidding strategies and allocate budget to best-performing channels');
+      recommendations.push('Review bidding strategies and allocate budget to best-performing channels');
     }
     
-    // Add some general recommendations
-    recommendations.add('A/B test different ad variations');
-    recommendations.add('Refine audience segmentation based on engagement data');
-    recommendations.add('Consider retargeting campaigns for engaged users');
+    recommendations.push('A/B test different ad variations');
+    recommendations.push('Refine audience segmentation based on engagement data');
+    recommendations.push('Consider retargeting campaigns for engaged users');
     
     return recommendations;
   }
