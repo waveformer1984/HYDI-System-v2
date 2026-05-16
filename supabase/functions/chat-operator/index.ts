@@ -216,10 +216,10 @@ async function handleGeneralInquiry(intent: any, context: any, supabase: any) {
 
 function simulateOrderStatus(orderId: string) {
   // Simulate order status - in production, integrate with real system
-  const statuses = ['processing', 'shipped', 'delivered', 'cancelled']
+  const statuses = ['processing', 'shipped', 'delivered', 'cancelled'] as const
   const status = statuses[Math.floor(Math.random() * statuses.length)]
   
-  const messages = {
+  const messages: Record<string, string> = {
     processing: 'Your order is being prepared for shipment.',
     shipped: 'Your order has been shipped and is on its way.',
     delivered: 'Your order has been delivered successfully.',
@@ -227,11 +227,6 @@ function simulateOrderStatus(orderId: string) {
   }
   
   return { status, message: messages[status] }
-}
-
-function generateGeneralInstruction(message: string, history: any[]) {
-  const recentMessages = history.slice(-3).map(h => h.content).join(' ')
-  return `Based on your message "${message}" and recent conversation: "${recentMessages}", please provide a helpful response.`
 }
 
 function generateGeneralResponse(message: string, history: any[]) {
@@ -271,7 +266,6 @@ serve(async (req) => {
 
   try {
     const { method } = req
-    const url = new URL(req.url)
     
     if (method === 'GET') {
       // Health check
@@ -311,7 +305,7 @@ serve(async (req) => {
       )
       
       // Get session details
-      const { data: session } = await supabase.rpc('get_session_details', {
+      const { data: session } = await supabaseClient.rpc('get_session_details', {
         p_session_id: session_id
       })
       
@@ -319,7 +313,7 @@ serve(async (req) => {
         return new Response(
           JSON.stringify({ error: 'Invalid session' }),
           { 
-            headers: { { ...corsHeaders, 'Content-Type': 'application/json' },
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
             status: 404
           }
         )
@@ -329,10 +323,10 @@ serve(async (req) => {
       const intent = await getIntent(message, { session, user_id })
       
       // Execute appropriate tool
-      const result = await executeTool(intent, { session, user_id, message }, supabase)
+      const result = await executeTool(intent, { session, user_id, message }, supabaseClient)
       
       // Store user message
-      await supabase.from('chat_messages').insert({
+      await supabaseClient.from('chat_messages').insert({
         session_id,
         sender_type: 'user',
         sender_id: user_id,
@@ -345,7 +339,7 @@ serve(async (req) => {
       })
       
       // Store operator response
-      await supabase.from('chat_messages').insert({
+      await supabaseClient.from('chat_messages').insert({
         session_id,
         sender_type: 'operator',
         sender_id: 'chat-operator',
@@ -355,7 +349,7 @@ serve(async (req) => {
       })
       
       // Broadcast update
-      await supabase.from('chat_events').insert({
+      await supabaseClient.from('chat_events').insert({
         session_id,
         user_id,
         event_type: 'operator_action',
@@ -392,7 +386,7 @@ serve(async (req) => {
     
     return new Response(
       JSON.stringify({ 
-        error: error.message,
+        error: error instanceof Error ? error.message : 'Unknown error',
         timestamp: new Date().toISOString()
       }),
       { 
