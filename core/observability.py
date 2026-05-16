@@ -13,7 +13,7 @@ from collections import defaultdict, deque
 from typing import Any, Dict, List, Optional, Tuple
 
 
-# ── Structured logger ─────────────────────────────────────────────────────────
+# ── Structured logger ──────────────────────────────────────────────────────
 
 class JsonFormatter(logging.Formatter):
     """Emits one JSON object per log line."""
@@ -58,7 +58,7 @@ class StructuredLogger:
         self._emit(logging.ERROR, msg, **ctx)
 
 
-# ── Metrics collector ─────────────────────────────────────────────────────────
+# ── Metrics collector ───────────────────────────────────────────────────
 
 class MetricsCollector:
     """
@@ -124,10 +124,7 @@ class MetricsCollector:
             }
 
 
-# ── Health aggregator ─────────────────────────────────────────────────────────
-
-@dataclass_workaround = None  # avoid circular import with dataclasses
-
+# ── Health aggregator ─────────────────────────────────────────────────────
 
 class HealthAggregator:
     """
