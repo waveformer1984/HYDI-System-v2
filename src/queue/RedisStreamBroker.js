@@ -10,10 +10,9 @@
  *   hydi:edge-results   — results returned from edge nodes
  */
 
-const UPSTASH_URL = process.env.UPSTASH_REDIS_REST_URL;
-const UPSTASH_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
-
 async function redisCommand(...args) {
+  const UPSTASH_URL = process.env.UPSTASH_REDIS_REST_URL;
+  const UPSTASH_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
   if (!UPSTASH_URL || !UPSTASH_TOKEN) {
     // Silent no-op when Redis is not configured — avoids crashing the loop
     return null;
@@ -37,6 +36,8 @@ async function redisCommand(...args) {
 }
 
 async function redisPost(command) {
+  const UPSTASH_URL = process.env.UPSTASH_REDIS_REST_URL;
+  const UPSTASH_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
   if (!UPSTASH_URL || !UPSTASH_TOKEN) return null;
   try {
     const res = await fetch(UPSTASH_URL, {

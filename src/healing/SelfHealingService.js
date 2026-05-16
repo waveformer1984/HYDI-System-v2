@@ -5,11 +5,9 @@
  * generate an actionable corrective strategy.
  */
 
-const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
-const TRACES_BASE = process.env.HYDI_TRACES_URL || 'http://localhost:3000/api/traces';
-
 async function callClaude(systemPrompt, userContent) {
-  if (!ANTHROPIC_API_KEY) {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) {
     console.warn('[SELF-HEAL] ANTHROPIC_API_KEY not set — returning no-op correction');
     return null;
   }
@@ -18,7 +16,7 @@ async function callClaude(systemPrompt, userContent) {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'x-api-key': ANTHROPIC_API_KEY,
+      'x-api-key': apiKey,
       'anthropic-version': '2023-06-01',
     },
     body: JSON.stringify({
@@ -40,8 +38,9 @@ async function callClaude(systemPrompt, userContent) {
 }
 
 async function fetchRecentTraces(limit = 5) {
+  const tracesBase = process.env.HYDI_TRACES_URL || 'http://localhost:3000/api/traces';
   try {
-    const res = await fetch(`${TRACES_BASE}?sample=${limit}`, {
+    const res = await fetch(`${tracesBase}?sample=${limit}`, {
       signal: AbortSignal.timeout(5000),
     });
     if (!res.ok) return [];
