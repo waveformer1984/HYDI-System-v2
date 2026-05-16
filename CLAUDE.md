@@ -25,7 +25,6 @@ npm test             # Run Jest unit tests
 npm run test:watch   # Jest in watch mode
 npm run test:coverage  # Jest with coverage report
 npm run test:integration  # Run adversarial integration tests (tests/hdi-adversarial.test.js)
-npm run typecheck    # TypeScript type-check without emitting (tsc --noEmit)
 ```
 
 Run a single test file:
@@ -204,7 +203,7 @@ vercel env ls | grep SECRET_NAME
 ## Notable Conventions
 
 - **Mixed module styles**: some `api/` files use `export default` (ESM) while others use `module.exports` (CJS). The project's Next.js build handles this, but Edge Functions are pure ESM (Deno).
-- **TypeScript build errors surface**: `next.config.js` no longer suppresses `ignoreBuildErrors` or `ignoreDuringBuilds` — type errors and lint warnings now surface during `npm run build`. Run `npm run typecheck` to check types without building.
+- **TypeScript is present but soft**: `next.config.js` sets `ignoreBuildErrors: true` and `eslint.ignoreDuringBuilds: true` — the build won't fail on type errors.
 - **The `clean-main` branch** is the primary branch (CI runs against it, not `main`).
 - **`.sql.skip` files**: migrations with this suffix are intentionally skipped by the runner; they document attempted approaches that were superseded.
 - **`system_dashboard` view**: the central Supabase view consumed by health checks, Ursula status queries, and infrastructure monitoring — if this view is broken, health endpoints degrade gracefully to `503`.
