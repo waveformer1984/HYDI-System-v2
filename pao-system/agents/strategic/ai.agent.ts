@@ -28,11 +28,8 @@ export class AIAgent extends BaseAgent {
 
   private async handleSystemHealthUpdate(event: any): Promise<void> {
     console.log('[AI Agent] Processing system health update');
-    
-    // Analyze system health
     const healthStatus = this.analyzeSystemHealth(event.payload);
     
-    // If issues detected, take corrective action
     if (healthStatus.issues.length > 0) {
       this.emit_event('AI_INTERVENTION_REQUIRED', {
         issues: healthStatus.issues,
@@ -41,7 +38,6 @@ export class AIAgent extends BaseAgent {
         timestamp: new Date().toISOString()
       }, 'broadcast', healthStatus.urgency);
     } else {
-      // System is healthy, emit confirmation
       this.emit_event('SYSTEM_HEALTH_CONFIRMED', {
         status: 'healthy',
         metrics: healthStatus.metrics,
@@ -53,11 +49,7 @@ export class AIAgent extends BaseAgent {
 
   private async handleAgentDeploymentRequest(event: any): Promise<void> {
     console.log('[AI Agent] Processing agent deployment request');
-    
-    // Deploy the requested agent
     const deploymentResult = await this.deployAgent(event.payload.agent_type, event.payload.config);
-    
-    // Emit deployment result
     this.emit_event('AGENT_DEPLOYMENT_COMPLETE', {
       agent_type: event.payload.agent_type,
       deployment_id: deploymentResult.deployment_id,
@@ -70,14 +62,8 @@ export class AIAgent extends BaseAgent {
 
   private async handleScalingNeeded(event: any): Promise<void> {
     console.log('[AI Agent] Processing scaling request');
-    
-    // Analyze current load and scale accordingly
     const scalingAction = this.determineScalingAction(event.payload);
-    
-    // Execute scaling
     const scalingResult = await this.executeScaling(scalingAction);
-    
-    // Emit scaling result
     this.emit_event('SCALING_EXECUTED', {
       action: scalingAction.action,
       target_capacity: scalingAction.target_capacity,
@@ -89,14 +75,8 @@ export class AIAgent extends BaseAgent {
 
   private async handlePerformanceOptimization(event: any): Promise<void> {
     console.log('[AI Agent] Processing performance optimization request');
-    
-    // Analyze performance bottlenecks
     const bottlenecks = this.identifyPerformanceBottlenecks(event.payload);
-    
-    // Apply optimizations
     const optimizations = this.applyPerformanceOptimizations(bottlenecks);
-    
-    // Emit optimization results
     this.emit_event('PERFORMANCE_OPTIMIZATION_APPLIED', {
       bottlenecks_addressed: bottlenecks,
       optimizations_applied: optimizations,
@@ -107,7 +87,6 @@ export class AIAgent extends BaseAgent {
   }
 
   private analyzeSystemHealth(payload: any): any {
-    // Simplified health analysis
     return {
       issues: [],
       recommended_actions: [],
@@ -121,13 +100,9 @@ export class AIAgent extends BaseAgent {
     };
   }
 
-  private async deployAgent(agentType: string, config: any): Promise<any> {
+  private async deployAgent(agentType: string, _config: any): Promise<any> {
     console.log(`[AI Agent] Deploying agent type: ${agentType}`);
-    
-    // In real system, this would deploy the agent (Docker, Kubernetes, etc.)
-    // For now, simulate deployment
     await new Promise(resolve => setTimeout(resolve, 2000));
-    
     return {
       deployment_id: `deploy_${Date.now()}`,
       status: 'success',
@@ -136,106 +111,63 @@ export class AIAgent extends BaseAgent {
   }
 
   private determineScalingAction(payload: any): any {
-    // Simple scaling decision logic
     const currentLoad = payload.current_load || 0;
-    const threshold = payload.threshold || 80; // 80% utilization threshold
+    const threshold = payload.threshold || 80;
+    const currentCapacity = payload.current_capacity || 1;
     
     if (currentLoad > threshold) {
-      return {
-        action: 'scale_up',
-        target_capacity: Math.ceil((currentLoad / threshold) * 2)
-      };
+      return { action: 'scale_up', target_capacity: Math.ceil((currentLoad / threshold) * 2), current_capacity: currentCapacity };
     } else if (currentLoad < threshold * 0.3) {
-      return {
-        action: 'scale_down',
-        target_capacity: Math.max(1, Math.floor(currentLoad / (threshold * 0.3)))
-      };
+      return { action: 'scale_down', target_capacity: Math.max(1, Math.floor(currentLoad / (threshold * 0.3))), current_capacity: currentCapacity };
     } else {
-      return {
-        action: 'maintain',
-        target_capacity: payload.current_capacity || 1
-      };
+      return { action: 'maintain', target_capacity: currentCapacity, current_capacity: currentCapacity };
     }
   }
 
   private async executeScaling(action: any): Promise<any> {
     console.log(`[AI Agent] Executing scaling action: ${action.action}`);
-    
-    // In real system, this would interact with orchestration platform
     await new Promise(resolve => setTimeout(resolve, 3000));
-    
     return {
       status: 'success',
       new_capacity: action.target_capacity,
-      nodes_added_or_removed: Math.abs((action.target_capacity || 0) - (payload.current_capacity || 1))
+      nodes_added_or_removed: Math.abs((action.target_capacity || 0) - (action.current_capacity || 1))
     };
   }
 
   private identifyPerformanceBottlenecks(payload: any): any[] {
-    const bottlenecks = [];
+    const bottlenecks: any[] = [];
     
     if (payload.response_time && payload.response_time > 1000) {
-      bottlenecks.push({
-        type: 'response_time',
-        severity: 'high',
-        value: payload.response_time,
-        threshold: 1000
-      });
+      bottlenecks.push({ type: 'response_time', severity: 'high', value: payload.response_time, threshold: 1000 });
     }
     
     if (payload.error_rate && payload.error_rate > 0.05) {
-      bottlenecks.push({
-        type: 'error_rate',
-        severity: 'medium',
-        value: payload.error_rate,
-        threshold: 0.05
-      });
+      bottlenecks.push({ type: 'error_rate', severity: 'medium', value: payload.error_rate, threshold: 0.05 });
     }
     
     if (payload.throughput && payload.throughput < payload.expected_throughput * 0.7) {
-      bottlenecks.push({
-        type: 'throughput',
-        severity: 'medium',
-        value: payload.throughput,
-        expected: payload.expected_throughput
-      });
+      bottlenecks.push({ type: 'throughput', severity: 'medium', value: payload.throughput, expected: payload.expected_throughput });
     }
     
     return bottlenecks;
   }
 
   private applyPerformanceOptimizations(bottlenecks: any[]): any[] {
-    const optimizations = [];
+    const optimizations: any[] = [];
     
     for (const bottleneck of bottlenecks) {
       switch (bottleneck.type) {
         case 'response_time':
-          optimizations.push({
-            type: 'cache_optimization',
-            description: 'Optimized caching strategy to reduce response time',
-            expected_improvement: '20-30%'
-          });
+          optimizations.push({ type: 'cache_optimization', description: 'Optimized caching strategy to reduce response time', expected_improvement: '20-30%' });
           break;
         case 'error_rate':
-          optimizations.push({
-            type: 'error_handling_improvement',
-            description: 'Enhanced error handling and retry mechanisms',
-            expected_improvement: '50% reduction in errors'
-          });
+          optimizations.push({ type: 'error_handling_improvement', description: 'Enhanced error handling and retry mechanisms', expected_improvement: '50% reduction in errors' });
           break;
         case 'throughput':
-          optimizations.push({
-            type: 'load_balancing',
-            description: 'Improved load balancing across instances',
-            expected_improvement: '40% increase in throughput'
-          });
+          optimizations.push({ type: 'load_balancing', description: 'Improved load balancing across instances', expected_improvement: '40% increase in throughput' });
           break;
         default:
-          optimizations.push({
-            type: 'general_optimization',
-            description: 'Applied general performance optimizations',
-            expected_improvement: '10-15%'
-          });
+          optimizations.push({ type: 'general_optimization', description: 'Applied general performance optimizations', expected_improvement: '10-15%' });
       }
     }
     
@@ -243,10 +175,7 @@ export class AIAgent extends BaseAgent {
   }
 
   private calculateExpectedImprovement(optimizations: any[]): number {
-    // Simple calculation of expected improvement
     if (optimizations.length === 0) return 0;
-    
-    // In reality, this would be more sophisticated
-    return Math.min(50, optimizations.length * 15); // Cap at 50%
+    return Math.min(50, optimizations.length * 15);
   }
 }
