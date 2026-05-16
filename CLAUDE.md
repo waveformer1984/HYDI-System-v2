@@ -22,7 +22,7 @@ The system manages:
 | Layer | Technology |
 |---|---|
 | Frontend | Next.js 15, React 18, Tailwind CSS |
-| Backend | Node.js ≥ 20, Express |
+| Backend | Node.js ≥ 20, Express (port 3005 by default) |
 | Database | Supabase (PostgreSQL) via `@supabase/supabase-js` / `@supabase/ssr` |
 | Payments | Stripe (`stripe` SDK) |
 | Testing | Jest 29 (`tests/unit/**/*.test.js`) |
@@ -36,8 +36,8 @@ The system manages:
 ```
 hydi-system-v2/
 ├── src/
-│   ├── server.js            # Main Express server (primary entry point)
-│   ├── server-clean.js      # Minimal server variant
+│   ├── server.js            # Full production Express server (52 KB) — canonical runtime
+│   ├── server-clean.js      # Lightweight standalone server for isolated testing/dev
 │   ├── HYDISystem.js        # Core system class
 │   ├── database.js          # Supabase client & DB helpers
 │   ├── actions/             # Server-side action handlers
@@ -56,7 +56,7 @@ hydi-system-v2/
 │   ├── services/            # External service integrations
 │   └── webhook-handlers/    # Stripe & other webhook processors
 │
-├── pages/                   # Next.js page routes (App Router not used)
+├── pages/                   # Next.js page routes
 ├── components/              # React UI components
 ├── public/                  # Static assets
 │
@@ -66,7 +66,7 @@ hydi-system-v2/
 │
 ├── supabase/
 │   ├── config.toml          # Supabase local dev config
-│   ├── migrations/          # SQL migration files (run in order)
+│   ├── migrations/          # SQL migration files (apply in filename order)
 │   ├── functions/           # Supabase Edge Functions
 │   └── heidi-init.sql       # Schema bootstrapping
 │
@@ -79,12 +79,21 @@ hydi-system-v2/
 ├── tests/
 │   └── unit/                # Unit tests (Jest matches **/tests/unit/**/*.test.js)
 │
-├── next.config.js           # Next.js config (TS & ESLint errors suppressed in build)
+├── next.config.js           # Next.js config (TypeScript & ESLint errors surface in build)
 ├── jest.config.js           # Jest config
 ├── tailwind.config.js       # Tailwind CSS config
 ├── package.json             # npm scripts & dependencies
 └── .env.example             # Environment variable template
 ```
+
+### Two Express servers — which to use
+
+| File | Role |
+|---|---|
+| `src/server.js` | **Canonical production server.** Full-featured: WebSockets, event bus, billing, local models, agent bus, SSE. Start with `node src/server.js`. |
+| `src/server-clean.js` | **Lightweight standalone server.** Minimal: ingest → validate → classify → persist → emit pipeline only. Useful for isolated dev or integration testing without the full dependency tree. |
+
+Do not delete either — they serve different purposes. New production features go into `src/server.js`.
 
 ---
 
@@ -100,9 +109,10 @@ cp .env.example .env   # fill in real values
 ### Run modes
 
 ```bash
-npm run dev      # Next.js dev server (port 3000, hot-reload)
-npm start        # next start (production mode)
-node src/server.js  # Express API server directly
+npm run dev           # Next.js dev server (port 3000, hot-reload)
+npm start             # next start (production mode)
+node src/server.js    # Full Express API server (port 3005)
+node src/server-clean.js  # Lightweight Express server (port 3005)
 ```
 
 ### Tests
@@ -117,11 +127,11 @@ npm run test:integration   # node tests/hdi-adversarial.test.js
 ### Build
 
 ```bash
-npm run build   # next build
+npm run build   # next build — TypeScript and ESLint errors now surface here
 npm run lint    # next lint
 ```
 
-> **Note:** `next.config.js` silently suppresses TypeScript build errors (`ignoreBuildErrors: true`) and ESLint errors (`ignoreDuringBuilds: true`). Do not rely on these suppressions — fix errors at source.
+> **Note:** TypeScript (`ignoreBuildErrors`) and ESLint (`ignoreDuringBuilds`) suppressions have been removed from `next.config.js`. Build failures now correctly surface errors. Fix them at source — do not re-add the suppressions.
 
 ---
 
@@ -153,8 +163,11 @@ NODE_ENV=development
 ### `kilo.js` — Kilo Execution Engine
 The central execution loop. Manages the **Cascade bridge** that connects ProtoForge to external modules and services. All module execution goes through here.
 
-### `src/server.js` — Express API Server
-The full-featured Express server. Hosts the revenue endpoints and webhook processors. This is the primary runtime when running outside Next.js.
+### `src/server.js` — Full Production Express Server
+The canonical production server. Hosts the revenue endpoints, webhook processors, WebSocket chat server, local model adapter, event bus, and agent bus. Start this for production use.
+
+### `src/server-clean.js` — Lightweight Standalone Server
+A minimal ES-module server exposing only `POST /process`, `GET /health`, and `GET /metrics`. Validates and persists events through the event bus without the full dependency tree. Use for isolated development or integration tests.
 
 ### `src/HYDISystem.js` — HYDI Core
 Top-level system class that orchestrates subsystems: awareness, control, enforcement, memory, and orchestration layers.
@@ -186,14 +199,15 @@ Webhook endpoints for Stripe live in `src/webhook-handlers/`.
 - Coverage threshold is **50% line coverage** globally (enforced by Jest).
 - Integration tests use `tests/hdi-adversarial.test.js` and are run separately.
 - Do not import `src/server.js` or `src/server-clean.js` in unit tests (excluded from coverage collection).
+- Existing tests cover: subscription manager, stripe webhooks, core loop, orchestrator, memory system, action layer, hybrid model stack.
 
 ---
 
 ## CI/CD
 
-- **Unit Tests**: `.github/workflows/unit-tests.yml` — runs `npm test` on push/PR.
+- **Unit Tests**: `.github/workflows/unit-tests.yml` — triggers on push to `clean-main` or any PR. Runs `npm test -- --coverage --forceExit` on Node 20.
 - **CodeQL**: `.github/workflows/codeql.yml` — static security analysis.
-- **Codecov**: Coverage reports uploaded from the `clean-main` branch.
+- **Codecov**: Coverage reports uploaded from the `clean-main` branch (flags: `unit`).
 - **Dependabot**: Automated dependency PRs (`.github/dependabot.yml`).
 
 ---
@@ -222,7 +236,8 @@ Webhook endpoints for Stripe live in `src/webhook-handlers/`.
 
 ## Common Pitfalls
 
-1. **Next.js vs Express confusion**: The project runs both. Next.js handles the frontend/pages; Express (`src/server.js`) runs the backend API. They operate on different ports.
-2. **TypeScript errors silenced at build**: The build succeeds even with TS errors. Run `npx tsc --noEmit` to check types explicitly.
+1. **Next.js vs Express confusion**: The project runs both. Next.js handles the frontend/pages; Express (`src/server.js`) runs the backend API on port 3005. They operate on different ports.
+2. **TypeScript errors now surface in build**: Suppressions have been removed. Run `npx tsc --noEmit` to check types explicitly before building.
 3. **Migration ordering**: SQL migrations must be applied in filename order. Gaps or out-of-order application will break the schema.
 4. **Node version**: The engine field requires Node ≥ 20. Using an older Node version will cause subtle failures.
+5. **Root-level scripts**: The repository root contains many one-off `.js`/`.ps1`/`.sql` diagnostic scripts from historical debugging sessions. These are not part of the running system. Active scripts live in `scripts/`.
