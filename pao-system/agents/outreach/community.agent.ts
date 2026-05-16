@@ -31,18 +31,12 @@ export class CommunityAgent extends BaseAgent {
 
   private async handleUserFeedbackReceived(event: any): Promise<void> {
     console.log('[Community Agent] Processing user feedback received');
-    
-    // Categorize and prioritize feedback
     const categorizedFeedback = this.categorizeFeedback(event.payload);
-    
-    // Store feedback
     this.storeFeedback(categorizedFeedback);
-    
-    # Determine if action is needed
+    // Determine if action is needed
     const actionNeeded = this.determineIfActionNeeded(categorizedFeedback);
-    
     if (actionNeeded.needs_action) {
-      # Route to appropriate team/department
+      // Route to appropriate team/department
       this.emit_event('FEEDBACK_ACTION_REQUIRED', {
         feedback_id: event.payload.feedback_id,
         category: categorizedFeedback.category,
@@ -52,7 +46,7 @@ export class CommunityAgent extends BaseAgent {
         timestamp: new Date().toISOString()
       }, 'broadcast', actionNeeded.priority);
     } else {
-      # Just acknowledge receipt
+      // Just acknowledge receipt
       this.emit_event('FEEDBACK_ACKNOWLEDGED', {
         feedback_id: event.payload.feedback_id,
         acknowledged_by: this.id,
@@ -63,13 +57,10 @@ export class CommunityAgent extends BaseAgent {
 
   private async handleCommunityEngagementNeeded(event: any): Promise<void> {
     console.log('[Community Agent] Processing community engagement needed');
-    
-    # Create engagement plan
+    // Create engagement plan
     const engagementPlan = this.createEngagementPlan(event.payload);
-    
-    # Execute engagement activities
+    // Execute engagement activities
     await this.executeEngagementActivities(engagementPlan);
-    
     this.emit_event('COMMUNITY_ENGAGEMENT_EXECUTED', {
       event_id: event.payload.event_id,
       engagement_type: engagementPlan.type,
@@ -81,10 +72,8 @@ export class CommunityAgent extends BaseAgent {
 
   private async handleUserOnboardingRequest(event: any): Promise<void> {
     console.log('[Community Agent] Processing user onboarding request');
-    
-    # Process user onboarding
+    // Process user onboarding
     const onboardingResult = await this.processUserOnboarding(event.payload);
-    
     if (onboardingResult.success) {
       this.emit_event('USER_ONBOARDED', {
         user_id: event.payload.user_id,
@@ -105,13 +94,10 @@ export class CommunityAgent extends BaseAgent {
 
   private async handleCommunityModerationRequired(event: any): Promise<void> {
     console.log('[Community Agent] Processing community moderation required');
-    
-    # Review content/user behavior
+    // Review content/user behavior
     const moderationDecision = this.reviewForModeration(event.payload);
-    
-    # Take appropriate action
+    // Take appropriate action
     await this.executeModerationAction(event.payload, moderationDecision);
-    
     this.emit_event('COMMUNITY_MODERATION_COMPLETED', {
       content_id: event.payload.content_id,
       user_id: event.payload.user_id,
@@ -123,26 +109,22 @@ export class CommunityAgent extends BaseAgent {
 
   private async handleEngagementMetricsUpdate(event: any): Promise<void> {
     console.log('[Community Agent] Processing engagement metrics update');
-    
-    # Analyze metrics
+    // Analyze metrics
     const analysis = this.analyzeEngagementMetrics(event.payload);
-    
-    # Generate insights and recommendations
+    // Generate insights and recommendations
     const insights = this.generateEngagementInsights(analysis);
-    
     this.emit_event('ENGAGEMENT_INSIGHTS_GENERATED', {
       metrics_period: event.payload.period,
-      analysis: analysis,
-      insights: insights,
+      analysis,
+      insights,
       analyzed_by: this.id,
       timestamp: new Date().toISOString()
     }, 'broadcast', 'medium');
   }
 
   private categorizeFeedback(payload: any): any {
-    # Simplified feedback categorization
+    // Simplified feedback categorization
     const feedbackText = (payload.feedback_text || '').toLowerCase();
-    
     let category = 'general';
     if (feedbackText.includes('bug') || feedbackText.includes('error') || feedbackText.includes('broken')) {
       category = 'bug_report';
@@ -153,11 +135,10 @@ export class CommunityAgent extends BaseAgent {
     } else if (feedbackText.includes('hate') || feedbackText.includes('terrible') || feedbackText.includes('awful')) {
       category = 'negative_feedback';
     }
-    
     return {
       feedback_id: payload.feedback_id || `fb_${Date.now()}`,
       user_id: payload.user_id || 'unknown',
-      category: category,
+      category,
       sentiment: this.analyzeSentiment(feedbackText),
       priority: this.determinePriority(category, payload.urgency),
       original_feedback: payload.feedback_text
@@ -167,18 +148,10 @@ export class CommunityAgent extends BaseAgent {
   private analyzeSentiment(text: string): 'positive' | 'negative' | 'neutral' {
     const positiveWords = ['love', 'like', 'great', 'awesome', 'good', 'excellent', 'fantastic', 'amazing'];
     const negativeWords = ['hate', 'dislike', 'terrible', 'awful', 'bad', 'horrible', 'worst', 'disappointed'];
-    
     let positiveCount = 0;
     let negativeCount = 0;
-    
-    positiveWords.forEach(word => {
-      if (text.includes(word)) positiveCount++;
-    });
-    
-    negativeWords.forEach(word => {
-      if (text.includes(word)) negativeCount++;
-    });
-    
+    positiveWords.forEach(word => { if (text.includes(word)) positiveCount++; });
+    negativeWords.forEach(word => { if (text.includes(word)) negativeCount++; });
     if (positiveCount > negativeCount) return 'positive';
     if (negativeCount > positiveCount) return 'negative';
     return 'neutral';
@@ -193,11 +166,11 @@ export class CommunityAgent extends BaseAgent {
 
   private storeFeedback(feedback: any): void {
     console.log(`[Community Agent] Storing feedback: ${feedback.feedback_id}`);
-    # In real system, this would save to database
+    // In real system, this would save to database
   }
 
   private determineIfActionNeeded(feedback: any): any {
-    # Simplified action determination
+    // Simplified action determination
     if (feedback.category === 'bug_report' || feedback.category === 'negative_feedback') {
       return {
         needs_action: true,
@@ -205,101 +178,55 @@ export class CommunityAgent extends BaseAgent {
         suggested_action: `Address ${feedback.category}: ${feedback.original_feedback.substring(0, 50)}...`
       };
     }
-    
-    return {
-      needs_action: false,
-      priority: 'low',
-      suggested_action: 'No action required'
-    };
+    return { needs_action: false, priority: 'low', suggested_action: 'No action required' };
   }
 
   private createEngagementPlan(payload: any): any {
-    # Simplified engagement plan creation
+    // Simplified engagement plan creation
     return {
       event_id: payload.event_id,
       type: payload.engagement_type || 'discussion_forum',
       activities: [
-        {
-          name: 'community_post',
-          description: 'Create engaging community post',
-          estimated_reach: Math.floor(Math.random() * 1000) + 500
-        },
-        {
-          name: 'ama_session',
-          description: 'Host Ask Me Anything session',
-          estimated_participants: Math.floor(Math.random() * 100) + 50
-        },
-        {
-          name: 'feedback_collection',
-          description: 'Collect community feedback on recent updates',
-          estimated_responses: Math.floor(Math.random() * 200) + 100
-        }
+        { name: 'community_post', description: 'Create engaging community post', estimated_reach: Math.floor(Math.random() * 1000) + 500 },
+        { name: 'ama_session', description: 'Host Ask Me Anything session', estimated_participants: Math.floor(Math.random() * 100) + 50 },
+        { name: 'feedback_collection', description: 'Collect community feedback on recent updates', estimated_responses: Math.floor(Math.random() * 200) + 100 }
       ],
-      start_date: new Date(Date.now() + Math.random() * 7 * 24 * 60 * 60 * 1000).toISOString(), # Within a week
-      duration_days: Math.floor(Math.random() * 14) + 3 # 3-17 days
+      start_date: new Date(Date.now() + Math.random() * 7 * 24 * 60 * 60 * 1000).toISOString(), // Within a week
+      duration_days: Math.floor(Math.random() * 14) + 3 // 3-17 days
     };
   }
 
   private async executeEngagementActivities(plan: any): Promise<void> {
     console.log(`[Community Agent] Executing engagement plan: ${plan.type}`);
-    
-    # In real system, this would create posts, host events, etc.
     await new Promise(resolve => setTimeout(resolve, 2000));
-    
     console.log(`[Community Agent] Engagement activities executed: ${plan.type}`);
   }
 
   private async processUserOnboarding(payload: any): Promise<any> {
     console.log(`[Community Agent] Processing onboarding for user: ${payload.user_id}`);
-    
-    # In real system, this would create user account, send welcome email, etc.
     await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    # Simulate occasional failure
-    if (Math.random() > 0.9) { # 10% failure rate
-      return {
-        success: false,
-        reason: 'Account creation failed'
-      };
+    if (Math.random() > 0.9) { // 10% failure rate
+      return { success: false, reason: 'Account creation failed' };
     }
-    
-    return {
-      success: true,
-      welcome_materials: ['welcome_guide.pdf', 'getting_started_video.mp4', 'community_guidelines.pdf']
-    };
+    return { success: true, welcome_materials: ['welcome_guide.pdf', 'getting_started_video.mp4', 'community_guidelines.pdf'] };
   }
 
-  private reviewForModeration(payload: any): any {
-    # Simplified moderation review
-    const needsAction = Math.random() > 0.7; # 30% chance action needed
-    
-    if (!needsAction) {
-      return {
-        action: 'no_action',
-        urgency: 'low'
-      };
-    }
-    
+  private reviewForModeration(_payload: any): any {
+    // Simplified moderation review
+    const needsAction = Math.random() > 0.7; // 30% chance action needed
+    if (!needsAction) return { action: 'no_action', urgency: 'low' };
     const actionTypes = ['warn_user', 'hide_content', 'remove_content', 'ban_user'];
     const action = actionTypes[Math.floor(Math.random() * actionTypes.length)];
-    
-    return {
-      action: action,
-      urgency: action === 'ban_user' ? 'high' : action === 'remove_content' ? 'medium' : 'low'
-    };
+    return { action, urgency: action === 'ban_user' ? 'high' : action === 'remove_content' ? 'medium' : 'low' };
   }
 
-  private async executeModerationAction(payload: any, decision: any): Promise<void> {
+  private async executeModerationAction(_payload: any, decision: any): Promise<void> {
     console.log(`[Community Agent] Executing moderation action: ${decision.action}`);
-    
-    # In real system, this would perform the actual moderation action
     await new Promise(resolve => setTimeout(resolve, 500));
-    
     console.log(`[Community Agent] Moderation action executed: ${decision.action}`);
   }
 
   private analyzeEngagementMetrics(payload: any): any {
-    # Simplified engagement metrics analysis
     return {
       period: payload.period,
       active_users: payload.active_users || Math.floor(Math.random() * 1000) + 100,
@@ -308,36 +235,35 @@ export class CommunityAgent extends BaseAgent {
       comments_posted: payload.comments_posted || Math.floor(Math.random() * 2000) + 200,
       reactions_given: payload.reactions_given || Math.floor(Math.random() * 5000) + 500,
       engagement_rate: `${((payload.posts_created || 100) / Math.max(1, payload.active_users || 100) * 100).toFixed(2)}%`,
-      retention_rate: `${(Math.random() * 40 + 50).toFixed(2)}%`, # 50-90%
-      growth_rate: `${(Math.random() * 30 - 5).toFixed(2)}%` # -5% to 25%
+      retention_rate: `${(Math.random() * 40 + 50).toFixed(2)}%`, // 50-90%
+      growth_rate: `${(Math.random() * 30 - 5).toFixed(2)}%` // -5% to 25%
     };
   }
 
   private generateEngagementInsights(analysis: any): string[] {
-    const insights = [];
+    const insights: string[] = [];
     
     if (parseFloat(analysis.engagement_rate) > 5) {
-      insights.add('High engagement rate indicates strong community interest');
+      insights.push('High engagement rate indicates strong community interest');
     } else if (parseFloat(analysis.engagement_rate) < 1) {
-      insights.add('Low engagement rate suggests need for more engaging content');
+      insights.push('Low engagement rate suggests need for more engaging content');
     }
     
     if (parseFloat(analysis.growth_rate) > 10) {
-      insights.add('Community experiencing healthy growth');
+      insights.push('Community experiencing healthy growth');
     } else if (parseFloat(analysis.growth_rate) < 0) {
-      insights.add('Community declining - investigate retention issues');
+      insights.push('Community declining - investigate retention issues');
     }
     
     if (parseFloat(analysis.retention_rate) > 70) {
-      insights.add('Strong user retention indicates valuable community');
+      insights.push('Strong user retention indicates valuable community');
     } else if (parseFloat(analysis.retention_rate) < 40) {
-      insights.add('Low retention suggests users not finding lasting value');
+      insights.push('Low retention suggests users not finding lasting value');
     }
     
-    # Add some general insights
-    insights.add('Peak activity occurs on weekdays between 9AM-5PM');
-    insights.add('Video content generates 3x more engagement than text');
-    insights.add('Community members appreciate direct responses from team');
+    insights.push('Peak activity occurs on weekdays between 9AM-5PM');
+    insights.push('Video content generates 3x more engagement than text');
+    insights.push('Community members appreciate direct responses from team');
     
     return insights;
   }
