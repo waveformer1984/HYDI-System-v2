@@ -1,0 +1,40 @@
+{
+  "node_type": "rezonate",
+  "display_name": "Rezonate DAW Node",
+  "version": "1.0.0",
+  "description": "Full-stack creative operating system for music and live events.",
+  "hydi_compatible": true,
+  "protoforge_node": true,
+  "default_execution_mode": "solo",
+  "supported_execution_modes": ["solo", "cluster", "federation"],
+  "capabilities": {
+    "audio_processing": true,
+    "model_tracking": true,
+    "mixing_mastering": true,
+    "hardware_control": true,
+    "rights_monetization": true,
+    "nft_minting": true,
+    "gig_management": true,
+    "beat_academy": true,
+    "stem_separation": false,
+    "live_performance": true
+  },
+  "accepted_task_types": [
+    "stem_analysis",
+    "mix_analysis",
+    "audio_export",
+    "nft_mint",
+    "rights_verify",
+    "session_recall",
+    "hardware_map",
+    "beat_generate"
+  ],
+  "health_report_interval_seconds": 30,
+  "task_timeout_seconds": 300,
+  "federation": {
+    "trust_level": "node",
+    "zero_trust": true,
+    "requires_auth": true,
+    "auth_scheme": "bearer"
+  }
+}
