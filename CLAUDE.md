@@ -1,243 +1,210 @@
-# CLAUDE.md — HYDI System v2 (heidi-cascade-production)
+# CLAUDE.md
 
-This file provides context for AI coding assistants working in this repository.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
----
+## What This System Does
 
-## What This Repo Is
+HYDI System v2 (also called "Heidi" / "ProtoForge → Kilo Node") is a monetizable AI orchestration platform. It turns ProtoForge into an executable revenue-generating system by:
 
-**HYDI System v2** is the execution and revenue layer for the ProtoForge platform — codenamed *Kilo Node*. It exposes a Next.js 15 frontend alongside an Express-based API server (`src/server.js`) and integrates Supabase for event persistence and Stripe for payment processing.
+- Running a deterministic event pipeline (CASCADE → KILO → ProtoForge) over an immutable RAW EVENT LEDGER
+- Managing multi-revenue-stream billing via Stripe Connect with per-project sub-accounts
+- Hosting a Next.js frontend with Vercel serverless API routes
+- Offloading async work to ~35 Supabase Edge Functions (Deno)
+- Coordinating hardware/HID agents (Python) for physical device automation
 
-The system manages:
-- A **Cascade bridge** for bidirectional communication between ProtoForge modules
-- Revenue-ready endpoints (`/process`, `/insight`, `/event`)
-- Webhook handlers for Stripe events
-- Usage tracking and system health metrics
-- Supabase-backed event sourcing
+The six active revenue streams routed through Stripe Connect are: `galactic_bytes`, `detailer_bot`, `lipi_v2`, `protogrance_aromatics`, `rezonate`, and `waveformer_studio`.
 
----
-
-## Tech Stack
-
-| Layer | Technology |
-|---|---|
-| Frontend | Next.js 15, React 18, Tailwind CSS |
-| Backend | Node.js ≥ 20, Express (port 3005 by default) |
-| Database | Supabase (PostgreSQL) via `@supabase/supabase-js` / `@supabase/ssr` |
-| Payments | Stripe (`stripe` SDK) |
-| Testing | Jest 29 (`tests/unit/**/*.test.js`) |
-| Language | JavaScript (CommonJS), TypeScript types via `@types/*` |
-| Deployment | Vercel (Next.js), Netlify (`netlify.toml` also present) |
-
----
-
-## Repository Structure
-
-```
-hydi-system-v2/
-├── src/
-│   ├── server.js            # Full production Express server (52 KB) — canonical runtime
-│   ├── server-clean.js      # Lightweight standalone server for isolated testing/dev
-│   ├── HYDISystem.js        # Core system class
-│   ├── database.js          # Supabase client & DB helpers
-│   ├── actions/             # Server-side action handlers
-│   ├── api/                 # API route modules
-│   ├── audit/               # Audit logging
-│   ├── awareness/           # System awareness / self-monitoring
-│   ├── control/             # Control-plane logic
-│   ├── core/                # Core domain logic
-│   ├── enforcement/         # Policy enforcement
-│   ├── lib/                 # Shared utilities / libraries
-│   ├── memory/              # In-memory and persistent memory layer
-│   ├── middleware/          # Express middleware
-│   ├── models/              # Data models
-│   ├── orchestrator/        # Task orchestration
-│   ├── revenue/             # Revenue tracking & hooks
-│   ├── services/            # External service integrations
-│   └── webhook-handlers/    # Stripe & other webhook processors
-│
-├── pages/                   # Next.js page routes
-├── components/              # React UI components
-├── public/                  # Static assets
-│
-├── kilo.js                  # Kilo execution engine (Cascade bridge)
-├── kilo/                    # Built-in Kilo modules
-├── modules/                 # Custom modules directory
-│
-├── supabase/
-│   ├── config.toml          # Supabase local dev config
-│   ├── migrations/          # SQL migration files (apply in filename order)
-│   ├── functions/           # Supabase Edge Functions
-│   └── heidi-init.sql       # Schema bootstrapping
-│
-├── agents/                  # Agent definitions
-├── cascade/                 # Cascade communication modules
-├── heidi-core/              # Heidi core reasoning modules
-├── hooks/                   # Custom hooks
-├── workers/                 # Background worker definitions
-│
-├── tests/
-│   └── unit/                # Unit tests (Jest matches **/tests/unit/**/*.test.js)
-│
-├── next.config.js           # Next.js config (TypeScript & ESLint errors surface in build)
-├── jest.config.js           # Jest config
-├── tailwind.config.js       # Tailwind CSS config
-├── package.json             # npm scripts & dependencies
-└── .env.example             # Environment variable template
-```
-
-### Two Express servers — which to use
-
-| File | Role |
-|---|---|
-| `src/server.js` | **Canonical production server.** Full-featured: WebSockets, event bus, billing, local models, agent bus, SSE. Start with `node src/server.js`. |
-| `src/server-clean.js` | **Lightweight standalone server.** Minimal: ingest → validate → classify → persist → emit pipeline only. Useful for isolated dev or integration testing without the full dependency tree. |
-
-Do not delete either — they serve different purposes. New production features go into `src/server.js`.
-
----
-
-## Development Workflow
-
-### Setup
+## Commands
 
 ```bash
-npm install
-cp .env.example .env   # fill in real values
+npm install          # Install dependencies (Node >= 20 required)
+npm run dev          # Next.js dev server on 0.0.0.0:3000
+npm run build        # Production build
+npm start            # Start production server
+npm test             # Run Jest unit tests
+npm run test:watch   # Jest in watch mode
+npm run test:coverage  # Jest with coverage report
+npm run test:integration  # Run adversarial integration tests (tests/hdi-adversarial.test.js)
+npm run typecheck    # TypeScript type-check without emitting (tsc --noEmit)
 ```
 
-### Run modes
-
+Run a single test file:
 ```bash
-npm run dev           # Next.js dev server (port 3000, hot-reload)
-npm start             # next start (production mode)
-node src/server.js    # Full Express API server (port 3005)
-node src/server-clean.js  # Lightweight Express server (port 3005)
+npx jest tests/unit/heidi-core-loop.test.js
+npx jest tests/unit/stripe-webhook.test.js --verbose
 ```
 
-### Tests
-
+Run a single test by name:
 ```bash
-npm test                   # Jest unit tests (tests/unit/**/*.test.js)
-npm run test:watch         # Watch mode
-npm run test:coverage      # Coverage report (≥50% line coverage required)
-npm run test:integration   # node tests/hdi-adversarial.test.js
+npx jest --testNamePattern="should classify events"
 ```
 
-### Build
+## Architecture
 
-```bash
-npm run build   # next build — TypeScript and ESLint errors now surface here
-npm run lint    # next lint
+### The Core Pipeline (HEIDI V2 Single Truth Architecture)
+
+Every event flows through exactly six layers, in order, with **no layer performing another's job**:
+
+```
+[1] Ingestion Layer    → normalizes structure only, no interpretation
+[2] RAW EVENT LEDGER   → append-only, immutable, hashed — the single source of truth
+[3] CASCADE            → classifies events, outputs { classification, confidence, matched_rules }
+[4] KILO               → generates hypotheses only, never executes — { hypotheses, suggested_fixes }
+[5] ProtoForge         → policy engine, accepts/rejects KILO suggestions
+[6] Emission Layer     → SSE / API / logs, no logic
 ```
 
-> **Note:** TypeScript (`ignoreBuildErrors`) and ESLint (`ignoreDuringBuilds`) suppressions have been removed from `next.config.js`. Build failures now correctly surface errors. Fix them at source — do not re-add the suppressions.
+A Replay Engine sits outside this pipeline and validates determinism: same RAW LEDGER input must produce the same pipeline output. Divergence == real drift. See `HEIDI_V2_ARCHITECTURE.md` and `GROUNDED_ARCHITECTURE.md` for full detail.
 
----
+### Key Architectural Constraint
+
+The original system (V1) built enforcement before establishing ground truth, causing false positives and feedback loops. V2 inverts this: **truth is anchored first (RAW LEDGER), then enforcement layers run on top**. Two cooldown windows enforce this:
+- **Startup window**: 2 minutes — no enforcement
+- **Drift observation**: 30 seconds before alerts fire
+
+### Named Agents / Subsystems
+
+| Name | Role | Entry point |
+|------|------|-------------|
+| **Heidi** | Conversational orchestrator, task management | `api/heidi/route.js` |
+| **Ursula** | System monitor / status interface | `api/ursula/status.js`, `api/chat/route.js` |
+| **CASCADE** | Event classifier (classification only) | Routed via `api/chat/route.js` |
+| **KILO** | Hypothesis generator (no execution authority) | Routed via `api/chat/route.js` |
+| **ProtoForge** | Policy engine / governance layer | Routed via `api/chat/route.js` |
+| **Hyve** | Opportunity collective / swarm intelligence | Routed via `api/chat/route.js` |
+
+### API Layer (`api/`)
+
+All files under `api/` are **Vercel serverless functions** (Next.js API routes). They use ES module `export default async function handler(req, res)` style. Note: some files mix `import` and `require` — be consistent within a file.
+
+| Route | Purpose |
+|-------|---------|
+| `api/chat/route.js` | Universal chat router — dispatches `{ message, system }` to the correct named agent |
+| `api/health.js` | Reads the `system_dashboard` Supabase view for live health metrics |
+| `api/heidi/route.js` | Heidi-specific orchestration endpoint |
+| `api/hydi/sync.js` | HYDI state sync |
+| `api/ursula/status.js` | Ursula system status |
+| `api/life-flow/route.js` | Life-flow module |
+| `api/events/stream.js` | SSE stream for real-time events |
+| `api/revenue.js` | Revenue engine: leads, quotes, proposals, Stripe checkout, reports |
+| `api/client-dashboard.js` | Per-project ledger view with fee breakdown |
+| `api/checkout.js` / `api/checkout-v2.js` | Stripe Checkout session creation |
+| `api/stripe-connect-webhook.js` | Main Stripe Connect webhook — routes payments to sub-accounts, writes ledger entries |
+| `api/webhooks/stripe.js` | Standard Stripe webhook handler |
+| `api/local-model.js` | Local model inference integration |
+
+### Supabase Edge Functions (`supabase/functions/`)
+
+~35 Deno-based Edge Functions handle async work. JWT enforcement is configured per-function in `supabase/config.toml`. Key functions:
+
+- **`chat-operator`** — async chat processing
+- **`tool-executor`** / **`action-worker`** / **`agent-worker`** — task queue workers
+- **`billing-engine`** / **`billing-retry-worker`** / **`payment-processor`** / **`stripe-webhook`** / **`stripe-connect-admin`** / **`stripe-transfer-payout`** — billing pipeline
+- **`keymaker-gate`** / **`keeper-break-glass`** / **`keeper-break-glass-simple`** — authentication and emergency access
+- **`heidi-reflect`** / **`hydi-transition`** — Heidi self-reflection and state transitions
+- **`monitoring-health`** / **`chaos-runner`** — observability and chaos testing
+- **`revenue-tracker`** / **`usage-monitor`** / **`invoice-generator`** / **`subscription-manager`** — revenue operations
+- **`events-stream`** — real-time event streaming
+
+Public functions (no JWT): `api-gateway`, `notification-service`, `search-service`, `cache-service`, all marketing functions, `stripe-webhook`, `heidi-reflect`.
+
+### Agents (`agents/`)
+
+- **`agents/specialized/agent-factory.js`** — factory that creates typed business and execution agents
+- **`agents/specialized/business-agents.js`** — business domain agents (large, ~70KB)
+- **`agents/specialized/execution-agents.js`** — execution domain agents (~54KB)
+- **`agents/hid/`** — JavaScript key-rotation agent and secure key setup (PowerShell + JS)
+- **`agents/hardware-controller/`** — Python agents for physical hardware: USB HID controller, screen vision, Stripe/Vercel UI navigation via pyautogui/vision, safety orchestrator
+
+### Database (`supabase/`)
+
+Schema is managed via numbered migrations in `supabase/migrations/`. Files ending in `.sql.skip` are intentionally excluded from the migration runner. The Supabase project ref is `akbnfovjdcobifeupvbn`.
+
+Core tables (from `supabase/heidi-init.sql` and migrations):
+- **`memories`** — vector embeddings (1536-dim, `pgvector`) scoped by `user_id` / `session_id`
+- **`actions`** — task action log with `pending` / `completed` / `failed` status
+- **`sessions`** — session state (tone, active model, last action)
+- **`ledger`** — immutable financial ledger: gross amount, fee breakdown (platform 5%, agent 10%, Stripe 2.9% + $0.30), net, payout status
+- **`clients`** / **`payouts`** — client registry and payout batches
+- **`leads`** / **`quotes`** / **`proposals`** / **`checkout_sessions`** — revenue pipeline tables
+
+Key DB features: RLS enabled on all tables, `system_dashboard` view drives health endpoints, `pg_cron` schedules billing retry and monthly payout calculation, RPC functions for tool execution and auto-healing.
 
 ## Environment Variables
 
-Copy `.env.example` to `.env`. Required variables:
+| Variable | Purpose |
+|----------|----------|
+| `SUPABASE_URL` | Supabase project URL |
+| `SUPABASE_SERVICE_ROLE_KEY` | Service role key (server-side only) |
+| `SUPABASE_PUBLISHABLE_KEY` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Public anon key |
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase URL exposed to client |
+| `STRIPE_SECRET_KEY` | Stripe secret key |
+| `STRIPE_WEBHOOK_SECRET_01` | Stripe webhook signing secret |
+| `STRIPE_CONNECT_WEBHOOK_SECRET` | Stripe Connect webhook signing secret |
+| `STRIPE_ACCOUNT_GALACTIC_BYTES` et al. | Connect sub-account IDs per revenue stream |
+| `NODE_ENV` | `production` / `development` |
+
+Use `SUPABASE_SERVICE_ROLE_KEY` server-side only. Never expose it to the client.
+
+## CI / Workflows
+
+| Workflow | Trigger | What it does |
+|----------|---------|---------------|
+| `unit-tests.yml` | push to `clean-main`, all PRs | `npm test -- --coverage --forceExit`, uploads to Codecov |
+| `hdi-governance-gate.yml` | PRs touching `supabase/migrations/**` | 7-gate schema review: change detection, transformer tests, state machine approval, adversarial tests, replay fidelity, performance regression, blueprint sync |
+| `health-monitor.yml` | Scheduled | Pings health endpoint |
+| `codeql.yml` | Scheduled | Static security analysis |
+
+**Governance gate rule**: every new `.sql` migration must have a corresponding test in `tests/migrations/<version>.test.js`. State machine changes (enums, allowed transitions) require `STATE_MACHINE_APPROVED` in the PR description.
+
+## Testing Layout
 
 ```
-# Supabase
-SUPABASE_URL=
-SUPABASE_SERVICE_ROLE_KEY=
-NEXT_PUBLIC_SUPABASE_URL=
-NEXT_PUBLIC_SUPABASE_ANON_KEY=
-
-# Stripe
-STRIPE_SECRET_KEY=
-STRIPE_WEBHOOK_SECRET_01=
-
-# App
-NODE_ENV=development
+tests/
+  unit/                          # Jest unit tests (run via npm test)
+    heidi-core-loop.test.js
+    heidi-action-layer.test.js
+    heidi-memory-system.test.js
+    heidi-orchestrator.test.js
+    hybrid-model-stack.test.js
+    stripe-webhook.test.js
+    subscription-manager.test.js
+  hdi-adversarial.test.js        # Adversarial / chaos integration tests
+  hdi-everything-wrong.test.js   # Edge-case / failure-mode integration tests
 ```
 
-`NEXT_PUBLIC_*` variables are exposed to the browser. Never put secrets in `NEXT_PUBLIC_*`.
+The integration tests (`test:integration`) require live environment variables (`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`).
 
----
+## Secret Handling Protocol
 
-## Key Modules
+Per `SECURITY_PROTOCOL.md`: secrets must **never** be displayed, echoed, logged, or pasted. Use direct injection only:
 
-### `kilo.js` — Kilo Execution Engine
-The central execution loop. Manages the **Cascade bridge** that connects ProtoForge to external modules and services. All module execution goes through here.
+```bash
+# Correct: pipe directly into the destination
+node -e "require('crypto').randomBytes(32).toString('hex')" | vercel env add SECRET_NAME
 
-### `src/server.js` — Full Production Express Server
-The canonical production server. Hosts the revenue endpoints, webhook processors, WebSocket chat server, local model adapter, event bus, and agent bus. Start this for production use.
+# Verify presence without revealing value
+vercel env ls | grep SECRET_NAME
+```
 
-### `src/server-clean.js` — Lightweight Standalone Server
-A minimal ES-module server exposing only `POST /process`, `GET /health`, and `GET /metrics`. Validates and persists events through the event bus without the full dependency tree. Use for isolated development or integration tests.
+## MCP Integration
 
-### `src/HYDISystem.js` — HYDI Core
-Top-level system class that orchestrates subsystems: awareness, control, enforcement, memory, and orchestration layers.
+`.mcp.json` configures the Supabase MCP server for direct DB tooling during development:
+```json
+{
+  "mcpServers": {
+    "supabase": {
+      "type": "http",
+      "url": "https://mcp.supabase.com/mcp?project_ref=akbnfovjdcobifeupvbn&features=docs,account,database,debugging,development,functions,branching,storage"
+    }
+  }
+}
+```
 
-### `src/database.js` — Supabase Client
-Wraps Supabase connection and exposes helper methods for reading/writing events and system state.
+## Notable Conventions
 
-### Supabase Migrations
-Migration files live in `supabase/migrations/`. They are numbered and must be applied in sequence. Do not modify existing migration files — add new ones.
-
----
-
-## API Endpoints
-
-| Method | Path | Purpose |
-|---|---|---|
-| GET | `/health` | System health check |
-| POST | `/process` | Accept payload and trigger processing |
-| GET | `/insight` | Return processed intelligence |
-| POST | `/event` | Log system events to Supabase |
-
-Webhook endpoints for Stripe live in `src/webhook-handlers/`.
-
----
-
-## Testing Conventions
-
-- Unit tests live in `tests/unit/` and must match `**/*.test.js`.
-- Coverage threshold is **50% line coverage** globally (enforced by Jest).
-- Integration tests use `tests/hdi-adversarial.test.js` and are run separately.
-- Do not import `src/server.js` or `src/server-clean.js` in unit tests (excluded from coverage collection).
-- Existing tests cover: subscription manager, stripe webhooks, core loop, orchestrator, memory system, action layer, hybrid model stack.
-
----
-
-## CI/CD
-
-- **Unit Tests**: `.github/workflows/unit-tests.yml` — triggers on push to `clean-main` or any PR. Runs `npm test -- --coverage --forceExit` on Node 20.
-- **CodeQL**: `.github/workflows/codeql.yml` — static security analysis.
-- **Codecov**: Coverage reports uploaded from the `clean-main` branch (flags: `unit`).
-- **Dependabot**: Automated dependency PRs (`.github/dependabot.yml`).
-
----
-
-## Coding Conventions
-
-- **Language**: JavaScript (CommonJS `require`/`module.exports`) for `src/` and root scripts. TypeScript types are used via JSDoc or `@types/*` packages but the files themselves remain `.js`.
-- **No comments** unless the WHY is non-obvious. Don't describe what code does.
-- **Express middleware** goes in `src/middleware/`.
-- **New integrations** get their own file in `src/services/`.
-- **Webhook handlers** go in `src/webhook-handlers/` — never inline in the server.
-- **Database queries** go through `src/database.js` helpers, never raw `fetch` to Supabase URLs.
-- **Supabase schema changes** require a new numbered migration file in `supabase/migrations/` — never alter existing migration files.
-- **Environment secrets** must never appear in committed code. Use `.env` locally and Vercel environment variables in production.
-
----
-
-## Security Notes
-
-- Stripe webhook signatures must be verified using `STRIPE_WEBHOOK_SECRET_01` before processing any webhook payload.
-- Rate limiting is applied via `express-rate-limit`. Do not remove it.
-- `SUPABASE_SERVICE_ROLE_KEY` bypasses Row-Level Security (RLS) — use it only in server-side code, never expose it to the browser.
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY` is safe for browser use; it is governed by RLS policies.
-
----
-
-## Common Pitfalls
-
-1. **Next.js vs Express confusion**: The project runs both. Next.js handles the frontend/pages; Express (`src/server.js`) runs the backend API on port 3005. They operate on different ports.
-2. **TypeScript errors now surface in build**: Suppressions have been removed. Run `npx tsc --noEmit` to check types explicitly before building.
-3. **Migration ordering**: SQL migrations must be applied in filename order. Gaps or out-of-order application will break the schema.
-4. **Node version**: The engine field requires Node ≥ 20. Using an older Node version will cause subtle failures.
-5. **Root-level scripts**: The repository root contains many one-off `.js`/`.ps1`/`.sql` diagnostic scripts from historical debugging sessions. These are not part of the running system. Active scripts live in `scripts/`.
+- **Mixed module styles**: some `api/` files use `export default` (ESM) while others use `module.exports` (CJS). The project's Next.js build handles this, but Edge Functions are pure ESM (Deno).
+- **TypeScript build errors surface**: `next.config.js` no longer suppresses `ignoreBuildErrors` or `ignoreDuringBuilds` — type errors and lint warnings now surface during `npm run build`. Run `npm run typecheck` to check types without building.
+- **The `clean-main` branch** is the primary branch (CI runs against it, not `main`).
+- **`.sql.skip` files**: migrations with this suffix are intentionally skipped by the runner; they document attempted approaches that were superseded.
+- **`system_dashboard` view**: the central Supabase view consumed by health checks, Ursula status queries, and infrastructure monitoring — if this view is broken, health endpoints degrade gracefully to `503`.
