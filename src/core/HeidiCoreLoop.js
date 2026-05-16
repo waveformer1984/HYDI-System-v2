@@ -17,6 +17,8 @@ const HeidiOrchestrator = require('../orchestrator/HeidiOrchestrator');
 const HybridModelStack = require('../models/HybridModelStack');
 const HeidiMemorySystem = require('../memory/HeidiMemorySystem');
 const HeidiActionLayer = require('../actions/HeidiActionLayer');
+const selfHealing = require('../healing/SelfHealingService');
+const redisStream = require('../queue/RedisStreamBroker');
 
 class HeidiCoreLoop extends EventEmitter {
   constructor(config = {}) {
@@ -328,22 +330,35 @@ class HeidiCoreLoop extends EventEmitter {
       
     } catch (error) {
       console.error(`[CORE LOOP] Loop failed: ${loopId} - ${error.message}`);
-      
+
       this.metrics.loopsFailed++;
-      
+
       // Store failure in memory
       this.memorySystem.storeWhatFailed(loopId, task, error.message, {
         type: task.type,
         priority: task.priority || 'normal'
       });
-      
+
+      // Publish failure to Redis stream for downstream consumers
+      redisStream.publish('hydi:task-failures', {
+        loopId, task, error: error.message, timestamp: new Date().toISOString(),
+      }).catch(() => {});
+
+      // Self-healing: ask Claude for a corrective retry task
+      selfHealing.healFromCrash(task, error.message, loopId).then(heal => {
+        if (heal?.should_retry && heal.corrected_task) {
+          console.log(`[SELF-HEAL] Scheduling corrective retry for ${loopId}`);
+          setTimeout(() => this.executeLoop(heal.corrected_task).catch(() => {}), 5000);
+        }
+      }).catch(() => {});
+
       // Emit failure
       this.emit('loop_failed', {
         loopId,
         task,
         error: error.message
       });
-      
+
       throw error;
       
     } finally {
@@ -394,9 +409,23 @@ class HeidiCoreLoop extends EventEmitter {
     
     // Store loop result in memory
     this.memorySystem.storeSession(loopId, result, 'loops');
-    
+
+    // Publish result to the appropriate stream for downstream consumers
+    const resultStream = measurement?.success ? 'hydi:task-results' : 'hydi:task-failures';
+    redisStream.publish(resultStream, result).catch(() => {});
+
+    // Self-heal on soft failure (loop completed but measurement.success === false)
+    if (!measurement?.success) {
+      selfHealing.diagnoseAndCorrect(result).then(heal => {
+        if (heal?.corrected_task) {
+          console.log(`[HEIDI LOOP] Scheduling corrected retry for ${loopId} in 3s`);
+          setTimeout(() => this.executeLoop(heal.corrected_task).catch(() => {}), 3000);
+        }
+      }).catch(() => {});
+    }
+
     console.log(`[HEIDI LOOP] Completed ${task.type} loop: ${loopId}`);
-    
+
     return result;
   }
   
