@@ -1,88 +1,88 @@
 /**
  * API LAYER - /api/execute
- * 
- * Executes parsed actions ONLY with schema validation before execution
+ *
+ * Executes parsed actions with schema validation before execution.
  */
 
-import { NextApiRequest, NextApiResponse } from 'next';
+import { NextApiRequest, NextApiResponse } from 'next'
 
-interface ExecuteRequest {
-  session_id: string;
-  actions: Array<{
-    type: string;
-    payload: Record<string, any>;
-  }>;
+type ActionPayload = Record<string, unknown>
+
+interface ExecuteAction {
+  type: string
+  payload: ActionPayload
 }
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+interface ActionResult {
+  action: ExecuteAction
+  status: 'completed' | 'failed'
+  result?: Record<string, unknown>
+  error?: string
+}
+
+interface ExecuteRequest {
+  session_id: string
+  actions: ExecuteAction[]
+}
+
+const ALLOWED_ACTION_TYPES = [
+  'send_email',
+  'create_task',
+  'update_database',
+  'fetch_data',
+  'schedule_event',
+] as const
+
+type AllowedActionType = typeof ALLOWED_ACTION_TYPES[number]
+
+export default async function handler(
+  req: NextApiRequest,
+  res: NextApiResponse
+): Promise<void> {
   if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
+    res.status(405).json({ error: 'Method not allowed' })
+    return
   }
 
   try {
-    const { session_id, actions }: ExecuteRequest = req.body;
+    const { session_id, actions }: ExecuteRequest = req.body
 
     if (!session_id || !actions) {
-      return res.status(400).json({ 
-        error: 'Missing required fields: session_id, actions' 
-      });
+      res.status(400).json({ error: 'Missing required fields: session_id, actions' })
+      return
     }
 
     if (!Array.isArray(actions)) {
-      return res.status(400).json({ 
-        error: 'actions must be an array' 
-      });
+      res.status(400).json({ error: 'actions must be an array' })
+      return
     }
 
-    // Validate schema for each action
-    const allowedActionTypes = ['send_email', 'create_task', 'update_database', 'fetch_data', 'schedule_event'];
-    const results = [];
+    const results: ActionResult[] = []
 
     for (const action of actions) {
-      // Validate action structure
       if (!action.type || typeof action.type !== 'string') {
-        results.push({
-          action,
-          status: 'failed',
-          error: 'Action must have a valid type string'
-        });
-        continue;
+        results.push({ action, status: 'failed', error: 'Action must have a valid type string' })
+        continue
       }
-
       if (!action.payload || typeof action.payload !== 'object') {
-        results.push({
-          action,
-          status: 'failed',
-          error: 'Action must have a valid payload object'
-        });
-        continue;
+        results.push({ action, status: 'failed', error: 'Action must have a valid payload object' })
+        continue
+      }
+      if (!(ALLOWED_ACTION_TYPES as readonly string[]).includes(action.type)) {
+        results.push({ action, status: 'failed', error: `Action type '${action.type}' not allowed` })
+        continue
       }
 
-      // Validate action type
-      if (!allowedActionTypes.includes(action.type)) {
-        results.push({
-          action,
-          status: 'failed',
-          error: `Action type '${action.type}' not allowed`
-        });
-        continue;
-      }
-
-      // Execute action (async safe, never block)
       try {
-        const result = await executeAction(action.type, action.payload, session_id);
-        results.push({
-          action,
-          status: 'completed',
-          result
-        });
-      } catch (error) {
-        console.error(`Action execution failed for ${action.type}:`, error);
+        const result = await executeAction(action.type as AllowedActionType, action.payload, session_id)
+        results.push({ action, status: 'completed', result })
+      } catch (err) {
+        console.error(`Action execution failed for ${action.type}:`, err)
         results.push({
           action,
           status: 'failed',
-          error: error instanceof Error ? error.message : 'Unknown error'
-        });
+          error: err instanceof Error ? err.message : 'Unknown error',
+        })
       }
     }
 
@@ -91,67 +91,53 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       results,
       total_actions: actions.length,
       completed: results.filter(r => r.status === 'completed').length,
-      failed: results.filter(r => r.status === 'failed').length
-    });
+      failed: results.filter(r => r.status === 'failed').length,
+    })
 
-  } catch (error) {
-    console.error('Execute API error:', error);
-    res.status(500).json({ 
+  } catch (err) {
+    console.error('Execute API error:', err)
+    res.status(500).json({
       error: 'Internal server error',
-      message: error instanceof Error ? error.message : 'Unknown error'
-    });
+      message: err instanceof Error ? err.message : 'Unknown error',
+    })
   }
 }
 
-/**
- * Execute individual action
- */
-async function executeAction(type: string, payload: Record<string, any>, sessionId: string): Promise<any> {
+async function executeAction(
+  type: AllowedActionType,
+  payload: ActionPayload,
+  _sessionId: string
+): Promise<Record<string, unknown>> {
   switch (type) {
-    case 'send_email':
-      return await sendEmail(payload, sessionId);
-    case 'create_task':
-      return await createTask(payload, sessionId);
-    case 'update_database':
-      return await updateDatabase(payload, sessionId);
-    case 'fetch_data':
-      return await fetchData(payload, sessionId);
-    case 'schedule_event':
-      return await scheduleEvent(payload, sessionId);
-    default:
-      throw new Error(`Unknown action type: ${type}`);
+    case 'send_email':    return sendEmail(payload)
+    case 'create_task':   return createTask(payload)
+    case 'update_database': return updateDatabase(payload)
+    case 'fetch_data':    return fetchData(payload)
+    case 'schedule_event': return scheduleEvent(payload)
   }
 }
 
-/**
- * Action implementations (simplified for demo)
- */
-async function sendEmail(payload: any, sessionId: string): Promise<any> {
-  // In production, integrate with actual email service
-  console.log(`[ACTION] Sending email:`, payload);
-  return { sent: true, message_id: `msg_${Date.now()}` };
+async function sendEmail(payload: ActionPayload): Promise<Record<string, unknown>> {
+  console.warn('[ACTION] send_email', payload)
+  return { sent: true, message_id: `msg_${Date.now()}` }
 }
 
-async function createTask(payload: any, sessionId: string): Promise<any> {
-  // In production, integrate with task management system
-  console.log(`[ACTION] Creating task:`, payload);
-  return { task_id: `task_${Date.now()}`, created: true };
+async function createTask(payload: ActionPayload): Promise<Record<string, unknown>> {
+  console.warn('[ACTION] create_task', payload)
+  return { task_id: `task_${Date.now()}`, created: true }
 }
 
-async function updateDatabase(payload: any, sessionId: string): Promise<any> {
-  // In production, integrate with database service
-  console.log(`[ACTION] Updating database:`, payload);
-  return { updated: true, affected_rows: 1 };
+async function updateDatabase(payload: ActionPayload): Promise<Record<string, unknown>> {
+  console.warn('[ACTION] update_database', payload)
+  return { updated: true, affected_rows: 1 }
 }
 
-async function fetchData(payload: any, sessionId: string): Promise<any> {
-  // In production, integrate with data service
-  console.log(`[ACTION] Fetching data:`, payload);
-  return { data: `sample_data_${Date.now()}`, count: 42 };
+async function fetchData(payload: ActionPayload): Promise<Record<string, unknown>> {
+  console.warn('[ACTION] fetch_data', payload)
+  return { data: `sample_data_${Date.now()}`, count: 42 }
 }
 
-async function scheduleEvent(payload: any, sessionId: string): Promise<any> {
-  // In production, integrate with scheduling service
-  console.log(`[ACTION] Scheduling event:`, payload);
-  return { scheduled: true, event_id: `event_${Date.now()}` };
+async function scheduleEvent(payload: ActionPayload): Promise<Record<string, unknown>> {
+  console.warn('[ACTION] schedule_event', payload)
+  return { scheduled: true, event_id: `event_${Date.now()}` }
 }

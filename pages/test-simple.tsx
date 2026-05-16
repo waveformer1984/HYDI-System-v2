@@ -1,7 +1,7 @@
 import { useState } from 'react'
 
 export default function TestSimplePage() {
-  const [result, setResult] = useState<any>(null)
+  const [result, setResult] = useState<Record<string, unknown> | null>(null)
   const [error, setError] = useState<string>('')
   const [loading, setLoading] = useState(false)
 
@@ -9,34 +9,31 @@ export default function TestSimplePage() {
     setLoading(true)
     setError('')
     setResult(null)
-    
+
     try {
-      // Test the execute API directly without auth first
-      const resp = await fetch("/api/execute", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+      const resp = await fetch('/api/execute', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          session_id: "test-session-" + Date.now(),
-          user_id: "test-user",
+          session_id: 'test-session-' + Date.now(),
+          user_id: 'test-user',
           actions: [
             {
-              idempotency_key: "test-" + Date.now(),
-              task_name: "echo",
-              payload: { hello: "world" },
+              idempotency_key: 'test-' + Date.now(),
+              task_name: 'echo',
+              payload: { hello: 'world' },
             },
           ],
         }),
-      });
+      })
 
-      const data = await resp.json().catch(() => ({}));
+      const data = await resp.json().catch(() => ({}))
 
       if (!resp.ok) {
-        throw new Error(data?.error ?? `Request failed (${resp.status})`);
+        throw new Error((data as Record<string, unknown>)?.error as string ?? `Request failed (${resp.status})`)
       }
 
-      setResult(data)
+      setResult(data as Record<string, unknown>)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error')
     } finally {
@@ -48,7 +45,7 @@ export default function TestSimplePage() {
     <div className="min-h-screen bg-gray-50 p-8">
       <div className="max-w-2xl mx-auto">
         <h1 className="text-2xl font-bold mb-8">Heidi API Test (Simple)</h1>
-        
+
         <button
           onClick={handleTest}
           disabled={loading}
