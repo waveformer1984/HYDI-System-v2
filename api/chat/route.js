@@ -3,6 +3,8 @@
 
 import { createHmac, timingSafeEqual } from 'crypto';
 import { createClient } from '@supabase/supabase-js';
+import { getLatestDeployment, triggerRedeploy, listEnvVars, setEnvVar, PROJECT_IDS } from '../../lib/vercel/vercelAdmin.js';
+import { getSystemStatus, isReachable } from '../../lib/termux/termuxClient.js';
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -234,49 +236,164 @@ async function handleHyveMessage(message, request) {
 }
 
 async function handleInfrastructureMessage(message, request) {
-  const lowerMessage = message.toLowerCase();
-  
+  const lowerMessage = message.toLowerCase()
+
+  // ── Device telemetry (TermuxBridge) ─────────────────────────────────────────
+  if (lowerMessage.includes('device')) {
+    try {
+      const reachable = await isReachable()
+      if (!reachable) {
+        return '🏗️ Device: TermuxBridge offline. Restart with: pm2 restart termux-bridge'
+      }
+      const status = await getSystemStatus()
+      const bat = status.battery?.percentage !== undefined
+        ? `${status.battery.percentage}% (${status.battery.status})`
+        : 'unknown'
+      const storage = status.storage?.available ?? 'unknown'
+      const uptime = typeof status.uptime === 'string'
+        ? status.uptime.split(',')[0]
+        : 'unknown'
+      return `🏗️ Device (Termux):\n• Battery: ${bat}\n• Storage available: ${storage}\n• Uptime: ${uptime}`
+    } catch (err) {
+      return `🏗️ Device Error: ${err.message}`
+    }
+  }
+
+  // ── Deployment status ────────────────────────────────────────────────────────
+  if (lowerMessage.match(/deployment.?status/) || lowerMessage.match(/status\s+(heidi|hydi|all)/)) {
+    const showBoth = lowerMessage.includes('all') || (!lowerMessage.includes('heidi') && !lowerMessage.includes('hydi'))
+    const checks = []
+    if ((showBoth || lowerMessage.includes('heidi')) && PROJECT_IDS.heidi) {
+      checks.push({ name: 'heidi-chat-portal', id: PROJECT_IDS.heidi })
+    }
+    if ((showBoth || lowerMessage.includes('hydi')) && PROJECT_IDS.hydi) {
+      checks.push({ name: 'hydi-system', id: PROJECT_IDS.hydi })
+    }
+    if (!checks.length) {
+      return '🏗️ Status: project IDs not configured. Set VERCEL_PROJECT_HEIDI / VERCEL_PROJECT_HYDI on this project.'
+    }
+    const STATE_EMOJI = { READY: '✅', ERROR: '🔴', BUILDING: '🔄', CANCELED: '⛔', QUEUED: '⏳' }
+    const lines = await Promise.all(checks.map(async ({ name, id }) => {
+      try {
+        const d = await getLatestDeployment(id)
+        if (!d) return `❓ ${name}: no deployments found`
+        const emoji = STATE_EMOJI[d.state] ?? '❓'
+        return `${emoji} ${name}: ${d.state} — ${d.url ?? 'no url'} (${d.created})`
+      } catch (e) {
+        return `❓ ${name}: ${e.message}`
+      }
+    }))
+    return '🏗️ Deployment Status:\n' + lines.join('\n')
+  }
+
+  // ── Redeploy ─────────────────────────────────────────────────────────────────
+  if (lowerMessage.match(/\b(redeploy|deploy)\b/)) {
+    const wantsAll = lowerMessage.includes('all')
+    const wantsHeidi = lowerMessage.includes('heidi')
+    const wantsHydi = lowerMessage.includes('hydi')
+    const defaultBoth = !wantsHeidi && !wantsHydi
+    const targets = []
+    if ((wantsHeidi || wantsAll || defaultBoth) && PROJECT_IDS.heidi) {
+      targets.push({ name: 'heidi-chat-portal', id: PROJECT_IDS.heidi })
+    }
+    if ((wantsHydi || wantsAll) && PROJECT_IDS.hydi) {
+      targets.push({ name: 'hydi-system', id: PROJECT_IDS.hydi })
+    }
+    if (!targets.length) {
+      return '🏗️ Redeploy: project IDs not configured. Set VERCEL_PROJECT_HEIDI and/or VERCEL_PROJECT_HYDI.'
+    }
+    const results = await Promise.all(targets.map(async ({ name, id }) => {
+      try {
+        const result = await triggerRedeploy(id)
+        return `🚀 ${name}: Queued — ${result.url ?? 'deploying...'} [via ${result.via}]`
+      } catch (e) {
+        return `❌ ${name}: ${e.message}`
+      }
+    }))
+    return '🏗️ Redeploy:\n' + results.join('\n')
+  }
+
+  // ── Env var management ───────────────────────────────────────────────────────
+  if (lowerMessage.includes('env')) {
+    const targetHydi = lowerMessage.includes('hydi')
+    const projectId = targetHydi ? PROJECT_IDS.hydi : PROJECT_IDS.heidi
+    const projectName = targetHydi ? 'hydi-system' : 'heidi-chat-portal'
+    if (!projectId) return `🏗️ Env: ${projectName} project ID not configured`
+
+    const setMatch = message.match(/env\s+set(?:\s+(?:heidi|hydi))?\s+([A-Z_][A-Z0-9_]*)=(.+)$/i)
+    if (setMatch) {
+      const [, key, value] = setMatch
+      try {
+        const result = await setEnvVar(projectId, key.trim(), value.trim())
+        return `🏗️ Env ${result.action}: ${key} on ${projectName}. Redeploy to apply.`
+      } catch (e) {
+        return `🏗️ Env Error: ${e.message}`
+      }
+    }
+
+    if (lowerMessage.includes('list')) {
+      try {
+        const envs = await listEnvVars(projectId)
+        if (!envs.length) return `🏗️ No env vars found on ${projectName}`
+        const lines = envs.map(e => `• ${e.key} [${e.target.join(', ')}]`).join('\n')
+        return `🏗️ Env vars on ${projectName} (${envs.length}):\n${lines}`
+      } catch (e) {
+        return `🏗️ Env Error: ${e.message}`
+      }
+    }
+
+    return `🏗️ Env commands:\n• env list [heidi|hydi]\n• env set [heidi|hydi] KEY=value`
+  }
+
+  // ── Supabase health monitoring (existing) ────────────────────────────────────
   try {
     const { data: dash, error } = await supabase
       .from('system_dashboard')
       .select('*')
-      .single();
-    
+      .single()
+
     if (error) {
-      return `🏗️ Infrastructure: Unable to fetch health data - ${error.message}`;
+      return `🏗️ Infrastructure: Unable to fetch health data — ${error.message}`
     }
-    
+
     if (lowerMessage.includes('health')) {
-      const statusEmoji = dash.current_status === 'OK' ? '✅' : 
-                          dash.current_status === 'WARNING' ? '⚠️' : '🔴';
+      const statusEmoji = { OK: '✅', WARNING: '⚠️', CRITICAL: '🔴' }[dash.current_status] ?? '❓'
       return `🏗️ Infrastructure Health: ${statusEmoji} ${dash.current_status}\n` +
              `Trend: ${dash.trend_status} (${dash.trend_reason})\n` +
              `Queue: ${dash.jobs_queued} queued, ${dash.jobs_failed} failed, ${dash.jobs_dead} dead\n` +
-             `Events (1h): ${dash.events_last_hour} | Auto-heals (24h): ${dash.auto_heals_24h}`;
+             `Events (1h): ${dash.events_last_hour} | Auto-heals (24h): ${dash.auto_heals_24h}`
     }
-    
+
     if (lowerMessage.includes('resources') || lowerMessage.includes('queue')) {
       return `🏗️ Resource Usage:\n` +
              `• Jobs queued: ${dash.jobs_queued}\n` +
              `• Jobs failed: ${dash.jobs_failed}\n` +
              `• Jobs dead: ${dash.jobs_dead}\n` +
              `• Avg queue size: ${dash.avg_queue_size}\n` +
-             `• Critical runs: ${dash.critical_pct}% | Warning runs: ${dash.warning_pct}%`;
+             `• Critical: ${dash.critical_pct}% | Warning: ${dash.warning_pct}%`
     }
-    
+
     if (lowerMessage.includes('alerts') || lowerMessage.includes('escalation')) {
       if (dash.escalation_level === 'OK') {
-        return `🏗️ Alerts: No active escalations. System is stable.`;
+        return `🏗️ Alerts: No active escalations. System is stable.`
       }
       return `🏗️ ALERT: ${dash.escalation_level} escalation active!\n` +
              `Action: ${dash.escalation_action}\n` +
-             `Reason: ${dash.escalation_reason}`;
+             `Reason: ${dash.escalation_reason}`
     }
-    
-    return `🏗️ Infrastructure: System monitoring. Try 'health', 'resources', 'alerts', or 'queue'.`;
   } catch (err) {
-    return `🏗️ Infrastructure Error: ${err.message}`;
+    return `🏗️ Infrastructure Error: ${err.message}`
   }
+
+  return [
+    '🏗️ Heidi Infrastructure Controls:',
+    '  deployment status [heidi|hydi|all]  — check Vercel deployment state',
+    '  redeploy [heidi|hydi|all]           — trigger new Vercel deployment',
+    '  env list [heidi|hydi]               — list env var names (values hidden)',
+    '  env set [heidi|hydi] KEY=value      — update env var (redeploy to apply)',
+    '  device                              — TermuxBridge battery/storage/uptime',
+    '  health / resources / alerts / queue — HYDI system monitoring',
+  ].join('\n')
 }
 
 // ── Helper stubs ──────────────────────────────────────────────────────────────
