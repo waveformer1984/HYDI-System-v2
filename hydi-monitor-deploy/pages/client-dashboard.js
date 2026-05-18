@@ -1,10 +1,18 @@
 import { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-);
+// Lazy init — avoids "supabaseUrl is required" crash during SSR/build
+// when NEXT_PUBLIC_SUPABASE_URL is not set in the build environment.
+let _supabase = null;
+function getSupabase() {
+  if (!_supabase && process.env.NEXT_PUBLIC_SUPABASE_URL) {
+    _supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    );
+  }
+  return _supabase;
+}
 
 export default function ClientDashboard() {
   const [client, setClient] = useState(null);
@@ -23,7 +31,14 @@ export default function ClientDashboard() {
   async function loadDashboard(clientId) {
     setLoading(true);
     setError('');
-    
+
+    const supabase = getSupabase();
+    if (!supabase) {
+      setError('Database not configured');
+      setLoading(false);
+      return;
+    }
+
     try {
       // Get client info
       const { data: clientData, error: clientError } = await supabase
