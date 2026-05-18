@@ -3,7 +3,10 @@
 
 import { createHmac, timingSafeEqual } from 'crypto';
 import { createClient } from '@supabase/supabase-js';
-import { getLatestDeployment, triggerRedeploy, listEnvVars, setEnvVar, PROJECT_IDS } from '../../lib/vercel/vercelAdmin.js';
+import {
+  getLatestDeployment, triggerRedeploy, listEnvVars, setEnvVar,
+  setupDeployHooks, PROJECT_IDS,
+} from '../../lib/vercel/vercelAdmin.js';
 import { getSystemStatus, isReachable } from '../../lib/termux/termuxClient.js';
 
 const supabase = createClient(
@@ -345,6 +348,27 @@ async function handleInfrastructureMessage(message, request) {
     return `🏗️ Env commands:\n• env list [heidi|hydi]\n• env set [heidi|hydi] KEY=value`
   }
 
+  // ── Self-provisioning: create Vercel deploy hooks ────────────────────────────
+  if (lowerMessage.match(/setup\s+hooks?/)) {
+    try {
+      const results = await setupDeployHooks()
+      const lines = results.map(r =>
+        r.error
+          ? `❌ ${r.envKey}: ${r.error}`
+          : `✅ ${r.envKey}: hook created (id: ${r.hookId})`
+      )
+      return [
+        '🏗️ Deploy Hooks:',
+        ...lines,
+        '',
+        'Hook URLs stored as encrypted env vars on HYDI.',
+        'Run `redeploy hydi` to activate — future `redeploy` commands will use hooks.',
+      ].join('\n')
+    } catch (e) {
+      return `🏗️ Setup Error: ${e.message}`
+    }
+  }
+
   // ── Supabase health monitoring (existing) ────────────────────────────────────
   try {
     const { data: dash, error } = await supabase
@@ -391,6 +415,7 @@ async function handleInfrastructureMessage(message, request) {
     '  redeploy [heidi|hydi|all]           — trigger new Vercel deployment',
     '  env list [heidi|hydi]               — list env var names (values hidden)',
     '  env set [heidi|hydi] KEY=value      — update env var (redeploy to apply)',
+    '  setup hooks                         — create Vercel deploy hooks (run once)',
     '  device                              — TermuxBridge battery/storage/uptime',
     '  health / resources / alerts / queue — HYDI system monitoring',
   ].join('\n')
