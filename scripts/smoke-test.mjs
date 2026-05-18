@@ -2,10 +2,13 @@
 // End-to-end smoke test for HYDI /api/chat infrastructure handler.
 // Generates real HMAC-SHA256 service tokens and exercises all infra commands.
 //
-// Usage:
+// Usage (run from repo root):
 //   HYDI_URL=https://your-hydi.vercel.app \
 //   HYDI_SERVICE_SECRET=your-secret \
-//   node scripts/smoke-test.js
+//   node scripts/smoke-test.mjs
+//
+// Tip: get the URL from Vercel dashboard or:
+//   npx vercel ls 2>/dev/null | grep hydi
 
 import { createHmac } from 'crypto'
 
@@ -14,6 +17,8 @@ const SERVICE_SECRET = process.env.HYDI_SERVICE_SECRET
 
 if (!HYDI_URL || !SERVICE_SECRET) {
   console.error('ERROR: Set HYDI_URL and HYDI_SERVICE_SECRET before running')
+  console.error('  export HYDI_URL="https://your-hydi.vercel.app"')
+  console.error('  export HYDI_SERVICE_SECRET="your-secret"')
   process.exit(1)
 }
 
@@ -36,7 +41,10 @@ async function callChat(message, system = 'infrastructure') {
     body: JSON.stringify({ message, system }),
     signal: AbortSignal.timeout(20_000),
   })
-  return { status: res.status, data: await res.json() }
+  const text = await res.text()
+  let data
+  try { data = JSON.parse(text) } catch { throw new Error(`Non-JSON response (HTTP ${res.status}): ${text.slice(0, 200)}`) }
+  return { status: res.status, data }
 }
 
 function preview(val) {
@@ -79,7 +87,6 @@ const tests = [
     run: async () => {
       const { status, data } = await callChat('device')
       if (status !== 200) throw new Error(`HTTP ${status}: ${JSON.stringify(data)}`)
-      // Graceful when bridge is offline
       return preview(data.response)
     },
   },
