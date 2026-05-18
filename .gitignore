@@ -2,6 +2,7 @@ node_modules/
 coverage/
 .vercel
 .env*.local
+.next/
 
 # Local Netlify folder
 .netlify
