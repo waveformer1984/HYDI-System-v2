@@ -3,8 +3,8 @@
  * Routes payments to correct sub-account and writes ledger entries
  */
 
-import Stripe from 'stripe';
-import { createClient } from '@supabase/supabase-js';
+const Stripe = require('stripe');
+const { createClient } = require('@supabase/supabase-js');
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 const supabase = createClient(
@@ -13,7 +13,7 @@ const supabase = createClient(
 );
 
 // Revenue stream to Stripe Connect account mapping
-export const REVENUE_STREAM_ACCOUNTS = {
+const REVENUE_STREAM_ACCOUNTS = {
   galactic_bytes: process.env.STRIPE_ACCOUNT_GALACTIC_BYTES,
   detailer_bot: process.env.STRIPE_ACCOUNT_DETAILER_BOT,
   lipi_v2: process.env.STRIPE_ACCOUNT_LIPI_V2,
@@ -23,14 +23,14 @@ export const REVENUE_STREAM_ACCOUNTS = {
 };
 
 // Fee structure
-export const FEE_STRUCTURE = {
+const FEE_STRUCTURE = {
   platform_fee_percent: 5.0,
   agent_fee_percent: 10.0,
   stripe_fee_percent: 2.9,
   stripe_fixed_fee: 0.3,
 };
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
@@ -181,7 +181,7 @@ async function handlePayoutPaid(payout) {
   console.log(`[Connect Webhook] Payout settled: ${payout.id} — $${payout.amount / 100}`);
 }
 
-export function determineRevenueStream(paymentIntent) {
+function determineRevenueStream(paymentIntent) {
   if (paymentIntent.metadata?.revenue_stream) {
     return paymentIntent.metadata.revenue_stream;
   }
@@ -202,3 +202,8 @@ export function determineRevenueStream(paymentIntent) {
   );
   return 'galactic_bytes';
 }
+
+module.exports = handler;
+module.exports.REVENUE_STREAM_ACCOUNTS = REVENUE_STREAM_ACCOUNTS;
+module.exports.FEE_STRUCTURE = FEE_STRUCTURE;
+module.exports.determineRevenueStream = determineRevenueStream;
