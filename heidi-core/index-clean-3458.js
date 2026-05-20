@@ -17,13 +17,34 @@ const MODEL = 'llama3.2:latest'; // change to qwen2.5-coder:1.5b if preferred
 // ── DB setup ────────────────────────────────────────────────────────────────
 const dbFile = path.join(__dirname, 'heidi-memory.json');
 const adapter = new JSONFile(dbFile);
-const db = new Low(adapter, { sessions: [], tasks: [] });
+const db = new Low(adapter, { sessions: [], tasks: [], phase5: { patterns: [], insights: [] } });
 
 async function initDB() {
   await db.read();
-  db.data ||= { sessions: [], tasks: [] };
+  db.data ||= { sessions: [], tasks: [], phase5: { patterns: [], insights: [] } };
+  db.data.phase5 ||= { patterns: [], insights: [] };
   await db.write();
   console.log(`[DB] Memory file: ${dbFile}`);
+}
+
+async function persistPhase5Pattern(patternId) {
+  const pattern = metaCognition.reasoningPatterns.get(patternId);
+  if (!pattern) return;
+  await db.read();
+  const idx = db.data.phase5.patterns.findIndex(p => p.id === patternId);
+  if (idx >= 0) db.data.phase5.patterns[idx] = pattern;
+  else db.data.phase5.patterns.push(pattern);
+  await db.write();
+}
+
+async function persistPhase5Insight(insightId) {
+  const insight = synthesis.discoveredInsights.get(insightId);
+  if (!insight) return;
+  await db.read();
+  const idx = db.data.phase5.insights.findIndex(i => i.id === insightId);
+  if (idx >= 0) db.data.phase5.insights[idx] = insight;
+  else db.data.phase5.insights.push(insight);
+  await db.write();
 }
 
 // ── Helper: call Ollama ──────────────────────────────────────────────────────
@@ -75,8 +96,14 @@ app.post('/think', async (req, res) => {
       .map(h => `User: ${h.input}\nHEIDI: ${h.response}`)
       .join('\n');
 
+    // Inject relevant synthesized insights into the system prompt (context feedback loop)
+    const relevantInsights = await synthesis.findRelevantInsights(input);
+    const insightContext = relevantInsights.slice(0, 3)
+      .map(r => `- ${r.content}`)
+      .join('\n');
+
     const systemPrompt = `You are HEIDI, the intelligent core of the ProtoForge system.
-You are a task router and assistant. Be concise and direct.
+You are a task router and assistant. Be concise and direct.${insightContext ? `\n\nRelevant knowledge from prior reasoning:\n${insightContext}` : ''}
 Recent conversation:\n${recentHistory}`;
 
     const response = await callOllama(input, systemPrompt);
@@ -183,14 +210,31 @@ const synthesis = new KnowledgeSynthesisEngine({
   metaCognition,
 });
 
-metaCognition.on('pattern-extracted', ({ patternId, qualityScore }) =>
-  console.log(`[MC] Pattern extracted: ${patternId} (score: ${qualityScore.toFixed(2)})`));
+metaCognition.on('pattern-extracted', ({ patternId, qualityScore }) => {
+  console.log(`[MC] Pattern extracted: ${patternId} (score: ${qualityScore.toFixed(2)})`);
+  persistPhase5Pattern(patternId).catch(() => {});
+});
 metaCognition.on('reasoning-failure-detected', ({ primaryIssue }) =>
   console.warn(`[MC] Reasoning gap: ${primaryIssue}`));
-synthesis.on('insight-synthesized', ({ relationshipType, confidence }) =>
-  console.log(`[KS] Insight: ${relationshipType} (confidence: ${confidence.toFixed(2)})`));
+synthesis.on('insight-synthesized', ({ insightId, relationshipType, confidence }) => {
+  console.log(`[KS] Insight: ${relationshipType} (confidence: ${confidence.toFixed(2)})`);
+  persistPhase5Insight(insightId).catch(() => {});
+});
 synthesis.on('synthesis-complete', ({ patternCount, insightCount, executionTime }) =>
   console.log(`[KS] Synthesis: ${patternCount} patterns → ${insightCount} insights (${executionTime}ms)`));
+
+// ── HYDI Dev Optimizer (Phase 5.4) ──────────────────────────────────────────
+const HydiDevOptimizer = require('./hydi-dev-optimizer');
+const optimizer = new HydiDevOptimizer({
+  codebasePath: path.join(__dirname, '..'),
+  outputDir: path.join(__dirname, '../hydi-optimizations'),
+  autoCreatePRs: process.env.AUTO_CREATE_PRS === 'true',
+  githubToken: process.env.GITHUB_TOKEN,
+});
+optimizer.on('optimization-complete', ({ issueCount, fixCount, executionTime }) =>
+  console.log(`[OPT] Cycle complete: ${issueCount} issues, ${fixCount} fixes (${executionTime}ms)`));
+optimizer.on('optimization-error', ({ error }) =>
+  console.warn(`[OPT] Cycle error: ${error}`));
 
 // Inspect the autonomous queue state
 app.get('/queue', (req, res) => {
@@ -1287,8 +1331,42 @@ function buildDependencyChain(taskId, graph, visited) {
   return chain;
 }
 
+// ── HYDI Dev Optimizer endpoints ─────────────────────────────────────────────
+
+app.get('/optimizer/status', (req, res) => {
+  res.json(optimizer.getStatus());
+});
+
+app.post('/optimizer/run', async (req, res) => {
+  try {
+    const result = await optimizer.runOptimizationCycle(req.body || {});
+    res.json(result);
+  } catch (err) {
+    console.error('[OPT] Run error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/optimizer/recent', async (req, res) => {
+  const limit = parseInt(req.query.limit) || 10;
+  const results = await optimizer.getRecentOptimizations(limit);
+  res.json(results);
+});
+
 // ── Start ─────────────────────────────────────────────────────────────────────
 initDB().then(() => {
+  // Restore Phase 5 patterns and insights from persistent storage
+  const p5 = db.data.phase5 || { patterns: [], insights: [] };
+  for (const pattern of p5.patterns) {
+    metaCognition.reasoningPatterns.set(pattern.id, pattern);
+  }
+  for (const insight of p5.insights) {
+    synthesis.discoveredInsights.set(insight.id, insight);
+  }
+  if (p5.patterns.length > 0 || p5.insights.length > 0) {
+    console.log(`[DB] Phase 5 restored: ${p5.patterns.length} patterns, ${p5.insights.length} insights`);
+  }
+
   app.listen(PORT, () => {
     console.log(`\n╔══════════════════════════════════╗`);
     console.log(`║  HEIDI Core running on :${PORT}   ║`);
