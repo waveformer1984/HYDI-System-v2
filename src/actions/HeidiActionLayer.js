@@ -85,12 +85,12 @@ class HeidiActionLayer extends EventEmitter {
       
       this.activeActions.set(actionId, { type: actionType, params, context, startTime });
       
-      const result = await Promise.race([
-        action.handler(params, context),
-        new Promise((_, reject) => {
-          timeoutId = setTimeout(() => reject(new Error('ACTION_TIMEOUT')), this.config.actionTimeout);
-        })
-      ]);
+      const timeoutPromise = new Promise((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error('ACTION_TIMEOUT')), this.config.actionTimeout);
+        timeoutId.unref?.();
+      });
+
+      const result = await Promise.race([action.handler(params, context), timeoutPromise]);
       
       const latency = Date.now() - startTime;
       
@@ -141,7 +141,7 @@ class HeidiActionLayer extends EventEmitter {
       
       throw error;
     } finally {
-      clearTimeout(timeoutId);
+      if (timeoutId) clearTimeout(timeoutId);
       this.activeActions.delete(actionId);
     }
   }

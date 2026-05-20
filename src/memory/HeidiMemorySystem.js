@@ -874,6 +874,7 @@ class HeidiMemorySystem extends EventEmitter {
     this.cleanupTimer = setInterval(() => {
       this.cleanupSessionMemory();
     }, 60000);
+    this.cleanupTimer.unref();
 
     this.reflectionTimer = setInterval(() => {
       if (Date.now() - this.reflectiveMemory.lastReflection >= this.config.reflectionInterval) {
@@ -882,16 +883,18 @@ class HeidiMemorySystem extends EventEmitter {
         });
       }
     }, 60000);
+    this.reflectionTimer.unref();
 
     this.persistTimer = setInterval(() => {
       this.persistReflectiveMemory();
     }, 300000);
+    this.persistTimer.unref();
   }
 
   destroy() {
-    clearInterval(this.cleanupTimer);
-    clearInterval(this.reflectionTimer);
-    clearInterval(this.persistTimer);
+    if (this.cleanupTimer) clearInterval(this.cleanupTimer);
+    if (this.reflectionTimer) clearInterval(this.reflectionTimer);
+    if (this.persistTimer) clearInterval(this.persistTimer);
   }
   
   cleanupSessionMemory() {
