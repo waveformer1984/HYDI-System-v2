@@ -75,8 +75,14 @@ app.post('/think', async (req, res) => {
       .map(h => `User: ${h.input}\nHEIDI: ${h.response}`)
       .join('\n');
 
+    // Inject relevant synthesized insights into the system prompt (context feedback loop)
+    const relevantInsights = await synthesis.findRelevantInsights(input);
+    const insightContext = relevantInsights.slice(0, 3)
+      .map(r => `- ${r.content}`)
+      .join('\n');
+
     const systemPrompt = `You are HEIDI, the intelligent core of the ProtoForge system.
-You are a task router and assistant. Be concise and direct.
+You are a task router and assistant. Be concise and direct.${insightContext ? `\n\nRelevant knowledge from prior reasoning:\n${insightContext}` : ''}
 Recent conversation:\n${recentHistory}`;
 
     const response = await callOllama(input, systemPrompt);
