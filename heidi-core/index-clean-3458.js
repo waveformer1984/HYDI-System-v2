@@ -198,6 +198,19 @@ synthesis.on('insight-synthesized', ({ relationshipType, confidence }) =>
 synthesis.on('synthesis-complete', ({ patternCount, insightCount, executionTime }) =>
   console.log(`[KS] Synthesis: ${patternCount} patterns → ${insightCount} insights (${executionTime}ms)`));
 
+// ── HYDI Dev Optimizer (Phase 5.4) ──────────────────────────────────────────
+const HydiDevOptimizer = require('./hydi-dev-optimizer');
+const optimizer = new HydiDevOptimizer({
+  codebasePath: path.join(__dirname, '..'),
+  outputDir: path.join(__dirname, '../hydi-optimizations'),
+  autoCreatePRs: process.env.AUTO_CREATE_PRS === 'true',
+  githubToken: process.env.GITHUB_TOKEN,
+});
+optimizer.on('optimization-complete', ({ issueCount, fixCount, executionTime }) =>
+  console.log(`[OPT] Cycle complete: ${issueCount} issues, ${fixCount} fixes (${executionTime}ms)`));
+optimizer.on('optimization-error', ({ error }) =>
+  console.warn(`[OPT] Cycle error: ${error}`));
+
 // Inspect the autonomous queue state
 app.get('/queue', (req, res) => {
   res.json(atq.snapshot());
@@ -1292,6 +1305,28 @@ function buildDependencyChain(taskId, graph, visited) {
   
   return chain;
 }
+
+// ── HYDI Dev Optimizer endpoints ─────────────────────────────────────────────
+
+app.get('/optimizer/status', (req, res) => {
+  res.json(optimizer.getStatus());
+});
+
+app.post('/optimizer/run', async (req, res) => {
+  try {
+    const result = await optimizer.runOptimizationCycle(req.body || {});
+    res.json(result);
+  } catch (err) {
+    console.error('[OPT] Run error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/optimizer/recent', async (req, res) => {
+  const limit = parseInt(req.query.limit) || 10;
+  const results = await optimizer.getRecentOptimizations(limit);
+  res.json(results);
+});
 
 // ── Start ─────────────────────────────────────────────────────────────────────
 initDB().then(() => {
