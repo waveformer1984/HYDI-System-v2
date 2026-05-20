@@ -23,8 +23,10 @@ const HybridModelStack = require('../../src/models/HybridModelStack');
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
+let _instances = [];
+
 function makeStack(cfg = {}) {
-  return new HybridModelStack({
+  const stack = new HybridModelStack({
     maxCostPerRequest: 0.50,
     dailyBudget: 10.0,
     externalThreshold: 0.8,
@@ -32,7 +34,14 @@ function makeStack(cfg = {}) {
     enableFailover: true,
     ...cfg,
   });
+  _instances.push(stack);
+  return stack;
 }
+
+afterEach(() => {
+  _instances.forEach(s => s.destroy());
+  _instances = [];
+});
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
@@ -47,12 +56,14 @@ describe('HybridModelStack', () => {
       expect(stack.config.dailyBudget).toBe(10.0);
       expect(stack.config.localFirst).toBe(true);
       expect(stack.config.enableFailover).toBe(true);
+      stack.destroy();
     });
 
     it('overrides defaults with provided config', () => {
       const stack = new HybridModelStack({ dailyBudget: 5.0, localFirst: false });
       expect(stack.config.dailyBudget).toBe(5.0);
       expect(stack.config.localFirst).toBe(false);
+      stack.destroy();
     });
 
     it('starts with zero cost tracker', () => {
