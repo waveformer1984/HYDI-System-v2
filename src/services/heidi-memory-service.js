@@ -10,6 +10,31 @@ class HeidiMemoryService {
         this.supabase = createClient(supabaseUrl, supabaseKey);
         this.cache = new Map(); // Cache for < 100ms queries
         this.cacheTimeout = 30000; // 30 seconds
+        // Circuit breaker: suppress console.error spam after 3 consecutive Supabase failures
+        this._cbFailures   = 0;
+        this._cbThreshold  = 3;
+        this._cbOpenUntil  = 0; // timestamp: 0 = closed (normal)
+        this._cbResetMs    = 5 * 60 * 1000; // retry after 5 minutes
+    }
+
+    _cbLog(msg, err) {
+        const now = Date.now();
+        if (err && (err.message || '').includes('fetch failed')) {
+            this._cbFailures++;
+            if (this._cbFailures <= this._cbThreshold) {
+                console.error(msg, { message: err.message });
+            } else if (this._cbFailures === this._cbThreshold + 1) {
+                console.warn(`[MEMORY] Supabase unreachable — suppressing further errors for ${this._cbResetMs/60000} min`);
+                this._cbOpenUntil = now + this._cbResetMs;
+            } else if (now > this._cbOpenUntil) {
+                this._cbFailures = 0;
+                this._cbOpenUntil = 0;
+                console.error(msg, { message: err.message });
+            }
+            return;
+        }
+        this._cbFailures = 0;
+        console.error(msg, err);
     }
 
     // Cache management
@@ -57,7 +82,7 @@ class HeidiMemoryService {
             console.log(`[MEMORY] Recorded prediction: ${taskId} -> ${theme} (${confidence.toFixed(2)})`);
             return data;
         } catch (error) {
-            console.error('[MEMORY] Failed to record prediction:', error);
+            this._cbLog('[MEMORY] Failed to record prediction:', error);
             throw error;
         }
     }
@@ -84,7 +109,7 @@ class HeidiMemoryService {
             console.log(`[MEMORY] Recorded outcome: ${taskId} -> ${actualTheme} (${wasCorrect ? 'correct' : 'wrong'})`);
             return data;
         } catch (error) {
-            console.error('[MEMORY] Failed to record outcome:', error);
+            this._cbLog('[MEMORY] Failed to record outcome:', error);
             throw error;
         }
     }
@@ -107,7 +132,7 @@ class HeidiMemoryService {
             this.setCached(cacheKey, data);
             return data;
         } catch (error) {
-            console.error('[MEMORY] Failed to get theme accuracy:', error);
+            this._cbLog('[MEMORY] Failed to get theme accuracy:', error);
             // Return default on error
             return { rolling_accuracy: 0.5, correct: 0, incorrect: 0 };
         }
@@ -131,7 +156,7 @@ class HeidiMemoryService {
             this.setCached(cacheKey, data);
             return data;
         } catch (error) {
-            console.error('[MEMORY] Failed to get system calibration:', error);
+            this._cbLog('[MEMORY] Failed to get system calibration:', error);
             return {
                 total_predictions: 0,
                 overall_accuracy: 0.0,
@@ -152,7 +177,7 @@ class HeidiMemoryService {
 
             return data;
         } catch (error) {
-            console.error('[MEMORY] Failed to get theme calibration:', error);
+            this._cbLog('[MEMORY] Failed to get theme calibration:', error);
             return null;
         }
     }
@@ -181,7 +206,7 @@ class HeidiMemoryService {
             console.log(`[MEMORY] Stored reflection for task: ${reflection.taskId}`);
             return data;
         } catch (error) {
-            console.error('[MEMORY] Failed to store reflection:', error);
+            this._cbLog('[MEMORY] Failed to store reflection:', error);
             throw error;
         }
     }
@@ -206,7 +231,7 @@ class HeidiMemoryService {
             console.error(`[MEMORY] Logged system misalignment: ${event.severity} severity`);
             return data;
         } catch (error) {
-            console.error('[MEMORY] Failed to log misalignment:', error);
+            this._cbLog('[MEMORY] Failed to log misalignment:', error);
             throw error;
         }
     }
@@ -223,7 +248,7 @@ class HeidiMemoryService {
             if (error) throw error;
             return data;
         } catch (error) {
-            console.error('[MEMORY] Failed to get reflections:', error);
+            this._cbLog('[MEMORY] Failed to get reflections:', error);
             return [];
         }
     }
@@ -246,7 +271,7 @@ class HeidiMemoryService {
             if (error) throw error;
             return data;
         } catch (error) {
-            console.error('[MEMORY] Failed to get overconfidence events:', error);
+            this._cbLog('[MEMORY] Failed to get overconfidence events:', error);
             return [];
         }
     }
@@ -263,7 +288,7 @@ class HeidiMemoryService {
             if (error) throw error;
             return data;
         } catch (error) {
-            console.error('[MEMORY] Failed to get misalignment events:', error);
+            this._cbLog('[MEMORY] Failed to get misalignment events:', error);
             return [];
         }
     }

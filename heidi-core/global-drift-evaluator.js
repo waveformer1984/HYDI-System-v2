@@ -344,22 +344,17 @@ class GlobalDriftEvaluator {
     calculateGlobalDriftScore(driftSignals) {
         let weightedScore = 0;
         let maxDrift = 0;
-        
-        Object.entries(driftSignals).forEach(([signal, config]) => {
-            const signalValue = Math.abs(signal);
-            const weight = config.weight;
-            const window = config.window;
-            
-            // Apply window-based weighting (more recent = higher weight)
-            const windowWeight = window === 'short_term' ? 1.2 : window === 'medium_term' ? 1.0 : 0.8;
-            
-            const contribution = signalValue * weight * windowWeight;
-            weightedScore += contribution;
-            maxDrift = Math.max(maxDrift, signalValue);
+
+        // driftSignals values are plain numbers (trends), not {weight, window} objects
+        Object.entries(driftSignals).forEach(([signalName, signalValue]) => {
+            const absValue = Math.abs(Number(signalValue) || 0);
+            weightedScore += absValue;
+            maxDrift = Math.max(maxDrift, absValue);
         });
-        
+
         // Normalize to 0-1 scale
-        const normalizedScore = Math.min(0.1, weightedScore);
+        const signalCount = Object.keys(driftSignals).length || 1;
+        const normalizedScore = Math.min(1.0, weightedScore / signalCount);
         
         return {
             drift_score: normalizedScore,

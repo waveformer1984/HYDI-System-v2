@@ -165,20 +165,26 @@ class AutonomousTaskQueue {
     let valid = false;
     let details = {};
     try {
-      // CascadeEngineV3.reprioritizeTasks() is the real health method
-      const result = await this.cascade.reprioritizeTasks();
-      const health = result.structural_health || {};
-      valid = health.health_rating !== 'critical';
+      // Real shape: { tasks, metadata, theme_confidence_metrics, strategic_themes }
+      const result  = await this.cascade.reprioritizeTasks();
+      const meta    = result.metadata || {};
+      const themes  = result.theme_confidence_metrics || {};
+      const blocked = meta.blocked_tasks || 0;
+      const total   = meta.total_tasks   || (result.tasks || []).length;
+      const blockRate = total > 0 ? blocked / total : 0;
+
+      valid = blockRate < 0.5 && themes.confidence_health !== 'critical';
       details = {
-        rating: health.health_rating,
-        issues: (health.issues || []).length,
-        tasks:  (result.tasks || []).length,
+        rating:     themes.confidence_health || (valid ? 'ok' : 'degraded'),
+        total,
+        blocked,
+        authorized: meta.authorized_tasks ?? (total - blocked),
       };
     } catch (err) {
-      details = { error: err.message };
+      details = { rating: 'error', error: err.message };
     }
 
-    this.log.log(`[ATQ] cascade — valid:${valid} rating:${details.rating || 'error'} tasks:${details.tasks ?? '?'}`);
+    this.log.log(`[ATQ] cascade — valid:${valid} rating:${details.rating} tasks:${details.total ?? '?'} blocked:${details.blocked ?? '?'}`);
 
     const followUp = [];
     if (!valid) followUp.push({ type: 'validate_cascade', priority: 'high' });
