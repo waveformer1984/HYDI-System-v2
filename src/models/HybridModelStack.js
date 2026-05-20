@@ -23,17 +23,17 @@ class HybridModelStack extends EventEmitter {
     
     this.config = {
       // Cost controls
-      maxCostPerRequest: config.maxCostPerRequest || 0.50, // $0.50 max per request
-      dailyBudget: config.dailyBudget || 10.0, // $10 daily budget
-      externalThreshold: config.externalThreshold || 0.8, // 80% confidence needed for external
+      maxCostPerRequest: config.maxCostPerRequest || 0.50,
+      dailyBudget: config.dailyBudget || 10.0,
+      externalThreshold: config.externalThreshold || 0.8,
       
       // Performance controls
-      localTimeout: config.localTimeout || 8000, // 8s local timeout
-      externalTimeout: config.externalTimeout || 30000, // 30s external timeout
+      localTimeout: config.localTimeout || 8000,
+      externalTimeout: config.externalTimeout || 30000,
       
       // Strategy controls
-      localFirst: config.localFirst !== false, // Default to local first
-      enableFailover: config.enableFailover !== false, // Enable failover chains
+      localFirst: config.localFirst !== false,
+      enableFailover: config.enableFailover !== false,
       ...config
     };
     
@@ -57,9 +57,9 @@ class HybridModelStack extends EventEmitter {
         baseURL: 'https://api.anthropic.com/v1',
         apiKey: process.env.ANTHROPIC_API_KEY,
         models: {
-          'claude-3-opus': { costPer1kTokens: 0.015, maxTokens: 4096 },
-          'claude-3-sonnet': { costPer1kTokens: 0.003, maxTokens: 4096 },
-          'claude-3-haiku': { costPer1kTokens: 0.00025, maxTokens: 4096 }
+          'claude-opus-4-7':          { costPer1kTokens: 0.015,   maxTokens: 4096 },
+          'claude-sonnet-4-6':        { costPer1kTokens: 0.003,   maxTokens: 4096 },
+          'claude-haiku-4-5-20251001':{ costPer1kTokens: 0.00025, maxTokens: 4096 }
         }
       },
       
@@ -75,51 +75,37 @@ class HybridModelStack extends EventEmitter {
     
     // Model selection strategy
     this.strategy = {
-      // LOCAL MODELS - Use these first, always
       local: {
-        // Reasoning and analysis
         reasoning: {
           primary: 'gpt-4-local',
           fallback: ['gpt-35-turbo', 'local-llama'],
           use: 'reflection, planning, analysis, decision-making'
         },
-        
-        // General tasks
         general: {
           primary: 'gpt-35-turbo',
           fallback: ['local-llama'],
           use: 'standard requests, basic tasks'
         },
-        
-        // Fast operations
         fast: {
           primary: 'local-classifier',
           fallback: ['rule-engine'],
           use: 'classification, rule-based decisions'
         },
-        
-        // Code and technical
         code: {
           primary: 'code-specialist',
           fallback: ['code-parser', 'gpt-4-local'],
           use: 'code generation, debugging, technical analysis'
         },
-        
-        // Security and validation
         security: {
           primary: 'security-scanner',
           fallback: ['bug-finder'],
           use: 'security analysis, vulnerability detection'
         },
-        
-        // Database operations
         database: {
           primary: 'db-specialist',
           fallback: ['gpt-4-local'],
           use: 'SQL generation, database optimization'
         },
-        
-        // Analytics and prediction
         analytics: {
           primary: 'predictive-model',
           fallback: ['pricing-engine'],
@@ -127,25 +113,19 @@ class HybridModelStack extends EventEmitter {
         }
       },
       
-      // EXTERNAL MODELS - Use only when necessary
       external: {
-        // High-stakes output (sales copy, external messaging)
         high_stakes: {
-          models: ['gpt-4', 'claude-3-opus'],
+          models: ['gpt-4', 'claude-opus-4-7'],
           trigger: 'revenue, sales, customer-facing content',
           reason: 'Maximum quality for revenue-generating content'
         },
-        
-        // Complex reasoning spikes
         complex_reasoning: {
-          models: ['gpt-4-turbo', 'claude-3-sonnet'],
+          models: ['gpt-4-turbo', 'claude-sonnet-4-6'],
           trigger: 'multi-step logic, complex problem solving',
           reason: 'Advanced reasoning when local models struggle'
         },
-        
-        // Polish and refinement
         polish: {
-          models: ['gpt-4-turbo', 'claude-3-sonnet'],
+          models: ['gpt-4-turbo', 'claude-sonnet-4-6'],
           trigger: 'final output refinement, quality enhancement',
           reason: 'Superior language quality for final deliverables'
         }
@@ -169,6 +149,9 @@ class HybridModelStack extends EventEmitter {
     
     // Available models list
     this.availableModels = [];
+
+    // Timer handle so destroy() can clear it
+    this.costMonitorTimer = null;
     
     // Initialize
     this.initialize();
@@ -177,13 +160,17 @@ class HybridModelStack extends EventEmitter {
   async initialize() {
     console.log('[HYBRID STACK] Initializing Hybrid Model Stack...');
     
-    // Check local model availability
+    // Check local model availability and report accurately
     const localAvailable = await this.ollamaClient.isAvailable();
-    console.log(`[HYBRID STACK] Local models available: ${localAvailable ? 'YES' : 'NO'}`);
-    
     if (localAvailable) {
       const models = await this.ollamaClient.getModels();
-      console.log(`[HYBRID STACK] Found ${models.length} local models:`, models.join(', '));
+      if (models.length > 0) {
+        console.log(`[HYBRID STACK] Local models: ${models.length} loaded (${models.join(', ')})`);
+      } else {
+        console.log('[HYBRID STACK] Ollama running but no models loaded — using external APIs');
+      }
+    } else {
+      console.log('[HYBRID STACK] Local models: Ollama not available — using external APIs');
     }
     
     // Check external API keys
@@ -199,13 +186,9 @@ class HybridModelStack extends EventEmitter {
     console.log(`[HYBRID STACK] Strategy: ${this.config.localFirst ? 'LOCAL_FIRST' : 'EXTERNAL_FIRST'}`);
   }
   
-  /**
-   * Build the available models list
-   */
   buildAvailableModelsList() {
     this.availableModels = [];
     
-    // Add local models
     for (const [category, models] of Object.entries(this.strategy.local)) {
       if (typeof models === 'object' && models.primary) {
         this.availableModels.push({
@@ -218,7 +201,6 @@ class HybridModelStack extends EventEmitter {
           latency: 'low'
         });
         
-        // Add fallback models
         if (models.fallback && Array.isArray(models.fallback)) {
           for (const fallback of models.fallback) {
             if (!this.availableModels.find(m => m.id === fallback)) {
@@ -237,7 +219,6 @@ class HybridModelStack extends EventEmitter {
       }
     }
     
-    // Add external models if API keys are available
     if (this.externalModels.openai.apiKey) {
       this.availableModels.push({
         id: 'gpt-4',
@@ -248,9 +229,8 @@ class HybridModelStack extends EventEmitter {
         cost: 0.03,
         latency: 'medium'
       });
-      
       this.availableModels.push({
-        id: 'gpt-35-turbo',
+        id: 'gpt-3.5-turbo',
         name: 'GPT-3.5 Turbo',
         type: 'external',
         provider: 'openai',
@@ -262,8 +242,8 @@ class HybridModelStack extends EventEmitter {
     
     if (this.externalModels.anthropic.apiKey) {
       this.availableModels.push({
-        id: 'claude-3-opus',
-        name: 'Claude 3 Opus',
+        id: 'claude-opus-4-7',
+        name: 'Claude Opus 4.7',
         type: 'external',
         provider: 'anthropic',
         capabilities: ['reasoning', 'analysis', 'writing'],
@@ -286,7 +266,6 @@ class HybridModelStack extends EventEmitter {
   }
   
   getModelCapabilities(modelId) {
-    // Basic capability mapping based on model name
     if (modelId.includes('gpt-4') || modelId.includes('claude')) {
       return ['reasoning', 'analysis', 'writing', 'code'];
     } else if (modelId.includes('classifier') || modelId.includes('rule')) {
@@ -302,31 +281,21 @@ class HybridModelStack extends EventEmitter {
     }
   }
 
-  /**
-   * MAIN INFERENCE METHOD - Smart model selection and execution
-   */
   async execute(task, options = {}) {
     const requestId = `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const startTime = Date.now();
+    let strategy;
     
     try {
       console.log(`[HYBRID STACK] Executing task ${requestId}: ${task.type}`);
       
-      // Determine execution strategy
-      const strategy = this.determineStrategy(task, options);
-      
-      // Execute with chosen strategy
+      strategy = this.determineStrategy(task, options);
       const result = await this.executeWithStrategy(task, strategy, requestId);
       
-      // Track performance
       this.trackPerformance(strategy, result, Date.now() - startTime);
       
-      // Emit completion
       this.emit('inference_complete', {
-        requestId,
-        task,
-        strategy,
-        result,
+        requestId, task, strategy, result,
         latency: Date.now() - startTime
       });
       
@@ -335,43 +304,24 @@ class HybridModelStack extends EventEmitter {
     } catch (error) {
       console.error(`[HYBRID STACK] Task ${requestId} failed:`, error.message);
       
-      this.performance[strategy.type].failure++;
+      if (strategy) this.performance[strategy.type].failure++;
       
-      this.emit('inference_failed', {
-        requestId,
-        task,
-        error: error.message,
-        strategy
-      });
+      this.emit('inference_failed', { requestId, task, error: error.message, strategy });
       
       throw error;
     }
   }
   
-  /**
-   * DETERMINE STRATEGY - Decide between local and external
-   */
   determineStrategy(task, options) {
-    // Force strategy if specified
     if (options.forceStrategy) {
-      return {
-        type: options.forceStrategy,
-        model: options.forceModel,
-        reason: 'forced_by_user'
-      };
+      return { type: options.forceStrategy, model: options.forceModel, reason: 'forced_by_user' };
     }
     
-    // Check budget constraints
     if (this.costTracker.daily >= this.config.dailyBudget) {
       console.log('[HYBRID STACK] Daily budget exceeded, forcing local models');
-      return {
-        type: 'local',
-        model: this.selectBestLocalModel(task),
-        reason: 'budget_limit'
-      };
+      return { type: 'local', model: this.selectBestLocalModel(task), reason: 'budget_limit' };
     }
     
-    // Check if task requires external models
     const externalRequirement = this.checkExternalRequirement(task);
     if (externalRequirement.required) {
       return {
@@ -382,7 +332,6 @@ class HybridModelStack extends EventEmitter {
       };
     }
     
-    // Default to local first
     if (this.config.localFirst) {
       return {
         type: 'local',
@@ -392,17 +341,11 @@ class HybridModelStack extends EventEmitter {
       };
     }
     
-    // Cost-based decision
     const estimatedCost = this.estimateCost(task);
     if (estimatedCost > this.config.maxCostPerRequest) {
-      return {
-        type: 'local',
-        model: this.selectBestLocalModel(task),
-        reason: 'cost_limit'
-      };
+      return { type: 'local', model: this.selectBestLocalModel(task), reason: 'cost_limit' };
     }
     
-    // Default external
     return {
       type: 'external',
       model: this.selectBestExternalModel(task),
@@ -411,33 +354,19 @@ class HybridModelStack extends EventEmitter {
     };
   }
   
-  /**
-   * EXECUTE WITH STRATEGY - Execute using the determined strategy
-   */
   async executeWithStrategy(task, strategy, requestId) {
     switch (strategy.type) {
-      case 'local':
-        return await this.executeLocal(task, strategy, requestId);
-      
-      case 'external':
-        return await this.executeExternal(task, strategy, requestId);
-      
-      case 'hybrid':
-        return await this.executeHybrid(task, strategy, requestId);
-      
-      default:
-        throw new Error(`Unknown strategy: ${strategy.type}`);
+      case 'local':    return await this.executeLocal(task, strategy, requestId);
+      case 'external': return await this.executeExternal(task, strategy, requestId);
+      case 'hybrid':   return await this.executeHybrid(task, strategy, requestId);
+      default: throw new Error(`Unknown strategy: ${strategy.type}`);
     }
   }
   
-  /**
-   * LOCAL EXECUTION - Use local models
-   */
   async executeLocal(task, strategy, requestId) {
+    const input = this.prepareInput(task);
     try {
       console.log(`[HYBRID STACK] Executing locally with model: ${strategy.model}`);
-      
-      const input = this.prepareInput(task);
       
       const result = await this.localModels.execute(strategy.model, input, {
         tier: task.tier || 'pro',
@@ -445,29 +374,18 @@ class HybridModelStack extends EventEmitter {
         inferenceRequestId: requestId
       });
       
-      return {
-        ...result,
-        strategy: 'local',
-        model: strategy.model,
-        provider: 'local',
-        cost: 0, // Local models are "free" (already paid for)
-        requestId
-      };
+      return { ...result, strategy: 'local', model: strategy.model, provider: 'local', cost: 0, requestId };
       
     } catch (error) {
-      // Try fallback if available
       if (strategy.fallback && this.config.enableFailover) {
         console.log(`[HYBRID STACK] Local model failed, trying fallback: ${strategy.fallback}`);
-        
         try {
           const fallbackResult = await this.localModels.execute(strategy.fallback, input, {
             tier: task.tier || 'pro',
             timeout: this.config.localTimeout,
             inferenceRequestId: requestId
           });
-          
           this.performance.fallbacks++;
-          
           return {
             ...fallbackResult,
             strategy: 'local_fallback',
@@ -477,28 +395,18 @@ class HybridModelStack extends EventEmitter {
             requestId,
             originalError: error.message
           };
-          
         } catch (fallbackError) {
           console.error(`[HYBRID STACK] Fallback also failed:`, fallbackError.message);
         }
       }
-      
       throw error;
     }
   }
   
-  /**
-   * EXTERNAL EXECUTION - Use external APIs
-   */
   async executeExternal(task, strategy, requestId) {
     const provider = this.externalModels[strategy.provider];
-    if (!provider) {
-      throw new Error(`Unknown external provider: ${strategy.provider}`);
-    }
-    
-    if (!provider.apiKey) {
-      throw new Error(`No API key configured for ${strategy.provider}`);
-    }
+    if (!provider) throw new Error(`Unknown external provider: ${strategy.provider}`);
+    if (!provider.apiKey) throw new Error(`No API key configured for ${strategy.provider}`);
     
     try {
       console.log(`[HYBRID STACK] Executing externally with ${strategy.provider}:${strategy.model}`);
@@ -506,57 +414,39 @@ class HybridModelStack extends EventEmitter {
       const input = this.prepareInput(task);
       const cost = this.calculateCost(strategy.provider, strategy.model, input);
       
-      // Check cost limits
       if (cost > this.config.maxCostPerRequest) {
         throw new Error(`Cost $${cost.toFixed(4)} exceeds limit $${this.config.maxCostPerRequest}`);
       }
       
       const result = await this.callExternalAPI(strategy.provider, strategy.model, input, requestId);
-      
-      // Track cost
       this.trackCost(cost, strategy.provider, strategy.model);
       
-      return {
-        ...result,
-        strategy: 'external',
-        model: strategy.model,
-        provider: strategy.provider,
-        cost,
-        requestId
-      };
+      return { ...result, strategy: 'external', model: strategy.model, provider: strategy.provider, cost, requestId };
       
     } catch (error) {
       console.error(`[HYBRID STACK] External execution failed:`, error.message);
       
-      // Fallback to local if enabled
       if (this.config.enableFailover) {
         console.log('[HYBRID STACK] External failed, falling back to local');
-        
         return await this.executeLocal(task, {
           model: this.selectBestLocalModel(task),
           fallback: this.selectLocalFallback(task),
           reason: 'external_failover'
         }, requestId);
       }
-      
       throw error;
     }
   }
   
-  /**
-   * HYBRID EXECUTION - Local first, external enhancement if needed
-   */
   async executeHybrid(task, strategy, requestId) {
     console.log('[HYBRID STACK] Executing hybrid strategy');
     
-    // First, try local
     const localResult = await this.executeLocal(task, {
       model: this.selectBestLocalModel(task),
       fallback: this.selectLocalFallback(task),
       reason: 'hybrid_primary'
     }, requestId);
     
-    // Evaluate local result quality
     const quality = this.assessQuality(localResult);
     
     if (quality.confidence >= this.config.externalThreshold) {
@@ -566,7 +456,6 @@ class HybridModelStack extends EventEmitter {
     
     console.log('[HYBRID STACK] Local quality insufficient, enhancing with external');
     
-    // Enhance with external model
     const enhancedTask = {
       ...task,
       context: {
@@ -592,131 +481,79 @@ class HybridModelStack extends EventEmitter {
     };
   }
   
-  /**
-   * MODEL SELECTION METHODS
-   */
   selectBestLocalModel(task) {
     const taskType = this.mapTaskType(task.type);
     const strategy = this.strategy.local[taskType];
-    
     return strategy ? strategy.primary : 'gpt-35-turbo';
   }
   
   selectLocalFallback(task) {
     const taskType = this.mapTaskType(task.type);
     const strategy = this.strategy.local[taskType];
-    
     return strategy && strategy.fallback ? strategy.fallback[0] : 'local-llama';
   }
   
   selectBestExternalModel(task) {
     const requirement = this.checkExternalRequirement(task);
-    if (requirement.required) {
-      return requirement.model;
-    }
-    
-    // Default to cost-effective external model
+    if (requirement.required) return requirement.model;
     return 'gpt-3.5-turbo';
   }
   
   selectExternalProvider(task) {
-    // Check API key availability and cost
-    if (this.externalModels.openai.apiKey) return 'openai';
-    if (this.externalModels.anthropic.apiKey) return 'anthropic';
-    if (this.externalModels.gemini.apiKey) return 'gemini';
-    
+    if (this.externalModels.openai.apiKey)     return 'openai';
+    if (this.externalModels.anthropic.apiKey)  return 'anthropic';
+    if (this.externalModels.gemini.apiKey)     return 'gemini';
     throw new Error('No external API keys available');
   }
   
-  /**
-   * EXTERNAL REQUIREMENT CHECK
-   */
   checkExternalRequirement(task) {
-    // High-stakes content (revenue, customer-facing)
     if (task.type === 'revenue' || task.type === 'sales' || task.type === 'marketing') {
-      return {
-        required: true,
-        model: 'gpt-4',
-        provider: 'openai',
-        reason: 'high_stakes_revenue_content'
-      };
+      return { required: true, model: 'gpt-4', provider: 'openai', reason: 'high_stakes_revenue_content' };
     }
-    
-    // Complex reasoning
     if (task.complexity > 3 || task.type === 'complex_analysis') {
-      return {
-        required: true,
-        model: 'gpt-4-turbo',
-        provider: 'openai',
-        reason: 'complex_reasoning_required'
-      };
+      return { required: true, model: 'gpt-4-turbo', provider: 'openai', reason: 'complex_reasoning_required' };
     }
-    
-    // Polish and refinement
     if (task.type === 'polish' || task.type === 'refine') {
-      return {
-        required: true,
-        model: 'claude-3-sonnet',
-        provider: 'anthropic',
-        reason: 'polish_refinement_required'
-      };
+      return { required: true, model: 'claude-sonnet-4-6', provider: 'anthropic', reason: 'polish_refinement_required' };
     }
-    
     return { required: false };
   }
   
-  /**
-   * EXTERNAL API CALLS
-   */
   async callExternalAPI(provider, model, input, requestId) {
     switch (provider) {
-      case 'openai':
-        return await this.callOpenAI(model, input, requestId);
-      case 'anthropic':
-        return await this.callAnthropic(model, input, requestId);
-      case 'gemini':
-        return await this.callGemini(model, input, requestId);
-      default:
-        throw new Error(`Unknown provider: ${provider}`);
+      case 'openai':    return await this.callOpenAI(model, input, requestId);
+      case 'anthropic': return await this.callAnthropic(model, input, requestId);
+      case 'gemini':    return await this.callGemini(model, input, requestId);
+      default: throw new Error(`Unknown provider: ${provider}`);
     }
   }
   
   async callOpenAI(model, input, requestId) {
     const provider = this.externalModels.openai;
-    
-    const payload = {
-      model: model,
+    const response = await axios.post(`${provider.baseURL}/chat/completions`, {
+      model,
       messages: this.formatMessages(input),
-      max_tokens: provider.models[model].maxTokens,
+      max_tokens: provider.models[model]?.maxTokens ?? 4096,
       temperature: 0.7
-    };
-    
-    const response = await axios.post(`${provider.baseURL}/chat/completions`, payload, {
-      headers: {
-        'Authorization': `Bearer ${provider.apiKey}`,
-        'Content-Type': 'application/json'
-      },
+    }, {
+      headers: { 'Authorization': `Bearer ${provider.apiKey}`, 'Content-Type': 'application/json' },
       timeout: this.config.externalTimeout
     });
-    
     return {
       text: response.data.choices[0].message.content,
-      model: model,
+      model,
       usage: response.data.usage,
-      confidence: 0.9 // OpenAI typically has high confidence
+      confidence: 0.9
     };
   }
   
   async callAnthropic(model, input, requestId) {
     const provider = this.externalModels.anthropic;
-    
-    const payload = {
-      model: model,
-      max_tokens: provider.models[model].maxTokens,
+    const response = await axios.post(`${provider.baseURL}/messages`, {
+      model,
+      max_tokens: provider.models[model]?.maxTokens ?? 4096,
       messages: this.formatMessages(input)
-    };
-    
-    const response = await axios.post(`${provider.baseURL}/messages`, payload, {
+    }, {
       headers: {
         'x-api-key': provider.apiKey,
         'Content-Type': 'application/json',
@@ -724,12 +561,26 @@ class HybridModelStack extends EventEmitter {
       },
       timeout: this.config.externalTimeout
     });
-    
     return {
       text: response.data.content[0].text,
-      model: model,
+      model,
       usage: response.data.usage,
       confidence: 0.9
+    };
+  }
+  
+  async callGemini(model, input, requestId) {
+    const provider = this.externalModels.gemini;
+    const response = await axios.post(
+      `${provider.baseURL}/models/${model}:generateContent?key=${provider.apiKey}`,
+      { contents: [{ parts: [{ text: this.formatGeminiInput(input) }] }] },
+      { headers: { 'Content-Type': 'application/json' }, timeout: this.config.externalTimeout }
+    );
+    return {
+      text: response.data.candidates[0].content.parts[0].text,
+      model,
+      usage: response.data.usageMetadata,
+      confidence: 0.85
     };
   }
   
@@ -744,57 +595,15 @@ class HybridModelStack extends EventEmitter {
     }));
   }
   
-  getStatus() {
-    return {
-      availableModels: this.availableModels.length,
-      activeModel: this.activeModel,
-      metrics: { ...this.metrics },
-      config: this.config
-    };
-  }
-  
-  async callGemini(model, input, requestId) {
-    const provider = this.externalModels.gemini;
-    
-    const payload = {
-      contents: [{
-        parts: [{
-          text: this.formatGeminiInput(input)
-        }]
-      }]
-    };
-    
-    const response = await axios.post(`${provider.baseURL}/models/${model}:generateContent`, payload, {
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      timeout: this.config.externalTimeout
-    });
-    
-    return {
-      text: response.data.candidates[0].content.parts[0].text,
-      model: model,
-      usage: response.data.usageMetadata,
-      confidence: 0.85
-    };
-  }
-  
-  /**
-   * UTILITY METHODS
-   */
   mapTaskType(taskType) {
     const mapping = {
-      'revenue': 'reasoning',
-      'analysis': 'reasoning',
-      'planning': 'reasoning',
+      'revenue': 'reasoning', 'analysis': 'reasoning', 'planning': 'reasoning',
       'classification': 'fast',
       'code': 'code',
       'security': 'security',
       'database': 'database',
-      'analytics': 'analytics',
-      'prediction': 'analytics'
+      'analytics': 'analytics', 'prediction': 'analytics'
     };
-    
     return mapping[taskType] || 'general';
   }
   
@@ -809,39 +618,24 @@ class HybridModelStack extends EventEmitter {
   
   formatMessages(input) {
     const messages = [];
-    
-    if (input.context.system) {
-      messages.push({ role: 'system', content: input.context.system });
-    }
-    
+    if (input.context.system) messages.push({ role: 'system', content: input.context.system });
     messages.push({ role: 'user', content: input.instruction });
-    
     return messages;
   }
   
   formatGeminiInput(input) {
     let text = '';
-    
-    if (input.context.system) {
-      text += `System: ${input.context.system}\n\n`;
-    }
-    
+    if (input.context.system) text += `System: ${input.context.system}\n\n`;
     text += `User: ${input.instruction}`;
-    
     return text;
   }
   
   assessQuality(result) {
-    // Simple quality assessment based on confidence and content
     const confidence = result.confidence || 0.5;
     const textLength = result.text ? result.text.length : 0;
-    
-    // Adjust confidence based on output quality
     let adjustedConfidence = confidence;
-    
-    if (textLength < 50) adjustedConfidence -= 0.2; // Too short
-    if (textLength > 5000) adjustedConfidence -= 0.1; // Too long (might be rambling)
-    
+    if (textLength < 50)   adjustedConfidence -= 0.2;
+    if (textLength > 5000) adjustedConfidence -= 0.1;
     return {
       confidence: Math.max(0.1, Math.min(0.99, adjustedConfidence)),
       textLength,
@@ -855,41 +649,30 @@ class HybridModelStack extends EventEmitter {
     if (!providerConfig) return 0;
     const modelConfig = providerConfig.models[model];
     if (!modelConfig) return 0;
-    
-    // Estimate tokens (rough calculation)
-    const estimatedTokens = this.estimateTokens(input);
-    
-    return (estimatedTokens / 1000) * modelConfig.costPer1kTokens;
+    return (this.estimateTokens(input) / 1000) * modelConfig.costPer1kTokens;
+  }
+
+  estimateCost(task) {
+    const input = this.prepareInput(task);
+    return this.calculateCost('openai', 'gpt-3.5-turbo', input);
   }
   
   estimateTokens(input) {
     const text = typeof input === 'string' ? input : JSON.stringify(input);
-    // Rough estimate: ~4 characters per token
     return Math.ceil(text.length / 4);
   }
   
   trackCost(cost, provider, model) {
     this.costTracker.daily += cost;
     this.costTracker.total += cost;
+    this.costTracker.requests.push({ timestamp: Date.now(), cost, provider, model, daily: this.costTracker.daily });
     
-    this.costTracker.requests.push({
-      timestamp: Date.now(),
-      cost,
-      provider,
-      model,
-      daily: this.costTracker.daily
-    });
-    
-    // Emit cost tracking event
     this.emit('cost_tracked', {
-      cost,
-      provider,
-      model,
+      cost, provider, model,
       dailyTotal: this.costTracker.daily,
       remainingBudget: this.config.dailyBudget - this.costTracker.daily
     });
     
-    // Check budget warning
     if (this.costTracker.daily >= this.config.dailyBudget * 0.8) {
       this.emit('budget_warning', {
         used: this.costTracker.daily,
@@ -901,11 +684,8 @@ class HybridModelStack extends EventEmitter {
   
   trackPerformance(strategy, result, latency) {
     const perf = this.performance[strategy.type];
-    
     if (result.success !== false) {
       perf.success++;
-      
-      // Update average latency
       perf.avgLatency = (perf.avgLatency * (perf.success - 1) + latency) / perf.success;
     } else {
       perf.failure++;
@@ -914,7 +694,6 @@ class HybridModelStack extends EventEmitter {
   
   checkExternalAPIs() {
     const available = [];
-    
     for (const [provider, config] of Object.entries(this.externalModels)) {
       if (config.apiKey) {
         available.push(provider);
@@ -923,27 +702,25 @@ class HybridModelStack extends EventEmitter {
         console.log(`[HYBRID STACK] ${provider.toUpperCase()} API key NOT configured`);
       }
     }
-    
     console.log(`[HYBRID STACK] External providers available: ${available.length} (${available.join(', ')})`);
   }
   
   startCostMonitoring() {
-    // Reset daily cost at midnight
-    setInterval(() => {
+    this.costMonitorTimer = setInterval(() => {
       const now = new Date();
       const lastReset = new Date(this.costTracker.lastReset);
-      
       if (now.getDate() !== lastReset.getDate() || now.getMonth() !== lastReset.getMonth()) {
         console.log(`[HYBRID STACK] Resetting daily cost tracker. Yesterday: $${this.costTracker.daily.toFixed(4)}`);
         this.costTracker.daily = 0;
         this.costTracker.lastReset = Date.now();
       }
-    }, 60000); // Check every minute
+    }, 60000);
+  }
+
+  destroy() {
+    clearInterval(this.costMonitorTimer);
   }
   
-  /**
-   * STATUS AND MONITORING
-   */
   getStatus() {
     return {
       config: this.config,
@@ -955,7 +732,7 @@ class HybridModelStack extends EventEmitter {
       },
       performance: { ...this.performance },
       models: {
-        local: this.localModels.getModelStatus(),
+        available: this.availableModels.length,
         external: Object.keys(this.externalModels).filter(p => this.externalModels[p].apiKey)
       }
     };
@@ -974,6 +751,9 @@ class HybridModelStack extends EventEmitter {
     };
     
     console.log('[HYBRID STACK] Reset completed');
+    
+    // Re-initialize after reset
+    await this.initialize();
   }
 }
 
