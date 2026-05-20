@@ -150,6 +150,28 @@ app.delete('/session/:id', async (req, res) => {
 const CascadeEngineV3 = require('./cascade-v3-clean');
 const cascade = new CascadeEngineV3();
 
+// ── Autonomous Task Queue (Phase 5) ─────────────────────────────────────────
+const AutonomousTaskQueue = require('./autonomous-task-queue');
+const atq = new AutonomousTaskQueue(db, cascade);
+atq.start(6000); // background tick every 6 seconds
+
+// Inspect the autonomous queue state
+app.get('/queue', (req, res) => {
+  res.json(atq.snapshot());
+});
+
+// Manually enqueue an autonomous task
+app.post('/queue/enqueue', (req, res) => {
+  const { type, context = {}, priority = 'normal' } = req.body;
+  const allowed = ['introspect_health', 'validate_cascade', 'check_task_backlog',
+                   'check_ollama', 'synthesize_insight', 'summarize_history'];
+  if (!allowed.includes(type)) {
+    return res.status(400).json({ error: `Unknown task type. Allowed: ${allowed.join(', ')}` });
+  }
+  const id = atq.enqueue(type, context, priority);
+  res.json({ success: true, id });
+});
+
 // CASCADE AGENT ENDPOINTS - Early-Stage COO Intelligence
 
 // CASCADE v3 ENDPOINTS - Anti-Misalignment Layer
