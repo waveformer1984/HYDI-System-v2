@@ -231,6 +231,8 @@ const optimizer = new HydiDevOptimizer({
   autoCreatePRs: process.env.AUTO_CREATE_PRS === 'true',
   githubToken: process.env.GITHUB_TOKEN,
 });
+global.devOptimizer = optimizer;
+global._hydiOptimizer = optimizer; // ATQ nightly scan hook
 optimizer.on('optimization-complete', ({ issueCount, fixCount, executionTime }) =>
   console.log(`[OPT] Cycle complete: ${issueCount} issues, ${fixCount} fixes (${executionTime}ms)`));
 optimizer.on('optimization-error', ({ error }) =>
@@ -245,7 +247,7 @@ app.get('/queue', (req, res) => {
 app.post('/queue/enqueue', (req, res) => {
   const { type, context = {}, priority = 'normal' } = req.body;
   const allowed = ['introspect_health', 'validate_cascade', 'check_task_backlog',
-                   'check_ollama', 'synthesize_insight', 'summarize_history'];
+                   'check_ollama', 'synthesize_insight', 'summarize_history', 'run_optimizer_scan'];
   if (!allowed.includes(type)) {
     return res.status(400).json({ error: `Unknown task type. Allowed: ${allowed.join(', ')}` });
   }
@@ -1366,6 +1368,9 @@ initDB().then(() => {
   if (p5.patterns.length > 0 || p5.insights.length > 0) {
     console.log(`[DB] Phase 5 restored: ${p5.patterns.length} patterns, ${p5.insights.length} insights`);
   }
+
+  // Seed nightly optimizer scan into ATQ (runs once per 24h, self-reschedules)
+  atq.enqueue('run_optimizer_scan', {}, 'low');
 
   app.listen(PORT, () => {
     console.log(`\n╔══════════════════════════════════╗`);
