@@ -59,6 +59,8 @@ app.post('/think', async (req, res) => {
   const { input, sessionId = 'default' } = req.body;
   if (!input) return res.status(400).json({ error: 'input required' });
 
+  const startTime = Date.now();
+
   try {
     // Load session history
     await db.read();
@@ -73,11 +75,12 @@ app.post('/think', async (req, res) => {
       .map(h => `User: ${h.input}\nHEIDI: ${h.response}`)
       .join('\n');
 
-    const systemPrompt = `You are HEIDI, the intelligent core of the ProtoForge system. 
+    const systemPrompt = `You are HEIDI, the intelligent core of the ProtoForge system.
 You are a task router and assistant. Be concise and direct.
 Recent conversation:\n${recentHistory}`;
 
     const response = await callOllama(input, systemPrompt);
+    const executionTime = Date.now() - startTime;
 
     // Save to memory
     session.history.push({
@@ -87,7 +90,20 @@ Recent conversation:\n${recentHistory}`;
     });
     await db.write();
 
-    res.json({ response, sessionId, model: MODEL });
+    // Feed meta-cognition evaluator asynchronously — does not block response
+    const thinkResult = {
+      query: input,
+      response,
+      sessionId,
+      model: MODEL,
+      executionTime,
+      thinkingProcess: [], // llama3.2 doesn't expose chain-of-thought
+      cascadeLookups: [],  // not wired to CASCADE yet
+      confidence: 0.7,     // default prior
+    };
+    metaCognition.evaluateReasoningQuality(thinkResult).catch(() => {});
+
+    res.json({ response, sessionId, model: MODEL, executionTime });
   } catch (err) {
     console.error('[think] error:', err.message);
     res.status(500).json({ error: err.message });
@@ -150,10 +166,31 @@ app.delete('/session/:id', async (req, res) => {
 const CascadeEngineV3 = require('./cascade-v3-clean');
 const cascade = new CascadeEngineV3();
 
-// ── Autonomous Task Queue (Phase 5) ─────────────────────────────────────────
+// ── Autonomous Task Queue (Phase 5.1) ───────────────────────────────────────
 const AutonomousTaskQueue = require('./autonomous-task-queue');
 const atq = new AutonomousTaskQueue(db, cascade);
+atq.enqueueTask = (type, ctx, priority) => atq.enqueue(type, ctx, priority); // alias for Phase 5.2+
 atq.start(6000); // background tick every 6 seconds
+
+// ── Meta-Cognition + Knowledge Synthesis (Phase 5.2 / 5.3) ─────────────────
+const MetaCognitiveLoop = require('./meta-cognition');
+const KnowledgeSynthesisEngine = require('./knowledge-synthesis');
+
+const metaCognition = new MetaCognitiveLoop({ cascadeSystem: cascade, autonomousQueue: atq });
+const synthesis = new KnowledgeSynthesisEngine({
+  cascadeSystem: cascade,
+  autonomousQueue: atq,
+  metaCognition,
+});
+
+metaCognition.on('pattern-extracted', ({ patternId, qualityScore }) =>
+  console.log(`[MC] Pattern extracted: ${patternId} (score: ${qualityScore.toFixed(2)})`));
+metaCognition.on('reasoning-failure-detected', ({ primaryIssue }) =>
+  console.warn(`[MC] Reasoning gap: ${primaryIssue}`));
+synthesis.on('insight-synthesized', ({ relationshipType, confidence }) =>
+  console.log(`[KS] Insight: ${relationshipType} (confidence: ${confidence.toFixed(2)})`));
+synthesis.on('synthesis-complete', ({ patternCount, insightCount, executionTime }) =>
+  console.log(`[KS] Synthesis: ${patternCount} patterns → ${insightCount} insights (${executionTime}ms)`));
 
 // Inspect the autonomous queue state
 app.get('/queue', (req, res) => {
@@ -170,6 +207,58 @@ app.post('/queue/enqueue', (req, res) => {
   }
   const id = atq.enqueue(type, context, priority);
   res.json({ success: true, id });
+});
+
+// ── Phase 5 Meta-Cognition + Knowledge Synthesis endpoints ──────────────────
+
+// Overall Phase 5 status
+app.get('/phase5/status', (req, res) => {
+  res.json({
+    meta_cognition: metaCognition.getInsights(),
+    knowledge_synthesis: synthesis.getStatistics(),
+    evolution: synthesis.getEvolutionAnalysis(),
+  });
+});
+
+// Recent reasoning evaluations
+app.get('/phase5/evaluations', (req, res) => {
+  const limit = parseInt(req.query.limit) || 10;
+  res.json({
+    evaluations: metaCognition.evaluationHistory.slice(-limit),
+    total: metaCognition.evaluationHistory.length,
+  });
+});
+
+// Recent synthesized insights
+app.get('/phase5/insights', (req, res) => {
+  const limit = parseInt(req.query.limit) || 10;
+  const insights = Array.from(synthesis.discoveredInsights.values())
+    .sort((a, b) => b.timestamp - a.timestamp)
+    .slice(0, limit);
+  res.json({ insights, total: synthesis.discoveredInsights.size });
+});
+
+// Find insights relevant to a query
+app.post('/phase5/insights/search', async (req, res) => {
+  const { query } = req.body;
+  if (!query) return res.status(400).json({ error: 'query required' });
+  const relevant = await synthesis.findRelevantInsights(query);
+  res.json({ results: relevant });
+});
+
+// Trigger a synthesis cycle on demand
+app.post('/phase5/synthesize', async (req, res) => {
+  try {
+    const result = await synthesis.synthesizeNewInsights();
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Export all discovered knowledge
+app.get('/phase5/export', (req, res) => {
+  res.json(synthesis.exportDiscoveries());
 });
 
 // CASCADE AGENT ENDPOINTS - Early-Stage COO Intelligence
