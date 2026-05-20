@@ -68,6 +68,11 @@ class HeidiMemorySystem extends EventEmitter {
     // Drift score (also stored in reflectiveMemory.driftScore, but tracked here too)
     this.driftScore = 0;
 
+    // Timer handles — stored so destroy() can clear them
+    this.cleanupTimer = null;
+    this.reflectionTimer = null;
+    this.persistTimer = null;
+
     // Initialize storage
     this.initialize();
 
@@ -866,24 +871,27 @@ class HeidiMemorySystem extends EventEmitter {
   }
   
   startMaintenanceTasks() {
-    // Clean up expired session memory
-    setInterval(() => {
+    this.cleanupTimer = setInterval(() => {
       this.cleanupSessionMemory();
-    }, 60000); // Every minute
-    
-    // Run reflection cycle
-    setInterval(() => {
+    }, 60000);
+
+    this.reflectionTimer = setInterval(() => {
       if (Date.now() - this.reflectiveMemory.lastReflection >= this.config.reflectionInterval) {
         this.runReflection().catch(error => {
           console.error('[MEMORY] Reflection cycle failed:', error.message);
         });
       }
-    }, 60000); // Check every minute
-    
-    // Persist reflective memory
-    setInterval(() => {
+    }, 60000);
+
+    this.persistTimer = setInterval(() => {
       this.persistReflectiveMemory();
-    }, 300000); // Every 5 minutes
+    }, 300000);
+  }
+
+  destroy() {
+    clearInterval(this.cleanupTimer);
+    clearInterval(this.reflectionTimer);
+    clearInterval(this.persistTimer);
   }
   
   cleanupSessionMemory() {

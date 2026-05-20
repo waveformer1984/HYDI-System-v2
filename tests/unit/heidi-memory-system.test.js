@@ -45,6 +45,15 @@ function makeMemory(cfg = {}) {
 
 describe('HeidiMemorySystem', () => {
 
+  beforeEach(() => {
+    jest.useFakeTimers();
+  });
+
+  afterEach(() => {
+    jest.clearAllTimers();
+    jest.useRealTimers();
+  });
+
   // ── Constructor ───────────────────────────────────────────────────────────
 
   describe('constructor', () => {
