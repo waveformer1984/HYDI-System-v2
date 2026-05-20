@@ -491,6 +491,10 @@ class GlobalDriftEvaluator {
                 authority_level: 'parameter_adjustment',
                 constraint: 'meta_regulation_only'
             };
+        }
+
+        return adaptation;
+    }
 
     // SYSTEM ADAPTATION RULES
 
