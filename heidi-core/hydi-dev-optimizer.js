@@ -9,8 +9,10 @@
 
 const EventEmitter = require('events');
 const fs = require('fs').promises;
+const fsSync = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const { execSync } = require('child_process');
 
 class HydiDevOptimizer extends EventEmitter {
   constructor(config = {}) {
@@ -124,162 +126,219 @@ class HydiDevOptimizer extends EventEmitter {
   }
 
   /**
-   * Detect performance drift patterns
+   * Collect .js/.ts files under a directory (max depth 6, skips node_modules/.git)
+   */
+  async collectSourceFiles(dir, depth = 0) {
+    if (depth > 6) return [];
+    const files = [];
+    let entries;
+    try { entries = await fs.readdir(dir, { withFileTypes: true }); } catch { return []; }
+    for (const e of entries) {
+      if (['.git', 'node_modules', 'dist', 'build', '.next', 'coverage'].includes(e.name)) continue;
+      const full = path.join(dir, e.name);
+      if (e.isDirectory()) files.push(...await this.collectSourceFiles(full, depth + 1));
+      else if (/\.(js|ts|mjs|cjs)$/.test(e.name)) files.push(full);
+    }
+    return files;
+  }
+
+  /**
+   * Detect performance drift patterns via actual file content scan
    */
   async detectPerformanceDrift(codebasePath) {
     const issues = [];
 
-    // Look for common performance antipatterns
     const antipatterns = [
       {
-        pattern: /\.map\s*\(\s*.*\)\.filter\s*\(\s*.*\)/,
-        message: 'Use map+filter optimization pattern',
+        pattern: /\.map\([^)]*\)\.filter\(/,
+        message: 'map().filter() chain — combine into single .reduce() pass',
         severity: 2,
-        fix: 'Combine map and filter into single pass'
-      },
-      {
-        pattern: /for\s*\(\s*let\s+\w+\s*=\s*0\s*;\s*\w+\s*<\s*\w+\.length\s*;/,
-        message: 'Replace imperative loop with array methods',
-        severity: 1,
-        fix: 'Use forEach/map/filter for clarity and optimization'
+        fix: 'Replace .map().filter() with a single .reduce() or .flatMap() to avoid two iterations'
       },
       {
         pattern: /JSON\.parse\s*\(\s*JSON\.stringify\s*\(/,
-        message: 'Deep clone pattern detected - consider structuredClone',
+        message: 'JSON deep-clone detected — use structuredClone()',
         severity: 2,
-        fix: 'Use structuredClone or library for deep copy'
+        fix: 'Replace JSON.parse(JSON.stringify(x)) with structuredClone(x) (Node 17+)'
       },
       {
-        pattern: /async\s+\w+\s*\([^)]*\)\s*{[^}]*await\s+\w+\s*\([^)]*\)\s*;[^}]*await\s+\w+\s*\([^)]*\)/,
-        message: 'Sequential async operations detected',
+        pattern: /new\s+Promise\s*\(\s*(?:async\s+)?\(\s*resolve\s*,\s*reject\s*\)\s*=>\s*\{\s*(?:const\s+\w+\s*=\s*)?await\s+/,
+        message: 'Unnecessary Promise constructor wrapping an async operation',
         severity: 2,
-        fix: 'Use Promise.all() for parallel async operations'
+        fix: 'Remove the Promise constructor wrapper — async functions already return promises'
+      },
+      {
+        pattern: /for\s*\(\s*(?:let|var)\s+\w+\s*=\s*0\s*;\s*\w+\s*<\s*\w+\.length\s*;/,
+        message: 'Manual indexed loop — prefer array method',
+        severity: 1,
+        fix: 'Use forEach/map/filter/reduce for clarity and JIT-friendliness'
       }
     ];
 
-    for (const ap of antipatterns) {
-      // This is a simplified scan - real implementation would traverse files
-      issues.push({
-        type: 'performance-drift',
-        pattern: ap.pattern.source,
-        message: ap.message,
-        severity: ap.severity,
-        fix: ap.fix,
-        detectedAt: new Date().toISOString()
-      });
+    const files = await this.collectSourceFiles(codebasePath);
+
+    for (const file of files) {
+      let content;
+      try { content = await fs.readFile(file, 'utf8'); } catch { continue; }
+      for (const ap of antipatterns) {
+        const match = ap.pattern.exec(content);
+        if (match) {
+          const lineNo = content.slice(0, match.index).split('\n').length;
+          issues.push({
+            type: 'performance-drift',
+            file: path.relative(codebasePath, file),
+            line: lineNo,
+            message: ap.message,
+            severity: ap.severity,
+            fix: ap.fix,
+            detectedAt: new Date().toISOString()
+          });
+        }
+      }
     }
 
     return issues;
   }
 
   /**
-   * Detect syntax and code quality issues
+   * Detect syntax errors by running node --check on each JS file
    */
   async detectSyntaxErrors(codebasePath) {
     const issues = [];
+    const files = await this.collectSourceFiles(codebasePath);
 
-    // Would typically use ESLint, but this is the pattern
-    const codeQualityChecks = [
-      {
-        name: 'unused-variables',
-        message: 'Unused variable declarations',
-        severity: 1
-      },
-      {
-        name: 'unreachable-code',
-        message: 'Code after return statement',
-        severity: 3
-      },
-      {
-        name: 'missing-error-handling',
-        message: 'Async operation without try-catch',
-        severity: 2
+    for (const file of files) {
+      if (/\.ts$/.test(file)) continue; // skip TypeScript — needs tsc
+      try {
+        execSync(`node --check "${file}"`, { stdio: 'pipe', timeout: 5000 });
+      } catch (err) {
+        const msg = (err.stderr || err.stdout || '').toString().trim().split('\n')[0];
+        issues.push({
+          type: 'syntax-error',
+          file: path.relative(codebasePath, file),
+          message: msg || 'Syntax error detected',
+          severity: 3,
+          fix: 'Fix the syntax error reported by node --check',
+          detectedAt: new Date().toISOString()
+        });
       }
-    ];
-
-    for (const check of codeQualityChecks) {
-      // Placeholder for actual ESLint/analysis
-      issues.push({
-        type: 'code-quality',
-        checkName: check.name,
-        message: check.message,
-        severity: check.severity,
-        detectedAt: new Date().toISOString()
-      });
     }
 
     return issues;
   }
 
   /**
-   * Detect database bottlenecks
+   * Detect database bottleneck patterns via file content scan
    */
   async detectDatabaseBottlenecks(codebasePath) {
     const issues = [];
 
-    const dbPatterns = [
+    // Detect query-inside-loop: await db/supabase/prisma call inside a for/while/forEach body
+    const loopQueryPattern = /(?:for\s*\(|while\s*\(|\.forEach\s*\()[\s\S]{0,300}?await\s+(?:db|supabase|prisma|pool|client|knex|mongoose)\b/;
+    // Detect .select('*') — over-fetching columns
+    const selectStarPattern = /\.select\(\s*['"`]\*['"`]\s*\)/;
+    // Detect missing .limit() on queries that fetch collections
+    const unboundedQueryPattern = /(?:supabase|prisma|db)\.[a-z]+\.[a-z]+\([^)]*\)(?!\s*\.limit\b)(?!\s*\.take\b)(?!\s*\.first\b)/;
+
+    const dbChecks = [
       {
-        pattern: 'N+1 queries',
-        message: 'Query in loop detected - use JOIN or batch query',
+        pattern: loopQueryPattern,
+        message: 'Database query inside a loop (potential N+1)',
         severity: 3,
-        fix: 'Refactor to single batch query'
+        fix: 'Batch the queries: collect IDs first, then fetch all in one query using .in() or WHERE IN'
       },
       {
-        pattern: 'Missing indexes',
-        message: 'WHERE clause on unindexed column',
-        severity: 2,
-        fix: 'Add database index on frequently queried column'
-      },
-      {
-        pattern: 'Connection pool exhaustion',
-        message: 'Connection pool size too small for load',
-        severity: 2,
-        fix: 'Increase pool size or implement connection reuse'
+        pattern: selectStarPattern,
+        message: 'SELECT * detected — fetches unused columns',
+        severity: 1,
+        fix: 'Select only the columns you need: .select("id, name, created_at")'
       }
     ];
 
-    for (const bp of dbPatterns) {
-      // Placeholder - real implementation would analyze DB queries
-      issues.push({
-        type: 'database-bottleneck',
-        pattern: bp.pattern,
-        message: bp.message,
-        severity: bp.severity,
-        fix: bp.fix,
-        detectedAt: new Date().toISOString()
-      });
+    const files = await this.collectSourceFiles(codebasePath);
+
+    for (const file of files) {
+      let content;
+      try { content = await fs.readFile(file, 'utf8'); } catch { continue; }
+      for (const check of dbChecks) {
+        const match = check.pattern.exec(content);
+        if (match) {
+          const lineNo = content.slice(0, match.index).split('\n').length;
+          issues.push({
+            type: 'database-bottleneck',
+            file: path.relative(codebasePath, file),
+            line: lineNo,
+            message: check.message,
+            severity: check.severity,
+            fix: check.fix,
+            detectedAt: new Date().toISOString()
+          });
+        }
+      }
     }
 
     return issues;
   }
 
   /**
-   * Detect security vulnerabilities
+   * Detect dependency vulnerabilities via npm audit --json
    */
   async detectVulnerabilities(codebasePath) {
     const issues = [];
 
-    // Would use npm audit or similar
-    const vulnerabilityChecks = [
-      {
-        package: 'example-outdated-package',
-        currentVersion: '1.0.0',
-        latestVersion: '3.5.2',
-        severity: 2,
-        advisory: 'Security vulnerability in old version'
-      }
-    ];
+    // Find the nearest package.json
+    let pkgDir = codebasePath;
+    while (pkgDir !== path.dirname(pkgDir)) {
+      if (fsSync.existsSync(path.join(pkgDir, 'package.json'))) break;
+      pkgDir = path.dirname(pkgDir);
+    }
+    if (!fsSync.existsSync(path.join(pkgDir, 'package.json'))) return [];
+    if (!fsSync.existsSync(path.join(pkgDir, 'node_modules'))) return [];
 
-    for (const vuln of vulnerabilityChecks) {
-      issues.push({
-        type: 'vulnerability',
-        package: vuln.package,
-        currentVersion: vuln.currentVersion,
-        latestVersion: vuln.latestVersion,
-        severity: vuln.severity,
-        advisory: vuln.advisory,
-        detectedAt: new Date().toISOString()
-      });
+    try {
+      const raw = execSync('npm audit --json', {
+        cwd: pkgDir,
+        stdio: 'pipe',
+        timeout: 30000
+      }).toString();
+      const audit = JSON.parse(raw);
+      const vulns = audit.vulnerabilities || {};
+
+      for (const [pkg, info] of Object.entries(vulns)) {
+        const severityMap = { critical: 4, high: 3, moderate: 2, low: 1, info: 0 };
+        issues.push({
+          type: 'vulnerability',
+          package: pkg,
+          severity: severityMap[info.severity] ?? 1,
+          severityLabel: info.severity,
+          fixAvailable: info.fixAvailable === true,
+          advisory: (info.via || []).filter(v => typeof v === 'object').map(v => v.title).join('; ') || 'See npm audit',
+          fix: info.fixAvailable === true ? `npm audit fix` : `Review manually: npm audit --package ${pkg}`,
+          detectedAt: new Date().toISOString()
+        });
+      }
+    } catch (err) {
+      // npm audit exits non-zero when vulns found; parse JSON from stdout anyway
+      try {
+        const raw = (err.stdout || '').toString();
+        if (raw.startsWith('{')) {
+          const audit = JSON.parse(raw);
+          const vulns = audit.vulnerabilities || {};
+          for (const [pkg, info] of Object.entries(vulns)) {
+            const severityMap = { critical: 4, high: 3, moderate: 2, low: 1, info: 0 };
+            issues.push({
+              type: 'vulnerability',
+              package: pkg,
+              severity: severityMap[info.severity] ?? 1,
+              severityLabel: info.severity,
+              fixAvailable: info.fixAvailable === true,
+              advisory: (info.via || []).filter(v => typeof v === 'object').map(v => v.title).join('; ') || 'See npm audit',
+              fix: info.fixAvailable === true ? 'npm audit fix' : `Review manually: npm audit --package ${pkg}`,
+              detectedAt: new Date().toISOString()
+            });
+          }
+        }
+      } catch { /* audit not available or no package.json */ }
     }
 
     return issues;

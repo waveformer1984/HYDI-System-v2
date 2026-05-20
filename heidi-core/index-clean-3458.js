@@ -17,13 +17,34 @@ const MODEL = 'llama3.2:latest'; // change to qwen2.5-coder:1.5b if preferred
 // ── DB setup ────────────────────────────────────────────────────────────────
 const dbFile = path.join(__dirname, 'heidi-memory.json');
 const adapter = new JSONFile(dbFile);
-const db = new Low(adapter, { sessions: [], tasks: [] });
+const db = new Low(adapter, { sessions: [], tasks: [], phase5: { patterns: [], insights: [] } });
 
 async function initDB() {
   await db.read();
-  db.data ||= { sessions: [], tasks: [] };
+  db.data ||= { sessions: [], tasks: [], phase5: { patterns: [], insights: [] } };
+  db.data.phase5 ||= { patterns: [], insights: [] };
   await db.write();
   console.log(`[DB] Memory file: ${dbFile}`);
+}
+
+async function persistPhase5Pattern(patternId) {
+  const pattern = metaCognition.reasoningPatterns.get(patternId);
+  if (!pattern) return;
+  await db.read();
+  const idx = db.data.phase5.patterns.findIndex(p => p.id === patternId);
+  if (idx >= 0) db.data.phase5.patterns[idx] = pattern;
+  else db.data.phase5.patterns.push(pattern);
+  await db.write();
+}
+
+async function persistPhase5Insight(insightId) {
+  const insight = synthesis.discoveredInsights.get(insightId);
+  if (!insight) return;
+  await db.read();
+  const idx = db.data.phase5.insights.findIndex(i => i.id === insightId);
+  if (idx >= 0) db.data.phase5.insights[idx] = insight;
+  else db.data.phase5.insights.push(insight);
+  await db.write();
 }
 
 // ── Helper: call Ollama ──────────────────────────────────────────────────────
@@ -189,12 +210,16 @@ const synthesis = new KnowledgeSynthesisEngine({
   metaCognition,
 });
 
-metaCognition.on('pattern-extracted', ({ patternId, qualityScore }) =>
-  console.log(`[MC] Pattern extracted: ${patternId} (score: ${qualityScore.toFixed(2)})`));
+metaCognition.on('pattern-extracted', ({ patternId, qualityScore }) => {
+  console.log(`[MC] Pattern extracted: ${patternId} (score: ${qualityScore.toFixed(2)})`);
+  persistPhase5Pattern(patternId).catch(() => {});
+});
 metaCognition.on('reasoning-failure-detected', ({ primaryIssue }) =>
   console.warn(`[MC] Reasoning gap: ${primaryIssue}`));
-synthesis.on('insight-synthesized', ({ relationshipType, confidence }) =>
-  console.log(`[KS] Insight: ${relationshipType} (confidence: ${confidence.toFixed(2)})`));
+synthesis.on('insight-synthesized', ({ insightId, relationshipType, confidence }) => {
+  console.log(`[KS] Insight: ${relationshipType} (confidence: ${confidence.toFixed(2)})`);
+  persistPhase5Insight(insightId).catch(() => {});
+});
 synthesis.on('synthesis-complete', ({ patternCount, insightCount, executionTime }) =>
   console.log(`[KS] Synthesis: ${patternCount} patterns → ${insightCount} insights (${executionTime}ms)`));
 
@@ -1330,6 +1355,18 @@ app.get('/optimizer/recent', async (req, res) => {
 
 // ── Start ─────────────────────────────────────────────────────────────────────
 initDB().then(() => {
+  // Restore Phase 5 patterns and insights from persistent storage
+  const p5 = db.data.phase5 || { patterns: [], insights: [] };
+  for (const pattern of p5.patterns) {
+    metaCognition.reasoningPatterns.set(pattern.id, pattern);
+  }
+  for (const insight of p5.insights) {
+    synthesis.discoveredInsights.set(insight.id, insight);
+  }
+  if (p5.patterns.length > 0 || p5.insights.length > 0) {
+    console.log(`[DB] Phase 5 restored: ${p5.patterns.length} patterns, ${p5.insights.length} insights`);
+  }
+
   app.listen(PORT, () => {
     console.log(`\n╔══════════════════════════════════╗`);
     console.log(`║  HEIDI Core running on :${PORT}   ║`);
