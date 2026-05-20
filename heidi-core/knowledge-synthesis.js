@@ -410,30 +410,48 @@ class KnowledgeSynthesisEngine extends EventEmitter {
   /**
    * Find insights that could improve specific reasoning task
    */
-  async findRelevantInsights(query) {
-    const relevant = [];
+  async findRelevantInsights(query, limit = 5) {
+    // Retrieval is intentionally looser than synthesis pairing (0.25 vs 0.7).
+    // Scored by query-recall (intersection / queryWords) not Jaccard, because
+    // insight content is verbose — a single shared concept is still signal.
+    const RETRIEVAL_THRESHOLD = 0.25;
 
-    for (const [id, insight] of this.discoveredInsights) {
-      const queryWords = new Set(query.toLowerCase().split(/\s+/));
-      const insightWords = new Set(
-        (insight.content + insight.sourcePatterns.join(' ')).toLowerCase().split(/\s+/)
+    try {
+      const queryWords = new Set(
+        query.toLowerCase().split(/\s+/).filter(w => w.length > 3)
       );
+      if (queryWords.size === 0) return [];
 
-      const intersection = new Set([...queryWords].filter(x => insightWords.has(x)));
-      const similarity = intersection.size / Math.max(queryWords.size, insightWords.size);
+      const candidates = [];
 
-      if (similarity > this.synthesisConfig.similarityThreshold) {
-        relevant.push({
-          insightId: insight.id,
-          similarity,
-          confidence: insight.confidence,
-          content: insight.content,
-          applicability: insight.applicability
-        });
+      for (const insight of this.discoveredInsights.values()) {
+        const insightWords = new Set(
+          (insight.content + ' ' + (insight.sharedConcepts || []).join(' '))
+            .toLowerCase().split(/\s+/).filter(w => w.length > 3)
+        );
+
+        const intersection = new Set([...queryWords].filter(x => insightWords.has(x)));
+        // Query-recall: what fraction of the query's keywords appear in this insight
+        const similarity = intersection.size / queryWords.size;
+
+        if (similarity >= RETRIEVAL_THRESHOLD) {
+          candidates.push({
+            insightId: insight.id,
+            similarity,
+            confidence: insight.confidence,
+            content: insight.content,
+            applicability: insight.applicability
+          });
+        }
       }
-    }
 
-    return relevant.sort((a, b) => (b.similarity * b.confidence) - (a.similarity * a.confidence));
+      return candidates
+        .sort((a, b) => (b.similarity * b.confidence) - (a.similarity * a.confidence))
+        .slice(0, limit);
+
+    } catch (error) {
+      return [];
+    }
   }
 
   /**
