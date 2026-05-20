@@ -715,10 +715,11 @@ class HybridModelStack extends EventEmitter {
         this.costTracker.lastReset = Date.now();
       }
     }, 60000);
+    this.costMonitorTimer.unref();
   }
 
   destroy() {
-    clearInterval(this.costMonitorTimer);
+    if (this.costMonitorTimer) clearInterval(this.costMonitorTimer);
   }
   
   getStatus() {
