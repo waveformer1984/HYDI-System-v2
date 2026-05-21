@@ -11,3 +11,5 @@ hydi-system-*.tar.gz
 logs.txt
 .DS_Store
 /generated/prisma
+heidi-core.env.local
+*.env.local
