@@ -45,7 +45,7 @@
       env: {
         NODE_ENV: 'production',
         ENVIRONMENT: 'production',
-        PORT: 3001
+        PORT: 3002   // 3001 is occupied by Docker backend; protoforge binds 3002
       },
       autorestart: true,
       watch: false,
