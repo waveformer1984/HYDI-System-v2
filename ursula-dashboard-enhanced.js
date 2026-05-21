@@ -24,17 +24,21 @@ const supabase = SUPABASE_URL && SUPABASE_KEY
 // ─── helpers ──────────────────────────────────────────────────────────────────
 async function httpGet(url, timeoutMs = 2500) {
   return new Promise((resolve) => {
-    const timer = setTimeout(() => resolve({ ok: false, status: 'timeout' }), timeoutMs);
+    const timer = setTimeout(() => resolve({ ok: false, warn: false, status: 'timeout' }), timeoutMs);
     const req = http.get(url, (res) => {
       clearTimeout(timer);
       let body = '';
       res.on('data', d => (body += d));
       res.on('end', () => {
-        try { resolve({ ok: res.statusCode < 400, status: res.statusCode, body: JSON.parse(body) }); }
-        catch { resolve({ ok: res.statusCode < 400, status: res.statusCode, body }); }
+        const code = res.statusCode;
+        const isOk   = code >= 200 && code < 300;
+        const isWarn = code >= 300 && code < 400; // redirect = service exists but misconfigured
+        let parsed;
+        try { parsed = JSON.parse(body); } catch { parsed = body; }
+        resolve({ ok: isOk, warn: isWarn, status: code, body: parsed });
       });
     });
-    req.on('error', () => { clearTimeout(timer); resolve({ ok: false, status: 'unreachable' }); });
+    req.on('error', () => { clearTimeout(timer); resolve({ ok: false, warn: false, status: 'unreachable' }); });
   });
 }
 
@@ -55,24 +59,44 @@ async function getRecentEvents() {
   }
 }
 
-async function getStats(events) {
-  const counts = { pending: 0, processing: 0, completed: 0, failed: 0, total: events.length };
-  for (const e of events) {
-    if (counts[e.status] !== undefined) counts[e.status]++;
+async function getStats(recentEvents) {
+  // Real totals via aggregated count query — not limited by the 50-row fetch
+  const counts = { pending: 0, processing: 0, completed: 0, failed: 0, total: 0 };
+
+  if (supabase) {
+    try {
+      const { data, error } = await supabase
+        .from('hydi_events')
+        .select('status');
+      if (!error && data) {
+        for (const e of data) {
+          counts.total++;
+          if (counts[e.status] !== undefined) counts[e.status]++;
+        }
+      }
+    } catch { /* fall through to local count */ }
   }
 
-  // success rate & avg processing time from completed events
-  const completed = events.filter(e => e.status === 'completed');
-  counts.successRate = counts.total > 0
-    ? ((completed.length / counts.total) * 100).toFixed(1)
+  // Fall back to counting the fetched batch if DB query failed
+  if (counts.total === 0 && recentEvents.length > 0) {
+    for (const e of recentEvents) {
+      counts.total++;
+      if (counts[e.status] !== undefined) counts[e.status]++;
+    }
+  }
+
+  // Success rate
+  const done = counts.completed + counts.failed;
+  counts.successRate = done > 0
+    ? ((counts.completed / done) * 100).toFixed(1)
     : '0.0';
 
-  const withTime = completed.filter(e => e.created_at && e.updated_at);
-  if (withTime.length > 0) {
-    const totalMs = withTime.reduce((acc, e) => {
-      return acc + (new Date(e.updated_at) - new Date(e.created_at));
-    }, 0);
-    counts.avgProcessingMs = Math.round(totalMs / withTime.length);
+  // Avg processing time from recent completed events
+  const completed = recentEvents.filter(e => e.status === 'completed' && e.created_at && e.updated_at);
+  if (completed.length > 0) {
+    const totalMs = completed.reduce((acc, e) =>
+      acc + (new Date(e.updated_at) - new Date(e.created_at)), 0);
+    counts.avgProcessingMs = Math.round(totalMs / completed.length);
   } else {
     counts.avgProcessingMs = null;
   }
@@ -88,6 +112,7 @@ async function getServiceHealth() {
       results[key] = {
         label,
         ok    : res.ok,
+        warn  : res.warn,
         status: res.status,
         detail: res.body,
       };
@@ -476,11 +501,12 @@ function applySnapshot(snap) {
   const hg = document.getElementById('healthGrid');
   if (snap.health && Object.keys(snap.health).length) {
     hg.innerHTML = Object.entries(snap.health).map(([, h]) => {
-      const cls = h.ok ? 'ok' : 'fail';
-      const detail = typeof h.status === 'object' ? JSON.stringify(h.status) : h.status;
+      const cls = h.ok ? 'ok' : h.warn ? 'warn' : 'fail';
+      const detail = typeof h.status === 'object' ? JSON.stringify(h.status) : String(h.status);
+      const note   = h.warn ? ' (redirect)' : '';
       return \`<div class="health-row">
         <div class="svc"><div class="dot \${cls}"></div>\${h.label}</div>
-        <div class="health-status">\${detail}</div>
+        <div class="health-status">\${detail}\${note}</div>
       </div>\`;
     }).join('');
   }
