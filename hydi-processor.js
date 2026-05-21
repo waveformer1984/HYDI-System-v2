@@ -16,14 +16,14 @@ class HYDIProcessor {
 
   async processEvent(source, type, payload) {
     const event = {
-      event_id: uuidv4(),
+      event_id:   uuidv4(),
       source,
-      type,
-      status: 'pending',
+      type,         // normalized type (used by consumer router)
+      event_type: type, // original event type column — NOT NULL in schema
+      status:     'pending',
       payload,
-      timestamp: new Date().toISOString(), // Changed from created_at
+      timestamp:  new Date().toISOString(),
       created_at: new Date().toISOString(),
-      retries: 0,
       retry_count: 0
     };
 
@@ -62,17 +62,18 @@ class HYDIProcessor {
 
       } catch (error) {
         lastError = error;
-        event.retries = attempt;
-        
+        event.retry_count = attempt;
+
         console.log(`WRITE FAILED: ${event.event_id} - attempt ${attempt + 1} - ${error.message}`);
-        
+
         if (attempt < maxRetries) {
           const delay = Math.pow(2, attempt) * 1000; // Exponential backoff: 1s, 2s, 4s
           console.log(`RETRY DELAY: ${event.event_id} - waiting ${delay}ms`);
           await new Promise(resolve => setTimeout(resolve, delay));
         } else {
           event.status = 'failed';
-          event.failure_reason = lastError.message;
+          // Store failure reason in evaluation_context_snapshot (jsonb) — failure_reason is not a DB column
+          event.evaluation_context_snapshot = { failure_reason: lastError.message };
           console.log(`MAX RETRIES EXCEEDED: ${event.event_id} - marking as failed`);
         }
       }
@@ -240,6 +241,21 @@ if (require.main === module) {
     console.log(`  POST /consumer/start   — start polling hydi_events`);
     console.log(`  POST /consumer/stop    — stop polling`);
   });
+
+  // ── Register built-in workers ────────────────────────────────────────────
+  // Workers are registered before the consumer starts so the first poll
+  // already has a full registry. Add more by requiring from core/workers/.
+  try {
+    const systemMonitor   = require('./core/workers/system-monitor-worker');
+    const stripeBilling   = require('./core/workers/stripe-billing-worker');
+    const revenuePipeline = require('./core/workers/revenue-pipeline-worker');
+    [systemMonitor, stripeBilling, revenuePipeline].forEach((w) => {
+      registry.register(w);
+      console.log(`  [registry] registered worker: ${w.id} (domains: ${w.domains.join(', ')})`);
+    });
+  } catch (e) {
+    console.error('[registry] Failed to register built-in workers:', e.message);
+  }
 
   // Auto-start the consumer loop if env says so. Default off so existing pm2
   // deployments don't get surprised by a new background loop. To enable:

@@ -25,7 +25,7 @@ class CapabilityRegistry {
     if (!Array.isArray(worker.domains) || worker.domains.length === 0) {
       throw new Error(`worker ${worker.id} must declare at least one domain`);
     }
-    this.workers.set(worker.id, {
+    const entry = {
       id: worker.id,
       domains: worker.domains.map((d) => String(d).toLowerCase()),
       version: worker.version || '0.0.0',
@@ -34,7 +34,11 @@ class CapabilityRegistry {
         : () => 1.0,
       metadata: worker.metadata || {},
       registeredAt: new Date().toISOString()
-    });
+    };
+    // Preserve dispatch surface: in-process function takes priority over endpoint.
+    if (typeof worker.execute === 'function') entry.execute = worker.execute;
+    if (worker.endpoint) entry.endpoint = worker.endpoint;
+    this.workers.set(worker.id, entry);
     return this.workers.get(worker.id);
   }
 

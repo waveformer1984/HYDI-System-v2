@@ -8,28 +8,59 @@
 // the Pathways doc:  Input → Intent Parser → Capability Registry → Worker.
 
 // Built-in mappings from event.type to intent. Extend as needed.
+// Full dotted event types (e.g. "heartbeat.missing") are listed first so they
+// take precedence over their prefix-only counterparts.
 const TYPE_MAP = {
-  error: 'diagnostic',
-  task: 'work',
-  info: 'log',
-  outreach: 'outreach',
-  lead: 'outreach',
-  cad: 'cad',
-  audio: 'audio',
-  analysis: 'analysis',
-  repair: 'repair',
-  research: 'research',
-  vision: 'vision'
+  // System / operational
+  error:                        'diagnostic',
+  info:                         'log',
+  repair:                       'repair',
+  'repair.batch_completed':     'repair',
+  'heartbeat.missing':          'heartbeat',
+  'heartbeat.restored':         'heartbeat',
+  heartbeat:                    'heartbeat',
+  system:                       'system',
+  // Revenue pipeline
+  lead:                         'outreach',
+  outreach:                     'outreach',
+  quote:                        'quote',
+  proposal:                     'proposal',
+  revenue:                      'revenue',
+  task:                         'work',
+  // Stripe / billing
+  'payment_intent.succeeded':   'payment',
+  'payment_intent.failed':      'payment',
+  'checkout.session.completed': 'checkout',
+  'invoice.paid':               'invoice',
+  'invoice.payment_failed':     'invoice',
+  'customer.subscription.created': 'subscription',
+  'customer.subscription.deleted': 'subscription',
+  stripe:                       'stripe',
+  payment:                      'payment',
+  checkout:                     'checkout',
+  billing:                      'billing',
+  invoice:                      'invoice',
+  subscription:                 'subscription',
+  // Creative / technical
+  cad:                          'cad',
+  audio:                        'audio',
+  analysis:                     'analysis',
+  research:                     'research',
+  vision:                       'vision'
 };
 
 // Keyword → intent fallback. Scans event.type and stringified payload.
 const KEYWORD_MAP = [
-  { intent: 'outreach', terms: ['lead', 'email', 'outreach', 'campaign', 'crm'] },
-  { intent: 'cad', terms: ['stl', 'cad', 'mesh', '3d print', 'enclosure'] },
-  { intent: 'audio', terms: ['render', 'wav', 'mp3', 'midi', 'synth', 'pattern'] },
-  { intent: 'analysis', terms: ['analyze', 'score', 'compute', 'metric', 'stat'] },
-  { intent: 'diagnostic', terms: ['error', 'fail', 'crash', 'exception', 'stack'] },
-  { intent: 'work', terms: ['task', 'job', 'queue', 'process'] }
+  { intent: 'outreach',     terms: ['lead', 'email', 'outreach', 'campaign', 'crm'] },
+  { intent: 'payment',      terms: ['payment', 'stripe', 'charge', 'invoice', 'checkout', 'billing'] },
+  { intent: 'subscription', terms: ['subscription', 'plan', 'recurring'] },
+  { intent: 'heartbeat',    terms: ['heartbeat', 'ping', 'keepalive'] },
+  { intent: 'repair',       terms: ['repair', 'sweep', 'fix', 'heal'] },
+  { intent: 'diagnostic',   terms: ['error', 'fail', 'crash', 'exception', 'stack'] },
+  { intent: 'cad',          terms: ['stl', 'cad', 'mesh', '3d print', 'enclosure'] },
+  { intent: 'audio',        terms: ['render', 'wav', 'mp3', 'midi', 'synth', 'pattern'] },
+  { intent: 'analysis',     terms: ['analyze', 'score', 'compute', 'metric', 'stat'] },
+  { intent: 'work',         terms: ['task', 'job', 'queue', 'process'] }
 ];
 
 function defaultClassifier(event) {
