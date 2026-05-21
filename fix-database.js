@@ -43,12 +43,16 @@ async function fixDatabase() {
 
     // Step 1: Add created_at column
     console.log('\n📝 Step 1: Adding created_at column...');
-    const { error: addColumnError } = await supabase.rpc('execute_sql', {
-      sql: `ALTER TABLE public.hydi_events ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();`
-    }).catch(() => {
-      // If RPC doesn't exist, we'll use direct SQL execution
-      return supabase.from('hydi_events').select('event_id').limit(1);
-    });
+    let addColumnError;
+    try {
+      const result = await supabase.rpc('execute_sql', {
+        sql: `ALTER TABLE public.hydi_events ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();`
+      });
+      addColumnError = result.error;
+    } catch (_e) {
+      // RPC doesn't exist — schema change must be done manually via SQL Editor
+      addColumnError = null;
+    }
 
     // Direct approach: Use Supabase SQL function or manual approach
     console.log('ℹ️  Note: Using Supabase REST API (RPC may have limitations)');
@@ -59,23 +63,24 @@ async function fixDatabase() {
     console.log(`CREATE INDEX IF NOT EXISTS idx_hydi_events_created_at_status ON public.hydi_events(created_at DESC, status);`);
     console.log('--- End SQL ---\n');
 
-    // Step 2: Verify table structure
+    // Step 2: Verify table structure via fallback row fetch
     console.log('📊 Step 2: Verifying table structure...');
-    const { data: columns, error: columnsError } = await supabase
-      .rpc('get_table_info')
-      .catch(async () => {
-        // Fallback: Try to get table info via direct query
-        const { data, error } = await supabase
-          .from('hydi_events')
-          .select('*')
-          .limit(1);
-        return { data, error };
-      });
-
+    let columnsError;
+    try {
+      const { data, error } = await supabase
+        .from('hydi_events')
+        .select('*')
+        .limit(1);
+      columnsError = error;
+      if (!error && data) {
+        const cols = data.length ? Object.keys(data[0]).join(', ') : '(empty table)';
+        console.log(`✓ Table verification passed — columns: ${cols}`);
+      }
+    } catch (_e) {
+      columnsError = _e;
+    }
     if (columnsError) {
-      console.log('⚠️  Could not verify columns via RPC');
-    } else {
-      console.log('✓ Table verification passed');
+      console.log('⚠️  Could not verify columns:', columnsError.message || columnsError);
     }
 
     // Step 3: Count events
