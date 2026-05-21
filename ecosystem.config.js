@@ -84,18 +84,19 @@ module.exports = {
     
     {
       name: 'hydi-ursula',
-      script: 'ursula-dashboard.js',
+      script: 'ursula-dashboard-enhanced.js',
+      cwd: 'F:\\HYDI_System',
       instances: 1, // Single instance for SSE consistency
       exec_mode: 'fork',
       env: {
         NODE_ENV: 'production',
         ENVIRONMENT: 'production',
-        DASHBOARD_PORT: 3002
+        DASHBOARD_PORT: 3004
       },
       env_production: {
         NODE_ENV: 'production',
         ENVIRONMENT: 'production',
-        DASHBOARD_PORT: 3002
+        DASHBOARD_PORT: 3004
       },
       
       // Auto-restart configuration
