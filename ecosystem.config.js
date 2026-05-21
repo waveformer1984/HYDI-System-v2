@@ -2,12 +2,14 @@
   apps: [
     {
       name: 'heidi',
-      script: 'heidi-core/index.js',
+      script: 'heidi-core/server.js',
+      cwd: 'F:\\HYDI_System',
       instances: 1,
       exec_mode: 'fork',
       env: {
         NODE_ENV: 'production',
-        ENVIRONMENT: 'production'
+        ENVIRONMENT: 'production',
+        HEIDI_PORT: '3456'
       },
       autorestart: true,
       watch: false,
