@@ -1,4 +1,8 @@
 {
   "sessions": [],
-  "tasks": []
+  "tasks": [],
+  "phase5": {
+    "patterns": [],
+    "insights": []
+  }
 }
