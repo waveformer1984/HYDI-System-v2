@@ -106,14 +106,22 @@ class ConsumerLoop {
         // 2. For each, try to claim atomically and process
         for (const ev of candidates) {
           if (this._stopRequested) break;
-          this.log.log(`[consumer] poll #${pollN}: attempting claim ${ev.event_id} (type=${ev.type})`);
-          const claimed = await this._claim(ev.event_id);
+          // Normalise: event_id may be null for legacy rows; use integer id as claim key.
+          // Also normalise type from event_type when type is missing/unknown.
+          const claimKey = ev.event_id || ev.id;
+          const displayType = (ev.type && ev.type !== 'unknown') ? ev.type : (ev.event_type || ev.type);
+          this.log.log(`[consumer] poll #${pollN}: attempting claim ${claimKey} (type=${displayType})`);
+          const claimed = await this._claim(ev.id, ev.event_id);
           if (!claimed) {
-            this.log.log(`[consumer] poll #${pollN}: claim returned null for ${ev.event_id} (raced, or status check rejected)`);
+            this.log.log(`[consumer] poll #${pollN}: claim returned null for ${claimKey} (raced, or status check rejected)`);
             continue;
           }
+          // Ensure normalised type is set on the claimed object for routing
+          if (!claimed.type || claimed.type === 'unknown') {
+            claimed.type = claimed.event_type || 'unknown';
+          }
           this.metrics.claimed += 1;
-          this.log.log(`[consumer] poll #${pollN}: CLAIMED ${ev.event_id}, handling...`);
+          this.log.log(`[consumer] poll #${pollN}: CLAIMED ${claimKey}, handling...`);
           await this._handle(claimed);
           processedThisRound += 1;
         }
@@ -131,41 +139,52 @@ class ConsumerLoop {
     this.log.log('[consumer] stopped');
   }
 
-  async _claim(eventId) {
+  async _claim(rowId, eventId) {
     // Atomic-ish: only flip pending→processing if it's still pending.
-    // Supabase doesn't expose true SELECT FOR UPDATE here, but the conditional
+    // We claim by the integer `id` (always populated) because `event_id` is a
+    // UUID that may be null on legacy rows — Postgres evaluates
+    // `WHERE event_id = NULL` as always-false, so eq('event_id', null) claims nothing.
+    // Supabase doesn't expose true SELECT FOR UPDATE, but the conditional
     // update + RETURNING semantics give us safe-enough single-claim.
     const { data, error } = await this.supabase
       .from('hydi_events')
       .update({ status: 'processing' })
-      .eq('event_id', eventId)
+      .eq('id', rowId)
       .eq('status', 'pending')
       .select()
       .maybeSingle();
     if (error) {
-      this.log.error(`[consumer] claim error for ${eventId}:`, error.message);
+      this.log.error(`[consumer] claim error for id=${rowId} (event_id=${eventId}):`, error.message);
       return null;
     }
     return data; // null if someone else claimed first
   }
 
   async _handle(event) {
+    // Use event_id when available; fall back to integer id for legacy rows.
+    const label = event.event_id || `id:${event.id}`;
     let decision;
     try {
       decision = await this.router.route(event);
     } catch (e) {
-      this.log.error(`[consumer] route error for ${event.event_id}:`, e.message);
-      await this._mark(event.event_id, 'failed', { failure_reason: `route error: ${e.message}` });
+      this.log.error(`[consumer] route error for ${label}:`, e.message);
+      await this._mark(event.id, event.event_id, 'failed', {
+        evaluation_context_snapshot: { failure_reason: `route error: ${e.message}` }
+      });
       this.metrics.failed += 1;
       return;
     }
 
     // Dead-letter path: classifier ran but no worker exists
     if (decision.action === 'dead_letter' || !decision.worker) {
-      this.log.log(`[consumer] ${event.event_id} → dead_letter (intent=${decision.intent}, conf=${decision.confidence?.toFixed(2)})`);
-      await this._mark(event.event_id, 'dead_letter', {
-        failure_reason: `no worker for intent=${decision.intent}`,
-        ai_analysis: JSON.stringify({ route: decision })
+      this.log.log(`[consumer] ${label} → dead_letter (intent=${decision.intent}, conf=${decision.confidence?.toFixed(2)})`);
+      await this._mark(event.id, event.event_id, 'dead_letter', {
+        intent: decision.intent || null,
+        // evaluation_context_snapshot is the jsonb column for analysis data
+        evaluation_context_snapshot: {
+          failure_reason: `no worker for intent=${decision.intent}`,
+          route: decision
+        }
       });
       this.metrics.deadLettered += 1;
       return;
@@ -179,39 +198,42 @@ class ConsumerLoop {
     });
 
     if (out.ok) {
-      this.log.log(`[consumer] ${event.event_id} → processed by ${decision.worker.id} (${out.elapsedMs}ms via ${out.transport})`);
-      await this._mark(event.event_id, 'processed', {
-        ai_analysis: JSON.stringify({
+      this.log.log(`[consumer] ${label} → processed by ${decision.worker.id} (${out.elapsedMs}ms via ${out.transport})`);
+      await this._mark(event.id, event.event_id, 'processed', {
+        intent: decision.intent || null,
+        evaluation_context_snapshot: {
           worker_id: decision.worker.id,
           intent: decision.intent,
           score: decision.score,
           transport: out.transport,
           elapsedMs: out.elapsedMs
-        })
+        }
       });
       this.metrics.processed += 1;
     } else {
-      this.log.log(`[consumer] ${event.event_id} → failed (${decision.worker.id}: ${out.error})`);
-      await this._mark(event.event_id, 'failed', {
-        failure_reason: out.error,
-        ai_analysis: JSON.stringify({
+      this.log.log(`[consumer] ${label} → failed (${decision.worker.id}: ${out.error})`);
+      await this._mark(event.id, event.event_id, 'failed', {
+        intent: decision.intent || null,
+        evaluation_context_snapshot: {
+          failure_reason: out.error,
           worker_id: decision.worker.id,
           intent: decision.intent,
           score: decision.score,
           transport: out.transport
-        })
+        }
       });
       this.metrics.failed += 1;
     }
   }
 
-  async _mark(eventId, status, extras = {}) {
+  async _mark(rowId, eventId, status, extras = {}) {
+    // Prefer event_id for the WHERE clause (stable UUID), fall back to integer id.
     const update = { status, ...extras };
     const { error } = await this.supabase
       .from('hydi_events')
       .update(update)
-      .eq('event_id', eventId);
-    if (error) this.log.error(`[consumer] mark ${status} failed for ${eventId}:`, error.message);
+      .eq('id', rowId);
+    if (error) this.log.error(`[consumer] mark ${status} failed for id=${rowId} (event_id=${eventId}):`, error.message);
   }
 
   _sleep(ms) {
