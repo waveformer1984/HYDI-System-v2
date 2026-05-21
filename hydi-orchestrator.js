@@ -353,7 +353,7 @@ class HYDIOrchestrator {
       
       for (const file of essentialFiles) {
         if (fs.existsSync(file)) {
-          fs.copyFileSync(`dist/${file}`, fs.readFileSync(file));
+          fs.copyFileSync(file, path.join('dist', file));
         }
       }
       
@@ -472,7 +472,7 @@ class HYDIOrchestrator {
       for (const file of essentialFiles) {
         if (fs.existsSync(file)) {
           const targetPath = path.join(snapshotDir, file);
-          fs.copyFileSync(targetPath, fs.readFileSync(file));
+          fs.copyFileSync(file, targetPath);
           console.log(`Copied: ${file} -> ${targetPath}`);
         }
       }

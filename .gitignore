@@ -10,3 +10,4 @@ hydi-system-*.zip
 hydi-system-*.tar.gz
 logs.txt
 .DS_Store
+/generated/prisma

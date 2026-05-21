@@ -339,7 +339,7 @@ class BypassCacheOracle {
       console.log(`Phases Completed: ${results.overall.phasesCompleted}/4`);
       
       Object.entries(results).forEach(([phase, result]) => {
-        const status = result.completed ? 'COMPLETED' : 'FAILED';
+        const status = result.completed ? 'processed' : 'FAILED';
         console.log(`${phase}: ${status}`);
       });
       

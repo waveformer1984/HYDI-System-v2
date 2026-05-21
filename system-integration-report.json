@@ -1,0 +1,100 @@
+{
+  "timestamp": "2026-05-17T18:09:33.109Z",
+  "components": {
+    "production-orchestrator.js": {
+      "exists": true,
+      "status": "READY",
+      "path": "F:\\HYDI_System\\production-orchestrator.js",
+      "size_kb": "16.85"
+    },
+    "agent-worker-with-model.js": {
+      "exists": true,
+      "status": "READY",
+      "path": "F:\\HYDI_System\\agent-worker-with-model.js",
+      "size_kb": "12.91"
+    },
+    "local-model-integration.js": {
+      "exists": true,
+      "status": "READY",
+      "path": "F:\\HYDI_System\\local-model-integration.js",
+      "size_kb": "16.82"
+    },
+    "complete-event-pipeline.js": {
+      "exists": true,
+      "status": "READY",
+      "path": "F:\\HYDI_System\\complete-event-pipeline.js",
+      "size_kb": "15.61"
+    },
+    "ursula-dashboard-enhanced.js": {
+      "exists": true,
+      "status": "READY",
+      "path": "F:\\HYDI_System\\ursula-dashboard-enhanced.js",
+      "size_kb": "25.93"
+    },
+    "protoforge-mock.js": {
+      "exists": true,
+      "status": "READY",
+      "path": "F:\\HYDI_System\\protoforge-mock.js",
+      "size_kb": "1.90"
+    },
+    "LocalModelIntegrationEngine": {
+      "status": "VERIFIED",
+      "features_found": 7,
+      "total_features": 7
+    },
+    "AIWorkerIntegration": {
+      "status": "VERIFIED"
+    },
+    "UrsulaDashboardEnhanced": {
+      "status": "VERIFIED",
+      "features_implemented": 7,
+      "total_expected_features": 12
+    },
+    "WorkerConfig": {
+      "status": "CORRECT"
+    },
+    "EventPipeline": {
+      "status": "VERIFIED",
+      "stages": 8
+    },
+    "start_full_system.bat": {
+      "status": "READY"
+    },
+    "start_hydi.bat": {
+      "status": "MISSING"
+    },
+    "Dependencies": {
+      "status": "VERIFIED",
+      "installed": 6,
+      "total_required": 6
+    }
+  },
+  "connections": {},
+  "integration_status": "COMPLETE",
+  "critical_issues": [],
+  "warnings": [
+    "Startup script missing: Orchestrator",
+    "Startup script missing: AI Worker",
+    "Startup script missing: ProtoForge Mock"
+  ],
+  "verified_features": [
+    "Decision Tree Backend",
+    "Ollama Support",
+    "TensorFlow Support",
+    "Caching System",
+    "Retry Strategy",
+    "Performance Analysis",
+    "Health Checks",
+    "Model Engine Integration",
+    "Decision Generation",
+    "Autonomous Actions",
+    "Metrics Tracking",
+    "Real-time Streaming (SSE)",
+    "AI Confidence Display",
+    "Worker Metrics Panel",
+    "Retry History Display",
+    "Dark/Light Theme",
+    "Export Functionality",
+    "Event Payload Display"
+  ]
+}

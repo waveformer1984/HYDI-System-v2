@@ -457,7 +457,7 @@ class KiloExecutionEngine {
         return { success: true, message: `Stopped ${target}` };
         
       case 'status':
-        return { success: true, status: 'running', target };
+        return { success: true, status: 'processing', target };
         
       default:
         return { success: false, error: `Unknown action: ${action}` };

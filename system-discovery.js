@@ -208,12 +208,12 @@ class SystemDiscovery {
           port: service.port,
           path: service.path,
           type: 'running_service',
-          status: result.running ? 'running' : 'stopped',
+          status: result.running ? 'processing' : 'stopped',
           discovered: new Date().toISOString(),
           details: result
         };
         
-        console.log(`  Service: ${service.name} - ${result.running ? 'RUNNING' : 'STOPPED'}`);
+        console.log(`  Service: ${service.name} - ${result.running ? 'processing' : 'STOPPED'}`);
         
       } catch (error) {
         console.log(`  Service: ${service.name} - ERROR: ${error.message}`);
@@ -229,7 +229,7 @@ class SystemDiscovery {
       existingPaths: Object.values(this.systemMap.paths).filter(p => p.exists).length,
       totalModules: Object.keys(this.systemMap.modules).length,
       totalServices: Object.keys(this.systemMap.services).length,
-      runningServices: Object.values(this.systemMap.services).filter(s => s.status === 'running').length,
+      runningServices: Object.values(this.systemMap.services).filter(s => s.status === 'processing').length,
       discovered: new Date().toISOString()
     };
     

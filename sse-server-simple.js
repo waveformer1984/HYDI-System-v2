@@ -163,7 +163,7 @@ class SimpleSServer {
 
   getStatus() {
     return {
-      status: 'running',
+      status: 'processing',
       port: 3002,
       clientsConnected: this.clients.length,
       eventsEmitted: this.eventsEmitted,

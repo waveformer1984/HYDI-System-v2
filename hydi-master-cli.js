@@ -587,7 +587,7 @@ class HYDIMasterCLI {
     // Service status
     try {
       const response = await fetch('http://localhost:3001/health');
-      const protoforgeStatus = response.ok ? 'RUNNING' : 'STOPPED';
+      const protoforgeStatus = response.ok ? 'processing' : 'STOPPED';
       console.log(`ProtoForge (3001): ${protoforgeStatus}`);
     } catch (error) {
       console.log(`ProtoForge (3001): STOPPED`);
@@ -595,7 +595,7 @@ class HYDIMasterCLI {
     
     try {
       const response = await fetch('http://localhost:3002/health');
-      const ursulaStatus = response.ok ? 'RUNNING' : 'STOPPED';
+      const ursulaStatus = response.ok ? 'processing' : 'STOPPED';
       console.log(`Ursula Dashboard (3002): ${ursulaStatus}`);
     } catch (error) {
       console.log(`Ursula Dashboard (3002): STOPPED`);
