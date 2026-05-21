@@ -1,759 +1,607 @@
+'use strict';
 require('dotenv').config();
-const express = require('express');
+
+const express  = require('express');
+const http     = require('http');
 const { createClient } = require('@supabase/supabase-js');
 
-// Enhanced Ursula Dashboard - Full-Featured Real-time Monitoring
-class UrsulaDashboardEnhanced {
-  constructor() {
-    this.app = express();
-    this.supabase = createClient(
-      process.env.SUPABASE_URL,
-      process.env.SUPABASE_ANON_KEY
-    );
-    this.port = process.env.DASHBOARD_PORT || 3002;
+// ─── config ───────────────────────────────────────────────────────────────────
+const PORT        = parseInt(process.env.DASHBOARD_PORT || '3004', 10);
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
 
-    this.setupMiddleware();
-    this.setupRoutes();
-  }
+const SERVICES = {
+  protoforge : { label: 'ProtoForge',  url: `http://localhost:${process.env.PROTOFORGE_PORT  || 3001}/health` },
+  processor  : { label: 'Processor',   url: `http://localhost:${process.env.PROCESSOR_PORT   || 3003}/health` },
+  ollama     : { label: 'Ollama',      url: 'http://localhost:11434/api/tags' },
+};
 
-  setupMiddleware() {
-    this.app.use(express.json());
-  }
+// ─── Supabase client ──────────────────────────────────────────────────────────
+const supabase = SUPABASE_URL && SUPABASE_KEY
+  ? createClient(SUPABASE_URL, SUPABASE_KEY)
+  : null;
 
-  setupRoutes() {
-    // Main dashboard
-    this.app.get('/', (req, res) => {
-      res.send(this.getDashboardHTML());
-    });
-
-    // Real-time event streaming
-    this.app.get('/events/stream', async (req, res) => {
-      res.writeHead(200, {
-        'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache',
-        'Connection': 'keep-alive',
-        'Access-Control-Allow-Origin': '*'
+// ─── helpers ──────────────────────────────────────────────────────────────────
+async function httpGet(url, timeoutMs = 2500) {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve({ ok: false, status: 'timeout' }), timeoutMs);
+    const req = http.get(url, (res) => {
+      clearTimeout(timer);
+      let body = '';
+      res.on('data', d => (body += d));
+      res.on('end', () => {
+        try { resolve({ ok: res.statusCode < 400, status: res.statusCode, body: JSON.parse(body) }); }
+        catch { resolve({ ok: res.statusCode < 400, status: res.statusCode, body }); }
       });
-
-      const sendUpdate = async () => {
-        try {
-          const events = await this.getRecentEvents();
-          const stats = await this.getSystemStats();
-          const health = await this.getSystemHealth();
-          const workerMetrics = await this.getWorkerMetrics();
-
-          res.write(`data: ${JSON.stringify({
-            events,
-            stats,
-            health,
-            workerMetrics,
-            timestamp: new Date().toISOString()
-          })}\n\n`);
-        } catch (error) {
-          res.write(`data: ${JSON.stringify({ error: error.message })}\n\n`);
-        }
-      };
-
-      sendUpdate();
-      const interval = setInterval(sendUpdate, 2000);
-      req.on('close', () => clearInterval(interval));
     });
-
-    // Event details API
-    this.app.get('/api/events/:id', async (req, res) => {
-      try {
-        const { data, error } = await this.supabase
-          .from('hydi_events')
-          .select('*')
-          .eq('event_id', req.params.id)
-          .single();
-
-        if (error) throw error;
-        res.json(data);
-      } catch (error) {
-        res.status(404).json({ error: error.message });
-      }
-    });
-
-    // Export events
-    this.app.get('/api/export', async (req, res) => {
-      try {
-        const { format = 'json' } = req.query;
-        const { data, error } = await this.supabase
-          .from('hydi_events')
-          .select('*')
-          .order('created_at', { ascending: false })
-          .limit(1000);
-
-        if (error) throw error;
-
-        if (format === 'csv') {
-          const csv = this.convertToCSV(data);
-          res.setHeader('Content-Type', 'text/csv');
-          res.setHeader('Content-Disposition', 'attachment; filename=events.csv');
-          res.send(csv);
-        } else {
-          res.json(data);
-        }
-      } catch (error) {
-        res.status(500).json({ error: error.message });
-      }
-    });
-
-    // Health check
-    this.app.get('/health', (req, res) => {
-      res.json({ status: 'ok', timestamp: new Date().toISOString() });
-    });
-  }
-
-  async getRecentEvents() {
-    try {
-      const { data, error } = await this.supabase
-        .from('hydi_events')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(50);
-
-      if (error) throw error;
-      return data || [];
-    } catch (error) {
-      console.log('Failed to get events:', error.message);
-      return [];
-    }
-  }
-
-  async getSystemStats() {
-    try {
-      const { data, error } = await this.supabase
-        .from('hydi_events')
-        .select('status');
-
-      if (error) throw error;
-
-      const stats = {
-        pending: data.filter(e => e.status === 'pending').length,
-        processing: data.filter(e => e.status === 'processing').length,
-        completed: data.filter(e => e.status === 'completed').length,
-        failed: data.filter(e => e.status === 'failed').length,
-        total: data.length
-      };
-
-      return stats;
-    } catch (error) {
-      return { pending: 0, processing: 0, completed: 0, failed: 0, total: 0 };
-    }
-  }
-
-  async getSystemHealth() {
-    return {
-      database: 'healthy',
-      orchestrator: 'healthy',
-      worker: 'healthy',
-      model: 'ready',
-      api: 'responsive'
-    };
-  }
-
-  async getWorkerMetrics() {
-    return {
-      active_workers: 1,
-      total_processed: 0,
-      success_rate: 0,
-      avg_processing_time: 0,
-      ai_decisions: 0,
-      model_cache_hits: 0
-    };
-  }
-
-  convertToCSV(data) {
-    if (!data || data.length === 0) return 'No data';
-
-    const headers = Object.keys(data[0]);
-    const csv = [headers.join(',')];
-
-    data.forEach(row => {
-      const values = headers.map(header => {
-        const value = row[header];
-        if (typeof value === 'object') {
-          return `"${JSON.stringify(value).replace(/"/g, '""')}"`;
-        }
-        return `"${String(value).replace(/"/g, '""')}"`;
-      });
-      csv.push(values.join(','));
-    });
-
-    return csv.join('\n');
-  }
-
-  getDashboardHTML() {
-    return `
-<!DOCTYPE html>
-<html>
-<head>
-    <title>HYDI Dashboard - Enhanced</title>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-
-        :root {
-          --bg-primary: #1a1a1a;
-          --bg-secondary: #2a2a2a;
-          --bg-tertiary: #333;
-          --text-primary: #fff;
-          --text-secondary: #ccc;
-          --accent: #4CAF50;
-          --danger: #ff6b6b;
-          --warning: #ffd93d;
-          --border: #444;
-        }
-
-        body.light-mode {
-          --bg-primary: #f5f5f5;
-          --bg-secondary: #ffffff;
-          --bg-tertiary: #efefef;
-          --text-primary: #333;
-          --text-secondary: #666;
-          --border: #ddd;
-        }
-
-        body {
-          font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-          background: var(--bg-primary);
-          color: var(--text-primary);
-          transition: all 0.3s;
-        }
-
-        .header {
-          background: var(--bg-secondary);
-          padding: 20px;
-          border-bottom: 2px solid var(--border);
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          flex-wrap: wrap;
-          gap: 15px;
-        }
-
-        .header h1 { font-size: 28px; }
-        .header-controls { display: flex; gap: 10px; align-items: center; }
-
-        button {
-          background: var(--accent);
-          color: white;
-          border: none;
-          padding: 8px 16px;
-          border-radius: 4px;
-          cursor: pointer;
-          font-size: 14px;
-          transition: all 0.3s;
-        }
-
-        button:hover { opacity: 0.8; }
-        button.secondary { background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border); }
-
-        .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
-
-        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-        .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
-        .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; }
-
-        .panel {
-          background: var(--bg-secondary);
-          padding: 20px;
-          border-radius: 8px;
-          border: 1px solid var(--border);
-        }
-
-        .panel h3 { margin-bottom: 15px; color: var(--accent); }
-
-        .status-item {
-          background: var(--bg-tertiary);
-          padding: 15px;
-          border-radius: 6px;
-          text-align: center;
-        }
-
-        .status-count { font-size: 28px; font-weight: bold; color: var(--accent); margin-bottom: 5px; }
-        .status-label { font-size: 12px; color: var(--text-secondary); }
-
-        .health-indicator {
-          display: inline-block;
-          width: 12px;
-          height: 12px;
-          border-radius: 50%;
-          background: var(--accent);
-          margin-right: 5px;
-        }
-
-        .health-item { margin: 8px 0; }
-
-        .event-list {
-          max-height: 500px;
-          overflow-y: auto;
-        }
-
-        .event-item {
-          background: var(--bg-tertiary);
-          padding: 12px;
-          margin: 5px 0;
-          border-radius: 4px;
-          cursor: pointer;
-          transition: all 0.2s;
-          border-left: 4px solid var(--accent);
-        }
-
-        .event-item:hover { background: var(--bg-primary); }
-
-        .event-item.pending { border-left-color: var(--warning); }
-        .event-item.failed { border-left-color: var(--danger); }
-        .event-item.completed { border-left-color: var(--accent); }
-
-        .event-header { font-weight: bold; margin-bottom: 5px; }
-        .event-meta { font-size: 12px; color: var(--text-secondary); }
-
-        .confidence-bar {
-          background: var(--bg-primary);
-          height: 6px;
-          border-radius: 3px;
-          margin: 5px 0;
-          overflow: hidden;
-        }
-
-        .confidence-fill {
-          height: 100%;
-          background: linear-gradient(90deg, var(--danger), var(--warning), var(--accent));
-        }
-
-        .filter-group {
-          display: flex;
-          gap: 10px;
-          flex-wrap: wrap;
-          margin-bottom: 15px;
-        }
-
-        .filter-btn {
-          padding: 6px 12px;
-          font-size: 13px;
-          background: var(--bg-tertiary);
-          border: 1px solid var(--border);
-        }
-
-        .filter-btn.active {
-          background: var(--accent);
-          border-color: var(--accent);
-          color: white;
-        }
-
-        .search-box {
-          width: 100%;
-          padding: 10px;
-          background: var(--bg-tertiary);
-          border: 1px solid var(--border);
-          border-radius: 4px;
-          color: var(--text-primary);
-          margin-bottom: 15px;
-        }
-
-        .modal {
-          display: none;
-          position: fixed;
-          top: 0;
-          left: 0;
-          width: 100%;
-          height: 100%;
-          background: rgba(0,0,0,0.7);
-          z-index: 1000;
-          align-items: center;
-          justify-content: center;
-        }
-
-        .modal.active { display: flex; }
-
-        .modal-content {
-          background: var(--bg-secondary);
-          padding: 30px;
-          border-radius: 8px;
-          max-width: 600px;
-          max-height: 80vh;
-          overflow-y: auto;
-          position: relative;
-        }
-
-        .modal-close {
-          position: absolute;
-          top: 10px;
-          right: 15px;
-          font-size: 24px;
-          cursor: pointer;
-          color: var(--text-secondary);
-        }
-
-        .modal-close:hover { color: var(--text-primary); }
-
-        .detail-row { margin: 10px 0; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
-        .detail-label { font-weight: bold; color: var(--accent); font-size: 12px; }
-        .detail-value { margin-top: 3px; word-break: break-all; }
-
-        .chart-container { height: 200px; margin: 20px 0; }
-
-        .live-indicator {
-          color: var(--accent);
-          font-weight: bold;
-          display: flex;
-          align-items: center;
-          gap: 5px;
-        }
-
-        .pulse { animation: pulse 1s infinite; }
-        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
-
-        @media (max-width: 768px) {
-          .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
-          .header { flex-direction: column; align-items: flex-start; }
-        }
-    </style>
-</head>
-<body>
-    <div class="header">
-        <div>
-            <h1>🎯 HYDI System Dashboard</h1>
-            <div class="live-indicator"><span class="pulse">●</span> Live: <span id="timestamp">--:--:--</span></div>
-        </div>
-        <div class="header-controls">
-            <button id="themeToggle" class="secondary">🌙 Dark Mode</button>
-            <button id="exportBtn" class="secondary">📥 Export</button>
-        </div>
-    </div>
-
-    <div class="container">
-        <!-- System Status -->
-        <div class="panel">
-            <h3>⚡ System Status</h3>
-            <div class="grid-4">
-                <div class="status-item">
-                    <div class="status-count" id="pendingCount">0</div>
-                    <div class="status-label">Pending</div>
-                </div>
-                <div class="status-item">
-                    <div class="status-count" id="processingCount">0</div>
-                    <div class="status-label">Processing</div>
-                </div>
-                <div class="status-item">
-                    <div class="status-count" id="completedCount">0</div>
-                    <div class="status-label">Completed</div>
-                </div>
-                <div class="status-item">
-                    <div class="status-count" id="failedCount">0</div>
-                    <div class="status-label">Failed</div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Health Status -->
-        <div class="panel">
-            <h3>🏥 System Health</h3>
-            <div id="healthStatus">
-                <div class="health-item"><span class="health-indicator"></span> Database: <strong>Healthy</strong></div>
-                <div class="health-item"><span class="health-indicator"></span> Orchestrator: <strong>Healthy</strong></div>
-                <div class="health-item"><span class="health-indicator"></span> Worker: <strong>Healthy</strong></div>
-                <div class="health-item"><span class="health-indicator"></span> Model Engine: <strong>Ready</strong></div>
-                <div class="health-item"><span class="health-indicator"></span> API: <strong>Responsive</strong></div>
-            </div>
-        </div>
-
-        <!-- Worker Metrics -->
-        <div class="panel">
-            <h3>👷 Worker Metrics</h3>
-            <div id="workerMetrics">
-                <div class="detail-row">
-                    <div class="detail-label">Active Workers</div>
-                    <div class="detail-value" id="activeWorkers">1</div>
-                </div>
-                <div class="detail-row">
-                    <div class="detail-label">Success Rate</div>
-                    <div class="detail-value" id="successRate">--</div>
-                </div>
-                <div class="detail-row">
-                    <div class="detail-label">Avg Processing Time</div>
-                    <div class="detail-value" id="avgTime">--</div>
-                </div>
-                <div class="detail-row">
-                    <div class="detail-label">AI Decisions Made</div>
-                    <div class="detail-value" id="aiDecisions">0</div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Events Section -->
-        <div class="grid-2">
-            <div class="panel">
-                <h3>🔍 Filter & Search</h3>
-                <input type="text" id="searchBox" class="search-box" placeholder="Search by event ID, type...">
-
-                <div>
-                    <h4 style="margin-bottom: 10px;">Type:</h4>
-                    <div class="filter-group" id="typeFilters"></div>
-                </div>
-
-                <div>
-                    <h4 style="margin-bottom: 10px;">Status:</h4>
-                    <div class="filter-group" id="statusFilters"></div>
-                </div>
-
-                <div>
-                    <h4 style="margin-bottom: 10px;">Severity:</h4>
-                    <div class="filter-group" id="severityFilters"></div>
-                </div>
-            </div>
-
-            <div class="panel">
-                <h3>📊 Recent Events</h3>
-                <div class="event-list" id="eventsList"></div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Event Detail Modal -->
-    <div id="eventModal" class="modal">
-        <div class="modal-content">
-            <span class="modal-close" onclick="closeModal()">&times;</span>
-            <h2>Event Details</h2>
-            <div id="eventDetails"></div>
-        </div>
-    </div>
-
-    <script>
-        let allEvents = [];
-        let activeFilters = { type: [], status: [], severity: [] };
-        let isDarkMode = true;
-
-        const eventSource = new EventSource('/events/stream');
-
-        eventSource.onmessage = function(event) {
-            const data = JSON.parse(event.data);
-            updateDashboard(data);
-        };
-
-        function updateDashboard(data) {
-            document.getElementById('timestamp').textContent = new Date(data.timestamp).toLocaleTimeString();
-
-            // Update stats
-            document.getElementById('pendingCount').textContent = data.stats.pending || 0;
-            document.getElementById('processingCount').textContent = data.stats.processing || 0;
-            document.getElementById('completedCount').textContent = data.stats.completed || 0;
-            document.getElementById('failedCount').textContent = data.stats.failed || 0;
-
-            // Update events
-            allEvents = data.events || [];
-            renderEvents();
-
-            // Update worker metrics
-            if (data.workerMetrics) {
-                document.getElementById('activeWorkers').textContent = data.workerMetrics.active_workers || 1;
-                document.getElementById('successRate').textContent = (data.workerMetrics.success_rate * 100).toFixed(1) + '%' || '--';
-                document.getElementById('avgTime').textContent = data.workerMetrics.avg_processing_time.toFixed(0) + 'ms' || '--';
-                document.getElementById('aiDecisions').textContent = data.workerMetrics.ai_decisions || 0;
-            }
-        }
-
-        function renderEvents() {
-            const filtered = allEvents.filter(event => {
-                const matchType = activeFilters.type.length === 0 || activeFilters.type.includes(event.type);
-                const matchStatus = activeFilters.status.length === 0 || activeFilters.status.includes(event.status);
-                const matchSeverity = activeFilters.severity.length === 0 || activeFilters.severity.includes(event.severity || 'medium');
-                const matchSearch = document.getElementById('searchBox').value === '' ||
-                    event.event_id.includes(document.getElementById('searchBox').value) ||
-                    (event.type || '').includes(document.getElementById('searchBox').value);
-
-                return matchType && matchStatus && matchSeverity && matchSearch;
-            });
-
-            const list = document.getElementById('eventsList');
-            list.innerHTML = filtered.slice(0, 20).map(event => \`
-                <div class="event-item \${event.status}" onclick="showEventDetails('\${event.event_id}')">
-                    <div class="event-header">\${event.type.toUpperCase()} - \${event.status}</div>
-                    <div class="event-meta">
-                        ID: \${event.event_id.substring(0, 8)}...
-                        | \${new Date(event.created_at).toLocaleTimeString()}
-                    </div>
-                    \${event.metadata?.confidence ? \`
-                        <div style="font-size: 11px; margin-top: 5px;">
-                            Confidence: \${(event.metadata.confidence * 100).toFixed(0)}%
-                            <div class="confidence-bar"><div class="confidence-fill" style="width: \${event.metadata.confidence * 100}%"></div></div>
-                        </div>
-                    \` : ''}
-                </div>
-            \`).join('');
-        }
-
-        function showEventDetails(eventId) {
-            const event = allEvents.find(e => e.event_id === eventId);
-            if (!event) return;
-
-            const modal = document.getElementById('eventModal');
-            const details = document.getElementById('eventDetails');
-
-            details.innerHTML = \`
-                <div class="detail-row">
-                    <div class="detail-label">Event ID</div>
-                    <div class="detail-value">\${event.event_id}</div>
-                </div>
-                <div class="detail-row">
-                    <div class="detail-label">Type</div>
-                    <div class="detail-value">\${event.type}</div>
-                </div>
-                <div class="detail-row">
-                    <div class="detail-label">Status</div>
-                    <div class="detail-value">\${event.status}</div>
-                </div>
-                <div class="detail-row">
-                    <div class="detail-label">Severity</div>
-                    <div class="detail-value">\${event.severity || 'normal'}</div>
-                </div>
-                \${event.metadata?.confidence ? \`
-                <div class="detail-row">
-                    <div class="detail-label">AI Confidence</div>
-                    <div class="detail-value">\${(event.metadata.confidence * 100).toFixed(1)}%</div>
-                    <div class="confidence-bar"><div class="confidence-fill" style="width: \${event.metadata.confidence * 100}%"></div></div>
-                </div>
-                \` : ''}
-                \${event.metadata?.retry_count ? \`
-                <div class="detail-row">
-                    <div class="detail-label">Retry Count</div>
-                    <div class="detail-value">\${event.metadata.retry_count}</div>
-                </div>
-                \` : ''}
-                <div class="detail-row">
-                    <div class="detail-label">Created</div>
-                    <div class="detail-value">\${new Date(event.created_at).toLocaleString()}</div>
-                </div>
-                <div class="detail-row">
-                    <div class="detail-label">Updated</div>
-                    <div class="detail-value">\${new Date(event.updated_at).toLocaleString()}</div>
-                </div>
-                <div class="detail-row">
-                    <div class="detail-label">Payload</div>
-                    <div class="detail-value"><pre>\${JSON.stringify(event.payload, null, 2)}</pre></div>
-                </div>
-                \${event.metadata ? \`
-                <div class="detail-row">
-                    <div class="detail-label">Metadata</div>
-                    <div class="detail-value"><pre>\${JSON.stringify(event.metadata, null, 2)}</pre></div>
-                </div>
-                \` : ''}
-            \`;
-
-            modal.classList.add('active');
-        }
-
-        function closeModal() {
-            document.getElementById('eventModal').classList.remove('active');
-        }
-
-        // Theme toggle
-        document.getElementById('themeToggle').addEventListener('click', () => {
-            isDarkMode = !isDarkMode;
-            document.body.classList.toggle('light-mode');
-            document.getElementById('themeToggle').textContent = isDarkMode ? '🌙 Dark Mode' : '☀️ Light Mode';
-            localStorage.setItem('darkMode', isDarkMode);
-        });
-
-        // Export
-        document.getElementById('exportBtn').addEventListener('click', () => {
-            window.location.href = '/api/export?format=json';
-        });
-
-        // Search
-        document.getElementById('searchBox').addEventListener('input', renderEvents);
-
-        // Initialize filters
-        const types = ['task', 'analysis', 'error', 'outreach', 'cad', 'audio', 'info'];
-        const statuses = ['pending', 'processing', 'completed', 'failed'];
-        const severities = ['critical', 'high', 'medium', 'low'];
-
-        types.forEach(type => {
-            const btn = document.createElement('button');
-            btn.textContent = type;
-            btn.className = 'filter-btn secondary';
-            btn.onclick = () => {
-                btn.classList.toggle('active');
-                if (btn.classList.contains('active')) {
-                    activeFilters.type.push(type);
-                } else {
-                    activeFilters.type = activeFilters.type.filter(t => t !== type);
-                }
-                renderEvents();
-            };
-            document.getElementById('typeFilters').appendChild(btn);
-        });
-
-        statuses.forEach(status => {
-            const btn = document.createElement('button');
-            btn.textContent = status;
-            btn.className = 'filter-btn secondary';
-            btn.onclick = () => {
-                btn.classList.toggle('active');
-                if (btn.classList.contains('active')) {
-                    activeFilters.status.push(status);
-                } else {
-                    activeFilters.status = activeFilters.status.filter(s => s !== status);
-                }
-                renderEvents();
-            };
-            document.getElementById('statusFilters').appendChild(btn);
-        });
-
-        severities.forEach(sev => {
-            const btn = document.createElement('button');
-            btn.textContent = sev;
-            btn.className = 'filter-btn secondary';
-            btn.onclick = () => {
-                btn.classList.toggle('active');
-                if (btn.classList.contains('active')) {
-                    activeFilters.severity.push(sev);
-                } else {
-                    activeFilters.severity = activeFilters.severity.filter(s => s !== sev);
-                }
-                renderEvents();
-            };
-            document.getElementById('severityFilters').appendChild(btn);
-        });
-
-        // Load theme preference
-        if (localStorage.getItem('darkMode') === 'false') {
-            isDarkMode = false;
-            document.body.classList.add('light-mode');
-            document.getElementById('themeToggle').textContent = '☀️ Light Mode';
-        }
-
-        // Close modal on outside click
-        document.getElementById('eventModal').addEventListener('click', (e) => {
-            if (e.target.id === 'eventModal') closeModal();
-        });
-    </script>
-</body>
-</html>`;
-  }
-
-  start() {
-    this.app.listen(this.port, () => {
-      console.log(`\n✨ Enhanced Ursula Dashboard running on port ${this.port}`);
-      console.log(`📊 Dashboard: http://localhost:${this.port}`);
-      console.log(`🔄 Live Stream: http://localhost:${this.port}/events/stream`);
-      console.log(`\n🎯 Features:`);
-      console.log(`  ✅ Real-time event monitoring`);
-      console.log(`  ✅ Event detail modals`);
-      console.log(`  ✅ AI classification display`);
-      console.log(`  ✅ Filter & search`);
-      console.log(`  ✅ Worker metrics`);
-      console.log(`  ✅ System health indicators`);
-      console.log(`  ✅ Dark/light theme`);
-      console.log(`  ✅ Export functionality\n`);
-    });
+    req.on('error', () => { clearTimeout(timer); resolve({ ok: false, status: 'unreachable' }); });
+  });
+}
+
+// ─── data functions ────────────────────────────────────────────────────────────
+async function getRecentEvents() {
+  if (!supabase) return [];
+  try {
+    const { data, error } = await supabase
+      .from('hydi_events')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(50);
+    if (error) throw error;
+    return data || [];
+  } catch (e) {
+    console.error('[ursula] events query failed:', e.message);
+    return [];
   }
 }
 
-// Start the dashboard
-const dashboard = new UrsulaDashboardEnhanced();
-dashboard.start();
+async function getStats(events) {
+  const counts = { pending: 0, processing: 0, completed: 0, failed: 0, total: events.length };
+  for (const e of events) {
+    if (counts[e.status] !== undefined) counts[e.status]++;
+  }
+
+  // success rate & avg processing time from completed events
+  const completed = events.filter(e => e.status === 'completed');
+  counts.successRate = counts.total > 0
+    ? ((completed.length / counts.total) * 100).toFixed(1)
+    : '0.0';
+
+  const withTime = completed.filter(e => e.created_at && e.updated_at);
+  if (withTime.length > 0) {
+    const totalMs = withTime.reduce((acc, e) => {
+      return acc + (new Date(e.updated_at) - new Date(e.created_at));
+    }, 0);
+    counts.avgProcessingMs = Math.round(totalMs / withTime.length);
+  } else {
+    counts.avgProcessingMs = null;
+  }
+
+  return counts;
+}
+
+async function getServiceHealth() {
+  const results = {};
+  await Promise.all(
+    Object.entries(SERVICES).map(async ([key, { label, url }]) => {
+      const res = await httpGet(url);
+      results[key] = {
+        label,
+        ok    : res.ok,
+        status: res.status,
+        detail: res.body,
+      };
+    })
+  );
+
+  // Supabase connectivity check
+  if (supabase) {
+    try {
+      const { error } = await supabase.from('hydi_events').select('event_id').limit(1);
+      results.supabase = { label: 'Supabase DB', ok: !error, status: error ? error.message : 'connected' };
+    } catch (e) {
+      results.supabase = { label: 'Supabase DB', ok: false, status: e.message };
+    }
+  } else {
+    results.supabase = { label: 'Supabase DB', ok: false, status: 'no credentials' };
+  }
+
+  return results;
+}
+
+async function getProcessorMetrics() {
+  const res = await httpGet(`http://localhost:${process.env.PROCESSOR_PORT || 3003}/stats`);
+  if (res.ok && res.body && res.body.stats) return res.body.stats;
+  return null;
+}
+
+// ─── SSE broadcast ────────────────────────────────────────────────────────────
+const sseClients = new Set();
+
+async function buildSnapshot() {
+  const events  = await getRecentEvents();
+  const stats   = await getStats(events);
+  const health  = await getServiceHealth();
+  const procStats = await getProcessorMetrics();
+
+  return {
+    events,
+    stats,
+    health,
+    procStats,
+    timestamp: new Date().toISOString(),
+    uptime: Math.round(process.uptime()),
+    port: PORT,
+  };
+}
+
+let lastSnapshot = null;
+let broadcasting = false;
+
+async function broadcast() {
+  if (broadcasting) return;
+  broadcasting = true;
+  try {
+    lastSnapshot = await buildSnapshot();
+    const payload = `data: ${JSON.stringify(lastSnapshot)}\n\n`;
+    for (const res of sseClients) {
+      try { res.write(payload); } catch { sseClients.delete(res); }
+    }
+  } catch (e) {
+    console.error('[ursula] broadcast error:', e.message);
+  } finally {
+    broadcasting = false;
+  }
+}
+
+// ─── Express app ──────────────────────────────────────────────────────────────
+const app = express();
+app.use(express.json());
+
+// CORS — allow dashboard to be loaded from file:// or other ports during dev
+app.use((req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  next();
+});
+
+// SSE stream
+app.get('/events/stream', (req, res) => {
+  res.writeHead(200, {
+    'Content-Type' : 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection'   : 'keep-alive',
+  });
+  res.flushHeaders?.();
+
+  // Send whatever we have immediately
+  if (lastSnapshot) {
+    res.write(`data: ${JSON.stringify(lastSnapshot)}\n\n`);
+  }
+
+  sseClients.add(res);
+  req.on('close', () => sseClients.delete(res));
+});
+
+// REST APIs
+app.get('/api/events', async (req, res) => {
+  const events = await getRecentEvents();
+  res.json(events);
+});
+
+app.get('/api/health', async (req, res) => {
+  const health = await getServiceHealth();
+  const allOk = Object.values(health).every(h => h.ok);
+  res.status(allOk ? 200 : 207).json(health);
+});
+
+app.get('/api/stats', async (req, res) => {
+  const events = await getRecentEvents();
+  res.json(await getStats(events));
+});
+
+app.get('/api/export', async (req, res) => {
+  const events = await getRecentEvents();
+  const fmt = req.query.format || 'json';
+  if (fmt === 'csv') {
+    if (!events.length) return res.send('no data');
+    const keys = Object.keys(events[0]);
+    const rows = [keys.join(','), ...events.map(e =>
+      keys.map(k => `"${String(e[k] ?? '').replace(/"/g, '""')}"`).join(',')
+    )];
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename=hydi-events.csv');
+    return res.send(rows.join('\n'));
+  }
+  res.json(events);
+});
+
+app.get('/health', (req, res) =>
+  res.json({ status: 'ok', pid: process.pid, uptime: process.uptime(), port: PORT })
+);
+
+// Dashboard HTML
+app.get('/', (req, res) => res.send(dashboardHTML()));
+
+// 404 fallthrough
+app.use((req, res) => res.status(404).json({ error: `unknown route: ${req.path}` }));
+
+// ─── HTTP server with proper error handling ────────────────────────────────────
+const server = http.createServer(app);
+
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`[ursula] ❌  Port ${PORT} is already in use. Set DASHBOARD_PORT to a free port.`);
+  } else {
+    console.error('[ursula] Server error:', err.message);
+  }
+  process.exit(1);
+});
+
+server.listen(PORT, () => {
+  console.log(`\n✨  Ursula Dashboard  →  http://localhost:${PORT}`);
+  console.log(`📡  SSE stream       →  http://localhost:${PORT}/events/stream`);
+  console.log(`🔗  REST API         →  http://localhost:${PORT}/api/health\n`);
+
+  // Immediately build first snapshot, then poll every 3 s
+  broadcast();
+  setInterval(broadcast, 3000);
+});
+
+// Graceful shutdown
+const shutdown = (sig) => {
+  console.log(`\n[ursula] ${sig} received — shutting down`);
+  server.close(() => process.exit(0));
+  setTimeout(() => process.exit(1), 8000).unref();
+};
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT',  () => shutdown('SIGINT'));
+
+process.on('unhandledRejection', (reason) => {
+  console.error('[ursula] Unhandled rejection:', reason);
+});
+
+// ─── HTML ─────────────────────────────────────────────────────────────────────
+function dashboardHTML() {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ursula — HYDI Monitor</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg0:#0f1117;--bg1:#1a1d27;--bg2:#22263a;--bg3:#2c3150;
+  --text:#e8eaf6;--muted:#7b82a8;--border:#2e3357;
+  --green:#4caf50;--yellow:#ffc107;--red:#ef5350;--blue:#5c9cf5;
+  --purple:#9575cd;--cyan:#26c6da;
+}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg0);color:var(--text);font-size:14px;min-height:100vh}
+a{color:var(--blue);text-decoration:none}
+
+/* header */
+header{background:var(--bg1);border-bottom:1px solid var(--border);padding:14px 24px;display:flex;align-items:center;justify-content:space-between;gap:12px;position:sticky;top:0;z-index:100}
+header h1{font-size:18px;font-weight:700;letter-spacing:0.5px}
+header h1 span{color:var(--purple)}
+.badge{padding:3px 10px;border-radius:999px;font-size:11px;font-weight:600;background:var(--bg3);color:var(--muted);border:1px solid var(--border)}
+.badge.live{background:#1a3320;color:var(--green);border-color:#2d6b3a;animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.6}}
+.hdr-right{display:flex;align-items:center;gap:10px}
+#ts{font-size:12px;color:var(--muted)}
+.btn{background:var(--bg3);color:var(--text);border:1px solid var(--border);padding:6px 14px;border-radius:6px;cursor:pointer;font-size:13px;transition:.15s}
+.btn:hover{border-color:var(--blue);color:var(--blue)}
+
+/* layout */
+main{padding:20px 24px;max-width:1600px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
+
+/* stat row */
+.stat-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px}
+.stat-card{background:var(--bg1);border:1px solid var(--border);border-radius:10px;padding:16px;display:flex;flex-direction:column;gap:4px}
+.stat-card .num{font-size:32px;font-weight:700}
+.stat-card .lbl{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+.green{color:var(--green)} .yellow{color:var(--yellow)} .red{color:var(--red)} .blue{color:var(--blue)} .purple{color:var(--purple)} .cyan{color:var(--cyan)}
+
+/* grid */
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+@media(max-width:900px){.grid2,.grid3{grid-template-columns:1fr}}
+
+/* card */
+.card{background:var(--bg1);border:1px solid var(--border);border-radius:10px;padding:18px;display:flex;flex-direction:column;gap:12px}
+.card h3{font-size:13px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+
+/* health grid */
+.health-grid{display:flex;flex-direction:column;gap:8px}
+.health-row{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border-radius:6px;background:var(--bg2)}
+.health-row .svc{display:flex;align-items:center;gap:8px;font-weight:500}
+.dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+.dot.ok{background:var(--green);box-shadow:0 0 6px var(--green)}
+.dot.fail{background:var(--red);box-shadow:0 0 6px var(--red)}
+.dot.warn{background:var(--yellow);box-shadow:0 0 6px var(--yellow)}
+.health-status{font-size:11px;color:var(--muted);text-align:right}
+
+/* events */
+.event-filters{display:flex;gap:8px;flex-wrap:wrap}
+.f-btn{background:var(--bg2);border:1px solid var(--border);color:var(--muted);padding:4px 12px;border-radius:999px;cursor:pointer;font-size:12px;transition:.15s}
+.f-btn:hover,.f-btn.on{background:var(--blue);border-color:var(--blue);color:#fff}
+.search{width:100%;background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:8px 12px;color:var(--text);font-size:13px;outline:none}
+.search:focus{border-color:var(--blue)}
+.event-list{display:flex;flex-direction:column;gap:6px;max-height:440px;overflow-y:auto}
+.event-list::-webkit-scrollbar{width:5px} .event-list::-webkit-scrollbar-thumb{background:var(--bg3);border-radius:4px}
+.ev{background:var(--bg2);border:1px solid var(--border);border-left-width:3px;border-radius:6px;padding:10px 12px;cursor:pointer;transition:.15s;display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+.ev:hover{background:var(--bg3);border-color:var(--blue)}
+.ev.pending{border-left-color:var(--yellow)}
+.ev.failed{border-left-color:var(--red)}
+.ev.completed{border-left-color:var(--green)}
+.ev.processing{border-left-color:var(--blue)}
+.ev-type{font-weight:600;font-size:13px}
+.ev-id{font-size:10px;color:var(--muted);font-family:monospace}
+.ev-time{font-size:11px;color:var(--muted);white-space:nowrap}
+.tag{display:inline-block;padding:2px 7px;border-radius:4px;font-size:10px;font-weight:600;text-transform:uppercase}
+.tag.pending{background:#332d00;color:var(--yellow)}
+.tag.failed{background:#330000;color:var(--red)}
+.tag.completed{background:#0d2e13;color:var(--green)}
+.tag.processing{background:#0d1f3c;color:var(--blue)}
+
+/* proc stats */
+.proc-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.proc-item{background:var(--bg2);border-radius:6px;padding:12px}
+.proc-item .val{font-size:20px;font-weight:700;margin-bottom:2px}
+.proc-item .key{font-size:11px;color:var(--muted)}
+
+/* modal */
+.modal-wrap{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:500;align-items:center;justify-content:center}
+.modal-wrap.show{display:flex}
+.modal{background:var(--bg1);border:1px solid var(--border);border-radius:12px;width:min(640px,95vw);max-height:85vh;overflow-y:auto;padding:24px;position:relative}
+.modal h2{margin-bottom:16px;font-size:16px}
+.modal-close{position:absolute;top:16px;right:16px;background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer;line-height:1}
+.modal-close:hover{color:var(--text)}
+.m-row{border-bottom:1px solid var(--border);padding:10px 0;display:grid;grid-template-columns:120px 1fr;gap:8px;align-items:start}
+.m-key{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;padding-top:2px}
+.m-val{font-size:13px;word-break:break-all}
+pre{background:var(--bg2);border-radius:6px;padding:10px;font-size:11px;overflow-x:auto;white-space:pre-wrap}
+
+/* empty state */
+.empty{color:var(--muted);text-align:center;padding:30px;font-size:13px}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🎯 <span>Ursula</span> — HYDI Monitor</h1>
+  <div class="hdr-right">
+    <span id="connBadge" class="badge">connecting…</span>
+    <span id="ts" class="badge"></span>
+    <button class="btn" onclick="exportData()">↓ Export</button>
+  </div>
+</header>
+
+<main>
+
+  <!-- stat row -->
+  <div class="stat-row">
+    <div class="stat-card"><div class="num yellow" id="sPending">—</div><div class="lbl">Pending</div></div>
+    <div class="stat-card"><div class="num blue"   id="sProcessing">—</div><div class="lbl">Processing</div></div>
+    <div class="stat-card"><div class="num green"  id="sCompleted">—</div><div class="lbl">Completed</div></div>
+    <div class="stat-card"><div class="num red"    id="sFailed">—</div><div class="lbl">Failed</div></div>
+    <div class="stat-card"><div class="num muted"  id="sTotal">—</div><div class="lbl">Total</div></div>
+    <div class="stat-card"><div class="num cyan"   id="sSuccessRate">—</div><div class="lbl">Success Rate</div></div>
+    <div class="stat-card"><div class="num purple" id="sAvgTime">—</div><div class="lbl">Avg Process Time</div></div>
+    <div class="stat-card"><div class="num blue"   id="sUptime">—</div><div class="lbl">Dashboard Uptime</div></div>
+  </div>
+
+  <!-- health + processor stats -->
+  <div class="grid2">
+    <div class="card">
+      <h3>Service Health</h3>
+      <div class="health-grid" id="healthGrid">
+        <div class="empty">Connecting…</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Processor Stats (live from :3003)</h3>
+      <div class="proc-grid" id="procStats">
+        <div class="empty" style="grid-column:span 2">Waiting for processor…</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- events -->
+  <div class="card" style="gap:10px">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+      <h3>Recent Events</h3>
+      <div class="event-filters" id="statusFilters"></div>
+    </div>
+    <input class="search" id="search" placeholder="Filter by type, ID, source…" oninput="renderEvents()">
+    <div class="event-list" id="eventList"><div class="empty">No events yet…</div></div>
+  </div>
+
+</main>
+
+<!-- modal -->
+<div class="modal-wrap" id="modalWrap" onclick="if(event.target===this)closeModal()">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal()">×</button>
+    <h2>Event Detail</h2>
+    <div id="modalBody"></div>
+  </div>
+</div>
+
+<script>
+const POLL_MS = 3000;
+let allEvents = [];
+let activeStatuses = new Set();
+let connected = false;
+
+// ── SSE ──────────────────────────────────────────────────────────────────────
+let es;
+function connectSSE() {
+  es = new EventSource('/events/stream');
+  es.onopen = () => {
+    connected = true;
+    document.getElementById('connBadge').className = 'badge live';
+    document.getElementById('connBadge').textContent = '● LIVE';
+  };
+  es.onmessage = (e) => {
+    try { applySnapshot(JSON.parse(e.data)); } catch {}
+  };
+  es.onerror = () => {
+    connected = false;
+    document.getElementById('connBadge').className = 'badge';
+    document.getElementById('connBadge').textContent = 'reconnecting…';
+    es.close();
+    setTimeout(connectSSE, 3000);
+  };
+}
+connectSSE();
+
+// ── snapshot ─────────────────────────────────────────────────────────────────
+function applySnapshot(snap) {
+  // timestamp
+  document.getElementById('ts').textContent = new Date(snap.timestamp).toLocaleTimeString();
+
+  // stats
+  const s = snap.stats || {};
+  document.getElementById('sPending').textContent     = s.pending    ?? '—';
+  document.getElementById('sProcessing').textContent  = s.processing ?? '—';
+  document.getElementById('sCompleted').textContent   = s.completed  ?? '—';
+  document.getElementById('sFailed').textContent      = s.failed     ?? '—';
+  document.getElementById('sTotal').textContent       = s.total      ?? '—';
+  document.getElementById('sSuccessRate').textContent = s.successRate != null ? s.successRate + '%' : '—';
+  document.getElementById('sAvgTime').textContent     = s.avgProcessingMs != null ? s.avgProcessingMs + 'ms' : '—';
+  document.getElementById('sUptime').textContent      = snap.uptime != null ? fmtUptime(snap.uptime) : '—';
+
+  // health
+  const hg = document.getElementById('healthGrid');
+  if (snap.health && Object.keys(snap.health).length) {
+    hg.innerHTML = Object.entries(snap.health).map(([, h]) => {
+      const cls = h.ok ? 'ok' : 'fail';
+      const detail = typeof h.status === 'object' ? JSON.stringify(h.status) : h.status;
+      return \`<div class="health-row">
+        <div class="svc"><div class="dot \${cls}"></div>\${h.label}</div>
+        <div class="health-status">\${detail}</div>
+      </div>\`;
+    }).join('');
+  }
+
+  // processor stats
+  const pg = document.getElementById('procStats');
+  if (snap.procStats && Object.keys(snap.procStats).length) {
+    const items = Object.entries(snap.procStats)
+      .filter(([, v]) => v !== null && v !== undefined)
+      .map(([k, v]) => \`<div class="proc-item"><div class="val">\${v}</div><div class="key">\${k}</div></div>\`);
+    pg.innerHTML = items.length ? items.join('') : '<div class="empty" style="grid-column:span 2">No stats returned</div>';
+  } else {
+    pg.innerHTML = '<div class="empty" style="grid-column:span 2">Processor not reachable</div>';
+  }
+
+  // events
+  allEvents = snap.events || [];
+  buildStatusFilters();
+  renderEvents();
+}
+
+// ── filters ───────────────────────────────────────────────────────────────────
+function buildStatusFilters() {
+  const statuses = [...new Set(allEvents.map(e => e.status).filter(Boolean))].sort();
+  const bar = document.getElementById('statusFilters');
+  // preserve active set, just re-render buttons
+  bar.innerHTML = statuses.map(s => {
+    const on = activeStatuses.has(s) ? 'on' : '';
+    return \`<button class="f-btn \${on}" onclick="toggleStatus('\${s}',this)">\${s}</button>\`;
+  }).join('');
+}
+
+function toggleStatus(s, btn) {
+  activeStatuses.has(s) ? activeStatuses.delete(s) : activeStatuses.add(s);
+  btn.classList.toggle('on');
+  renderEvents();
+}
+
+// ── event list ────────────────────────────────────────────────────────────────
+function renderEvents() {
+  const q = (document.getElementById('search').value || '').toLowerCase();
+  const list = document.getElementById('eventList');
+
+  const filtered = allEvents.filter(ev => {
+    if (activeStatuses.size && !activeStatuses.has(ev.status)) return false;
+    if (q) {
+      const hay = [ev.event_id, ev.type, ev.source, ev.status].join(' ').toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  }).slice(0, 30);
+
+  if (!filtered.length) {
+    list.innerHTML = '<div class="empty">No matching events</div>';
+    return;
+  }
+
+  list.innerHTML = filtered.map(ev => \`
+    <div class="ev \${ev.status || ''}" onclick="openModal('\${ev.event_id}')">
+      <div>
+        <div class="ev-type">\${(ev.type || 'unknown').toUpperCase()}
+          <span class="tag \${ev.status}">\${ev.status}</span>
+        </div>
+        <div class="ev-id">\${ev.event_id}</div>
+        \${ev.source ? \`<div class="ev-id" style="color:var(--muted)">from \${ev.source}</div>\` : ''}
+      </div>
+      <div class="ev-time">\${fmtTime(ev.created_at)}</div>
+    </div>
+  \`).join('');
+}
+
+// ── modal ─────────────────────────────────────────────────────────────────────
+function openModal(id) {
+  const ev = allEvents.find(e => e.event_id === id);
+  if (!ev) return;
+  const rows = [
+    ['Event ID', ev.event_id],
+    ['Type', ev.type],
+    ['Status', ev.status],
+    ['Source', ev.source || '—'],
+    ['Severity', ev.severity || '—'],
+    ['Retry Count', ev.retry_count ?? ev.retries ?? '—'],
+    ['Created', fmtFull(ev.created_at)],
+    ['Updated', fmtFull(ev.updated_at)],
+    ['Payload', typeof ev.payload === 'object' ? JSON.stringify(ev.payload, null, 2) : ev.payload],
+  ];
+  if (ev.metadata) rows.push(['Metadata', JSON.stringify(ev.metadata, null, 2)]);
+  if (ev.failure_reason) rows.push(['Failure Reason', ev.failure_reason]);
+
+  document.getElementById('modalBody').innerHTML = rows.map(([k, v]) => {
+    const isJson = v && v.startsWith('{') || (v && v.startsWith('['));
+    return \`<div class="m-row">
+      <div class="m-key">\${k}</div>
+      <div class="m-val">\${isJson ? \`<pre>\${escHtml(v)}</pre>\` : escHtml(String(v ?? '—'))}</div>
+    </div>\`;
+  }).join('');
+  document.getElementById('modalWrap').classList.add('show');
+}
+
+function closeModal() { document.getElementById('modalWrap').classList.remove('show'); }
+
+// ── export ────────────────────────────────────────────────────────────────────
+function exportData() { window.open('/api/export?format=json', '_blank'); }
+
+// ── util ──────────────────────────────────────────────────────────────────────
+function fmtTime(iso) {
+  if (!iso) return '—';
+  try { return new Date(iso).toLocaleTimeString(); } catch { return iso; }
+}
+function fmtFull(iso) {
+  if (!iso) return '—';
+  try { return new Date(iso).toLocaleString(); } catch { return iso; }
+}
+function fmtUptime(s) {
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+  return [h && h + 'h', m && m + 'm', sec + 's'].filter(Boolean).join(' ');
+}
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+</script>
+</body>
+</html>`;
+}
