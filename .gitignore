@@ -1,8 +1,15 @@
 node_modules/
-coverage/
-.vercel
-.env*.local
-.next/
-
-# Local Netlify folder
-.netlify
+.env
+.env.*
+dist/
+build/
+*.log
+*.zip
+*.tar.gz
+hydi-system-*.zip
+hydi-system-*.tar.gz
+logs.txt
+.DS_Store
+/generated/prisma
+heidi-core.env.local
+*.env.local
