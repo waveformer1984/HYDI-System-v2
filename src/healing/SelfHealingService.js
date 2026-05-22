@@ -159,6 +159,10 @@ Respond ONLY with valid JSON:
       return null;
     }
   }
+
+  destroy() {
+    this._destroyed = true;
+  }
 }
 
 module.exports = new SelfHealingService();

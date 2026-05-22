@@ -1,4 +1,4 @@
-﻿module.exports = {
+module.exports = {
   apps: [
     {
       name: 'heidi',
@@ -63,7 +63,7 @@
       env: {
         NODE_ENV: 'production',
         ENVIRONMENT: 'production',
-        DASHBOARD_PORT: 3005
+        DASHBOARD_PORT: 3007
       },
       autorestart: true,
       watch: false,
