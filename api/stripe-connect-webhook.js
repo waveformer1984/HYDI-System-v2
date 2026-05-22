@@ -1,8 +1,11 @@
 /**
  * Stripe Connect Webhook Handler
- * Routes payments to correct sub-account and writes ledger entries
+ * Routes payments to correct sub-account, writes ledger entries, and
+ * forwards every verified event into the HYDI pipeline via /ingest so
+ * stripe-billing-worker can perform downstream processing.
  */
 
+const http   = require('http');
 const Stripe = require('stripe');
 const { createClient } = require('@supabase/supabase-js');
 
@@ -68,6 +71,8 @@ async function handler(req, res) {
       default:
         console.log(`[Connect Webhook] Unhandled: ${event.type}`);
     }
+    // Forward verified event into HYDI pipeline (fire-and-forget)
+    forwardToHYDI(event);
     return res.status(200).json({ received: true });
   } catch (error) {
     console.error('[Connect Webhook] Processing error:', error);
@@ -203,7 +208,47 @@ function determineRevenueStream(paymentIntent) {
   return 'galactic_bytes';
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// HYDI Pipeline forward — fire-and-forget POST to the ingest endpoint.
+// Errors are logged but never block the webhook response to Stripe.
+// ─────────────────────────────────────────────────────────────────────────────
+const INGEST_URL = process.env.HYDI_INGEST_URL || 'http://localhost:3003/ingest';
+
+function forwardToHYDI(stripeEvent) {
+  const body = JSON.stringify({
+    source: 'stripe-webhook',
+    type:   stripeEvent.type,        // e.g. "payment_intent.succeeded"
+    payload: {
+      stripeEventId:   stripeEvent.id,
+      stripeEventType: stripeEvent.type,
+      object:          stripeEvent.data.object,
+      revenueStream:   stripeEvent.data.object?.metadata?.revenue_stream || null
+    }
+  });
+
+  const url = new URL(INGEST_URL);
+  const options = {
+    hostname: url.hostname,
+    port:     parseInt(url.port || '3003', 10),
+    path:     url.pathname,
+    method:   'POST',
+    headers:  { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) }
+  };
+
+  const req = http.request(options, (res) => {
+    console.log(`[Connect Webhook] HYDI ingest forwarded ${stripeEvent.type} → ${res.statusCode}`);
+  });
+
+  req.on('error', (err) => {
+    console.warn('[Connect Webhook] HYDI ingest forward failed (non-fatal):', err.message);
+  });
+
+  req.write(body);
+  req.end();
+}
+
 module.exports = handler;
 module.exports.REVENUE_STREAM_ACCOUNTS = REVENUE_STREAM_ACCOUNTS;
 module.exports.FEE_STRUCTURE = FEE_STRUCTURE;
 module.exports.determineRevenueStream = determineRevenueStream;
+module.exports.forwardToHYDI = forwardToHYDI;

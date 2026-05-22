@@ -127,6 +127,8 @@ if (require.main === module) {
   const express = require('express');
   const { router, registry, breaker } = require('./core/hydi-router');
   const { ConsumerLoop } = require('./core/consumer-loop');
+  const { RedisStreamConsumer } = require('./core/redis-stream-consumer');
+  const metrics = require('./core/metrics');
 
   const app = express();
   app.use(express.json());
@@ -134,8 +136,11 @@ if (require.main === module) {
   const PORT = parseInt(process.env.PROCESSOR_PORT || '3003', 10);
   const startedAt = new Date().toISOString();
 
-  // Single consumer loop instance shared across endpoints
+  // Supabase polling consumer loop
   const consumer = new ConsumerLoop({ router, registry, breaker });
+
+  // Redis Streams → worker bridge (subscribes to hydi:tasks:routing)
+  const streamConsumer = new RedisStreamConsumer({ router, registry, breaker });
 
   // Health — pm2 / load balancers / cron probes
   app.get('/health', (req, res) => {
@@ -150,6 +155,17 @@ if (require.main === module) {
     });
   });
 
+  // Prometheus metrics — scraped by Prometheus every 15 s
+  app.get('/metrics', async (req, res) => {
+    // Refresh queue-depth gauge on each scrape
+    try {
+      const stats = await processor.getEventStats();
+      metrics.supabaseQueueDepth.set(stats.pending || 0);
+    } catch (_) { /* non-fatal */ }
+    res.set('Content-Type', metrics.registry.contentType);
+    res.end(await metrics.registry.metrics());
+  });
+
   // Stats — wraps the existing getEventStats()
   app.get('/stats', async (req, res) => {
     const stats = await processor.getEventStats();
@@ -159,6 +175,7 @@ if (require.main === module) {
   // Direct ingestion endpoint (alternate channel from protoforge-mock)
   // POST /ingest { source, type, payload }
   app.post('/ingest', async (req, res) => {
+    const t0 = Date.now();
     const { source, type, payload } = req.body || {};
     if (!source || !type) {
       return res.status(400).json({
@@ -167,6 +184,7 @@ if (require.main === module) {
       });
     }
     const result = await processor.processEvent(source, type, payload || {});
+    metrics.ingestLatency.observe(Date.now() - t0);
     res.status(result.success ? 200 : 500).json(result);
   });
 
@@ -207,7 +225,10 @@ if (require.main === module) {
   });
 
   // ── Consumer loop control ──────────────────────────────────────────────
-  app.get('/consumer/status', (req, res) => res.json(consumer.snapshot()));
+  app.get('/consumer/status', (req, res) => res.json({
+    supabase: consumer.snapshot(),
+    streams:  streamConsumer.snapshot()
+  }));
 
   app.post('/consumer/start', async (req, res) => {
     await consumer.start();
@@ -217,6 +238,19 @@ if (require.main === module) {
   app.post('/consumer/stop', async (req, res) => {
     await consumer.stop();
     res.json({ ok: true, running: consumer.running });
+  });
+
+  // ── Redis Streams consumer control ─────────────────────────────────────────
+  app.get('/streams/status', (req, res) => res.json(streamConsumer.snapshot()));
+
+  app.post('/streams/start', async (req, res) => {
+    await streamConsumer.start();
+    res.json({ ok: true, running: streamConsumer.running });
+  });
+
+  app.post('/streams/stop', async (req, res) => {
+    await streamConsumer.stop();
+    res.json({ ok: true, running: streamConsumer.running });
   });
 
   // 404 fallthrough
@@ -264,6 +298,13 @@ if (require.main === module) {
     consumer.start().catch((e) => {
       console.error('Consumer auto-start failed:', e);
     });
+    // Also start the Redis Streams consumer alongside the Supabase loop
+    streamConsumer.start().catch((e) => {
+      console.error('Stream consumer auto-start failed:', e);
+    });
+    console.log(`  POST /streams/start        — start Redis Streams worker bridge`);
+    console.log(`  POST /streams/stop         — stop Redis Streams worker bridge`);
+    console.log(`  GET  /streams/status       — stream consumer metrics`);
   } else {
     console.log('Consumer loop NOT auto-started (set HYDI_CONSUMER_ENABLED=true to enable).');
   }
@@ -271,7 +312,10 @@ if (require.main === module) {
   // Graceful shutdown — pm2 sends SIGINT/SIGTERM on stop/reload
   const shutdown = async (signal) => {
     console.log(`Received ${signal}, shutting down...`);
-    await consumer.stop().catch(() => {});
+    await Promise.all([
+      consumer.stop().catch(() => {}),
+      streamConsumer.stop().catch(() => {})
+    ]);
     server.close(() => {
       console.log('HTTP server closed. Goodbye.');
       process.exit(0);

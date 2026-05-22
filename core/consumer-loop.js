@@ -22,6 +22,15 @@
 const { createClient } = require('@supabase/supabase-js');
 const { dispatch } = require('./dispatcher');
 
+// Metrics are optional — if prom-client isn't installed or the registry
+// hasn't been set up yet, consumer-loop degrades gracefully.
+let metrics;
+try {
+  metrics = require('./metrics');
+} catch (_) {
+  metrics = null;
+}
+
 class ConsumerLoop {
   constructor({ router, registry, breaker, supabase, logger = console } = {}) {
     if (!router || !registry || !breaker) {
@@ -77,6 +86,7 @@ class ConsumerLoop {
   async _loop() {
     while (!this._stopRequested) {
       const pollN = ++this.metrics.polls;
+      metrics?.consumerPolls.inc();
       let processedThisRound = 0;
       try {
         this.log.log(`[consumer] poll #${pollN}: querying hydi_events for status=pending limit=${this.batch}`);
@@ -121,6 +131,7 @@ class ConsumerLoop {
             claimed.type = claimed.event_type || 'unknown';
           }
           this.metrics.claimed += 1;
+          metrics?.eventsClaimed.inc();
           this.log.log(`[consumer] poll #${pollN}: CLAIMED ${claimKey}, handling...`);
           await this._handle(claimed);
           processedThisRound += 1;
@@ -180,29 +191,33 @@ class ConsumerLoop {
       this.log.log(`[consumer] ${label} → dead_letter (intent=${decision.intent}, conf=${decision.confidence?.toFixed(2)})`);
       await this._mark(event.id, event.event_id, 'dead_letter', {
         intent: decision.intent || null,
-        // evaluation_context_snapshot is the jsonb column for analysis data
         evaluation_context_snapshot: {
           failure_reason: `no worker for intent=${decision.intent}`,
           route: decision
         }
       });
       this.metrics.deadLettered += 1;
+      metrics?.eventsDeadLettered.inc();
       return;
     }
 
+    const t0 = Date.now();
     const out = await dispatch({
       event,
       decision,
       breaker: this.breaker,
       timeoutMs: this.timeoutMs
     });
+    const elapsedMs = Date.now() - t0;
+    const workerId  = decision.worker.id;
+    const eventType = event.type || 'unknown';
 
     if (out.ok) {
-      this.log.log(`[consumer] ${label} → processed by ${decision.worker.id} (${out.elapsedMs}ms via ${out.transport})`);
+      this.log.log(`[consumer] ${label} → processed by ${workerId} (${out.elapsedMs}ms via ${out.transport})`);
       await this._mark(event.id, event.event_id, 'processed', {
         intent: decision.intent || null,
         evaluation_context_snapshot: {
-          worker_id: decision.worker.id,
+          worker_id: workerId,
           intent: decision.intent,
           score: decision.score,
           transport: out.transport,
@@ -210,19 +225,22 @@ class ConsumerLoop {
         }
       });
       this.metrics.processed += 1;
+      metrics?.eventsProcessed.inc({ worker_id: workerId, event_type: eventType });
+      metrics?.workerLatency.observe({ worker_id: workerId }, elapsedMs);
     } else {
-      this.log.log(`[consumer] ${label} → failed (${decision.worker.id}: ${out.error})`);
+      this.log.log(`[consumer] ${label} → failed (${workerId}: ${out.error})`);
       await this._mark(event.id, event.event_id, 'failed', {
         intent: decision.intent || null,
         evaluation_context_snapshot: {
           failure_reason: out.error,
-          worker_id: decision.worker.id,
+          worker_id: workerId,
           intent: decision.intent,
           score: decision.score,
           transport: out.transport
         }
       });
       this.metrics.failed += 1;
+      metrics?.eventsFailed.inc({ worker_id: workerId, event_type: eventType });
     }
   }
 
