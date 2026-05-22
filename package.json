@@ -45,8 +45,8 @@
     "stripe": "^22.1.1",
     "typescript": "^5.0.0",
     "uuid": "^14.0.0",
-    "web3": "^4.0.0",
-    "eth-account": "^0.11.0"
+    "ioredis": "^5.6.1",
+    "web3": "^4.0.0"
   },
   "devDependencies": {
     "@types/jest": "^29.5.14",
@@ -59,7 +59,7 @@
     "@nomicfoundation/hardhat-toolbox": "^4.0.0",
     "@openzeppelin/contracts": "^5.0.0",
     "hardhat": "^2.22.0",
-    "hardhat-etherscan": "^3.1.7"
+    "ts-node": "^10.9.2"
   },
   "overrides": {
     "glob": "^10.4.5"

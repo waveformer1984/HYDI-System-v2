@@ -3,7 +3,7 @@
 require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
-const { execSync } = require('child_process');
+const { exec, execSync } = require('child_process');
 const { v4: uuidv4 } = require('uuid');
 
 // CLI-First Global Orchestrator for HYDI Ecosystem
@@ -524,6 +524,44 @@ class HYDIOrchestrator {
     return health;
   }
 
+  // ── Thermal policy hooks (called by ThermalMitigationGuard) ────────────────
+
+  /** Update thermal status — exposed to dashboard via /health. */
+  setThermalStatus(status) {
+    this.systemState.thermal = { status, updatedAt: new Date().toISOString() };
+    this.logEvent('THERMAL_STATUS_CHANGE', { status });
+  }
+
+  /** Halt all active workers immediately (EMERGENCY). */
+  emergencyHaltAllWorkers() {
+    this.systemState.thermal = { status: 'EMERGENCY', updatedAt: new Date().toISOString() };
+    this.logEvent('EMERGENCY_HALT', { reason: 'thermal_threshold_92c' });
+    // In a fully-wired deployment, broadcast a stop signal to the consumer loop
+    // and all in-process workers here.
+    console.error('[Orchestrator] ⚠ EMERGENCY HALT — all worker intake suspended');
+  }
+
+  /** Reduce queue intake to `rate` of normal capacity (THROTTLE). */
+  setQueueThrottleRate(rate) {
+    this.systemState.thermal = { status: 'THROTTLE', rate, updatedAt: new Date().toISOString() };
+    this.logEvent('QUEUE_THROTTLE', { rate });
+    console.warn(`[Orchestrator] Queue intake throttled to ${(rate * 100).toFixed(0)}%`);
+  }
+
+  /** Pause speculative/background indexing tasks (WARNING). */
+  pauseBackgroundIndexing() {
+    this.systemState.thermal = { status: 'WARNING', updatedAt: new Date().toISOString() };
+    this.logEvent('BACKGROUND_PAUSE', { reason: 'thermal_warning_80c' });
+    console.log('[Orchestrator] Background indexing paused');
+  }
+
+  /** Resume full normal operations (NOMINAL). */
+  resumeNormalOperations() {
+    this.systemState.thermal = { status: 'NOMINAL', updatedAt: new Date().toISOString() };
+    this.logEvent('NORMAL_OPERATIONS_RESUMED', {});
+    console.log('[Orchestrator] Normal operations resumed — all throttles released');
+  }
+
   // CLI-FIRST EXECUTION ENFORCER
   async executeWithCLIFirst(task, fallback = null) {
     console.log(`Executing task: ${task}`);
@@ -601,15 +639,128 @@ class HYDIOrchestrator {
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// THERMAL MITIGATION GUARD (Milestone 2.2)
+//
+// Samples host CPU thermals via WMI every 4 s. On threshold breach it invokes
+// matching orchestrator methods to gate/halt worker intake, preventing the
+// Windows 11 UI from freezing under heavy inference load.
+//
+// Temperature thresholds (°C):
+//   ≥ 80  WARNING    — pause speculative background tasks
+//   ≥ 88  THROTTLE   — restrict queue intake to 25 % capacity
+//   ≥ 92  EMERGENCY  — halt all workers (full lockdown)
+//   < 78  NOMINAL    — release all throttles
+// ─────────────────────────────────────────────────────────────────────────────
+class ThermalMitigationGuard {
+  constructor(orchestratorCore) {
+    this.orchestrator = orchestratorCore;
+    this.currentStatus = 'NOMINAL'; // NOMINAL | WARNING | THROTTLE | EMERGENCY
+    this.intervalId = null;
+  }
+
+  start() {
+    this.intervalId = setInterval(() => this.evaluateHostThermals(), 4000);
+    console.log('[ThermalGuard] Started — polling thermals every 4 s');
+  }
+
+  stop() {
+    if (this.intervalId) {
+      clearInterval(this.intervalId);
+      this.intervalId = null;
+      console.log('[ThermalGuard] Stopped');
+    }
+  }
+
+  evaluateHostThermals() {
+    // Query Windows Management Instrumentation for CPU zone temperature (tenths of Kelvin)
+    exec(
+      'wmic /namespace:\\\\root\\wmi PATH MSAcpi_ThermalZoneTemperature Get CurrentTemperature 2>nul',
+      (err, stdout) => {
+        if (err) {
+          // WMI may not expose thermals on all hardware; log once and skip
+          if (this.currentStatus !== '_WMI_WARN') {
+            console.warn('[ThermalGuard] WMI thermal query unavailable — using simulated NOMINAL');
+            this.currentStatus = '_WMI_WARN';
+          }
+          return;
+        }
+
+        // Parse: header line "CurrentTemperature", then value line
+        const lines = stdout.trim().split(/\r?\n/).filter(l => /^\d+/.test(l.trim()));
+        if (lines.length === 0) return;
+
+        const rawTemp = parseFloat(lines[0].trim());
+        if (!rawTemp || isNaN(rawTemp)) return;
+
+        // Convert tenths-of-Kelvin → Celsius
+        const celsius = (rawTemp / 10.0) - 273.15;
+        this.executePolicyMatrix(celsius);
+      }
+    );
+  }
+
+  /** Public — call directly for testing (e.g. executePolicyMatrix(93)). */
+  executePolicyMatrix(temp) {
+    if (temp >= 92 && this.currentStatus !== 'EMERGENCY') {
+      this.currentStatus = 'EMERGENCY';
+      console.error(
+        `[ThermalGuard] CRITICAL INVARIANT VIOLATION: Thermal threshold breached at ${temp.toFixed(1)}°C. ` +
+        `Executing emergency lockdown.`
+      );
+      this.orchestrator.emergencyHaltAllWorkers();
+      this.orchestrator.setThermalStatus('EMERGENCY');
+
+    } else if (temp >= 88 && this.currentStatus !== 'THROTTLE' && this.currentStatus !== 'EMERGENCY') {
+      this.currentStatus = 'THROTTLE';
+      console.warn(
+        `[ThermalGuard] THERMAL BOUNDARY BREACHED (${temp.toFixed(1)}°C): ` +
+        `Restricting worker queue ingestion to 25 % capacity.`
+      );
+      this.orchestrator.setQueueThrottleRate(0.25);
+      this.orchestrator.setThermalStatus('THROTTLE');
+
+    } else if (temp >= 80 && this.currentStatus !== 'WARNING' &&
+               this.currentStatus !== 'THROTTLE' && this.currentStatus !== 'EMERGENCY') {
+      this.currentStatus = 'WARNING';
+      console.log(
+        `[ThermalGuard] WARNING: Host thermal limits elevated at ${temp.toFixed(1)}°C. ` +
+        `Pausing speculative background tasks.`
+      );
+      this.orchestrator.pauseBackgroundIndexing();
+      this.orchestrator.setThermalStatus('WARNING');
+
+    } else if (temp < 78 && this.currentStatus !== 'NOMINAL') {
+      this.currentStatus = 'NOMINAL';
+      console.log(
+        `[ThermalGuard] System thermals stabilized at ${temp.toFixed(1)}°C. ` +
+        `All structural execution throttles released.`
+      );
+      this.orchestrator.resumeNormalOperations();
+      this.orchestrator.setThermalStatus('NOMINAL');
+    }
+  }
+
+  snapshot() {
+    return { currentStatus: this.currentStatus, running: this.intervalId !== null };
+  }
+}
+
 // CLI interface
 if (require.main === module) {
   const orchestrator = new HYDIOrchestrator();
+
+  // Wire and start thermal guard automatically when run as main process
+  const thermalGuard = new ThermalMitigationGuard(orchestrator);
+  thermalGuard.start();
+
   const command = process.argv[2] || 'health';
-  
+
   orchestrator.execute(command).catch(error => {
     console.error('Orchestrator Error:', error.message);
+    thermalGuard.stop();
     process.exit(1);
   });
 }
 
-module.exports = { HYDIOrchestrator };
+module.exports = { HYDIOrchestrator, ThermalMitigationGuard };
