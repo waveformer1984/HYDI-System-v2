@@ -54,7 +54,8 @@ const systemHandlers = {
   kilo: handleKiloMessage,
   protoforge: handleProtoForgeMessage,
   hyve: handleHyveMessage,
-  infrastructure: handleInfrastructureMessage
+  infrastructure: handleInfrastructureMessage,
+  rezonate: handleRezonateMessage
 };
 
 export default async function handler(req, res) {
@@ -419,6 +420,57 @@ async function handleInfrastructureMessage(message, request) {
     '  device                              — TermuxBridge battery/storage/uptime',
     '  health / resources / alerts / queue — HYDI system monitoring',
   ].join('\n')
+}
+
+async function handleRezonateMessage(message, request) {
+  const lowerMessage = message.toLowerCase();
+
+  if (lowerMessage.includes('project')) {
+    try {
+      const { count, error } = await supabase
+        .from('rezonate_projects')
+        .select('id', { count: 'exact', head: true });
+      if (error) {
+        return `🎵 Rezonate: Unable to fetch project count.`;
+      }
+      return `🎵 Rezonate: ${count} active projects in your workspace.`;
+    } catch (_) {
+      return `🎵 Rezonate: Unable to fetch project count.`;
+    }
+  }
+
+  if (lowerMessage.includes('task') || lowerMessage.includes('dispatch')) {
+    return [
+      '🎵 Rezonate: Available task types:',
+      '  • stem_analysis    — isolate and analyse audio stems',
+      '  • mix_analysis     — evaluate mix balance and dynamics',
+      '  • audio_export     — render and export audio in target format',
+      '  • nft_mint         — mint audio asset as NFT',
+      '  • rights_verify    — verify ownership and licensing rights',
+      '  • session_recall   — restore a previous session snapshot',
+      '  • hardware_map     — map connected audio hardware devices',
+      '  • beat_generate    — generate a beat from a style prompt',
+    ].join('\n');
+  }
+
+  if (lowerMessage.includes('status') || lowerMessage.includes('health')) {
+    const nodeType = 'rezonate-audio-node';
+    const capabilities = ['stem_analysis', 'mix_analysis', 'audio_export', 'nft_mint', 'rights_verify', 'session_recall', 'hardware_map', 'beat_generate'];
+    const federationTrustLevel = 'verified';
+    return [
+      '🎵 Rezonate Node Manifest:',
+      `  • Node type: ${nodeType}`,
+      `  • Capabilities: ${capabilities.length} registered`,
+      `  • Federation trust level: ${federationTrustLevel}`,
+    ].join('\n');
+  }
+
+  return [
+    '🎵 Rezonate: Audio intelligence node. Available commands:',
+    '  project  — show active project count',
+    '  task / dispatch  — list available task types',
+    '  status / health  — show node manifest and federation trust',
+  ].join('\n');
 }
 
 // ── Helper stubs ──────────────────────────────────────────────────────────────
