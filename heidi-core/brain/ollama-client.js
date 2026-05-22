@@ -9,7 +9,7 @@ class OllamaClient {
   constructor(config = {}) {
     this.baseURL = config.baseURL || process.env.OLLAMA_URL || 'http://localhost:11434';
     this.model = config.model || process.env.OLLAMA_MODEL || 'llama3';
-    this.timeout = config.timeout || 8000; // 8 second hard timeout
+    this.timeout = config.timeout || parseInt(process.env.OLLAMA_TIMEOUT_MS || '60000', 10); // default 60s; override with OLLAMA_TIMEOUT_MS
     
     this.client = axios.create({
       baseURL: this.baseURL,

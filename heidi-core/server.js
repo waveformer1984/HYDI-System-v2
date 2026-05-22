@@ -1,10 +1,11 @@
 /**
  * HEIDI Core Server
  * The heartbeat of the system
- * 
+ *
  * Simple loop: listen → retrieve → generate → store → reflect → act
  */
 
+require('dotenv').config(); // load .env before any module reads process.env
 const express = require('express');
 const OllamaClient = require('./brain/ollama-client');
 
