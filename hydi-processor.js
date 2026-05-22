@@ -253,6 +253,15 @@ if (require.main === module) {
     res.json({ ok: true, running: streamConsumer.running });
   });
 
+  // ── Self-reflection control endpoint ───────────────────────────────────
+  // Must be registered before the 404 fallthrough below.
+  app.get('/reflect/status', (req, res) => {
+    if (!selfReflectionEngine) {
+      return res.json({ running: false, reason: 'HYDI_SELF_REFLECT not enabled' });
+    }
+    res.json(selfReflectionEngine.snapshot());
+  });
+
   // 404 fallthrough
   app.use((req, res) => {
     res.status(404).json({ ok: false, error: `unknown route: ${req.method} ${req.path}` });
@@ -283,10 +292,17 @@ if (require.main === module) {
     const systemMonitor   = require('./core/workers/system-monitor-worker');
     const stripeBilling   = require('./core/workers/stripe-billing-worker');
     const revenuePipeline = require('./core/workers/revenue-pipeline-worker');
-    [systemMonitor, stripeBilling, revenuePipeline].forEach((w) => {
+    const selfHeal        = require('./core/workers/self-heal-worker');
+
+    [systemMonitor, stripeBilling, revenuePipeline, selfHeal].forEach((w) => {
       registry.register(w);
       console.log(`  [registry] registered worker: ${w.id} (domains: ${w.domains.join(', ')})`);
     });
+
+    // Inject live consumer references so self-heal-worker can recycle loops
+    // without holding a direct require() dependency on this file.
+    selfHeal.inject({ consumer, streamConsumer });
+    console.log('  [registry] self-heal-worker injected consumer + streamConsumer refs');
   } catch (e) {
     console.error('[registry] Failed to register built-in workers:', e.message);
   }
@@ -294,6 +310,12 @@ if (require.main === module) {
   // Auto-start the consumer loop if env says so. Default off so existing pm2
   // deployments don't get surprised by a new background loop. To enable:
   //   pm2 set HYDI_CONSUMER_ENABLED true  (or set in .env / ecosystem env)
+  // ── Self-Reflection Engine ──────────────────────────────────────────────
+  // Optionally run as a background introspection loop. Enabled separately
+  // from the consumer loop so existing deployments aren't surprised.
+  // Enable with: HYDI_SELF_REFLECT=true in .env or ecosystem env.
+  let selfReflectionEngine = null;
+
   if (String(process.env.HYDI_CONSUMER_ENABLED || '').toLowerCase() === 'true') {
     consumer.start().catch((e) => {
       console.error('Consumer auto-start failed:', e);
@@ -305,6 +327,25 @@ if (require.main === module) {
     console.log(`  POST /streams/start        — start Redis Streams worker bridge`);
     console.log(`  POST /streams/stop         — stop Redis Streams worker bridge`);
     console.log(`  GET  /streams/status       — stream consumer metrics`);
+
+    // Start self-reflection engine when consumers are active
+    if (String(process.env.HYDI_SELF_REFLECT || '').toLowerCase() === 'true') {
+      const METRICS_URL  = `http://localhost:${PORT}/metrics`;
+      const REDIS_URL    = process.env.REDIS_URL || 'redis://localhost:6379';
+      const REFLECT_INTERVAL = parseInt(process.env.HYDI_REFLECT_INTERVAL_MS || '5000', 10);
+
+      // Load from pre-compiled dist/ output (avoids ts-node NodeNext resolution issues)
+      try {
+        const { SelfReflectionEngine } = require('./dist/core/self/SelfReflectionEngine');
+        selfReflectionEngine = new SelfReflectionEngine(METRICS_URL, REDIS_URL, REFLECT_INTERVAL);
+        selfReflectionEngine.initialize().catch((e) => {
+          console.error('[reflection] Failed to initialize:', e.message);
+        });
+        console.log(`  🧠 Self-Reflection Engine started (interval=${REFLECT_INTERVAL}ms)`);
+      } catch (e) {
+        console.error('[reflection] Could not start SelfReflectionEngine:', e.message);
+      }
+    }
   } else {
     console.log('Consumer loop NOT auto-started (set HYDI_CONSUMER_ENABLED=true to enable).');
   }
@@ -314,7 +355,8 @@ if (require.main === module) {
     console.log(`Received ${signal}, shutting down...`);
     await Promise.all([
       consumer.stop().catch(() => {}),
-      streamConsumer.stop().catch(() => {})
+      streamConsumer.stop().catch(() => {}),
+      selfReflectionEngine ? selfReflectionEngine.shutdown().catch(() => {}) : Promise.resolve()
     ]);
     server.close(() => {
       console.log('HTTP server closed. Goodbye.');

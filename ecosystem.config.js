@@ -24,10 +24,13 @@ module.exports = {
       cwd: 'F:\\HYDI_System',
       instances: 1,
       exec_mode: 'fork',
+      node_args: '--expose-gc',      // allows self-heal-worker to call global.gc()
       env: {
         NODE_ENV: 'production',
         ENVIRONMENT: 'production',
-        HYDI_CONSUMER_ENABLED: 'true'
+        HYDI_CONSUMER_ENABLED:    'true',
+        HYDI_SELF_REFLECT:        'true',   // enable SelfReflectionEngine
+        HYDI_REFLECT_INTERVAL_MS: '5000'    // 5-second introspection loop
       },
       autorestart: true,
       watch: false,
