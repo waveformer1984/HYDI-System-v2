@@ -58,6 +58,7 @@ class HeidiMemorySystem extends EventEmitter {
     };
 
     // Timer references — stored so destroy() can clear them
+    this._destroyed = false;
     this.cleanupTimer = null;
     this.reflectionTimer = null;
     this.persistTimer = null;
@@ -287,9 +288,10 @@ class HeidiMemorySystem extends EventEmitter {
   // ── Reflection engine ──────────────────────────────────────────────────
 
   async runReflection() {
+    if (this._destroyed) return;
     const reflectionId = `reflection_${Date.now()}`;
     try {
-      console.log(`[MEMORY] Starting reflection cycle: ${reflectionId}`);
+      if (!this._destroyed) console.log(`[MEMORY] Starting reflection cycle: ${reflectionId}`);
       const reflection = {
         id: reflectionId,
         timestamp: Date.now(),
@@ -302,11 +304,11 @@ class HeidiMemorySystem extends EventEmitter {
       };
       await this.persistReflection(reflection);
       this.reflectiveMemory.lastReflection = Date.now();
-      this.emit('reflection_completed', reflection);
-      console.log(`[MEMORY] Reflection completed: ${reflectionId}`);
+      if (!this._destroyed) this.emit('reflection_completed', reflection);
+      if (!this._destroyed) console.log(`[MEMORY] Reflection completed: ${reflectionId}`);
       return reflection;
     } catch (error) {
-      console.error(`[MEMORY] Reflection failed: ${reflectionId}:`, error.message);
+      if (!this._destroyed) console.error(`[MEMORY] Reflection failed: ${reflectionId}:`, error.message);
       throw error;
     }
   }
@@ -480,12 +482,13 @@ class HeidiMemorySystem extends EventEmitter {
   }
 
   async persistReflection(reflection) {
+    if (this._destroyed) return;
     try {
       const filePath = path.join(this.config.localStoragePath, 'reflective_memory.json');
       await fs.writeFile(filePath, JSON.stringify({ ...this.reflectiveMemory, lastReflection: Date.now() }, null, 2));
-      if (this.config.enablePersistence) await this.storeReflectionInDatabase(reflection);
+      if (this.config.enablePersistence && !this._destroyed) await this.storeReflectionInDatabase(reflection);
     } catch (error) {
-      console.error('[MEMORY] Failed to persist reflection:', error.message);
+      if (!this._destroyed) console.error('[MEMORY] Failed to persist reflection:', error.message);
     }
   }
 
@@ -498,20 +501,27 @@ class HeidiMemorySystem extends EventEmitter {
       });
       if (error) throw error;
     } catch (error) {
-      console.error('[MEMORY] Failed to store reflection in database:', error.message);
+      if (!this._destroyed) console.error('[MEMORY] Failed to store reflection in database:', error.message);
     }
   }
 
   startMaintenanceTasks() {
-    this.cleanupTimer = setInterval(() => { this.cleanupSessionMemory(); }, 60000);
+    this.cleanupTimer = setInterval(() => {
+      if (!this._destroyed) this.cleanupSessionMemory();
+    }, 60000);
 
     this.reflectionTimer = setInterval(() => {
+      if (this._destroyed) return;
       if (Date.now() - this.reflectiveMemory.lastReflection >= this.config.reflectionInterval) {
-        this.runReflection().catch(err => console.error('[MEMORY] Reflection cycle failed:', err.message));
+        this.runReflection().catch(err => {
+          if (!this._destroyed) console.error('[MEMORY] Reflection cycle failed:', err.message);
+        });
       }
     }, 60000);
 
-    this.persistTimer = setInterval(() => { this.persistReflectiveMemory(); }, 300000);
+    this.persistTimer = setInterval(() => {
+      if (!this._destroyed) this.persistReflectiveMemory();
+    }, 300000);
 
     // Allow Jest / Node to exit without waiting for these timers
     if (this.cleanupTimer.unref) this.cleanupTimer.unref();
@@ -536,11 +546,12 @@ class HeidiMemorySystem extends EventEmitter {
   }
 
   async persistReflectiveMemory() {
+    if (this._destroyed) return;
     try {
       const filePath = path.join(this.config.localStoragePath, 'reflective_memory.json');
       await fs.writeFile(filePath, JSON.stringify({ ...this.reflectiveMemory, lastSaved: Date.now() }, null, 2));
     } catch (error) {
-      console.error('[MEMORY] Failed to persist reflective memory:', error.message);
+      if (!this._destroyed) console.error('[MEMORY] Failed to persist reflective memory:', error.message);
     }
   }
 
@@ -548,6 +559,7 @@ class HeidiMemorySystem extends EventEmitter {
 
   /** Stop all background timers. Call in afterAll / afterEach when testing. */
   destroy() {
+    this._destroyed = true;
     clearInterval(this.cleanupTimer);
     clearInterval(this.reflectionTimer);
     clearInterval(this.persistTimer);
