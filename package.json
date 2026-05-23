@@ -26,6 +26,7 @@
     "node": ">=20.x"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.98.0",
     "@supabase/ssr": "^0.10.2",
     "@supabase/supabase-js": "^2.105.1",
     "@types/node": "^20.19.41",
