@@ -118,6 +118,29 @@ const stripeEventsForwarded = new client.Counter({
   registers: [registry]
 });
 
+// ── Edge Mesh: Cluster consumer group metrics ─────────────────────────────────
+// Populated on each /metrics scrape via RedisStreamBroker.fetchClusterConsumerGroupMetrics()
+
+const edgeConsumerPending = new client.Gauge({
+  name: 'hydi_edge_consumer_pending',
+  help: 'Pending (unacknowledged) messages per edge consumer in hydi:tasks:routing',
+  labelNames: ['consumer_name'],
+  registers: [registry]
+});
+
+const edgeConsumerIdleMs = new client.Gauge({
+  name: 'hydi_edge_consumer_idle_ms',
+  help: 'Time in ms since the edge consumer last read a message',
+  labelNames: ['consumer_name'],
+  registers: [registry]
+});
+
+const edgeConsumerCount = new client.Gauge({
+  name: 'hydi_edge_consumer_count',
+  help: 'Total number of active consumers attached to hydi:tasks:routing/hydi-workers',
+  registers: [registry]
+});
+
 module.exports = {
   registry,
   // Consumer
@@ -138,6 +161,10 @@ module.exports = {
   ingestLatency,
   // Revenue
   stripeEventsForwarded,
+  // Edge Mesh
+  edgeConsumerPending,
+  edgeConsumerIdleMs,
+  edgeConsumerCount,
   // Convenience: expose prom-client so callers don't need to re-require it
   client
 };

@@ -350,4 +350,49 @@ export class RedisStreamBroker implements MessageBroker {
   private sleep(ms: number): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
+
+  // ── Edge Mesh: Cluster Consumer Group Metrics ──────────────────────────────
+
+  /**
+   * Fetch per-consumer metrics for a topic/group pair.
+   * Intended for Prometheus scraping: exposes which edge node is active,
+   * its pending backlog, and how long it has been idle.
+   *
+   * Prometheus exposure: scraped on GET /metrics → hydi_edge_consumer_* gauges.
+   *
+   * @param topic  Redis stream key (e.g. 'hydi:tasks:routing')
+   * @param group  Consumer group name (e.g. 'hydi-workers')
+   */
+  public async fetchClusterConsumerGroupMetrics(
+    topic: string,
+    group: string
+  ): Promise<Array<{ consumerName: string; pendingCount: number; idleTimeMs: number }>> {
+    try {
+      // XINFO CONSUMERS returns a flat multi-bulk array per consumer
+      const consumersRaw = await this.client.xinfo('CONSUMERS', topic, group) as any[][];
+
+      return consumersRaw.map((consumer: any) => {
+        // Structural normalisation of raw Redis multi-nested array
+        const metricsMap: Record<string, any> = {};
+        for (let i = 0; i < consumer.length; i += 2) {
+          metricsMap[consumer[i]] = consumer[i + 1];
+        }
+        return {
+          consumerName: String(metricsMap['name']   ?? 'unknown'),
+          pendingCount: Number(metricsMap['pending'] ?? 0),
+          idleTimeMs:   Number(metricsMap['idle']    ?? 0),
+        };
+      });
+    } catch (err: any) {
+      // Stream or group may not exist yet; return empty rather than throw
+      if (err?.message?.includes('ERR no such key') || err?.message?.includes('NOGROUP')) {
+        return [];
+      }
+      throw new BrokerError(
+        'UNKNOWN',
+        `fetchClusterConsumerGroupMetrics failed for ${topic}/${group}: ${err}`,
+        true
+      );
+    }
+  }
 }

@@ -162,6 +162,32 @@ if (require.main === module) {
       const stats = await processor.getEventStats();
       metrics.supabaseQueueDepth.set(stats.pending || 0);
     } catch (_) { /* non-fatal */ }
+
+    // Refresh edge-mesh consumer group gauges (Path B)
+    // Uses RedisStreamBroker.fetchClusterConsumerGroupMetrics() via the
+    // compiled dist/ module — graceful no-op if Redis is unavailable.
+    try {
+      const { RedisStreamBroker } = require('./dist/infrastructure/broker/RedisStreamBroker');
+      const edgeBroker = new RedisStreamBroker(
+        process.env.REDIS_URL || 'redis://localhost:6379'
+      );
+      await edgeBroker.connect();
+      const consumers = await edgeBroker.fetchClusterConsumerGroupMetrics(
+        'hydi:tasks:routing',
+        'hydi-workers'
+      );
+      await edgeBroker.disconnect();
+
+      metrics.edgeConsumerCount.set(consumers.length);
+      // Reset stale label sets then repopulate from live data
+      metrics.edgeConsumerPending.reset();
+      metrics.edgeConsumerIdleMs.reset();
+      for (const c of consumers) {
+        metrics.edgeConsumerPending.set({ consumer_name: c.consumerName }, c.pendingCount);
+        metrics.edgeConsumerIdleMs.set({ consumer_name: c.consumerName }, c.idleTimeMs);
+      }
+    } catch (_) { /* non-fatal — Redis may be unreachable on this scrape */ }
+
     res.set('Content-Type', metrics.registry.contentType);
     res.end(await metrics.registry.metrics());
   });
