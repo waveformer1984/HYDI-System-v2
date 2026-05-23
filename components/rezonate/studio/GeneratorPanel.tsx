@@ -1,7 +1,7 @@
 'use client';
 import React, { useState, useRef, useCallback } from 'react';
 import { useAudioEngine } from '../../../providers/rezonate/AudioEngineProvider';
-import { TrackGenerator, GenerationType, GeneratedTrack } from '../../../lib/rezonate/TrackGenerator';
+import { TrackGenerator, GenerationType, GeneratedTrack, AIProvider } from '../../../lib/rezonate/TrackGenerator';
 import { WaveformDisplay } from './WaveformDisplay';
 
 const GENERATOR_TYPES: { id: GenerationType; label: string }[] = [
@@ -24,6 +24,8 @@ interface GeneratorPanelProps {
 export function GeneratorPanel({ projectId, onLoadToPad }: GeneratorPanelProps) {
   const { engine, samples, bpm } = useAudioEngine();
   const [activeType, setActiveType] = useState<GenerationType>('drum');
+  const [provider, setProvider] = useState<AIProvider>('replicate_musicgen');
+  const [prompt, setPrompt] = useState('');
   const [key, setKey] = useState('C major');
   const [style, setStyle] = useState('pop');
   const [bars, setBars] = useState(4);
@@ -35,8 +37,8 @@ export function GeneratorPanel({ projectId, onLoadToPad }: GeneratorPanelProps) 
 
   function getGenerator(): TrackGenerator {
     if (!generatorRef.current) {
-      const baseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? '';
-      const fnUrl = `${baseUrl}/functions/v1/rezonate-ai-assist`;
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? '';
+      const fnUrl = `${supabaseUrl}/functions/v1`;
       generatorRef.current = new TrackGenerator(engine, fnUrl);
     }
     return generatorRef.current;
@@ -48,14 +50,14 @@ export function GeneratorPanel({ projectId, onLoadToPad }: GeneratorPanelProps) 
     setGenerated(null);
     try {
       const gen = getGenerator();
-      const result = await gen.generate({ projectId, type: activeType, bpm, key, style, bars });
+      const result = await gen.generate({ projectId, type: activeType, bpm, key, style, bars, provider, prompt: prompt || undefined });
       setGenerated(result);
       setStatus('ready');
     } catch (err) {
       setErrorMsg((err as Error).message);
       setStatus('error');
     }
-  }, [activeType, bpm, key, style, bars, projectId]);
+  }, [activeType, bpm, key, style, bars, projectId, provider, prompt]);
 
   const handleLoadToPad = useCallback(() => {
     if (!generated) return;
@@ -80,6 +82,7 @@ export function GeneratorPanel({ projectId, onLoadToPad }: GeneratorPanelProps) 
         type: activeType,
         buffer: buf!,
         label: `Custom: ${file.name}`,
+        provider: 'oscillator',
         rawResult: {},
       });
       setStatus('ready');
@@ -139,6 +142,37 @@ export function GeneratorPanel({ projectId, onLoadToPad }: GeneratorPanelProps) 
         </div>
       </div>
 
+      {/* Provider selector */}
+      <div>
+        <label className="block text-gray-400 text-xs mb-1">AI Model</label>
+        <div className="flex gap-1 flex-wrap">
+          {([
+            { id: 'google_lyria', label: 'Google Lyria', badge: '✦' },
+            { id: 'replicate_musicgen', label: 'MusicGen', badge: '♪' },
+            { id: 'elevenlabs', label: 'ElevenLabs', badge: '◎' },
+            { id: 'oscillator', label: 'Fallback', badge: '' },
+          ] as { id: AIProvider; label: string; badge: string }[]).map(p => (
+            <button key={p.id} onClick={() => setProvider(p.id)}
+              className={`px-2 py-1 rounded text-xs font-medium transition-colors
+                ${provider === p.id ? 'bg-violet-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}>
+              {p.badge && <span className="mr-1">{p.badge}</span>}{p.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Prompt */}
+      <div>
+        <label className="block text-gray-400 text-xs mb-1">Prompt</label>
+        <input
+          type="text"
+          value={prompt}
+          onChange={e => setPrompt(e.target.value)}
+          placeholder={`e.g. "punchy trap drums at ${bpm} bpm"`}
+          className="w-full bg-gray-800 border border-gray-600 text-white rounded px-2 py-1.5 text-xs focus:outline-none focus:border-violet-500"
+        />
+      </div>
+
       {/* Generate button */}
       <button
         onClick={handleGenerate}
@@ -156,6 +190,15 @@ export function GeneratorPanel({ projectId, onLoadToPad }: GeneratorPanelProps) 
       {generated && (
         <div className="space-y-2">
           <p className="text-gray-400 text-xs">{generated.label}</p>
+          <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium
+            ${generated.provider === 'google_lyria' ? 'bg-blue-900 text-blue-300' :
+              generated.provider === 'replicate_musicgen' ? 'bg-purple-900 text-purple-300' :
+              generated.provider === 'elevenlabs' ? 'bg-orange-900 text-orange-300' :
+              'bg-gray-800 text-gray-400'}`}>
+            {generated.provider === 'google_lyria' ? '✦ Google Lyria' :
+             generated.provider === 'replicate_musicgen' ? '♪ MusicGen' :
+             generated.provider === 'elevenlabs' ? '◎ ElevenLabs' : 'Oscillator'}
+          </span>
           <WaveformDisplay audioBuffer={generated.buffer} color="#8b5cf6" height={48} />
         </div>
       )}

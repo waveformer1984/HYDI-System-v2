@@ -103,3 +103,6 @@ verify_jwt = false
 
 [functions.rezonate-delivery]
 verify_jwt = false
+
+[functions.rezonate-generate]
+verify_jwt = false

@@ -1,114 +1,163 @@
 /**
- * TrackGenerator — calls the generation edge function and renders the
- * returned note/pattern data into an AudioBuffer via Web Audio oscillators.
- * The resulting buffer can be handed to SampleStore to replace a pad/track.
+ * TrackGenerator — calls the rezonate-generate edge function (which routes
+ * to Google Lyria, Replicate MusicGen, or ElevenLabs) and returns a decoded
+ * AudioBuffer for immediate playback and SampleStore loading.
  */
 
 import { AudioEngine } from './AudioEngine';
 
-export type GenerationType = 'drum' | 'melody' | 'vocal' | 'full_track';
+export type GenerationType = 'drum' | 'melody' | 'vocal' | 'full_track' | 'fx';
+export type AIProvider = 'google_lyria' | 'replicate_musicgen' | 'elevenlabs' | 'oscillator';
 
 export interface GeneratorOptions {
   projectId: string;
   type: GenerationType;
+  prompt?: string;
   bpm?: number;
   key?: string;
   style?: string;
   bars?: number;
-  syllables?: string[];
+  duration?: number;
+  provider?: AIProvider;
+  musicgen_model?: 'stereo-melody-large' | 'melody-large' | 'large' | 'medium';
 }
 
 export interface GeneratedTrack {
   type: GenerationType;
   buffer: AudioBuffer;
   label: string;
+  provider: AIProvider;
   rawResult: Record<string, unknown>;
 }
 
-const NOTE_FREQ: Record<number, number> = (() => {
-  const map: Record<number, number> = {};
-  for (let m = 21; m <= 108; m++) {
-    map[m] = 440 * Math.pow(2, (m - 69) / 12);
-  }
-  return map;
-})();
+// Default prompts per type to help users get started
+const DEFAULT_PROMPTS: Record<GenerationType, string> = {
+  drum: 'punchy drum beat with kick and snare',
+  melody: 'catchy melodic hook with piano or synth',
+  vocal: 'wordless vocal melody, oh and ah sounds',
+  full_track: 'upbeat music track with drums, bass, and melody',
+  fx: 'atmospheric texture and ambient sound',
+};
 
-function midiToFreq(midi: number): number {
-  return NOTE_FREQ[midi] ?? 440;
-}
+// Best provider per type (user can override)
+const DEFAULT_PROVIDER: Record<GenerationType, AIProvider> = {
+  drum: 'elevenlabs',
+  melody: 'replicate_musicgen',
+  vocal: 'google_lyria',
+  full_track: 'replicate_musicgen',
+  fx: 'elevenlabs',
+};
 
 export class TrackGenerator {
   private readonly _engine: AudioEngine;
-  private readonly _aiAssistUrl: string;
+  private readonly _generateUrl: string;
 
-  constructor(engine: AudioEngine, aiAssistBaseUrl: string) {
+  constructor(engine: AudioEngine, generateBaseUrl: string) {
     this._engine = engine;
-    this._aiAssistUrl = aiAssistBaseUrl;
+    // generateBaseUrl is the Supabase functions base URL
+    this._generateUrl = generateBaseUrl.endsWith('/')
+      ? `${generateBaseUrl}rezonate-generate`
+      : `${generateBaseUrl}/rezonate-generate`;
   }
 
   async generate(opts: GeneratorOptions): Promise<GeneratedTrack> {
-    const requestTypeMap: Record<GenerationType, string> = {
-      drum: 'generate_drum_layer',
-      melody: 'generate_melody',
-      vocal: 'generate_vocal_line',
-      full_track: 'generate_full_track',
-    };
+    const provider = opts.provider ?? DEFAULT_PROVIDER[opts.type] ?? 'replicate_musicgen';
 
-    const requestType = requestTypeMap[opts.type];
-    const context: Record<string, unknown> = {
-      bpm: opts.bpm ?? 120,
-      key: opts.key ?? 'C major',
-      style: opts.style ?? 'pop',
-      bars: opts.bars ?? 4,
-      syllables: opts.syllables,
-    };
+    // Fall back to oscillator if no API keys (development mode)
+    if (provider === 'oscillator') {
+      return this._generateOscillator(opts);
+    }
 
-    const res = await fetch(this._aiAssistUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ project_id: opts.projectId, request_type: requestType, context }),
-    });
-
-    if (!res.ok) throw new Error(`TrackGenerator: ai-assist returned ${res.status}`);
-    const json = await res.json();
-    const rawResult = json.result as Record<string, unknown>;
-
+    const prompt = opts.prompt || DEFAULT_PROMPTS[opts.type];
     const bpm = opts.bpm ?? 120;
     const bars = opts.bars ?? 4;
-    const secondsPerBeat = 60 / bpm;
-    const totalSeconds = bars * 4 * secondsPerBeat;
+    const secondsPerBar = (60 / bpm) * 4;
+    const duration = opts.duration ?? Math.round(secondsPerBar * bars);
 
-    const buffer = await this._renderToBuffer(opts.type, rawResult, totalSeconds, bpm);
+    const res = await fetch(this._generateUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? ''}`,
+      },
+      body: JSON.stringify({
+        provider,
+        prompt,
+        duration,
+        bpm,
+        key: opts.key,
+        style: opts.style,
+        type: opts.type,
+      }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: res.statusText }));
+      throw new Error(`Generation failed (${provider}): ${err.error ?? res.statusText}`);
+    }
+
+    const json = await res.json();
+    const result = json.result as {
+      audio_url?: string;
+      audio_base64?: string;
+      content_type: string;
+      provider: AIProvider;
+      duration_s: number;
+      prompt_used: string;
+    };
+
+    if (!result) throw new Error('No result from generation service');
+
+    // Decode to AudioBuffer
+    const buffer = await this._decodeResult(result);
 
     return {
       type: opts.type,
       buffer,
-      label: `Generated ${opts.type} — ${opts.key ?? 'C major'} ${opts.style ?? 'pop'}`,
-      rawResult,
+      label: `${result.provider} — ${prompt.slice(0, 40)}`,
+      provider: result.provider,
+      rawResult: result as unknown as Record<string, unknown>,
     };
   }
 
-  private async _renderToBuffer(
-    type: GenerationType,
-    result: Record<string, unknown>,
-    totalSeconds: number,
-    bpm: number,
-  ): Promise<AudioBuffer> {
-    const ctx = this._engine.getCtx();
-    const sampleRate = ctx.sampleRate;
-    const length = Math.ceil(totalSeconds * sampleRate);
-    // Create an offline context to render into a buffer
-    const offline = new OfflineAudioContext(1, length, sampleRate);
-    const spb = 60 / bpm;
+  private async _decodeResult(result: {
+    audio_url?: string;
+    audio_base64?: string;
+    content_type: string;
+  }): Promise<AudioBuffer> {
+    let blob: Blob;
 
-    if (type === 'drum') {
-      const pattern = (result.pattern as number[]) ?? [1,0,0,0,1,0,0,0];
-      const steps = pattern.length;
-      const stepDur = (spb * 4) / steps;
+    if (result.audio_url) {
+      const res = await fetch(result.audio_url);
+      if (!res.ok) throw new Error(`Failed to fetch audio: ${res.status}`);
+      blob = await res.blob();
+    } else if (result.audio_base64) {
+      const binary = atob(result.audio_base64);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      blob = new Blob([bytes], { type: result.content_type });
+    } else {
+      throw new Error('No audio data in result');
+    }
+
+    return this._engine.decodeBlob(blob);
+  }
+
+  // Oscillator fallback (used when provider='oscillator' or no API keys)
+  private async _generateOscillator(opts: GeneratorOptions): Promise<GeneratedTrack> {
+    const bpm = opts.bpm ?? 120;
+    const bars = opts.bars ?? 4;
+    const sampleRate = 44100;
+    const spb = 60 / bpm;
+    const totalSeconds = spb * 4 * bars;
+    const offline = new OfflineAudioContext(1, Math.ceil(totalSeconds * sampleRate), sampleRate);
+
+    if (opts.type === 'drum') {
+      const pattern = [1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0];
+      const stepDur = (spb * 4) / 16;
       pattern.forEach((active, i) => {
         if (!active) return;
         const t = i * stepDur;
-        // Kick: 60Hz sine burst
         const osc = offline.createOscillator();
         const gain = offline.createGain();
         osc.frequency.setValueAtTime(80, t);
@@ -116,49 +165,30 @@ export class TrackGenerator {
         gain.gain.setValueAtTime(1, t);
         gain.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
         osc.connect(gain).connect(offline.destination);
-        osc.start(t);
-        osc.stop(t + 0.15);
+        osc.start(t); osc.stop(t + 0.15);
       });
-    } else if (type === 'melody' || type === 'vocal') {
-      const notes = (result.notes ?? result.phonemes) as Array<{note?: number; pitch_midi?: number; time_beats: number; duration_beats: number; velocity?: number}> ?? [];
-      const waveform = (type === 'vocal') ? 'sawtooth' : 'sine';
-      notes.forEach((n) => {
-        const midi = n.note ?? n.pitch_midi ?? 60;
-        const freq = midiToFreq(midi);
-        const t = n.time_beats * spb;
-        const dur = n.duration_beats * spb;
-        const vel = (n.velocity ?? 80) / 127;
+    } else {
+      const freqs = [261.63, 329.63, 392, 349.23, 440, 392, 329.63, 261.63];
+      freqs.forEach((freq, i) => {
+        const t = i * spb * 0.5;
         const osc = offline.createOscillator();
         const gain = offline.createGain();
-        (osc as OscillatorNode).type = waveform as OscillatorType;
+        osc.type = opts.type === 'vocal' ? 'sawtooth' : 'sine';
         osc.frequency.value = freq;
-        gain.gain.setValueAtTime(vel * 0.4, t);
-        gain.gain.exponentialRampToValueAtTime(0.001, t + Math.max(0.05, dur - 0.05));
+        gain.gain.setValueAtTime(0.3, t);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + spb * 0.4);
         osc.connect(gain).connect(offline.destination);
-        osc.start(t);
-        osc.stop(t + dur);
-      });
-    } else if (type === 'full_track') {
-      // Composite: render drum layer from layers.drums.pattern
-      const layers = result.layers as Record<string, Record<string, unknown>> ?? {};
-      const drumPattern = (layers.drums?.pattern as number[]) ?? [];
-      const steps = drumPattern.length;
-      const stepDur = steps > 0 ? (spb * 4) / steps : spb / 4;
-      drumPattern.forEach((active, i) => {
-        if (!active) return;
-        const t = i * stepDur;
-        const osc = offline.createOscillator();
-        const gain = offline.createGain();
-        osc.frequency.setValueAtTime(80, t);
-        osc.frequency.exponentialRampToValueAtTime(40, t + 0.1);
-        gain.gain.setValueAtTime(0.8, t);
-        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
-        osc.connect(gain).connect(offline.destination);
-        osc.start(t);
-        osc.stop(t + 0.15);
+        osc.start(t); osc.stop(t + spb * 0.5);
       });
     }
 
-    return offline.startRendering();
+    const buffer = await offline.startRendering();
+    return {
+      type: opts.type,
+      buffer,
+      label: `Oscillator (fallback) — ${opts.type}`,
+      provider: 'oscillator',
+      rawResult: {},
+    };
   }
 }
