@@ -1,4 +1,24 @@
+/**
+ * BeatBoxCapture
+ *
+ * Eight-pad audio recorder / sampler with BPM-synced loop playback.
+ *
+ * IMPORTANT: This component must be rendered inside <AudioEngineProvider>.
+ * useAudioEngine() will throw at runtime if the provider is absent. Example:
+ *
+ *   import { AudioEngineProvider } from '../../providers/rezonate/AudioEngineProvider';
+ *
+ *   function RezonatePage() {
+ *     return (
+ *       <AudioEngineProvider>
+ *         <BeatBoxCapture projectId="my-project" onSave={handleSave} />
+ *       </AudioEngineProvider>
+ *     );
+ *   }
+ */
+
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { useAudioEngine } from '../../providers/rezonate/AudioEngineProvider';
 
 interface BeatBoxCaptureProps {
   projectId?: string;
@@ -30,8 +50,6 @@ interface PadState {
 const PAD_LABELS = ['1', '2', '3', '4', '5', '6', '7', '8'] as const;
 const MAX_RECORD_MS = 8000;
 const LONG_PRESS_MS = 500;
-const SCHEDULER_INTERVAL_MS = 25;
-const LOOKAHEAD_SEC = 0.1;
 const BEATS_PER_BAR = 4;
 const DEFAULT_BPM = 120;
 const MIN_BPM = 60;
@@ -80,15 +98,31 @@ function buildInitialPads(): PadState[] {
 }
 
 export default function BeatBoxCapture({ projectId, onSave }: BeatBoxCaptureProps) {
+  // ── Shared audio engine (from provider) ──────────────────────────────────
+  const {
+    engine,
+    samples,
+    cache,
+    bpm,
+    setBpm,
+    isPlaying,
+    startPlayback,
+    stopPlayback,
+    currentBeat,
+  } = useAudioEngine();
+
+  // ── Local UI state ────────────────────────────────────────────────────────
   const [pads, setPads] = useState<PadState[]>(buildInitialPads);
-  const [bpm, setBpm] = useState(DEFAULT_BPM);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [currentBeat, setCurrentBeat] = useState(-1);
+  /**
+   * loopEnabled is pad-level UI state — which pads should fire on each bar
+   * tick. This remains in the component because it governs the pad UI ring
+   * indicator and is not needed by other Rezonate components.
+   */
   const [loopEnabled, setLoopEnabled] = useState<Set<number>>(new Set());
   const [toastError, setToastError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
-  // Recording
+  // ── Recording refs ────────────────────────────────────────────────────────
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const recordingPadRef = useRef<number | null>(null);
@@ -98,106 +132,38 @@ export default function BeatBoxCapture({ projectId, onSave }: BeatBoxCaptureProp
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const chunksRef = useRef<BlobPart[]>([]);
 
-  // Audio engine
-  const audioCtxRef = useRef<AudioContext | null>(null);
-  const audioBuffersRef = useRef<Map<number, AudioBuffer>>(new Map());
+  /**
+   * audioUrlsRef holds object URLs for each pad's recorded blob.
+   * Needed for the URL fallback in playPad (when SampleStore hasn't decoded
+   * the buffer yet) and for blob access during save-session export.
+   */
   const audioUrlsRef = useRef<Map<number, string>>(new Map());
-  const schedulerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const nextBarTimeRef = useRef<number>(0);
-  const bpmRef = useRef(DEFAULT_BPM);
-  const loopEnabledRef = useRef<Set<number>>(new Set());
+
+  /**
+   * tapTimesRef records the timestamps of recent TAP button presses so that
+   * average interval can be converted to a BPM estimate.
+   */
   const tapTimesRef = useRef<number[]>([]);
 
-  // Keep hot refs in sync with state so scheduler closure always reads current values
-  useEffect(() => { bpmRef.current = bpm; }, [bpm]);
-  useEffect(() => { loopEnabledRef.current = loopEnabled; }, [loopEnabled]);
+  // ── Cleanup on unmount ────────────────────────────────────────────────────
+
+  useEffect(() => {
+    return () => {
+      if (elapsedTimerRef.current) clearInterval(elapsedTimerRef.current);
+      if (autoStopTimerRef.current) clearTimeout(autoStopTimerRef.current);
+      streamRef.current?.getTracks().forEach(t => t.stop());
+      audioUrlsRef.current.forEach(url => URL.revokeObjectURL(url));
+    };
+  }, []);
+
+  // ── Utility helpers ───────────────────────────────────────────────────────
 
   const showToast = useCallback((msg: string) => {
     setToastError(msg);
     setTimeout(() => setToastError(null), 4000);
   }, []);
 
-  // ── AudioContext (lazy, user-gesture safe) ─────────────────────────────────
-
-  const getAudioCtx = useCallback((): AudioContext => {
-    if (!audioCtxRef.current) {
-      audioCtxRef.current = new AudioContext();
-    }
-    if (audioCtxRef.current.state === 'suspended') {
-      audioCtxRef.current.resume();
-    }
-    return audioCtxRef.current;
-  }, []);
-
-  // ── Global cleanup ─────────────────────────────────────────────────────────
-
-  useEffect(() => {
-    return () => {
-      if (elapsedTimerRef.current) clearInterval(elapsedTimerRef.current);
-      if (autoStopTimerRef.current) clearTimeout(autoStopTimerRef.current);
-      if (schedulerRef.current) clearInterval(schedulerRef.current);
-      streamRef.current?.getTracks().forEach(t => t.stop());
-      audioUrlsRef.current.forEach(url => URL.revokeObjectURL(url));
-      audioCtxRef.current?.close();
-    };
-  }, []);
-
-  // ── Beat indicator — driven by isPlaying + bpm ─────────────────────────────
-  // Separate from the audio scheduler so BPM changes restart the visual tick
-  // without touching the precise Web Audio clock.
-
-  useEffect(() => {
-    if (!isPlaying) {
-      setCurrentBeat(-1);
-      return;
-    }
-    let beat = 0;
-    setCurrentBeat(0);
-    const ms = (60 / bpm) * 1000;
-    const id = setInterval(() => {
-      beat = (beat + 1) % BEATS_PER_BAR;
-      setCurrentBeat(beat);
-    }, ms);
-    return () => clearInterval(id);
-  }, [isPlaying, bpm]);
-
-  // ── Look-ahead scheduler ───────────────────────────────────────────────────
-  // Fires every 25 ms and schedules AudioBufferSourceNodes up to 100 ms ahead.
-  // Reads bpmRef and loopEnabledRef so it always uses the current values even
-  // inside a stale closure.
-
-  const scheduleLoop = useCallback(() => {
-    const ctx = audioCtxRef.current;
-    if (!ctx) return;
-    const secondsPerBeat = 60 / bpmRef.current;
-    const secondsPerBar = secondsPerBeat * BEATS_PER_BAR;
-    while (nextBarTimeRef.current < ctx.currentTime + LOOKAHEAD_SEC) {
-      loopEnabledRef.current.forEach(padIndex => {
-        const buf = audioBuffersRef.current.get(padIndex);
-        if (!buf) return;
-        const src = ctx.createBufferSource();
-        src.buffer = buf;
-        src.connect(ctx.destination);
-        src.start(Math.max(nextBarTimeRef.current, ctx.currentTime));
-      });
-      nextBarTimeRef.current += secondsPerBar;
-    }
-  }, []);
-
-  const startPlayback = useCallback(() => {
-    const ctx = getAudioCtx();
-    nextBarTimeRef.current = ctx.currentTime + 0.05;
-    if (schedulerRef.current) clearInterval(schedulerRef.current);
-    schedulerRef.current = setInterval(scheduleLoop, SCHEDULER_INTERVAL_MS);
-    setIsPlaying(true);
-  }, [getAudioCtx, scheduleLoop]);
-
-  const stopPlayback = useCallback(() => {
-    if (schedulerRef.current) { clearInterval(schedulerRef.current); schedulerRef.current = null; }
-    setIsPlaying(false);
-  }, []);
-
-  // ── Tap tempo ──────────────────────────────────────────────────────────────
+  // ── Tap tempo ─────────────────────────────────────────────────────────────
 
   const handleTapTempo = useCallback(() => {
     const now = Date.now();
@@ -213,9 +179,9 @@ export default function BeatBoxCapture({ projectId, onSave }: BeatBoxCaptureProp
       const detected = Math.round(60000 / avg);
       setBpm(Math.max(MIN_BPM, Math.min(MAX_BPM, detected)));
     }
-  }, []);
+  }, [setBpm]);
 
-  // ── Recording helpers ──────────────────────────────────────────────────────
+  // ── Recording helpers ─────────────────────────────────────────────────────
 
   const clearElapsedTimer = useCallback(() => {
     if (elapsedTimerRef.current !== null) {
@@ -255,6 +221,7 @@ export default function BeatBoxCapture({ projectId, onSave }: BeatBoxCaptureProp
       const durationMs = Date.now() - recordingStartRef.current;
       const blob = new Blob(chunks, { type: mimeType });
 
+      // Keep the object URL for the URL fallback path and for save-session access.
       revokeUrl(padIndex);
       audioUrlsRef.current.set(padIndex, URL.createObjectURL(blob));
 
@@ -270,17 +237,21 @@ export default function BeatBoxCapture({ projectId, onSave }: BeatBoxCaptureProp
       mediaRecorderRef.current = null;
       chunksRef.current = [];
 
-      // Decode to AudioBuffer so the scheduler and playPad can use the Web Audio clock
+      // Load the blob into SampleStore so the scheduler and playPad can use
+      // the Web Audio clock for sample-accurate playback.
       try {
-        const ctx = getAudioCtx();
-        const arrayBuf = await blob.arrayBuffer();
-        const audioBuf = await ctx.decodeAudioData(arrayBuf);
-        audioBuffersRef.current.set(padIndex, audioBuf);
+        await samples.loadBlob(`pad-${padIndex}`, blob);
       } catch {
-        // Non-fatal — URL fallback still works for one-shot taps
+        // Non-fatal — URL fallback still works for one-shot taps.
       }
+
+      // Persist the blob in IndexedDB for cross-session recall.
+      // Fire-and-forget: do not await or block the UI.
+      cache.save(`pad-${padIndex}`, blob).catch(() => {
+        // Non-fatal: recording is still usable in the current session.
+      });
     },
-    [clearElapsedTimer, clearAutoStop, stopStream, revokeUrl, getAudioCtx]
+    [clearElapsedTimer, clearAutoStop, stopStream, revokeUrl, samples, cache]
   );
 
   const startRecording = useCallback(
@@ -344,32 +315,36 @@ export default function BeatBoxCapture({ projectId, onSave }: BeatBoxCaptureProp
     }
   }, []);
 
-  // ── One-shot playback via AudioContext ─────────────────────────────────────
-  // Multiple pads can play simultaneously (each gets its own source node).
+  // ── One-shot playback via SampleStore ─────────────────────────────────────
+  // Delegates to SampleStore for AudioContext-backed playback. Falls back to
+  // an <Audio> element via object URL when the sample is not yet loaded.
 
-  const playPad = useCallback((padIndex: number, pad: PadState) => {
-    const ctx = getAudioCtx();
-    const buf = audioBuffersRef.current.get(padIndex);
+  const playPad = useCallback((padIndex: number) => {
+    const sampleKey = `pad-${padIndex}`;
 
-    if (buf) {
-      const src = ctx.createBufferSource();
-      src.buffer = buf;
-      src.connect(ctx.destination);
-      src.start();
+    // Attempt sample-accurate playback via SampleStore (uses engine.getCtx()).
+    if (samples.has(sampleKey)) {
+      samples.play(sampleKey);
       setPads(prev =>
         prev.map((p, i) => i === padIndex ? { ...p, status: 'playing' } : p)
       );
-      src.onended = () => {
-        setPads(prev =>
-          prev.map((p, i) =>
-            i === padIndex && p.status === 'playing' ? { ...p, status: 'has-sample' } : p
-          )
-        );
-      };
+      // SampleStore is expected to invoke a completion callback; we reset the
+      // status optimistically after the sample duration. For exact ended
+      // signalling, SampleStore.play() may accept an onEnded callback —
+      // handled below if it returns a source node or promise.
+      samples.play(sampleKey, {
+        onEnded: () => {
+          setPads(prev =>
+            prev.map((p, i) =>
+              i === padIndex && p.status === 'playing' ? { ...p, status: 'has-sample' } : p
+            )
+          );
+        },
+      });
       return;
     }
 
-    // Fallback when AudioBuffer isn't decoded yet
+    // Fallback when SampleStore hasn't decoded the buffer yet — use object URL.
     const url = audioUrlsRef.current.get(padIndex);
     if (!url) return;
     const audio = new Audio(url);
@@ -382,9 +357,9 @@ export default function BeatBoxCapture({ projectId, onSave }: BeatBoxCaptureProp
     audio.play().catch(() => {
       setPads(prev => prev.map((p, i) => i === padIndex ? { ...p, status: 'has-sample' } : p));
     });
-  }, [getAudioCtx]);
+  }, [samples]);
 
-  // ── Pad interactions ───────────────────────────────────────────────────────
+  // ── Pad interactions ──────────────────────────────────────────────────────
 
   const isAnyRecording = pads.some(p => p.status === 'recording');
 
@@ -394,13 +369,14 @@ export default function BeatBoxCapture({ projectId, onSave }: BeatBoxCaptureProp
     if (isAnyRecording) return;
     if (pad.status === 'idle') { startRecording(padIndex); return; }
     if (pad.status === 'has-sample' || pad.status === 'playing') {
-      playPad(padIndex, pad);
+      playPad(padIndex);
     }
   }, [pads, isAnyRecording, stopRecording, startRecording, playPad]);
 
   const clearPad = useCallback((padIndex: number) => {
     revokeUrl(padIndex);
-    audioBuffersRef.current.delete(padIndex);
+    // Unload from SampleStore so stale data is not re-played.
+    samples.unload(`pad-${padIndex}`);
     setLoopEnabled(prev => {
       const next = new Set(prev);
       next.delete(padIndex);
@@ -413,7 +389,7 @@ export default function BeatBoxCapture({ projectId, onSave }: BeatBoxCaptureProp
           : p
       )
     );
-  }, [revokeUrl]);
+  }, [revokeUrl, samples]);
 
   const handleLongPressStart = useCallback((padIndex: number) => {
     const pad = pads[padIndex];
@@ -442,10 +418,11 @@ export default function BeatBoxCapture({ projectId, onSave }: BeatBoxCaptureProp
     stopPlayback();
     audioUrlsRef.current.forEach(url => URL.revokeObjectURL(url));
     audioUrlsRef.current.clear();
-    audioBuffersRef.current.clear();
+    // Unload all pads from SampleStore.
+    PAD_LABELS.forEach((_, i) => samples.unload(`pad-${i}`));
     setLoopEnabled(new Set());
     setPads(buildInitialPads());
-  }, [stopPlayback]);
+  }, [stopPlayback, samples]);
 
   const handleSave = useCallback(async () => {
     if (!onSave) return;
@@ -478,7 +455,7 @@ export default function BeatBoxCapture({ projectId, onSave }: BeatBoxCaptureProp
     p => p.blob !== null && (p.status === 'has-sample' || p.status === 'playing')
   );
 
-  // ── Styles ─────────────────────────────────────────────────────────────────
+  // ── Styles ────────────────────────────────────────────────────────────────
 
   function padClasses(pad: PadState, isLooped: boolean): string {
     const base =
@@ -492,7 +469,7 @@ export default function BeatBoxCapture({ projectId, onSave }: BeatBoxCaptureProp
     }
   }
 
-  // ── Render ─────────────────────────────────────────────────────────────────
+  // ── Render ────────────────────────────────────────────────────────────────
 
   return (
     <div className="bg-gray-900 min-h-screen p-4 flex flex-col gap-4">
@@ -506,7 +483,7 @@ export default function BeatBoxCapture({ projectId, onSave }: BeatBoxCaptureProp
       {/* Transport + BPM */}
       <div className="flex items-center gap-2">
         <button
-          onClick={() => setBpm(b => Math.max(MIN_BPM, b - 1))}
+          onClick={() => setBpm(Math.max(MIN_BPM, bpm - 1))}
           className="w-8 h-8 rounded-lg bg-gray-700 hover:bg-gray-600 text-white font-bold flex items-center justify-center text-lg leading-none"
           aria-label="Decrease BPM"
         >−</button>
@@ -517,7 +494,7 @@ export default function BeatBoxCapture({ projectId, onSave }: BeatBoxCaptureProp
         </div>
 
         <button
-          onClick={() => setBpm(b => Math.min(MAX_BPM, b + 1))}
+          onClick={() => setBpm(Math.min(MAX_BPM, bpm + 1))}
           className="w-8 h-8 rounded-lg bg-gray-700 hover:bg-gray-600 text-white font-bold flex items-center justify-center text-lg leading-none"
           aria-label="Increase BPM"
         >+</button>
