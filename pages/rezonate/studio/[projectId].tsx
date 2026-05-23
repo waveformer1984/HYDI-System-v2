@@ -154,6 +154,94 @@ function ExportController({ steps, bpm, project }: ExportControllerProps) {
   );
 }
 
+// ── PublishController ─────────────────────────────────────────────────────────
+//
+// Inner component rendered inside <AudioEngineProvider> so it can call
+// useAudioEngine() to access SampleStore buffers for WAV upload at publish time.
+// Renders only the Publish button + feedback message.
+
+interface PublishControllerProps {
+  steps: boolean[][];
+  bpm: number;
+  project: ProjectData | null;
+}
+
+function PublishController({ steps, bpm, project }: PublishControllerProps) {
+  const { samples } = useAudioEngine();
+  const [isPublished, setIsPublished] = useState(false);
+  const [publishMsg, setPublishMsg] = useState('');
+
+  const handlePublish = useCallback(async () => {
+    if (!project?.id) return;
+
+    // Step 1: render WAV in browser and upload to Supabase Storage
+    let audioExportUrl: string | undefined;
+    try {
+      const { createClient } = await import('@supabase/supabase-js');
+
+      const trackIds: string[] = (project?.tracks ?? []).map((t: { id: string }) => `track-${t.id}`);
+      const trackBuffers = new Map<string, AudioBuffer>();
+      trackIds.forEach((id) => {
+        const buf = samples.get(id);
+        if (buf) trackBuffers.set(id, buf);
+      });
+
+      if (trackBuffers.size > 0) {
+        const wav = await renderPatternToWav(steps, trackBuffers, trackIds, { bpm, bars: 4 });
+
+        // Upload to Supabase Storage
+        const sb = createClient(
+          process.env.NEXT_PUBLIC_SUPABASE_URL!,
+          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+        );
+        const storagePath = `${project.id}/beat.wav`;
+        const { error: uploadErr } = await sb.storage
+          .from('rezonate-beats')
+          .upload(storagePath, wav, { upsert: true, contentType: 'audio/wav' });
+
+        if (!uploadErr) {
+          audioExportUrl = `rezonate-beats/${storagePath}`;
+        }
+      }
+    } catch (err) {
+      console.warn('[Publish] WAV upload skipped:', (err as Error).message);
+      // Non-fatal — publish without audio_export_url
+    }
+
+    // Step 2: publish the project
+    const res = await fetch('/api/rezonate/publish', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'publish',
+        project_id: project.id,
+        price_cents: 0,
+        license_type: 'non_exclusive',
+        audio_export_url: audioExportUrl,
+      }),
+    });
+    const json = await res.json();
+    if (json.data) {
+      setIsPublished(true);
+      setPublishMsg(`Published → /rezonate/beat/${json.data.public_slug}`);
+      setTimeout(() => setPublishMsg(''), 4000);
+    }
+  }, [project, steps, bpm, samples]);
+
+  return (
+    <>
+      <button
+        onClick={handlePublish}
+        disabled={isPublished}
+        className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-600 disabled:bg-gray-700 text-white text-sm rounded-lg transition-colors"
+      >
+        {isPublished ? 'Published ✓' : 'Publish'}
+      </button>
+      {publishMsg && <span className="text-emerald-400 text-xs">{publishMsg}</span>}
+    </>
+  );
+}
+
 // ── ClockSequencer ────────────────────────────────────────────────────────────
 //
 // Inner component rendered inside <AudioEngineProvider> so it can call
@@ -291,25 +379,7 @@ export default function StudioPage() {
     };
   }, [resolvedProjectId]);
 
-  // ── Publish state ──────────────────────────────────────────────────────────
-
-  const [isPublished, setIsPublished] = useState(false);
-  const [publishMsg, setPublishMsg] = useState('');
-
-  const handlePublish = useCallback(async () => {
-    if (!project?.id) return;
-    const res = await fetch('/api/rezonate/publish', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'publish', project_id: project.id, price_cents: 0, license_type: 'non_exclusive' }),
-    });
-    const json = await res.json();
-    if (json.data) {
-      setIsPublished(true);
-      setPublishMsg(`Published → /rezonate/beat/${json.data.public_slug}`);
-      setTimeout(() => setPublishMsg(''), 4000);
-    }
-  }, [project]);
+  // Publish state is now owned by PublishController (inside AudioEngineProvider).
 
   // ── Transport state ────────────────────────────────────────────────────────
 
@@ -553,15 +623,8 @@ export default function StudioPage() {
               {/* Export WAV + Publish button + feedback */}
               <div className="shrink-0 flex items-center gap-2 justify-end">
                 <ExportController steps={steps} bpm={bpm} project={project} />
-                <button
-                  onClick={handlePublish}
-                  disabled={isPublished}
-                  className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-600 disabled:bg-gray-700 text-white text-sm rounded-lg transition-colors"
-                >
-                  {isPublished ? 'Published ✓' : 'Publish'}
-                </button>
+                <PublishController steps={steps} bpm={bpm} project={project} />
               </div>
-              {publishMsg && <span className="text-emerald-400 text-xs">{publishMsg}</span>}
             </div>
 
             {/* Row 2: transport controls */}

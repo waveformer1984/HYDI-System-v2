@@ -15,6 +15,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { AudioEngineProvider } from '../../providers/rezonate/AudioEngineProvider';
 import ProjectCard, { ProjectCardProps } from '../../components/rezonate/shared/ProjectCard';
+import { UserMenu } from '../../components/rezonate/UserMenu';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -180,6 +181,8 @@ function RezonateDashboard() {
               )}
               New Project
             </button>
+
+            <UserMenu />
           </div>
         </div>
 
