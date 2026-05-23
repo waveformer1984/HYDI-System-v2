@@ -87,3 +87,16 @@ verify_jwt = true
 # Heidi Reflection Service (Header-based auth)
 [functions.heidi-reflect]
 verify_jwt = false
+
+# Rezonate DAW Services (Public — internal service-role callers, no user JWT)
+[functions.rezonate-ai-assist]
+verify_jwt = false
+
+[functions.rezonate-fingerprint]
+verify_jwt = false
+
+[functions.rezonate-collab]
+verify_jwt = false
+
+[functions.rezonate-export]
+verify_jwt = false
