@@ -49,7 +49,7 @@ export default async function handler(req, res) {
   if (!project_id) return res.status(400).json({ error: 'project_id required' });
 
   if (action === 'publish') {
-    const { price_cents = 0, license_type = 'non_exclusive' } = body;
+    const { price_cents = 0, license_type = 'non_exclusive', audio_export_url } = body;
     // Fetch current project to generate slug from name
     const { data: proj } = await supabase
       .from('rezonate_projects')
@@ -59,7 +59,14 @@ export default async function handler(req, res) {
     const slug = proj?.public_slug || slugify(proj?.name || 'beat');
     const { data, error } = await supabase
       .from('rezonate_projects')
-      .update({ is_published: true, public_slug: slug, price_cents, license_type })
+      .update({
+        is_published: true,
+        public_slug: slug,
+        price_cents,
+        license_type,
+        audio_export_url: audio_export_url || null,
+        export_uploaded_at: audio_export_url ? new Date().toISOString() : null,
+      })
       .eq('id', project_id)
       .select('id, public_slug, price_cents, license_type')
       .single();

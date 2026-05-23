@@ -65,6 +65,32 @@ async function handler(req, res) {
       case 'payout.paid':
         await handlePayoutPaid(event.data.object);
         break;
+      case 'checkout.session.completed': {
+        const session = event.data.object;
+        const revenueStream = session.metadata?.revenue_stream;
+        if (revenueStream === 'rezonate') {
+          const projectId = session.metadata?.project_id;
+          const licenseType = session.metadata?.license_type ?? 'non_exclusive';
+          const buyerEmail = session.customer_details?.email ?? session.customer_email;
+          if (projectId && buyerEmail) {
+            const deliveryUrl = `${process.env.SUPABASE_URL}/functions/v1/rezonate-delivery`;
+            fetch(deliveryUrl, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
+              },
+              body: JSON.stringify({
+                stripe_session_id: session.id,
+                project_id: projectId,
+                buyer_email: buyerEmail,
+                license_type: licenseType,
+              }),
+            }).catch(err => console.error('[WEBHOOK] Delivery call failed:', err.message));
+          }
+        }
+        break;
+      }
       default:
         console.log(`[Connect Webhook] Unhandled: ${event.type}`);
     }

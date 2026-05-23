@@ -100,3 +100,6 @@ verify_jwt = false
 
 [functions.rezonate-export]
 verify_jwt = false
+
+[functions.rezonate-delivery]
+verify_jwt = false
