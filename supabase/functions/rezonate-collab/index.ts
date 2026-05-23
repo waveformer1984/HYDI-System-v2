@@ -38,6 +38,7 @@ const VALID_ACTIONS = [
   'leave_session',
   'log_event',
   'get_session',
+  'close_session',
 ] as const
 
 type CollabAction = typeof VALID_ACTIONS[number]
@@ -284,6 +285,94 @@ async function handleGetSession(
   )
 }
 
+/**
+ * close_session — marks the session closed, locks the revenue split config,
+ * calculates per-collaborator payout amounts from ledger net_amount rows, and
+ * records a session_closed action entry for audit purposes.
+ */
+async function handleCloseSession(
+  supabase: ReturnType<typeof makeSupabase>,
+  body: Record<string, unknown>,
+): Promise<Response> {
+  const { session_id } = body
+
+  if (!session_id || typeof session_id !== 'string') {
+    return jsonResponse({ data: null, error: 'session_id is required' }, 400)
+  }
+
+  // 1. Fetch split config
+  const { data: splitData } = await supabase
+    .from('rezonate_revenue_splits')
+    .select('split_config, locked')
+    .eq('session_id', session_id)
+    .single()
+
+  // 2. Fetch the session to check its current status and project_id
+  const { data: session } = await supabase
+    .from('rezonate_collab_sessions')
+    .select('project_id, status')
+    .eq('id', session_id)
+    .single()
+
+  if (session?.status === 'closed') {
+    return jsonResponse({ data: { already_closed: true }, error: null }, 200)
+  }
+
+  // 3. Calculate split amounts from ledger entries tied to this project
+  let totalRevenue = 0
+  let payouts: Array<{ user_id: string; display_name: string; percentage: number; amount: number }> = []
+
+  if (session?.project_id) {
+    const { data: ledger } = await supabase
+      .from('ledger')
+      .select('net_amount')
+      .eq('project_code', session.project_id)
+      .eq('status', 'completed')
+
+    totalRevenue = (ledger ?? []).reduce(
+      (sum: number, row: Record<string, unknown>) => sum + ((row.net_amount as number) ?? 0),
+      0,
+    )
+  }
+
+  const splits: Array<{ user_id: string; display_name: string; percentage: number }> =
+    (splitData?.split_config as Array<{ user_id: string; display_name: string; percentage: number }>) ?? []
+
+  payouts = splits.map((s) => ({
+    ...s,
+    amount: parseFloat(((s.percentage / 100) * totalRevenue).toFixed(2)),
+  }))
+
+  // 4. Mark session closed
+  await supabase
+    .from('rezonate_collab_sessions')
+    .update({ status: 'closed', closed_at: new Date().toISOString() })
+    .eq('id', session_id)
+
+  // 5. Lock the split config so it can no longer be modified
+  if (splitData) {
+    await supabase
+      .from('rezonate_revenue_splits')
+      .update({ locked: true, locked_at: new Date().toISOString() })
+      .eq('session_id', session_id)
+  }
+
+  // 6. Record a completed action in the audit log
+  await supabase.from('actions').insert({
+    task_name: 'session_closed',
+    status: 'completed',
+    session_id,
+    payload: { session_id, total_revenue: totalRevenue, payouts, split_count: splits.length },
+  })
+
+  console.info('[REZONATE-COLLAB] close_session: session', session_id, 'closed; payouts:', payouts.length)
+
+  return jsonResponse(
+    { data: { closed: true, session_id, total_revenue: totalRevenue, payouts }, error: null },
+    200,
+  )
+}
+
 // ---------------------------------------------------------------------------
 // Main handler
 // ---------------------------------------------------------------------------
@@ -355,5 +444,7 @@ serve(async (req: Request) => {
       return handleLogEvent(supabase, body)
     case 'get_session':
       return handleGetSession(supabase, body.session_id as string)
+    case 'close_session':
+      return handleCloseSession(supabase, body)
   }
 })

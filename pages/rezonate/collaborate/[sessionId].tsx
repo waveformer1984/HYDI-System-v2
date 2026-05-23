@@ -23,6 +23,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/router';
 import dynamic from 'next/dynamic';
 import { AudioEngineProvider } from '../../../providers/rezonate/AudioEngineProvider';
+import { CollabClient } from '../../../lib/rezonate/CollabClient';
 import SessionPresence, { Peer } from '../../../components/rezonate/collaboration/SessionPresence';
 import ContributionTimeline, {
   Contribution,
@@ -85,6 +86,13 @@ function CollaborateSession() {
   // My identity after joining
   const [myUserId, setMyUserId] = useState('');
 
+  // Real-time collaboration client
+  const collabClientRef = useRef<CollabClient | null>(null);
+  const [collabClient, setCollabClient] = useState<CollabClient | null>(null);
+
+  // Live peer list driven by CollabClient presence events
+  const [peers, setPeers] = useState<Peer[]>([]);
+
   const [toast, setToast] = useState<ToastState | null>(null);
 
   // ── Toast helper ──────────────────────────────────────────────────────────
@@ -92,6 +100,21 @@ function CollaborateSession() {
   const showToast = useCallback((message: string, type: 'success' | 'error') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3500);
+  }, []);
+
+  // ── Create CollabClient on mount, destroy on unmount ─────────────────────
+
+  useEffect(() => {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+    if (url && key) {
+      const client = new CollabClient(url, key);
+      collabClientRef.current = client;
+      setCollabClient(client);
+    }
+    return () => {
+      collabClientRef.current?.leaveSession();
+    };
   }, []);
 
   // ── Fetch session data ────────────────────────────────────────────────────
@@ -143,6 +166,22 @@ function CollaborateSession() {
       const updated = await fetchSession(sid);
       if (updated) {
         setMyUserId(userId);
+
+        // Join the real-time presence channel
+        await collabClientRef.current?.joinSession(sid, userId, displayName.trim());
+
+        // Keep the peers state in sync with live presence events
+        collabClientRef.current?.onPresenceChange((livePeers) => {
+          setPeers(
+            livePeers.map((p) => ({
+              userId: p.userId,
+              displayName: p.displayName,
+              joinedAt: p.joinedAt,
+              isMe: p.userId === userId,
+            }))
+          );
+        });
+
         setPageState('session');
         showToast('Joined session!', 'success');
       }
@@ -153,6 +192,14 @@ function CollaborateSession() {
       setIsJoining(false);
     }
   }, [displayName, sid, isJoining, fetchSession, showToast]);
+
+  // ── Save session (passed to BeatBoxCapture as onSave) ────────────────────
+
+  const handleSave = useCallback(async (session: unknown) => {
+    // Placeholder: integrate with a project-specific save API as needed.
+    // BeatBoxCapture passes a CaptureSession with pad blobs and metadata.
+    void session;
+  }, []);
 
   // ── Leave session ─────────────────────────────────────────────────────────
 
@@ -174,6 +221,7 @@ function CollaborateSession() {
     } catch {
       // Non-fatal — navigate away regardless
     }
+    collabClientRef.current?.leaveSession();
     await router.push('/rezonate');
   }, [sid, myUserId, router]);
 
@@ -299,18 +347,13 @@ function CollaborateSession() {
 
   // ── Render: full session UI ───────────────────────────────────────────────
 
-  const peers: Peer[] = (sessionData?.peers ?? []).map((p) => ({
-    ...p,
-    isMe: p.userId === myUserId,
-  }));
-
   return (
     <div className="min-h-screen bg-gray-900 flex flex-col">
-      {/* Presence top bar */}
+      {/* Presence top bar — driven by live CollabClient presence events */}
       <SessionPresence
         peers={peers}
         sessionName={sessionData?.sessionName}
-        isConnected={true}
+        isConnected={collabClient?.isConnected ?? false}
       />
 
       {/* Leave button row */}
@@ -333,7 +376,12 @@ function CollaborateSession() {
       <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
         {/* Beat pads — main area */}
         <main className="flex-1 overflow-y-auto">
-          <BeatBoxCapture projectId={sid} />
+          <BeatBoxCapture
+            projectId={sid}
+            collabClient={collabClient}
+            userId={myUserId}
+            onSave={handleSave}
+          />
         </main>
 
         {/* Contribution timeline — right sidebar on desktop, bottom panel on mobile */}

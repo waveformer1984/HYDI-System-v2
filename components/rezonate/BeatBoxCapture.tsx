@@ -19,10 +19,13 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useAudioEngine } from '../../providers/rezonate/AudioEngineProvider';
+import type { PadTriggerEvent } from '../../lib/rezonate/MidiController';
 
 interface BeatBoxCaptureProps {
   projectId?: string;
   onSave?: (session: CaptureSession) => Promise<void>;
+  collabClient?: import('../../lib/rezonate/CollabClient').CollabClient | null;
+  userId?: string;
 }
 
 interface CaptureSession {
@@ -97,11 +100,13 @@ function buildInitialPads(): PadState[] {
   }));
 }
 
-export default function BeatBoxCapture({ projectId, onSave }: BeatBoxCaptureProps) {
+export default function BeatBoxCapture({ projectId, onSave, collabClient = null, userId = 'local' }: BeatBoxCaptureProps) {
   // ── Shared audio engine (from provider) ──────────────────────────────────
   const {
     engine,
+    clock,
     samples,
+    midi,
     cache,
     bpm,
     setBpm,
@@ -119,6 +124,14 @@ export default function BeatBoxCapture({ projectId, onSave }: BeatBoxCaptureProp
    * indicator and is not needed by other Rezonate components.
    */
   const [loopEnabled, setLoopEnabled] = useState<Set<number>>(new Set());
+  const loopEnabledRef = useRef<Set<number>>(new Set());
+  useEffect(() => { loopEnabledRef.current = loopEnabled; }, [loopEnabled]);
+
+  const broadcast = (type: string, extra?: object) => {
+    if (!collabClient) return;
+    collabClient.broadcast({ type: type as any, userId, ...extra });
+  };
+
   const [toastError, setToastError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -156,6 +169,72 @@ export default function BeatBoxCapture({ projectId, onSave }: BeatBoxCaptureProp
     };
   }, []);
 
+  useEffect(() => {
+    const unsub = clock.onBar((barTime: number) => {
+      loopEnabledRef.current.forEach((padIndex) => {
+        const src = samples.play(`pad-${padIndex}`, barTime);
+        if (src) {
+          setPads(prev =>
+            prev.map((p, i) =>
+              i === padIndex && p.status === 'has-sample'
+                ? { ...p, status: 'playing' }
+                : p
+            )
+          );
+          src.onended = () => {
+            setPads(prev =>
+              prev.map((p, i) =>
+                i === padIndex && p.status === 'playing'
+                  ? { ...p, status: 'has-sample' }
+                  : p
+              )
+            );
+          };
+        }
+      });
+    });
+    return unsub;
+  }, [clock, samples]);
+
+  useEffect(() => {
+    const unsub = midi.onPadTrigger((evt) => {
+      handlePadTap(evt.padIndex);
+    });
+    return unsub;
+  }, [midi, handlePadTap]);
+
+  useEffect(() => {
+    if (!collabClient) return;
+    const unsub = collabClient.onEvent((evt) => {
+      if (evt.userId === userId) return;
+      switch (evt.type) {
+        case 'bpm_change':
+          if (evt.bpm) setBpm(evt.bpm);
+          break;
+        case 'pad_clear':
+          if (evt.padIndex !== undefined) clearPad(evt.padIndex);
+          break;
+        case 'pad_loop_toggle':
+          if (evt.padIndex !== undefined) {
+            setLoopEnabled(prev => {
+              const next = new Set(prev);
+              if (next.has(evt.padIndex!)) next.delete(evt.padIndex!);
+              else next.add(evt.padIndex!);
+              return next;
+            });
+          }
+          break;
+        case 'play':
+          startPlayback();
+          break;
+        case 'stop':
+          stopPlayback();
+          break;
+      }
+    });
+    return unsub;
+  }, [collabClient, userId, setBpm, clearPad, startPlayback, stopPlayback]);
+
   // ── Utility helpers ───────────────────────────────────────────────────────
 
   const showToast = useCallback((msg: string) => {
@@ -177,7 +256,9 @@ export default function BeatBoxCapture({ projectId, onSave }: BeatBoxCaptureProp
       const intervals = taps.slice(1).map((t, i) => t - taps[i]);
       const avg = intervals.reduce((a, b) => a + b, 0) / intervals.length;
       const detected = Math.round(60000 / avg);
-      setBpm(Math.max(MIN_BPM, Math.min(MAX_BPM, detected)));
+      const clamped = Math.max(MIN_BPM, Math.min(MAX_BPM, detected));
+      setBpm(clamped);
+      broadcast('bpm_change', { bpm: clamped });
     }
   }, [setBpm]);
 
@@ -232,6 +313,7 @@ export default function BeatBoxCapture({ projectId, onSave }: BeatBoxCaptureProp
             : p
         )
       );
+      broadcast('pad_record', { padIndex, durationMs });
 
       recordingPadRef.current = null;
       mediaRecorderRef.current = null;
@@ -389,6 +471,7 @@ export default function BeatBoxCapture({ projectId, onSave }: BeatBoxCaptureProp
           : p
       )
     );
+    broadcast('pad_clear', { padIndex });
   }, [revokeUrl, samples]);
 
   const handleLongPressStart = useCallback((padIndex: number) => {
@@ -412,6 +495,7 @@ export default function BeatBoxCapture({ projectId, onSave }: BeatBoxCaptureProp
       else next.add(padIndex);
       return next;
     });
+    broadcast('pad_loop_toggle', { padIndex: padIndex });
   }, []);
 
   const handleClearAll = useCallback(() => {
@@ -507,7 +591,7 @@ export default function BeatBoxCapture({ projectId, onSave }: BeatBoxCaptureProp
         </button>
 
         <button
-          onClick={isPlaying ? stopPlayback : startPlayback}
+          onClick={isPlaying ? () => { stopPlayback(); broadcast('stop'); } : () => { startPlayback(); broadcast('play'); }}
           className={`px-4 py-1.5 rounded-lg text-white text-xs font-bold transition-colors ${
             isPlaying
               ? 'bg-red-600 hover:bg-red-500'

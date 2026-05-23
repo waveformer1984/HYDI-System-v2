@@ -21,13 +21,13 @@
  * Mobile: single-column stack (lg:grid kicks in at ≥1024px).
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import dynamic from 'next/dynamic';
 
-import { AudioEngineProvider } from '../../../providers/rezonate/AudioEngineProvider';
+import { AudioEngineProvider, useAudioEngine } from '../../../providers/rezonate/AudioEngineProvider';
 import type { Track } from '../../../components/rezonate/studio/TrackList';
 import type { MixerChannel } from '../../../components/rezonate/studio/MixerConsole';
 
@@ -100,6 +100,98 @@ function buildMixerChannels(tracks: Track[]): MixerChannel[] {
   }));
 }
 
+// ── ClockSequencer ────────────────────────────────────────────────────────────
+//
+// Inner component rendered inside <AudioEngineProvider> so it can call
+// useAudioEngine().  It owns the beat→step subscription and schedules sample
+// playback via SampleStore whenever an active pattern step falls on a beat or
+// subdivision.
+
+interface ClockSequencerProps {
+  isPlaying: boolean;
+  bpm: number;
+  /** The 2-D pattern grid: patternSteps[trackIndex][stepIndex] = active. */
+  patternSteps: boolean[][];
+  project: ProjectData | null;
+  setCurrentStep: (step: number) => void;
+}
+
+function ClockSequencer({
+  isPlaying,
+  bpm,
+  patternSteps,
+  project,
+  setCurrentStep,
+}: ClockSequencerProps) {
+  const { clock, samples } = useAudioEngine();
+
+  /**
+   * Tracks which 16-step position the sequencer is currently on.
+   * Updated on every beat so the value is available synchronously inside the
+   * scheduler callback without a stale-closure problem.
+   */
+  const step16Ref = useRef(0);
+
+  /**
+   * Best-effort sample presence check when the project loads.
+   * Logs any tracks that are not yet in SampleStore so we know what still
+   * needs to be fetched from Supabase Storage.
+   * TODO: load from Supabase Storage when audio_file URLs are available.
+   */
+  useEffect(() => {
+    if (!project) return;
+    (project.tracks ?? []).forEach((track) => {
+      if (!samples.has(`track-${track.id}`)) {
+        console.debug(
+          `[StudioPage] track-${track.id} not in SampleStore — needs loading`
+        );
+      }
+    });
+  }, [project, samples]);
+
+  /**
+   * Subscribe to BpmClock beat events while playback is active.
+   *
+   * Each BeatEvent covers one quarter-note beat (beatIndex 0-3).  Within that
+   * beat we schedule all four 16th-note subdivisions using Web Audio time so
+   * they fire at the exact sample-accurate moment rather than relying on JS
+   * timers.
+   */
+  useEffect(() => {
+    if (!isPlaying) return;
+
+    const secondsPerBeat = 60 / bpm;
+
+    const unsub = clock.onBeat((evt) => {
+      const stepBase = evt.beatIndex * 4;
+
+      for (let sub = 0; sub < 4; sub++) {
+        const step = stepBase + sub;
+        // Schedule each subdivision ahead of its exact Web Audio time.
+        const fireAt = evt.barTime + sub * (secondsPerBeat / 4);
+
+        patternSteps.forEach((trackSteps, trackIndex) => {
+          if (trackSteps[step]) {
+            const trackId = project?.tracks?.[trackIndex]?.id;
+            if (trackId) {
+              samples.play(`track-${trackId}`, fireAt);
+            }
+          }
+        });
+      }
+
+      // Update 16-step position for PatternEditor highlight.
+      step16Ref.current = stepBase;
+      setCurrentStep(stepBase);
+    });
+
+    return unsub;
+  }, [isPlaying, clock, samples, bpm, patternSteps, project, setCurrentStep]);
+
+  // This component has no visual output — it only wires the audio scheduler.
+  return null;
+}
+
 // ── Page component ────────────────────────────────────────────────────────────
 
 export default function StudioPage() {
@@ -157,7 +249,8 @@ export default function StudioPage() {
     if (project?.bpm) setBpm(project.bpm);
   }, [project]);
 
-  // Beat/step counter driven by a simple interval while playing.
+  // Beat counter driven by a simple interval while playing.
+  // currentStep is now driven by the BpmClock subscription in ClockSequencer.
   useEffect(() => {
     if (!isPlaying) {
       setCurrentBeat(-1);
@@ -165,22 +258,15 @@ export default function StudioPage() {
       return;
     }
     let beat = 0;
-    let step = 0;
     setCurrentBeat(0);
     setCurrentStep(0);
     const beatMs = (60 / bpm) * 1000;
-    const stepMs = beatMs / 4; // 16th-note steps (4 per beat)
     const beatId = setInterval(() => {
       beat = (beat + 1) % 4;
       setCurrentBeat(beat);
     }, beatMs);
-    const stepId = setInterval(() => {
-      step = (step + 1) % TOTAL_STEPS;
-      setCurrentStep(step);
-    }, stepMs);
     return () => {
       clearInterval(beatId);
-      clearInterval(stepId);
     };
   }, [isPlaying, bpm]);
 
@@ -365,6 +451,14 @@ export default function StudioPage() {
       </Head>
 
       <AudioEngineProvider>
+        {/* Wire the BpmClock → SampleStore sequencer without adding any UI. */}
+        <ClockSequencer
+          isPlaying={isPlaying}
+          bpm={bpm}
+          patternSteps={steps}
+          project={project}
+          setCurrentStep={setCurrentStep}
+        />
         <div className="min-h-screen bg-gray-900 text-white flex flex-col">
 
           {/* ── Top bar ──────────────────────────────────────────────────── */}

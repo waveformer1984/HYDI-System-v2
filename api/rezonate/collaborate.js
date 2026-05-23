@@ -203,6 +203,19 @@ async function handler(req, res) {
       return res.status(200).json({ data, error: null });
     }
 
+    // ── close_session ─────────────────────────────────────────────────────────
+    if (action === 'close_session') {
+      const { session_id } = body;
+
+      if (!session_id) {
+        return res.status(400).json({ data: null, error: 'session_id is required' });
+      }
+
+      // Proxy to the rezonate-collab edge function which owns the close logic.
+      const { status, json } = await proxyPostToCollab({ action: 'close_session', session_id });
+      return res.status(status).json(json);
+    }
+
     // ── unknown action ───────────────────────────────────────────────────────
     return res.status(400).json({ data: null, error: `Unknown action: ${action}` });
 

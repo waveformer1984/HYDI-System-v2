@@ -144,12 +144,13 @@ export function AudioEngineProvider({ children }: AudioEngineProviderProps) {
     });
 
     // Subscribe to beat events from the clock to drive currentBeat state.
-    clock.onBeat((beat: number) => {
-      setCurrentBeat(beat);
+    const unsubBeat = clock.onBeat((evt) => {
+      setCurrentBeat(evt.beatIndex);
     });
 
     // ── Cleanup on unmount ──────────────────────────────────────────────────
     return () => {
+      unsubBeat();
       clock.stop();
       midi.disconnect();
       engine.close();
