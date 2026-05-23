@@ -8,6 +8,8 @@ import {
   setupDeployHooks, PROJECT_IDS,
 } from '../../lib/vercel/vercelAdmin.js';
 import { getSystemStatus, isReachable } from '../../lib/termux/termuxClient.js';
+import { callAgent, isClaudeAvailable } from '../../lib/claude.js';
+import { executeApprovedActions } from '../../lib/protoforge/dispatcher.js';
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -104,139 +106,105 @@ export default async function handler(req, res) {
 // ── Individual system handlers ────────────────────────────────────────────────
 
 async function handleUrsulaMessage(message, request) {
-  const lowerMessage = message.toLowerCase();
-  
-  if (lowerMessage.includes('system status') || lowerMessage.includes('status')) {
-    try {
-      const { data: heal } = await supabase.rpc('auto_heal_from_trends');
-      
-      const { data: dash, error: dashError } = await supabase
-        .from('system_dashboard')
-        .select('*')
-        .single();
-
-      if (dashError) {
-        return `❓ Ursula: I'm having trouble connecting to the health monitoring system. Please check back in a moment.`;
+  let dashContext = '';
+  try {
+    const [healResult, dashResult] = await Promise.all([
+      supabase.rpc('auto_heal_from_trends'),
+      supabase.from('system_dashboard').select('*').single(),
+    ]);
+    if (!dashResult.error && dashResult.data) {
+      dashContext = `Live system_dashboard:\n${JSON.stringify(dashResult.data, null, 2)}`;
+      if (healResult.data?.healed > 0) {
+        dashContext += `\nauto_heal: ${healResult.data.healed} action(s) taken`;
       }
-
-      const EMOJI = {
-        OK: '✅', WARNING: '🟡', CRITICAL: '🔴', UNKNOWN: '❓',
-        stable: '📈', degrading: '📉', critical_trend: '🚨', unknown: '❓'
-      };
-
-      let response = `${EMOJI[dash.current_status] || '❓'} HYDI Status: ${dash.current_status}\n`;
-      response += `${EMOJI[dash.trend_status] || ''} Trend: ${dash.trend_status} — ${dash.trend_reason}\n`;
-      
-      if (dash.escalation_level !== 'OK') {
-        response += `⚠️ Escalation: ${dash.escalation_action} — ${dash.escalation_reason}\n`;
-      }
-      
-      if (heal && heal.healed > 0) {
-        response += `🔧 Auto-healed: ${heal.healed} action(s) taken\n`;
-      }
-      
-      response += `📊 Queue: ${dash.jobs_queued} queued | ${dash.jobs_failed} failed | ${dash.events_last_hour} events/hr`;
-      
-      return response;
-    } catch (error) {
-      console.error('Ursula status query error:', error);
-      return `❓ Ursula: I'm unable to check system status right now. Error: ${error.message}`;
     }
+  } catch (_) {}
+
+  if (isClaudeAvailable()) {
+    return callAgent('ursula', message, dashContext || undefined);
   }
-  
-  return {
-    text: `[Ursula] Processing: "${message}"`,
-    actions: []
-  };
+
+  // Structured fallback using raw dashboard data
+  if (dashContext) {
+    try {
+      const { data: dash } = await supabase.from('system_dashboard').select('*').single();
+      if (dash) {
+        const S = { OK: '✅', WARNING: '🟡', CRITICAL: '🔴', UNKNOWN: '❓' };
+        const T = { stable: '📈', degrading: '📉', critical_trend: '🚨', unknown: '❓' };
+        let r = `${S[dash.current_status] || '❓'} HYDI: ${dash.current_status}\n`;
+        r += `${T[dash.trend_status] || ''} Trend: ${dash.trend_status} — ${dash.trend_reason}\n`;
+        if (dash.escalation_level !== 'OK') r += `⚠️ ${dash.escalation_action} — ${dash.escalation_reason}\n`;
+        r += `📊 Queue: ${dash.jobs_queued} queued | ${dash.jobs_failed} failed | ${dash.events_last_hour} events/hr`;
+        return r;
+      }
+    } catch (_) {}
+  }
+  return `❓ Ursula: ANTHROPIC_API_KEY not configured and no dashboard data available.`;
 }
 
 async function handleHeidiMessage(message, request) {
-  const lowerMessage = message.toLowerCase();
-  
-  if (lowerMessage.includes('analyze')) {
-    return `🧠 Heidi: Analysis complete. Context integrity: ${getContextIntegrity()}`;
+  if (isClaudeAvailable()) {
+    return callAgent('heidi', message);
   }
-  
-  return {
-    text: `[Heidi] Task received: "${message}"`,
-    taskId: `task_${Date.now()}`
-  };
+  return `🧠 Heidi: ANTHROPIC_API_KEY not configured. Set it to enable live AI responses.`;
 }
 
 async function handleCascadeMessage(message, request) {
-  const lowerMessage = message.toLowerCase();
-  
-  if (lowerMessage.includes('process')) {
-    const event = extractEventFromMessage(message);
-    if (event) {
-      const result = await processCascadeEvent(event);
-      return `⚡ CASCADE: Event processed - Classification: ${result.classification}, Confidence: ${result.confidence}`;
-    }
+  if (isClaudeAvailable()) {
+    return callAgent('cascade', message);
   }
-  
-  if (lowerMessage.includes('status')) {
-    return `⚡ CASCADE: ${getCascadeStatus()}`;
-  }
-  
-  if (lowerMessage.includes('quarantine')) {
-    return `⚡ CASCADE: Quarantine status - ${getQuarantineStatus()}`;
-  }
-  
-  return `⚡ CASCADE: Event processing system. Try 'process <event>', 'status', or 'quarantine'.`;
+  return JSON.stringify({
+    classification: 'UNKNOWN',
+    confidence: 0,
+    matched_rules: [],
+    severity: 'low',
+    requires_kilo: false,
+    note: 'ANTHROPIC_API_KEY not configured — classification unavailable'
+  }, null, 2);
 }
 
 async function handleKiloMessage(message, request) {
-  const lowerMessage = message.toLowerCase();
-  
-  if (lowerMessage.includes('hypothesis') || lowerMessage.includes('repair')) {
-    return `🔧 KILO: Generating repair hypothesis based on current system state... ${generateHypothesis()}`;
+  if (isClaudeAvailable()) {
+    return callAgent('kilo', message);
   }
-  
-  if (lowerMessage.includes('validate')) {
-    return `🔧 KILO: Validation complete - ${getValidationResult()}`;
-  }
-  
-  if (lowerMessage.includes('manifest')) {
-    return `🔧 KILO: Repair manifest ready - ${getRepairManifest()}`;
-  }
-  
-  return `🔧 KILO: Repair hypothesis engine. Ask about 'hypothesis', 'validate', or 'manifest'.`;
+  return JSON.stringify({
+    hypotheses: [],
+    execution_authority: false,
+    requires_protoforge_approval: true,
+    note: 'ANTHROPIC_API_KEY not configured — hypothesis generation unavailable'
+  }, null, 2);
 }
 
 async function handleProtoForgeMessage(message, request) {
-  const lowerMessage = message.toLowerCase();
-  
-  if (lowerMessage.includes('status')) {
-    return `🌐 ProtoForge: Core system status - ${getProtoForgeStatus()}`;
+  if (!isClaudeAvailable()) {
+    return JSON.stringify({
+      decision: 'deferred',
+      rationale: 'ANTHROPIC_API_KEY not configured — governance evaluation unavailable',
+      approved_actions: [],
+      conditions: ''
+    }, null, 2);
   }
-  
-  if (lowerMessage.includes('modules')) {
-    return `🌐 ProtoForge: Active modules - ${getActiveModules()}`;
-  }
-  
-  if (lowerMessage.includes('govern')) {
-    return `🌐 ProtoForge: Governance status - ${getGovernanceStatus()}`;
-  }
-  
-  return `🌐 ProtoForge: Core system coordination. Try 'status', 'modules', or 'govern'.`;
+
+  const raw = await callAgent('protoforge', message);
+
+  // If approved actions were returned, attempt to dispatch them
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed.decision === 'approved' && Array.isArray(parsed.approved_actions) && parsed.approved_actions.length > 0) {
+      const results = await executeApprovedActions(parsed.approved_actions);
+      parsed.dispatch_results = results;
+      return JSON.stringify(parsed, null, 2);
+    }
+  } catch (_) {}
+
+  return raw;
 }
 
 async function handleHyveMessage(message, request) {
-  const lowerMessage = message.toLowerCase();
-  
-  if (lowerMessage.includes('opportunity')) {
-    return `🐝 Hyve: Current opportunities - ${getOpportunities()}`;
+  if (isClaudeAvailable()) {
+    return callAgent('hyve', message);
   }
-  
-  if (lowerMessage.includes('collective')) {
-    return `🐝 Hyve: Collective status - ${getCollectiveStatus()}`;
-  }
-  
-  if (lowerMessage.includes('swarm')) {
-    return `🐝 Hyve: Swarm intelligence active - ${getSwarmStatus()}`;
-  }
-  
-  return `🐝 Hyve: Opportunity collective. Ask about 'opportunity', 'collective', or 'swarm'.`;
+  return `🐝 Hyve: ANTHROPIC_API_KEY not configured — swarm intelligence offline.`;
 }
 
 async function handleInfrastructureMessage(message, request) {
@@ -410,6 +378,11 @@ async function handleInfrastructureMessage(message, request) {
     return `🏗️ Infrastructure Error: ${err.message}`
   }
 
+  // Unknown command — try Claude for intelligent interpretation
+  if (isClaudeAvailable()) {
+    return callAgent('infrastructure', message);
+  }
+
   return [
     '🏗️ Heidi Infrastructure Controls:',
     '  deployment status [heidi|hydi|all]  — check Vercel deployment state',
@@ -473,32 +446,3 @@ async function handleRezonateMessage(message, request) {
   ].join('\n');
 }
 
-// ── Helper stubs ──────────────────────────────────────────────────────────────
-
-function extractEventFromMessage(message) {
-  const match = message.match(/event[:\s]+(.+)$/i);
-  return match ? match[1].trim() : null;
-}
-
-function getContextIntegrity() {
-  return (Math.random() * 100).toFixed(1) + '%';
-}
-
-async function processCascadeEvent(event) {
-  return {
-    classification: 'INFRA_FAILURE',
-    confidence: (Math.random() * 0.5 + 0.5).toFixed(2)
-  };
-}
-
-function getCascadeStatus() { return 'Processing events normally. Queue: 0'; }
-function getQuarantineStatus() { return '2 events quarantined'; }
-function generateHypothesis() { return 'Hypothesis: Database connection pool exhaustion'; }
-function getValidationResult() { return 'Hypothesis validated with 85% confidence'; }
-function getRepairManifest() { return 'Manifest ready for INFRA_FAILURE'; }
-function getProtoForgeStatus() { return 'All systems operational'; }
-function getActiveModules() { return 'CASCADE, KILO, Heidi, Ursula, Hyve'; }
-function getGovernanceStatus() { return 'All policies compliant'; }
-function getOpportunities() { return '3 optimization opportunities detected'; }
-function getCollectiveStatus() { return 'Swarm intelligence: ACTIVE'; }
-function getSwarmStatus() { return '12 agents collaborating'; }
