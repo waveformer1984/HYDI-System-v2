@@ -125,6 +125,14 @@ function RezonateDashboard() {
           <h1 className="text-xl font-bold tracking-tight text-white">Rezonate</h1>
 
           <div className="flex items-center gap-2">
+            {/* Sample Library */}
+            <Link
+              href="/rezonate/library"
+              className="px-3 py-1.5 rounded-lg bg-gray-700 hover:bg-gray-600 text-sm text-gray-200 transition-colors"
+            >
+              Library
+            </Link>
+
             {/* Beat Box quick link */}
             <Link
               href="/rezonate/beatbox"

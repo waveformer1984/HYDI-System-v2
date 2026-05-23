@@ -33,6 +33,9 @@ const VALID_REQUEST_TYPES = [
   'suggest_bassline',
   'detect_clipping',
   'generate_drum_layer',
+  'generate_melody',
+  'generate_vocal_line',
+  'generate_full_track',
 ] as const
 
 type RequestType = typeof VALID_REQUEST_TYPES[number]
@@ -106,6 +109,78 @@ function handleGenerateDrumLayer(_context: Record<string, unknown>) {
   }
 }
 
+function handleGenerateMelody(context: Record<string, unknown>) {
+  const key = (context.key as string) ?? 'C major';
+  const bars = Math.min(8, Math.max(1, (context.bars as number) ?? 4));
+  const style = (context.style as string) ?? 'pop';
+  // Returns a note sequence: [{note, octave, duration_beats, velocity}]
+  // Real implementation: call a music generation model or rule-based composer
+  const scales: Record<string, number[]> = {
+    'C major': [60, 62, 64, 65, 67, 69, 71],
+    'A minor': [57, 59, 60, 62, 64, 65, 67],
+  };
+  const midiRoot = scales[key] ?? scales['C major'];
+  // Stub 8-note melodic phrase repeated per bar
+  const phrase = [
+    { note: midiRoot[0], octave: 4, duration_beats: 1, velocity: 90 },
+    { note: midiRoot[2], octave: 4, duration_beats: 0.5, velocity: 75 },
+    { note: midiRoot[4], octave: 4, duration_beats: 0.5, velocity: 80 },
+    { note: midiRoot[3], octave: 4, duration_beats: 1, velocity: 70 },
+    { note: midiRoot[6], octave: 4, duration_beats: 0.5, velocity: 85 },
+    { note: midiRoot[4], octave: 4, duration_beats: 0.5, velocity: 75 },
+    { note: midiRoot[2], octave: 4, duration_beats: 1, velocity: 80 },
+    { note: midiRoot[0], octave: 4, duration_beats: 1, velocity: 90 },
+  ];
+  return {
+    key,
+    bars,
+    style,
+    notes: Array.from({ length: bars }, () => phrase).flat(),
+    render_hint: 'oscillator:sine',
+  };
+}
+
+function handleGenerateVocalLine(context: Record<string, unknown>) {
+  const key = (context.key as string) ?? 'C major';
+  const style = (context.style as string) ?? 'pop';
+  const syllables = (context.syllables as string[]) ?? ['oh', 'ah', 'hey', 'yeah'];
+  // Returns phoneme timing for synthesis
+  // Real implementation: TTS/singing model API call
+  return {
+    key,
+    style,
+    phonemes: syllables.map((syl, i) => ({
+      syllable: syl,
+      time_beats: i * 1.0,
+      duration_beats: 0.75,
+      pitch_midi: 60 + [0, 2, 4, 5][i % 4],
+      velocity: 85,
+    })),
+    render_hint: 'oscillator:sawtooth',
+    note: 'Replace with your own vocal recording via sample substitution',
+  };
+}
+
+function handleGenerateFullTrack(context: Record<string, unknown>) {
+  const bpm = (context.bpm as number) ?? 120;
+  const key = (context.key as string) ?? 'C major';
+  const style = (context.style as string) ?? 'pop';
+  // Composes drum + bass + melody layers together
+  return {
+    bpm,
+    key,
+    style,
+    bars: 4,
+    layers: {
+      drums: { pattern: [1,0,0,1,1,0,0,1,1,0,0,1,1,0,1,0], instrument: 'kit' },
+      bass:  { root_note: 60, pattern: [1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0] },
+      melody: { notes: [60,64,67,65,64,62,60], rhythm: [1,0.5,0.5,1,0.5,0.5,1] },
+    },
+    render_hint: 'composite',
+    note: 'Each layer can be replaced with your own sample via sample substitution',
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Route a validated request_type to its handler
 // ---------------------------------------------------------------------------
@@ -126,6 +201,12 @@ function routeRequest(
       return handleRemoveNoise(context)
     case 'generate_drum_layer':
       return handleGenerateDrumLayer(context)
+    case 'generate_melody':
+      return handleGenerateMelody(context)
+    case 'generate_vocal_line':
+      return handleGenerateVocalLine(context)
+    case 'generate_full_track':
+      return handleGenerateFullTrack(context)
   }
 }
 

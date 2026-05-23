@@ -5,6 +5,7 @@ export { MidiController } from './MidiController'
 export { IndexedDBCache } from './IndexedDBCache'
 export { CollabClient } from './CollabClient'
 export { RightsClient } from './RightsClient'
+export * from './SampleLibrary'
 
 export type { BeatEvent } from './BpmClock'
 export type { PadTriggerEvent } from './MidiController'
