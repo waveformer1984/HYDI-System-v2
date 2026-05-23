@@ -72,9 +72,8 @@ export default function AgentManager() {
     <div className="min-h-screen bg-gray-50">
       {/* Top nav */}
       <nav className="bg-white border-b border-gray-200 px-6 py-3 flex items-center gap-4">
-        <Link href="/" className="text-gray-500 hover:text-gray-800 text-sm">
-          ← Heidi
-        </Link>
+        <Link href="/" className="text-gray-500 hover:text-gray-800 text-sm">← Heidi</Link>
+        <Link href="/song-composer" className="text-gray-500 hover:text-gray-800 text-sm">Song Composer</Link>
         <span className="text-gray-300">|</span>
         <h1 className="font-semibold text-gray-900">ProtoForge Agent Manager</h1>
         <div className="ml-auto">
