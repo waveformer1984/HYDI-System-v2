@@ -10,6 +10,8 @@ hydi-system-*.zip
 hydi-system-*.tar.gz
 logs.txt
 .DS_Store
+tsconfig.tsbuildinfo
+*.tsbuildinfo
 /generated/prisma
 heidi-core.env.local
 *.env.local
