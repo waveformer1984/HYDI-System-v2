@@ -141,6 +141,14 @@ function RezonateDashboard() {
               Beat Box
             </Link>
 
+            {/* Marketplace */}
+            <Link
+              href="/rezonate/marketplace"
+              className="px-3 py-1.5 rounded-lg bg-gray-700 hover:bg-gray-600 text-sm text-gray-200 transition-colors"
+            >
+              Marketplace
+            </Link>
+
             {/* New Project */}
             <button
               onClick={handleNewProject}

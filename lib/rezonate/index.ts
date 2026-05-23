@@ -1,4 +1,5 @@
 export { AudioEngine } from './AudioEngine'
+export * from './AudioExporter'
 export { BpmClock } from './BpmClock'
 export { SampleStore } from './SampleStore'
 export { MidiController } from './MidiController'

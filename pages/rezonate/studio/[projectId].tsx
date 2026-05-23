@@ -28,6 +28,7 @@ import { useRouter } from 'next/router';
 import dynamic from 'next/dynamic';
 
 import { AudioEngineProvider, useAudioEngine } from '../../../providers/rezonate/AudioEngineProvider';
+import { renderPatternToWav } from '../../../lib/rezonate/AudioExporter';
 import type { Track } from '../../../components/rezonate/studio/TrackList';
 import type { MixerChannel } from '../../../components/rezonate/studio/MixerConsole';
 
@@ -98,6 +99,59 @@ function buildMixerChannels(tracks: Track[]): MixerChannel[] {
     muted: t.muted,
     color: TRACK_COLORS[t.type],
   }));
+}
+
+// ── ExportController ──────────────────────────────────────────────────────────
+//
+// Inner component rendered inside <AudioEngineProvider> so it can call
+// useAudioEngine() to access SampleStore buffers for WAV export.
+// Renders only the Export WAV button.
+
+interface ExportControllerProps {
+  steps: boolean[][];
+  bpm: number;
+  project: ProjectData | null;
+}
+
+function ExportController({ steps, bpm, project }: ExportControllerProps) {
+  const { samples } = useAudioEngine();
+  const [isExporting, setIsExporting] = useState(false);
+
+  const handleExport = useCallback(async () => {
+    if (isExporting) return;
+    setIsExporting(true);
+    try {
+      // Build the ordered list of track IDs matching the patternSteps rows.
+      const trackIds: string[] = (project?.tracks ?? []).map((t: { id: string }) => `track-${t.id}`);
+      // Pull AudioBuffers from SampleStore via the public get() method.
+      const trackBuffers = new Map<string, AudioBuffer>();
+      trackIds.forEach((id) => {
+        const buf = samples.get(id);
+        if (buf) trackBuffers.set(id, buf);
+      });
+      const wav = await renderPatternToWav(steps, trackBuffers, trackIds, { bpm, bars: 4 });
+      // Trigger browser download.
+      const url = URL.createObjectURL(wav);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${project?.name ?? 'beat'}.wav`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Export failed:', err);
+    }
+    setIsExporting(false);
+  }, [isExporting, project, steps, bpm, samples]);
+
+  return (
+    <button
+      onClick={handleExport}
+      disabled={isExporting}
+      className="px-3 py-1.5 bg-blue-700 hover:bg-blue-600 disabled:opacity-50 text-white text-sm rounded-lg transition-colors"
+    >
+      {isExporting ? 'Exporting…' : 'Export WAV'}
+    </button>
+  );
 }
 
 // ── ClockSequencer ────────────────────────────────────────────────────────────
@@ -236,6 +290,26 @@ export default function StudioPage() {
       cancelled = true;
     };
   }, [resolvedProjectId]);
+
+  // ── Publish state ──────────────────────────────────────────────────────────
+
+  const [isPublished, setIsPublished] = useState(false);
+  const [publishMsg, setPublishMsg] = useState('');
+
+  const handlePublish = useCallback(async () => {
+    if (!project?.id) return;
+    const res = await fetch('/api/rezonate/publish', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'publish', project_id: project.id, price_cents: 0, license_type: 'non_exclusive' }),
+    });
+    const json = await res.json();
+    if (json.data) {
+      setIsPublished(true);
+      setPublishMsg(`Published → /rezonate/beat/${json.data.public_slug}`);
+      setTimeout(() => setPublishMsg(''), 4000);
+    }
+  }, [project]);
 
   // ── Transport state ────────────────────────────────────────────────────────
 
@@ -476,8 +550,18 @@ export default function StudioPage() {
                 {projectName}
               </h1>
 
-              {/* Spacer keeps title visually centred */}
-              <div className="w-20 shrink-0" />
+              {/* Export WAV + Publish button + feedback */}
+              <div className="shrink-0 flex items-center gap-2 justify-end">
+                <ExportController steps={steps} bpm={bpm} project={project} />
+                <button
+                  onClick={handlePublish}
+                  disabled={isPublished}
+                  className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-600 disabled:bg-gray-700 text-white text-sm rounded-lg transition-colors"
+                >
+                  {isPublished ? 'Published ✓' : 'Publish'}
+                </button>
+              </div>
+              {publishMsg && <span className="text-emerald-400 text-xs">{publishMsg}</span>}
             </div>
 
             {/* Row 2: transport controls */}
