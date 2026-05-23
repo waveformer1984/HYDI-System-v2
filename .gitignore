@@ -13,3 +13,7 @@ logs.txt
 /generated/prisma
 heidi-core.env.local
 *.env.local
+# Runtime data files
+heidi-core/data/*.db
+heidi-core/data/*.db-shm
+heidi-core/data/*.db-wal
