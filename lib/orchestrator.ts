@@ -129,42 +129,27 @@ export class HeidiOrchestrator {
     }
   }
 
-  /**
-   * Retrieve memory context from Supabase
-   */
   private async retrieveMemory(sessionId: string, userId: string): Promise<string> {
     try {
-      // Generate embedding for the current message (simplified - in production use actual embedding service)
-      const embedding = await this.generateEmbedding("current message placeholder");
-      
-      // Search for similar memories
-      const { data } = await this.supabase.rpc('search_memories', {
-        query_embedding: embedding,
-        match_count: 5,
-        user_id: userId
-      });
-      
-      if (!data || data.length === 0) {
-        return '';
-      }
-      
-      // Format memory context
-      const memoryContext = data.map((mem: any) => mem.content).join('\n');
-      return `Previous relevant context:\n${memoryContext}`;
-      
+      const { data } = await this.supabase
+        .from('memories')
+        .select('content, created_at')
+        .eq('session_id', sessionId)
+        .order('created_at', { ascending: false })
+        .limit(10);
+
+      if (!data || data.length === 0) return '';
+      return 'Previous conversation:\n' + data.reverse().map((m: { content: string }) => m.content).join('\n');
     } catch (error) {
       console.error('[Orchestrator] Memory retrieval failed:', error);
       return '';
     }
   }
 
-  /**
-   * Generate embedding (simplified placeholder)
-   */
-  private async generateEmbedding(text: string): Promise<number[]> {
-    // In production, use actual embedding service (OpenAI embeddings, etc.)
-    // For now, return a dummy embedding
-    return new Array(1536).fill(0.1);
+  private async generateEmbedding(_text: string): Promise<number[]> {
+    // Placeholder: real embeddings require Voyage AI or OpenAI embedding API.
+    // Memory retrieval uses session_id + timestamp ordering, not vector similarity.
+    return new Array(1536).fill(0);
   }
 
   /**
