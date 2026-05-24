@@ -1,3 +1,4 @@
+'use strict';
 /**
  * HEIDI MEMORY SYSTEM - Layer 4: The Memory Backbone
  * This is where most people fail - you need 3 memory types
@@ -56,6 +57,9 @@ class HeidiMemorySystem extends EventEmitter {
       adaptations: [],
       lastReflection: Date.now()
     };
+
+    // Top-level drift score — mirrors reflectiveMemory.driftScore for direct access
+    this.driftScore = 0;
 
     // Timer references — stored so destroy() can clear them
     this._destroyed = false;
@@ -601,6 +605,7 @@ class HeidiMemorySystem extends EventEmitter {
     }
     for (const cache of Object.keys(this.dbMemory)) this.dbMemory[cache].clear();
     this.reflectiveMemory = { whatWorked: new Map(), whatFailed: new Map(), confidenceReality: [], driftScore: 0, patterns: [], adaptations: [], lastReflection: Date.now() };
+    this.driftScore = 0;
     console.log('[MEMORY] Memory system reset completed');
   }
 }
