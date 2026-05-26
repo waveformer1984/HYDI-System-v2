@@ -61,7 +61,8 @@ class HeidiMemorySystem extends EventEmitter {
     // Top-level drift score — mirrors reflectiveMemory.driftScore for direct access
     this.driftScore = 0;
 
-    // Timer references — stored so destroy() can clear them
+    // _destroyed must be set before initialize() is called so async
+    // callbacks can guard against post-teardown logging.
     this._destroyed = false;
     this.cleanupTimer = null;
     this.reflectionTimer = null;
@@ -78,13 +79,16 @@ class HeidiMemorySystem extends EventEmitter {
   async initialize() {
     try {
       await fs.mkdir(this.config.localStoragePath, { recursive: true });
+      if (this._destroyed) return;
       await this.loadDatabaseCache();
+      if (this._destroyed) return;
       await this.loadReflectiveMemory();
+      if (this._destroyed) return;
       await this.initializeDatabaseTables();
+      if (this._destroyed) return;
       console.log('[MEMORY] Memory system initialized successfully');
     } catch (error) {
-      console.error('[MEMORY] Initialization failed:', error.message);
-      throw error;
+      if (!this._destroyed) console.error('[MEMORY] Initialization failed:', error.message);
     }
   }
 
@@ -462,11 +466,11 @@ class HeidiMemorySystem extends EventEmitter {
   // ── Persistence and maintenance ────────────────────────────────────────
 
   async initializeDatabaseTables() {
-    console.log('[MEMORY] Database tables assumed to exist');
+    if (!this._destroyed) console.log('[MEMORY] Database tables assumed to exist');
   }
 
   async loadDatabaseCache() {
-    console.log('[MEMORY] Loading database cache...');
+    if (!this._destroyed) console.log('[MEMORY] Loading database cache...');
   }
 
   async loadReflectiveMemory() {
@@ -474,14 +478,15 @@ class HeidiMemorySystem extends EventEmitter {
       const filePath = path.join(this.config.localStoragePath, 'reflective_memory.json');
       try {
         const data = await fs.readFile(filePath, 'utf8');
+        if (this._destroyed) return;
         this.reflectiveMemory = { ...this.reflectiveMemory, ...JSON.parse(data) };
-        console.log('[MEMORY] Reflective memory loaded from disk');
+        if (!this._destroyed) console.log('[MEMORY] Reflective memory loaded from disk');
       } catch (error) {
         if (error.code !== 'ENOENT') throw error;
-        console.log('[MEMORY] No existing reflective memory found, starting fresh');
+        if (!this._destroyed) console.log('[MEMORY] No existing reflective memory found, starting fresh');
       }
     } catch (error) {
-      console.error('[MEMORY] Failed to load reflective memory:', error.message);
+      if (!this._destroyed) console.error('[MEMORY] Failed to load reflective memory:', error.message);
     }
   }
 
@@ -527,7 +532,6 @@ class HeidiMemorySystem extends EventEmitter {
       if (!this._destroyed) this.persistReflectiveMemory();
     }, 300000);
 
-    // Allow Jest / Node to exit without waiting for these timers
     if (this.cleanupTimer.unref) this.cleanupTimer.unref();
     if (this.reflectionTimer.unref) this.reflectionTimer.unref();
     if (this.persistTimer.unref) this.persistTimer.unref();
@@ -561,7 +565,6 @@ class HeidiMemorySystem extends EventEmitter {
 
   // ── Lifecycle ──────────────────────────────────────────────────────────
 
-  /** Stop all background timers. Call in afterAll / afterEach when testing. */
   destroy() {
     this._destroyed = true;
     clearInterval(this.cleanupTimer);

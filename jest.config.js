@@ -16,8 +16,12 @@ module.exports = {
     '/tests/hdi-everything-wrong.test.js',
   ],
 
-  // Correct key: setupFilesAfterEnv (not setupFilesAfterFramework)
   setupFilesAfterEnv: ['./jest.setup.js'],
+
+  // Redirect missing external modules to lightweight stubs
+  moduleNameMapper: {
+    '^.*heidi-core.*ollama-client.*$': '<rootDir>/tests/__mocks__/ollama-client-stub.js',
+  },
 
   forceExit: true,
   detectOpenHandles: false,

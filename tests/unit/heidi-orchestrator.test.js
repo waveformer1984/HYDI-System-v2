@@ -1,12 +1,7 @@
 'use strict';
 
-// OllamaClient lives outside this repo — mock as virtual so require() doesn't fail
-jest.mock('../../heidi-core/brain/ollama-client', () => {
-  return class OllamaClient {
-    constructor() {}
-    generate() { return Promise.resolve({ text: 'mock response' }); }
-  };
-}, { virtual: true });
+// OllamaClient is redirected to a stub via moduleNameMapper in jest.config.js
+// — no jest.mock() needed for it here.
 
 // LocalModelAdapter starts setInterval timers — replace with a lightweight stub
 jest.mock('../../src/models/local-model-adapter', () => {
@@ -68,15 +63,12 @@ describe('HeidiOrchestrator', () => {
     test('revenue → critical (revenuePriority=true)', () => {
       expect(orchestrator.calculatePriority({ type: 'revenue' })).toBe('critical');
     });
-
     test('critical → critical', () => {
       expect(orchestrator.calculatePriority({ type: 'critical' })).toBe('critical');
     });
-
     test('reflection → low', () => {
       expect(orchestrator.calculatePriority({ type: 'reflection' })).toBe('low');
     });
-
     test('unknown → normal', () => {
       expect(orchestrator.calculatePriority({ type: 'chat' })).toBe('normal');
     });
@@ -101,7 +93,6 @@ describe('HeidiOrchestrator', () => {
     test('returns non-negative number', () => {
       expect(orchestrator.estimateCost({ type: 'chat', input: 'hi' })).toBeGreaterThanOrEqual(0);
     });
-
     test('longer input costs more', () => {
       const cheap = orchestrator.estimateCost({ input: 'hi' });
       const expensive = orchestrator.estimateCost({ input: 'x'.repeat(6000) });
