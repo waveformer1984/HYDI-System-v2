@@ -17,6 +17,8 @@ const HeidiOrchestrator = require('../orchestrator/HeidiOrchestrator');
 const HybridModelStack = require('../models/HybridModelStack');
 const HeidiMemorySystem = require('../memory/HeidiMemorySystem');
 const HeidiActionLayer = require('../actions/HeidiActionLayer');
+const selfHealing = require('../healing/SelfHealingService');
+const redisStream = require('../queue/RedisStreamBroker');
 
 class HeidiCoreLoop extends EventEmitter {
   constructor(config = {}) {
@@ -336,6 +338,19 @@ class HeidiCoreLoop extends EventEmitter {
         type: task.type,
         priority: task.priority || 'normal'
       });
+      
+      // Publish failure to Redis stream for downstream consumers
+      redisStream.publish('hydi:task-failures', {
+        loopId, task, error: error.message, timestamp: new Date().toISOString(),
+      }).catch(() => {});
+      
+      // Self-healing: ask Claude for a corrective retry task
+      selfHealing.healFromCrash(task, error.message, loopId).then(heal => {
+        if (heal?.should_retry && heal.corrected_task) {
+          console.log(`[SELF-HEAL] Scheduling corrective retry for ${loopId}`);
+          setTimeout(() => this.executeLoop(heal.corrected_task).catch(() => {}), 5000);
+        }
+      }).catch(() => {});
       
       // Emit failure
       this.emit('loop_failed', {
