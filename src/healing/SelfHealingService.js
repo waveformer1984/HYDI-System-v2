@@ -96,6 +96,18 @@ class SelfHealingService {
   destroy() {
     this._destroyed = true;
   }
+
+  // Static convenience methods: allow calling on the class directly
+  // (e.g. `const svc = require('./SelfHealingService'); svc.healFromCrash(...)`)
+  static async healFromCrash(task, errorMessage, loopId) {
+    const instance = new SelfHealingService();
+    return instance.healFromCrash(errorMessage);
+  }
+
+  static async diagnoseAndCorrect(issue) {
+    const instance = new SelfHealingService();
+    return instance.diagnoseAndCorrect(issue);
+  }
 }
 
 module.exports = SelfHealingService;
