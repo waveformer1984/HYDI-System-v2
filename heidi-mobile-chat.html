@@ -162,6 +162,7 @@
         .message.user { align-self: flex-end; }
         .message.heidi { align-self: flex-start; }
         .message.system { align-self: center; max-width: 95%; }
+        .message.restored { animation: none; }
 
         .message-bubble {
             padding: 12px 16px;
@@ -470,7 +471,7 @@
 
 <header class="header">
     <div class="header-left">
-        <div class="heidi-avatar">🧠</div>
+        <div class="heidi-avatar">&#x1F9E0;</div>
         <div class="header-info">
             <h1>Heidi</h1>
             <div class="status">
@@ -480,45 +481,45 @@
         </div>
     </div>
     <div class="header-right">
-        <button class="tts-btn" id="ttsBtn" onclick="toggleTTS()" title="Toggle voice (Heidi speaks)">🔇</button>
-        <div class="health-badge offline" id="healthBadge">—</div>
+        <button class="tts-btn" id="ttsBtn" onclick="toggleTTS()" title="Toggle voice (Heidi speaks)">&#x1F507;</button>
+        <div class="health-badge offline" id="healthBadge">&mdash;</div>
     </div>
 </header>
 
 <div class="health-strip">
     <div class="health-metric">
-        <span class="icon">🤖</span>
-        <span class="value" id="metricModels">—</span>
+        <span class="icon">&#x1F916;</span>
+        <span class="value" id="metricModels">&mdash;</span>
         <span class="label">models</span>
     </div>
     <div class="health-metric">
-        <span class="icon">⚡</span>
-        <span class="value" id="metricProvider">—</span>
+        <span class="icon">&#x26A1;</span>
+        <span class="value" id="metricProvider">&mdash;</span>
     </div>
     <div class="health-metric">
-        <span class="icon">💬</span>
+        <span class="icon">&#x1F4AC;</span>
         <span class="value" id="metricMsgCount">0</span>
         <span class="label">msgs</span>
     </div>
     <div class="health-metric">
-        <span class="icon">🕐</span>
-        <span class="value" id="metricTime">—</span>
+        <span class="icon">&#x1F550;</span>
+        <span class="value" id="metricTime">&mdash;</span>
     </div>
 </div>
 
 <div class="messages-container" id="messages"></div>
 
 <div class="quick-actions">
-    <div class="quick-action" onclick="sendQuick('status')">📊 Status</div>
-    <div class="quick-action" onclick="sendQuick('models')">🤖 Models</div>
-    <div class="quick-action" onclick="sendQuick('help')">💡 What can you do</div>
-    <div class="quick-action" onclick="sendQuick('health')">🔧 Health check</div>
-    <div class="quick-action" onclick="sendQuick('clear')">🗑️ Clear chat</div>
+    <div class="quick-action" onclick="sendQuick('status')">&#x1F4CA; Status</div>
+    <div class="quick-action" onclick="sendQuick('models')">&#x1F916; Models</div>
+    <div class="quick-action" onclick="sendQuick('help')">&#x1F4A1; What can you do</div>
+    <div class="quick-action" onclick="sendQuick('health')">&#x1F527; Health check</div>
+    <div class="quick-action" onclick="sendQuick('clear')">&#x1F5D1;&#xFE0F; Clear chat</div>
 </div>
 
 <div class="input-area">
     <div class="input-row">
-        <button class="icon-btn mic-btn" id="micBtn" onclick="toggleVoice()" title="Voice input">🎤</button>
+        <button class="icon-btn mic-btn" id="micBtn" onclick="toggleVoice()" title="Voice input">&#x1F3A4;</button>
         <textarea
             class="message-input"
             id="msgInput"
@@ -533,11 +534,11 @@
     </div>
 </div>
 
-<div class="model-toggle" onclick="toggleModelMenu()" title="Switch model">🤖</div>
+<div class="model-toggle" onclick="toggleModelMenu()" title="Switch model">&#x1F916;</div>
 <div class="model-selector" id="modelMenu">
     <div class="model-selector-header">AI Model</div>
     <div class="model-option active" id="defaultModelOpt">
-        <span>🦙</span>
+        <span>&#x1F999;</span>
         <span id="defaultModelName">llama3</span>
         <span class="provider-badge">ollama</span>
     </div>
@@ -556,23 +557,70 @@ let recognition = null;
 let msgCount = 0;
 let healthTimer = null;
 
+// Conversation history for multi-turn context and persistence
+let conversationHistory = []; // [{role:'user'|'assistant', content:string}]
+const HISTORY_KEY = 'heidi-chat-history';
+const MAX_CTX = 40; // keep last 20 exchanges (40 messages)
+
 // ─── Init ─────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
     initVoice();
     loadVoices();
+    restoreHistory();
     const online = await checkServer();
     if (online) {
         await loadModels();
         pollHealth();
-        addMsg('heidi',
-            "Hi! I'm Heidi, your local ProtoForge AI.\n\nI'm running on your device via Ollama. You can talk to me, ask about your system, or use voice input with the 🎤 button. Enable 🔊 in the header so I speak back to you.",
-            [{ label: '📊 System status', q: 'status' }, { label: '🤖 Available models', q: 'models' }]
-        );
+        if (!conversationHistory.length) {
+            addMsg('heidi',
+                "Hi! I'm Heidi, your local ProtoForge AI.\n\nI'm running on your device via Ollama. You can talk to me, ask about your system, or use voice input with the microphone button. Enable the speaker icon in the header so I speak back to you.",
+                [{ label: '&#x1F4CA; System status', q: 'status' }, { label: '&#x1F916; Available models', q: 'models' }]
+            );
+        }
     } else {
-        addMsg('system', '⚠️ Cannot reach Heidi server. Make sure: node launch-heidi-mobile.js is running on your machine.');
+        addMsg('system', '&#x26A0;&#xFE0F; Cannot reach Heidi server. Make sure: node launch-heidi-mobile.js is running on your machine.');
         setStatus('offline', 'Server offline');
     }
 });
+
+// ─── Conversation history ─────────────────────────────────────────────────────
+function restoreHistory() {
+    try {
+        const raw = localStorage.getItem(HISTORY_KEY);
+        if (!raw) return;
+        const saved = JSON.parse(raw);
+        if (!Array.isArray(saved) || !saved.length) return;
+        conversationHistory = saved;
+        const exchangeCount = Math.floor(saved.filter(m => m.role === 'user').length);
+        // Show a divider before restored messages
+        const divider = document.createElement('div');
+        divider.className = 'message system restored';
+        divider.innerHTML = '<div class="message-bubble">&#x2014; ' + exchangeCount + ' previous exchange' + (exchangeCount !== 1 ? 's' : '') + ' restored &#x2014;</div>';
+        document.getElementById('messages').appendChild(divider);
+        // Render saved messages without TTS or animation
+        saved.forEach(msg => {
+            const el = document.createElement('div');
+            el.className = 'message ' + (msg.role === 'user' ? 'user' : 'heidi') + ' restored';
+            const bubble = document.createElement('div');
+            bubble.className = 'message-bubble';
+            bubble.textContent = msg.content;
+            el.appendChild(bubble);
+            document.getElementById('messages').appendChild(el);
+        });
+        msgCount = saved.filter(m => m.role === 'user').length;
+        document.getElementById('metricMsgCount').textContent = msgCount;
+        scrollBottom();
+    } catch {
+        conversationHistory = [];
+    }
+}
+
+function saveHistory() {
+    try {
+        conversationHistory = conversationHistory.slice(-MAX_CTX);
+        localStorage.setItem(HISTORY_KEY, JSON.stringify(conversationHistory));
+    } catch {}
+}
 
 // ─── Server check ─────────────────────────────────────────────────────────────
 async function checkServer() {
@@ -628,7 +676,7 @@ async function loadModels() {
 
         if (models.length === 0) {
             setStatus('warning', 'Online · No model');
-            addMsg('system', '⚠️ No local AI model found. Install Ollama (ollama.ai) then run: ollama pull llama3');
+            addMsg('system', '&#x26A0;&#xFE0F; No local AI model found. Install Ollama (ollama.ai) then run: ollama pull llama3');
             return;
         }
 
@@ -648,7 +696,7 @@ function populateModelMenu(models) {
         el.className = 'model-option' + (i === 0 ? ' active' : '');
         el.dataset.id = m.id;
         el.dataset.provider = m.provider;
-        el.innerHTML = `<span>${m.provider === 'ollama' ? '🦙' : '🖥️'}</span>
+        el.innerHTML = `<span>${m.provider === 'ollama' ? '&#x1F999;' : '&#x1F5A5;&#xFE0F;'}</span>
             <span style="flex:1;overflow:hidden;text-overflow:ellipsis">${m.name}</span>
             <span class="provider-badge">${m.provider}${m.size ? ' · ' + m.size : ''}</span>`;
         el.onclick = () => pickModel(m.id, m.provider, el);
@@ -715,7 +763,12 @@ async function sendMessage() {
         const resp = await fetch('/api/chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message: text, model: currentModel, provider: currentProvider })
+            body: JSON.stringify({
+                message: text,
+                model: currentModel,
+                provider: currentProvider,
+                history: conversationHistory.slice(-MAX_CTX)
+            })
         });
 
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
@@ -763,7 +816,7 @@ async function sendMessage() {
         showAlert('Cannot reach server', 'error');
     }
 
-    // Finalize
+    // Finalize bubble
     bubble.textContent = fullText || '(empty response)';
 
     const meta = document.createElement('div');
@@ -773,6 +826,13 @@ async function sendMessage() {
 
     addContextActions(msgEl, fullText, text);
     scrollBottom();
+
+    // Persist to history
+    if (fullText && fullText !== '(empty response)') {
+        conversationHistory.push({ role: 'user', content: text });
+        conversationHistory.push({ role: 'assistant', content: fullText });
+        saveHistory();
+    }
 
     if (ttsEnabled && fullText) speak(cleanForTTS(fullText));
 
@@ -784,6 +844,8 @@ async function sendMessage() {
 function sendQuick(cmd) {
     if (cmd === 'clear') {
         document.getElementById('messages').innerHTML = '';
+        conversationHistory = [];
+        localStorage.removeItem(HISTORY_KEY);
         msgCount = 0;
         document.getElementById('metricMsgCount').textContent = '0';
         return;
@@ -808,7 +870,11 @@ function addMsg(sender, content, actions = null) {
 
     const bubble = document.createElement('div');
     bubble.className = 'message-bubble';
-    bubble.textContent = content;
+    if (actions) {
+        bubble.innerHTML = esc(content);
+    } else {
+        bubble.textContent = content;
+    }
     el.appendChild(bubble);
 
     if (sender !== 'system') {
@@ -821,11 +887,11 @@ function addMsg(sender, content, actions = null) {
     if (actions?.length) {
         const card = document.createElement('div');
         card.className = 'action-card';
-        card.innerHTML = '<div class="action-card-header">⚡ Quick actions</div>';
+        card.innerHTML = '<div class="action-card-header">&#x26A1; Quick actions</div>';
         actions.forEach(a => {
             const btn = document.createElement('button');
             btn.className = 'action-button';
-            btn.textContent = a.label;
+            btn.innerHTML = a.label;
             btn.onclick = () => sendQuick(a.q);
             card.appendChild(btn);
         });
@@ -842,20 +908,20 @@ function addContextActions(msgEl, response, userMsg) {
     const actions = [];
 
     if (text.includes('health') || text.includes('status') || text.includes('check'))
-        actions.push({ label: '🔄 Re-run health check', q: 'health' });
+        actions.push({ label: '&#x1F504; Re-run health check', q: 'health' });
     if (text.includes('model') || text.includes('ollama') || text.includes('llama') || text.includes('install'))
-        actions.push({ label: '🤖 List all models', q: 'models' });
+        actions.push({ label: '&#x1F916; List all models', q: 'models' });
     if (text.includes('error') || text.includes('fail') || text.includes('issue') || text.includes('problem'))
-        actions.push({ label: '🔧 Diagnose', q: 'health' });
+        actions.push({ label: '&#x1F527; Diagnose', q: 'health' });
 
     if (!actions.length) return;
     const card = document.createElement('div');
     card.className = 'action-card';
-    card.innerHTML = '<div class="action-card-header">⚡ Follow-up</div>';
+    card.innerHTML = '<div class="action-card-header">&#x26A1; Follow-up</div>';
     actions.forEach(a => {
         const btn = document.createElement('button');
         btn.className = 'action-button';
-        btn.textContent = a.label;
+        btn.innerHTML = a.label;
         btn.onclick = () => sendQuick(a.q);
         card.appendChild(btn);
     });
@@ -877,7 +943,7 @@ function loadVoices() {
 function toggleTTS() {
     ttsEnabled = !ttsEnabled;
     const btn = document.getElementById('ttsBtn');
-    btn.textContent = ttsEnabled ? '🔊' : '🔇';
+    btn.textContent = ttsEnabled ? '&#x1F50A;' : '&#x1F507;';
     btn.classList.toggle('active', ttsEnabled);
     if (!ttsEnabled) {
         window.speechSynthesis?.cancel();
@@ -961,7 +1027,7 @@ function initVoice() {
 
 function toggleVoice() {
     if (!recognition) {
-        addMsg('system', '⚠️ Voice input requires Chrome or Safari on iOS/Android.');
+        addMsg('system', '&#x26A0;&#xFE0F; Voice input requires Chrome or Safari on iOS/Android.');
         return;
     }
     if (isStreaming) return;

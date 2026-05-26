@@ -7,7 +7,7 @@
  *   1. npm install
  *   2. Install Ollama: https://ollama.ai
  *   3. ollama pull llama3
- *   4. node launch-heidi-mobile.js
+ *   4. node launch-heidi-mobile.js   (or: npm run mobile)
  *   5. Open the phone URL shown in the console on your mobile device (same WiFi)
  */
 
@@ -119,9 +119,9 @@ app.get('/api/health', async (req, res) => {
     res.json(status);
 });
 
-// SSE streaming chat
+// SSE streaming chat — accepts optional history[] for multi-turn context
 app.post('/api/chat', async (req, res) => {
-    const { message, model, provider } = req.body;
+    const { message, model, provider, history = [] } = req.body;
     if (!message) return res.status(400).json({ error: 'message required' });
 
     res.setHeader('Content-Type', 'text/event-stream');
@@ -137,7 +137,7 @@ app.post('/api/chat', async (req, res) => {
 
     if (provider !== 'lmstudio') {
         try {
-            await streamOllama(message, selectedModel, systemPrompt, send);
+            await streamOllama(message, selectedModel, systemPrompt, history, send);
             return finish({ provider: 'ollama' });
         } catch (e) {
             console.log('[Chat] Ollama unavailable:', e.message);
@@ -145,7 +145,7 @@ app.post('/api/chat', async (req, res) => {
     }
 
     try {
-        await streamLMStudio(message, selectedModel, systemPrompt, send);
+        await streamLMStudio(message, selectedModel, systemPrompt, history, send);
         return finish({ provider: 'lmstudio' });
     } catch (e) {
         console.log('[Chat] LM Studio unavailable:', e.message);
@@ -160,14 +160,20 @@ app.post('/api/chat', async (req, res) => {
     finish({ provider: 'fallback' });
 });
 
-async function streamOllama(message, model, systemPrompt, send) {
-    const prompt = `${systemPrompt}\n\nUser: ${message}\n\nHeidi:`;
-    const response = await fetch(`${OLLAMA_URL}/api/generate`, {
+async function streamOllama(message, model, systemPrompt, history, send) {
+    // Use /api/chat for multi-turn message support
+    const messages = [
+        { role: 'system', content: systemPrompt },
+        ...history,
+        { role: 'user', content: message }
+    ];
+
+    const response = await fetch(`${OLLAMA_URL}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
             model,
-            prompt,
+            messages,
             stream: true,
             options: { temperature: 0.7, num_predict: 600 }
         }),
@@ -187,14 +193,20 @@ async function streamOllama(message, model, systemPrompt, send) {
             if (!line.trim()) continue;
             try {
                 const data = JSON.parse(line);
-                if (data.response) send({ t: data.response });
+                if (data.message?.content) send({ t: data.message.content });
                 if (data.done) return;
             } catch {}
         }
     }
 }
 
-async function streamLMStudio(message, model, systemPrompt, send) {
+async function streamLMStudio(message, model, systemPrompt, history, send) {
+    const messages = [
+        { role: 'system', content: systemPrompt },
+        ...history,
+        { role: 'user', content: message }
+    ];
+
     const response = await fetch(`${LM_STUDIO_URL}/v1/chat/completions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -203,10 +215,7 @@ async function streamLMStudio(message, model, systemPrompt, send) {
             stream: true,
             temperature: 0.7,
             max_tokens: 600,
-            messages: [
-                { role: 'system', content: systemPrompt },
-                { role: 'user', content: message }
-            ]
+            messages
         }),
         signal: AbortSignal.timeout(90000)
     });
@@ -239,15 +248,15 @@ const lanIP = getLANIP();
 server.listen(PORT, '0.0.0.0', async () => {
     const portStr = PORT.toString();
     const ipLine = `http://${lanIP}:${portStr}`;
-    console.log('\n╔══════════════════════════════════════════════╗');
+    console.log('\n╬════════════════════════════════════════════╗');
     console.log('║       🧠  HEIDI — Local Mobile Chat          ║');
-    console.log('╠══════════════════════════════════════════════╣');
+    console.log('╠════════════════════════════════════════════╣');
     console.log(`║  Desktop:  http://localhost:${portStr}${' '.repeat(16 - portStr.length)}║`);
     console.log(`║  📱 Phone: ${ipLine}${' '.repeat(34 - ipLine.length)}║`);
-    console.log('╠══════════════════════════════════════════════╣');
+    console.log('╠════════════════════════════════════════════╣');
     console.log('║  Open the Phone URL on your mobile device    ║');
     console.log('║  (must be on the same WiFi / LAN network)    ║');
-    console.log('╚══════════════════════════════════════════════╝\n');
+    console.log('╚════════════════════════════════════════════╝\n');
 
     try {
         const r = await fetch(`${OLLAMA_URL}/api/tags`, { signal: AbortSignal.timeout(2000) });
