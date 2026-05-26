@@ -21,6 +21,7 @@ module.exports = {
   // Redirect missing external modules to lightweight stubs
   moduleNameMapper: {
     '^.*heidi-core.*ollama-client.*$': '<rootDir>/tests/__mocks__/ollama-client-stub.js',
+    '^uuid$': '<rootDir>/tests/__mocks__/uuid-stub.js',
   },
 
   forceExit: true,
