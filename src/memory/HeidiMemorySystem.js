@@ -1,9 +1,10 @@
+'use strict';
 /**
  * HEIDI MEMORY SYSTEM - Layer 4: The Memory Backbone
  * This is where most people fail - you need 3 memory types
- * 
+ *
  * 1. Short-Term (Session): Current tasks, active goals
- * 2. Long-Term (Database): User profiles, decisions, outcomes, revenue events, system performance  
+ * 2. Long-Term (Database): User profiles, decisions, outcomes, revenue events, system performance
  * 3. Reflective Memory: Heidi's "self-awareness" - what worked, what failed, confidence vs reality, drift score
  */
 
@@ -15,232 +16,153 @@ const path = require('path');
 class HeidiMemorySystem extends EventEmitter {
   constructor(config = {}) {
     super();
-    
+
     this.config = {
-      // Session memory limits
-      sessionMaxSize: config.sessionMaxSize || 100, // Max items in session memory
-      sessionTTL: config.sessionTTL || 3600000, // 1 hour session TTL
-      
-      // Database memory settings
+      sessionMaxSize: config.sessionMaxSize || 100,
+      sessionTTL: config.sessionTTL || 3600000,
       batchSize: config.batchSize || 50,
       enablePersistence: config.enablePersistence !== false,
-      
-      // Reflective memory settings
-      reflectionInterval: config.reflectionInterval || 300000, // 5 minutes
+      reflectionInterval: config.reflectionInterval || 300000,
       driftThreshold: config.driftThreshold || 0.3,
       maxReflectionHistory: config.maxReflectionHistory || 1000,
-      
-      // Storage paths
       localStoragePath: config.localStoragePath || path.resolve(__dirname, '../../data/memory'),
-      
       ...config
     };
-    
+
     // 1. SHORT-TERM MEMORY (Session)
     this.sessionMemory = {
-      tasks: new Map(), // Current active tasks
-      goals: new Map(), // Active goals
-      context: new Map(), // Session context
-      workingMemory: new Map(), // Temporary working data
-      lastAccess: new Map() // Track access times for cleanup
+      tasks: new Map(),
+      goals: new Map(),
+      context: new Map(),
+      workingMemory: new Map(),
+      lastAccess: new Map()
     };
-    
+
     // 2. LONG-TERM MEMORY (Database)
     this.dbMemory = {
-      userProfiles: new Map(), // Cached user profiles
-      decisions: new Map(), // Cached decisions
-      patterns: new Map(), // Learned patterns
-      performance: new Map(), // Performance metrics
-      revenue: new Map() // Revenue events and patterns
+      userProfiles: new Map(),
+      decisions: new Map(),
+      patterns: new Map(),
+      performance: new Map(),
+      revenue: new Map()
     };
-    
+
     // 3. REFLECTIVE MEMORY (Self-Awareness)
     this.reflectiveMemory = {
-      whatWorked: new Map(), // Successful strategies
-      whatFailed: new Map(), // Failed strategies
-      confidenceReality: [], // Confidence vs reality tracking
-      driftScore: 0, // Current drift score
-      patterns: [], // Detected patterns
-      adaptations: [], // Adaptations made
+      whatWorked: new Map(),
+      whatFailed: new Map(),
+      confidenceReality: [],
+      driftScore: 0,
+      patterns: [],
+      adaptations: [],
       lastReflection: Date.now()
     };
-    
-    // Initialize storage
+
+    // Top-level drift score — mirrors reflectiveMemory.driftScore for direct access
+    this.driftScore = 0;
+
+    // _destroyed must be set before initialize() is called so async
+    // callbacks can guard against post-teardown logging.
+    this._destroyed = false;
+    this.cleanupTimer = null;
+    this.reflectionTimer = null;
+    this.persistTimer = null;
+
     this.initialize();
-    
-    // Start maintenance tasks
     this.startMaintenanceTasks();
-    
+
     console.log('[MEMORY] Heidi Memory System initialized');
     console.log(`[MEMORY] Session TTL: ${this.config.sessionTTL}ms`);
     console.log(`[MEMORY] Reflection interval: ${this.config.reflectionInterval}ms`);
   }
-  
+
   async initialize() {
     try {
-      // Ensure local storage directory exists
       await fs.mkdir(this.config.localStoragePath, { recursive: true });
-      
-      // Load cached database memory
+      if (this._destroyed) return;
       await this.loadDatabaseCache();
-      
-      // Load reflective memory
+      if (this._destroyed) return;
       await this.loadReflectiveMemory();
-      
-      // Initialize database tables if needed
+      if (this._destroyed) return;
       await this.initializeDatabaseTables();
-      
+      if (this._destroyed) return;
       console.log('[MEMORY] Memory system initialized successfully');
-      
     } catch (error) {
-      console.error('[MEMORY] Initialization failed:', error.message);
-      throw error;
+      if (!this._destroyed) console.error('[MEMORY] Initialization failed:', error.message);
     }
   }
-  
-  /**
-   * SHORT-TERM MEMORY OPERATIONS
-   */
-  
-  // Store in session memory
+
+  // ── Short-term memory ──────────────────────────────────────────────────────
+
   storeSession(key, value, category = 'workingMemory') {
-    if (!this.sessionMemory[category]) {
-      this.sessionMemory[category] = new Map();
-    }
-    
-    // Check size limit
+    if (!this.sessionMemory[category]) this.sessionMemory[category] = new Map();
     if (this.sessionMemory[category].size >= this.config.sessionMaxSize) {
       this.evictOldestSession(category);
     }
-    
-    this.sessionMemory[category].set(key, {
-      value,
-      timestamp: Date.now(),
-      accessCount: 1
-    });
-    
+    this.sessionMemory[category].set(key, { value, timestamp: Date.now(), accessCount: 1 });
     this.sessionMemory.lastAccess.set(key, Date.now());
-    
-    // Emit storage event
     this.emit('session_stored', { key, category, timestamp: Date.now() });
   }
-  
-  // Retrieve from session memory
+
   getSession(key, category = 'workingMemory') {
     const item = this.sessionMemory[category]?.get(key);
-    
     if (item) {
       item.accessCount++;
       this.sessionMemory.lastAccess.set(key, Date.now());
       return item.value;
     }
-    
     return null;
   }
-  
-  // Store active task
+
   storeTask(taskId, task) {
     this.storeSession(taskId, task, 'tasks');
     console.log(`[MEMORY] Task stored in session: ${taskId}`);
   }
-  
-  // Get active task
-  getTask(taskId) {
-    return this.getSession(taskId, 'tasks');
-  }
-  
-  // Store active goal
+
+  getTask(taskId) { return this.getSession(taskId, 'tasks'); }
+
   storeGoal(goalId, goal) {
     this.storeSession(goalId, goal, 'goals');
     console.log(`[MEMORY] Goal stored in session: ${goalId}`);
   }
-  
-  // Get active goal
-  getGoal(goalId) {
-    return this.getSession(goalId, 'goals');
-  }
-  
-  // Store working context
-  storeContext(contextId, context) {
-    this.storeSession(contextId, context, 'context');
-  }
-  
-  // Get working context
-  getContext(contextId) {
-    return this.getSession(contextId, 'context');
-  }
-  
-  /**
-   * LONG-TERM MEMORY OPERATIONS
-   */
-  
-  // Store user profile
+
+  getGoal(goalId) { return this.getSession(goalId, 'goals'); }
+  storeContext(id, ctx) { this.storeSession(id, ctx, 'context'); }
+  getContext(id) { return this.getSession(id, 'context'); }
+
+  // ── Long-term memory (database) ────────────────────────────────────────
+
   async storeUserProfile(userId, profile) {
     try {
-      const profileData = {
-        user_id: userId,
-        profile_data: profile,
-        updated_at: new Date().toISOString()
-      };
-      
-      const { data, error } = await supabase
-        .from('user_profiles')
-        .upsert(profileData, { onConflict: 'user_id' })
-        .select();
-      
+      const profileData = { user_id: userId, profile_data: profile, updated_at: new Date().toISOString() };
+      const { error } = await supabase.from('user_profiles').upsert(profileData, { onConflict: 'user_id' }).select();
       if (error) throw error;
-      
-      // Cache in memory
-      this.dbMemory.userProfiles.set(userId, {
-        ...profile,
-        updated_at: profileData.updated_at
-      });
-      
+      this.dbMemory.userProfiles.set(userId, { ...profile, updated_at: profileData.updated_at });
       this.emit('user_profile_stored', { userId, profile });
-      
       console.log(`[MEMORY] User profile stored: ${userId}`);
-      
     } catch (error) {
       console.error(`[MEMORY] Failed to store user profile ${userId}:`, error.message);
       throw error;
     }
   }
-  
-  // Get user profile
+
   async getUserProfile(userId) {
     try {
-      // Check cache first
       const cached = this.dbMemory.userProfiles.get(userId);
-      if (cached) {
-        return cached;
-      }
-      
-      // Load from database
-      const { data, error } = await supabase
-        .from('user_profiles')
-        .select('*')
-        .eq('user_id', userId)
-        .single();
-      
-      if (error && error.code !== 'PGRST116') { // Not found is ok
-        throw error;
-      }
-      
+      if (cached) return cached;
+      const { data, error } = await supabase.from('user_profiles').select('*').eq('user_id', userId).single();
+      if (error && error.code !== 'PGRST116') throw error;
       if (data) {
-        // Cache the result
         this.dbMemory.userProfiles.set(userId, data.profile_data);
         return data.profile_data;
       }
-      
       return null;
-      
     } catch (error) {
       console.error(`[MEMORY] Failed to get user profile ${userId}:`, error.message);
       throw error;
     }
   }
-  
-  // Store decision
+
   async storeDecision(decision) {
     try {
       const decisionData = {
@@ -255,53 +177,30 @@ class HeidiMemorySystem extends EventEmitter {
         outcome: decision.outcome,
         timestamp: decision.timestamp || new Date().toISOString()
       };
-      
-      const { data, error } = await supabase
-        .from('decisions')
-        .insert(decisionData)
-        .select();
-      
+      const { error } = await supabase.from('decisions').insert(decisionData).select();
       if (error) throw error;
-      
-      // Cache in memory
       this.dbMemory.decisions.set(decision.id, decision);
-      
       this.emit('decision_stored', { decisionId: decision.id, decision });
-      
       console.log(`[MEMORY] Decision stored: ${decision.id}`);
-      
     } catch (error) {
       console.error(`[MEMORY] Failed to store decision ${decision.id}:`, error.message);
       throw error;
     }
   }
-  
-  // Get recent decisions
+
   async getRecentDecisions(limit = 50, userId = null) {
     try {
-      let query = supabase
-        .from('decisions')
-        .select('*')
-        .order('timestamp', { ascending: false })
-        .limit(limit);
-      
-      if (userId) {
-        query = query.eq('user_id', userId);
-      }
-      
+      let query = supabase.from('decisions').select('*').order('timestamp', { ascending: false }).limit(limit);
+      if (userId) query = query.eq('user_id', userId);
       const { data, error } = await query;
-      
       if (error) throw error;
-      
       return data || [];
-      
     } catch (error) {
       console.error('[MEMORY] Failed to get recent decisions:', error.message);
       throw error;
     }
   }
-  
-  // Store revenue event
+
   async storeRevenueEvent(event) {
     try {
       const eventData = {
@@ -314,28 +213,17 @@ class HeidiMemorySystem extends EventEmitter {
         context: event.context,
         timestamp: event.timestamp || new Date().toISOString()
       };
-      
-      const { data, error } = await supabase
-        .from('revenue_events')
-        .insert(eventData)
-        .select();
-      
+      const { error } = await supabase.from('revenue_events').insert(eventData).select();
       if (error) throw error;
-      
-      // Cache in memory
       this.dbMemory.revenue.set(event.id, event);
-      
       this.emit('revenue_event_stored', { eventId: event.id, event });
-      
       console.log(`[MEMORY] Revenue event stored: ${event.id} ($${event.amount})`);
-      
     } catch (error) {
       console.error(`[MEMORY] Failed to store revenue event ${event.id}:`, error.message);
       throw error;
     }
   }
-  
-  // Store system performance
+
   async storePerformance(performance) {
     try {
       const perfData = {
@@ -345,67 +233,33 @@ class HeidiMemorySystem extends EventEmitter {
         context: performance.context,
         timestamp: performance.timestamp || new Date().toISOString()
       };
-      
-      const { data, error } = await supabase
-        .from('system_performance')
-        .insert(perfData)
-        .select();
-      
+      const { error } = await supabase.from('system_performance').insert(perfData).select();
       if (error) throw error;
-      
-      // Cache in memory
       this.dbMemory.performance.set(performance.id, performance);
-      
       this.emit('performance_stored', { performanceId: performance.id, performance });
-      
       console.log(`[MEMORY] Performance metric stored: ${performance.id}`);
-      
     } catch (error) {
       console.error(`[MEMORY] Failed to store performance ${performance.id}:`, error.message);
       throw error;
     }
   }
-  
-  /**
-   * REFLECTIVE MEMORY OPERATIONS (Self-Awareness)
-   */
-  
-  // Store what worked
+
+  // ── Reflective memory ──────────────────────────────────────────────────
+
   storeWhatWorked(strategyId, strategy, outcome) {
-    const entry = {
-      id: strategyId,
-      strategy,
-      outcome,
-      timestamp: Date.now(),
-      effectiveness: this.calculateEffectiveness(strategy, outcome)
-    };
-    
+    const entry = { id: strategyId, strategy, outcome, timestamp: Date.now(), effectiveness: this.calculateEffectiveness(strategy, outcome) };
     this.reflectiveMemory.whatWorked.set(strategyId, entry);
-    
     this.emit('what_worked_stored', { strategyId, entry });
-    
     console.log(`[MEMORY] Strategy that worked: ${strategyId}`);
   }
-  
-  // Store what failed
+
   storeWhatFailed(strategyId, strategy, error, context) {
-    const entry = {
-      id: strategyId,
-      strategy,
-      error,
-      context,
-      timestamp: Date.now(),
-      severity: this.assessFailureSeverity(error, context)
-    };
-    
+    const entry = { id: strategyId, strategy, error, context, timestamp: Date.now(), severity: this.assessFailureSeverity(error, context) };
     this.reflectiveMemory.whatFailed.set(strategyId, entry);
-    
     this.emit('what_failed_stored', { strategyId, entry });
-    
     console.log(`[MEMORY] Strategy that failed: ${strategyId}`);
   }
-  
-  // Track confidence vs reality
+
   trackConfidenceVsReality(taskId, expectedConfidence, actualOutcome) {
     const entry = {
       taskId,
@@ -414,75 +268,38 @@ class HeidiMemorySystem extends EventEmitter {
       accuracy: this.calculateAccuracy(expectedConfidence, actualOutcome),
       timestamp: Date.now()
     };
-    
     this.reflectiveMemory.confidenceReality.push(entry);
-    
-    // Keep only recent history
     if (this.reflectiveMemory.confidenceReality.length > this.config.maxReflectionHistory) {
       this.reflectiveMemory.confidenceReality.shift();
     }
-    
-    // Update drift score
     this.updateDriftScore();
-    
     this.emit('confidence_tracked', { taskId, entry });
-    
     console.log(`[MEMORY] Confidence vs reality tracked: ${taskId} (accuracy: ${entry.accuracy.toFixed(2)})`);
   }
-  
-  // Store pattern detected
+
   storePattern(pattern) {
-    const entry = {
-      ...pattern,
-      id: `pattern_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      timestamp: Date.now(),
-      confidence: pattern.confidence || 0.5
-    };
-    
+    const entry = { ...pattern, id: `pattern_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`, timestamp: Date.now(), confidence: pattern.confidence || 0.5 };
     this.reflectiveMemory.patterns.push(entry);
-    
-    // Keep only recent patterns
-    if (this.reflectiveMemory.patterns.length > this.config.maxReflectionHistory) {
-      this.reflectiveMemory.patterns.shift();
-    }
-    
+    if (this.reflectiveMemory.patterns.length > this.config.maxReflectionHistory) this.reflectiveMemory.patterns.shift();
     this.emit('pattern_detected', { pattern: entry });
-    
     console.log(`[MEMORY] Pattern detected: ${entry.type}`);
   }
-  
-  // Store adaptation made
+
   storeAdaptation(adaptation) {
-    const entry = {
-      ...adaptation,
-      id: `adaptation_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      timestamp: Date.now(),
-      effectiveness: 0 // Will be updated later
-    };
-    
+    const entry = { ...adaptation, id: `adaptation_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`, timestamp: Date.now(), effectiveness: 0 };
     this.reflectiveMemory.adaptations.push(entry);
-    
-    // Keep only recent adaptations
-    if (this.reflectiveMemory.adaptations.length > this.config.maxReflectionHistory) {
-      this.reflectiveMemory.adaptations.shift();
-    }
-    
+    if (this.reflectiveMemory.adaptations.length > this.config.maxReflectionHistory) this.reflectiveMemory.adaptations.shift();
     this.emit('adaptation_made', { adaptation: entry });
-    
     console.log(`[MEMORY] Adaptation made: ${entry.type}`);
   }
-  
-  /**
-   * REFLECTION ENGINE - Core self-awareness logic
-   */
-  
-  // Run reflection cycle
+
+  // ── Reflection engine ──────────────────────────────────────────────────
+
   async runReflection() {
+    if (this._destroyed) return;
     const reflectionId = `reflection_${Date.now()}`;
-    
     try {
-      console.log(`[MEMORY] Starting reflection cycle: ${reflectionId}`);
-      
+      if (!this._destroyed) console.log(`[MEMORY] Starting reflection cycle: ${reflectionId}`);
       const reflection = {
         id: reflectionId,
         timestamp: Date.now(),
@@ -493,437 +310,271 @@ class HeidiMemorySystem extends EventEmitter {
         driftScore: this.driftScore,
         recommendations: this.generateRecommendations()
       };
-      
-      // Store reflection
       await this.persistReflection(reflection);
-      
-      // Update last reflection time
       this.reflectiveMemory.lastReflection = Date.now();
-      
-      // Emit reflection completed
-      this.emit('reflection_completed', reflection);
-      
-      console.log(`[MEMORY] Reflection completed: ${reflectionId}`);
-      
+      if (!this._destroyed) this.emit('reflection_completed', reflection);
+      if (!this._destroyed) console.log(`[MEMORY] Reflection completed: ${reflectionId}`);
       return reflection;
-      
     } catch (error) {
-      console.error(`[MEMORY] Reflection failed: ${reflectionId}:`, error.message);
+      if (!this._destroyed) console.error(`[MEMORY] Reflection failed: ${reflectionId}:`, error.message);
       throw error;
     }
   }
-  
-  // Analyze what worked
+
   analyzeWhatWorked() {
-    const analysis = {
+    const strategies = Array.from(this.reflectiveMemory.whatWorked.values())
+      .sort((a, b) => b.effectiveness - a.effectiveness).slice(0, 10);
+    return {
       totalStrategies: this.reflectiveMemory.whatWorked.size,
-      topStrategies: [],
-      patterns: [],
+      topStrategies: strategies.map(s => ({ id: s.id, strategy: s.strategy, effectiveness: s.effectiveness })),
+      patterns: this.identifySuccessPatterns(strategies),
       recommendations: []
     };
-    
-    // Find top performing strategies
-    const strategies = Array.from(this.reflectiveMemory.whatWorked.values())
-      .sort((a, b) => b.effectiveness - a.effectiveness)
-      .slice(0, 10);
-    
-    analysis.topStrategies = strategies.map(s => ({
-      id: s.id,
-      strategy: s.strategy,
-      effectiveness: s.effectiveness
-    }));
-    
-    // Identify patterns in successful strategies
-    analysis.patterns = this.identifySuccessPatterns(strategies);
-    
-    return analysis;
   }
-  
-  // Analyze what failed
+
   analyzeWhatFailed() {
-    const analysis = {
+    const failuresByType = {};
+    for (const failure of this.reflectiveMemory.whatFailed.values()) {
+      const type = failure.strategy.type || 'unknown';
+      if (!failuresByType[type]) failuresByType[type] = [];
+      failuresByType[type].push(failure);
+    }
+    return {
       totalFailures: this.reflectiveMemory.whatFailed.size,
-      commonFailures: [],
+      commonFailures: Object.entries(failuresByType)
+        .map(([type, failures]) => ({ type, count: failures.length, avgSeverity: failures.reduce((s, f) => s + f.severity, 0) / failures.length }))
+        .sort((a, b) => b.count - a.count).slice(0, 5),
       failureModes: [],
       recommendations: []
     };
-    
-    // Group failures by type
-    const failuresByType = {};
-    
-    for (const failure of this.reflectiveMemory.whatFailed.values()) {
-      const type = failure.strategy.type || 'unknown';
-      if (!failuresByType[type]) {
-        failuresByType[type] = [];
-      }
-      failuresByType[type].push(failure);
-    }
-    
-    // Find common failure patterns
-    analysis.commonFailures = Object.entries(failuresByType)
-      .map(([type, failures]) => ({
-        type,
-        count: failures.length,
-        avgSeverity: failures.reduce((sum, f) => sum + f.severity, 0) / failures.length
-      }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 5);
-    
-    return analysis;
   }
-  
-  // Analyze confidence accuracy
+
   analyzeConfidenceAccuracy() {
     const entries = this.reflectiveMemory.confidenceReality;
-    
-    if (entries.length === 0) {
-      return { avgAccuracy: 0, trend: 'stable', recommendations: [] };
-    }
-    
-    const avgAccuracy = entries.reduce((sum, e) => sum + e.accuracy, 0) / entries.length;
-    
-    // Calculate trend (last 10 vs previous)
+    if (!entries.length) return { avgAccuracy: 0, trend: 'stable', recommendations: [] };
+    const avgAccuracy = entries.reduce((s, e) => s + e.accuracy, 0) / entries.length;
     const recent = entries.slice(-10);
     const previous = entries.slice(-20, -10);
-    
     let trend = 'stable';
-    if (recent.length > 0 && previous.length > 0) {
-      const recentAvg = recent.reduce((sum, e) => sum + e.accuracy, 0) / recent.length;
-      const previousAvg = previous.reduce((sum, e) => sum + e.accuracy, 0) / previous.length;
-      
-      if (recentAvg > previousAvg + 0.1) trend = 'improving';
-      else if (recentAvg < previousAvg - 0.1) trend = 'declining';
+    if (recent.length && previous.length) {
+      const rAvg = recent.reduce((s, e) => s + e.accuracy, 0) / recent.length;
+      const pAvg = previous.reduce((s, e) => s + e.accuracy, 0) / previous.length;
+      if (rAvg > pAvg + 0.1) trend = 'improving';
+      else if (rAvg < pAvg - 0.1) trend = 'declining';
     }
-    
     const recommendations = [];
-    if (avgAccuracy < 0.7) {
-      recommendations.push('confidence_calibration_needed');
-    }
-    if (trend === 'declining') {
-      recommendations.push('investigate_declining_accuracy');
-    }
-    
-    return {
-      avgAccuracy,
-      trend,
-      sampleSize: entries.length,
-      recommendations
-    };
+    if (avgAccuracy < 0.7) recommendations.push('confidence_calibration_needed');
+    if (trend === 'declining') recommendations.push('investigate_declining_accuracy');
+    return { avgAccuracy, trend, sampleSize: entries.length, recommendations };
   }
-  
-  // Analyze patterns
+
   analyzePatterns() {
     const patterns = this.reflectiveMemory.patterns;
-    
     return {
       totalPatterns: patterns.length,
       recentPatterns: patterns.slice(-10),
       patternTypes: this.categorizePatterns(patterns),
-      confidence: patterns.length > 0 ? patterns.reduce((sum, p) => sum + p.confidence, 0) / patterns.length : 0
+      confidence: patterns.length ? patterns.reduce((s, p) => s + p.confidence, 0) / patterns.length : 0
     };
   }
-  
-  // Generate recommendations
+
   generateRecommendations() {
-    const recommendations = [];
-    
-    // Based on drift score
+    const recs = [];
     if (this.driftScore > this.config.driftThreshold) {
-      recommendations.push({
-        type: 'drift_mitigation',
-        priority: 'high',
-        action: 'reduce_confidence_threshold',
-        reason: `Drift score ${this.driftScore.toFixed(2)} exceeds threshold ${this.config.driftThreshold}`
-      });
+      recs.push({ type: 'drift_mitigation', priority: 'high', action: 'reduce_confidence_threshold', reason: `Drift score ${this.driftScore.toFixed(2)} exceeds threshold ${this.config.driftThreshold}` });
     }
-    
-    // Based on failure analysis
     const failures = this.analyzeWhatFailed();
-    if (failures.commonFailures.length > 0) {
-      const topFailure = failures.commonFailures[0];
-      recommendations.push({
-        type: 'failure_mitigation',
-        priority: 'medium',
-        action: 'avoid_strategy',
-        target: topFailure.type,
-        reason: `High failure rate: ${topFailure.count} failures`
-      });
+    if (failures.commonFailures.length) {
+      recs.push({ type: 'failure_mitigation', priority: 'medium', action: 'avoid_strategy', target: failures.commonFailures[0].type, reason: `High failure rate: ${failures.commonFailures[0].count} failures` });
     }
-    
-    // Based on success patterns
     const successes = this.analyzeWhatWorked();
-    if (successes.topStrategies.length > 0) {
-      const topStrategy = successes.topStrategies[0];
-      recommendations.push({
-        type: 'success_amplification',
-        priority: 'low',
-        action: 'increase_strategy_preference',
-        target: topStrategy.id,
-        reason: `High effectiveness: ${topStrategy.effectiveness.toFixed(2)}`
-      });
+    if (successes.topStrategies.length) {
+      recs.push({ type: 'success_amplification', priority: 'low', action: 'increase_strategy_preference', target: successes.topStrategies[0].id, reason: `High effectiveness: ${successes.topStrategies[0].effectiveness.toFixed(2)}` });
     }
-    
-    return recommendations;
+    return recs;
   }
-  
-  /**
-   * UTILITY METHODS
-   */
-  
+
+  // ── Utilities ───────────────────────────────────────────────────────────
+
   calculateEffectiveness(strategy, outcome) {
     if (!outcome || outcome.success === false) return 0;
-    
-    let effectiveness = 0.5; // Base effectiveness
-    
-    if (outcome.success) effectiveness += 0.3;
-    if (outcome.latency < 5000) effectiveness += 0.1; // Fast execution
-    if (outcome.confidence > 0.8) effectiveness += 0.1; // High confidence
-    
-    return Math.min(1.0, effectiveness);
+    let e = 0.5;
+    if (outcome.success) e += 0.3;
+    if (outcome.latency < 5000) e += 0.1;
+    if (outcome.confidence > 0.8) e += 0.1;
+    return Math.min(1.0, e);
   }
-  
+
   assessFailureSeverity(error, context) {
-    let severity = 0.5; // Base severity
-    
-    if (context.priority === 'critical') severity += 0.3;
-    if (context.type === 'revenue') severity += 0.2;
-    if (error.includes('timeout')) severity += 0.1;
-    if (error.includes('critical')) severity += 0.2;
-    
-    return Math.min(1.0, severity);
+    let s = 0.5;
+    if (context.priority === 'critical') s += 0.3;
+    if (context.type === 'revenue') s += 0.2;
+    if (error.includes('timeout')) s += 0.1;
+    if (error.includes('critical')) s += 0.2;
+    return Math.min(1.0, s);
   }
-  
+
   calculateAccuracy(expectedConfidence, actualOutcome) {
     if (!actualOutcome) return 0;
-    
     const success = actualOutcome.success !== false ? 1 : 0;
     const confidence = expectedConfidence || 0;
-    
-    // Accuracy measures how well confidence predicted success
     return success === (confidence > 0.5 ? 1 : 0) ? 1 : 0;
   }
-  
+
   updateDriftScore() {
     const entries = this.reflectiveMemory.confidenceReality;
-    
-    if (entries.length === 0) {
-      this.driftScore = 0;
-      return;
-    }
-    
-    // Calculate drift as 1 - average accuracy
-    const avgAccuracy = entries.reduce((sum, e) => sum + e.accuracy, 0) / entries.length;
+    if (!entries.length) { this.driftScore = 0; return; }
+    const avgAccuracy = entries.reduce((s, e) => s + e.accuracy, 0) / entries.length;
     this.driftScore = 1 - avgAccuracy;
-    
-    // Emit drift update
     this.emit('drift_updated', { score: this.driftScore, accuracy: avgAccuracy });
   }
-  
+
   identifySuccessPatterns(strategies) {
     const patterns = [];
-    
-    // Look for common themes in successful strategies
     const modelUsage = {};
     const strategyTypes = {};
-    
-    for (const strategy of strategies) {
-      // Track model usage
-      const model = strategy.strategy.model;
-      modelUsage[model] = (modelUsage[model] || 0) + 1;
-      
-      // Track strategy types
-      const type = strategy.strategy.type || 'unknown';
-      strategyTypes[type] = (strategyTypes[type] || 0) + 1;
+    for (const s of strategies) {
+      modelUsage[s.strategy.model] = (modelUsage[s.strategy.model] || 0) + 1;
+      const t = s.strategy.type || 'unknown';
+      strategyTypes[t] = (strategyTypes[t] || 0) + 1;
     }
-    
-    // Identify patterns
-    if (modelUsage['gpt-4-local'] > strategies.length * 0.5) {
-      patterns.push('gpt-4_local_dominates_success');
-    }
-    
-    if (strategyTypes['local'] > strategies.length * 0.8) {
-      patterns.push('local_strategies_preferred');
-    }
-    
+    if (modelUsage['gpt-4-local'] > strategies.length * 0.5) patterns.push('gpt-4_local_dominates_success');
+    if (strategyTypes['local'] > strategies.length * 0.8) patterns.push('local_strategies_preferred');
     return patterns;
   }
-  
+
   categorizePatterns(patterns) {
-    const categories = {};
-    
-    for (const pattern of patterns) {
-      const type = pattern.type || 'unknown';
-      categories[type] = (categories[type] || 0) + 1;
-    }
-    
-    return categories;
+    const cats = {};
+    for (const p of patterns) { const t = p.type || 'unknown'; cats[t] = (cats[t] || 0) + 1; }
+    return cats;
   }
-  
+
   evictOldestSession(category) {
     const memory = this.sessionMemory[category];
-    if (!memory || memory.size === 0) return;
-    
-    let oldestKey = null;
-    let oldestTime = Date.now();
-    
+    if (!memory || !memory.size) return;
+    let oldestKey = null, oldestTime = Date.now();
     for (const [key, item] of memory) {
-      if (item.timestamp < oldestTime) {
-        oldestTime = item.timestamp;
-        oldestKey = key;
-      }
+      if (item.timestamp < oldestTime) { oldestTime = item.timestamp; oldestKey = key; }
     }
-    
     if (oldestKey) {
       memory.delete(oldestKey);
       this.sessionMemory.lastAccess.delete(oldestKey);
       console.log(`[MEMORY] Evicted oldest session item: ${oldestKey}`);
     }
   }
-  
-  /**
-   * PERSISTENCE AND MAINTENANCE
-   */
-  
+
+  // ── Persistence and maintenance ────────────────────────────────────────
+
   async initializeDatabaseTables() {
-    // This would create the necessary database tables
-    // For now, we assume they exist in Supabase
-    console.log('[MEMORY] Database tables assumed to exist');
+    if (!this._destroyed) console.log('[MEMORY] Database tables assumed to exist');
   }
-  
+
   async loadDatabaseCache() {
-    // Load frequently accessed data into memory cache
-    console.log('[MEMORY] Loading database cache...');
+    if (!this._destroyed) console.log('[MEMORY] Loading database cache...');
   }
-  
+
   async loadReflectiveMemory() {
     try {
       const filePath = path.join(this.config.localStoragePath, 'reflective_memory.json');
-      
       try {
         const data = await fs.readFile(filePath, 'utf8');
-        const reflective = JSON.parse(data);
-        
-        // Restore reflective memory
-        this.reflectiveMemory = {
-          ...this.reflectiveMemory,
-          ...reflective
-        };
-        
-        console.log('[MEMORY] Reflective memory loaded from disk');
-        
+        if (this._destroyed) return;
+        this.reflectiveMemory = { ...this.reflectiveMemory, ...JSON.parse(data) };
+        if (!this._destroyed) console.log('[MEMORY] Reflective memory loaded from disk');
       } catch (error) {
-        if (error.code !== 'ENOENT') {
-          throw error;
-        }
-        console.log('[MEMORY] No existing reflective memory found, starting fresh');
+        if (error.code !== 'ENOENT') throw error;
+        if (!this._destroyed) console.log('[MEMORY] No existing reflective memory found, starting fresh');
       }
-      
     } catch (error) {
-      console.error('[MEMORY] Failed to load reflective memory:', error.message);
+      if (!this._destroyed) console.error('[MEMORY] Failed to load reflective memory:', error.message);
     }
   }
-  
+
   async persistReflection(reflection) {
+    if (this._destroyed) return;
     try {
       const filePath = path.join(this.config.localStoragePath, 'reflective_memory.json');
-      
-      // Update reflective memory with current state
-      const data = {
-        ...this.reflectiveMemory,
-        lastReflection: Date.now()
-      };
-      
-      await fs.writeFile(filePath, JSON.stringify(data, null, 2));
-      
-      // Also store in database for long-term persistence
-      if (this.config.enablePersistence) {
-        await this.storeReflectionInDatabase(reflection);
-      }
-      
+      await fs.writeFile(filePath, JSON.stringify({ ...this.reflectiveMemory, lastReflection: Date.now() }, null, 2));
+      if (this.config.enablePersistence && !this._destroyed) await this.storeReflectionInDatabase(reflection);
     } catch (error) {
-      console.error('[MEMORY] Failed to persist reflection:', error.message);
+      if (!this._destroyed) console.error('[MEMORY] Failed to persist reflection:', error.message);
     }
   }
-  
+
   async storeReflectionInDatabase(reflection) {
     try {
-      const { data, error } = await supabase
-        .from('reflections')
-        .insert({
-          reflection_id: reflection.id,
-          reflection_data: reflection,
-          timestamp: new Date(reflection.timestamp).toISOString()
-        });
-      
+      const { error } = await supabase.from('reflections').insert({
+        reflection_id: reflection.id,
+        reflection_data: reflection,
+        timestamp: new Date(reflection.timestamp).toISOString()
+      });
       if (error) throw error;
-      
     } catch (error) {
-      console.error('[MEMORY] Failed to store reflection in database:', error.message);
+      if (!this._destroyed) console.error('[MEMORY] Failed to store reflection in database:', error.message);
     }
   }
-  
+
   startMaintenanceTasks() {
-    // Clean up expired session memory
-    setInterval(() => {
-      this.cleanupSessionMemory();
-    }, 60000); // Every minute
-    
-    // Run reflection cycle
-    setInterval(() => {
+    this.cleanupTimer = setInterval(() => {
+      if (!this._destroyed) this.cleanupSessionMemory();
+    }, 60000);
+
+    this.reflectionTimer = setInterval(() => {
+      if (this._destroyed) return;
       if (Date.now() - this.reflectiveMemory.lastReflection >= this.config.reflectionInterval) {
-        this.runReflection().catch(error => {
-          console.error('[MEMORY] Reflection cycle failed:', error.message);
+        this.runReflection().catch(err => {
+          if (!this._destroyed) console.error('[MEMORY] Reflection cycle failed:', err.message);
         });
       }
-    }, 60000); // Check every minute
-    
-    // Persist reflective memory
-    setInterval(() => {
-      this.persistReflectiveMemory();
-    }, 300000); // Every 5 minutes
+    }, 60000);
+
+    this.persistTimer = setInterval(() => {
+      if (!this._destroyed) this.persistReflectiveMemory();
+    }, 300000);
+
+    if (this.cleanupTimer.unref) this.cleanupTimer.unref();
+    if (this.reflectionTimer.unref) this.reflectionTimer.unref();
+    if (this.persistTimer.unref) this.persistTimer.unref();
   }
-  
+
   cleanupSessionMemory() {
     const now = Date.now();
     let cleaned = 0;
-    
-    // Clean each category
-    for (const [category, memory] of Object.entries(this.sessionMemory)) {
-      if (memory instanceof Map) {
-        for (const [key, item] of memory) {
-          if (now - item.timestamp > this.config.sessionTTL) {
-            memory.delete(key);
-            this.sessionMemory.lastAccess.delete(key);
-            cleaned++;
-          }
+    for (const [, memory] of Object.entries(this.sessionMemory)) {
+      if (!(memory instanceof Map)) continue;
+      for (const [key, item] of memory) {
+        if (now - item.timestamp > this.config.sessionTTL) {
+          memory.delete(key);
+          this.sessionMemory.lastAccess.delete(key);
+          cleaned++;
         }
       }
     }
-    
-    if (cleaned > 0) {
-      console.log(`[MEMORY] Cleaned ${cleaned} expired session items`);
-    }
+    if (cleaned > 0) console.log(`[MEMORY] Cleaned ${cleaned} expired session items`);
   }
-  
+
   async persistReflectiveMemory() {
+    if (this._destroyed) return;
     try {
       const filePath = path.join(this.config.localStoragePath, 'reflective_memory.json');
-      const data = {
-        ...this.reflectiveMemory,
-        lastSaved: Date.now()
-      };
-      
-      await fs.writeFile(filePath, JSON.stringify(data, null, 2));
-      
+      await fs.writeFile(filePath, JSON.stringify({ ...this.reflectiveMemory, lastSaved: Date.now() }, null, 2));
     } catch (error) {
-      console.error('[MEMORY] Failed to persist reflective memory:', error.message);
+      if (!this._destroyed) console.error('[MEMORY] Failed to persist reflective memory:', error.message);
     }
   }
-  
-  /**
-   * STATUS AND MONITORING
-   */
-  
+
+  // ── Lifecycle ──────────────────────────────────────────────────────────
+
+  destroy() {
+    this._destroyed = true;
+    clearInterval(this.cleanupTimer);
+    clearInterval(this.reflectionTimer);
+    clearInterval(this.persistTimer);
+    this.cleanupTimer = null;
+    this.reflectionTimer = null;
+    this.persistTimer = null;
+  }
+
   getStatus() {
     return {
       session: {
@@ -950,31 +601,14 @@ class HeidiMemorySystem extends EventEmitter {
       config: this.config
     };
   }
-  
+
   async reset() {
-    // Clear session memory
     for (const category of Object.keys(this.sessionMemory)) {
-      if (this.sessionMemory[category] instanceof Map) {
-        this.sessionMemory[category].clear();
-      }
+      if (this.sessionMemory[category] instanceof Map) this.sessionMemory[category].clear();
     }
-    
-    // Clear database cache
-    for (const cache of Object.keys(this.dbMemory)) {
-      this.dbMemory[cache].clear();
-    }
-    
-    // Reset reflective memory
-    this.reflectiveMemory = {
-      whatWorked: new Map(),
-      whatFailed: new Map(),
-      confidenceReality: [],
-      driftScore: 0,
-      patterns: [],
-      adaptations: [],
-      lastReflection: Date.now()
-    };
-    
+    for (const cache of Object.keys(this.dbMemory)) this.dbMemory[cache].clear();
+    this.reflectiveMemory = { whatWorked: new Map(), whatFailed: new Map(), confidenceReality: [], driftScore: 0, patterns: [], adaptations: [], lastReflection: Date.now() };
+    this.driftScore = 0;
     console.log('[MEMORY] Memory system reset completed');
   }
 }

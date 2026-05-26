@@ -1,253 +1,284 @@
 #!/usr/bin/env node
 /**
- * Launch Heidi Mobile Chat Portal
- * Starts Express server with Heidi chat, WebSocket, and health integration
+ * Heidi Local Mobile Chat Server
+ * Streams from Ollama/LM Studio — open on mobile via LAN URL printed at startup
+ *
+ * Setup:
+ *   1. npm install
+ *   2. Install Ollama: https://ollama.ai
+ *   3. ollama pull llama3
+ *   4. node launch-heidi-mobile.js
+ *   5. Open the phone URL shown in the console on your mobile device (same WiFi)
  */
 
 const express = require('express');
 const http = require('http');
 const path = require('path');
-require('dotenv').config();
+const os = require('os');
 
-const HeidiWebSocketServer = require('./modules/heidi-websocket-server');
+const PORT = parseInt(process.env.HEIDI_PORT || '3006');
+const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434';
+const LM_STUDIO_URL = process.env.LM_STUDIO_URL || 'http://localhost:1234';
+const DEFAULT_MODEL = process.env.LOCAL_MODEL_NAME || 'llama3';
 
-// Configuration
-const PORT = process.env.HEIDI_PORT || 3006;
-const HOST = process.env.HEIDI_HOST || 'localhost';
+function getLANIP() {
+    for (const ifaces of Object.values(os.networkInterfaces())) {
+        for (const iface of ifaces) {
+            if (iface.family === 'IPv4' && !iface.internal) return iface.address;
+        }
+    }
+    return 'localhost';
+}
 
-// Create Express app
+function buildSystemPrompt() {
+    return `You are Heidi, the AI assistant for the HYDI ProtoForge system.
+You run locally on the user's device via Ollama.
+You are helpful, direct, and slightly warm in personality.
+You assist with: system health monitoring, technical questions, deployments, code, and general tasks.
+When asked to take an action, explain what you will do clearly and concisely.
+Keep responses concise (under 300 words) unless the user explicitly asks for detail.
+Current date/time: ${new Date().toLocaleString()}`;
+}
+
+function buildFallback(message) {
+    const lower = message.toLowerCase();
+    if (lower.includes('hello') || lower.includes('hi') || lower.includes('hey')) {
+        return "Hi! I'm Heidi, running in fallback mode — no local AI model detected. Install Ollama at ollama.ai, then run: ollama pull llama3. Once done, restart this server and I'll have full AI capabilities!";
+    }
+    if (lower.includes('model') || lower.includes('ollama') || lower.includes('install')) {
+        return "No local AI model is connected. To set one up:\n1. Install Ollama from ollama.ai\n2. Run: ollama pull llama3\n3. Restart this server\n\nLM Studio is also supported (port 1234). Once a model is running, Heidi will stream responses directly to your phone!";
+    }
+    if (lower.includes('status') || lower.includes('health')) {
+        return "Heidi server: running ✅  |  Local AI: not connected ⚠️\n\nTo enable AI: install Ollama (ollama.ai) and pull a model. The server is ready and waiting for a local model connection.";
+    }
+    return "I'm in fallback mode — no local AI model detected. The server is running but needs Ollama or LM Studio for full AI. Visit ollama.ai to get started, then run: ollama pull llama3";
+}
+
 const app = express();
-
-// Middleware
 app.use(express.json({ limit: '10mb' }));
-app.use(express.static(path.join(__dirname)));
 
-// CORS headers
 app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
-  
-  next();
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Content-Type');
+    if (req.method === 'OPTIONS') return res.sendStatus(200);
+    next();
 });
 
-// API Routes
+// Serve mobile chat UI
+app.get(['/', '/heidi-mobile', '/heidi'], (req, res) => {
+    res.sendFile(path.join(__dirname, 'heidi-mobile-chat.html'));
+});
+
+// Available models from local providers
+app.get('/api/models', async (req, res) => {
+    const models = [];
+
+    try {
+        const r = await fetch(`${OLLAMA_URL}/api/tags`, { signal: AbortSignal.timeout(2000) });
+        if (r.ok) {
+            const { models: list = [] } = await r.json();
+            models.push(...list.map(m => ({
+                id: m.name,
+                name: m.name,
+                provider: 'ollama',
+                size: m.size ? (Math.round(m.size / 1e8) / 10) + 'GB' : ''
+            })));
+        }
+    } catch {}
+
+    try {
+        const r = await fetch(`${LM_STUDIO_URL}/v1/models`, { signal: AbortSignal.timeout(2000) });
+        if (r.ok) {
+            const { data = [] } = await r.json();
+            models.push(...data.map(m => ({ id: m.id, name: m.id, provider: 'lmstudio' })));
+        }
+    } catch {}
+
+    res.json({ models, default: DEFAULT_MODEL });
+});
+
+// Server + AI health
 app.get('/api/health', async (req, res) => {
-  try {
-    const response = await fetch(`${process.env.SUPABASE_URL}/rest/v1/system_dashboard?select=*`, {
-      headers: {
-        'apikey': process.env.SUPABASE_ANON_KEY,
-        'Authorization': `Bearer ${process.env.SUPABASE_ANON_KEY}`
-      }
-    });
-    
-    if (response.ok) {
-      const data = await response.json();
-      res.json(data[0] || {});
-    } else {
-      res.status(500).json({ error: 'Failed to fetch health data' });
-    }
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
+    const status = { server: 'ok', ollama: false, lmstudio: false, models: [] };
+
+    try {
+        const r = await fetch(`${OLLAMA_URL}/api/tags`, { signal: AbortSignal.timeout(2000) });
+        if (r.ok) {
+            status.ollama = true;
+            const data = await r.json();
+            status.models = data.models?.map(m => m.name) || [];
+        }
+    } catch {}
+
+    try {
+        const r = await fetch(`${LM_STUDIO_URL}/v1/models`, { signal: AbortSignal.timeout(2000) });
+        if (r.ok) status.lmstudio = true;
+    } catch {}
+
+    res.json(status);
 });
 
-// Heidi API endpoint (fallback for HTTP)
-app.post('/api/heidi', async (req, res) => {
-  try {
-    const { message, model, action } = req.body;
-    
-    if (action === 'status') {
-      // Return Heidi status
-      res.json({
-        response: 'Heidi is online with local model support',
-        model: process.env.LOCAL_MODEL_NAME || 'llama2',
-        provider: process.env.LOCAL_MODEL_PROVIDER || 'ollama',
-        timestamp: new Date().toISOString()
-      });
-      return;
-    }
-    
-    if (!message) {
-      return res.status(400).json({ error: 'Message is required' });
-    }
-    
-    // Simple response for now (would integrate with local model handler)
-    res.json({
-      response: `Heidi received: "${message}". Local model integration available.`,
-      timestamp: new Date().toISOString()
-    });
-    
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Chat router (existing system integration)
+// SSE streaming chat
 app.post('/api/chat', async (req, res) => {
-  try {
-    const { message, system } = req.body;
-    
-    if (system === 'heidi') {
-      // Route to Heidi handler
-      const response = await fetch(`http://${HOST}:${PORT}/api/heidi`, {
+    const { message, model, provider } = req.body;
+    if (!message) return res.status(400).json({ error: 'message required' });
+
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+
+    const send = (data) => res.write(`data: ${JSON.stringify(data)}\n\n`);
+    const finish = (meta = {}) => { send({ done: true, ...meta }); res.end(); };
+
+    const systemPrompt = buildSystemPrompt();
+    const selectedModel = model || DEFAULT_MODEL;
+
+    if (provider !== 'lmstudio') {
+        try {
+            await streamOllama(message, selectedModel, systemPrompt, send);
+            return finish({ provider: 'ollama' });
+        } catch (e) {
+            console.log('[Chat] Ollama unavailable:', e.message);
+        }
+    }
+
+    try {
+        await streamLMStudio(message, selectedModel, systemPrompt, send);
+        return finish({ provider: 'lmstudio' });
+    } catch (e) {
+        console.log('[Chat] LM Studio unavailable:', e.message);
+    }
+
+    // Typed fallback
+    const fallback = buildFallback(message);
+    for (const char of fallback) {
+        send({ t: char });
+        await new Promise(r => setTimeout(r, 12));
+    }
+    finish({ provider: 'fallback' });
+});
+
+async function streamOllama(message, model, systemPrompt, send) {
+    const prompt = `${systemPrompt}\n\nUser: ${message}\n\nHeidi:`;
+    const response = await fetch(`${OLLAMA_URL}/api/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(req.body)
-      });
-      
-      const data = await response.json();
-      return res.json(data);
-    }
-    
-    // Other systems would be handled by existing chat router
-    res.json({
-      response: `Message routed to ${system}`,
-      timestamp: new Date().toISOString()
+        body: JSON.stringify({
+            model,
+            prompt,
+            stream: true,
+            options: { temperature: 0.7, num_predict: 600 }
+        }),
+        signal: AbortSignal.timeout(90000)
     });
-    
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
 
-// Serve the Heidi mobile chat interface
-app.get('/heidi-mobile', (req, res) => {
-  res.sendFile(path.join(__dirname, 'heidi-mobile-chat.html'));
-});
+    if (!response.ok) throw new Error(`Ollama HTTP ${response.status}`);
 
-// Also serve as root for convenience
-app.get('/', (req, res) => {
-  res.redirect('/heidi-mobile');
-});
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
 
-// Server stats endpoint
-app.get('/api/stats', (req, res) => {
-  if (wsServer) {
-    res.json(wsServer.getStats());
-  } else {
-    res.json({ error: 'WebSocket server not initialized' });
-  }
-});
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const text = decoder.decode(value, { stream: true });
+        for (const line of text.split('\n')) {
+            if (!line.trim()) continue;
+            try {
+                const data = JSON.parse(line);
+                if (data.response) send({ t: data.response });
+                if (data.done) return;
+            } catch {}
+        }
+    }
+}
 
-// Create HTTP server
+async function streamLMStudio(message, model, systemPrompt, send) {
+    const response = await fetch(`${LM_STUDIO_URL}/v1/chat/completions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            model,
+            stream: true,
+            temperature: 0.7,
+            max_tokens: 600,
+            messages: [
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: message }
+            ]
+        }),
+        signal: AbortSignal.timeout(90000)
+    });
+
+    if (!response.ok) throw new Error(`LM Studio HTTP ${response.status}`);
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const text = decoder.decode(value, { stream: true });
+        for (const line of text.split('\n')) {
+            if (!line.startsWith('data: ')) continue;
+            const data = line.slice(6).trim();
+            if (data === '[DONE]') return;
+            try {
+                const parsed = JSON.parse(data);
+                const token = parsed.choices?.[0]?.delta?.content;
+                if (token) send({ t: token });
+            } catch {}
+        }
+    }
+}
+
 const server = http.createServer(app);
+const lanIP = getLANIP();
 
-// Initialize WebSocket server
-let wsServer = null;
+server.listen(PORT, '0.0.0.0', async () => {
+    const portStr = PORT.toString();
+    const ipLine = `http://${lanIP}:${portStr}`;
+    console.log('\n╔══════════════════════════════════════════════╗');
+    console.log('║       🧠  HEIDI — Local Mobile Chat          ║');
+    console.log('╠══════════════════════════════════════════════╣');
+    console.log(`║  Desktop:  http://localhost:${portStr}${' '.repeat(16 - portStr.length)}║`);
+    console.log(`║  📱 Phone: ${ipLine}${' '.repeat(34 - ipLine.length)}║`);
+    console.log('╠══════════════════════════════════════════════╣');
+    console.log('║  Open the Phone URL on your mobile device    ║');
+    console.log('║  (must be on the same WiFi / LAN network)    ║');
+    console.log('╚══════════════════════════════════════════════╝\n');
 
-// Start server
-server.listen(PORT, HOST, () => {
-  console.log(`\n🧠 Heidi Mobile Chat Portal`);
-  console.log(`📱 Mobile Interface: http://${HOST}:${PORT}/heidi-mobile`);
-  console.log(`🔗 WebSocket: ws://${HOST}:${PORT}/ws/heidi`);
-  console.log(`📊 Health API: http://${HOST}:${PORT}/api/health`);
-  console.log(`📈 Server Stats: http://${HOST}:${PORT}/api/stats`);
-  console.log(`\n⚙️  Configuration:`);
-  console.log(`   Local Model URL: ${process.env.LOCAL_MODEL_URL || 'http://localhost:11434'}`);
-  console.log(`   Model: ${process.env.LOCAL_MODEL_NAME || 'llama2'}`);
-  console.log(`   Provider: ${process.env.LOCAL_MODEL_PROVIDER || 'ollama'}`);
-  console.log(`   Supabase: ${process.env.SUPABASE_URL ? '✅ Configured' : '❌ Not configured'}`);
-  console.log(`\n🚀 Server running on port ${PORT}\n`);
-  
-  // Initialize WebSocket server after HTTP server is ready
-  wsServer = new HeidiWebSocketServer(server);
+    try {
+        const r = await fetch(`${OLLAMA_URL}/api/tags`, { signal: AbortSignal.timeout(2000) });
+        if (r.ok) {
+            const { models = [] } = await r.json();
+            if (models.length > 0) {
+                console.log(`✅ Ollama: ${models.map(m => m.name).join(', ')}`);
+            } else {
+                console.log('⚠️  Ollama is running but has no models.');
+                console.log('   Pull one: ollama pull llama3');
+            }
+        }
+    } catch {
+        console.log('⚠️  Ollama not found at', OLLAMA_URL);
+        console.log('   Install: https://ollama.ai  →  ollama pull llama3');
+    }
+
+    try {
+        const r = await fetch(`${LM_STUDIO_URL}/v1/models`, { signal: AbortSignal.timeout(2000) });
+        if (r.ok) console.log(`✅ LM Studio online at ${LM_STUDIO_URL}`);
+    } catch {
+        console.log('ℹ️  LM Studio not found (optional alternative to Ollama)');
+    }
+
+    console.log('');
 });
 
-// Graceful shutdown
 process.on('SIGINT', () => {
-  console.log('\n🛑 Shutting down Heidi Mobile Chat Portal...');
-  
-  if (wsServer) {
-    wsServer.wss.close(() => {
-      console.log('✅ WebSocket server closed');
-    });
-  }
-  
-  server.close(() => {
-    console.log('✅ HTTP server closed');
-    process.exit(0);
-  });
+    console.log('\n🛑 Shutting down Heidi...');
+    server.close(() => process.exit(0));
 });
-
-process.on('SIGTERM', () => {
-  console.log('\n🛑 SIGTERM received');
-  process.exit(0);
-});
-
-// Error handling
-process.on('uncaughtException', (error) => {
-  console.error('💥 Uncaught Exception:', error);
-  process.exit(1);
-});
-
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('💥 Unhandled Rejection at:', promise, 'reason:', reason);
-  process.exit(1);
-});
-
-// Check dependencies
-console.log('🔍 Checking dependencies...');
-
-// Check if local model service is available
-async function checkLocalModel() {
-  try {
-    const axios = require('axios');
-    const url = process.env.LOCAL_MODEL_URL || 'http://localhost:11434';
-    
-    if (process.env.LOCAL_MODEL_PROVIDER === 'ollama') {
-      const response = await axios.get(`${url}/api/tags`, { timeout: 2000 });
-      console.log(`✅ Ollama available at ${url}`);
-      if (response.data.models?.length > 0) {
-        console.log(`   Available models: ${response.data.models.map(m => m.name).join(', ')}`);
-      }
-    } else if (process.env.LOCAL_MODEL_PROVIDER === 'lmstudio') {
-      const response = await axios.get(`${url}/v1/models`, { timeout: 2000 });
-      console.log(`✅ LM Studio available at ${url}`);
-      if (response.data.data?.length > 0) {
-        console.log(`   Available models: ${response.data.data.map(m => m.id).join(', ')}`);
-      }
-    }
-  } catch (error) {
-    console.log(`⚠️  Local model service not available at ${process.env.LOCAL_MODEL_URL || 'http://localhost:11434'}`);
-    console.log('   Heidi will work with fallback responses');
-  }
-}
-
-// Check Supabase connection
-async function checkSupabase() {
-  try {
-    if (!process.env.SUPABASE_URL || !process.env.SUPABASE_ANON_KEY) {
-      console.log('⚠️  Supabase credentials not configured');
-      console.log('   Set SUPABASE_URL and SUPABASE_ANON_KEY in .env');
-      return;
-    }
-    
-    const response = await fetch(`${process.env.SUPABASE_URL}/rest/v1/`, {
-      headers: {
-        'apikey': process.env.SUPABASE_ANON_KEY,
-        'Authorization': `Bearer ${process.env.SUPABASE_ANON_KEY}`
-      }
-    });
-    
-    if (response.ok) {
-      console.log('✅ Supabase connection verified');
-    } else {
-      console.log('⚠️  Supabase connection failed');
-    }
-  } catch (error) {
-    console.log('⚠️  Cannot reach Supabase');
-  }
-}
-
-// Run checks
-Promise.all([
-  checkLocalModel(),
-  checkSupabase()
-]).then(() => {
-  console.log('🔍 Dependency check complete\n');
-});
+process.on('SIGTERM', () => process.exit(0));
+process.on('uncaughtException', (e) => { console.error('Fatal:', e.message); process.exit(1); });
+process.on('unhandledRejection', (e) => { console.error('Unhandled rejection:', e); });
