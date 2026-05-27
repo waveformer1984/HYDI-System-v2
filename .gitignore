@@ -1,5 +1,35 @@
-.vercel
+# Dependencies
+node_modules/
+
+# Next.js
+.next/
+
+# Environment — never commit secrets
+.env
+.env.*
 .env*.local
 
-# Local Netlify folder
+# Vercel / Netlify deploy artifacts
+.vercel
 .netlify
+
+# Build outputs
+dist/
+build/
+/generated/prisma
+
+# Archives
+*.zip
+*.tar.gz
+hydi-system-*.zip
+hydi-system-*.tar.gz
+
+# Logs
+*.log
+logs.txt
+
+# OS
+.DS_Store
+
+# Heidi local env
+heidi-core.env.local

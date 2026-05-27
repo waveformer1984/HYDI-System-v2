@@ -218,46 +218,39 @@ export class ModelManager {
   }
 
   private async generateAnthropicResponse(prompt: string): Promise<{ content: string; success: boolean; error?: string; model: string; latency: number }> {
+    const start = Date.now();
     try {
       const response = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: {
           'x-api-key': process.env.ANTHROPIC_API_KEY!,
           'Content-Type': 'application/json',
-          'anthropic-version': '2023-06-01'
+          'anthropic-version': '2023-06-01',
         },
         body: JSON.stringify({
-          model: 'claude-3-sonnet-20240229',
+          model: 'claude-sonnet-4-6',
           max_tokens: 1000,
-          messages: [
-            {
-              role: 'user',
-              content: `You are Heidi, a production-grade conversational AI assistant. Always respond with valid JSON in the format: {"response": "string", "actions": []}\n\n${prompt}`
-            }
-          ]
-        })
+          system: 'You are Heidi, a production-grade conversational AI assistant. Always respond with valid JSON: {"response": "string", "actions": []}',
+          messages: [{ role: 'user', content: prompt }],
+        }),
       });
 
-      if (!response.ok) {
-        throw new Error(`Anthropic API error: ${response.status}`);
-      }
+      if (!response.ok) throw new Error(`Anthropic API error: ${response.status}`);
+      const data = await response.json() as { content: Array<{ type: string; text: string }> };
 
-      const data = await response.json();
-      
       return {
-        content: data.content[0].text,
+        content: data.content.filter(b => b.type === 'text').map(b => b.text).join(''),
         success: true,
-        model: 'anthropic',
-        latency: 0
+        model: 'claude-sonnet-4-6',
+        latency: Date.now() - start,
       };
-
     } catch (error) {
       return {
         content: '',
         success: false,
         error: error instanceof Error ? error.message : 'Anthropic API error',
-        model: 'anthropic',
-        latency: 0
+        model: 'claude-sonnet-4-6',
+        latency: Date.now() - start,
       };
     }
   }

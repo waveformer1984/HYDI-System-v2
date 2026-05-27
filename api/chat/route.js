@@ -8,6 +8,7 @@ import {
   setupDeployHooks, PROJECT_IDS,
 } from '../../lib/vercel/vercelAdmin.js';
 import { getSystemStatus, isReachable } from '../../lib/termux/termuxClient.js';
+import { callAgent, isClaudeAvailable } from '../../lib/claude.js';
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -54,7 +55,8 @@ const systemHandlers = {
   kilo: handleKiloMessage,
   protoforge: handleProtoForgeMessage,
   hyve: handleHyveMessage,
-  infrastructure: handleInfrastructureMessage
+  infrastructure: handleInfrastructureMessage,
+  rezonate: handleRezonateMessage
 };
 
 export default async function handler(req, res) {
