@@ -30,9 +30,9 @@
       "listen_emit_functions": true
     },
     "ursula_bridge": {
-      "endpoint": "http://localhost:3002/events/stream",
+      "endpoint": "http://localhost:3005/events/stream",
       "status": "configured",
-      "validation_pending": true
+      "validation_pending": false
     },
     "capabilities": {
       "event_processing": true,

@@ -38,9 +38,18 @@ async function handler(req, res) {
   const sig = req.headers['stripe-signature'];
   const webhookSecret = process.env.STRIPE_CONNECT_WEBHOOK_SECRET;
 
+  if (!webhookSecret) {
+    console.error('[Connect Webhook] STRIPE_CONNECT_WEBHOOK_SECRET is not set');
+    return res.status(500).json({ error: 'Webhook secret not configured' });
+  }
+
+  // Stripe requires the raw body — Next.js bodyParser must be disabled (see config export below)
+  // req.body is a Buffer when bodyParser: false
+  const rawBody = req.body;
+
   let event;
   try {
-    event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
+    event = stripe.webhooks.constructEvent(rawBody, sig, webhookSecret);
   } catch (err) {
     console.error('[Connect Webhook] Signature verification failed:', err.message);
     return res.status(400).json({ error: 'Invalid signature' });
@@ -80,7 +89,7 @@ async function handlePaymentIntentSucceeded(paymentIntent) {
   const connectAccountId = REVENUE_STREAM_ACCOUNTS[revenueStream];
 
   if (!connectAccountId) {
-    throw new Error(`Cannot route payment — unknown revenue stream: ${revenueStream}`);
+    throw new Error(`Cannot route payment -- unknown revenue stream: ${revenueStream}`);
   }
 
   const charge = paymentIntent.latest_charge
@@ -97,7 +106,7 @@ async function handlePaymentIntentSucceeded(paymentIntent) {
   const net = gross - platformFee - agentFee - stripeFee;
 
   console.log(
-    `[Connect Webhook] ${revenueStream} — gross $${gross.toFixed(2)}, net $${net.toFixed(2)}`
+    `[Connect Webhook] ${revenueStream} -- gross $${gross.toFixed(2)}, net $${net.toFixed(2)}`
   );
 
   const { data: ledgerEntry, error } = await supabase
@@ -178,7 +187,7 @@ async function handlePayoutPaid(payout) {
       payout_completed_at: new Date().toISOString(),
     })
     .eq('payout_batch_id', payout.id);
-  console.log(`[Connect Webhook] Payout settled: ${payout.id} — $${payout.amount / 100}`);
+  console.log(`[Connect Webhook] Payout settled: ${payout.id} -- $${payout.amount / 100}`);
 }
 
 function determineRevenueStream(paymentIntent) {
@@ -203,7 +212,9 @@ function determineRevenueStream(paymentIntent) {
   return 'galactic_bytes';
 }
 
+// Disable Next.js body parsing -- Stripe needs the raw Buffer for signature verification
 module.exports = handler;
+module.exports.config = { api: { bodyParser: false } };
 module.exports.REVENUE_STREAM_ACCOUNTS = REVENUE_STREAM_ACCOUNTS;
 module.exports.FEE_STRUCTURE = FEE_STRUCTURE;
 module.exports.determineRevenueStream = determineRevenueStream;
