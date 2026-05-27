@@ -169,6 +169,9 @@ class HybridModelStack extends EventEmitter {
     
     // Available models list
     this.availableModels = [];
+
+    // Timer reference — cleared by destroy()
+    this._monitorInterval = null;
     
     // Initialize
     this.initialize();
@@ -732,27 +735,7 @@ class HybridModelStack extends EventEmitter {
       confidence: 0.9
     };
   }
-  
-  getAvailableModels() {
-    return this.availableModels.map(model => ({
-      id: model.id,
-      name: model.name,
-      type: model.type,
-      capabilities: model.capabilities,
-      cost: model.cost,
-      latency: model.latency
-    }));
-  }
-  
-  getStatus() {
-    return {
-      availableModels: this.availableModels.length,
-      activeModel: this.activeModel,
-      metrics: { ...this.metrics },
-      config: this.config
-    };
-  }
-  
+
   async callGemini(model, input, requestId) {
     const provider = this.externalModels.gemini;
     
@@ -850,11 +833,8 @@ class HybridModelStack extends EventEmitter {
   }
   
   calculateCost(provider, model, input) {
-    if (provider === 'local') return 0;
     const providerConfig = this.externalModels[provider];
-    if (!providerConfig) return 0;
     const modelConfig = providerConfig.models[model];
-    if (!modelConfig) return 0;
     
     // Estimate tokens (rough calculation)
     const estimatedTokens = this.estimateTokens(input);
@@ -866,6 +846,14 @@ class HybridModelStack extends EventEmitter {
     const text = typeof input === 'string' ? input : JSON.stringify(input);
     // Rough estimate: ~4 characters per token
     return Math.ceil(text.length / 4);
+  }
+
+  estimateCost(task) {
+    const input = this.prepareInput(task);
+    const provider = this.selectExternalProvider(task).catch(() => null);
+    if (!provider) return 0;
+    const model = this.selectBestExternalModel(task);
+    return this.calculateCost(provider, model, input);
   }
   
   trackCost(cost, provider, model) {
@@ -928,8 +916,8 @@ class HybridModelStack extends EventEmitter {
   }
   
   startCostMonitoring() {
-    // Reset daily cost at midnight
-    setInterval(() => {
+    // Store the reference so destroy() can clear it
+    this._monitorInterval = setInterval(() => {
       const now = new Date();
       const lastReset = new Date(this.costTracker.lastReset);
       
@@ -939,6 +927,17 @@ class HybridModelStack extends EventEmitter {
         this.costTracker.lastReset = Date.now();
       }
     }, 60000); // Check every minute
+
+    // Allow Node / Jest to exit even if this interval is still scheduled
+    if (this._monitorInterval.unref) this._monitorInterval.unref();
+  }
+
+  /**
+   * Stop background timers. Call in afterAll / afterEach when testing.
+   */
+  destroy() {
+    clearInterval(this._monitorInterval);
+    this._monitorInterval = null;
   }
   
   /**
@@ -955,15 +954,25 @@ class HybridModelStack extends EventEmitter {
       },
       performance: { ...this.performance },
       models: {
-        local: this.localModels.getModelStatus(),
+        available: this.availableModels.length,
         external: Object.keys(this.externalModels).filter(p => this.externalModels[p].apiKey)
       }
     };
   }
+
+  getAvailableModels() {
+    return this.availableModels.map(model => ({
+      id: model.id,
+      name: model.name,
+      type: model.type,
+      capabilities: model.capabilities,
+      cost: model.cost,
+      latency: model.latency
+    }));
+  }
   
   async reset() {
     this.costTracker.daily = 0;
-    this.costTracker.total = 0;
     this.costTracker.lastReset = Date.now();
     this.costTracker.requests = [];
     

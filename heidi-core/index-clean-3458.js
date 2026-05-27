@@ -17,34 +17,13 @@ const MODEL = 'llama3.2:latest'; // change to qwen2.5-coder:1.5b if preferred
 // ── DB setup ────────────────────────────────────────────────────────────────
 const dbFile = path.join(__dirname, 'heidi-memory.json');
 const adapter = new JSONFile(dbFile);
-const db = new Low(adapter, { sessions: [], tasks: [], phase5: { patterns: [], insights: [] } });
+const db = new Low(adapter, { sessions: [], tasks: [] });
 
 async function initDB() {
   await db.read();
-  db.data ||= { sessions: [], tasks: [], phase5: { patterns: [], insights: [] } };
-  db.data.phase5 ||= { patterns: [], insights: [] };
+  db.data ||= { sessions: [], tasks: [] };
   await db.write();
   console.log(`[DB] Memory file: ${dbFile}`);
-}
-
-async function persistPhase5Pattern(patternId) {
-  const pattern = metaCognition.reasoningPatterns.get(patternId);
-  if (!pattern) return;
-  await db.read();
-  const idx = db.data.phase5.patterns.findIndex(p => p.id === patternId);
-  if (idx >= 0) db.data.phase5.patterns[idx] = pattern;
-  else db.data.phase5.patterns.push(pattern);
-  await db.write();
-}
-
-async function persistPhase5Insight(insightId) {
-  const insight = synthesis.discoveredInsights.get(insightId);
-  if (!insight) return;
-  await db.read();
-  const idx = db.data.phase5.insights.findIndex(i => i.id === insightId);
-  if (idx >= 0) db.data.phase5.insights[idx] = insight;
-  else db.data.phase5.insights.push(insight);
-  await db.write();
 }
 
 // ── Helper: call Ollama ──────────────────────────────────────────────────────
@@ -80,8 +59,6 @@ app.post('/think', async (req, res) => {
   const { input, sessionId = 'default' } = req.body;
   if (!input) return res.status(400).json({ error: 'input required' });
 
-  const startTime = Date.now();
-
   try {
     // Load session history
     await db.read();
@@ -96,18 +73,11 @@ app.post('/think', async (req, res) => {
       .map(h => `User: ${h.input}\nHEIDI: ${h.response}`)
       .join('\n');
 
-    // Inject relevant synthesized insights into the system prompt (context feedback loop)
-    const relevantInsights = await synthesis.findRelevantInsights(input);
-    const insightContext = relevantInsights.slice(0, 3)
-      .map(r => `- ${r.content}`)
-      .join('\n');
-
-    const systemPrompt = `You are HEIDI, the intelligent core of the ProtoForge system.
-You are a task router and assistant. Be concise and direct.${insightContext ? `\n\nRelevant knowledge from prior reasoning:\n${insightContext}` : ''}
+    const systemPrompt = `You are HEIDI, the intelligent core of the ProtoForge system. 
+You are a task router and assistant. Be concise and direct.
 Recent conversation:\n${recentHistory}`;
 
     const response = await callOllama(input, systemPrompt);
-    const executionTime = Date.now() - startTime;
 
     // Save to memory
     session.history.push({
@@ -117,20 +87,7 @@ Recent conversation:\n${recentHistory}`;
     });
     await db.write();
 
-    // Feed meta-cognition evaluator asynchronously — does not block response
-    const thinkResult = {
-      query: input,
-      response,
-      sessionId,
-      model: MODEL,
-      executionTime,
-      thinkingProcess: [], // llama3.2 doesn't expose chain-of-thought
-      cascadeLookups: [],  // not wired to CASCADE yet
-      confidence: 0.7,     // default prior
-    };
-    metaCognition.evaluateReasoningQuality(thinkResult).catch(() => {});
-
-    res.json({ response, sessionId, model: MODEL, executionTime });
+    res.json({ response, sessionId, model: MODEL });
   } catch (err) {
     console.error('[think] error:', err.message);
     res.status(500).json({ error: err.message });
@@ -192,118 +149,6 @@ app.delete('/session/:id', async (req, res) => {
 // CASCADE AGENT v3 - Anti-Misalignment Layer
 const CascadeEngineV3 = require('./cascade-v3-clean');
 const cascade = new CascadeEngineV3();
-
-// ── Autonomous Task Queue (Phase 5.1) ───────────────────────────────────────
-const AutonomousTaskQueue = require('./autonomous-task-queue');
-const atq = new AutonomousTaskQueue(db, cascade);
-atq.enqueueTask = (type, ctx, priority) => atq.enqueue(type, ctx, priority); // alias for Phase 5.2+
-atq.start(6000); // background tick every 6 seconds
-
-// ── Meta-Cognition + Knowledge Synthesis (Phase 5.2 / 5.3) ─────────────────
-const MetaCognitiveLoop = require('./meta-cognition');
-const KnowledgeSynthesisEngine = require('./knowledge-synthesis');
-
-const metaCognition = new MetaCognitiveLoop({ cascadeSystem: cascade, autonomousQueue: atq });
-const synthesis = new KnowledgeSynthesisEngine({
-  cascadeSystem: cascade,
-  autonomousQueue: atq,
-  metaCognition,
-});
-
-metaCognition.on('pattern-extracted', ({ patternId, qualityScore }) => {
-  console.log(`[MC] Pattern extracted: ${patternId} (score: ${qualityScore.toFixed(2)})`);
-  persistPhase5Pattern(patternId).catch(() => {});
-});
-metaCognition.on('reasoning-failure-detected', ({ primaryIssue }) =>
-  console.warn(`[MC] Reasoning gap: ${primaryIssue}`));
-synthesis.on('insight-synthesized', ({ insightId, relationshipType, confidence }) => {
-  console.log(`[KS] Insight: ${relationshipType} (confidence: ${confidence.toFixed(2)})`);
-  persistPhase5Insight(insightId).catch(() => {});
-});
-synthesis.on('synthesis-complete', ({ patternCount, insightCount, executionTime }) =>
-  console.log(`[KS] Synthesis: ${patternCount} patterns → ${insightCount} insights (${executionTime}ms)`));
-
-// ── HYDI Dev Optimizer (Phase 5.4) ──────────────────────────────────────────
-const HydiDevOptimizer = require('./hydi-dev-optimizer');
-const optimizer = new HydiDevOptimizer({
-  codebasePath: path.join(__dirname, '..'),
-  outputDir: path.join(__dirname, '../hydi-optimizations'),
-  autoCreatePRs: process.env.AUTO_CREATE_PRS === 'true',
-  githubToken: process.env.GITHUB_TOKEN,
-});
-optimizer.on('optimization-complete', ({ issueCount, fixCount, executionTime }) =>
-  console.log(`[OPT] Cycle complete: ${issueCount} issues, ${fixCount} fixes (${executionTime}ms)`));
-optimizer.on('optimization-error', ({ error }) =>
-  console.warn(`[OPT] Cycle error: ${error}`));
-
-// Inspect the autonomous queue state
-app.get('/queue', (req, res) => {
-  res.json(atq.snapshot());
-});
-
-// Manually enqueue an autonomous task
-app.post('/queue/enqueue', (req, res) => {
-  const { type, context = {}, priority = 'normal' } = req.body;
-  const allowed = ['introspect_health', 'validate_cascade', 'check_task_backlog',
-                   'check_ollama', 'synthesize_insight', 'summarize_history'];
-  if (!allowed.includes(type)) {
-    return res.status(400).json({ error: `Unknown task type. Allowed: ${allowed.join(', ')}` });
-  }
-  const id = atq.enqueue(type, context, priority);
-  res.json({ success: true, id });
-});
-
-// ── Phase 5 Meta-Cognition + Knowledge Synthesis endpoints ──────────────────
-
-// Overall Phase 5 status
-app.get('/phase5/status', (req, res) => {
-  res.json({
-    meta_cognition: metaCognition.getInsights(),
-    knowledge_synthesis: synthesis.getStatistics(),
-    evolution: synthesis.getEvolutionAnalysis(),
-  });
-});
-
-// Recent reasoning evaluations
-app.get('/phase5/evaluations', (req, res) => {
-  const limit = parseInt(req.query.limit) || 10;
-  res.json({
-    evaluations: metaCognition.evaluationHistory.slice(-limit),
-    total: metaCognition.evaluationHistory.length,
-  });
-});
-
-// Recent synthesized insights
-app.get('/phase5/insights', (req, res) => {
-  const limit = parseInt(req.query.limit) || 10;
-  const insights = Array.from(synthesis.discoveredInsights.values())
-    .sort((a, b) => b.timestamp - a.timestamp)
-    .slice(0, limit);
-  res.json({ insights, total: synthesis.discoveredInsights.size });
-});
-
-// Find insights relevant to a query
-app.post('/phase5/insights/search', async (req, res) => {
-  const { query } = req.body;
-  if (!query) return res.status(400).json({ error: 'query required' });
-  const relevant = await synthesis.findRelevantInsights(query);
-  res.json({ results: relevant });
-});
-
-// Trigger a synthesis cycle on demand
-app.post('/phase5/synthesize', async (req, res) => {
-  try {
-    const result = await synthesis.synthesizeNewInsights();
-    res.json(result);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Export all discovered knowledge
-app.get('/phase5/export', (req, res) => {
-  res.json(synthesis.exportDiscoveries());
-});
 
 // CASCADE AGENT ENDPOINTS - Early-Stage COO Intelligence
 
@@ -1331,42 +1176,8 @@ function buildDependencyChain(taskId, graph, visited) {
   return chain;
 }
 
-// ── HYDI Dev Optimizer endpoints ─────────────────────────────────────────────
-
-app.get('/optimizer/status', (req, res) => {
-  res.json(optimizer.getStatus());
-});
-
-app.post('/optimizer/run', async (req, res) => {
-  try {
-    const result = await optimizer.runOptimizationCycle(req.body || {});
-    res.json(result);
-  } catch (err) {
-    console.error('[OPT] Run error:', err.message);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.get('/optimizer/recent', async (req, res) => {
-  const limit = parseInt(req.query.limit) || 10;
-  const results = await optimizer.getRecentOptimizations(limit);
-  res.json(results);
-});
-
 // ── Start ─────────────────────────────────────────────────────────────────────
 initDB().then(() => {
-  // Restore Phase 5 patterns and insights from persistent storage
-  const p5 = db.data.phase5 || { patterns: [], insights: [] };
-  for (const pattern of p5.patterns) {
-    metaCognition.reasoningPatterns.set(pattern.id, pattern);
-  }
-  for (const insight of p5.insights) {
-    synthesis.discoveredInsights.set(insight.id, insight);
-  }
-  if (p5.patterns.length > 0 || p5.insights.length > 0) {
-    console.log(`[DB] Phase 5 restored: ${p5.patterns.length} patterns, ${p5.insights.length} insights`);
-  }
-
   app.listen(PORT, () => {
     console.log(`\n╔══════════════════════════════════╗`);
     console.log(`║  HEIDI Core running on :${PORT}   ║`);

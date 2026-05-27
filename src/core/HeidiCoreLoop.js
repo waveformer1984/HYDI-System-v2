@@ -330,20 +330,20 @@ class HeidiCoreLoop extends EventEmitter {
       
     } catch (error) {
       console.error(`[CORE LOOP] Loop failed: ${loopId} - ${error.message}`);
-
+      
       this.metrics.loopsFailed++;
-
+      
       // Store failure in memory
       this.memorySystem.storeWhatFailed(loopId, task, error.message, {
         type: task.type,
         priority: task.priority || 'normal'
       });
-
+      
       // Publish failure to Redis stream for downstream consumers
       redisStream.publish('hydi:task-failures', {
         loopId, task, error: error.message, timestamp: new Date().toISOString(),
       }).catch(() => {});
-
+      
       // Self-healing: ask Claude for a corrective retry task
       selfHealing.healFromCrash(task, error.message, loopId).then(heal => {
         if (heal?.should_retry && heal.corrected_task) {
@@ -351,14 +351,14 @@ class HeidiCoreLoop extends EventEmitter {
           setTimeout(() => this.executeLoop(heal.corrected_task).catch(() => {}), 5000);
         }
       }).catch(() => {});
-
+      
       // Emit failure
       this.emit('loop_failed', {
         loopId,
         task,
         error: error.message
       });
-
+      
       throw error;
       
     } finally {
@@ -409,23 +409,9 @@ class HeidiCoreLoop extends EventEmitter {
     
     // Store loop result in memory
     this.memorySystem.storeSession(loopId, result, 'loops');
-
-    // Publish result to the appropriate stream for downstream consumers
-    const resultStream = measurement?.success ? 'hydi:task-results' : 'hydi:task-failures';
-    redisStream.publish(resultStream, result).catch(() => {});
-
-    // Self-heal on soft failure (loop completed but measurement.success === false)
-    if (!measurement?.success) {
-      selfHealing.diagnoseAndCorrect(result).then(heal => {
-        if (heal?.corrected_task) {
-          console.log(`[HEIDI LOOP] Scheduling corrected retry for ${loopId} in 3s`);
-          setTimeout(() => this.executeLoop(heal.corrected_task).catch(() => {}), 3000);
-        }
-      }).catch(() => {});
-    }
-
+    
     console.log(`[HEIDI LOOP] Completed ${task.type} loop: ${loopId}`);
-
+    
     return result;
   }
   
@@ -862,46 +848,10 @@ class HeidiCoreLoop extends EventEmitter {
     console.log(`[CORE LOOP] Inference completed: ${event.requestId}`);
   }
   
-  // ── Evaluation helpers ────────────────────────────────────────────────────
-
-  calculateTaskConfidence(task, observation) {
-    const priorityScore = { critical: 0.9, high: 0.8, medium: 0.7, low: 0.6 }[task.priority] ?? 0.7;
-    return priorityScore;
-  }
-
-  calculateTaskRisk(task, observation) {
-    const riskByType = { revenue: 0.3, communication: 0.2, optimization: 0.4, analysis: 0.1 };
-    return riskByType[task.type] ?? 0.3;
-  }
-
-  identifyOpportunity(task, observation) {
-    return task.priority === 'high' || task.priority === 'critical' ? 0.8 : 0.5;
-  }
-
-  assessUrgency(task, observation) {
-    return task.priority === 'critical' ? 0.9 : task.priority === 'high' ? 0.7 : 0.4;
-  }
-
-  assessFeasibility(task, observation) {
-    return 0.8;
-  }
-
-  generateRecommendation(task, observation) {
-    return 'proceed';
-  }
-
-  updateMetrics(result, loopTime) {
-    this.metrics.loopsCompleted++;
-    const prev = this.metrics.avgLoopTime;
-    const n = this.metrics.loopsCompleted;
-    this.metrics.avgLoopTime = prev + (loopTime - prev) / n;
-    if (result && result.action) this.metrics.actions++;
-  }
-
   /**
    * STATUS AND MONITORING
    */
-
+  
   getStatus() {
     return {
       running: this.isRunning,

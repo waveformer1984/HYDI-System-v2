@@ -607,11 +607,11 @@ class HeidiOrchestrator extends EventEmitter {
   updateMetrics(result, latency) {
     this.metrics.tasksProcessed++;
     
-    if (result?.action?.success) {
+    if (result.action.success) {
       this.metrics.tasksSuccessful++;
-      this.metrics.totalCost += result.measurement?.cost || 0;
-
-      if (result.task?.type === 'revenue' && (result.measurement?.revenueImpact || 0) > 0) {
+      this.metrics.totalCost += result.measurement.cost;
+      
+      if (result.task.type === 'revenue' && result.measurement.revenueImpact > 0) {
         this.metrics.revenueGenerated += result.measurement.revenueImpact;
       }
     } else {

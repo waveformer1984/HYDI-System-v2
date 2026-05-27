@@ -35,7 +35,7 @@ for ($i = 1; $i -le $MAX_RETRIES; $i++) {
         Write-Host "Ollama responding" -ForegroundColor Green
         break
     } catch {
-        Write-Host "Attempt $i/$($MAX_RETRIES): Ollama not responding" -ForegroundColor Red
+        Write-Host "Attempt $i/$MAX_RETRIES: Ollama not responding" -ForegroundColor Red
         if ($i -lt $MAX_RETRIES) {
             Write-Host "  Waiting 2 seconds..." -ForegroundColor Gray
             Start-Sleep -Seconds 2
