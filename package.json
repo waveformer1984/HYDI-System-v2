@@ -57,11 +57,6 @@
     "postcss": "^8.5.15",
     "tailwindcss": "^3.4.19"
   },
-  "jest": {
-    "transform": {
-      "^.+\\.js$": "babel-jest"
-    }
-  },
   "overrides": {
     "brace-expansion": ">=5.0.6",
     "glob": "^10.4.5",

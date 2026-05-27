@@ -755,7 +755,7 @@ class HeidiActionLayer extends EventEmitter {
       'custom': 0 // Custom pricing
     };
     
-    return prices[type] || 49;
+    return type in prices ? prices[type] : 49;
   }
   
   generateOfferTerms(type) {

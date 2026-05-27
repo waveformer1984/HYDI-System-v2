@@ -834,6 +834,8 @@ class HybridModelStack extends EventEmitter {
   
   calculateCost(provider, model, input) {
     const providerConfig = this.externalModels[provider];
+    // Local provider (or any provider not in externalModels) has no API cost
+    if (!providerConfig) return 0;
     const modelConfig = providerConfig.models[model];
     
     // Estimate tokens (rough calculation)
@@ -973,6 +975,7 @@ class HybridModelStack extends EventEmitter {
   
   async reset() {
     this.costTracker.daily = 0;
+    this.costTracker.total = 0;
     this.costTracker.lastReset = Date.now();
     this.costTracker.requests = [];
     

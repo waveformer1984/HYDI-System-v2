@@ -68,9 +68,15 @@ class InMemoryBroker extends MessageBroker {
   }
 
   _fanoutToGroups(topic, entry) {
+    const msgs = this._messages.get(topic) || [];
+    const msgIdx = msgs.findIndex(m => m.id === entry.id);
     for (const key of this._handlers.keys()) {
       if (!key.startsWith(`${topic}:`)) continue;
       const group = key.slice(topic.length + 1);
+      const groupState = this._groups.get(key);
+      // Skip groups whose cursor has already passed this message (already delivered
+      // via the catch-up loop in subscribe() for late subscribers).
+      if (groupState && msgIdx < groupState.cursor) continue;
       this._deliver(topic, group, entry);
     }
   }

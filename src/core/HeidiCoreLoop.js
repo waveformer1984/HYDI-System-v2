@@ -866,7 +866,127 @@ class HeidiCoreLoop extends EventEmitter {
   getLoopHistory(limit = 50) {
     return this.loopHistory.slice(-limit);
   }
-  
+
+  // ── Metrics update ─────────────────────────────────────────────────────────
+  updateMetrics(result, loopTime) {
+    this.metrics.loopsCompleted++;
+    const n = this.metrics.loopsCompleted;
+    this.metrics.avgLoopTime = ((this.metrics.avgLoopTime * (n - 1)) + loopTime) / n;
+  }
+
+  // ── System observation helpers ─────────────────────────────────────────────
+  getCPUUsage() {
+    // Rough estimate using process.cpuUsage(); falls back to 0.5 if unavailable
+    try {
+      const usage = process.cpuUsage();
+      return Math.min(1, (usage.user + usage.system) / 1e9 / 10);
+    } catch {
+      return 0.5;
+    }
+  }
+
+  getMemoryUsage() {
+    try {
+      const { heapUsed, heapTotal } = process.memoryUsage();
+      return heapTotal > 0 ? heapUsed / heapTotal : 0.5;
+    } catch {
+      return 0.5;
+    }
+  }
+
+  // ── Task queue ─────────────────────────────────────────────────────────────
+  async getPendingTasks() {
+    return [];
+  }
+
+  async generateRevenueTask() {
+    return null;
+  }
+
+  // ── Evaluation helpers (used in evaluateTask) ──────────────────────────────
+  calculateTaskConfidence(task, observation) {
+    // Base confidence on task type and system health
+    const systemOk = (observation?.system?.cpu || 0) < 0.9 &&
+                     (observation?.system?.memory || 0) < 0.9;
+    return systemOk ? 0.75 : 0.4;
+  }
+
+  calculateTaskRisk(task, observation) {
+    const cpuLoad = observation?.system?.cpu || 0;
+    const memLoad = observation?.system?.memory || 0;
+    return Math.min(0.95, (cpuLoad + memLoad) / 2);
+  }
+
+  identifyOpportunity(task, observation) {
+    const revenue = observation?.business?.recentRevenue || 0;
+    return revenue < 1 ? 0.8 : 0.4;
+  }
+
+  assessUrgency(task, observation) {
+    return task?.priority === 'critical' ? 0.9 :
+           task?.priority === 'high'     ? 0.7 : 0.4;
+  }
+
+  assessFeasibility(task, observation) {
+    const systemOk = (observation?.system?.cpu || 0) < 0.95;
+    return systemOk ? 0.85 : 0.3;
+  }
+
+  generateRecommendation(task, observation) {
+    const cpu = observation?.system?.cpu || 0;
+    if (cpu > 0.9) return 'hold';
+    if (task?.priority === 'critical') return 'proceed_immediately';
+    return 'proceed';
+  }
+
+  // ── Measurement helpers (used in measureResults) ───────────────────────────
+  assessActionQuality(action) {
+    return action?.success ? 0.85 : 0.3;
+  }
+
+  async assessActionImpact(task, action) {
+    return action?.success ? 0.7 : 0.2;
+  }
+
+  predictUserSatisfaction(task, action) {
+    return action?.success ? 0.8 : 0.2;
+  }
+
+  calculateBusinessValue(task, action) {
+    return action?.result?.revenue || 0;
+  }
+
+  async measureConversionImpact(action) {
+    return action?.result?.converted ? 1.0 : 0.0;
+  }
+
+  // ── Reflection helpers (used in reflectOnLoop) ─────────────────────────────
+  compareConfidenceVsReality(confidence, measurement) {
+    const actual = measurement?.success ? 1 : 0;
+    const accuracy = 1 - Math.abs((confidence || 0.5) - actual);
+    return { confidence, actual, accuracy };
+  }
+
+  detectPatterns(task, observation, measurement) {
+    return [];
+  }
+
+  extractLessons(task, observation, decision, measurement) {
+    return [];
+  }
+
+  shouldRepeatStrategy(task, measurement) {
+    return measurement?.success && measurement?.strategy
+      ? [measurement.strategy]
+      : [];
+  }
+
+  shouldAvoidStrategy(task, measurement) {
+    return !measurement?.success && measurement?.strategy
+      ? [measurement.strategy]
+      : [];
+  }
+
   async reset() {
     // Stop the loop
     await this.stop();
