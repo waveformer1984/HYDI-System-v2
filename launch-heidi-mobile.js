@@ -19,7 +19,10 @@ const os = require('os');
 const PORT = parseInt(process.env.HEIDI_PORT || '3006');
 const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434';
 const LM_STUDIO_URL = process.env.LM_STUDIO_URL || 'http://localhost:1234';
-const DEFAULT_MODEL = process.env.LOCAL_MODEL_NAME || 'llama3';
+const DEFAULT_MODEL = process.env.LOCAL_MODEL_NAME || 'tinyllama';
+
+// 10 minutes — phone cold-start model load can take 2-5 min before first token
+const CHAT_TIMEOUT_MS = 600_000;
 
 function getLANIP() {
     for (const ifaces of Object.values(os.networkInterfaces())) {
@@ -43,15 +46,15 @@ Current date/time: ${new Date().toLocaleString()}`;
 function buildFallback(message) {
     const lower = message.toLowerCase();
     if (lower.includes('hello') || lower.includes('hi') || lower.includes('hey')) {
-        return "Hi! I'm Heidi, running in fallback mode — no local AI model detected. Install Ollama at ollama.ai, then run: ollama pull llama3. Once done, restart this server and I'll have full AI capabilities!";
+        return "Hi! I'm Heidi, running in fallback mode — no local AI model detected. Install Ollama at ollama.ai, then run: ollama pull tinyllama. Once done, restart this server and I'll have full AI capabilities!";
     }
     if (lower.includes('model') || lower.includes('ollama') || lower.includes('install')) {
-        return "No local AI model is connected. To set one up:\n1. Install Ollama from ollama.ai\n2. Run: ollama pull llama3\n3. Restart this server\n\nLM Studio is also supported (port 1234). Once a model is running, Heidi will stream responses directly to your phone!";
+        return "No local AI model is connected. To set one up:\n1. Install Ollama from ollama.ai\n2. Run: ollama pull tinyllama\n3. Restart this server\n\nLM Studio is also supported (port 1234). Once a model is running, Heidi will stream responses directly to your phone!";
     }
     if (lower.includes('status') || lower.includes('health')) {
         return "Heidi server: running ✅  |  Local AI: not connected ⚠️\n\nTo enable AI: install Ollama (ollama.ai) and pull a model. The server is ready and waiting for a local model connection.";
     }
-    return "I'm in fallback mode — no local AI model detected. The server is running but needs Ollama or LM Studio for full AI. Visit ollama.ai to get started, then run: ollama pull llama3";
+    return "I'm in fallback mode — no local AI model detected. The server is running but needs Ollama or LM Studio for full AI. Visit ollama.ai to get started, then run: ollama pull tinyllama";
 }
 
 const app = express();
@@ -161,7 +164,6 @@ app.post('/api/chat', async (req, res) => {
 });
 
 async function streamOllama(message, model, systemPrompt, history, send) {
-    // Use /api/chat for multi-turn message support
     const messages = [
         { role: 'system', content: systemPrompt },
         ...history,
@@ -175,9 +177,9 @@ async function streamOllama(message, model, systemPrompt, history, send) {
             model,
             messages,
             stream: true,
-            options: { temperature: 0.7, num_predict: 600 }
+            options: { temperature: 0.7, num_predict: 400 }
         }),
-        signal: AbortSignal.timeout(90000)
+        signal: AbortSignal.timeout(CHAT_TIMEOUT_MS)
     });
 
     if (!response.ok) throw new Error(`Ollama HTTP ${response.status}`);
@@ -214,10 +216,10 @@ async function streamLMStudio(message, model, systemPrompt, history, send) {
             model,
             stream: true,
             temperature: 0.7,
-            max_tokens: 600,
+            max_tokens: 400,
             messages
         }),
-        signal: AbortSignal.timeout(90000)
+        signal: AbortSignal.timeout(CHAT_TIMEOUT_MS)
     });
 
     if (!response.ok) throw new Error(`LM Studio HTTP ${response.status}`);
@@ -264,14 +266,15 @@ server.listen(PORT, '0.0.0.0', async () => {
             const { models = [] } = await r.json();
             if (models.length > 0) {
                 console.log(`✅ Ollama: ${models.map(m => m.name).join(', ')}`);
+                console.log(`   Default model: ${DEFAULT_MODEL}`);
             } else {
                 console.log('⚠️  Ollama is running but has no models.');
-                console.log('   Pull one: ollama pull llama3');
+                console.log('   Pull one: ollama pull tinyllama');
             }
         }
     } catch {
         console.log('⚠️  Ollama not found at', OLLAMA_URL);
-        console.log('   Install: https://ollama.ai  →  ollama pull llama3');
+        console.log('   Install: https://ollama.ai  →  ollama pull tinyllama');
     }
 
     try {
