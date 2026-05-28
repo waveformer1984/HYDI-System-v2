@@ -5,7 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Heidi">
     <meta name="theme-color" content="#0a0a0f">
+    <link rel="manifest" href="/manifest.json">
+    <link rel="apple-touch-icon" href="/icon.svg">
     <title>Heidi</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -36,7 +39,6 @@
             flex-direction: column;
         }
 
-        /* Header */
         .header {
             background: var(--bg-secondary);
             border-bottom: 1px solid rgba(255,255,255,0.05);
@@ -50,421 +52,215 @@
             backdrop-filter: blur(20px);
             flex-shrink: 0;
         }
-
         .header-left { display: flex; align-items: center; gap: 12px; }
         .header-right { display: flex; align-items: center; gap: 8px; }
-
         .heidi-avatar {
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
+            width: 40px; height: 40px; border-radius: 50%;
             background: linear-gradient(135deg, var(--accent), #3b82f6);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 20px;
-            box-shadow: 0 0 20px rgba(100,255,218,0.3);
-            flex-shrink: 0;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 20px; box-shadow: 0 0 20px rgba(100,255,218,0.3); flex-shrink: 0;
         }
-
         .header-info h1 { font-size: 16px; font-weight: 600; }
         .header-info .status {
-            font-size: 12px;
-            color: var(--text-secondary);
-            display: flex;
-            align-items: center;
-            gap: 4px;
+            font-size: 12px; color: var(--text-secondary);
+            display: flex; align-items: center; gap: 4px;
         }
-
         .status-dot {
-            width: 6px; height: 6px;
-            border-radius: 50%;
-            background: var(--status-ok);
-            animation: pulse 2s infinite;
-            flex-shrink: 0;
+            width: 6px; height: 6px; border-radius: 50%;
+            background: var(--status-ok); animation: pulse 2s infinite; flex-shrink: 0;
         }
         .status-dot.warning { background: var(--status-warning); }
         .status-dot.critical { background: var(--status-critical); }
         .status-dot.off { background: var(--status-unknown); animation: none; }
-
         @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
 
         .tts-btn {
-            background: none;
-            border: none;
-            font-size: 18px;
-            cursor: pointer;
-            padding: 6px;
-            border-radius: 50%;
-            transition: all 0.2s;
-            line-height: 1;
+            background: none; border: none; font-size: 18px; cursor: pointer;
+            padding: 6px; border-radius: 50%; transition: all 0.2s; line-height: 1;
             color: var(--text-muted);
         }
-        .tts-btn.active {
-            color: var(--accent);
-            background: var(--accent-dim);
-        }
+        .tts-btn.active { color: var(--accent); background: var(--accent-dim); }
 
         .health-badge {
-            padding: 4px 10px;
-            border-radius: 12px;
-            font-size: 11px;
-            font-weight: 500;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            white-space: nowrap;
+            padding: 4px 10px; border-radius: 12px; font-size: 11px; font-weight: 500;
+            text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap;
         }
         .health-badge.ok { background: rgba(16,185,129,0.2); color: var(--status-ok); }
         .health-badge.warning { background: rgba(245,158,11,0.2); color: var(--status-warning); }
-        .health-badge.critical { background: rgba(239,68,68,0.2); color: var(--status-critical); }
         .health-badge.offline { background: rgba(107,114,128,0.2); color: var(--status-unknown); }
 
-        /* Health strip */
         .health-strip {
             background: var(--bg-secondary);
             border-bottom: 1px solid rgba(255,255,255,0.05);
-            padding: 8px 16px;
-            display: flex;
-            gap: 10px;
-            overflow-x: auto;
-            scrollbar-width: none;
-            flex-shrink: 0;
+            padding: 8px 16px; display: flex; gap: 10px;
+            overflow-x: auto; scrollbar-width: none; flex-shrink: 0;
         }
         .health-strip::-webkit-scrollbar { display: none; }
         .health-metric {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            padding: 6px 12px;
-            background: var(--bg-elevated);
-            border-radius: 8px;
-            white-space: nowrap;
-            font-size: 12px;
+            display: flex; align-items: center; gap: 6px;
+            padding: 6px 12px; background: var(--bg-elevated);
+            border-radius: 8px; white-space: nowrap; font-size: 12px;
         }
         .health-metric .icon { font-size: 14px; }
         .health-metric .value { font-weight: 600; }
         .health-metric .label { color: var(--text-muted); }
 
-        /* Messages */
         .messages-container {
-            flex: 1;
-            overflow-y: auto;
-            padding: 16px;
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-            scroll-behavior: smooth;
-            overscroll-behavior: contain;
+            flex: 1; overflow-y: auto; padding: 16px;
+            display: flex; flex-direction: column; gap: 12px;
+            scroll-behavior: smooth; overscroll-behavior: contain;
         }
-
         .message { max-width: 85%; animation: slideIn 0.25s ease; }
         @keyframes slideIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:none} }
         .message.user { align-self: flex-end; }
         .message.heidi { align-self: flex-start; }
         .message.system { align-self: center; max-width: 95%; }
         .message.restored { animation: none; }
-
         .message-bubble {
-            padding: 12px 16px;
-            border-radius: 18px;
-            font-size: 15px;
-            line-height: 1.55;
-            word-break: break-word;
-            white-space: pre-wrap;
+            padding: 12px 16px; border-radius: 18px; font-size: 15px;
+            line-height: 1.55; word-break: break-word; white-space: pre-wrap;
         }
         .message.user .message-bubble {
-            background: var(--accent);
-            color: #000;
-            border-bottom-right-radius: 4px;
+            background: var(--accent); color: #000; border-bottom-right-radius: 4px;
         }
         .message.heidi .message-bubble {
-            background: var(--bg-elevated);
-            border: 1px solid rgba(255,255,255,0.1);
+            background: var(--bg-elevated); border: 1px solid rgba(255,255,255,0.1);
             border-bottom-left-radius: 4px;
         }
         .message.system .message-bubble {
-            background: rgba(100,255,218,0.05);
-            border: 1px solid var(--accent-dim);
-            font-size: 13px;
-            text-align: center;
-            color: var(--text-secondary);
+            background: rgba(100,255,218,0.05); border: 1px solid var(--accent-dim);
+            font-size: 13px; text-align: center; color: var(--text-secondary);
         }
-
-        .message-meta {
-            font-size: 11px;
-            color: var(--text-muted);
-            margin-top: 4px;
-            padding: 0 4px;
-        }
+        .message-meta { font-size: 11px; color: var(--text-muted); margin-top: 4px; padding: 0 4px; }
         .message.user .message-meta { text-align: right; }
 
-        /* Streaming cursor */
         .streaming-cursor {
-            display: inline-block;
-            width: 2px;
-            height: 1em;
-            background: var(--accent);
-            margin-left: 1px;
-            vertical-align: middle;
+            display: inline-block; width: 2px; height: 1em;
+            background: var(--accent); margin-left: 1px; vertical-align: middle;
             animation: blink 0.7s step-end infinite;
         }
         @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
 
-        /* Action cards */
         .action-card {
-            background: var(--bg-elevated);
-            border: 1px solid rgba(255,255,255,0.1);
-            border-radius: 12px;
-            padding: 12px;
-            margin-top: 8px;
+            background: var(--bg-elevated); border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 12px; padding: 12px; margin-top: 8px;
         }
         .action-card-header {
-            font-size: 12px;
-            font-weight: 600;
-            color: var(--accent);
-            margin-bottom: 8px;
-            display: flex;
-            align-items: center;
-            gap: 6px;
+            font-size: 12px; font-weight: 600; color: var(--accent);
+            margin-bottom: 8px; display: flex; align-items: center; gap: 6px;
         }
         .action-button {
-            width: 100%;
-            padding: 10px;
-            background: var(--accent-dim);
-            border: 1px solid rgba(100,255,218,0.3);
-            border-radius: 8px;
-            color: var(--accent);
-            font-size: 14px;
-            font-weight: 500;
-            cursor: pointer;
-            margin-top: 6px;
-            transition: all 0.2s;
-            text-align: left;
+            width: 100%; padding: 10px;
+            background: var(--accent-dim); border: 1px solid rgba(100,255,218,0.3);
+            border-radius: 8px; color: var(--accent); font-size: 14px; font-weight: 500;
+            cursor: pointer; margin-top: 6px; transition: all 0.2s; text-align: left;
         }
         .action-button:active { transform: scale(0.98); background: rgba(100,255,218,0.2); }
 
-        /* Quick actions bar */
         .quick-actions {
-            background: var(--bg-secondary);
-            border-top: 1px solid rgba(255,255,255,0.05);
-            padding: 8px 16px;
-            display: flex;
-            gap: 8px;
-            overflow-x: auto;
-            scrollbar-width: none;
-            flex-shrink: 0;
+            background: var(--bg-secondary); border-top: 1px solid rgba(255,255,255,0.05);
+            padding: 8px 16px; display: flex; gap: 8px;
+            overflow-x: auto; scrollbar-width: none; flex-shrink: 0;
         }
         .quick-actions::-webkit-scrollbar { display: none; }
         .quick-action {
-            padding: 7px 14px;
-            background: var(--bg-elevated);
-            border: 1px solid rgba(255,255,255,0.1);
-            border-radius: 16px;
-            font-size: 13px;
-            color: var(--text-secondary);
-            white-space: nowrap;
-            cursor: pointer;
-            transition: all 0.2s;
-            user-select: none;
+            padding: 7px 14px; background: var(--bg-elevated);
+            border: 1px solid rgba(255,255,255,0.1); border-radius: 16px;
+            font-size: 13px; color: var(--text-secondary); white-space: nowrap;
+            cursor: pointer; transition: all 0.2s; user-select: none;
         }
         .quick-action:active { background: var(--accent-dim); color: var(--accent); border-color: rgba(100,255,218,0.3); }
 
-        /* Input area */
         .input-area {
-            background: var(--bg-secondary);
-            border-top: 1px solid rgba(255,255,255,0.05);
+            background: var(--bg-secondary); border-top: 1px solid rgba(255,255,255,0.05);
             padding: 12px 16px;
             padding-bottom: max(12px, env(safe-area-inset-bottom));
             flex-shrink: 0;
         }
-        .input-row {
-            display: flex;
-            gap: 8px;
-            align-items: flex-end;
-        }
+        .input-row { display: flex; gap: 8px; align-items: flex-end; }
         .message-input {
-            flex: 1;
-            background: var(--bg-elevated);
-            border: 1px solid rgba(255,255,255,0.1);
-            border-radius: 20px;
-            padding: 10px 16px;
-            font-size: 15px;
-            color: var(--text-primary);
-            outline: none;
-            max-height: 120px;
-            resize: none;
-            font-family: inherit;
-            transition: border-color 0.2s;
-            line-height: 1.4;
+            flex: 1; background: var(--bg-elevated);
+            border: 1px solid rgba(255,255,255,0.1); border-radius: 20px;
+            padding: 10px 16px; font-size: 15px; color: var(--text-primary);
+            outline: none; max-height: 120px; resize: none; font-family: inherit;
+            transition: border-color 0.2s; line-height: 1.4;
         }
         .message-input:focus { border-color: var(--accent); }
         .message-input::placeholder { color: var(--text-muted); }
 
         .icon-btn {
-            width: 44px;
-            height: 44px;
-            border-radius: 50%;
-            border: none;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            transition: all 0.2s;
-            flex-shrink: 0;
-            font-size: 18px;
+            width: 44px; height: 44px; border-radius: 50%; border: none;
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer; transition: all 0.2s; flex-shrink: 0; font-size: 18px;
         }
         .icon-btn:active { transform: scale(0.92); }
         .icon-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
-
-        .mic-btn {
-            background: var(--bg-elevated);
-            border: 1px solid rgba(255,255,255,0.1);
-            color: var(--text-secondary);
-        }
+        .mic-btn { background: var(--bg-elevated); border: 1px solid rgba(255,255,255,0.1); color: var(--text-secondary); }
         .mic-btn.listening {
-            background: rgba(239,68,68,0.15);
-            border-color: var(--status-critical);
-            color: var(--status-critical);
-            animation: mic-pulse 1.5s ease-in-out infinite;
+            background: rgba(239,68,68,0.15); border-color: var(--status-critical);
+            color: var(--status-critical); animation: mic-pulse 1.5s ease-in-out infinite;
         }
         @keyframes mic-pulse {
             0%,100% { box-shadow: 0 0 0 0 rgba(239,68,68,0.4); }
             50% { box-shadow: 0 0 0 8px rgba(239,68,68,0); }
         }
-
-        .send-btn {
-            background: var(--accent);
-        }
+        .send-btn { background: var(--accent); }
         .send-btn svg { width: 20px; height: 20px; fill: #000; }
 
-        /* Model selector */
         .model-toggle {
-            position: fixed;
-            bottom: 90px;
-            right: 16px;
-            width: 44px;
-            height: 44px;
-            border-radius: 50%;
-            background: var(--bg-elevated);
-            border: 1px solid rgba(255,255,255,0.15);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            font-size: 18px;
-            z-index: 40;
-            transition: all 0.2s;
+            position: fixed; bottom: 90px; right: 16px;
+            width: 44px; height: 44px; border-radius: 50%;
+            background: var(--bg-elevated); border: 1px solid rgba(255,255,255,0.15);
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer; font-size: 18px; z-index: 40; transition: all 0.2s;
             box-shadow: 0 4px 12px rgba(0,0,0,0.4);
         }
         .model-toggle:active { transform: scale(0.9); }
-
         .model-selector {
-            position: fixed;
-            bottom: 142px;
-            right: 16px;
-            background: var(--bg-elevated);
-            border: 1px solid rgba(255,255,255,0.12);
-            border-radius: 14px;
-            padding: 8px;
-            display: flex;
-            flex-direction: column;
-            gap: 2px;
-            opacity: 0;
-            pointer-events: none;
-            transform: translateY(8px) scale(0.95);
-            transition: all 0.2s;
-            z-index: 50;
-            min-width: 200px;
-            max-width: 280px;
-            max-height: 300px;
-            overflow-y: auto;
-            box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+            position: fixed; bottom: 142px; right: 16px;
+            background: var(--bg-elevated); border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 14px; padding: 8px; display: flex; flex-direction: column;
+            gap: 2px; opacity: 0; pointer-events: none;
+            transform: translateY(8px) scale(0.95); transition: all 0.2s;
+            z-index: 50; min-width: 200px; max-width: 280px; max-height: 300px;
+            overflow-y: auto; box-shadow: 0 8px 32px rgba(0,0,0,0.5);
         }
         .model-selector.show { opacity: 1; pointer-events: auto; transform: none; }
         .model-selector-header {
-            font-size: 11px;
-            color: var(--text-muted);
-            padding: 4px 8px;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
+            font-size: 11px; color: var(--text-muted); padding: 4px 8px;
+            text-transform: uppercase; letter-spacing: 0.5px;
         }
         .model-option {
-            padding: 10px 12px;
-            border-radius: 8px;
-            font-size: 13px;
-            color: var(--text-secondary);
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            transition: background 0.15s;
+            padding: 10px 12px; border-radius: 8px; font-size: 13px;
+            color: var(--text-secondary); cursor: pointer;
+            display: flex; align-items: center; gap: 8px; transition: background 0.15s;
         }
         .model-option:hover { background: rgba(255,255,255,0.05); }
         .model-option.active { background: var(--accent-dim); color: var(--accent); }
         .model-option .provider-badge {
-            font-size: 10px;
-            background: rgba(255,255,255,0.08);
-            padding: 2px 6px;
-            border-radius: 6px;
-            margin-left: auto;
-            white-space: nowrap;
+            font-size: 10px; background: rgba(255,255,255,0.08);
+            padding: 2px 6px; border-radius: 6px; margin-left: auto; white-space: nowrap;
         }
         .model-option.active .provider-badge { background: rgba(100,255,218,0.15); }
 
-        /* Alert banner */
         .alert-banner {
-            position: fixed;
-            top: 68px;
-            left: 16px;
-            right: 16px;
-            padding: 12px 16px;
-            border-radius: 12px;
-            font-size: 14px;
-            font-weight: 500;
-            z-index: 200;
-            transform: translateY(-110%);
-            transition: transform 0.3s ease;
+            position: fixed; top: 68px; left: 16px; right: 16px;
+            padding: 12px 16px; border-radius: 12px; font-size: 14px; font-weight: 500;
+            z-index: 200; transform: translateY(-110%); transition: transform 0.3s ease;
             text-align: center;
         }
         .alert-banner.error { background: var(--status-critical); color: #fff; }
         .alert-banner.warning { background: var(--status-warning); color: #000; }
         .alert-banner.show { transform: translateY(0); }
 
-        /* Typing dots */
-        .typing-dots {
-            display: flex;
-            gap: 4px;
-            padding: 14px 16px;
-        }
+        .typing-dots { display: flex; gap: 4px; padding: 14px 16px; }
         .typing-dots span {
-            width: 8px; height: 8px;
-            background: var(--text-muted);
-            border-radius: 50%;
-            animation: bounce 1.4s infinite;
+            width: 8px; height: 8px; background: var(--text-muted);
+            border-radius: 50%; animation: bounce 1.4s infinite;
         }
         .typing-dots span:nth-child(2) { animation-delay: 0.2s; }
         .typing-dots span:nth-child(3) { animation-delay: 0.4s; }
         @keyframes bounce { 0%,60%,100%{transform:translateY(0)} 30%{transform:translateY(-8px)} }
-
-        /* Setup hint */
-        .setup-hint {
-            background: rgba(100,255,218,0.06);
-            border: 1px solid rgba(100,255,218,0.2);
-            border-radius: 12px;
-            padding: 14px 16px;
-            margin: 8px 0;
-            font-size: 13px;
-            line-height: 1.6;
-            color: var(--text-secondary);
-        }
-        .setup-hint code {
-            background: rgba(0,0,0,0.3);
-            padding: 2px 6px;
-            border-radius: 4px;
-            font-size: 12px;
-            color: var(--accent);
-            font-family: 'SF Mono', 'Fira Code', monospace;
-        }
     </style>
 </head>
 <body>
@@ -481,30 +277,16 @@
         </div>
     </div>
     <div class="header-right">
-        <button class="tts-btn" id="ttsBtn" onclick="toggleTTS()" title="Toggle voice (Heidi speaks)">&#x1F507;</button>
+        <button class="tts-btn" id="ttsBtn" onclick="toggleTTS()" title="Toggle voice">&#x1F507;</button>
         <div class="health-badge offline" id="healthBadge">&mdash;</div>
     </div>
 </header>
 
 <div class="health-strip">
-    <div class="health-metric">
-        <span class="icon">&#x1F916;</span>
-        <span class="value" id="metricModels">&mdash;</span>
-        <span class="label">models</span>
-    </div>
-    <div class="health-metric">
-        <span class="icon">&#x26A1;</span>
-        <span class="value" id="metricProvider">&mdash;</span>
-    </div>
-    <div class="health-metric">
-        <span class="icon">&#x1F4AC;</span>
-        <span class="value" id="metricMsgCount">0</span>
-        <span class="label">msgs</span>
-    </div>
-    <div class="health-metric">
-        <span class="icon">&#x1F550;</span>
-        <span class="value" id="metricTime">&mdash;</span>
-    </div>
+    <div class="health-metric"><span class="icon">&#x1F916;</span><span class="value" id="metricModels">&mdash;</span><span class="label">models</span></div>
+    <div class="health-metric"><span class="icon">&#x26A1;</span><span class="value" id="metricProvider">&mdash;</span></div>
+    <div class="health-metric"><span class="icon">&#x1F4AC;</span><span class="value" id="metricMsgCount">0</span><span class="label">msgs</span></div>
+    <div class="health-metric"><span class="icon">&#x1F550;</span><span class="value" id="metricTime">&mdash;</span></div>
 </div>
 
 <div class="messages-container" id="messages"></div>
@@ -520,14 +302,8 @@
 <div class="input-area">
     <div class="input-row">
         <button class="icon-btn mic-btn" id="micBtn" onclick="toggleVoice()" title="Voice input">&#x1F3A4;</button>
-        <textarea
-            class="message-input"
-            id="msgInput"
-            placeholder="Message Heidi..."
-            rows="1"
-            oninput="autoResize(this)"
-            onkeypress="onKey(event)"
-        ></textarea>
+        <textarea class="message-input" id="msgInput" placeholder="Message Heidi..."
+            rows="1" oninput="autoResize(this)" onkeypress="onKey(event)"></textarea>
         <button class="icon-btn send-btn" id="sendBtn" onclick="sendMessage()">
             <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
         </button>
@@ -537,17 +313,13 @@
 <div class="model-toggle" onclick="toggleModelMenu()" title="Switch model">&#x1F916;</div>
 <div class="model-selector" id="modelMenu">
     <div class="model-selector-header">AI Model</div>
-    <div class="model-option active" id="defaultModelOpt">
-        <span>&#x1F999;</span>
-        <span id="defaultModelName">llama3</span>
-        <span class="provider-badge">ollama</span>
-    </div>
+    <div class="model-option active"><span>&#x1F999;</span><span id="defaultModelName">tinyllama</span><span class="provider-badge">ollama</span></div>
 </div>
 
 <div class="alert-banner" id="alertBanner"></div>
 
 <script>
-// ─── State ───────────────────────────────────────────────────────────────────
+// ─── State ──────────────────────────────────────────────────────────────────
 let currentModel = null;
 let currentProvider = 'ollama';
 let ttsEnabled = false;
@@ -556,13 +328,11 @@ let isListening = false;
 let recognition = null;
 let msgCount = 0;
 let healthTimer = null;
-
-// Conversation history for multi-turn context and persistence
-let conversationHistory = []; // [{role:'user'|'assistant', content:string}]
+let conversationHistory = [];
 const HISTORY_KEY = 'heidi-chat-history';
-const MAX_CTX = 40; // keep last 20 exchanges (40 messages)
+const MAX_CTX = 40;
 
-// ─── Init ─────────────────────────────────────────────────────────────────────
+// ─── Init ────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
     initVoice();
     loadVoices();
@@ -573,17 +343,17 @@ document.addEventListener('DOMContentLoaded', async () => {
         pollHealth();
         if (!conversationHistory.length) {
             addMsg('heidi',
-                "Hi! I'm Heidi, your local ProtoForge AI.\n\nI'm running on your device via Ollama. You can talk to me, ask about your system, or use voice input with the microphone button. Enable the speaker icon in the header so I speak back to you.",
+                "Hi! I'm Heidi, your local ProtoForge AI.\n\nI'm running on your device via Ollama. Talk to me, ask about your system, or use voice input. Enable the speaker icon so I speak back.",
                 [{ label: '&#x1F4CA; System status', q: 'status' }, { label: '&#x1F916; Available models', q: 'models' }]
             );
         }
     } else {
-        addMsg('system', '&#x26A0;&#xFE0F; Cannot reach Heidi server. Make sure: node launch-heidi-mobile.js is running on your machine.');
+        addMsg('system', '&#x26A0;&#xFE0F; Cannot reach Heidi server. Run: node launch-heidi-mobile.js');
         setStatus('offline', 'Server offline');
     }
 });
 
-// ─── Conversation history ─────────────────────────────────────────────────────
+// ─── Conversation history ────────────────────────────────────────────────────
 function restoreHistory() {
     try {
         const raw = localStorage.getItem(HISTORY_KEY);
@@ -591,13 +361,11 @@ function restoreHistory() {
         const saved = JSON.parse(raw);
         if (!Array.isArray(saved) || !saved.length) return;
         conversationHistory = saved;
-        const exchangeCount = Math.floor(saved.filter(m => m.role === 'user').length);
-        // Show a divider before restored messages
+        const exchangeCount = saved.filter(m => m.role === 'user').length;
         const divider = document.createElement('div');
         divider.className = 'message system restored';
         divider.innerHTML = '<div class="message-bubble">&#x2014; ' + exchangeCount + ' previous exchange' + (exchangeCount !== 1 ? 's' : '') + ' restored &#x2014;</div>';
         document.getElementById('messages').appendChild(divider);
-        // Render saved messages without TTS or animation
         saved.forEach(msg => {
             const el = document.createElement('div');
             el.className = 'message ' + (msg.role === 'user' ? 'user' : 'heidi') + ' restored';
@@ -610,9 +378,7 @@ function restoreHistory() {
         msgCount = saved.filter(m => m.role === 'user').length;
         document.getElementById('metricMsgCount').textContent = msgCount;
         scrollBottom();
-    } catch {
-        conversationHistory = [];
-    }
+    } catch { conversationHistory = []; }
 }
 
 function saveHistory() {
@@ -622,80 +388,52 @@ function saveHistory() {
     } catch {}
 }
 
-// ─── Server check ─────────────────────────────────────────────────────────────
+// ─── Server / health ───────────────────────────────────────────────────────────
 async function checkServer() {
-    try {
-        const r = await fetch('/api/health', { signal: AbortSignal.timeout(3000) });
-        return r.ok;
-    } catch {
-        return false;
-    }
+    try { const r = await fetch('/api/health', { signal: AbortSignal.timeout(3000) }); return r.ok; } catch { return false; }
 }
-
-// ─── Health polling ───────────────────────────────────────────────────────────
 async function pollHealth() {
     try {
         const r = await fetch('/api/health', { signal: AbortSignal.timeout(3000) });
         if (!r.ok) throw new Error();
-        const h = await r.json();
-        updateHealthUI(h);
-    } catch {
-        setStatus('off', 'Reconnecting...');
-    }
+        updateHealthUI(await r.json());
+    } catch { setStatus('off', 'Reconnecting...'); }
     healthTimer = setTimeout(pollHealth, 30000);
 }
-
 function updateHealthUI(h) {
     const badge = document.getElementById('healthBadge');
     const hasAI = h.ollama || h.lmstudio;
-
     badge.textContent = hasAI ? 'AI ON' : 'NO AI';
     badge.className = 'health-badge ' + (hasAI ? 'ok' : 'warning');
-
-    const provider = h.ollama ? 'Ollama' : h.lmstudio ? 'LMStudio' : 'none';
     document.getElementById('metricModels').textContent = h.models?.length ?? 0;
-    document.getElementById('metricProvider').textContent = provider;
+    document.getElementById('metricProvider').textContent = h.ollama ? 'Ollama' : h.lmstudio ? 'LMStudio' : 'none';
     document.getElementById('metricTime').textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
-    setStatus(hasAI ? '' : 'warning', hasAI
-        ? `Online · ${currentModel || h.models?.[0] || 'ready'}`
-        : 'Online · No AI model');
+    setStatus(hasAI ? '' : 'warning', hasAI ? `Online · ${currentModel || h.models?.[0] || 'ready'}` : 'Online · No AI model');
 }
-
 function setStatus(dotClass, text) {
     document.getElementById('statusDot').className = 'status-dot ' + (dotClass || '');
     document.getElementById('statusText').textContent = text;
 }
 
-// ─── Model loading ────────────────────────────────────────────────────────────
+// ─── Model loading ───────────────────────────────────────────────────────────
 async function loadModels() {
     try {
         const r = await fetch('/api/models', { signal: AbortSignal.timeout(3000) });
         if (!r.ok) return;
         const { models, default: def } = await r.json();
-
-        if (models.length === 0) {
-            setStatus('warning', 'Online · No model');
-            addMsg('system', '&#x26A0;&#xFE0F; No local AI model found. Install Ollama (ollama.ai) then run: ollama pull llama3');
-            return;
-        }
-
+        if (!models.length) { setStatus('warning', 'Online · No model'); return; }
         currentModel = models[0].id;
         currentProvider = models[0].provider;
         populateModelMenu(models);
         setStatus('', `Online · ${currentModel}`);
     } catch {}
 }
-
 function populateModelMenu(models) {
     const menu = document.getElementById('modelMenu');
     menu.innerHTML = '<div class="model-selector-header">AI Model</div>';
-
     models.forEach((m, i) => {
         const el = document.createElement('div');
         el.className = 'model-option' + (i === 0 ? ' active' : '');
-        el.dataset.id = m.id;
-        el.dataset.provider = m.provider;
         el.innerHTML = `<span>${m.provider === 'ollama' ? '&#x1F999;' : '&#x1F5A5;&#xFE0F;'}</span>
             <span style="flex:1;overflow:hidden;text-overflow:ellipsis">${m.name}</span>
             <span class="provider-badge">${m.provider}${m.size ? ' · ' + m.size : ''}</span>`;
@@ -703,101 +441,62 @@ function populateModelMenu(models) {
         menu.appendChild(el);
     });
 }
-
 function pickModel(id, provider, el) {
-    currentModel = id;
-    currentProvider = provider;
+    currentModel = id; currentProvider = provider;
     document.querySelectorAll('.model-option').forEach(o => o.classList.remove('active'));
     el.classList.add('active');
     toggleModelMenu();
     setStatus('', `Online · ${id}`);
     addMsg('system', `Switched to: ${id} (${provider})`);
 }
+function toggleModelMenu() { document.getElementById('modelMenu').classList.toggle('show'); }
 
-function toggleModelMenu() {
-    document.getElementById('modelMenu').classList.toggle('show');
-}
-
-// ─── Sending messages ─────────────────────────────────────────────────────────
+// ─── Sending messages ────────────────────────────────────────────────────────
 async function sendMessage() {
     const input = document.getElementById('msgInput');
     const text = input.value.trim();
     if (!text || isStreaming) return;
-
     isStreaming = true;
     document.getElementById('sendBtn').disabled = true;
     document.getElementById('micBtn').disabled = true;
-
     msgCount++;
     document.getElementById('metricMsgCount').textContent = msgCount;
-
     addMsg('user', text);
-    input.value = '';
-    autoResize(input);
-
+    input.value = ''; autoResize(input);
     const container = document.getElementById('messages');
-
-    // Typing indicator
     const typingEl = document.createElement('div');
-    typingEl.className = 'message heidi';
-    typingEl.id = 'typing';
+    typingEl.className = 'message heidi'; typingEl.id = 'typing';
     typingEl.innerHTML = '<div class="message-bubble"><div class="typing-dots"><span></span><span></span><span></span></div></div>';
-    container.appendChild(typingEl);
-    scrollBottom();
-
-    // Create streaming bubble (hidden until first token)
+    container.appendChild(typingEl); scrollBottom();
     const msgEl = document.createElement('div');
-    msgEl.className = 'message heidi';
-    msgEl.style.display = 'none';
-
+    msgEl.className = 'message heidi'; msgEl.style.display = 'none';
     const bubble = document.createElement('div');
     bubble.className = 'message-bubble';
-    msgEl.appendChild(bubble);
-    container.appendChild(msgEl);
-
-    let fullText = '';
-    let provider = 'local';
-    let firstToken = true;
-
+    msgEl.appendChild(bubble); container.appendChild(msgEl);
+    let fullText = '', provider = 'local', firstToken = true;
     try {
         const resp = await fetch('/api/chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                message: text,
-                model: currentModel,
-                provider: currentProvider,
-                history: conversationHistory.slice(-MAX_CTX)
-            })
+            body: JSON.stringify({ message: text, model: currentModel, provider: currentProvider, history: conversationHistory.slice(-MAX_CTX) })
         });
-
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-
         const reader = resp.body.getReader();
         const dec = new TextDecoder();
         let buf = '';
-
         while (true) {
             const { done, value } = await reader.read();
             if (done) break;
-
             buf += dec.decode(value, { stream: true });
-
             let idx;
             while ((idx = buf.indexOf('\n\n')) !== -1) {
-                const chunk = buf.slice(0, idx);
-                buf = buf.slice(idx + 2);
-
+                const chunk = buf.slice(0, idx); buf = buf.slice(idx + 2);
                 for (const line of chunk.split('\n')) {
                     if (!line.startsWith('data: ')) continue;
                     try {
                         const d = JSON.parse(line.slice(6));
                         if (d.t !== undefined) {
-                            if (firstToken) {
-                                firstToken = false;
-                                typingEl.remove();
-                                msgEl.style.display = '';
-                            }
+                            if (firstToken) { firstToken = false; typingEl.remove(); msgEl.style.display = ''; }
                             fullText += d.t;
                             bubble.innerHTML = esc(fullText) + '<span class="streaming-cursor"></span>';
                             scrollBottom();
@@ -807,35 +506,25 @@ async function sendMessage() {
                 }
             }
         }
-
     } catch (err) {
-        typingEl.remove();
-        msgEl.style.display = '';
+        typingEl.remove(); msgEl.style.display = '';
         fullText = 'Connection error. Is the Heidi server running?\n\nRun: node launch-heidi-mobile.js';
         bubble.textContent = fullText;
         showAlert('Cannot reach server', 'error');
     }
-
-    // Finalize bubble
     bubble.textContent = fullText || '(empty response)';
-
     const meta = document.createElement('div');
     meta.className = 'message-meta';
     meta.textContent = `Heidi · ${now()} · ${provider}`;
     msgEl.appendChild(meta);
-
     addContextActions(msgEl, fullText, text);
     scrollBottom();
-
-    // Persist to history
     if (fullText && fullText !== '(empty response)') {
         conversationHistory.push({ role: 'user', content: text });
         conversationHistory.push({ role: 'assistant', content: fullText });
         saveHistory();
     }
-
     if (ttsEnabled && fullText) speak(cleanForTTS(fullText));
-
     isStreaming = false;
     document.getElementById('sendBtn').disabled = false;
     document.getElementById('micBtn').disabled = false;
@@ -844,10 +533,8 @@ async function sendMessage() {
 function sendQuick(cmd) {
     if (cmd === 'clear') {
         document.getElementById('messages').innerHTML = '';
-        conversationHistory = [];
-        localStorage.removeItem(HISTORY_KEY);
-        msgCount = 0;
-        document.getElementById('metricMsgCount').textContent = '0';
+        conversationHistory = []; localStorage.removeItem(HISTORY_KEY);
+        msgCount = 0; document.getElementById('metricMsgCount').textContent = '0';
         return;
     }
     const map = {
@@ -858,201 +545,132 @@ function sendQuick(cmd) {
     };
     const input = document.getElementById('msgInput');
     input.value = map[cmd] || cmd;
-    autoResize(input);
-    sendMessage();
+    autoResize(input); sendMessage();
 }
 
-// ─── Message rendering ────────────────────────────────────────────────────────
+// ─── Message rendering ───────────────────────────────────────────────────────
 function addMsg(sender, content, actions = null) {
     const container = document.getElementById('messages');
     const el = document.createElement('div');
     el.className = `message ${sender}`;
-
     const bubble = document.createElement('div');
     bubble.className = 'message-bubble';
-    if (actions) {
-        bubble.innerHTML = esc(content);
-    } else {
-        bubble.textContent = content;
-    }
+    if (actions) { bubble.innerHTML = esc(content); } else { bubble.textContent = content; }
     el.appendChild(bubble);
-
     if (sender !== 'system') {
         const meta = document.createElement('div');
         meta.className = 'message-meta';
         meta.textContent = sender === 'user' ? `You · ${now()}` : `Heidi · ${now()}`;
         el.appendChild(meta);
     }
-
     if (actions?.length) {
         const card = document.createElement('div');
         card.className = 'action-card';
         card.innerHTML = '<div class="action-card-header">&#x26A1; Quick actions</div>';
         actions.forEach(a => {
             const btn = document.createElement('button');
-            btn.className = 'action-button';
-            btn.innerHTML = a.label;
+            btn.className = 'action-button'; btn.innerHTML = a.label;
             btn.onclick = () => sendQuick(a.q);
             card.appendChild(btn);
         });
         el.appendChild(card);
     }
-
-    container.appendChild(el);
-    scrollBottom();
+    container.appendChild(el); scrollBottom();
     if (sender === 'heidi' && ttsEnabled) speak(cleanForTTS(content));
 }
 
 function addContextActions(msgEl, response, userMsg) {
     const text = (response + ' ' + userMsg).toLowerCase();
     const actions = [];
-
     if (text.includes('health') || text.includes('status') || text.includes('check'))
         actions.push({ label: '&#x1F504; Re-run health check', q: 'health' });
-    if (text.includes('model') || text.includes('ollama') || text.includes('llama') || text.includes('install'))
+    if (text.includes('model') || text.includes('ollama') || text.includes('install'))
         actions.push({ label: '&#x1F916; List all models', q: 'models' });
-    if (text.includes('error') || text.includes('fail') || text.includes('issue') || text.includes('problem'))
+    if (text.includes('error') || text.includes('fail') || text.includes('issue'))
         actions.push({ label: '&#x1F527; Diagnose', q: 'health' });
-
     if (!actions.length) return;
     const card = document.createElement('div');
     card.className = 'action-card';
     card.innerHTML = '<div class="action-card-header">&#x26A1; Follow-up</div>';
     actions.forEach(a => {
         const btn = document.createElement('button');
-        btn.className = 'action-button';
-        btn.innerHTML = a.label;
+        btn.className = 'action-button'; btn.innerHTML = a.label;
         btn.onclick = () => sendQuick(a.q);
         card.appendChild(btn);
     });
     msgEl.appendChild(card);
 }
 
-// ─── TTS ──────────────────────────────────────────────────────────────────────
+// ─── TTS ────────────────────────────────────────────────────────────────────
 let voices = [];
-
 function loadVoices() {
     voices = window.speechSynthesis?.getVoices() || [];
-    if (!voices.length) {
-        window.speechSynthesis?.addEventListener('voiceschanged', () => {
-            voices = window.speechSynthesis.getVoices();
-        });
-    }
+    if (!voices.length) window.speechSynthesis?.addEventListener('voiceschanged', () => { voices = window.speechSynthesis.getVoices(); });
 }
-
 function toggleTTS() {
     ttsEnabled = !ttsEnabled;
     const btn = document.getElementById('ttsBtn');
     btn.textContent = ttsEnabled ? '&#x1F50A;' : '&#x1F507;';
     btn.classList.toggle('active', ttsEnabled);
-    if (!ttsEnabled) {
-        window.speechSynthesis?.cancel();
-    } else {
-        speak('Voice enabled. I will speak my responses.');
-    }
+    if (!ttsEnabled) window.speechSynthesis?.cancel();
+    else speak('Voice enabled.');
 }
-
 function speak(text) {
     if (!ttsEnabled || !window.speechSynthesis || !text.trim()) return;
     window.speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(text);
-    u.rate = 1.05;
-    u.pitch = 1.1;
-    u.volume = 0.9;
-
-    // Prefer natural-sounding female voices
-    const preferred = ['Samantha', 'Karen', 'Victoria', 'Moira', 'Google US English', 'Microsoft Zira', 'Alex'];
+    u.rate = 1.05; u.pitch = 1.1; u.volume = 0.9;
+    const preferred = ['Samantha','Karen','Victoria','Moira','Google US English','Microsoft Zira'];
     for (const name of preferred) {
         const v = voices.find(v => v.name.includes(name) && v.lang.startsWith('en'));
         if (v) { u.voice = v; break; }
     }
-    if (!u.voice) {
-        u.voice = voices.find(v => v.lang.startsWith('en-')) || voices[0] || null;
-    }
-
+    if (!u.voice) u.voice = voices.find(v => v.lang.startsWith('en-')) || voices[0] || null;
     window.speechSynthesis.speak(u);
 }
-
 function cleanForTTS(text) {
-    return text
-        .replace(/```[\s\S]*?```/g, 'code block')
-        .replace(/`[^`]+`/g, '')
-        .replace(/\*{1,3}([^*]+)\*{1,3}/g, '$1')
-        .replace(/#{1,6}\s/g, '')
-        .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-        .replace(/https?:\/\/\S+/g, 'link')
-        .replace(/\n{2,}/g, '. ')
-        .replace(/\n/g, ' ')
-        .replace(/[•\-\*]\s/g, '')
-        .trim();
+    return text.replace(/```[\s\S]*?```/g,'code block').replace(/`[^`]+`/g,'')
+        .replace(/\*{1,3}([^*]+)\*{1,3}/g,'$1').replace(/#{1,6}\s/g,'')
+        .replace(/https?:\/\/\S+/g,'link').replace(/\n{2,}/g,'. ').replace(/\n/g,' ').trim();
 }
 
 // ─── Voice input ──────────────────────────────────────────────────────────────
 function initVoice() {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SR) {
-        const btn = document.getElementById('micBtn');
-        btn.style.opacity = '0.3';
-        btn.title = 'Voice not supported (use Chrome or Safari)';
-        return;
-    }
+    if (!SR) { const btn = document.getElementById('micBtn'); btn.style.opacity = '0.3'; btn.title = 'Voice not supported'; return; }
     recognition = new SR();
-    recognition.continuous = false;
-    recognition.interimResults = true;
-    recognition.lang = 'en-US';
-
+    recognition.continuous = false; recognition.interimResults = true; recognition.lang = 'en-US';
     recognition.onresult = (e) => {
         const t = Array.from(e.results).map(r => r[0].transcript).join('');
         const input = document.getElementById('msgInput');
-        input.value = t;
-        autoResize(input);
+        input.value = t; autoResize(input);
     };
-
     recognition.onend = () => {
-        isListening = false;
-        updateMicState(false);
+        isListening = false; updateMicState(false);
         const input = document.getElementById('msgInput');
         if (input.value.trim() && !isStreaming) setTimeout(sendMessage, 300);
     };
-
     recognition.onerror = (e) => {
-        console.warn('[Voice]', e.error);
-        isListening = false;
-        updateMicState(false);
-        if (e.error === 'not-allowed') {
-            showAlert('Microphone access denied', 'warning');
-        }
+        isListening = false; updateMicState(false);
+        if (e.error === 'not-allowed') showAlert('Microphone access denied', 'warning');
     };
 }
-
 function toggleVoice() {
-    if (!recognition) {
-        addMsg('system', '&#x26A0;&#xFE0F; Voice input requires Chrome or Safari on iOS/Android.');
-        return;
-    }
+    if (!recognition) { addMsg('system', '&#x26A0;&#xFE0F; Voice requires Chrome or Safari.'); return; }
     if (isStreaming) return;
-    if (isListening) {
-        recognition.stop();
-    } else {
-        isListening = true;
-        updateMicState(true);
+    if (isListening) { recognition.stop(); }
+    else {
+        isListening = true; updateMicState(true);
         document.getElementById('msgInput').value = '';
-        document.getElementById('msgInput').placeholder = 'Listening...';
-        try { recognition.start(); } catch {
-            isListening = false;
-            updateMicState(false);
-        }
+        try { recognition.start(); } catch { isListening = false; updateMicState(false); }
     }
 }
-
 function updateMicState(on) {
-    const btn = document.getElementById('micBtn');
-    const inp = document.getElementById('msgInput');
-    btn.classList.toggle('listening', on);
-    inp.placeholder = on ? 'Listening...' : 'Message Heidi...';
+    document.getElementById('micBtn').classList.toggle('listening', on);
+    document.getElementById('msgInput').placeholder = on ? 'Listening...' : 'Message Heidi...';
 }
 
-// ─── Alert banner ─────────────────────────────────────────────────────────────
+// ─── Alert ────────────────────────────────────────────────────────────────────────
 let alertTimer = null;
 function showAlert(msg, type = 'error') {
     const el = document.getElementById('alertBanner');
@@ -1063,46 +681,48 @@ function showAlert(msg, type = 'error') {
 }
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
-function autoResize(el) {
-    el.style.height = 'auto';
-    el.style.height = Math.min(el.scrollHeight, 120) + 'px';
-}
+function autoResize(el) { el.style.height = 'auto'; el.style.height = Math.min(el.scrollHeight, 120) + 'px'; }
+function onKey(e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } }
+function scrollBottom() { const c = document.getElementById('messages'); c.scrollTop = c.scrollHeight; }
+function now() { return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); }
+function esc(t) { const d = document.createElement('div'); d.textContent = t; return d.innerHTML; }
 
-function onKey(e) {
-    if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        sendMessage();
-    }
-}
-
-function scrollBottom() {
-    const c = document.getElementById('messages');
-    c.scrollTop = c.scrollHeight;
-}
-
-function now() {
-    return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-}
-
-function esc(t) {
-    const d = document.createElement('div');
-    d.textContent = t;
-    return d.innerHTML;
-}
-
-// Close model menu on outside tap
-document.addEventListener('click', (e) => {
-    if (!e.target.closest('#modelMenu') && !e.target.closest('.model-toggle')) {
+document.addEventListener('click', e => {
+    if (!e.target.closest('#modelMenu') && !e.target.closest('.model-toggle'))
         document.getElementById('modelMenu').classList.remove('show');
-    }
+});
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && ttsEnabled) window.speechSynthesis?.resume();
 });
 
-// Resume speech on visibility (iOS quirk)
-document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible' && ttsEnabled) {
-        window.speechSynthesis?.resume();
-    }
+// ─── PWA ──────────────────────────────────────────────────────────────────────────
+let installPrompt = null;
+
+window.addEventListener('beforeinstallprompt', e => {
+    e.preventDefault();
+    installPrompt = e;
+    if (document.getElementById('installBtn')) return;
+    const btn = document.createElement('button');
+    btn.id = 'installBtn';
+    btn.className = 'tts-btn';
+    btn.title = 'Add Heidi to home screen';
+    btn.textContent = '📲';
+    btn.onclick = async () => {
+        if (!installPrompt) return;
+        installPrompt.prompt();
+        const { outcome } = await installPrompt.userChoice;
+        btn.remove();
+        installPrompt = null;
+        if (outcome === 'accepted') addMsg('system', '✅ Heidi added to your home screen!');
+    };
+    document.querySelector('.header-right').insertBefore(btn, document.querySelector('.header-right').firstChild);
 });
+
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js').catch(() => {});
+    });
+}
 </script>
 </body>
 </html>

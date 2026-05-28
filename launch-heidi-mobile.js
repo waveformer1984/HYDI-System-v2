@@ -6,7 +6,7 @@
  * Setup:
  *   1. npm install
  *   2. Install Ollama: https://ollama.ai
- *   3. ollama pull llama3
+ *   3. ollama pull tinyllama
  *   4. node launch-heidi-mobile.js   (or: npm run mobile)
  *   5. Open the phone URL shown in the console on your mobile device (same WiFi)
  */
@@ -68,28 +68,95 @@ app.use((req, res, next) => {
     next();
 });
 
-// Serve mobile chat UI
+// ── PWA assets ────────────────────────────────────────────────────────────────
+
+app.get('/manifest.json', (req, res) => {
+    res.setHeader('Content-Type', 'application/manifest+json');
+    res.json({
+        name: 'Heidi',
+        short_name: 'Heidi',
+        description: 'HYDI ProtoForge local AI assistant',
+        start_url: '/',
+        display: 'standalone',
+        background_color: '#0a0a0f',
+        theme_color: '#0a0a0f',
+        orientation: 'portrait-primary',
+        icons: [
+            { src: '/icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any maskable' }
+        ]
+    });
+});
+
+app.get('/icon.svg', (req, res) => {
+    res.setHeader('Content-Type', 'image/svg+xml');
+    res.send(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192">
+  <rect width="192" height="192" rx="40" fill="#0a0a0f"/>
+  <defs>
+    <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#64ffda"/>
+      <stop offset="100%" stop-color="#3b82f6"/>
+    </linearGradient>
+  </defs>
+  <circle cx="96" cy="96" r="64" fill="url(#g)"/>
+  <text x="96" y="122" text-anchor="middle" font-size="72"
+        fill="#0a0a0f" font-family="sans-serif" font-weight="bold">H</text>
+</svg>`);
+});
+
+app.get('/sw.js', (req, res) => {
+    res.setHeader('Content-Type', 'application/javascript');
+    res.setHeader('Service-Worker-Allowed', '/');
+    res.send(`
+const CACHE = 'heidi-v1';
+
+self.addEventListener('install', e => {
+    e.waitUntil(caches.open(CACHE).then(c => c.add('/')));
+    self.skipWaiting();
+});
+
+self.addEventListener('activate', e => {
+    e.waitUntil(
+        caches.keys().then(keys =>
+            Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
+        )
+    );
+    self.clients.claim();
+});
+
+self.addEventListener('fetch', e => {
+    // Always network for API calls
+    if (e.request.url.includes('/api/')) return;
+    e.respondWith(
+        caches.match(e.request).then(hit => hit || fetch(e.request).then(res => {
+            if (res.ok) {
+                const clone = res.clone();
+                caches.open(CACHE).then(c => c.put(e.request, clone));
+            }
+            return res;
+        }))
+    );
+});
+`);
+});
+
+// ── App routes ────────────────────────────────────────────────────────────────
+
 app.get(['/', '/heidi-mobile', '/heidi'], (req, res) => {
     res.sendFile(path.join(__dirname, 'heidi-mobile-chat.html'));
 });
 
-// Available models from local providers
 app.get('/api/models', async (req, res) => {
     const models = [];
-
     try {
         const r = await fetch(`${OLLAMA_URL}/api/tags`, { signal: AbortSignal.timeout(2000) });
         if (r.ok) {
             const { models: list = [] } = await r.json();
             models.push(...list.map(m => ({
-                id: m.name,
-                name: m.name,
-                provider: 'ollama',
+                id: m.name, name: m.name, provider: 'ollama',
                 size: m.size ? (Math.round(m.size / 1e8) / 10) + 'GB' : ''
             })));
         }
     } catch {}
-
     try {
         const r = await fetch(`${LM_STUDIO_URL}/v1/models`, { signal: AbortSignal.timeout(2000) });
         if (r.ok) {
@@ -97,14 +164,11 @@ app.get('/api/models', async (req, res) => {
             models.push(...data.map(m => ({ id: m.id, name: m.id, provider: 'lmstudio' })));
         }
     } catch {}
-
     res.json({ models, default: DEFAULT_MODEL });
 });
 
-// Server + AI health
 app.get('/api/health', async (req, res) => {
     const status = { server: 'ok', ollama: false, lmstudio: false, models: [] };
-
     try {
         const r = await fetch(`${OLLAMA_URL}/api/tags`, { signal: AbortSignal.timeout(2000) });
         if (r.ok) {
@@ -113,16 +177,13 @@ app.get('/api/health', async (req, res) => {
             status.models = data.models?.map(m => m.name) || [];
         }
     } catch {}
-
     try {
         const r = await fetch(`${LM_STUDIO_URL}/v1/models`, { signal: AbortSignal.timeout(2000) });
         if (r.ok) status.lmstudio = true;
     } catch {}
-
     res.json(status);
 });
 
-// SSE streaming chat — accepts optional history[] for multi-turn context
 app.post('/api/chat', async (req, res) => {
     const { message, model, provider, history = [] } = req.body;
     if (!message) return res.status(400).json({ error: 'message required' });
@@ -146,7 +207,6 @@ app.post('/api/chat', async (req, res) => {
             console.log('[Chat] Ollama unavailable:', e.message);
         }
     }
-
     try {
         await streamLMStudio(message, selectedModel, systemPrompt, history, send);
         return finish({ provider: 'lmstudio' });
@@ -154,7 +214,6 @@ app.post('/api/chat', async (req, res) => {
         console.log('[Chat] LM Studio unavailable:', e.message);
     }
 
-    // Typed fallback
     const fallback = buildFallback(message);
     for (const char of fallback) {
         send({ t: char });
@@ -169,24 +228,15 @@ async function streamOllama(message, model, systemPrompt, history, send) {
         ...history,
         { role: 'user', content: message }
     ];
-
     const response = await fetch(`${OLLAMA_URL}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            model,
-            messages,
-            stream: true,
-            options: { temperature: 0.7, num_predict: 400 }
-        }),
+        body: JSON.stringify({ model, messages, stream: true, options: { temperature: 0.7, num_predict: 400 } }),
         signal: AbortSignal.timeout(CHAT_TIMEOUT_MS)
     });
-
     if (!response.ok) throw new Error(`Ollama HTTP ${response.status}`);
-
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
-
     while (true) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -208,25 +258,15 @@ async function streamLMStudio(message, model, systemPrompt, history, send) {
         ...history,
         { role: 'user', content: message }
     ];
-
     const response = await fetch(`${LM_STUDIO_URL}/v1/chat/completions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            model,
-            stream: true,
-            temperature: 0.7,
-            max_tokens: 400,
-            messages
-        }),
+        body: JSON.stringify({ model, stream: true, temperature: 0.7, max_tokens: 400, messages }),
         signal: AbortSignal.timeout(CHAT_TIMEOUT_MS)
     });
-
     if (!response.ok) throw new Error(`LM Studio HTTP ${response.status}`);
-
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
-
     while (true) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -259,7 +299,6 @@ server.listen(PORT, '0.0.0.0', async () => {
     console.log('║  Open the Phone URL on your mobile device    ║');
     console.log('║  (must be on the same WiFi / LAN network)    ║');
     console.log('╚════════════════════════════════════════════╝\n');
-
     try {
         const r = await fetch(`${OLLAMA_URL}/api/tags`, { signal: AbortSignal.timeout(2000) });
         if (r.ok) {
@@ -268,29 +307,23 @@ server.listen(PORT, '0.0.0.0', async () => {
                 console.log(`✅ Ollama: ${models.map(m => m.name).join(', ')}`);
                 console.log(`   Default model: ${DEFAULT_MODEL}`);
             } else {
-                console.log('⚠️  Ollama is running but has no models.');
-                console.log('   Pull one: ollama pull tinyllama');
+                console.log('⚠️  Ollama is running but has no models. Pull one: ollama pull tinyllama');
             }
         }
     } catch {
         console.log('⚠️  Ollama not found at', OLLAMA_URL);
         console.log('   Install: https://ollama.ai  →  ollama pull tinyllama');
     }
-
     try {
         const r = await fetch(`${LM_STUDIO_URL}/v1/models`, { signal: AbortSignal.timeout(2000) });
         if (r.ok) console.log(`✅ LM Studio online at ${LM_STUDIO_URL}`);
     } catch {
         console.log('ℹ️  LM Studio not found (optional alternative to Ollama)');
     }
-
     console.log('');
 });
 
-process.on('SIGINT', () => {
-    console.log('\n🛑 Shutting down Heidi...');
-    server.close(() => process.exit(0));
-});
+process.on('SIGINT', () => { console.log('\n🛑 Shutting down Heidi...'); server.close(() => process.exit(0)); });
 process.on('SIGTERM', () => process.exit(0));
 process.on('uncaughtException', (e) => { console.error('Fatal:', e.message); process.exit(1); });
 process.on('unhandledRejection', (e) => { console.error('Unhandled rejection:', e); });
