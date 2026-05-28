@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 
-const AGENT_SYSTEM_PROMPTS: Record<string, string> = {
+export const AGENT_SYSTEM_PROMPTS: Record<string, string> = {
   heidi: `You are Heidi, the conversational orchestrator of HYDI System v2. You coordinate between agents, manage tasks, and serve as the primary interface for Jordan (waveformer1984@gmail.com).
 
 HYDI operates six Stripe Connect revenue streams: galactic_bytes, detailer_bot, lipi_v2, protogrance_aromatics, rezonate, waveformer_studio.
@@ -57,14 +57,77 @@ Be direct about impact estimates. Prioritize by value-to-effort ratio. Natural l
 Be terse and technical. Use exact values. Surface failures immediately. When you receive partial data from automated checks, interpret it in context and flag anomalies.`,
 };
 
-let _client: Anthropic | null = null;
+// ── Provider resolution ───────────────────────────────────────────────────────
 
-function getClient(): Anthropic {
-  if (!_client) {
-    _client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-  }
-  return _client;
+type Provider = 'anthropic' | 'groq';
+
+function resolveProvider(): Provider {
+  if (process.env.ANTHROPIC_API_KEY) return 'anthropic';
+  if (process.env.GROQ_API_KEY) return 'groq';
+  return 'anthropic'; // will fail with a clear message
 }
+
+export function isClaudeAvailable(): boolean {
+  return !!(process.env.ANTHROPIC_API_KEY || process.env.GROQ_API_KEY);
+}
+
+// ── Anthropic path ────────────────────────────────────────────────────────────
+
+let _anthropic: Anthropic | null = null;
+
+function getAnthropicClient(): Anthropic {
+  if (!_anthropic) {
+    _anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  }
+  return _anthropic;
+}
+
+async function callAnthropic(system: string, message: string, maxTokens: number, sonnet: boolean): Promise<string> {
+  const client = getAnthropicClient();
+  const response = await client.messages.create({
+    model: sonnet ? 'claude-sonnet-4-6' : 'claude-haiku-4-5-20251001',
+    max_tokens: maxTokens,
+    system,
+    messages: [{ role: 'user', content: message }],
+  });
+  return response.content
+    .filter((b): b is Anthropic.TextBlock => b.type === 'text')
+    .map((b) => b.text)
+    .join('');
+}
+
+// ── Groq path (OpenAI-compatible) ─────────────────────────────────────────────
+
+async function callGroq(system: string, message: string, maxTokens: number): Promise<string> {
+  const apiKey = process.env.GROQ_API_KEY;
+  if (!apiKey) throw new Error('GROQ_API_KEY not configured');
+
+  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: 'llama-3.3-70b-versatile',
+      max_tokens: maxTokens,
+      messages: [
+        { role: 'system', content: system },
+        { role: 'user', content: message },
+      ],
+    }),
+  });
+
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Groq API error ${res.status}: ${body}`);
+  }
+
+  const data = await res.json() as { choices: Array<{ message: { content: string } }> };
+  return data.choices[0]?.message?.content ?? '';
+}
+
+// ── Public API ────────────────────────────────────────────────────────────────
 
 export async function callAgent(
   agent: string,
@@ -72,26 +135,12 @@ export async function callAgent(
   extraContext?: string,
   maxTokens = 1024
 ): Promise<string> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    throw new Error('ANTHROPIC_API_KEY not configured');
-  }
-
   const systemPrompt = AGENT_SYSTEM_PROMPTS[agent] ?? AGENT_SYSTEM_PROMPTS.heidi;
   const system = extraContext ? `${systemPrompt}\n\nAdditional context:\n${extraContext}` : systemPrompt;
+  const provider = resolveProvider();
 
-  const client = getClient();
-  const response = await client.messages.create({
-    model: 'claude-haiku-4-5-20251001',
-    max_tokens: maxTokens,
-    system,
-    messages: [{ role: 'user', content: message }],
-  });
-
-  return response.content
-    .filter((b): b is Anthropic.TextBlock => b.type === 'text')
-    .map((b) => b.text)
-    .join('');
+  if (provider === 'groq') return callGroq(system, message, maxTokens);
+  return callAnthropic(system, message, maxTokens, false);
 }
 
 export async function callAgentSonnet(
@@ -100,28 +149,11 @@ export async function callAgentSonnet(
   extraContext?: string,
   maxTokens = 2048
 ): Promise<string> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    throw new Error('ANTHROPIC_API_KEY not configured');
-  }
-
   const systemPrompt = AGENT_SYSTEM_PROMPTS[agent] ?? AGENT_SYSTEM_PROMPTS.heidi;
   const system = extraContext ? `${systemPrompt}\n\nAdditional context:\n${extraContext}` : systemPrompt;
+  const provider = resolveProvider();
 
-  const client = getClient();
-  const response = await client.messages.create({
-    model: 'claude-sonnet-4-6',
-    max_tokens: maxTokens,
-    system,
-    messages: [{ role: 'user', content: message }],
-  });
-
-  return response.content
-    .filter((b): b is Anthropic.TextBlock => b.type === 'text')
-    .map((b) => b.text)
-    .join('');
-}
-
-export function isClaudeAvailable(): boolean {
-  return !!process.env.ANTHROPIC_API_KEY;
+  // Groq doesn't have a "sonnet" tier — llama-3.3-70b is the strongest available
+  if (provider === 'groq') return callGroq(system, message, maxTokens);
+  return callAnthropic(system, message, maxTokens, true);
 }
