@@ -45,11 +45,14 @@ export default async function handler(req, res) {
       console.error('Auto-heal RPC error:', healError);
     }
 
-    // Fetch from Supabase system_dashboard view
-    const { data: dash, error: dashError } = await supabase
-      .from('system_dashboard')
-      .select('*')
-      .single();
+    // Fetch dashboard view and infrastructure health snapshot in parallel
+    const [
+      { data: dash, error: dashError },
+      { data: infra }
+    ] = await Promise.all([
+      supabase.from('system_dashboard').select('*').single(),
+      supabase.from('infrastructure_health').select('*').eq('id', 'singleton').single()
+    ]);
 
     if (dashError) {
       console.error('Dashboard fetch error:', dashError);
@@ -95,6 +98,15 @@ export default async function handler(req, res) {
         reason: dash.escalation_reason
       },
       auto_heal: heal || { healed: 0, actions: [] },
+      infrastructure: infra ? {
+        overall:    infra.overall,
+        efficiency: infra.efficiency,
+        power:      infra.power,
+        thermal:    infra.thermal,
+        scaffold:   infra.scaffold,
+        revenue:    infra.revenue,
+        updated_at: infra.updated_at
+      } : null,
       last_check: dash.last_check,
       timestamp: new Date().toISOString(),
       vercel: true

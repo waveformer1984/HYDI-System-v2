@@ -1286,7 +1286,7 @@ class LocalModelAdapter extends EventEmitter {
       if (process.platform === 'win32') {
         const { execSync } = require('child_process');
         // Use WMIC for Windows
-        const output = execSync('wmic /namespace:\\\\\root\\wmi PATH MSAcpi_ThermalZoneTemperature get CurrentTemperature', { encoding: 'utf8' });
+        const output = execSync('wmic /namespace:\\\\\root\\wmi PATH MSAcpi_ThermalZoneTemperature get CurrentTemperature 2>nul', { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] });
         const temps = output.split('\n')
           .filter(line => line.trim() && !isNaN(parseInt(line.trim())))
           .map(line => (parseInt(line.trim()) - 2732) / 10); // Kelvin*10 to Celsius

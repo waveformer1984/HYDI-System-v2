@@ -1,164 +1,113 @@
-/**
- * SELF-HEALING SERVICE
- * When a loop or task fails, queries the Traces API for context,
- * builds a structured correction prompt, and calls Claude to
- * generate an actionable corrective strategy.
- */
+'use strict';
 
-async function callClaude(systemPrompt, userContent) {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    console.warn('[SELF-HEAL] ANTHROPIC_API_KEY not set — returning no-op correction');
-    return null;
-  }
-
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({
-      model: 'claude-opus-4-7',
-      max_tokens: 1024,
-      system: systemPrompt,
-      messages: [{ role: 'user', content: userContent }],
-    }),
-  });
-
-  if (!res.ok) {
-    console.error(`[SELF-HEAL] Claude API error: ${res.status}`);
-    return null;
-  }
-
-  const data = await res.json();
-  const textBlock = data.content?.find(b => b.type === 'text');
-  return textBlock?.text ?? null;
-}
-
-async function fetchRecentTraces(limit = 5) {
-  const tracesBase = process.env.HYDI_TRACES_URL || 'http://localhost:3000/api/traces';
-  try {
-    const res = await fetch(`${tracesBase}?sample=${limit}`, {
-      signal: AbortSignal.timeout(5000),
-    });
-    if (!res.ok) return [];
-    const data = await res.json();
-    return data.traces ?? data ?? [];
-  } catch {
-    return [];
-  }
-}
+const https = require('https');
 
 class SelfHealingService {
-  /**
-   * Called when a loop completes but measurement.success === false.
-   * Returns a corrective instruction object or null if nothing actionable.
-   *
-   * @param {object} loopResult - full result from executeHeidiLoop()
-   * @returns {Promise<{correctedTask: object, reasoning: string}|null>}
-   */
-  async diagnoseAndCorrect(loopResult) {
-    const { task, action, measurement, decision, reflection, loopId } = loopResult;
+  constructor(config = {}) {
+    this._destroyed = false;
+    this.config = {
+      model: config.model || 'claude-3-haiku-20240307',
+      maxTokens: config.maxTokens || 1024,
+      apiHost: config.apiHost || 'api.anthropic.com',
+      apiPath: config.apiPath || '/v1/messages',
+      ...config,
+    };
+  }
 
-    const recentTraces = await fetchRecentTraces(5);
-    const driftingTraces = recentTraces.filter(t => {
-      const score = t.determinism_score ?? t.score ?? 1;
-      return score < 0.95;
-    });
-
-    const userContent = JSON.stringify({
-      failed_task: {
-        type: task,
-        loopId,
-        decision_strategy: decision?.strategy,
-        decision_model: decision?.model,
-        action_status: action?.status,
-        action_error: action?.error,
-      },
-      measurement: {
-        success: measurement?.success,
-        error: measurement?.error,
-        quality: measurement?.quality,
-        latency_ms: measurement?.latency,
-      },
-      reflection_lessons: reflection?.lessonsLearned ?? [],
-      recent_drift_events: driftingTraces.slice(0, 3).map(t => ({
-        event_id: t.event_id ?? t.id,
-        determinism_score: t.determinism_score ?? t.score,
-        drift_fields: t.drift_fields,
-      })),
-    }, null, 2);
-
-    const rawText = await callClaude(
-      `You are the self-healing engine for the HYDI/Heidi autonomous system.
-A task loop just failed. Your job is to:
-1. Identify the root cause from the failure context and recent trace drift data.
-2. Produce a corrected task specification that avoids the failure mode.
-3. Suggest a strategy change (model, approach, or parameters).
-
-Respond ONLY with valid JSON in this exact shape:
-{
-  "root_cause": "one sentence",
-  "corrected_task": {
-    "type": "...",
-    "strategy": "local | external | hybrid",
-    "model": "...",
-    "instruction": "...",
-    "priority": "normal | high | critical"
-  },
-  "reasoning": "one paragraph"
-}`,
-      userContent
-    );
-
-    if (!rawText) return null;
+  async diagnoseAndCorrect(issue) {
+    if (this._destroyed) return null;
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) return null;
 
     try {
-      const jsonMatch = rawText.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) return null;
-      const parsed = JSON.parse(jsonMatch[0]);
-      console.log(`[SELF-HEAL] Correction for ${loopId}: ${parsed.root_cause}`);
-      return parsed;
-    } catch (e) {
-      console.error('[SELF-HEAL] Failed to parse Claude response:', e.message);
+      const result = await this._callApi({
+        model: this.config.model,
+        max_tokens: this.config.maxTokens,
+        messages: [{ role: 'user', content: `Diagnose and correct:\n${JSON.stringify(issue)}` }],
+      }, apiKey);
+      if (!this._destroyed) console.log('[SELF-HEALING] Diagnosis complete');
+      return result;
+    } catch (err) {
+      if (!this._destroyed) console.error('[SELF-HEALING] diagnoseAndCorrect failed:', err.message);
       return null;
     }
   }
 
-  /**
-   * Called from the catch block of executeLoop() for hard failures.
-   * Returns a retry-ready task object or null.
-   */
-  async healFromCrash(task, errorMessage, loopId) {
-    const recentTraces = await fetchRecentTraces(3);
+  async healFromCrash(error) {
+    if (this._destroyed) return null;
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) return null;
 
-    const userContent = JSON.stringify({
-      crashed_task: { type: task.type, loopId },
-      error: errorMessage,
-      recent_traces: recentTraces.slice(0, 3),
-    }, null, 2);
-
-    const rawText = await callClaude(
-      `You are the HYDI crash recovery engine. A task loop crashed with an unhandled exception.
-Respond ONLY with valid JSON:
-{
-  "should_retry": true | false,
-  "corrected_task": { "type": "...", "strategy": "...", "instruction": "...", "priority": "..." },
-  "reasoning": "one sentence"
-}`,
-      userContent
-    );
-
-    if (!rawText) return null;
+    const errorMsg = error instanceof Error ? error.message : String(error);
     try {
-      const jsonMatch = rawText.match(/\{[\s\S]*\}/);
-      return jsonMatch ? JSON.parse(jsonMatch[0]) : null;
-    } catch {
+      const result = await this._callApi({
+        model: this.config.model,
+        max_tokens: this.config.maxTokens,
+        messages: [{ role: 'user', content: `Service crashed: ${errorMsg}\nSuggest recovery.` }],
+      }, apiKey);
+      if (!this._destroyed) console.log('[SELF-HEALING] Crash recovery strategy generated');
+      return result;
+    } catch (err) {
+      if (!this._destroyed) console.error('[SELF-HEALING] healFromCrash failed:', err.message);
       return null;
     }
+  }
+
+  _callApi(body, apiKey) {
+    return new Promise((resolve, reject) => {
+      if (this._destroyed) { resolve(null); return; }
+
+      const data = JSON.stringify(body);
+      const options = {
+        hostname: this.config.apiHost,
+        path: this.config.apiPath,
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'content-length': Buffer.byteLength(data),
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+        },
+      };
+
+      const req = https.request(options, (res) => {
+        if (res.statusCode !== 200) {
+          res.resume();
+          resolve(null);
+          return;
+        }
+        let raw = '';
+        res.on('data', (chunk) => { raw += chunk; });
+        res.on('end', () => {
+          try { resolve(JSON.parse(raw)); } catch { resolve(null); }
+        });
+      });
+
+      req.on('error', (err) => {
+        if (!this._destroyed) reject(err);
+        else resolve(null);
+      });
+
+      req.write(data);
+      req.end();
+    });
+  }
+
+  destroy() {
+    this._destroyed = true;
+  }
+
+  // Static convenience methods: allow calling on the class directly
+  // (e.g. `const svc = require('./SelfHealingService'); svc.healFromCrash(...)`)
+  static async healFromCrash(task, errorMessage, loopId) {
+    const instance = new SelfHealingService();
+    return instance.healFromCrash(errorMessage);
+  }
+
+  static async diagnoseAndCorrect(issue) {
+    const instance = new SelfHealingService();
+    return instance.diagnoseAndCorrect(issue);
   }
 }
 
-module.exports = new SelfHealingService();
+module.exports = SelfHealingService;

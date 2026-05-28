@@ -1,11 +1,5 @@
 # ProtoForge → Execution + Revenue Layer (Kilo Node)
 
-[![Unit Tests](https://github.com/waveformer1984/HYDI-System-v2/actions/workflows/unit-tests.yml/badge.svg)](https://github.com/waveformer1984/HYDI-System-v2/actions/workflows/unit-tests.yml)
-[![CodeQL](https://github.com/waveformer1984/HYDI-System-v2/actions/workflows/codeql.yml/badge.svg)](https://github.com/waveformer1984/HYDI-System-v2/actions/workflows/codeql.yml)
-[![codecov](https://codecov.io/gh/waveformer1984/HYDI-System-v2/branch/clean-main/graph/badge.svg)](https://codecov.io/gh/waveformer1984/HYDI-System-v2)
-![Node](https://img.shields.io/badge/node-%3E%3D20-brightgreen)
-![License](https://img.shields.io/badge/license-private-lightgrey)
-
 This system turns ProtoForge into an executable, monetizable system by managing infrastructure, syncing code and modules, handling event persistence, and enabling revenue-capable endpoints.
 
 ## Features

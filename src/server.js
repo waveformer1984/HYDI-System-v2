@@ -54,12 +54,12 @@ console.log('[CASCADE V2] Features: Schema Lock | Fingerprinting | Confidence Sc
 
 // Initialize system enforcement modules
 const { readinessGate } = require('../modules/readiness-gate');
-// const noSilentSuccessEnforcer = require('../modules/no-silent-success-enforcer'); // Temporarily disabled (iconv-lite error)
-// const { systemContractGuard } = require('../modules/system-contract-guard'); // Temporarily disabled
+const noSilentSuccessEnforcer = require('../modules/no-silent-success-enforcer');
+const { systemContractGuard } = require('../modules/system-contract-guard');
 
 // Start enforcement systems
 readinessGate.start();
-// noSilentSuccessEnforcer.initialize(); // Temporarily disabled
+noSilentSuccessEnforcer.initialize();
 
 console.log('[SYSTEM] Enforcement modules initialized');
 
@@ -722,7 +722,7 @@ infrastructure.on('infrastructure_alert', (alert) => {
 
 infrastructure.on('revenue_tracked', (revenue) => {
   console.log(`[INFRA] Revenue Event: $${revenue.amount} from ${revenue.source} (${revenue.layer})`);
-  
+
   // Broadcast revenue events
   if (ursulaSSE && ursulaSSE.getSubscriberCount() > 0) {
     ursulaSSE.broadcast({
@@ -730,6 +730,41 @@ infrastructure.on('revenue_tracked', (revenue) => {
       message: `Revenue: $${revenue.amount} from ${revenue.source}`,
       data: revenue
     });
+  }
+});
+
+// Bridge infrastructure health snapshot → Supabase every 30 s
+// so Ursula's dashboard reflects Digital Twin + 48V microgrid state
+let _infraSyncErrorLogged = false;
+infrastructure.on('health_update', async (health) => {
+  try {
+    const { error } = await supabase
+      .from('infrastructure_health')
+      .upsert({
+        id: 'singleton',
+        overall:    health.overall,
+        power:      health.power,
+        thermal:    health.thermal,
+        scaffold:   health.scaffold,
+        revenue:    health.revenue,
+        efficiency: health.efficiency,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'id' });
+
+    if (error) {
+      if (!_infraSyncErrorLogged) {
+        console.error('[INFRA] Failed to sync health to Supabase:', error.message);
+        console.error('[INFRA] Run: npx supabase db push  to create the infrastructure_health table');
+        _infraSyncErrorLogged = true;
+      }
+    } else {
+      _infraSyncErrorLogged = false; // reset if it recovers
+    }
+  } catch (err) {
+    if (!_infraSyncErrorLogged) {
+      console.error('[INFRA] health_update bridge error:', err.message);
+      _infraSyncErrorLogged = true;
+    }
   }
 });
 
@@ -1682,12 +1717,8 @@ process.on('SIGTERM', async () => {
   process.exit(0);
 });
 
-// Start the server
-app.listen(PORT, () => {
-  console.log(`[SERVER] HYDI Server listening on port ${PORT}`);
-  console.log(`[SERVER] Health check: http://localhost:${PORT}/health`);
-  console.log(`[SERVER] Heidi insights: http://localhost:${PORT}/heidi/insights`);
-});
+// server.listen(PORT) above (line ~1542) is the authoritative listener — it wraps app
+// with an http.Server so WebSocket support works. Do not add a second app.listen here.
 
 // Export app for testing
 module.exports = app;

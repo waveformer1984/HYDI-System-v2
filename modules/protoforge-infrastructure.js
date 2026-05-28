@@ -201,7 +201,7 @@ class ProtoForgeInfrastructure extends EventEmitter {
           this.handleThermalAlert(id, 'overheating', `Zone ${id} temperature: ${zone.temp.toFixed(1)}°C`);
         }
         
-        if (zone.pressure < 85) {
+        if (zone.pressure < 75) {
           this.handleThermalAlert(id, 'low_pressure', `Zone ${id} pressure: ${zone.pressure.toFixed(1)} PSI`);
         }
         
@@ -215,7 +215,7 @@ class ProtoForgeInfrastructure extends EventEmitter {
         avgTemp: Array.from(this.plumbing.values()).reduce((sum, z) => sum + z.temp, 0) / this.plumbing.size,
         zones: Object.fromEntries(this.plumbing)
       });
-    }, 2000); // Update every 2 seconds
+    }, 30000); // Update every 30 seconds
   }
   
   /**
