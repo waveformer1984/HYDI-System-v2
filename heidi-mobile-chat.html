@@ -121,6 +121,7 @@
         .push-banner.show { transform: translateY(0); }
         .push-banner.level-warning { border-color: rgba(245,158,11,0.5); }
         .push-banner.level-critical { border-color: rgba(239,68,68,0.5); }
+        .push-banner.level-briefing { border-color: rgba(251,191,36,0.4); background: linear-gradient(135deg, var(--bg-elevated), rgba(251,191,36,0.05)); }
         .push-banner-icon { font-size: 22px; flex-shrink: 0; }
         .push-banner-content { flex: 1; min-width: 0; }
         .push-banner-title { font-size: 13px; font-weight: 600; color: var(--text-primary); }
@@ -234,7 +235,18 @@ const DEVICE_KEY = 'heidi-device-id';
 
 // ── Push alerts ──────────────────────────────────────────────────────────────
 let pushSource = null, browserNotifs = false, pushBannerTimer = null;
-const PUSH_ICONS = { info: '&#x1F514;', warning: '&#x26A0;&#xFE0F;', critical: '&#x1F6A8;', hydi_activity: '&#x1F4E1;' };
+const PUSH_ICONS = {
+    info: '&#x1F514;',
+    warning: '&#x26A0;&#xFE0F;',
+    critical: '&#x1F6A8;',
+    briefing: '&#x2600;&#xFE0F;',
+    daily_briefing: '&#x2600;&#xFE0F;',
+    hydi_activity: '&#x1F4E1;',
+    hydi_offline: '&#x1F4F4;',
+    hydi_recovered: '&#x1F7E2;',
+    hydi_silence: '&#x1F910;',
+    hydi_status_change: '&#x26A0;&#xFE0F;'
+};
 
 function connectPushStream() {
     if (pushSource) return;
@@ -256,7 +268,8 @@ function handlePushEvent(ev) {
     if (document.visibilityState !== 'visible' && browserNotifs && 'Notification' in window && Notification.permission === 'granted') {
         try { new Notification(title || 'Heidi', { body: body || '', icon: '/icon.svg', tag: type }); } catch {}
     }
-    addMsg('system', (PUSH_ICONS[level || type] || PUSH_ICONS.info) + ' ' + (title || type) + (body ? ': ' + body : ''));
+    const iconKey = type || level || 'info';
+    addMsg('system', (PUSH_ICONS[iconKey] || PUSH_ICONS[level] || PUSH_ICONS.info) + ' ' + (title || type) + (body ? ': ' + body : ''));
 }
 
 function showPushBanner(title, body, level) {
@@ -281,7 +294,7 @@ async function toggleBrowserNotifs() {
             browserNotifs = true;
             const btn = document.getElementById('bellBtn');
             btn.innerHTML = '&#x1F514;'; btn.classList.add('active');
-            addMsg('system', '&#x1F514; Browser notifications enabled — you’ll get alerts even when this tab is in the background.');
+            addMsg('system', '&#x1F514; Browser notifications enabled — you\'ll get alerts even when this tab is in the background.');
         } else {
             showAlert('Notification permission denied', 'warning');
         }

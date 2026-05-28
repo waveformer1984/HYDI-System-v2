@@ -353,10 +353,14 @@ app.post('/api/memory/:deviceId', async (req, res) => {
 // ── Push notification broadcast (SSE) ────────────────────────────────────────
 // HYDI or any service can POST to /api/events/push to alert all connected clients.
 // The client connects to /api/events/stream (SSE) for real-time delivery.
-// watchHydiEvents() also auto-detects new HYDI event counts every 15 seconds.
+// watchHydiEvents() auto-detects HYDI state changes every 15 seconds.
 
 const pushClients = new Set();
 let lastEventCount = -1;
+let lastHydiOnline = false;
+let lastHydiOpStatus = null;
+let lastEventTime = 0;
+let silenceAlertSent = false;
 
 function broadcastPush(event) {
     if (!pushClients.size) return;
@@ -387,25 +391,165 @@ app.post('/api/events/push', (req, res) => {
     res.json({ ok: true, clients: pushClients.size });
 });
 
+async function analyzeHydiState(status, delta) {
+    try {
+        const prompt = delta !== null
+            ? `HYDI system: ${status.totalEvents} total events, ${delta} new in last 15s, status=${status.status}, db=${status.database}. Summarize what is happening in one concise sentence.`
+            : `HYDI system: status=${status.status}, db=${status.database}, events=${status.totalEvents}. Describe the current state in one concise sentence.`;
+        const r = await fetch(`${OLLAMA_URL}/api/generate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ model: DEFAULT_MODEL, prompt, stream: false, options: { temperature: 0.4, num_predict: 60 } }),
+            signal: AbortSignal.timeout(12000)
+        });
+        if (!r.ok) return null;
+        const data = await r.json();
+        return data.response?.trim() || null;
+    } catch { return null; }
+}
+
 async function watchHydiEvents() {
     try {
         const status = await fetchHydiStatus();
-        if (status?.totalEvents !== undefined) {
-            if (lastEventCount >= 0 && status.totalEvents > lastEventCount) {
-                const delta = status.totalEvents - lastEventCount;
+        const now = Date.now();
+
+        if (!status) {
+            if (lastHydiOnline) {
+                lastHydiOnline = false;
                 broadcastPush({
-                    type: 'hydi_activity',
-                    title: 'HYDI Activity',
-                    body: `${delta} new event${delta !== 1 ? 's' : ''} · total: ${status.totalEvents.toLocaleString()}`,
-                    level: status.status === 'operational' ? 'info' : 'warning',
-                    payload: { total: status.totalEvents, delta, hydi_status: status.status },
-                    ts: Date.now()
+                    type: 'hydi_offline',
+                    title: 'HYDI Offline',
+                    body: 'HYDI system is not responding',
+                    level: 'warning',
+                    payload: {},
+                    ts: now
                 });
             }
-            lastEventCount = status.totalEvents;
+        } else {
+            if (!lastHydiOnline) {
+                lastHydiOnline = true;
+                lastHydiOpStatus = status.status;
+                broadcastPush({
+                    type: 'hydi_recovered',
+                    title: 'HYDI Online',
+                    body: `System recovered · status: ${status.status}`,
+                    level: 'info',
+                    payload: { status: status.status },
+                    ts: now
+                });
+            }
+
+            if (lastHydiOpStatus !== null && lastHydiOpStatus !== status.status) {
+                const analysis = await analyzeHydiState(status, null);
+                broadcastPush({
+                    type: 'hydi_status_change',
+                    title: 'HYDI Status Changed',
+                    body: analysis || `${lastHydiOpStatus} → ${status.status}`,
+                    level: status.status === 'operational' ? 'info' : 'warning',
+                    payload: { previous: lastHydiOpStatus, current: status.status },
+                    ts: now
+                });
+            }
+            lastHydiOpStatus = status.status;
+
+            if (status.totalEvents !== undefined) {
+                if (lastEventCount >= 0 && status.totalEvents > lastEventCount) {
+                    const delta = status.totalEvents - lastEventCount;
+                    lastEventTime = now;
+                    silenceAlertSent = false;
+
+                    if (delta >= 20) {
+                        const analysis = await analyzeHydiState(status, delta);
+                        broadcastPush({
+                            type: 'hydi_activity',
+                            title: `HYDI Burst: +${delta} events`,
+                            body: analysis || `${delta} new events · total: ${status.totalEvents.toLocaleString()}`,
+                            level: 'warning',
+                            payload: { total: status.totalEvents, delta, hydi_status: status.status, burst: true },
+                            ts: now
+                        });
+                    } else {
+                        broadcastPush({
+                            type: 'hydi_activity',
+                            title: 'HYDI Activity',
+                            body: `${delta} new event${delta !== 1 ? 's' : ''} · total: ${status.totalEvents.toLocaleString()}`,
+                            level: status.status === 'operational' ? 'info' : 'warning',
+                            payload: { total: status.totalEvents, delta, hydi_status: status.status },
+                            ts: now
+                        });
+                    }
+                } else if (lastEventCount >= 0 && lastEventTime > 0 && !silenceAlertSent) {
+                    const silentMs = now - lastEventTime;
+                    if (silentMs >= 30 * 60 * 1000) {
+                        silenceAlertSent = true;
+                        broadcastPush({
+                            type: 'hydi_silence',
+                            title: 'HYDI Quiet',
+                            body: `No new events for ${Math.round(silentMs / 60000)} minutes`,
+                            level: 'info',
+                            payload: { silent_ms: silentMs, total: status.totalEvents },
+                            ts: now
+                        });
+                    }
+                }
+
+                if (lastEventCount === -1) lastEventTime = now;
+                lastEventCount = status.totalEvents;
+            }
         }
     } catch {}
     setTimeout(watchHydiEvents, 15000);
+}
+
+function scheduleDailyBriefing() {
+    const hour = parseInt(process.env.BRIEFING_HOUR || '8', 10);
+    const now = new Date();
+    const next = new Date(now);
+    next.setHours(hour, 0, 0, 0);
+    if (next <= now) next.setDate(next.getDate() + 1);
+    const delay = next - now;
+    console.log(`📅 Daily briefing scheduled for ${next.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`);
+    setTimeout(async () => {
+        await sendDailyBriefing();
+        scheduleDailyBriefing();
+    }, delay);
+}
+
+async function sendDailyBriefing() {
+    if (!pushClients.size) return;
+    try {
+        const status = await fetchHydiStatus();
+        const hydiSummary = status
+            ? `HYDI status is ${status.status}, database is ${status.database}, and there have been ${status.totalEvents} total events`
+            : 'HYDI is currently offline';
+        const prompt = `You are Heidi, the HYDI ProtoForge AI assistant. Write a brief morning briefing in 2-3 sentences. Current system context: ${hydiSummary}. Current time: ${new Date().toLocaleString()}. Be warm, concise, and mention anything noteworthy.`;
+        const r = await fetch(`${OLLAMA_URL}/api/generate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ model: DEFAULT_MODEL, prompt, stream: false, options: { temperature: 0.6, num_predict: 100 } }),
+            signal: AbortSignal.timeout(20000)
+        });
+        const briefingText = r.ok
+            ? ((await r.json()).response?.trim() || 'Good morning! HYDI system is running.')
+            : 'Good morning! Daily HYDI system check complete.';
+        broadcastPush({
+            type: 'daily_briefing',
+            title: 'Good Morning',
+            body: briefingText,
+            level: 'briefing',
+            payload: { hydi_status: status?.status },
+            ts: Date.now()
+        });
+    } catch {
+        broadcastPush({
+            type: 'daily_briefing',
+            title: 'Good Morning',
+            body: 'Daily briefing — HYDI system is running.',
+            level: 'briefing',
+            payload: {},
+            ts: Date.now()
+        });
+    }
 }
 
 // ── App routes ────────────────────────────────────────────────────────────────
@@ -605,9 +749,10 @@ server.listen(PORT, '0.0.0.0', async () => {
         if (r.ok) { const h = await r.json(); console.log(`✅ HYDI online at ${HYDI_URL} — db: ${h.database}`); }
         else console.log(`ℹ️  HYDI not found at ${HYDI_URL} (set HYDI_URL env var to connect)`);
     } catch { console.log(`ℹ️  HYDI not found at ${HYDI_URL} (set HYDI_URL env var to connect)`); }
-    console.log('📡 Push alerts: ready (POST /api/events/push to broadcast)');
+    console.log('📡 Push alerts: ready | 🤖 HYDI observer: active | 📅 Daily briefing: scheduled');
     console.log('');
     watchHydiEvents();
+    scheduleDailyBriefing();
 });
 
 process.on('SIGINT', () => { console.log('\n🛑 Shutting down Heidi...'); server.close(() => process.exit(0)); });
