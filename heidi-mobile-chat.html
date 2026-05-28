@@ -12,95 +12,32 @@
     <title>Heidi</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-
         :root {
-            --bg-primary: #0a0a0f;
-            --bg-secondary: #12121a;
-            --bg-elevated: #1a1a24;
-            --accent: #64ffda;
-            --accent-dim: rgba(100, 255, 218, 0.1);
-            --text-primary: #e2e8f0;
-            --text-secondary: #94a3b8;
-            --text-muted: #64748b;
-            --status-ok: #10b981;
-            --status-warning: #f59e0b;
-            --status-critical: #ef4444;
-            --status-unknown: #6b7280;
+            --bg-primary: #0a0a0f; --bg-secondary: #12121a; --bg-elevated: #1a1a24;
+            --accent: #64ffda; --accent-dim: rgba(100,255,218,0.1);
+            --text-primary: #e2e8f0; --text-secondary: #94a3b8; --text-muted: #64748b;
+            --status-ok: #10b981; --status-warning: #f59e0b; --status-critical: #ef4444; --status-unknown: #6b7280;
         }
-
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: var(--bg-primary);
-            color: var(--text-primary);
-            height: 100vh;
-            height: 100dvh;
-            overflow: hidden;
-            display: flex;
-            flex-direction: column;
-        }
-
-        .header {
-            background: var(--bg-secondary);
-            border-bottom: 1px solid rgba(255,255,255,0.05);
-            padding: 12px 16px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            position: sticky;
-            top: 0;
-            z-index: 100;
-            backdrop-filter: blur(20px);
-            flex-shrink: 0;
-        }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg-primary); color: var(--text-primary); height: 100vh; height: 100dvh; overflow: hidden; display: flex; flex-direction: column; }
+        .header { background: var(--bg-secondary); border-bottom: 1px solid rgba(255,255,255,0.05); padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; backdrop-filter: blur(20px); flex-shrink: 0; }
         .header-left { display: flex; align-items: center; gap: 12px; }
         .header-right { display: flex; align-items: center; gap: 8px; }
-        .heidi-avatar {
-            width: 40px; height: 40px; border-radius: 50%;
-            background: linear-gradient(135deg, var(--accent), #3b82f6);
-            display: flex; align-items: center; justify-content: center;
-            font-size: 20px; box-shadow: 0 0 20px rgba(100,255,218,0.3); flex-shrink: 0;
-        }
+        .heidi-avatar { width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(135deg, var(--accent), #3b82f6); display: flex; align-items: center; justify-content: center; font-size: 20px; box-shadow: 0 0 20px rgba(100,255,218,0.3); flex-shrink: 0; }
         .header-info h1 { font-size: 16px; font-weight: 600; }
-        .header-info .status {
-            font-size: 12px; color: var(--text-secondary);
-            display: flex; align-items: center; gap: 4px;
-        }
-        .status-dot {
-            width: 6px; height: 6px; border-radius: 50%;
-            background: var(--status-ok); animation: pulse 2s infinite; flex-shrink: 0;
-        }
+        .header-info .status { font-size: 12px; color: var(--text-secondary); display: flex; align-items: center; gap: 4px; }
+        .status-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--status-ok); animation: pulse 2s infinite; flex-shrink: 0; }
         .status-dot.warning { background: var(--status-warning); }
-        .status-dot.critical { background: var(--status-critical); }
         .status-dot.off { background: var(--status-unknown); animation: none; }
         @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
-
-        .tts-btn {
-            background: none; border: none; font-size: 18px; cursor: pointer;
-            padding: 6px; border-radius: 50%; transition: all 0.2s; line-height: 1;
-            color: var(--text-muted);
-        }
+        .tts-btn { background: none; border: none; font-size: 18px; cursor: pointer; padding: 6px; border-radius: 50%; transition: all 0.2s; line-height: 1; color: var(--text-muted); }
         .tts-btn.active { color: var(--accent); background: var(--accent-dim); }
-
-        .health-badge {
-            padding: 4px 10px; border-radius: 12px; font-size: 11px; font-weight: 500;
-            text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap;
-        }
+        .health-badge { padding: 4px 10px; border-radius: 12px; font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; }
         .health-badge.ok { background: rgba(16,185,129,0.2); color: var(--status-ok); }
         .health-badge.warning { background: rgba(245,158,11,0.2); color: var(--status-warning); }
         .health-badge.offline { background: rgba(107,114,128,0.2); color: var(--status-unknown); }
-
-        .health-strip {
-            background: var(--bg-secondary);
-            border-bottom: 1px solid rgba(255,255,255,0.05);
-            padding: 8px 16px; display: flex; gap: 10px;
-            overflow-x: auto; scrollbar-width: none; flex-shrink: 0;
-        }
+        .health-strip { background: var(--bg-secondary); border-bottom: 1px solid rgba(255,255,255,0.05); padding: 8px 16px; display: flex; gap: 10px; overflow-x: auto; scrollbar-width: none; flex-shrink: 0; }
         .health-strip::-webkit-scrollbar { display: none; }
-        .health-metric {
-            display: flex; align-items: center; gap: 6px;
-            padding: 6px 12px; background: var(--bg-elevated);
-            border-radius: 8px; white-space: nowrap; font-size: 12px;
-        }
+        .health-metric { display: flex; align-items: center; gap: 6px; padding: 6px 12px; background: var(--bg-elevated); border-radius: 8px; white-space: nowrap; font-size: 12px; }
         .health-metric .icon { font-size: 14px; }
         .health-metric .value { font-weight: 600; }
         .health-metric .label { color: var(--text-muted); }
@@ -108,212 +45,78 @@
         .health-metric.hydi-offline .value { color: var(--text-muted); }
 
         /* HYDI system panel */
-        .system-panel {
-            background: var(--bg-secondary);
-            border-bottom: 1px solid rgba(255,255,255,0.05);
-            flex-shrink: 0;
-        }
-        .system-panel-header {
-            display: flex; align-items: center; gap: 8px;
-            padding: 8px 16px; cursor: pointer; user-select: none;
-            font-size: 12px; color: var(--text-secondary);
-            transition: background 0.15s;
-        }
-        .system-panel-header:active { background: rgba(255,255,255,0.04); }
+        .system-panel { background: var(--bg-secondary); border-bottom: 1px solid rgba(255,255,255,0.05); flex-shrink: 0; }
+        .system-panel-header { display: flex; align-items: center; gap: 8px; padding: 8px 16px; cursor: pointer; user-select: none; font-size: 12px; color: var(--text-secondary); }
         .system-panel-title { font-weight: 600; flex: 1; }
-        .system-panel-badge {
-            padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: 600;
-            text-transform: uppercase;
-        }
+        .system-panel-badge { padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: 600; text-transform: uppercase; }
         .system-panel-badge.online { background: rgba(16,185,129,0.2); color: var(--status-ok); }
         .system-panel-badge.offline { background: rgba(107,114,128,0.15); color: var(--text-muted); }
         .system-panel-chevron { font-size: 10px; transition: transform 0.2s; }
         .system-panel-chevron.open { transform: rotate(180deg); }
-        .system-panel-body {
-            padding: 0 16px 12px;
-            display: none;
-        }
+        .system-panel-body { padding: 0 16px 12px; display: none; }
         .system-panel-body.open { display: block; }
-        .system-grid {
-            display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px;
-        }
-        .system-card {
-            background: var(--bg-elevated); border-radius: 8px; padding: 10px 12px;
-        }
+        .system-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+        .system-card { background: var(--bg-elevated); border-radius: 8px; padding: 10px 12px; }
         .system-card-label { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
         .system-card-value { font-size: 14px; font-weight: 600; margin-top: 2px; }
-        .system-card-value.ok { color: var(--status-ok); }
-        .system-card-value.warn { color: var(--status-warning); }
-        .system-card-value.muted { color: var(--text-muted); }
+        .system-card-value.ok { color: var(--status-ok); } .system-card-value.warn { color: var(--status-warning); } .system-card-value.muted { color: var(--text-muted); }
         .system-action-row { display: flex; gap: 8px; }
-        .system-action-btn {
-            flex: 1; padding: 8px; background: var(--accent-dim);
-            border: 1px solid rgba(100,255,218,0.2); border-radius: 8px;
-            color: var(--accent); font-size: 12px; font-weight: 500;
-            cursor: pointer; text-align: center; transition: all 0.2s;
-        }
-        .system-action-btn:active { background: rgba(100,255,218,0.2); }
-        .system-action-btn.secondary {
-            background: var(--bg-elevated); border-color: rgba(255,255,255,0.1);
-            color: var(--text-secondary);
-        }
+        .system-action-btn { flex: 1; padding: 8px; background: var(--accent-dim); border: 1px solid rgba(100,255,218,0.2); border-radius: 8px; color: var(--accent); font-size: 12px; font-weight: 500; cursor: pointer; text-align: center; transition: all 0.2s; }
+        .system-action-btn.secondary { background: var(--bg-elevated); border-color: rgba(255,255,255,0.1); color: var(--text-secondary); }
 
-        .messages-container {
-            flex: 1; overflow-y: auto; padding: 16px;
-            display: flex; flex-direction: column; gap: 12px;
-            scroll-behavior: smooth; overscroll-behavior: contain;
-        }
+        .messages-container { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; scroll-behavior: smooth; overscroll-behavior: contain; }
         .message { max-width: 85%; animation: slideIn 0.25s ease; }
         @keyframes slideIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:none} }
-        .message.user { align-self: flex-end; }
-        .message.heidi { align-self: flex-start; }
-        .message.system { align-self: center; max-width: 95%; }
-        .message.restored { animation: none; }
-        .message-bubble {
-            padding: 12px 16px; border-radius: 18px; font-size: 15px;
-            line-height: 1.55; word-break: break-word; white-space: pre-wrap;
-        }
-        .message.user .message-bubble {
-            background: var(--accent); color: #000; border-bottom-right-radius: 4px;
-        }
-        .message.heidi .message-bubble {
-            background: var(--bg-elevated); border: 1px solid rgba(255,255,255,0.1);
-            border-bottom-left-radius: 4px;
-        }
-        .message.system .message-bubble {
-            background: rgba(100,255,218,0.05); border: 1px solid var(--accent-dim);
-            font-size: 13px; text-align: center; color: var(--text-secondary);
-        }
+        .message.user { align-self: flex-end; } .message.heidi { align-self: flex-start; } .message.system { align-self: center; max-width: 95%; } .message.restored { animation: none; }
+        .message-bubble { padding: 12px 16px; border-radius: 18px; font-size: 15px; line-height: 1.55; word-break: break-word; white-space: pre-wrap; }
+        .message.user .message-bubble { background: var(--accent); color: #000; border-bottom-right-radius: 4px; }
+        .message.heidi .message-bubble { background: var(--bg-elevated); border: 1px solid rgba(255,255,255,0.1); border-bottom-left-radius: 4px; }
+        .message.system .message-bubble { background: rgba(100,255,218,0.05); border: 1px solid var(--accent-dim); font-size: 13px; text-align: center; color: var(--text-secondary); }
         .message-meta { font-size: 11px; color: var(--text-muted); margin-top: 4px; padding: 0 4px; }
         .message.user .message-meta { text-align: right; }
-
-        .streaming-cursor {
-            display: inline-block; width: 2px; height: 1em;
-            background: var(--accent); margin-left: 1px; vertical-align: middle;
-            animation: blink 0.7s step-end infinite;
-        }
+        .streaming-cursor { display: inline-block; width: 2px; height: 1em; background: var(--accent); margin-left: 1px; vertical-align: middle; animation: blink 0.7s step-end infinite; }
         @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
-
-        .action-card {
-            background: var(--bg-elevated); border: 1px solid rgba(255,255,255,0.1);
-            border-radius: 12px; padding: 12px; margin-top: 8px;
-        }
-        .action-card-header {
-            font-size: 12px; font-weight: 600; color: var(--accent);
-            margin-bottom: 8px; display: flex; align-items: center; gap: 6px;
-        }
-        .action-button {
-            width: 100%; padding: 10px;
-            background: var(--accent-dim); border: 1px solid rgba(100,255,218,0.3);
-            border-radius: 8px; color: var(--accent); font-size: 14px; font-weight: 500;
-            cursor: pointer; margin-top: 6px; transition: all 0.2s; text-align: left;
-        }
+        .tool-indicator { display: block; color: var(--accent); font-size: 13px; font-style: italic; padding: 2px 0; opacity: 0.85; }
+        @keyframes tool-pulse { 0%,100%{opacity:0.85} 50%{opacity:0.5} }
+        .tool-indicator.running { animation: tool-pulse 1.2s ease-in-out infinite; }
+        .action-card { background: var(--bg-elevated); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 12px; margin-top: 8px; }
+        .action-card-header { font-size: 12px; font-weight: 600; color: var(--accent); margin-bottom: 8px; }
+        .action-button { width: 100%; padding: 10px; background: var(--accent-dim); border: 1px solid rgba(100,255,218,0.3); border-radius: 8px; color: var(--accent); font-size: 14px; font-weight: 500; cursor: pointer; margin-top: 6px; transition: all 0.2s; text-align: left; }
         .action-button:active { transform: scale(0.98); background: rgba(100,255,218,0.2); }
-
-        .quick-actions {
-            background: var(--bg-secondary); border-top: 1px solid rgba(255,255,255,0.05);
-            padding: 8px 16px; display: flex; gap: 8px;
-            overflow-x: auto; scrollbar-width: none; flex-shrink: 0;
-        }
+        .quick-actions { background: var(--bg-secondary); border-top: 1px solid rgba(255,255,255,0.05); padding: 8px 16px; display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; flex-shrink: 0; }
         .quick-actions::-webkit-scrollbar { display: none; }
-        .quick-action {
-            padding: 7px 14px; background: var(--bg-elevated);
-            border: 1px solid rgba(255,255,255,0.1); border-radius: 16px;
-            font-size: 13px; color: var(--text-secondary); white-space: nowrap;
-            cursor: pointer; transition: all 0.2s; user-select: none;
-        }
+        .quick-action { padding: 7px 14px; background: var(--bg-elevated); border: 1px solid rgba(255,255,255,0.1); border-radius: 16px; font-size: 13px; color: var(--text-secondary); white-space: nowrap; cursor: pointer; transition: all 0.2s; user-select: none; }
         .quick-action:active { background: var(--accent-dim); color: var(--accent); border-color: rgba(100,255,218,0.3); }
         .quick-action.hydi { border-color: rgba(100,255,218,0.2); color: var(--accent); }
-
-        .input-area {
-            background: var(--bg-secondary); border-top: 1px solid rgba(255,255,255,0.05);
-            padding: 12px 16px;
-            padding-bottom: max(12px, env(safe-area-inset-bottom));
-            flex-shrink: 0;
-        }
+        .input-area { background: var(--bg-secondary); border-top: 1px solid rgba(255,255,255,0.05); padding: 12px 16px; padding-bottom: max(12px, env(safe-area-inset-bottom)); flex-shrink: 0; }
         .input-row { display: flex; gap: 8px; align-items: flex-end; }
-        .message-input {
-            flex: 1; background: var(--bg-elevated);
-            border: 1px solid rgba(255,255,255,0.1); border-radius: 20px;
-            padding: 10px 16px; font-size: 15px; color: var(--text-primary);
-            outline: none; max-height: 120px; resize: none; font-family: inherit;
-            transition: border-color 0.2s; line-height: 1.4;
-        }
+        .message-input { flex: 1; background: var(--bg-elevated); border: 1px solid rgba(255,255,255,0.1); border-radius: 20px; padding: 10px 16px; font-size: 15px; color: var(--text-primary); outline: none; max-height: 120px; resize: none; font-family: inherit; transition: border-color 0.2s; line-height: 1.4; }
         .message-input:focus { border-color: var(--accent); }
         .message-input::placeholder { color: var(--text-muted); }
-
-        .icon-btn {
-            width: 44px; height: 44px; border-radius: 50%; border: none;
-            display: flex; align-items: center; justify-content: center;
-            cursor: pointer; transition: all 0.2s; flex-shrink: 0; font-size: 18px;
-        }
-        .icon-btn:active { transform: scale(0.92); }
-        .icon-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+        .icon-btn { width: 44px; height: 44px; border-radius: 50%; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s; flex-shrink: 0; font-size: 18px; }
+        .icon-btn:active { transform: scale(0.92); } .icon-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
         .mic-btn { background: var(--bg-elevated); border: 1px solid rgba(255,255,255,0.1); color: var(--text-secondary); }
-        .mic-btn.listening {
-            background: rgba(239,68,68,0.15); border-color: var(--status-critical);
-            color: var(--status-critical); animation: mic-pulse 1.5s ease-in-out infinite;
-        }
-        @keyframes mic-pulse {
-            0%,100% { box-shadow: 0 0 0 0 rgba(239,68,68,0.4); }
-            50% { box-shadow: 0 0 0 8px rgba(239,68,68,0); }
-        }
+        .mic-btn.listening { background: rgba(239,68,68,0.15); border-color: var(--status-critical); color: var(--status-critical); animation: mic-pulse 1.5s ease-in-out infinite; }
+        @keyframes mic-pulse { 0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,0.4)} 50%{box-shadow:0 0 0 8px rgba(239,68,68,0)} }
         .send-btn { background: var(--accent); }
         .send-btn svg { width: 20px; height: 20px; fill: #000; }
-
-        .model-toggle {
-            position: fixed; bottom: 90px; right: 16px;
-            width: 44px; height: 44px; border-radius: 50%;
-            background: var(--bg-elevated); border: 1px solid rgba(255,255,255,0.15);
-            display: flex; align-items: center; justify-content: center;
-            cursor: pointer; font-size: 18px; z-index: 40; transition: all 0.2s;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.4);
-        }
+        .model-toggle { position: fixed; bottom: 90px; right: 16px; width: 44px; height: 44px; border-radius: 50%; background: var(--bg-elevated); border: 1px solid rgba(255,255,255,0.15); display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 18px; z-index: 40; transition: all 0.2s; box-shadow: 0 4px 12px rgba(0,0,0,0.4); }
         .model-toggle:active { transform: scale(0.9); }
-        .model-selector {
-            position: fixed; bottom: 142px; right: 16px;
-            background: var(--bg-elevated); border: 1px solid rgba(255,255,255,0.12);
-            border-radius: 14px; padding: 8px; display: flex; flex-direction: column;
-            gap: 2px; opacity: 0; pointer-events: none;
-            transform: translateY(8px) scale(0.95); transition: all 0.2s;
-            z-index: 50; min-width: 200px; max-width: 280px; max-height: 300px;
-            overflow-y: auto; box-shadow: 0 8px 32px rgba(0,0,0,0.5);
-        }
+        .model-selector { position: fixed; bottom: 142px; right: 16px; background: var(--bg-elevated); border: 1px solid rgba(255,255,255,0.12); border-radius: 14px; padding: 8px; display: flex; flex-direction: column; gap: 2px; opacity: 0; pointer-events: none; transform: translateY(8px) scale(0.95); transition: all 0.2s; z-index: 50; min-width: 200px; max-width: 280px; max-height: 300px; overflow-y: auto; box-shadow: 0 8px 32px rgba(0,0,0,0.5); }
         .model-selector.show { opacity: 1; pointer-events: auto; transform: none; }
-        .model-selector-header {
-            font-size: 11px; color: var(--text-muted); padding: 4px 8px;
-            text-transform: uppercase; letter-spacing: 0.5px;
-        }
-        .model-option {
-            padding: 10px 12px; border-radius: 8px; font-size: 13px;
-            color: var(--text-secondary); cursor: pointer;
-            display: flex; align-items: center; gap: 8px; transition: background 0.15s;
-        }
+        .model-selector-header { font-size: 11px; color: var(--text-muted); padding: 4px 8px; text-transform: uppercase; letter-spacing: 0.5px; }
+        .model-option { padding: 10px 12px; border-radius: 8px; font-size: 13px; color: var(--text-secondary); cursor: pointer; display: flex; align-items: center; gap: 8px; transition: background 0.15s; }
         .model-option:hover { background: rgba(255,255,255,0.05); }
         .model-option.active { background: var(--accent-dim); color: var(--accent); }
-        .model-option .provider-badge {
-            font-size: 10px; background: rgba(255,255,255,0.08);
-            padding: 2px 6px; border-radius: 6px; margin-left: auto; white-space: nowrap;
-        }
+        .model-option .provider-badge { font-size: 10px; background: rgba(255,255,255,0.08); padding: 2px 6px; border-radius: 6px; margin-left: auto; white-space: nowrap; }
         .model-option.active .provider-badge { background: rgba(100,255,218,0.15); }
-
-        .alert-banner {
-            position: fixed; top: 68px; left: 16px; right: 16px;
-            padding: 12px 16px; border-radius: 12px; font-size: 14px; font-weight: 500;
-            z-index: 200; transform: translateY(-110%); transition: transform 0.3s ease;
-            text-align: center;
-        }
+        .alert-banner { position: fixed; top: 68px; left: 16px; right: 16px; padding: 12px 16px; border-radius: 12px; font-size: 14px; font-weight: 500; z-index: 200; transform: translateY(-110%); transition: transform 0.3s ease; text-align: center; }
         .alert-banner.error { background: var(--status-critical); color: #fff; }
         .alert-banner.warning { background: var(--status-warning); color: #000; }
         .alert-banner.show { transform: translateY(0); }
-
         .typing-dots { display: flex; gap: 4px; padding: 14px 16px; }
-        .typing-dots span {
-            width: 8px; height: 8px; background: var(--text-muted);
-            border-radius: 50%; animation: bounce 1.4s infinite;
-        }
-        .typing-dots span:nth-child(2) { animation-delay: 0.2s; }
-        .typing-dots span:nth-child(3) { animation-delay: 0.4s; }
+        .typing-dots span { width: 8px; height: 8px; background: var(--text-muted); border-radius: 50%; animation: bounce 1.4s infinite; }
+        .typing-dots span:nth-child(2) { animation-delay: 0.2s; } .typing-dots span:nth-child(3) { animation-delay: 0.4s; }
         @keyframes bounce { 0%,60%,100%{transform:translateY(0)} 30%{transform:translateY(-8px)} }
     </style>
 </head>
@@ -324,10 +127,7 @@
         <div class="heidi-avatar">&#x1F9E0;</div>
         <div class="header-info">
             <h1>Heidi</h1>
-            <div class="status">
-                <span class="status-dot off" id="statusDot"></span>
-                <span id="statusText">Starting...</span>
-            </div>
+            <div class="status"><span class="status-dot off" id="statusDot"></span><span id="statusText">Starting...</span></div>
         </div>
     </div>
     <div class="header-right">
@@ -340,11 +140,11 @@
     <div class="health-metric"><span class="icon">&#x1F916;</span><span class="value" id="metricModels">&mdash;</span><span class="label">models</span></div>
     <div class="health-metric"><span class="icon">&#x26A1;</span><span class="value" id="metricProvider">&mdash;</span></div>
     <div class="health-metric" id="metricHydi"><span class="icon">&#x1F4E1;</span><span class="value muted" id="metricHydiValue">&#x2014;</span><span class="label">hydi</span></div>
+    <div class="health-metric"><span class="icon">&#x1F528;</span><span class="value" id="metricTools">5</span><span class="label">tools</span></div>
     <div class="health-metric"><span class="icon">&#x1F4AC;</span><span class="value" id="metricMsgCount">0</span><span class="label">msgs</span></div>
     <div class="health-metric"><span class="icon">&#x1F550;</span><span class="value" id="metricTime">&mdash;</span></div>
 </div>
 
-<!-- HYDI System Panel -->
 <div class="system-panel" id="systemPanel">
     <div class="system-panel-header" onclick="toggleSystemPanel()">
         <span class="system-panel-title">&#x2699;&#xFE0F; HYDI System</span>
@@ -353,22 +153,10 @@
     </div>
     <div class="system-panel-body" id="systemPanelBody">
         <div class="system-grid">
-            <div class="system-card">
-                <div class="system-card-label">Status</div>
-                <div class="system-card-value muted" id="sysStat">&#x2014;</div>
-            </div>
-            <div class="system-card">
-                <div class="system-card-label">Database</div>
-                <div class="system-card-value muted" id="sysDb">&#x2014;</div>
-            </div>
-            <div class="system-card">
-                <div class="system-card-label">Events</div>
-                <div class="system-card-value muted" id="sysEvents">&#x2014;</div>
-            </div>
-            <div class="system-card">
-                <div class="system-card-label">Updated</div>
-                <div class="system-card-value muted" id="sysUpdated">&#x2014;</div>
-            </div>
+            <div class="system-card"><div class="system-card-label">Status</div><div class="system-card-value muted" id="sysStat">&#x2014;</div></div>
+            <div class="system-card"><div class="system-card-label">Database</div><div class="system-card-value muted" id="sysDb">&#x2014;</div></div>
+            <div class="system-card"><div class="system-card-label">Events</div><div class="system-card-value muted" id="sysEvents">&#x2014;</div></div>
+            <div class="system-card"><div class="system-card-label">Updated</div><div class="system-card-value muted" id="sysUpdated">&#x2014;</div></div>
         </div>
         <div class="system-action-row">
             <button class="system-action-btn" onclick="sendQuick('hydi_status')">&#x1F4CA; Ask Heidi</button>
@@ -384,9 +172,9 @@
     <div class="quick-action" onclick="sendQuick('status')">&#x1F4CA; Status</div>
     <div class="quick-action" onclick="sendQuick('models')">&#x1F916; Models</div>
     <div class="quick-action hydi" onclick="sendQuick('hydi_status')">&#x2699;&#xFE0F; HYDI</div>
-    <div class="quick-action" onclick="sendQuick('help')">&#x1F4A1; What can you do</div>
-    <div class="quick-action" onclick="sendQuick('health')">&#x1F527; Health check</div>
-    <div class="quick-action" onclick="sendQuick('clear')">&#x1F5D1;&#xFE0F; Clear chat</div>
+    <div class="quick-action" onclick="sendQuick('tools')">&#x1F528; Tools</div>
+    <div class="quick-action" onclick="sendQuick('health')">&#x1F527; Health</div>
+    <div class="quick-action" onclick="sendQuick('clear')">&#x1F5D1;&#xFE0F; Clear</div>
 </div>
 
 <div class="input-area">
@@ -409,43 +197,27 @@
 <div class="alert-banner" id="alertBanner"></div>
 
 <script>
-// ─── State ──────────────────────────────────────────────────────────────────
-let currentModel = null;
-let currentProvider = 'ollama';
-let ttsEnabled = false;
-let isStreaming = false;
-let isListening = false;
-let recognition = null;
-let msgCount = 0;
-let healthTimer = null;
-let hydiTimer = null;
+let currentModel = null, currentProvider = 'ollama';
+let ttsEnabled = false, isStreaming = false, isListening = false;
+let recognition = null, msgCount = 0, healthTimer = null, hydiTimer = null;
 let conversationHistory = [];
-const HISTORY_KEY = 'heidi-chat-history';
-const MAX_CTX = 40;
+const HISTORY_KEY = 'heidi-chat-history', MAX_CTX = 40;
 
-// ─── Init ────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
-    initVoice();
-    loadVoices();
-    restoreHistory();
+    initVoice(); loadVoices(); restoreHistory();
     const online = await checkServer();
     if (online) {
-        await loadModels();
-        pollHealth();
-        pollHydiStatus();
+        await loadModels(); pollHealth(); pollHydiStatus();
         if (!conversationHistory.length) {
-            addMsg('heidi',
-                "Hi! I'm Heidi, your local ProtoForge AI.\n\nI'm running on your device via Ollama. Talk to me, ask about your system, or use voice input. Enable the speaker icon so I speak back.",
-                [{ label: '&#x1F4CA; System status', q: 'status' }, { label: '&#x2699;&#xFE0F; HYDI status', q: 'hydi_status' }]
-            );
+            addMsg('heidi', "Hi! I'm Heidi, your local ProtoForge AI.\n\nI have tools I can use to check your system: Ollama health, HYDI status, run commands, and read files. Ask me anything!",
+                [{ label: '&#x1F4CA; System status', q: 'status' }, { label: '&#x1F528; What tools do you have', q: 'tools' }]);
         }
     } else {
         addMsg('system', '&#x26A0;&#xFE0F; Cannot reach Heidi server. Run: node launch-heidi-mobile.js');
-        setStatus('offline', 'Server offline');
+        setStatus('off', 'Server offline');
     }
 });
 
-// ─── Conversation history ────────────────────────────────────────────────────
 function restoreHistory() {
     try {
         const raw = localStorage.getItem(HISTORY_KEY);
@@ -461,11 +233,8 @@ function restoreHistory() {
         saved.forEach(msg => {
             const el = document.createElement('div');
             el.className = 'message ' + (msg.role === 'user' ? 'user' : 'heidi') + ' restored';
-            const bubble = document.createElement('div');
-            bubble.className = 'message-bubble';
-            bubble.textContent = msg.content;
-            el.appendChild(bubble);
-            document.getElementById('messages').appendChild(el);
+            const bubble = document.createElement('div'); bubble.className = 'message-bubble'; bubble.textContent = msg.content;
+            el.appendChild(bubble); document.getElementById('messages').appendChild(el);
         });
         msgCount = saved.filter(m => m.role === 'user').length;
         document.getElementById('metricMsgCount').textContent = msgCount;
@@ -474,22 +243,15 @@ function restoreHistory() {
 }
 
 function saveHistory() {
-    try {
-        conversationHistory = conversationHistory.slice(-MAX_CTX);
-        localStorage.setItem(HISTORY_KEY, JSON.stringify(conversationHistory));
-    } catch {}
+    try { conversationHistory = conversationHistory.slice(-MAX_CTX); localStorage.setItem(HISTORY_KEY, JSON.stringify(conversationHistory)); } catch {}
 }
 
-// ─── Server / health ───────────────────────────────────────────────────────────
 async function checkServer() {
     try { const r = await fetch('/api/health', { signal: AbortSignal.timeout(3000) }); return r.ok; } catch { return false; }
 }
 async function pollHealth() {
-    try {
-        const r = await fetch('/api/health', { signal: AbortSignal.timeout(3000) });
-        if (!r.ok) throw new Error();
-        updateHealthUI(await r.json());
-    } catch { setStatus('off', 'Reconnecting...'); }
+    try { const r = await fetch('/api/health', { signal: AbortSignal.timeout(3000) }); if (!r.ok) throw new Error(); updateHealthUI(await r.json()); }
+    catch { setStatus('off', 'Reconnecting...'); }
     healthTimer = setTimeout(pollHealth, 30000);
 }
 function updateHealthUI(h) {
@@ -507,93 +269,50 @@ function setStatus(dotClass, text) {
     document.getElementById('statusText').textContent = text;
 }
 
-// ─── HYDI System status ────────────────────────────────────────────────────────
-async function pollHydiStatus() {
-    await refreshSystemPanel();
-    hydiTimer = setTimeout(pollHydiStatus, 60000);
-}
-
+async function pollHydiStatus() { await refreshSystemPanel(); hydiTimer = setTimeout(pollHydiStatus, 60000); }
 async function refreshSystemPanel() {
-    try {
-        const r = await fetch('/api/system/status', { signal: AbortSignal.timeout(4000) });
-        if (!r.ok) throw new Error();
-        const s = await r.json();
-        updateHydiUI(s);
-    } catch {
-        updateHydiUI(null);
-    }
+    try { const r = await fetch('/api/system/status', { signal: AbortSignal.timeout(4000) }); if (!r.ok) throw new Error(); updateHydiUI(await r.json()); }
+    catch { updateHydiUI(null); }
 }
-
 function updateHydiUI(s) {
     const badge = document.getElementById('systemPanelBadge');
     const metricEl = document.getElementById('metricHydi');
     const metricVal = document.getElementById('metricHydiValue');
-
     if (!s || !s.online) {
         badge.textContent = 'offline'; badge.className = 'system-panel-badge offline';
-        metricEl.className = 'health-metric hydi-offline';
-        metricVal.textContent = 'off';
-        document.getElementById('sysStat').textContent = '—';
-        document.getElementById('sysDb').textContent = '—';
-        document.getElementById('sysEvents').textContent = '—';
-        document.getElementById('sysUpdated').textContent = '—';
+        metricEl.className = 'health-metric hydi-offline'; metricVal.textContent = 'off';
+        ['sysStat','sysDb','sysEvents','sysUpdated'].forEach(id => { document.getElementById(id).textContent = '—'; document.getElementById(id).className = 'system-card-value muted'; });
         return;
     }
-
     badge.textContent = 'online'; badge.className = 'system-panel-badge online';
-    metricEl.className = 'health-metric hydi-online';
-    metricVal.textContent = 'on';
-
-    const statEl = document.getElementById('sysStat');
-    statEl.textContent = s.status || '—';
-    statEl.className = 'system-card-value ' + (s.status === 'operational' ? 'ok' : 'warn');
-
-    const dbEl = document.getElementById('sysDb');
-    dbEl.textContent = s.database || '—';
-    dbEl.className = 'system-card-value ' + (s.database === 'connected' ? 'ok' : 'warn');
-
+    metricEl.className = 'health-metric hydi-online'; metricVal.textContent = 'on';
+    const statEl = document.getElementById('sysStat'); statEl.textContent = s.status || '—'; statEl.className = 'system-card-value ' + (s.status === 'operational' ? 'ok' : 'warn');
+    const dbEl = document.getElementById('sysDb'); dbEl.textContent = s.database || '—'; dbEl.className = 'system-card-value ' + (s.database === 'connected' ? 'ok' : 'warn');
     document.getElementById('sysEvents').textContent = s.totalEvents?.toLocaleString() || '0';
     document.getElementById('sysUpdated').textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
-
 function toggleSystemPanel() {
     const body = document.getElementById('systemPanelBody');
     const chevron = document.getElementById('systemPanelChevron');
-    const open = body.classList.toggle('open');
-    chevron.classList.toggle('open', open);
+    chevron.classList.toggle('open', body.classList.toggle('open'));
 }
-
 async function sendSystemEvent() {
     const type = prompt('Event type (e.g. health_check, observation):');
     if (!type) return;
     try {
-        const r = await fetch('/api/system/action', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ type, source: 'heidi-mobile-ui' })
-        });
+        const r = await fetch('/api/system/action', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type, source: 'heidi-mobile-ui' }) });
         const result = await r.json();
-        if (result.success) {
-            addMsg('system', '✅ Event sent: ' + type + '\nResult: ' + JSON.stringify(result.result?.status || 'ok'));
-        } else {
-            addMsg('system', '⚠;️ Event failed: ' + (result.error || 'HYDI not connected'));
-        }
-    } catch (e) {
-        addMsg('system', '⚠;️ Could not reach HYDI: ' + e.message);
-    }
+        addMsg('system', result.success ? '✅ Event sent: ' + type : '⚠️ Failed: ' + (result.error || 'HYDI not connected'));
+    } catch (e) { addMsg('system', '⚠️ Could not reach HYDI: ' + e.message); }
 }
 
-// ─── Model loading ───────────────────────────────────────────────────────────
 async function loadModels() {
     try {
-        const r = await fetch('/api/models', { signal: AbortSignal.timeout(3000) });
-        if (!r.ok) return;
-        const { models, default: def } = await r.json();
+        const r = await fetch('/api/models', { signal: AbortSignal.timeout(3000) }); if (!r.ok) return;
+        const { models } = await r.json();
         if (!models.length) { setStatus('warning', 'Online · No model'); return; }
-        currentModel = models[0].id;
-        currentProvider = models[0].provider;
-        populateModelMenu(models);
-        setStatus('', `Online · ${currentModel}`);
+        currentModel = models[0].id; currentProvider = models[0].provider;
+        populateModelMenu(models); setStatus('', `Online · ${currentModel}`);
     } catch {}
 }
 function populateModelMenu(models) {
@@ -602,9 +321,7 @@ function populateModelMenu(models) {
     models.forEach((m, i) => {
         const el = document.createElement('div');
         el.className = 'model-option' + (i === 0 ? ' active' : '');
-        el.innerHTML = `<span>${m.provider === 'ollama' ? '&#x1F999;' : '&#x1F5A5;&#xFE0F;'}</span>
-            <span style="flex:1;overflow:hidden;text-overflow:ellipsis">${m.name}</span>
-            <span class="provider-badge">${m.provider}${m.size ? ' · ' + m.size : ''}</span>`;
+        el.innerHTML = `<span>${m.provider === 'ollama' ? '&#x1F999;' : '&#x1F5A5;&#xFE0F;'}</span><span style="flex:1;overflow:hidden;text-overflow:ellipsis">${m.name}</span><span class="provider-badge">${m.provider}${m.size ? ' · ' + m.size : ''}</span>`;
         el.onclick = () => pickModel(m.id, m.provider, el);
         menu.appendChild(el);
     });
@@ -612,14 +329,11 @@ function populateModelMenu(models) {
 function pickModel(id, provider, el) {
     currentModel = id; currentProvider = provider;
     document.querySelectorAll('.model-option').forEach(o => o.classList.remove('active'));
-    el.classList.add('active');
-    toggleModelMenu();
-    setStatus('', `Online · ${id}`);
-    addMsg('system', `Switched to: ${id} (${provider})`);
+    el.classList.add('active'); toggleModelMenu();
+    setStatus('', `Online · ${id}`); addMsg('system', `Switched to: ${id} (${provider})`);
 }
 function toggleModelMenu() { document.getElementById('modelMenu').classList.toggle('show'); }
 
-// ─── Sending messages ────────────────────────────────────────────────────────
 async function sendMessage() {
     const input = document.getElementById('msgInput');
     const text = input.value.trim();
@@ -627,10 +341,8 @@ async function sendMessage() {
     isStreaming = true;
     document.getElementById('sendBtn').disabled = true;
     document.getElementById('micBtn').disabled = true;
-    msgCount++;
-    document.getElementById('metricMsgCount').textContent = msgCount;
-    addMsg('user', text);
-    input.value = ''; autoResize(input);
+    msgCount++; document.getElementById('metricMsgCount').textContent = msgCount;
+    addMsg('user', text); input.value = ''; autoResize(input);
     const container = document.getElementById('messages');
     const typingEl = document.createElement('div');
     typingEl.className = 'message heidi'; typingEl.id = 'typing';
@@ -638,23 +350,18 @@ async function sendMessage() {
     container.appendChild(typingEl); scrollBottom();
     const msgEl = document.createElement('div');
     msgEl.className = 'message heidi'; msgEl.style.display = 'none';
-    const bubble = document.createElement('div');
-    bubble.className = 'message-bubble';
+    const bubble = document.createElement('div'); bubble.className = 'message-bubble';
     msgEl.appendChild(bubble); container.appendChild(msgEl);
     let fullText = '', provider = 'local', firstToken = true;
     try {
         const resp = await fetch('/api/chat', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ message: text, model: currentModel, provider: currentProvider, history: conversationHistory.slice(-MAX_CTX) })
         });
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-        const reader = resp.body.getReader();
-        const dec = new TextDecoder();
-        let buf = '';
+        const reader = resp.body.getReader(); const dec = new TextDecoder(); let buf = '';
         while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
+            const { done, value } = await reader.read(); if (done) break;
             buf += dec.decode(value, { stream: true });
             let idx;
             while ((idx = buf.indexOf('\n\n')) !== -1) {
@@ -663,7 +370,13 @@ async function sendMessage() {
                     if (!line.startsWith('data: ')) continue;
                     try {
                         const d = JSON.parse(line.slice(6));
-                        if (d.t !== undefined) {
+                        if (d.tool_use) {
+                            if (firstToken) { firstToken = false; typingEl.remove(); msgEl.style.display = ''; }
+                            bubble.innerHTML = `<span class="tool-indicator running">&#x1F527; ${esc(d.tool_name.replace(/_/g,' '))}...</span>`;
+                            scrollBottom();
+                        } else if (d.tool_result) {
+                            // Text tokens will follow — tool indicator stays briefly
+                        } else if (d.t !== undefined) {
                             if (firstToken) { firstToken = false; typingEl.remove(); msgEl.style.display = ''; }
                             fullText += d.t;
                             bubble.innerHTML = esc(fullText) + '<span class="streaming-cursor"></span>';
@@ -677,16 +390,12 @@ async function sendMessage() {
     } catch (err) {
         typingEl.remove(); msgEl.style.display = '';
         fullText = 'Connection error. Is the Heidi server running?\n\nRun: node launch-heidi-mobile.js';
-        bubble.textContent = fullText;
-        showAlert('Cannot reach server', 'error');
+        bubble.textContent = fullText; showAlert('Cannot reach server', 'error');
     }
     bubble.textContent = fullText || '(empty response)';
-    const meta = document.createElement('div');
-    meta.className = 'message-meta';
-    meta.textContent = `Heidi · ${now()} · ${provider}`;
-    msgEl.appendChild(meta);
-    addContextActions(msgEl, fullText, text);
-    scrollBottom();
+    const meta = document.createElement('div'); meta.className = 'message-meta';
+    meta.textContent = `Heidi · ${now()} · ${provider}`; msgEl.appendChild(meta);
+    addContextActions(msgEl, fullText, text); scrollBottom();
     if (fullText && fullText !== '(empty response)') {
         conversationHistory.push({ role: 'user', content: text });
         conversationHistory.push({ role: 'assistant', content: fullText });
@@ -706,42 +415,33 @@ function sendQuick(cmd) {
         return;
     }
     const map = {
-        status: 'What is the current system and AI status? Check if Ollama is running and which models are available.',
-        models: 'List all available AI models and tell me about the current one you are using.',
-        help: 'What can you help me with? Give a friendly overview of your capabilities.',
-        health: 'Run a health check: check Ollama, server status, and any issues you can detect.',
-        hydi_status: 'What is the current HYDI system status? Check the database connection, event bus, and any running agents or loops.',
+        status: 'Use your tools to check the current system status: Ollama health, available models, and HYDI system if connected.',
+        models: 'Use your get_system_health tool and list all available AI models.',
+        help: 'What can you help me with? Describe your capabilities and the tools you have available.',
+        health: 'Run a full health check using your tools: check Ollama, run "free -h" and "df -h" for system resources, and check HYDI status.',
+        hydi_status: 'Use your get_hydi_status tool to check the HYDI ProtoForge system status.',
+        tools: 'List all the tools you have available and briefly explain what each one does.',
     };
     const input = document.getElementById('msgInput');
     input.value = map[cmd] || cmd;
     autoResize(input); sendMessage();
 }
 
-// ─── Message rendering ───────────────────────────────────────────────────────
 function addMsg(sender, content, actions = null) {
     const container = document.getElementById('messages');
-    const el = document.createElement('div');
-    el.className = `message ${sender}`;
-    const bubble = document.createElement('div');
-    bubble.className = 'message-bubble';
+    const el = document.createElement('div'); el.className = `message ${sender}`;
+    const bubble = document.createElement('div'); bubble.className = 'message-bubble';
     if (actions) { bubble.innerHTML = esc(content); } else { bubble.textContent = content; }
     el.appendChild(bubble);
     if (sender !== 'system') {
-        const meta = document.createElement('div');
-        meta.className = 'message-meta';
+        const meta = document.createElement('div'); meta.className = 'message-meta';
         meta.textContent = sender === 'user' ? `You · ${now()}` : `Heidi · ${now()}`;
         el.appendChild(meta);
     }
     if (actions?.length) {
-        const card = document.createElement('div');
-        card.className = 'action-card';
+        const card = document.createElement('div'); card.className = 'action-card';
         card.innerHTML = '<div class="action-card-header">&#x26A1; Quick actions</div>';
-        actions.forEach(a => {
-            const btn = document.createElement('button');
-            btn.className = 'action-button'; btn.innerHTML = a.label;
-            btn.onclick = () => sendQuick(a.q);
-            card.appendChild(btn);
-        });
+        actions.forEach(a => { const btn = document.createElement('button'); btn.className = 'action-button'; btn.innerHTML = a.label; btn.onclick = () => sendQuick(a.q); card.appendChild(btn); });
         el.appendChild(card);
     }
     container.appendChild(el); scrollBottom();
@@ -751,149 +451,78 @@ function addMsg(sender, content, actions = null) {
 function addContextActions(msgEl, response, userMsg) {
     const text = (response + ' ' + userMsg).toLowerCase();
     const actions = [];
-    if (text.includes('health') || text.includes('status') || text.includes('check'))
-        actions.push({ label: '&#x1F504; Re-run health check', q: 'health' });
-    if (text.includes('hydi') || text.includes('agent') || text.includes('loop') || text.includes('event bus'))
-        actions.push({ label: '&#x2699;&#xFE0F; HYDI status', q: 'hydi_status' });
-    if (text.includes('model') || text.includes('ollama') || text.includes('install'))
-        actions.push({ label: '&#x1F916; List all models', q: 'models' });
-    if (text.includes('error') || text.includes('fail') || text.includes('issue'))
-        actions.push({ label: '&#x1F527; Diagnose', q: 'health' });
+    if (text.includes('health') || text.includes('status') || text.includes('check')) actions.push({ label: '&#x1F504; Re-run health check', q: 'health' });
+    if (text.includes('hydi') || text.includes('agent') || text.includes('loop') || text.includes('event bus')) actions.push({ label: '&#x2699;&#xFE0F; HYDI status', q: 'hydi_status' });
+    if (text.includes('model') || text.includes('ollama') || text.includes('install')) actions.push({ label: '&#x1F916; List all models', q: 'models' });
+    if (text.includes('tool') || text.includes('command') || text.includes('run')) actions.push({ label: '&#x1F528; Show tools', q: 'tools' });
     if (!actions.length) return;
-    const card = document.createElement('div');
-    card.className = 'action-card';
+    const card = document.createElement('div'); card.className = 'action-card';
     card.innerHTML = '<div class="action-card-header">&#x26A1; Follow-up</div>';
-    actions.forEach(a => {
-        const btn = document.createElement('button');
-        btn.className = 'action-button'; btn.innerHTML = a.label;
-        btn.onclick = () => sendQuick(a.q);
-        card.appendChild(btn);
-    });
+    actions.forEach(a => { const btn = document.createElement('button'); btn.className = 'action-button'; btn.innerHTML = a.label; btn.onclick = () => sendQuick(a.q); card.appendChild(btn); });
     msgEl.appendChild(card);
 }
 
-// ─── TTS ────────────────────────────────────────────────────────────────────
 let voices = [];
-function loadVoices() {
-    voices = window.speechSynthesis?.getVoices() || [];
-    if (!voices.length) window.speechSynthesis?.addEventListener('voiceschanged', () => { voices = window.speechSynthesis.getVoices(); });
-}
+function loadVoices() { voices = window.speechSynthesis?.getVoices() || []; if (!voices.length) window.speechSynthesis?.addEventListener('voiceschanged', () => { voices = window.speechSynthesis.getVoices(); }); }
 function toggleTTS() {
     ttsEnabled = !ttsEnabled;
-    const btn = document.getElementById('ttsBtn');
-    btn.textContent = ttsEnabled ? '&#x1F50A;' : '&#x1F507;';
-    btn.classList.toggle('active', ttsEnabled);
-    if (!ttsEnabled) window.speechSynthesis?.cancel();
-    else speak('Voice enabled.');
+    const btn = document.getElementById('ttsBtn'); btn.textContent = ttsEnabled ? '&#x1F50A;' : '&#x1F507;'; btn.classList.toggle('active', ttsEnabled);
+    if (!ttsEnabled) window.speechSynthesis?.cancel(); else speak('Voice enabled.');
 }
 function speak(text) {
     if (!ttsEnabled || !window.speechSynthesis || !text.trim()) return;
     window.speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(text);
-    u.rate = 1.05; u.pitch = 1.1; u.volume = 0.9;
+    const u = new SpeechSynthesisUtterance(text); u.rate = 1.05; u.pitch = 1.1; u.volume = 0.9;
     const preferred = ['Samantha','Karen','Victoria','Moira','Google US English','Microsoft Zira'];
-    for (const name of preferred) {
-        const v = voices.find(v => v.name.includes(name) && v.lang.startsWith('en'));
-        if (v) { u.voice = v; break; }
-    }
+    for (const name of preferred) { const v = voices.find(v => v.name.includes(name) && v.lang.startsWith('en')); if (v) { u.voice = v; break; } }
     if (!u.voice) u.voice = voices.find(v => v.lang.startsWith('en-')) || voices[0] || null;
     window.speechSynthesis.speak(u);
 }
 function cleanForTTS(text) {
-    return text.replace(/```[\s\S]*?```/g,'code block').replace(/`[^`]+`/g,'')
-        .replace(/\*{1,3}([^*]+)\*{1,3}/g,'$1').replace(/#{1,6}\s/g,'')
-        .replace(/https?:\/\/\S+/g,'link').replace(/\n{2,}/g,'. ').replace(/\n/g,' ').trim();
+    return text.replace(/```[\s\S]*?```/g,'code block').replace(/`[^`]+`/g,'').replace(/\*{1,3}([^*]+)\*{1,3}/g,'$1').replace(/#{1,6}\s/g,'').replace(/https?:\/\/\S+/g,'link').replace(/\n{2,}/g,'. ').replace(/\n/g,' ').trim();
 }
 
-// ─── Voice input ──────────────────────────────────────────────────────────────
 function initVoice() {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) { const btn = document.getElementById('micBtn'); btn.style.opacity = '0.3'; btn.title = 'Voice not supported'; return; }
-    recognition = new SR();
-    recognition.continuous = false; recognition.interimResults = true; recognition.lang = 'en-US';
-    recognition.onresult = (e) => {
-        const t = Array.from(e.results).map(r => r[0].transcript).join('');
-        const input = document.getElementById('msgInput');
-        input.value = t; autoResize(input);
-    };
-    recognition.onend = () => {
-        isListening = false; updateMicState(false);
-        const input = document.getElementById('msgInput');
-        if (input.value.trim() && !isStreaming) setTimeout(sendMessage, 300);
-    };
-    recognition.onerror = (e) => {
-        isListening = false; updateMicState(false);
-        if (e.error === 'not-allowed') showAlert('Microphone access denied', 'warning');
-    };
+    recognition = new SR(); recognition.continuous = false; recognition.interimResults = true; recognition.lang = 'en-US';
+    recognition.onresult = (e) => { const t = Array.from(e.results).map(r => r[0].transcript).join(''); const input = document.getElementById('msgInput'); input.value = t; autoResize(input); };
+    recognition.onend = () => { isListening = false; updateMicState(false); const input = document.getElementById('msgInput'); if (input.value.trim() && !isStreaming) setTimeout(sendMessage, 300); };
+    recognition.onerror = (e) => { isListening = false; updateMicState(false); if (e.error === 'not-allowed') showAlert('Microphone access denied', 'warning'); };
 }
 function toggleVoice() {
     if (!recognition) { addMsg('system', '&#x26A0;&#xFE0F; Voice requires Chrome or Safari.'); return; }
     if (isStreaming) return;
     if (isListening) { recognition.stop(); }
-    else {
-        isListening = true; updateMicState(true);
-        document.getElementById('msgInput').value = '';
-        try { recognition.start(); } catch { isListening = false; updateMicState(false); }
-    }
+    else { isListening = true; updateMicState(true); document.getElementById('msgInput').value = ''; try { recognition.start(); } catch { isListening = false; updateMicState(false); } }
 }
-function updateMicState(on) {
-    document.getElementById('micBtn').classList.toggle('listening', on);
-    document.getElementById('msgInput').placeholder = on ? 'Listening...' : 'Message Heidi...';
-}
+function updateMicState(on) { document.getElementById('micBtn').classList.toggle('listening', on); document.getElementById('msgInput').placeholder = on ? 'Listening...' : 'Message Heidi...'; }
 
-// ─── Alert ────────────────────────────────────────────────────────────────────────
 let alertTimer = null;
 function showAlert(msg, type = 'error') {
-    const el = document.getElementById('alertBanner');
-    el.textContent = (type === 'error' ? '⚠️ ' : 'ℹ️ ') + msg;
-    el.className = `alert-banner ${type} show`;
-    clearTimeout(alertTimer);
+    const el = document.getElementById('alertBanner'); el.textContent = (type === 'error' ? '⚠️ ' : 'ℹ️ ') + msg;
+    el.className = `alert-banner ${type} show`; clearTimeout(alertTimer);
     alertTimer = setTimeout(() => el.classList.remove('show'), 4000);
 }
 
-// ─── Utilities ────────────────────────────────────────────────────────────────
 function autoResize(el) { el.style.height = 'auto'; el.style.height = Math.min(el.scrollHeight, 120) + 'px'; }
 function onKey(e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } }
 function scrollBottom() { const c = document.getElementById('messages'); c.scrollTop = c.scrollHeight; }
 function now() { return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); }
 function esc(t) { const d = document.createElement('div'); d.textContent = t; return d.innerHTML; }
 
-document.addEventListener('click', e => {
-    if (!e.target.closest('#modelMenu') && !e.target.closest('.model-toggle'))
-        document.getElementById('modelMenu').classList.remove('show');
-});
-document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible' && ttsEnabled) window.speechSynthesis?.resume();
-});
+document.addEventListener('click', e => { if (!e.target.closest('#modelMenu') && !e.target.closest('.model-toggle')) document.getElementById('modelMenu').classList.remove('show'); });
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && ttsEnabled) window.speechSynthesis?.resume(); });
 
-// ─── PWA ──────────────────────────────────────────────────────────────────────────
 let installPrompt = null;
-
 window.addEventListener('beforeinstallprompt', e => {
-    e.preventDefault();
-    installPrompt = e;
+    e.preventDefault(); installPrompt = e;
     if (document.getElementById('installBtn')) return;
-    const btn = document.createElement('button');
-    btn.id = 'installBtn';
-    btn.className = 'tts-btn';
-    btn.title = 'Add Heidi to home screen';
-    btn.textContent = '📲';
-    btn.onclick = async () => {
-        if (!installPrompt) return;
-        installPrompt.prompt();
-        const { outcome } = await installPrompt.userChoice;
-        btn.remove();
-        installPrompt = null;
-        if (outcome === 'accepted') addMsg('system', '✅ Heidi added to your home screen!');
-    };
+    const btn = document.createElement('button'); btn.id = 'installBtn'; btn.className = 'tts-btn'; btn.title = 'Add Heidi to home screen'; btn.textContent = '📲';
+    btn.onclick = async () => { if (!installPrompt) return; installPrompt.prompt(); const { outcome } = await installPrompt.userChoice; btn.remove(); installPrompt = null; if (outcome === 'accepted') addMsg('system', '✅ Heidi added to your home screen!'); };
     document.querySelector('.header-right').insertBefore(btn, document.querySelector('.header-right').firstChild);
 });
-
-if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/sw.js').catch(() => {});
-    });
-}
+if ('serviceWorker' in navigator) { window.addEventListener('load', () => { navigator.serviceWorker.register('/sw.js').catch(() => {}); }); }
 </script>
 </body>
 </html>
