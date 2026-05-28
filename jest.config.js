@@ -8,6 +8,7 @@ module.exports = {
     '**/tests/unit/**/*.test.js',
     '**/tests/unit/**/*.spec.js',
     '**/__tests__/**/*.test.js',
+    '**/tests/migrations/**/*.test.js',
   ],
 
   testPathIgnorePatterns: [
@@ -15,6 +16,11 @@ module.exports = {
     '/tests/hdi-adversarial.test.js',
     '/tests/hdi-everything-wrong.test.js',
   ],
+
+  // Use scoped Babel config so Next.js can use SWC for builds
+  transform: {
+    '^.+\\.js$': ['babel-jest', { configFile: './babel.jest.config.js' }],
+  },
 
   setupFilesAfterEnv: ['./jest.setup.js'],
 

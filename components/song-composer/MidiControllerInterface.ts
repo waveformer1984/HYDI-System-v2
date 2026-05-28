@@ -93,7 +93,7 @@ export class MidiControllerInterface {
 
     try {
       this.access = await (navigator as any).requestMIDIAccess({ sysex: false });
-      this.access.onstatechange = () => onDeviceChange(this.listDevices());
+      if (this.access) this.access.onstatechange = () => onDeviceChange(this.listDevices());
       this.bindAllInputs();
       const devices = this.listDevices();
       console.log(`[MIDI] ✅ Substrate active. ${devices.filter((d) => d.type === 'input').length} input(s) found.`);
