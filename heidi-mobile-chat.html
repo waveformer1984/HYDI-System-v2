@@ -115,6 +115,18 @@
         .model-option.active { background: var(--accent-dim); color: var(--accent); }
         .model-option .provider-badge { font-size: 10px; background: rgba(255,255,255,0.08); padding: 2px 6px; border-radius: 6px; margin-left: auto; white-space: nowrap; }
         .model-option.active .provider-badge { background: rgba(100,255,218,0.15); }
+
+        /* Push notification banner */
+        .push-banner { position: fixed; top: 8px; left: 8px; right: 8px; background: var(--bg-elevated); border: 1px solid rgba(100,255,218,0.25); border-radius: 16px; padding: 14px 16px; display: flex; align-items: center; gap: 12px; z-index: 300; transform: translateY(-130%); transition: transform 0.35s cubic-bezier(0.34,1.56,0.64,1); box-shadow: 0 8px 40px rgba(0,0,0,0.7); }
+        .push-banner.show { transform: translateY(0); }
+        .push-banner.level-warning { border-color: rgba(245,158,11,0.5); }
+        .push-banner.level-critical { border-color: rgba(239,68,68,0.5); }
+        .push-banner-icon { font-size: 22px; flex-shrink: 0; }
+        .push-banner-content { flex: 1; min-width: 0; }
+        .push-banner-title { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+        .push-banner-body { font-size: 12px; color: var(--text-secondary); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .push-banner-close { background: none; border: none; color: var(--text-muted); font-size: 20px; cursor: pointer; padding: 0 2px; line-height: 1; flex-shrink: 0; }
+
         .alert-banner { position: fixed; top: 68px; left: 16px; right: 16px; padding: 12px 16px; border-radius: 12px; font-size: 14px; font-weight: 500; z-index: 200; transform: translateY(-110%); transition: transform 0.3s ease; text-align: center; }
         .alert-banner.error { background: var(--status-critical); color: #fff; }
         .alert-banner.warning { background: var(--status-warning); color: #000; }
@@ -136,6 +148,7 @@
         </div>
     </div>
     <div class="header-right">
+        <button class="tts-btn" id="bellBtn" onclick="toggleBrowserNotifs()" title="Enable push notifications">&#x1F515;</button>
         <button class="tts-btn" id="ttsBtn" onclick="toggleTTS()" title="Toggle voice">&#x1F507;</button>
         <div class="health-badge offline" id="healthBadge">&mdash;</div>
     </div>
@@ -200,6 +213,15 @@
     <div class="model-option active"><span>&#x1F999;</span><span id="defaultModelName">tinyllama</span><span class="provider-badge">ollama</span></div>
 </div>
 
+<div class="push-banner" id="pushBanner">
+    <span class="push-banner-icon" id="pushBannerIcon">&#x1F514;</span>
+    <div class="push-banner-content">
+        <div class="push-banner-title" id="pushBannerTitle"></div>
+        <div class="push-banner-body" id="pushBannerBody"></div>
+    </div>
+    <button class="push-banner-close" onclick="hidePushBanner()">&#x2715;</button>
+</div>
+
 <div class="alert-banner" id="alertBanner"></div>
 
 <script>
@@ -210,6 +232,68 @@ let conversationHistory = [];
 const HISTORY_KEY = 'heidi-chat-history', MAX_CTX = 40;
 const DEVICE_KEY = 'heidi-device-id';
 
+// ── Push alerts ──────────────────────────────────────────────────────────────
+let pushSource = null, browserNotifs = false, pushBannerTimer = null;
+const PUSH_ICONS = { info: '&#x1F514;', warning: '&#x26A0;&#xFE0F;', critical: '&#x1F6A8;', hydi_activity: '&#x1F4E1;' };
+
+function connectPushStream() {
+    if (pushSource) return;
+    pushSource = new EventSource('/api/events/stream');
+    pushSource.onmessage = (e) => {
+        try {
+            const ev = JSON.parse(e.data);
+            if (ev.type !== 'connected') handlePushEvent(ev);
+        } catch {}
+    };
+    pushSource.onerror = () => {
+        // EventSource auto-reconnects on error
+    };
+}
+
+function handlePushEvent(ev) {
+    const { type, title, body, level } = ev;
+    showPushBanner(title || type, body || '', level || 'info');
+    if (document.visibilityState !== 'visible' && browserNotifs && 'Notification' in window && Notification.permission === 'granted') {
+        try { new Notification(title || 'Heidi', { body: body || '', icon: '/icon.svg', tag: type }); } catch {}
+    }
+    addMsg('system', (PUSH_ICONS[level || type] || PUSH_ICONS.info) + ' ' + (title || type) + (body ? ': ' + body : ''));
+}
+
+function showPushBanner(title, body, level) {
+    const banner = document.getElementById('pushBanner');
+    document.getElementById('pushBannerIcon').innerHTML = PUSH_ICONS[level] || PUSH_ICONS.info;
+    document.getElementById('pushBannerTitle').textContent = title;
+    document.getElementById('pushBannerBody').textContent = body;
+    banner.className = 'push-banner show' + (level && level !== 'info' ? ' level-' + level : '');
+    clearTimeout(pushBannerTimer);
+    pushBannerTimer = setTimeout(hidePushBanner, 7000);
+}
+
+function hidePushBanner() {
+    document.getElementById('pushBanner').classList.remove('show');
+}
+
+async function toggleBrowserNotifs() {
+    if (!browserNotifs) {
+        if (!('Notification' in window)) { showAlert('Notifications not supported in this browser', 'warning'); return; }
+        const perm = await Notification.requestPermission();
+        if (perm === 'granted') {
+            browserNotifs = true;
+            const btn = document.getElementById('bellBtn');
+            btn.innerHTML = '&#x1F514;'; btn.classList.add('active');
+            addMsg('system', '&#x1F514; Browser notifications enabled — you’ll get alerts even when this tab is in the background.');
+        } else {
+            showAlert('Notification permission denied', 'warning');
+        }
+    } else {
+        browserNotifs = false;
+        const btn = document.getElementById('bellBtn');
+        btn.innerHTML = '&#x1F515;'; btn.classList.remove('active');
+        addMsg('system', '&#x1F515; Browser notifications disabled.');
+    }
+}
+
+// ── Device ID & cloud memory ──────────────────────────────────────────────────
 function getDeviceId() {
     let id = localStorage.getItem(DEVICE_KEY);
     if (!id) {
@@ -253,12 +337,12 @@ function saveToCloud(messages, model) {
     setSyncState('syncing');
 }
 
+// ── Init ──────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
     initVoice(); loadVoices();
     const online = await checkServer();
     if (online) {
         await loadModels(); pollHealth(); pollHydiStatus();
-        // Try cloud first, fall back to localStorage
         setSyncState('syncing');
         const cloudMessages = await loadFromCloud();
         if (cloudMessages && cloudMessages.length) {
@@ -270,6 +354,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (!conversationHistory.length) {
             addMsg('heidi', "Hi! I'm Heidi, your local ProtoForge AI.\n\nI have tools I can use to check your system: Ollama health, HYDI status, run commands, and read files. Ask me anything!",
                 [{ label: '&#x1F4CA; System status', q: 'status' }, { label: '&#x1F528; What tools do you have', q: 'tools' }]);
+        }
+        connectPushStream();
+        if ('Notification' in window && Notification.permission === 'granted') {
+            browserNotifs = true;
+            document.getElementById('bellBtn').innerHTML = '&#x1F514;';
+            document.getElementById('bellBtn').classList.add('active');
         }
     } else {
         restoreHistory();
@@ -444,7 +534,7 @@ async function sendMessage() {
                             bubble.innerHTML = `<span class="tool-indicator running">&#x1F527; ${esc(d.tool_name.replace(/_/g,' '))}...</span>`;
                             scrollBottom();
                         } else if (d.tool_result) {
-                            // Text tokens will follow — tool indicator stays briefly
+                            // Text tokens will follow
                         } else if (d.t !== undefined) {
                             if (firstToken) { firstToken = false; typingEl.remove(); msgEl.style.display = ''; }
                             fullText += d.t;

@@ -350,6 +350,64 @@ app.post('/api/memory/:deviceId', async (req, res) => {
     }
 });
 
+// ── Push notification broadcast (SSE) ────────────────────────────────────────
+// HYDI or any service can POST to /api/events/push to alert all connected clients.
+// The client connects to /api/events/stream (SSE) for real-time delivery.
+// watchHydiEvents() also auto-detects new HYDI event counts every 15 seconds.
+
+const pushClients = new Set();
+let lastEventCount = -1;
+
+function broadcastPush(event) {
+    if (!pushClients.size) return;
+    const data = `data: ${JSON.stringify(event)}\n\n`;
+    for (const client of [...pushClients]) {
+        try { client.write(data); } catch { pushClients.delete(client); }
+    }
+}
+
+app.get('/api/events/stream', (req, res) => {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.write(`data: ${JSON.stringify({ type: 'connected', clients: pushClients.size + 1 })}\n\n`);
+    pushClients.add(res);
+    const ping = setInterval(() => {
+        try { res.write(': ping\n\n'); }
+        catch { clearInterval(ping); pushClients.delete(res); }
+    }, 25000);
+    req.on('close', () => { clearInterval(ping); pushClients.delete(res); });
+});
+
+app.post('/api/events/push', (req, res) => {
+    const { type, title, body, level = 'info', payload } = req.body;
+    if (!type) return res.status(400).json({ error: 'type required' });
+    broadcastPush({ type, title: title || type, body: body || '', level, payload: payload || {}, ts: Date.now() });
+    res.json({ ok: true, clients: pushClients.size });
+});
+
+async function watchHydiEvents() {
+    try {
+        const status = await fetchHydiStatus();
+        if (status?.totalEvents !== undefined) {
+            if (lastEventCount >= 0 && status.totalEvents > lastEventCount) {
+                const delta = status.totalEvents - lastEventCount;
+                broadcastPush({
+                    type: 'hydi_activity',
+                    title: 'HYDI Activity',
+                    body: `${delta} new event${delta !== 1 ? 's' : ''} · total: ${status.totalEvents.toLocaleString()}`,
+                    level: status.status === 'operational' ? 'info' : 'warning',
+                    payload: { total: status.totalEvents, delta, hydi_status: status.status },
+                    ts: Date.now()
+                });
+            }
+            lastEventCount = status.totalEvents;
+        }
+    } catch {}
+    setTimeout(watchHydiEvents, 15000);
+}
+
 // ── App routes ────────────────────────────────────────────────────────────────
 
 app.get(['/', '/heidi-mobile', '/heidi'], (req, res) => {
@@ -373,7 +431,7 @@ app.get('/api/models', async (req, res) => {
 });
 
 app.get('/api/health', async (req, res) => {
-    const status = { server: 'ok', ollama: false, lmstudio: false, models: [], memory: !!supabaseClient };
+    const status = { server: 'ok', ollama: false, lmstudio: false, models: [], memory: !!supabaseClient, push_clients: pushClients.size };
     try {
         const r = await fetch(`${OLLAMA_URL}/api/tags`, { signal: AbortSignal.timeout(2000) });
         if (r.ok) { status.ollama = true; const data = await r.json(); status.models = data.models?.map(m => m.name) || []; }
@@ -547,7 +605,9 @@ server.listen(PORT, '0.0.0.0', async () => {
         if (r.ok) { const h = await r.json(); console.log(`✅ HYDI online at ${HYDI_URL} — db: ${h.database}`); }
         else console.log(`ℹ️  HYDI not found at ${HYDI_URL} (set HYDI_URL env var to connect)`);
     } catch { console.log(`ℹ️  HYDI not found at ${HYDI_URL} (set HYDI_URL env var to connect)`); }
+    console.log('📡 Push alerts: ready (POST /api/events/push to broadcast)');
     console.log('');
+    watchHydiEvents();
 });
 
 process.on('SIGINT', () => { console.log('\n🛑 Shutting down Heidi...'); server.close(() => process.exit(0)); });
