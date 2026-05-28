@@ -10,6 +10,7 @@ import {
 import { getSystemStatus, isReachable } from '../../lib/termux/termuxClient.js';
 import { callAgent, isClaudeAvailable } from '../../lib/claude.js';
 import { getPolicyEngine } from '../../lib/protoforge/policy-engine.js';
+import { autoGate } from '../../lib/protoforge/auto-gate.js';
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -189,9 +190,9 @@ async function handleCascadeMessage(message, request) {
 
 async function handleKiloMessage(message, request) {
   const lowerMessage = message.toLowerCase();
-  
+
   if (lowerMessage.includes('hypothesis') || lowerMessage.includes('repair')) {
-    return `🔧 KILO: Generating repair hypothesis based on current system state... ${await generateHypothesis()}`;
+    return await kiloGenerateAndGate(request);
   }
 
   if (lowerMessage.includes('validate')) {
@@ -201,8 +202,82 @@ async function handleKiloMessage(message, request) {
   if (lowerMessage.includes('manifest')) {
     return `🔧 KILO: Repair manifest ready - ${await getRepairManifest()}`;
   }
-  
+
   return `🔧 KILO: Repair hypothesis engine. Ask about 'hypothesis', 'validate', or 'manifest'.`;
+}
+
+/**
+ * Generate a structured KILO hypothesis from live health data and
+ * automatically gate it through ProtoForge before surfacing the result.
+ * Only approved hypotheses should proceed to the emission layer.
+ */
+async function kiloGenerateAndGate(request) {
+  try {
+    const body = request?.body || {};
+    const stream = body.stream || null;
+
+    // ── Build hypothesis from health trends ──────────────────────────────────
+    const { data: trends } = await supabase.rpc('analyze_health_trends');
+    const { data: dash }   = await supabase
+      .from('system_dashboard')
+      .select('current_status, trend_status, jobs_failed, jobs_queued')
+      .single();
+
+    const hypothesis = {
+      id:             `kilo-${Date.now()}`,
+      confidence:     body.confidence  ?? _inferConfidence(dash, trends),
+      risk:           body.risk        ?? _inferRisk(dash),
+      revenue_impact: body.revenue_impact ?? 0,
+      stream,
+      source:         'kilo',
+      reason:         trends?.trend_reason || dash?.trend_status || 'system analysis',
+    };
+
+    // ── Gate through ProtoForge policy engine ────────────────────────────────
+    const result = await autoGate([hypothesis], stream);
+    const { summary } = result;
+
+    if (summary.approved === 1) {
+      const d = result.approved[0].decision;
+      return `🔧 KILO → ✅ ProtoForge APPROVED · Rule: ${d.matchedRuleId || 'default'}\n` +
+             `Hypothesis: ${hypothesis.reason}\n` +
+             `Confidence: ${hypothesis.confidence} · Risk: ${hypothesis.risk} · ${d.reasoning}`;
+    }
+
+    if (summary.escalated === 1) {
+      const d = result.escalated[0].decision;
+      return `🔧 KILO → ⚠️ ProtoForge ESCALATED · Rule: ${d.matchedRuleId || 'default'}\n` +
+             `Hypothesis queued for review. ${d.reasoning}`;
+    }
+
+    // rejected
+    const d = result.rejected[0].decision;
+    return `🔧 KILO → ❌ ProtoForge REJECTED · ${d.reasoning}\n` +
+           `Hypothesis blocked. Confidence: ${hypothesis.confidence} · Risk: ${hypothesis.risk}`;
+
+  } catch (err) {
+    console.error('[KILO] Auto-gate error:', err.message);
+    return `🔧 KILO: Hypothesis generation failed — ${err.message}`;
+  }
+}
+
+/** Derive a confidence score from live health data. */
+function _inferConfidence(dash, trends) {
+  if (!dash) return 0.50;
+  if (dash.current_status === 'OK' && dash.trend_status === 'stable') return 0.90;
+  if (dash.current_status === 'OK')  return 0.75;
+  if (dash.current_status === 'WARNING') return 0.60;
+  return 0.40;
+}
+
+/** Derive a risk score from live queue/failure metrics. */
+function _inferRisk(dash) {
+  if (!dash) return 0.50;
+  const failedJobs = dash.jobs_failed || 0;
+  if (failedJobs === 0) return 0.10;
+  if (failedJobs < 5)  return 0.25;
+  if (failedJobs < 20) return 0.50;
+  return 0.80;
 }
 
 async function handleProtoForgeMessage(message, request) {
