@@ -43,6 +43,11 @@
         .health-metric .label { color: var(--text-muted); }
         .health-metric.hydi-online .value { color: var(--status-ok); }
         .health-metric.hydi-offline .value { color: var(--text-muted); }
+        .sync-idle .value { color: var(--text-muted); }
+        .sync-syncing .value { color: var(--status-warning); }
+        .sync-synced .value { color: var(--status-ok); }
+        .sync-offline .value { color: var(--text-muted); }
+        .sync-error .value { color: var(--status-critical); }
 
         /* HYDI system panel */
         .system-panel { background: var(--bg-secondary); border-bottom: 1px solid rgba(255,255,255,0.05); flex-shrink: 0; }
@@ -142,6 +147,7 @@
     <div class="health-metric" id="metricHydi"><span class="icon">&#x1F4E1;</span><span class="value muted" id="metricHydiValue">&#x2014;</span><span class="label">hydi</span></div>
     <div class="health-metric"><span class="icon">&#x1F528;</span><span class="value" id="metricTools">5</span><span class="label">tools</span></div>
     <div class="health-metric"><span class="icon">&#x1F4AC;</span><span class="value" id="metricMsgCount">0</span><span class="label">msgs</span></div>
+    <div class="health-metric sync-idle" id="metricSync"><span class="icon">&#x2601;&#xFE0F;</span><span class="value" id="metricSyncValue">&#x2014;</span><span class="label">sync</span></div>
     <div class="health-metric"><span class="icon">&#x1F550;</span><span class="value" id="metricTime">&mdash;</span></div>
 </div>
 
@@ -202,21 +208,93 @@ let ttsEnabled = false, isStreaming = false, isListening = false;
 let recognition = null, msgCount = 0, healthTimer = null, hydiTimer = null;
 let conversationHistory = [];
 const HISTORY_KEY = 'heidi-chat-history', MAX_CTX = 40;
+const DEVICE_KEY = 'heidi-device-id';
+
+function getDeviceId() {
+    let id = localStorage.getItem(DEVICE_KEY);
+    if (!id) {
+        id = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+            const r = Math.random() * 16 | 0;
+            return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+        });
+        localStorage.setItem(DEVICE_KEY, id);
+    }
+    return id;
+}
+
+function setSyncState(state) {
+    const el = document.getElementById('metricSync');
+    const val = document.getElementById('metricSyncValue');
+    const icons = { idle: '&#x2014;', syncing: '&#x21BB;', synced: '&#x2713;', offline: 'off', error: '!' };
+    el.className = `health-metric sync-${state}`;
+    val.innerHTML = icons[state] || '&#x2014;';
+}
+
+async function loadFromCloud() {
+    try {
+        const r = await fetch(`/api/memory/${getDeviceId()}`, { signal: AbortSignal.timeout(5000) });
+        if (!r.ok) return null;
+        const data = await r.json();
+        if (data.offline) { setSyncState('offline'); return null; }
+        setSyncState('synced');
+        return data.messages || null;
+    } catch {
+        setSyncState('error');
+        return null;
+    }
+}
+
+function saveToCloud(messages, model) {
+    fetch(`/api/memory/${getDeviceId()}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: messages.slice(-MAX_CTX), model: model || currentModel })
+    }).then(r => r.json()).then(d => setSyncState(d.offline ? 'offline' : 'synced')).catch(() => setSyncState('error'));
+    setSyncState('syncing');
+}
 
 document.addEventListener('DOMContentLoaded', async () => {
-    initVoice(); loadVoices(); restoreHistory();
+    initVoice(); loadVoices();
     const online = await checkServer();
     if (online) {
         await loadModels(); pollHealth(); pollHydiStatus();
+        // Try cloud first, fall back to localStorage
+        setSyncState('syncing');
+        const cloudMessages = await loadFromCloud();
+        if (cloudMessages && cloudMessages.length) {
+            conversationHistory = cloudMessages;
+            renderRestoredHistory(conversationHistory);
+        } else {
+            restoreHistory();
+        }
         if (!conversationHistory.length) {
             addMsg('heidi', "Hi! I'm Heidi, your local ProtoForge AI.\n\nI have tools I can use to check your system: Ollama health, HYDI status, run commands, and read files. Ask me anything!",
                 [{ label: '&#x1F4CA; System status', q: 'status' }, { label: '&#x1F528; What tools do you have', q: 'tools' }]);
         }
     } else {
+        restoreHistory();
         addMsg('system', '&#x26A0;&#xFE0F; Cannot reach Heidi server. Run: node launch-heidi-mobile.js');
         setStatus('off', 'Server offline');
     }
 });
+
+function renderRestoredHistory(messages) {
+    if (!messages.length) return;
+    const exchangeCount = messages.filter(m => m.role === 'user').length;
+    const divider = document.createElement('div');
+    divider.className = 'message system restored';
+    divider.innerHTML = '<div class="message-bubble">&#x2014; ' + exchangeCount + ' previous exchange' + (exchangeCount !== 1 ? 's' : '') + ' restored from cloud &#x2014;</div>';
+    document.getElementById('messages').appendChild(divider);
+    messages.forEach(msg => {
+        const el = document.createElement('div');
+        el.className = 'message ' + (msg.role === 'user' ? 'user' : 'heidi') + ' restored';
+        const bubble = document.createElement('div'); bubble.className = 'message-bubble'; bubble.textContent = msg.content;
+        el.appendChild(bubble); document.getElementById('messages').appendChild(el);
+    });
+    msgCount = messages.filter(m => m.role === 'user').length;
+    document.getElementById('metricMsgCount').textContent = msgCount;
+    scrollBottom();
+}
 
 function restoreHistory() {
     try {
@@ -225,25 +303,16 @@ function restoreHistory() {
         const saved = JSON.parse(raw);
         if (!Array.isArray(saved) || !saved.length) return;
         conversationHistory = saved;
-        const exchangeCount = saved.filter(m => m.role === 'user').length;
-        const divider = document.createElement('div');
-        divider.className = 'message system restored';
-        divider.innerHTML = '<div class="message-bubble">&#x2014; ' + exchangeCount + ' previous exchange' + (exchangeCount !== 1 ? 's' : '') + ' restored &#x2014;</div>';
-        document.getElementById('messages').appendChild(divider);
-        saved.forEach(msg => {
-            const el = document.createElement('div');
-            el.className = 'message ' + (msg.role === 'user' ? 'user' : 'heidi') + ' restored';
-            const bubble = document.createElement('div'); bubble.className = 'message-bubble'; bubble.textContent = msg.content;
-            el.appendChild(bubble); document.getElementById('messages').appendChild(el);
-        });
-        msgCount = saved.filter(m => m.role === 'user').length;
-        document.getElementById('metricMsgCount').textContent = msgCount;
-        scrollBottom();
+        renderRestoredHistory(conversationHistory);
     } catch { conversationHistory = []; }
 }
 
 function saveHistory() {
-    try { conversationHistory = conversationHistory.slice(-MAX_CTX); localStorage.setItem(HISTORY_KEY, JSON.stringify(conversationHistory)); } catch {}
+    try {
+        conversationHistory = conversationHistory.slice(-MAX_CTX);
+        localStorage.setItem(HISTORY_KEY, JSON.stringify(conversationHistory));
+        saveToCloud(conversationHistory, currentModel);
+    } catch {}
 }
 
 async function checkServer() {
@@ -411,6 +480,7 @@ function sendQuick(cmd) {
     if (cmd === 'clear') {
         document.getElementById('messages').innerHTML = '';
         conversationHistory = []; localStorage.removeItem(HISTORY_KEY);
+        saveToCloud([], currentModel);
         msgCount = 0; document.getElementById('metricMsgCount').textContent = '0';
         return;
     }

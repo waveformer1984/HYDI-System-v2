@@ -4,6 +4,8 @@
  * Streams from Ollama/LM Studio — open on mobile via LAN URL printed at startup
  */
 
+require('dotenv').config();
+
 const express = require('express');
 const http = require('http');
 const path = require('path');
@@ -19,6 +21,25 @@ const HYDI_URL = process.env.HYDI_URL || 'http://localhost:3005';
 
 const CHAT_TIMEOUT_MS = 600_000;
 const HYDI_TIMEOUT_MS = 3000;
+
+// ── Supabase client (optional — memory features disabled if env vars absent) ──
+
+let supabaseClient = null;
+if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    try {
+        const { createClient } = require('@supabase/supabase-js');
+        supabaseClient = createClient(
+            process.env.SUPABASE_URL,
+            process.env.SUPABASE_SERVICE_ROLE_KEY,
+            { auth: { persistSession: false } }
+        );
+        console.log('✅ Supabase memory: connected');
+    } catch (e) {
+        console.log('⚠️  Supabase memory: disabled —', e.message);
+    }
+} else {
+    console.log('ℹ️  Supabase memory: disabled (set SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY to enable)');
+}
 
 // ── Tool definitions ──────────────────────────────────────────────────────────
 
@@ -285,6 +306,50 @@ app.post('/api/system/action', async (req, res) => {
     }
 });
 
+// ── Memory routes (Supabase) ──────────────────────────────────────────────────
+
+const DEVICE_ID_RE = /^[a-z0-9-]{36}$/;
+
+app.get('/api/memory/:deviceId', async (req, res) => {
+    if (!supabaseClient) return res.json({ messages: null, offline: true });
+    const { deviceId } = req.params;
+    if (!DEVICE_ID_RE.test(deviceId)) return res.status(400).json({ error: 'invalid device id' });
+    try {
+        const { data, error } = await supabaseClient
+            .from('heidi_chat_sessions')
+            .select('messages, model, updated_at')
+            .eq('device_id', deviceId)
+            .single();
+        if (error && error.code !== 'PGRST116') throw error;
+        res.json({ messages: data?.messages || null, model: data?.model, updated_at: data?.updated_at });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.post('/api/memory/:deviceId', async (req, res) => {
+    if (!supabaseClient) return res.json({ saved: false, offline: true });
+    const { deviceId } = req.params;
+    if (!DEVICE_ID_RE.test(deviceId)) return res.status(400).json({ error: 'invalid device id' });
+    const { messages, model } = req.body;
+    if (!Array.isArray(messages)) return res.status(400).json({ error: 'messages must be array' });
+    try {
+        const { error } = await supabaseClient
+            .from('heidi_chat_sessions')
+            .upsert({
+                device_id: deviceId,
+                messages: messages.slice(-40),
+                model: model || null,
+                msg_count: messages.length,
+                updated_at: new Date().toISOString()
+            }, { onConflict: 'device_id' });
+        if (error) throw error;
+        res.json({ saved: true });
+    } catch (e) {
+        res.status(500).json({ saved: false, error: e.message });
+    }
+});
+
 // ── App routes ────────────────────────────────────────────────────────────────
 
 app.get(['/', '/heidi-mobile', '/heidi'], (req, res) => {
@@ -308,7 +373,7 @@ app.get('/api/models', async (req, res) => {
 });
 
 app.get('/api/health', async (req, res) => {
-    const status = { server: 'ok', ollama: false, lmstudio: false, models: [] };
+    const status = { server: 'ok', ollama: false, lmstudio: false, models: [], memory: !!supabaseClient };
     try {
         const r = await fetch(`${OLLAMA_URL}/api/tags`, { signal: AbortSignal.timeout(2000) });
         if (r.ok) { status.ollama = true; const data = await r.json(); status.models = data.models?.map(m => m.name) || []; }
