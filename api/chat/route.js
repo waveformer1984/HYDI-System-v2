@@ -9,6 +9,7 @@ import {
 } from '../../lib/vercel/vercelAdmin.js';
 import { getSystemStatus, isReachable } from '../../lib/termux/termuxClient.js';
 import { callAgent, isClaudeAvailable } from '../../lib/claude.js';
+import { getPolicyEngine } from '../../lib/protoforge/policy-engine.js';
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -206,7 +207,7 @@ async function handleKiloMessage(message, request) {
 
 async function handleProtoForgeMessage(message, request) {
   const lowerMessage = message.toLowerCase();
-  
+
   if (lowerMessage.includes('status')) {
     return `🌐 ProtoForge: Core system status - ${await getProtoForgeStatus()}`;
   }
@@ -218,8 +219,60 @@ async function handleProtoForgeMessage(message, request) {
   if (lowerMessage.includes('govern')) {
     return `🌐 ProtoForge: Governance status - ${await getGovernanceStatus()}`;
   }
-  
-  return `🌐 ProtoForge: Core system coordination. Try 'status', 'modules', or 'govern'.`;
+
+  // Evaluate a KILO hypothesis through the live policy engine
+  if (lowerMessage.includes('evaluate') || lowerMessage.includes('hypothesis')) {
+    return await evaluateHypothesis(message, request);
+  }
+
+  if (lowerMessage.includes('policy')) {
+    return await getPolicyInfo();
+  }
+
+  return `🌐 ProtoForge: Core system coordination. Try 'status', 'modules', 'govern', 'policy', or 'evaluate <hypothesis>'.`;
+}
+
+async function evaluateHypothesis(message, request) {
+  try {
+    // Parse hypothesis from message body if structured, otherwise build from text
+    const body = request?.body || {};
+    const hyp = body.hypothesis || {
+      id: `chat-${Date.now()}`,
+      confidence: body.confidence ?? 0.75,
+      risk: body.risk ?? 0.30,
+      revenue_impact: body.revenue_impact ?? 0,
+      stream: body.stream || null,
+    };
+
+    const stream = hyp.stream || null;
+    const engine = await getPolicyEngine(stream);
+    const decision = engine.evaluate(hyp);
+
+    // Record decision async — don't block the response
+    engine.recordDecision(decision).catch(err =>
+      console.error('[PROTOFORGE] Decision record error:', err.message)
+    );
+
+    const emoji = { approve: '✅', reject: '❌', escalate: '⚠️' }[decision.decision] || '❓';
+    return `${emoji} ProtoForge decision: ${decision.decision.toUpperCase()} · Rule: ${decision.matchedRuleId || 'default'} · ${decision.reasoning}`;
+  } catch (err) {
+    console.error('[PROTOFORGE] Evaluate error:', err.message);
+    return `🌐 ProtoForge: Evaluation failed — ${err.message}`;
+  }
+}
+
+async function getPolicyInfo() {
+  try {
+    const engine = await getPolicyEngine(null);
+    const policy = engine.activePolicy;
+    if (!policy) {
+      return '🌐 ProtoForge: No active policy. Promote a policy via the policies table to enable rule evaluation.';
+    }
+    const ruleCount = (policy.rules?.rules || []).length;
+    return `🌐 ProtoForge: Active policy — "${policy.name}" v${policy.version} · ${ruleCount} rule(s) · default: ${policy.rules?.default || 'reject'}`;
+  } catch (err) {
+    return `🌐 ProtoForge: Policy info unavailable — ${err.message}`;
+  }
 }
 
 async function handleHyveMessage(message, request) {
