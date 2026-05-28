@@ -104,6 +104,59 @@
         .health-metric .icon { font-size: 14px; }
         .health-metric .value { font-weight: 600; }
         .health-metric .label { color: var(--text-muted); }
+        .health-metric.hydi-online .value { color: var(--status-ok); }
+        .health-metric.hydi-offline .value { color: var(--text-muted); }
+
+        /* HYDI system panel */
+        .system-panel {
+            background: var(--bg-secondary);
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            flex-shrink: 0;
+        }
+        .system-panel-header {
+            display: flex; align-items: center; gap: 8px;
+            padding: 8px 16px; cursor: pointer; user-select: none;
+            font-size: 12px; color: var(--text-secondary);
+            transition: background 0.15s;
+        }
+        .system-panel-header:active { background: rgba(255,255,255,0.04); }
+        .system-panel-title { font-weight: 600; flex: 1; }
+        .system-panel-badge {
+            padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: 600;
+            text-transform: uppercase;
+        }
+        .system-panel-badge.online { background: rgba(16,185,129,0.2); color: var(--status-ok); }
+        .system-panel-badge.offline { background: rgba(107,114,128,0.15); color: var(--text-muted); }
+        .system-panel-chevron { font-size: 10px; transition: transform 0.2s; }
+        .system-panel-chevron.open { transform: rotate(180deg); }
+        .system-panel-body {
+            padding: 0 16px 12px;
+            display: none;
+        }
+        .system-panel-body.open { display: block; }
+        .system-grid {
+            display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px;
+        }
+        .system-card {
+            background: var(--bg-elevated); border-radius: 8px; padding: 10px 12px;
+        }
+        .system-card-label { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+        .system-card-value { font-size: 14px; font-weight: 600; margin-top: 2px; }
+        .system-card-value.ok { color: var(--status-ok); }
+        .system-card-value.warn { color: var(--status-warning); }
+        .system-card-value.muted { color: var(--text-muted); }
+        .system-action-row { display: flex; gap: 8px; }
+        .system-action-btn {
+            flex: 1; padding: 8px; background: var(--accent-dim);
+            border: 1px solid rgba(100,255,218,0.2); border-radius: 8px;
+            color: var(--accent); font-size: 12px; font-weight: 500;
+            cursor: pointer; text-align: center; transition: all 0.2s;
+        }
+        .system-action-btn:active { background: rgba(100,255,218,0.2); }
+        .system-action-btn.secondary {
+            background: var(--bg-elevated); border-color: rgba(255,255,255,0.1);
+            color: var(--text-secondary);
+        }
 
         .messages-container {
             flex: 1; overflow-y: auto; padding: 16px;
@@ -170,6 +223,7 @@
             cursor: pointer; transition: all 0.2s; user-select: none;
         }
         .quick-action:active { background: var(--accent-dim); color: var(--accent); border-color: rgba(100,255,218,0.3); }
+        .quick-action.hydi { border-color: rgba(100,255,218,0.2); color: var(--accent); }
 
         .input-area {
             background: var(--bg-secondary); border-top: 1px solid rgba(255,255,255,0.05);
@@ -285,8 +339,43 @@
 <div class="health-strip">
     <div class="health-metric"><span class="icon">&#x1F916;</span><span class="value" id="metricModels">&mdash;</span><span class="label">models</span></div>
     <div class="health-metric"><span class="icon">&#x26A1;</span><span class="value" id="metricProvider">&mdash;</span></div>
+    <div class="health-metric" id="metricHydi"><span class="icon">&#x1F4E1;</span><span class="value muted" id="metricHydiValue">&#x2014;</span><span class="label">hydi</span></div>
     <div class="health-metric"><span class="icon">&#x1F4AC;</span><span class="value" id="metricMsgCount">0</span><span class="label">msgs</span></div>
     <div class="health-metric"><span class="icon">&#x1F550;</span><span class="value" id="metricTime">&mdash;</span></div>
+</div>
+
+<!-- HYDI System Panel -->
+<div class="system-panel" id="systemPanel">
+    <div class="system-panel-header" onclick="toggleSystemPanel()">
+        <span class="system-panel-title">&#x2699;&#xFE0F; HYDI System</span>
+        <span class="system-panel-badge offline" id="systemPanelBadge">offline</span>
+        <span class="system-panel-chevron" id="systemPanelChevron">&#x25BC;</span>
+    </div>
+    <div class="system-panel-body" id="systemPanelBody">
+        <div class="system-grid">
+            <div class="system-card">
+                <div class="system-card-label">Status</div>
+                <div class="system-card-value muted" id="sysStat">&#x2014;</div>
+            </div>
+            <div class="system-card">
+                <div class="system-card-label">Database</div>
+                <div class="system-card-value muted" id="sysDb">&#x2014;</div>
+            </div>
+            <div class="system-card">
+                <div class="system-card-label">Events</div>
+                <div class="system-card-value muted" id="sysEvents">&#x2014;</div>
+            </div>
+            <div class="system-card">
+                <div class="system-card-label">Updated</div>
+                <div class="system-card-value muted" id="sysUpdated">&#x2014;</div>
+            </div>
+        </div>
+        <div class="system-action-row">
+            <button class="system-action-btn" onclick="sendQuick('hydi_status')">&#x1F4CA; Ask Heidi</button>
+            <button class="system-action-btn secondary" onclick="sendSystemEvent()">&#x1F4EC; Send Event</button>
+            <button class="system-action-btn secondary" onclick="refreshSystemPanel()">&#x1F504; Refresh</button>
+        </div>
+    </div>
 </div>
 
 <div class="messages-container" id="messages"></div>
@@ -294,6 +383,7 @@
 <div class="quick-actions">
     <div class="quick-action" onclick="sendQuick('status')">&#x1F4CA; Status</div>
     <div class="quick-action" onclick="sendQuick('models')">&#x1F916; Models</div>
+    <div class="quick-action hydi" onclick="sendQuick('hydi_status')">&#x2699;&#xFE0F; HYDI</div>
     <div class="quick-action" onclick="sendQuick('help')">&#x1F4A1; What can you do</div>
     <div class="quick-action" onclick="sendQuick('health')">&#x1F527; Health check</div>
     <div class="quick-action" onclick="sendQuick('clear')">&#x1F5D1;&#xFE0F; Clear chat</div>
@@ -328,6 +418,7 @@ let isListening = false;
 let recognition = null;
 let msgCount = 0;
 let healthTimer = null;
+let hydiTimer = null;
 let conversationHistory = [];
 const HISTORY_KEY = 'heidi-chat-history';
 const MAX_CTX = 40;
@@ -341,10 +432,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (online) {
         await loadModels();
         pollHealth();
+        pollHydiStatus();
         if (!conversationHistory.length) {
             addMsg('heidi',
                 "Hi! I'm Heidi, your local ProtoForge AI.\n\nI'm running on your device via Ollama. Talk to me, ask about your system, or use voice input. Enable the speaker icon so I speak back.",
-                [{ label: '&#x1F4CA; System status', q: 'status' }, { label: '&#x1F916; Available models', q: 'models' }]
+                [{ label: '&#x1F4CA; System status', q: 'status' }, { label: '&#x2699;&#xFE0F; HYDI status', q: 'hydi_status' }]
             );
         }
     } else {
@@ -413,6 +505,82 @@ function updateHealthUI(h) {
 function setStatus(dotClass, text) {
     document.getElementById('statusDot').className = 'status-dot ' + (dotClass || '');
     document.getElementById('statusText').textContent = text;
+}
+
+// ─── HYDI System status ────────────────────────────────────────────────────────
+async function pollHydiStatus() {
+    await refreshSystemPanel();
+    hydiTimer = setTimeout(pollHydiStatus, 60000);
+}
+
+async function refreshSystemPanel() {
+    try {
+        const r = await fetch('/api/system/status', { signal: AbortSignal.timeout(4000) });
+        if (!r.ok) throw new Error();
+        const s = await r.json();
+        updateHydiUI(s);
+    } catch {
+        updateHydiUI(null);
+    }
+}
+
+function updateHydiUI(s) {
+    const badge = document.getElementById('systemPanelBadge');
+    const metricEl = document.getElementById('metricHydi');
+    const metricVal = document.getElementById('metricHydiValue');
+
+    if (!s || !s.online) {
+        badge.textContent = 'offline'; badge.className = 'system-panel-badge offline';
+        metricEl.className = 'health-metric hydi-offline';
+        metricVal.textContent = 'off';
+        document.getElementById('sysStat').textContent = '—';
+        document.getElementById('sysDb').textContent = '—';
+        document.getElementById('sysEvents').textContent = '—';
+        document.getElementById('sysUpdated').textContent = '—';
+        return;
+    }
+
+    badge.textContent = 'online'; badge.className = 'system-panel-badge online';
+    metricEl.className = 'health-metric hydi-online';
+    metricVal.textContent = 'on';
+
+    const statEl = document.getElementById('sysStat');
+    statEl.textContent = s.status || '—';
+    statEl.className = 'system-card-value ' + (s.status === 'operational' ? 'ok' : 'warn');
+
+    const dbEl = document.getElementById('sysDb');
+    dbEl.textContent = s.database || '—';
+    dbEl.className = 'system-card-value ' + (s.database === 'connected' ? 'ok' : 'warn');
+
+    document.getElementById('sysEvents').textContent = s.totalEvents?.toLocaleString() || '0';
+    document.getElementById('sysUpdated').textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+function toggleSystemPanel() {
+    const body = document.getElementById('systemPanelBody');
+    const chevron = document.getElementById('systemPanelChevron');
+    const open = body.classList.toggle('open');
+    chevron.classList.toggle('open', open);
+}
+
+async function sendSystemEvent() {
+    const type = prompt('Event type (e.g. health_check, observation):');
+    if (!type) return;
+    try {
+        const r = await fetch('/api/system/action', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ type, source: 'heidi-mobile-ui' })
+        });
+        const result = await r.json();
+        if (result.success) {
+            addMsg('system', '✅ Event sent: ' + type + '\nResult: ' + JSON.stringify(result.result?.status || 'ok'));
+        } else {
+            addMsg('system', '⚠;️ Event failed: ' + (result.error || 'HYDI not connected'));
+        }
+    } catch (e) {
+        addMsg('system', '⚠;️ Could not reach HYDI: ' + e.message);
+    }
 }
 
 // ─── Model loading ───────────────────────────────────────────────────────────
@@ -542,6 +710,7 @@ function sendQuick(cmd) {
         models: 'List all available AI models and tell me about the current one you are using.',
         help: 'What can you help me with? Give a friendly overview of your capabilities.',
         health: 'Run a health check: check Ollama, server status, and any issues you can detect.',
+        hydi_status: 'What is the current HYDI system status? Check the database connection, event bus, and any running agents or loops.',
     };
     const input = document.getElementById('msgInput');
     input.value = map[cmd] || cmd;
@@ -584,6 +753,8 @@ function addContextActions(msgEl, response, userMsg) {
     const actions = [];
     if (text.includes('health') || text.includes('status') || text.includes('check'))
         actions.push({ label: '&#x1F504; Re-run health check', q: 'health' });
+    if (text.includes('hydi') || text.includes('agent') || text.includes('loop') || text.includes('event bus'))
+        actions.push({ label: '&#x2699;&#xFE0F; HYDI status', q: 'hydi_status' });
     if (text.includes('model') || text.includes('ollama') || text.includes('install'))
         actions.push({ label: '&#x1F916; List all models', q: 'models' });
     if (text.includes('error') || text.includes('fail') || text.includes('issue'))

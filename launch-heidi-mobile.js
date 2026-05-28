@@ -20,9 +20,11 @@ const PORT = parseInt(process.env.HEIDI_PORT || '3006');
 const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434';
 const LM_STUDIO_URL = process.env.LM_STUDIO_URL || 'http://localhost:1234';
 const DEFAULT_MODEL = process.env.LOCAL_MODEL_NAME || 'tinyllama';
+const HYDI_URL = process.env.HYDI_URL || 'http://localhost:3005';
 
 // 10 minutes — phone cold-start model load can take 2-5 min before first token
 const CHAT_TIMEOUT_MS = 600_000;
+const HYDI_TIMEOUT_MS = 3000;
 
 function getLANIP() {
     for (const ifaces of Object.values(os.networkInterfaces())) {
@@ -33,14 +35,49 @@ function getLANIP() {
     return 'localhost';
 }
 
-function buildSystemPrompt() {
-    return `You are Heidi, the AI assistant for the HYDI ProtoForge system.
+async function fetchHydiStatus() {
+    try {
+        const [healthRes, metricsRes] = await Promise.allSettled([
+            fetch(`${HYDI_URL}/health`, { signal: AbortSignal.timeout(HYDI_TIMEOUT_MS) }),
+            fetch(`${HYDI_URL}/metrics`, { signal: AbortSignal.timeout(HYDI_TIMEOUT_MS) })
+        ]);
+        let health = null, metrics = null;
+        if (healthRes.status === 'fulfilled' && healthRes.value.ok) health = await healthRes.value.json();
+        if (metricsRes.status === 'fulfilled' && metricsRes.value.ok) metrics = await metricsRes.value.json();
+        if (!health) return null;
+        return {
+            online: true,
+            status: health.status,
+            database: health.database,
+            totalEvents: metrics?.total_events || 0,
+            eventBus: metrics?.event_bus || null,
+            timestamp: health.timestamp
+        };
+    } catch { return null; }
+}
+
+function buildSystemPrompt(hydiStatus = null) {
+    let prompt = `You are Heidi, the AI assistant for the HYDI ProtoForge system.
 You run locally on the user's device via Ollama.
 You are helpful, direct, and slightly warm in personality.
 You assist with: system health monitoring, technical questions, deployments, code, and general tasks.
 When asked to take an action, explain what you will do clearly and concisely.
 Keep responses concise (under 300 words) unless the user explicitly asks for detail.
 Current date/time: ${new Date().toLocaleString()}`;
+
+    if (hydiStatus) {
+        prompt += `\n\nHYDI System Status (live):
+- Status: ${hydiStatus.status}
+- Database: ${hydiStatus.database}
+- Total events processed: ${hydiStatus.totalEvents}`;
+        if (hydiStatus.eventBus) {
+            prompt += `\n- Event bus: ${JSON.stringify(hydiStatus.eventBus)}`;
+        }
+    } else {
+        prompt += `\n\nHYDI System: Not connected (set HYDI_URL env var to connect to main system at ${HYDI_URL})`;
+    }
+
+    return prompt;
 }
 
 function buildFallback(message) {
@@ -139,6 +176,38 @@ self.addEventListener('fetch', e => {
 `);
 });
 
+// ── HYDI System bridge ────────────────────────────────────────────────────────
+
+app.get('/api/system/status', async (req, res) => {
+    const status = await fetchHydiStatus();
+    res.json(status || { online: false });
+});
+
+app.post('/api/system/action', async (req, res) => {
+    const { type, source, payload } = req.body;
+    if (!type) return res.status(400).json({ error: 'type required' });
+    try {
+        const event = {
+            event_id: `mobile_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            type,
+            source: source || 'heidi-mobile',
+            timestamp: new Date().toISOString(),
+            payload: payload || {}
+        };
+        const r = await fetch(`${HYDI_URL}/process`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(event),
+            signal: AbortSignal.timeout(HYDI_TIMEOUT_MS)
+        });
+        if (!r.ok) throw new Error(`HYDI HTTP ${r.status}`);
+        const result = await r.json();
+        res.json({ success: true, result });
+    } catch (e) {
+        res.status(503).json({ success: false, error: e.message });
+    }
+});
+
 // ── App routes ────────────────────────────────────────────────────────────────
 
 app.get(['/', '/heidi-mobile', '/heidi'], (req, res) => {
@@ -196,7 +265,9 @@ app.post('/api/chat', async (req, res) => {
     const send = (data) => res.write(`data: ${JSON.stringify(data)}\n\n`);
     const finish = (meta = {}) => { send({ done: true, ...meta }); res.end(); };
 
-    const systemPrompt = buildSystemPrompt();
+    // Fetch HYDI status to enrich system prompt (non-blocking, falls back to null)
+    const hydiStatus = await fetchHydiStatus();
+    const systemPrompt = buildSystemPrompt(hydiStatus);
     const selectedModel = model || DEFAULT_MODEL;
 
     if (provider !== 'lmstudio') {
@@ -319,6 +390,17 @@ server.listen(PORT, '0.0.0.0', async () => {
         if (r.ok) console.log(`✅ LM Studio online at ${LM_STUDIO_URL}`);
     } catch {
         console.log('ℹ️  LM Studio not found (optional alternative to Ollama)');
+    }
+    try {
+        const r = await fetch(`${HYDI_URL}/health`, { signal: AbortSignal.timeout(2000) });
+        if (r.ok) {
+            const h = await r.json();
+            console.log(`✅ HYDI System online at ${HYDI_URL} — db: ${h.database}`);
+        } else {
+            console.log(`ℹ️  HYDI System not found at ${HYDI_URL} (set HYDI_URL env var to connect)`);
+        }
+    } catch {
+        console.log(`ℹ️  HYDI System not found at ${HYDI_URL} (set HYDI_URL env var to connect)`);
     }
     console.log('');
 });
