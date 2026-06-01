@@ -6,146 +6,471 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Heidi">
-    <meta name="theme-color" content="#0a0a0f">
+    <meta name="theme-color" content="#0e0c08">
     <link rel="manifest" href="/manifest.json">
     <link rel="apple-touch-icon" href="/icon.svg">
-    <title>Heidi</title>
+    <title>HEIDI</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
         :root {
-            --bg-primary: #0a0a0f; --bg-secondary: #12121a; --bg-elevated: #1a1a24;
-            --accent: #64ffda; --accent-dim: rgba(100,255,218,0.1);
-            --text-primary: #e2e8f0; --text-secondary: #94a3b8; --text-muted: #64748b;
-            --status-ok: #10b981; --status-warning: #f59e0b; --status-critical: #ef4444; --status-unknown: #6b7280;
+            --bg-primary: #0e0c08;
+            --bg-secondary: #161310;
+            --bg-elevated: #1e1a12;
+            --accent: #c8881e;
+            --accent-dim: rgba(200,136,30,0.12);
+            --text-primary: #d4bc7a;
+            --text-secondary: #7a6040;
+            --text-muted: #3e2e18;
+            --status-ok: #4a8c30;
+            --status-warning: #c8881e;
+            --status-critical: #b83020;
+            --status-unknown: #4a3c28;
         }
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg-primary); color: var(--text-primary); height: 100vh; height: 100dvh; overflow: hidden; display: flex; flex-direction: column; }
-        .header { background: var(--bg-secondary); border-bottom: 1px solid rgba(255,255,255,0.05); padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; backdrop-filter: blur(20px); flex-shrink: 0; }
+        body {
+            font-family: 'Courier New', Courier, monospace;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            height: 100vh; height: 100dvh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+        /* Subtle scanline overlay */
+        body::after {
+            content: '';
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: repeating-linear-gradient(
+                0deg, transparent, transparent 3px,
+                rgba(0,0,0,0.04) 3px, rgba(0,0,0,0.04) 4px
+            );
+            pointer-events: none;
+            z-index: 9999;
+        }
+
+        /* ── Header ─────────────────────────────── */
+        .header {
+            background: var(--bg-secondary);
+            border-bottom: 1px solid rgba(200,136,30,0.25);
+            padding: 10px 16px;
+            display: flex; align-items: center; justify-content: space-between;
+            flex-shrink: 0;
+            position: relative;
+        }
+        .header::after {
+            content: '';
+            position: absolute; bottom: -1px; left: 0; right: 0; height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(200,136,30,0.35), transparent);
+        }
         .header-left { display: flex; align-items: center; gap: 12px; }
-        .header-right { display: flex; align-items: center; gap: 8px; }
-        .heidi-avatar { width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(135deg, var(--accent), #3b82f6); display: flex; align-items: center; justify-content: center; font-size: 20px; box-shadow: 0 0 20px rgba(100,255,218,0.3); flex-shrink: 0; }
-        .header-info h1 { font-size: 16px; font-weight: 600; }
-        .header-info .status { font-size: 12px; color: var(--text-secondary); display: flex; align-items: center; gap: 4px; }
-        .status-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--status-ok); animation: pulse 2s infinite; flex-shrink: 0; }
-        .status-dot.warning { background: var(--status-warning); }
-        .status-dot.off { background: var(--status-unknown); animation: none; }
-        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
-        .tts-btn { background: none; border: none; font-size: 18px; cursor: pointer; padding: 6px; border-radius: 50%; transition: all 0.2s; line-height: 1; color: var(--text-muted); }
-        .tts-btn.active { color: var(--accent); background: var(--accent-dim); }
-        .health-badge { padding: 4px 10px; border-radius: 12px; font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; }
-        .health-badge.ok { background: rgba(16,185,129,0.2); color: var(--status-ok); }
-        .health-badge.warning { background: rgba(245,158,11,0.2); color: var(--status-warning); }
-        .health-badge.offline { background: rgba(107,114,128,0.2); color: var(--status-unknown); }
-        .health-strip { background: var(--bg-secondary); border-bottom: 1px solid rgba(255,255,255,0.05); padding: 8px 16px; display: flex; gap: 10px; overflow-x: auto; scrollbar-width: none; flex-shrink: 0; }
+        .header-right { display: flex; align-items: center; gap: 6px; }
+        .heidi-avatar {
+            width: 38px; height: 38px;
+            border-radius: 50%;
+            background: var(--bg-elevated);
+            border: 1px solid rgba(200,136,30,0.5);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 17px; font-weight: bold;
+            color: var(--accent);
+            box-shadow: 0 0 14px rgba(200,136,30,0.18), inset 0 0 8px rgba(200,136,30,0.06);
+            flex-shrink: 0;
+            letter-spacing: -1px;
+        }
+        .header-info h1 {
+            font-size: 14px; font-weight: bold;
+            letter-spacing: 4px; text-transform: uppercase;
+            color: var(--text-primary);
+        }
+        .header-info .status {
+            font-size: 10px; color: var(--text-secondary);
+            display: flex; align-items: center; gap: 5px;
+            text-transform: uppercase; letter-spacing: 1px; margin-top: 2px;
+        }
+        .status-dot {
+            width: 5px; height: 5px; border-radius: 50%;
+            background: var(--status-ok);
+            box-shadow: 0 0 5px var(--status-ok);
+            animation: glow-pulse 2s infinite; flex-shrink: 0;
+        }
+        .status-dot.warning { background: var(--status-warning); box-shadow: 0 0 5px var(--status-warning); }
+        .status-dot.off { background: var(--status-unknown); box-shadow: none; animation: none; }
+        @keyframes glow-pulse { 0%,100%{opacity:1} 50%{opacity:0.35} }
+        .tts-btn {
+            background: var(--bg-elevated);
+            border: 1px solid rgba(200,136,30,0.18);
+            font-size: 15px; cursor: pointer;
+            padding: 5px 8px; border-radius: 2px;
+            transition: all 0.15s; line-height: 1;
+            color: var(--text-secondary);
+        }
+        .tts-btn.active {
+            color: var(--accent);
+            border-color: rgba(200,136,30,0.5);
+            box-shadow: 0 0 8px rgba(200,136,30,0.18);
+        }
+        .health-badge {
+            padding: 3px 7px; border-radius: 2px;
+            font-size: 9px; font-weight: bold;
+            text-transform: uppercase; letter-spacing: 1.5px;
+            border: 1px solid;
+        }
+        .health-badge.ok { border-color: rgba(74,140,48,0.45); color: var(--status-ok); background: rgba(74,140,48,0.08); }
+        .health-badge.warning { border-color: rgba(200,136,30,0.45); color: var(--status-warning); background: rgba(200,136,30,0.08); }
+        .health-badge.offline { border-color: rgba(74,60,40,0.35); color: var(--text-muted); }
+
+        /* ── Health strip ────────────────────────── */
+        .health-strip {
+            background: var(--bg-secondary);
+            border-bottom: 1px solid rgba(200,136,30,0.1);
+            padding: 5px 16px;
+            display: flex; gap: 5px; overflow-x: auto;
+            scrollbar-width: none; flex-shrink: 0;
+        }
         .health-strip::-webkit-scrollbar { display: none; }
-        .health-metric { display: flex; align-items: center; gap: 6px; padding: 6px 12px; background: var(--bg-elevated); border-radius: 8px; white-space: nowrap; font-size: 12px; }
-        .health-metric .icon { font-size: 14px; }
-        .health-metric .value { font-weight: 600; }
-        .health-metric .label { color: var(--text-muted); }
-        .health-metric.hydi-online .value { color: var(--status-ok); }
-        .health-metric.hydi-offline .value { color: var(--text-muted); }
-        .sync-idle .value { color: var(--text-muted); }
-        .sync-syncing .value { color: var(--status-warning); }
-        .sync-synced .value { color: var(--status-ok); }
-        .sync-offline .value { color: var(--text-muted); }
+        .health-metric {
+            display: flex; align-items: center; gap: 5px;
+            padding: 4px 9px;
+            background: var(--bg-primary);
+            border: 1px solid rgba(200,136,30,0.1);
+            border-radius: 2px;
+            white-space: nowrap; font-size: 11px;
+        }
+        .health-metric .icon { font-size: 11px; }
+        .health-metric .value {
+            font-weight: bold; color: var(--accent);
+            text-shadow: 0 0 7px rgba(200,136,30,0.45);
+        }
+        .health-metric .label {
+            color: var(--text-secondary);
+            text-transform: uppercase; font-size: 9px; letter-spacing: 0.5px;
+        }
+        .health-metric.hydi-online .value { color: var(--status-ok); text-shadow: 0 0 7px rgba(74,140,48,0.45); }
+        .health-metric.hydi-offline .value { color: var(--text-muted); text-shadow: none; }
+        .sync-idle .value { color: var(--text-muted); text-shadow: none; }
+        .sync-syncing .value { color: var(--status-warning); text-shadow: 0 0 7px rgba(200,136,30,0.45); }
+        .sync-synced .value { color: var(--status-ok); text-shadow: 0 0 7px rgba(74,140,48,0.45); }
+        .sync-offline .value { color: var(--text-muted); text-shadow: none; }
         .sync-error .value { color: var(--status-critical); }
 
-        /* HYDI system panel */
-        .system-panel { background: var(--bg-secondary); border-bottom: 1px solid rgba(255,255,255,0.05); flex-shrink: 0; }
-        .system-panel-header { display: flex; align-items: center; gap: 8px; padding: 8px 16px; cursor: pointer; user-select: none; font-size: 12px; color: var(--text-secondary); }
-        .system-panel-title { font-weight: 600; flex: 1; }
-        .system-panel-badge { padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: 600; text-transform: uppercase; }
-        .system-panel-badge.online { background: rgba(16,185,129,0.2); color: var(--status-ok); }
-        .system-panel-badge.offline { background: rgba(107,114,128,0.15); color: var(--text-muted); }
-        .system-panel-chevron { font-size: 10px; transition: transform 0.2s; }
+        /* ── System panel ────────────────────────── */
+        .system-panel {
+            background: var(--bg-secondary);
+            border-bottom: 1px solid rgba(200,136,30,0.1);
+            flex-shrink: 0;
+        }
+        .system-panel-header {
+            display: flex; align-items: center; gap: 8px;
+            padding: 7px 16px; cursor: pointer; user-select: none;
+            font-size: 10px; color: var(--text-secondary);
+            text-transform: uppercase; letter-spacing: 1.5px;
+        }
+        .system-panel-title { font-weight: bold; flex: 1; }
+        .system-panel-badge {
+            padding: 2px 6px; border-radius: 2px;
+            font-size: 9px; font-weight: bold;
+            text-transform: uppercase; letter-spacing: 1px; border: 1px solid;
+        }
+        .system-panel-badge.online { border-color: rgba(74,140,48,0.4); color: var(--status-ok); background: rgba(74,140,48,0.07); }
+        .system-panel-badge.offline { border-color: rgba(74,60,40,0.3); color: var(--text-muted); }
+        .system-panel-chevron { font-size: 9px; transition: transform 0.2s; color: var(--text-muted); }
         .system-panel-chevron.open { transform: rotate(180deg); }
         .system-panel-body { padding: 0 16px 12px; display: none; }
         .system-panel-body.open { display: block; }
-        .system-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
-        .system-card { background: var(--bg-elevated); border-radius: 8px; padding: 10px 12px; }
-        .system-card-label { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
-        .system-card-value { font-size: 14px; font-weight: 600; margin-top: 2px; }
-        .system-card-value.ok { color: var(--status-ok); } .system-card-value.warn { color: var(--status-warning); } .system-card-value.muted { color: var(--text-muted); }
-        .system-action-row { display: flex; gap: 8px; }
-        .system-action-btn { flex: 1; padding: 8px; background: var(--accent-dim); border: 1px solid rgba(100,255,218,0.2); border-radius: 8px; color: var(--accent); font-size: 12px; font-weight: 500; cursor: pointer; text-align: center; transition: all 0.2s; }
-        .system-action-btn.secondary { background: var(--bg-elevated); border-color: rgba(255,255,255,0.1); color: var(--text-secondary); }
+        .system-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 8px; }
+        .system-card {
+            background: var(--bg-primary);
+            border: 1px solid rgba(200,136,30,0.1);
+            border-radius: 2px; padding: 8px 10px;
+        }
+        .system-card-label { font-size: 9px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; }
+        .system-card-value { font-size: 13px; font-weight: bold; margin-top: 2px; }
+        .system-card-value.ok { color: var(--status-ok); }
+        .system-card-value.warn { color: var(--status-warning); }
+        .system-card-value.muted { color: var(--text-muted); }
+        .system-action-row { display: flex; gap: 5px; }
+        .system-action-btn {
+            flex: 1; padding: 7px;
+            background: transparent;
+            border: 1px solid rgba(200,136,30,0.2);
+            border-radius: 2px; color: var(--accent);
+            font-size: 10px; font-weight: bold; cursor: pointer;
+            text-align: center; transition: all 0.12s;
+            font-family: 'Courier New', monospace;
+            text-transform: uppercase; letter-spacing: 0.5px;
+        }
+        .system-action-btn:active { background: rgba(200,136,30,0.1); }
+        .system-action-btn.secondary { border-color: rgba(200,136,30,0.1); color: var(--text-secondary); }
 
-        .messages-container { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; scroll-behavior: smooth; overscroll-behavior: contain; }
-        .message { max-width: 85%; animation: slideIn 0.25s ease; }
-        @keyframes slideIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:none} }
-        .message.user { align-self: flex-end; } .message.heidi { align-self: flex-start; } .message.system { align-self: center; max-width: 95%; } .message.restored { animation: none; }
-        .message-bubble { padding: 12px 16px; border-radius: 18px; font-size: 15px; line-height: 1.55; word-break: break-word; white-space: pre-wrap; }
-        .message.user .message-bubble { background: var(--accent); color: #000; border-bottom-right-radius: 4px; }
-        .message.heidi .message-bubble { background: var(--bg-elevated); border: 1px solid rgba(255,255,255,0.1); border-bottom-left-radius: 4px; }
-        .message.system .message-bubble { background: rgba(100,255,218,0.05); border: 1px solid var(--accent-dim); font-size: 13px; text-align: center; color: var(--text-secondary); }
-        .message-meta { font-size: 11px; color: var(--text-muted); margin-top: 4px; padding: 0 4px; }
+        /* ── Messages ────────────────────────────── */
+        .messages-container {
+            flex: 1; overflow-y: auto;
+            padding: 14px 16px;
+            display: flex; flex-direction: column; gap: 10px;
+            scroll-behavior: smooth; overscroll-behavior: contain;
+        }
+        .message { max-width: 88%; animation: slideIn 0.2s ease; }
+        @keyframes slideIn { from{opacity:0;transform:translateY(5px)} to{opacity:1;transform:none} }
+        .message.user { align-self: flex-end; }
+        .message.heidi { align-self: flex-start; }
+        .message.system { align-self: center; max-width: 95%; }
+        .message.restored { animation: none; }
+        .message-bubble {
+            padding: 10px 13px;
+            font-size: 14px; line-height: 1.6;
+            word-break: break-word; white-space: pre-wrap;
+        }
+        .message.user .message-bubble {
+            background: rgba(200,136,30,0.12);
+            border: 1px solid rgba(200,136,30,0.3);
+            border-radius: 2px 2px 0 2px;
+        }
+        .message.heidi .message-bubble {
+            background: var(--bg-elevated);
+            border: 1px solid rgba(200,136,30,0.1);
+            border-left: 2px solid rgba(200,136,30,0.45);
+            border-radius: 0 2px 2px 2px;
+        }
+        .message.system .message-bubble {
+            background: transparent;
+            border: 1px dashed rgba(200,136,30,0.18);
+            border-radius: 2px;
+            font-size: 11px; text-align: center;
+            color: var(--text-secondary);
+            padding: 5px 12px;
+        }
+        .message-meta {
+            font-size: 9px; color: var(--text-muted);
+            margin-top: 3px; padding: 0 4px;
+            text-transform: uppercase; letter-spacing: 0.8px;
+        }
         .message.user .message-meta { text-align: right; }
-        .streaming-cursor { display: inline-block; width: 2px; height: 1em; background: var(--accent); margin-left: 1px; vertical-align: middle; animation: blink 0.7s step-end infinite; }
+        .streaming-cursor {
+            display: inline-block; width: 7px; height: 13px;
+            background: var(--accent);
+            margin-left: 1px; vertical-align: middle;
+            animation: blink 0.65s step-end infinite;
+        }
         @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
-        .tool-indicator { display: block; color: var(--accent); font-size: 13px; font-style: italic; padding: 2px 0; opacity: 0.85; }
-        @keyframes tool-pulse { 0%,100%{opacity:0.85} 50%{opacity:0.5} }
-        .tool-indicator.running { animation: tool-pulse 1.2s ease-in-out infinite; }
-        .action-card { background: var(--bg-elevated); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 12px; margin-top: 8px; }
-        .action-card-header { font-size: 12px; font-weight: 600; color: var(--accent); margin-bottom: 8px; }
-        .action-button { width: 100%; padding: 10px; background: var(--accent-dim); border: 1px solid rgba(100,255,218,0.3); border-radius: 8px; color: var(--accent); font-size: 14px; font-weight: 500; cursor: pointer; margin-top: 6px; transition: all 0.2s; text-align: left; }
-        .action-button:active { transform: scale(0.98); background: rgba(100,255,218,0.2); }
-        .quick-actions { background: var(--bg-secondary); border-top: 1px solid rgba(255,255,255,0.05); padding: 8px 16px; display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; flex-shrink: 0; }
+        .tool-indicator {
+            display: block; color: var(--accent);
+            font-size: 11px; padding: 2px 0; opacity: 0.75;
+        }
+        @keyframes tool-pulse { 0%,100%{opacity:0.75} 50%{opacity:0.25} }
+        .tool-indicator.running { animation: tool-pulse 1s ease-in-out infinite; }
+        .action-card {
+            background: var(--bg-elevated);
+            border: 1px solid rgba(200,136,30,0.12);
+            border-radius: 2px; padding: 9px; margin-top: 6px;
+        }
+        .action-card-header {
+            font-size: 9px; font-weight: bold; color: var(--accent);
+            margin-bottom: 6px; text-transform: uppercase; letter-spacing: 1.5px;
+        }
+        .action-button {
+            width: 100%; padding: 7px 9px;
+            background: transparent;
+            border: 1px solid rgba(200,136,30,0.18);
+            border-radius: 2px; color: var(--text-secondary);
+            font-size: 12px; cursor: pointer; margin-top: 4px;
+            transition: all 0.12s; text-align: left;
+            font-family: 'Courier New', monospace;
+        }
+        .action-button:active { background: rgba(200,136,30,0.1); color: var(--accent); }
+
+        /* ── Quick actions ───────────────────────── */
+        .quick-actions {
+            background: var(--bg-secondary);
+            border-top: 1px solid rgba(200,136,30,0.12);
+            padding: 6px 16px;
+            display: flex; gap: 5px; overflow-x: auto;
+            scrollbar-width: none; flex-shrink: 0;
+        }
         .quick-actions::-webkit-scrollbar { display: none; }
-        .quick-action { padding: 7px 14px; background: var(--bg-elevated); border: 1px solid rgba(255,255,255,0.1); border-radius: 16px; font-size: 13px; color: var(--text-secondary); white-space: nowrap; cursor: pointer; transition: all 0.2s; user-select: none; }
-        .quick-action:active { background: var(--accent-dim); color: var(--accent); border-color: rgba(100,255,218,0.3); }
-        .quick-action.hydi { border-color: rgba(100,255,218,0.2); color: var(--accent); }
-        .input-area { background: var(--bg-secondary); border-top: 1px solid rgba(255,255,255,0.05); padding: 12px 16px; padding-bottom: max(12px, env(safe-area-inset-bottom)); flex-shrink: 0; }
-        .input-row { display: flex; gap: 8px; align-items: flex-end; }
-        .message-input { flex: 1; background: var(--bg-elevated); border: 1px solid rgba(255,255,255,0.1); border-radius: 20px; padding: 10px 16px; font-size: 15px; color: var(--text-primary); outline: none; max-height: 120px; resize: none; font-family: inherit; transition: border-color 0.2s; line-height: 1.4; }
-        .message-input:focus { border-color: var(--accent); }
+        .quick-action {
+            padding: 5px 11px;
+            background: var(--bg-primary);
+            border: 1px solid rgba(200,136,30,0.14);
+            border-radius: 2px;
+            font-size: 10px; color: var(--text-secondary);
+            white-space: nowrap; cursor: pointer;
+            transition: all 0.12s; user-select: none;
+            text-transform: uppercase; letter-spacing: 0.5px;
+        }
+        .quick-action:active { background: rgba(200,136,30,0.1); color: var(--accent); border-color: rgba(200,136,30,0.35); }
+        .quick-action.hydi { border-color: rgba(200,136,30,0.28); color: var(--accent); }
+
+        /* ── Input area ──────────────────────────── */
+        .input-area {
+            background: var(--bg-secondary);
+            border-top: 1px solid rgba(200,136,30,0.22);
+            padding: 10px 16px;
+            padding-bottom: max(10px, env(safe-area-inset-bottom));
+            flex-shrink: 0;
+        }
+        .input-row { display: flex; gap: 7px; align-items: flex-end; }
+        .message-input {
+            flex: 1;
+            background: var(--bg-primary);
+            border: 1px solid rgba(200,136,30,0.2);
+            border-radius: 2px;
+            padding: 9px 13px;
+            font-size: 14px; color: var(--text-primary);
+            outline: none; max-height: 120px; resize: none;
+            font-family: 'Courier New', Courier, monospace;
+            transition: border-color 0.15s; line-height: 1.45;
+        }
+        .message-input:focus {
+            border-color: rgba(200,136,30,0.5);
+            box-shadow: 0 0 0 2px rgba(200,136,30,0.07);
+        }
         .message-input::placeholder { color: var(--text-muted); }
-        .icon-btn { width: 44px; height: 44px; border-radius: 50%; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s; flex-shrink: 0; font-size: 18px; }
-        .icon-btn:active { transform: scale(0.92); } .icon-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
-        .mic-btn { background: var(--bg-elevated); border: 1px solid rgba(255,255,255,0.1); color: var(--text-secondary); }
-        .mic-btn.listening { background: rgba(239,68,68,0.15); border-color: var(--status-critical); color: var(--status-critical); animation: mic-pulse 1.5s ease-in-out infinite; }
-        @keyframes mic-pulse { 0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,0.4)} 50%{box-shadow:0 0 0 8px rgba(239,68,68,0)} }
-        .send-btn { background: var(--accent); }
-        .send-btn svg { width: 20px; height: 20px; fill: #000; }
-        .model-toggle { position: fixed; bottom: 90px; right: 16px; width: 44px; height: 44px; border-radius: 50%; background: var(--bg-elevated); border: 1px solid rgba(255,255,255,0.15); display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 18px; z-index: 40; transition: all 0.2s; box-shadow: 0 4px 12px rgba(0,0,0,0.4); }
-        .model-toggle:active { transform: scale(0.9); }
-        .model-selector { position: fixed; bottom: 142px; right: 16px; background: var(--bg-elevated); border: 1px solid rgba(255,255,255,0.12); border-radius: 14px; padding: 8px; display: flex; flex-direction: column; gap: 2px; opacity: 0; pointer-events: none; transform: translateY(8px) scale(0.95); transition: all 0.2s; z-index: 50; min-width: 200px; max-width: 280px; max-height: 300px; overflow-y: auto; box-shadow: 0 8px 32px rgba(0,0,0,0.5); }
+        .icon-btn {
+            width: 42px; height: 42px;
+            border-radius: 2px;
+            border: 1px solid rgba(200,136,30,0.18);
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer; transition: all 0.12s;
+            flex-shrink: 0; font-size: 16px;
+            background: var(--bg-primary);
+            color: var(--text-secondary);
+        }
+        .icon-btn:active { transform: scale(0.93); background: rgba(200,136,30,0.08); }
+        .icon-btn:disabled { opacity: 0.28; cursor: not-allowed; transform: none; }
+        .mic-btn.listening {
+            background: rgba(184,48,32,0.12);
+            border-color: var(--status-critical);
+            color: var(--status-critical);
+            animation: mic-pulse 1.5s ease-in-out infinite;
+        }
+        @keyframes mic-pulse { 0%,100%{box-shadow:0 0 0 0 rgba(184,48,32,0.4)} 50%{box-shadow:0 0 0 5px rgba(184,48,32,0)} }
+        .send-btn {
+            background: rgba(200,136,30,0.12);
+            border-color: rgba(200,136,30,0.45);
+            border-radius: 50%;
+        }
+        .send-btn:active { background: rgba(200,136,30,0.22); }
+        .send-btn svg { width: 17px; height: 17px; fill: var(--accent); }
+
+        /* ── Model selector ──────────────────────── */
+        .model-toggle {
+            position: fixed; bottom: 88px; right: 16px;
+            width: 40px; height: 40px; border-radius: 2px;
+            background: var(--bg-elevated);
+            border: 1px solid rgba(200,136,30,0.28);
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer;
+            font-size: 11px; font-weight: bold; color: var(--accent);
+            letter-spacing: 1px; text-transform: uppercase;
+            z-index: 40; transition: all 0.15s;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.5);
+            font-family: 'Courier New', monospace;
+        }
+        .model-toggle:active { transform: scale(0.92); }
+        .model-selector {
+            position: fixed; bottom: 138px; right: 16px;
+            background: var(--bg-elevated);
+            border: 1px solid rgba(200,136,30,0.2);
+            border-radius: 2px; padding: 6px;
+            display: flex; flex-direction: column; gap: 2px;
+            opacity: 0; pointer-events: none;
+            transform: translateY(8px) scale(0.97);
+            transition: all 0.15s; z-index: 50;
+            min-width: 200px; max-width: 280px; max-height: 300px;
+            overflow-y: auto;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.65);
+        }
         .model-selector.show { opacity: 1; pointer-events: auto; transform: none; }
-        .model-selector-header { font-size: 11px; color: var(--text-muted); padding: 4px 8px; text-transform: uppercase; letter-spacing: 0.5px; }
-        .model-option { padding: 10px 12px; border-radius: 8px; font-size: 13px; color: var(--text-secondary); cursor: pointer; display: flex; align-items: center; gap: 8px; transition: background 0.15s; }
-        .model-option:hover { background: rgba(255,255,255,0.05); }
-        .model-option.active { background: var(--accent-dim); color: var(--accent); }
-        .model-option .provider-badge { font-size: 10px; background: rgba(255,255,255,0.08); padding: 2px 6px; border-radius: 6px; margin-left: auto; white-space: nowrap; }
-        .model-option.active .provider-badge { background: rgba(100,255,218,0.15); }
+        .model-selector-header {
+            font-size: 9px; color: var(--text-muted);
+            padding: 3px 8px 6px;
+            text-transform: uppercase; letter-spacing: 1.5px;
+            border-bottom: 1px solid rgba(200,136,30,0.1);
+            margin-bottom: 2px;
+        }
+        .model-option {
+            padding: 8px 10px; border-radius: 2px;
+            font-size: 11px; color: var(--text-secondary);
+            cursor: pointer; display: flex; align-items: center; gap: 8px;
+            transition: background 0.1s;
+            font-family: 'Courier New', monospace;
+        }
+        .model-option:hover { background: rgba(200,136,30,0.07); }
+        .model-option.active { background: rgba(200,136,30,0.12); color: var(--accent); }
+        .model-option .provider-badge {
+            font-size: 9px;
+            background: rgba(200,136,30,0.08);
+            border: 1px solid rgba(200,136,30,0.14);
+            padding: 1px 5px; border-radius: 1px;
+            margin-left: auto; white-space: nowrap;
+            text-transform: uppercase; letter-spacing: 0.5px;
+        }
+        .model-option.active .provider-badge { background: rgba(200,136,30,0.18); }
 
-        /* Push notification banner */
-        .push-banner { position: fixed; top: 8px; left: 8px; right: 8px; background: var(--bg-elevated); border: 1px solid rgba(100,255,218,0.25); border-radius: 16px; padding: 14px 16px; display: flex; align-items: center; gap: 12px; z-index: 300; transform: translateY(-130%); transition: transform 0.35s cubic-bezier(0.34,1.56,0.64,1); box-shadow: 0 8px 40px rgba(0,0,0,0.7); }
+        /* ── Push banner ─────────────────────────── */
+        .push-banner {
+            position: fixed; top: 8px; left: 8px; right: 8px;
+            background: var(--bg-elevated);
+            border: 1px solid rgba(200,136,30,0.32);
+            border-radius: 2px; padding: 11px 13px;
+            display: flex; align-items: center; gap: 10px;
+            z-index: 300;
+            transform: translateY(-130%);
+            transition: transform 0.3s cubic-bezier(0.34,1.2,0.64,1);
+            box-shadow: 0 4px 24px rgba(0,0,0,0.75), 0 0 20px rgba(200,136,30,0.07);
+        }
         .push-banner.show { transform: translateY(0); }
-        .push-banner.level-warning { border-color: rgba(245,158,11,0.5); }
-        .push-banner.level-critical { border-color: rgba(239,68,68,0.5); }
-        .push-banner.level-briefing { border-color: rgba(251,191,36,0.4); background: linear-gradient(135deg, var(--bg-elevated), rgba(251,191,36,0.05)); }
-        .push-banner-icon { font-size: 22px; flex-shrink: 0; }
+        .push-banner.level-warning { border-color: rgba(200,136,30,0.65); }
+        .push-banner.level-critical { border-color: rgba(184,48,32,0.65); }
+        .push-banner.level-briefing {
+            border-color: rgba(200,160,30,0.55);
+            background: linear-gradient(135deg, var(--bg-elevated), rgba(200,160,30,0.06));
+        }
+        .push-banner-icon { font-size: 18px; flex-shrink: 0; }
         .push-banner-content { flex: 1; min-width: 0; }
-        .push-banner-title { font-size: 13px; font-weight: 600; color: var(--text-primary); }
-        .push-banner-body { font-size: 12px; color: var(--text-secondary); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .push-banner-close { background: none; border: none; color: var(--text-muted); font-size: 20px; cursor: pointer; padding: 0 2px; line-height: 1; flex-shrink: 0; }
-
-        .alert-banner { position: fixed; top: 68px; left: 16px; right: 16px; padding: 12px 16px; border-radius: 12px; font-size: 14px; font-weight: 500; z-index: 200; transform: translateY(-110%); transition: transform 0.3s ease; text-align: center; }
+        .push-banner-title {
+            font-size: 11px; font-weight: bold;
+            color: var(--text-primary);
+            text-transform: uppercase; letter-spacing: 0.8px;
+        }
+        .push-banner-body {
+            font-size: 11px; color: var(--text-secondary);
+            margin-top: 2px; overflow: hidden;
+            text-overflow: ellipsis; white-space: nowrap;
+        }
+        .push-banner-close {
+            background: none; border: none;
+            color: var(--text-muted); font-size: 16px;
+            cursor: pointer; padding: 0 2px; line-height: 1; flex-shrink: 0;
+        }
+        .alert-banner {
+            position: fixed; top: 62px; left: 16px; right: 16px;
+            padding: 9px 14px; border-radius: 2px;
+            font-size: 11px; font-weight: bold;
+            text-transform: uppercase; letter-spacing: 0.8px;
+            z-index: 200; transform: translateY(-110%);
+            transition: transform 0.25s ease; text-align: center;
+        }
         .alert-banner.error { background: var(--status-critical); color: #fff; }
         .alert-banner.warning { background: var(--status-warning); color: #000; }
         .alert-banner.show { transform: translateY(0); }
-        .typing-dots { display: flex; gap: 4px; padding: 14px 16px; }
-        .typing-dots span { width: 8px; height: 8px; background: var(--text-muted); border-radius: 50%; animation: bounce 1.4s infinite; }
-        .typing-dots span:nth-child(2) { animation-delay: 0.2s; } .typing-dots span:nth-child(3) { animation-delay: 0.4s; }
-        @keyframes bounce { 0%,60%,100%{transform:translateY(0)} 30%{transform:translateY(-8px)} }
+        .typing-dots { display: flex; gap: 5px; padding: 12px 13px; }
+        .typing-dots span {
+            width: 6px; height: 6px;
+            background: var(--accent); border-radius: 1px;
+            animation: bounce 1.4s infinite; opacity: 0.55;
+        }
+        .typing-dots span:nth-child(2) { animation-delay: 0.2s; }
+        .typing-dots span:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes bounce { 0%,60%,100%{transform:translateY(0)} 30%{transform:translateY(-5px)} }
     </style>
 </head>
 <body>
 
 <header class="header">
     <div class="header-left">
-        <div class="heidi-avatar">&#x1F9E0;</div>
+        <div class="heidi-avatar">H</div>
         <div class="header-info">
             <h1>Heidi</h1>
-            <div class="status"><span class="status-dot off" id="statusDot"></span><span id="statusText">Starting...</span></div>
+            <div class="status"><span class="status-dot off" id="statusDot"></span><span id="statusText">Initializing...</span></div>
         </div>
     </div>
     <div class="header-right">
@@ -156,18 +481,18 @@
 </header>
 
 <div class="health-strip">
-    <div class="health-metric"><span class="icon">&#x1F916;</span><span class="value" id="metricModels">&mdash;</span><span class="label">models</span></div>
-    <div class="health-metric"><span class="icon">&#x26A1;</span><span class="value" id="metricProvider">&mdash;</span></div>
-    <div class="health-metric" id="metricHydi"><span class="icon">&#x1F4E1;</span><span class="value muted" id="metricHydiValue">&#x2014;</span><span class="label">hydi</span></div>
-    <div class="health-metric"><span class="icon">&#x1F528;</span><span class="value" id="metricTools">5</span><span class="label">tools</span></div>
-    <div class="health-metric"><span class="icon">&#x1F4AC;</span><span class="value" id="metricMsgCount">0</span><span class="label">msgs</span></div>
-    <div class="health-metric sync-idle" id="metricSync"><span class="icon">&#x2601;&#xFE0F;</span><span class="value" id="metricSyncValue">&#x2014;</span><span class="label">sync</span></div>
-    <div class="health-metric"><span class="icon">&#x1F550;</span><span class="value" id="metricTime">&mdash;</span></div>
+    <div class="health-metric"><span class="icon">&#x25A3;</span><span class="value" id="metricModels">&mdash;</span><span class="label">mdl</span></div>
+    <div class="health-metric"><span class="icon">&#x25B6;</span><span class="value" id="metricProvider">&mdash;</span></div>
+    <div class="health-metric" id="metricHydi"><span class="icon">&#x25C9;</span><span class="value muted" id="metricHydiValue">&#x2014;</span><span class="label">hydi</span></div>
+    <div class="health-metric"><span class="icon">&#x2317;</span><span class="value" id="metricTools">5</span><span class="label">tools</span></div>
+    <div class="health-metric"><span class="icon">&#x25A1;</span><span class="value" id="metricMsgCount">0</span><span class="label">msg</span></div>
+    <div class="health-metric sync-idle" id="metricSync"><span class="icon">&#x2601;&#xFE0F;</span><span class="value" id="metricSyncValue">&#x2014;</span><span class="label">mem</span></div>
+    <div class="health-metric"><span class="icon">&#x25D4;</span><span class="value" id="metricTime">&mdash;</span></div>
 </div>
 
 <div class="system-panel" id="systemPanel">
     <div class="system-panel-header" onclick="toggleSystemPanel()">
-        <span class="system-panel-title">&#x2699;&#xFE0F; HYDI System</span>
+        <span class="system-panel-title">&#x25A3; HYDI System</span>
         <span class="system-panel-badge offline" id="systemPanelBadge">offline</span>
         <span class="system-panel-chevron" id="systemPanelChevron">&#x25BC;</span>
     </div>
@@ -179,9 +504,9 @@
             <div class="system-card"><div class="system-card-label">Updated</div><div class="system-card-value muted" id="sysUpdated">&#x2014;</div></div>
         </div>
         <div class="system-action-row">
-            <button class="system-action-btn" onclick="sendQuick('hydi_status')">&#x1F4CA; Ask Heidi</button>
-            <button class="system-action-btn secondary" onclick="sendSystemEvent()">&#x1F4EC; Send Event</button>
-            <button class="system-action-btn secondary" onclick="refreshSystemPanel()">&#x1F504; Refresh</button>
+            <button class="system-action-btn" onclick="sendQuick('hydi_status')">&#x25B6; Ask Heidi</button>
+            <button class="system-action-btn secondary" onclick="sendSystemEvent()">&#x25A1; Send Event</button>
+            <button class="system-action-btn secondary" onclick="refreshSystemPanel()">&#x21BA; Refresh</button>
         </div>
     </div>
 </div>
@@ -189,18 +514,18 @@
 <div class="messages-container" id="messages"></div>
 
 <div class="quick-actions">
-    <div class="quick-action" onclick="sendQuick('status')">&#x1F4CA; Status</div>
-    <div class="quick-action" onclick="sendQuick('models')">&#x1F916; Models</div>
-    <div class="quick-action hydi" onclick="sendQuick('hydi_status')">&#x2699;&#xFE0F; HYDI</div>
-    <div class="quick-action" onclick="sendQuick('tools')">&#x1F528; Tools</div>
-    <div class="quick-action" onclick="sendQuick('health')">&#x1F527; Health</div>
-    <div class="quick-action" onclick="sendQuick('clear')">&#x1F5D1;&#xFE0F; Clear</div>
+    <div class="quick-action" onclick="sendQuick('status')">&#x25A3; Status</div>
+    <div class="quick-action" onclick="sendQuick('models')">&#x25B6; Models</div>
+    <div class="quick-action hydi" onclick="sendQuick('hydi_status')">&#x25C9; HYDI</div>
+    <div class="quick-action" onclick="sendQuick('tools')">&#x2317; Tools</div>
+    <div class="quick-action" onclick="sendQuick('health')">&#x25A1; Health</div>
+    <div class="quick-action" onclick="sendQuick('clear')">&#x2715; Clear</div>
 </div>
 
 <div class="input-area">
     <div class="input-row">
-        <button class="icon-btn mic-btn" id="micBtn" onclick="toggleVoice()" title="Voice input">&#x1F3A4;</button>
-        <textarea class="message-input" id="msgInput" placeholder="Message Heidi..."
+        <button class="icon-btn mic-btn" id="micBtn" onclick="toggleVoice()" title="Voice input">&#x25CF;</button>
+        <textarea class="message-input" id="msgInput" placeholder="&gt; Enter message..."
             rows="1" oninput="autoResize(this)" onkeypress="onKey(event)"></textarea>
         <button class="icon-btn send-btn" id="sendBtn" onclick="sendMessage()">
             <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
@@ -208,14 +533,14 @@
     </div>
 </div>
 
-<div class="model-toggle" onclick="toggleModelMenu()" title="Switch model">&#x1F916;</div>
+<div class="model-toggle" onclick="toggleModelMenu()" title="Switch model">MDL</div>
 <div class="model-selector" id="modelMenu">
-    <div class="model-selector-header">AI Model</div>
-    <div class="model-option active"><span>&#x1F999;</span><span id="defaultModelName">tinyllama</span><span class="provider-badge">ollama</span></div>
+    <div class="model-selector-header">Select Model</div>
+    <div class="model-option active"><span>&#x25B6;</span><span id="defaultModelName">tinyllama</span><span class="provider-badge">ollama</span></div>
 </div>
 
 <div class="push-banner" id="pushBanner">
-    <span class="push-banner-icon" id="pushBannerIcon">&#x1F514;</span>
+    <span class="push-banner-icon" id="pushBannerIcon">&#x25CF;</span>
     <div class="push-banner-content">
         <div class="push-banner-title" id="pushBannerTitle"></div>
         <div class="push-banner-body" id="pushBannerBody"></div>
@@ -236,16 +561,16 @@ const DEVICE_KEY = 'heidi-device-id';
 // ── Push alerts ──────────────────────────────────────────────────────────────
 let pushSource = null, browserNotifs = false, pushBannerTimer = null;
 const PUSH_ICONS = {
-    info: '&#x1F514;',
-    warning: '&#x26A0;&#xFE0F;',
-    critical: '&#x1F6A8;',
-    briefing: '&#x2600;&#xFE0F;',
-    daily_briefing: '&#x2600;&#xFE0F;',
-    hydi_activity: '&#x1F4E1;',
-    hydi_offline: '&#x1F4F4;',
-    hydi_recovered: '&#x1F7E2;',
-    hydi_silence: '&#x1F910;',
-    hydi_status_change: '&#x26A0;&#xFE0F;'
+    info: '&#x25CF;',
+    warning: '&#x25B2;',
+    critical: '&#x25A0;',
+    briefing: '&#x25D4;',
+    daily_briefing: '&#x25D4;',
+    hydi_activity: '&#x25C9;',
+    hydi_offline: '&#x25CB;',
+    hydi_recovered: '&#x25CF;',
+    hydi_silence: '&#x25A1;',
+    hydi_status_change: '&#x25B2;'
 };
 
 function connectPushStream() {
@@ -257,9 +582,7 @@ function connectPushStream() {
             if (ev.type !== 'connected') handlePushEvent(ev);
         } catch {}
     };
-    pushSource.onerror = () => {
-        // EventSource auto-reconnects on error
-    };
+    pushSource.onerror = () => {};
 }
 
 function handlePushEvent(ev) {
@@ -288,21 +611,21 @@ function hidePushBanner() {
 
 async function toggleBrowserNotifs() {
     if (!browserNotifs) {
-        if (!('Notification' in window)) { showAlert('Notifications not supported in this browser', 'warning'); return; }
+        if (!('Notification' in window)) { showAlert('Notifications not supported', 'warning'); return; }
         const perm = await Notification.requestPermission();
         if (perm === 'granted') {
             browserNotifs = true;
             const btn = document.getElementById('bellBtn');
             btn.innerHTML = '&#x1F514;'; btn.classList.add('active');
-            addMsg('system', '&#x1F514; Browser notifications enabled — you\'ll get alerts even when this tab is in the background.');
+            addMsg('system', '&#x25CF; Notifications enabled.');
         } else {
-            showAlert('Notification permission denied', 'warning');
+            showAlert('Permission denied', 'warning');
         }
     } else {
         browserNotifs = false;
         const btn = document.getElementById('bellBtn');
         btn.innerHTML = '&#x1F515;'; btn.classList.remove('active');
-        addMsg('system', '&#x1F515; Browser notifications disabled.');
+        addMsg('system', '&#x25CB; Notifications disabled.');
     }
 }
 
@@ -365,8 +688,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             restoreHistory();
         }
         if (!conversationHistory.length) {
-            addMsg('heidi', "Hi! I'm Heidi, your local ProtoForge AI.\n\nI have tools I can use to check your system: Ollama health, HYDI status, run commands, and read files. Ask me anything!",
-                [{ label: '&#x1F4CA; System status', q: 'status' }, { label: '&#x1F528; What tools do you have', q: 'tools' }]);
+            addMsg('heidi', "HEIDI online. Local ProtoForge AI ready.\n\nTools available: system health, HYDI status, shell commands, file read, time. Ask me anything about your system or stems.",
+                [{ label: '&#x25A3; System status', q: 'status' }, { label: '&#x2317; What tools do you have', q: 'tools' }]);
         }
         connectPushStream();
         if ('Notification' in window && Notification.permission === 'granted') {
@@ -376,7 +699,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     } else {
         restoreHistory();
-        addMsg('system', '&#x26A0;&#xFE0F; Cannot reach Heidi server. Run: node launch-heidi-mobile.js');
+        addMsg('system', '&#x25A0; Cannot reach server. Run: node launch-heidi-mobile.js');
         setStatus('off', 'Server offline');
     }
 });
@@ -386,7 +709,7 @@ function renderRestoredHistory(messages) {
     const exchangeCount = messages.filter(m => m.role === 'user').length;
     const divider = document.createElement('div');
     divider.className = 'message system restored';
-    divider.innerHTML = '<div class="message-bubble">&#x2014; ' + exchangeCount + ' previous exchange' + (exchangeCount !== 1 ? 's' : '') + ' restored from cloud &#x2014;</div>';
+    divider.innerHTML = '<div class="message-bubble">&#x2014; ' + exchangeCount + ' exchange' + (exchangeCount !== 1 ? 's' : '') + ' restored &#x2014;</div>';
     document.getElementById('messages').appendChild(divider);
     messages.forEach(msg => {
         const el = document.createElement('div');
@@ -429,12 +752,12 @@ async function pollHealth() {
 function updateHealthUI(h) {
     const badge = document.getElementById('healthBadge');
     const hasAI = h.ollama || h.lmstudio;
-    badge.textContent = hasAI ? 'AI ON' : 'NO AI';
+    badge.textContent = hasAI ? 'ONLINE' : 'NO AI';
     badge.className = 'health-badge ' + (hasAI ? 'ok' : 'warning');
     document.getElementById('metricModels').textContent = h.models?.length ?? 0;
     document.getElementById('metricProvider').textContent = h.ollama ? 'Ollama' : h.lmstudio ? 'LMStudio' : 'none';
     document.getElementById('metricTime').textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    setStatus(hasAI ? '' : 'warning', hasAI ? `Online · ${currentModel || h.models?.[0] || 'ready'}` : 'Online · No AI model');
+    setStatus(hasAI ? '' : 'warning', hasAI ? `Online · ${currentModel || h.models?.[0] || 'ready'}` : 'Online · No model');
 }
 function setStatus(dotClass, text) {
     document.getElementById('statusDot').className = 'status-dot ' + (dotClass || '');
@@ -469,13 +792,13 @@ function toggleSystemPanel() {
     chevron.classList.toggle('open', body.classList.toggle('open'));
 }
 async function sendSystemEvent() {
-    const type = prompt('Event type (e.g. health_check, observation):');
+    const type = prompt('Event type:');
     if (!type) return;
     try {
         const r = await fetch('/api/system/action', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type, source: 'heidi-mobile-ui' }) });
         const result = await r.json();
-        addMsg('system', result.success ? '✅ Event sent: ' + type : '⚠️ Failed: ' + (result.error || 'HYDI not connected'));
-    } catch (e) { addMsg('system', '⚠️ Could not reach HYDI: ' + e.message); }
+        addMsg('system', result.success ? '● Event sent: ' + type : '▲ Failed: ' + (result.error || 'HYDI not connected'));
+    } catch (e) { addMsg('system', '▲ Could not reach HYDI: ' + e.message); }
 }
 
 async function loadModels() {
@@ -489,11 +812,11 @@ async function loadModels() {
 }
 function populateModelMenu(models) {
     const menu = document.getElementById('modelMenu');
-    menu.innerHTML = '<div class="model-selector-header">AI Model</div>';
+    menu.innerHTML = '<div class="model-selector-header">Select Model</div>';
     models.forEach((m, i) => {
         const el = document.createElement('div');
         el.className = 'model-option' + (i === 0 ? ' active' : '');
-        el.innerHTML = `<span>${m.provider === 'ollama' ? '&#x1F999;' : '&#x1F5A5;&#xFE0F;'}</span><span style="flex:1;overflow:hidden;text-overflow:ellipsis">${m.name}</span><span class="provider-badge">${m.provider}${m.size ? ' · ' + m.size : ''}</span>`;
+        el.innerHTML = `<span>&#x25B6;</span><span style="flex:1;overflow:hidden;text-overflow:ellipsis">${m.name}</span><span class="provider-badge">${m.provider}${m.size ? ' ' + m.size : ''}</span>`;
         el.onclick = () => pickModel(m.id, m.provider, el);
         menu.appendChild(el);
     });
@@ -502,7 +825,7 @@ function pickModel(id, provider, el) {
     currentModel = id; currentProvider = provider;
     document.querySelectorAll('.model-option').forEach(o => o.classList.remove('active'));
     el.classList.add('active'); toggleModelMenu();
-    setStatus('', `Online · ${id}`); addMsg('system', `Switched to: ${id} (${provider})`);
+    setStatus('', `Online · ${id}`); addMsg('system', `&#x25B6; Model: ${id} (${provider})`);
 }
 function toggleModelMenu() { document.getElementById('modelMenu').classList.toggle('show'); }
 
@@ -544,10 +867,10 @@ async function sendMessage() {
                         const d = JSON.parse(line.slice(6));
                         if (d.tool_use) {
                             if (firstToken) { firstToken = false; typingEl.remove(); msgEl.style.display = ''; }
-                            bubble.innerHTML = `<span class="tool-indicator running">&#x1F527; ${esc(d.tool_name.replace(/_/g,' '))}...</span>`;
+                            bubble.innerHTML = `<span class="tool-indicator running">&#x2317; ${esc(d.tool_name.replace(/_/g,' '))}...</span>`;
                             scrollBottom();
                         } else if (d.tool_result) {
-                            // Text tokens will follow
+                            // tokens follow
                         } else if (d.t !== undefined) {
                             if (firstToken) { firstToken = false; typingEl.remove(); msgEl.style.display = ''; }
                             fullText += d.t;
@@ -561,14 +884,14 @@ async function sendMessage() {
         }
     } catch (err) {
         typingEl.remove(); msgEl.style.display = '';
-        fullText = 'Connection error. Is the Heidi server running?\n\nRun: node launch-heidi-mobile.js';
+        fullText = 'Connection error. Is the server running?\n\nnode launch-heidi-mobile.js';
         bubble.textContent = fullText; showAlert('Cannot reach server', 'error');
     }
-    bubble.textContent = fullText || '(empty response)';
+    bubble.textContent = fullText || '(no response)';
     const meta = document.createElement('div'); meta.className = 'message-meta';
     meta.textContent = `Heidi · ${now()} · ${provider}`; msgEl.appendChild(meta);
     addContextActions(msgEl, fullText, text); scrollBottom();
-    if (fullText && fullText !== '(empty response)') {
+    if (fullText && fullText !== '(no response)') {
         conversationHistory.push({ role: 'user', content: text });
         conversationHistory.push({ role: 'assistant', content: fullText });
         saveHistory();
@@ -613,7 +936,7 @@ function addMsg(sender, content, actions = null) {
     }
     if (actions?.length) {
         const card = document.createElement('div'); card.className = 'action-card';
-        card.innerHTML = '<div class="action-card-header">&#x26A1; Quick actions</div>';
+        card.innerHTML = '<div class="action-card-header">&#x25B6; Quick actions</div>';
         actions.forEach(a => { const btn = document.createElement('button'); btn.className = 'action-button'; btn.innerHTML = a.label; btn.onclick = () => sendQuick(a.q); card.appendChild(btn); });
         el.appendChild(card);
     }
@@ -624,13 +947,13 @@ function addMsg(sender, content, actions = null) {
 function addContextActions(msgEl, response, userMsg) {
     const text = (response + ' ' + userMsg).toLowerCase();
     const actions = [];
-    if (text.includes('health') || text.includes('status') || text.includes('check')) actions.push({ label: '&#x1F504; Re-run health check', q: 'health' });
-    if (text.includes('hydi') || text.includes('agent') || text.includes('loop') || text.includes('event bus')) actions.push({ label: '&#x2699;&#xFE0F; HYDI status', q: 'hydi_status' });
-    if (text.includes('model') || text.includes('ollama') || text.includes('install')) actions.push({ label: '&#x1F916; List all models', q: 'models' });
-    if (text.includes('tool') || text.includes('command') || text.includes('run')) actions.push({ label: '&#x1F528; Show tools', q: 'tools' });
+    if (text.includes('health') || text.includes('status') || text.includes('check')) actions.push({ label: '&#x21BA; Re-run health check', q: 'health' });
+    if (text.includes('hydi') || text.includes('agent') || text.includes('loop') || text.includes('event bus')) actions.push({ label: '&#x25C9; HYDI status', q: 'hydi_status' });
+    if (text.includes('model') || text.includes('ollama') || text.includes('install')) actions.push({ label: '&#x25B6; List all models', q: 'models' });
+    if (text.includes('tool') || text.includes('command') || text.includes('run')) actions.push({ label: '&#x2317; Show tools', q: 'tools' });
     if (!actions.length) return;
     const card = document.createElement('div'); card.className = 'action-card';
-    card.innerHTML = '<div class="action-card-header">&#x26A1; Follow-up</div>';
+    card.innerHTML = '<div class="action-card-header">&#x25B6; Follow-up</div>';
     actions.forEach(a => { const btn = document.createElement('button'); btn.className = 'action-button'; btn.innerHTML = a.label; btn.onclick = () => sendQuick(a.q); card.appendChild(btn); });
     msgEl.appendChild(card);
 }
@@ -639,8 +962,8 @@ let voices = [];
 function loadVoices() { voices = window.speechSynthesis?.getVoices() || []; if (!voices.length) window.speechSynthesis?.addEventListener('voiceschanged', () => { voices = window.speechSynthesis.getVoices(); }); }
 function toggleTTS() {
     ttsEnabled = !ttsEnabled;
-    const btn = document.getElementById('ttsBtn'); btn.textContent = ttsEnabled ? '&#x1F50A;' : '&#x1F507;'; btn.classList.toggle('active', ttsEnabled);
-    if (!ttsEnabled) window.speechSynthesis?.cancel(); else speak('Voice enabled.');
+    const btn = document.getElementById('ttsBtn'); btn.innerHTML = ttsEnabled ? '&#x1F50A;' : '&#x1F507;'; btn.classList.toggle('active', ttsEnabled);
+    if (!ttsEnabled) window.speechSynthesis?.cancel(); else speak('Voice on.');
 }
 function speak(text) {
     if (!ttsEnabled || !window.speechSynthesis || !text.trim()) return;
@@ -661,19 +984,19 @@ function initVoice() {
     recognition = new SR(); recognition.continuous = false; recognition.interimResults = true; recognition.lang = 'en-US';
     recognition.onresult = (e) => { const t = Array.from(e.results).map(r => r[0].transcript).join(''); const input = document.getElementById('msgInput'); input.value = t; autoResize(input); };
     recognition.onend = () => { isListening = false; updateMicState(false); const input = document.getElementById('msgInput'); if (input.value.trim() && !isStreaming) setTimeout(sendMessage, 300); };
-    recognition.onerror = (e) => { isListening = false; updateMicState(false); if (e.error === 'not-allowed') showAlert('Microphone access denied', 'warning'); };
+    recognition.onerror = (e) => { isListening = false; updateMicState(false); if (e.error === 'not-allowed') showAlert('Mic access denied', 'warning'); };
 }
 function toggleVoice() {
-    if (!recognition) { addMsg('system', '&#x26A0;&#xFE0F; Voice requires Chrome or Safari.'); return; }
+    if (!recognition) { addMsg('system', '&#x25B2; Voice requires Chrome or Safari.'); return; }
     if (isStreaming) return;
     if (isListening) { recognition.stop(); }
     else { isListening = true; updateMicState(true); document.getElementById('msgInput').value = ''; try { recognition.start(); } catch { isListening = false; updateMicState(false); } }
 }
-function updateMicState(on) { document.getElementById('micBtn').classList.toggle('listening', on); document.getElementById('msgInput').placeholder = on ? 'Listening...' : 'Message Heidi...'; }
+function updateMicState(on) { document.getElementById('micBtn').classList.toggle('listening', on); document.getElementById('msgInput').placeholder = on ? '> Listening...' : '> Enter message...'; }
 
 let alertTimer = null;
 function showAlert(msg, type = 'error') {
-    const el = document.getElementById('alertBanner'); el.textContent = (type === 'error' ? '⚠️ ' : 'ℹ️ ') + msg;
+    const el = document.getElementById('alertBanner'); el.textContent = msg;
     el.className = `alert-banner ${type} show`; clearTimeout(alertTimer);
     alertTimer = setTimeout(() => el.classList.remove('show'), 4000);
 }
@@ -691,8 +1014,8 @@ let installPrompt = null;
 window.addEventListener('beforeinstallprompt', e => {
     e.preventDefault(); installPrompt = e;
     if (document.getElementById('installBtn')) return;
-    const btn = document.createElement('button'); btn.id = 'installBtn'; btn.className = 'tts-btn'; btn.title = 'Add Heidi to home screen'; btn.textContent = '📲';
-    btn.onclick = async () => { if (!installPrompt) return; installPrompt.prompt(); const { outcome } = await installPrompt.userChoice; btn.remove(); installPrompt = null; if (outcome === 'accepted') addMsg('system', '✅ Heidi added to your home screen!'); };
+    const btn = document.createElement('button'); btn.id = 'installBtn'; btn.className = 'tts-btn'; btn.title = 'Add to home screen'; btn.textContent = '⊕';
+    btn.onclick = async () => { if (!installPrompt) return; installPrompt.prompt(); const { outcome } = await installPrompt.userChoice; btn.remove(); installPrompt = null; if (outcome === 'accepted') addMsg('system', '&#x25CF; Added to home screen.'); };
     document.querySelector('.header-right').insertBefore(btn, document.querySelector('.header-right').firstChild);
 });
 if ('serviceWorker' in navigator) { window.addEventListener('load', () => { navigator.serviceWorker.register('/sw.js').catch(() => {}); }); }
