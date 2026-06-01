@@ -13,7 +13,8 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
-    "test:integration": "node tests/hdi-adversarial.test.js"
+    "test:integration": "node tests/hdi-adversarial.test.js",
+    "typecheck": "tsc --noEmit"
   },
   "keywords": [
     "protoforge",

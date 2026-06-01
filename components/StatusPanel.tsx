@@ -1,49 +1,29 @@
-/**
- * COMPONENTS - StatusPanel.tsx
- * 
- * Model status indicator, session state viewer, and action log panel
- */
-
 import React from 'react';
+import { SessionState, SystemStatus, ActionLog } from '../types/index';
 
 interface StatusPanelProps {
-  sessionState: any;
-  systemStatus: any;
-  actions: any[];
+  sessionState: SessionState | null;
+  systemStatus: SystemStatus | null;
+  actions: ActionLog[];
 }
 
 export default function StatusPanel({ sessionState, systemStatus, actions }: StatusPanelProps) {
   const getModelStatusColor = () => {
     if (!systemStatus?.model_status) return 'bg-gray-500';
-    
-    if (systemStatus.model_status.circuitBreakerActive) {
-      return 'bg-orange-500';
-    }
-    
-    if (systemStatus.model_status.consecutiveFailures > 0) {
-      return 'bg-yellow-500';
-    }
-    
+    if (systemStatus.model_status.circuitBreakerActive) return 'bg-orange-500';
+    if (systemStatus.model_status.consecutiveFailures > 0) return 'bg-yellow-500';
     return 'bg-green-500';
   };
 
   const getModelStatusText = () => {
     if (!systemStatus?.model_status) return 'Unknown';
-    
-    if (systemStatus.model_status.circuitBreakerActive) {
-      return 'API Fallback Active';
-    }
-    
-    if (systemStatus.model_status.consecutiveFailures > 0) {
-      return 'Model Degraded';
-    }
-    
+    if (systemStatus.model_status.circuitBreakerActive) return 'API Fallback Active';
+    if (systemStatus.model_status.consecutiveFailures > 0) return 'Model Degraded';
     return 'Local Model Active';
   };
 
   return (
     <div className="bg-white border rounded-lg p-4 space-y-4">
-      {/* Model Status */}
       <div>
         <h3 className="text-sm font-semibold text-gray-900 mb-2">Model Status</h3>
         <div className="flex items-center space-x-2">
@@ -53,14 +33,11 @@ export default function StatusPanel({ sessionState, systemStatus, actions }: Sta
         {systemStatus?.model_status && (
           <div className="mt-2 text-xs text-gray-500">
             <div>Failures: {systemStatus.model_status.consecutiveFailures}</div>
-            {systemStatus.model_status.circuitBreakerActive && (
-              <div>Circuit breaker active</div>
-            )}
+            {systemStatus.model_status.circuitBreakerActive && <div>Circuit breaker active</div>}
           </div>
         )}
       </div>
 
-      {/* Session State */}
       <div>
         <h3 className="text-sm font-semibold text-gray-900 mb-2">Session State</h3>
         {sessionState ? (
@@ -75,7 +52,6 @@ export default function StatusPanel({ sessionState, systemStatus, actions }: Sta
         )}
       </div>
 
-      {/* Action Log */}
       <div>
         <h3 className="text-sm font-semibold text-gray-900 mb-2">Action Log</h3>
         {actions && actions.length > 0 ? (
@@ -103,7 +79,6 @@ export default function StatusPanel({ sessionState, systemStatus, actions }: Sta
         )}
       </div>
 
-      {/* System Info */}
       <div>
         <h3 className="text-sm font-semibold text-gray-900 mb-2">System Info</h3>
         <div className="text-xs text-gray-700 space-y-1">
