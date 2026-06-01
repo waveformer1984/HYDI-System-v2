@@ -21,6 +21,7 @@ npm install          # Install dependencies (Node >= 20 required)
 npm run dev          # Next.js dev server on 0.0.0.0:3000
 npm run build        # Production build
 npm start            # Start production server
+npm run typecheck    # TypeScript type-check (tsc --noEmit, no emit)
 npm test             # Run Jest unit tests
 npm run test:watch   # Jest in watch mode
 npm run test:coverage  # Jest with coverage report
@@ -72,12 +73,27 @@ The original system (V1) built enforcement before establishing ground truth, cau
 | **ProtoForge** | Policy engine / governance layer | Routed via `api/chat/route.js` |
 | **Hyve** | Opportunity collective / swarm intelligence | Routed via `api/chat/route.js` |
 
+### PAO System Agents (`pao-system/`)
+
+The PAO (Personal AI Orchestration) subsystem contains TypeScript agents that run under strict mode:
+
+| File | Role |
+|------|------|
+| `pao-system/core/heidi.controller.ts` | Central orchestrator — `taskRoutingMatrix: Map<string, string[]>`, emits events, manages session state |
+| `pao-system/agents/revenue.agent.ts` | Revenue pipeline agent |
+| `pao-system/agents/community.agent.ts` | Community management agent |
+| `pao-system/agents/marketing.agent.ts` | Marketing automation agent |
+| `pao-system/agents/outreach.agent.ts` | Outreach coordination agent |
+| `pao-system/agents/funding.agent.ts` | Funding and grants agent — uses `.getTime()` for Date arithmetic |
+
+All PAO agents use the shared types from `types/index.ts` (`SessionState`, `SystemStatus`, `ModelStatus`, `ActionLog`, `ActionItem`). Catch variables are typed `unknown` — always guard with `error instanceof Error ? error.message : 'Unknown error'`.
+
 ### API Layer (`api/`)
 
 All files under `api/` are **Vercel serverless functions** (Next.js API routes). They use ES module `export default async function handler(req, res)` style. Note: some files mix `import` and `require` — be consistent within a file.
 
 | Route | Purpose |
-|-------|---------|
+|-------|----------|
 | `api/chat/route.js` | Universal chat router — dispatches `{ message, system }` to the correct named agent |
 | `api/health.js` | Reads the `system_dashboard` Supabase view for live health metrics |
 | `api/heidi/route.js` | Heidi-specific orchestration endpoint |
@@ -115,6 +131,24 @@ Public functions (no JWT): `api-gateway`, `notification-service`, `search-servic
 - **`agents/hid/`** — JavaScript key-rotation agent and secure key setup (PowerShell + JS)
 - **`agents/hardware-controller/`** — Python agents for physical hardware: USB HID controller, screen vision, Stripe/Vercel UI navigation via pyautogui/vision, safety orchestrator
 
+### Ursula Suite (Local)
+
+The Ursula EPM Service Suite is a companion Flask server (`C:\ProtoForge_Ecosystem\Ursula_Suite\`) running at `http://localhost:5000`. It is a separate Python codebase — not deployed to Vercel. It hosts five apps:
+
+| App | Blueprint prefix | Description |
+|-----|-----------------|-------------|
+| Proto.I.Y | `/proto_iy` | Projects & Timelines |
+| BlameGames | `/blame_games` | Betting & Challenges |
+| PorchWise | `/porch_wise` | Family Management |
+| Rezonette | `/rezonette` | Music Production |
+| **Checkpoint** | `/checkpoint` | QA & Risk Analysis |
+
+The Checkpoint app (`apps/checkpoint/`) provides risk-scored workflow analysis:
+- `checkpoint_qa.py` — QA engine with SQLite backend, risk scoring, failure point detection, auto-checkpoint creation
+- `routes.py` — Flask Blueprint using `importlib.util.spec_from_file_location` for bulletproof module loading
+- Test suite: `ursula-suite/checkpoint/tests/phase2_test_suite.ps1`
+- Dashboard: `ursula-suite/checkpoint/dashboard/dashboard.html`
+
 ### Database (`supabase/`)
 
 Schema is managed via numbered migrations in `supabase/migrations/`. Files ending in `.sql.skip` are intentionally excluded from the migration runner. The Supabase project ref is `akbnfovjdcobifeupvbn`.
@@ -148,7 +182,7 @@ Use `SUPABASE_SERVICE_ROLE_KEY` server-side only. Never expose it to the client.
 ## CI / Workflows
 
 | Workflow | Trigger | What it does |
-|----------|---------|--------------|
+|----------|---------|---------------|
 | `unit-tests.yml` | push to `clean-main`, all PRs | `npm test -- --coverage --forceExit`, uploads to Codecov |
 | `hdi-governance-gate.yml` | PRs touching `supabase/migrations/**` | 7-gate schema review: change detection, transformer tests, state machine approval, adversarial tests, replay fidelity, performance regression, blueprint sync |
 | `health-monitor.yml` | Scheduled | Pings health endpoint |
@@ -203,7 +237,8 @@ vercel env ls | grep SECRET_NAME
 ## Notable Conventions
 
 - **Mixed module styles**: some `api/` files use `export default` (ESM) while others use `module.exports` (CJS). The project's Next.js build handles this, but Edge Functions are pure ESM (Deno).
-- **TypeScript is present but soft**: `next.config.js` sets `ignoreBuildErrors: true` and `eslint.ignoreDuringBuilds: true` — the build won't fail on type errors.
+- **TypeScript strict mode is enforced**: `next.config.js` does NOT suppress TS/ESLint errors. Run `npm run typecheck` before any PR. Catch variables are `unknown` — use `error instanceof Error ? error.message : 'Unknown error'` everywhere.
 - **The `clean-main` branch** is the primary branch (CI runs against it, not `main`).
 - **`.sql.skip` files**: migrations with this suffix are intentionally skipped by the runner; they document attempted approaches that were superseded.
 - **`system_dashboard` view**: the central Supabase view consumed by health checks, Ursula status queries, and infrastructure monitoring — if this view is broken, health endpoints degrade gracefully to `503`.
+- **`nnotification.service.ts`**: this file has a double-`n` typo in its name — do not rename it until all imports are updated together.
