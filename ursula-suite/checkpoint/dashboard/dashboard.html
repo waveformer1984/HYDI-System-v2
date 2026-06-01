@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Checkpoint QA Dashboard</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', sans-serif; background: #0f1117; color: #e0e0e0; }
+  header { background: #1a1d27; padding: 18px 32px; border-bottom: 2px solid #2d6a4f; display: flex; align-items: center; gap: 16px; }
+  header h1 { font-size: 1.4rem; color: #52b788; }
+  header span { font-size: 0.85rem; color: #6b7280; }
+  .container { max-width: 1100px; margin: 32px auto; padding: 0 24px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-bottom: 32px; }
+  .card { background: #1a1d27; border-radius: 10px; padding: 20px; border-left: 4px solid #2d6a4f; }
+  .card .label { font-size: 0.75rem; color: #6b7280; text-transform: uppercase; letter-spacing: 1px; }
+  .card .value { font-size: 2rem; font-weight: 700; color: #52b788; margin-top: 6px; }
+  .risk-CRITICAL { color: #ef4444 !important; }
+  .risk-HIGH     { color: #f97316 !important; }
+  .risk-MEDIUM   { color: #eab308 !important; }
+  .risk-LOW      { color: #22c55e !important; }
+  table { width: 100%; border-collapse: collapse; background: #1a1d27; border-radius: 10px; overflow: hidden; }
+  th { background: #141620; padding: 12px 16px; text-align: left; font-size: 0.75rem; color: #6b7280; text-transform: uppercase; letter-spacing: 1px; }
+  td { padding: 12px 16px; border-bottom: 1px solid #252836; font-size: 0.875rem; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: #22263a; }
+  .badge { display: inline-block; padding: 2px 10px; border-radius: 99px; font-size: 0.7rem; font-weight: 700; }
+  .badge-CRITICAL { background: #450a0a; color: #ef4444; }
+  .badge-HIGH     { background: #431407; color: #f97316; }
+  .badge-MEDIUM   { background: #422006; color: #eab308; }
+  .badge-LOW      { background: #052e16; color: #22c55e; }
+  section h2 { font-size: 1rem; color: #9ca3af; margin-bottom: 14px; text-transform: uppercase; letter-spacing: 1px; }
+  .section { margin-bottom: 32px; }
+  #status { font-size: 0.8rem; color: #6b7280; margin-bottom: 20px; }
+  button { background: #2d6a4f; color: white; border: none; padding: 8px 18px; border-radius: 6px; cursor: pointer; font-size: 0.85rem; }
+  button:hover { background: #40916c; }
+  .error { color: #ef4444; padding: 20px; text-align: center; }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Checkpoint QA Dashboard</h1>
+    <span>Ursula EPM &middot; Risk-Scored Workflow Analysis</span>
+  </div>
+  <button onclick="loadAll()" style="margin-left:auto">Refresh</button>
+</header>
+
+<div class="container">
+  <div id="status">Loading...</div>
+
+  <div class="grid">
+    <div class="card"><div class="label">Total Workflows</div><div class="value" id="stat-total">&mdash;</div></div>
+    <div class="card"><div class="label">Critical Risk</div><div class="value risk-CRITICAL" id="stat-critical">&mdash;</div></div>
+    <div class="card"><div class="label">High Risk</div><div class="value risk-HIGH" id="stat-high">&mdash;</div></div>
+    <div class="card"><div class="label">Checkpoints Required</div><div class="value" id="stat-checkpoints">&mdash;</div></div>
+  </div>
+
+  <div class="section">
+    <h2>Workflows</h2>
+    <table>
+      <thead><tr><th>ID</th><th>Name</th><th>Category</th><th>Steps</th><th>Risk Level</th><th>Created</th></tr></thead>
+      <tbody id="wf-tbody"><tr><td colspan="6" style="text-align:center;color:#6b7280">Loading...</td></tr></tbody>
+    </table>
+  </div>
+
+  <div class="section" id="detail-section" style="display:none">
+    <h2>Workflow Detail &mdash; <span id="detail-name"></span></h2>
+    <table>
+      <thead><tr><th>#</th><th>Step</th><th>Duration</th><th>Tools</th><th>Risk Score</th></tr></thead>
+      <tbody id="steps-tbody"></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+const BASE = "http://localhost:5000";
+
+async function loadAll() {
+  document.getElementById("status").textContent = "Last refreshed: " + new Date().toLocaleTimeString();
+  try {
+    const r = await fetch(BASE + "/checkpoint/workflows");
+    const workflows = await r.json();
+
+    document.getElementById("stat-total").textContent = workflows.length;
+    document.getElementById("stat-critical").textContent = workflows.filter(w => w.risk_level === "CRITICAL").length;
+    document.getElementById("stat-high").textContent = workflows.filter(w => w.risk_level === "HIGH").length;
+
+    let totalCheckpoints = 0;
+    const tbody = document.getElementById("wf-tbody");
+    tbody.innerHTML = "";
+
+    for (const wf of workflows) {
+      const dr = await fetch(BASE + "/checkpoint/workflow/" + wf.workflow_id);
+      const detail = await dr.json();
+      totalCheckpoints += detail.checkpoints_required || 0;
+
+      const row = document.createElement("tr");
+      row.style.cursor = "pointer";
+      row.onclick = () => showDetail(detail);
+      row.innerHTML = `
+        <td>${wf.workflow_id}</td>
+        <td>${wf.name}</td>
+        <td style="text-transform:capitalize">${wf.category}</td>
+        <td>${wf.total_steps}</td>
+        <td><span class="badge badge-${wf.risk_level}">${wf.risk_level}</span></td>
+        <td>${new Date(wf.created_at).toLocaleDateString()}</td>`;
+      tbody.appendChild(row);
+    }
+
+    document.getElementById("stat-checkpoints").textContent = totalCheckpoints;
+    if (workflows.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#6b7280">No workflows yet &mdash; run a POST to /checkpoint/workflow/analyze</td></tr>';
+    }
+  } catch(e) {
+    document.getElementById("wf-tbody").innerHTML = `<tr><td colspan="6" class="error">Cannot reach ${BASE} &mdash; is the server running?</td></tr>`;
+    document.getElementById("status").textContent = "Connection error";
+  }
+}
+
+function showDetail(detail) {
+  document.getElementById("detail-section").style.display = "block";
+  document.getElementById("detail-name").textContent = detail.workflow_name;
+  const tbody = document.getElementById("steps-tbody");
+  tbody.innerHTML = "";
+  for (const s of (detail.steps || [])) {
+    const row = document.createElement("tr");
+    const color = s.risk_score >= 8 ? "#ef4444" : s.risk_score >= 6 ? "#f97316" : s.risk_score >= 4 ? "#eab308" : "#22c55e";
+    row.innerHTML = `<td>${s.step_number}</td><td>${s.step_name}</td><td>${s.duration_hours}h</td><td>${s.tools_required}</td><td style="color:${color};font-weight:700">${s.risk_score}/10</td>`;
+    tbody.appendChild(row);
+  }
+  document.getElementById("detail-section").scrollIntoView({ behavior: "smooth" });
+}
+
+loadAll();
+</script>
+</body>
+</html>
