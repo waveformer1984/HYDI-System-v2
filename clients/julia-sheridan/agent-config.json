@@ -1,0 +1,212 @@
+{
+  "client_id": "julia-sheridan-clearview",
+  "business_name": "ClearView 3D Ultrasound LLC",
+  "owner": "Julia Sheridan",
+  "entity_type": "single_member_llc",
+  "industry": "mobile_elective_ultrasound",
+  "status": "pre_launch",
+  "revenue_stream_id": "clearview_ultrasound",
+  "protoforge_managed": true,
+
+  "hydi_agents": {
+    "heidi": {
+      "enabled": true,
+      "role": "business_intelligence",
+      "monitors": [
+        "monthly_revenue_vs_projection",
+        "session_count_vs_target",
+        "booking_conversion_rate",
+        "amber_grant_submission_status",
+        "sba_loan_application_status",
+        "ge_demo_pipeline",
+        "client_repeat_booking_rate",
+        "event_pipeline"
+      ],
+      "alerts": [
+        {
+          "id": "revenue_below_projection",
+          "trigger": "monthly_revenue_pct_of_projection",
+          "threshold": 0.80,
+          "action": "surface_marketing_recommendations"
+        },
+        {
+          "id": "amber_grant_deadline",
+          "trigger": "amber_grant_monthly_deadline_approaching",
+          "days_before": 7,
+          "action": "notify_julia_and_protoforge"
+        },
+        {
+          "id": "ge_demo_low",
+          "trigger": "ge_demo_month_count_below_target",
+          "threshold": 2,
+          "action": "flag_ge_relationship_check"
+        },
+        {
+          "id": "client_lapse",
+          "trigger": "client_no_rebook_after_days",
+          "days": 180,
+          "action": "trigger_re_engagement_outreach"
+        },
+        {
+          "id": "quarterly_tax",
+          "trigger": "quarterly_estimated_tax_due",
+          "days_before": 14,
+          "action": "notify_julia_tax_reminder"
+        }
+      ],
+      "outreach_sequences": {
+        "post_session_gallery": {
+          "trigger": "session.completed",
+          "delay_hours": 24,
+          "template": "gallery_delivery_and_review_request"
+        },
+        "second_pregnancy_reengagement": {
+          "trigger": "client_session_date",
+          "delay_months": 14,
+          "template": "welcome_back_clearview_second_pregnancy"
+        },
+        "early_booking_upgrade": {
+          "trigger": "booking_at_24_weeks_or_earlier",
+          "delay_weeks": 6,
+          "template": "premium_late_pregnancy_upgrade_offer"
+        },
+        "event_party_followup": {
+          "trigger": "event.completed",
+          "delay_days": 3,
+          "template": "event_host_testimonial_request_and_referral"
+        }
+      }
+    },
+
+    "ursula": {
+      "enabled": true,
+      "role": "booking_and_client_management",
+      "booking_portal": "/clearview",
+      "stripe_account_id": "pending_creation",
+      "services": [
+        { "id": "heartbeat", "name": "Heartbeat Session", "price_cents": 15000, "duration_min": 20 },
+        { "id": "standard", "name": "3D/4D Standard", "price_cents": 22500, "duration_min": 40 },
+        { "id": "premium", "name": "3D/4D Premium", "price_cents": 30000, "duration_min": 60 },
+        { "id": "event_standard", "name": "Event Package Standard", "price_cents": 65000, "duration_min": 120 },
+        { "id": "event_premium", "name": "Event Package Premium", "price_cents": 110000, "duration_min": 180 }
+      ],
+      "addons": [
+        { "id": "gender_reveal", "name": "Gender Reveal Add-On", "price_cents": 5000 },
+        { "id": "usb_keepsake", "name": "USB Keepsake Drive", "price_cents": 2500 }
+      ],
+      "booking_rules": {
+        "min_weeks_gestation": 14,
+        "optimal_window_start_weeks": 24,
+        "optimal_window_end_weeks": 32,
+        "max_weeks_gestation": 36,
+        "advance_booking_min_days": 2,
+        "advance_booking_max_days": 90,
+        "travel_free_radius_miles": 25,
+        "travel_fee_per_mile_over": 0.67,
+        "cancellation_free_window_hours": 48,
+        "late_cancel_fee_pct": 0.50,
+        "no_show_fee_pct": 1.0
+      }
+    },
+
+    "cascade": {
+      "enabled": true,
+      "pipeline": [
+        {
+          "trigger": "booking.confirmed",
+          "emit": [
+            "send_confirmation_email",
+            "create_stripe_receipt",
+            "schedule_reminder_48hr",
+            "schedule_reminder_24hr",
+            "schedule_reminder_2hr",
+            "notify_julia_new_booking"
+          ]
+        },
+        {
+          "trigger": "session.completed",
+          "emit": [
+            "trigger_gallery_delivery_24hr",
+            "send_review_request_24hr",
+            "log_to_revenue_ledger",
+            "check_upsell_eligibility",
+            "update_monthly_session_count"
+          ]
+        },
+        {
+          "trigger": "payment.received",
+          "emit": [
+            "log_to_immutable_ledger",
+            "update_monthly_revenue_tracker",
+            "heidi_revenue_check"
+          ]
+        },
+        {
+          "trigger": "event.booked",
+          "emit": [
+            "send_event_contract",
+            "collect_50pct_deposit",
+            "schedule_day_before_confirmation",
+            "notify_julia_event_booked"
+          ]
+        }
+      ]
+    },
+
+    "kilo": {
+      "enabled": true,
+      "role": "financial_validation",
+      "validates": [
+        "loan_application_financials",
+        "grant_application_revenue_figures",
+        "monthly_projection_vs_actual_variance",
+        "quarterly_tax_estimate"
+      ],
+      "confidence_threshold": 0.92,
+      "blocks_submission_on_low_confidence": true
+    }
+  },
+
+  "funding_tracker": {
+    "amber_grant": {
+      "status": "application_ready",
+      "target_amount_cents": 1000000,
+      "monthly_deadline": "last_day_of_month",
+      "submitted": false,
+      "submission_url": "https://www.womensnet.net/amber-grant",
+      "heidi_reminder_days_before": 7
+    },
+    "sba_microloan": {
+      "status": "documentation_complete",
+      "target_amount_cents": 2000000,
+      "intermediary": "pending_identification",
+      "submitted": false,
+      "notes": "Identify local Women's Business Center or CDFI via sba.gov/local-assistance"
+    },
+    "ge_financing": {
+      "status": "pending_ge_quote",
+      "purpose": "GE Voluson E8 or E10 acquisition",
+      "estimated_amount_cents": 4500000,
+      "contact": "Julia's GE sales rep — confirm name"
+    }
+  },
+
+  "compliance_checklist": {
+    "llc_formed": false,
+    "ein_obtained": false,
+    "business_bank_account_opened": false,
+    "insurance_professional_liability_bound": false,
+    "insurance_general_liability_bound": false,
+    "insurance_commercial_auto_bound": false,
+    "operating_agreement_signed": false,
+    "client_waiver_template_ready": false,
+    "state_elective_ultrasound_reg_reviewed": false,
+    "ge_partnership_agreement_signed": false,
+    "stripe_account_created": false,
+    "booking_portal_live": false
+  },
+
+  "created_at": "2026-06-02T00:00:00Z",
+  "managed_by": "ProtoForge Business Operations",
+  "hydi_version": "v2.0-CASCADE"
+}
