@@ -1,0 +1,16 @@
+{
+  "name": "@protoforge/adversarial-test",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Adversarial test harness - tests hostile decision layer behavior",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "test": "node index.js"
+  },
+  "dependencies": {
+    "crypto": "^1.0.1"
+  },
+  "keywords": ["adversarial", "test", "hostile", "safety"],
+  "author": "ProtoForge Systems"
+}

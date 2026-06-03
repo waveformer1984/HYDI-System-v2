@@ -1,0 +1,17 @@
+{
+  "pack_name": "sample_pack_001",
+  "created": "2026-04-14T22:54:16.080Z",
+  "files": [
+    "sample_01.wav",
+    "sample_02.wav",
+    "sample_03.wav",
+    "sample_04.wav",
+    "sample_05.wav",
+    "sample_06.wav",
+    "sample_07.wav",
+    "sample_08.wav",
+    "sample_09.wav",
+    "sample_10.wav"
+  ],
+  "file_count": 10
+}
