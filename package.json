@@ -34,7 +34,7 @@
     "@types/node": "^20.19.41",
     "@types/react": "^18.0.0",
     "@types/react-dom": "^18.0.0",
-    "axios": "^1.16.1",
+    "axios": "^1.17.0",
     "dotenv": "^17.4.2",
     "express-rate-limit": "^8.5.2",
     "next": "^15.5.18",
