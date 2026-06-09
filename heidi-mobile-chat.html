@@ -275,6 +275,23 @@
             font-family: 'Courier New', monospace;
         }
         .action-button:active { background: rgba(200,136,30,0.1); color: var(--accent); }
+        .auth-btn {
+            display: block; width: 100%; margin-top: 10px;
+            padding: 9px 14px;
+            background: rgba(200,136,30,0.1);
+            border: 1px solid rgba(200,136,30,0.6);
+            border-radius: 2px; color: var(--accent);
+            font-size: 11px; font-weight: bold; cursor: pointer;
+            font-family: 'Courier New', monospace;
+            text-transform: uppercase; letter-spacing: 2px;
+            transition: all 0.12s; text-align: center;
+            animation: auth-glow 2s ease-in-out infinite;
+        }
+        .auth-btn:active { background: rgba(200,136,30,0.25); transform: scale(0.97); }
+        @keyframes auth-glow {
+            0%,100% { box-shadow: 0 0 6px rgba(200,136,30,0.18), inset 0 0 6px rgba(200,136,30,0.04); }
+            50% { box-shadow: 0 0 14px rgba(200,136,30,0.45), inset 0 0 10px rgba(200,136,30,0.08); }
+        }
 
         /* ── Quick actions ───────────────────────── */
         .quick-actions {
@@ -484,7 +501,7 @@
     <div class="health-metric"><span class="icon">&#x25A3;</span><span class="value" id="metricModels">&mdash;</span><span class="label">mdl</span></div>
     <div class="health-metric"><span class="icon">&#x25B6;</span><span class="value" id="metricProvider">&mdash;</span></div>
     <div class="health-metric" id="metricHydi"><span class="icon">&#x25C9;</span><span class="value muted" id="metricHydiValue">&#x2014;</span><span class="label">hydi</span></div>
-    <div class="health-metric"><span class="icon">&#x2317;</span><span class="value" id="metricTools">5</span><span class="label">tools</span></div>
+    <div class="health-metric"><span class="icon">&#x2317;</span><span class="value" id="metricTools">10</span><span class="label">tools</span></div>
     <div class="health-metric"><span class="icon">&#x25A1;</span><span class="value" id="metricMsgCount">0</span><span class="label">msg</span></div>
     <div class="health-metric sync-idle" id="metricSync"><span class="icon">&#x2601;&#xFE0F;</span><span class="value" id="metricSyncValue">&#x2014;</span><span class="label">mem</span></div>
     <div class="health-metric"><span class="icon">&#x25D4;</span><span class="value" id="metricTime">&mdash;</span></div>
@@ -519,6 +536,9 @@
     <div class="quick-action hydi" onclick="sendQuick('hydi_status')">&#x25C9; HYDI</div>
     <div class="quick-action" onclick="sendQuick('tools')">&#x2317; Tools</div>
     <div class="quick-action" onclick="sendQuick('health')">&#x25A1; Health</div>
+    <div class="quick-action hydi" onclick="sendQuick('revenue')">&#x25C6; Revenue</div>
+    <div class="quick-action" onclick="sendQuick('pipeline')">&#x25C7; Pipeline</div>
+    <div class="quick-action" onclick="sendQuick('checkout')">&#x229E; Checkout</div>
     <div class="quick-action" onclick="sendQuick('clear')">&#x2715; Clear</div>
 </div>
 
@@ -688,8 +708,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             restoreHistory();
         }
         if (!conversationHistory.length) {
-            addMsg('heidi', "HEIDI online. Local ProtoForge AI ready.\n\nTools available: system health, HYDI status, shell commands, file read, time. Ask me anything about your system or stems.",
-                [{ label: '&#x25A3; System status', q: 'status' }, { label: '&#x2317; What tools do you have', q: 'tools' }]);
+            addMsg('heidi', "HEIDI online. Local ProtoForge AI ready.\n\nTools available: system health, HYDI status, shell commands, file read, time, revenue summary, pipeline, lead creation, Stripe checkout, payout status.\n\nRevenue actions require your explicit AUTHORIZE confirmation.",
+                [{ label: '&#x25A3; System status', q: 'status' }, { label: '&#x25C6; Revenue summary', q: 'revenue' }, { label: '&#x2317; What tools do you have', q: 'tools' }]);
         }
         connectPushStream();
         if ('Notification' in window && Notification.permission === 'granted') {
@@ -888,6 +908,7 @@ async function sendMessage() {
         bubble.textContent = fullText; showAlert('Cannot reach server', 'error');
     }
     bubble.textContent = fullText || '(no response)';
+    if (needsAuthorization(fullText)) injectAuthButton(msgEl, fullText);
     const meta = document.createElement('div'); meta.className = 'message-meta';
     meta.textContent = `Heidi · ${now()} · ${provider}`; msgEl.appendChild(meta);
     addContextActions(msgEl, fullText, text); scrollBottom();
@@ -917,6 +938,9 @@ function sendQuick(cmd) {
         health: 'Run a full health check using your tools: check Ollama, run "free -h" and "df -h" for system resources, and check HYDI status.',
         hydi_status: 'Use your get_hydi_status tool to check the HYDI ProtoForge system status.',
         tools: 'List all the tools you have available and briefly explain what each one does.',
+        revenue: 'Use your get_revenue_summary tool to show me total revenue across all ProtoForge streams.',
+        pipeline: 'Use your get_revenue_pipeline tool to show the active leads, quotes, and proposals in the revenue pipeline.',
+        checkout: 'I want to generate a Stripe checkout link. Walk me through the options — which stream and amount.',
     };
     const input = document.getElementById('msgInput');
     input.value = map[cmd] || cmd;
@@ -944,6 +968,29 @@ function addMsg(sender, content, actions = null) {
     if (sender === 'heidi' && ttsEnabled) speak(cleanForTTS(content));
 }
 
+function needsAuthorization(text) {
+    if (!text) return false;
+    const t = text.toLowerCase();
+    return t.includes('reply confirm') || t.includes('type confirm') || t.includes('reply "confirm"') ||
+           (t.includes('confirm') && (t.includes('authorize') || t.includes('proceed') || t.includes('checkout') || t.includes('create lead')));
+}
+
+function injectAuthButton(msgEl, fullText) {
+    const btn = document.createElement('button');
+    btn.className = 'auth-btn';
+    btn.innerHTML = '&#x25C6; AUTHORIZE &#x2014; CONFIRM';
+    btn.onclick = () => {
+        btn.disabled = true;
+        btn.style.opacity = '0.4';
+        btn.style.animation = 'none';
+        const input = document.getElementById('msgInput');
+        input.value = 'Confirmed. Authorized. Proceed.';
+        autoResize(input);
+        sendMessage();
+    };
+    msgEl.appendChild(btn);
+}
+
 function addContextActions(msgEl, response, userMsg) {
     const text = (response + ' ' + userMsg).toLowerCase();
     const actions = [];
@@ -951,6 +998,8 @@ function addContextActions(msgEl, response, userMsg) {
     if (text.includes('hydi') || text.includes('agent') || text.includes('loop') || text.includes('event bus')) actions.push({ label: '&#x25C9; HYDI status', q: 'hydi_status' });
     if (text.includes('model') || text.includes('ollama') || text.includes('install')) actions.push({ label: '&#x25B6; List all models', q: 'models' });
     if (text.includes('tool') || text.includes('command') || text.includes('run')) actions.push({ label: '&#x2317; Show tools', q: 'tools' });
+    if (text.includes('revenue') || text.includes('ledger') || text.includes('stripe') || text.includes('payout')) actions.push({ label: '&#x25C7; Revenue pipeline', q: 'pipeline' });
+    if (text.includes('lead') || text.includes('quote') || text.includes('proposal') || text.includes('checkout')) actions.push({ label: '&#x25C6; Revenue summary', q: 'revenue' });
     if (!actions.length) return;
     const card = document.createElement('div'); card.className = 'action-card';
     card.innerHTML = '<div class="action-card-header">&#x25B6; Follow-up</div>';
