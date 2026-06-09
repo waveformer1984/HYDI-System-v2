@@ -18,11 +18,26 @@ const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434';
 const LM_STUDIO_URL = process.env.LM_STUDIO_URL || 'http://localhost:1234';
 const DEFAULT_MODEL = process.env.LOCAL_MODEL_NAME || 'tinyllama';
 const HYDI_URL = process.env.HYDI_URL || 'http://localhost:3005';
+const NEXT_APP_URL = process.env.NEXT_APP_URL || 'http://localhost:3000';
 
 const CHAT_TIMEOUT_MS = 600_000;
 const HYDI_TIMEOUT_MS = 3000;
 
-// ── Supabase client (optional — memory features disabled if env vars absent) ──
+const REVENUE_STREAMS = [
+    'galactic_bytes', 'detailer_bot', 'lipi_v2',
+    'protogrance_aromatics', 'rezonate', 'waveformer_studio'
+];
+
+const STRIPE_CONNECT_ACCOUNTS = {
+    galactic_bytes:        process.env.STRIPE_ACCOUNT_GALACTIC_BYTES,
+    detailer_bot:          process.env.STRIPE_ACCOUNT_DETAILER_BOT,
+    lipi_v2:               process.env.STRIPE_ACCOUNT_LIPI_V2,
+    protogrance_aromatics: process.env.STRIPE_ACCOUNT_PROTOGRANCE_AROMATICS,
+    rezonate:              process.env.STRIPE_ACCOUNT_REZONATE,
+    waveformer_studio:     process.env.STRIPE_ACCOUNT_WAVEFORMER_STUDIO,
+};
+
+// ── Supabase client ───────────────────────────────────────────────────────────
 
 let supabaseClient = null;
 if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
@@ -38,7 +53,7 @@ if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
         console.log('⚠️  Supabase memory: disabled —', e.message);
     }
 } else {
-    console.log('ℹ️  Supabase memory: disabled (set SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY to enable)');
+    console.log('ℹ️  Supabase memory: disabled (set SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY)');
 }
 
 // ── Tool definitions ──────────────────────────────────────────────────────────
@@ -64,12 +79,10 @@ const TOOLS = [
         type: 'function',
         function: {
             name: 'run_command',
-            description: 'Execute a safe read-only shell command to inspect system state (ps, free, df, uptime, ls, uname, etc.)',
+            description: 'Execute a safe read-only shell command (ps, free, df, uptime, ls, etc.)',
             parameters: {
                 type: 'object',
-                properties: {
-                    command: { type: 'string', description: 'Shell command to run' }
-                },
+                properties: { command: { type: 'string', description: 'Shell command to run' } },
                 required: ['command']
             }
         }
@@ -81,9 +94,7 @@ const TOOLS = [
             description: 'Read a file from the project directory',
             parameters: {
                 type: 'object',
-                properties: {
-                    path: { type: 'string', description: 'File path relative to project root or absolute' }
-                },
+                properties: { path: { type: 'string', description: 'File path relative to project root or absolute' } },
                 required: ['path']
             }
         }
@@ -94,6 +105,88 @@ const TOOLS = [
             name: 'get_current_time',
             description: 'Get the current date, time, and timezone',
             parameters: { type: 'object', properties: {}, required: [] }
+        }
+    },
+    // ── Revenue tools ─────────────────────────────────────────────────────────
+    {
+        type: 'function',
+        function: {
+            name: 'get_revenue_summary',
+            description: 'Get revenue totals from the ProtoForge ledger. Shows gross, net, and transaction counts by stream.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    stream: { type: 'string', description: 'Filter by stream name. Omit for all 6 streams.' },
+                    days:   { type: 'integer', description: 'Days to look back. Default: 30.' }
+                },
+                required: []
+            }
+        }
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'get_revenue_pipeline',
+            description: 'Get leads, quotes, and proposals from the ProtoForge revenue pipeline.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    stage: { type: 'string', description: 'Filter by stage: leads, quotes, or proposals. Omit for all.' },
+                    limit: { type: 'integer', description: 'Max records per stage. Default: 5.' }
+                },
+                required: []
+            }
+        }
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'create_lead',
+            description: 'Create a new client lead in the revenue pipeline. AUTHORIZATION REQUIRED: always show the user all details and wait for explicit CONFIRM before calling this tool.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    name:            { type: 'string',  description: 'Client or company name' },
+                    email:           { type: 'string',  description: 'Client email address' },
+                    service:         { type: 'string',  description: 'Service or product description' },
+                    stream:          { type: 'string',  description: 'Revenue stream: ' + REVENUE_STREAMS.join(', ') },
+                    estimated_value: { type: 'number',  description: 'Estimated deal value in dollars' },
+                    notes:           { type: 'string',  description: 'Additional notes' }
+                },
+                required: ['name', 'service', 'stream']
+            }
+        }
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'generate_checkout_link',
+            description: 'Generate a live Stripe checkout payment link to send to a client. AUTHORIZATION REQUIRED: present full details and wait for CONFIRM. Returns a payment URL.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    amount_cents:  { type: 'integer', description: 'Amount in cents. E.g. 50000 = $500.00' },
+                    description:   { type: 'string',  description: 'Product/service name shown on Stripe checkout' },
+                    stream:        { type: 'string',  description: 'Revenue stream: ' + REVENUE_STREAMS.join(', ') },
+                    client_email:  { type: 'string',  description: 'Pre-fill client email (optional)' },
+                    currency:      { type: 'string',  description: 'ISO currency code. Default: usd' }
+                },
+                required: ['amount_cents', 'description', 'stream']
+            }
+        }
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'get_payout_status',
+            description: 'Check payout status and net balances from the ledger by stream.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    stream: { type: 'string', description: 'Filter by stream. Omit for all.' }
+                },
+                required: []
+            }
         }
     }
 ];
@@ -108,6 +201,7 @@ const SAFE_CMDS = new Set([
 
 async function executeToolCall(name, args) {
     switch (name) {
+        // ── System tools ──────────────────────────────────────────────────────
         case 'get_system_health': {
             const status = { server: 'ok', ollama: false, lmstudio: false, models: [] };
             try {
@@ -144,16 +238,187 @@ async function executeToolCall(name, args) {
             if (!filePath) return 'Error: no path provided';
             const resolved = path.resolve(__dirname, filePath);
             if (!resolved.startsWith(path.resolve(__dirname))) return 'Access denied: path outside project directory';
-            try {
-                return fs.readFileSync(resolved, 'utf8').slice(0, 5000);
-            } catch (e) {
-                return `Cannot read: ${e.message}`;
-            }
+            try { return fs.readFileSync(resolved, 'utf8').slice(0, 5000); }
+            catch (e) { return `Cannot read: ${e.message}`; }
         }
 
         case 'get_current_time': {
             const n = new Date();
             return `${n.toString()} (UTC: ${n.toUTCString()})`;
+        }
+
+        // ── Revenue tools ──────────────────────────────────────────────────────
+        case 'get_revenue_summary': {
+            if (!supabaseClient) return 'Supabase not connected. Set SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY.';
+            const days = Math.min(parseInt(args.days) || 30, 365);
+            const since = new Date(Date.now() - days * 864e5).toISOString();
+            let q = supabaseClient
+                .from('ledger')
+                .select('stream, gross_amount, net_amount, created_at, payout_status')
+                .gte('created_at', since)
+                .order('created_at', { ascending: false })
+                .limit(500);
+            if (args.stream) q = q.eq('stream', args.stream);
+            const { data, error } = await q;
+            if (error) return `Ledger query failed: ${error.message}`;
+            const rows = data || [];
+            const totals = {};
+            for (const row of rows) {
+                const s = row.stream || 'unknown';
+                if (!totals[s]) totals[s] = { gross: 0, net: 0, count: 0, pending_payout: 0 };
+                totals[s].gross += row.gross_amount || 0;
+                totals[s].net   += row.net_amount   || 0;
+                totals[s].count++;
+                if (row.payout_status === 'pending') totals[s].pending_payout += row.net_amount || 0;
+            }
+            const fmt = cents => `$${(cents / 100).toFixed(2)}`;
+            const grand = Object.values(totals).reduce((a, b) => ({ gross: a.gross + b.gross, net: a.net + b.net, count: a.count + b.count }), { gross: 0, net: 0, count: 0 });
+            return JSON.stringify({
+                period_days: days,
+                total_transactions: grand.count,
+                total_gross: fmt(grand.gross),
+                total_net:   fmt(grand.net),
+                by_stream: Object.fromEntries(
+                    Object.entries(totals).map(([k, v]) => [k, {
+                        gross: fmt(v.gross), net: fmt(v.net),
+                        transactions: v.count,
+                        pending_payout: fmt(v.pending_payout)
+                    }])
+                ),
+                recent: rows.slice(0, 5).map(r => ({
+                    stream: r.stream, gross: fmt(r.gross_amount || 0),
+                    net: fmt(r.net_amount || 0), status: r.payout_status,
+                    date: new Date(r.created_at).toLocaleDateString()
+                }))
+            }, null, 2);
+        }
+
+        case 'get_revenue_pipeline': {
+            if (!supabaseClient) return 'Supabase not connected.';
+            const limit = Math.min(parseInt(args.limit) || 5, 20);
+            const stages = args.stage ? [args.stage] : ['leads', 'quotes', 'proposals'];
+            const result = {};
+            for (const stage of stages) {
+                const { data, error } = await supabaseClient
+                    .from(stage)
+                    .select('*')
+                    .order('created_at', { ascending: false })
+                    .limit(limit);
+                result[stage] = error ? `Error: ${error.message}` : (data || []);
+            }
+            return JSON.stringify(result, null, 2);
+        }
+
+        case 'create_lead': {
+            if (!supabaseClient) return 'Supabase not connected.';
+            const { name, email, service, stream, estimated_value, notes } = args;
+            if (!name || !service || !stream) return 'Error: name, service, and stream are required.';
+            if (!REVENUE_STREAMS.includes(stream)) return `Invalid stream. Valid: ${REVENUE_STREAMS.join(', ')}`;
+            const { data, error } = await supabaseClient
+                .from('leads')
+                .insert({
+                    name,
+                    email:           email || null,
+                    service,
+                    stream,
+                    estimated_value: estimated_value ? Math.round(estimated_value * 100) : null,
+                    notes:           notes || null,
+                    status:          'new',
+                    source:          'heidi-mobile',
+                })
+                .select()
+                .single();
+            if (error) return `Failed to create lead: ${error.message}`;
+            return JSON.stringify({ success: true, lead_id: data?.id, name, service, stream, message: `Lead created for ${name}` }, null, 2);
+        }
+
+        case 'generate_checkout_link': {
+            if (!process.env.STRIPE_SECRET_KEY) return 'STRIPE_SECRET_KEY not set in .env — cannot create checkout link.';
+            const { amount_cents, description, stream, client_email, currency = 'usd' } = args;
+            if (!amount_cents || !description || !stream) return 'Error: amount_cents, description, and stream are required.';
+            if (!REVENUE_STREAMS.includes(stream)) return `Invalid stream: ${stream}. Valid: ${REVENUE_STREAMS.join(', ')}`;
+
+            const body = new URLSearchParams({
+                'payment_method_types[]':                         'card',
+                'line_items[0][price_data][currency]':            currency,
+                'line_items[0][price_data][product_data][name]':  description,
+                'line_items[0][price_data][unit_amount]':         String(amount_cents),
+                'line_items[0][quantity]':                        '1',
+                'mode':                                           'payment',
+                'success_url':                                    `${NEXT_APP_URL}/success?session_id={CHECKOUT_SESSION_ID}`,
+                'cancel_url':                                     `${NEXT_APP_URL}/cancel`,
+                'metadata[stream]':                               stream,
+                'metadata[source]':                               'heidi-mobile',
+            });
+            if (client_email) body.set('customer_email', client_email);
+
+            const headers = {
+                'Authorization':  `Bearer ${process.env.STRIPE_SECRET_KEY}`,
+                'Content-Type':   'application/x-www-form-urlencoded',
+            };
+            const connectAcct = STRIPE_CONNECT_ACCOUNTS[stream];
+            if (connectAcct) headers['Stripe-Account'] = connectAcct;
+
+            try {
+                const r = await fetch('https://api.stripe.com/v1/checkout/sessions', {
+                    method: 'POST', headers, body: body.toString(),
+                    signal: AbortSignal.timeout(15000)
+                });
+                const result = await r.json();
+                if (!r.ok) return `Stripe error: ${result.error?.message || JSON.stringify(result.error)}`;
+
+                if (supabaseClient) {
+                    await supabaseClient.from('checkout_sessions').insert({
+                        stripe_session_id: result.id,
+                        amount:            amount_cents,
+                        currency,
+                        description,
+                        stream,
+                        client_email:      client_email || null,
+                        status:            'pending',
+                        url:               result.url,
+                    }).catch(() => {});
+                }
+
+                return JSON.stringify({
+                    success:      true,
+                    checkout_url: result.url,
+                    session_id:   result.id,
+                    amount:       `${currency.toUpperCase()} ${(amount_cents / 100).toFixed(2)}`,
+                    description,
+                    stream,
+                    connect_account: connectAcct || 'platform',
+                    expires: new Date(result.expires_at * 1000).toLocaleString()
+                }, null, 2);
+            } catch (e) {
+                return `Checkout link failed: ${e.message}`;
+            }
+        }
+
+        case 'get_payout_status': {
+            if (!supabaseClient) return 'Supabase not connected.';
+            let q = supabaseClient.from('ledger').select('stream, net_amount, payout_status');
+            if (args.stream) q = q.eq('stream', args.stream);
+            const { data, error } = await q;
+            if (error) return `Error: ${error.message}`;
+            const fmt = cents => `$${(cents / 100).toFixed(2)}`;
+            const status = {};
+            for (const row of data || []) {
+                const s = row.stream || 'unknown';
+                if (!status[s]) status[s] = { pending: 0, paid: 0, total_net: 0 };
+                if (row.payout_status === 'pending') status[s].pending += row.net_amount || 0;
+                if (row.payout_status === 'paid')    status[s].paid    += row.net_amount || 0;
+                status[s].total_net += row.net_amount || 0;
+            }
+            return JSON.stringify({
+                payout_status: Object.fromEntries(
+                    Object.entries(status).map(([k, v]) => [k, {
+                        pending_payout: fmt(v.pending),
+                        paid_out:       fmt(v.paid),
+                        total_net:      fmt(v.total_net)
+                    }])
+                )
+            }, null, 2);
         }
 
         default:
@@ -175,17 +440,15 @@ function getLANIP() {
 async function fetchHydiStatus() {
     try {
         const [healthRes, metricsRes] = await Promise.allSettled([
-            fetch(`${HYDI_URL}/health`, { signal: AbortSignal.timeout(HYDI_TIMEOUT_MS) }),
+            fetch(`${HYDI_URL}/health`,  { signal: AbortSignal.timeout(HYDI_TIMEOUT_MS) }),
             fetch(`${HYDI_URL}/metrics`, { signal: AbortSignal.timeout(HYDI_TIMEOUT_MS) })
         ]);
         let health = null, metrics = null;
-        if (healthRes.status === 'fulfilled' && healthRes.value.ok) health = await healthRes.value.json();
+        if (healthRes.status === 'fulfilled' && healthRes.value.ok)  health  = await healthRes.value.json();
         if (metricsRes.status === 'fulfilled' && metricsRes.value.ok) metrics = await metricsRes.value.json();
         if (!health) return null;
         return {
-            online: true,
-            status: health.status,
-            database: health.database,
+            online: true, status: health.status, database: health.database,
             totalEvents: metrics?.total_events || 0,
             eventBus: metrics?.event_bus || null,
             timestamp: health.timestamp
@@ -194,33 +457,40 @@ async function fetchHydiStatus() {
 }
 
 function buildSystemPrompt(hydiStatus = null) {
-    let prompt = `You are Heidi, the AI assistant for the HYDI ProtoForge system.
-You run locally on the user's device via Ollama.
-You are helpful, direct, and slightly warm in personality.
-You have access to tools: get_system_health, get_hydi_status, run_command, read_file, get_current_time.
-Use tools when the user asks about system state, files, or live data — don't guess, check.
-Keep responses concise (under 300 words) unless the user asks for detail.
-Current date/time: ${new Date().toLocaleString()}`;
+    let prompt = `You are Heidi, the AI command interface for HYDI ProtoForge — an autonomous revenue-generating platform.
+You run locally via Ollama. The operator (user) directs you to manage and grow revenue.
+
+SYSTEM TOOLS: get_system_health, get_hydi_status, run_command, read_file, get_current_time
+REVENUE TOOLS: get_revenue_summary, get_revenue_pipeline, create_lead, generate_checkout_link, get_payout_status
+
+REVENUE STREAMS: galactic_bytes | detailer_bot | lipi_v2 | protogrance_aromatics | rezonate | waveformer_studio
+
+AUTHORIZATION PROTOCOL — MANDATORY for create_lead and generate_checkout_link:
+  1. Before calling either tool, present a summary: action type, all parameters, dollar amount.
+  2. End with: "Reply CONFIRM to authorize."
+  3. Wait for the operator to reply CONFIRM (or equivalent). Do not proceed without it.
+  4. After confirmation, call the tool and report the result.
+
+Be direct and concise. Treat the operator as the system owner with full authority.
+Current time: ${new Date().toLocaleString()}`;
 
     if (hydiStatus) {
-        prompt += `\n\nHYDI System Status (live):\n- Status: ${hydiStatus.status}\n- Database: ${hydiStatus.database}\n- Total events: ${hydiStatus.totalEvents}`;
-        if (hydiStatus.eventBus) prompt += `\n- Event bus: ${JSON.stringify(hydiStatus.eventBus)}`;
+        prompt += `\nHYDI: ${hydiStatus.status} | DB: ${hydiStatus.database} | Events: ${hydiStatus.totalEvents}`;
     } else {
-        prompt += `\n\nHYDI System: Not connected (set HYDI_URL env var to connect)`;
+        prompt += `\nHYDI: offline`;
     }
-
     return prompt;
 }
 
 function buildFallback(message) {
     const lower = message.toLowerCase();
     if (lower.includes('hello') || lower.includes('hi') || lower.includes('hey'))
-        return "Hi! I'm Heidi, running in fallback mode — no local AI model detected. Install Ollama at ollama.ai, then: ollama pull tinyllama";
-    if (lower.includes('model') || lower.includes('ollama') || lower.includes('install'))
-        return "No local AI model connected.\n1. Install Ollama from ollama.ai\n2. ollama pull tinyllama\n3. Restart this server";
+        return "Hi! I'm Heidi, running in fallback mode — no local AI model detected. Install Ollama: ollama pull tinyllama";
+    if (lower.includes('revenue') || lower.includes('stripe') || lower.includes('lead'))
+        return "Revenue features require a local AI model. Install Ollama (ollama.ai), then: ollama pull llama3.2";
     if (lower.includes('status') || lower.includes('health'))
-        return "Heidi server: running ✅  |  Local AI: not connected ⚠️\n\nInstall Ollama (ollama.ai) and pull a model to enable AI.";
-    return "Fallback mode — no local AI model detected. Visit ollama.ai to get started, then: ollama pull tinyllama";
+        return "Heidi server: running ✅  |  Local AI: not connected ⚠️\nInstall Ollama and pull a model to enable AI.";
+    return "Fallback mode — no local AI model. Visit ollama.ai, then: ollama pull llama3.2";
 }
 
 // ── Express setup ─────────────────────────────────────────────────────────────
@@ -241,9 +511,9 @@ app.get('/manifest.json', (req, res) => {
     res.setHeader('Content-Type', 'application/manifest+json');
     res.json({
         name: 'Heidi', short_name: 'Heidi',
-        description: 'HYDI ProtoForge local AI assistant',
+        description: 'HYDI ProtoForge command interface',
         start_url: '/', display: 'standalone',
-        background_color: '#0a0a0f', theme_color: '#0a0a0f',
+        background_color: '#0e0c08', theme_color: '#0e0c08',
         orientation: 'portrait-primary',
         icons: [{ src: '/icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any maskable' }]
     });
@@ -252,13 +522,13 @@ app.get('/manifest.json', (req, res) => {
 app.get('/icon.svg', (req, res) => {
     res.setHeader('Content-Type', 'image/svg+xml');
     res.send(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192">
-  <rect width="192" height="192" rx="40" fill="#0a0a0f"/>
+  <rect width="192" height="192" rx="40" fill="#0e0c08"/>
   <defs><linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
-    <stop offset="0%" stop-color="#64ffda"/><stop offset="100%" stop-color="#3b82f6"/>
+    <stop offset="0%" stop-color="#c8881e"/><stop offset="100%" stop-color="#7a4010"/>
   </linearGradient></defs>
   <circle cx="96" cy="96" r="64" fill="url(#g)"/>
   <text x="96" y="122" text-anchor="middle" font-size="72"
-        fill="#0a0a0f" font-family="sans-serif" font-weight="bold">H</text>
+        fill="#0e0c08" font-family="Courier New, monospace" font-weight="bold">H</text>
 </svg>`);
 });
 
@@ -266,7 +536,7 @@ app.get('/sw.js', (req, res) => {
     res.setHeader('Content-Type', 'application/javascript');
     res.setHeader('Service-Worker-Allowed', '/');
     res.send(`
-const CACHE = 'heidi-v1';
+const CACHE = 'heidi-v2';
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.add('/'))); self.skipWaiting(); });
 self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k))))); self.clients.claim(); });
 self.addEventListener('fetch', e => {
@@ -282,8 +552,7 @@ self.addEventListener('fetch', e => {
 // ── HYDI System bridge ────────────────────────────────────────────────────────
 
 app.get('/api/system/status', async (req, res) => {
-    const status = await fetchHydiStatus();
-    res.json(status || { online: false });
+    res.json(await fetchHydiStatus() || { online: false });
 });
 
 app.post('/api/system/action', async (req, res) => {
@@ -306,6 +575,39 @@ app.post('/api/system/action', async (req, res) => {
     }
 });
 
+// ── Revenue API routes ────────────────────────────────────────────────────────
+
+app.get('/api/revenue/summary', async (req, res) => {
+    if (!supabaseClient) return res.json({ available: false });
+    const days = Math.min(parseInt(req.query.days) || 30, 365);
+    const since = new Date(Date.now() - days * 864e5).toISOString();
+    const { data, error } = await supabaseClient
+        .from('ledger')
+        .select('stream, gross_amount, net_amount, payout_status')
+        .gte('created_at', since);
+    if (error) return res.status(500).json({ error: error.message });
+    const totals = {};
+    for (const row of data || []) {
+        const s = row.stream || 'other';
+        if (!totals[s]) totals[s] = { gross: 0, net: 0, count: 0 };
+        totals[s].gross += row.gross_amount || 0;
+        totals[s].net   += row.net_amount   || 0;
+        totals[s].count++;
+    }
+    const grand = Object.values(totals).reduce((a, b) => ({ gross: a.gross + b.gross, net: a.net + b.net, count: a.count + b.count }), { gross: 0, net: 0, count: 0 });
+    res.json({ days, grand, by_stream: totals });
+});
+
+app.get('/api/revenue/pipeline', async (req, res) => {
+    if (!supabaseClient) return res.json({ available: false });
+    const results = {};
+    for (const stage of ['leads', 'quotes', 'proposals']) {
+        const { data, error } = await supabaseClient.from(stage).select('id, name, service, stream, status, created_at').order('created_at', { ascending: false }).limit(5);
+        results[stage] = error ? [] : (data || []);
+    }
+    res.json(results);
+});
+
 // ── Memory routes (Supabase) ──────────────────────────────────────────────────
 
 const DEVICE_ID_RE = /^[a-z0-9-]{36}$/;
@@ -322,9 +624,7 @@ app.get('/api/memory/:deviceId', async (req, res) => {
             .single();
         if (error && error.code !== 'PGRST116') throw error;
         res.json({ messages: data?.messages || null, model: data?.model, updated_at: data?.updated_at });
-    } catch (e) {
-        res.status(500).json({ error: e.message });
-    }
+    } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.post('/api/memory/:deviceId', async (req, res) => {
@@ -337,30 +637,23 @@ app.post('/api/memory/:deviceId', async (req, res) => {
         const { error } = await supabaseClient
             .from('heidi_chat_sessions')
             .upsert({
-                device_id: deviceId,
-                messages: messages.slice(-40),
-                model: model || null,
-                msg_count: messages.length,
+                device_id: deviceId, messages: messages.slice(-40),
+                model: model || null, msg_count: messages.length,
                 updated_at: new Date().toISOString()
             }, { onConflict: 'device_id' });
         if (error) throw error;
         res.json({ saved: true });
-    } catch (e) {
-        res.status(500).json({ saved: false, error: e.message });
-    }
+    } catch (e) { res.status(500).json({ saved: false, error: e.message }); }
 });
 
 // ── Push notification broadcast (SSE) ────────────────────────────────────────
-// HYDI or any service can POST to /api/events/push to alert all connected clients.
-// The client connects to /api/events/stream (SSE) for real-time delivery.
-// watchHydiEvents() auto-detects HYDI state changes every 15 seconds.
 
 const pushClients = new Set();
-let lastEventCount = -1;
-let lastHydiOnline = false;
-let lastHydiOpStatus = null;
-let lastEventTime = 0;
-let silenceAlertSent = false;
+let lastEventCount    = -1;
+let lastHydiOnline    = false;
+let lastHydiOpStatus  = null;
+let lastEventTime     = 0;
+let silenceAlertSent  = false;
 
 function broadcastPush(event) {
     if (!pushClients.size) return;
@@ -394,8 +687,8 @@ app.post('/api/events/push', (req, res) => {
 async function analyzeHydiState(status, delta) {
     try {
         const prompt = delta !== null
-            ? `HYDI system: ${status.totalEvents} total events, ${delta} new in last 15s, status=${status.status}, db=${status.database}. Summarize what is happening in one concise sentence.`
-            : `HYDI system: status=${status.status}, db=${status.database}, events=${status.totalEvents}. Describe the current state in one concise sentence.`;
+            ? `HYDI system: ${status.totalEvents} total events, ${delta} new in last 15s, status=${status.status}, db=${status.database}. Summarize in one concise sentence.`
+            : `HYDI system: status=${status.status}, db=${status.database}, events=${status.totalEvents}. Describe current state in one concise sentence.`;
         const r = await fetch(`${OLLAMA_URL}/api/generate`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -403,8 +696,7 @@ async function analyzeHydiState(status, delta) {
             signal: AbortSignal.timeout(12000)
         });
         if (!r.ok) return null;
-        const data = await r.json();
-        return data.response?.trim() || null;
+        return (await r.json()).response?.trim() || null;
     } catch { return null; }
 }
 
@@ -412,87 +704,38 @@ async function watchHydiEvents() {
     try {
         const status = await fetchHydiStatus();
         const now = Date.now();
-
         if (!status) {
             if (lastHydiOnline) {
                 lastHydiOnline = false;
-                broadcastPush({
-                    type: 'hydi_offline',
-                    title: 'HYDI Offline',
-                    body: 'HYDI system is not responding',
-                    level: 'warning',
-                    payload: {},
-                    ts: now
-                });
+                broadcastPush({ type: 'hydi_offline', title: 'HYDI Offline', body: 'System not responding', level: 'warning', payload: {}, ts: now });
             }
         } else {
             if (!lastHydiOnline) {
-                lastHydiOnline = true;
-                lastHydiOpStatus = status.status;
-                broadcastPush({
-                    type: 'hydi_recovered',
-                    title: 'HYDI Online',
-                    body: `System recovered · status: ${status.status}`,
-                    level: 'info',
-                    payload: { status: status.status },
-                    ts: now
-                });
+                lastHydiOnline = true; lastHydiOpStatus = status.status;
+                broadcastPush({ type: 'hydi_recovered', title: 'HYDI Online', body: `Recovered · status: ${status.status}`, level: 'info', payload: { status: status.status }, ts: now });
             }
-
             if (lastHydiOpStatus !== null && lastHydiOpStatus !== status.status) {
                 const analysis = await analyzeHydiState(status, null);
-                broadcastPush({
-                    type: 'hydi_status_change',
-                    title: 'HYDI Status Changed',
-                    body: analysis || `${lastHydiOpStatus} → ${status.status}`,
-                    level: status.status === 'operational' ? 'info' : 'warning',
-                    payload: { previous: lastHydiOpStatus, current: status.status },
-                    ts: now
-                });
+                broadcastPush({ type: 'hydi_status_change', title: 'HYDI Status Changed', body: analysis || `${lastHydiOpStatus} → ${status.status}`, level: status.status === 'operational' ? 'info' : 'warning', payload: { previous: lastHydiOpStatus, current: status.status }, ts: now });
             }
             lastHydiOpStatus = status.status;
-
             if (status.totalEvents !== undefined) {
                 if (lastEventCount >= 0 && status.totalEvents > lastEventCount) {
                     const delta = status.totalEvents - lastEventCount;
-                    lastEventTime = now;
-                    silenceAlertSent = false;
-
+                    lastEventTime = now; silenceAlertSent = false;
                     if (delta >= 20) {
                         const analysis = await analyzeHydiState(status, delta);
-                        broadcastPush({
-                            type: 'hydi_activity',
-                            title: `HYDI Burst: +${delta} events`,
-                            body: analysis || `${delta} new events · total: ${status.totalEvents.toLocaleString()}`,
-                            level: 'warning',
-                            payload: { total: status.totalEvents, delta, hydi_status: status.status, burst: true },
-                            ts: now
-                        });
+                        broadcastPush({ type: 'hydi_activity', title: `HYDI Burst: +${delta}`, body: analysis || `${delta} new events · total: ${status.totalEvents.toLocaleString()}`, level: 'warning', payload: { total: status.totalEvents, delta, burst: true }, ts: now });
                     } else {
-                        broadcastPush({
-                            type: 'hydi_activity',
-                            title: 'HYDI Activity',
-                            body: `${delta} new event${delta !== 1 ? 's' : ''} · total: ${status.totalEvents.toLocaleString()}`,
-                            level: status.status === 'operational' ? 'info' : 'warning',
-                            payload: { total: status.totalEvents, delta, hydi_status: status.status },
-                            ts: now
-                        });
+                        broadcastPush({ type: 'hydi_activity', title: 'HYDI Activity', body: `${delta} new event${delta !== 1 ? 's' : ''} · total: ${status.totalEvents.toLocaleString()}`, level: status.status === 'operational' ? 'info' : 'warning', payload: { total: status.totalEvents, delta }, ts: now });
                     }
                 } else if (lastEventCount >= 0 && lastEventTime > 0 && !silenceAlertSent) {
                     const silentMs = now - lastEventTime;
                     if (silentMs >= 30 * 60 * 1000) {
                         silenceAlertSent = true;
-                        broadcastPush({
-                            type: 'hydi_silence',
-                            title: 'HYDI Quiet',
-                            body: `No new events for ${Math.round(silentMs / 60000)} minutes`,
-                            level: 'info',
-                            payload: { silent_ms: silentMs, total: status.totalEvents },
-                            ts: now
-                        });
+                        broadcastPush({ type: 'hydi_silence', title: 'HYDI Quiet', body: `No new events for ${Math.round(silentMs / 60000)} min`, level: 'info', payload: { silent_ms: silentMs }, ts: now });
                     }
                 }
-
                 if (lastEventCount === -1) lastEventTime = now;
                 lastEventCount = status.totalEvents;
             }
@@ -503,52 +746,36 @@ async function watchHydiEvents() {
 
 function scheduleDailyBriefing() {
     const hour = parseInt(process.env.BRIEFING_HOUR || '8', 10);
-    const now = new Date();
-    const next = new Date(now);
+    const now = new Date(), next = new Date(now);
     next.setHours(hour, 0, 0, 0);
     if (next <= now) next.setDate(next.getDate() + 1);
     const delay = next - now;
     console.log(`📅 Daily briefing scheduled for ${next.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`);
-    setTimeout(async () => {
-        await sendDailyBriefing();
-        scheduleDailyBriefing();
-    }, delay);
+    setTimeout(async () => { await sendDailyBriefing(); scheduleDailyBriefing(); }, delay);
 }
 
 async function sendDailyBriefing() {
     if (!pushClients.size) return;
     try {
         const status = await fetchHydiStatus();
-        const hydiSummary = status
-            ? `HYDI status is ${status.status}, database is ${status.database}, and there have been ${status.totalEvents} total events`
-            : 'HYDI is currently offline';
-        const prompt = `You are Heidi, the HYDI ProtoForge AI assistant. Write a brief morning briefing in 2-3 sentences. Current system context: ${hydiSummary}. Current time: ${new Date().toLocaleString()}. Be warm, concise, and mention anything noteworthy.`;
+        let revSummary = '';
+        if (supabaseClient) {
+            const since = new Date(Date.now() - 864e5).toISOString();
+            const { data } = await supabaseClient.from('ledger').select('net_amount').gte('created_at', since);
+            const net = (data || []).reduce((s, r) => s + (r.net_amount || 0), 0);
+            if (net > 0) revSummary = ` Last 24h revenue: $${(net / 100).toFixed(2)}.`;
+        }
+        const hydiCtx = status ? `HYDI ${status.status}, DB ${status.database}, ${status.totalEvents} events.` : 'HYDI offline.';
+        const prompt = `You are Heidi, the HYDI ProtoForge AI. Write a brief morning briefing in 2-3 sentences. Context: ${hydiCtx}${revSummary} Time: ${new Date().toLocaleString()}. Be warm and concise.`;
         const r = await fetch(`${OLLAMA_URL}/api/generate`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ model: DEFAULT_MODEL, prompt, stream: false, options: { temperature: 0.6, num_predict: 100 } }),
             signal: AbortSignal.timeout(20000)
         });
-        const briefingText = r.ok
-            ? ((await r.json()).response?.trim() || 'Good morning! HYDI system is running.')
-            : 'Good morning! Daily HYDI system check complete.';
-        broadcastPush({
-            type: 'daily_briefing',
-            title: 'Good Morning',
-            body: briefingText,
-            level: 'briefing',
-            payload: { hydi_status: status?.status },
-            ts: Date.now()
-        });
+        const text = r.ok ? ((await r.json()).response?.trim() || 'Good morning. System is running.') : 'Good morning. Daily check complete.';
+        broadcastPush({ type: 'daily_briefing', title: 'Good Morning', body: text, level: 'briefing', payload: {}, ts: Date.now() });
     } catch {
-        broadcastPush({
-            type: 'daily_briefing',
-            title: 'Good Morning',
-            body: 'Daily briefing — HYDI system is running.',
-            level: 'briefing',
-            payload: {},
-            ts: Date.now()
-        });
+        broadcastPush({ type: 'daily_briefing', title: 'Good Morning', body: 'Daily briefing — system running.', level: 'briefing', payload: {}, ts: Date.now() });
     }
 }
 
@@ -575,49 +802,30 @@ app.get('/api/models', async (req, res) => {
 });
 
 app.get('/api/health', async (req, res) => {
-    const status = { server: 'ok', ollama: false, lmstudio: false, models: [], memory: !!supabaseClient, push_clients: pushClients.size };
-    try {
-        const r = await fetch(`${OLLAMA_URL}/api/tags`, { signal: AbortSignal.timeout(2000) });
-        if (r.ok) { status.ollama = true; const data = await r.json(); status.models = data.models?.map(m => m.name) || []; }
-    } catch {}
-    try {
-        const r = await fetch(`${LM_STUDIO_URL}/v1/models`, { signal: AbortSignal.timeout(2000) });
-        if (r.ok) status.lmstudio = true;
-    } catch {}
+    const status = { server: 'ok', ollama: false, lmstudio: false, models: [], memory: !!supabaseClient, push_clients: pushClients.size, revenue_tools: !!supabaseClient, stripe_ready: !!process.env.STRIPE_SECRET_KEY };
+    try { const r = await fetch(`${OLLAMA_URL}/api/tags`, { signal: AbortSignal.timeout(2000) }); if (r.ok) { status.ollama = true; const d = await r.json(); status.models = d.models?.map(m => m.name) || []; } } catch {}
+    try { const r = await fetch(`${LM_STUDIO_URL}/v1/models`, { signal: AbortSignal.timeout(2000) }); if (r.ok) status.lmstudio = true; } catch {}
     res.json(status);
 });
 
 app.post('/api/chat', async (req, res) => {
     const { message, model, provider, history = [] } = req.body;
     if (!message) return res.status(400).json({ error: 'message required' });
-
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
     res.setHeader('X-Accel-Buffering', 'no');
-
-    const send = (data) => res.write(`data: ${JSON.stringify(data)}\n\n`);
+    const send   = (data) => res.write(`data: ${JSON.stringify(data)}\n\n`);
     const finish = (meta = {}) => { send({ done: true, ...meta }); res.end(); };
-
-    const hydiStatus = await fetchHydiStatus();
+    const hydiStatus   = await fetchHydiStatus();
     const systemPrompt = buildSystemPrompt(hydiStatus);
     const selectedModel = model || DEFAULT_MODEL;
-
     if (provider !== 'lmstudio') {
-        try {
-            await streamOllama(message, selectedModel, systemPrompt, history, send);
-            return finish({ provider: 'ollama' });
-        } catch (e) {
-            console.log('[Chat] Ollama unavailable:', e.message);
-        }
+        try { await streamOllama(message, selectedModel, systemPrompt, history, send); return finish({ provider: 'ollama' }); }
+        catch (e) { console.log('[Chat] Ollama:', e.message); }
     }
-    try {
-        await streamLMStudio(message, selectedModel, systemPrompt, history, send);
-        return finish({ provider: 'lmstudio' });
-    } catch (e) {
-        console.log('[Chat] LM Studio unavailable:', e.message);
-    }
-
+    try { await streamLMStudio(message, selectedModel, systemPrompt, history, send); return finish({ provider: 'lmstudio' }); }
+    catch (e) { console.log('[Chat] LM Studio:', e.message); }
     const fallback = buildFallback(message);
     for (const char of fallback) { send({ t: char }); await new Promise(r => setTimeout(r, 12)); }
     finish({ provider: 'fallback' });
@@ -626,29 +834,22 @@ app.post('/api/chat', async (req, res) => {
 // ── Streaming ─────────────────────────────────────────────────────────────────
 
 async function streamOllama(message, model, systemPrompt, history, send) {
-    const messages = [
-        { role: 'system', content: systemPrompt },
-        ...history,
-        { role: 'user', content: message }
-    ];
+    const messages = [{ role: 'system', content: systemPrompt }, ...history, { role: 'user', content: message }];
     await streamOllamaMessages(messages, model, send, 0);
 }
 
 async function streamOllamaMessages(messages, model, send, depth) {
     if (depth > 3) throw new Error('Tool call depth limit reached');
-
     const response = await fetch(`${OLLAMA_URL}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model, messages, stream: true, tools: TOOLS, options: { temperature: 0.7, num_predict: 400 } }),
+        body: JSON.stringify({ model, messages, stream: true, tools: TOOLS, options: { temperature: 0.7, num_predict: 600 } }),
         signal: AbortSignal.timeout(CHAT_TIMEOUT_MS)
     });
     if (!response.ok) throw new Error(`Ollama HTTP ${response.status}`);
-
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let finalMessage = null;
-
     while (true) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -662,15 +863,11 @@ async function streamOllamaMessages(messages, model, send, depth) {
             } catch {}
         }
     }
-
     if (finalMessage?.tool_calls?.length > 0) {
-        const updated = [
-            ...messages,
-            { role: 'assistant', content: finalMessage.content || '', tool_calls: finalMessage.tool_calls }
-        ];
+        const updated = [...messages, { role: 'assistant', content: finalMessage.content || '', tool_calls: finalMessage.tool_calls }];
         for (const tc of finalMessage.tool_calls) {
             const toolName = tc.function?.name || 'unknown';
-            const rawArgs = tc.function?.arguments || {};
+            const rawArgs  = tc.function?.arguments || {};
             const toolArgs = typeof rawArgs === 'string' ? JSON.parse(rawArgs) : rawArgs;
             send({ tool_use: true, tool_name: toolName });
             let result;
@@ -684,15 +881,11 @@ async function streamOllamaMessages(messages, model, send, depth) {
 }
 
 async function streamLMStudio(message, model, systemPrompt, history, send) {
-    const messages = [
-        { role: 'system', content: systemPrompt },
-        ...history,
-        { role: 'user', content: message }
-    ];
+    const messages = [{ role: 'system', content: systemPrompt }, ...history, { role: 'user', content: message }];
     const response = await fetch(`${LM_STUDIO_URL}/v1/chat/completions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model, stream: true, temperature: 0.7, max_tokens: 400, messages }),
+        body: JSON.stringify({ model, stream: true, temperature: 0.7, max_tokens: 600, messages }),
         signal: AbortSignal.timeout(CHAT_TIMEOUT_MS)
     });
     if (!response.ok) throw new Error(`LM Studio HTTP ${response.status}`);
@@ -701,16 +894,11 @@ async function streamLMStudio(message, model, systemPrompt, history, send) {
     while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        const text = decoder.decode(value, { stream: true });
-        for (const line of text.split('\n')) {
+        for (const line of decoder.decode(value, { stream: true }).split('\n')) {
             if (!line.startsWith('data: ')) continue;
             const data = line.slice(6).trim();
             if (data === '[DONE]') return;
-            try {
-                const parsed = JSON.parse(data);
-                const token = parsed.choices?.[0]?.delta?.content;
-                if (token) send({ t: token });
-            } catch {}
+            try { const p = JSON.parse(data); const t = p.choices?.[0]?.delta?.content; if (t) send({ t }); } catch {}
         }
     }
 }
@@ -718,44 +906,38 @@ async function streamLMStudio(message, model, systemPrompt, history, send) {
 // ── Server start ──────────────────────────────────────────────────────────────
 
 const server = http.createServer(app);
-const lanIP = getLANIP();
+const lanIP  = getLANIP();
 
 server.listen(PORT, '0.0.0.0', async () => {
     const portStr = PORT.toString();
-    const ipLine = `http://${lanIP}:${portStr}`;
+    const ipLine  = `http://${lanIP}:${portStr}`;
     console.log('\n╬════════════════════════════════════════════╗');
-    console.log('║       🧠  HEIDI — Local Mobile Chat          ║');
+    console.log('║       H  HEIDI — ProtoForge Command        ║');
     console.log('╠════════════════════════════════════════════╣');
     console.log(`║  Desktop:  http://localhost:${portStr}${' '.repeat(16 - portStr.length)}║`);
-    console.log(`║  📱 Phone: ${ipLine}${' '.repeat(34 - ipLine.length)}║`);
-    console.log('╠════════════════════════════════════════════╣');
-    console.log('║  Open the Phone URL on your mobile device    ║');
-    console.log('║  (must be on the same WiFi / LAN network)    ║');
+    console.log(`║  Phone:    ${ipLine}${' '.repeat(34 - ipLine.length)}║`);
     console.log('╚════════════════════════════════════════════╝\n');
     try {
         const r = await fetch(`${OLLAMA_URL}/api/tags`, { signal: AbortSignal.timeout(2000) });
         if (r.ok) {
             const { models = [] } = await r.json();
-            if (models.length) { console.log(`✅ Ollama: ${models.map(m => m.name).join(', ')}`); console.log(`   Default model: ${DEFAULT_MODEL}`); }
-            else console.log('⚠️  Ollama running but no models. Run: ollama pull tinyllama');
+            if (models.length) { console.log(`✅ Ollama: ${models.map(m => m.name).join(', ')}`); }
+            else console.log('⚠️  Ollama: no models. Run: ollama pull llama3.2');
         }
     } catch { console.log('⚠️  Ollama not found at', OLLAMA_URL); }
     try {
-        const r = await fetch(`${LM_STUDIO_URL}/v1/models`, { signal: AbortSignal.timeout(2000) });
-        if (r.ok) console.log(`✅ LM Studio online at ${LM_STUDIO_URL}`);
-    } catch { console.log('ℹ️  LM Studio not found (optional)'); }
-    try {
         const r = await fetch(`${HYDI_URL}/health`, { signal: AbortSignal.timeout(2000) });
-        if (r.ok) { const h = await r.json(); console.log(`✅ HYDI online at ${HYDI_URL} — db: ${h.database}`); }
-        else console.log(`ℹ️  HYDI not found at ${HYDI_URL} (set HYDI_URL env var to connect)`);
-    } catch { console.log(`ℹ️  HYDI not found at ${HYDI_URL} (set HYDI_URL env var to connect)`); }
-    console.log('📡 Push alerts: ready | 🤖 HYDI observer: active | 📅 Daily briefing: scheduled');
-    console.log('');
+        if (r.ok) { const h = await r.json(); console.log(`✅ HYDI: ${HYDI_URL} — db: ${h.database}`); }
+        else console.log(`ℹ️  HYDI not found at ${HYDI_URL}`);
+    } catch { console.log(`ℹ️  HYDI not found at ${HYDI_URL}`); }
+    console.log(supabaseClient ? '✅ Revenue tools: active (Supabase connected)' : 'ℹ️  Revenue tools: read-only (Supabase not connected)');
+    console.log(process.env.STRIPE_SECRET_KEY ? '✅ Stripe checkout: ready' : 'ℹ️  Stripe checkout: disabled (set STRIPE_SECRET_KEY)');
+    console.log('📡 Push alerts: ready | HYDI observer: active | Daily briefing: scheduled\n');
     watchHydiEvents();
     scheduleDailyBriefing();
 });
 
-process.on('SIGINT', () => { console.log('\n🛑 Shutting down Heidi...'); server.close(() => process.exit(0)); });
+process.on('SIGINT',  () => { console.log('\nShutting down Heidi...'); server.close(() => process.exit(0)); });
 process.on('SIGTERM', () => process.exit(0));
-process.on('uncaughtException', (e) => { console.error('Fatal:', e.message); process.exit(1); });
-process.on('unhandledRejection', (e) => { console.error('Unhandled rejection:', e); });
+process.on('uncaughtException',  (e) => { console.error('Fatal:', e.message); process.exit(1); });
+process.on('unhandledRejection', (e) => { console.error('Unhandled:', e); });
