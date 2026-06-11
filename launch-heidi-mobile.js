@@ -963,6 +963,53 @@ async function watchHydiEvents() {
     setTimeout(watchHydiEvents, 15000);
 }
 
+// ── Bridge SSE subscriber — receives forge build notifications ─────────────
+
+let bridgeStreamRetryMs = 5000;
+
+async function watchBridgeStream() {
+    const streamUrl = `${URSULA_URL}/api/bridge/stream`;
+    try {
+        const resp = await fetch(streamUrl, {
+            signal: AbortSignal.timeout(0),   // no timeout — long-lived
+            headers: { Accept: 'text/event-stream' }
+        });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        bridgeStreamRetryMs = 5000; // reset backoff on success
+        const reader = resp.body.getReader();
+        const dec    = new TextDecoder();
+        let   buf    = '';
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buf += dec.decode(value, { stream: true });
+            let idx;
+            while ((idx = buf.indexOf('\n\n')) !== -1) {
+                const chunk = buf.slice(0, idx); buf = buf.slice(idx + 2);
+                for (const line of chunk.split('\n')) {
+                    if (!line.startsWith('data: ')) continue;
+                    try {
+                        const ev = JSON.parse(line.slice(6));
+                        if (ev.type && ev.type !== 'connected') {
+                            broadcastPush({
+                                type:    ev.type,
+                                title:   ev.title  || 'Forge Update',
+                                body:    ev.body   || '',
+                                level:   ev.level  || 'info',
+                                payload: ev.payload || {},
+                                ts:      ev.ts     || Date.now()
+                            });
+                        }
+                    } catch {}
+                }
+            }
+        }
+    } catch {}
+    // Reconnect with backoff
+    bridgeStreamRetryMs = Math.min(bridgeStreamRetryMs * 2, 60000);
+    setTimeout(watchBridgeStream, bridgeStreamRetryMs);
+}
+
 function scheduleDailyBriefing() {
     const hour = parseInt(process.env.BRIEFING_HOUR || '8', 10);
     const now = new Date(), next = new Date(now);
@@ -1163,11 +1210,12 @@ server.listen(PORT, '0.0.0.0', async () => {
     } else {
         console.log(`Protohub (Node): not found at ${PROTOHUB_URL} — set PROTOHUB_URL env var`);
     }
-    console.log(supabaseClient ? '✅ Revenue tools: active (Supabase connected)' : 'ℹ️  Revenue tools: read-only (Supabase not connected)');
-    console.log(process.env.STRIPE_SECRET_KEY ? '✅ Stripe checkout: ready' : 'ℹ️  Stripe checkout: disabled (set STRIPE_SECRET_KEY)');
-    console.log('📡 Push alerts: ready | HYDI observer: active | Daily briefing: scheduled\n');
+    console.log(supabaseClient ? 'Revenue tools: active (Supabase connected)' : 'Revenue tools: read-only (Supabase not connected)');
+    console.log(process.env.STRIPE_SECRET_KEY ? 'Stripe checkout: ready' : 'Stripe checkout: disabled (set STRIPE_SECRET_KEY)');
+    console.log('Push alerts: ready | Backend observer: active | Daily briefing: scheduled\n');
     watchHydiEvents();
     scheduleDailyBriefing();
+    watchBridgeStream();
 });
 
 process.on('SIGINT',  () => { console.log('\nShutting down Heidi...'); server.close(() => process.exit(0)); });

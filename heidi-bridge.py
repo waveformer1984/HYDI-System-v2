@@ -203,6 +203,101 @@ def db_tables():
         'exists': DB_PATH.exists(),
     })
 
+import threading
+
+# In-memory SSE push queue — bridge-side (mirrors Heidi server's pushClients)
+_sse_clients: list = []
+_sse_lock = threading.Lock()
+
+@app.route('/api/bridge/stream')
+def bridge_sse_stream():
+    """SSE endpoint — Heidi server subscribes here for forge/bridge events."""
+    import queue
+    q: queue.Queue = queue.Queue(maxsize=50)
+    with _sse_lock:
+        _sse_clients.append(q)
+
+    def generate():
+        yield 'data: {"type":"connected","source":"bridge"}\n\n'
+        try:
+            while True:
+                try:
+                    msg = q.get(timeout=30)
+                    yield f'data: {msg}\n\n'
+                except queue.Empty:
+                    yield ': ping\n\n'  # keep-alive
+        except GeneratorExit:
+            pass
+        finally:
+            with _sse_lock:
+                _sse_clients.remove(q)
+
+    return app.response_class(generate(), mimetype='text/event-stream',
+        headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'})
+
+def _broadcast(payload: dict) -> int:
+    """Push a JSON event to all connected SSE clients. Returns client count."""
+    import json as _json
+    msg = _json.dumps(payload)
+    dead = []
+    with _sse_lock:
+        for q in _sse_clients:
+            try:
+                q.put_nowait(msg)
+            except Exception:
+                dead.append(q)
+        for q in dead:
+            _sse_clients.remove(q)
+    return len(_sse_clients) - len(dead)
+
+@app.route('/api/forge/webhook', methods=['POST'])
+def forge_webhook():
+    """
+    Called by forge_runner.py at end of each build cycle.
+    Broadcasts a push notification to all connected Heidi clients.
+
+    Expected body (all fields optional):
+    {
+      "build":   546,
+      "status":  "success",
+      "cpu":     4,
+      "ram":     61,
+      "disk":    87,
+      "disk_free_gb": 57.1,
+      "stages":  9,
+      "alerts":  [],
+      "duration_s": 12.3
+    }
+    """
+    data   = request.get_json(silent=True) or {}
+    build  = data.get('build', '?')
+    status = data.get('status', 'complete').lower()
+    cpu    = data.get('cpu', '?')
+    ram    = data.get('ram', '?')
+    disk   = data.get('disk', '?')
+    alerts = data.get('alerts', [])
+    dur    = data.get('duration_s')
+
+    level = 'warning' if alerts else ('critical' if status == 'failed' else 'info')
+    dur_str = f' · {dur:.1f}s' if isinstance(dur, (int, float)) else ''
+    alert_str = f' · {len(alerts)} alert{"s" if len(alerts)!=1 else ""}' if alerts else ''
+
+    payload = {
+        'type':  'forge_build',
+        'title': f'Forge Build #{build} — {status.upper()}',
+        'body':  f'CPU {cpu}% · RAM {ram}% · Disk {disk}%{alert_str}{dur_str}',
+        'level': level,
+        'payload': data,
+        'ts': time.time()
+    }
+
+    clients = _broadcast(payload)
+
+    # Also forward to Heidi server's push endpoint if it's running
+    _post_json('http://localhost:3006/api/events/push', payload)
+
+    return jsonify({'success': True, 'clients_notified': clients, 'build': build, 'level': level})
+
 @app.route('/api/db/query', methods=['POST'])
 def db_query_route():
     body = request.get_json(silent=True) or {}
