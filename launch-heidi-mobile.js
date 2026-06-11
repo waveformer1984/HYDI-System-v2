@@ -18,7 +18,7 @@ const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434';
 const LM_STUDIO_URL = process.env.LM_STUDIO_URL || 'http://localhost:1234';
 const DEFAULT_MODEL = process.env.LOCAL_MODEL_NAME || 'tinyllama';
 const HYDI_URL      = process.env.HYDI_URL      || 'http://localhost:3005'; // legacy HYDI
-const URSULA_URL    = process.env.URSULA_URL    || 'http://localhost:5000'; // Flask/ursula_server.py
+const URSULA_URL    = process.env.URSULA_URL    || 'http://localhost:5050'; // heidi-bridge.py (or Flask direct)
 const PROTOHUB_URL  = process.env.PROTOHUB_URL  || 'http://localhost:4000'; // Node/protohub
 const NEXT_APP_URL  = process.env.NEXT_APP_URL  || 'http://localhost:3000';
 
@@ -121,6 +121,20 @@ const TOOLS = [
             name: 'get_current_time',
             description: 'Get the current date, time, and timezone',
             parameters: { type: 'object', properties: {}, required: [] }
+        }
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'query_database',
+            description: 'Run a read-only SELECT query against the ProtoForge SQLite database (protoforge.db) via heidi-bridge. Use to inspect leads, builds, sessions, revenue entries, or any table.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    sql: { type: 'string', description: 'A SELECT SQL query to run against protoforge.db' }
+                },
+                required: ['sql']
+            }
         }
     },
     // ── Revenue tools ─────────────────────────────────────────────────────────
@@ -235,6 +249,24 @@ async function executeToolCall(name, args) {
             const all = await fetchBackendStatus();
             if (!all.online) return `No backend reachable.\n  Ursula: ${URSULA_URL}\n  Protohub: ${PROTOHUB_URL}\n  HYDI: ${HYDI_URL}\nStart ursula_server.py (port 5000) and/or protohub (port 4000).`;
             return JSON.stringify(all, null, 2);
+        }
+
+        case 'query_database': {
+            const sql = String(args.sql || '').trim();
+            if (!sql) return 'Error: no SQL provided';
+            if (!/^SELECT/i.test(sql)) return 'Error: only SELECT queries allowed';
+            try {
+                const r = await fetch(`${URSULA_URL}/api/db/query`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ sql }), signal: AbortSignal.timeout(5000)
+                });
+                if (!r.ok) return `DB query failed: HTTP ${r.status}`;
+                const result = await r.json();
+                if (result.error) return `DB error: ${result.error}`;
+                return JSON.stringify({ rows: result.rows, count: result.count }, null, 2);
+            } catch (e) {
+                return `Cannot reach bridge at ${URSULA_URL}/api/db/query: ${e.message}`;
+            }
         }
 
         case 'get_build_status': {
@@ -576,7 +608,7 @@ BACKEND SERVICES:
   Protohub — Node/Express (port 4000): JWT auth, workspaces, Stripe billing (Pro $49/mo, Enterprise $199/mo)
   Forge    — forge_runner.py: build pipeline, protoforge.db (SQLite), build_registry.json
 
-SYSTEM TOOLS: get_system_health, get_hydi_status, get_build_status, run_command, read_file, get_current_time
+SYSTEM TOOLS: get_system_health, get_hydi_status, get_build_status, query_database, run_command, read_file, get_current_time
 REVENUE TOOLS: get_revenue_summary, get_revenue_pipeline, create_lead, generate_checkout_link, get_payout_status
 
 REVENUE STREAMS: galactic_bytes | detailer_bot | lipi_v2 | protogrance_aromatics | rezonate | waveformer_studio
