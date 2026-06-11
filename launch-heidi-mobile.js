@@ -20,7 +20,7 @@ const DEFAULT_MODEL = process.env.LOCAL_MODEL_NAME || 'tinyllama';
 const HYDI_URL      = process.env.HYDI_URL      || 'http://localhost:3005'; // legacy HYDI
 const URSULA_URL    = process.env.URSULA_URL    || 'http://localhost:5050'; // heidi-bridge.py (or Flask direct)
 const PROTOHUB_URL  = process.env.PROTOHUB_URL  || 'http://localhost:4000'; // Node/protohub
-const NEXT_APP_URL  = process.env.NEXT_APP_URL  || 'http://localhost:3000';
+const NEXT_APP_URL  = process.env.NEXT_APP_URL  || 'https://ursula-nine.vercel.app';
 
 const CHAT_TIMEOUT_MS = 600_000;
 const HYDI_TIMEOUT_MS = 3000;
@@ -120,6 +120,28 @@ const TOOLS = [
         function: {
             name: 'get_current_time',
             description: 'Get the current date, time, and timezone',
+            parameters: { type: 'object', properties: {}, required: [] }
+        }
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'get_ursula_live',
+            description: 'Query the live Ursula Vercel app directly (https://ursula-nine.vercel.app). Fetches real-time system health, revenue data, or any API route. Pass a path like /api/health, /api/revenue, /api/ursula/status.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    path: { type: 'string', description: 'API path to fetch, e.g. /api/health or /api/revenue' }
+                },
+                required: ['path']
+            }
+        }
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'get_rezonate_score',
+            description: 'Get Rezonate DAW completion score, estimated monthly revenue, pricing tiers, and scaffolding suggestions from the local rezonate_core module via heidi-bridge.',
             parameters: { type: 'object', properties: {}, required: [] }
         }
     },
@@ -249,6 +271,29 @@ async function executeToolCall(name, args) {
             const all = await fetchBackendStatus();
             if (!all.online) return `No backend reachable.\n  Ursula: ${URSULA_URL}\n  Protohub: ${PROTOHUB_URL}\n  HYDI: ${HYDI_URL}\nStart ursula_server.py (port 5000) and/or protohub (port 4000).`;
             return JSON.stringify(all, null, 2);
+        }
+
+        case 'get_ursula_live': {
+            const urlPath = String(args.path || '/api/health').trim();
+            const ursulaBase = 'https://ursula-nine.vercel.app';
+            try {
+                const r = await fetch(`${ursulaBase}${urlPath}`, { signal: AbortSignal.timeout(8000) });
+                if (!r.ok) return `Ursula returned HTTP ${r.status} for ${urlPath}`;
+                const data = await r.json();
+                return JSON.stringify(data, null, 2);
+            } catch (e) {
+                return `Cannot reach Ursula at ${ursulaBase}${urlPath}: ${e.message}`;
+            }
+        }
+
+        case 'get_rezonate_score': {
+            try {
+                const r = await fetch(`${URSULA_URL}/api/rezonate/score`, { signal: AbortSignal.timeout(8000) });
+                if (!r.ok) return `Bridge returned HTTP ${r.status}`;
+                return JSON.stringify(await r.json(), null, 2);
+            } catch (e) {
+                return `Cannot reach bridge at ${URSULA_URL}/api/rezonate/score: ${e.message}`;
+            }
         }
 
         case 'query_database': {
@@ -601,14 +646,20 @@ async function fetchBackendStatus() {
 
 function buildSystemPrompt(backendStatus = null) {
     let prompt = `You are Heidi, the AI command interface for the ProtoForge ecosystem — an autonomous revenue-generating platform.
-You run locally via Ollama. The operator directs you to manage and grow revenue.
+You run locally via Ollama on Android/Termux. The operator directs you to manage and grow revenue.
 
-BACKEND SERVICES:
-  Ursula   — Flask API (port 5000): ursula_server.py — modules: Proto.I.Y, BlameGames, PorchWise, Rezonette, Checkpoint
-  Protohub — Node/Express (port 4000): JWT auth, workspaces, Stripe billing (Pro $49/mo, Enterprise $199/mo)
-  Forge    — forge_runner.py: build pipeline, protoforge.db (SQLite), build_registry.json
+LIVE BACKEND:
+  Ursula (cloud)  — https://ursula-nine.vercel.app — Next.js/Supabase, live now
+                    Routes: /api/health, /api/ursula/status, /api/revenue, /api/chat
+  Heidi Bridge    — http://localhost:5050 (Windows) — reads protoforge.db + build_registry.json
+                    Routes: /health, /api/builds, /api/metrics, /api/db/query, /api/rezonate/score
+  Protohub        — http://localhost:4000 — Node/Express, JWT auth, Stripe billing (Pro $49, Enterprise $199)
+  Forge           — forge_runner.py: 545+ builds, protoforge.db (SQLite), build_registry.json
 
-SYSTEM TOOLS: get_system_health, get_hydi_status, get_build_status, query_database, run_command, read_file, get_current_time
+MODULES (in Ursula_Suite):
+  Proto.I.Y · BlameGames · PorchWise · Rezonette (DAW) · Checkpoint QA
+
+SYSTEM TOOLS: get_system_health, get_hydi_status, get_build_status, get_ursula_live, get_rezonate_score, query_database, run_command, read_file, get_current_time
 REVENUE TOOLS: get_revenue_summary, get_revenue_pipeline, create_lead, generate_checkout_link, get_payout_status
 
 REVENUE STREAMS: galactic_bytes | detailer_bot | lipi_v2 | protogrance_aromatics | rezonate | waveformer_studio

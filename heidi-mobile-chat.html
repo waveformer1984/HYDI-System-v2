@@ -501,7 +501,7 @@
     <div class="health-metric"><span class="icon">&#x25A3;</span><span class="value" id="metricModels">&mdash;</span><span class="label">mdl</span></div>
     <div class="health-metric"><span class="icon">&#x25B6;</span><span class="value" id="metricProvider">&mdash;</span></div>
     <div class="health-metric" id="metricHydi"><span class="icon">&#x25C9;</span><span class="value muted" id="metricHydiValue">&#x2014;</span><span class="label">hydi</span></div>
-    <div class="health-metric"><span class="icon">&#x2317;</span><span class="value" id="metricTools">12</span><span class="label">tools</span></div>
+    <div class="health-metric"><span class="icon">&#x2317;</span><span class="value" id="metricTools">14</span><span class="label">tools</span></div>
     <div class="health-metric"><span class="icon">&#x25A1;</span><span class="value" id="metricMsgCount">0</span><span class="label">msg</span></div>
     <div class="health-metric sync-idle" id="metricSync"><span class="icon">&#x2601;&#xFE0F;</span><span class="value" id="metricSyncValue">&#x2014;</span><span class="label">mem</span></div>
     <div class="health-metric"><span class="icon">&#x25D4;</span><span class="value" id="metricTime">&mdash;</span></div>
@@ -539,6 +539,8 @@
     <div class="quick-action hydi" onclick="sendQuick('revenue')">&#x25C6; Revenue</div>
     <div class="quick-action" onclick="sendQuick('pipeline')">&#x25C7; Pipeline</div>
     <div class="quick-action" onclick="sendQuick('checkout')">&#x229E; Checkout</div>
+    <div class="quick-action hydi" onclick="sendQuick('rezonate')">&#x25D4; Rezonate</div>
+    <div class="quick-action" onclick="sendQuick('ursula')">&#x2601; Ursula</div>
     <div class="quick-action" onclick="sendQuick('clear')">&#x2715; Clear</div>
 </div>
 
@@ -708,8 +710,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             restoreHistory();
         }
         if (!conversationHistory.length) {
-            addMsg('heidi', "HEIDI online. ProtoForge AI ready.\n\nBackends: Ursula (Flask:5000), Protohub (Node:4000).\nTools: system health, backend status, build pipeline, shell commands, file read, revenue summary, pipeline, lead creation, Stripe checkout.\n\nRevenue actions require your explicit AUTHORIZE confirmation.",
-                [{ label: '&#x25A3; Backend status', q: 'backend' }, { label: '&#x25A1; Builds', q: 'builds' }, { label: '&#x25C6; Revenue', q: 'revenue' }]);
+            addMsg('heidi', "HEIDI online. ProtoForge AI ready.\n\nLive: Ursula at ursula-nine.vercel.app + local bridge (port 5050).\n14 tools: system, builds, database query, live Ursula API, Rezonate score, revenue, pipeline, checkout.\n\nRevenue actions require your explicit AUTHORIZE confirmation.",
+                [{ label: '&#x2601; Ursula live', q: 'ursula' }, { label: '&#x25A1; Builds', q: 'builds' }, { label: '&#x25C6; Revenue', q: 'revenue' }]);
         }
         connectPushStream();
         if ('Notification' in window && Notification.permission === 'granted') {
@@ -941,8 +943,10 @@ function sendQuick(cmd) {
         revenue: 'Use your get_revenue_summary tool to show me total revenue across all ProtoForge streams.',
         pipeline: 'Use your get_revenue_pipeline tool to show the active leads, quotes, and proposals in the revenue pipeline.',
         checkout: 'I want to generate a Stripe checkout link. Walk me through the options — which stream and amount.',
-        backend: 'Use your get_hydi_status tool to check all ProtoForge backend services: Ursula (Flask), Protohub (Node), and HYDI.',
+        backend: 'Use your get_hydi_status tool to check all ProtoForge backend services: Ursula (Vercel), Protohub (Node), and the local bridge.',
         builds: 'Use your get_build_status tool to show me the recent forge builds and current pipeline state.',
+        rezonate: 'Use your get_rezonate_score tool to show me the Rezonate DAW completion score, estimated revenue, and next scaffolding steps.',
+        ursula: 'Use your get_ursula_live tool with path /api/health to check the live Ursula Vercel app status.',
     };
     const input = document.getElementById('msgInput');
     input.value = map[cmd] || cmd;
@@ -1003,6 +1007,8 @@ function addContextActions(msgEl, response, userMsg) {
     if (text.includes('tool') || text.includes('command') || text.includes('run')) actions.push({ label: '&#x2317; Show tools', q: 'tools' });
     if (text.includes('revenue') || text.includes('ledger') || text.includes('stripe') || text.includes('payout')) actions.push({ label: '&#x25C7; Revenue pipeline', q: 'pipeline' });
     if (text.includes('lead') || text.includes('quote') || text.includes('proposal') || text.includes('checkout')) actions.push({ label: '&#x25C6; Revenue summary', q: 'revenue' });
+    if (text.includes('rezonate') || text.includes('daw') || text.includes('music') || text.includes('audio')) actions.push({ label: '&#x25D4; Rezonate score', q: 'rezonate' });
+    if (text.includes('vercel') || text.includes('ursula') || text.includes('live') || text.includes('cloud')) actions.push({ label: '&#x2601; Ursula live', q: 'ursula' });
     if (!actions.length) return;
     const card = document.createElement('div'); card.className = 'action-card';
     card.innerHTML = '<div class="action-card-header">&#x25B6; Follow-up</div>';

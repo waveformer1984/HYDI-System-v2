@@ -2,12 +2,12 @@
 """
 Heidi Bridge  —  ProtoForge Windows companion server
 =====================================================
-Runs on your Windows machine alongside ursula_server.py.
-Heidi (Termux/Android) points URSULA_URL at this bridge.
+Runs on your Windows machine. Heidi (Termux/Android) connects here.
 
-Exposes the exact endpoints Heidi expects, reading directly
-from protoforge.db (SQLite) and build_registry.json when
-ursula_server.py is unavailable or its routes differ.
+Bridges three data sources:
+  1. protoforge.db (SQLite) — local build history, sessions, revenue
+  2. build_registry.json   — forge cycle build log
+  3. Ursula (Vercel/local) — live system status proxied through
 
 Usage
 -----
@@ -16,12 +16,12 @@ Usage
 
 Environment
 -----------
-    BRIDGE_PORT      Port to listen on              (default: 5050)
-    URSULA_URL       ursula_server.py base URL       (default: http://localhost:5000)
-    PROTOHUB_URL     protohub base URL               (default: http://localhost:4000)
-    PROTOFORGE_DIR   Root of C:\\ProtoForge_Ecosystem (default: script directory)
-    DB_NAME          SQLite db filename              (default: protoforge.db)
-    REGISTRY_FILE    Build registry filename         (default: build_registry.json)
+    BRIDGE_PORT      Port to listen on                     (default: 5050)
+    URSULA_URL       Ursula base URL                       (default: https://ursula-nine.vercel.app)
+    PROTOHUB_URL     protohub base URL                     (default: http://localhost:4000)
+    PROTOFORGE_DIR   Root of C:\\ProtoForge_Ecosystem      (default: script directory)
+    DB_NAME          SQLite db filename                    (default: protoforge.db)
+    REGISTRY_FILE    Build registry filename               (default: build_registry.json)
 
 Then set on Android/Termux .env:
     URSULA_URL=http://<your-windows-ip>:5050
@@ -44,7 +44,7 @@ app = Flask(__name__)
 # ── Config ────────────────────────────────────────────────────────────────────
 
 PORT           = int(os.getenv('BRIDGE_PORT', 5050))
-URSULA_URL     = os.getenv('URSULA_URL', 'http://localhost:5000').rstrip('/')
+URSULA_URL     = os.getenv('URSULA_URL', 'https://ursula-nine.vercel.app').rstrip('/')
 PROTOHUB_URL   = os.getenv('PROTOHUB_URL', 'http://localhost:4000').rstrip('/')
 PROTOFORGE_DIR = Path(os.getenv('PROTOFORGE_DIR', os.path.dirname(os.path.abspath(__file__))))
 DB_PATH        = PROTOFORGE_DIR / os.getenv('DB_NAME', 'protoforge.db')
@@ -237,9 +237,57 @@ def rezonate_status():
 @app.route('/api/ursula/proxy')
 def ursula_proxy():
     """Pass-through proxy to any ursula endpoint."""
-    path    = request.args.get('path', '/health')
-    data    = _get_json(f'{URSULA_URL}{path}')
+    path = request.args.get('path', '/health')
+    data = _get_json(f'{URSULA_URL}{path}')
     return jsonify(data or {'error': f'Ursula unreachable at {URSULA_URL}{path}'})
+
+@app.route('/api/ursula/revenue')
+def ursula_revenue():
+    """Proxy to Ursula's live revenue endpoint."""
+    data = _get_json(f'{URSULA_URL}/api/revenue') or \
+           _get_json(f'{URSULA_URL}/api/client-dashboard')
+    return jsonify(data or {'error': 'Revenue endpoint not reachable on Ursula'})
+
+@app.route('/api/rezonate/score')
+def rezonate_score():
+    """Run Rezonate ProtoForge completion scoring if rezonate_core is available."""
+    rez_dir = PROTOFORGE_DIR / 'Ursula_Suite' / 'api'
+    core_candidates = [
+        PROTOFORGE_DIR / 'rezonate_core',
+        PROTOFORGE_DIR / 'Ursula_Suite' / 'rezonate_core',
+        PROTOFORGE_DIR / 'rezonette' / 'rezonate_core',
+    ]
+    import sys
+    for candidate in core_candidates:
+        if candidate.exists():
+            sys.path.insert(0, str(candidate.parent))
+            try:
+                from rezonate_core.protoforge_integration import RezonateProtoForgeService
+                svc   = RezonateProtoForgeService()
+                score = svc.calculate_completion_score()
+                rev   = svc.estimate_revenue({'free': 500, 'standard': 100, 'professional': 25, 'enterprise': 2})
+                suggestions = svc.get_scaffolding_suggestions()
+                return jsonify({
+                    'found':       True,
+                    'core_path':   str(candidate),
+                    'completion':  round(score.overall, 3),
+                    'scores': {
+                        'audio_engine':       score.audio_engine,
+                        'mixing_mastering':   score.mixing_mastering,
+                        'hardware_control':   score.hardware_control,
+                        'rights_monetization': score.rights_monetization,
+                        'blockchain':         score.blockchain_integration,
+                        'ui_demo':            score.ui_demo,
+                        'test_coverage':      score.test_coverage,
+                        'documentation':      score.documentation,
+                    },
+                    'estimated_monthly_revenue': rev,
+                    'suggestions': suggestions,
+                    'pricing': [{'tier': p['tier'], 'monthly_usd': p['monthly_usd']} for p in svc.get_pricing()],
+                })
+            except Exception as exc:
+                return jsonify({'found': True, 'core_path': str(candidate), 'error': str(exc)})
+    return jsonify({'found': False, 'note': 'rezonate_core not found in expected locations', 'searched': [str(c) for c in core_candidates]})
 
 @app.route('/api/system/info')
 def system_info():
@@ -280,8 +328,31 @@ if __name__ == '__main__':
     if ursula_data:
         print(f'  Ursula         : connected at {ep} — status: {ursula_data.get("status", "?")}')
     else:
-        print(f'  Ursula         : offline (start ursula_server.py first, or bridge runs standalone)')
+        print(f'  Ursula         : offline')
+
+    # DB table inventory
+    if DB_PATH.exists():
+        tables = _db_query("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
+        if tables:
+            print()
+            print('  protoforge.db tables:')
+            for t in tables:
+                count = _db_query(f"SELECT COUNT(*) AS n FROM \"{t['name']}\"")
+                n = count[0]['n'] if count else '?'
+                print(f'    {t["name"]:30s} {n:>6} rows')
+
+    # Rezonate check
+    core_candidates = [
+        PROTOFORGE_DIR / 'rezonate_core',
+        PROTOFORGE_DIR / 'Ursula_Suite' / 'rezonate_core',
+        PROTOFORGE_DIR / 'rezonette' / 'rezonate_core',
+    ]
+    rez_found = next((c for c in core_candidates if c.exists()), None)
     print()
+    if rez_found:
+        print(f'  Rezonate core  : found at {rez_found}')
+    else:
+        print(f'  Rezonate core  : not found (clone rezonette repo into {PROTOFORGE_DIR})')
 
     # Find LAN IP for the .env instruction
     import socket
@@ -293,6 +364,7 @@ if __name__ == '__main__':
     except Exception:
         lan_ip = 'your-windows-ip'
 
+    print()
     print(f'  Add to Heidi .env on Android/Termux:')
     print(f'    URSULA_URL=http://{lan_ip}:{PORT}')
     print()
