@@ -501,7 +501,7 @@
     <div class="health-metric"><span class="icon">&#x25A3;</span><span class="value" id="metricModels">&mdash;</span><span class="label">mdl</span></div>
     <div class="health-metric"><span class="icon">&#x25B6;</span><span class="value" id="metricProvider">&mdash;</span></div>
     <div class="health-metric" id="metricHydi"><span class="icon">&#x25C9;</span><span class="value muted" id="metricHydiValue">&#x2014;</span><span class="label">hydi</span></div>
-    <div class="health-metric"><span class="icon">&#x2317;</span><span class="value" id="metricTools">10</span><span class="label">tools</span></div>
+    <div class="health-metric"><span class="icon">&#x2317;</span><span class="value" id="metricTools">11</span><span class="label">tools</span></div>
     <div class="health-metric"><span class="icon">&#x25A1;</span><span class="value" id="metricMsgCount">0</span><span class="label">msg</span></div>
     <div class="health-metric sync-idle" id="metricSync"><span class="icon">&#x2601;&#xFE0F;</span><span class="value" id="metricSyncValue">&#x2014;</span><span class="label">mem</span></div>
     <div class="health-metric"><span class="icon">&#x25D4;</span><span class="value" id="metricTime">&mdash;</span></div>
@@ -532,10 +532,10 @@
 
 <div class="quick-actions">
     <div class="quick-action" onclick="sendQuick('status')">&#x25A3; Status</div>
+    <div class="quick-action hydi" onclick="sendQuick('backend')">&#x25C9; Backend</div>
+    <div class="quick-action" onclick="sendQuick('builds')">&#x25A1; Builds</div>
     <div class="quick-action" onclick="sendQuick('models')">&#x25B6; Models</div>
-    <div class="quick-action hydi" onclick="sendQuick('hydi_status')">&#x25C9; HYDI</div>
-    <div class="quick-action" onclick="sendQuick('tools')">&#x2317; Tools</div>
-    <div class="quick-action" onclick="sendQuick('health')">&#x25A1; Health</div>
+    <div class="quick-action" onclick="sendQuick('health')">&#x2317; Health</div>
     <div class="quick-action hydi" onclick="sendQuick('revenue')">&#x25C6; Revenue</div>
     <div class="quick-action" onclick="sendQuick('pipeline')">&#x25C7; Pipeline</div>
     <div class="quick-action" onclick="sendQuick('checkout')">&#x229E; Checkout</div>
@@ -708,8 +708,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             restoreHistory();
         }
         if (!conversationHistory.length) {
-            addMsg('heidi', "HEIDI online. Local ProtoForge AI ready.\n\nTools available: system health, HYDI status, shell commands, file read, time, revenue summary, pipeline, lead creation, Stripe checkout, payout status.\n\nRevenue actions require your explicit AUTHORIZE confirmation.",
-                [{ label: '&#x25A3; System status', q: 'status' }, { label: '&#x25C6; Revenue summary', q: 'revenue' }, { label: '&#x2317; What tools do you have', q: 'tools' }]);
+            addMsg('heidi', "HEIDI online. ProtoForge AI ready.\n\nBackends: Ursula (Flask:5000), Protohub (Node:4000).\nTools: system health, backend status, build pipeline, shell commands, file read, revenue summary, pipeline, lead creation, Stripe checkout.\n\nRevenue actions require your explicit AUTHORIZE confirmation.",
+                [{ label: '&#x25A3; Backend status', q: 'backend' }, { label: '&#x25A1; Builds', q: 'builds' }, { label: '&#x25C6; Revenue', q: 'revenue' }]);
         }
         connectPushStream();
         if ('Notification' in window && Notification.permission === 'granted') {
@@ -941,6 +941,8 @@ function sendQuick(cmd) {
         revenue: 'Use your get_revenue_summary tool to show me total revenue across all ProtoForge streams.',
         pipeline: 'Use your get_revenue_pipeline tool to show the active leads, quotes, and proposals in the revenue pipeline.',
         checkout: 'I want to generate a Stripe checkout link. Walk me through the options — which stream and amount.',
+        backend: 'Use your get_hydi_status tool to check all ProtoForge backend services: Ursula (Flask), Protohub (Node), and HYDI.',
+        builds: 'Use your get_build_status tool to show me the recent forge builds and current pipeline state.',
     };
     const input = document.getElementById('msgInput');
     input.value = map[cmd] || cmd;
@@ -995,7 +997,8 @@ function addContextActions(msgEl, response, userMsg) {
     const text = (response + ' ' + userMsg).toLowerCase();
     const actions = [];
     if (text.includes('health') || text.includes('status') || text.includes('check')) actions.push({ label: '&#x21BA; Re-run health check', q: 'health' });
-    if (text.includes('hydi') || text.includes('agent') || text.includes('loop') || text.includes('event bus')) actions.push({ label: '&#x25C9; HYDI status', q: 'hydi_status' });
+    if (text.includes('ursula') || text.includes('flask') || text.includes('protohub') || text.includes('backend')) actions.push({ label: '&#x25C9; Backend status', q: 'backend' });
+    if (text.includes('build') || text.includes('forge') || text.includes('pipeline') || text.includes('registry')) actions.push({ label: '&#x25A1; Build status', q: 'builds' });
     if (text.includes('model') || text.includes('ollama') || text.includes('install')) actions.push({ label: '&#x25B6; List all models', q: 'models' });
     if (text.includes('tool') || text.includes('command') || text.includes('run')) actions.push({ label: '&#x2317; Show tools', q: 'tools' });
     if (text.includes('revenue') || text.includes('ledger') || text.includes('stripe') || text.includes('payout')) actions.push({ label: '&#x25C7; Revenue pipeline', q: 'pipeline' });

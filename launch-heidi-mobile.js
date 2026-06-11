@@ -17,8 +17,10 @@ const PORT = parseInt(process.env.HEIDI_PORT || '3006');
 const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434';
 const LM_STUDIO_URL = process.env.LM_STUDIO_URL || 'http://localhost:1234';
 const DEFAULT_MODEL = process.env.LOCAL_MODEL_NAME || 'tinyllama';
-const HYDI_URL = process.env.HYDI_URL || 'http://localhost:3005';
-const NEXT_APP_URL = process.env.NEXT_APP_URL || 'http://localhost:3000';
+const HYDI_URL      = process.env.HYDI_URL      || 'http://localhost:3005'; // legacy HYDI
+const URSULA_URL    = process.env.URSULA_URL    || 'http://localhost:5000'; // Flask/ursula_server.py
+const PROTOHUB_URL  = process.env.PROTOHUB_URL  || 'http://localhost:4000'; // Node/protohub
+const NEXT_APP_URL  = process.env.NEXT_APP_URL  || 'http://localhost:3000';
 
 const CHAT_TIMEOUT_MS = 600_000;
 const HYDI_TIMEOUT_MS = 3000;
@@ -71,8 +73,22 @@ const TOOLS = [
         type: 'function',
         function: {
             name: 'get_hydi_status',
-            description: 'Get current HYDI ProtoForge system status: database connection, event count, and event bus metrics',
+            description: 'Get current ProtoForge backend status — queries Ursula (Flask/5000), Protohub (Node/4000), and HYDI. Returns service health, database connection, build count, and event metrics.',
             parameters: { type: 'object', properties: {}, required: [] }
+        }
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'get_build_status',
+            description: 'Get ProtoForge forge runner build history and pipeline status from Ursula. Returns total builds, recent build list, and current forge cycle state.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    limit: { type: 'number', description: 'Number of recent builds to return (default 10, max 50)' }
+                },
+                required: []
+            }
         }
     },
     {
@@ -216,8 +232,46 @@ async function executeToolCall(name, args) {
         }
 
         case 'get_hydi_status': {
-            const s = await fetchHydiStatus();
-            return s ? JSON.stringify(s, null, 2) : `HYDI not connected at ${HYDI_URL}`;
+            const all = await fetchBackendStatus();
+            if (!all.online) return `No backend reachable.\n  Ursula: ${URSULA_URL}\n  Protohub: ${PROTOHUB_URL}\n  HYDI: ${HYDI_URL}\nStart ursula_server.py (port 5000) and/or protohub (port 4000).`;
+            return JSON.stringify(all, null, 2);
+        }
+
+        case 'get_build_status': {
+            const limit = Math.min(parseInt(args.limit) || 10, 50);
+            // Try Ursula build endpoints
+            const endpoints = [
+                `/api/builds?limit=${limit}`,
+                `/api/forge/status`,
+                `/forge/builds?limit=${limit}`,
+                `/dashboard`
+            ];
+            for (const ep of endpoints) {
+                try {
+                    const r = await fetch(`${URSULA_URL}${ep}`, { signal: AbortSignal.timeout(HYDI_TIMEOUT_MS) });
+                    if (!r.ok) continue;
+                    const d = await r.json();
+                    return JSON.stringify({ source: `${URSULA_URL}${ep}`, data: d }, null, 2);
+                } catch {}
+            }
+            // Fallback: read build_registry.json if on same machine
+            const registryPaths = [
+                path.join(__dirname, 'build_registry.json'),
+                path.join(__dirname, '..', 'build_registry.json')
+            ];
+            for (const p of registryPaths) {
+                try {
+                    const raw = fs.readFileSync(p, 'utf8');
+                    const data = JSON.parse(raw);
+                    const builds = Array.isArray(data) ? data : (data.builds || []);
+                    return JSON.stringify({
+                        source: p,
+                        total_builds: builds.length,
+                        recent: builds.slice(-limit).reverse()
+                    }, null, 2);
+                } catch {}
+            }
+            return `Ursula build endpoints not reachable at ${URSULA_URL}. Ensure ursula_server.py is running.`;
         }
 
         case 'run_command': {
@@ -437,6 +491,49 @@ function getLANIP() {
     return 'localhost';
 }
 
+// Probe Ursula (Flask) — tries several common route patterns
+async function fetchUrsulaStatus() {
+    const probes = ['/health', '/api/health', '/status', '/api/status'];
+    for (const ep of probes) {
+        try {
+            const r = await fetch(`${URSULA_URL}${ep}`, { signal: AbortSignal.timeout(HYDI_TIMEOUT_MS) });
+            if (!r.ok) continue;
+            const d = await r.json();
+            return {
+                online: true, source: 'ursula',
+                status: d.status || (d.ok || d.healthy ? 'operational' : 'unknown'),
+                database: d.database || d.db || (d.sqlite ? 'sqlite' : 'unknown'),
+                totalEvents: d.total_events || d.events || d.builds || d.build_count || 0,
+                version: d.version || null,
+                modules: d.modules || d.apps || null,
+                timestamp: d.timestamp || new Date().toISOString(),
+                endpoint: ep
+            };
+        } catch {}
+    }
+    return null;
+}
+
+// Probe Protohub (Node/Express)
+async function fetchProtohubStatus() {
+    const probes = ['/health', '/api/health', '/status'];
+    for (const ep of probes) {
+        try {
+            const r = await fetch(`${PROTOHUB_URL}${ep}`, { signal: AbortSignal.timeout(HYDI_TIMEOUT_MS) });
+            if (!r.ok) continue;
+            const d = await r.json();
+            return {
+                online: true, source: 'protohub',
+                status: d.status || 'operational',
+                version: d.version || null,
+                endpoint: ep
+            };
+        } catch {}
+    }
+    return null;
+}
+
+// Legacy HYDI bridge (v1)
 async function fetchHydiStatus() {
     try {
         const [healthRes, metricsRes] = await Promise.allSettled([
@@ -448,7 +545,8 @@ async function fetchHydiStatus() {
         if (metricsRes.status === 'fulfilled' && metricsRes.value.ok) metrics = await metricsRes.value.json();
         if (!health) return null;
         return {
-            online: true, status: health.status, database: health.database,
+            online: true, source: 'hydi',
+            status: health.status, database: health.database,
             totalEvents: metrics?.total_events || 0,
             eventBus: metrics?.event_bus || null,
             timestamp: health.timestamp
@@ -456,11 +554,29 @@ async function fetchHydiStatus() {
     } catch { return null; }
 }
 
-function buildSystemPrompt(hydiStatus = null) {
-    let prompt = `You are Heidi, the AI command interface for HYDI ProtoForge — an autonomous revenue-generating platform.
-You run locally via Ollama. The operator (user) directs you to manage and grow revenue.
+// Unified status — Ursula first, then legacy HYDI
+async function fetchBackendStatus() {
+    const [ursula, protohub, hydi] = await Promise.allSettled([
+        fetchUrsulaStatus(), fetchProtohubStatus(), fetchHydiStatus()
+    ]);
+    return {
+        ursula:   ursula.value   || null,
+        protohub: protohub.value || null,
+        hydi:     hydi.value     || null,
+        online:   !!(ursula.value || protohub.value || hydi.value)
+    };
+}
 
-SYSTEM TOOLS: get_system_health, get_hydi_status, run_command, read_file, get_current_time
+function buildSystemPrompt(backendStatus = null) {
+    let prompt = `You are Heidi, the AI command interface for the ProtoForge ecosystem — an autonomous revenue-generating platform.
+You run locally via Ollama. The operator directs you to manage and grow revenue.
+
+BACKEND SERVICES:
+  Ursula   — Flask API (port 5000): ursula_server.py — modules: Proto.I.Y, BlameGames, PorchWise, Rezonette, Checkpoint
+  Protohub — Node/Express (port 4000): JWT auth, workspaces, Stripe billing (Pro $49/mo, Enterprise $199/mo)
+  Forge    — forge_runner.py: build pipeline, protoforge.db (SQLite), build_registry.json
+
+SYSTEM TOOLS: get_system_health, get_hydi_status, get_build_status, run_command, read_file, get_current_time
 REVENUE TOOLS: get_revenue_summary, get_revenue_pipeline, create_lead, generate_checkout_link, get_payout_status
 
 REVENUE STREAMS: galactic_bytes | detailer_bot | lipi_v2 | protogrance_aromatics | rezonate | waveformer_studio
@@ -474,8 +590,9 @@ AUTHORIZATION PROTOCOL — MANDATORY for create_lead and generate_checkout_link:
 Be direct and concise. Treat the operator as the system owner with full authority.
 Current time: ${new Date().toLocaleString()}`;
 
-    if (hydiStatus) {
-        prompt += `\nHYDI: ${hydiStatus.status} | DB: ${hydiStatus.database} | Events: ${hydiStatus.totalEvents}`;
+    if (backendStatus) {
+        const src = backendStatus.source || 'backend';
+        prompt += `\n${src.toUpperCase()}: ${backendStatus.status} | DB: ${backendStatus.database} | Events/Builds: ${backendStatus.totalEvents}`;
     } else {
         prompt += `\nHYDI: offline`;
     }
@@ -552,27 +669,45 @@ self.addEventListener('fetch', e => {
 // ── HYDI System bridge ────────────────────────────────────────────────────────
 
 app.get('/api/system/status', async (req, res) => {
-    res.json(await fetchHydiStatus() || { online: false });
+    const all = await fetchBackendStatus();
+    // Return the first online service's status in the legacy shape for the UI panel
+    const primary = all.ursula || all.protohub || all.hydi;
+    if (!primary) return res.json({ online: false });
+    res.json({
+        online: true,
+        status: primary.status || 'operational',
+        database: primary.database || 'unknown',
+        totalEvents: primary.totalEvents || 0,
+        source: primary.source,
+        backends: all
+    });
 });
 
 app.post('/api/system/action', async (req, res) => {
     const { type, source, payload } = req.body;
     if (!type) return res.status(400).json({ error: 'type required' });
-    try {
-        const event = {
-            event_id: `mobile_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-            type, source: source || 'heidi-mobile',
-            timestamp: new Date().toISOString(), payload: payload || {}
-        };
-        const r = await fetch(`${HYDI_URL}/process`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(event), signal: AbortSignal.timeout(HYDI_TIMEOUT_MS)
-        });
-        if (!r.ok) throw new Error(`HYDI HTTP ${r.status}`);
-        res.json({ success: true, result: await r.json() });
-    } catch (e) {
-        res.status(503).json({ success: false, error: e.message });
+    const event = {
+        event_id: `mobile_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        type, source: source || 'heidi-mobile',
+        timestamp: new Date().toISOString(), payload: payload || {}
+    };
+    // Try Ursula event endpoint first, fall back to HYDI
+    const targets = [
+        `${URSULA_URL}/api/events`,
+        `${URSULA_URL}/events`,
+        `${HYDI_URL}/process`
+    ];
+    for (const url of targets) {
+        try {
+            const r = await fetch(url, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(event), signal: AbortSignal.timeout(HYDI_TIMEOUT_MS)
+            });
+            if (!r.ok) continue;
+            return res.json({ success: true, result: await r.json(), target: url });
+        } catch {}
     }
+    res.status(503).json({ success: false, error: `No backend accepted event. Tried: ${targets.join(', ')}` });
 });
 
 // ── Revenue API routes ────────────────────────────────────────────────────────
@@ -702,7 +837,8 @@ async function analyzeHydiState(status, delta) {
 
 async function watchHydiEvents() {
     try {
-        const status = await fetchHydiStatus();
+        const backends = await fetchBackendStatus();
+        const status = backends.ursula || backends.protohub || backends.hydi;
         const now = Date.now();
         if (!status) {
             if (lastHydiOnline) {
@@ -757,7 +893,8 @@ function scheduleDailyBriefing() {
 async function sendDailyBriefing() {
     if (!pushClients.size) return;
     try {
-        const status = await fetchHydiStatus();
+        const backends = await fetchBackendStatus();
+        const status = backends.ursula || backends.protohub || backends.hydi;
         let revSummary = '';
         if (supabaseClient) {
             const since = new Date(Date.now() - 864e5).toISOString();
@@ -765,7 +902,10 @@ async function sendDailyBriefing() {
             const net = (data || []).reduce((s, r) => s + (r.net_amount || 0), 0);
             if (net > 0) revSummary = ` Last 24h revenue: $${(net / 100).toFixed(2)}.`;
         }
-        const hydiCtx = status ? `HYDI ${status.status}, DB ${status.database}, ${status.totalEvents} events.` : 'HYDI offline.';
+        const backendName = status?.source || 'ProtoForge';
+        const hydiCtx = status
+            ? `${backendName}: ${status.status}, DB: ${status.database}, ${status.totalEvents} events/builds.`
+            : 'Backend offline.';
         const prompt = `You are Heidi, the HYDI ProtoForge AI. Write a brief morning briefing in 2-3 sentences. Context: ${hydiCtx}${revSummary} Time: ${new Date().toLocaleString()}. Be warm and concise.`;
         const r = await fetch(`${OLLAMA_URL}/api/generate`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -817,8 +957,9 @@ app.post('/api/chat', async (req, res) => {
     res.setHeader('X-Accel-Buffering', 'no');
     const send   = (data) => res.write(`data: ${JSON.stringify(data)}\n\n`);
     const finish = (meta = {}) => { send({ done: true, ...meta }); res.end(); };
-    const hydiStatus   = await fetchHydiStatus();
-    const systemPrompt = buildSystemPrompt(hydiStatus);
+    const backends     = await fetchBackendStatus();
+    const primaryStatus = backends.ursula || backends.protohub || backends.hydi;
+    const systemPrompt = buildSystemPrompt(primaryStatus);
     const selectedModel = model || DEFAULT_MODEL;
     if (provider !== 'lmstudio') {
         try { await streamOllama(message, selectedModel, systemPrompt, history, send); return finish({ provider: 'ollama' }); }
@@ -925,11 +1066,20 @@ server.listen(PORT, '0.0.0.0', async () => {
             else console.log('⚠️  Ollama: no models. Run: ollama pull llama3.2');
         }
     } catch { console.log('⚠️  Ollama not found at', OLLAMA_URL); }
-    try {
-        const r = await fetch(`${HYDI_URL}/health`, { signal: AbortSignal.timeout(2000) });
-        if (r.ok) { const h = await r.json(); console.log(`✅ HYDI: ${HYDI_URL} — db: ${h.database}`); }
-        else console.log(`ℹ️  HYDI not found at ${HYDI_URL}`);
-    } catch { console.log(`ℹ️  HYDI not found at ${HYDI_URL}`); }
+    // Probe all backend services
+    const [ursula, protohub] = await Promise.allSettled([
+        fetchUrsulaStatus(), fetchProtohubStatus()
+    ]);
+    if (ursula.value) {
+        console.log(`Ursula (Flask): connected at ${URSULA_URL} — status: ${ursula.value.status}`);
+    } else {
+        console.log(`Ursula (Flask): not found at ${URSULA_URL} — set URSULA_URL env var`);
+    }
+    if (protohub.value) {
+        console.log(`Protohub (Node): connected at ${PROTOHUB_URL}`);
+    } else {
+        console.log(`Protohub (Node): not found at ${PROTOHUB_URL} — set PROTOHUB_URL env var`);
+    }
     console.log(supabaseClient ? '✅ Revenue tools: active (Supabase connected)' : 'ℹ️  Revenue tools: read-only (Supabase not connected)');
     console.log(process.env.STRIPE_SECRET_KEY ? '✅ Stripe checkout: ready' : 'ℹ️  Stripe checkout: disabled (set STRIPE_SECRET_KEY)');
     console.log('📡 Push alerts: ready | HYDI observer: active | Daily briefing: scheduled\n');
