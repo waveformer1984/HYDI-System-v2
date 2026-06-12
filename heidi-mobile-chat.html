@@ -478,6 +478,128 @@
         .typing-dots span:nth-child(2) { animation-delay: 0.2s; }
         .typing-dots span:nth-child(3) { animation-delay: 0.4s; }
         @keyframes bounce { 0%,60%,100%{transform:translateY(0)} 30%{transform:translateY(-5px)} }
+
+        /* ── Forge build badge ─────────────────────────── */
+        .forge-badge {
+            position: fixed; bottom: 90px; left: 16px;
+            padding: 4px 9px; border-radius: 2px;
+            font-size: 10px; font-family: 'Courier New', monospace;
+            z-index: 45; cursor: pointer;
+            border: 1px solid rgba(200,136,30,0.2);
+            background: var(--bg-elevated);
+            color: var(--text-secondary);
+            font-weight: bold; letter-spacing: 0.5px;
+            text-transform: uppercase;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+            transition: opacity 0.3s, transform 0.12s;
+        }
+        .forge-badge:active { transform: scale(0.92); }
+        .forge-badge.ok { border-color: rgba(74,140,48,0.45); color: var(--status-ok); }
+        .forge-badge.err { border-color: rgba(184,48,32,0.45); color: var(--status-critical); }
+        .forge-badge.run { border-color: rgba(200,136,30,0.45); color: var(--status-warning); animation: glow-pulse 1.5s infinite; }
+        .forge-badge.hidden { opacity: 0; pointer-events: none; }
+
+        /* ── Offline overlay ───────────────────────────── */
+        .offline-overlay {
+            position: fixed; inset: 0;
+            background: rgba(14,12,8,0.93);
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            z-index: 500; opacity: 0; pointer-events: none;
+            transition: opacity 0.3s;
+            font-family: 'Courier New', monospace; gap: 6px;
+        }
+        .offline-overlay.show { opacity: 1; pointer-events: auto; }
+        .offline-icon { font-size: 26px; color: var(--status-critical); }
+        .offline-title { font-size: 13px; font-weight: bold; color: var(--status-critical); letter-spacing: 2px; text-transform: uppercase; }
+        .offline-body { font-size: 11px; color: var(--text-secondary); letter-spacing: 1px; }
+        .offline-countdown { font-size: 32px; color: var(--accent); font-weight: bold; margin-top: 8px; }
+        .offline-retry-btn {
+            margin-top: 10px; padding: 8px 18px;
+            background: rgba(200,136,30,0.1); border: 1px solid rgba(200,136,30,0.4);
+            border-radius: 2px; color: var(--accent);
+            font-size: 10px; font-weight: bold; cursor: pointer;
+            font-family: 'Courier New', monospace;
+            text-transform: uppercase; letter-spacing: 1.5px; transition: all 0.12s;
+        }
+        .offline-retry-btn:active { background: rgba(200,136,30,0.2); }
+
+        /* ── Quick actions drawer ──────────────────────── */
+        .qa-backdrop {
+            position: fixed; inset: 0;
+            background: rgba(0,0,0,0.55);
+            z-index: 190; opacity: 0; pointer-events: none;
+            transition: opacity 0.25s;
+        }
+        .qa-backdrop.show { opacity: 1; pointer-events: auto; }
+        .qa-drawer {
+            position: fixed; top: 0; right: 0; bottom: 0;
+            width: min(280px, 85vw);
+            background: var(--bg-secondary);
+            border-left: 1px solid rgba(200,136,30,0.2);
+            z-index: 200; transform: translateX(102%);
+            transition: transform 0.25s cubic-bezier(0.4,0,0.2,1);
+            display: flex; flex-direction: column;
+            overflow-y: auto; padding: 16px 12px;
+            padding-bottom: max(16px, env(safe-area-inset-bottom));
+            box-shadow: -8px 0 32px rgba(0,0,0,0.65);
+        }
+        .qa-drawer.open { transform: translateX(0); }
+        .qa-drawer-hdr {
+            font-size: 10px; color: var(--text-muted);
+            text-transform: uppercase; letter-spacing: 2px;
+            margin-bottom: 12px; padding-bottom: 8px;
+            border-bottom: 1px solid rgba(200,136,30,0.1);
+            display: flex; justify-content: space-between; align-items: center;
+            flex-shrink: 0;
+        }
+        .qa-drawer-close {
+            background: none; border: none; color: var(--text-muted);
+            font-size: 18px; cursor: pointer; padding: 0; line-height: 1;
+        }
+        .qa-btn {
+            width: 100%; padding: 11px 12px; margin-bottom: 3px;
+            background: var(--bg-primary);
+            border: 1px solid rgba(200,136,30,0.12);
+            border-radius: 2px; font-size: 11px; color: var(--text-secondary);
+            cursor: pointer; text-align: left; transition: all 0.12s;
+            font-family: 'Courier New', monospace;
+            text-transform: uppercase; letter-spacing: 0.5px;
+        }
+        .qa-btn:active { background: rgba(200,136,30,0.1); color: var(--accent); border-color: rgba(200,136,30,0.35); }
+        .qa-btn.hi { border-color: rgba(200,136,30,0.25); color: var(--accent); }
+        .qa-divider { height: 1px; background: rgba(200,136,30,0.08); margin: 8px 0; }
+
+        /* ── Install banner ────────────────────────────── */
+        .install-banner {
+            position: fixed; bottom: 0; left: 0; right: 0;
+            background: var(--bg-elevated);
+            border-top: 1px solid rgba(200,136,30,0.3);
+            padding: 14px 16px;
+            padding-bottom: max(14px, env(safe-area-inset-bottom));
+            display: flex; align-items: center; gap: 12px;
+            z-index: 250; transform: translateY(110%);
+            transition: transform 0.35s cubic-bezier(0.34,1.1,0.64,1);
+            font-family: 'Courier New', monospace;
+            box-shadow: 0 -4px 20px rgba(0,0,0,0.5);
+        }
+        .install-banner.show { transform: translateY(0); }
+        .install-banner-txt { flex: 1; }
+        .install-banner-title { font-size: 12px; font-weight: bold; color: var(--text-primary); }
+        .install-banner-sub { font-size: 10px; color: var(--text-secondary); margin-top: 2px; text-transform: uppercase; letter-spacing: 0.5px; }
+        .install-banner-btn {
+            padding: 8px 14px; border-radius: 2px;
+            background: rgba(200,136,30,0.12); border: 1px solid rgba(200,136,30,0.5);
+            color: var(--accent); font-weight: bold; font-size: 10px;
+            cursor: pointer; font-family: 'Courier New', monospace;
+            text-transform: uppercase; letter-spacing: 1px; white-space: nowrap;
+            transition: all 0.12s;
+        }
+        .install-banner-btn:active { background: rgba(200,136,30,0.22); }
+        .install-dismiss {
+            background: none; border: none; color: var(--text-muted);
+            font-size: 18px; cursor: pointer; padding: 0; line-height: 1; flex-shrink: 0;
+        }
     </style>
 </head>
 <body>
@@ -572,6 +694,50 @@
 
 <div class="alert-banner" id="alertBanner"></div>
 
+<!-- Forge build badge -->
+<div class="forge-badge hidden" id="forgeBadge" onclick="sendQuick('builds')" title="Latest forge build"></div>
+
+<!-- Offline overlay -->
+<div class="offline-overlay" id="offlineOverlay">
+    <div class="offline-icon">&#x25A0;</div>
+    <div class="offline-title">Connection Lost</div>
+    <div class="offline-body">Server unreachable</div>
+    <div class="offline-countdown" id="offlineCd">10</div>
+    <button class="offline-retry-btn" onclick="retryNow()">&#x21BA; Retry Now</button>
+</div>
+
+<!-- Quick actions drawer -->
+<div class="qa-backdrop" id="qaBackdrop" onclick="closeDrawer()"></div>
+<div class="qa-drawer" id="qaDrawer">
+    <div class="qa-drawer-hdr">
+        <span>&#x25A3; Quick Actions</span>
+        <button class="qa-drawer-close" onclick="closeDrawer()">&#x2715;</button>
+    </div>
+    <button class="qa-btn hi" onclick="closeDrawer();sendQuick('backend')">&#x25C9; Backend Status</button>
+    <button class="qa-btn" onclick="closeDrawer();sendQuick('builds')">&#x25A1; Forge Builds</button>
+    <button class="qa-btn hi" onclick="closeDrawer();sendQuick('revenue')">&#x25C6; Revenue Summary</button>
+    <button class="qa-btn" onclick="closeDrawer();sendQuick('pipeline')">&#x25C7; Pipeline</button>
+    <button class="qa-btn" onclick="closeDrawer();sendQuick('checkout')">&#x229E; Checkout Link</button>
+    <div class="qa-divider"></div>
+    <button class="qa-btn hi" onclick="closeDrawer();sendQuick('rezonate')">&#x25D4; Rezonate Score</button>
+    <button class="qa-btn" onclick="closeDrawer();sendQuick('ursula')">&#x2601; Ursula Live</button>
+    <button class="qa-btn" onclick="closeDrawer();sendQuick('status')">&#x25A3; System Status</button>
+    <button class="qa-btn" onclick="closeDrawer();sendQuick('models')">&#x25B6; AI Models</button>
+    <button class="qa-btn" onclick="closeDrawer();sendQuick('health')">&#x2317; Health Check</button>
+    <div class="qa-divider"></div>
+    <button class="qa-btn" onclick="closeDrawer();sendQuick('clear')">&#x2715; Clear Chat</button>
+</div>
+
+<!-- Install banner -->
+<div class="install-banner" id="installBanner">
+    <div class="install-banner-txt">
+        <div class="install-banner-title">Add Heidi to Home Screen</div>
+        <div class="install-banner-sub">Fullscreen &#x00B7; Works offline &#x00B7; Push alerts</div>
+    </div>
+    <button class="install-banner-btn" id="installBannerBtn">Install</button>
+    <button class="install-dismiss" onclick="dismissInstall()">&#x2715;</button>
+</div>
+
 <script>
 let currentModel = null, currentProvider = 'ollama';
 let ttsEnabled = false, isStreaming = false, isListening = false;
@@ -617,6 +783,8 @@ function handlePushEvent(ev) {
     }
     const iconKey = type || level || 'info';
     addMsg('system', (PUSH_ICONS[iconKey] || PUSH_ICONS[level] || PUSH_ICONS.info) + ' ' + (title || type) + (body ? ': ' + body : ''));
+    if (type === 'forge_build' && ev.payload?.build) updateForgeBadge(ev.payload);
+    if (navigator.vibrate) navigator.vibrate(level === 'critical' ? [80, 40, 80] : 15);
 }
 
 function showPushBanner(title, body, level) {
@@ -641,7 +809,8 @@ async function toggleBrowserNotifs() {
             browserNotifs = true;
             const btn = document.getElementById('bellBtn');
             btn.innerHTML = '&#x1F514;'; btn.classList.add('active');
-            addMsg('system', '&#x25CF; Notifications enabled.');
+            const wpOk = await subscribeWebPush();
+            addMsg('system', '&#x25CF; Notifications enabled.' + (wpOk ? ' Background push active.' : ''));
         } else {
             showAlert('Permission denied', 'warning');
         }
@@ -649,6 +818,7 @@ async function toggleBrowserNotifs() {
         browserNotifs = false;
         const btn = document.getElementById('bellBtn');
         btn.innerHTML = '&#x1F515;'; btn.classList.remove('active');
+        fetch('/api/push/unsubscribe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ deviceId: getDeviceId() }) }).catch(() => {});
         addMsg('system', '&#x25CB; Notifications disabled.');
     }
 }
@@ -716,11 +886,16 @@ document.addEventListener('DOMContentLoaded', async () => {
                 [{ label: '&#x2601; Ursula live', q: 'ursula' }, { label: '&#x25A1; Builds', q: 'builds' }, { label: '&#x25C6; Revenue', q: 'revenue' }]);
         }
         connectPushStream();
+        fetchForgeBadge();
         if ('Notification' in window && Notification.permission === 'granted') {
             browserNotifs = true;
             document.getElementById('bellBtn').innerHTML = '&#x1F514;';
             document.getElementById('bellBtn').classList.add('active');
         }
+        // Handle PWA shortcut query params
+        const qs = new URLSearchParams(location.search);
+        const qCmd = qs.get('q');
+        if (qCmd && conversationHistory.length === 0) setTimeout(() => sendQuick(qCmd), 800);
     } else {
         restoreHistory();
         addMsg('system', '&#x25A0; Cannot reach server. Run: node launch-heidi-mobile.js');
@@ -769,8 +944,15 @@ async function checkServer() {
     try { const r = await fetch('/api/health', { signal: AbortSignal.timeout(3000) }); return r.ok; } catch { return false; }
 }
 async function pollHealth() {
-    try { const r = await fetch('/api/health', { signal: AbortSignal.timeout(3000) }); if (!r.ok) throw new Error(); updateHealthUI(await r.json()); }
-    catch { setStatus('off', 'Reconnecting...'); }
+    try {
+        const r = await fetch('/api/health', { signal: AbortSignal.timeout(3000) });
+        if (!r.ok) throw new Error();
+        updateHealthUI(await r.json());
+        if (!_serverOnline) setServerOnline(true);
+    } catch {
+        setStatus('off', 'Reconnecting...');
+        setServerOnline(false);
+    }
     healthTimer = setTimeout(pollHealth, 30000);
 }
 function updateHealthUI(h) {
@@ -1070,14 +1252,131 @@ function esc(t) { const d = document.createElement('div'); d.textContent = t; re
 document.addEventListener('click', e => { if (!e.target.closest('#modelMenu') && !e.target.closest('.model-toggle')) document.getElementById('modelMenu').classList.remove('show'); });
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && ttsEnabled) window.speechSynthesis?.resume(); });
 
+// ── Forge build badge ─────────────────────────────────────────────────────────
+async function fetchForgeBadge() {
+    try {
+        const r = await fetch('/api/forge/badge', { signal: AbortSignal.timeout(3000) });
+        if (!r.ok) return;
+        const d = await r.json();
+        if (d.build) updateForgeBadge(d);
+    } catch {}
+}
+
+function updateForgeBadge(data) {
+    const badge = document.getElementById('forgeBadge');
+    if (!badge || !data) return;
+    const { build, status } = data;
+    if (!build) { badge.classList.add('hidden'); return; }
+    badge.className = 'forge-badge';
+    const s = (status || '').toLowerCase();
+    if (s === 'success' || s === 'ok') { badge.classList.add('ok'); badge.textContent = `#${build} OK`; }
+    else if (s === 'failure' || s === 'error' || s === 'fail' || s === 'failed') { badge.classList.add('err'); badge.textContent = `#${build} ERR`; }
+    else if (s === 'running' || s === 'building') { badge.classList.add('run'); badge.textContent = `#${build} RUN`; }
+    else { badge.textContent = `#${build}`; }
+}
+
+// ── Offline detection + reconnect ─────────────────────────────────────────────
+let _serverOnline = true, _reconnectTimer = null, _reconnectTick = 10;
+
+function setServerOnline(online) {
+    if (online === _serverOnline) return;
+    _serverOnline = online;
+    online ? hideOfflineOverlay() : showOfflineOverlay();
+}
+
+function showOfflineOverlay() {
+    _reconnectTick = 10;
+    document.getElementById('offlineOverlay').classList.add('show');
+    document.getElementById('offlineCd').textContent = _reconnectTick;
+    clearInterval(_reconnectTimer);
+    _reconnectTimer = setInterval(async () => {
+        _reconnectTick--;
+        document.getElementById('offlineCd').textContent = _reconnectTick;
+        if (_reconnectTick <= 0) {
+            _reconnectTick = 15;
+            const ok = await checkServer();
+            if (ok) { setServerOnline(true); pollHealth(); }
+        }
+    }, 1000);
+}
+
+function hideOfflineOverlay() {
+    document.getElementById('offlineOverlay').classList.remove('show');
+    clearInterval(_reconnectTimer);
+    _reconnectTimer = null;
+}
+
+async function retryNow() {
+    clearInterval(_reconnectTimer);
+    document.getElementById('offlineCd').textContent = '...';
+    const ok = await checkServer();
+    if (ok) { setServerOnline(true); pollHealth(); }
+    else { _reconnectTick = 10; showOfflineOverlay(); }
+}
+
+window.addEventListener('online',  () => checkServer().then(ok => { if (ok) setServerOnline(true); }));
+window.addEventListener('offline', () => setServerOnline(false));
+
+// ── Swipe gesture drawer ──────────────────────────────────────────────────────
+function openDrawer()  { document.getElementById('qaDrawer').classList.add('open'); document.getElementById('qaBackdrop').classList.add('show'); if (navigator.vibrate) navigator.vibrate(8); }
+function closeDrawer() { document.getElementById('qaDrawer').classList.remove('open'); document.getElementById('qaBackdrop').classList.remove('show'); }
+
+let _tsX = 0, _tsY = 0;
+document.addEventListener('touchstart', e => { _tsX = e.touches[0].clientX; _tsY = e.touches[0].clientY; }, { passive: true });
+document.addEventListener('touchend', e => {
+    const dx = e.changedTouches[0].clientX - _tsX;
+    const dy = Math.abs(e.changedTouches[0].clientY - _tsY);
+    if (dy > 70) return;
+    const open = document.getElementById('qaDrawer').classList.contains('open');
+    if (!open && dx < -50 && _tsX > window.innerWidth * 0.55) openDrawer();
+    else if (open && dx > 60) closeDrawer();
+}, { passive: true });
+
+// ── Web Push (VAPID) ──────────────────────────────────────────────────────────
+async function subscribeWebPush() {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) return false;
+    try {
+        const reg = await navigator.serviceWorker.ready;
+        const r = await fetch('/api/push/vapid-key', { signal: AbortSignal.timeout(3000) });
+        if (!r.ok) return false;
+        const { publicKey } = await r.json();
+        if (!publicKey) return false;
+        const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: _b64ToUint8(publicKey) });
+        await fetch('/api/push/subscribe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ subscription: sub, deviceId: getDeviceId() }) });
+        return true;
+    } catch { return false; }
+}
+
+function _b64ToUint8(b64) {
+    const pad = '='.repeat((4 - b64.length % 4) % 4);
+    const raw = atob((b64 + pad).replace(/-/g, '+').replace(/_/g, '/'));
+    const arr = new Uint8Array(raw.length);
+    for (let i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+    return arr;
+}
+
 let installPrompt = null;
 window.addEventListener('beforeinstallprompt', e => {
     e.preventDefault(); installPrompt = e;
-    if (document.getElementById('installBtn')) return;
-    const btn = document.createElement('button'); btn.id = 'installBtn'; btn.className = 'tts-btn'; btn.title = 'Add to home screen'; btn.textContent = '⊕';
-    btn.onclick = async () => { if (!installPrompt) return; installPrompt.prompt(); const { outcome } = await installPrompt.userChoice; btn.remove(); installPrompt = null; if (outcome === 'accepted') addMsg('system', '&#x25CF; Added to home screen.'); };
-    document.querySelector('.header-right').insertBefore(btn, document.querySelector('.header-right').firstChild);
+    if (localStorage.getItem('heidi-install-dismissed')) return;
+    const banner = document.getElementById('installBanner');
+    if (banner) setTimeout(() => banner.classList.add('show'), 2500);
+    const installBtn = document.getElementById('installBannerBtn');
+    if (installBtn) {
+        installBtn.onclick = async () => {
+            if (!installPrompt) return;
+            document.getElementById('installBanner').classList.remove('show');
+            installPrompt.prompt();
+            const { outcome } = await installPrompt.userChoice;
+            installPrompt = null;
+            if (outcome === 'accepted') addMsg('system', '&#x25CF; Heidi added to home screen.');
+        };
+    }
 });
+function dismissInstall() {
+    document.getElementById('installBanner').classList.remove('show');
+    localStorage.setItem('heidi-install-dismissed', '1');
+}
 if ('serviceWorker' in navigator) { window.addEventListener('load', () => { navigator.serviceWorker.register('/sw.js').catch(() => {}); }); }
 </script>
 </body>
