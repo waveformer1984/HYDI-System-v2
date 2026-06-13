@@ -570,6 +570,55 @@
         .qa-btn.hi { border-color: rgba(200,136,30,0.25); color: var(--accent); }
         .qa-divider { height: 1px; background: rgba(200,136,30,0.08); margin: 8px 0; }
 
+        /* ── Service registry panel ────────────────────── */
+        .registry-panel { margin-top: 6px; }
+        .registry-hdr {
+            font-size: 9px; color: var(--text-muted); text-transform: uppercase;
+            letter-spacing: 1.5px; margin-bottom: 8px;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .registry-refresh {
+            background: none; border: none; color: var(--text-muted);
+            font-size: 11px; cursor: pointer; padding: 0; line-height: 1;
+            font-family: 'Courier New', monospace;
+        }
+        .registry-refresh:active { color: var(--accent); }
+        .registry-grid {
+            display: grid; grid-template-columns: 1fr 1fr; gap: 4px;
+        }
+        .svc-cell {
+            background: var(--bg-primary);
+            border: 1px solid rgba(200,136,30,0.1);
+            border-radius: 2px; padding: 7px 8px;
+            font-size: 9.5px; font-family: 'Courier New', monospace;
+        }
+        .svc-cell.ok   { border-color: rgba(74,140,48,0.25); }
+        .svc-cell.err  { border-color: rgba(184,48,32,0.25); }
+        .svc-cell.busy { border-color: rgba(200,136,30,0.2); }
+        .svc-dot {
+            display: inline-block; width: 6px; height: 6px;
+            border-radius: 50%; margin-right: 5px; vertical-align: middle; flex-shrink: 0;
+        }
+        .svc-dot.ok   { background: var(--status-ok); }
+        .svc-dot.err  { background: var(--status-critical); }
+        .svc-dot.busy { background: var(--status-warning); }
+        .svc-name { color: var(--text-primary); font-weight: bold; letter-spacing: 0.3px; }
+        .svc-detail {
+            color: var(--text-muted); font-size: 8.5px; margin-top: 3px;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .svc-latency {
+            float: right; color: var(--text-muted); font-size: 8px; margin-top: 1px;
+        }
+        .registry-ts {
+            font-size: 8px; color: var(--text-muted); text-align: right;
+            margin-top: 6px; letter-spacing: 0.5px;
+        }
+        .registry-loading {
+            font-size: 10px; color: var(--text-muted); text-align: center;
+            padding: 12px 0; letter-spacing: 1px;
+        }
+
         /* ── Install banner ────────────────────────────── */
         .install-banner {
             position: fixed; bottom: 0; left: 0; right: 0;
@@ -726,6 +775,14 @@
     <button class="qa-btn" onclick="closeDrawer();sendQuick('health')">&#x2317; Health Check</button>
     <div class="qa-divider"></div>
     <button class="qa-btn" onclick="closeDrawer();sendQuick('clear')">&#x2715; Clear Chat</button>
+    <div class="qa-divider"></div>
+    <div class="registry-panel" id="registryPanel">
+        <div class="registry-hdr">
+            <span>&#x25A3; Service Registry</span>
+            <button class="registry-refresh" onclick="fetchRegistry()" title="Refresh">&#x21BB;</button>
+        </div>
+        <div id="registryGrid" class="registry-loading">loading&#x2026;</div>
+    </div>
 </div>
 
 <!-- Install banner -->
@@ -1317,9 +1374,61 @@ async function retryNow() {
 window.addEventListener('online',  () => checkServer().then(ok => { if (ok) setServerOnline(true); }));
 window.addEventListener('offline', () => setServerOnline(false));
 
+// ── Service registry ──────────────────────────────────────────────────────────
+let _registryTimer = null;
+
+const SVC_LABELS = {
+    heidi: 'HEIDI', ollama: 'OLLAMA', bridge: 'BRIDGE',
+    supabase: 'SUPA', forge: 'FORGE', workers: 'WORKERS', push_subs: 'PUSH'
+};
+
+async function fetchRegistry() {
+    const grid = document.getElementById('registryGrid');
+    if (!grid) return;
+    try {
+        const r = await fetch('/api/registry/status', { signal: AbortSignal.timeout(8000) });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const data = await r.json();
+        renderRegistry(data);
+    } catch (e) {
+        grid.innerHTML = `<div class="registry-loading" style="color:var(--status-critical)">&#x25A0; ${e.message}</div>`;
+    }
+}
+
+function renderRegistry(data) {
+    const grid = document.getElementById('registryGrid');
+    if (!grid || !data?.services) return;
+    const svcs = data.services;
+    const cells = Object.entries(svcs).map(([key, svc]) => {
+        const st = svc.ok ? 'ok' : 'err';
+        const lat = svc.latency_ms > 0 ? `${svc.latency_ms}ms` : '';
+        return `<div class="svc-cell ${st}">
+            <div><span class="svc-dot ${st}"></span><span class="svc-name">${SVC_LABELS[key] || key.toUpperCase()}</span><span class="svc-latency">${lat}</span></div>
+            <div class="svc-detail">${escHtml(svc.detail || '')}</div>
+        </div>`;
+    }).join('');
+    const ts = data.ts ? new Date(data.ts).toLocaleTimeString() : '';
+    grid.className = 'registry-grid';
+    grid.innerHTML = cells + `</div><div class="registry-ts">polled ${ts}`;
+}
+
+function escHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
 // ── Swipe gesture drawer ──────────────────────────────────────────────────────
-function openDrawer()  { document.getElementById('qaDrawer').classList.add('open'); document.getElementById('qaBackdrop').classList.add('show'); if (navigator.vibrate) navigator.vibrate(8); }
-function closeDrawer() { document.getElementById('qaDrawer').classList.remove('open'); document.getElementById('qaBackdrop').classList.remove('show'); }
+function openDrawer()  {
+    document.getElementById('qaDrawer').classList.add('open');
+    document.getElementById('qaBackdrop').classList.add('show');
+    if (navigator.vibrate) navigator.vibrate(8);
+    fetchRegistry();
+    _registryTimer = setInterval(fetchRegistry, 30000);
+}
+function closeDrawer() {
+    document.getElementById('qaDrawer').classList.remove('open');
+    document.getElementById('qaBackdrop').classList.remove('show');
+    if (_registryTimer) { clearInterval(_registryTimer); _registryTimer = null; }
+}
 
 let _tsX = 0, _tsY = 0;
 document.addEventListener('touchstart', e => { _tsX = e.touches[0].clientX; _tsY = e.touches[0].clientY; }, { passive: true });

@@ -862,6 +862,108 @@ app.get('/api/system/status', async (req, res) => {
     });
 });
 
+// ── Service registry — probes every component concurrently ───────────────────
+
+async function probeService(label, fn) {
+    const t0 = Date.now();
+    try {
+        const detail = await fn();
+        return { ok: true, latency_ms: Date.now() - t0, detail: detail || 'ok' };
+    } catch (e) {
+        return { ok: false, latency_ms: Date.now() - t0, detail: e.message?.slice(0, 80) || 'error' };
+    }
+}
+
+async function buildRegistry() {
+    const uptime = process.uptime();
+    const uptimeStr = uptime < 60 ? `${Math.floor(uptime)}s`
+        : uptime < 3600 ? `${Math.floor(uptime / 60)}m`
+        : `${Math.floor(uptime / 3600)}h ${Math.floor((uptime % 3600) / 60)}m`;
+
+    const [ollamaR, bridgeR, supabaseR, forgeR, workersR, pushR] = await Promise.all([
+        probeService('ollama', async () => {
+            const r = await fetch(`${OLLAMA_URL}/api/tags`, { signal: AbortSignal.timeout(2500) });
+            if (!r.ok) throw new Error(`HTTP ${r.status}`);
+            const d = await r.json();
+            const count = d.models?.length || 0;
+            return `${count} model${count !== 1 ? 's' : ''}`;
+        }),
+        probeService('bridge', async () => {
+            for (const ep of ['/health', '/api/health']) {
+                try {
+                    const r = await fetch(`${URSULA_URL}${ep}`, { signal: AbortSignal.timeout(2500) });
+                    if (r.ok) { const d = await r.json(); return d.status || 'online'; }
+                } catch {}
+            }
+            throw new Error('no response');
+        }),
+        probeService('supabase', async () => {
+            if (!supabaseClient) throw new Error('no credentials');
+            const t = Date.now();
+            const { error } = await supabaseClient.from('push_subscriptions').select('id').limit(1);
+            if (error && error.code !== 'PGRST116') throw new Error(error.message.slice(0, 60));
+            const { count: active } = await supabaseClient
+                .from('push_subscriptions').select('id', { count: 'exact', head: true })
+                .eq('active', true);
+            return `${active ?? '?'} push sub${active !== 1 ? 's' : ''}`;
+        }),
+        probeService('forge', async () => {
+            try {
+                const r = await fetch(`${URSULA_URL}/api/builds?limit=1`, { signal: AbortSignal.timeout(2500) });
+                if (r.ok) {
+                    const d = await r.json();
+                    const builds = d.builds || d.recent || (Array.isArray(d) ? d : []);
+                    const b = builds[0];
+                    if (b) return `#${b.build_number || b.id} ${b.status || 'ok'}`;
+                }
+            } catch {}
+            const rp = ['build_registry.json', '../build_registry.json']
+                .map(p => require('path').join(__dirname, p))
+                .find(p => require('fs').existsSync(p));
+            if (rp) {
+                const data = JSON.parse(require('fs').readFileSync(rp, 'utf8'));
+                const arr = Array.isArray(data) ? data : (data.builds || []);
+                if (arr.length) { const b = arr[arr.length - 1]; return `#${b.build_number || arr.length} ${b.status || 'ok'}`; }
+            }
+            throw new Error('no build data');
+        }),
+        probeService('workers', async () => {
+            if (!supabaseClient) throw new Error('supabase offline');
+            const { data, error } = await supabaseClient
+                .from('worker_status').select('status');
+            if (error) throw new Error(error.message.slice(0, 60));
+            const total = data?.length || 0;
+            const healthy = data?.filter(w => w.status === 'idle' || w.status === 'busy').length || 0;
+            return `${healthy}/${total} healthy`;
+        }),
+        probeService('push_subs', async () => {
+            const n = webPushSubs.size;
+            return `${n} device${n !== 1 ? 's' : ''} (in-mem)`;
+        }),
+    ]);
+
+    return {
+        ts: new Date().toISOString(),
+        services: {
+            heidi:     { ok: true,  latency_ms: 0, detail: `up ${uptimeStr}` },
+            ollama:    ollamaR,
+            bridge:    bridgeR,
+            supabase:  supabaseR,
+            forge:     forgeR,
+            workers:   workersR,
+            push_subs: pushR,
+        }
+    };
+}
+
+app.get('/api/registry/status', async (req, res) => {
+    try {
+        res.json(await buildRegistry());
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
 app.post('/api/system/action', async (req, res) => {
     const { type, source, payload } = req.body;
     if (!type) return res.status(400).json({ error: 'type required' });
