@@ -58,6 +58,64 @@ if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
     console.log('ℹ️  Supabase memory: disabled (set SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY)');
 }
 
+// ── Web Push (VAPID) ──────────────────────────────────────────────────────────
+
+let webPush = null, vapidKeys = null;
+const webPushSubs = new Map(); // deviceId → subscription
+
+async function loadPushSubscriptions() {
+    if (!supabaseClient) return;
+    try {
+        const { data, error } = await supabaseClient
+            .from('push_subscriptions')
+            .select('device_id, endpoint, p256dh, auth')
+            .eq('active', true);
+        if (error) throw error;
+        for (const row of data || []) {
+            webPushSubs.set(row.device_id, { endpoint: row.endpoint, keys: { p256dh: row.p256dh, auth: row.auth } });
+        }
+        if (data?.length) console.log(`✅ Web Push: restored ${data.length} subscription(s) from Supabase`);
+    } catch (e) {
+        console.log('ℹ️  Web Push: could not load subscriptions —', e.message);
+    }
+}
+
+async function savePushSubscription(deviceId, subscription) {
+    if (!supabaseClient) return;
+    try {
+        await supabaseClient.from('push_subscriptions').upsert({
+            device_id: deviceId,
+            endpoint: subscription.endpoint,
+            p256dh: subscription.keys?.p256dh || '',
+            auth: subscription.keys?.auth || '',
+            active: true,
+            updated_at: new Date().toISOString()
+        }, { onConflict: 'endpoint' });
+    } catch {}
+}
+
+async function removePushSubscription(deviceId) {
+    if (!supabaseClient) return;
+    try {
+        await supabaseClient.from('push_subscriptions').update({ active: false, updated_at: new Date().toISOString() }).eq('device_id', deviceId);
+    } catch {}
+}
+
+try {
+    webPush = require('web-push');
+    const vapidFile = path.join(__dirname, '.vapid-keys.json');
+    if (fs.existsSync(vapidFile)) {
+        vapidKeys = JSON.parse(fs.readFileSync(vapidFile, 'utf8'));
+    } else {
+        vapidKeys = webPush.generateVAPIDKeys();
+        fs.writeFileSync(vapidFile, JSON.stringify(vapidKeys));
+    }
+    webPush.setVapidDetails('mailto:waveformer1984@gmail.com', vapidKeys.publicKey, vapidKeys.privateKey);
+    console.log('✅ Web Push: VAPID configured');
+} catch {
+    console.log('ℹ️  Web Push: disabled (run: npm install web-push)');
+}
+
 // ── Tool definitions ──────────────────────────────────────────────────────────
 
 const TOOLS = [
@@ -710,12 +768,20 @@ app.use((req, res, next) => {
 app.get('/manifest.json', (req, res) => {
     res.setHeader('Content-Type', 'application/manifest+json');
     res.json({
-        name: 'Heidi', short_name: 'Heidi',
-        description: 'HYDI ProtoForge command interface',
-        start_url: '/', display: 'standalone',
+        name: 'Heidi — ProtoForge', short_name: 'Heidi',
+        description: 'HYDI ProtoForge AI command interface',
+        start_url: '/?source=pwa', display: 'standalone',
         background_color: '#0e0c08', theme_color: '#0e0c08',
         orientation: 'portrait-primary',
-        icons: [{ src: '/icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any maskable' }]
+        categories: ['productivity', 'utilities'],
+        icons: [
+            { src: '/icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
+            { src: '/icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'maskable' }
+        ],
+        shortcuts: [
+            { name: 'Build Status', short_name: 'Builds', url: '/?q=builds', description: 'Check forge builds' },
+            { name: 'Revenue', short_name: 'Revenue', url: '/?q=revenue', description: 'Revenue summary' }
+        ]
     });
 });
 
@@ -736,15 +802,45 @@ app.get('/sw.js', (req, res) => {
     res.setHeader('Content-Type', 'application/javascript');
     res.setHeader('Service-Worker-Allowed', '/');
     res.send(`
-const CACHE = 'heidi-v2';
-self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.add('/'))); self.skipWaiting(); });
-self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k))))); self.clients.claim(); });
+const CACHE = 'heidi-v3';
+self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(['/']))); self.skipWaiting(); });
+self.addEventListener('activate', e => {
+    e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))));
+    self.clients.claim();
+});
 self.addEventListener('fetch', e => {
-    if (e.request.url.includes('/api/')) return;
-    e.respondWith(caches.match(e.request).then(hit => hit || fetch(e.request).then(res => {
-        if (res.ok) { const clone = res.clone(); caches.open(CACHE).then(c => c.put(e.request, clone)); }
-        return res;
-    })));
+    if (e.request.url.includes('/api/') || e.request.url.includes('/sw.js')) return;
+    e.respondWith(
+        caches.match(e.request).then(hit => hit || fetch(e.request).then(res => {
+            if (res.ok && e.request.method === 'GET') {
+                const clone = res.clone();
+                caches.open(CACHE).then(c => c.put(e.request, clone));
+            }
+            return res;
+        }).catch(() => caches.match('/')))
+    );
+});
+self.addEventListener('push', e => {
+    if (!e.data) return;
+    let d = {};
+    try { d = e.data.json(); } catch { d = { title: 'Heidi', body: e.data.text() }; }
+    e.waitUntil(self.registration.showNotification(d.title || 'Heidi', {
+        body: d.body || '',
+        icon: '/icon.svg',
+        badge: '/icon.svg',
+        tag: d.type || 'heidi',
+        data: d,
+        vibrate: d.level === 'critical' ? [100, 50, 100] : [30]
+    }));
+});
+self.addEventListener('notificationclick', e => {
+    e.notification.close();
+    e.waitUntil(
+        clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
+            for (const c of list) { if ('focus' in c) return c.focus(); }
+            return clients.openWindow('/');
+        })
+    );
 });
 `);
 });
@@ -874,10 +970,23 @@ let lastEventTime     = 0;
 let silenceAlertSent  = false;
 
 function broadcastPush(event) {
-    if (!pushClients.size) return;
-    const data = `data: ${JSON.stringify(event)}\n\n`;
-    for (const client of [...pushClients]) {
-        try { client.write(data); } catch { pushClients.delete(client); }
+    // SSE — in-app clients
+    if (pushClients.size) {
+        const data = `data: ${JSON.stringify(event)}\n\n`;
+        for (const client of [...pushClients]) {
+            try { client.write(data); } catch { pushClients.delete(client); }
+        }
+    }
+    // Web Push — background / closed browser
+    const webPushTypes = new Set(['forge_build', 'forge_alert', 'daily_briefing', 'hydi_offline', 'hydi_recovered']);
+    if (webPush && webPushSubs.size && (webPushTypes.has(event.type) || event.level === 'critical' || event.level === 'warning')) {
+        const payload = JSON.stringify({ title: event.title, body: event.body, type: event.type, level: event.level, payload: event.payload });
+        for (const [deviceId, sub] of webPushSubs) {
+            webPush.sendNotification(sub, payload).catch(() => {
+                webPushSubs.delete(deviceId);
+                removePushSubscription(deviceId);
+            });
+        }
     }
 }
 
@@ -900,6 +1009,59 @@ app.post('/api/events/push', (req, res) => {
     if (!type) return res.status(400).json({ error: 'type required' });
     broadcastPush({ type, title: title || type, body: body || '', level, payload: payload || {}, ts: Date.now() });
     res.json({ ok: true, clients: pushClients.size });
+});
+
+// ── Web Push (VAPID) routes ───────────────────────────────────────────────────
+
+app.get('/api/push/vapid-key', (req, res) => {
+    if (!vapidKeys) return res.json({ available: false, publicKey: null });
+    res.json({ available: true, publicKey: vapidKeys.publicKey });
+});
+
+app.post('/api/push/subscribe', async (req, res) => {
+    const { subscription, deviceId } = req.body;
+    if (!subscription || !deviceId) return res.status(400).json({ error: 'subscription and deviceId required' });
+    webPushSubs.set(deviceId, subscription);
+    await savePushSubscription(deviceId, subscription);
+    res.json({ ok: true, subscribed: webPushSubs.size, persisted: !!supabaseClient });
+});
+
+app.post('/api/push/unsubscribe', async (req, res) => {
+    const { deviceId } = req.body;
+    if (deviceId) { webPushSubs.delete(deviceId); await removePushSubscription(deviceId); }
+    res.json({ ok: true });
+});
+
+// ── Forge build badge ─────────────────────────────────────────────────────────
+
+app.get('/api/forge/badge', async (req, res) => {
+    // Try bridge first
+    try {
+        const r = await fetch(`${URSULA_URL}/api/builds?limit=1`, { signal: AbortSignal.timeout(3000) });
+        if (r.ok) {
+            const d = await r.json();
+            const builds = d.builds || d.recent || (Array.isArray(d) ? d : []);
+            const latest = builds[0];
+            if (latest) return res.json({ build: latest.build_number || latest.id, status: latest.status || 'success', ts: latest.timestamp || latest.ts });
+        }
+    } catch {}
+    // Fallback: read build_registry.json locally
+    const registryPaths = [
+        path.join(__dirname, 'build_registry.json'),
+        path.join(__dirname, '..', 'build_registry.json'),
+        'C:\\ProtoForge_Ecosystem\\build_registry.json'
+    ];
+    for (const p of registryPaths) {
+        try {
+            if (!fs.existsSync(p)) continue;
+            const data = JSON.parse(fs.readFileSync(p, 'utf8'));
+            const builds = Array.isArray(data) ? data : (data.builds || []);
+            if (!builds.length) continue;
+            const latest = builds[builds.length - 1];
+            return res.json({ build: latest.build_number || builds.length, status: latest.status || 'success', ts: latest.timestamp });
+        } catch {}
+    }
+    res.json({ build: null, status: 'unknown' });
 });
 
 async function analyzeHydiState(status, delta) {
@@ -1213,6 +1375,7 @@ server.listen(PORT, '0.0.0.0', async () => {
     console.log(supabaseClient ? 'Revenue tools: active (Supabase connected)' : 'Revenue tools: read-only (Supabase not connected)');
     console.log(process.env.STRIPE_SECRET_KEY ? 'Stripe checkout: ready' : 'Stripe checkout: disabled (set STRIPE_SECRET_KEY)');
     console.log('Push alerts: ready | Backend observer: active | Daily briefing: scheduled\n');
+    await loadPushSubscriptions();
     watchHydiEvents();
     scheduleDailyBriefing();
     watchBridgeStream();
