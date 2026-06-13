@@ -21,9 +21,16 @@ Format: Risk ID | Severity | Status | Description | Mitigation
 
 ### R-SEC-03 — .vapid-keys.json private key on disk
 - **Severity:** Medium
-- **Status:** Not yet mitigated
-- **Description:** Web push VAPID private key is stored in `.vapid-keys.json` in the project directory. Not in `.gitignore` — could be accidentally committed.
-- **Mitigation:** Add `.vapid-keys.json` to `.gitignore` immediately. Consider storing key in env vars instead.
+- **Status:** Mitigated
+- **Description:** Web push VAPID private key is stored in `.vapid-keys.json` in the project directory.
+- **Mitigation:** `.vapid-keys.json` and `**/.vapid-keys.json` added to `.gitignore` — will never be committed.
+
+### R-SEC-03b — Secret .env files in git history ⚠️ ACTION REQUIRED
+- **Severity:** Critical
+- **Status:** Partially mitigated — files untracked, secrets still in history, must rotate
+- **Description:** `.env.backup`, `.env.production`, `.env.test-jwt` were committed to git. They contain real credentials: `SUPABASE_URL`, `STRIPE_SECRET_KEY`, `VERCEL_OIDC_TOKEN`, `KEEPER_BREAK_GLASS_JWT`.
+- **Mitigation (completed):** Files removed from tracking via `git rm --cached`; added to `.gitignore`. The files remain on disk but will not be re-committed.
+- **Action required (not yet done):** Rotate all affected keys in their respective dashboards — Supabase, Stripe, Vercel, and wherever KEEPER_BREAK_GLASS_JWT is managed. Git history still contains the old values; rotation neutralizes them. If this repo is private and history clean-up is desired, use `git filter-repo` or BFG Repo Cleaner.
 
 ### R-SEC-04 — Stripe secret key exposure
 - **Severity:** High

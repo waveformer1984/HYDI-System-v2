@@ -7,3 +7,10 @@
 # Heidi runtime secrets
 .vapid-keys.json
 **/.vapid-keys.json
+
+# Secret env files — never track, rotate keys if already in history
+.env.backup
+.env.production
+.env.test-jwt
+.env.secret
+.env.secrets
