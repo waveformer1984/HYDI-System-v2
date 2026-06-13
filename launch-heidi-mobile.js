@@ -63,6 +63,44 @@ if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
 let webPush = null, vapidKeys = null;
 const webPushSubs = new Map(); // deviceId → subscription
 
+async function loadPushSubscriptions() {
+    if (!supabaseClient) return;
+    try {
+        const { data, error } = await supabaseClient
+            .from('push_subscriptions')
+            .select('device_id, endpoint, p256dh, auth')
+            .eq('active', true);
+        if (error) throw error;
+        for (const row of data || []) {
+            webPushSubs.set(row.device_id, { endpoint: row.endpoint, keys: { p256dh: row.p256dh, auth: row.auth } });
+        }
+        if (data?.length) console.log(`✅ Web Push: restored ${data.length} subscription(s) from Supabase`);
+    } catch (e) {
+        console.log('ℹ️  Web Push: could not load subscriptions —', e.message);
+    }
+}
+
+async function savePushSubscription(deviceId, subscription) {
+    if (!supabaseClient) return;
+    try {
+        await supabaseClient.from('push_subscriptions').upsert({
+            device_id: deviceId,
+            endpoint: subscription.endpoint,
+            p256dh: subscription.keys?.p256dh || '',
+            auth: subscription.keys?.auth || '',
+            active: true,
+            updated_at: new Date().toISOString()
+        }, { onConflict: 'endpoint' });
+    } catch {}
+}
+
+async function removePushSubscription(deviceId) {
+    if (!supabaseClient) return;
+    try {
+        await supabaseClient.from('push_subscriptions').update({ active: false, updated_at: new Date().toISOString() }).eq('device_id', deviceId);
+    } catch {}
+}
+
 try {
     webPush = require('web-push');
     const vapidFile = path.join(__dirname, '.vapid-keys.json');
@@ -944,7 +982,10 @@ function broadcastPush(event) {
     if (webPush && webPushSubs.size && (webPushTypes.has(event.type) || event.level === 'critical' || event.level === 'warning')) {
         const payload = JSON.stringify({ title: event.title, body: event.body, type: event.type, level: event.level, payload: event.payload });
         for (const [deviceId, sub] of webPushSubs) {
-            webPush.sendNotification(sub, payload).catch(() => webPushSubs.delete(deviceId));
+            webPush.sendNotification(sub, payload).catch(() => {
+                webPushSubs.delete(deviceId);
+                removePushSubscription(deviceId);
+            });
         }
     }
 }
@@ -977,16 +1018,17 @@ app.get('/api/push/vapid-key', (req, res) => {
     res.json({ available: true, publicKey: vapidKeys.publicKey });
 });
 
-app.post('/api/push/subscribe', (req, res) => {
+app.post('/api/push/subscribe', async (req, res) => {
     const { subscription, deviceId } = req.body;
     if (!subscription || !deviceId) return res.status(400).json({ error: 'subscription and deviceId required' });
     webPushSubs.set(deviceId, subscription);
-    res.json({ ok: true, subscribed: webPushSubs.size });
+    await savePushSubscription(deviceId, subscription);
+    res.json({ ok: true, subscribed: webPushSubs.size, persisted: !!supabaseClient });
 });
 
-app.post('/api/push/unsubscribe', (req, res) => {
+app.post('/api/push/unsubscribe', async (req, res) => {
     const { deviceId } = req.body;
-    if (deviceId) webPushSubs.delete(deviceId);
+    if (deviceId) { webPushSubs.delete(deviceId); await removePushSubscription(deviceId); }
     res.json({ ok: true });
 });
 
@@ -1333,6 +1375,7 @@ server.listen(PORT, '0.0.0.0', async () => {
     console.log(supabaseClient ? 'Revenue tools: active (Supabase connected)' : 'Revenue tools: read-only (Supabase not connected)');
     console.log(process.env.STRIPE_SECRET_KEY ? 'Stripe checkout: ready' : 'Stripe checkout: disabled (set STRIPE_SECRET_KEY)');
     console.log('Push alerts: ready | Backend observer: active | Daily briefing: scheduled\n');
+    await loadPushSubscriptions();
     watchHydiEvents();
     scheduleDailyBriefing();
     watchBridgeStream();

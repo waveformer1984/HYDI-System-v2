@@ -6,3 +6,4 @@
 
 # Heidi runtime secrets
 .vapid-keys.json
+**/.vapid-keys.json
