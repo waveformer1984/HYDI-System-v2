@@ -1,6 +1,6 @@
 # Service Catalog — HYDI / ProtoForge Ecosystem
 
-Last updated: 2026-06-13  
+Last updated: 2026-06-14  
 Source: HYDI-System-v2 (mobile stack) + ProtoForge_Ecosystem (PC stack)
 
 ---
@@ -53,6 +53,10 @@ STRIPE_SECRET_KEY=...           # server-side only
 - `GET /api/revenue/pipeline` — leads/quotes/proposals
 - `GET /api/memory/:deviceId` — load chat history from Supabase
 - `POST /api/memory/:deviceId` — save chat history to Supabase
+- `GET /api/registry/status` — unified service registry (see §11)
+- `GET /api/memory/:deviceId/facts` — list recalled semantic-memory facts (see §12)
+- `DELETE /api/memory/:deviceId/facts` — clear semantic-memory facts for a device
+- `POST /api/plan` — standalone multi-step plan generation (see §12)
 - `GET /manifest.json` — PWA manifest
 - `GET /sw.js` — service worker (caching + push handler)
 - `GET /icon.svg` — app icon
@@ -213,6 +217,50 @@ STRIPE_SECRET_KEY=...           # server-side only
 | **Status** | Bridge reports "not found" — clone needed |
 
 **Provides:** completion scoring, estimated monthly revenue, pricing tiers, scaffolding suggestions.
+
+---
+
+## 11. Unified Service Registry / Health Dashboard
+
+| Field | Value |
+|---|---|
+| **Added** | 2026-06-13 (commit `b84b770`) |
+| **Endpoint** | `GET /api/registry/status` (served by Heidi Mobile, port 3006) |
+| **UI** | Service registry panel embedded in `heidi-mobile-chat.html` QA drawer — 2-column grid of colored cells (ok=green, err=red), auto-fetches on drawer open, refreshes every 30s |
+| **Status** | Active |
+
+**Responsibilities:**
+- Probes 7 components concurrently via `Promise.all`: heidi (self/uptime), ollama (model count), bridge (health endpoint), supabase (push_subscriptions count), forge (latest build via bridge/local), workers (idle+busy from `worker_status` table), push_subs (in-memory device count)
+- `probeService()` wrapper captures `latency_ms` per component and normalizes errors so one failing probe doesn't block the others
+- `escHtml()` sanitizes service detail strings before rendering (XSS protection)
+
+**Maps to:** "HYDI Service Registry v1" spec (registry schema, health states, `/api/system/*` endpoints, health-score formula). The implemented `/api/registry/status` is a first pass covering the "Auto Discovery" + "All services" portions of that spec — `/api/system/restart/:id`, `/api/system/events` (event log → `system_events`), and the full health-score formula (100 minus latency/dependency/restart/unavailable deductions) are not yet implemented.
+
+---
+
+## 12. Semantic Memory & Multi-Step Planner
+
+| Field | Value |
+|---|---|
+| **Added** | 2026-06-14 (commit `69e1b14`) |
+| **Files** | `heidi-semantic-memory.js`, `heidi-planner.js`, `setup-semantic-memory.sql` |
+| **Storage** | `.heidi-memory.json` (local, per-device) — Supabase upgrade path via `setup-semantic-memory.sql` |
+| **Status** | Active |
+
+**Semantic memory responsibilities:**
+- Cosine-similarity recall using Ollama `/api/embeddings`
+- `extractAndStore()` runs after each response, auto-pulling notable facts per device
+- Deduplication: skips memories with >0.95 cosine overlap
+- Recalled memories injected into system prompt before each chat turn
+- `GET /api/memory/:deviceId/facts` (list) + `DELETE` (clear)
+
+**Planner responsibilities:**
+- `needsPlan()` detects complex/multi-step intent via regex heuristics
+- `generatePlan()` asks Ollama to decompose a goal into 3–7 ordered steps
+- Plan prepended to streaming response + injected into system-prompt context
+- `POST /api/plan` — standalone plan-only endpoint
+
+**Also in this commit:** vault fix, start-all launcher (not yet documented here in detail — needs follow-up pass).
 
 ---
 
