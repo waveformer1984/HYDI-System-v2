@@ -15,7 +15,12 @@ const fs = require('fs');
 
 const semanticMemory = require('./heidi-semantic-memory');
 const { needsPlan, generatePlan, formatPlan, planEndpoint } = require('./heidi-planner');
+<<<<<<< HEAD
 const HeidiAgentLoop = require('./heidi-agent-loop');
+||||||| parent of 98d6e59 (fix: get_build_status three-tier fallback (Bridge -> build_registry.json -> Ursula))
+=======
+const { createAgentLoop } = require('./heidi-agent-loop');
+>>>>>>> 98d6e59 (fix: get_build_status three-tier fallback (Bridge -> build_registry.json -> Ursula))
 
 const PORT = parseInt(process.env.HEIDI_PORT || '3006');
 const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434';
@@ -315,6 +320,60 @@ const TOOLS = [
     }
 ];
 
+// ── Tool selection ──────────────────────────────────────────────────────────
+// llama3.2:3B's tool-calling reliability collapses when given all 14 tool
+// definitions at once (verified empirically: 1 tool -> real tool_calls;
+// 14 tools -> always falls back to describing a command in prose, regardless
+// of system prompt or temperature). To work around this, pick a small,
+// relevant subset of tools per request based on keyword matches against the
+// user's message, capped at TOOL_SELECT_MAX.
+
+const TOOL_SELECT_MAX = 4;
+
+const TOOL_KEYWORDS = {
+    get_system_health:     ['system health', 'ollama', 'lm studio', 'models available', 'ai service'],
+    get_hydi_status:       ['hydi', 'backend', 'protohub', 'overall status'],
+    get_build_status:      ['build', 'forge', 'pipeline', 'cycle', 'compile'],
+    run_command:           ['run command', 'shell', 'free -h', 'df -h', 'cpu', 'ram', 'memory', 'disk', 'resources', 'uptime', 'process'],
+    read_file:             ['read file', 'open file', 'file contents', 'cat '],
+    get_current_time:      ['time', 'date', 'clock', 'timezone'],
+    get_ursula_live:       ['ursula', 'vercel'],
+    get_rezonate_score:    ['rezonate', 'rezonette', 'daw'],
+    query_database:        ['database', 'sql', 'query', 'table', 'protoforge.db'],
+    get_revenue_summary:   ['revenue', 'ledger', 'earnings', 'income', 'gross', 'net amount'],
+    get_revenue_pipeline:  ['pipeline', 'leads', 'quotes', 'proposals'],
+    create_lead:           ['create lead', 'new lead', 'new client'],
+    generate_checkout_link:['checkout', 'stripe', 'payment link', 'invoice'],
+    get_payout_status:     ['payout', 'balance', 'payouts'],
+};
+
+// Default tools sent when nothing matches — small, broad, read-only.
+const DEFAULT_TOOLS = ['get_hydi_status', 'get_system_health', 'get_ursula_live', 'get_build_status'];
+
+function selectRelevantTools(message) {
+    const text = (message || '').toLowerCase();
+    const scored = TOOLS
+        .map(t => {
+            const kws = TOOL_KEYWORDS[t.function.name] || [];
+            const score = kws.reduce((s, kw) => s + (text.includes(kw) ? 1 : 0), 0);
+            return { tool: t, score };
+        })
+        .filter(x => x.score > 0)
+        .sort((a, b) => b.score - a.score);
+
+    let selected = scored.map(x => x.tool);
+
+    if (selected.length === 0) {
+        selected = TOOLS.filter(t => DEFAULT_TOOLS.includes(t.function.name));
+    }
+
+    if (selected.length > TOOL_SELECT_MAX) {
+        selected = selected.slice(0, TOOL_SELECT_MAX);
+    }
+
+    return selected;
+}
+
 const SAFE_CMDS = new Set([
     'ps', 'free', 'df', 'du', 'ls', 'cat', 'head', 'tail', 'wc',
     'uptime', 'uname', 'whoami', 'date', 'hostname', 'id',
@@ -388,14 +447,16 @@ async function executeToolCall(name, args) {
 
         case 'get_build_status': {
             const limit = Math.min(parseInt(args.limit) || 10, 50);
-            // Try Ursula build endpoints
-            const endpoints = [
+
+            // 1. Try the local Heidi Bridge (heidi-bridge.py / Flask, URSULA_URL, default :5050)
+            //    — this is where forge_runner.py / build_registry.json / protoforge.db live.
+            const localEndpoints = [
                 `/api/builds?limit=${limit}`,
                 `/api/forge/status`,
                 `/forge/builds?limit=${limit}`,
                 `/dashboard`
             ];
-            for (const ep of endpoints) {
+            for (const ep of localEndpoints) {
                 try {
                     const r = await fetch(`${URSULA_URL}${ep}`, { signal: AbortSignal.timeout(HYDI_TIMEOUT_MS) });
                     if (!r.ok) continue;
@@ -403,10 +464,12 @@ async function executeToolCall(name, args) {
                     return JSON.stringify({ source: `${URSULA_URL}${ep}`, data: d }, null, 2);
                 } catch {}
             }
-            // Fallback: read build_registry.json if on same machine
+
+            // 2. Fallback: read build_registry.json if it exists on this machine
             const registryPaths = [
                 path.join(__dirname, 'build_registry.json'),
-                path.join(__dirname, '..', 'build_registry.json')
+                path.join(__dirname, '..', 'build_registry.json'),
+                'C:\\ProtoForge_Ecosystem\\build_registry.json'
             ];
             for (const p of registryPaths) {
                 try {
@@ -420,7 +483,22 @@ async function executeToolCall(name, args) {
                     }, null, 2);
                 } catch {}
             }
-            return `Ursula build endpoints not reachable at ${URSULA_URL}. Ensure ursula_server.py is running.`;
+
+            // 3. Fallback: the LIVE deployed Ursula app (ursula-nine.vercel.app) —
+            //    this is the system that's actually online (per get_ursula_live).
+            //    /api/dashboard/status and /api/hydi/tasks give task/pipeline
+            //    execution state, which is the closest live equivalent to "build status".
+            for (const ep of [`/api/dashboard/status`, `/api/hydi/tasks`]) {
+                try {
+                    const r = await fetch(`${NEXT_APP_URL}${ep}`, { signal: AbortSignal.timeout(8000) });
+                    if (!r.ok) continue;
+                    const d = await r.json();
+                    return JSON.stringify({ source: `${NEXT_APP_URL}${ep}`, note: 'Local forge/build registry unreachable — showing live Ursula task/pipeline status instead.', data: d }, null, 2);
+                } catch {}
+            }
+
+            return `No build/pipeline data available. Checked local Heidi Bridge (${URSULA_URL}), local build_registry.json, and live Ursula (${NEXT_APP_URL}). ` +
+                   `To get forge build history: start the Heidi Bridge (heidi-bridge.py) on port 5050, or ensure build_registry.json exists in the project root.`;
         }
 
         case 'run_command': {
@@ -736,6 +814,9 @@ REVENUE TOOLS: get_revenue_summary, get_revenue_pipeline, create_lead, generate_
 
 REVENUE STREAMS: galactic_bytes | detailer_bot | lipi_v2 | protogrance_aromatics | rezonate | waveformer_studio
 
+TOOL USE — MANDATORY:
+You have real function-calling. When a request requires a tool above, you MUST emit an actual tool call — never describe, narrate, or print a shell command, code block, or "you can run..." instructions. Do not invent tool names (e.g. there is no "protopage" tool — only the tools listed above exist). If you are unsure which tool applies, pick the closest real one and call it; do not fall back to prose.
+
 AUTHORIZATION PROTOCOL — MANDATORY for create_lead and generate_checkout_link:
   1. Before calling either tool, present a summary: action type, all parameters, dollar amount.
   2. End with: "Reply CONFIRM to authorize."
@@ -976,6 +1057,30 @@ app.get('/api/registry/status', async (req, res) => {
     } catch (e) {
         res.status(500).json({ error: e.message });
     }
+});
+
+// ── Autonomous agent loop ──────────────────────────────────────────────────
+
+const agentLoop = createAgentLoop({
+    buildRegistry,
+    broadcastPush: (...args) => broadcastPush(...args),
+    supabaseClient,
+    OLLAMA_URL,
+    DEFAULT_MODEL,
+    URSULA_URL,
+});
+
+app.get('/api/agent/status', (req, res) => res.json(agentLoop.getStatus()));
+app.get('/api/agent/log', (req, res) => res.json({ log: agentLoop.getLog(parseInt(req.query.limit) || 20) }));
+app.get('/api/agent/pending', (req, res) => res.json({ pending: agentLoop.getPendingActions() }));
+app.post('/api/agent/run', async (req, res) => {
+    try { res.json(await agentLoop.runCycle()); }
+    catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.post('/api/agent/authorize/:id', (req, res) => {
+    const { decision } = req.body; // 'approve' | 'reject'
+    if (!['approve', 'reject'].includes(decision)) return res.status(400).json({ error: "decision must be 'approve' or 'reject'" });
+    res.json(agentLoop.resolveAction(req.params.id, decision));
 });
 
 app.post('/api/system/action', async (req, res) => {
@@ -1478,32 +1583,34 @@ app.post('/api/chat', async (req, res) => {
 
 async function streamOllama(message, model, systemPrompt, history, send) {
     const messages = [{ role: 'system', content: systemPrompt }, ...history, { role: 'user', content: message }];
-    await streamOllamaMessages(messages, model, send, 0);
+    // Pick a small relevant subset of tools based on the user's message —
+    // see TOOL_SELECT_MAX comment above for why this is necessary.
+    const tools = selectRelevantTools(message);
+    await streamOllamaMessages(messages, model, send, 0, tools);
 }
 
-async function streamOllamaMessages(messages, model, send, depth) {
+async function streamOllamaMessages(messages, model, send, depth, tools = TOOLS) {
     if (depth > 3) throw new Error('Tool call depth limit reached');
+    // NOTE: stream:false is intentional. Ollama's streaming /api/chat does not
+    // reliably populate message.tool_calls on the final chunk for llama3.2 —
+    // verified via direct curl that non-streaming responses DO include
+    // tool_calls correctly. We fetch the full response, then emit it to the
+    // client in chunks to preserve the SSE streaming UX.
     const response = await fetch(`${OLLAMA_URL}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model, messages, stream: true, tools: TOOLS, options: { temperature: 0.7, num_predict: 600 } }),
+        body: JSON.stringify({ model, messages, stream: false, tools, options: { temperature: 0.7, num_predict: 600 } }),
         signal: AbortSignal.timeout(CHAT_TIMEOUT_MS)
     });
     if (!response.ok) throw new Error(`Ollama HTTP ${response.status}`);
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let finalMessage = null;
-    while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        const text = decoder.decode(value, { stream: true });
-        for (const line of text.split('\n')) {
-            if (!line.trim()) continue;
-            try {
-                const data = JSON.parse(line);
-                if (data.message?.content) send({ t: data.message.content });
-                if (data.done) finalMessage = data.message;
-            } catch {}
+    const data = await response.json();
+    const finalMessage = data.message || null;
+    if (finalMessage?.content) {
+        // Chunk the content out so the client still sees incremental tokens.
+        const text = finalMessage.content;
+        const CHUNK = 40;
+        for (let i = 0; i < text.length; i += CHUNK) {
+            send({ t: text.slice(i, i + CHUNK) });
         }
     }
     if (finalMessage?.tool_calls?.length > 0) {
@@ -1519,7 +1626,7 @@ async function streamOllamaMessages(messages, model, send, depth) {
             send({ tool_result: true, tool_name: toolName });
             updated.push({ role: 'tool', content: String(result) });
         }
-        await streamOllamaMessages(updated, model, send, depth + 1);
+        await streamOllamaMessages(updated, model, send, depth + 1, tools);
     }
 }
 
@@ -1589,11 +1696,16 @@ server.listen(PORT, '0.0.0.0', async () => {
     watchHydiEvents();
     scheduleDailyBriefing();
     watchBridgeStream();
+<<<<<<< HEAD
     agentLoop.supabase     = supabaseClient;
     agentLoop.start();
+||||||| parent of 98d6e59 (fix: get_build_status three-tier fallback (Bridge -> build_registry.json -> Ursula))
+=======
+    agentLoop.start();
+>>>>>>> 98d6e59 (fix: get_build_status three-tier fallback (Bridge -> build_registry.json -> Ursula))
 });
 
-process.on('SIGINT',  () => { console.log('\nShutting down Heidi...'); server.close(() => process.exit(0)); });
+process.on('SIGINT',  () => { console.log('\nShutting down Heidi...'); agentLoop.stop(); server.close(() => process.exit(0)); });
 process.on('SIGTERM', () => process.exit(0));
 process.on('uncaughtException',  (e) => { console.error('Fatal:', e.message); process.exit(1); });
 process.on('unhandledRejection', (e) => { console.error('Unhandled:', e); });
