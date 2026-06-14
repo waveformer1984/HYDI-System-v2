@@ -13,7 +13,9 @@
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "test:integration": "jest --config jest.integration.config.js",
-    "mobile": "node launch-heidi-mobile.js"
+    "mobile": "node launch-heidi-mobile.js",
+    "start:all": "node start-all.js",
+    "start:no-workers": "node start-all.js --no-workers"
   },
   "keywords": [
     "protoforge",
@@ -41,6 +43,7 @@
     "react-dom": "^18.0.0",
     "stripe": "^22.1.0",
     "typescript": "^5.0.0",
+    "uuid": "^14.0.0",
     "web-push": "^3.6.7"
   },
   "devDependencies": {

@@ -1114,7 +1114,7 @@ async function sendMessage() {
     try {
         const resp = await fetch('/api/chat', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message: text, model: currentModel, provider: currentProvider, history: conversationHistory.slice(-MAX_CTX) })
+            body: JSON.stringify({ message: text, model: currentModel, provider: currentProvider, history: conversationHistory.slice(-MAX_CTX), deviceId: getDeviceId() })
         });
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
         const reader = resp.body.getReader(); const dec = new TextDecoder(); let buf = '';

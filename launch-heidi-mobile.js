@@ -13,6 +13,9 @@ const os = require('os');
 const { execSync } = require('child_process');
 const fs = require('fs');
 
+const semanticMemory = require('./heidi-semantic-memory');
+const { needsPlan, generatePlan, formatPlan, planEndpoint } = require('./heidi-planner');
+
 const PORT = parseInt(process.env.HEIDI_PORT || '3006');
 const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434';
 const LM_STUDIO_URL = process.env.LM_STUDIO_URL || 'http://localhost:1234';
@@ -1062,6 +1065,21 @@ app.post('/api/memory/:deviceId', async (req, res) => {
     } catch (e) { res.status(500).json({ saved: false, error: e.message }); }
 });
 
+// ── Semantic memory API ───────────────────────────────────────────────────────
+
+app.get('/api/memory/:deviceId/facts', (req, res) => {
+    const { deviceId } = req.params;
+    if (!DEVICE_ID_RE.test(deviceId)) return res.status(400).json({ error: 'invalid device id' });
+    res.json({ facts: semanticMemory.listMemories(deviceId) });
+});
+
+app.delete('/api/memory/:deviceId/facts', (req, res) => {
+    const { deviceId } = req.params;
+    if (!DEVICE_ID_RE.test(deviceId)) return res.status(400).json({ error: 'invalid device id' });
+    semanticMemory.clearMemories(deviceId);
+    res.json({ cleared: true });
+});
+
 // ── Push notification broadcast (SSE) ────────────────────────────────────────
 
 const pushClients = new Set();
@@ -1342,8 +1360,10 @@ app.get('/api/health', async (req, res) => {
     res.json(status);
 });
 
+app.post('/api/plan', (req, res) => planEndpoint(req, res, OLLAMA_URL, DEFAULT_MODEL, buildSystemPrompt));
+
 app.post('/api/chat', async (req, res) => {
-    const { message, model, provider, history = [] } = req.body;
+    const { message, model, provider, history = [], deviceId } = req.body;
     if (!message) return res.status(400).json({ error: 'message required' });
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
@@ -1351,19 +1371,65 @@ app.post('/api/chat', async (req, res) => {
     res.setHeader('X-Accel-Buffering', 'no');
     const send   = (data) => res.write(`data: ${JSON.stringify(data)}\n\n`);
     const finish = (meta = {}) => { send({ done: true, ...meta }); res.end(); };
-    const backends     = await fetchBackendStatus();
+
+    const backends      = await fetchBackendStatus();
     const primaryStatus = backends.ursula || backends.protohub || backends.hydi;
-    const systemPrompt = buildSystemPrompt(primaryStatus);
+    let systemPrompt    = buildSystemPrompt(primaryStatus);
     const selectedModel = model || DEFAULT_MODEL;
-    if (provider !== 'lmstudio') {
-        try { await streamOllama(message, selectedModel, systemPrompt, history, send); return finish({ provider: 'ollama' }); }
-        catch (e) { console.log('[Chat] Ollama:', e.message); }
+    const safeDeviceId  = typeof deviceId === 'string' && deviceId.length > 0 ? deviceId : null;
+
+    // ── Semantic memory recall ────────────────────────────────────────────────
+    if (safeDeviceId) {
+        try {
+            const memories = await semanticMemory.recall(safeDeviceId, message, OLLAMA_URL, 4);
+            if (memories.length > 0) {
+                systemPrompt += `\n\nRELEVANT MEMORY (from past sessions):\n${memories.map((m, i) => `${i + 1}. ${m}`).join('\n')}`;
+            }
+        } catch {}
     }
-    try { await streamLMStudio(message, selectedModel, systemPrompt, history, send); return finish({ provider: 'lmstudio' }); }
-    catch (e) { console.log('[Chat] LM Studio:', e.message); }
-    const fallback = buildFallback(message);
-    for (const char of fallback) { send({ t: char }); await new Promise(r => setTimeout(r, 12)); }
-    finish({ provider: 'fallback' });
+
+    // ── Planning mode injection ───────────────────────────────────────────────
+    if (needsPlan(message) && provider !== 'lmstudio') {
+        try {
+            const steps = await generatePlan(message, OLLAMA_URL, selectedModel, systemPrompt.slice(0, 400));
+            if (steps) {
+                const planText = formatPlan(steps);
+                send({ t: planText + '\n\n' });
+                // Append plan context so the follow-up knows the plan exists
+                systemPrompt += `\n\nPLAN GENERATED:\n${steps.map((s, i) => `${i + 1}. ${s}`).join('\n')}\nNow execute step 1 or elaborate as needed.`;
+            }
+        } catch {}
+    }
+
+    // ── Accumulate full response for memory extraction ────────────────────────
+    let fullResponse = '';
+    const sendAndCapture = (data) => { if (data.t) fullResponse += data.t; send(data); };
+
+    let usedProvider = 'fallback';
+    if (provider !== 'lmstudio') {
+        try {
+            await streamOllama(message, selectedModel, systemPrompt, history, sendAndCapture);
+            usedProvider = 'ollama';
+        } catch (e) { console.log('[Chat] Ollama:', e.message); }
+    }
+    if (usedProvider === 'fallback') {
+        try {
+            await streamLMStudio(message, selectedModel, systemPrompt, history, sendAndCapture);
+            usedProvider = 'lmstudio';
+        } catch (e) { console.log('[Chat] LM Studio:', e.message); }
+    }
+    if (usedProvider === 'fallback') {
+        const fallback = buildFallback(message);
+        for (const char of fallback) { send({ t: char }); await new Promise(r => setTimeout(r, 12)); }
+    }
+    finish({ provider: usedProvider });
+
+    // ── Async memory extraction (non-blocking) ────────────────────────────────
+    if (safeDeviceId && fullResponse.length > 60) {
+        setImmediate(() => {
+            semanticMemory.extractAndStore(safeDeviceId, message, fullResponse, OLLAMA_URL, selectedModel).catch(() => {});
+        });
+    }
 });
 
 // ── Streaming ─────────────────────────────────────────────────────────────────

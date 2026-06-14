@@ -233,3 +233,65 @@ This starts a Cloudflare Quick Tunnel — outputs a public `trycloudflare.com` U
 URSULA_URL=https://xxxx.trycloudflare.com
 OLLAMA_URL=https://xxxx.trycloudflare.com/ollama   # if proxied
 ```
+
+---
+
+## Starting Everything at Once
+
+Instead of 3 separate terminal windows for Heidi:
+
+```powershell
+cd C:\Users\Owner\HYDI-System-v2
+node start-all.js
+```
+
+This starts both the Heidi chat server AND the WorkerOrchestrator in one process.
+To skip workers (lighter startup):
+
+```powershell
+node start-all.js --no-workers
+# or
+npm run start:no-workers
+```
+
+---
+
+## Symptom: Semantic memory not working ("no relevant memories recalled")
+
+**Cause A:** Embedding model not available in Ollama.
+
+Semantic memory uses `nomic-embed-text` or `mxbai-embed-large` first. If neither is installed, it falls back to `tinyllama` (less accurate).
+
+```powershell
+ollama pull nomic-embed-text
+```
+
+**Cause B:** Memory file corrupt.
+
+```powershell
+cd C:\Users\Owner\HYDI-System-v2
+del .heidi-memory.json
+```
+
+Server recreates it fresh on next store operation.
+
+---
+
+## Symptom: `/api/plan` returns 503
+
+Ollama is not running or model is not loaded. Start Ollama and verify:
+
+```powershell
+curl http://localhost:11434/api/tags
+```
+
+---
+
+## Symptom: Workers fail to start (`Cannot find module '@supabase/supabase-js'`)
+
+Run `npm install` in the HYDI-System-v2 directory:
+
+```powershell
+cd C:\Users\Owner\HYDI-System-v2
+npm install --legacy-peer-deps
+```
