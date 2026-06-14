@@ -15,6 +15,7 @@ const fs = require('fs');
 
 const semanticMemory = require('./heidi-semantic-memory');
 const { needsPlan, generatePlan, formatPlan, planEndpoint } = require('./heidi-planner');
+const HeidiAgentLoop = require('./heidi-agent-loop');
 
 const PORT = parseInt(process.env.HEIDI_PORT || '3006');
 const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434';
@@ -60,6 +61,16 @@ if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
 } else {
     console.log('ℹ️  Supabase memory: disabled (set SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY)');
 }
+
+// ── Autonomous agent loop ─────────────────────────────────────────────────────
+
+const agentLoop = new HeidiAgentLoop({
+    ollamaUrl:      OLLAMA_URL,
+    bridgeUrl:      URSULA_URL,
+    supabase:       supabaseClient,
+    broadcast:      (event) => broadcastPush(event),
+    buildRegistry:  () => buildRegistry(),
+});
 
 // ── Web Push (VAPID) ──────────────────────────────────────────────────────────
 
@@ -1362,6 +1373,37 @@ app.get('/api/health', async (req, res) => {
 
 app.post('/api/plan', (req, res) => planEndpoint(req, res, OLLAMA_URL, DEFAULT_MODEL, buildSystemPrompt));
 
+// ── Agent loop API ────────────────────────────────────────────────────────────
+
+app.get('/api/agent/status', (req, res) => res.json(agentLoop.getStatus()));
+app.get('/api/agent/log',    (req, res) => res.json({ log: agentLoop.getLog() }));
+app.get('/api/agent/pending',(req, res) => res.json({ pending: agentLoop.getPending() }));
+
+app.post('/api/agent/run', async (req, res) => {
+    try {
+        await agentLoop.runCycle();
+        res.json({ ok: true, status: agentLoop.getStatus() });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.post('/api/agent/authorize/:id', (req, res) => {
+    try {
+        res.json({ ok: true, action: agentLoop.authorize(req.params.id) });
+    } catch (e) {
+        res.status(404).json({ error: e.message });
+    }
+});
+
+app.delete('/api/agent/pending/:id', (req, res) => {
+    try {
+        res.json({ ok: true, action: agentLoop.reject(req.params.id) });
+    } catch (e) {
+        res.status(404).json({ error: e.message });
+    }
+});
+
 app.post('/api/chat', async (req, res) => {
     const { message, model, provider, history = [], deviceId } = req.body;
     if (!message) return res.status(400).json({ error: 'message required' });
@@ -1547,6 +1589,8 @@ server.listen(PORT, '0.0.0.0', async () => {
     watchHydiEvents();
     scheduleDailyBriefing();
     watchBridgeStream();
+    agentLoop.supabase     = supabaseClient;
+    agentLoop.start();
 });
 
 process.on('SIGINT',  () => { console.log('\nShutting down Heidi...'); server.close(() => process.exit(0)); });

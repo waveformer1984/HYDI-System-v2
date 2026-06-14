@@ -57,6 +57,12 @@ STRIPE_SECRET_KEY=...           # server-side only
 - `GET /api/memory/:deviceId/facts` — list recalled semantic-memory facts (see §12)
 - `DELETE /api/memory/:deviceId/facts` — clear semantic-memory facts for a device
 - `POST /api/plan` — standalone multi-step plan generation (see §13)
+- `GET /api/agent/status` — agent loop state (see §14)
+- `GET /api/agent/log` — last 20 cycle entries
+- `GET /api/agent/pending` — pending actions awaiting operator authorization
+- `POST /api/agent/run` — trigger an immediate agent cycle
+- `POST /api/agent/authorize/:id` — authorize a queued action
+- `DELETE /api/agent/pending/:id` — reject a queued action
 - `GET /manifest.json` — PWA manifest
 - `GET /sw.js` — service worker (caching + push handler)
 - `GET /icon.svg` — app icon
@@ -222,49 +228,6 @@ STRIPE_SECRET_KEY=...           # server-side only
 
 ---
 
-<<<<<<< HEAD
-## 11. Unified Service Registry / Health Dashboard
-
-| Field | Value |
-|---|---|
-| **Added** | 2026-06-13 (commit `b84b770`) |
-| **Endpoint** | `GET /api/registry/status` (served by Heidi Mobile, port 3006) |
-| **UI** | Service registry panel embedded in `heidi-mobile-chat.html` QA drawer — 2-column grid of colored cells (ok=green, err=red), auto-fetches on drawer open, refreshes every 30s |
-| **Status** | Active |
-
-**Responsibilities:**
-- Probes 7 components concurrently via `Promise.all`: heidi (self/uptime), ollama (model count), bridge (health endpoint), supabase (push_subscriptions count), forge (latest build via bridge/local), workers (idle+busy from `worker_status` table), push_subs (in-memory device count)
-- `probeService()` wrapper captures `latency_ms` per component and normalizes errors so one failing probe doesn't block the others
-- `escHtml()` sanitizes service detail strings before rendering (XSS protection)
-
-**Maps to:** "HYDI Service Registry v1" spec (registry schema, health states, `/api/system/*` endpoints, health-score formula). The implemented `/api/registry/status` is a first pass covering the "Auto Discovery" + "All services" portions of that spec — `/api/system/restart/:id`, `/api/system/events` (event log → `system_events`), and the full health-score formula (100 minus latency/dependency/restart/unavailable deductions) are not yet implemented.
-
----
-
-## 12. Semantic Memory & Multi-Step Planner
-
-| Field | Value |
-|---|---|
-| **Added** | 2026-06-14 (commit `69e1b14`) |
-| **Files** | `heidi-semantic-memory.js`, `heidi-planner.js`, `setup-semantic-memory.sql` |
-| **Storage** | `.heidi-memory.json` (local, per-device) — Supabase upgrade path via `setup-semantic-memory.sql` |
-| **Status** | Active |
-
-**Semantic memory responsibilities:**
-- Cosine-similarity recall using Ollama `/api/embeddings`
-- `extractAndStore()` runs after each response, auto-pulling notable facts per device
-- Deduplication: skips memories with >0.95 cosine overlap
-- Recalled memories injected into system prompt before each chat turn
-- `GET /api/memory/:deviceId/facts` (list) + `DELETE` (clear)
-
-**Planner responsibilities:**
-- `needsPlan()` detects complex/multi-step intent via regex heuristics
-- `generatePlan()` asks Ollama to decompose a goal into 3–7 ordered steps
-- Plan prepended to streaming response + injected into system-prompt context
-- `POST /api/plan` — standalone plan-only endpoint
-
-**Also in this commit:** vault fix, start-all launcher (not yet documented here in detail — needs follow-up pass).
-=======
 ## 11. Service Registry
 
 | Field | Value |
@@ -321,7 +284,43 @@ Max 500 memories per device. Per-device scope via `deviceId` UUID sent in chat P
 `needsPlan()` uses regex heuristics to detect multi-step intent (keywords: plan, roadmap, set up, build … and, automate, workflow, etc.). When triggered during `/api/chat`, `generatePlan()` asks Ollama to decompose the goal into 3–7 numbered steps, prepends the formatted plan to the streaming response, and injects the step list into the system prompt context for follow-up.
 
 `/api/plan` can also be called directly to get a plan without running the full chat pipeline.
->>>>>>> 5e5d11e (docs: dedupe RISK_REGISTER, document registry + semantic memory + planner in SERVICE_CATALOG)
+
+---
+
+## 14. Autonomous Agent Loop
+
+| Field | Value |
+|---|---|
+| **File** | `heidi-agent-loop.js` |
+| **Class** | `HeidiAgentLoop extends EventEmitter` |
+| **Default interval** | 15 min (`AGENT_LOOP_INTERVAL_MIN`) |
+| **Autonomy level** | `alert_only` (`AGENT_AUTONOMY_LEVEL`) |
+| **Reasoning model** | `llama3.2` (`AGENT_REASONING_MODEL`) |
+| **Status** | Active when `AGENT_LOOP_ENABLED=true` |
+
+**SAFETY INVARIANT:** The loop can never take consequential action autonomously. It can only (a) send a push notification or (b) queue a `pending` action that requires operator `CONFIRM` via `POST /api/agent/authorize/:id`.
+
+**Cycle pipeline:**
+1. `_observe()` — probes service registry, revenue delta (Supabase ledger last 24h vs prior 24h), forge build via bridge
+2. `_reason()` — sends observation summary to Ollama with `format:'json'`, `temperature:0.15`; falls back to `_ruleBasedDecision()` if Ollama is unreachable
+3. `_act()` — dispatches `send_alert` (push) or `queue_revenue_review` (pending auth), never acts beyond that
+
+**Rule-based fallback thresholds:**
+- `send_alert` → any service down (excluding push_subs), forge failure, or revenue drop >20% vs prior day
+- `queue_revenue_review` → revenue delta >$50 vs prior day
+
+**API endpoints (wired into `launch-heidi-mobile.js`):**
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/agent/status` | Current loop state (enabled, interval, cycle count, pending count, next_run) |
+| `GET` | `/api/agent/log` | Last 20 cycle log entries |
+| `GET` | `/api/agent/pending` | All pending actions awaiting authorization |
+| `POST` | `/api/agent/run` | Trigger an immediate cycle |
+| `POST` | `/api/agent/authorize/:id` | Authorize a pending action (sets status→authorized, emits `action_authorized`) |
+| `DELETE` | `/api/agent/pending/:id` | Reject/dismiss a pending action |
+
+**Env vars:** `AGENT_LOOP_ENABLED`, `AGENT_LOOP_INTERVAL_MIN`, `AGENT_AUTONOMY_LEVEL`, `AGENT_REASONING_MODEL`
 
 ---
 
