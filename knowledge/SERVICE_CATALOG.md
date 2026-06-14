@@ -56,7 +56,7 @@ STRIPE_SECRET_KEY=...           # server-side only
 - `GET /api/registry/status` — unified service registry (see §11)
 - `GET /api/memory/:deviceId/facts` — list recalled semantic-memory facts (see §12)
 - `DELETE /api/memory/:deviceId/facts` — clear semantic-memory facts for a device
-- `POST /api/plan` — standalone multi-step plan generation (see §12)
+- `POST /api/plan` — standalone multi-step plan generation (see §13)
 - `GET /manifest.json` — PWA manifest
 - `GET /sw.js` — service worker (caching + push handler)
 - `GET /icon.svg` — app icon
@@ -179,6 +179,8 @@ STRIPE_SECRET_KEY=...           # server-side only
 - `proposals` — pipeline proposals
 - `checkout_sessions` — Stripe checkout records
 - `heidi_chat_sessions` — per-device chat history (device_id, messages, model)
+- `push_subscriptions` — VAPID web push registrations (endpoint, p256dh, auth, active)
+- `worker_status` — heartbeat + status rows written by WorkerOrchestrator workers
 
 ---
 
@@ -220,6 +222,7 @@ STRIPE_SECRET_KEY=...           # server-side only
 
 ---
 
+<<<<<<< HEAD
 ## 11. Unified Service Registry / Health Dashboard
 
 | Field | Value |
@@ -261,6 +264,64 @@ STRIPE_SECRET_KEY=...           # server-side only
 - `POST /api/plan` — standalone plan-only endpoint
 
 **Also in this commit:** vault fix, start-all launcher (not yet documented here in detail — needs follow-up pass).
+=======
+## 11. Service Registry
+
+| Field | Value |
+|---|---|
+| **File** | `launch-heidi-mobile.js` (built-in) |
+| **Endpoint** | `GET /api/registry/status` |
+| **Status** | Active |
+
+Probes all 7 components in parallel and returns structured health data:
+
+| Service key | What it probes | Detail returned |
+|---|---|---|
+| `heidi` | self | uptime string |
+| `ollama` | `/api/tags` | model count |
+| `bridge` | `${URSULA_URL}/health` | status string |
+| `supabase` | `push_subscriptions` count query | active sub count |
+| `forge` | bridge `/api/builds` or local `build_registry.json` | latest build # + status |
+| `workers` | `worker_status` table row count | healthy/total |
+| `push_subs` | in-memory `webPushSubs` Map | device count |
+
+Each entry: `{ ok: bool, latency_ms: number, detail: string }`. The QA drawer in Heidi UI auto-fetches and refreshes every 30 s when open.
+
+**Known gaps vs full HYDI Service Registry spec:** `/api/system/restart/:id`, aggregate health score formula, event log endpoint.
+
+---
+
+## 12. Semantic Memory
+
+| Field | Value |
+|---|---|
+| **File** | `heidi-semantic-memory.js` |
+| **Storage** | `.heidi-memory.json` (local) — Supabase upgrade path: `setup-semantic-memory.sql` |
+| **Embedding model** | `nomic-embed-text` (Ollama) → falls back to `mxbai-embed-large` → `tinyllama` |
+| **Status** | Active — wired into `/api/chat` |
+
+**How it works:**
+1. Before each chat response: embeds the user message and recalls top-4 memories with cosine similarity ≥ 0.72
+2. Recalled facts are injected into the system prompt as "RELEVANT MEMORY" section
+3. After each response: `extractAndStore()` asks Ollama to pull 1–3 notable facts and stores them with embeddings
+4. Deduplication: skips memories with >0.95 cosine overlap to the existing store
+
+Max 500 memories per device. Per-device scope via `deviceId` UUID sent in chat POST body.
+
+---
+
+## 13. Heidi Planner
+
+| Field | Value |
+|---|---|
+| **File** | `heidi-planner.js` |
+| **Endpoint** | `POST /api/plan` body: `{ goal, deviceId }` |
+| **Status** | Active — auto-triggers on complex chat messages |
+
+`needsPlan()` uses regex heuristics to detect multi-step intent (keywords: plan, roadmap, set up, build … and, automate, workflow, etc.). When triggered during `/api/chat`, `generatePlan()` asks Ollama to decompose the goal into 3–7 numbered steps, prepends the formatted plan to the streaming response, and injects the step list into the system prompt context for follow-up.
+
+`/api/plan` can also be called directly to get a plan without running the full chat pipeline.
+>>>>>>> 5e5d11e (docs: dedupe RISK_REGISTER, document registry + semantic memory + planner in SERVICE_CATALOG)
 
 ---
 
