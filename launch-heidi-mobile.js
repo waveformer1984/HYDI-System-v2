@@ -15,12 +15,7 @@ const fs = require('fs');
 
 const semanticMemory = require('./heidi-semantic-memory');
 const { needsPlan, generatePlan, formatPlan, planEndpoint } = require('./heidi-planner');
-<<<<<<< HEAD
 const HeidiAgentLoop = require('./heidi-agent-loop');
-||||||| parent of 98d6e59 (fix: get_build_status three-tier fallback (Bridge -> build_registry.json -> Ursula))
-=======
-const { createAgentLoop } = require('./heidi-agent-loop');
->>>>>>> 98d6e59 (fix: get_build_status three-tier fallback (Bridge -> build_registry.json -> Ursula))
 
 const PORT = parseInt(process.env.HEIDI_PORT || '3006');
 const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434';
@@ -1696,13 +1691,8 @@ server.listen(PORT, '0.0.0.0', async () => {
     watchHydiEvents();
     scheduleDailyBriefing();
     watchBridgeStream();
-<<<<<<< HEAD
     agentLoop.supabase     = supabaseClient;
     agentLoop.start();
-||||||| parent of 98d6e59 (fix: get_build_status three-tier fallback (Bridge -> build_registry.json -> Ursula))
-=======
-    agentLoop.start();
->>>>>>> 98d6e59 (fix: get_build_status three-tier fallback (Bridge -> build_registry.json -> Ursula))
 });
 
 process.on('SIGINT',  () => { console.log('\nShutting down Heidi...'); agentLoop.stop(); server.close(() => process.exit(0)); });
