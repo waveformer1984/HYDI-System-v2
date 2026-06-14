@@ -1054,30 +1054,6 @@ app.get('/api/registry/status', async (req, res) => {
     }
 });
 
-// ── Autonomous agent loop ──────────────────────────────────────────────────
-
-const agentLoop = createAgentLoop({
-    buildRegistry,
-    broadcastPush: (...args) => broadcastPush(...args),
-    supabaseClient,
-    OLLAMA_URL,
-    DEFAULT_MODEL,
-    URSULA_URL,
-});
-
-app.get('/api/agent/status', (req, res) => res.json(agentLoop.getStatus()));
-app.get('/api/agent/log', (req, res) => res.json({ log: agentLoop.getLog(parseInt(req.query.limit) || 20) }));
-app.get('/api/agent/pending', (req, res) => res.json({ pending: agentLoop.getPendingActions() }));
-app.post('/api/agent/run', async (req, res) => {
-    try { res.json(await agentLoop.runCycle()); }
-    catch (e) { res.status(500).json({ error: e.message }); }
-});
-app.post('/api/agent/authorize/:id', (req, res) => {
-    const { decision } = req.body; // 'approve' | 'reject'
-    if (!['approve', 'reject'].includes(decision)) return res.status(400).json({ error: "decision must be 'approve' or 'reject'" });
-    res.json(agentLoop.resolveAction(req.params.id, decision));
-});
-
 app.post('/api/system/action', async (req, res) => {
     const { type, source, payload } = req.body;
     if (!type) return res.status(400).json({ error: 'type required' });
