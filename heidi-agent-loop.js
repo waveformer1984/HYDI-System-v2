@@ -150,6 +150,7 @@ Available actions:
   no_action          — everything normal, no intervention
   send_alert         — push a notification to the operator
   queue_revenue_review — queue an action for operator authorization
+  re_probe           — schedule an immediate re-check of a specific service (safe, supervised mode only)
 
 Decision rules:
   - Prefer no_action when uncertain or all metrics normal
@@ -190,6 +191,13 @@ Reply ONLY with valid JSON, no prose:
                              (obs.revenue.delta / obs.revenue.prior_24h) < -0.2;
         const revOpportunity = obs.revenue && obs.revenue.delta > 50;
 
+        if (downSvcs.length && this.autonomyLevel === 'supervised') {
+            return {
+                action: 're_probe', needs_attention: true,
+                summary: `Supervised re-probe: ${downSvcs.join(', ')} reported down`,
+                alert_title: '', alert_body: ''
+            };
+        }
         if (downSvcs.length || forgeFailed || revDrop) {
             return {
                 action: 'send_alert', needs_attention: true,
@@ -239,6 +247,14 @@ Reply ONLY with valid JSON, no prose:
             return;
         }
         this._alertCooldowns.set(key, Date.now());
+
+        if (decision.action === 're_probe') {
+            console.log(`[🤖 AgentLoop] Supervised re-probe triggered (autonomy=supervised)`);
+            this.emit('service_reprobe', { obs, decision, ts: Date.now() });
+            this._push({ type: 'hydi_activity', level: 'info',
+                title: 'Auto Re-probe', body: decision.summary,
+                payload: { source: 'agent_loop', auto_executed: true }, ts: Date.now() });
+        }
 
         if (decision.action === 'send_alert') {
             this._push({ type: 'hydi_activity', level: 'warning',

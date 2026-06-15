@@ -17,6 +17,23 @@ const semanticMemory = require('./heidi-semantic-memory');
 const { needsPlan, generatePlan, formatPlan, planEndpoint } = require('./heidi-planner');
 const HeidiAgentLoop = require('./heidi-agent-loop');
 
+function routeModel(message, defaultModel) {
+    const text = (message || '').toLowerCase();
+    const codePatterns = ['code', 'function', 'class', 'javascript', 'python', 'typescript',
+        'debug', 'syntax', 'bug', 'error', 'implement', 'write a', 'fix this', 'refactor',
+        'script', 'snippet'];
+    if (codePatterns.some(p => text.includes(p)) || message.includes('`')) {
+        return 'qwen2.5-coder:1.5b';
+    }
+    const planPatterns = ['plan', 'roadmap', 'strategy', 'analyze', 'compare', 'should i',
+        'pros and cons', 'recommend', 'best way', 'how do i build', 'architecture', 'design',
+        'automate', 'workflow', 'explain why'];
+    if (planPatterns.some(p => text.includes(p))) {
+        return 'llama3.2:latest';
+    }
+    return defaultModel;
+}
+
 const PORT = parseInt(process.env.HEIDI_PORT || '3006');
 const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434';
 const LM_STUDIO_URL = process.env.LM_STUDIO_URL || 'http://localhost:1234';
@@ -1493,7 +1510,8 @@ app.post('/api/chat', async (req, res) => {
     const backends      = await fetchBackendStatus();
     const primaryStatus = backends.ursula || backends.protohub || backends.hydi;
     let systemPrompt    = buildSystemPrompt(primaryStatus);
-    const selectedModel = model || DEFAULT_MODEL;
+    const selectedModel = model || routeModel(message, DEFAULT_MODEL);
+    if (!model) console.log(`[Chat] Auto-routed to model: ${selectedModel}`);
     const safeDeviceId  = typeof deviceId === 'string' && deviceId.length > 0 ? deviceId : null;
 
     // ── Semantic memory recall ────────────────────────────────────────────────
