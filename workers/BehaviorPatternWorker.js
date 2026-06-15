@@ -1,55 +1,114 @@
-            // Find best and worst performing job types
-            let bestType = null;
-            let worstType = null;
-            let bestRate = 0;
-            let worstRate = 1;
-            
-            for (const type in performanceByType) {
-                const rate = performanceByType[type].successRate;
-                if (rate > bestRate) {
-                    bestRate = rate;
-                    bestType = type;
-                }
-                if (rate < worstRate) {
-                    worstRate = rate;
-                    worstType = type;
-                }
-            }
-            
-            if (bestType && worstType && bestType !== worstType) {
-                insights.push(`Best performing job type: ${bestType} (${(bestRate*100).toFixed(1)}% success rate)`);
-                insights.push(`Worst performing job type: ${worstType} (${(worstRate*100).toFixed(1)}% success rate)`);
-            }
-            
-            return insights;
-        };
+/**
+ * Behavior Pattern Worker
+ * Analyzes customer and system behavior patterns to surface insights and trends.
+ *
+ * Queue-driven
+ * Pattern recognition
+ * Trend analysis
+ */
 
-        this.analyzeServiceUsagePatterns = async function(time_period, filters) {
-            // Analyze service usage patterns
-            let startDate;
-            if (time_period === 'today') {
-                startDate = new Date();
-                startDate.setHours(0, 0, 0, 0);
-            } else if (time_period === 'week') {
-                startDate = new Date();
-                startDate.setDate(startDate.getDate() - 7);
-            } else if (time_period === 'month') {
-                startDate = new Date();
-                startDate.setMonth(startDate.getMonth() - 1);
-            } else {
-                // Default to last 30 days
-                startDate = new Date();
-                startDate.setDate(startDate.getDate() - 30);
+'use strict';
+
+const QueueManager = require('./QueueManager');
+const { createClient } = require('@supabase/supabase-js');
+
+class BehaviorPatternWorker {
+    constructor(workerId = null) {
+        this.workerId = workerId || `behavior-pattern-worker-${Date.now()}`;
+        this.queue = new QueueManager();
+        this.supabase = null;
+        this.running = false;
+        this.pollInterval = 5000; // 5 seconds
+        this.pollTimer = null;
+    }
+
+    async initialize() {
+        const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+        const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
+        if (!supabaseUrl || !supabaseKey) throw new Error('Missing Supabase credentials');
+        this.supabase = createClient(supabaseUrl, supabaseKey);
+        await this.queue.registerWorker('behavior_pattern', this.workerId);
+        await this.queue.updateHeartbeat('idle');
+        console.log(`[📊 Behavior Pattern Worker] Initialized: ${this.workerId}`);
+    }
+
+    async start() {
+        if (this.running) {
+            console.log('[📊 Behavior Pattern Worker] Already running');
+            return;
+        }
+        await this.initialize();
+        this.running = true;
+        this.queue.startHeartbeat();
+        console.log('[📊 Behavior Pattern Worker] Starting behavior pattern analysis...');
+        this.poll();
+    }
+
+    async stop() {
+        this.running = false;
+        if (this.pollTimer) clearTimeout(this.pollTimer);
+        await this.queue.shutdown();
+        console.log('[📊 Behavior Pattern Worker] Stopped');
+    }
+
+    poll() {
+        if (!this.running) return;
+        this.processNextTask()
+            .catch(err => {
+                console.error('[📊 Behavior Pattern Worker] Error in poll:', err);
+            })
+            .finally(() => {
+                this.pollTimer = setTimeout(() => this.poll(), this.pollInterval);
+            });
+    }
+
+    async processNextTask() {
+        const taskId = await this.queue.dequeue('behavior_pattern');
+        if (!taskId) return;
+        try {
+            const task = await this.queue.getTask(taskId);
+            if (!task) {
+                console.error(`[📊 Behavior Pattern Worker] Task not found: ${taskId}`);
+                return;
             }
-            
-            const { data: serviceUsage } = await this.supabase
-                .from('service_usage_logs')
-                .select('*')
-                .gte('timestamp', startDate.toISOString());
-            
-            if (filters && filters.service_name) {
-                // Filter by service name if specified
-                serviceUsage.filter = su => su.service_name === filters.service_name;
-            }
-            
-            #analyze-service-usage-statistics
+            console.log(`[📊 Behavior Pattern Worker] Processing task: ${task.payload.event_type}`);
+            // Store behavior event for pattern analysis
+            await this.supabase
+                .from('behavior_events')
+                .insert({
+                    event_type: task.payload.event_type,
+                    data: task.payload.data,
+                    recorded_at: new Date(),
+                    worker_id: this.workerId
+                });
+            await this.queue.completeTask(taskId, true);
+        } catch (err) {
+            console.error(`[📊 Behavior Pattern Worker] Task failed: ${taskId}`, err);
+            await this.queue.completeTask(taskId, false, err.message);
+        }
+    }
+}
+
+// Run worker if called directly
+if (require.main === module) {
+    const worker = new BehaviorPatternWorker();
+
+    process.on('SIGINT', async () => {
+        console.log('\n[📊 Behavior Pattern Worker] Shutting down...');
+        await worker.stop();
+        process.exit(0);
+    });
+
+    process.on('SIGTERM', async () => {
+        console.log('\n[📊 Behavior Pattern Worker] Shutting down...');
+        await worker.stop();
+        process.exit(0);
+    });
+
+    worker.start().catch(err => {
+        console.error('[📊 Behavior Pattern Worker] Failed to start:', err);
+        process.exit(1);
+    });
+}
+
+module.exports = BehaviorPatternWorker;

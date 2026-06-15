@@ -1,3 +1,144 @@
+/**
+ * Anomaly Detection Worker
+ * Monitors system metrics, job performance, and behavior patterns to detect anomalies.
+ *
+ * Queue-driven
+ * Threshold-based alerting
+ * Auto-recovery triggers
+ */
+
+'use strict';
+
+const QueueManager = require('./QueueManager');
+const { createClient } = require('@supabase/supabase-js');
+
+class AnomalyDetectionWorker {
+    constructor(workerId = null) {
+        this.workerId = workerId || `anomaly-detection-worker-${Date.now()}`;
+        this.queue = new QueueManager();
+        this.supabase = null;
+        this.running = false;
+        this.pollInterval = 5000; // 5 seconds
+        this.pollTimer = null;
+
+        this.anomalyThresholds = {
+            stuck_queue: {
+                time_threshold_minutes: 10,
+                queue_length_threshold: 50
+            },
+            failed_job_spike: {
+                failure_rate_threshold: 0.3,
+                time_window_minutes: 15,
+                min_samples: 5
+            },
+            resource_exhaustion: {
+                memory_threshold_mb: 1024,
+                cpu_threshold_percent: 90,
+                disk_threshold_percent: 85
+            },
+            slow_response: {
+                threshold_ms: 3000,
+                consecutive_samples: 3
+            },
+            unusual_pattern: {
+                deviation_threshold: 2.5
+            }
+        };
+
+        this.initialize = async function() {
+            const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+            const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
+            if (!supabaseUrl || !supabaseKey) throw new Error('Missing Supabase credentials');
+            this.supabase = createClient(supabaseUrl, supabaseKey);
+            await this.queue.registerWorker('anomaly_detection', this.workerId);
+            await this.queue.updateHeartbeat('idle');
+            console.log(`[⚠️ Anomaly Detection Worker] Initialized: ${this.workerId}`);
+        };
+
+        this.start = async function() {
+            if (this.running) {
+                console.log('[⚠️ Anomaly Detection Worker] Already running');
+                return;
+            }
+            await this.initialize();
+            this.running = true;
+            this.queue.startHeartbeat();
+            console.log('[⚠️ Anomaly Detection Worker] Starting anomaly detection...');
+            this.poll();
+        };
+
+        this.stop = async function() {
+            this.running = false;
+            if (this.pollTimer) clearTimeout(this.pollTimer);
+            await this.queue.shutdown();
+            console.log('[⚠️ Anomaly Detection Worker] Stopped');
+        };
+
+        this.poll = function() {
+            if (!this.running) return;
+            this.processNextTask()
+                .catch(err => {
+                    console.error('[⚠️ Anomaly Detection Worker] Error in poll:', err);
+                })
+                .finally(() => {
+                    this.pollTimer = setTimeout(() => this.poll(), this.pollInterval);
+                });
+        };
+
+        this.processNextTask = async function() {
+            const taskId = await this.queue.dequeue('anomaly_detection');
+            if (!taskId) return;
+            try {
+                const task = await this.queue.getTask(taskId);
+                if (!task) {
+                    console.error(`[⚠️ Anomaly Detection Worker] Task not found: ${taskId}`);
+                    return;
+                }
+                console.log(`[⚠️ Anomaly Detection Worker] Processing task: ${task.payload.event_type}`);
+                switch (task.payload.event_type) {
+                    case 'queue.metrics':
+                        await this.checkQueueAnomalies(task.payload);
+                        break;
+                    case 'job.completed':
+                    case 'job.failed':
+                        await this.checkJobAnomalies(task.payload);
+                        break;
+                    case 'system.metrics':
+                        await this.checkSystemAnomalies(task.payload);
+                        break;
+                    case 'api.response':
+                        await this.checkResponseTimeAnomalies(task.payload);
+                        break;
+                    case 'behavior.update':
+                        await this.checkBehaviorAnomalies(task.payload);
+                        break;
+                    default:
+                        console.log(`[⚠️ Anomaly Detection Worker] Unhandled event type: ${task.payload.event_type}`);
+                }
+                await this.queue.completeTask(taskId, true);
+            } catch (err) {
+                console.error(`[⚠️ Anomaly Detection Worker] Task failed: ${taskId}`, err);
+                await this.queue.completeTask(taskId, false, err.message);
+            }
+        };
+
+        this.checkQueueAnomalies = async function(payload) {
+            const { queue_name, pending_jobs, oldest_job_age_minutes } = payload.data;
+
+            console.log(`[⚠️ Anomaly] Checking queue anomalies for ${queue_name}`);
+
+            // Check for stuck queue (jobs not being processed)
+            if (oldest_job_age_minutes > this.anomalyThresholds.stuck_queue.time_threshold_minutes) {
+                await this.triggerAnomalyAlert('stuck_queue', {
+                    queue_name,
+                    oldest_job_age_minutes,
+                    threshold_minutes: this.anomalyThresholds.stuck_queue.time_threshold_minutes,
+                    suggested_action: 'check_worker_health_or_restart_workers'
+                });
+
+                console.log(`[⚠️ Anomaly] Stuck queue detected: ${queue_name} has job ${oldest_job_age_minutes} minutes old`);
+            }
+
                 // Check for queue length anomaly (backup indicator)
                 if (pending_jobs > this.anomalyThresholds.stuck_queue.queue_length_threshold) {
                     await this.triggerAnomalyAlert('queue_backup', {
@@ -16,7 +157,7 @@
             
             console.log(`[⚠️ Anomaly] Checking job anomalies for ${job_type} job ${job_id}`);
             
-            #check-failed-job-patterns
+            // #check-failed-job-patterns
             // Check for failed job spikes
             const { data: recentJobs } = await this.supabase
                 .from('job_performance')
@@ -48,7 +189,7 @@
             
             console.log(`[⚠️ Anomaly] Checking system resource anomalies`);
             
-            #check-resource-exhaustion
+            // #check-resource-exhaustion
             // Check for resource exhaustion
             const anomalies = [];
             
@@ -94,7 +235,7 @@
             
             console.log(`[⚠️ Anomaly] Checking response time anomalies for ${endpoint}`);
             
-            #check-slow-response-pattern
+            // #check-slow-response-pattern
             // Check for slow response times
             const { data: recentResponses } = await this.supabase
                 .from('response_times')
@@ -126,7 +267,7 @@
             
             console.log(`[⚠️ Anomaly] Checking behavior anomalies: ${behavior_type}`);
             
-            #check-unusual-patterns
+            // #check-unusual-patterns
             // Check for unusual patterns using statistical deviation
             if (baseline !== undefined && deviation !== undefined) {
                 const threshold = this.anomalyThresholds.unusual_pattern.deviation_threshold;
@@ -154,13 +295,13 @@
                 detected_by: this.workerId
             };
             
-            #store-anomaly-and-emit-alert
+            // #store-anomaly-and-emit-alert
             // Store anomaly
             await this.supabase
                 .from('anomalies_detected')
                 .insert(anomaly);
             
-            #emit-anomaly-event
+            // #emit-anomaly-event
             // Emit event to notify other systems (including notification worker)
             const queue = new QueueManager();
             await queue.initialize();
@@ -170,7 +311,7 @@
                 data: anomaly
             }, 10); // Highest priority for anomalies
             
-            #trigger-auto-recovery-if-applicable
+            // #trigger-auto-recovery-if-applicable
             // Trigger auto-recovery flows if applicable
             await this.triggerAutoRecovery(anomalyType, details);
             
@@ -180,7 +321,7 @@
         this.triggerAutoRecovery = async function(anomalyType, details) {
             console.log(`[⚠️ Anomaly] Checking auto-recovery options for ${anomalyType}`);
             
-            #auto-recovery-strategies
+            // #auto-recovery-strategies
             switch (anomalyType) {
                 case 'stuck_queue':
                     // For stuck queues, try to restart workers or increase processing
@@ -207,12 +348,12 @@
             
             console.log(`[⚠️ Anomaly] Attempting queue recovery for ${queue_name}`);
             
-            #attempt-restarting-workers-for-queue
+            // #attempt-restarting-workers-for-queue
             // Try to restart workers for this queue
             const queue = new QueueManager();
             await queue.initialize();
             
-            #get-worker-count-for-queue-and-restart-them
+            // #get-worker-count-for-queue-and-restart-them
             // This would integrate with the orchestrator to restart workers
             // For now, we'll just log the intention
             console.log(`[⚠️ Anomaly] Would restart workers for queue ${queue_name} (integration with orchestrator needed)`);
@@ -223,7 +364,7 @@
             
             console.log(`[⚠️ Anomaly] Attempting job recovery for ${job_type}`);
             
-            #attempt-dependency-check-or-rollback
+            // #attempt-dependency-check-or-rollback
             // This would check dependencies or suggest rollback
             console.log(`[⚠️ Anomaly] Would check dependencies for job type ${job_type} (integration needed)`);
         };
@@ -231,12 +372,12 @@
         this.attemptResourceRecovery = async function(details) {
             console.log(`[⚠️ Anomaly] Attempting resource recovery`);
             
-            #attempt-cleanup-or-scaling
-            #attempt-garbage-collection-or-cache-clearing
+            // #attempt-cleanup-or-scaling
+            // #attempt-garbage-collection-or-cache-clearing
             console.log(`[⚠️ Anomaly] Would attempt resource cleanup or scaling (integration needed)`);
         };
 
-        #helper-methods
+        // #helper-methods
         this.getQueueStatus = async function(queueName) {
             const queue = new QueueManager();
             await queue.initialize();

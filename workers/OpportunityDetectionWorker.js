@@ -1,3 +1,124 @@
+/**
+ * Opportunity Detection Worker
+ * Analyzes customer behavior to identify upsell, cross-sell, and engagement opportunities.
+ *
+ * Queue-driven
+ * Pattern-based opportunity detection
+ * Event-driven opportunity emission
+ */
+
+'use strict';
+
+const QueueManager = require('./QueueManager');
+const { createClient } = require('@supabase/supabase-js');
+
+class OpportunityDetectionWorker {
+    constructor(workerId = null) {
+        this.workerId = workerId || `opportunity-detection-worker-${Date.now()}`;
+        this.queue = new QueueManager();
+        this.supabase = null;
+        this.running = false;
+        this.pollInterval = 5000; // 5 seconds
+        this.pollTimer = null;
+
+        this.opportunityPatterns = {
+            high_frequency_usage: {
+                threshold: 10,           // 10 uses
+                window_minutes: 60       // in 60 minutes
+            },
+            repeated_feature_request: {
+                threshold: 3,            // 3 requests
+                window_hours: 24         // in 24 hours
+            },
+            abandoned_cart: {
+                threshold: 100           // $100 cart value
+            },
+            usage_spike: {
+                threshold: 3.0           // 3x normal usage
+            }
+        };
+
+        this.initialize = async function() {
+            const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+            const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
+            if (!supabaseUrl || !supabaseKey) throw new Error('Missing Supabase credentials');
+            this.supabase = createClient(supabaseUrl, supabaseKey);
+            await this.queue.registerWorker('opportunity_detection', this.workerId);
+            await this.queue.updateHeartbeat('idle');
+            console.log(`[🔍 Opportunity Detection Worker] Initialized: ${this.workerId}`);
+        };
+
+        this.start = async function() {
+            if (this.running) {
+                console.log('[🔍 Opportunity Detection Worker] Already running');
+                return;
+            }
+            await this.initialize();
+            this.running = true;
+            this.queue.startHeartbeat();
+            console.log('[🔍 Opportunity Detection Worker] Starting opportunity detection...');
+            this.poll();
+        };
+
+        this.stop = async function() {
+            this.running = false;
+            if (this.pollTimer) clearTimeout(this.pollTimer);
+            await this.queue.shutdown();
+            console.log('[🔍 Opportunity Detection Worker] Stopped');
+        };
+
+        this.poll = function() {
+            if (!this.running) return;
+            this.processNextTask()
+                .catch(err => {
+                    console.error('[🔍 Opportunity Detection Worker] Error in poll:', err);
+                })
+                .finally(() => {
+                    this.pollTimer = setTimeout(() => this.poll(), this.pollInterval);
+                });
+        };
+
+        this.processNextTask = async function() {
+            const taskId = await this.queue.dequeue('opportunity_detection');
+            if (!taskId) return;
+            try {
+                const task = await this.queue.getTask(taskId);
+                if (!task) {
+                    console.error(`[🔍 Opportunity Detection Worker] Task not found: ${taskId}`);
+                    return;
+                }
+                console.log(`[🔍 Opportunity Detection Worker] Processing task: ${task.payload.event_type}`);
+                switch (task.payload.event_type) {
+                    case 'service.usage':
+                        await this.analyzeUsagePatterns(task.payload);
+                        break;
+                    case 'feature.request':
+                        await this.analyzeFeatureRequests(task.payload);
+                        break;
+                    case 'cart.abandoned':
+                        await this.analyzeAbandonedCart(task.payload);
+                        break;
+                    case 'service.completed':
+                        await this.analyzeServiceCompletion(task.payload);
+                        break;
+                    case 'behavior.update':
+                        await this.analyzeUserBehavior(task.payload);
+                        break;
+                    default:
+                        console.log(`[🔍 Opportunity Detection Worker] Unhandled event type: ${task.payload.event_type}`);
+                }
+                await this.queue.completeTask(taskId, true);
+            } catch (err) {
+                console.error(`[🔍 Opportunity Detection Worker] Task failed: ${taskId}`, err);
+                await this.queue.completeTask(taskId, false, err.message);
+            }
+        };
+
+        this.analyzeUsagePatterns = async function(payload) {
+            const { customer_email, service_name, timestamp } = payload.data;
+
+            console.log(`[🔍 Opportunity] Analyzing usage patterns for ${customer_email} on ${service_name}`);
+
             // Analyze high frequency usage
             const { data: recentUsage } = await this.supabase
                 .from('service_usage_logs')
@@ -190,7 +311,7 @@
                 .from('opportunities_detected')
                 .insert(opportunity);
             
-            #emit-opportunity-event
+            // #emit-opportunity-event
             // Emit event to notify other systems
             const queue = new QueueManager();
             await queue.initialize();
@@ -203,7 +324,7 @@
             console.log(`[🔍 Opportunity] Emitted ${opportunityType} opportunity for ${customer_email}`);
         };
 
-        #helper-methods-for-patterns
+        // #helper-methods-for-patterns
         this.getOptimalLevel = function(itemType) {
             // Define optimal stock levels for different item types
             const optimalLevels = {

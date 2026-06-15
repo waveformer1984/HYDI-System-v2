@@ -1,3 +1,140 @@
+/**
+ * Notification Worker
+ * Handles sending notifications via multiple channels: realtime, Discord, webhooks, email, and UI.
+ *
+ * Queue-driven
+ * Multi-channel support
+ * Notification logging and summary generation
+ */
+
+'use strict';
+
+const QueueManager = require('./QueueManager');
+const { createClient } = require('@supabase/supabase-js');
+
+class NotificationWorker {
+    constructor(workerId = null) {
+        this.workerId = workerId || `notification-worker-${Date.now()}`;
+        this.queue = new QueueManager();
+        this.supabase = null;
+        this.running = false;
+        this.pollInterval = 2000; // 2 seconds
+        this.pollTimer = null;
+
+        this.notificationChannels = {
+            realtime: {
+                enabled: true
+            },
+            discord: {
+                enabled: !!(process.env.DISCORD_WEBHOOK_URL),
+                webhook_url: process.env.DISCORD_WEBHOOK_URL || '',
+                username: 'ProtoForge',
+                avatar_url: null
+            },
+            webhooks: {
+                enabled: false,
+                endpoints: []
+            },
+            email: {
+                enabled: !!(process.env.SMTP_HOST),
+                host: process.env.SMTP_HOST || 'localhost',
+                port: parseInt(process.env.SMTP_PORT || '587'),
+                user: process.env.SMTP_USER || '',
+                pass: process.env.SMTP_PASS || '',
+                from: process.env.SMTP_FROM || 'noreply@theforge.local'
+            },
+            ui: {
+                enabled: true,
+                retention_hours: 72
+            }
+        };
+
+        this.initialize = async function() {
+            const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+            const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
+            if (!supabaseUrl || !supabaseKey) throw new Error('Missing Supabase credentials');
+            this.supabase = createClient(supabaseUrl, supabaseKey);
+            await this.queue.registerWorker('notification', this.workerId);
+            await this.queue.updateHeartbeat('idle');
+            console.log(`[📣 Notification Worker] Initialized: ${this.workerId}`);
+        };
+
+        this.start = async function() {
+            if (this.running) {
+                console.log('[📣 Notification Worker] Already running');
+                return;
+            }
+            await this.initialize();
+            this.running = true;
+            this.queue.startHeartbeat();
+            console.log('[📣 Notification Worker] Starting to process notifications...');
+            this.poll();
+        };
+
+        this.stop = async function() {
+            this.running = false;
+            if (this.pollTimer) clearTimeout(this.pollTimer);
+            await this.queue.shutdown();
+            console.log('[📣 Notification Worker] Stopped');
+        };
+
+        this.poll = function() {
+            if (!this.running) return;
+            this.processNextTask()
+                .catch(err => {
+                    console.error('[📣 Notification Worker] Error in poll:', err);
+                })
+                .finally(() => {
+                    this.pollTimer = setTimeout(() => this.poll(), this.pollInterval);
+                });
+        };
+
+        this.processNextTask = async function() {
+            const taskId = await this.queue.dequeue('notification');
+            if (!taskId) return;
+            try {
+                const task = await this.queue.getTask(taskId);
+                if (!task) {
+                    console.error(`[📣 Notification Worker] Task not found: ${taskId}`);
+                    return;
+                }
+                console.log(`[📣 Notification Worker] Processing task: ${task.payload.event_type}`);
+                switch (task.payload.event_type) {
+                    case 'notification.send':
+                        await this.sendNotification(task.payload);
+                        break;
+                    case 'notification.summary':
+                        await this.generateNotificationSummary(task.payload.data.summary_type, task.payload.data.time_period);
+                        break;
+                    default:
+                        console.log(`[📣 Notification Worker] Unhandled event type: ${task.payload.event_type}`);
+                }
+                await this.queue.completeTask(taskId, true);
+            } catch (err) {
+                console.error(`[📣 Notification Worker] Task failed: ${taskId}`, err);
+                await this.queue.completeTask(taskId, false, err.message);
+            }
+        };
+
+        this.sendNotification = async function(payload) {
+            const notificationData = payload.data;
+            const { recipient, template, priority } = notificationData;
+            console.log(`[📣 Notification] Sending notification to ${recipient} via template ${template}`);
+            const channels = ['realtime', 'ui'];
+            if (priority === 'high' || priority >= 8) {
+                channels.push('discord');
+                channels.push('email');
+            }
+            for (const channel of channels) {
+                try {
+                    await this.sendViaChannel(channel, notificationData);
+                } catch (err) {
+                    console.error(`[📣 Notification] Failed to send via ${channel}:`, err.message);
+                    await this.logNotificationFailure(recipient, template, channel, err.message);
+                }
+            }
+        };
+
         this.sendViaChannel = async function(channel, notificationData) {
             switch (channel) {
                 case 'realtime':
