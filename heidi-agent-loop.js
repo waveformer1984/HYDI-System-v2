@@ -35,6 +35,10 @@ class HeidiAgentLoop extends EventEmitter {
         // Alert suppression: same alert key can only fire once per window
         this._alertCooldowns    = new Map();
         this._alertCooldownMs   = (parseInt(process.env.AGENT_ALERT_COOLDOWN_MIN) || 240) * 60000;
+
+        // World model: causal rules inferred from observation history
+        this.correlationRules   = [];
+        this.worldModelTs       = null;
     }
 
     // ── Lifecycle ──────────────────────────────────────────────────────────────
@@ -65,6 +69,7 @@ class HeidiAgentLoop extends EventEmitter {
             const obs      = await this._observe();
             const decision = await this._reason(obs);
             await this._act(decision, obs);
+            this._persistObservation(obs, decision).catch(() => {});
 
             this.cycleCount++;
             this.lastRun = new Date().toISOString();
@@ -78,6 +83,11 @@ class HeidiAgentLoop extends EventEmitter {
             this.log.unshift(entry);
             if (this.log.length > 50) this.log.pop();
             console.log(`[🤖 AgentLoop] #${this.cycleCount} (${Date.now() - t0}ms) → ${decision.action}: ${decision.summary}`);
+
+            // Rebuild world model every 20 cycles once we have enough history
+            if (this.cycleCount >= 30 && this.cycleCount % 20 === 0) {
+                this._updateWorldModel().catch(() => {});
+            }
         } catch (e) {
             console.error('[🤖 AgentLoop] Cycle error:', e.message);
         } finally {
@@ -140,11 +150,15 @@ class HeidiAgentLoop extends EventEmitter {
     // ── 2. REASON ──────────────────────────────────────────────────────────────
 
     async _reason(obs) {
+        const worldContext = this.correlationRules.length
+            ? `\nWORLD MODEL (learned from ${this.cycleCount} observation cycles):\n${this.correlationRules.map(r => `  - ${r}`).join('\n')}`
+            : '';
+
         const prompt =
 `You are the ProtoForge autonomous decision agent. Assess observations and decide if action is needed.
 
 OBSERVATIONS: ${obs.summary}
-AUTONOMY LEVEL: ${this.autonomyLevel}
+AUTONOMY LEVEL: ${this.autonomyLevel}${worldContext}
 
 Available actions:
   no_action            — everything normal, no intervention
@@ -309,6 +323,104 @@ Reply ONLY with valid JSON, no prose:
         if (this._broadcast) this._broadcast(event);
     }
 
+    // ── 4. WORLD MODEL — persist observations + infer causal rules ─────────────
+
+    async _persistObservation(obs, decision) {
+        if (!this.supabase) return;
+        const downSvcs = obs.services
+            ? Object.entries(obs.services.services || {})
+                .filter(([k, v]) => !v.ok && k !== 'push_subs').map(([k]) => k)
+            : [];
+        await this.supabase.from('heidi_observations').insert({
+            cycle:           this.cycleCount,
+            ts:              obs.ts,
+            forge_status:    obs.forge  ? obs.forge.status          : null,
+            forge_build:     obs.forge  ? String(obs.forge.build)   : null,
+            services_down:   downSvcs,
+            revenue_24h:     obs.revenue ? obs.revenue.recent_24h   : null,
+            revenue_delta:   obs.revenue ? obs.revenue.delta        : null,
+            decision_action: decision.action,
+            decision_summary: decision.summary
+        });
+    }
+
+    async _updateWorldModel() {
+        if (!this.supabase) return;
+        const { data: rows, error } = await this.supabase
+            .from('heidi_observations')
+            .select('ts, forge_status, services_down, revenue_24h, revenue_delta')
+            .order('ts', { ascending: true })
+            .limit(200);
+
+        if (error || !rows || rows.length < 30) return;
+
+        const rules = [];
+
+        // Rule 1: forge failure → revenue delta 24h later
+        const forgeFailRows = rows.filter(r =>
+            r.forge_status && ['failure', 'error', 'failed'].includes(r.forge_status));
+        if (forgeFailRows.length >= 3) {
+            const impacts = forgeFailRows.map(fo => {
+                const foTs = new Date(fo.ts).getTime();
+                const later = rows.find(r => {
+                    const diff = new Date(r.ts).getTime() - foTs;
+                    return diff > 20 * 3600000 && diff < 28 * 3600000 && r.revenue_delta != null;
+                });
+                return later ? later.revenue_delta : null;
+            }).filter(v => v != null);
+
+            if (impacts.length >= 2) {
+                const avg = impacts.reduce((a, b) => a + b, 0) / impacts.length;
+                if (Math.abs(avg) > 5) {
+                    rules.push(
+                        `Forge failures correlate with ${avg >= 0 ? '+' : ''}$${avg.toFixed(2)} avg revenue delta 24h later` +
+                        ` (${impacts.length} data points)`
+                    );
+                }
+            }
+        }
+
+        // Rule 2: revenue trend across recent observations
+        const revRows = rows.filter(r => r.revenue_delta != null).slice(-20);
+        if (revRows.length >= 5) {
+            const avg = revRows.reduce((a, r) => a + r.revenue_delta, 0) / revRows.length;
+            const trend = avg > 10 ? 'upward' : avg < -10 ? 'downward' : null;
+            if (trend) {
+                rules.push(
+                    `Revenue trend is ${trend}: avg 24h delta $${avg.toFixed(2)} over last ${revRows.length} observations`
+                );
+            }
+        }
+
+        // Rule 3: chronically unreliable services (down >30 % of cycles)
+        const svcRows = rows.filter(r => Array.isArray(r.services_down));
+        if (svcRows.length >= 10) {
+            const counts = {};
+            svcRows.forEach(r => r.services_down.forEach(s => { counts[s] = (counts[s] || 0) + 1; }));
+            const unreliable = Object.entries(counts)
+                .filter(([, c]) => c / svcRows.length > 0.3)
+                .map(([s, c]) => `${s} (${Math.round(c / svcRows.length * 100)}% downtime)`);
+            if (unreliable.length) {
+                rules.push(`Chronically unreliable services: ${unreliable.join(', ')}`);
+            }
+        }
+
+        this.correlationRules = rules;
+        this.worldModelTs     = new Date().toISOString();
+
+        if (rules.length) {
+            console.log(`[🤖 AgentLoop] World model updated (${rules.length} rule${rules.length > 1 ? 's' : ''}): ${rules[0].slice(0, 80)}…`);
+            // Persist rules as high-importance world_model memories
+            for (const rule of rules) {
+                const memId = `wm_${Buffer.from(rule.slice(0, 60)).toString('base64').replace(/[^a-z0-9]/gi, '').slice(0, 32)}`;
+                await this.supabase.from('heidi_memories').upsert({
+                    id: memId, device_id: 'agent_loop', content: rule,
+                    source: 'world_model', importance: 0.9, embedding: null
+                }).catch(() => {});
+            }
+        }
+    }
+
     // ── API helpers ────────────────────────────────────────────────────────────
 
     getStatus() {
@@ -332,8 +444,9 @@ Reply ONLY with valid JSON, no prose:
         };
     }
 
-    getLog()     { return this.log.slice(0, 20); }
-    getPending() { return [...this.pendingActions.values()]; }
+    getLog()        { return this.log.slice(0, 20); }
+    getPending()    { return [...this.pendingActions.values()]; }
+    getWorldModel() { return { rules: this.correlationRules, updated_at: this.worldModelTs, cycle_count: this.cycleCount }; }
 
     authorize(id) {
         const a = this.pendingActions.get(id);

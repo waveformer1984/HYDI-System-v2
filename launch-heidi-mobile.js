@@ -1473,9 +1473,10 @@ app.post('/api/plan', (req, res) => planEndpoint(req, res, OLLAMA_URL, DEFAULT_M
 
 // ── Agent loop API ────────────────────────────────────────────────────────────
 
-app.get('/api/agent/status', (req, res) => res.json(agentLoop.getStatus()));
-app.get('/api/agent/log',    (req, res) => res.json({ log: agentLoop.getLog() }));
-app.get('/api/agent/pending',(req, res) => res.json({ pending: agentLoop.getPending() }));
+app.get('/api/agent/status',      (req, res) => res.json(agentLoop.getStatus()));
+app.get('/api/agent/log',         (req, res) => res.json({ log: agentLoop.getLog() }));
+app.get('/api/agent/pending',     (req, res) => res.json({ pending: agentLoop.getPending() }));
+app.get('/api/agent/world-model', (req, res) => res.json(agentLoop.getWorldModel()));
 
 app.post('/api/agent/run', async (req, res) => {
     try {
