@@ -31,6 +31,10 @@ class HeidiAgentLoop extends EventEmitter {
         this.lastRun         = null;
         this.log             = [];          // ring buffer, last 50 cycles
         this.pendingActions  = new Map();   // id → action record
+
+        // Alert suppression: same alert key can only fire once per window
+        this._alertCooldowns    = new Map();
+        this._alertCooldownMs   = (parseInt(process.env.AGENT_ALERT_COOLDOWN_MIN) || 240) * 60000;
     }
 
     // ── Lifecycle ──────────────────────────────────────────────────────────────
@@ -207,8 +211,34 @@ Reply ONLY with valid JSON, no prose:
 
     // ── 3. ACT (alert-only; consequential actions require authorization) ────────
 
+    _alertKey(decision, obs) {
+        // Stable key for deduplication: action type + which services are down
+        if (decision.action === 'send_alert') {
+            const downSvcs = obs.services
+                ? Object.entries(obs.services.services || {})
+                    .filter(([k, v]) => !v.ok && k !== 'push_subs')
+                    .map(([k]) => k).sort().join(',')
+                : 'unknown';
+            return `alert:${downSvcs || 'general'}`;
+        }
+        if (decision.action === 'queue_revenue_review') return 'revenue_review';
+        return decision.action;
+    }
+
+    _isSuppressed(key) {
+        const last = this._alertCooldowns.get(key);
+        return last && (Date.now() - last) < this._alertCooldownMs;
+    }
+
     async _act(decision, obs) {
         if (!decision.needs_attention || decision.action === 'no_action') return;
+
+        const key = this._alertKey(decision, obs);
+        if (this._isSuppressed(key)) {
+            console.log(`[🤖 AgentLoop] Suppressed duplicate ${decision.action} (cooldown ${Math.round(this._alertCooldownMs / 60000)}min)`);
+            return;
+        }
+        this._alertCooldowns.set(key, Date.now());
 
         if (decision.action === 'send_alert') {
             this._push({ type: 'hydi_activity', level: 'warning',
@@ -236,12 +266,20 @@ Reply ONLY with valid JSON, no prose:
     // ── API helpers ────────────────────────────────────────────────────────────
 
     getStatus() {
+        const now = Date.now();
+        const suppressedUntil = {};
+        for (const [k, t] of this._alertCooldowns) {
+            const remaining = t + this._alertCooldownMs - now;
+            if (remaining > 0) suppressedUntil[k] = new Date(t + this._alertCooldownMs).toISOString();
+        }
         return {
             enabled: this.enabled, running: this.running,
             interval_min: this.intervalMin, autonomy_level: this.autonomyLevel,
             reasoning_model: this.reasoningModel,
             cycle_count: this.cycleCount, last_run: this.lastRun,
             pending_count: this.pendingActions.size,
+            alert_cooldown_min: Math.round(this._alertCooldownMs / 60000),
+            suppressed_until: suppressedUntil,
             next_run: this.timer && this.lastRun
                 ? new Date(new Date(this.lastRun).getTime() + this.intervalMin * 60000).toISOString()
                 : null
