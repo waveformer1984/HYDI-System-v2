@@ -395,7 +395,7 @@ async function executeToolCall(name, args) {
 
         case 'get_hydi_status': {
             const all = await fetchBackendStatus();
-            if (!all.online) return `No backend reachable.\n  Ursula: ${URSULA_URL}\n  Protohub: ${PROTOHUB_URL}\n  HYDI: ${HYDI_URL}\nStart ursula_server.py (port 5000) and/or protohub (port 4000).`;
+            if (!all.online) return `No backend reachable.\n  Bridge: ${URSULA_URL}\n  Protohub: ${PROTOHUB_URL}\n  HYDI: ${HYDI_URL}\nStart heidi-bridge.py (port 5050) and/or protohub (port 4000).`;
             return JSON.stringify(all, null, 2);
         }
 

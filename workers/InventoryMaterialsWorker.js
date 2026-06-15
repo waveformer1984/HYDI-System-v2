@@ -1,3 +1,73 @@
+/**
+ * Inventory & Materials Worker
+ * Monitors inventory levels, triggers low-stock alerts, and queues procurement actions.
+ */
+
+'use strict';
+
+const QueueManager = require('./QueueManager');
+const { createClient } = require('@supabase/supabase-js');
+
+class InventoryMaterialsWorker {
+    constructor(workerId = null) {
+        this.workerId    = workerId || `inventory-worker-${Date.now()}`;
+        this.queue       = new QueueManager();
+        this.supabase    = null;
+        this.running     = false;
+        this.pollInterval = 60000; // 60 seconds
+        this.pollTimer   = null;
+
+        this.lowStockThresholds = {
+            filament_grams:        500,
+            components_count:       10,
+            material_ml:           100,
+            pcb_boards:              5,
+            electronic_components:  20,
+        };
+    }
+
+    async initialize() {
+        const url = process.env.SUPABASE_URL;
+        const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
+        if (!url || !key) throw new Error('Missing Supabase credentials');
+        this.supabase = createClient(url, key);
+        await this.queue.registerWorker('inventory_materials', this.workerId);
+        await this.queue.updateHeartbeat('idle');
+        console.log(`[📦 Inventory & Materials Worker] Initialized: ${this.workerId}`);
+    }
+
+    async start() {
+        if (this.running) return;
+        await this.initialize();
+        this.running = true;
+        this.queue.startHeartbeat();
+        console.log('[📦 Inventory & Materials Worker] Starting routine inventory checks...');
+        this.poll();
+    }
+
+    async stop() {
+        this.running = false;
+        if (this.pollTimer) clearTimeout(this.pollTimer);
+        await this.queue.shutdown();
+        console.log('[📦 Inventory & Materials Worker] Stopped');
+    }
+
+    poll() {
+        if (!this.running) return;
+        this.performRoutineCheck().finally(() => {
+            if (this.running) this.pollTimer = setTimeout(() => this.poll(), this.pollInterval);
+        });
+    }
+
+    async performRoutineCheck() {
+        try {
+            const inventory  = await this.getAllInventory();
+            const lowStock   = this.identifyLowStock(inventory);
+            if (lowStock.length) {
+                await this.triggerLowStockAlerts(lowStock);
+                await this.triggerProcurementForLowStock(lowStock);
+            }
+            await this.checkForExpiringItems();
             // Update inventory metrics
             await this.updateInventoryMetrics();
         } catch (err) {
