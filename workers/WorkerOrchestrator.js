@@ -214,6 +214,10 @@ class WorkerOrchestrator {
                     await worker.start();
                     instances.push(worker);
                     console.log(`[🎼 Orchestrator] ✓ Started worker: ${workerId}`);
+                    worker.on('error', async (err) => {
+                        console.error(`[🎼 Orchestrator] Worker ${workerId} error:`, err.message);
+                        await this._scheduleRestart(workerType, workerId, config.class);
+                    });
                 } catch (err) {
                     console.error(`[🎼 Orchestrator] ✗ Failed to start ${workerId}:`, err);
                 }
@@ -309,6 +313,27 @@ class WorkerOrchestrator {
         } catch (err) {
             console.error(`[🎼 Orchestrator] ✗ Failed to restart ${workerId}:`, err);
         }
+    }
+
+    async _scheduleRestart(workerType, workerId, WorkerClass, attempt = 1) {
+        const maxAttempts = 5;
+        if (attempt > maxAttempts) {
+            console.error(`[🎼 Orchestrator] ${workerId} failed ${maxAttempts} times — giving up`);
+            return;
+        }
+        const delayMs = Math.min(attempt * 15000, 120000); // 15s, 30s, 45s... cap at 2min
+        console.log(`[🎼 Orchestrator] Restarting ${workerId} in ${delayMs/1000}s (attempt ${attempt}/${maxAttempts})`);
+        setTimeout(async () => {
+            try {
+                const newWorker = new WorkerClass(workerId);
+                await newWorker.start();
+                this.workers.set(workerId, newWorker);
+                console.log(`[🎼 Orchestrator] ✓ Restarted: ${workerId}`);
+            } catch (e) {
+                console.error(`[🎼 Orchestrator] Restart failed for ${workerId}:`, e.message);
+                await this._scheduleRestart(workerType, workerId, WorkerClass, attempt + 1);
+            }
+        }, delayMs);
     }
 
     async gatherMetrics() {
