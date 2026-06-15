@@ -147,15 +147,17 @@ OBSERVATIONS: ${obs.summary}
 AUTONOMY LEVEL: ${this.autonomyLevel}
 
 Available actions:
-  no_action          — everything normal, no intervention
-  send_alert         — push a notification to the operator
+  no_action            — everything normal, no intervention
+  send_alert           — push a notification to the operator
   queue_revenue_review — queue an action for operator authorization
-  re_probe           — schedule an immediate re-check of a specific service (safe, supervised mode only)
+  queue_forge_build    — queue a forge build trigger for operator authorization (requires forge down + revenue opportunity)
+  re_probe             — schedule an immediate re-check of a specific service (safe, supervised mode only)
 
 Decision rules:
   - Prefer no_action when uncertain or all metrics normal
   - send_alert when any critical service is down, forge build failed, or revenue dropped >20 % from prior day
-  - queue_revenue_review when revenue delta is positive >$50 (opportunity)
+  - queue_revenue_review when revenue delta is positive >$50 (opportunity) and forge is healthy
+  - queue_forge_build when forge status is failed/error AND revenue delta is positive >$50 (missed opportunity due to forge)
 
 Reply ONLY with valid JSON, no prose:
 {"action":"<action>","summary":"<one sentence>","needs_attention":<bool>,"alert_title":"<short>","alert_body":"<detail>"}`;
@@ -198,6 +200,15 @@ Reply ONLY with valid JSON, no prose:
                 alert_title: '', alert_body: ''
             };
         }
+        // Forge failed + revenue opportunity → queue build trigger for operator auth
+        if (forgeFailed && revOpportunity) {
+            return {
+                action: 'queue_forge_build', needs_attention: true,
+                summary: `Forge build #${obs.forge.build} failed while revenue opportunity +$${obs.revenue.delta.toFixed(2)} active`,
+                alert_title: 'Forge Build Needed',
+                alert_body: obs.summary
+            };
+        }
         if (downSvcs.length || forgeFailed || revDrop) {
             return {
                 action: 'send_alert', needs_attention: true,
@@ -230,6 +241,7 @@ Reply ONLY with valid JSON, no prose:
             return `alert:${downSvcs || 'general'}`;
         }
         if (decision.action === 'queue_revenue_review') return 'revenue_review';
+        if (decision.action === 'queue_forge_build') return `forge_build:${obs.forge ? obs.forge.build : 'unknown'}`;
         return decision.action;
     }
 
@@ -273,6 +285,24 @@ Reply ONLY with valid JSON, no prose:
                 body: `${decision.summary} — open Heidi to review`,
                 payload: { action_id: id }, ts: Date.now() });
         }
+
+        if (decision.action === 'queue_forge_build') {
+            const id = `pa_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+            const record = {
+                id, action: 'forge_build',
+                context: obs.summary,
+                summary: decision.summary,
+                forge_build: obs.forge ? obs.forge.build : null,
+                ts: new Date().toISOString(),
+                status: 'pending'
+            };
+            this.pendingActions.set(id, record);
+            console.log(`[🤖 AgentLoop] Queued forge build trigger ${id} — awaiting operator authorization`);
+            this._push({ type: 'hydi_activity', level: 'warning',
+                title: decision.alert_title || 'Forge Build Needed',
+                body: `${decision.summary} — authorize in Heidi to trigger build`,
+                payload: { action_id: id, source: 'agent_loop' }, ts: Date.now() });
+        }
     }
 
     _push(event) {
@@ -311,7 +341,33 @@ Reply ONLY with valid JSON, no prose:
         a.status = 'authorized'; a.authorized_at = new Date().toISOString();
         this.pendingActions.set(id, a);
         this.emit('action_authorized', a);
+        // Execute authorized forge builds immediately
+        if (a.action === 'forge_build') this._executeForgeBuild(a);
         return a;
+    }
+
+    async _executeForgeBuild(action) {
+        try {
+            console.log(`[🤖 AgentLoop] Executing authorized forge build trigger (action ${action.id})`);
+            const r = await fetch(`${this.bridgeUrl}/api/builds/trigger`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ source: 'agent_loop', action_id: action.id, authorized_at: action.authorized_at }),
+                signal: AbortSignal.timeout(10000)
+            });
+            const resultText = r.ok ? 'triggered' : `HTTP ${r.status}`;
+            console.log(`[🤖 AgentLoop] Forge build trigger: ${resultText}`);
+            action.status = 'executed'; action.executed_at = new Date().toISOString(); action.result = resultText;
+            this.pendingActions.set(action.id, action);
+            this._push({ type: 'hydi_activity', level: 'info',
+                title: 'Forge Build Triggered',
+                body: `Agent triggered forge build — status: ${resultText}`,
+                payload: { action_id: action.id, source: 'agent_loop' }, ts: Date.now() });
+        } catch (e) {
+            console.error(`[🤖 AgentLoop] Forge build trigger failed:`, e.message);
+            action.status = 'execute_failed'; action.error = e.message;
+            this.pendingActions.set(action.id, action);
+        }
     }
 
     reject(id) {
