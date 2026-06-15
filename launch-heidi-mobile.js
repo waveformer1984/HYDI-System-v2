@@ -1171,17 +1171,22 @@ app.post('/api/memory/:deviceId', async (req, res) => {
 
 // ── Semantic memory API ───────────────────────────────────────────────────────
 
-app.get('/api/memory/:deviceId/facts', (req, res) => {
+app.get('/api/memory/:deviceId/facts', async (req, res) => {
     const { deviceId } = req.params;
     if (!DEVICE_ID_RE.test(deviceId)) return res.status(400).json({ error: 'invalid device id' });
-    res.json({ facts: semanticMemory.listMemories(deviceId) });
+    try {
+        const facts = await semanticMemory.listMemories(deviceId, supabaseClient);
+        res.json({ facts });
+    } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.delete('/api/memory/:deviceId/facts', (req, res) => {
+app.delete('/api/memory/:deviceId/facts', async (req, res) => {
     const { deviceId } = req.params;
     if (!DEVICE_ID_RE.test(deviceId)) return res.status(400).json({ error: 'invalid device id' });
-    semanticMemory.clearMemories(deviceId);
-    res.json({ cleared: true });
+    try {
+        await semanticMemory.clearMemories(deviceId, supabaseClient);
+        res.json({ cleared: true });
+    } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // ── Push notification broadcast (SSE) ────────────────────────────────────────
@@ -1517,7 +1522,7 @@ app.post('/api/chat', async (req, res) => {
     // ── Semantic memory recall ────────────────────────────────────────────────
     if (safeDeviceId) {
         try {
-            const memories = await semanticMemory.recall(safeDeviceId, message, OLLAMA_URL, 4);
+            const memories = await semanticMemory.recall(safeDeviceId, message, OLLAMA_URL, 4, supabaseClient);
             if (memories.length > 0) {
                 systemPrompt += `\n\nRELEVANT MEMORY (from past sessions):\n${memories.map((m, i) => `${i + 1}. ${m}`).join('\n')}`;
             }
@@ -1563,7 +1568,7 @@ app.post('/api/chat', async (req, res) => {
     // ── Async memory extraction (non-blocking) ────────────────────────────────
     if (safeDeviceId && fullResponse.length > 60) {
         setImmediate(() => {
-            semanticMemory.extractAndStore(safeDeviceId, message, fullResponse, OLLAMA_URL, selectedModel).catch(() => {});
+            semanticMemory.extractAndStore(safeDeviceId, message, fullResponse, OLLAMA_URL, selectedModel, supabaseClient).catch(() => {});
         });
     }
 });
