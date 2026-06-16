@@ -9,7 +9,7 @@ HYDI System v2 (also called "Heidi" / "ProtoForge → Kilo Node") is a monetizab
 - Running a deterministic event pipeline (CASCADE → KILO → ProtoForge) over an immutable RAW EVENT LEDGER
 - Managing multi-revenue-stream billing via Stripe Connect with per-project sub-accounts
 - Hosting a Next.js frontend with Vercel serverless API routes
-- Offloading async work to ~35 Supabase Edge Functions (Deno)
+- Offloading async work to 42 Supabase Edge Functions (Deno)
 - Coordinating hardware/HID agents (Python) for physical device automation
 
 The six active revenue streams routed through Stripe Connect are: `galactic_bytes`, `detailer_bot`, `lipi_v2`, `protogrance_aromatics`, `rezonate`, and `waveformer_studio`.
@@ -77,16 +77,35 @@ The original system (V1) built enforcement before establishing ground truth, cau
 
 The PAO (Personal AI Orchestration) subsystem contains TypeScript agents that run under strict mode:
 
+**Core** (`pao-system/core/`):
+
 | File | Role |
 |------|------|
-| `pao-system/core/heidi.controller.ts` | Central orchestrator — `taskRoutingMatrix: Map<string, string[]>`, emits events, manages session state |
-| `pao-system/agents/revenue.agent.ts` | Revenue pipeline agent |
-| `pao-system/agents/community.agent.ts` | Community management agent |
-| `pao-system/agents/marketing.agent.ts` | Marketing automation agent |
-| `pao-system/agents/outreach.agent.ts` | Outreach coordination agent |
-| `pao-system/agents/funding.agent.ts` | Funding and grants agent — uses `.getTime()` for Date arithmetic |
+| `heidi.controller.ts` | Central orchestrator — `taskRoutingMatrix: Map<string, string[]>`, emits events, manages session state |
+| `agent.registry.ts` | Agent registration and discovery |
+| `approval.engine.ts` | Action approval workflow |
+| `ethical-decision-engine.ts` | Ethical guardrails for agent decisions |
+| `event.bus.ts` | Internal event pub/sub |
+| `risk.engine.ts` | Risk scoring for proposed actions |
+| `task.router.ts` | Routes tasks to the correct agent |
 
-All PAO agents use the shared types from `types/index.ts` (`SessionState`, `SystemStatus`, `ModelStatus`, `ActionLog`, `ActionItem`). Catch variables are typed `unknown` — always guard with `error instanceof Error ? error.message : 'Unknown error'`.
+**Agents** (`pao-system/agents/`):
+
+Business: `revenue.agent.ts`, `funding.agent.ts` (uses `.getTime()` for Date arithmetic), `finance.agent.ts`
+Operations: `facility.agent.ts`, `security.agent.ts`, `workflow.agent.ts`, `procurement.agent.ts`
+Outreach: `community.agent.ts`, `marketing.agent.ts`, `outreach.agent.ts`
+Execution: `construction.agent.ts`, `fabrication.agent.ts`
+Strategic: `ai.agent.ts`, `architect.agent.ts`, `energy.agent.ts`
+
+**Services** (`pao-system/services/`): `llm.service.ts`, `storage.service.ts`, `notification.service.ts`, `nnotification.service.ts` (double-`n` typo — do not rename until all imports updated)
+
+**Integrations** (`pao-system/integrations/`): `email.ts`, `grants.api.ts`, `stripe.ts`
+
+**Schemas** (`pao-system/schemas/`): `event.schema.ts`, `finance.schema.ts`, `task.schema.ts`
+
+**Knowledge base** (`pao-system/knowledge/`): Markdown files covering agent-prompts, cultural-tone, ethos-mission, integration-rules, public-mission, unified-cognitive-layer
+
+All PAO agents use shared types from `types/index.ts` (`SessionState`, `SystemStatus`, `ModelStatus`, `ActionLog`, `ActionItem`). Catch variables are typed `unknown` — always guard with `error instanceof Error ? error.message : 'Unknown error'`.
 
 ### API Layer (`api/`)
 
@@ -110,18 +129,67 @@ All files under `api/` are **Vercel serverless functions** (Next.js API routes).
 
 ### Supabase Edge Functions (`supabase/functions/`)
 
-~35 Deno-based Edge Functions handle async work. JWT enforcement is configured per-function in `supabase/config.toml`. Key functions:
+42 Deno-based Edge Functions handle async work. JWT enforcement is configured per-function in `supabase/config.toml`.
 
-- **`chat-operator`** — async chat processing
-- **`tool-executor`** / **`action-worker`** / **`agent-worker`** — task queue workers
-- **`billing-engine`** / **`billing-retry-worker`** / **`payment-processor`** / **`stripe-webhook`** / **`stripe-connect-admin`** / **`stripe-transfer-payout`** — billing pipeline
-- **`keymaker-gate`** / **`keeper-break-glass`** / **`keeper-break-glass-simple`** — authentication and emergency access
-- **`heidi-reflect`** / **`hydi-transition`** — Heidi self-reflection and state transitions
-- **`monitoring-health`** / **`chaos-runner`** — observability and chaos testing
-- **`revenue-tracker`** / **`usage-monitor`** / **`invoice-generator`** / **`subscription-manager`** — revenue operations
-- **`events-stream`** — real-time event streaming
+**Task workers**: `action-worker`, `agent-worker`, `tool-executor`, `chat-operator`, `jobs-processor`
 
-Public functions (no JWT): `api-gateway`, `notification-service`, `search-service`, `cache-service`, all marketing functions, `stripe-webhook`, `heidi-reflect`.
+**Billing pipeline**: `billing-engine`, `billing-retry-worker`, `payment-processing`, `payment-processor`, `stripe-webhook`, `stripe-connect-admin`, `stripe-transfer-payout`, `stripe-worker`, `monthly-payout-calculation`
+
+**Auth / access**: `keymaker-gate`, `keeper-break-glass`, `keeper-break-glass-simple`
+
+**Heidi / transitions**: `heidi-reflect`, `hydi-transition`
+
+**Revenue operations**: `revenue-tracker`, `usage-monitor`, `invoice-generator`, `subscription-manager`, `rezonate-engine`
+
+**Observability**: `monitoring-health`, `chaos-runner`, `analytics-service`
+
+**Public services (no JWT)**: `api-gateway`, `notification-service`, `search-service`, `cache-service`, `events-stream`, `file-storage`, `user-management`
+
+**Marketing suite (no JWT)**: `brand-awareness`, `campaign-analytics`, `content-management`, `customer-segments`, `email-marketing`, `lead-generation`, `marketing-automation`, `social-media`
+
+The `stripe-webhook` and `heidi-reflect` functions are also public.
+
+### Frontend (`pages/`, `components/`, `hooks/`)
+
+Next.js pages under `pages/`:
+- `pages/index.tsx` — main dashboard
+- `pages/agent-manager.tsx` — agent management UI
+- `pages/funding.tsx` — funding pipeline view
+- `pages/song-composer.tsx` — Rezonate music composer integration
+- `pages/trace-viewer.jsx` / `pages/traces.jsx` — event trace inspection
+
+React components under `components/`:
+- `AgentBoard.tsx`, `AgentCard.tsx` — agent status and management
+- `Chat.tsx` — Heidi chat interface
+- `StatusPanel.tsx` — system health display
+- `TaskCreateModal.tsx`, `TaskQueue.tsx` — task pipeline UI
+- `components/funding/` — funding-specific components
+- `components/song-composer/` — song composer components
+
+Custom hooks: `hooks/useHeidi.ts` — React hook for Heidi orchestration state.
+
+### Revenue Engine (`revenue-engine/`)
+
+Revenue pipeline module separate from the API layer:
+- `revenue-engine/index.js` — entry point
+- `revenue-engine/revenue-engine-v2.js` — v2 engine with enhanced logic
+- `revenue-engine/reality-filter.js` — filters unrealistic revenue projections
+- `revenue-engine/schema.sql` / `revenue-engine/outcome-schema.sql` — local schema definitions
+- `revenue-engine/modules/` — sub-modules
+
+### KILO Module (`kilo/`)
+
+Standalone implementation of the KILO hypothesis generator:
+- `kilo/index.js` — entry point
+- `kilo/modules/repair-manifest-validator.js` — validates repair manifests before KILO processes them
+- `kilo/modules/truth-filter-gate.js` — gates hypotheses against ground truth before emission
+
+### Hyve Service (`hyve_service/`)
+
+The Hyve opportunity-collective service implementation (Python):
+- `hyve_service/listener.py` — listens for opportunity signals
+- `hyve_service/outputs/` — processed output directory
+- `hyve_service/revenue_ready/` — revenue-ready configuration state
 
 ### Agents (`agents/`)
 
