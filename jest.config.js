@@ -28,6 +28,8 @@ module.exports = {
   moduleNameMapper: {
     '^.*heidi-core.*ollama-client.*$': '<rootDir>/tests/__mocks__/ollama-client-stub.js',
     '^uuid$': '<rootDir>/tests/__mocks__/uuid-stub.js',
+    // lib/claude.ts is TypeScript-only; redirect to a JS stub for tests
+    '^.+/lib/claude(\\.js|\\.ts)?$': '<rootDir>/tests/__mocks__/claude-stub.js',
   },
 
   forceExit: true,

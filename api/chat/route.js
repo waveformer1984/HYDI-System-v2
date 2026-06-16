@@ -222,6 +222,27 @@ async function handleProtoForgeMessage(message, request) {
   return `🌐 ProtoForge: Core system coordination. Try 'status', 'modules', or 'govern'.`;
 }
 
+async function handleRezonateMessage(message, request) {
+  const lowerMessage = message.toLowerCase();
+
+  if (lowerMessage.includes('track') || lowerMessage.includes('project')) {
+    const { data, error } = await supabase
+      .from('rezonate_tracks')
+      .select('id, title, status')
+      .order('updated_at', { ascending: false })
+      .limit(5);
+    if (error || !data) return '🎵 Rezonate: No active tracks found.';
+    const list = data.map(t => `• ${t.title} [${t.status}]`).join('\n');
+    return `🎵 Rezonate: Active tracks:\n${list}`;
+  }
+
+  if (lowerMessage.includes('status')) {
+    return `🎵 Rezonate: Music production system online. Waveformer Studio active.`;
+  }
+
+  return `🎵 Rezonate: Music production interface. Try 'tracks', 'status', or 'project'.`;
+}
+
 async function handleHyveMessage(message, request) {
   const lowerMessage = message.toLowerCase();
   
