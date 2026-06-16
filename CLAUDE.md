@@ -9,7 +9,7 @@ HYDI System v2 (also called "Heidi" / "ProtoForge → Kilo Node") is a monetizab
 - Running a deterministic event pipeline (CASCADE → KILO → ProtoForge) over an immutable RAW EVENT LEDGER
 - Managing multi-revenue-stream billing via Stripe Connect with per-project sub-accounts
 - Hosting a Next.js frontend with Vercel serverless API routes
-- Offloading async work to 42 Supabase Edge Functions (Deno)
+- Offloading async work to 68 Supabase Edge Functions (Deno)
 - Coordinating hardware/HID agents (Python) for physical device automation
 
 The six active revenue streams routed through Stripe Connect are: `galactic_bytes`, `detailer_bot`, `lipi_v2`, `protogrance_aromatics`, `rezonate`, and `waveformer_studio`.
@@ -89,21 +89,23 @@ The PAO (Personal AI Orchestration) subsystem contains TypeScript agents that ru
 | `risk.engine.ts` | Risk scoring for proposed actions |
 | `task.router.ts` | Routes tasks to the correct agent |
 
-**Agents** (`pao-system/agents/`):
+**Agents** (`pao-system/agents/`) — 15 named agents across five domains:
 
-Business: `revenue.agent.ts`, `funding.agent.ts` (uses `.getTime()` for Date arithmetic), `finance.agent.ts`
-Operations: `facility.agent.ts`, `security.agent.ts`, `workflow.agent.ts`, `procurement.agent.ts`
-Outreach: `community.agent.ts`, `marketing.agent.ts`, `outreach.agent.ts`
-Execution: `construction.agent.ts`, `fabrication.agent.ts`
-Strategic: `ai.agent.ts`, `architect.agent.ts`, `energy.agent.ts`
+- Business: Revenue Strategist, Pricing Analyst, Growth Planner
+- Operations: Workflow Orchestrator, Reliability Monitor, Compliance Controller
+- Outreach: Lead Scout, Campaign Operator, Follow-up Coordinator
+- Execution: Task Dispatcher, Tool Executor, QA Verifier
+- Strategic: Opportunity Mapper, Risk Forecaster, Executive Synthesizer
 
-**Services** (`pao-system/services/`): `llm.service.ts`, `storage.service.ts`, `notification.service.ts`, `nnotification.service.ts` (double-`n` typo — do not rename until all imports updated)
+**Core** (`pao-system/core/`): scheduler, dispatcher, policy gatekeeper, global state coordination, priority management, safety rails and emergency stop pathways
 
-**Integrations** (`pao-system/integrations/`): `email.ts`, `grants.api.ts`, `stripe.ts`
+**Services** (`pao-system/services/`): business operations services, execution handlers, read-model/query services, service-level validation. Files: `llm.service.ts`, `storage.service.ts`, `notification.service.ts`, `nnotification.service.ts` (double-`n` typo — do not rename until all imports updated)
 
-**Schemas** (`pao-system/schemas/`): `event.schema.ts`, `finance.schema.ts`, `task.schema.ts`
+**Integrations** (`pao-system/integrations/`): Stripe, email, CRM, webhook connectors with adapter pattern for provider interchangeability. Files: `email.ts`, `grants.api.ts`, `stripe.ts`
 
-**Knowledge base** (`pao-system/knowledge/`): Markdown files covering agent-prompts, cultural-tone, ethos-mission, integration-rules, public-mission, unified-cognitive-layer
+**Schemas** (`pao-system/schemas/`): canonical event schemas, command payload definitions, validation strategy, shared type generation. Files: `event.schema.ts`, `finance.schema.ts`, `task.schema.ts`
+
+**Knowledge base** (`pao-system/knowledge/`): persistent context, decision traces, retrieval/ranking for prior outcomes, governance constraints on memory writes/reads. Markdown files covering agent-prompts, cultural-tone, ethos-mission, integration-rules, public-mission, unified-cognitive-layer
 
 All PAO agents use shared types from `types/index.ts` (`SessionState`, `SystemStatus`, `ModelStatus`, `ActionLog`, `ActionItem`). Catch variables are typed `unknown` — always guard with `error instanceof Error ? error.message : 'Unknown error'`.
 
@@ -129,25 +131,19 @@ All files under `api/` are **Vercel serverless functions** (Next.js API routes).
 
 ### Supabase Edge Functions (`supabase/functions/`)
 
-42 Deno-based Edge Functions handle async work. JWT enforcement is configured per-function in `supabase/config.toml`.
+68 Deno-based Edge Functions handle async work. JWT enforcement is configured per-function in `supabase/config.toml`. See `SYSTEM_ARCHITECTURE.md` for the full canonical inventory.
 
-**Task workers**: `action-worker`, `agent-worker`, `tool-executor`, `chat-operator`, `jobs-processor`
+**Core Orchestration & Governance (17)**: `core-dispatcher`, `core-agent-heartbeat`, `core-recovery-worker`, `core-operator-api`, `worker-orchestrator`, `governed-execute`, `publish-event`, `claim-work`, `submit-approval-decision`, `emit-risk-alert`, `keymaker-router`, `tool-executor`, `action-worker`, `events-stream`, `jobs-processor`, `monitoring-health`, `api-gateway`
 
-**Billing pipeline**: `billing-engine`, `billing-retry-worker`, `payment-processing`, `payment-processor`, `stripe-webhook`, `stripe-connect-admin`, `stripe-transfer-payout`, `stripe-worker`, `monthly-payout-calculation`
+**HYDI / HEIDI Intelligence Layer (17)**: `hydi-transition`, `hydi-reflect`, `hydi-heartbeat`, `hydi-repair`, `hydi-boot`, `hydi-alignment-audit`, `hydi-outcome-ingest`, `hydi-memory`, `theme-calibration`, `heidi-reflect`, `heidi-ingest-event`, `heidi-orchestrator`, `chaos-runner`, `run-followups`, `send-outreach`, `chat-operator`, `toby-llm`
 
-**Auth / access**: `keymaker-gate`, `keeper-break-glass`, `keeper-break-glass-simple`
+**Billing / Revenue / Stripe (17)**: `stripe-setup`, `stripe-webhook`, `stripe-worker`, `stripe-connect-webhook`, `stripe-connect-admin`, `stripe-transfer-payout`, `stripe-webhook-revenue`, `sync-stripe-events`, `monthly-payout-calculation`, `revenue-tracker`, `billing-engine`, `billing-retry-worker`, `usage-monitor`, `invoice-generator`, `subscription-manager`, `payment-processor`, `payment-processing`
 
-**Heidi / transitions**: `heidi-reflect`, `hydi-transition`
+**Platform / Application Services (6)**: `user-management`, `notification-service`, `analytics-service`, `file-storage`, `search-service`, `cache-service`
 
-**Revenue operations**: `revenue-tracker`, `usage-monitor`, `invoice-generator`, `subscription-manager`, `rezonate-engine`
+**Marketing / Growth Services (8)**: `marketing-automation`, `lead-generation`, `content-management`, `email-marketing`, `social-media`, `customer-segments`, `campaign-analytics`, `brand-awareness`
 
-**Observability**: `monitoring-health`, `chaos-runner`, `analytics-service`
-
-**Public services (no JWT)**: `api-gateway`, `notification-service`, `search-service`, `cache-service`, `events-stream`, `file-storage`, `user-management`
-
-**Marketing suite (no JWT)**: `brand-awareness`, `campaign-analytics`, `content-management`, `customer-segments`, `email-marketing`, `lead-generation`, `marketing-automation`, `social-media`
-
-The `stripe-webhook` and `heidi-reflect` functions are also public.
+**Ops / Safety Utilities (3)**: `keeper`, `keeper-break-glass`, `keeper-break-glass-simple`
 
 ### Frontend (`pages/`, `components/`, `hooks/`)
 
@@ -170,26 +166,21 @@ Custom hooks: `hooks/useHeidi.ts` — React hook for Heidi orchestration state.
 
 ### Revenue Engine (`revenue-engine/`)
 
-Revenue pipeline module separate from the API layer:
-- `revenue-engine/index.js` — entry point
-- `revenue-engine/revenue-engine-v2.js` — v2 engine with enhanced logic
-- `revenue-engine/reality-filter.js` — filters unrealistic revenue projections
-- `revenue-engine/schema.sql` / `revenue-engine/outcome-schema.sql` — local schema definitions
-- `revenue-engine/modules/` — sub-modules
+Central module for monetization workflows, billing state transitions, and financial observability. Responsibilities: subscription lifecycle (trial → active → grace → canceled), Stripe event ingestion and reconciliation, invoice and payout orchestration, failed payment recovery, MRR/churn/ARPU analytics. Processing is idempotent and replay-safe with dead-letter handling for unrecoverable billing errors.
+
+Files: `revenue-engine/index.js`, `revenue-engine/revenue-engine-v2.js`, `revenue-engine/reality-filter.js`, `revenue-engine/schema.sql`, `revenue-engine/outcome-schema.sql`, `revenue-engine/modules/`
 
 ### KILO Module (`kilo/`)
 
-Standalone implementation of the KILO hypothesis generator:
-- `kilo/index.js` — entry point
-- `kilo/modules/repair-manifest-validator.js` — validates repair manifests before KILO processes them
-- `kilo/modules/truth-filter-gate.js` — gates hypotheses against ground truth before emission
+Execution-focused module for deterministic workflow handling and controlled task progression. Ingests normalized task/intent payloads, routes to execution pipelines, enforces execution contracts, emits structured outcomes for downstream systems. Built-in idempotency, deduplication, and exponential-backoff retry boundaries. Structured logs carry correlation id, actor id, and task id.
+
+Files: `kilo/index.js`, `kilo/modules/repair-manifest-validator.js`, `kilo/modules/truth-filter-gate.js`
 
 ### Hyve Service (`hyve_service/`)
 
-The Hyve opportunity-collective service implementation (Python):
-- `hyve_service/listener.py` — listens for opportunity signals
-- `hyve_service/outputs/` — processed output directory
-- `hyve_service/revenue_ready/` — revenue-ready configuration state
+Service boundary for inter-module communication and high-throughput event handling. Provides stable versioned APIs to internal consumers, publishes/subscribes to system event streams, enforces auth on service operations. Implements backpressure-aware queue consumption, circuit-breaker patterns on external dependencies, and SLO-driven latency tracking.
+
+Files: `hyve_service/listener.py`, `hyve_service/outputs/`, `hyve_service/revenue_ready/`
 
 ### Agents (`agents/`)
 
