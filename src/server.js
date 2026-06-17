@@ -383,7 +383,7 @@ app.post('/process', async (req, res) => {
   // Generate unique cycle ID for this request
   const cycleId = `process_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   
-  // TODO: Re-enable noSilentSuccessEnforcer when iconv-lite issue is fixed
+  noSilentSuccessEnforcer.startCycle(cycleId, 'cascade', { event_id: req.body?.event_id });
   console.log(`[PROCESS] Starting cycle ${cycleId}`);
   
   try {
@@ -397,6 +397,10 @@ app.post('/process', async (req, res) => {
     
     // Record cascade processing completion
     console.log(`[PROCESS] Cascade completed: ${result.status} for ${payload.event_id}`);
+    noSilentSuccessEnforcer.recordState(cycleId, 'cascade',
+        result.status === 'processed' ? 'processed' : result.status === 'rejected' ? 'rejected' : 'quarantined',
+        { event_id: payload.event_id, confidence: result.validation?.confidence }
+    );
     console.log(`[PROCESS] Validation: ${result.validation?.status}, Opportunity: ${!!result.opportunity}`);
     
     // Update readiness gate metrics based on cascade processing
@@ -496,8 +500,10 @@ app.post('/process', async (req, res) => {
     // Record protoforge state
     console.log(`[PROCESS] Protoforge state: ${protoforgeState}, KILO involved: ${kiloInvolved}`);
     
-    // TODO: Re-enable noSilentSuccessEnforcer when iconv-lite issue is fixed
-    
+    noSilentSuccessEnforcer.recordState(cycleId, 'protoforge', protoforgeState,
+        { event_id: payload.event_id, kilo_involved: kiloInvolved }
+    );
+
     // Return processing result - simple contract
     res.json({
       status: result.status,
@@ -519,10 +525,11 @@ app.post('/process', async (req, res) => {
   } catch (error) {
     // Record error state in cycle
     console.error(`[PROCESS] Error in cycle ${cycleId}:`, error.message);
-    
+
     // Mark protoforge as failed
     console.error(`[PROCESS] Protoforge failed for ${req.body.event_id}:`, error.message);
-    
+    noSilentSuccessEnforcer.forceCompleteCycle(cycleId, error.message, 'failure');
+
     console.error('Process endpoint failed:', error);
     res.status(500).json({
       status: 'error',
