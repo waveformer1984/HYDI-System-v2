@@ -97,7 +97,7 @@ Outreach: `community.agent.ts`, `marketing.agent.ts`, `outreach.agent.ts`
 Execution: `construction.agent.ts`, `fabrication.agent.ts`
 Strategic: `ai.agent.ts`, `architect.agent.ts`, `energy.agent.ts`
 
-**Services** (`pao-system/services/`): `llm.service.ts`, `storage.service.ts`, `notification.service.ts`, `nnotification.service.ts` (double-`n` typo — do not rename until all imports updated)
+**Services** (`pao-system/services/`): `llm.service.ts`, `storage.service.ts`, `notification.service.ts`
 
 **Integrations** (`pao-system/integrations/`): `email.ts`, `grants.api.ts`, `stripe.ts`
 
@@ -309,4 +309,3 @@ vercel env ls | grep SECRET_NAME
 - **The `clean-main` branch** is the primary branch (CI runs against it, not `main`).
 - **`.sql.skip` files**: migrations with this suffix are intentionally skipped by the runner; they document attempted approaches that were superseded.
 - **`system_dashboard` view**: the central Supabase view consumed by health checks, Ursula status queries, and infrastructure monitoring — if this view is broken, health endpoints degrade gracefully to `503`.
-- **`nnotification.service.ts`**: this file has a double-`n` typo in its name — do not rename it until all imports are updated together.
