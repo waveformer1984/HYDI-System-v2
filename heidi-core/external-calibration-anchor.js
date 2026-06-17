@@ -142,12 +142,53 @@ class ExternalCalibrationAnchor {
         };
         
         try {
-            // Collect external signals (simplified implementation)
-            const userFeedback = []; // TODO: Implement actual collection
-            const groundTruthChecks = []; // TODO: Implement actual collection
-            const environmentValidations = []; // TODO: Implement actual collection
-            const humanOverrideLabels = []; // TODO: Implement actual collection
-            const auditResults = []; // TODO: Implement actual collection
+            // Collect external signals in parallel from Supabase
+            const [
+                feedbackResult,
+                groundTruthResult,
+                envValidationResult,
+                humanOverrideResult,
+                auditResult
+            ] = await Promise.all([
+                // User feedback: reflections where outcome was incorrect
+                this.memoryService.supabase
+                    .from('heidi_reflections')
+                    .select('*')
+                    .eq('was_correct', false)
+                    .gte('timestamp', timeWindow.start)
+                    .lte('timestamp', timeWindow.end),
+                // Ground truth checks: verified theme outcomes
+                this.memoryService.supabase
+                    .from('theme_outcomes')
+                    .select('*')
+                    .gte('timestamp', timeWindow.start)
+                    .lte('timestamp', timeWindow.end),
+                // Environment validations: reflections where gating was evaluated
+                this.memoryService.supabase
+                    .from('heidi_reflections')
+                    .select('*')
+                    .not('gating_appropriate', 'is', null)
+                    .gte('timestamp', timeWindow.start)
+                    .lte('timestamp', timeWindow.end),
+                // Human override labels: overconfidence events (system was overridden)
+                this.memoryService.supabase
+                    .from('overconfidence_events')
+                    .select('*')
+                    .gte('timestamp', timeWindow.start)
+                    .lte('timestamp', timeWindow.end),
+                // Audit results: system misalignment events
+                this.memoryService.supabase
+                    .from('system_misalignment_events')
+                    .select('*')
+                    .gte('timestamp', timeWindow.start)
+                    .lte('timestamp', timeWindow.end)
+            ]);
+
+            const userFeedback = feedbackResult.data || [];
+            const groundTruthChecks = groundTruthResult.data || [];
+            const environmentValidations = envValidationResult.data || [];
+            const humanOverrideLabels = humanOverrideResult.data || [];
+            const auditResults = auditResult.data || [];
             
             const allSignals = [
                 ...userFeedback.map(s => ({ type: 'user_feedback', ...s })),
