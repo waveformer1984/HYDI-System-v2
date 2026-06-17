@@ -200,12 +200,45 @@ class GlobalDriftEvaluator {
         };
         
         try {
-            // Get decisions from memory service (simplified implementation)
-            const decisions = []; // TODO: Implement actual memory service calls
-            const outcomes = []; // TODO: Implement actual memory service calls
-            const governanceActivations = []; // TODO: Implement actual memory service calls
-            const biasActivations = []; // TODO: Implement actual memory service calls
-            const performanceMetrics = []; // TODO: Implement actual memory service calls
+            // Query all four metric sources in parallel for the given time window
+            const [
+                decisionsResult,
+                outcomesResult,
+                governanceResult,
+                biasResult
+            ] = await Promise.all([
+                this.memoryService.supabase
+                    .from('theme_predictions')
+                    .select('*')
+                    .gte('timestamp', timeWindow.start)
+                    .lte('timestamp', timeWindow.end),
+                this.memoryService.supabase
+                    .from('theme_outcomes')
+                    .select('*')
+                    .gte('timestamp', timeWindow.start)
+                    .lte('timestamp', timeWindow.end),
+                this.memoryService.supabase
+                    .from('heidi_reflections')
+                    .select('*')
+                    .eq('gating_appropriate', true)
+                    .gte('timestamp', timeWindow.start)
+                    .lte('timestamp', timeWindow.end),
+                this.memoryService.supabase
+                    .from('overconfidence_events')
+                    .select('*')
+                    .gte('timestamp', timeWindow.start)
+                    .lte('timestamp', timeWindow.end)
+            ]);
+
+            const decisions = decisionsResult.data || [];
+            const outcomes = outcomesResult.data || [];
+            const governanceActivations = governanceResult.data || [];
+            const biasActivations = biasResult.data || [];
+            const performanceMetrics = decisions.map(d => ({
+                task_id: d.task_id,
+                confidence: d.confidence,
+                timestamp: d.timestamp
+            }));
             
             return {
                 time_window: timeWindow,
@@ -686,9 +719,18 @@ class GlobalDriftEvaluator {
                 drift_signals: driftScore.weighted_signals
             };
             
-            // Store in persistent memory (simplified implementation)
-            // await this.memoryService.storeDriftSnapshot(snapshot);
-            console.log('[GLOBAL DRIFT EVALUATOR] Drift snapshot storage not implemented');
+            // Persist snapshot to the keymaker_events audit table
+            await this.memoryService.supabase
+                .from('keymaker_events')
+                .insert({
+                    event_id: `drift_snapshot_${timestamp}_${Math.random().toString(36).substr(2, 6)}`,
+                    type: 'drift_snapshot',
+                    source: 'global_drift_evaluator',
+                    severity: snapshot.regime === 'critical' ? 'error' : snapshot.regime === 'unstable' ? 'warn' : 'info',
+                    payload: snapshot,
+                    processed: true,
+                    occurred_at: new Date(timestamp).toISOString()
+                });
             
             console.log(`[GLOBAL DRIFT EVALUATOR] Drift snapshot stored: score=${driftScore.drift_score.toFixed(3)} regime=${this.driftState.regime}`);
             
