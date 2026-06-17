@@ -267,16 +267,31 @@ Thank you for using ProtoForge!
       `.trim()
     };
 
-    console.log(`[MONTHLY-PAYOUT] Email would be sent to ${client.email}:`);
-    console.log(emailContent.body);
-
-    // TODO: Integrate with your email service (SendGrid, Resend, etc.)
-    // Example:
-    // await fetch('https://api.resend.com/emails', {
-    //   method: 'POST',
-    //   headers: { 'Authorization': `Bearer ${Deno.env.get('RESEND_API_KEY')}` },
-    //   body: JSON.stringify(emailContent)
-    // });
+    // Send payout notification email via Resend if API key is configured
+    const resendApiKey = Deno.env.get('RESEND_API_KEY');
+    if (resendApiKey) {
+      const emailResponse = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${resendApiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          from: 'payouts@protoforgeindustries.com',
+          to: emailContent.to,
+          subject: emailContent.subject,
+          text: emailContent.body
+        })
+      });
+      if (!emailResponse.ok) {
+        const errText = await emailResponse.text();
+        console.error(`[MONTHLY-PAYOUT] Resend API error: ${emailResponse.status} ${errText}`);
+      } else {
+        console.log(`[MONTHLY-PAYOUT] Email sent via Resend to ${emailContent.to}`);
+      }
+    } else {
+      console.warn(`[MONTHLY-PAYOUT] RESEND_API_KEY not set — skipping email to ${emailContent.to}`);
+    }
 
     // Log email event
     await supabase.from('keymaker_events').insert({
