@@ -526,15 +526,16 @@ class HeidiMemorySystem extends EventEmitter {
   async storeReflectionInDatabase(reflection) {
     if (this._reflectionDbDisabled) return; // schema absent — skip without spamming
     try {
-      const { error } = await supabase.from('reflections').insert({
+      // public.reflections is a VIEW; write blob snapshots to the dedicated table.
+      const { error } = await supabase.from('heidi_reflection_snapshots').insert({
         reflection_id: reflection.id,
         reflection_data: reflection,
         timestamp: new Date(reflection.timestamp).toISOString()
       });
       if (error) throw error;
     } catch (error) {
-      // Disable DB persistence after the first failure (e.g. missing reflection_data
-      // column) so it doesn't log every cycle. Local JSON persistence still works.
+      // Disable DB persistence after the first failure (e.g. table absent) so it
+      // doesn't log every cycle. Local JSON persistence still works.
       this._reflectionDbDisabled = true;
       if (!this._destroyed) console.warn('[MEMORY] Reflection DB persistence off (apply migration 20260617_heidi_orchestrator_schema.sql):', error.message);
     }
