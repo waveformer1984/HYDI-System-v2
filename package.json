@@ -6,6 +6,9 @@
   "scripts": {
     "dev": "next dev --hostname 0.0.0.0 --port 3000",
     "server": "node src/server.js",
+    "boot": "node scripts/boot-agent.js",
+    "boot:prod": "node scripts/boot-agent.js --prod",
+    "boot:plan": "node scripts/boot-agent.js --dry-run",
     "prebuild": "echo 'Prebuild complete'",
     "build": "next build",
     "start": "next start",
@@ -15,34 +18,28 @@
     "test:coverage": "jest --coverage",
     "test:integration": "node tests/hdi-adversarial.test.js"
   },
-  "keywords": [
-    "protoforge",
-    "kilo",
-    "cascade",
-    "ursula"
-  ],
+  "keywords": ["protoforge", "kilo", "cascade", "ursula"],
   "author": "ProtoForge Team",
   "license": "MIT",
-  "engines": {
-    "node": ">=20.x"
-  },
+  "engines": { "node": ">=20.x" },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.98.0",
     "@supabase/ssr": "^0.10.2",
     "@supabase/supabase-js": "^2.106.2",
     "@types/node": "^20.19.41",
-    "@types/react": "^18.0.0",
-    "@types/react-dom": "^18.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
     "axios": "^1.16.1",
     "dotenv": "^17.4.2",
     "express-rate-limit": "^8.5.2",
     "next": "^15.5.18",
-    "react": "^18.0.0",
-    "react-dom": "^18.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
     "sqlite3": "^6.0.1",
     "stripe": "^22.1.1",
     "typescript": "^5.0.0",
-    "uuid": "^14.0.0"
+    "uuid": "^14.0.0",
+    "ws": "^8.20.1"
   },
   "devDependencies": {
     "@babel/core": "^7.24.0",
@@ -61,7 +58,7 @@
     "brace-expansion": ">=5.0.6",
     "glob": "^10.4.5",
     "qs": ">=6.15.2",
-    "ws": ">=8.20.1",
+    "ws": "$ws",
     "postcss": "$postcss"
   }
 }
