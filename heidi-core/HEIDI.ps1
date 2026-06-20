@@ -1,3 +1,12 @@
+# ============================================================================
+# DEPRECATED / NOT USED BY INSTALLER.
+# The canonical HEIDI launcher lives at:
+#   C:\Users\Owner\HYDI-System-v2\heidi-core\HEIDI.ps1
+# install-heidi-autostart.ps1 registers and runs THAT copy, not this one.
+# This file is kept only for reference. Its all-node kill has been removed so it
+# is no longer a footgun, but prefer the v2 copy for any real startup.
+# ============================================================================
+
 # HEIDI - Single Entry Point
 # The ONLY way to start HEIDI. No variants, no mazes.
 
@@ -31,22 +40,10 @@ $OLLAMA_URL = "http://127.0.0.1:11434"
     } catch {
         Write-Host "  No processes on port $PORT" -ForegroundColor Gray
     }
-    
-    # Kill orphaned node processes
-    try {
-        $nodeProcesses = Get-Process node -ErrorAction SilentlyContinue
-        if ($nodeProcesses) {
-            $nodeProcesses | ForEach-Object {
-                Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue
-                Write-Host "  Killed node process $($_.Id)" -ForegroundColor Green
-            }
-        } else {
-            Write-Host "  No node processes to kill" -ForegroundColor Gray
-        }
-    } catch {
-        Write-Host "  No node processes to kill" -ForegroundColor Gray
-    }
-    
+
+    # (Removed) machine-wide node kill -- see canonical v2 copy. Only port 3458
+    # is ever touched here.
+
     Start-Sleep -Seconds 2
 
 # 2. Ensure Ollama is running (unless skipped)
