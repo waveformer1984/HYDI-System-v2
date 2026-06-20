@@ -19,7 +19,7 @@
       "args": ["src/server.js"],
       "env": { "PORT": "3005" },
       "port": 3005,
-      "health": { "url": "http://127.0.0.1:3005/health", "graceMs": 120000, "intervalMs": 2000 },
+      "health": { "url": "http://127.0.0.1:3005/health", "graceMs": 300000, "intervalMs": 2000 },
       "dependsOn": []
     },
     {
@@ -33,7 +33,7 @@
       "argsProd": ["run", "start"],
       "env": { "PORT": "3000" },
       "port": 3000,
-      "health": { "url": "http://127.0.0.1:3000/api/health", "graceMs": 120000, "intervalMs": 2500 },
+      "health": { "url": "http://127.0.0.1:3000/api/health", "graceMs": 300000, "intervalMs": 2500 },
       "dependsOn": ["protoforge-core"]
     },
     {
