@@ -18,7 +18,7 @@ const DecisionAssistWorker = require('./DecisionAssistWorker');
 const SecurityIdentityWorker = require('./SecurityIdentityWorker');
 const SyncWorker = require('./SyncWorker');
 const QueueManager = require('./QueueManager');
-const { createClient } = require('@supabase/supabase-js);
+const { createClient } = require('@supabase/supabase-js');
 require('dotenv').config();
 
 class WorkerOrchestrator {
