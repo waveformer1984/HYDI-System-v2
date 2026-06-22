@@ -4,7 +4,19 @@
  * Streams from Ollama/LM Studio — open on mobile via LAN URL printed at startup
  */
 
-require('dotenv').config();
+const __dotenv = require('dotenv').config();
+// ── Config sanity: surface the EFFECTIVE Supabase URL and warn loudly if an OS
+//    environment variable silently overrides .env (dotenv does NOT override
+//    existing process.env vars — this exact footgun masked a dead project ref).
+(() => {
+    const fileUrl   = __dotenv.parsed && __dotenv.parsed.SUPABASE_URL;
+    const effective = process.env.SUPABASE_URL;
+    if (effective) console.log(`[CONFIG] Effective SUPABASE_URL = ${effective}`);
+    else console.warn('[CONFIG] ⚠ SUPABASE_URL is not set — Supabase features disabled');
+    if (fileUrl && effective && fileUrl !== effective) {
+        console.warn(`[CONFIG] ⚠ OVERRIDE: .env has SUPABASE_URL=${fileUrl} but an OS env var overrides it with ${effective}. dotenv does NOT override existing env vars, so the OS value wins. If unintended, fix/remove the OS variable (User or Machine scope), then restart.`);
+    }
+})();
 
 const express = require('express');
 const http = require('http');
@@ -958,11 +970,25 @@ app.get('/api/system/status', async (req, res) => {
     const all = await fetchBackendStatus();
     // Return the first online service's status in the legacy shape for the UI panel
     const primary = all.ursula || all.protohub || all.hydi;
-    if (!primary) return res.json({ online: false });
+    // Honest local-DB reachability: probe Supabase directly instead of echoing
+    // Ursula's "unknown" (Ursula is stateless and has no view of our database).
+    let database = 'disabled';
+    if (supabaseClient) {
+        try {
+            const { error } = await supabaseClient.from('push_subscriptions').select('id').limit(1);
+            if (!error || error.code === 'PGRST116') database = 'connected';
+            else database = `error: ${(error.message || '').slice(0, 70)}`;
+        } catch (e) {
+            database = `down: ${(e.message || '').slice(0, 70)}`;
+        }
+    }
+    const dbHealthy = database === 'connected';
+    if (!primary) return res.json({ online: false, database });
     res.json({
         online: true,
-        status: primary.status || 'operational',
-        database: primary.database || 'unknown',
+        // Reflect reality: if the DB isn't reachable, we are degraded, not "healthy".
+        status: dbHealthy ? (primary.status || 'operational') : 'degraded',
+        database,
         totalEvents: primary.totalEvents || 0,
         source: primary.source,
         backends: all
@@ -1124,10 +1150,13 @@ app.get('/api/revenue/summary', async (req, res) => {
 app.get('/api/revenue/pipeline', async (req, res) => {
     if (!supabaseClient) return res.json({ available: false });
     const results = {};
+    const errors = {};
     for (const stage of ['leads', 'quotes', 'proposals']) {
         const { data, error } = await supabaseClient.from(stage).select('id, name, service, stream, status, created_at').order('created_at', { ascending: false }).limit(5);
         results[stage] = error ? [] : (data || []);
+        if (error) errors[stage] = error.message;   // surface, don't swallow — empty != broken
     }
+    if (Object.keys(errors).length) results.errors = errors;
     res.json(results);
 });
 
