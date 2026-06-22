@@ -53,11 +53,25 @@ export class ModelManager {
    */
   async generateResponse(prompt: string, sessionId: string): Promise<ModelResponse> {
     const startTime = Date.now();
-    
+
     // Check circuit breaker
     if (this.isCircuitBreakerActive()) {
       console.log('[ModelManager] Circuit breaker active - using API fallback');
       return await this.generateAPIResponse(prompt, sessionId);
+    }
+
+    // Local model is opt-in only — skip when not explicitly enabled
+    const localEnabled = process.env.LOCAL_MODEL_ENABLED === 'true';
+    if (!localEnabled) {
+      const apiResponse = await this.generateAPIResponse(prompt, sessionId);
+      await this.updateSessionState(sessionId, 'api', apiResponse.success ? 'success' : 'failure');
+      return {
+        content: apiResponse.content,
+        model: 'api',
+        latency: Date.now() - startTime,
+        success: apiResponse.success,
+        error: apiResponse.error
+      };
     }
 
     // Try local model first
@@ -120,7 +134,7 @@ export class ModelManager {
             max_tokens: 1000
           }
         }),
-        signal: AbortSignal.timeout(5000) // 5 second timeout
+        signal: AbortSignal.timeout(1500) // 1.5 second timeout
       });
 
       if (!response.ok) {
