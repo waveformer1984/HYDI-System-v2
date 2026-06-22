@@ -260,12 +260,22 @@ class ProductionVerification {
     
     try {
       // Check 1: Duplicate webhook handling
-      const { data: duplicateEvents, error } = await this.supabase
+      // Supabase JS v2 has no .group()/.having() — select the column and tally in JS.
+      const { data: rawEvents, error } = await this.supabase
         .from('webhook_events')
-        .select('stripe_event_id, count')
-        .group('stripe_event_id')
-        .having('count > 1')
-        .limit(10);
+        .select('stripe_event_id');
+
+      let duplicateEvents = null;
+      if (!error && rawEvents) {
+        const counts = {};
+        for (const r of rawEvents) {
+          counts[r.stripe_event_id] = (counts[r.stripe_event_id] || 0) + 1;
+        }
+        duplicateEvents = Object.entries(counts)
+          .filter(([, c]) => c > 1)
+          .slice(0, 10)
+          .map(([stripe_event_id, count]) => ({ stripe_event_id, count }));
+      }
 
       if (error) {
         this.log('PROVISION', `Failed to check duplicates: ${error.message}`, 'fail');
@@ -276,11 +286,25 @@ class ProductionVerification {
       }
 
       // Check 2: Idempotency in customer creation
-      const { data: customers, error: custError } = await this.supabase
+      // Supabase JS v2 has no .group()/.having() — select the columns and tally in JS.
+      const { data: rawCustomers, error: custError } = await this.supabase
         .from('customers')
-        .select('stripe_customer_id, email')
-        .group('stripe_customer_id, email')
-        .having('count(*) > 1');
+        .select('stripe_customer_id, email');
+
+      let customers = null;
+      if (!custError && rawCustomers) {
+        const counts = {};
+        for (const r of rawCustomers) {
+          const key = `${r.stripe_customer_id}|${r.email}`;
+          counts[key] = (counts[key] || 0) + 1;
+        }
+        customers = Object.entries(counts)
+          .filter(([, c]) => c > 1)
+          .map(([key, count]) => {
+            const [stripe_customer_id, email] = key.split('|');
+            return { stripe_customer_id, email, count };
+          });
+      }
 
       if (custError) {
         this.log('PROVISION', `Failed to check customer duplicates: ${custError.message}`, 'fail');
@@ -291,11 +315,20 @@ class ProductionVerification {
       }
 
       // Check 3: Recent provisioning success rate
-      const { data: recentProvisions, error: provError } = await this.supabase
+      // Supabase JS v2 has no .group() — select the column and tally by status in JS.
+      const { data: rawProvisions, error: provError } = await this.supabase
         .from('provisioning_logs')
-        .select('status, count')
-        .gte('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
-        .group('status');
+        .select('status')
+        .gte('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString());
+
+      let recentProvisions = null;
+      if (!provError && rawProvisions) {
+        const counts = {};
+        for (const r of rawProvisions) {
+          counts[r.status] = (counts[r.status] || 0) + 1;
+        }
+        recentProvisions = Object.entries(counts).map(([status, count]) => ({ status, count }));
+      }
 
       if (provError) {
         this.log('PROVISION', 'Unable to check provisioning success rate', 'warn');
