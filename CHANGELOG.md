@@ -1,0 +1,108 @@
+# Changelog
+
+All notable changes to HYDI System v2 are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
+
+## [Unreleased]
+
+## [2026-06-22] — Documentation suite
+
+### Added
+- `CLAUDE.md` — comprehensive AI assistant reference covering pipeline architecture, API routes, workers, DSL policy engine, and ops scripts
+- `README.md` — rewritten to reflect current architecture (six-layer pipeline, named agents, API routes, Edge Functions, CI workflows)
+- `.cursorrules` — prescriptive Cursor IDE AI rules covering pipeline constraints, KILO execution prohibition, PolicyEngine fail-closed, TypeScript conventions, and secret handling
+- `AGENTS.md` — autonomous AI agent guidelines covering verification commands, codebase navigation, and hard constraints
+- `CONTRIBUTING.md` — full contributor guide with setup, PR checklist, DB migration governance, and CI summary
+- `SECURITY.md` — vulnerability reporting process, scope, known limitations, and security controls
+- `CODE_OF_CONDUCT.md` — Contributor Covenant v2.1
+
+## [2026-06-19] — Worker stability fix
+
+### Fixed
+- Restored `DecisionAssistWorker` registration in `WorkerOrchestrator.js` — omission was causing a startup crash loop
+
+## [2026-06-18] — Mobile status endpoint + stream health watchdog
+
+### Added
+- `api/mobile-status.js` — compact, 3G-safe single-round-trip endpoint returning `{ ok, alert, system, drift, heals_24h, streams, silent, ms, ts }`
+- `supabase/functions/stream-health-watchdog/` — Edge Function monitoring Redis stream health
+
+## [2026-06-17] — Security hardening: SECURITY DEFINER search_path
+
+### Security
+- Pinned `search_path` on 17 `SECURITY DEFINER` functions across Supabase migrations to prevent SQL injection via search path manipulation (#88)
+
+## [2026-06-16] — DSL policy engine, KILO entry point, ops tooling
+
+### Added
+- `kilo/index.js` — CommonJS entry point for the KILO hypothesis generator; exports `{ KiloEngine, createKiloEngine }`; `execute()` throws unconditionally (KILO never acts)
+- `lib/protoforge/policy-engine.js` — DSL rule evaluator with operators `gte`, `lte`, `gt`, `lt`, `eq`, `neq`, `in`, `nin`; fail-closed (default `'reject'`); hot-reloads via Supabase Realtime
+- `lib/protoforge/auto-gate.js` — automatic wrapper that runs PolicyEngine on every KILO output before Emission Layer
+- `supabase/functions/protoforge-calibration/` — calibration feedback loop adjusting rule weights via `calibrate_protoforge_decisions()` RPC
+- `workers/DecisionAssistWorker.js` — polls for decision-assist tasks across financial_planning, resource_allocation, risk_assessment, system_optimization
+- `verify-supabase.sh` — health check script verifying Supabase connectivity and key tables
+
+### Fixed
+- CI action versions pinned to v4 to resolve broken `clean-main` CI (#86)
+
+### Security
+- Resolved multiple npm CVEs (form-data CR/LF escape, tar PAX header, postcss)
+
+## [2026-05-28–29] — KILO→ProtoForge automatic gating pipeline
+
+### Added
+- `lib/protoforge/` foundation: `policies` and `decisions` Supabase tables
+- KILO→ProtoForge automatic gating pipeline — every KILO hypothesis now passes through PolicyEngine before reaching the Emission Layer
+- ProtoForge calibration worker and migration (feedback loop layer 3)
+- 29 unit tests for the DSL policy engine
+
+### Fixed
+- 10 bugs across Ursula heartbeat, SSE stream, and SSE manager
+
+## [2026-05-27] — Ops substrate + security hardening
+
+### Added
+- Ops substrate: infrastructure health bridge, enforcement modules re-enabled
+- HeidiCoreLoop unit test suite (35 tests)
+- `selfHealing` and `redisStream` integrated into `HeidiCoreLoop.executeLoop()`
+- Stripe Connect setup script
+
+### Fixed
+- RLS enabled on 4 previously unprotected public tables (Advisor CRITICAL)
+- Resolved all 9 failing unit test cases
+- Resolved postcss CVE GHSA-qx2v-qp2m-jg93 via dependency override
+- Scoped Babel to Jest only; Next.js build now uses SWC
+
+## [2026-05-19–21] — Phase 5: meta-cognition + local mobile chat
+
+### Added
+- Phase 5 autonomous reasoning queue wired to real HYDI infrastructure
+- Phase 5 meta-cognition and knowledge synthesis engine
+- Context feedback loop — synthesized insights injected into `/think` prompt
+- Local mobile chat with streaming, TTS, voice input, and Ollama integration
+- HYDI cognitive loop, governance gate, and automated deployment
+- HEIDI diagnostic script and PM2 service setup
+
+## [2026-05-16] — Phase 1+2: telemetry, self-healing, Redis, ProtoForge runtime
+
+### Added
+- Telemetry self-healing engine (`SelfHealingService`) and Redis stream broker for the core loop
+- Replay history migration, traces API (`api/events/stream.js`), and trace viewer UI pages
+- ProtoForge core runtime: task engine, message bus, memory, safety, observability modules
+- Service-to-service HMAC auth on `api/chat` (#30)
+- TermuxBridge JS client (`termuxClient`)
+- `api/mobile-status.js` precursor: lazy env loading and unit tests for self-healing + Redis broker
+- Registered Rezonate as HYDI federation node
+- Heidi self-optimization: Vercel admin handler + TermuxBridge infra integration
+- Deploy hook self-provisioning and end-to-end smoke test
+
+## [2026-04-24] — Monetization deployment + initial foundation
+
+### Added
+- Complete HYDI monetization deployment: Stripe Connect sub-accounts for `galactic_bytes`, `detailer_bot`, `lipi_v2`, `protogrance_aromatics`, `rezonate`, `waveformer_studio`
+- Adaptive feedback loop with working memory buffer
+- Supabase migrations for core ledger, clients, payouts, and revenue pipeline tables
+- Phase 1 repository: clean repo initialization with full file tracking
+- `hdi-governance-gate.yml` CI workflow (7-gate schema review for migrations)
+- `unit-tests.yml` CI workflow with Codecov integration
+
+[Unreleased]: https://github.com/waveformer1984/HYDI-System-v2/compare/HEAD...HEAD
