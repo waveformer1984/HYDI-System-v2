@@ -28,6 +28,13 @@ npm run test:coverage  # Jest with coverage report
 npm run test:integration  # Run adversarial integration tests (tests/hdi-adversarial.test.js)
 ```
 
+Operational scripts at the repo root:
+```bash
+./verify-supabase.sh       # Health check: verifies Supabase connectivity and key tables
+./deploy-production-safe.sh  # Safe production deploy with pre-flight checks
+./setup.sh                 # First-time environment setup
+```
+
 Run a single test file:
 ```bash
 npx jest tests/unit/heidi-core-loop.test.js
@@ -118,6 +125,7 @@ All files under `api/` are **Vercel serverless functions** (Next.js API routes).
 | `api/heidi/route.js` | Heidi-specific orchestration endpoint |
 | `api/hydi/sync.js` | HYDI state sync |
 | `api/ursula/status.js` | Ursula system status |
+| `api/mobile-status.js` | Compact, 3G-safe system snapshot: health + per-stream revenue in a single round-trip |
 | `api/life-flow/route.js` | Life-flow module |
 | `api/events/stream.js` | SSE stream for real-time events |
 | `api/revenue.js` | Revenue engine: leads, quotes, proposals, Stripe checkout, reports |
@@ -141,7 +149,7 @@ All files under `api/` are **Vercel serverless functions** (Next.js API routes).
 
 **Revenue operations**: `revenue-tracker`, `usage-monitor`, `invoice-generator`, `subscription-manager`, `rezonate-engine`
 
-**Observability**: `monitoring-health`, `chaos-runner`, `analytics-service`
+**Observability**: `monitoring-health`, `chaos-runner`, `analytics-service`, `stream-health-watchdog`
 
 **Public services (no JWT)**: `api-gateway`, `notification-service`, `search-service`, `cache-service`, `events-stream`, `file-storage`, `user-management`
 
@@ -180,9 +188,18 @@ Revenue pipeline module separate from the API layer:
 ### KILO Module (`kilo/`)
 
 Standalone implementation of the KILO hypothesis generator:
-- `kilo/index.js` — entry point
+- `kilo/index.js` — entry point; exports `{ KiloEngine, createKiloEngine }` (CommonJS). `execute()` throws unconditionally — KILO never runs actions directly; only `generateHypotheses()` is permitted.
 - `kilo/modules/repair-manifest-validator.js` — validates repair manifests before KILO processes them
 - `kilo/modules/truth-filter-gate.js` — gates hypotheses against ground truth before emission
+
+### DSL Policy Engine (`lib/protoforge/`)
+
+Implements ProtoForge's policy layer (pipeline layer [5]) with a runtime-configurable rule DSL:
+
+- `lib/protoforge/policy-engine.js` — evaluates KILO hypotheses against priority-ordered rules loaded from Supabase. DSL operators: `gte`, `lte`, `gt`, `lt`, `eq`, `neq`, `in`, `nin`. Fail-closed: default decision is `'reject'`. Decisions: `'approve' | 'reject' | 'escalate'`. Hot-reloads rule changes via Supabase Realtime — no restart required.
+- `lib/protoforge/auto-gate.js` — automatic wrapper that runs PolicyEngine on every KILO output before it reaches the Emission Layer.
+- `supabase/functions/protoforge-calibration/` — Edge Function running the calibration feedback loop; adjusts rule weights based on actual outcomes via the `calibrate_protoforge_decisions()` RPC.
+- DB tables: `policies` (rules), `decisions` (audit log).
 
 ### Hyve Service (`hyve_service/`)
 
@@ -190,6 +207,15 @@ The Hyve opportunity-collective service implementation (Python):
 - `hyve_service/listener.py` — listens for opportunity signals
 - `hyve_service/outputs/` — processed output directory
 - `hyve_service/revenue_ready/` — revenue-ready configuration state
+
+### Workers (`workers/`)
+
+Background workers that poll Supabase and process queue items independently of the API layer:
+
+- **`workers/DecisionAssistWorker.js`** — polls for decision-assist tasks; scores financial_planning, resource_allocation, risk_assessment, and system_optimization requests against configurable confidence thresholds before emitting recommendations. Requires `QueueManager`.
+- **`workers/WorkerOrchestrator.js`** — spawns and supervises all workers; `DecisionAssistWorker` must be registered here or the orchestrator will crash on startup.
+
+If you add a new worker, register it in `WorkerOrchestrator.js` before deploying.
 
 ### Agents (`agents/`)
 
