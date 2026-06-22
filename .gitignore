@@ -15,3 +15,13 @@ node_modules/
 .env.test-jwt
 .env.secret
 .env.secrets
+*-key-guide.md
+get-supabase-credentials.js
+*-steps.md
+get-correct-key.md
+fix-env.js
+direct-instructions.md
+exact-steps.md
+final-key-guide.md
+visual-guide.md
+revenue-dashboard.html
