@@ -33,3 +33,4 @@ logs.txt
 
 # Heidi local env
 heidi-core.env.local
+tsconfig.tsbuildinfo
