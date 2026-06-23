@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react'
 import Chat from '../components/Chat'
 import StatusPanel from '../components/StatusPanel'
-import { HeidiOrchestrator } from '../lib/orchestrator'
 import type { SessionState, SystemStatus, ActionLog } from '../types/index'
 
 export default function Home() {
@@ -11,12 +10,15 @@ export default function Home() {
   const [actions, setActions] = useState<ActionLog[]>([])
 
   useEffect(() => {
-    const orchestrator = new HeidiOrchestrator()
-    orchestrator.getSystemStatus().then(setSystemStatus)
-    
-    const interval = setInterval(() => {
-      // Poll for updates
-    }, 5000)
+    const fetchStatus = () => {
+      fetch('/api/status')
+        .then((res) => res.json())
+        .then(setSystemStatus)
+        .catch((err) => console.error('Failed to fetch system status:', err))
+    }
+
+    fetchStatus()
+    const interval = setInterval(fetchStatus, 5000)
 
     return () => clearInterval(interval)
   }, [sessionId])
