@@ -13,8 +13,8 @@
 
 import { ModelManager } from './ModelManager';
 import { ActionParser, ParsedResponse } from './ActionParser';
-import { generateEmbedding } from './embeddings';
 import { ActionExecutor } from './action-executor';
+import { retrieveMemory, storeMemory } from './heidi-memory';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 interface ChatRequest {
@@ -138,31 +138,7 @@ export class HeidiOrchestrator {
    * user's current message. Skips retrieval when embeddings are unavailable.
    */
   private async retrieveMemory(message: string, userId: string): Promise<string> {
-    try {
-      const embedding = await generateEmbedding(message);
-      if (!embedding) {
-        // No embedding provider configured — skip semantic recall.
-        return '';
-      }
-
-      const { data } = await this.supabase.rpc('search_memories', {
-        query_embedding: embedding,
-        match_count: 5,
-        user_id: userId
-      });
-
-      if (!data || data.length === 0) {
-        return '';
-      }
-
-      const memoryContext = (data as Array<{ content: string }>)
-        .map((mem) => mem.content)
-        .join('\n');
-      return `Previous relevant context:\n${memoryContext}`;
-    } catch (error) {
-      console.error('[Orchestrator] Memory retrieval failed:', error instanceof Error ? error.message : 'Unknown error');
-      return '';
-    }
+    return retrieveMemory(this.supabase, message, userId);
   }
 
   /**
@@ -192,30 +168,7 @@ Respond with JSON:`;
    * Store conversation in memory
    */
   private async storeMemory(sessionId: string, userId: string, userMessage: string, assistantResponse: string): Promise<void> {
-    try {
-      const [userEmbedding, assistantEmbedding] = await Promise.all([
-        generateEmbedding(userMessage),
-        generateEmbedding(assistantResponse),
-      ]);
-
-      await this.supabase.from('memories').insert([
-        {
-          user_id: userId,
-          session_id: sessionId,
-          content: `User: ${userMessage}`,
-          embedding: userEmbedding,
-        },
-        {
-          user_id: userId,
-          session_id: sessionId,
-          content: `Assistant: ${assistantResponse}`,
-          embedding: assistantEmbedding,
-        },
-      ]);
-    } catch (error) {
-      console.error('[Orchestrator] Memory storage failed:', error instanceof Error ? error.message : 'Unknown error');
-      // Don't fail the entire response if memory storage fails
-    }
+    return storeMemory(this.supabase, sessionId, userId, userMessage, assistantResponse);
   }
 
   /**
