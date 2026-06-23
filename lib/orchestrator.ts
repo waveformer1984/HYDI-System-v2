@@ -14,7 +14,7 @@
 import { ModelManager } from './ModelManager';
 import { ActionParser, ParsedResponse } from './ActionParser';
 import { ActionExecutor } from './action-executor';
-import { retrieveMemory, storeMemory } from './heidi-memory';
+import { retrieveMemory, storeMemory, getRecentHistory, formatHistory } from './heidi-memory';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 interface ChatRequest {
@@ -59,11 +59,14 @@ export class HeidiOrchestrator {
     const startTime = Date.now();
     
     try {
-      // 1. Retrieve memory context
-      const memoryContext = await this.retrieveMemory(request.message, request.user_id);
+      // 1. Retrieve memory context (semantic) + recent in-session history
+      const [memoryContext, history] = await Promise.all([
+        this.retrieveMemory(request.message, request.user_id),
+        getRecentHistory(this.supabase, request.session_id),
+      ]);
       
-      // 2. Build prompt with memory
-      const prompt = this.buildPrompt(request.message, memoryContext);
+      // 2. Build prompt with memory + conversation history
+      const prompt = this.buildPrompt(request.message, memoryContext, formatHistory(history));
       
       // 3. Generate response via ModelManager
       const modelResponse = await this.modelManager.generateResponse(prompt, request.session_id);
@@ -144,7 +147,7 @@ export class HeidiOrchestrator {
   /**
    * Build prompt with memory context
    */
-  private buildPrompt(userMessage: string, memoryContext: string): string {
+  private buildPrompt(userMessage: string, memoryContext: string, historyContext: string = ''): string {
     const systemPrompt = `You are Heidi, a production-grade conversational AI assistant.
 
 Rules:
@@ -152,11 +155,11 @@ Rules:
 2. Use this exact structure: {"response": "your response", "actions": [{"type": "action_type", "payload": {}}]}
 3. Keep responses concise and helpful
 4. Only suggest actions that are genuinely useful
+5. Use the recent conversation to resolve follow-up references before answering
 
 Available actions: ${this.allowedActionTypes.join(', ')}
 
-${memoryContext ? `Context: ${memoryContext}` : ''}
-
+${memoryContext ? `Context: ${memoryContext}\n` : ''}${historyContext ? `${historyContext}\n` : ''}
 User message: ${userMessage}
 
 Respond with JSON:`;

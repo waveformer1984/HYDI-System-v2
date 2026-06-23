@@ -15,7 +15,7 @@ import { createClient } from '@supabase/supabase-js';
 import { getAnthropicClient, getAgentSystemPrompt } from './claude';
 import { ActionExecutor, ExecutorAction, ActionResult } from './action-executor';
 import { HEIDI_TOOLS } from './heidi-tools';
-import { retrieveMemory, storeMemory } from './heidi-memory';
+import { retrieveMemory, storeMemory, getRecentHistory, formatHistory } from './heidi-memory';
 
 const MODEL = process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-6';
 const MAX_TOKENS = 2048;
@@ -55,11 +55,16 @@ export async function runHeidiAgentStream(params: RunHeidiAgentParams): Promise<
   const executor = new ActionExecutor(supabase);
   const client = getAnthropicClient();
 
-  const memoryContext = await retrieveMemory(supabase, message, userId);
+  const [memoryContext, history] = await Promise.all([
+    retrieveMemory(supabase, message, userId),
+    getRecentHistory(supabase, sessionId),
+  ]);
   const system = [
     getAgentSystemPrompt('heidi'),
     'You can take real actions using the provided tools. Prefer tools over describing what you would do. Read data with fetch_data before answering data questions.',
+    'Use the recent conversation to resolve follow-up references before answering.',
     memoryContext,
+    formatHistory(history),
   ]
     .filter(Boolean)
     .join('\n\n');
