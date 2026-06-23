@@ -6,6 +6,7 @@ module.exports = {
 
   testMatch: [
     '**/tests/unit/**/*.test.js',
+    '**/tests/unit/**/*.test.ts',
     '**/tests/unit/**/*.spec.js',
     '**/__tests__/**/*.test.js',
     '**/tests/migrations/**/*.test.js',
@@ -19,7 +20,7 @@ module.exports = {
 
   // Use scoped Babel config so Next.js can use SWC for builds
   transform: {
-    '^.+\\.js$': ['babel-jest', { configFile: './babel.jest.config.js' }],
+    '^.+\\.(t|j)sx?$': ['babel-jest', { configFile: './babel.jest.config.js' }],
   },
 
   setupFilesAfterEnv: ['./jest.setup.js'],
