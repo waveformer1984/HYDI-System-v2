@@ -270,6 +270,13 @@ Key DB features: RLS enabled on all tables, `system_dashboard` view drives healt
 | `STRIPE_CONNECT_WEBHOOK_SECRET` | Stripe Connect webhook signing secret |
 | `STRIPE_ACCOUNT_GALACTIC_BYTES` et al. | Connect sub-account IDs per revenue stream |
 | `NODE_ENV` | `production` / `development` |
+| `ANTHROPIC_API_KEY` | Enables the native streaming/tool-calling agent (`lib/heidi-agent.ts`); when unset Heidi uses the fallback orchestrator |
+| `ANTHROPIC_BASE_URL` | Optional override of the Anthropic SDK base URL (e.g. a compatible proxy) |
+| `OPENAI_API_KEY` | Hosted memory embeddings (1536-dim) |
+| `EMBEDDING_PROVIDER` | `openai` \| `ollama` — forces the embeddings backend; auto-selected otherwise (OpenAI if its key is set, else Ollama when a local model is enabled) |
+| `OLLAMA_EMBEDDING_MODEL` | Local embeddings model (default `nomic-embed-text`); vectors are zero-padded to 1536 dims |
+| `ENABLE_LOCAL_MODEL` / `LOCAL_MODEL_URL` / `LOCAL_MODEL_NAME` | Enable + locate the local Ollama model for inference |
+| `LOCAL_MODEL_TIMEOUT_MS` | Local inference budget in ms (default `5000`); governs both the abort timeout and the success-routing latency gate in `lib/ModelManager.ts` |
 
 Use `SUPABASE_SERVICE_ROLE_KEY` server-side only. Never expose it to the client.
 

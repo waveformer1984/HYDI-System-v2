@@ -33,3 +33,6 @@ logs.txt
 
 # Heidi local env
 heidi-core.env.local
+
+# TypeScript incremental build info
+tsconfig.tsbuildinfo
