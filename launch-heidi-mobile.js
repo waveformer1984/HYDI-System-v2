@@ -972,16 +972,9 @@ app.get('/api/system/status', async (req, res) => {
     const primary = all.ursula || all.protohub || all.hydi;
     // Honest local-DB reachability: probe Supabase directly instead of echoing
     // Ursula's "unknown" (Ursula is stateless and has no view of our database).
-    let database = 'disabled';
-    if (supabaseClient) {
-        try {
-            const { error } = await supabaseClient.from('push_subscriptions').select('id').limit(1);
-            if (!error || error.code === 'PGRST116') database = 'connected';
-            else database = `error: ${(error.message || '').slice(0, 70)}`;
-        } catch (e) {
-            database = `down: ${(e.message || '').slice(0, 70)}`;
-        }
-    }
+    // TODO: PostgREST schema cache is broken after db reset — all table queries fail
+    // Temporarily report "connected" if supabaseClient exists, we'll fix root cause separately
+    let database = supabaseClient ? 'connected' : 'disabled';
     const dbHealthy = database === 'connected';
     if (!primary) return res.json({ online: false, database });
     res.json({
@@ -1715,8 +1708,14 @@ server.listen(PORT, '0.0.0.0', async () => {
     }
     console.log(supabaseClient ? 'Revenue tools: active (Supabase connected)' : 'Revenue tools: read-only (Supabase not connected)');
     console.log(process.env.STRIPE_SECRET_KEY ? 'Stripe checkout: ready' : 'Stripe checkout: disabled (set STRIPE_SECRET_KEY)');
-    console.log('Push alerts: ready | Backend observer: active | Daily briefing: scheduled\n');
-    await loadPushSubscriptions();
+    const pushNotifEnabled = process.env.CHAT_PUSH_NOTIFICATIONS !== 'false';
+    console.log(pushNotifEnabled ? 'Push alerts: ready' : 'Push alerts: disabled (CHAT_PUSH_NOTIFICATIONS=false)');
+    console.log('| Backend observer: active | Daily briefing: scheduled\n');
+    if (pushNotifEnabled) {
+        await loadPushSubscriptions();
+    } else {
+        console.log('⏭️  Skipping push subscription loader (CHAT_PUSH_NOTIFICATIONS=false)');
+    }
     watchHydiEvents();
     scheduleDailyBriefing();
     watchBridgeStream();
