@@ -49,6 +49,16 @@ export class ModelManager {
   }
 
   /**
+   * Max local inference budget (ms). Defaults to 5000 (the documented strict
+   * limit); override with LOCAL_MODEL_TIMEOUT_MS for slower local hardware.
+   * Governs both the abort timeout and the success-routing latency gate.
+   */
+  private getLocalTimeoutMs(): number {
+    const parsed = parseInt(process.env.LOCAL_MODEL_TIMEOUT_MS || '', 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 5000;
+  }
+
+  /**
    * Main routing method - NON-NEGOTIABLE routing logic
    */
   async generateResponse(prompt: string, sessionId: string): Promise<ModelResponse> {
@@ -80,7 +90,7 @@ export class ModelManager {
     const latency = Date.now() - startTime;
 
     // Apply routing rule (NON-NEGOTIABLE)
-    if (localResponse.success && latency < 5000 && this.validateOutput(localResponse.content)) {
+    if (localResponse.success && latency < this.getLocalTimeoutMs() && this.validateOutput(localResponse.content)) {
       // Success - use local response
       await this.updateSessionState(sessionId, 'local', 'success');
       this.consecutiveFailures = 0;
@@ -144,7 +154,7 @@ export class ModelManager {
             max_tokens: 1000
           }
         }),
-        signal: AbortSignal.timeout(5000) // 5 second timeout
+        signal: AbortSignal.timeout(this.getLocalTimeoutMs()) // default 5s; override via LOCAL_MODEL_TIMEOUT_MS
       });
 
       if (!response.ok) {
