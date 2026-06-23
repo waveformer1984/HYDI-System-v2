@@ -17,6 +17,10 @@ UI path: homepage `pages/index.tsx` → `components/Chat.tsx` → `hooks/useHeid
 - Supabase CLI is a two-binary shim — `supabase` and `supabase-go` must live together. Install the full tarball to `$HOME/.local/share/supabase` and add to PATH (don't just drop the single `supabase` binary in `/usr/local/bin`).
 - `supabase start` brings up Postgres at `http://127.0.0.1:54321`. Get keys with `supabase status -o env` (ANON_KEY, SERVICE_ROLE_KEY).
 - Apply schema: `docker exec -i <supabase_db_container> psql -U postgres -d postgres < supabase/heidi-init.sql` (creates `memories`, `actions`, `sessions`).
+- **Semantic recall needs the `search_memories` RPC.** `lib/heidi-memory.ts` calls `supabase.rpc('search_memories', { query_embedding, match_count, user_id })`. If it's missing, retrieval silently returns `''` (error is swallowed). The definition lives in `heidi-memory-schema.sql`. Two gotchas when creating it locally:
+  - The input param `user_id` collides with an output column named `user_id` in the `RETURNS TABLE` (`parameter name "user_id" used more than once`). Drop the duplicate output columns — the app only reads `content`. Qualify the WHERE as `search_memories.user_id`.
+  - If the local `memories.created_at` is `timestamp` (not `timestamptz`), a function declaring `created_at timestamptz` fails at call time with `42804 ... does not match expected type`. Easiest fix for testing: omit `created_at` from the function's `RETURNS TABLE`. A minimal working local def: `RETURNS TABLE (id uuid, session_id text, content text, similarity float)`.
+  - Verify directly before blaming app code: `POST /rest/v1/rpc/search_memories` with the service-role key and a 1536-length `query_embedding` array; expect rows with a `similarity` field.
 - **CRITICAL GOTCHA:** tables created via raw `psql` as `postgres` have **no grants** for the `service_role`/`anon` roles, so PostgREST inserts fail with `42501 permission denied` and rows silently never persist (the app swallows the error). Fix:
   ```sql
   GRANT ALL ON public.memories, public.actions, public.sessions TO anon, authenticated, service_role;
@@ -38,6 +42,19 @@ Start `next dev` with:
 - `SUPABASE_SERVICE_ROLE_KEY` = local service-role key, `NEXT_PUBLIC_SUPABASE_ANON_KEY` = local anon key
 - `ENABLE_LOCAL_MODEL=true`, `LOCAL_MODEL_URL=http://localhost:11434`, `LOCAL_MODEL_NAME=llama3.2:3b`
 - **`LOCAL_MODEL_TIMEOUT_MS=30000`** — governs BOTH the abort timeout and the success-routing latency gate in `lib/ModelManager.ts` (`getLocalTimeoutMs()`). Default is 5000; raise it on slow CPU.
+
+## Testing $0 local semantic memory recall (Ollama embeddings, as of PR #120)
+`lib/embeddings.ts` supports a local **Ollama** embeddings provider, so memory recall works with **no paid OpenAI key**.
+
+1. Pull the embeddings model: `ollama pull nomic-embed-text` (768-dim; smoke-test `POST localhost:11434/api/embeddings -d '{"model":"nomic-embed-text","prompt":"hi"}'`).
+2. Add to the dev-server env: `EMBEDDING_PROVIDER=ollama` and `OLLAMA_EMBEDDING_MODEL=nomic-embed-text` (keep `OPENAI_API_KEY` unset). `getEmbeddingProvider()` honors the explicit `EMBEDDING_PROVIDER` first.
+3. Ollama vectors (768) are **zero-padded to 1536** (`toEmbeddingDim`) to match the `memories.embedding vector(1536)` column — cosine-preserving, so similarity search still works.
+
+**Adversarial UI test for recall** (a broken embeddings path would visibly fail this):
+- The orchestrator prompt (`lib/orchestrator.ts` `buildPrompt`) injects ONLY the embedding-retrieved memory — **no conversation history**. The UI regenerates `session_id` on every page load (`pages/index.tsx:7`) with a constant `user_id='demo-user'` (`hooks/useHeidi.ts:62`).
+- So: (a) state a fact in the chat ("my favorite color is teal, my flagship project is Rezonate"), (b) **reload** the page (new session, empty transcript), (c) ask for the fact. A correct answer can ONLY come from semantic retrieval. If embeddings/RPC are broken the model says "I don't have that information".
+- Confirm storage: `select left(content,40), (embedding is not null), vector_dims(embedding) from memories where user_id='demo-user'` → expect `vector_dims = 1536`.
+- Clear `demo-user` rows first (`delete from memories where user_id='demo-user'`) for an unambiguous run.
 
 ## Verifying the fixes (as of PR #116, no temp edits needed)
 The 3 bugs that previously required throwaway patches are **fixed**. Expected healthy behavior:
@@ -72,7 +89,7 @@ The native agent path (`lib/heidi-agent.ts`: token streaming + `tool_use` loop) 
 
 ## What still can't be tested $0
 - **Real Claude reasoning quality** — the proxy approach above validates wiring, not Claude itself. Needs `ANTHROPIC_API_KEY` **with credits** (a creditless key returns `400: "Your credit balance is too low"`).
-- **OpenAI embedding semantic recall** — needs `OPENAI_API_KEY` quota; degrades gracefully to null embeddings otherwise.
+- **OpenAI embedding semantic recall (hosted)** — needs `OPENAI_API_KEY` quota. NOTE: semantic recall itself IS testable $0 via the local Ollama embeddings provider (see "Testing $0 local semantic memory recall" above); only the *hosted OpenAI* variant needs quota.
 
 ## Devin Secrets Needed
 - `ANTHROPIC_API_KEY` — only needed (with credit) to test **real Claude** quality. The native code path itself is testable $0 via the LiteLLM proxy with a dummy key.
