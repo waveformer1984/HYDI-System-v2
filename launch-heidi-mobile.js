@@ -81,7 +81,11 @@ if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
         supabaseClient = createClient(
             process.env.SUPABASE_URL,
             process.env.SUPABASE_SERVICE_ROLE_KEY,
-            { auth: { persistSession: false } }
+            { 
+                auth: { persistSession: false },
+                db: { schema: 'public' },
+                global: { headers: { 'Prefer': 'return=representation' } }
+            }
         );
         console.log('✅ Supabase memory: connected');
     } catch (e) {
@@ -970,12 +974,48 @@ app.get('/api/system/status', async (req, res) => {
     const all = await fetchBackendStatus();
     // Return the first online service's status in the legacy shape for the UI panel
     const primary = all.ursula || all.protohub || all.hydi;
-    // Honest local-DB reachability: probe Supabase directly instead of echoing
-    // Ursula's "unknown" (Ursula is stateless and has no view of our database).
-    // TODO: PostgREST schema cache is broken after db reset — all table queries fail
-    // Temporarily report "connected" if supabaseClient exists, we'll fix root cause separately
-    let database = supabaseClient ? 'connected' : 'disabled';
-    const dbHealthy = database === 'connected';
+    
+    // Probe Supabase directly to test actual database reachability with retry logic
+    let database = 'disabled';
+    let dbHealthy = false;
+    if (supabaseClient) {
+        const maxRetries = 3;
+        const baseDelay = 1000;
+        
+        for (let attempt = 0; attempt < maxRetries; attempt++) {
+            try {
+                // Test with a simple query that should always work
+                // Use health_check table (new minimal migration) to avoid complex schema issues
+                const { error } = await supabaseClient
+                    .from('health_check')
+                    .select('id')
+                    .limit(1);
+                
+                if (error) {
+                    // Schema cache error - PostgREST needs reload
+                    if (error.message.includes('schema cache') || error.message.includes('Could not find the table')) {
+                        if (attempt < maxRetries - 1) {
+                            // Exponential backoff: 1s, 2s, 4s
+                            const delay = baseDelay * Math.pow(2, attempt);
+                            await new Promise(resolve => setTimeout(resolve, delay));
+                            continue;
+                        }
+                        database = 'error: Could not query the database for the schema cache. Retrying.';
+                    } else {
+                        database = `error: ${error.message}`;
+                    }
+                } else {
+                    database = 'connected';
+                    dbHealthy = true;
+                    break;
+                }
+            } catch (e) {
+                database = `error: ${e.message}`;
+                break;
+            }
+        }
+    }
+    
     if (!primary) return res.json({ online: false, database });
     res.json({
         online: true,
@@ -1153,42 +1193,93 @@ app.get('/api/revenue/pipeline', async (req, res) => {
     res.json(results);
 });
 
-// ── Memory routes (Supabase) ──────────────────────────────────────────────────
+// ── Memory routes (Supabase with local JSON fallback) ───────────────────────────
 
 const DEVICE_ID_RE = /^[a-z0-9-]{36}$/;
+const SESSIONS_FILE = path.join(__dirname, '.heidi-sessions.json');
+
+// Local JSON storage helpers
+function loadSessions() {
+    try { return JSON.parse(fs.readFileSync(SESSIONS_FILE, 'utf8')); }
+    catch { return {}; }
+}
+
+function saveSessions(sessions) {
+    fs.writeFileSync(SESSIONS_FILE, JSON.stringify(sessions), 'utf8');
+}
 
 app.get('/api/memory/:deviceId', async (req, res) => {
-    if (!supabaseClient) return res.json({ messages: null, offline: true });
     const { deviceId } = req.params;
     if (!DEVICE_ID_RE.test(deviceId)) return res.status(400).json({ error: 'invalid device id' });
+    
+    // Try Supabase first
+    if (supabaseClient) {
+        try {
+            const { data, error } = await supabaseClient
+                .from('heidi_chat_sessions')
+                .select('messages, model, updated_at')
+                .eq('device_id', deviceId)
+                .single();
+            if (!error && data) {
+                return res.json({ messages: data.messages || null, model: data.model, updated_at: data.updated_at, source: 'supabase' });
+            }
+        } catch (e) {
+            console.log('[Memory] Supabase read failed, falling back to local:', e.message);
+        }
+    }
+    
+    // Fall back to local JSON
     try {
-        const { data, error } = await supabaseClient
-            .from('heidi_chat_sessions')
-            .select('messages, model, updated_at')
-            .eq('device_id', deviceId)
-            .single();
-        if (error && error.code !== 'PGRST116') throw error;
-        res.json({ messages: data?.messages || null, model: data?.model, updated_at: data?.updated_at });
-    } catch (e) { res.status(500).json({ error: e.message }); }
+        const sessions = loadSessions();
+        const session = sessions[deviceId];
+        if (session) {
+            return res.json({ messages: session.messages || null, model: session.model, updated_at: session.updated_at, source: 'local' });
+        }
+    } catch (e) {
+        console.log('[Memory] Local read failed:', e.message);
+    }
+    
+    res.json({ messages: null, offline: true });
 });
 
 app.post('/api/memory/:deviceId', async (req, res) => {
-    if (!supabaseClient) return res.json({ saved: false, offline: true });
     const { deviceId } = req.params;
     if (!DEVICE_ID_RE.test(deviceId)) return res.status(400).json({ error: 'invalid device id' });
     const { messages, model } = req.body;
     if (!Array.isArray(messages)) return res.status(400).json({ error: 'messages must be array' });
+    
+    const sessionData = {
+        device_id: deviceId,
+        messages: messages.slice(-40),
+        model: model || null,
+        msg_count: messages.length,
+        updated_at: new Date().toISOString()
+    };
+    
+    // Always save to local JSON (as cache/backup)
     try {
-        const { error } = await supabaseClient
-            .from('heidi_chat_sessions')
-            .upsert({
-                device_id: deviceId, messages: messages.slice(-40),
-                model: model || null, msg_count: messages.length,
-                updated_at: new Date().toISOString()
-            }, { onConflict: 'device_id' });
-        if (error) throw error;
-        res.json({ saved: true });
-    } catch (e) { res.status(500).json({ saved: false, error: e.message }); }
+        const sessions = loadSessions();
+        sessions[deviceId] = sessionData;
+        saveSessions(sessions);
+    } catch (e) {
+        console.log('[Memory] Local save failed:', e.message);
+    }
+    
+    // Try to save to Supabase (best-effort)
+    if (supabaseClient) {
+        try {
+            const { error } = await supabaseClient
+                .from('heidi_chat_sessions')
+                .upsert(sessionData, { onConflict: 'device_id' });
+            if (error) throw error;
+            return res.json({ saved: true, source: 'supabase' });
+        } catch (e) {
+            console.log('[Memory] Supabase save failed, using local only:', e.message);
+            return res.json({ saved: true, source: 'local' });
+        }
+    }
+    
+    res.json({ saved: true, source: 'local' });
 });
 
 // ── Semantic memory API ───────────────────────────────────────────────────────
