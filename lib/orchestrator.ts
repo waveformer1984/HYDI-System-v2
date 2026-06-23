@@ -13,7 +13,9 @@
 
 import { ModelManager } from './ModelManager';
 import { ActionParser, ParsedResponse } from './ActionParser';
-import { createClient } from '@supabase/supabase-js';
+import { ActionExecutor } from './action-executor';
+import { retrieveMemory, storeMemory } from './heidi-memory';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 interface ChatRequest {
   message: string;
@@ -31,7 +33,8 @@ interface ChatResponse {
 
 export class HeidiOrchestrator {
   private modelManager: ModelManager;
-  private supabase: any;
+  private supabase: SupabaseClient;
+  private actionExecutor: ActionExecutor;
   private allowedActionTypes: string[] = [
     'send_email',
     'create_task',
@@ -46,6 +49,7 @@ export class HeidiOrchestrator {
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
+    this.actionExecutor = new ActionExecutor(this.supabase);
   }
 
   /**
@@ -56,7 +60,7 @@ export class HeidiOrchestrator {
     
     try {
       // 1. Retrieve memory context
-      const memoryContext = await this.retrieveMemory(request.session_id, request.user_id);
+      const memoryContext = await this.retrieveMemory(request.message, request.user_id);
       
       // 2. Build prompt with memory
       const prompt = this.buildPrompt(request.message, memoryContext);
@@ -96,8 +100,8 @@ export class HeidiOrchestrator {
         );
       }
       
-      // 6. Execute actions (async, non-blocking)
-      this.executeActions(finalResponse.actions, request.session_id);
+      // 6. Execute actions
+      await this.executeActions(finalResponse.actions, request.session_id);
       
       // 7. Store conversation in memory
       await this.storeMemory(request.session_id, request.user_id, request.message, finalResponse.response);
@@ -130,41 +134,11 @@ export class HeidiOrchestrator {
   }
 
   /**
-   * Retrieve memory context from Supabase
+   * Retrieve memory context from Supabase via semantic search over the
+   * user's current message. Skips retrieval when embeddings are unavailable.
    */
-  private async retrieveMemory(sessionId: string, userId: string): Promise<string> {
-    try {
-      // Generate embedding for the current message (simplified - in production use actual embedding service)
-      const embedding = await this.generateEmbedding("current message placeholder");
-      
-      // Search for similar memories
-      const { data } = await this.supabase.rpc('search_memories', {
-        query_embedding: embedding,
-        match_count: 5,
-        user_id: userId
-      });
-      
-      if (!data || data.length === 0) {
-        return '';
-      }
-      
-      // Format memory context
-      const memoryContext = data.map((mem: any) => mem.content).join('\n');
-      return `Previous relevant context:\n${memoryContext}`;
-      
-    } catch (error) {
-      console.error('[Orchestrator] Memory retrieval failed:', error);
-      return '';
-    }
-  }
-
-  /**
-   * Generate embedding (simplified placeholder)
-   */
-  private async generateEmbedding(text: string): Promise<number[]> {
-    // In production, use actual embedding service (OpenAI embeddings, etc.)
-    // For now, return a dummy embedding
-    return new Array(1536).fill(0.1);
+  private async retrieveMemory(message: string, userId: string): Promise<string> {
+    return retrieveMemory(this.supabase, message, userId);
   }
 
   /**
@@ -194,67 +168,32 @@ Respond with JSON:`;
    * Store conversation in memory
    */
   private async storeMemory(sessionId: string, userId: string, userMessage: string, assistantResponse: string): Promise<void> {
-    try {
-      // Store user message
-      await this.supabase.from('memories').insert({
-        user_id: userId,
-        session_id: sessionId,
-        content: `User: ${userMessage}`,
-        embedding: await this.generateEmbedding(userMessage)
-      });
-
-      // Store assistant response
-      await this.supabase.from('memories').insert({
-        user_id: userId,
-        session_id: sessionId,
-        content: `Assistant: ${assistantResponse}`,
-        embedding: await this.generateEmbedding(assistantResponse)
-      });
-
-    } catch (error) {
-      console.error('[Orchestrator] Memory storage failed:', error);
-      // Don't fail the entire response if memory storage fails
-    }
+    return storeMemory(this.supabase, sessionId, userId, userMessage, assistantResponse);
   }
 
   /**
-   * Execute actions (async, non-blocking)
+   * Execute actions for real and record truthful outcomes in the `actions`
+   * audit log (status reflects the actual handler result).
    */
-  private async executeActions(actions: any[], sessionId: string): Promise<void> {
+  private async executeActions(actions: ParsedResponse['actions'], sessionId: string): Promise<void> {
     for (const action of actions) {
       try {
-        // Log action start
+        const outcome = await this.actionExecutor.execute(action, sessionId);
+        console.log(`[Orchestrator] Executed action: ${action.type} -> ${outcome.status}`);
+
         await this.supabase.from('actions').insert({
           session_id: sessionId,
           task_name: action.type,
-          status: 'pending',
-          payload: action.payload
+          status: outcome.status,
+          payload: { ...action.payload, result: outcome.result, error: outcome.error },
         });
-
-        // Execute action (in production, implement actual action handlers)
-        console.log(`[Orchestrator] Executing action: ${action.type}`, action.payload);
-        
-        // Simulate action execution
-        setTimeout(async () => {
-          const success = Math.random() > 0.1; // 90% success rate for demo
-          
-          await this.supabase
-            .from('actions')
-            .update({ status: success ? 'completed' : 'failed' })
-            .eq('session_id', sessionId)
-            .eq('task_name', action.type)
-            .eq('status', 'pending');
-        }, 1000);
-
       } catch (error) {
         console.error(`[Orchestrator] Action execution failed for ${action.type}:`, error);
-        
-        // Log failure
         await this.supabase.from('actions').insert({
           session_id: sessionId,
           task_name: action.type,
           status: 'failed',
-          payload: { ...action.payload, error: error instanceof Error ? error.message : 'Unknown error' }
+          payload: { ...action.payload, error: error instanceof Error ? error.message : 'Unknown error' },
         });
       }
     }

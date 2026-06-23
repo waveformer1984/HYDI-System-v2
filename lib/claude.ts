@@ -66,6 +66,20 @@ function getClient(): Anthropic {
   return _client;
 }
 
+/**
+ * Resolve a named agent's system prompt (falls back to Heidi's).
+ */
+export function getAgentSystemPrompt(agent: string): string {
+  return AGENT_SYSTEM_PROMPTS[agent] ?? AGENT_SYSTEM_PROMPTS.heidi;
+}
+
+/**
+ * Shared Anthropic client accessor for advanced callers (streaming, tools).
+ */
+export function getAnthropicClient(): Anthropic {
+  return getClient();
+}
+
 export async function callAgent(
   agent: string,
   message: string,
