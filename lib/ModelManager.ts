@@ -53,7 +53,22 @@ export class ModelManager {
    */
   async generateResponse(prompt: string, sessionId: string): Promise<ModelResponse> {
     const startTime = Date.now();
-    
+
+    // Skip local inference entirely unless a local model is configured.
+    // On serverless hosts (e.g. Vercel) localhost Ollama is unreachable, so
+    // attempting it just burns the 5s timeout on every request.
+    if (!this.isLocalModelEnabled()) {
+      const apiResponse = await this.generateAPIResponse(prompt, sessionId);
+      await this.updateSessionState(sessionId, 'api', apiResponse.success ? 'success' : 'failure');
+      return {
+        content: apiResponse.content,
+        model: apiResponse.model,
+        latency: Date.now() - startTime,
+        success: apiResponse.success,
+        error: apiResponse.error,
+      };
+    }
+
     // Check circuit breaker
     if (this.isCircuitBreakerActive()) {
       console.log('[ModelManager] Circuit breaker active - using API fallback');
@@ -102,17 +117,26 @@ export class ModelManager {
   }
 
   /**
+   * Whether a local inference endpoint is configured.
+   */
+  private isLocalModelEnabled(): boolean {
+    return process.env.ENABLE_LOCAL_MODEL === 'true' || !!process.env.LOCAL_MODEL_URL;
+  }
+
+  /**
    * Local model generation via Ollama
    */
   private async generateLocalResponse(prompt: string): Promise<{ content: string; success: boolean }> {
     try {
-      const response = await fetch('http://localhost:11434/api/generate', {
+      const baseURL = process.env.LOCAL_MODEL_URL || 'http://localhost:11434';
+      const model = process.env.LOCAL_MODEL_NAME || 'llama3';
+      const response = await fetch(`${baseURL}/api/generate`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: 'llama3', // or mistral
+          model, // e.g. llama3 or mistral
           prompt: prompt,
           stream: false,
           options: {
@@ -148,13 +172,13 @@ export class ModelManager {
    */
   private async generateAPIResponse(prompt: string, sessionId: string): Promise<{ content: string; success: boolean; error?: string; model: string; latency: number }> {
     try {
-      // Try OpenAI first, then Anthropic as fallback
-      if (process.env.OPENAI_API_KEY) {
-        return await this.generateOpenAIResponse(prompt);
-      } else if (process.env.ANTHROPIC_API_KEY) {
+      // Prefer Anthropic (the repo's primary provider), then OpenAI.
+      if (process.env.ANTHROPIC_API_KEY) {
         return await this.generateAnthropicResponse(prompt);
+      } else if (process.env.OPENAI_API_KEY) {
+        return await this.generateOpenAIResponse(prompt);
       } else {
-        throw new Error('No API keys configured');
+        throw new Error('No API keys configured (set ANTHROPIC_API_KEY or OPENAI_API_KEY)');
       }
     } catch (error) {
       console.error('[ModelManager] API fallback error:', error);
