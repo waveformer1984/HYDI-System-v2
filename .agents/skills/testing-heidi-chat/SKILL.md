@@ -6,7 +6,7 @@ description: Test the Heidi chat pipeline (/api/chat, orchestrator, memory, acti
 # Testing Heidi chat end-to-end (local $0 stack)
 
 Heidi's chat has two code paths in `pages/api/chat.ts`:
-- **Anthropic agent path** (`lib/heidi-agent.ts`) — native tool-calling + token streaming. Requires `ANTHROPIC_API_KEY` with credits. Cannot be tested $0.
+- **Anthropic agent path** (`lib/heidi-agent.ts`) — native tool-calling + token streaming. Selected when `ANTHROPIC_API_KEY` is set (`isClaudeAvailable()`). Can be exercised $0 against a local Anthropic-compatible proxy — see "Testing the Anthropic native path for $0" below.
 - **Fallback orchestrator path** (`lib/orchestrator.ts`) — used when `ANTHROPIC_API_KEY` is unset. Non-streaming (writes the full response over the same SSE contract). Testable fully locally.
 
 UI path: homepage `pages/index.tsx` → `components/Chat.tsx` → `hooks/useHeidi.ts` POSTs `/api/chat` and parses SSE events (`metadata` / `content` / `actions` / `[DONE]`). The homepage also polls `/api/status`; `useHeidi` calls `/api/status` + `/api/session`.
@@ -50,11 +50,31 @@ Quick end-to-end check: send `Create a task to email the quarterly report to fin
 ## Truthfulness check (P0 real-action-execution)
 If the model picks `send_email`, it should log as `failed` ("Email not configured") rather than a fake success — this confirms real action execution (no `Math.random()` fake-success).
 
+## Testing the Anthropic native path for $0 (no real Claude credit)
+The native agent path (`lib/heidi-agent.ts`: token streaming + `tool_use` loop) can be exercised **without paying** because the Anthropic SDK honors the **`ANTHROPIC_BASE_URL`** env var. Point it at a local **LiteLLM** proxy that speaks the Anthropic Messages API and is backed by Ollama. **No app code changes — env vars only.**
+
+1. `pip install "litellm[proxy]"`. Config (`/tmp/litellm_config.yaml`):
+   ```yaml
+   model_list:
+     - model_name: claude-local
+       litellm_params:
+         model: ollama_chat/llama3.2:3b   # ollama_chat (not ollama) supports tools
+         api_base: http://localhost:11434
+   litellm_settings:
+     drop_params: true
+   ```
+2. `litellm --config /tmp/litellm_config.yaml --port 4000`. Sanity-check the Anthropic endpoint directly before wiring the app:
+   `curl localhost:4000/v1/messages -H 'x-api-key: sk-local-dummy' -H 'anthropic-version: 2023-06-01' -d '{"model":"claude-local","max_tokens":256,"tools":[...],"messages":[...]}'` — expect a `content[].type=="tool_use"` block and `stop_reason:"tool_use"`. Add `"stream":true` to confirm SSE (`content_block_delta`/`text_delta`).
+3. Start `next dev` with the local Supabase env PLUS: `ANTHROPIC_API_KEY=sk-local-dummy`, `ANTHROPIC_BASE_URL=http://localhost:4000`, `ANTHROPIC_MODEL=claude-local`. (Unset `ENABLE_LOCAL_MODEL` — that's only for the fallback path.) This makes `isClaudeAvailable()` true → `runHeidiAgentStream`.
+4. Send a task message in the chat UI. Expect SSE `metadata.model_used == "claude-local"`, token-by-token `content` deltas, a `tool`/`actions` event, and a new `actions` row whose id matches the task id in the reply. The tool loop can take ~30s on CPU (`MAX_TOOL_ITERATIONS=6`).
+
+**Fidelity caveat:** this proves the *code path* (SSE streaming, `tool_use`→`tool_result` loop, `ActionExecutor`, memory) — NOT Claude's reasoning quality, since a local model drives the tool calls via the proxy's translation. For real Claude, set a credited `ANTHROPIC_API_KEY` and unset `ANTHROPIC_BASE_URL`.
+
 ## What still can't be tested $0
-- **Anthropic native tool-calling + token streaming** (`lib/heidi-agent.ts`) — needs `ANTHROPIC_API_KEY` **with credits**. A creditless key returns `400: "Your credit balance is too low"`. Verify credit with a minimal `curl https://api.anthropic.com/v1/messages` before planning to test this path.
+- **Real Claude reasoning quality** — the proxy approach above validates wiring, not Claude itself. Needs `ANTHROPIC_API_KEY` **with credits** (a creditless key returns `400: "Your credit balance is too low"`).
 - **OpenAI embedding semantic recall** — needs `OPENAI_API_KEY` quota; degrades gracefully to null embeddings otherwise.
 
 ## Devin Secrets Needed
-- `ANTHROPIC_API_KEY` — only for the Anthropic native streaming/tool path (must have credit).
+- `ANTHROPIC_API_KEY` — only needed (with credit) to test **real Claude** quality. The native code path itself is testable $0 via the LiteLLM proxy with a dummy key.
 - `OPENAI_API_KEY` — only for real embedding-based memory recall (must have quota).
-- None required for the local $0 fallback path (local Supabase + Ollama supply their own keys).
+- None required for the local $0 fallback path or the $0 LiteLLM Anthropic-path test (local Supabase + Ollama + LiteLLM supply their own).
