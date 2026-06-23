@@ -63,6 +63,9 @@
     "glob": "^10.4.5",
     "qs": ">=6.15.2",
     "ws": ">=8.20.1",
-    "postcss": "$postcss"
+    "postcss": "$postcss",
+    "test-exclude": {
+      "glob": "^7.1.6"
+    }
   }
 }
