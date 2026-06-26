@@ -25,3 +25,10 @@ exact-steps.md
 final-key-guide.md
 visual-guide.md
 revenue-dashboard.html
+
+actions-runner/
+logs/
+*.log
+heidi_snapshot.json
+watchdog-state.json
+supabase/.temp/
