@@ -1,0 +1,37 @@
+name: Test Procedural Memory
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'heidi-procedural-memory.js'
+      - 'heidi-core/actions/action-executor.js'
+      - 'heidi-agent-loop.js'
+
+jobs:
+  test-procedural-memory:
+    runs-on: self-hosted
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run procedural memory evaluation
+        run: node eval-procedural-memory.js
+        env:
+          OLLAMA_URL: http://localhost:11434
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+
+      - name: Upload evaluation results
+        uses: actions/upload-artifact@v4
+        with:
+          name: procedural-memory-eval-results
+          path: .procedural-memory-eval-results.json
