@@ -17,7 +17,9 @@
     "typecheck": "tsc --noEmit",
     "check:ports": "node scripts/check-ports.js",
     "wait:dependencies": "node scripts/wait-for-dependencies.js",
-    "start:hydi": "node scripts/start-hydi.js"
+    "start:hydi": "node scripts/start-hydi.js",
+    "soak-test": "node scripts/soak-test.js",
+    "soak-test:1h": "SOAK_DURATION=3600000 node scripts/soak-test.js"
   },
   "keywords": [
     "protoforge",
