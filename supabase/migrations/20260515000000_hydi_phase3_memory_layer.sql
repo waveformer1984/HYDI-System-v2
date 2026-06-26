@@ -2,6 +2,9 @@
 -- Three-tier memory: Hot (Redis) -> Warm (pgvector) -> Cold (graph)
 -- This migration covers the Warm and Cold tiers stored in Postgres.
 
+-- Enable pgvector extension
+CREATE EXTENSION IF NOT EXISTS vector;
+
 -- ============================================================
 -- WARM TIER: memory_entities
 -- Semantic memories with pgvector embeddings for cosine search
@@ -28,8 +31,7 @@ CREATE INDEX IF NOT EXISTS memory_entities_embedding_idx
 
 -- Composite index for tenant-scoped lookups
 CREATE INDEX IF NOT EXISTS memory_entities_user_scope_idx
-  ON memory_entities (user_id, scope)
-  WHERE expires_at IS NULL OR expires_at > now();
+  ON memory_entities (user_id, scope);
 
 -- ============================================================
 -- COLD TIER: memory_relations

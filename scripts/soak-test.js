@@ -19,7 +19,15 @@
 const http = require('http');
 const logger = require('../lib/structured-logger');
 
-const SOAK_DURATION = parseInt(process.env.SOAK_DURATION || '86400000'); // 24h default
+// Parse --duration argument (or use env var, or default to 24h)
+let SOAK_DURATION = 86400000; // 24h default
+const durationArgIndex = process.argv.indexOf('--duration');
+if (durationArgIndex !== -1 && durationArgIndex + 1 < process.argv.length) {
+  SOAK_DURATION = parseInt(process.argv[durationArgIndex + 1], 10);
+} else if (process.env.SOAK_DURATION) {
+  SOAK_DURATION = parseInt(process.env.SOAK_DURATION, 10);
+}
+
 const TEST_INTERVAL = 30000; // Request every 30s
 const CHAOS_INTERVAL = 3600000; // Inject chaos every 1h
 

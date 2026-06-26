@@ -54,6 +54,12 @@ async function checkAllPorts() {
 
   // Check each port
   for (const [key, config] of Object.entries(services)) {
+    // Skip external services (already running elsewhere)
+    if (config.external) {
+      console.log(`  ${colors.cyan('ℹ External')}  Port ${config.port.toString().padEnd(5)} — ${config.name}`);
+      continue;
+    }
+
     const inUse = await isPortInUse(config.port);
     const status = inUse
       ? colors.red(`✗ IN USE`)

@@ -20,21 +20,42 @@ const colors = {
   gray: (s) => `\x1b[90m${s}\x1b[0m`,
 };
 
-// Critical dependencies that must be ready before startup
-const CRITICAL_DEPS = {
-  supabase: {
-    port: 54321,
-    path: '/health',
-    timeout: 30000, // 30s max wait
-    description: 'PostgreSQL database',
-  },
-  ollama: {
-    port: 11434,
-    path: '/api/tags',
-    timeout: 30000,
-    description: 'Local LLM embeddings',
-  },
-};
+/**
+ * Determine which dependencies are critical based on .ports.json registry
+ * External services are skipped (assumed to be managed elsewhere)
+ */
+function getCriticalDeps() {
+  const deps = {};
+
+  for (const [key, config] of Object.entries(PORTS_CONFIG.services)) {
+    if (config.external) {
+      console.log(`${colors.gray('ℹ Skipping external service:')} ${config.name}`);
+      continue;
+    }
+
+    // Map service key to health check config
+    if (key === 'ollama') {
+      deps.ollama = {
+        port: config.port,
+        path: '/api/tags',
+        timeout: 30000,
+        description: 'Local LLM embeddings',
+      };
+    }
+    if (key === 'supabase') {
+      deps.supabase = {
+        port: config.port,
+        path: '/health',
+        timeout: 30000,
+        description: 'PostgreSQL database',
+      };
+    }
+  }
+
+  return deps;
+}
+
+const CRITICAL_DEPS = getCriticalDeps();
 
 /**
  * Check if a service is healthy
@@ -110,9 +131,16 @@ async function waitForDependencies() {
   // Failed
   console.log(colors.red('\n❌ Dependencies not ready after 60s. Aborting startup.\n'));
   console.log('Troubleshooting:');
-  console.log('  1. Check Supabase: supabase status');
-  console.log('  2. Check Ollama: curl http://localhost:11434/api/tags');
-  console.log('  3. View logs: supabase logs -f\n');
+
+  const depsToCheck = Object.entries(CRITICAL_DEPS);
+  if (depsToCheck.length === 0) {
+    console.log('  No critical dependencies configured.\n');
+  } else {
+    depsToCheck.forEach(([name, config]) => {
+      console.log(`  • Check ${name}: curl http://localhost:${config.port}${config.path}`);
+    });
+    console.log('');
+  }
 
   process.exit(1);
 }

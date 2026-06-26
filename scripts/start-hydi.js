@@ -18,6 +18,8 @@ const { execSync, spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 
+const PORTS_CONFIG = require('../.ports.json');
+
 const colors = {
   green: (s) => `\x1b[32m${s}\x1b[0m`,
   red: (s) => `\x1b[31m${s}\x1b[0m`,
@@ -26,10 +28,11 @@ const colors = {
   gray: (s) => `\x1b[90m${s}\x1b[0m`,
 };
 
-// Service startup order (respects dependencies)
-const STARTUP_ORDER = [
+// Full startup order (before filtering)
+const ALL_SERVICES = [
   {
     name: 'Supabase',
+    key: 'supabase',
     cmd: 'supabase',
     args: ['start'],
     cwd: process.cwd(),
@@ -39,6 +42,7 @@ const STARTUP_ORDER = [
   },
   {
     name: 'Ollama',
+    key: 'ollama',
     cmd: process.platform === 'win32' ? 'ollama' : 'ollama',
     args: ['serve'],
     background: true,
@@ -47,28 +51,52 @@ const STARTUP_ORDER = [
   },
   {
     name: 'HEIDI Core',
+    key: 'heidi-core',
     cmd: 'node',
     args: ['heidi-core/index-clean-3458.js'],
-    env: { HEIDI_CORE_PORT: '3458' },
+    getEnv: () => {
+      const config = PORTS_CONFIG.services['heidi-core'];
+      return { HEIDI_CORE_PORT: String(config.port) };
+    },
     background: true,
     description: 'AI orchestrator & agent router',
   },
   {
     name: 'HEIDI Mobile Chat',
+    key: 'heidi-mobile-chat',
     cmd: 'node',
     args: ['launch-heidi-mobile.js'],
-    env: { HEIDI_PORT: '3006' },
+    getEnv: () => {
+      const config = PORTS_CONFIG.services['heidi-mobile-chat'];
+      return { HEIDI_PORT: String(config.port) };
+    },
     background: true,
     description: 'Chat API for mobile clients',
   },
   {
     name: 'Next.js Frontend',
+    key: 'next-app',
     cmd: 'npm',
     args: ['run', 'dev'],
+    getEnv: () => {
+      const config = PORTS_CONFIG.services['next-app'];
+      return { PORT: String(config.port) };
+    },
     background: false, // Keep in foreground for visibility
     description: 'React dashboard (DashHub)',
   },
 ];
+
+// Filter out external services
+const STARTUP_ORDER = ALL_SERVICES.filter((service) => {
+  const config = PORTS_CONFIG.services[service.key];
+  if (!config) return true; // Not in registry, start it
+  if (config.external) {
+    console.log(`${colors.gray('ℹ Skipping external service:')} ${service.name}`);
+    return false; // External, skip it
+  }
+  return true; // Managed, start it
+});
 
 const runningProcesses = [];
 
@@ -121,9 +149,18 @@ function waitForDependencies() {
 function startService(service, index) {
   log('wait', `[${index}/${STARTUP_ORDER.length}] Starting ${service.name}...`);
 
-  const proc = spawn(service.cmd, service.args, {
+  // On Windows, npm needs to be invoked as npm.cmd
+  let cmd = service.cmd;
+  if (process.platform === 'win32' && service.cmd === 'npm') {
+    cmd = 'npm.cmd';
+  }
+
+  // Compute env (handle getEnv function)
+  const serviceEnv = service.getEnv ? service.getEnv() : service.env || {};
+
+  const proc = spawn(cmd, service.args, {
     cwd: service.cwd || process.cwd(),
-    env: { ...process.env, ...service.env },
+    env: { ...process.env, ...serviceEnv },
     stdio: service.background ? 'pipe' : 'inherit',
   });
 
