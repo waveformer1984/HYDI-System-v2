@@ -1,7 +1,19 @@
 -- Enable pgvector extension
 CREATE EXTENSION IF NOT EXISTS vector;
 
--- Add embedding column to hydi_facts if it doesn't exist
+-- Create hydi_facts table if it doesn't exist
+CREATE TABLE IF NOT EXISTS hydi_facts (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  content TEXT NOT NULL,
+  confidence FLOAT DEFAULT 0.5,
+  division TEXT,
+  content_key TEXT UNIQUE,
+  embedding vector(1536),
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- Ensure embedding column exists
 ALTER TABLE hydi_facts ADD COLUMN IF NOT EXISTS embedding vector(1536);
 
 -- Create index on embedding for fast cosine similarity search

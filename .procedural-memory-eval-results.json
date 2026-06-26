@@ -1,0 +1,28 @@
+{
+  "timestamp": "2026-06-26T03:35:40.857Z",
+  "duration_ms": 1480,
+  "retrieval_accuracy": 1,
+  "confidence_increase": 0.050000000000000044,
+  "lessons_pruned": 1,
+  "tasks_tested": 3,
+  "results": [
+    {
+      "task_id": "deploy_staging",
+      "retrieval_success": true,
+      "lessons_found": 1,
+      "top_lesson": "Always run health check after deploy"
+    },
+    {
+      "task_id": "database_timeout",
+      "retrieval_success": true,
+      "lessons_found": 1,
+      "top_lesson": "Retry with exponential backoff up to 3 times before reporting failure"
+    },
+    {
+      "task_id": "file_write_permission",
+      "retrieval_success": true,
+      "lessons_found": 1,
+      "top_lesson": "Check directory permissions before attempting write operations"
+    }
+  ]
+}

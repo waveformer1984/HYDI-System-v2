@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Rezonate — Samples</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: -apple-system, Segoe UI, Roboto, sans-serif;
+         background: #16161a; color: #e7e7ea; font-size: 14px; }
+  header { padding: 14px 18px; border-bottom: 1px solid #2a2a31;
+           display: flex; align-items: center; gap: 12px; position: sticky; top: 0; background: #16161a; z-index: 5; }
+  .logo { font-weight: 600; letter-spacing: .2px; }
+  .pill { font-size: 12px; color: #8be0c4; background: #143329; padding: 3px 9px; border-radius: 6px; }
+  .wrap { padding: 16px 18px 60px; max-width: 1100px; margin: 0 auto; }
+  .controls { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; }
+  input, select { background: #1f1f25; color: #e7e7ea; border: 1px solid #34343d;
+                  border-radius: 8px; padding: 9px 12px; font-size: 14px; outline: none; }
+  input:focus, select:focus { border-color: #6f66d6; }
+  #q { flex: 1; min-width: 220px; }
+  .stat { color: #9a9aa3; font-size: 13px; }
+  .drop { border: 1.5px dashed #3a3a44; border-radius: 12px; padding: 36px; text-align: center;
+          color: #9a9aa3; cursor: pointer; margin-bottom: 16px; }
+  .drop:hover { border-color: #6f66d6; color: #cfcfe6; }
+  .row { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border: 1px solid #26262d;
+         border-radius: 8px; margin-bottom: 6px; background: #1b1b21; }
+  .row:hover { border-color: #3a3a55; }
+  .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .meta { color: #9a9aa3; font-size: 12px; white-space: nowrap; }
+  .tag { font-size: 11px; color: #b9b3f0; background: #232038; padding: 2px 7px; border-radius: 5px; }
+  .folder { color: #6f6f7a; font-size: 11px; max-width: 230px; overflow: hidden; text-overflow: ellipsis;
+            white-space: nowrap; direction: rtl; text-align: left; }
+  button.copy { background: #232028; color: #cfcfe6; border: 1px solid #34343d; border-radius: 6px;
+                padding: 5px 9px; cursor: pointer; font-size: 12px; }
+  button.copy:hover { border-color: #6f66d6; }
+  .empty { color: #7a7a85; padding: 30px; text-align: center; }
+</style>
+</head>
+<body>
+<header>
+  <span class="logo">Rezonate</span><span class="pill">samples</span>
+  <span class="stat" id="stat"></span>
+</header>
+<div class="wrap">
+  <div id="loader" class="drop">Drop <b>samples-catalog.json</b> here, or click to choose it
+    <input id="file" type="file" accept=".json,application/json" style="display:none" />
+  </div>
+
+  <div id="ui" style="display:none">
+    <div class="controls">
+      <input id="q" placeholder="search by name, folder, vibe…  e.g.  dark rhodes 88" />
+      <select id="key"><option value="">any key</option></select>
+      <select id="ext"><option value="">any type</option></select>
+      <label class="stat"><input type="checkbox" id="hasbpm" style="vertical-align:-2px"> has BPM</label>
+    </div>
+    <div class="stat" id="count" style="margin-bottom:10px"></div>
+    <div id="list"></div>
+  </div>
+</div>
+
+<script>
+let ALL = [];
+const $ = id => document.getElementById(id);
+
+function load(json) {
+  try {
+    const data = JSON.parse(json);
+    ALL = data.samples || [];
+  } catch (e) { alert('Could not read that file: ' + e.message); return; }
+  $('loader').style.display = 'none';
+  $('ui').style.display = 'block';
+  $('stat').textContent = ALL.length.toLocaleString() + ' samples';
+  const keys = [...new Set(ALL.map(s => s.key).filter(Boolean))].sort();
+  for (const k of keys) $('key').insertAdjacentHTML('beforeend', `<option>${k}</option>`);
+  const exts = [...new Set(ALL.map(s => s.ext).filter(Boolean))].sort();
+  for (const e of exts) $('ext').insertAdjacentHTML('beforeend', `<option>${e}</option>`);
+  render();
+}
+
+function render() {
+  const terms = $('q').value.toLowerCase().split(/\s+/).filter(Boolean);
+  const key = $('key').value, ext = $('ext').value, needBpm = $('hasbpm').checked;
+  const out = [];
+  for (const s of ALL) {
+    if (key && s.key !== key) continue;
+    if (ext && s.ext !== ext) continue;
+    if (needBpm && !s.bpm) continue;
+    if (terms.length) {
+      const hay = (s.name + ' ' + s.path + ' ' + (s.tags || []).join(' ') + ' ' + (s.key || '') + ' ' + (s.bpm || '')).toLowerCase();
+      if (!terms.every(t => hay.includes(t))) continue;
+    }
+    out.push(s);
+    if (out.length >= 300) break;
+  }
+  const total = out.length >= 300 ? '300+' : out.length;
+  $('count').textContent = `showing ${total} match${out.length === 1 ? '' : 'es'}`;
+  if (!out.length) { $('list').innerHTML = '<div class="empty">No matches. Try fewer words.</div>'; return; }
+  $('list').innerHTML = out.map((s, i) => `
+    <div class="row">
+      <span class="name" title="${esc(s.path)}">${esc(s.name)}</span>
+      ${s.key ? `<span class="meta">${esc(s.key)}</span>` : ''}
+      ${s.bpm ? `<span class="meta">${s.bpm}</span>` : ''}
+      ${(s.tags || []).slice(0, 3).map(t => `<span class="tag">${esc(t)}</span>`).join('')}
+      <span class="folder" title="${esc(s.folder)}">${esc(s.folder)}</span>
+      <button class="copy" data-i="${i}">copy path</button>
+    </div>`).join('');
+  $('list').querySelectorAll('.copy').forEach(b => b.onclick = () => {
+    navigator.clipboard.writeText(out[+b.dataset.i].path);
+    b.textContent = 'copied'; setTimeout(() => b.textContent = 'copy path', 1000);
+  });
+}
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+$('loader').onclick = () => $('file').click();
+$('file').onchange = e => { const f = e.target.files[0]; if (f) f.text().then(load); };
+['dragover','drop'].forEach(ev => $('loader').addEventListener(ev, e => e.preventDefault()));
+$('loader').addEventListener('drop', e => { const f = e.dataTransfer.files[0]; if (f) f.text().then(load); });
+let t; ['q','key','ext','hasbpm'].forEach(id => $(id).addEventListener('input', () => { clearTimeout(t); t = setTimeout(render, 120); }));
+</script>
+</body>
+</html>

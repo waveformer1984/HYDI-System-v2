@@ -43,9 +43,18 @@ CREATE TABLE IF NOT EXISTS heidi_reflections (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   reflection JSONB NOT NULL, -- patterns, uncertainties, improvements
   event_range JSONB, -- { from: UUID, to: UUID }
-  cycle INT NOT NULL,
+  cycle INT NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ DEFAULT now()
 );
+
+-- Add cycle column if it doesn't exist (for backward compatibility)
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='heidi_reflections' AND column_name='cycle') THEN
+    ALTER TABLE heidi_reflections ADD COLUMN cycle INT NOT NULL DEFAULT 0;
+  END IF;
+END
+$$;
 
 -- Initialize decision bounds (one row)
 INSERT INTO heidi_decision_bounds (auto_approve_threshold, max_auto_approve_amount, lease_holder, lease_expires)
