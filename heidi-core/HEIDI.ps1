@@ -120,11 +120,13 @@ if (-not (Test-Path $toRun)) {
     exit 1
 }
 
-# 5. Set environment variables for Supabase
+# 5. Set environment variables for Supabase (load from .env.local or use defaults)
 Write-Host "`nConfiguring environment..." -ForegroundColor Yellow
-$env:SUPABASE_URL = "http://127.0.0.1:54321"
-$env:SUPABASE_KEY = "sb_secret_N7UND0UgjKTVK-Uodkm0Hg_xSvEMPvz"
-$env:SUPABASE_SERVICE_ROLE_KEY = "sb_secret_N7UND0UgjKTVK-Uodkm0Hg_xSvEMPvz"
+$env:SUPABASE_URL = $env:SUPABASE_URL -or "http://127.0.0.1:54321"
+# NOTE: Load SUPABASE_SERVICE_ROLE_KEY from .env.local or environment
+if (-not $env:SUPABASE_SERVICE_ROLE_KEY) {
+    Write-Host "  ⚠️  SUPABASE_SERVICE_ROLE_KEY not set. Load from .env.local or environment." -ForegroundColor Yellow
+}
 Write-Host "  Supabase: $($env:SUPABASE_URL)" -ForegroundColor Green
 
 # 6. Start HEIDI
