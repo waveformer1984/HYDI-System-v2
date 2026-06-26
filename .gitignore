@@ -8,6 +8,37 @@ node_modules/
 .env
 .env.*
 .env*.local
+||||||| parent of 2e19cb5 (feat(heidi): procedural memory eval + CI workflow)
+node_modules/
+.vercel
+.env*.local
+node_modules/
+.vercel
+.env*.local
+
+# Local Netlify folder
+.netlify
+
+# Heidi runtime secrets
+.vapid-keys.json
+**/.vapid-keys.json
+
+# Secret env files — never track, rotate keys if already in history
+.env.backup
+.env.production
+.env.test-jwt
+.env.secret
+.env.secrets
+*-key-guide.md
+get-supabase-credentials.js
+*-steps.md
+get-correct-key.md
+fix-env.js
+direct-instructions.md
+exact-steps.md
+final-key-guide.md
+visual-guide.md
+revenue-dashboard.html
 
 # Vercel / Netlify deploy artifacts
 .vercel
@@ -36,3 +67,33 @@ heidi-core.env.local
 
 # TypeScript incremental build info
 tsconfig.tsbuildinfo
+||||||| parent of 2e19cb5 (feat(heidi): procedural memory eval + CI workflow)
+# Local Netlify folder
+.netlify
+
+# Heidi runtime secrets
+.vapid-keys.json
+**/.vapid-keys.json
+
+# Secret env files — never track, rotate keys if already in history
+.env.backup
+.env.production
+.env.test-jwt
+.env.secret
+.env.secrets
+*-key-guide.md
+get-supabase-credentials.js
+*-steps.md
+get-correct-key.md
+fix-env.js
+direct-instructions.md
+exact-steps.md
+final-key-guide.md
+visual-guide.md
+revenue-dashboard.html
+actions-runner/
+logs/
+*.log
+heidi_snapshot.json
+watchdog-state.json
+supabase/.temp/
