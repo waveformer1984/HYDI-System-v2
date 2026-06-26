@@ -14,7 +14,10 @@
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "test:integration": "node tests/hdi-adversarial.test.js",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "check:ports": "node scripts/check-ports.js",
+    "wait:dependencies": "node scripts/wait-for-dependencies.js",
+    "start:hydi": "node scripts/start-hydi.js"
   },
   "keywords": [
     "protoforge",
