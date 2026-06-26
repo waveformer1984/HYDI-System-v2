@@ -147,47 +147,97 @@ class HeidiAgent {
   }
 
   /**
+   * Retrieve relevant procedural memory facts for a task
+   */
+  async retrieveRelevantFacts(task) {
+    try {
+      // Build a search query from task payload
+      const taskDescription = JSON.stringify(task.payload).substring(0, 200);
+      const divisionPrefix = `${task.division || 'general'} ${task.type || ''}`;
+      const searchQuery = `${divisionPrefix} ${taskDescription}`.substring(0, 300);
+
+      // Query procedural memory by division and confidence
+      const { data, error } = await this.supabase
+        .from('hydi_facts')
+        .select('id, content, confidence, division')
+        .eq('division', task.division || 'general')
+        .order('confidence', { ascending: false })
+        .limit(3);
+
+      if (error || !data) {
+        return [];
+      }
+
+      return data;
+    } catch (error) {
+      console.warn('[HEIDI-AGENT] Fact retrieval failed:', error.message);
+      return [];
+    }
+  }
+
+  /**
    * Make a decision on a task
-   * Returns: { verdict: 'AUTO-APPROVE' | 'REVIEW' | 'BLOCK', reason: string }
+   * Returns: { verdict: 'AUTO-APPROVE' | 'REVIEW' | 'BLOCK', reason: string, memory_ids: UUID[] }
    */
   async makeDecision(task) {
     try {
       // Never auto-approve without explicit enable flag
       if (!process.env.HEIDI_ALLOW_EXEC) {
-        return { verdict: 'REVIEW', reason: 'HEIDI_ALLOW_EXEC not set' };
+        return { verdict: 'REVIEW', reason: 'HEIDI_ALLOW_EXEC not set', memory_ids: [] };
       }
 
       // Check bounds
       if (!this.decisionBounds) {
-        return { verdict: 'REVIEW', reason: 'Decision bounds not loaded' };
+        return { verdict: 'REVIEW', reason: 'Decision bounds not loaded', memory_ids: [] };
       }
 
-      const taskConfidence = task.confidence || 0;
+      // Retrieve relevant procedural memory
+      const relevantFacts = await this.retrieveRelevantFacts(task);
+      const memoryIds = relevantFacts.map(f => f.id);
+
+      // Boost confidence if high-confidence facts support this task
+      let adjustedConfidence = task.confidence || 0;
+      let memoryReasoning = '';
+
+      if (relevantFacts.length > 0) {
+        const avgFactConfidence = relevantFacts.reduce((sum, f) => sum + (f.confidence || 0), 0) / relevantFacts.length;
+        // Boost confidence up to threshold if facts support it
+        if (avgFactConfidence > 0.85) {
+          adjustedConfidence = Math.min(adjustedConfidence + 0.05, 1.0);
+          memoryReasoning = ` (boosted by ${relevantFacts.length} high-confidence facts)`;
+        } else {
+          memoryReasoning = ` (verified against ${relevantFacts.length} procedural facts)`;
+        }
+      }
+
       const threshold = this.decisionBounds.auto_approve_threshold || 0.85;
 
       // Decision logic (triple gate)
-      if (taskConfidence >= threshold && task.within_bounds) {
+      if (adjustedConfidence >= threshold && task.within_bounds) {
         return {
           verdict: 'AUTO-APPROVE',
-          reason: `High confidence (${(taskConfidence * 100).toFixed(0)}%) and within bounds`
+          reason: `High confidence (${(adjustedConfidence * 100).toFixed(0)}%)${memoryReasoning} and within bounds`,
+          memory_ids: memoryIds
         };
       }
 
-      if (taskConfidence < 0.5) {
+      if (adjustedConfidence < 0.5) {
         return {
           verdict: 'BLOCK',
-          reason: `Low confidence (${(taskConfidence * 100).toFixed(0)}%)`
+          reason: `Low confidence (${(adjustedConfidence * 100).toFixed(0)}%)${memoryReasoning}`,
+          memory_ids: memoryIds
         };
       }
 
       // Default to review
       return {
         verdict: 'REVIEW',
-        reason: `Confidence ${(taskConfidence * 100).toFixed(0)}% below threshold ${(threshold * 100).toFixed(0)}%`
+        reason: `Confidence ${(adjustedConfidence * 100).toFixed(0)}%${memoryReasoning} below threshold ${(threshold * 100).toFixed(0)}%`,
+        memory_ids: memoryIds
       };
     } catch (error) {
       console.error('[HEIDI-AGENT] Decision failed:', error.message);
-      return { verdict: 'REVIEW', reason: 'Decision engine error' };
+      return { verdict: 'REVIEW', reason: 'Decision engine error', memory_ids: [] };
     }
   }
 
@@ -198,7 +248,7 @@ class HeidiAgent {
     try {
       if (decision.verdict !== 'AUTO-APPROVE') {
         // Log review/block decision but don't execute
-        await this.logEvent(task, decision.verdict, decision.reason);
+        await this.logEvent(task, decision.verdict, decision.reason, decision.memory_ids);
         return { success: true, executed: false, verdict: decision.verdict };
       }
 
@@ -232,8 +282,8 @@ class HeidiAgent {
         .update({ status: finalStatus, result })
         .eq('id', task.id);
 
-      // Log the event
-      await this.logEvent(task, 'AUTO-APPROVE', `Executed: ${result.success ? 'success' : 'failed'}`);
+      // Log the event with memory traceability
+      await this.logEvent(task, 'AUTO-APPROVE', `Executed: ${result.success ? 'success' : 'failed'}`, decision.memory_ids);
 
       this.stats.tasksApproved++;
       return { success: true, executed: true, verdict: 'AUTO-APPROVE', result };
@@ -264,7 +314,7 @@ class HeidiAgent {
   /**
    * Log decision event to heidi_events
    */
-  async logEvent(task, verdict, reason) {
+  async logEvent(task, verdict, reason, memoryIds = []) {
     try {
       const { error } = await this.supabase
         .from('heidi_events')
@@ -276,9 +326,10 @@ class HeidiAgent {
           context_snapshot: {
             task_id: task.id,
             reason,
-            lease_holder: this.leaseHolder
+            lease_holder: this.leaseHolder,
+            task_confidence: task.confidence
           },
-          memory_ids: []
+          memory_ids: memoryIds
         });
 
       if (error) {
