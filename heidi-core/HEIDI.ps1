@@ -111,20 +111,31 @@ if (-not (Test-Path ".\node_modules")) {
 }
 
 # 4. Check for index file
+$agentFile = ".\heidi-agent.js"
 $indexFile = ".\index-clean-3458.js"
-if (-not (Test-Path $indexFile)) {
-    Write-Host "  ERROR: $indexFile not found" -ForegroundColor Red
+$toRun = if (Test-Path $agentFile) { $agentFile } else { $indexFile }
+
+if (-not (Test-Path $toRun)) {
+    Write-Host "  ERROR: Neither $agentFile nor $indexFile found" -ForegroundColor Red
     exit 1
 }
 
-# 5. Start HEIDI
+# 5. Set environment variables for Supabase
+Write-Host "`nConfiguring environment..." -ForegroundColor Yellow
+$env:SUPABASE_URL = "http://127.0.0.1:54321"
+$env:SUPABASE_KEY = "sb_secret_N7UND0UgjKTVK-Uodkm0Hg_xSvEMPvz"
+$env:SUPABASE_SERVICE_ROLE_KEY = "sb_secret_N7UND0UgjKTVK-Uodkm0Hg_xSvEMPvz"
+Write-Host "  Supabase: $($env:SUPABASE_URL)" -ForegroundColor Green
+
+# 6. Start HEIDI
 Write-Host "`nStarting HEIDI..." -ForegroundColor Cyan
 Write-Host "  Port: $PORT" -ForegroundColor Gray
 Write-Host "  Ollama: $(if ($ollamaRunning) { 'Connected' } else { 'Offline' })" -ForegroundColor Gray
-Write-Host "  UI: Open mobile-ui.html in browser" -ForegroundColor Gray
+Write-Host "  Advisory Mode: $($env:HEIDI_ADVISORY_MODE -eq 'true')" -ForegroundColor Gray
+Write-Host "  Agent: $(Split-Path $toRun -Leaf)" -ForegroundColor Gray
 
 try {
-    node $indexFile
+    node $toRun
 } catch {
     Write-Host "  Failed to start HEIDI: $($_.Exception.Message)" -ForegroundColor Red
     exit 1

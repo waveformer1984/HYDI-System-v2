@@ -5,13 +5,14 @@
  * Runs on Frank as a long-lived process that:
  * 1. Claims an operational lease
  * 2. Polls agent_bus for pending tasks
- * 3. Executes decisions within bounds
+ * 3. Executes decisions within bounds (or advisory mode: recommends for approval)
  * 4. Reflects on outcomes and learns
  * 5. Monitors system drift
  *
- * Phase 2A: Persistent orchestration
+ * Phase 2A: Persistent orchestration + Advisory Mode
  */
 
+const http = require('http');
 const { createClient } = require('@supabase/supabase-js');
 
 class HeidiAgent {
@@ -46,6 +47,10 @@ class HeidiAgent {
     this.leaseTimer = null;
     this.pollTimer = null;
     this.reflectionTimer = null;
+
+    // Advisory mode (HTTP server for user approvals)
+    this.advisoryMode = process.env.HEIDI_ADVISORY_MODE === 'true';
+    this.httpServer = null;
   }
 
   /**
@@ -57,14 +62,14 @@ class HeidiAgent {
       const now = new Date();
       const expiresAt = new Date(now.getTime() + this.leaseTTL * 1000);
 
+      // Claim if no holder OR if lease expired
       const { data, error } = await this.supabase
         .from('heidi_decision_bounds')
         .update({
           lease_holder: this.leaseHolder,
           lease_expires: expiresAt.toISOString()
         })
-        .eq('lease_holder', null)
-        .or(`lease_expires.lt.${now.toISOString()}`)
+        .or(`lease_holder.is.null,lease_expires.lt.${now.toISOString()}`)
         .select();
 
       if (error) {
@@ -195,36 +200,40 @@ class HeidiAgent {
       const relevantFacts = await this.retrieveRelevantFacts(task);
       const memoryIds = relevantFacts.map(f => f.id);
 
-      // Boost confidence if high-confidence facts support this task
-      let adjustedConfidence = task.confidence || 0;
+      const originalConfidence = task.confidence || 0;
+      const threshold = this.decisionBounds.auto_approve_threshold || 0.85;
       let memoryReasoning = '';
+      let adjustedConfidence = originalConfidence;
 
+      // Record memory reasoning but DON'T boost confidence before gate evaluation
       if (relevantFacts.length > 0) {
         const avgFactConfidence = relevantFacts.reduce((sum, f) => sum + (f.confidence || 0), 0) / relevantFacts.length;
-        // Boost confidence up to threshold if facts support it
-        if (avgFactConfidence > 0.85) {
-          adjustedConfidence = Math.min(adjustedConfidence + 0.05, 1.0);
-          memoryReasoning = ` (boosted by ${relevantFacts.length} high-confidence facts)`;
-        } else {
-          memoryReasoning = ` (verified against ${relevantFacts.length} procedural facts)`;
-        }
+        memoryReasoning = ` (verified against ${relevantFacts.length} facts, avg ${(avgFactConfidence * 100).toFixed(0)}% confident)`;
       }
 
-      const threshold = this.decisionBounds.auto_approve_threshold || 0.85;
-
-      // Decision logic (triple gate)
-      if (adjustedConfidence >= threshold && task.within_bounds) {
+      // Sensitive tasks ALWAYS need human review (financial, crypto, vendor decisions)
+      const sensitiveDivisions = ['financial', 'crypto', 'vendor'];
+      if (sensitiveDivisions.includes(task.division)) {
         return {
-          verdict: 'AUTO-APPROVE',
-          reason: `High confidence (${(adjustedConfidence * 100).toFixed(0)}%)${memoryReasoning} and within bounds`,
+          verdict: 'REVIEW',
+          reason: `Sensitive (${task.division}) → human approval required${memoryReasoning}`,
           memory_ids: memoryIds
         };
       }
 
-      if (adjustedConfidence < 0.5) {
+      // Decision logic (triple gate) — evaluate on ORIGINAL confidence, not boosted
+      if (originalConfidence >= threshold && task.within_bounds) {
+        return {
+          verdict: 'AUTO-APPROVE',
+          reason: `High confidence (${(originalConfidence * 100).toFixed(0)}%)${memoryReasoning} and within bounds`,
+          memory_ids: memoryIds
+        };
+      }
+
+      if (originalConfidence < 0.5) {
         return {
           verdict: 'BLOCK',
-          reason: `Low confidence (${(adjustedConfidence * 100).toFixed(0)}%)${memoryReasoning}`,
+          reason: `Low confidence (${(originalConfidence * 100).toFixed(0)}%)${memoryReasoning}`,
           memory_ids: memoryIds
         };
       }
@@ -232,7 +241,7 @@ class HeidiAgent {
       // Default to review
       return {
         verdict: 'REVIEW',
-        reason: `Confidence ${(adjustedConfidence * 100).toFixed(0)}%${memoryReasoning} below threshold ${(threshold * 100).toFixed(0)}%`,
+        reason: `Confidence ${(originalConfidence * 100).toFixed(0)}%${memoryReasoning} below threshold ${(threshold * 100).toFixed(0)}%`,
         memory_ids: memoryIds
       };
     } catch (error) {
@@ -429,6 +438,54 @@ class HeidiAgent {
   }
 
   /**
+   * Handle user approval/rejection in advisory mode
+   */
+  async handleAdvisoryAction(taskId, action, reason = '') {
+    try {
+      if (!['approve', 'reject'].includes(action)) {
+        return { success: false, error: 'Invalid action (must be approve or reject)' };
+      }
+
+      // Fetch the task
+      const { data: tasks, error } = await this.supabase
+        .from('agent_bus')
+        .select('*')
+        .eq('id', taskId);
+
+      if (error || !tasks || tasks.length === 0) {
+        return { success: false, error: 'Task not found' };
+      }
+
+      const task = tasks[0];
+
+      if (action === 'approve') {
+        // Execute the task
+        console.log(`[HEIDI-AGENT] User approved task ${taskId}`);
+        await this.supabase
+          .from('agent_bus')
+          .update({ status: 'approved_by_user', approved_at: new Date().toISOString() })
+          .eq('id', taskId);
+
+        const execResult = await this.executeTask(task, { verdict: 'AUTO-APPROVE', reason: 'User approved' });
+        return { success: execResult.success, executed: execResult.executed, action: 'approved' };
+      } else {
+        // Reject the task
+        console.log(`[HEIDI-AGENT] User rejected task ${taskId}`);
+        await this.supabase
+          .from('agent_bus')
+          .update({ status: 'rejected_by_user', rejected_reason: reason, rejected_at: new Date().toISOString() })
+          .eq('id', taskId);
+
+        await this.logEvent(task, 'USER-REJECTED', reason || 'User rejected task', []);
+        return { success: true, executed: false, action: 'rejected' };
+      }
+    } catch (error) {
+      console.error('[HEIDI-AGENT] Advisory action error:', error.message);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
    * Initialize agent
    */
   async initialize() {
@@ -479,6 +536,124 @@ class HeidiAgent {
     }, this.reflectionInterval);
 
     console.log('[HEIDI-AGENT] Event loops active');
+
+    // Start HTTP server for advisory mode
+    if (this.advisoryMode) {
+      this.startAdvisoryServer();
+    }
+  }
+
+  /**
+   * Start HTTP server for advisory mode approvals
+   */
+  startAdvisoryServer() {
+    const port = 3459; // Separate port for advisory API
+
+    this.httpServer = http.createServer(async (req, res) => {
+      res.setHeader('Content-Type', 'application/json');
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+
+      if (req.method === 'OPTIONS') {
+        res.writeHead(200);
+        res.end();
+        return;
+      }
+
+      // GET /api/decisions/pending - List pending REVIEW decisions
+      if (req.method === 'GET' && req.url === '/api/decisions/pending') {
+        try {
+          const { data, error } = await this.supabase
+            .from('agent_bus')
+            .select('*')
+            .eq('status', 'pending');
+
+          if (error) throw error;
+
+          // Get corresponding decisions from events (last decision for each task)
+          const decisions = await Promise.all(
+            (data || []).map(async task => {
+              const { data: events } = await this.supabase
+                .from('heidi_events')
+                .select('*')
+                .eq('task_id', task.id)
+                .order('timestamp', { ascending: false })
+                .limit(1);
+
+              return {
+                task_id: task.id,
+                type: task.type,
+                division: task.division,
+                payload: task.payload,
+                confidence: task.confidence,
+                decision: events?.[0] ? { verdict: events[0].verdict, reason: events[0].reason } : null
+              };
+            })
+          );
+
+          res.writeHead(200);
+          res.end(JSON.stringify({ decisions }));
+        } catch (error) {
+          res.writeHead(500);
+          res.end(JSON.stringify({ error: error.message }));
+        }
+        return;
+      }
+
+      // POST /api/decisions/{taskId}/approve - Approve a decision
+      if (req.method === 'POST' && req.url.match(/^\/api\/decisions\/[^/]+\/approve$/)) {
+        try {
+          const taskId = req.url.split('/')[3];
+          const result = await this.handleAdvisoryAction(taskId, 'approve');
+
+          res.writeHead(result.success ? 200 : 400);
+          res.end(JSON.stringify(result));
+        } catch (error) {
+          res.writeHead(500);
+          res.end(JSON.stringify({ error: error.message }));
+        }
+        return;
+      }
+
+      // POST /api/decisions/{taskId}/reject - Reject a decision
+      if (req.method === 'POST' && req.url.match(/^\/api\/decisions\/[^/]+\/reject$/)) {
+        try {
+          const taskId = req.url.split('/')[3];
+          let body = '';
+          req.on('data', chunk => body += chunk);
+          req.on('end', async () => {
+            try {
+              const payload = JSON.parse(body || '{}');
+              const result = await this.handleAdvisoryAction(taskId, 'reject', payload.reason);
+
+              res.writeHead(result.success ? 200 : 400);
+              res.end(JSON.stringify(result));
+            } catch (e) {
+              res.writeHead(400);
+              res.end(JSON.stringify({ error: 'Invalid JSON' }));
+            }
+          });
+        } catch (error) {
+          res.writeHead(500);
+          res.end(JSON.stringify({ error: error.message }));
+        }
+        return;
+      }
+
+      // 404
+      res.writeHead(404);
+      res.end(JSON.stringify({ error: 'Not found' }));
+    });
+
+    this.httpServer.listen(port, () => {
+      console.log(`[HEIDI-AGENT] Advisory server listening on http://localhost:${port}`);
+    });
+
+    this.httpServer.on('error', (error) => {
+      if (error.code !== 'EADDRINUSE') {
+        console.error('[HEIDI-AGENT] Advisory server error:', error.message);
+      }
+    });
   }
 
   /**
@@ -491,6 +666,12 @@ class HeidiAgent {
     clearInterval(this.leaseTimer);
     clearInterval(this.pollTimer);
     clearInterval(this.reflectionTimer);
+
+    // Close HTTP server
+    if (this.httpServer) {
+      this.httpServer.close();
+      console.log('[HEIDI-AGENT] Advisory server closed');
+    }
 
     // Release lease
     if (this.leaseClaimed) {

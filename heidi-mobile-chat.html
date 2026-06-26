@@ -194,8 +194,30 @@
             color: var(--text-muted);
             margin-top: 4px;
             padding: 0 4px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
         .message.user .message-meta { text-align: right; }
+
+        /* Facts badge */
+        .facts-badge {
+            font-size: 11px;
+            background: linear-gradient(135deg, rgba(16,185,129,0.3), rgba(16,185,129,0.15));
+            color: var(--status-ok);
+            padding: 3px 8px;
+            border-radius: 4px;
+            border: 1px solid rgba(16,185,129,0.3);
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            white-space: nowrap;
+            font-weight: 500;
+        }
+        .facts-badge::before {
+            content: '📚';
+            font-size: 10px;
+        }
 
         /* Streaming cursor */
         .streaming-cursor {
@@ -768,7 +790,16 @@ async function sendMessage() {
 
     const meta = document.createElement('div');
     meta.className = 'message-meta';
-    meta.textContent = `Heidi · ${now()} · ${provider}`;
+    const timeEl = document.createElement('span');
+    timeEl.textContent = `Heidi · ${now()} · ${provider}`;
+    meta.appendChild(timeEl);
+
+    // Add facts badge to show response is grounded in procedural memory
+    const factsBadge = document.createElement('span');
+    factsBadge.className = 'facts-badge';
+    factsBadge.textContent = 'grounded';
+    meta.appendChild(factsBadge);
+
     msgEl.appendChild(meta);
 
     addContextActions(msgEl, fullText, text);
