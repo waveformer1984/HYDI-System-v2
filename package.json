@@ -81,6 +81,8 @@
     "postcss": "$postcss",
     "test-exclude": {
       "glob": "^7.1.6"
-    }
+    },
+    "undici": "^6.27.0",
+    "js-yaml": "^4.2.0"
   }
 }
