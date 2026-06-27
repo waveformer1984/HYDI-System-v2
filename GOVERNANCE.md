@@ -46,6 +46,29 @@ Breaking changes to the pipeline API, Supabase schema, or worker interfaces requ
 
 Releases are tagged by the maintainer when a meaningful set of changes has accumulated. There is no fixed release cadence. Version numbers follow [Semantic Versioning](https://semver.org/).
 
+## RFC process for significant changes
+
+Changes that affect the pipeline contract, the Supabase schema, or any of the five architectural constraints listed above should be proposed as a GitHub Issue with the label `rfc` before any code is written. The RFC should describe:
+
+- What is changing and why
+- Which pipeline layer(s) or constraints are affected
+- What the migration or rollback path is
+- What tests will validate the change
+
+The maintainer will comment on the RFC to indicate acceptance, rejection, or request for revision before a PR is opened. RFCs are not required for bug fixes or additive changes that do not touch the pipeline contract.
+
+## New agents and workers
+
+Adding a new PAO System agent (`pao-system/agents/`) or background worker (`workers/`) requires the same RFC process. New workers must additionally be registered in `WorkerOrchestrator.js` before the PR is submitted — unregistered workers cause the orchestrator to crash on startup.
+
+## Security
+
+Security vulnerabilities should be reported privately — do not open a public issue. See [SECURITY.md](SECURITY.md) for the reporting process and coordinated disclosure timeline.
+
 ## Amendments to this document
 
 Changes to this governance document require a PR with a clear rationale. The maintainer has final approval.
+
+---
+
+See also: [CONTRIBUTING.md](CONTRIBUTING.md) · [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) · [SECURITY.md](SECURITY.md) · [SUPPORT.md](SUPPORT.md)
