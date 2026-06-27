@@ -19,6 +19,7 @@ npm install          # Node >= 20 required
 ```bash
 npm run typecheck              # TypeScript type-check — must pass clean
 npm test                       # Jest unit tests (tests/unit/)
+./verify-supabase.sh           # health check — Supabase connectivity + key tables
 ```
 
 Integration tests require live env vars (`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`) — do not run in a cold environment:
@@ -91,6 +92,7 @@ Both windows are mandatory — do not remove or shorten them:
 - Files ending `.sql.skip` are intentionally excluded from the migration runner — do not run them.
 - RLS is enabled on all tables — never disable it.
 - Pin `search_path` on all `SECURITY DEFINER` functions to prevent SQL injection.
+- PRs touching `supabase/migrations/**` trigger the **`hdi-governance-gate.yml`** 7-gate CI review: change detection → transformer tests → state machine approval → adversarial tests → replay fidelity → performance regression → blueprint sync. All seven gates must pass.
 
 ### `api/mobile-status.js`
 
@@ -131,6 +133,12 @@ vercel env ls | grep SECRET_NAME
 
 `SUPABASE_SERVICE_ROLE_KEY` is server-side only — never expose to the client.
 
+## RFC / Significant Changes
+
+Before implementing a change that touches the six-layer pipeline boundary, the PolicyEngine DSL, the `system_dashboard` view schema, Supabase Edge Function JWT config, or any PAO agent public API, open a GitHub Issue with the `rfc` label first. See [GOVERNANCE.md](GOVERNANCE.md) for the RFC process.
+
+Pipeline boundary bugs should be filed using the **`pipeline-violation`** issue template (`.github/ISSUE_TEMPLATE/pipeline-violation.md`), not the generic bug template.
+
 ## What Not To Do
 
 - Do not give KILO execution authority — `execute()` must keep throwing.
@@ -144,3 +152,13 @@ vercel env ls | grep SECRET_NAME
 - Do not push to `main` — the primary branch is `clean-main`.
 - Do not rename `pao-system/services/nnotification.service.ts` until all imports are updated together.
 - Do not add latency to `api/mobile-status.js`.
+
+## Key Documentation
+
+| Doc | Purpose |
+|-----|---------|
+| [CLAUDE.md](CLAUDE.md) | Full architecture, module reference, commands, and conventions |
+| [AGENTS.md](AGENTS.md) | This file — agent quick-reference |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Branch strategy, test commands, PR requirements |
+| [GOVERNANCE.md](GOVERNANCE.md) | RFC process, migration gate policy |
+| [SECURITY_PROTOCOL.md](SECURITY_PROTOCOL.md) | Secret handling protocol |
