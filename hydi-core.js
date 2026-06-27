@@ -111,7 +111,8 @@ class HYDICore {
     this.logger.info('Loading agents...');
 
     // Load specialized agents
-    let OperationsAgent;
+    let OperationsAgent, EngineeringAgent, BusinessAgent, ResearchAgent, StudioAgent, FabricationAgent;
+
     try {
       OperationsAgent = require('./agents/operations-agent');
     } catch (e) {
@@ -119,49 +120,49 @@ class HYDICore {
       OperationsAgent = Agent;
     }
 
+    try {
+      EngineeringAgent = require('./agents/engineering-agent');
+    } catch (e) {
+      this.logger.warn('Engineering Agent not yet implemented, using base Agent');
+      EngineeringAgent = Agent;
+    }
+
+    try {
+      BusinessAgent = require('./agents/business-agent');
+    } catch (e) {
+      this.logger.warn('Business Agent not yet implemented, using base Agent');
+      BusinessAgent = Agent;
+    }
+
+    try {
+      ResearchAgent = require('./agents/research-agent');
+    } catch (e) {
+      this.logger.warn('Research Agent not yet implemented, using base Agent');
+      ResearchAgent = Agent;
+    }
+
+    try {
+      StudioAgent = require('./agents/studio-agent');
+    } catch (e) {
+      this.logger.warn('Studio Agent not yet implemented, using base Agent');
+      StudioAgent = Agent;
+    }
+
+    try {
+      FabricationAgent = require('./agents/fabrication-agent');
+    } catch (e) {
+      this.logger.warn('Fabrication Agent not yet implemented, using base Agent');
+      FabricationAgent = Agent;
+    }
+
     // Create agent instances
     const agents = [
       new OperationsAgent(),
-
-      new Agent({
-        id: 'eng-agent',
-        name: 'Engineering Agent',
-        type: 'engineering',
-        capabilities: ['code-review', 'testing', 'ci-cd', 'deployment'],
-        dependencies: ['memory-engine'],
-      }),
-
-      new Agent({
-        id: 'biz-agent',
-        name: 'Business Agent',
-        type: 'business',
-        capabilities: ['crm', 'proposals', 'revenue-tracking', 'lead-scoring'],
-        dependencies: ['memory-engine'],
-      }),
-
-      new Agent({
-        id: 'res-agent',
-        name: 'Research Agent',
-        type: 'research',
-        capabilities: ['grant-discovery', 'tech-monitoring', 'patent-search'],
-        dependencies: ['memory-engine'],
-      }),
-
-      new Agent({
-        id: 'studio-agent',
-        name: 'Studio Agent',
-        type: 'studio',
-        capabilities: ['music-generation', 'midi-creation', 'sample-management'],
-        dependencies: ['memory-engine'],
-      }),
-
-      new Agent({
-        id: 'fab-agent',
-        name: 'Fabrication Agent',
-        type: 'fabrication',
-        capabilities: ['cad-design', 'slicing', 'print-management', 'inventory'],
-        dependencies: ['memory-engine'],
-      }),
+      new EngineeringAgent(),
+      new BusinessAgent(),
+      new ResearchAgent(),
+      new StudioAgent(),
+      new FabricationAgent(),
     ];
 
     for (const agent of agents) {
