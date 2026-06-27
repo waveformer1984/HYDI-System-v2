@@ -33,6 +33,11 @@ class StressTestRunner {
     this.tasksPerHour = config.tasksPerHour || 60;
     this.taskInterval = (3600000 / this.tasksPerHour);
 
+    // Unique id for THIS run. Tagged onto every task payload so we can later
+    // count ONLY the heidi_events produced by this run's tasks (the agent
+    // copies task.payload through into heidi_events.payload via logEvent()).
+    this.runId = require('crypto').randomUUID();
+
     this.stats = {
       tasksCreated: 0,
       tasksCompleted: 0,
@@ -56,6 +61,7 @@ class StressTestRunner {
    */
   async start() {
     console.log('[STRESS-TEST] Starting...');
+    console.log(`  Run ID: ${this.runId}`);
     console.log(`  Duration: ${this.testDuration / 1000}s`);
     console.log(`  Rate: ${this.tasksPerHour} tasks/hour (every ${this.taskInterval.toFixed(0)}ms)`);
 
@@ -89,6 +95,7 @@ class StressTestRunner {
         payload: {
           action: 'test',
           timestamp: new Date().toISOString(),
+          run_id: this.runId,
           test_batch: `batch-${new Date().getHours()}`
         },
         confidence: 0.50 + Math.random() * 0.45, // 0.50-0.95
@@ -162,12 +169,11 @@ class StressTestRunner {
     try {
       console.log('[STRESS-TEST] Cleaning up test data...');
 
-      const batchId = new Date().getHours(); // Group by hour
-
+      // Delete ONLY this run's tasks, matched precisely by run_id.
       const { error } = await this.supabase
         .from('agent_bus')
         .delete()
-        .eq('payload->test_batch', `batch-${batchId}`);
+        .eq('payload->>run_id', this.runId);
 
       if (!error) {
         console.log('[STRESS-TEST] ✅ Cleanup complete');
@@ -184,12 +190,15 @@ class StressTestRunner {
    */
   async collectResults() {
     try {
-      // Get recent events created during test
+      // Count ONLY events produced by THIS run's tasks. The agent copies
+      // task.payload into heidi_events.payload (logEvent), so our run_id is
+      // present on exactly the events we caused. The created_at window is kept
+      // as a secondary guard, but run_id is what makes the number trustworthy.
       const { data: events, error } = await this.supabase
         .from('heidi_events')
         .select('verdict')
-        .gte('created_at', new Date(this.stats.startTime).toISOString())
-        .lte('created_at', new Date(this.stats.endTime).toISOString());
+        .eq('payload->>run_id', this.runId)
+        .gte('created_at', new Date(this.stats.startTime).toISOString());
 
       if (!error && events) {
         for (const event of events) {
@@ -232,9 +241,12 @@ class StressTestRunner {
     console.log(`║ Tasks Failed: ${this.stats.tasksFailed}`);
     console.log(`║`);
 
-    const autoApprovePct = (this.stats.decisionsAutoApprove / this.stats.tasksCompleted * 100).toFixed(1);
-    const reviewPct = (this.stats.decisionsReview / this.stats.tasksCompleted * 100).toFixed(1);
-    const blockPct = (this.stats.decisionsBlock / this.stats.tasksCompleted * 100).toFixed(1);
+    const pct = (n) => this.stats.tasksCompleted > 0
+      ? (n / this.stats.tasksCompleted * 100).toFixed(1)
+      : '0.0';
+    const autoApprovePct = pct(this.stats.decisionsAutoApprove);
+    const reviewPct = pct(this.stats.decisionsReview);
+    const blockPct = pct(this.stats.decisionsBlock);
 
     console.log(`║ Decisions:`);
     console.log(`║   AUTO-APPROVE: ${this.stats.decisionsAutoApprove} (${autoApprovePct}%)`);
