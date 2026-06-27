@@ -4,6 +4,21 @@ All notable changes to HYDI System v2 are documented here. The format follows [K
 
 ## [Unreleased]
 
+## [2026-06-27] — Documentation suite expansion
+
+### Added
+- `.github/ISSUE_TEMPLATE/pipeline-violation.md` — dedicated template for reporting pipeline layer boundary violations (KILO executing, Emission Layer adding logic, ledger mutation, Replay non-determinism, cooldown bypass), with evidence fields and reproduction steps
+- `GOVERNANCE.md` — RFC process for significant changes (pipeline contract, schema, architectural constraints); new agent/worker approval policy requiring WorkerOrchestrator registration; security reference; see-also footer
+- `SUPPORT.md` — issue template selection guide; "What to expect" section (response timings, urgency tiers, RFC pointer); see-also footer
+
+### Changed
+- `.github/PULL_REQUEST_TEMPLATE.md` — enriched with pipeline integrity checklist, DB migration section (migration test requirement, STATE_MACHINE_APPROVED gate, `.sql.skip` convention), worker registration check, `npm run typecheck` step, `SUPABASE_SERVICE_ROLE_KEY` server-side constraint, `unknown` catch guard, Edge Function ESM purity, `system_dashboard` stability, `nnotification.service.ts` rename warning
+- `.github/ISSUE_TEMPLATE/bug_report.md` — added pipeline layer/subsystem checkboxes, `npm run typecheck` output field, log safety reminder
+- `.github/ISSUE_TEMPLATE/feature_request.md` — added full pipeline layers checklist and pipeline constraint check section
+- `CONTRIBUTING.md` — added first-time contributors section, `./verify-supabase.sh` note in migration checklist, changelog policy section, see-also table
+- `SECURITY.md` — added GitHub private security advisory as preferred channel, coordinated disclosure timeline table, see-also footer
+- `CODE_OF_CONDUCT.md` — added reporter confidentiality paragraph, see-also footer
+
 ## [2026-06-22] — Documentation suite
 
 ### Added
