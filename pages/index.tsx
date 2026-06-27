@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react'
 import Chat from '../components/Chat'
 import StatusPanel from '../components/StatusPanel'
-import { HeidiOrchestrator } from '../lib/orchestrator'
 
 export default function Home() {
   const [sessionId] = useState(`session-${Date.now()}`)
@@ -10,16 +9,41 @@ export default function Home() {
   const [actions, setActions] = useState([])
 
   useEffect(() => {
-    // Initialize system status
-    const orchestrator = new HeidiOrchestrator()
-    orchestrator.getSystemStatus().then(setSystemStatus)
-    
-    // Set up polling for session state
-    const interval = setInterval(() => {
-      // Poll for updates
-    }, 5000)
+    let cancelled = false
 
-    return () => clearInterval(interval)
+    // Fetch system status from the server. The orchestrator is server-side code
+    // (it needs SUPABASE_SERVICE_ROLE_KEY) and must never be instantiated in the
+    // browser — do it behind the API route instead.
+    const loadStatus = () => {
+      fetch('/api/heidi', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'status' }),
+      })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => {
+          if (cancelled || !data) return
+          setSystemStatus({
+            model_status: {
+              consecutiveFailures: 0,
+              circuitBreakerActive: !data.available,
+            },
+            memory_connected: !!data.available,
+            allowed_actions: [],
+          })
+        })
+        .catch(() => {
+          // Status is optional; StatusPanel renders safe defaults if it's null.
+        })
+    }
+
+    loadStatus()
+    const interval = setInterval(loadStatus, 5000)
+
+    return () => {
+      cancelled = true
+      clearInterval(interval)
+    }
   }, [sessionId])
 
   return (
