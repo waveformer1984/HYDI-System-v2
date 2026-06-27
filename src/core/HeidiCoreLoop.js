@@ -894,6 +894,47 @@ class HeidiCoreLoop extends EventEmitter {
     }
   }
 
+  // ── Business / environment observation helpers ─────────────────────────────
+  // Neutral telemetry the autonomous loop observes each cycle. Safe defaults
+  // until wired to real sources (revenue engine, analytics, error tracker).
+  async getRecentRevenue() {
+    return 0;
+  }
+
+  async getActiveUsers() {
+    return 0;
+  }
+
+  async getConversionRate() {
+    return 0;
+  }
+
+  getSystemLoad() {
+    // Composite CPU + memory pressure, 0..1
+    return Math.min(1, (this.getCPUUsage() + this.getMemoryUsage()) / 2);
+  }
+
+  getRecentErrors() {
+    return [];
+  }
+
+  async getExternalFactors() {
+    return {};
+  }
+
+  // ── Task-observation helpers (used in observeForTask) ──────────────────────
+  async getRelevantHistory() {
+    return [];
+  }
+
+  async getAvailableResources() {
+    // Headroom = 1 - current pressure, 0..1
+    return {
+      cpu: Math.max(0, 1 - this.getCPUUsage()),
+      memory: Math.max(0, 1 - this.getMemoryUsage())
+    };
+  }
+
   // ── Task queue ─────────────────────────────────────────────────────────────
   async getPendingTasks() {
     return [];

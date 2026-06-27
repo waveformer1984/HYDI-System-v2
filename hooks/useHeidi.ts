@@ -26,6 +26,9 @@ export function useHeidi(sessionId: string) {
   const fetchSessionState = useCallback(async () => {
     try {
       const response = await fetch(`/api/session?session_id=${sessionId}`);
+      if (!response.ok) return;
+      const contentType = response.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) return;
       const data = await response.json();
       setSessionState(data);
     } catch (err) {
@@ -36,6 +39,9 @@ export function useHeidi(sessionId: string) {
   const fetchSystemStatus = useCallback(async () => {
     try {
       const response = await fetch('/api/status');
+      if (!response.ok) return;
+      const contentType = response.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) return;
       const data = await response.json();
       setSystemStatus(data);
     } catch (err) {

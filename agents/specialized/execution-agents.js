@@ -218,7 +218,7 @@ class ProcurementAgent extends SpecializedAgent {
       recommendations.push({
         type: 'timeline',
         priority: 'medium',
-        message: `${longLeadItems.length} items have long lead times. Order immediately.',
+        message: `${longLeadItems.length} items have long lead times. Order immediately.`,
         actionItems: longLeadItems.map(item => `Order ${item.part} now`)
       });
     }

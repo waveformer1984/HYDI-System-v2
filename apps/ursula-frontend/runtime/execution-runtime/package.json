@@ -1,0 +1,15 @@
+{
+  "name": "@protoforge/execution-runtime",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Trusted execution runtime - dumb on purpose",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "crypto": "^1.0.1"
+  },
+  "keywords": ["execution", "trusted", "schema", "safety"],
+  "author": "ProtoForge Systems"
+}

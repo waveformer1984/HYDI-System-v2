@@ -661,8 +661,60 @@ class HeidiOrchestrator extends EventEmitter {
     
     this.driftScore = 0;
     this.confidenceHistory = [];
-    
+
     console.log('[ORCHESTRATOR] Reset completed');
+  }
+
+  // ── Telemetry / scoring helpers ────────────────────────────────────────────
+  // Neutral, type-correct defaults so the autonomous loop runs without crashing.
+  // Replace with real logic (analytics, cost model, satisfaction prediction) later.
+  getCurrentLoad() {
+    return 0.3;
+  }
+
+  getRecentFailures() {
+    return [];
+  }
+
+  getResourceAvailability() {
+    return { cpu: 1, memory: 1, models: 1 };
+  }
+
+  calculateActualCost(task, action) {
+    return action?.cost || 0;
+  }
+
+  assessOutputQuality(result) {
+    return result ? 0.7 : 0;
+  }
+
+  predictUserSatisfaction(task, result) {
+    return result ? 0.7 : 0;
+  }
+
+  calculateRevenueImpact(task, result) {
+    return 0;
+  }
+
+  estimateConversionProbability(result) {
+    return 0;
+  }
+
+  compareConfidenceVsReality(task, measurement) {
+    return 0;
+  }
+
+  detectPatterns(task, measurement) {
+    return [];
+  }
+
+  shouldChangeStrategy(measurement) {
+    return false;
+  }
+
+  applyAdaptation(adaptation) {
+    // no-op until adaptation execution is implemented
+    return adaptation;
   }
 }
 

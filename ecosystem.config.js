@@ -3,7 +3,7 @@
     {
       name: 'heidi',
       script: 'heidi-core/server.js',
-      cwd: 'F:\\HYDI_System',
+      cwd: 'C:\\Users\\Owner\\HYDI_System',
       instances: 1,
       exec_mode: 'fork',
       env: {
@@ -21,7 +21,7 @@
     {
       name: 'hydi-processor',
       script: 'hydi-processor.js',
-      cwd: 'F:\\HYDI_System',
+      cwd: 'C:\\Users\\Owner\\HYDI_System',
       instances: 1,
       exec_mode: 'fork',
       env: {
@@ -38,14 +38,15 @@
     },
     {
       name: 'hydi-protoforge',
-      script: 'protoforge-mock.js',
-      cwd: 'F:\\HYDI_System',
-      instances: 2,
-      exec_mode: 'cluster',
+      script: 'protoforge-main.js',
+      args: 'start',
+      cwd: 'C:\\Users\\Owner\\HYDI_System',
+      instances: 1,
+      exec_mode: 'fork',
       env: {
         NODE_ENV: 'production',
         ENVIRONMENT: 'production',
-        PORT: 3002   // 3001 is occupied by Docker backend; protoforge binds 3002
+        PORT: 3002
       },
       autorestart: true,
       watch: false,
@@ -55,21 +56,41 @@
       log_date_format: 'YYYY-MM-DD HH:mm:ss Z'
     },
     {
-      name: 'hydi-ursula',
-      script: 'ursula-dashboard-enhanced.js',
-      cwd: 'F:\\HYDI_System',
+      name: 'ursula-agent',
+      script: 'agents/ursula/ursula.js',
+      cwd: 'C:\\Users\\Owner\\HYDI_System',
       instances: 1,
       exec_mode: 'fork',
       env: {
         NODE_ENV: 'production',
         ENVIRONMENT: 'production',
-        DASHBOARD_PORT: 3005
+        URSULA_PORT: 3005,
+        HYDI_SYSTEM_PATH: 'C:\\Users\\Owner\\HYDI_System'
       },
       autorestart: true,
       watch: false,
       max_memory_restart: '512M',
       min_uptime: '10s',
       max_restarts: 10,
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z'
+    },
+    {
+      name: 'ursula-frontend',
+      script: 'node_modules/next/dist/bin/next',
+      args: 'start',
+      cwd: 'C:\\Users\\Owner\\HYDI_System\\apps\\ursula-frontend',
+      instances: 1,
+      exec_mode: 'fork',
+      env: {
+        NODE_ENV: 'production',
+        ENVIRONMENT: 'production',
+        PORT: 3001
+      },
+      autorestart: true,
+      watch: false,
+      max_memory_restart: '1G',
+      min_uptime: '10s',
+      max_restarts: 5,
       log_date_format: 'YYYY-MM-DD HH:mm:ss Z'
     }
   ]

@@ -1,0 +1,16 @@
+{
+  "name": "@protoforge/runtime-bridge",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Bridge between decision and execution runtimes",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "stop": "node -e \"process.exit(0)\" index.js"
+  },
+  "dependencies": {
+    "worker_threads": "^0.0.1"
+  },
+  "keywords": ["runtime", "bridge", "communication"],
+  "author": "ProtoForge Systems"
+}

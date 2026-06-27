@@ -161,36 +161,40 @@ app.post('/api/chat', async (req, res) => {
 });
 
 async function streamOllama(message, model, systemPrompt, send) {
-    const prompt = `${systemPrompt}\n\nUser: ${message}\n\nHeidi:`;
-    const response = await fetch(`${OLLAMA_URL}/api/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            model,
-            prompt,
-            stream: true,
-            options: { temperature: 0.7, num_predict: 600 }
-        }),
-        signal: AbortSignal.timeout(90000)
-    });
+    try {
+        const prompt = `${systemPrompt}\n\nUser: ${message}\n\nHeidi:`;
+        const response = await fetch(`${OLLAMA_URL}/api/generate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                model,
+                prompt,
+                stream: true,
+                options: { temperature: 0.7, num_predict: 600 }
+            }),
+            signal: AbortSignal.timeout(90000)
+        });
 
-    if (!response.ok) throw new Error(`Ollama HTTP ${response.status}`);
+        if (!response.ok) throw new Error(`Ollama HTTP ${response.status}`);
 
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
 
-    while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        const text = decoder.decode(value, { stream: true });
-        for (const line of text.split('\n')) {
-            if (!line.trim()) continue;
-            try {
-                const data = JSON.parse(line);
-                if (data.response) send({ t: data.response });
-                if (data.done) return;
-            } catch {}
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            const text = decoder.decode(value, { stream: true });
+            for (const line of text.split('\n')) {
+                if (!line.trim()) continue;
+                try {
+                    const data = JSON.parse(line);
+                    if (data.response) send({ t: data.response });
+                    if (data.done) return;
+                } catch {}
+            }
         }
+    } catch (e) {
+        throw e;
     }
 }
 
@@ -279,6 +283,21 @@ process.on('SIGINT', () => {
     console.log('\n🛑 Shutting down Heidi...');
     server.close(() => process.exit(0));
 });
-process.on('SIGTERM', () => process.exit(0));
-process.on('uncaughtException', (e) => { console.error('Fatal:', e.message); process.exit(1); });
-process.on('unhandledRejection', (e) => { console.error('Unhandled rejection:', e); });
+
+process.on('SIGTERM', () => {
+    console.log('\n⏹️  SIGTERM received, shutting down...');
+    server.close(() => process.exit(0));
+});
+
+process.on('uncaughtException', (e) => {
+    console.error('[FATAL] Uncaught exception:', e.message);
+    console.error(e.stack);
+    process.exit(1);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('[FATAL] Unhandled promise rejection:', reason);
+    console.error('Promise:', promise);
+    // Exit after logging to allow supervisor to restart
+    setTimeout(() => process.exit(1), 1000);
+});
