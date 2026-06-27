@@ -19,7 +19,11 @@
     "wait:dependencies": "node scripts/wait-for-dependencies.js",
     "start:hydi": "node scripts/start-hydi.js",
     "soak-test": "node scripts/soak-test.js",
-    "soak-test:1h": "node scripts/soak-test.js --duration 3600000"
+    "soak-test:1h": "node scripts/soak-test.js --duration 3600000",
+    "stress-test": "node heidi-core/phase-5-stress-test.js",
+    "stress-test:2m": "TEST_DURATION=120000 TASKS_PER_HOUR=120 node heidi-core/phase-5-stress-test.js",
+    "stress-test:10m": "TEST_DURATION=600000 TASKS_PER_HOUR=60 node heidi-core/phase-5-stress-test.js",
+    "stress-test:1h": "TEST_DURATION=3600000 TASKS_PER_HOUR=60 node heidi-core/phase-5-stress-test.js"
   },
   "keywords": [
     "protoforge",

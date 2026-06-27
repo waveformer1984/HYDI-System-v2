@@ -137,6 +137,35 @@ class StressTestRunner {
 
     // Collect results from database
     await this.collectResults();
+
+    // Clean up test data (optional)
+    if (process.env.CLEANUP !== 'false') {
+      await this.cleanup();
+    }
+  }
+
+  /**
+   * Clean up test data from agent_bus
+   */
+  async cleanup() {
+    try {
+      console.log('[STRESS-TEST] Cleaning up test data...');
+
+      const batchId = new Date().getHours(); // Group by hour
+
+      const { error } = await this.supabase
+        .from('agent_bus')
+        .delete()
+        .eq('payload->test_batch', `batch-${batchId}`);
+
+      if (!error) {
+        console.log('[STRESS-TEST] ✅ Cleanup complete');
+      } else {
+        console.warn('[STRESS-TEST] Cleanup failed:', error.message);
+      }
+    } catch (error) {
+      console.warn('[STRESS-TEST] Cleanup error:', error.message);
+    }
   }
 
   /**
@@ -159,6 +188,17 @@ class StressTestRunner {
         }
 
         this.stats.tasksCompleted = events.length;
+
+        // IMPORTANT: Warn if no consumer is running
+        if (events.length === 0) {
+          console.warn('\n⚠️ WARNING: No heidi_events found during test!');
+          console.warn('[STRESS-TEST] This means the HEIDI agent is NOT running.');
+          console.warn('[STRESS-TEST] The harness only measures task *consumption* speed.');
+          console.warn('[STRESS-TEST] Without an active agent, throughput will be 0.');
+          console.warn('[STRESS-TEST]\n[STRESS-TEST] To get real numbers:');
+          console.warn('[STRESS-TEST]   Terminal 1: $env:HEIDI_ALLOW_EXEC=\'true\'; node heidi-core/heidi-agent.js');
+          console.warn('[STRESS-TEST]   Terminal 2: (run this harness again)');
+        }
       }
     } catch (error) {
       console.error('[STRESS-TEST] Result collection error:', error.message);
@@ -192,7 +232,7 @@ class StressTestRunner {
     console.log(`║`);
 
     const throughput = (this.stats.tasksCompleted / (this.stats.totalDuration / 1000)).toFixed(2);
-    const throughputPerHour = (throughput * 3600).toFixed(0);
+    const throughputPerHour = Math.round(throughput * 3600);
     console.log(`║ Throughput:`);
     console.log(`║   ${throughput} tasks/second`);
     console.log(`║   ${throughputPerHour} tasks/hour`);
@@ -207,21 +247,45 @@ class StressTestRunner {
       this.stats.errors.slice(0, 5).forEach(error => {
         console.log(`║   - ${error.substring(0, 50)}`);
       });
+    } else {
+      console.log(`║ Errors: None`);
     }
 
     console.log('╠════════════════════════════════════════════════════════════╣');
 
-    const testStatus = this.stats.tasksFailed === 0 ? '✅ PASSED' : '⚠️ PARTIAL FAILURE';
-    console.log(`║ Test Status: ${testStatus}`.padEnd(64) + '║');
+    // Determine pass/fail
+    const consumerIsRunning = this.stats.tasksCompleted > 0;
+    const throughputOK = throughputPerHour >= 60;
+    const errorRateOK = this.stats.tasksFailed < (this.stats.tasksCreated * 0.05);
 
+    let testStatus = '✅ PASSED';
+    let verdict = 'SUCCESS';
+
+    if (!consumerIsRunning) {
+      testStatus = '⚠️ NO CONSUMER';
+      verdict = 'INCONCLUSIVE';
+    } else if (!throughputOK || !errorRateOK) {
+      testStatus = '❌ FAILED';
+      verdict = 'FAILURE';
+    }
+
+    console.log(`║ Test Status: ${testStatus}`.padEnd(64) + '║');
     console.log('╚════════════════════════════════════════════════════════════╝');
 
-    // Print verdict
-    if (throughputPerHour >= 60 && this.stats.tasksFailed < this.stats.tasksCreated * 0.05) {
+    // Print verdict with detailed guidance
+    if (verdict === 'SUCCESS') {
       console.log('\n✨ Stress test PASSED: System stable under load');
       process.exit(0);
+    } else if (verdict === 'INCONCLUSIVE') {
+      console.log('\n⚠️ Stress test INCONCLUSIVE: Consumer (heidi-agent) is not running.');
+      console.log('\nTo run a real test:');
+      console.log('  Terminal 1: $env:HEIDI_ALLOW_EXEC=\'true\'; node heidi-core/heidi-agent.js');
+      console.log('  Terminal 2: npm run stress-test');
+      process.exit(1);
     } else {
       console.log('\n❌ Stress test FAILED: Performance below targets');
+      console.log(`   Expected: 60+ tasks/hour, got: ${throughputPerHour}`);
+      console.log(`   Expected: <5% error rate, got: ${((this.stats.tasksFailed/this.stats.tasksCreated)*100).toFixed(1)}%`);
       process.exit(1);
     }
   }
