@@ -1,5 +1,11 @@
 # Contributing to HYDI System v2
 
+## First-time contributors
+
+Look for issues labelled **`good first issue`** — these are scoped to a single module, have clear acceptance criteria, and do not require deep knowledge of the event pipeline. Leave a comment before starting so duplicate work is avoided.
+
+For larger changes, open a draft PR early (even with just a description) so the approach can be validated before significant effort is invested.
+
 ## Before You Start
 
 - Read `CLAUDE.md` for architecture overview and module reference.
@@ -86,6 +92,8 @@ Every new `.sql` migration in `supabase/migrations/` requires:
 
 Files ending in `.sql.skip` are intentionally excluded from the migration runner — do not run them.
 
+Run `./verify-supabase.sh` after applying migrations locally to confirm Supabase connectivity and key table state before opening the PR.
+
 ## Secret Handling
 
 Per `SECURITY_PROTOCOL.md`: secrets must never be displayed, echoed, logged, or pasted. Use direct injection:
@@ -130,6 +138,20 @@ Use the issue templates in `.github/ISSUE_TEMPLATE/`:
 - **Bug report** — include Node version, OS, branch/commit, reproduction steps, and logs.
 - **Feature request** — describe the problem, proposed solution, affected subsystem, and acceptance criteria.
 
+## Changelog
+
+The `CHANGELOG.md` is maintained by the project maintainer and updated at release time. Contributors do not need to update it — describe your changes clearly in the PR description and commit messages instead.
+
 ## Questions
 
 Open a discussion or a draft PR. Tag the relevant subsystem in the title (e.g., `[KILO]`, `[ProtoForge]`, `[Stripe]`).
+
+## See also
+
+| Document | Purpose |
+|----------|---------|
+| [`CLAUDE.md`](CLAUDE.md) | Full architecture reference for AI-assisted development |
+| [`SUPPORT.md`](SUPPORT.md) | Help channels and diagnostics guide |
+| [`GOVERNANCE.md`](GOVERNANCE.md) | Decision-making process and maintainer responsibilities |
+| [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) | Community standards and enforcement |
+| [`SECURITY_PROTOCOL.md`](SECURITY_PROTOCOL.md) | Secret handling and security procedures |
