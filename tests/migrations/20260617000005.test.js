@@ -1,114 +1,62 @@
 'use strict';
 const { readMigration } = require('./helpers');
 
-describe('20260617000001_fix_security_definer_search_path', () => {
+describe('20260617000005_heidi_orchestrator_schema', () => {
   let sql;
   beforeAll(() => {
-    sql = readMigration('20260617000001_fix_security_definer_search_path.sql').toLowerCase();
+    sql = readMigration('20260617000005_heidi_orchestrator_schema.sql').toLowerCase();
   });
 
-  test('migration file is readable', () => {
-    expect(sql.length).toBeGreaterThan(0);
+  // G÷¦G÷¦ offers (HeidiRevenueEngine persistence) G÷¦G÷¦G÷¦G÷¦G÷¦G÷¦G÷¦G÷¦G÷¦G÷¦G÷¦G÷¦G÷¦G÷¦G÷¦G÷¦G÷¦G÷¦G÷¦G÷¦G÷¦G÷¦G÷¦G÷¦G÷¦G÷¦G÷¦G÷¦G÷¦G÷¦G÷¦G÷¦
+  test('creates the offers table idempotently', () => {
+    expect(sql).toContain('create table if not exists public.offers');
   });
 
-  test('only uses alter function (no destructive DDL)', () => {
-    expect(sql).not.toContain('drop function');
-    expect(sql).not.toContain('create or replace function');
+  test('offers has a unique offer_id and jsonb offer_data', () => {
+    expect(sql).toMatch(/offer_id\s+text\s+not null\s+unique/);
+    expect(sql).toMatch(/offer_data\s+jsonb/);
   });
 
-  test('pins search_path to safe schemas for all functions', () => {
-    const alterCount = (sql.match(/alter function/g) || []).length;
-    expect(alterCount).toBe(17);
+  test('offers defaults status to active', () => {
+    expect(sql).toMatch(/status\s+text\s+not null\s+default\s+'active'/);
   });
 
-  test('every alter function line is followed by a set search_path', () => {
-    const setCount = (sql.match(/set search_path/g) || []).length;
-    expect(setCount).toBe(18); // 17 alter statements + 1 in comment
+  test('offers indexes status and offer_id', () => {
+    expect(sql).toContain('idx_offers_status');
+    expect(sql).toContain('idx_offers_offer_id');
   });
 
-  // GöÇGöÇ Keymaker functions GöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇ
-
-  test('patches keymaker_issue_key', () => {
-    expect(sql).toContain('keymaker_issue_key');
+  test('offers enables RLS with select + service-role write policies', () => {
+    expect(sql).toMatch(/alter table public\.offers enable row level security/);
+    expect(sql).toMatch(/create policy\s+"offers_select"\s+on\s+public\.offers/);
+    expect(sql).toMatch(/create policy\s+"offers_insert_service"\s+on\s+public\.offers/);
+    expect(sql).toMatch(/create policy\s+"offers_update_service"\s+on\s+public\.offers/);
   });
 
-  test('patches keymaker_validate_and_route', () => {
-    expect(sql).toContain('keymaker_validate_and_route');
+  // G÷¦G÷¦ heidi_reflection_snapshots (HeidiMemorySystem blob snapshots) G÷¦G÷¦G÷¦G÷¦G÷¦G÷¦G÷¦G÷¦G÷¦G÷¦G÷¦
+  test('creates the heidi_reflection_snapshots table idempotently', () => {
+    expect(sql).toContain('create table if not exists public.heidi_reflection_snapshots');
   });
 
-  test('patches oracle_calculate_behavior_score', () => {
-    expect(sql).toContain('oracle_calculate_behavior_score');
+  test('snapshot table has reflection_id, reflection_data jsonb, and timestamp columns', () => {
+    expect(sql).toMatch(/reflection_id\s+text/);
+    expect(sql).toMatch(/reflection_data\s+jsonb/);
+    expect(sql).toMatch(/"timestamp"\s+timestamptz/);
   });
 
-  test('patches oracle_predict_next_action', () => {
-    expect(sql).toContain('oracle_predict_next_action');
+  test('snapshot table indexes reflection_id and timestamp', () => {
+    expect(sql).toContain('idx_heidi_reflection_snapshots_reflection_id');
+    expect(sql).toContain('idx_heidi_reflection_snapshots_timestamp');
   });
 
-  test('patches agent_create_job', () => {
-    expect(sql).toContain('agent_create_job');
+  test('snapshot table enables RLS with select + service-role insert policies', () => {
+    expect(sql).toMatch(/alter table public\.heidi_reflection_snapshots enable row level security/);
+    expect(sql).toMatch(/create policy\s+"heidi_reflection_snapshots_select"\s+on\s+public\.heidi_reflection_snapshots/);
+    expect(sql).toMatch(/create policy\s+"heidi_reflection_snapshots_insert_service"\s+on\s+public\.heidi_reflection_snapshots/);
   });
 
-  test('patches agent_claim_job', () => {
-    expect(sql).toContain('agent_claim_job');
-  });
-
-  test('patches agent_complete_job', () => {
-    expect(sql).toContain('agent_complete_job');
-  });
-
-  test('patches agent_retry_failed_jobs', () => {
-    expect(sql).toContain('agent_retry_failed_jobs');
-  });
-
-  test('patches neo_kill_switch', () => {
-    expect(sql).toContain('neo_kill_switch');
-  });
-
-  test('patches neo_break_glass_access', () => {
-    expect(sql).toContain('neo_break_glass_access');
-  });
-
-  // GöÇGöÇ Stripe / billing GöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇ
-
-  test('patches sync_hydi_stripe_subscription', () => {
-    expect(sql).toContain('sync_hydi_stripe_subscription');
-  });
-
-  test('patches get_billing_retry_health', () => {
-    expect(sql).toContain('get_billing_retry_health');
-  });
-
-  // GöÇGöÇ Tool executor RPC GöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇ
-
-  test('patches tool_create_invoice', () => {
-    expect(sql).toContain('tool_create_invoice');
-  });
-
-  test('patches tool_pause_subscription', () => {
-    expect(sql).toContain('tool_pause_subscription');
-  });
-
-  test('patches tool_create_support_ticket', () => {
-    expect(sql).toContain('tool_create_support_ticket');
-  });
-
-  // GöÇGöÇ Chat operator notifications GöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇ
-
-  test('patches tool_send_notification', () => {
-    expect(sql).toContain('tool_send_notification');
-  });
-
-  test('patches send_completion_notification', () => {
-    expect(sql).toContain('send_completion_notification');
-  });
-
-  // GöÇGöÇ Safety: does not ALTER already-fixed functions GöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇGöÇ
-
-  test('does not alter keeper_auto_escalate (already has search_path)', () => {
-    expect(sql).not.toMatch(/alter function[^;]*keeper_auto_escalate/);
-  });
-
-  test('does not alter get_hydi_context (already has search_path)', () => {
-    expect(sql).not.toMatch(/alter function[^;]*get_hydi_context/);
+  // G÷¦G÷¦ guard: public.reflections is a VIEW and must never be altered G÷¦G÷¦G÷¦G÷¦G÷¦G÷¦G÷¦G÷¦G÷¦G÷¦G÷¦
+  test('does NOT alter the reflections view (the bug that rolled back the apply)', () => {
+    expect(sql).not.toMatch(/alter table\s+public\.reflections\b/);
   });
 });
