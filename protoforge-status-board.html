@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ProtoForge Status Board</title>
+<style>
+  :root{
+    color-scheme: light dark;
+    --bg:#0f1115; --panel:#171a21; --panel2:#1e222b; --border:#2a2f3a;
+    --txt:#e7ebf0; --muted:#9aa4b2; --accent:#6aa9ff;
+    --up:#34d399; --down:#f87171; --warn:#fbbf24; --unknown:#94a3b8;
+  }
+  @media (prefers-color-scheme: light){
+    :root{ --bg:#f4f6fa; --panel:#ffffff; --panel2:#f7f9fc; --border:#e2e8f0;
+      --txt:#1a2233; --muted:#5b6676; --accent:#2563eb; }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font:14px/1.45 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--txt);}
+  header{position:sticky;top:0;z-index:5;background:var(--panel);border-bottom:1px solid var(--border);
+    padding:14px 18px;display:flex;flex-wrap:wrap;gap:12px;align-items:center;}
+  h1{font-size:17px;margin:0;font-weight:650;letter-spacing:.2px}
+  .sub{color:var(--muted);font-size:12px}
+  .spacer{flex:1}
+  .pill{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;
+    border:1px solid var(--border);background:var(--panel2);font-size:12px;color:var(--muted)}
+  .pill b{color:var(--txt)}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--unknown);display:inline-block}
+  .dot.up{background:var(--up)} .dot.down{background:var(--down)}
+  .dot.warn{background:var(--warn)} .dot.unknown{background:var(--unknown)}
+  button{font:inherit;color:var(--txt);background:var(--panel2);border:1px solid var(--border);
+    border-radius:8px;padding:7px 12px;cursor:pointer}
+  button:hover{border-color:var(--accent)}
+  button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+  select,input{font:inherit;color:var(--txt);background:var(--panel2);border:1px solid var(--border);
+    border-radius:8px;padding:7px 10px}
+  main{padding:18px;max-width:1200px;margin:0 auto}
+  .grid{display:grid;gap:14px;grid-template-columns:repeat(auto-fill,minmax(320px,1fr))}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:14px 15px;
+    display:flex;flex-direction:column;gap:10px;position:relative;overflow:hidden}
+  .card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--unknown)}
+  .card.up::before{background:var(--up)} .card.down::before{background:var(--down)}
+  .card.warn::before{background:var(--warn)} .card.unknown::before{background:var(--unknown)}
+  .card-top{display:flex;align-items:flex-start;gap:10px}
+  .name{font-weight:650;font-size:15px}
+  .url{font-size:11.5px;color:var(--muted);word-break:break-all}
+  .url a{color:var(--muted)}
+  .badge{margin-left:auto;font-size:11px;font-weight:650;padding:3px 9px;border-radius:999px;
+    text-transform:uppercase;letter-spacing:.4px;white-space:nowrap}
+  .badge.up{background:rgba(52,211,153,.16);color:var(--up)}
+  .badge.down{background:rgba(248,113,113,.16);color:var(--down)}
+  .badge.warn{background:rgba(251,191,36,.18);color:var(--warn)}
+  .badge.unknown{background:rgba(148,163,184,.18);color:var(--unknown)}
+  .metrics{display:grid;grid-template-columns:1fr 1fr;gap:6px 14px}
+  .metric{font-size:12px;display:flex;justify-content:space-between;gap:8px;border-bottom:1px dashed var(--border);padding-bottom:3px}
+  .metric .k{color:var(--muted)} .metric .v{font-weight:600;text-align:right}
+  .meta{display:flex;flex-wrap:wrap;gap:8px 14px;font-size:11px;color:var(--muted);margin-top:2px}
+  .err{font-size:12px;color:var(--down);background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.25);
+    border-radius:8px;padding:7px 9px;word-break:break-word}
+  .raw{font-size:11px;color:var(--muted)}
+  details summary{cursor:pointer;color:var(--accent);font-size:12px}
+  pre{margin:6px 0 0;background:var(--panel2);border:1px solid var(--border);border-radius:8px;
+    padding:8px;overflow:auto;max-height:180px;font-size:11px}
+  .card-actions{display:flex;gap:8px;margin-top:auto}
+  .card-actions button{padding:5px 9px;font-size:12px}
+  .empty{color:var(--muted);text-align:center;padding:50px 0}
+  dialog{border:1px solid var(--border);border-radius:12px;background:var(--panel);color:var(--txt);
+    padding:0;width:min(440px,92vw)}
+  dialog::backdrop{background:rgba(0,0,0,.45)}
+  .dlg-body{padding:18px;display:flex;flex-direction:column;gap:12px}
+  .dlg-body h2{margin:0;font-size:16px}
+  .field{display:flex;flex-direction:column;gap:4px}
+  .field label{font-size:12px;color:var(--muted)}
+  .field input,.field textarea{width:100%}
+  .dlg-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:4px}
+  .hint{font-size:11.5px;color:var(--muted);line-height:1.4}
+  .footer{max-width:1200px;margin:8px auto 30px;padding:0 18px;color:var(--muted);font-size:11.5px;line-height:1.5}
+  code{background:var(--panel2);border:1px solid var(--border);border-radius:5px;padding:1px 5px;font-size:11.5px}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>ProtoForge Status Board</h1>
+    <div class="sub">Live polling of your ProtoForge systems &amp; modules</div>
+  </div>
+  <div class="spacer"></div>
+  <span class="pill"><span class="dot" id="sumDot"></span><span id="summary">&mdash;</span></span>
+  <span class="pill">next in <b id="countdown">&mdash;</b></span>
+  <label class="pill">every
+    <select id="interval" style="margin-left:6px;padding:2px 6px">
+      <option value="10000">10s</option>
+      <option value="15000" selected>15s</option>
+      <option value="30000">30s</option>
+      <option value="60000">60s</option>
+      <option value="0">manual</option>
+    </select>
+  </label>
+  <button id="pauseBtn">Pause</button>
+  <button id="refreshBtn" class="primary">Refresh now</button>
+  <button id="addBtn">+ Service</button>
+</header>
+
+<main>
+  <div class="grid" id="grid"></div>
+  <div class="empty" id="empty" hidden>No services configured. Click <b>+ Service</b> to add one.</div>
+</main>
+
+<div class="footer">
+  <b>How it works:</b> this page fetches each service's URL from <i>your</i> browser every refresh and reads the JSON it returns.
+  Status is derived from <code>online:true</code>, <code>status:"ok"/"healthy"</code>, or any HTTP 200.
+  &nbsp;<b>CORS note:</b> a service shown as <i>unreachable</i> while you know it's up is almost always cross-origin blocking &mdash;
+  the browser won't let a page on one origin read another origin's response unless that service sends CORS headers.
+  For <code>localhost:3006</code> this works best when the page is opened <i>from</i> that origin. Your edits (services + interval) are saved in this browser.
+</div>
+
+<dialog id="dlg">
+  <form method="dialog" class="dlg-body" id="dlgForm">
+    <h2 id="dlgTitle">Add service</h2>
+    <div class="field">
+      <label>Name</label>
+      <input id="f_name" required placeholder="e.g. HYDI / Idy" />
+    </div>
+    <div class="field">
+      <label>Health URL (returns JSON)</label>
+      <input id="f_url" required placeholder="/api/system/status" />
+    </div>
+    <div class="field">
+      <label>Notes (optional)</label>
+      <input id="f_note" placeholder="e.g. chat server + workers" />
+    </div>
+    <p class="hint">Tip: point at an endpoint that returns JSON. The board auto-shows common fields
+      (status, uptime, memory, version, watchdog restarts) plus the full raw payload.</p>
+    <div class="dlg-actions">
+      <button type="button" id="dlgCancel">Cancel</button>
+      <button type="submit" class="primary" id="dlgSave">Save</button>
+    </div>
+  </form>
+</dialog>
+
+<script>
+"use strict";
+const LS_SERVICES="pf_status_services_v1", LS_INTERVAL="pf_status_interval_v1";
+const DEFAULTS=[
+  {id:cid(), name:"HYDI / Idy", url:"/api/system/status", note:"chat server + 12 workers"},
+  {id:cid(), name:"HYDI health", url:"/api/health", note:"raw server/ollama/memory pulse"},
+  {id:cid(), name:"Ursula", url:"https://ursula-nine.vercel.app/api/health", note:"Flask app on Vercel"},
+  {id:cid(), name:"Protohub", url:"http://localhost:4000/", note:"Node service (set real URL if different)"}
+];
+function cid(){return "s"+Math.random().toString(36).slice(2,9)}
+
+let services = load(LS_SERVICES, DEFAULTS);
+let interval = parseInt(localStorage.getItem(LS_INTERVAL) ?? "15000",10);
+let paused=false, timer=null, countdownTimer=null, nextAt=0;
+const state = {}; // id -> {status,...}
+
+const grid=document.getElementById("grid");
+const emptyEl=document.getElementById("empty");
+const intervalSel=document.getElementById("interval");
+const dlg=document.getElementById("dlg");
+let editingId=null;
+
+intervalSel.value=String(interval);
+
+function load(key,fallback){
+  try{const v=JSON.parse(localStorage.getItem(key)); if(Array.isArray(v)&&v.length) return v;}catch(e){}
+  return fallback.slice();
+}
+function saveServices(){localStorage.setItem(LS_SERVICES,JSON.stringify(services));}
+
+function classify(httpOk, data){
+  // returns 'up' | 'warn' | 'down' | 'unknown'
+  if(data && typeof data==="object"){
+    const s=(data.status||"").toString().toLowerCase();
+    const online = data.online;
+    if(online===false) return "down";
+    if(["down","error","fail","failed","critical"].includes(s)) return "down";
+    if(["degraded","warn","warning","partial"].includes(s)) return "warn";
+    if(data.memory_warn===true) return "warn";
+    if(online===true || ["ok","healthy","operational","up","running"].includes(s)) return "up";
+  }
+  return httpOk ? "up" : "unknown";
+}
+
+function pickMetrics(data){
+  if(!data || typeof data!=="object") return [];
+  const out=[];
+  const add=(k,v)=>{ if(v!==undefined && v!==null && v!=="") out.push([k,String(v)]); };
+  add("status", data.status);
+  if(data.online!==undefined) add("online", data.online ? "yes":"no");
+  add("uptime", data.uptime_str ?? (typeof data.uptime==="number" ? Math.round(data.uptime)+"s" : undefined));
+  if(data.memory_mb!==undefined) add("memory", data.memory_mb+" MB"+(data.memory_warn?" ⚠":""));
+  add("version", data.version);
+  if(data.watchdog && typeof data.watchdog==="object"){
+    add("worker restarts", data.watchdog.worker_restarts);
+    add("chat restarts", data.watchdog.chat_restarts);
+  }
+  if(data.backends && typeof data.backends==="object"){
+    const names=Object.keys(data.backends).filter(n=>data.backends[n]);
+    if(names.length) add("backends", names.join(", "));
+  }
+  add("events", data.totalEvents);
+  add("database", data.database);
+  return out.slice(0,8);
+}
+
+async function poll(svc){
+  const started=performance.now();
+  const ctrl=new AbortController();
+  const to=setTimeout(()=>ctrl.abort(), 6000);
+  let res, data=null, text="", httpOk=false, code=null, err=null;
+  try{
+    res=await fetch(svc.url,{signal:ctrl.signal,cache:"no-store",headers:{"Accept":"application/json"}});
+    code=res.status; httpOk=res.ok;
+    text=await res.text();
+    try{ data=JSON.parse(text); }catch(_){ data=null; }
+  }catch(e){
+    err = (e.name==="AbortError") ? "Timed out (>6s)"
+        : "Unreachable / blocked — "+(e.message||"network or CORS error");
+  }finally{ clearTimeout(to); }
+  const latency=Math.round(performance.now()-started);
+  let status;
+  if(err) status="unknown";
+  else status=classify(httpOk, data);
+  if(!err && !httpOk && code) status = (code>=500?"down":"warn");
+  state[svc.id]={status,code,latency,data,text,err,checkedAt:new Date()};
+}
+
+async function pollAll(){
+  await Promise.all(services.map(poll));
+  render();
+  scheduleNext();
+}
+
+function scheduleNext(){
+  clearTimeout(timer); clearInterval(countdownTimer);
+  document.getElementById("countdown").textContent = paused?"paused":(interval?"":"manual");
+  if(paused || !interval){ return; }
+  nextAt=Date.now()+interval;
+  timer=setTimeout(pollAll, interval);
+  countdownTimer=setInterval(()=>{
+    const s=Math.max(0,Math.round((nextAt-Date.now())/1000));
+    document.getElementById("countdown").textContent=s+"s";
+  },250);
+}
+
+function render(){
+  emptyEl.hidden = services.length>0;
+  grid.innerHTML="";
+  let up=0,down=0,warn=0,unknown=0;
+  for(const svc of services){
+    const st=state[svc.id]||{status:"unknown"};
+    if(st.status==="up")up++; else if(st.status==="down")down++;
+    else if(st.status==="warn")warn++; else unknown++;
+    grid.appendChild(card(svc,st));
+  }
+  const total=services.length;
+  document.getElementById("summary").innerHTML=
+    `<b>${up}</b>/${total} up`+(warn?` · <b>${warn}</b> warn`:"")+(down?` · <b>${down}</b> down`:"")+(unknown?` · <b>${unknown}</b> ?`:"");
+  const sd=document.getElementById("sumDot");
+  sd.className="dot "+(down?"down":warn?"warn":unknown&&!up?"unknown":"up");
+}
+
+function card(svc,st){
+  const el=document.createElement("div");
+  el.className="card "+st.status;
+  const metrics=pickMetrics(st.data);
+  const checked = st.checkedAt ? timeAgo(st.checkedAt) : "—";
+  el.innerHTML=`
+    <div class="card-top">
+      <div>
+        <div class="name"></div>
+        <div class="url"><a href="${escapeAttr(svc.url)}" target="_blank" rel="noopener"></a></div>
+      </div>
+      <span class="badge ${st.status}">${st.status}</span>
+    </div>
+    ${svc.note?`<div class="raw note"></div>`:""}
+    ${metrics.length?`<div class="metrics">${metrics.map(([k,v])=>
+      `<div class="metric"><span class="k">${escapeHtml(k)}</span><span class="v">${escapeHtml(v)}</span></div>`).join("")}</div>`:""}
+    ${st.err?`<div class="err"></div>`:""}
+    <div class="meta">
+      <span>HTTP ${st.code??"—"}</span>
+      <span>${st.latency!=null?st.latency+" ms":""}</span>
+      <span>checked ${checked}</span>
+    </div>
+    ${st.text?`<details><summary>raw payload</summary><pre></pre></details>`:""}
+    <div class="card-actions">
+      <button data-act="edit">Edit</button>
+      <button data-act="remove">Remove</button>
+    </div>`;
+  el.querySelector(".name").textContent=svc.name;
+  const a=el.querySelector(".url a"); a.textContent=svc.url;
+  if(svc.note) el.querySelector(".note").textContent=svc.note;
+  if(st.err) el.querySelector(".err").textContent=st.err;
+  if(st.text){ el.querySelector("pre").textContent = pretty(st.text); }
+  el.querySelector('[data-act="edit"]').onclick=()=>openDlg(svc);
+  el.querySelector('[data-act="remove"]').onclick=()=>{
+    if(confirm("Remove "+svc.name+"?")){ services=services.filter(s=>s.id!==svc.id); delete state[svc.id]; saveServices(); render(); }
+  };
+  return el;
+}
+
+function pretty(t){ try{return JSON.stringify(JSON.parse(t),null,2);}catch(_){return t.slice(0,2000);} }
+function timeAgo(d){const s=Math.round((Date.now()-d.getTime())/1000);
+  if(s<60)return s+"s ago"; const m=Math.round(s/60); return m+"m ago";}
+function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
+function escapeAttr(s){return escapeHtml(s);}
+
+// dialog
+function openDlg(svc){
+  editingId = svc ? svc.id : null;
+  document.getElementById("dlgTitle").textContent = svc?"Edit service":"Add service";
+  document.getElementById("f_name").value = svc?svc.name:"";
+  document.getElementById("f_url").value = svc?svc.url:"";
+  document.getElementById("f_note").value = svc?(svc.note||""):"";
+  dlg.showModal();
+}
+document.getElementById("dlgForm").addEventListener("submit",(e)=>{
+  const name=document.getElementById("f_name").value.trim();
+  const url=document.getElementById("f_url").value.trim();
+  const note=document.getElementById("f_note").value.trim();
+  if(!name||!url) return;
+  if(editingId){ const s=services.find(x=>x.id===editingId); if(s){s.name=name;s.url=url;s.note=note;} }
+  else { services.push({id:cid(),name,url,note}); }
+  saveServices(); render();
+  const target = editingId ? services.find(x=>x.id===editingId) : services[services.length-1];
+  if(target) poll(target).then(render);
+  editingId=null;
+});
+document.getElementById("dlgCancel").onclick=()=>dlg.close();
+
+// controls
+document.getElementById("addBtn").onclick=()=>openDlg(null);
+document.getElementById("refreshBtn").onclick=()=>pollAll();
+document.getElementById("pauseBtn").onclick=(e)=>{
+  paused=!paused; e.target.textContent=paused?"Resume":"Pause"; scheduleNext();
+};
+intervalSel.onchange=(e)=>{ interval=parseInt(e.target.value,10); localStorage.setItem(LS_INTERVAL,String(interval)); scheduleNext(); };
+
+// boot
+render();
+pollAll();
+</script>
+</body>
+</html>

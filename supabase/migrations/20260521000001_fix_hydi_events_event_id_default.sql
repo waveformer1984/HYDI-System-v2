@@ -10,23 +10,31 @@
 --   2. Backfill all existing NULL rows with generated UUIDs.
 --   3. Add NOT NULL constraint now that all rows are populated.
 
--- Step 1: add default (idempotent: ALTER COLUMN SET DEFAULT is safe to re-run)
-ALTER TABLE hydi_events
-  ALTER COLUMN event_id SET DEFAULT gen_random_uuid();
+-- Only apply if hydi_events table exists
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.tables
+    WHERE table_schema = 'public' AND table_name = 'hydi_events'
+  ) THEN
+    -- Step 1: add default
+    ALTER TABLE hydi_events
+      ALTER COLUMN event_id SET DEFAULT gen_random_uuid();
 
--- Step 2: backfill existing null rows
-UPDATE hydi_events
-   SET event_id = gen_random_uuid()
- WHERE event_id IS NULL;
+    -- Step 2: backfill existing null rows
+    UPDATE hydi_events
+       SET event_id = gen_random_uuid()
+     WHERE event_id IS NULL;
 
--- Step 3: enforce NOT NULL now that backfill is complete
-ALTER TABLE hydi_events
-  ALTER COLUMN event_id SET NOT NULL;
+    -- Step 3: enforce NOT NULL now that backfill is complete
+    ALTER TABLE hydi_events
+      ALTER COLUMN event_id SET NOT NULL;
 
--- Also normalise the `type` column: map 'unknown' to the actual event_type
--- for rows that were inserted before type was populated.
-UPDATE hydi_events
-   SET type = event_type
- WHERE (type IS NULL OR type = 'unknown')
-   AND event_type IS NOT NULL
-   AND event_type != '';
+    -- Also normalise the `type` column
+    UPDATE hydi_events
+       SET type = event_type
+     WHERE (type IS NULL OR type = 'unknown')
+       AND event_type IS NOT NULL
+       AND event_type != '';
+  END IF;
+END $$;

@@ -494,6 +494,10 @@ class GlobalDriftEvaluator {
 
     // SYSTEM ADAPTATION RULES
 
+        }
+        return adaptation;
+    }
+
     applyAdaptationRules(driftScore, regime) {
         const score = driftScore.drift_score;
         const currentCap = this.executionModeCaps.current_cap;

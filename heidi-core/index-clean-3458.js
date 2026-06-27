@@ -10,7 +10,7 @@ const { JSONFile } = require('lowdb/node');
 const app = express();
 app.use(express.json());
 
-const PORT = 3458; // Changed to 3458
+const PORT = parseInt(process.env.HEIDI_CORE_PORT || '3458', 10);
 const OLLAMA_URL = 'http://127.0.0.1:11434';
 const MODEL = 'llama3.2:latest'; // change to qwen2.5-coder:1.5b if preferred
 

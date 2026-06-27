@@ -1,0 +1,30 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "HYDI System v2"
+abstract: >
+  HYDI System v2 (also known as "Heidi") is a monetizable AI orchestration
+  platform that runs a deterministic six-layer event pipeline
+  (Ingestion → RAW EVENT LEDGER → CASCADE → KILO → ProtoForge → Emission)
+  over an immutable append-only ledger. It manages multi-revenue-stream
+  billing via Stripe Connect, hosts a Next.js frontend on Vercel, offloads
+  async work to 42 Supabase Edge Functions (Deno), and coordinates
+  hardware/HID agents for physical device automation.
+authors:
+  - alias: waveformer1984
+    email: waveformer1984@gmail.com
+version: "1.0.0"
+date-released: "2026-06-22"
+license: MIT
+repository-code: "https://github.com/waveformer1984/HYDI-System-v2"
+url: "https://github.com/waveformer1984/HYDI-System-v2"
+keywords:
+  - ai-orchestration
+  - event-pipeline
+  - stripe-connect
+  - supabase
+  - next-js
+  - revenue-automation
+  - policy-engine
+  - hypothesis-generator
+  - dsl
+  - edge-functions

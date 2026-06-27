@@ -241,9 +241,15 @@ class HeidiLocalHandler {
         usage: response.usage
       };
     } catch (error) {
-      console.error('[Heidi] Local model generation failed:', error);
-      
-      // Fallback response
+      console.error('[Heidi] Local model generation failed:', error.message);
+
+      // Cloud fallback (works on serverless where the local model is unreachable)
+      const cloud = await this.tryCloudFallback(message, healthContext);
+      if (cloud) {
+        return { ...cloud, healthContext: healthContext ? 'included' : 'unavailable', fallback: true };
+      }
+
+      // Last-resort canned response
       return {
         text: this.getFallbackResponse(message, healthContext),
         model: this.client.model,
@@ -252,6 +258,74 @@ class HeidiLocalHandler {
         fallback: true
       };
     }
+  }
+
+  /**
+   * Cloud fallback via Anthropic (preferred) or OpenAI when configured.
+   * Returns null when no cloud provider is available or the call fails.
+   */
+  async tryCloudFallback(message, healthContext) {
+    const systemPrompt = this.client.getSystemPrompt();
+    const userContent = healthContext
+      ? `Current System Health: ${JSON.stringify(healthContext)}\n\nUser message: ${message}`
+      : message;
+
+    try {
+      if (process.env.ANTHROPIC_API_KEY) {
+        const resp = await axios.post(
+          'https://api.anthropic.com/v1/messages',
+          {
+            model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-6',
+            max_tokens: 1000,
+            system: systemPrompt,
+            messages: [{ role: 'user', content: userContent }],
+          },
+          {
+            headers: {
+              'x-api-key': process.env.ANTHROPIC_API_KEY,
+              'anthropic-version': '2023-06-01',
+              'Content-Type': 'application/json',
+            },
+            timeout: 30000,
+          }
+        );
+        const text = (resp.data.content || [])
+          .filter((b) => b.type === 'text')
+          .map((b) => b.text)
+          .join('');
+        return { text, model: resp.data.model, provider: 'anthropic', usage: resp.data.usage };
+      }
+
+      if (process.env.OPENAI_API_KEY) {
+        const resp = await axios.post(
+          'https://api.openai.com/v1/chat/completions',
+          {
+            model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+            messages: [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: userContent },
+            ],
+            max_tokens: 1000,
+          },
+          {
+            headers: {
+              Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+              'Content-Type': 'application/json',
+            },
+            timeout: 30000,
+          }
+        );
+        return {
+          text: resp.data.choices[0]?.message?.content || '',
+          model: resp.data.model,
+          provider: 'openai',
+          usage: resp.data.usage,
+        };
+      }
+    } catch (err) {
+      console.error('[Heidi] Cloud fallback failed:', err.message);
+    }
+    return null;
   }
 
   /**

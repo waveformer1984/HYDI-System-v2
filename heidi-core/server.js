@@ -7,6 +7,19 @@
 
 const express = require('express');
 const OllamaClient = require('./brain/ollama-client');
+const { createClient } = require('@supabase/supabase-js');
+const https = require('https');
+
+// Initialize Supabase client for procedural memory retrieval
+const supabase = createClient(
+  process.env.SUPABASE_URL || 'https://akbnfvojdcobifeupvbn.supabase.co',
+  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY
+);
+
+// Ollama embedding configuration
+const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434';
+const EMBEDDING_MODEL = process.env.OLLAMA_EMBEDDING_MODEL || 'nomic-embed-text';
+const EMBEDDING_DIMENSION = 1536;
 
 // Simple CORS middleware (no external package needed)
 const corsMiddleware = (req, res, next) => {
@@ -84,7 +97,7 @@ class HeidiCore {
     this.app.post('/think', async (req, res) => {
       try {
         const { input, context = {}, options = {} } = req.body;
-        
+
         if (!input) {
           return res.status(400).json({ error: 'input is required' });
         }
@@ -92,7 +105,7 @@ class HeidiCore {
         this.stats.requests++;
         const startTime = Date.now();
 
-        // 1. RETRIEVE context from memory
+        // 1. RETRIEVE context from local memory
         let memoryContext;
         try {
           memoryContext = await this.memory.buildContext(input);
@@ -101,16 +114,25 @@ class HeidiCore {
           memoryContext = { recent_interactions: [], relevant_facts: [], recent_reflections: [], system_health: [] };
         }
 
+        // 1B. RETRIEVE procedural memory from Supabase (NEW)
+        let proceduralFacts = [];
+        try {
+          proceduralFacts = await this.retrieveProceduralMemory(input);
+          console.log(`[HEIDI] Retrieved ${proceduralFacts.length} procedural facts`);
+        } catch (error) {
+          console.error('[HEIDI] Procedural memory fetch failed:', error.message);
+        }
+
         // 2. GENERATE response with timeout and error handling
         let response;
         let generationStatus = 'success';
         try {
-          const prompt = this.buildPrompt(input, memoryContext, context);
+          const prompt = this.buildPromptWithMemory(input, memoryContext, proceduralFacts, context);
           response = await this.brain.generate(prompt, options);
         } catch (error) {
           console.error('[HEIDI] Generation failed:', error.message);
           generationStatus = error.message.includes('timeout') ? 'timeout' : 'failed';
-          
+
           // Fallback response
           response = {
             text: this.getFallbackResponse(input, memoryContext),
@@ -122,6 +144,11 @@ class HeidiCore {
         // 3. STORE in memory
         const confidence = this.estimateConfidence(response.text, memoryContext);
         await this.memory.storeShortTerm(input, response.text, context, confidence);
+
+        // 3B. EXTRACT and store new facts to Supabase (NEW)
+        this.extractAndStoreFacts(input, response.text).catch(error => {
+          console.error('[HEIDI] Fact extraction failed:', error.message);
+        });
 
         // 4. REFLECT (async, don't block response)
         if (confidence > 0.7) {
@@ -298,6 +325,56 @@ class HeidiCore {
     });
   }
 
+  /**
+   * Build prompt with procedural memory injected from Supabase
+   * This is the NEW memory-aware version (Phase 1 wiring)
+   */
+  buildPromptWithMemory(input, memoryContext, proceduralFacts, userContext) {
+    const parts = [];
+
+    // Add system personality with memory acknowledgment
+    parts.push(this.getSystemPersonality());
+
+    // Add procedural memory from Supabase (NEW)
+    if (proceduralFacts && proceduralFacts.length > 0) {
+      parts.push('\n📚 Verified Operational Memory:');
+      proceduralFacts.forEach(fact => {
+        parts.push(`[MEMORY] ${fact.content} (confidence: ${(fact.confidence * 100).toFixed(0)}%)`);
+      });
+    } else {
+      parts.push('\n📚 Verified Operational Memory: None available');
+    }
+
+    // Add relevant facts from local memory
+    if (memoryContext.relevant_facts && memoryContext.relevant_facts.length > 0) {
+      parts.push('\nRelevant context:');
+      memoryContext.relevant_facts.forEach(f => {
+        parts.push(`- ${f.fact}`);
+      });
+    }
+
+    // Add recent interactions from local memory
+    if (memoryContext.recent_interactions && memoryContext.recent_interactions.length > 0) {
+      parts.push('\nRecent conversation:');
+      memoryContext.recent_interactions.slice(-3).reverse().forEach(i => {
+        parts.push(`User: ${i.input}`);
+        parts.push(`Heidi: ${i.response}`);
+      });
+    }
+
+    // Add user context
+    if (userContext && Object.keys(userContext).length > 0) {
+      parts.push(`\nContext: ${JSON.stringify(userContext)}`);
+    }
+
+    // Add current input
+    parts.push(`\nUser: ${input}`);
+    parts.push('Heidi:');
+
+    return parts.join('\n');
+  }
+
+  // Keep original buildPrompt for backwards compatibility
   buildPrompt(input, memoryContext, userContext) {
     const parts = [];
 
@@ -348,8 +425,234 @@ class HeidiCore {
     return 'I\'m having technical issues with my AI model. Please try again in a moment.';
   }
 
+  /**
+   * Generate embedding for text via Ollama
+   * Returns a 1536-dimensional vector (nomic-embed-text output)
+   */
+  async generateEmbedding(text) {
+    try {
+      const response = await fetch(`${OLLAMA_URL}/api/embeddings`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: EMBEDDING_MODEL,
+          prompt: text
+        })
+      });
+
+      if (!response.ok) {
+        console.error(`[HEIDI] Embedding generation failed: ${response.status}`);
+        return null;
+      }
+
+      const data = await response.json();
+      return data.embedding || null;
+    } catch (error) {
+      console.error('[HEIDI] Embedding fetch error:', error.message);
+      return null;
+    }
+  }
+
+  /**
+   * Retrieve procedural memory from Supabase (hydi_facts table)
+   * Phase 1B: Semantic retrieval via pgvector
+   * - Generates embedding for user input
+   * - Queries facts by cosine similarity (1 - (embedding <=> query_embedding))
+   * - Returns top 5 by relevance + confidence
+   */
+  async retrieveProceduralMemory(userInput) {
+    try {
+      // Step 1: Generate embedding for user input
+      const queryEmbedding = await this.generateEmbedding(userInput);
+      if (!queryEmbedding) {
+        console.log('[HEIDI] Embedding generation failed, falling back to confidence-based retrieval');
+        // Fallback to high-confidence facts if embedding fails
+        const { data, error } = await supabase
+          .from('hydi_facts')
+          .select('id, content, confidence, division')
+          .order('confidence', { ascending: false })
+          .limit(5);
+
+        if (error) {
+          console.error('[HEIDI] Fallback retrieval error:', error.message);
+          return [];
+        }
+
+        return data || [];
+      }
+
+      // Step 2: Query Supabase RPC for semantic similarity search
+      // This uses pgvector's cosine distance operator (<=>)
+      // The RPC function computes: 1 - (embedding <=> query_embedding) as similarity
+      const { data, error } = await supabase.rpc('retrieve_similar_facts', {
+        query_embedding: queryEmbedding,
+        similarity_threshold: 0.6,
+        limit_results: 5
+      });
+
+      if (error) {
+        console.log(`[HEIDI] RPC retrieval failed (${error.message}), trying direct similarity search`);
+
+        // If RPC doesn't exist, use raw SQL via Supabase
+        const { data: rawData, error: rawError } = await supabase
+          .from('hydi_facts')
+          .select('id, content, confidence, division, embedding')
+          .not('embedding', 'is', null)
+          .order('confidence', { ascending: false })
+          .limit(10); // Get more to filter client-side
+
+        if (rawError) {
+          console.error('[HEIDI] Direct retrieval error:', rawError.message);
+          return [];
+        }
+
+        // Client-side similarity filtering (fallback if pgvector not available)
+        if (rawData && rawData.length > 0) {
+          const similarities = rawData.map(fact => {
+            const similarity = this.cosineSimilarity(queryEmbedding, fact.embedding);
+            return { ...fact, similarity };
+          });
+
+          return similarities
+            .filter(f => f.similarity > 0.6)
+            .sort((a, b) => {
+              // Sort by: similarity DESC, then confidence DESC
+              if (b.similarity !== a.similarity) return b.similarity - a.similarity;
+              return b.confidence - a.confidence;
+            })
+            .slice(0, 5)
+            .map(({ similarity, ...fact }) => fact);
+        }
+
+        return [];
+      }
+
+      if (data && data.length > 0) {
+        console.log(`[HEIDI] Retrieved ${data.length} semantically similar facts (similarity > 0.6)`);
+      }
+
+      return data || [];
+    } catch (error) {
+      console.error('[HEIDI] Procedural memory fetch failed:', error.message);
+      return [];
+    }
+  }
+
+  /**
+   * Compute cosine similarity between two vectors
+   * Used as fallback when pgvector RPC is unavailable
+   */
+  cosineSimilarity(vecA, vecB) {
+    if (!vecA || !vecB || vecA.length !== vecB.length) return 0;
+
+    let dotProduct = 0;
+    let normA = 0;
+    let normB = 0;
+
+    for (let i = 0; i < vecA.length; i++) {
+      dotProduct += vecA[i] * vecB[i];
+      normA += vecA[i] * vecA[i];
+      normB += vecB[i] * vecB[i];
+    }
+
+    if (normA === 0 || normB === 0) return 0;
+    return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+  }
+
+  /**
+   * Extract new facts from user input and Heidi response
+   * Store them in Supabase with confidence 0.65 (only meaningful facts)
+   * Phase 1B: Dedup to prevent fact table pollution
+   */
+  async extractAndStoreFacts(userInput, response) {
+    try {
+      const facts = [];
+      const knownDivisions = ['J.STEIN', 'Colter', 'ForgeFinder', 'Rezonate', 'AppForge', 'Build-A-Mind', 'Galactic', 'GroundWork'];
+
+      // Detect which division we're discussing (for context tagging)
+      const lowerInput = userInput.toLowerCase();
+      let contextDivision = null;
+      for (const div of knownDivisions) {
+        if (lowerInput.includes(div.toLowerCase())) {
+          contextDivision = div;
+          break;
+        }
+      }
+
+      // Extract numbers WITH context (not standalone "123" noise)
+      // Only store if it's associated with words like budget, cost, revenue, count, etc.
+      const numberMatches = (userInput + ' ' + response).match(/(?:budget|cost|revenue|price|count|amount|value|target|goal|spent|earned|approved)[\s:\$]*[\d,]+(?:\.\d{2})?/gi);
+      if (numberMatches) {
+        numberMatches.slice(0, 2).forEach(num => {
+          facts.push({
+            content: `Financial/operational metric: ${num}`,
+            source: 'heidi_inference',
+            confidence: 0.68,
+            division: contextDivision
+          });
+        });
+      }
+
+      // Extract key decisions/statuses (only if confidence is high enough)
+      const approvalPatterns = ['approve', 'approved', 'grant', 'granted', 'accept', 'accepted', 'allow'];
+      const blockPatterns = ['block', 'blocked', 'reject', 'rejected', 'deny', 'denied', 'failed'];
+
+      const responseUpper = response.toLowerCase();
+      const hasApproval = approvalPatterns.some(p => responseUpper.includes(p));
+      const hasBlock = blockPatterns.some(p => responseUpper.includes(p));
+
+      if (hasApproval && !hasBlock) {
+        // Only store if it's a clear approval, not conditional
+        facts.push({
+          content: 'Decision outcome: approval granted',
+          source: 'heidi_inference',
+          confidence: 0.75,
+          division: contextDivision
+        });
+      }
+
+      if (hasBlock && !hasApproval) {
+        // Only store if it's a clear block, not conditional
+        facts.push({
+          content: 'Decision outcome: action blocked or rejected',
+          source: 'heidi_inference',
+          confidence: 0.75,
+          division: contextDivision
+        });
+      }
+
+      // Upsert facts with embeddings for semantic retrieval
+      if (facts.length > 0) {
+        // Generate embeddings for each fact (async, fire-and-forget)
+        const factsWithEmbeddings = await Promise.all(
+          facts.map(async (f) => {
+            const embedding = await this.generateEmbedding(f.content);
+            return {
+              ...f,
+              content_key: `${f.content.substring(0, 50)}_${f.division || 'global'}`,
+              embedding: embedding || null // May be null if embedding fails
+            };
+          })
+        );
+
+        const { error } = await supabase
+          .from('hydi_facts')
+          .upsert(factsWithEmbeddings, { onConflict: 'content_key' });
+
+        if (error) {
+          console.error('[HEIDI] Fact storage error:', error.message);
+        } else {
+          const withEmbedding = factsWithEmbeddings.filter(f => f.embedding).length;
+          console.log(`[HEIDI] Stored ${facts.length} contextual facts (${withEmbedding} with embeddings, division: ${contextDivision || 'global'})`);
+        }
+      }
+    } catch (error) {
+      console.error('[HEIDI] Fact extraction failed:', error.message);
+    }
+  }
+
   getSystemPersonality() {
-    return `You are Heidi, the ProtoForge contextual conscience and system health advisor.
+    return `You are Heidi, the operational AI for ProtoForge Industries.
 
 Your traits:
 - Helpful and knowledgeable about the HYDI system
@@ -358,10 +661,13 @@ Your traits:
 - Slightly warm and friendly
 
 You have access to:
+- Verified procedural memory from ProtoForge operations
 - System health monitoring
 - Memory of past interactions
 - Reflections on patterns and insights
 - Ability to execute approved actions
+
+Ground all responses in the memory context above. If no memory is relevant to the question, say so explicitly.
 
 Be direct. Don't over-explain. Focus on what matters.`;
   }

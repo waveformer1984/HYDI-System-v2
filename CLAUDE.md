@@ -9,7 +9,7 @@ HYDI System v2 (also called "Heidi" / "ProtoForge → Kilo Node") is a monetizab
 - Running a deterministic event pipeline (CASCADE → KILO → ProtoForge) over an immutable RAW EVENT LEDGER
 - Managing multi-revenue-stream billing via Stripe Connect with per-project sub-accounts
 - Hosting a Next.js frontend with Vercel serverless API routes
-- Offloading async work to ~35 Supabase Edge Functions (Deno)
+- Offloading async work to 42 Supabase Edge Functions (Deno)
 - Coordinating hardware/HID agents (Python) for physical device automation
 
 The six active revenue streams routed through Stripe Connect are: `galactic_bytes`, `detailer_bot`, `lipi_v2`, `protogrance_aromatics`, `rezonate`, and `waveformer_studio`.
@@ -21,10 +21,18 @@ npm install          # Install dependencies (Node >= 20 required)
 npm run dev          # Next.js dev server on 0.0.0.0:3000
 npm run build        # Production build
 npm start            # Start production server
+npm run typecheck    # TypeScript type-check (tsc --noEmit, no emit)
 npm test             # Run Jest unit tests
 npm run test:watch   # Jest in watch mode
 npm run test:coverage  # Jest with coverage report
 npm run test:integration  # Run adversarial integration tests (tests/hdi-adversarial.test.js)
+```
+
+Operational scripts at the repo root:
+```bash
+./verify-supabase.sh       # Health check: verifies Supabase connectivity and key tables
+./deploy-production-safe.sh  # Safe production deploy with pre-flight checks
+./setup.sh                 # First-time environment setup
 ```
 
 Run a single test file:
@@ -72,17 +80,52 @@ The original system (V1) built enforcement before establishing ground truth, cau
 | **ProtoForge** | Policy engine / governance layer | Routed via `api/chat/route.js` |
 | **Hyve** | Opportunity collective / swarm intelligence | Routed via `api/chat/route.js` |
 
+### PAO System Agents (`pao-system/`)
+
+The PAO (Personal AI Orchestration) subsystem contains TypeScript agents that run under strict mode:
+
+**Core** (`pao-system/core/`):
+
+| File | Role |
+|------|------|
+| `heidi.controller.ts` | Central orchestrator — `taskRoutingMatrix: Map<string, string[]>`, emits events, manages session state |
+| `agent.registry.ts` | Agent registration and discovery |
+| `approval.engine.ts` | Action approval workflow |
+| `ethical-decision-engine.ts` | Ethical guardrails for agent decisions |
+| `event.bus.ts` | Internal event pub/sub |
+| `risk.engine.ts` | Risk scoring for proposed actions |
+| `task.router.ts` | Routes tasks to the correct agent |
+
+**Agents** (`pao-system/agents/`):
+
+Business: `revenue.agent.ts`, `funding.agent.ts` (uses `.getTime()` for Date arithmetic), `finance.agent.ts`
+Operations: `facility.agent.ts`, `security.agent.ts`, `workflow.agent.ts`, `procurement.agent.ts`
+Outreach: `community.agent.ts`, `marketing.agent.ts`, `outreach.agent.ts`
+Execution: `construction.agent.ts`, `fabrication.agent.ts`
+Strategic: `ai.agent.ts`, `architect.agent.ts`, `energy.agent.ts`
+
+**Services** (`pao-system/services/`): `llm.service.ts`, `storage.service.ts`, `notification.service.ts`, `nnotification.service.ts` (double-`n` typo — do not rename until all imports updated)
+
+**Integrations** (`pao-system/integrations/`): `email.ts`, `grants.api.ts`, `stripe.ts`
+
+**Schemas** (`pao-system/schemas/`): `event.schema.ts`, `finance.schema.ts`, `task.schema.ts`
+
+**Knowledge base** (`pao-system/knowledge/`): Markdown files covering agent-prompts, cultural-tone, ethos-mission, integration-rules, public-mission, unified-cognitive-layer
+
+All PAO agents use shared types from `types/index.ts` (`SessionState`, `SystemStatus`, `ModelStatus`, `ActionLog`, `ActionItem`). Catch variables are typed `unknown` — always guard with `error instanceof Error ? error.message : 'Unknown error'`.
+
 ### API Layer (`api/`)
 
 All files under `api/` are **Vercel serverless functions** (Next.js API routes). They use ES module `export default async function handler(req, res)` style. Note: some files mix `import` and `require` — be consistent within a file.
 
 | Route | Purpose |
-|-------|---------|
+|-------|----------|
 | `api/chat/route.js` | Universal chat router — dispatches `{ message, system }` to the correct named agent |
 | `api/health.js` | Reads the `system_dashboard` Supabase view for live health metrics |
 | `api/heidi/route.js` | Heidi-specific orchestration endpoint |
 | `api/hydi/sync.js` | HYDI state sync |
 | `api/ursula/status.js` | Ursula system status |
+| `api/mobile-status.js` | Compact, 3G-safe system snapshot: health + per-stream revenue in a single round-trip |
 | `api/life-flow/route.js` | Life-flow module |
 | `api/events/stream.js` | SSE stream for real-time events |
 | `api/revenue.js` | Revenue engine: leads, quotes, proposals, Stripe checkout, reports |
@@ -94,18 +137,85 @@ All files under `api/` are **Vercel serverless functions** (Next.js API routes).
 
 ### Supabase Edge Functions (`supabase/functions/`)
 
-~35 Deno-based Edge Functions handle async work. JWT enforcement is configured per-function in `supabase/config.toml`. Key functions:
+42 Deno-based Edge Functions handle async work. JWT enforcement is configured per-function in `supabase/config.toml`.
 
-- **`chat-operator`** — async chat processing
-- **`tool-executor`** / **`action-worker`** / **`agent-worker`** — task queue workers
-- **`billing-engine`** / **`billing-retry-worker`** / **`payment-processor`** / **`stripe-webhook`** / **`stripe-connect-admin`** / **`stripe-transfer-payout`** — billing pipeline
-- **`keymaker-gate`** / **`keeper-break-glass`** / **`keeper-break-glass-simple`** — authentication and emergency access
-- **`heidi-reflect`** / **`hydi-transition`** — Heidi self-reflection and state transitions
-- **`monitoring-health`** / **`chaos-runner`** — observability and chaos testing
-- **`revenue-tracker`** / **`usage-monitor`** / **`invoice-generator`** / **`subscription-manager`** — revenue operations
-- **`events-stream`** — real-time event streaming
+**Task workers**: `action-worker`, `agent-worker`, `tool-executor`, `chat-operator`, `jobs-processor`
 
-Public functions (no JWT): `api-gateway`, `notification-service`, `search-service`, `cache-service`, all marketing functions, `stripe-webhook`, `heidi-reflect`.
+**Billing pipeline**: `billing-engine`, `billing-retry-worker`, `payment-processing`, `payment-processor`, `stripe-webhook`, `stripe-connect-admin`, `stripe-transfer-payout`, `stripe-worker`, `monthly-payout-calculation`
+
+**Auth / access**: `keymaker-gate`, `keeper-break-glass`, `keeper-break-glass-simple`
+
+**Heidi / transitions**: `heidi-reflect`, `hydi-transition`
+
+**Revenue operations**: `revenue-tracker`, `usage-monitor`, `invoice-generator`, `subscription-manager`, `rezonate-engine`
+
+**Observability**: `monitoring-health`, `chaos-runner`, `analytics-service`, `stream-health-watchdog`
+
+**Public services (no JWT)**: `api-gateway`, `notification-service`, `search-service`, `cache-service`, `events-stream`, `file-storage`, `user-management`
+
+**Marketing suite (no JWT)**: `brand-awareness`, `campaign-analytics`, `content-management`, `customer-segments`, `email-marketing`, `lead-generation`, `marketing-automation`, `social-media`
+
+The `stripe-webhook` and `heidi-reflect` functions are also public.
+
+### Frontend (`pages/`, `components/`, `hooks/`)
+
+Next.js pages under `pages/`:
+- `pages/index.tsx` — main dashboard
+- `pages/agent-manager.tsx` — agent management UI
+- `pages/funding.tsx` — funding pipeline view
+- `pages/song-composer.tsx` — Rezonate music composer integration
+- `pages/trace-viewer.jsx` / `pages/traces.jsx` — event trace inspection
+
+React components under `components/`:
+- `AgentBoard.tsx`, `AgentCard.tsx` — agent status and management
+- `Chat.tsx` — Heidi chat interface
+- `StatusPanel.tsx` — system health display
+- `TaskCreateModal.tsx`, `TaskQueue.tsx` — task pipeline UI
+- `components/funding/` — funding-specific components
+- `components/song-composer/` — song composer components
+
+Custom hooks: `hooks/useHeidi.ts` — React hook for Heidi orchestration state.
+
+### Revenue Engine (`revenue-engine/`)
+
+Revenue pipeline module separate from the API layer:
+- `revenue-engine/index.js` — entry point
+- `revenue-engine/revenue-engine-v2.js` — v2 engine with enhanced logic
+- `revenue-engine/reality-filter.js` — filters unrealistic revenue projections
+- `revenue-engine/schema.sql` / `revenue-engine/outcome-schema.sql` — local schema definitions
+- `revenue-engine/modules/` — sub-modules
+
+### KILO Module (`kilo/`)
+
+Standalone implementation of the KILO hypothesis generator:
+- `kilo/index.js` — entry point; exports `{ KiloEngine, createKiloEngine }` (CommonJS). `execute()` throws unconditionally — KILO never runs actions directly; only `generateHypotheses()` is permitted.
+- `kilo/modules/repair-manifest-validator.js` — validates repair manifests before KILO processes them
+- `kilo/modules/truth-filter-gate.js` — gates hypotheses against ground truth before emission
+
+### DSL Policy Engine (`lib/protoforge/`)
+
+Implements ProtoForge's policy layer (pipeline layer [5]) with a runtime-configurable rule DSL:
+
+- `lib/protoforge/policy-engine.js` — evaluates KILO hypotheses against priority-ordered rules loaded from Supabase. DSL operators: `gte`, `lte`, `gt`, `lt`, `eq`, `neq`, `in`, `nin`. Fail-closed: default decision is `'reject'`. Decisions: `'approve' | 'reject' | 'escalate'`. Hot-reloads rule changes via Supabase Realtime — no restart required.
+- `lib/protoforge/auto-gate.js` — automatic wrapper that runs PolicyEngine on every KILO output before it reaches the Emission Layer.
+- `supabase/functions/protoforge-calibration/` — Edge Function running the calibration feedback loop; adjusts rule weights based on actual outcomes via the `calibrate_protoforge_decisions()` RPC.
+- DB tables: `policies` (rules), `decisions` (audit log).
+
+### Hyve Service (`hyve_service/`)
+
+The Hyve opportunity-collective service implementation (Python):
+- `hyve_service/listener.py` — listens for opportunity signals
+- `hyve_service/outputs/` — processed output directory
+- `hyve_service/revenue_ready/` — revenue-ready configuration state
+
+### Workers (`workers/`)
+
+Background workers that poll Supabase and process queue items independently of the API layer:
+
+- **`workers/DecisionAssistWorker.js`** — polls for decision-assist tasks; scores financial_planning, resource_allocation, risk_assessment, and system_optimization requests against configurable confidence thresholds before emitting recommendations. Requires `QueueManager`.
+- **`workers/WorkerOrchestrator.js`** — spawns and supervises all workers; `DecisionAssistWorker` must be registered here or the orchestrator will crash on startup.
+
+If you add a new worker, register it in `WorkerOrchestrator.js` before deploying.
 
 ### Agents (`agents/`)
 
@@ -114,6 +224,24 @@ Public functions (no JWT): `api-gateway`, `notification-service`, `search-servic
 - **`agents/specialized/execution-agents.js`** — execution domain agents (~54KB)
 - **`agents/hid/`** — JavaScript key-rotation agent and secure key setup (PowerShell + JS)
 - **`agents/hardware-controller/`** — Python agents for physical hardware: USB HID controller, screen vision, Stripe/Vercel UI navigation via pyautogui/vision, safety orchestrator
+
+### Ursula Suite (Local)
+
+The Ursula EPM Service Suite is a companion Flask server (`C:\ProtoForge_Ecosystem\Ursula_Suite\`) running at `http://localhost:5000`. It is a separate Python codebase — not deployed to Vercel. It hosts five apps:
+
+| App | Blueprint prefix | Description |
+|-----|-----------------|-------------|
+| Proto.I.Y | `/proto_iy` | Projects & Timelines |
+| BlameGames | `/blame_games` | Betting & Challenges |
+| PorchWise | `/porch_wise` | Family Management |
+| Rezonette | `/rezonette` | Music Production |
+| **Checkpoint** | `/checkpoint` | QA & Risk Analysis |
+
+The Checkpoint app (`apps/checkpoint/`) provides risk-scored workflow analysis:
+- `checkpoint_qa.py` — QA engine with SQLite backend, risk scoring, failure point detection, auto-checkpoint creation
+- `routes.py` — Flask Blueprint using `importlib.util.spec_from_file_location` for bulletproof module loading
+- Test suite: `ursula-suite/checkpoint/tests/phase2_test_suite.ps1`
+- Dashboard: `ursula-suite/checkpoint/dashboard/dashboard.html`
 
 ### Database (`supabase/`)
 
@@ -142,13 +270,20 @@ Key DB features: RLS enabled on all tables, `system_dashboard` view drives healt
 | `STRIPE_CONNECT_WEBHOOK_SECRET` | Stripe Connect webhook signing secret |
 | `STRIPE_ACCOUNT_GALACTIC_BYTES` et al. | Connect sub-account IDs per revenue stream |
 | `NODE_ENV` | `production` / `development` |
+| `ANTHROPIC_API_KEY` | Enables the native streaming/tool-calling agent (`lib/heidi-agent.ts`); when unset Heidi uses the fallback orchestrator |
+| `ANTHROPIC_BASE_URL` | Optional override of the Anthropic SDK base URL (e.g. a compatible proxy) |
+| `OPENAI_API_KEY` | Hosted memory embeddings (1536-dim) |
+| `EMBEDDING_PROVIDER` | `openai` \| `ollama` — forces the embeddings backend; auto-selected otherwise (OpenAI if its key is set, else Ollama when a local model is enabled) |
+| `OLLAMA_EMBEDDING_MODEL` | Local embeddings model (default `nomic-embed-text`); vectors are zero-padded to 1536 dims |
+| `ENABLE_LOCAL_MODEL` / `LOCAL_MODEL_URL` / `LOCAL_MODEL_NAME` | Enable + locate the local Ollama model for inference |
+| `LOCAL_MODEL_TIMEOUT_MS` | Local inference budget in ms (default `5000`); governs both the abort timeout and the success-routing latency gate in `lib/ModelManager.ts` |
 
 Use `SUPABASE_SERVICE_ROLE_KEY` server-side only. Never expose it to the client.
 
 ## CI / Workflows
 
 | Workflow | Trigger | What it does |
-|----------|---------|--------------|
+|----------|---------|---------------|
 | `unit-tests.yml` | push to `clean-main`, all PRs | `npm test -- --coverage --forceExit`, uploads to Codecov |
 | `hdi-governance-gate.yml` | PRs touching `supabase/migrations/**` | 7-gate schema review: change detection, transformer tests, state machine approval, adversarial tests, replay fidelity, performance regression, blueprint sync |
 | `health-monitor.yml` | Scheduled | Pings health endpoint |
@@ -203,7 +338,8 @@ vercel env ls | grep SECRET_NAME
 ## Notable Conventions
 
 - **Mixed module styles**: some `api/` files use `export default` (ESM) while others use `module.exports` (CJS). The project's Next.js build handles this, but Edge Functions are pure ESM (Deno).
-- **TypeScript is present but soft**: `next.config.js` sets `ignoreBuildErrors: true` and `eslint.ignoreDuringBuilds: true` — the build won't fail on type errors.
+- **TypeScript strict mode is enforced**: `next.config.js` does NOT suppress TS/ESLint errors. Run `npm run typecheck` before any PR. Catch variables are `unknown` — use `error instanceof Error ? error.message : 'Unknown error'` everywhere.
 - **The `clean-main` branch** is the primary branch (CI runs against it, not `main`).
 - **`.sql.skip` files**: migrations with this suffix are intentionally skipped by the runner; they document attempted approaches that were superseded.
 - **`system_dashboard` view**: the central Supabase view consumed by health checks, Ursula status queries, and infrastructure monitoring — if this view is broken, health endpoints degrade gracefully to `503`.
+- **`nnotification.service.ts`**: this file has a double-`n` typo in its name — do not rename it until all imports are updated together.

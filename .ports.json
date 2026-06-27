@@ -1,0 +1,63 @@
+{
+  "description": "Global port registry for all HYDI services. Single source of truth.",
+  "validation": "Run: node scripts/check-ports.js before startup",
+  "services": {
+    "heidi-mobile-chat": {
+      "port": 3006,
+      "name": "HEIDI Mobile Chat API",
+      "env_var": "HEIDI_PORT",
+      "description": "Ollama/LM Studio chat endpoint for mobile clients",
+      "depends_on": ["ollama"]
+    },
+    "next-app": {
+      "port": 3000,
+      "name": "Next.js DashHub Frontend",
+      "env_var": "PORT",
+      "description": "React dashboard and admin UI",
+      "depends_on": ["supabase"]
+    },
+    "heidi-core": {
+      "port": 3459,
+      "name": "HEIDI Core Orchestrator",
+      "env_var": "HEIDI_CORE_PORT",
+      "description": "Central AI orchestration and agent routing",
+      "depends_on": ["supabase", "ollama"]
+    },
+    "heidi-bridge": {
+      "port": 5050,
+      "name": "Heidi Bridge (Flask/Python)",
+      "env_var": "HEIDI_BRIDGE_PORT",
+      "description": "System monitoring and status bridge",
+      "depends_on": ["supabase"]
+    },
+    "ollama": {
+      "port": 11434,
+      "name": "Ollama Local LLM Server",
+      "env_var": "OLLAMA_PORT",
+      "description": "Local embeddings and inference",
+      "depends_on": [],
+      "external": true
+    },
+    "supabase": {
+      "port": 54321,
+      "name": "Supabase Local (PostgreSQL)",
+      "env_var": "SUPABASE_DB_PORT",
+      "description": "Local dev database (if using supabase start)",
+      "depends_on": [],
+      "external": true
+    },
+    "supabase-rest": {
+      "port": 3001,
+      "name": "Supabase REST API",
+      "env_var": "SUPABASE_REST_PORT",
+      "description": "Local PostgREST endpoint",
+      "depends_on": ["supabase"],
+      "external": true
+    }
+  },
+  "reserved_ranges": {
+    "github_actions": "5000-5999 (for runner callbacks)",
+    "docker": "8000-8999 (if containerized)",
+    "system": "1-1023 (admin only)"
+  }
+}

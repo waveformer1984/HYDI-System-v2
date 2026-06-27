@@ -1,0 +1,96 @@
+# HYDI System v2 — Cursor Rules
+
+## What This Is
+
+HYDI System v2 ("Heidi" / "ProtoForge → Kilo Node") is a monetizable AI orchestration platform built on Next.js + Vercel serverless functions, Supabase (42 Deno Edge Functions), and Stripe Connect. It routes events through a deterministic six-layer pipeline and manages six active revenue streams.
+
+## Core Pipeline — Never Violate Layer Boundaries
+
+```
+[1] Ingestion       → normalizes structure only, no interpretation
+[2] RAW EVENT LEDGER → append-only, immutable, hashed
+[3] CASCADE         → classifies events only
+[4] KILO            → generates hypotheses only — NEVER executes
+[5] ProtoForge      → policy engine, accepts/rejects KILO output
+[6] Emission        → SSE / API / logs, no logic
+```
+
+**KILO (`kilo/index.js`) must never execute actions.** `execute()` throws unconditionally by design. Only `generateHypotheses()` is permitted.
+
+**ProtoForge policy engine (`lib/protoforge/policy-engine.js`) is fail-closed.** Default decision is `'reject'` when no rule matches. Do not change this default.
+
+## Architecture Rules
+
+- **Two cooldown windows are mandatory**: 2-minute startup window (no enforcement), 30-second drift observation before alerts fire.
+- **The `system_dashboard` Supabase view** drives all health endpoints. If this view breaks, endpoints return 503 — do not try to work around it.
+- **`workers/WorkerOrchestrator.js`** must register every worker. Adding a new worker without registering it here causes a crash on startup.
+- **`supabase/functions/protoforge-calibration/`** runs the feedback loop via `calibrate_protoforge_decisions()` RPC. Do not inline calibration logic elsewhere.
+- **`api/mobile-status.js`** must stay a single round-trip returning `{ ok, alert, system, drift, heals_24h, streams, silent, ms, ts }`. Do not add latency.
+
+## Technology Stack
+
+- **Runtime**: Node >= 20, Next.js 14+ (pages router for API routes)
+- **Edge Functions**: Deno (pure ESM — no CommonJS, no `require`)
+- **Database**: Supabase (PostgreSQL + pgvector 1536-dim + RLS on all tables)
+- **Payments**: Stripe Connect (6 sub-accounts: `galactic_bytes`, `detailer_bot`, `lipi_v2`, `protogrance_aromatics`, `rezonate`, `waveformer_studio`)
+- **Language**: TypeScript (strict) + JavaScript (mixed CJS/ESM in `api/`)
+
+## TypeScript Rules
+
+- Strict mode is enforced. `next.config.js` does NOT suppress TS/ESLint errors.
+- Catch variables are `unknown`. Always guard: `error instanceof Error ? error.message : 'Unknown error'`
+- Run `npm run typecheck` before every PR.
+- PAO agents (`pao-system/`) use types from `types/index.ts` (`SessionState`, `SystemStatus`, `ModelStatus`, `ActionLog`, `ActionItem`).
+
+## Module Style
+
+- **`api/` files**: ES module `export default async function handler(req, res)` style.
+- **`kilo/index.js`**: CommonJS (`module.exports = { KiloEngine, createKiloEngine }`).
+- **Edge Functions**: pure ESM (Deno) — never use `require`.
+- Some `api/` files mix `import` and `require` — be consistent within a file; do not mix in new code.
+
+## Database
+
+- **All migrations** go in `supabase/migrations/` with sequential numbering.
+- **`.sql.skip` files** are intentionally excluded — do not run them.
+- **Every new `.sql` migration** requires a corresponding test in `tests/migrations/<version>.test.js`.
+- **State machine changes** (enums, transitions) require `STATE_MACHINE_APPROVED` in the PR description.
+- RLS is enabled on all tables. Never disable it.
+- **`search_path`** must be pinned on all `SECURITY DEFINER` functions to prevent SQL injection.
+
+## Secret Handling
+
+Never display, echo, log, or paste secrets. Pipe directly to destination:
+
+```bash
+node -e "require('crypto').randomBytes(32).toString('hex')" | vercel env add SECRET_NAME
+```
+
+Use `SUPABASE_SERVICE_ROLE_KEY` server-side only — never expose to client.
+
+## Naming & Files
+
+- **`nnotification.service.ts`** — double-`n` typo is intentional for now. Do not rename until all imports are updated together.
+- **Primary branch is `clean-main`**, not `main`. CI runs against `clean-main`.
+- **`.sql.skip`** suffix = migration intentionally skipped.
+- **`pao-system/services/nnotification.service.ts`** — do not rename until all callers are updated.
+
+## PAO System
+
+- All agents in `pao-system/agents/` follow strict TypeScript mode.
+- `funding.agent.ts` uses `.getTime()` for Date arithmetic — do not change to arithmetic operators.
+- `nnotification.service.ts` has double-`n` — do not rename yet.
+
+## DSL Policy Engine
+
+Operators: `gte`, `lte`, `gt`, `lt`, `eq`, `neq`, `in`, `nin`. Rules load from Supabase and hot-reload via Realtime. Do not hardcode rules in application code.
+
+## What Not To Do
+
+- Do not add logic to the Emission Layer (layer 6).
+- Do not give KILO execution authority.
+- Do not bypass the ProtoForge policy gate.
+- Do not expose `SUPABASE_SERVICE_ROLE_KEY` to the browser.
+- Do not add migrations without corresponding tests.
+- Do not rename `nnotification.service.ts` without updating all imports first.
+- Do not push to `main` directly — use `clean-main`.

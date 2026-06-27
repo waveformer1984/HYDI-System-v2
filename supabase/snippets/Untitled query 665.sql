@@ -1,0 +1,1 @@
+select count(*) from hydi_facts where embedding is not null;
