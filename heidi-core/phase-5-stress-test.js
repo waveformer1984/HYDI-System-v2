@@ -9,6 +9,17 @@
  * - Decision quality maintenance
  */
 
+// Load ONLY .env.local for development
+const dotenv = require('dotenv');
+const fs = require('fs');
+const envPath = '.env.local';
+if (fs.existsSync(envPath)) {
+  const envContent = fs.readFileSync(envPath, 'utf8');
+  const parsed = dotenv.parse(envContent);
+  Object.assign(process.env, parsed);
+  console.log('[STRESS-TEST] Loaded configuration from .env.local');
+}
+
 const { createClient } = require('@supabase/supabase-js');
 
 class StressTestRunner {

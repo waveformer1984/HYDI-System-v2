@@ -12,6 +12,17 @@
  * Phase 2A: Persistent orchestration + Advisory Mode
  */
 
+// Load ONLY .env.local for development
+const dotenv = require('dotenv');
+const fs = require('fs');
+const envPath = '.env.local';
+if (fs.existsSync(envPath)) {
+  const envContent = fs.readFileSync(envPath, 'utf8');
+  const parsed = dotenv.parse(envContent);
+  Object.assign(process.env, parsed);
+  console.log('[HEIDI-AGENT] Loaded configuration from .env.local');
+}
+
 const http = require('http');
 const { createClient } = require('@supabase/supabase-js');
 
@@ -62,39 +73,43 @@ class HeidiAgent {
       const now = new Date();
       const expiresAt = new Date(now.getTime() + this.leaseTTL * 1000);
 
+      // Check current lease status
+      const { data: current, error: checkError } = await this.supabase
+        .from('heidi_decision_bounds')
+        .select('id, lease_holder, lease_expires')
+        .single();
+
+      if (checkError) {
+        console.error('[HEIDI-AGENT] Lease check error:', checkError.message);
+        return false;
+      }
+
       // Claim if no holder OR if lease expired
-      const { data, error } = await this.supabase
+      const isLeaseAvailable = !current.lease_holder || new Date(current.lease_expires) < now;
+
+      if (!isLeaseAvailable) {
+        console.log(`[HEIDI-AGENT] ⚠️ Lease held by ${current.lease_holder} until ${current.lease_expires}`);
+        this.leaseClaimed = false;
+        return false;
+      }
+
+      // Try to claim the lease
+      const { error: updateError } = await this.supabase
         .from('heidi_decision_bounds')
         .update({
           lease_holder: this.leaseHolder,
           lease_expires: expiresAt.toISOString()
         })
-        .or(`lease_holder.is.null,lease_expires.lt.${now.toISOString()}`)
-        .select();
+        .eq('id', current.id);
 
-      if (error) {
-        console.error('[HEIDI-AGENT] Lease claim error:', error.message);
+      if (updateError) {
+        console.error('[HEIDI-AGENT] Lease claim error:', updateError.message);
         return false;
       }
 
-      if (data && data.length > 0) {
-        this.leaseClaimed = true;
-        console.log(`[HEIDI-AGENT] ✅ Lease claimed (expires: ${expiresAt.toISOString()})`);
-        return true;
-      }
-
-      // Lease is held by someone else
-      const { data: current } = await this.supabase
-        .from('heidi_decision_bounds')
-        .select('lease_holder, lease_expires')
-        .single();
-
-      if (current) {
-        console.log(`[HEIDI-AGENT] ⚠️ Lease held by ${current.lease_holder} until ${current.lease_expires}`);
-      }
-
-      this.leaseClaimed = false;
-      return false;
+      this.leaseClaimed = true;
+      console.log(`[HEIDI-AGENT] ✅ Lease claimed (expires: ${expiresAt.toISOString()})`);
+      return true;
     } catch (error) {
       console.error('[HEIDI-AGENT] Lease claim failed:', error.message);
       this.leaseClaimed = false;
