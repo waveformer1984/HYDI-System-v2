@@ -1,0 +1,39 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  @apply bg-colters-dark text-white;
+}
+
+/* Mobile-first responsive */
+@media (min-width: 768px) {
+  .mobile-container {
+    max-width: 428px;
+    margin: 0 auto;
+    box-shadow: 0 0 40px rgba(0, 0, 0, 0.3);
+  }
+}
+
+/* Bottom navigation spacing */
+.main-content {
+  padding-bottom: 5rem;
+}
+
+/* Touch-friendly buttons */
+.btn-touch {
+  @apply min-h-[44px] min-w-[44px];
+}
+
+/* Status indicators */
+.status-active {
+  @apply bg-green-600;
+}
+
+.status-pending {
+  @apply bg-yellow-600;
+}
+
+.status-alert {
+  @apply bg-red-600;
+}

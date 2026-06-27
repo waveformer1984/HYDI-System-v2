@@ -473,13 +473,35 @@ class HeidiMemorySystem extends EventEmitter {
     if (!this._destroyed) console.log('[MEMORY] Loading database cache...');
   }
 
+  // Maps serialize to {} under JSON.stringify; convert to/from [k,v] entry arrays.
+  _toReflectiveMap(value) {
+    if (value instanceof Map) return value;
+    if (Array.isArray(value)) return new Map(value);
+    if (value && typeof value === 'object') return new Map(Object.entries(value));
+    return new Map();
+  }
+
+  _serializeReflective(extra = {}) {
+    return {
+      ...this.reflectiveMemory,
+      whatWorked: Array.from((this.reflectiveMemory.whatWorked || new Map()).entries()),
+      whatFailed: Array.from((this.reflectiveMemory.whatFailed || new Map()).entries()),
+      ...extra
+    };
+  }
+
   async loadReflectiveMemory() {
     try {
       const filePath = path.join(this.config.localStoragePath, 'reflective_memory.json');
       try {
         const data = await fs.readFile(filePath, 'utf8');
         if (this._destroyed) return;
-        this.reflectiveMemory = { ...this.reflectiveMemory, ...JSON.parse(data) };
+        const parsed = JSON.parse(data);
+        this.reflectiveMemory = { ...this.reflectiveMemory, ...parsed };
+        // Maps don't survive JSON.stringify — rehydrate whatWorked/whatFailed back
+        // into Maps so storeWhatWorked/storeWhatFailed can call .set() on them.
+        this.reflectiveMemory.whatWorked = this._toReflectiveMap(parsed.whatWorked);
+        this.reflectiveMemory.whatFailed = this._toReflectiveMap(parsed.whatFailed);
         if (!this._destroyed) console.log('[MEMORY] Reflective memory loaded from disk');
       } catch (error) {
         if (error.code !== 'ENOENT') throw error;
@@ -494,7 +516,7 @@ class HeidiMemorySystem extends EventEmitter {
     if (this._destroyed) return;
     try {
       const filePath = path.join(this.config.localStoragePath, 'reflective_memory.json');
-      await fs.writeFile(filePath, JSON.stringify({ ...this.reflectiveMemory, lastReflection: Date.now() }, null, 2));
+      await fs.writeFile(filePath, JSON.stringify(this._serializeReflective({ lastReflection: Date.now() }), null, 2));
       if (this.config.enablePersistence && !this._destroyed) await this.storeReflectionInDatabase(reflection);
     } catch (error) {
       if (!this._destroyed) console.error('[MEMORY] Failed to persist reflection:', error.message);
@@ -502,15 +524,20 @@ class HeidiMemorySystem extends EventEmitter {
   }
 
   async storeReflectionInDatabase(reflection) {
+    if (this._reflectionDbDisabled) return; // schema absent — skip without spamming
     try {
-      const { error } = await supabase.from('reflections').insert({
+      // public.reflections is a VIEW; write blob snapshots to the dedicated table.
+      const { error } = await supabase.from('heidi_reflection_snapshots').insert({
         reflection_id: reflection.id,
         reflection_data: reflection,
         timestamp: new Date(reflection.timestamp).toISOString()
       });
       if (error) throw error;
     } catch (error) {
-      if (!this._destroyed) console.error('[MEMORY] Failed to store reflection in database:', error.message);
+      // Disable DB persistence after the first failure (e.g. table absent) so it
+      // doesn't log every cycle. Local JSON persistence still works.
+      this._reflectionDbDisabled = true;
+      if (!this._destroyed) console.warn('[MEMORY] Reflection DB persistence off (apply migration 20260617_heidi_orchestrator_schema.sql):', error.message);
     }
   }
 
@@ -557,7 +584,7 @@ class HeidiMemorySystem extends EventEmitter {
     if (this._destroyed) return;
     try {
       const filePath = path.join(this.config.localStoragePath, 'reflective_memory.json');
-      await fs.writeFile(filePath, JSON.stringify({ ...this.reflectiveMemory, lastSaved: Date.now() }, null, 2));
+      await fs.writeFile(filePath, JSON.stringify(this._serializeReflective({ lastSaved: Date.now() }), null, 2));
     } catch (error) {
       if (!this._destroyed) console.error('[MEMORY] Failed to persist reflective memory:', error.message);
     }

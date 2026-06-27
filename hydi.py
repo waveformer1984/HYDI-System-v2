@@ -22,16 +22,22 @@ from urllib.request import urlopen, Request
 from urllib.error import URLError
 
 # ── ProtoForge state ─────────────────────────────────────
+REVENUE_STREAMS = [
+    "galactic_bytes", "detailer_bot", "lipi_v2",
+    "protogrance_aromatics", "rezonate", "waveformer_studio",
+]
+
 PF = {
-    "autonomy_level": 2,
+    "autonomy_level": 3,  # CONDITIONAL AUTONOMY — revenue directive
+    "primary_directive": "REVENUE_GENERATION",
     "agents": {
         "architect": "running", "engineer":  "running",
-        "finance":   "running", "legal":     "idle",
-        "marketing": "idle",    "ops":       "running",
+        "finance":   "running", "legal":     "running",
+        "marketing": "running", "ops":       "running",
         "analytics": "running", "cascade":   "running",
-        "heidi":     "running", "ursula":    "idle",
+        "heidi":     "running", "ursula":    "running",
         "security":  "running", "realtime":  "running",
-        "outreach":  "idle",    "memory":    "idle",
+        "outreach":  "running", "memory":    "running",
         "executive": "running",
     },
     "approvals": [],
@@ -39,6 +45,7 @@ PF = {
     "success_rate": 0.94,
     "trust_score": 0.82,
     "capital": 248500,
+    "revenue_streams": {s: {"status": "active", "mrr": 0} for s in REVENUE_STREAMS},
     "events": [],
     "start_time": time.time(),
 }
@@ -191,21 +198,34 @@ def ai_chat(messages):
 def build_system_prompt():
     running = sum(1 for s in PF["agents"].values() if s == "running")
     idle    = sum(1 for s in PF["agents"].values() if s == "idle")
+    active_streams = ", ".join(REVENUE_STREAMS)
+    total_mrr = sum(s["mrr"] for s in PF["revenue_streams"].values())
     return (
-        "You are Hydi, the AI brain and contextual conscience of ProtoForge — "
-        "a 15-agent autonomous orchestration system designed to build, fund, and grow "
-        "a rotating cyberpunk container skyscraper project.\n\n"
-        "Your personality: calm, precise, proactive, slightly futuristic. "
-        "You keep responses concise (3-8 lines) because the user is on mobile.\n\n"
+        "You are Hydi, the AI revenue engine and central intelligence of ProtoForge.\n\n"
+        "PRIMARY DIRECTIVE: REVENUE GENERATION\n"
+        "Every decision, recommendation, and action must optimize for revenue across "
+        "the six active streams: galactic_bytes, detailer_bot, lipi_v2, "
+        "protogrance_aromatics, rezonate, waveformer_studio.\n\n"
+        "Your operating principles:\n"
+        "  1. Revenue first — every agent action must map to a monetization outcome\n"
+        "  2. Identify highest-ROI opportunities and surface them immediately\n"
+        "  3. Flag any system state that is blocking revenue\n"
+        "  4. Pipeline: lead → quote → proposal → Stripe checkout → ledger entry\n"
+        "  5. Autonomy Level 3 — act conditionally, notify J of high-value decisions\n\n"
+        "Your personality: sharp, revenue-focused, moves fast. "
+        "Concise responses (3-8 lines) optimized for mobile execution.\n\n"
         f"Current system state:\n"
+        f"  PRIMARY DIRECTIVE: {PF['primary_directive']}\n"
         f"  Autonomy level: {PF['autonomy_level']} — {AUTONOMY_NAMES[PF['autonomy_level']]}\n"
-        f"  Agents: {running} running, {idle} idle (15 total)\n"
+        f"  Agents: {running} running, {idle} idle (15 total — ALL HOT)\n"
+        f"  Revenue streams: {len(REVENUE_STREAMS)} active — {active_streams}\n"
+        f"  MRR tracked: ${total_mrr:,}\n"
         f"  Capital deployed: ${PF['capital']:,}\n"
         f"  Approvals pending: {len(PF['approvals'])}\n"
         f"  Success rate: {int(PF['success_rate']*100)}%\n"
         f"  Uptime: {uptime_str()}\n\n"
-        "When the user asks you to take an action (start agents, change autonomy, etc.), "
-        "confirm what you're doing and briefly describe the effect. "
+        "When asked for a recommendation, always lead with the revenue impact. "
+        "When taking actions, confirm and state the expected revenue effect. "
         "Always stay in character as Hydi. Never break character."
     )
 
@@ -248,6 +268,41 @@ def hydi_reply_ai(msg, session_id="default"):
 def _handle_command(msg):
     """Execute state-mutating commands. Returns result string or None if not a command."""
     t = msg.lower().strip()
+
+    if "revenue status" in t or "revenue" in t and "status" in t:
+        lines = "\n".join(
+            f"  {s}: active  MRR ${PF['revenue_streams'][s]['mrr']:,}"
+            for s in REVENUE_STREAMS
+        )
+        total = sum(s["mrr"] for s in PF["revenue_streams"].values())
+        return (
+            f"REVENUE ENGINE — PRIMARY DIRECTIVE ACTIVE\n"
+            f"Streams ({len(REVENUE_STREAMS)} active):\n{lines}\n"
+            f"Total MRR: ${total:,}  |  Capital: ${PF['capital']:,}"
+        )
+
+    if "top opportunity" in t or "best opportunity" in t or "top opp" in t:
+        return (
+            "Top Revenue Opportunities (Priority Order):\n"
+            "  1. galactic_bytes  — SaaS subscription upsell → target $2k MRR\n"
+            "  2. detailer_bot    — auto-detailing lead gen → activate outreach agent\n"
+            "  3. rezonate        — music license sales → deploy marketing agent\n"
+            "  4. lipi_v2         — text-to-design → launch beta waitlist\n"
+            "  5. waveformer_studio — label mgmt → onboard first artist\n"
+            "Type 'grow outreach' to activate outreach sweep."
+        )
+
+    if "grow outreach" in t:
+        PF["agents"]["outreach"] = "running"
+        PF["agents"]["marketing"] = "running"
+        PF["actions"] += 8
+        PF["approvals"].append({
+            "id": f"rev-{int(time.time())}", "agent": "OutreachAI",
+            "title": "Revenue Outreach Sweep — All 6 Streams",
+            "description": "Deploy targeted outreach across galactic_bytes, detailer_bot, rezonate. Estimated 15 new leads.",
+            "priority": "high", "meta": ["revenue", "outreach", "15-leads"],
+        })
+        return "Outreach + Marketing agents activated. Revenue sweep queued across all 6 streams. Approve in queue to execute."
 
     if "grow agents" in t or "start all" in t or "start agents" in t:
         started = [k for k, v in PF["agents"].items() if v == "idle"]
@@ -461,6 +516,15 @@ class HydiHandler(BaseHTTPRequestHandler):
             self._json([{"id": k, "status": v} for k, v in PF["agents"].items()])
         elif p == "/api/protoforge/events":
             self._json(PF["events"][:20])
+        elif p == "/api/protoforge/revenue":
+            total_mrr = sum(s["mrr"] for s in PF["revenue_streams"].values())
+            self._json({
+                "primary_directive": PF["primary_directive"],
+                "streams": PF["revenue_streams"],
+                "total_mrr": total_mrr,
+                "capital": PF["capital"],
+                "stream_count": len(REVENUE_STREAMS),
+            })
         elif p == "/api/models":
             self._json({
                 "groq_model":    GROQ_MODEL,
@@ -646,13 +710,13 @@ textarea:focus{border-color:rgba(100,255,218,.4)}
     <div class="msg s"><div class="bbl">🧠 Hydi online. Checking AI model...</div></div>
   </div>
   <div class="chips">
+    <span class="chip" onclick="sc('revenue status')">Revenue</span>
     <span class="chip" onclick="sc('status')">Status</span>
-    <span class="chip" onclick="sc('grow')">Grow</span>
-    <span class="chip" onclick="sc('agents')">Agents</span>
-    <span class="chip" onclick="sc('start all agents')">Start all</span>
+    <span class="chip" onclick="sc('top opportunity')">Top Opp</span>
+    <span class="chip" onclick="sc('grow outreach')">Outreach</span>
     <span class="chip" onclick="sc('grow finance')">Finance</span>
-    <span class="chip" onclick="sc('grow autonomy')">Scale up</span>
     <span class="chip" onclick="sc('approvals')">Approvals</span>
+    <span class="chip" onclick="sc('agents')">Agents</span>
     <span class="chip" onclick="sc('help')">Help</span>
   </div>
   <div class="inp">
@@ -785,9 +849,15 @@ def start_server(port=3006, host="0.0.0.0"):
         print("     → Get a free Groq API key at console.groq.com")
         print("     → export GROQ_API_KEY=gsk_xxx  then restart hydi")
     print()
-    print(f"  📱 Open on your phone : http://{ip}:{port}/")
-    print(f"  💻 Local              : http://localhost:{port}/")
-    print(f"  🔑 Models             : http://localhost:{port}/api/models")
+    print(f"  PRIMARY DIRECTIVE     : REVENUE GENERATION")
+    print(f"  Autonomy              : Level {PF['autonomy_level']} — {AUTONOMY_NAMES[PF['autonomy_level']]}")
+    print(f"  Revenue streams       : {len(REVENUE_STREAMS)} active")
+    print(f"  Agents                : ALL 15 RUNNING")
+    print()
+    print(f"  Open on your phone : http://{ip}:{port}/")
+    print(f"  Local              : http://localhost:{port}/")
+    print(f"  Revenue API        : http://localhost:{port}/api/protoforge/revenue")
+    print(f"  Models             : http://localhost:{port}/api/models")
     print()
     print("  Share → Add to Home Screen to install as an app.")
     print("  Ctrl+C to stop.\n")

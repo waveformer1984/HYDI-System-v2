@@ -1,0 +1,13 @@
+{
+  "template_id": "template_001",
+  "type": "template",
+  "created": "2026-04-14T22:54:16.850Z",
+  "value_estimate": 35,
+  "files": [
+    "config.json",
+    "example.config.json",
+    "example.js",
+    "readme.md",
+    "template.js"
+  ]
+}

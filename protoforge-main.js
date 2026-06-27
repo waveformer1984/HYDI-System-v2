@@ -365,21 +365,44 @@ async function main() {
   const protoforge = new ProtoForgeMain();
 
   switch (command) {
-    case 'start':
+    case 'start': {
       const initialCapital = parseInt(args[1]) || 1000000;
       await protoforge.initialize(initialCapital);
-      
+
+      // Start lightweight HTTP server for health checks
+      const http = require('http');
+      const port = process.env.PORT || 3002;
+      const server = http.createServer((req, res) => {
+        if (req.url === '/health') {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            status: 'UP',
+            service: 'hydi-protoforge',
+            initialized: protoforge.initialized,
+            timestamp: new Date().toISOString()
+          }));
+        } else {
+          res.writeHead(404, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Not found' }));
+        }
+      });
+      server.listen(port, () => {
+        console.log(`🌐 Health server listening on port ${port}`);
+      });
+
       // Keep running
       console.log('🔄 ProtoForge PAO System running. Press Ctrl+C to stop.');
       process.on('SIGINT', async () => {
         console.log('\n🛑 Received interrupt signal...');
+        server.close();
         await protoforge.shutdown();
         process.exit(0);
       });
-      
+
       // Prevent exit
       await new Promise(() => {});
       break;
+    }
 
     case 'status':
       if (!protoforge.initialized) {

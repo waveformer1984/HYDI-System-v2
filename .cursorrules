@@ -57,6 +57,7 @@ HYDI System v2 ("Heidi" / "ProtoForge → Kilo Node") is a monetizable AI orches
 - **State machine changes** (enums, transitions) require `STATE_MACHINE_APPROVED` in the PR description.
 - RLS is enabled on all tables. Never disable it.
 - **`search_path`** must be pinned on all `SECURITY DEFINER` functions to prevent SQL injection.
+- **Migration PRs trigger `hdi-governance-gate.yml`** — a 7-gate CI review covering: change detection, transformer tests, state machine approval, adversarial tests, replay fidelity, performance regression, and blueprint sync. All 7 gates must pass.
 
 ## Secret Handling
 
@@ -94,3 +95,19 @@ Operators: `gte`, `lte`, `gt`, `lt`, `eq`, `neq`, `in`, `nin`. Rules load from S
 - Do not add migrations without corresponding tests.
 - Do not rename `nnotification.service.ts` without updating all imports first.
 - Do not push to `main` directly — use `clean-main`.
+- Do not add `require()` calls in Deno Edge Functions — pure ESM only.
+- Do not bypass the startup cooldown window (2 min) or drift observation window (30 s).
+
+## Significant Changes
+
+Before implementing a change that touches the pipeline contract, Supabase schema, or core architectural constraints, open a GitHub Issue with the `rfc` label first. See [GOVERNANCE.md](GOVERNANCE.md) for the RFC process. If you discover a pipeline layer boundary violation, use the `pipeline-violation` issue template.
+
+## Key Documentation
+
+| Doc | Purpose |
+|-----|---------|
+| [CLAUDE.md](CLAUDE.md) | Full architecture, API routes, workers, and conventions reference |
+| [AGENTS.md](AGENTS.md) | AI agent guidelines for working in this codebase |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | PR checklist, migration governance, CI summary |
+| [GOVERNANCE.md](GOVERNANCE.md) | RFC process, decision-making authority |
+| [SECURITY_PROTOCOL.md](SECURITY_PROTOCOL.md) | Secret handling protocol |

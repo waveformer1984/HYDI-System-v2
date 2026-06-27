@@ -1,0 +1,29 @@
+{
+  "project": {
+    "name": "ursula",
+    "type": "nodejs",
+    "path": "C:\\Users\\Owner\\HYDI_System\\ursula"
+  },
+  "hydi": {
+    "version": "1.0.0",
+    "mode": "assistant",
+    "features": {
+      "code_review": true,
+      "task_generation": true,
+      "dependency_check": true,
+      "security_scan": true,
+      "performance_monitor": true
+    }
+  },
+  "orchestrator": {
+    "url": "http://127.0.0.1:8002",
+    "webhook_url": "http://127.0.0.1:8001/webhooks/hydi",
+    "report_interval": 3600
+  },
+  "preferences": {
+    "auto_fix": false,
+    "suggestions": true,
+    "commit_hooks": true,
+    "pr_reviews": true
+  }
+}

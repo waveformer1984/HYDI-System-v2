@@ -1,0 +1,18 @@
+{
+  "name": "@protoforge/unified-system",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Unified system with three meaningful trust boundaries",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "status": "node index.js status",
+    "verify": "node index.js verify",
+    "test": "node index.js test"
+  },
+  "dependencies": {
+    "crypto": "^1.0.1"
+  },
+  "keywords": ["unified", "trust", "boundaries", "safety"],
+  "author": "ProtoForge Systems"
+}

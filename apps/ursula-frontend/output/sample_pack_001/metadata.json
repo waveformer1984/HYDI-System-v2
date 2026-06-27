@@ -1,0 +1,19 @@
+{
+  "pack_id": "sample_pack_001",
+  "type": "sample_pack",
+  "created": "2026-04-14T22:54:16.089Z",
+  "value_estimate": 25,
+  "files": [
+    "manifest.json",
+    "sample_01.wav",
+    "sample_02.wav",
+    "sample_03.wav",
+    "sample_04.wav",
+    "sample_05.wav",
+    "sample_06.wav",
+    "sample_07.wav",
+    "sample_08.wav",
+    "sample_09.wav",
+    "sample_10.wav"
+  ]
+}

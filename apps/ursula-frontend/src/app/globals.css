@@ -1,0 +1,80 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-titlebar: #323233;
+  --bg-activitybar: #2c2c2d;
+  --bg-sidebar: #252526;
+  --bg-editor: #1e1e1e;
+  --bg-panel: #1e1e1e;
+  --bg-statusbar: #007acc;
+  --bg-tab: #2d2d2d;
+  --bg-tab-active: #1e1e1e;
+  --bg-tab-hover: #2a2d2e;
+  --text-primary: #cccccc;
+  --text-secondary: #858585;
+  --text-active: #ffffff;
+  --text-accent: #007acc;
+  --border-color: #3c3c3c;
+  --icon-active: #ffffff;
+  --icon-inactive: #858585;
+  --highlight: #094771;
+  --background: #1e1e1e;
+  --foreground: #cccccc;
+
+  /* ActivityBar icon colors per module for visual differentiation */
+  --icon-copilot: #00d4ff;
+  --icon-roadmap: #fbbf24;
+  --icon-dashboard: #10b981;
+  --icon-payments: #8b5cf6;
+  --icon-projects: #f97316;
+  --icon-settings: #6b7280;
+  --icon-default: #858585;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  overflow: auto;
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), system-ui, -apple-system, sans-serif;
+  scroll-behavior: smooth;
+}
+
+/* Scrollbar styling to match VS Code */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(121, 121, 121, 0.4);
+  border-radius: 0;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(121, 121, 121, 0.7);
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}

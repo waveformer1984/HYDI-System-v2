@@ -1,0 +1,75 @@
+{
+  "$schema": "./boot.config.schema.json",
+  "description": "HYDI Boot Agent module registry. The boot agent reads this file and starts each enabled module in dependency order, gating on health before starting dependents. Add a new ProtoForged module by appending an entry here -- no code changes required.",
+  "settings": {
+    "defaultGraceMs": 120000,
+    "defaultIntervalMs": 2000,
+    "shutdownTimeoutMs": 8000,
+    "requiredEnv": ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"],
+    "warnEnv": ["STRIPE_SECRET_KEY", "STRIPE_CONNECT_WEBHOOK_SECRET", "NEXT_PUBLIC_SUPABASE_URL"]
+  },
+  "modules": [
+    {
+      "id": "protoforge-core",
+      "label": "ProtoForge Core (CASCADE/KILO/ProtoForge + Agent Bus)",
+      "type": "process",
+      "enabled": true,
+      "required": true,
+      "command": "node",
+      "args": ["src/server.js"],
+      "env": { "PORT": "3005" },
+      "port": 3005,
+      "health": { "url": "http://127.0.0.1:3005/health", "graceMs": 300000, "intervalMs": 2000 },
+      "dependsOn": []
+    },
+    {
+      "id": "heidi-web",
+      "label": "Heidi Web Layer (Next.js)",
+      "type": "process",
+      "enabled": true,
+      "required": true,
+      "command": "npm",
+      "args": ["run", "dev"],
+      "argsProd": ["run", "start"],
+      "env": { "PORT": "3000" },
+      "port": 3000,
+      "health": { "url": "http://127.0.0.1:3000/api/health", "graceMs": 300000, "intervalMs": 2500 },
+      "dependsOn": ["protoforge-core"]
+    },
+    {
+      "id": "hydi-orchestrator",
+      "label": "HYDI System Orchestrator (Observe->Decide->Act core loop)",
+      "type": "module",
+      "enabled": true,
+      "required": false,
+      "module": "src/HYDISystem.js",
+      "construct": true,
+      "config": { "enableAutoActions": false },
+      "method": "start",
+      "stopMethod": "shutdown",
+      "dependsOn": ["protoforge-core"]
+    },
+    {
+      "id": "hardware-agent",
+      "label": "Hardware/HID Safety Orchestrator (Python)",
+      "type": "process",
+      "enabled": false,
+      "required": false,
+      "command": "python",
+      "args": ["agents/hardware-controller/safety_orchestrator.py"],
+      "livenessMs": 5000,
+      "dependsOn": ["protoforge-core"]
+    },
+    {
+      "id": "trading-loop",
+      "label": "HYDI Trading Loop (Python)",
+      "type": "process",
+      "enabled": false,
+      "required": false,
+      "command": "python",
+      "args": ["hydi_scripts/trading_loop.py"],
+      "livenessMs": 5000,
+      "dependsOn": ["protoforge-core", "heidi-web"]
+    }
+  ]
+}

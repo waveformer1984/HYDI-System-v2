@@ -1,0 +1,923 @@
+/**
+ * AgentTaskExecutorModule — Ollama AI Task Executor Monitor
+ * 
+ * Monitors and controls the Ollama-based task executor that processes tasks
+ * from .hydi/tasks.json using local LLM models.
+ * 
+ * Architecture based on: HYDI_Personal_Assistant/hydi_task_execution.py
+ * 
+ * Executor Features:
+ * - Loads tasks from .hydi/tasks.json (queue → executing → completed)
+ * - Executes via Ollama at http://localhost:11434
+ * - Models: llama3.2:latest (default), gemma3:4b
+ * - Timeout: 600 seconds per task
+ * - Retry logic: max 3 retries for failed_retryable tasks
+ * - Closed-loop follow-up: generates new tasks based on LLM responses
+ * - Post-completion hooks: Railway redeploy for incident tasks
+ * - Crash-safe: atomic writes, recovery of stuck tasks
+ * 
+ * TEST mode: Shows mock execution with simulated Ollama responses.
+ * LIVE mode: Monitors real executor, triggers runs, shows live task states.
+ */
+'use client';
+
+import { useState, useEffect, useCallback } from 'react';
+import {
+  Play,
+  Pause,
+  RefreshCw,
+  RotateCcw,
+  Trash2,
+  AlertCircle,
+  CheckCircle,
+  CheckCircle2,
+  Clock,
+  Zap,
+  Bot,
+  AlertTriangle,
+  Radio,
+  FlaskConical,
+  ChevronRight,
+  Terminal,
+  Sparkles,
+  ListChecks,
+} from 'lucide-react';
+import { ollamaGenerate, ollamaListModels, ollamaHealth, type OllamaModel } from '@/lib/api';
+import { useMode } from '@/lib/mode-context';
+import { listAgents, type AgentItem } from '@/lib/api';
+
+// ─── Types ───────────────────────────────────────────────────────────────────
+
+interface AgentTask {
+  id: string;
+  title: string;
+  description: string;
+  priority: 'urgent' | 'high' | 'medium' | 'low';
+  status: 'assigned' | 'in_progress' | 'completed';
+  outcome?: 'done' | 'failed_retryable' | 'failed_terminal';
+  assignedTo: string;
+  created_at: string;
+  assigned_at?: string;
+  started_at?: string;
+  completed_at?: string;
+  subtasks: string[];
+  data?: Record<string, unknown>;
+  executionLog: ExecutionLogEntry[];
+  result?: string;
+  error?: string;
+  retry_count: number;
+  max_retries: number;
+}
+
+interface ExecutionLogEntry {
+  timestamp: string;
+  message: string;
+  level: 'info' | 'warning' | 'error' | 'success';
+}
+
+interface OllamaExecutionMetrics {
+  model: string;
+  tokensUsed: number;
+  executionTime: number;
+  temperature: number;
+}
+
+interface ExecutionStats {
+  totalTasks: number;
+  queue: number;
+  executing: number;
+  completed: number;
+  done: number;
+  failed_retryable: number;
+  failed_terminal: number;
+  successRate: number;
+  avgExecutionTime: number;
+}
+
+// ─── Mock Data ───────────────────────────────────────────────────────────────
+
+const MOCK_AGENTS: AgentItem[] = [
+  { id: 'devopsAgent', name: 'DevOps Agent', type: 'ai', capabilities: ['deployment', 'infrastructure', 'security'], status: 'online' },
+  { id: 'workerAgent', name: 'Worker Agent', type: 'ai', capabilities: ['testing', 'refactoring', 'documentation'], status: 'online' },
+  { id: 'revenueCatalyst', name: 'Revenue Catalyst', type: 'ai', capabilities: ['monetization', 'payment_setup', 'marketing'], status: 'online' },
+  { id: 'systemsDirector', name: 'Systems Director', type: 'ai', capabilities: ['orchestration', 'monitoring', 'optimization'], status: 'online' },
+  { id: 'auditAgent', name: 'Audit Agent', type: 'ai', capabilities: ['security_audit', 'compliance', 'code_review'], status: 'online' },
+];
+
+const MOCK_TASKS: AgentTask[] = [
+  {
+    id: 'task-1',
+    title: '[Security] Add RESEND_API_KEY to production services',
+    description: 'Set RESEND_API_KEY environment variable in Railway dashboard for beta-portal, payment-auto, and web-backend services.',
+    priority: 'urgent',
+    status: 'assigned',
+    assignedTo: 'devopsAgent',
+    created_at: new Date().toISOString(),
+    subtasks: [
+      'Get fresh Resend API key from dashboard',
+      'Set RESEND_API_KEY in beta-portal (Railway)',
+      'Set RESEND_API_KEY in payment-auto (Railway)',
+      'Verify RESEND_API_KEY in web-backend',
+      'Test email sending on all 3 services',
+      'Document in deployment checklist',
+    ],
+    executionLog: [],
+    retry_count: 0,
+    max_retries: 3,
+  },
+  {
+    id: 'task-2',
+    title: '[Testing] Add test scaffolding to 12 untested projects',
+    description: 'Create test directories, add vitest/jest config, and write initial smoke tests for critical payment and API gateway modules.',
+    priority: 'high',
+    status: 'assigned',
+    assignedTo: 'workerAgent',
+    created_at: new Date().toISOString(),
+    subtasks: [
+      'Add tests/ directory to HydiPay with pytest config',
+      'Add vitest.config.ts to api-gateway',
+      'Write smoke tests for payment endpoints',
+      'Write smoke tests for webhook handlers',
+      'Add GitHub Actions test workflow',
+      'Document test requirements in CONTRIBUTING.md',
+    ],
+    executionLog: [],
+    retry_count: 0,
+    max_retries: 3,
+  },
+  {
+    id: 'task-3',
+    title: '[Revenue] Create Stripe payment links for 3 subscription products',
+    description: 'Generate monthly and annual payment links for Hobby, Freelancer, and Hardware Editors Suite products.',
+    priority: 'high',
+    status: 'pending',
+    assignedTo: 'revenueCatalyst',
+    createdAt: new Date().toISOString(),
+    subtasks: [
+      'Get fresh Stripe live API key',
+      'Create payment link: Hobby $10/mo',
+      'Create payment link: Hobby $100/yr (2 months free)',
+      'Create payment link: Freelancer $20/mo',
+      'Create payment link: Freelancer $200/yr (2 months free)',
+      'Create payment link: Hardware Editors Suite $15/mo',
+      'Create payment link: Hardware Editors Suite $150/yr (2 months free)',
+      'Add links to protoforgeindustries.com',
+      'Update HMH Revenue Launch spreadsheet',
+    ],
+    executionLog: [],
+    retryCount: 0,
+    maxRetries: 3,
+  },
+];
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+const PRIORITY_CONFIG = {
+  urgent: { color: '#f85149', bg: '#f8514920', label: 'Urgent' },
+  high: { color: '#f0883e', bg: '#f0883e20', label: 'High' },
+  medium: { color: '#d29922', bg: '#d2992220', label: 'Medium' },
+  low: { color: '#58a6ff', bg: '#58a6ff20', label: 'Low' },
+};
+
+const STATUS_CONFIG = {
+  pending: { color: '#8b949e', bg: '#8b949e20', icon: Clock, label: 'Pending' },
+  executing: { color: '#58a6ff', bg: '#58a6ff20', icon: RotateCcw, label: 'Executing' },
+  completed: { color: '#3fb950', bg: '#3fb95020', icon: CheckCircle, label: 'Completed' },
+  failed: { color: '#f85149', bg: '#f8514920', icon: AlertCircle, label: 'Failed' },
+  retrying: { color: '#d29922', bg: '#d2992220', icon: RotateCcw, label: 'Retrying' },
+};
+
+function calculateStats(tasks: AgentTask[]): ExecutionStats {
+  const total = tasks.length;
+  const queue = tasks.filter(t => t.status === 'assigned').length;
+  const executing = tasks.filter(t => t.status === 'in_progress').length;
+  const completed = tasks.filter(t => t.status === 'completed').length;
+  const done = tasks.filter(t => t.status === 'completed' && t.outcome === 'done').length;
+  const failed_retryable = tasks.filter(t => t.status === 'completed' && t.outcome === 'failed_retryable').length;
+  const failed_terminal = tasks.filter(t => t.status === 'completed' && t.outcome === 'failed_terminal').length;
+  const successRate = completed > 0 ? (done / completed) : 0;
+
+  const completedTasks = tasks.filter(t => t.status === 'completed' && t.result);
+  const avgExecutionTime = completedTasks.length > 0
+    ? completedTasks.reduce((sum, t) => sum + 1000, 0) / completedTasks.length
+    : 0;
+
+  return { totalTasks: total, queue, executing, completed, done, failed_retryable, failed_terminal, successRate, avgExecutionTime };
+}
+
+// ─── Component ───────────────────────────────────────────────────────────────
+
+const HYDI_API_URL = 'http://127.0.0.1:8811';
+
+export default function AgentTaskExecutorModule() {
+  const { isLive, isTest } = useMode();
+  const [tasks, setTasks] = useState<AgentTask[]>([]);
+  const [agents, setAgents] = useState<AgentItem[]>(MOCK_AGENTS);
+  const [concurrency, setConcurrency] = useState(2);
+  const [isExecuting, setIsExecuting] = useState(false);
+  const [autoExecute, setAutoExecute] = useState(false);
+  const [selectedTask, setSelectedTask] = useState<AgentTask | null>(null);
+  const [filter, setFilter] = useState<'all' | 'pending' | 'executing' | 'completed' | 'failed'>('all');
+  const [ollamaModels, setOllamaModels] = useState<OllamaModel[]>([]);
+  const [selectedModel, setSelectedModel] = useState<string>('llama3.2');
+  const [ollamaStatus, setOllamaStatus] = useState<'unknown' | 'healthy' | 'unhealthy'>('unknown');
+  const [loading, setLoading] = useState(false);
+
+  // Load tasks from HYDI API
+  const loadTasks = useCallback(async () => {
+    if (!isLive) {
+      setTasks(MOCK_TASKS);
+      setSelectedTask(MOCK_TASKS[0]);
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const res = await fetch(`${HYDI_API_URL}/tasks?status=assigned`);
+      if (!res.ok) {
+        console.error('Failed to load HYDI tasks:', res.statusText);
+        setLoading(false);
+        return;
+      }
+
+      const data = await res.json();
+      const hydiTasks = (data.tasks ?? []) as any[];
+
+      // Map HYDI tasks to AgentTask format
+      const mapped: AgentTask[] = hydiTasks.map((t) => ({
+        id: t.id,
+        title: t.title,
+        description: t.description || '',
+        priority: (t.priority ?? 'medium') as AgentTask['priority'],
+        status: 'assigned',
+        assignedTo: t.assigned_to || 'systemsDirector',
+        created_at: t.created_at || new Date().toISOString(),
+        subtasks: t.subtasks ?? [],
+        data: t.data,
+        executionLog: [],
+        retry_count: 0,
+        max_retries: 3,
+      }));
+
+      setTasks(mapped);
+      if (mapped.length > 0 && !selectedTask) {
+        setSelectedTask(mapped[0]);
+      }
+    } catch (error) {
+      console.error('Failed to load HYDI tasks:', error);
+    }
+    setLoading(false);
+  }, [isLive, selectedTask]);
+
+  // Load agents and Ollama models on mount
+  useEffect(() => {
+    setAgents(MOCK_AGENTS);
+
+    // Check Ollama health and load models
+    if (isLive) {
+      (async () => {
+        const healthRes = await ollamaHealth();
+        if (healthRes.data) {
+          setOllamaStatus('healthy');
+          const modelsRes = await ollamaListModels();
+          if (modelsRes.data?.models) {
+            setOllamaModels(modelsRes.data.models);
+            if (modelsRes.data.models.length > 0 && !selectedModel) {
+              setSelectedModel(modelsRes.data.models[0].name);
+            }
+          }
+        } else {
+          setOllamaStatus('unhealthy');
+        }
+      })();
+    }
+  }, [isLive, selectedModel]);
+
+  useEffect(() => {
+    loadTasks();
+  }, [loadTasks]);
+
+  // Execute single task
+  const executeTask = useCallback(async (task: AgentTask) => {
+    const startTime = Date.now();
+    const taskId = task.id;
+
+    // Update to executing
+    setTasks(prev => prev.map(t =>
+      t.id === taskId
+        ? { ...t, status: 'executing', startedAt: new Date().toISOString(), executionLog: [...t.executionLog, { timestamp: new Date().toISOString(), message: `Starting execution with ${task.assignedTo}`, level: 'info' }] }
+        : t
+    ));
+
+    if (!isLive) {
+      // TEST mode: simulate execution
+      await new Promise(resolve => setTimeout(resolve, 3000 + Math.random() * 2000));
+
+      const success = Math.random() > 0.2; // 80% success rate
+      const executionTime = (Date.now() - startTime) / 1000;
+
+      setTasks(prev => prev.map(t => {
+        if (t.id !== taskId) return t;
+
+        const log: ExecutionLogEntry[] = [
+          ...t.executionLog,
+          { timestamp: new Date().toISOString(), message: 'Analyzing task requirements...', level: 'info' },
+          { timestamp: new Date().toISOString(), message: 'Executing subtasks...', level: 'info' },
+        ];
+
+        if (success) {
+          log.push({ timestamp: new Date().toISOString(), message: `Task completed successfully in ${executionTime.toFixed(1)}s`, level: 'success' });
+          const result = {
+            success: true,
+            output: `Successfully completed all subtasks for: ${task.title}`,
+            tokensUsed: Math.floor(Math.random() * 1000) + 500,
+            executionTime,
+            subtasksCompleted: task.subtasks.length,
+            subtasksTotal: task.subtasks.length,
+          };
+
+          // Sync completion to HYDI API
+          (async () => {
+            try {
+              await fetch(`${HYDI_API_URL}/tasks/${encodeURIComponent(taskId)}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  status: 'completed',
+                  outcome: 'done',
+                  completed_at: new Date().toISOString(),
+                  result: result,
+                }),
+              });
+            } catch (e) {
+              console.error('Failed to sync completed task to HYDI:', e);
+            }
+          })();
+
+          return {
+            ...t,
+            status: 'completed',
+            completedAt: new Date().toISOString(),
+            executionLog: log,
+            result,
+          };
+        } else {
+          log.push({ timestamp: new Date().toISOString(), message: 'Task execution failed', level: 'error' });
+          const error = 'Simulated execution failure';
+
+          // Sync failure to HYDI API
+          (async () => {
+            try {
+              await fetch(`${HYDI_API_URL}/tasks/${encodeURIComponent(taskId)}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  status: 'failed',
+                  outcome: 'failed_terminal',
+                  completed_at: new Date().toISOString(),
+                  error: error,
+                }),
+              });
+            } catch (e) {
+              console.error('Failed to sync failed task to HYDI:', e);
+            }
+          })();
+
+          return {
+            ...t,
+            status: t.retryCount < t.maxRetries ? 'retrying' : 'failed',
+            completedAt: new Date().toISOString(),
+            executionLog: log,
+            error: error,
+            retryCount: t.retryCount + 1,
+          };
+        }
+      }));
+
+      return;
+    }
+
+    // LIVE mode: call actual Ollama execution
+    try {
+      // Build prompt for agent
+      const systemPrompt = `You are ${task.assignedTo}, an AI agent specialized in task execution. Execute tasks thoroughly and provide detailed results.`;
+
+      const prompt = `
+Task: ${task.title}
+Description: ${task.description}
+Priority: ${task.priority}
+
+Subtasks to complete:
+${task.subtasks.map((st, i) => `${i + 1}. ${st}`).join('\n')}
+
+Please execute this task step-by-step and provide:
+1. Detailed results for each subtask
+2. Any issues encountered
+3. Final outcome summary
+
+Respond in a structured format with clear sections for each subtask.`;
+
+      // Update task status to show it's calling Ollama
+      setTasks(prev => prev.map(t =>
+        t.id === taskId
+          ? {
+            ...t,
+            executionLog: [...t.executionLog, { timestamp: new Date().toISOString(), message: `Calling Ollama model: ${selectedModel}`, level: 'info' }]
+          }
+          : t
+      ));
+
+      // Call Ollama
+      const ollamaRes = await ollamaGenerate({
+        model: selectedModel,
+        prompt: prompt,
+        system: systemPrompt,
+        options: {
+          temperature: 0.7,
+          num_predict: 2000,
+        },
+      });
+
+      if (!ollamaRes.data || ollamaRes.error) {
+        throw new Error(ollamaRes.error || 'Ollama execution failed');
+      }
+
+      const executionTime = (Date.now() - startTime) / 1000;
+      const tokensUsed = (ollamaRes.data.prompt_eval_count || 0) + (ollamaRes.data.eval_count || 0);
+
+      const result = {
+        success: true,
+        output: ollamaRes.data.response,
+        model: selectedModel,
+        tokensUsed: tokensUsed,
+        executionTime: executionTime,
+        promptTokens: ollamaRes.data.prompt_eval_count,
+        completionTokens: ollamaRes.data.eval_count,
+        subtasksCompleted: task.subtasks.length,
+        subtasksTotal: task.subtasks.length,
+      };
+
+      // Sync completion to HYDI API
+      try {
+        await fetch(`${HYDI_API_URL}/tasks/${encodeURIComponent(taskId)}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            status: 'completed',
+            outcome: 'done',
+            completed_at: new Date().toISOString(),
+            result: result,
+          }),
+        });
+      } catch (e) {
+        console.error('Failed to sync completed task to HYDI:', e);
+      }
+
+      setTasks(prev => prev.map(t =>
+        t.id === taskId
+          ? {
+            ...t,
+            status: 'completed',
+            completedAt: new Date().toISOString(),
+            executionLog: [...t.executionLog, { timestamp: new Date().toISOString(), message: 'Task completed (LIVE mode placeholder)', level: 'success' }],
+            result
+          }
+          : t
+      ));
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+
+      // Sync failure to HYDI API
+      try {
+        await fetch(`${HYDI_API_URL}/tasks/${encodeURIComponent(taskId)}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            status: 'failed',
+            outcome: 'failed_terminal',
+            completed_at: new Date().toISOString(),
+            error: errorMsg,
+          }),
+        });
+      } catch (e) {
+        console.error('Failed to sync failed task to HYDI:', e);
+        setTasks(prev => prev.map(t =>
+          t.id === taskId
+            ? {
+              ...t,
+              status: 'completed',
+              outcome: 'failed_retryable',
+              completed_at: new Date().toISOString(),
+              executionLog: [
+                ...t.executionLog,
+                { timestamp: new Date().toISOString(), message: `Execution failed: ${errorMessage}`, level: 'error' },
+              ],
+              error: errorMessage,
+            }
+            : t
+        ));
+      }
+    }, [isLive]);
+
+  // Execute all pending tasks
+  const executeAll = useCallback(async () => {
+    setIsExecuting(true);
+    const pendingTasks = tasks.filter(t => t.status === 'assigned');
+
+    // Execute with concurrency limit
+    for (let i = 0; i < pendingTasks.length; i += concurrency) {
+      const batch = pendingTasks.slice(i, i + concurrency);
+      await Promise.all(batch.map(executeTask));
+    }
+
+    setIsExecuting(false);
+  }, [tasks, concurrency, executeTask]);
+
+  // Retry failed tasks
+  const retryFailed = useCallback(() => {
+    setTasks(prev => prev.map(t =>
+      t.status === 'completed' && t.outcome === 'failed_retryable' && t.retry_count < t.max_retries
+        ? { ...t, status: 'assigned', outcome: undefined, error: undefined, retry_count: t.retry_count + 1 }
+        : t
+    ));
+  }, []);
+
+  // Clear completed tasks
+  const clearCompleted = useCallback(() => {
+    setTasks(prev => prev.filter(t => t.status !== 'completed'));
+    if (selectedTask?.status === 'completed') {
+      setSelectedTask(null);
+    }
+  }, [selectedTask]);
+
+  const stats = calculateStats(tasks);
+  const filteredTasks = filter === 'all' ? tasks : tasks.filter(t => t.status === filter);
+
+  return (
+    <div className="h-full overflow-y-auto p-6" style={{ background: 'var(--bg-editor)' }}>
+      {/* Header */}
+      <div className="mb-6">
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-3">
+            <Bot size={20} style={{ color: '#bc8cff' }} />
+            <h1 className="text-xl font-bold" style={{ color: 'var(--text-active)' }}>
+              Agent Task Executor
+            </h1>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={executeAll}
+              disabled={isExecuting || stats.pending === 0}
+              className="flex items-center gap-1 px-3 py-1.5 rounded text-xs font-mono font-bold transition-colors disabled:opacity-30"
+              style={{ background: '#3fb95020', color: '#3fb950' }}
+            >
+              {isExecuting ? (
+                <>
+                  <RefreshCw size={12} className="animate-spin" />
+                  Executing...
+                </>
+              ) : (
+                <>
+                  <Play size={12} />
+                  Execute All ({stats.pending})
+                </>
+              )}
+            </button>
+            <button
+              onClick={retryFailed}
+              disabled={stats.failed === 0}
+              className="flex items-center gap-1 px-2 py-1.5 rounded text-xs font-mono transition-colors disabled:opacity-30"
+              style={{ color: 'var(--text-accent)' }}
+            >
+              <RefreshCw size={12} />
+              Retry Failed
+            </button>
+            <button
+              onClick={clearCompleted}
+              disabled={stats.completed === 0}
+              className="flex items-center gap-1 px-2 py-1.5 rounded text-xs font-mono transition-colors disabled:opacity-30"
+              style={{ color: 'var(--text-accent)' }}
+            >
+              <CheckCircle2 size={12} />
+              Clear Completed
+            </button>
+            <span
+              className="flex items-center gap-1.5 px-2 py-1 rounded text-[10px] font-bold font-mono uppercase tracking-wider"
+              style={{
+                background: isLive ? '#3fb95020' : '#007acc20',
+                color: isLive ? '#3fb950' : '#007acc',
+              }}
+            >
+              {isLive ? <><Radio size={10} /> Live</> : <><FlaskConical size={10} /> Test</>}
+            </span>
+          </div>
+        </div>
+        <p className="text-sm font-mono" style={{ color: 'var(--text-secondary)' }}>
+          AI agent-based task execution with real-time monitoring and logging
+        </p>
+      </div>
+
+      {/* Stats Dashboard */}
+      <div className="grid grid-cols-6 gap-3 mb-6">
+        {[
+          { label: 'Total', value: stats.totalTasks, color: 'var(--text-accent)' },
+          { label: 'Pending', value: stats.pending, color: '#8b949e' },
+          { label: 'Executing', value: stats.executing, color: '#58a6ff' },
+          { label: 'Completed', value: stats.completed, color: '#3fb950' },
+          { label: 'Failed', value: stats.failed, color: '#f85149' },
+          { label: 'Success Rate', value: `${stats.successRate.toFixed(0)}%`, color: stats.successRate > 80 ? '#3fb950' : stats.successRate > 50 ? '#d29922' : '#f85149' },
+        ].map((s) => (
+          <div
+            key={s.label}
+            className="rounded-md p-3 border text-center"
+            style={{ background: 'var(--bg-sidebar)', borderColor: 'var(--border-color)' }}
+          >
+            <div className="text-xl font-bold font-mono" style={{ color: s.color }}>
+              {s.value}
+            </div>
+            <div className="text-[10px] font-mono" style={{ color: 'var(--text-secondary)' }}>
+              {s.label}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Controls */}
+      <div className="flex items-center gap-4 mb-4">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-mono" style={{ color: 'var(--text-secondary)' }}>
+            Filter:
+          </span>
+          {(['all', 'pending', 'executing', 'completed', 'failed'] as const).map((f) => (
+            <button
+              key={f}
+              onClick={() => setFilter(f)}
+              className="px-2 py-1 rounded text-[10px] font-mono font-bold uppercase tracking-wider transition-colors"
+              style={{
+                background: filter === f ? 'var(--text-accent)' : 'transparent',
+                color: filter === f ? '#fff' : 'var(--text-secondary)',
+              }}
+            >
+              {f}
+            </button>
+          ))}
+        </div>
+        <div className="flex items-center gap-2 ml-auto">
+          <label className="flex items-center gap-2 text-xs font-mono" style={{ color: 'var(--text-secondary)' }}>
+            <input
+              type="checkbox"
+              checked={autoExecute}
+              onChange={(e) => setAutoExecute(e.target.checked)}
+            />
+            Auto-execute new tasks
+          </label>
+          <select
+            value={concurrency}
+            onChange={(e) => setConcurrency(Number(e.target.value))}
+            className="px-2 py-1 rounded text-xs font-mono"
+            style={{ background: 'var(--bg-sidebar)', color: 'var(--text-active)', border: '1px solid var(--border-color)' }}
+          >
+            <option value={1}>1 concurrent</option>
+            <option value={2}>2 concurrent</option>
+            <option value={3}>3 concurrent</option>
+            <option value={5}>5 concurrent</option>
+          </select>
+        </div>
+      </div>
+
+      {/* Task List + Detail */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Task List */}
+        <div className="space-y-2 max-h-[600px] overflow-y-auto pr-2">
+          {filteredTasks.length === 0 ? (
+            <div
+              className="rounded-md p-8 border text-center"
+              style={{ background: 'var(--bg-sidebar)', borderColor: 'var(--border-color)' }}
+            >
+              <ListChecks size={32} className="mx-auto mb-2" style={{ color: 'var(--text-secondary)' }} />
+              <p className="text-sm font-mono" style={{ color: 'var(--text-secondary)' }}>
+                No tasks matching filter.
+              </p>
+            </div>
+          ) : (
+            filteredTasks.map((task) => {
+              const statusConfig = STATUS_CONFIG[task.status];
+              const priorityConfig = PRIORITY_CONFIG[task.priority];
+              const isSelected = selectedTask?.id === task.id;
+              const StatusIcon = statusConfig.icon;
+
+              return (
+                <button
+                  key={task.id}
+                  onClick={() => setSelectedTask(task)}
+                  className="w-full text-left rounded-md p-3 border transition-colors"
+                  style={{
+                    background: isSelected ? '#bc8cff10' : 'var(--bg-sidebar)',
+                    borderColor: isSelected ? '#bc8cff60' : 'var(--border-color)',
+                  }}
+                >
+                  <div className="flex items-start gap-3">
+                    <StatusIcon
+                      size={16}
+                      style={{ color: statusConfig.color, marginTop: 2 }}
+                      className={task.status === 'executing' ? 'animate-spin' : ''}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-semibold mb-1" style={{ color: 'var(--text-active)' }}>
+                        {task.title}
+                      </div>
+                      <div className="flex items-center gap-2 flex-wrap mb-1">
+                        <span
+                          className="text-[9px] font-mono px-1.5 py-0.5 rounded"
+                          style={{ color: statusConfig.color, background: statusConfig.bg }}
+                        >
+                          {statusConfig.label}
+                        </span>
+                        <span
+                          className="text-[9px] font-mono px-1.5 py-0.5 rounded"
+                          style={{ color: priorityConfig.color, background: priorityConfig.bg }}
+                        >
+                          {priorityConfig.label}
+                        </span>
+                        <span className="text-[9px] font-mono" style={{ color: 'var(--text-secondary)' }}>
+                          → {task.assignedTo}
+                        </span>
+                      </div>
+                      {task.result && (
+                        <div className="text-[9px] font-mono" style={{ color: 'var(--text-secondary)' }}>
+                          {task.result.subtasksCompleted}/{task.result.subtasksTotal} subtasks • {task.result.executionTime?.toFixed(1)}s
+                        </div>
+                      )}
+                    </div>
+                    {task.status === 'pending' && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          executeTask(task);
+                        }}
+                        className="px-2 py-1 rounded text-[10px] font-mono transition-colors"
+                        style={{ background: '#3fb95020', color: '#3fb950' }}
+                      >
+                        <Play size={10} />
+                      </button>
+                    )}
+                    <ChevronRight size={14} className="shrink-0" style={{ color: 'var(--text-secondary)' }} />
+                  </div>
+                </button>
+              );
+            })
+          )}
+        </div>
+
+        {/* Task Detail */}
+        <div
+          className="rounded-md p-4 border max-h-[600px] overflow-y-auto"
+          style={{ background: 'var(--bg-sidebar)', borderColor: 'var(--border-color)' }}
+        >
+          {selectedTask ? (
+            <>
+              <div className="mb-4">
+                <div className="flex items-start gap-2 mb-2">
+                  {(() => {
+                    const StatusIcon = STATUS_CONFIG[selectedTask.status].icon;
+                    return <StatusIcon size={18} style={{ color: STATUS_CONFIG[selectedTask.status].color }} className={selectedTask.status === 'executing' ? 'animate-spin' : ''} />;
+                  })()}
+                  <div className="flex-1">
+                    <h3 className="text-base font-bold" style={{ color: 'var(--text-active)' }}>
+                      {selectedTask.title}
+                    </h3>
+                    <p className="text-xs mt-1" style={{ color: 'var(--text-secondary)' }}>
+                      {selectedTask.description}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded" style={{ background: '#58a6ff20', color: '#58a6ff' }}>
+                    {selectedTask.assignedTo}
+                  </span>
+                  <span className="text-[10px] font-mono" style={{ color: 'var(--text-secondary)' }}>
+                    Retry: {selectedTask.retryCount}/{selectedTask.maxRetries}
+                  </span>
+                  {selectedTask.startedAt && (
+                    <span className="text-[10px] font-mono" style={{ color: 'var(--text-secondary)' }}>
+                      Started: {new Date(selectedTask.startedAt).toLocaleTimeString()}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="mb-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <ListChecks size={14} style={{ color: 'var(--text-accent)' }} />
+                  <span className="text-xs font-bold font-mono" style={{ color: 'var(--text-active)' }}>
+                    Subtasks ({selectedTask.subtasks.length})
+                  </span>
+                </div>
+                <div className="space-y-1">
+                  {selectedTask.subtasks.map((st, i) => (
+                    <div
+                      key={i}
+                      className="text-[11px] font-mono p-2 rounded flex items-start gap-2"
+                      style={{ background: 'var(--bg-editor)', color: 'var(--text-secondary)' }}
+                    >
+                      <span className="shrink-0">{i + 1}.</span>
+                      <span>{st}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="mb-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <Terminal size={14} style={{ color: 'var(--text-accent)' }} />
+                  <span className="text-xs font-bold font-mono" style={{ color: 'var(--text-active)' }}>
+                    Execution Log ({selectedTask.executionLog.length})
+                  </span>
+                </div>
+                <div className="space-y-1 max-h-[200px] overflow-y-auto">
+                  {selectedTask.executionLog.length === 0 ? (
+                    <div className="text-[10px] font-mono p-2 rounded" style={{ background: 'var(--bg-editor)', color: 'var(--text-secondary)' }}>
+                      No logs yet
+                    </div>
+                  ) : (
+                    selectedTask.executionLog.map((log, i) => (
+                      <div
+                        key={i}
+                        className="text-[10px] font-mono p-1.5 rounded"
+                        style={{
+                          background: 'var(--bg-editor)',
+                          color: log.level === 'error' ? '#f85149' : log.level === 'warning' ? '#d29922' : log.level === 'success' ? '#3fb950' : 'var(--text-secondary)'
+                        }}
+                      >
+                        [{new Date(log.timestamp).toLocaleTimeString()}] {log.message}
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              {selectedTask.result && (
+                <div className="mb-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Sparkles size={14} style={{ color: '#3fb950' }} />
+                    <span className="text-xs font-bold font-mono" style={{ color: 'var(--text-active)' }}>
+                      Result
+                    </span>
+                  </div>
+                  <div
+                    className="p-3 rounded border"
+                    style={{ background: 'var(--bg-editor)', borderColor: '#3fb95040' }}
+                  >
+                    <div className="text-xs mb-2" style={{ color: 'var(--text-active)' }}>
+                      {selectedTask.result.output}
+                    </div>
+                    <div className="flex items-center gap-3 text-[10px] font-mono" style={{ color: 'var(--text-secondary)' }}>
+                      {selectedTask.result.tokensUsed && <span>Tokens: {selectedTask.result.tokensUsed}</span>}
+                      {selectedTask.result.executionTime && <span>Time: {selectedTask.result.executionTime.toFixed(1)}s</span>}
+                      {selectedTask.result.subtasksCompleted && <span>Completed: {selectedTask.result.subtasksCompleted}/{selectedTask.result.subtasksTotal}</span>}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {selectedTask.error && (
+                <div className="mb-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <AlertTriangle size={14} style={{ color: '#f85149' }} />
+                    <span className="text-xs font-bold font-mono" style={{ color: 'var(--text-active)' }}>
+                      Error
+                    </span>
+                  </div>
+                  <div
+                    className="p-3 rounded border text-xs font-mono"
+                    style={{ background: '#f8514910', borderColor: '#f8514940', color: '#f85149' }}
+                  >
+                    {selectedTask.error}
+                  </div>
+                </div>
+              )}
+
+              {selectedTask.status === 'pending' && (
+                <button
+                  onClick={() => executeTask(selectedTask)}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2 rounded text-sm font-mono font-bold transition-colors"
+                  style={{ background: '#3fb95020', color: '#3fb950' }}
+                >
+                  <Play size={14} />
+                  Execute Task
+                </button>
+              )}
+            </>
+          ) : (
+            <div className="text-center py-12">
+              <Bot size={32} className="mx-auto mb-2" style={{ color: 'var(--text-secondary)' }} />
+              <p className="text-sm font-mono" style={{ color: 'var(--text-secondary)' }}>
+                Select a task to view details and execution logs
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}

@@ -1,9 +1,17 @@
 -- HYDI Worker Queue System
 -- Simple but reliable queue implementation using native Postgres
+--
+-- NOTE: This file is superseded by the tracked migration
+--   supabase/migrations/20260617000003_worker_queue_system.sql
+-- It is kept runnable for manual/ad-hoc use. The original PARTITION BY HASH
+-- version was removed because a partitioned table's PRIMARY KEY must include the
+-- partition key (id alone does not include queue_name), so it failed to create.
+-- Non-partitioned is correct at this scale. Uses gen_random_uuid() (built-in)
+-- instead of uuid_generate_v4() (requires the uuid-ossp extension).
 
 -- Queue tables for each worker type
 CREATE TABLE IF NOT EXISTS worker_queues (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     queue_name TEXT NOT NULL,
     payload JSONB NOT NULL,
     status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'completed', 'failed')),
@@ -13,24 +21,8 @@ CREATE TABLE IF NOT EXISTS worker_queues (
     error_message TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     started_at TIMESTAMPTZ,
-    completed_at TIMESTAMPTZ,
-    
-    -- Partitioning by queue_name for performance
-    PARTITION BY HASH (queue_name)
+    completed_at TIMESTAMPTZ
 );
-
--- Create partitions for better performance
-CREATE TABLE IF NOT EXISTS worker_queues_revenue PARTITION OF worker_queues
-    FOR VALUES WITH (modulus 4, remainder 0);
-
-CREATE TABLE IF NOT EXISTS worker_queues_heidi PARTITION OF worker_queues
-    FOR VALUES WITH (modulus 4, remainder 1);
-
-CREATE TABLE IF NOT EXISTS worker_queues_ursula PARTITION OF worker_queues
-    FOR VALUES WITH (modulus 4, remainder 2);
-
-CREATE TABLE IF NOT EXISTS worker_queues_protoforge PARTITION OF worker_queues
-    FOR VALUES WITH (modulus 4, remainder 3);
 
 -- Worker status tracking
 CREATE TABLE IF NOT EXISTS worker_status (
@@ -46,7 +38,7 @@ CREATE TABLE IF NOT EXISTS worker_status (
 
 -- Event log for debugging
 CREATE TABLE IF NOT EXISTS worker_events (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     worker_id TEXT,
     queue_name TEXT,
     event_type TEXT NOT NULL,
