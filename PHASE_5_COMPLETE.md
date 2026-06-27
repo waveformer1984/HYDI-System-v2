@@ -69,11 +69,22 @@ Future Decisions Improved
 - **Security Agent** — Threat assessment, access control, incident response
 - **Workflow Agent** — Process automation, workflow optimization, task routing
 
-**All agents implement:**
+**All agents implement transparent, input-driven logic:**
 - `initialize()` — Setup
 - `canExecute(task)` — Capability check
-- `execute(task)` — Task execution
+- `execute(task)` — Task execution with real heuristics
 - `reflect()` — Optional learning
+
+**Agent Logic:**
+- **Layer A (Strategic):** Real, documented formulas (scalability scoring, team sizing, model selection constraints)
+- **Layer B (Execution):** Vendor evaluation (weighted scoring), project estimation (complexity-based), production cost modeling
+- **Layer C (Finance):** Budget tracking, revenue forecasting (growth-based), cap-table dilution risk calculation
+- **Layer D (Outreach):** Campaign budgeting, lead generation (CPL-based), community growth forecasting
+- **Layer E (Facility):** Maintenance scheduling, threat scoring, workflow optimization time estimation
+
+**Key Property:** No hardcoded returns. All methods validate input, compute transparent values, and fail cleanly on invalid data.
+
+**Test Suite:** `heidi-core/test-layer-a-agents.js` — 25 assertions verifying Layer A logic across all input scenarios. All agents follow the same pattern.
 
 ---
 
@@ -115,7 +126,7 @@ router.routeTask(task) → {
 
 ### 4. Stress Test Harness ✅
 
-**File:** `heidi-core/phase-5-stress-test.js` (350+ lines)
+**File:** `heidi-core/phase-5-stress-test.js` (450+ lines)
 
 **Validates:**
 - 60+ tasks/hour sustained throughput
@@ -123,13 +134,19 @@ router.routeTask(task) → {
 - Memory stability (peak heap monitoring)
 - Decision quality maintenance during stress
 
-**Run stress test:**
-```bash
-# 1 hour, 60 tasks/hour
-TEST_DURATION=3600000 TASKS_PER_HOUR=60 node heidi-core/phase-5-stress-test.js
+**Improvements:**
+- **Unique `runId`** per test run — each task tagged with identifier
+- **Correlation:** Agent copies task.payload → heidi_events.payload, so harness can filter by `payload->>run_id`
+- **Result Accuracy:** Only counts events from current test, not pre-existing rows
+- **Scoped Cleanup:** Deletes only test data by run_id, not by hour
+- **No NaN%:** Decision percentages guarded against divide-by-zero
 
-# Custom: 30 minutes, 100 tasks/hour
-TEST_DURATION=1800000 TASKS_PER_HOUR=100 node heidi-core/phase-5-stress-test.js
+**Run stress test via npm scripts:**
+```bash
+npm run stress-test          # 1 hour @ 60 tasks/hour
+npm run stress-test:2m       # 2 minutes @ 120 tasks/hour (quick test)
+npm run stress-test:10m      # 10 minutes @ 60 tasks/hour (medium test)
+npm run stress-test:1h       # 1 hour @ 60 tasks/hour (full test)
 ```
 
 **Test Output:**
