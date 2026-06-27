@@ -6,8 +6,8 @@
 
 const { createClient } = require('@supabase/supabase-js');
 
-const SUPABASE_URL = 'http://127.0.0.1:54321';
-const SUPABASE_KEY = 'sb_secret_N7UND0UgjKTVK-Uodkm0Hg_xSvEMPvz';
+const SUPABASE_URL = process.env.SUPABASE_URL || 'http://127.0.0.1:54321';
+const SUPABASE_KEY = process.env.SUPABASE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
 const client = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 (async () => {

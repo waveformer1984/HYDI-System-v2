@@ -350,6 +350,106 @@ class HeidiAgent {
   }
 
   /**
+   * FEEDBACK LOOP: Process human approval/rejection to update confidence
+   * Called when a task receives human feedback (approved, rejected, needs changes)
+   */
+  async processFeedback(eventId, feedback) {
+    try {
+      const { approval, outcome, notes } = feedback;
+      // approval: 'approved' | 'rejected' | 'needs-changes'
+      // outcome: boolean (was the decision correct?)
+
+      // Fetch the event that received feedback
+      const { data: event, error: eventError } = await this.supabase
+        .from('heidi_events')
+        .select('*')
+        .eq('id', eventId)
+        .single();
+
+      if (eventError || !event) {
+        console.error('[HEIDI-AGENT] Feedback event not found');
+        return;
+      }
+
+      // Update confidence for each memory fact that influenced this decision
+      if (event.memory_ids && event.memory_ids.length > 0) {
+        for (const memId of event.memory_ids) {
+          await this.updateFactConfidence(memId, outcome);
+        }
+      }
+
+      // Log the feedback for auditing
+      const { error: feedbackError } = await this.supabase
+        .from('heidi_feedback')
+        .insert({
+          event_id: eventId,
+          approval,
+          outcome,
+          notes,
+          division: event.division
+        });
+
+      if (feedbackError) {
+        console.warn('[HEIDI-AGENT] Feedback log error:', feedbackError.message);
+      }
+
+      console.log(`[HEIDI-AGENT] Feedback processed: event ${eventId} → ${approval} (outcome: ${outcome})`);
+    } catch (error) {
+      console.error('[HEIDI-AGENT] Feedback processing failed:', error.message);
+    }
+  }
+
+  /**
+   * Update a procedural fact's confidence based on decision outcome
+   * Successful decisions → +2% confidence (cap 0.97)
+   * Failed decisions → -3% confidence (floor 0.50)
+   */
+  async updateFactConfidence(factId, wasSuccessful) {
+    try {
+      // Fetch current confidence
+      const { data: fact, error: fetchError } = await this.supabase
+        .from('hydi_facts')
+        .select('id, confidence, updates_count')
+        .eq('id', factId)
+        .single();
+
+      if (fetchError || !fact) {
+        console.warn('[HEIDI-AGENT] Fact not found for confidence update');
+        return;
+      }
+
+      // Calculate new confidence with bias toward stability
+      let newConfidence = fact.confidence;
+      if (wasSuccessful) {
+        newConfidence = Math.min(0.97, fact.confidence + 0.02);
+      } else {
+        newConfidence = Math.max(0.50, fact.confidence - 0.03);
+      }
+
+      const updatesCount = (fact.updates_count || 0) + 1;
+
+      // Update fact
+      const { error: updateError } = await this.supabase
+        .from('hydi_facts')
+        .update({
+          confidence: newConfidence,
+          updates_count: updatesCount,
+          last_feedback_at: new Date().toISOString()
+        })
+        .eq('id', factId);
+
+      if (updateError) {
+        console.warn('[HEIDI-AGENT] Confidence update error:', updateError.message);
+      } else {
+        const direction = wasSuccessful ? '↑' : '↓';
+        console.log(`[HEIDI-AGENT] Fact ${factId}: confidence ${(fact.confidence*100).toFixed(0)}% ${direction} ${(newConfidence*100).toFixed(0)}%`);
+      }
+    } catch (error) {
+      console.error('[HEIDI-AGENT] Confidence update failed:', error.message);
+    }
+  }
+
+  /**
    * Process one task cycle
    */
   async processTaskCycle() {
@@ -628,6 +728,32 @@ class HeidiAgent {
 
               res.writeHead(result.success ? 200 : 400);
               res.end(JSON.stringify(result));
+            } catch (e) {
+              res.writeHead(400);
+              res.end(JSON.stringify({ error: 'Invalid JSON' }));
+            }
+          });
+        } catch (error) {
+          res.writeHead(500);
+          res.end(JSON.stringify({ error: error.message }));
+        }
+        return;
+      }
+
+      // POST /api/feedback/{eventId} - Submit feedback on a decision
+      if (req.method === 'POST' && req.url.match(/^\/api\/feedback\/[^/]+$/)) {
+        try {
+          const eventId = req.url.split('/')[3];
+          let body = '';
+          req.on('data', chunk => body += chunk);
+          req.on('end', async () => {
+            try {
+              const feedback = JSON.parse(body || '{}');
+              // feedback: { approval: 'approved'|'rejected'|'needs-changes', outcome: bool, notes: string }
+              await this.processFeedback(eventId, feedback);
+
+              res.writeHead(200);
+              res.end(JSON.stringify({ success: true, message: 'Feedback processed' }));
             } catch (e) {
               res.writeHead(400);
               res.end(JSON.stringify({ error: 'Invalid JSON' }));
