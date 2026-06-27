@@ -8,14 +8,28 @@ HYDI System v2 is a continuously deployed platform. Security fixes are applied t
 
 **Please do not open a public GitHub issue for security vulnerabilities.**
 
-Report vulnerabilities by email to **waveformer1984@gmail.com** with the subject line `[SECURITY] HYDI System v2 — <brief description>`. Include:
+You have two options:
+
+1. **GitHub private security advisory** (preferred) — open a draft advisory at `https://github.com/waveformer1984/HYDI-System-v2/security/advisories/new`. This keeps the report private within GitHub and allows collaborative editing before disclosure.
+2. **Email** — send to **waveformer1984@gmail.com** with the subject line `[SECURITY] HYDI System v2 — <brief description>`.
+
+In either case, include:
 
 - A description of the vulnerability and the affected component
 - Steps to reproduce or a proof-of-concept (safe / non-destructive only)
 - Potential impact assessment
 - Any suggested remediation
 
-You can expect an acknowledgement within **48 hours** and a status update within **7 days**. We will coordinate a fix and disclosure timeline with you before making anything public.
+## Coordinated Disclosure Timeline
+
+| Milestone | Target |
+|-----------|--------|
+| Acknowledgement | Within 48 hours of receipt |
+| Initial assessment | Within 7 days |
+| Fix delivered | Within 30 days for critical/high; 90 days for medium/low |
+| Public disclosure | After fix is deployed — coordinated with the reporter |
+
+We will not disclose a vulnerability publicly before a fix is available unless the vulnerability is already publicly known. If we need more time than the above targets, we will communicate that proactively.
 
 ## Scope
 
@@ -75,3 +89,10 @@ vercel env ls | grep SECRET_NAME
 | PolicyEngine fail-closed (default `'reject'`) | `lib/protoforge/policy-engine.js` |
 | CodeQL static analysis | `.github/workflows/codeql.yml` (scheduled) |
 | Governance gate for DB migrations | `.github/workflows/hdi-governance-gate.yml` |
+
+## See also
+
+- [`SECURITY_PROTOCOL.md`](SECURITY_PROTOCOL.md) — secret injection and rotation procedures
+- [`GOVERNANCE.md`](GOVERNANCE.md) — decision-making and maintainer responsibilities
+- [`CONTRIBUTING.md`](CONTRIBUTING.md) — development guidelines and architecture constraints
+- [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) — community standards
