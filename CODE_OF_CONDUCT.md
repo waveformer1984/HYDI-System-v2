@@ -38,6 +38,8 @@ This Code of Conduct applies within all project spaces — including the GitHub 
 
 Instances of abusive, harassing, or otherwise unacceptable behaviour may be reported to the project maintainer at **waveformer1984@gmail.com**. All complaints will be reviewed and investigated promptly and fairly.
 
+All reports are handled confidentially. The identity of the reporter will not be disclosed to the subject of the report without the reporter's explicit consent.
+
 All project maintainers are obligated to respect the privacy and security of the reporter of any incident.
 
 ## Enforcement Guidelines
@@ -73,3 +75,7 @@ Project maintainers will follow these guidelines in determining the consequences
 This Code of Conduct is adapted from the [Contributor Covenant](https://www.contributor-covenant.org), version 2.1, available at [https://www.contributor-covenant.org/version/2/1/code_of_conduct.html](https://www.contributor-covenant.org/version/2/1/code_of_conduct.html).
 
 For answers to common questions about this code of conduct, see the FAQ at [https://www.contributor-covenant.org/faq](https://www.contributor-covenant.org/faq). Translations are available at [https://www.contributor-covenant.org/translations](https://www.contributor-covenant.org/translations).
+
+---
+
+For project decision-making processes and maintainer responsibilities, see [GOVERNANCE.md](GOVERNANCE.md). For help and support channels, see [SUPPORT.md](SUPPORT.md).
