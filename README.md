@@ -183,6 +183,18 @@ node -e "require('crypto').randomBytes(32).toString('hex')" | vercel env add SEC
 vercel env ls | grep SECRET_NAME
 ```
 
+## Community
+
+| Document | Purpose |
+|----------|---------|
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Setup, PR checklist, DB migration governance, CI summary |
+| [GOVERNANCE.md](GOVERNANCE.md) | Decision-making process, RFC policy, maintainer responsibilities |
+| [SECURITY.md](SECURITY.md) | Vulnerability reporting and coordinated disclosure |
+| [SUPPORT.md](SUPPORT.md) | How to get help and which issue template to use |
+| [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) | Community standards |
+| [CHANGELOG.md](CHANGELOG.md) | Release history |
+| [AGENTS.md](AGENTS.md) | Guidelines for AI agents working in this codebase |
+
 ## License
 
 MIT
