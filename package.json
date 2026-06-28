@@ -23,7 +23,10 @@
     "stress-test": "node heidi-core/phase-5-stress-test.js",
     "stress-test:2m": "cross-env TEST_DURATION=120000 TASKS_PER_HOUR=120 node heidi-core/phase-5-stress-test.js",
     "stress-test:10m": "cross-env TEST_DURATION=600000 TASKS_PER_HOUR=60 node heidi-core/phase-5-stress-test.js",
-    "stress-test:1h": "cross-env TEST_DURATION=3600000 TASKS_PER_HOUR=60 node heidi-core/phase-5-stress-test.js"
+    "stress-test:1h": "cross-env TEST_DURATION=3600000 TASKS_PER_HOUR=60 node heidi-core/phase-5-stress-test.js",
+    "boot": "node scripts/boot-agent.js",
+    "boot:plan": "node scripts/boot-agent.js --dry-run",
+    "boot:prod": "node scripts/boot-agent.js --prod"
   },
   "keywords": [
     "protoforge",
@@ -78,6 +81,8 @@
     "postcss": "$postcss",
     "test-exclude": {
       "glob": "^7.1.6"
-    }
+    },
+    "undici": "^6.27.0",
+    "js-yaml": "^4.2.0"
   }
 }
