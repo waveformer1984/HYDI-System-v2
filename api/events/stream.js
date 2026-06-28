@@ -2,11 +2,31 @@
 // This handles the /events/stream endpoint for the Ursula dashboard
 
 const { EventEmitter } = require('events');
+const { verifyServiceToken } = require('../../lib/auth/verifyServiceToken');
 
 // Create a simple event emitter for broadcasting
 const eventEmitter = new EventEmitter();
 
 export default function handler(req, res) {
+  // CORS preflight
+  if (req.method === 'OPTIONS') {
+    res.writeHead(204, {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Headers': 'Cache-Control, x-hydi-service-token',
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    });
+    res.end();
+    return;
+  }
+
+  // Service token auth guard
+  const tokenResult = verifyServiceToken(req.headers['x-hydi-service-token']);
+  if (!tokenResult.valid) {
+    res.writeHead(401, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Unauthorized', reason: tokenResult.reason }));
+    return;
+  }
+
   // Set SSE headers
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
