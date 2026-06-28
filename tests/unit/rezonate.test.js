@@ -1,9 +1,15 @@
 /**
  * Unit tests for api/rezonate/route.js
  *
- * Mocks @supabase/supabase-js and fs so no live services are required.
- * Follows the same mock pattern as tests/unit/stripe-connect-webhook.test.js.
+ * Mocks @supabase/supabase-js, fs, and verifyServiceToken so no live services
+ * are required. Follows the same mock pattern as stripe-connect-webhook.test.js.
  */
+
+// ── verifyServiceToken mock ────────────────────────────────────────────────────
+const mockVerifyServiceToken = jest.fn();
+jest.mock('../../lib/auth/verifyServiceToken', () => ({
+  verifyServiceToken: (...args) => mockVerifyServiceToken(...args),
+}));
 
 // ── Supabase mock ──────────────────────────────────────────────────────────────
 // We build the chain mock once and expose helper references so individual
@@ -93,6 +99,8 @@ const handler = require('../../api/rezonate/route.js');
 // Reset call counts between tests to keep assertions clean.
 beforeEach(() => {
   jest.clearAllMocks();
+  // Default: valid token from the 'user_abc' service identity.
+  mockVerifyServiceToken.mockReturnValue({ valid: true, service: 'user_abc' });
   // Re-attach chained return values after clearAllMocks resets them.
   mockFrom.mockReturnValue({
     select: mockSelect,
@@ -124,9 +132,11 @@ describe('list_projects', () => {
     expect(mockFrom).toHaveBeenCalledWith('rezonate_projects');
   });
 
-  it('returns supabase data when no user-id header is present', async () => {
+  it('returns all projects when service identity has no user context (null service)', async () => {
     const fakeProjects = [{ id: 'proj_2', name: 'Global Track' }];
-    // Without a user header, eq() is never called; the promise comes from select().
+    // When tokenResult.service is null, eq() is never called; the promise
+    // resolves from select() directly (no user filter applied).
+    mockVerifyServiceToken.mockReturnValueOnce({ valid: true, service: null });
     mockSelect.mockResolvedValueOnce({ data: fakeProjects, error: null });
 
     const { req, res } = buildReqRes({ body: { action: 'list_projects' } });
@@ -134,6 +144,7 @@ describe('list_projects', () => {
 
     expect(res._status).toBe(200);
     expect(res._body.data).toEqual(fakeProjects);
+    expect(mockEq).not.toHaveBeenCalled();
   });
 });
 
@@ -272,5 +283,77 @@ describe('POST without action', () => {
 
     expect(res._status).toBe(400);
     expect(res._body.error).toMatch(/action is required/i);
+  });
+});
+
+// ── service token guard (RFC-139) ──────────────────────────────────────────────
+describe('service token guard', () => {
+  it('returns 401 when x-hydi-service-token header is missing', async () => {
+    mockVerifyServiceToken.mockReturnValueOnce({ valid: false, reason: 'missing token' });
+
+    const { req, res } = buildReqRes({ body: { action: 'list_projects' } });
+    await handler(req, res);
+
+    expect(res._status).toBe(401);
+    expect(res._body.error).toBe('Unauthorized');
+    expect(res._body.reason).toBe('missing token');
+    expect(mockFrom).not.toHaveBeenCalled();
+  });
+
+  it('returns 401 when token signature is invalid', async () => {
+    mockVerifyServiceToken.mockReturnValueOnce({ valid: false, reason: 'signature mismatch' });
+
+    const { req, res } = buildReqRes({
+      body: { action: 'list_projects' },
+      headers: { 'x-hydi-service-token': 'bad.token.here.x' },
+    });
+    await handler(req, res);
+
+    expect(res._status).toBe(401);
+    expect(res._body.error).toBe('Unauthorized');
+    expect(res._body.reason).toBe('signature mismatch');
+    expect(mockFrom).not.toHaveBeenCalled();
+  });
+
+  it('returns 401 when token is expired', async () => {
+    mockVerifyServiceToken.mockReturnValueOnce({
+      valid: false,
+      reason: 'token expired or clock skew exceeds 5 minutes',
+    });
+
+    const { req, res } = buildReqRes({
+      body: { action: 'node_manifest' },
+      headers: { 'x-hydi-service-token': 'old.expired.token.sig' },
+    });
+    await handler(req, res);
+
+    expect(res._status).toBe(401);
+    expect(res._body.reason).toMatch(/expired/i);
+  });
+
+  it('uses tokenResult.service as userId for DB queries', async () => {
+    mockVerifyServiceToken.mockReturnValueOnce({ valid: true, service: 'rezonate-client' });
+    mockEq.mockResolvedValueOnce({ data: [], error: null });
+
+    const { req, res } = buildReqRes({ body: { action: 'list_projects' } });
+    await handler(req, res);
+
+    expect(res._status).toBe(200);
+    expect(mockEq).toHaveBeenCalledWith('user_id', 'rezonate-client');
+  });
+
+  it('passes verified service identity to create_project record', async () => {
+    mockVerifyServiceToken.mockReturnValueOnce({ valid: true, service: 'studio-node' });
+    const created = { id: 'proj_x', name: 'Test', user_id: 'studio-node' };
+    mockSingle.mockResolvedValueOnce({ data: created, error: null });
+
+    const { req, res } = buildReqRes({
+      body: { action: 'create_project', payload: { name: 'Test' } },
+    });
+    await handler(req, res);
+
+    expect(res._status).toBe(201);
+    const insertedArg = mockInsert.mock.calls[0][0];
+    expect(insertedArg.user_id).toBe('studio-node');
   });
 });

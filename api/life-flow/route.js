@@ -1,11 +1,12 @@
 /**
  * Deep Life Architect API Routes
- * 
+ *
  * This file provides REST API endpoints for the Deep Life Architect system,
  * allowing external applications to interact with life-flow analysis functionality.
  */
 
 const HYDISystem = require('../../src/HYDISystem');
+const { verifyServiceToken } = require('../../lib/auth/verifyServiceToken');
 
 // Initialize HYDI system with Deep Life Architect enabled
 const hydiSystem = new HYDISystem({
@@ -24,30 +25,36 @@ export default async function handler(req, res) {
   // Enable CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-hydi-service-token');
+
   // Handle preflight requests
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
-  
+
+  // Verify service token — callers must present x-hydi-service-token.
+  const tokenResult = verifyServiceToken(req.headers['x-hydi-service-token']);
+  if (!tokenResult.valid) {
+    return res.status(401).json({ success: false, error: 'Unauthorized', reason: tokenResult.reason });
+  }
+
   try {
     const { type, subtype, params } = req.body || {};
-    
+
     if (!type) {
       return res.status(400).json({
         success: false,
         error: 'Missing request type'
       });
     }
-    
+
     // Process request through HYDI system
     const result = await hydiSystem.processRequest({
       type,
       subtype,
       params,
       context: {
-        userId: req.headers['x-user-id'] || 'anonymous',
+        userId: tokenResult.service,
         sessionId: req.headers['x-session-id'] || 'default',
         tier: req.headers['x-tier'] || 'starter'
       }

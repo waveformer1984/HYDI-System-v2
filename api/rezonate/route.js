@@ -10,6 +10,7 @@
 const { createClient } = require('@supabase/supabase-js');
 const fs = require('fs');
 const path = require('path');
+const { verifyServiceToken } = require('../../lib/auth/verifyServiceToken');
 
 // Initialise Supabase client using service-role key (server-side only).
 const supabase = createClient(
@@ -38,6 +39,12 @@ function loadNodeConfig() {
  * Response shape: { data, error } with appropriate HTTP status codes.
  */
 async function handler(req, res) {
+  // ── service token guard ───────────────────────────────────────────────────────
+  const tokenResult = verifyServiceToken(req.headers['x-hydi-service-token']);
+  if (!tokenResult.valid) {
+    return res.status(401).json({ data: null, error: 'Unauthorized', reason: tokenResult.reason });
+  }
+
   // ── method gate ──────────────────────────────────────────────────────────────
   if (req.method !== 'POST' && req.method !== 'GET') {
     return res.status(405).json({ data: null, error: 'Method not allowed' });
@@ -59,8 +66,8 @@ async function handler(req, res) {
     return res.status(400).json({ data: null, error: 'action is required' });
   }
 
-  // ── identify the requesting user ──────────────────────────────────────────────
-  const userId = req.headers['x-user-id'] || null;
+  // ── identify the requesting service (verified identity from token) ───────────
+  const userId = tokenResult.service;
 
   try {
     switch (action) {
