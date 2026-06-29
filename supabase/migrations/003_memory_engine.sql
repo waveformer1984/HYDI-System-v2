@@ -1,6 +1,12 @@
 -- HYDI Memory Engine Tables
 -- =======================
 
+-- pgvector must exist before the vector(768) column in knowledge_documents below.
+-- This is the EARLIEST migration that uses the vector type, so create the extension
+-- here (idempotent). Later migrations also create it; this just ensures correct order
+-- for a clean `supabase db reset` against a fresh local database.
+CREATE EXTENSION IF NOT EXISTS vector;
+
 -- Procedural Workflows (learned patterns)
 CREATE TABLE IF NOT EXISTS procedural_workflows (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -115,7 +121,9 @@ CREATE TABLE IF NOT EXISTS interactions (
 );
 
 CREATE INDEX idx_interactions_type ON interactions(type);
-CREATE INDEX idx_interactions_expires ON interactions(expires_at) WHERE expires_at > NOW();
+-- NOTE: a partial index predicate cannot use NOW() (not IMMUTABLE). Index the column
+-- plainly; queries can still filter `WHERE expires_at > now()` and use this index.
+CREATE INDEX IF NOT EXISTS idx_interactions_expires ON interactions(expires_at);
 
 -- Vector search helper function
 CREATE OR REPLACE FUNCTION search_documents(
