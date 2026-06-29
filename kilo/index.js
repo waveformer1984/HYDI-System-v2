@@ -106,6 +106,7 @@ class KiloEngine {
     } else {
       gate_result = {
         verified: false,
+        skipped: true,
         reason: 'No fingerprint/classification present — gate check skipped',
         confidence: 0
       };
@@ -194,7 +195,7 @@ class KiloEngine {
   _buildHypotheses(payload, gate_result) {
     const hypotheses = [];
 
-    if (gate_result && gate_result.verified === false) {
+    if (gate_result && gate_result.verified === false && !gate_result.skipped) {
       hypotheses.push(
         `Gate verification failed (${gate_result.reason}): no actionable repair hypotheses generated.`
       );
