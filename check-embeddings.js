@@ -1,11 +1,8 @@
 #!/usr/bin/env node
-const { createClient } = require('@supabase/supabase-js');
+const { Client } = require('pg');
 
-const SUPABASE_URL = process.env.SUPABASE_URL || 'http://127.0.0.1:54321';
-const SUPABASE_KEY = process.env.SUPABASE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
+const PG_URL = process.env.PG_URL || 'postgresql://postgres:postgres@127.0.0.1:54322/postgres';
 const OLLAMA = 'http://127.0.0.1:11434';
-
-const client = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 async function embed(text) {
   const r = await fetch(`${OLLAMA}/api/embeddings`, {
@@ -24,20 +21,16 @@ const norm = v => Math.sqrt(v.reduce((sum, x) => sum + x*x, 0));
 const cosineSim = (a, b) => dot(a, b) / (norm(a) * norm(b));
 
 (async () => {
-  const question = 'How does AppForge work?';
+  const client = new Client({ connectionString: PG_URL });
+  await client.connect();
+  
+  const question = 'What can HEIDI do?';
   console.log(`Embedding question: "${question}"`);
   const qvec = await embed(question);
   console.log('✅ Got embedding (dim=' + qvec.length + ')\n');
 
   // Fetch all facts
-  const { data: facts, error } = await client
-    .from('hydi_facts')
-    .select('division, content, confidence, embedding');
-
-  if (error) {
-    console.error('❌ Query error:', error);
-    process.exit(1);
-  }
+  const { rows: facts } = await client.query('SELECT division, content, confidence, embedding FROM hydi_facts');
 
   console.log('Raw facts fetched:', facts.length);
   if (facts.length > 0) {
@@ -94,6 +87,8 @@ const cosineSim = (a, b) => dot(a, b) / (norm(a) * norm(b));
     console.log(`${i+1}. [${f.division}] distance=${f.distance.toFixed(3)}`);
     console.log(`   "${f.content}"\n`);
   });
+  
+  await client.end();
 })().catch(e => {
   console.error('Fatal:', e.message);
   process.exit(1);

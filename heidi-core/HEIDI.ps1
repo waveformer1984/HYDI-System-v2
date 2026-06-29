@@ -12,7 +12,8 @@
 
 param(
     [switch]$SkipOllama,
-    [switch]$KillFirst
+    [switch]$KillFirst,
+    [switch]$Server
 )
 
 Set-Location $PSScriptRoot
@@ -110,7 +111,12 @@ if (-not (Test-Path ".\node_modules")) {
 # 4. Check for index file
 $agentFile = ".\heidi-agent.js"
 $indexFile = ".\index-clean-3458.js"
-$toRun = if (Test-Path $agentFile) { $agentFile } else { $indexFile }
+
+if ($Server) {
+    $toRun = $indexFile
+} else {
+    $toRun = if (Test-Path $agentFile) { $agentFile } else { $indexFile }
+}
 
 if (-not (Test-Path $toRun)) {
     Write-Host "  ERROR: Neither $agentFile nor $indexFile found" -ForegroundColor Red
@@ -119,10 +125,29 @@ if (-not (Test-Path $toRun)) {
 
 # 5. Set environment variables for Supabase (load from .env.local or use defaults)
 Write-Host "`nConfiguring environment..." -ForegroundColor Yellow
-$env:SUPABASE_URL = $env:SUPABASE_URL -or "http://127.0.0.1:54321"
+
+# Load from .env.local if it exists
+$envLocalPath = Join-Path $PSScriptRoot "..\.env.local"
+if (Test-Path $envLocalPath) {
+    Write-Host "  Loading from .env.local..." -ForegroundColor Gray
+    Get-Content $envLocalPath | ForEach-Object {
+        if ($_ -match '^([^=]+)=(.*)$') {
+            $name = $matches[1].Trim()
+            $value = $matches[2].Trim()
+            # Remove quotes if present
+            if ($value -match '^"(.*)"$') { $value = $matches[1] }
+            Set-Item -Path "env:$name" -Value $value
+        }
+    }
+}
+
+if ([string]::IsNullOrEmpty($env:SUPABASE_URL) -or $env:SUPABASE_URL -eq "True") {
+    $env:SUPABASE_URL = "http://127.0.0.1:54321"
+}
 # NOTE: Load SUPABASE_SERVICE_ROLE_KEY from .env.local or environment
-if (-not $env:SUPABASE_SERVICE_ROLE_KEY) {
+if ([string]::IsNullOrEmpty($env:SUPABASE_SERVICE_ROLE_KEY) -or $env:SUPABASE_SERVICE_ROLE_KEY -eq "True") {
     Write-Host "  ⚠️  SUPABASE_SERVICE_ROLE_KEY not set. Load from .env.local or environment." -ForegroundColor Yellow
+    $env:SUPABASE_SERVICE_ROLE_KEY = "sb_secret_N7UND0UgjKTVK-Uodkm0Hg_xSvEMPvz"
 }
 Write-Host "  Supabase: $($env:SUPABASE_URL)" -ForegroundColor Green
 

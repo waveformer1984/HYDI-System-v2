@@ -22,7 +22,7 @@ async function chat(prompt) {
   console.log(`\n[1] Embedding question -> nomic-embed-text`);
   const qvec = await embed(question);
   console.log(`[2] Searching procedural memory (pgvector cosine)...`);
-  const facts = (await db.query(`select division, content, confidence, (embedding <=> $1::vector) as distance from hydi_facts where embedding is not null order by embedding <=> $1::vector limit ${TOPK}`, [qvec])).rows;
+  const facts = (await db.query(`select division, content, confidence, (1 - (embedding <=> $1::vector))::float as similarity, (embedding <=> $1::vector) as distance from hydi_facts where embedding is not null order by similarity DESC, confidence DESC limit ${TOPK}`, [qvec])).rows;
   console.log(`\n=== FACTS HEIDI RETRIEVED ===`);
   facts.forEach((f,i)=>console.log(`  ${i+1}. [${f.division}] d=${Number(f.distance).toFixed(3)} :: ${f.content}`));
   const context = facts.map(f=>`- (${f.division}) ${f.content}`).join('\n');
