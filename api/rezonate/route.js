@@ -39,6 +39,16 @@ function loadNodeConfig() {
  * Response shape: { data, error } with appropriate HTTP status codes.
  */
 async function handler(req, res) {
+  // ── CORS ───────────────────────────────────────────────────────────────────────
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-hydi-service-token');
+
+  // Handle preflight requests
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+
   // ── service token guard ───────────────────────────────────────────────────────
   const tokenResult = verifyServiceToken(req.headers['x-hydi-service-token']);
   if (!tokenResult.valid) {
