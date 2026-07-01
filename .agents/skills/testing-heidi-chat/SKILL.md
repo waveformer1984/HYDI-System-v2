@@ -14,8 +14,9 @@ UI path: homepage `pages/index.tsx` → `components/Chat.tsx` → `hooks/useHeid
 ## Local $0 stack setup
 
 ### 1. Local Supabase (Docker)
-- Supabase CLI is a two-binary shim — `supabase` and `supabase-go` must live together. Install the full tarball to `$HOME/.local/share/supabase` and add to PATH (don't just drop the single `supabase` binary in `/usr/local/bin`).
-- `supabase start` brings up Postgres at `http://127.0.0.1:54321`. Get keys with `supabase status -o env` (ANON_KEY, SERVICE_ROLE_KEY).
+- Supabase CLI is a two-binary shim — `supabase` and `supabase-go` must live together. Install the full tarball to `$HOME/.local/share/supabase` and add to PATH (don't just drop the single `supabase` binary in `/usr/local/bin`). Resolve the latest release tag from the `releases/latest` redirect (`curl -sSI .../releases/latest | grep -i location`) — the GitHub API `tag_name` fetch sometimes returns empty and you download a 9-byte file.
+- **Do NOT run `supabase start` from the repo root.** It auto-applies the repo's `supabase/migrations`, and at least one migration currently fails (e.g. a `vector(768)` column def), which aborts the whole start and tears down the containers. Instead run `supabase init --force` in a **separate throwaway dir** (e.g. `~/hydi-local-supabase`, which has no migrations) and `supabase start` there. Default API stays `http://127.0.0.1:54321`, matching the app env. Then apply the schema manually (below).
+- `supabase start` brings up Postgres at `http://127.0.0.1:54321`. Get keys with `supabase status -o env` (ANON_KEY, SERVICE_ROLE_KEY). Use the **JWT** `ANON_KEY`/`SERVICE_ROLE_KEY` (the app uses supabase-js), not the newer `PUBLISHABLE_KEY`/`SECRET_KEY`. The DB container is `supabase_db_<dirname>` (e.g. `supabase_db_hydi-local-supabase`).
 - Apply schema: `docker exec -i <supabase_db_container> psql -U postgres -d postgres < supabase/heidi-init.sql` (creates `memories`, `actions`, `sessions`).
 - **Semantic recall needs the `search_memories` RPC.** `lib/heidi-memory.ts` calls `supabase.rpc('search_memories', { query_embedding, match_count, user_id })`. If it's missing, retrieval silently returns `''` (error is swallowed). The definition lives in `heidi-memory-schema.sql`. Two gotchas when creating it locally:
   - The input param `user_id` collides with an output column named `user_id` in the `RETURNS TABLE` (`parameter name "user_id" used more than once`). Drop the duplicate output columns — the app only reads `content`. Qualify the WHERE as `search_memories.user_id`.
@@ -63,6 +64,9 @@ The 3 bugs that previously required throwaway patches are **fixed**. Expected he
 3. **Local responses >5s are accepted** — with `LOCAL_MODEL_TIMEOUT_MS` raised, a ~6–10s local response returns `model_used: "local"` (not `api`) and persists. Confirm in the dev log (`POST /api/chat 200 in <N>ms`, N>5000) and in the `actions`/`memories` tables.
 
 Quick end-to-end check: send `Create a task to email the quarterly report to finance` in the chat → expect `Model: local`, an assistant reply, a `create_task` action chip, and a new `actions` row with `task_name='create_task'`.
+
+## GOTCHA: homepage StatusPanel "Memory Connected" is misleading (as of this writing)
+The homepage panel is NOT driven by `/api/status`. `pages/index.tsx` polls `POST /api/heidi {action:'status'}` and maps `data.available`→`memory_connected`, but `/api/heidi` only exists at root `api/heidi/route.js` (Vercel app-router `route.js`) and is **not served by `next dev`'s pages router** → `POST /api/heidi` returns **404**. It also hardcodes `allowed_actions: []`. Net: the panel **always** shows `Memory Connected: No` / `Allowed Actions: 0` under `next dev`, regardless of real health. This might be fixed later (a `pages/api/heidi.ts` shim would fix it), but for now **do not use the panel to judge memory health** — verify via `GET /api/status` (`memory_connected:true`) and the cross-session recall test instead. Chat itself is unaffected (it uses `pages/api/chat.ts`, which works).
 
 ## Truthfulness check (P0 real-action-execution)
 If the model picks `send_email`, it should log as `failed` ("Email not configured") rather than a fake success — this confirms real action execution (no `Math.random()` fake-success).
