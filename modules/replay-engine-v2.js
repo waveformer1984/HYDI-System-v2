@@ -93,14 +93,15 @@ class ReplayEngineV2 extends EventEmitter {
       // Calculate replay duration
       trace.duration_ms = Date.now() - startTime;
       
-      // Store trace if requested
+      // Compare with the stored trace FIRST — before overwriting the baseline,
+      // otherwise we'd compare the new trace against itself and never see drift.
+      const drift = this.compareWithStoredTrace(eventId, trace);
+
+      // Store trace if requested (after comparison so the baseline survives)
       if (storeTrace) {
         this.executionTraces.set(eventId, trace);
         this.stats.tracesStored++;
       }
-      
-      // Compare with stored trace if exists
-      const drift = this.compareWithStoredTrace(eventId, trace);
       
       // Create replay result
       const result = {
@@ -207,7 +208,7 @@ class ReplayEngineV2 extends EventEmitter {
   // Handles precision drift, undefined vs null, and string/number variance
   normalize(stage) {
     if (!stage || typeof stage !== 'object') {
-      return { type: 'NONE', confidence: '0.00', count: 0 };
+      return { type: 'NONE', confidence: '0.00', count: 0, success: false };
     }
     
     return {

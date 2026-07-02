@@ -11,22 +11,20 @@
 --
 -- Fix: drop and recreate each policy scoped explicitly TO service_role.
 
--- conversation_threads
-DROP POLICY IF EXISTS "service_role_all" ON public.conversation_threads;
-CREATE POLICY "service_role_all" ON public.conversation_threads
-  FOR ALL TO service_role USING (true) WITH CHECK (true);
-
--- rule_sets
-DROP POLICY IF EXISTS "service_role_all" ON public.rule_sets;
-CREATE POLICY "service_role_all" ON public.rule_sets
-  FOR ALL TO service_role USING (true) WITH CHECK (true);
-
--- compensation_events
-DROP POLICY IF EXISTS "service_role_all" ON public.compensation_events;
-CREATE POLICY "service_role_all" ON public.compensation_events
-  FOR ALL TO service_role USING (true) WITH CHECK (true);
-
--- drift_log
-DROP POLICY IF EXISTS "service_role_all" ON public.drift_log;
-CREATE POLICY "service_role_all" ON public.drift_log
-  FOR ALL TO service_role USING (true) WITH CHECK (true);
+-- Guarded: these four tables are created elsewhere and may not exist on a
+-- from-scratch local database (their creating migration is a .sql.skip). Only
+-- adjust the policy when the table actually exists -- a no-op locally, correct on
+-- remote. (DROP POLICY IF EXISTS still errors if the *table* is missing, hence the
+-- to_regclass guard.)
+DO $$
+DECLARE
+  t text;
+BEGIN
+  FOREACH t IN ARRAY ARRAY['conversation_threads', 'rule_sets', 'compensation_events', 'drift_log']
+  LOOP
+    IF to_regclass('public.' || t) IS NOT NULL THEN
+      EXECUTE format('DROP POLICY IF EXISTS "service_role_all" ON public.%I;', t);
+      EXECUTE format('CREATE POLICY "service_role_all" ON public.%I FOR ALL TO service_role USING (true) WITH CHECK (true);', t);
+    END IF;
+  END LOOP;
+END $$;

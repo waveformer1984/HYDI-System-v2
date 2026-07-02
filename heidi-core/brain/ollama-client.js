@@ -9,7 +9,7 @@ class OllamaClient {
   constructor(config = {}) {
     this.baseURL = config.baseURL || process.env.OLLAMA_URL || 'http://localhost:11434';
     this.model = config.model || process.env.OLLAMA_MODEL || 'llama3';
-    this.timeout = config.timeout || 8000; // 8 second hard timeout
+    this.timeout = config.timeout || parseInt(process.env.OLLAMA_TIMEOUT_MS || '8000', 10); // hard timeout (override via OLLAMA_TIMEOUT_MS)
     
     this.client = axios.create({
       baseURL: this.baseURL,
@@ -35,6 +35,56 @@ class OllamaClient {
       console.error('[HEIDI Brain] Failed to get models:', error.message);
       return [];
     }
+  }
+
+  /**
+   * Stream a generation token-by-token. Calls onToken(text) for each chunk,
+   * resolves with the same shape as generate() once complete.
+   */
+  async generateStream(prompt, onToken, options = {}) {
+    const model = options.model || this.model;
+    const response = await fetch(`${this.baseURL}/api/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model,
+        prompt,
+        stream: true,
+        options: {
+          temperature: options.temperature || 0.7,
+          num_predict: options.maxTokens || 600
+        }
+      }),
+      signal: AbortSignal.timeout(this.timeout)
+    });
+    if (!response.ok) throw new Error(`Ollama HTTP ${response.status}`);
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let full = '';
+    let buf = '';
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      const lines = buf.split('\n');
+      buf = lines.pop();
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        try {
+          const d = JSON.parse(line);
+          if (d.response) { full += d.response; onToken(d.response); }
+          if (d.done) {
+            return {
+              text: full,
+              model,
+              tokens: { prompt: d.prompt_eval_count || 0, completion: d.eval_count || 0 }
+            };
+          }
+        } catch {}
+      }
+    }
+    return { text: full, model, tokens: { prompt: 0, completion: 0 } };
   }
 
   async generate(prompt, options = {}) {

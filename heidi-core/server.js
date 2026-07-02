@@ -10,11 +10,16 @@ const OllamaClient = require('./brain/ollama-client');
 const { createClient } = require('@supabase/supabase-js');
 const https = require('https');
 
-// Initialize Supabase client for procedural memory retrieval
-const supabase = createClient(
-  process.env.SUPABASE_URL || 'https://akbnfvojdcobifeupvbn.supabase.co',
-  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY
-);
+// Supabase is OPTIONAL — in local-only mode (no SUPABASE_URL/key set) it is
+// skipped entirely: procedural memory degrades to local SQLite, cloud fact
+// sync is a no-op, and no network calls leave the machine.
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
+const supabase = (process.env.SUPABASE_URL && SUPABASE_KEY)
+  ? createClient(process.env.SUPABASE_URL, SUPABASE_KEY)
+  : null;
+if (!supabase) {
+  console.log('[HEIDI] LOCAL-ONLY MODE: Supabase disabled — using local memory only');
+}
 
 // Ollama embedding configuration
 const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434';
@@ -128,6 +133,10 @@ class HeidiCore {
         let generationStatus = 'success';
         try {
           const prompt = this.buildPromptWithMemory(input, memoryContext, proceduralFacts, context);
+          if (!options.model) {
+            const routed = this.pickModel(input);
+            if (routed) options.model = routed;
+          }
           response = await this.brain.generate(prompt, options);
         } catch (error) {
           console.error('[HEIDI] Generation failed:', error.message);
@@ -157,11 +166,20 @@ class HeidiCore {
           });
         }
 
-        // 5. CHECK for action triggers
+        // 5. CHECK for action triggers.
+        // SAFETY: model-detected actions do NOT auto-execute by default. A
+        // small local model hallucinates commands, so autonomous execution is
+        // opt-in via HEIDI_AUTONOMOUS_ACTIONS=true. Otherwise we only record
+        // the suggestion; a human runs it explicitly via the /act endpoint.
         const action = this.detectAction(input, response.text);
-        if (action && this.actions.isSafe(action)) {
-          // Queue action for execution (don't block response)
-          this.executeActionAsync(action);
+        if (action) {
+          const allowed = process.env.HEIDI_AUTONOMOUS_ACTIONS === 'true';
+          if (allowed && this.actions.isSafe(action)) {
+            this.executeActionAsync(action);
+          } else {
+            this.stats.actions_suggested = (this.stats.actions_suggested || 0) + 1;
+            console.log(`[HEIDI] Action SUGGESTED (not run — autonomous execution ${allowed ? 'passed-safety=false' : 'disabled'}): ${action.type} -> ${action.target || action.command}`);
+          }
         }
 
         // OBSERVABILITY: Smart logging (summary by default, full detail on special cases)
@@ -208,6 +226,73 @@ class HeidiCore {
       }
     });
 
+    // THINK-STREAM - Same loop as /think but streams tokens via SSE as
+    // they come out of Ollama, so UIs render the answer live.
+    this.app.post('/think-stream', async (req, res) => {
+      try {
+        const { input, context = {}, options = {} } = req.body;
+        if (!input) return res.status(400).json({ error: 'input is required' });
+
+        this.stats.requests++;
+        const startTime = Date.now();
+        res.setHeader('Content-Type', 'text/event-stream');
+        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('Connection', 'keep-alive');
+        res.setHeader('X-Accel-Buffering', 'no');
+        const send = (d) => res.write(`data: ${JSON.stringify(d)}\n\n`);
+
+        // RETRIEVE
+        let memoryContext;
+        try {
+          memoryContext = await this.memory.buildContext(input);
+        } catch (e) {
+          memoryContext = { recent_interactions: [], relevant_facts: [], recent_reflections: [], system_health: [] };
+        }
+        let proceduralFacts = [];
+        try { proceduralFacts = await this.retrieveProceduralMemory(input); } catch {}
+
+        // GENERATE (streaming)
+        if (!options.model) {
+          const routed = this.pickModel(input);
+          if (routed) options.model = routed;
+        }
+        const prompt = this.buildPromptWithMemory(input, memoryContext, proceduralFacts, context);
+        let result;
+        try {
+          result = await this.brain.generateStream(prompt, (t) => send({ t }), options);
+        } catch (e) {
+          console.error('[HEIDI] Stream generation failed:', e.message);
+          const fb = this.getFallbackResponse(input, memoryContext);
+          send({ t: fb });
+          result = { text: fb, model: 'fallback', tokens: { prompt: 0, completion: 0 } };
+        }
+
+        // STORE + REFLECT (post-stream, non-blocking for the client)
+        const confidence = this.estimateConfidence(result.text, memoryContext);
+        await this.memory.storeShortTerm(input, result.text, context, confidence);
+        this.extractAndStoreFacts(input, result.text).catch(() => {});
+        if (confidence > 0.7 && result.model !== 'fallback') {
+          this.reflection.reflect(input, result.text, confidence)
+            .then(i => { if (i) this.stats.reflections++; }).catch(() => {});
+        }
+
+        send({
+          done: true,
+          model: result.model,
+          confidence,
+          latency_ms: Date.now() - startTime,
+          memories_retrieved: memoryContext.recent_interactions.length + memoryContext.relevant_facts.length
+        });
+        res.end();
+      } catch (error) {
+        console.error('[HEIDI] Think-stream error:', error.message);
+        try {
+          res.write(`data: ${JSON.stringify({ error: error.message, done: true })}\n\n`);
+          res.end();
+        } catch {}
+      }
+    });
+
     // REFLECT - Trigger reflection manually
     this.app.post('/reflect', async (req, res) => {
       try {
@@ -232,8 +317,21 @@ class HeidiCore {
     // ACT - Execute an action
     this.app.post('/act', async (req, res) => {
       try {
+        // /act executes real side effects, so it demands an explicit token
+        // even from localhost — the general middleware waves localhost
+        // through, but CORS is '*', so a drive-by web page on any site you
+        // visit could otherwise POST here. Require HEIDI_SECRET, and if it's
+        // unset, refuse rather than run unauthenticated.
+        const secret = req.headers['x-heidi-secret'];
+        if (!process.env.HEIDI_SECRET) {
+          return res.status(503).json({ error: '/act disabled: set HEIDI_SECRET to enable authenticated action execution' });
+        }
+        if (secret !== process.env.HEIDI_SECRET) {
+          return res.status(403).json({ error: 'Forbidden: /act requires a valid x-heidi-secret header' });
+        }
+
         const action = req.body;
-        
+
         if (!action.type) {
           return res.status(400).json({ error: 'action.type is required' });
         }
@@ -335,14 +433,14 @@ class HeidiCore {
     // Add system personality with memory acknowledgment
     parts.push(this.getSystemPersonality());
 
-    // Add procedural memory from Supabase (NEW)
-    if (proceduralFacts && proceduralFacts.length > 0) {
-      parts.push('\n📚 Verified Operational Memory:');
-      proceduralFacts.forEach(fact => {
-        parts.push(`[MEMORY] ${fact.content} (confidence: ${(fact.confidence * 100).toFixed(0)}%)`);
+    // Add recent interactions from local memory (background context only —
+    // verified memory below takes precedence if the two disagree)
+    if (memoryContext.recent_interactions && memoryContext.recent_interactions.length > 0) {
+      parts.push('\nRecent conversation (background context only):');
+      memoryContext.recent_interactions.slice(-3).reverse().forEach(i => {
+        parts.push(`User: ${i.input}`);
+        parts.push(`Heidi: ${i.response}`);
       });
-    } else {
-      parts.push('\n📚 Verified Operational Memory: None available');
     }
 
     // Add relevant facts from local memory
@@ -353,18 +451,20 @@ class HeidiCore {
       });
     }
 
-    // Add recent interactions from local memory
-    if (memoryContext.recent_interactions && memoryContext.recent_interactions.length > 0) {
-      parts.push('\nRecent conversation:');
-      memoryContext.recent_interactions.slice(-3).reverse().forEach(i => {
-        parts.push(`User: ${i.input}`);
-        parts.push(`Heidi: ${i.response}`);
-      });
-    }
-
     // Add user context
     if (userContext && Object.keys(userContext).length > 0) {
       parts.push(`\nContext: ${JSON.stringify(userContext)}`);
+    }
+
+    // Verified operational memory goes last, right next to the question —
+    // this is the authoritative source and must win over anything above it.
+    if (proceduralFacts && proceduralFacts.length > 0) {
+      parts.push('\n📚 Verified Operational Memory (authoritative — if this conflicts with recent conversation above, trust this instead):');
+      proceduralFacts.forEach(fact => {
+        parts.push(`[MEMORY] ${fact.content} (confidence: ${(fact.confidence * 100).toFixed(0)}%)`);
+      });
+    } else {
+      parts.push('\n📚 Verified Operational Memory: None available');
     }
 
     // Add current input
@@ -466,6 +566,9 @@ class HeidiCore {
       const queryEmbedding = await this.generateEmbedding(userInput);
       if (!queryEmbedding) {
         console.log('[HEIDI] Embedding generation failed, falling back to confidence-based retrieval');
+
+        if (!supabase) return this.memory.getTopFacts(5);
+
         // Fallback to high-confidence facts if embedding fails
         const { data, error } = await supabase
           .from('hydi_facts')
@@ -479,6 +582,14 @@ class HeidiCore {
         }
 
         return data || [];
+      }
+
+      if (!supabase) {
+        const local = await this.memory.searchFactsBySimilarity(queryEmbedding, 0.6, 5);
+        if (local.length > 0) {
+          console.log(`[HEIDI] Retrieved ${local.length} semantically similar local facts (similarity > 0.6)`);
+        }
+        return local;
       }
 
       // Step 2: Query Supabase RPC for semantic similarity search
@@ -635,6 +746,16 @@ class HeidiCore {
           })
         );
 
+        const withEmbedding = factsWithEmbeddings.filter(f => f.embedding).length;
+
+        if (!supabase) {
+          for (const f of factsWithEmbeddings) {
+            await this.memory.storeFactWithEmbedding(f.content, f.division, f.confidence, f.embedding);
+          }
+          console.log(`[HEIDI] Stored ${facts.length} contextual facts locally (${withEmbedding} with embeddings, division: ${contextDivision || 'global'})`);
+          return;
+        }
+
         const { error } = await supabase
           .from('hydi_facts')
           .upsert(factsWithEmbeddings, { onConflict: 'content_key' });
@@ -642,13 +763,47 @@ class HeidiCore {
         if (error) {
           console.error('[HEIDI] Fact storage error:', error.message);
         } else {
-          const withEmbedding = factsWithEmbeddings.filter(f => f.embedding).length;
           console.log(`[HEIDI] Stored ${facts.length} contextual facts (${withEmbedding} with embeddings, division: ${contextDivision || 'global'})`);
         }
       }
     } catch (error) {
       console.error('[HEIDI] Fact extraction failed:', error.message);
     }
+  }
+
+  /**
+   * Route quick or code-flavored inputs to the small fast model (FAST_MODEL,
+   * e.g. qwen2.5-coder:1.5b) — memory retrieval is identical either way, the
+   * model only phrases the answer. Returns undefined to use the default model.
+   */
+  pickModel(input) {
+    const fast = process.env.FAST_MODEL;
+    if (!fast || !input) return undefined;
+    const codey = /\b(code|function|script|regex|json|sql|error|stack trace|command|syntax)\b/i.test(input);
+    const short = input.length <= 60 && input.split(/\s+/).length <= 10 && !/remember|for the record|note:/i.test(input);
+    return (codey || short) ? fast : undefined;
+  }
+
+  /**
+   * Watchdog: if Ollama stops responding, try to revive it (with cooldown so
+   * we never spawn-storm). Keeps Heidi's brain alive unattended.
+   */
+  startBrainWatchdog() {
+    const { spawn } = require('child_process');
+    let lastRevive = 0;
+    setInterval(async () => {
+      try {
+        if (await this.brain.isAvailable()) return;
+        if (Date.now() - lastRevive < 90000) return;
+        lastRevive = Date.now();
+        console.warn('[HEIDI Watchdog] Ollama not responding — attempting revive (ollama serve)...');
+        const p = spawn('ollama', ['serve'], { detached: true, stdio: 'ignore', shell: true });
+        p.unref();
+      } catch (e) {
+        console.error('[HEIDI Watchdog]', e.message);
+      }
+    }, 30000);
+    console.log('[HEIDI] Brain watchdog armed (checks every 30s)');
   }
 
   getSystemPersonality() {
@@ -669,7 +824,9 @@ You have access to:
 
 Ground all responses in the memory context above. If no memory is relevant to the question, say so explicitly.
 
-Be direct. Don't over-explain. Focus on what matters.`;
+Be direct. Don't over-explain. Focus on what matters.
+
+Hard rule: NEVER invent commands, file paths, ports, or system features. If a system detail is not in your memory context above, say you don't have it on record instead of guessing.`;
   }
 
   estimateConfidence(response, memoryContext) {
@@ -765,6 +922,7 @@ Be direct. Don't over-explain. Focus on what matters.`;
 
     this.stats.startTime = Date.now();
     this.isRunning = true;
+    this.startBrainWatchdog();
 
     console.log('[HEIDI] Ready');
   }

@@ -25,6 +25,9 @@ if (fs.existsSync(envPath)) {
 
 const http = require('http');
 const { createClient } = require('@supabase/supabase-js');
+const HeidiGoalEngine = require('../evolution/heidi-goals');
+const GoalExecutor = require('../evolution/goal-executor');
+const ActionExecutor = require('./actions/action-executor');
 
 class HeidiAgent {
   constructor(config = {}) {
@@ -62,6 +65,12 @@ class HeidiAgent {
     // Advisory mode (HTTP server for user approvals)
     this.advisoryMode = process.env.HEIDI_ADVISORY_MODE === 'true';
     this.httpServer = null;
+
+    // Goal execution system
+    this.goalEngine = null;
+    this.goalExecutor = null;
+    this.goalExecutionInterval = 60000; // check for goals every minute
+    this.goalTimer = null;
   }
 
   /**
@@ -633,6 +642,9 @@ class HeidiAgent {
   start() {
     console.log('[HEIDI-AGENT] Starting event loop...');
 
+    // Initialize goal execution system
+    this.initializeGoalSystem();
+
     // Lease renewal (every 90s)
     this.leaseTimer = setInterval(async () => {
       if (this.leaseClaimed) {
@@ -650,11 +662,83 @@ class HeidiAgent {
       await this.reflect();
     }, this.reflectionInterval);
 
+    // Goal execution (every minute)
+    this.goalTimer = setInterval(async () => {
+      await this.processGoals();
+    }, this.goalExecutionInterval);
+
     console.log('[HEIDI-AGENT] Event loops active');
 
     // Start HTTP server for advisory mode
     if (this.advisoryMode) {
       this.startAdvisoryServer();
+    }
+  }
+
+  /**
+   * Initialize goal execution system
+   */
+  async initializeGoalSystem() {
+    try {
+      // Create a simple brain interface for goal decomposition
+      const brain = {
+        generate: async (prompt) => {
+          // For now, use Ollama directly
+          const response = await fetch('http://127.0.0.1:11434/api/generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ model: 'llama3.2', prompt, stream: false })
+          });
+          const result = await response.json();
+          return { text: result.response };
+        }
+      };
+
+      // Create a simple memory interface
+      const memory = {
+        store: async (content) => {
+          console.log(`[GoalSystem] Stored: ${content.substring(0, 50)}...`);
+          return true;
+        }
+      };
+
+      this.goalEngine = new HeidiGoalEngine(brain, memory);
+      await this.goalEngine.initialize();
+
+      const actionExecutor = new ActionExecutor();
+      this.goalExecutor = new GoalExecutor(this.goalEngine, actionExecutor);
+
+      console.log('[HEIDI-AGENT] Goal execution system initialized');
+    } catch (error) {
+      console.error('[HEIDI-AGENT] Goal system initialization failed:', error.message);
+    }
+  }
+
+  /**
+   * Process active goals - execute next task for each
+   */
+  async processGoals() {
+    try {
+      if (!this.goalExecutor) {
+        return;
+      }
+
+      const activeGoals = this.goalEngine.getActiveGoals();
+      if (activeGoals.length === 0) {
+        return;
+      }
+
+      console.log(`[HEIDI-AGENT] Processing ${activeGoals.length} active goals`);
+
+      for (const goal of activeGoals) {
+        const nextTask = this.goalEngine.nextTask(goal.id);
+        if (nextTask) {
+          console.log(`[HEIDI-AGENT] Executing task: ${nextTask.description}`);
+          await this.goalExecutor.executeNextTask(goal.id);
+        }
+      }
+    } catch (error) {
+      console.error('[HEIDI-AGENT] Goal processing failed:', error.message);
     }
   }
 

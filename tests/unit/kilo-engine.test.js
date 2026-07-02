@@ -19,7 +19,7 @@ function makeMinimalPayload(overrides = {}) {
 
 function makeManifest(overrides = {}) {
   return {
-    issue_type: 'regression',
+    issue_type: 'UNKNOWN_ANOMALY', // must be one of the validator's enum values
     affected_module: 'cascade-classifier',
     root_cause_hypothesis: 'Confidence threshold drift',
     verification_steps: ['replay event', 'compare traces'],
