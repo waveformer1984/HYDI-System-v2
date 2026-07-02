@@ -107,8 +107,8 @@ export class MidiControllerInterface {
   public listDevices(): MidiDevice[] {
     if (!this.access) return [];
     const devices: MidiDevice[] = [];
-    this.access.inputs.forEach((i) => devices.push({ id: i.id, name: i.name, type: 'input', state: i.state as any }));
-    this.access.outputs.forEach((o) => devices.push({ id: o.id, name: o.name, type: 'output', state: o.state as any }));
+    this.access.inputs.forEach((i) => devices.push({ id: i.id, name: i.name ?? 'Unknown MIDI input', type: 'input', state: i.state as any }));
+    this.access.outputs.forEach((o) => devices.push({ id: o.id, name: o.name ?? 'Unknown MIDI output', type: 'output', state: o.state as any }));
     return devices;
   }
 

@@ -1,10 +1,13 @@
 import { BaseAgent } from '../agents/base.agent';
 import { Event } from '../schemas/event.schema';
+import { AgentRegistry } from './agent.registry';
 
 export class TaskRouter {
   private routeMap: Map<string, string[]> = new Map();
+  private agentRegistry?: AgentRegistry;
 
-  constructor() {
+  constructor(agentRegistry?: AgentRegistry) {
+    this.agentRegistry = agentRegistry;
     // Initialize route mappings based on the specification
     this.initializeRoutes();
   }
@@ -35,11 +38,15 @@ export class TaskRouter {
     }
 
     // For now, return the first agent (later we can implement load balancing)
-    // In a real system, we would get the agent from the agent registry
-    // This is a simplified version for the boilerplate
     const agentId = agentIds[0];
-    // We would normally get the agent from a registry, but for boilerplate we return a placeholder
-    // In practice, the HeidiController would use the AgentRegistry to get the agent instance
-    return { id: agentId, capabilities: [] } as BaseAgent; // Placeholder
+
+    if (this.agentRegistry) {
+      return this.agentRegistry.getAgent(agentId);
+    }
+
+    // No registry wired in - fall back to a fresh placeholder so callers
+    // still get a usable BaseAgent, but note this loses any real state
+    // (status/load/registered subclass) the real instance would carry.
+    return new BaseAgent(agentId, []);
   }
 }

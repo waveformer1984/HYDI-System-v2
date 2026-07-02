@@ -55,7 +55,7 @@ export class RiskEngine {
 
   getRiskLevel(event: any): 'SAFE' | 'WARNING' | 'CRITICAL' {
     const score = this.calculateRiskScore(event);
-    
+
     if (score >= 0.8) {
       return 'CRITICAL';
     } else if (score >= 0.5) {
@@ -63,5 +63,13 @@ export class RiskEngine {
     } else {
       return 'SAFE';
     }
+  }
+
+  assess(event: any): { requires_approval: boolean; level: 'SAFE' | 'WARNING' | 'CRITICAL'; score: number } {
+    return {
+      requires_approval: this.requiresApproval(event),
+      level: this.getRiskLevel(event),
+      score: this.calculateRiskScore(event)
+    };
   }
 }

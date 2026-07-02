@@ -1,12 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
-import type { SessionState, SystemStatus } from '../types/index';
+import type { SessionState, SystemStatus, ActionLog } from '../types/index';
 
 interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
   content: string;
   timestamp: Date;
-  actions?: Record<string, unknown>[];
+  actions?: ActionLog[];
 }
 
 export function useHeidi(sessionId: string) {
@@ -76,7 +76,7 @@ export function useHeidi(sessionId: string) {
       const decoder = new TextDecoder();
       
       let assistantMessage = '';
-      let actions: Record<string, unknown>[] = [];
+      let actions: ActionLog[] = [];
       let responseData: Record<string, unknown> | null = null;
 
       if (reader) {
@@ -101,7 +101,7 @@ export function useHeidi(sessionId: string) {
       } else {
         responseData = await response.json() as Record<string, unknown>;
         assistantMessage = responseData.response as string;
-        actions = responseData.actions as Record<string, unknown>[];
+        actions = responseData.actions as ActionLog[];
       }
 
       const assistantMsg: ChatMessage = {

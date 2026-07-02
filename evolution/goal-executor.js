@@ -153,12 +153,18 @@ class GoalExecutor {
     // Extract command from description (simple heuristic)
     const match = description.match(/(?:run|execute)\s+(.+)/i);
     const command = match ? match[1] : 'echo "Task executed"';
-    
+
     const action = {
       type: 'run_command',
       command: command
     };
-    
+
+    // Goal tasks are LLM-decomposed free text, not human-authored - never
+    // run anything the hardened allowlist wouldn't also pass autonomously.
+    if (!this.actionExecutor.isSafe(action)) {
+      throw new Error(`Blocked: command extracted from task description failed the safety check ("${command}"). Needs human review before it can run.`);
+    }
+
     return await this.actionExecutor.execute(action);
   }
 
@@ -183,9 +189,14 @@ class GoalExecutor {
   async _executeDeployTask(description) {
     const action = {
       type: 'run_command',
-      command: 'git status'
+      command: 'git',
+      args: ['status']
     };
-    
+
+    if (!this.actionExecutor.isSafe(action)) {
+      throw new Error(`Blocked: deploy action failed the safety check. Needs human review before it can run.`);
+    }
+
     return await this.actionExecutor.execute(action);
   }
 
