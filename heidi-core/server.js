@@ -411,14 +411,14 @@ class HeidiCore {
     // Add system personality with memory acknowledgment
     parts.push(this.getSystemPersonality());
 
-    // Add procedural memory from Supabase (NEW)
-    if (proceduralFacts && proceduralFacts.length > 0) {
-      parts.push('\n📚 Verified Operational Memory:');
-      proceduralFacts.forEach(fact => {
-        parts.push(`[MEMORY] ${fact.content} (confidence: ${(fact.confidence * 100).toFixed(0)}%)`);
+    // Add recent interactions from local memory (background context only —
+    // verified memory below takes precedence if the two disagree)
+    if (memoryContext.recent_interactions && memoryContext.recent_interactions.length > 0) {
+      parts.push('\nRecent conversation (background context only):');
+      memoryContext.recent_interactions.slice(-3).reverse().forEach(i => {
+        parts.push(`User: ${i.input}`);
+        parts.push(`Heidi: ${i.response}`);
       });
-    } else {
-      parts.push('\n📚 Verified Operational Memory: None available');
     }
 
     // Add relevant facts from local memory
@@ -429,18 +429,20 @@ class HeidiCore {
       });
     }
 
-    // Add recent interactions from local memory
-    if (memoryContext.recent_interactions && memoryContext.recent_interactions.length > 0) {
-      parts.push('\nRecent conversation:');
-      memoryContext.recent_interactions.slice(-3).reverse().forEach(i => {
-        parts.push(`User: ${i.input}`);
-        parts.push(`Heidi: ${i.response}`);
-      });
-    }
-
     // Add user context
     if (userContext && Object.keys(userContext).length > 0) {
       parts.push(`\nContext: ${JSON.stringify(userContext)}`);
+    }
+
+    // Verified operational memory goes last, right next to the question —
+    // this is the authoritative source and must win over anything above it.
+    if (proceduralFacts && proceduralFacts.length > 0) {
+      parts.push('\n📚 Verified Operational Memory (authoritative — if this conflicts with recent conversation above, trust this instead):');
+      proceduralFacts.forEach(fact => {
+        parts.push(`[MEMORY] ${fact.content} (confidence: ${(fact.confidence * 100).toFixed(0)}%)`);
+      });
+    } else {
+      parts.push('\n📚 Verified Operational Memory: None available');
     }
 
     // Add current input
