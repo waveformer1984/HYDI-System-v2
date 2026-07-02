@@ -39,11 +39,21 @@ export default function RecordingStudio({
   const chunksRef = useRef<Blob[]>([]);
   const startBarRef = useRef(1);
   const startTimeRef = useRef(0);
+  const hasUpdatedLayersRef = useRef(false);
 
-  const updateLayers = useCallback((updated: Layer[]) => {
+  const updateLayers = useCallback((updated: React.SetStateAction<Layer[]>) => {
+    hasUpdatedLayersRef.current = true;
     setLayers(updated);
-    onLayersChange(updated);
-  }, [onLayersChange]);
+  }, []);
+
+  // Notify the parent from an effect, after React has resolved the (possibly
+  // updater-function) argument to updateLayers into the real next state.
+  // The ref guard preserves the original behavior of only notifying on an
+  // actual update, not on the initial mount.
+  useEffect(() => {
+    if (!hasUpdatedLayersRef.current) return;
+    onLayersChange(layers);
+  }, [layers, onLayersChange]);
 
   const startRecording = useCallback(async () => {
     setMicError(null);

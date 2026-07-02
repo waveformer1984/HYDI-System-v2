@@ -1,3 +1,82 @@
+const { createClient } = require('@supabase/supabase-js');
+const QueueManager = require('./QueueManager');
+const jwt = require('jsonwebtoken');
+require('dotenv').config();
+
+class SecurityIdentityWorker {
+    constructor(workerId) {
+        this.workerId = workerId || `security-identity-worker-${Date.now()}`;
+        this.running = false;
+        this.pollInterval = 5000;
+        this.pollTimer = null;
+        this.supabase = null;
+        this.queue = new QueueManager();
+        this.securityConfig = {
+            jwtSecret: process.env.JWT_SECRET || 'dev-secret-change-in-production',
+            tokenExpiry: '24h',
+            rateLimiting: { enabled: true, maxRequestsPerMinute: 60 },
+            session: { timeoutMinutes: 60, renewThreshold: 10 }
+        };
+
+        this.initialize = function() {
+            const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+            const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
+            if (!supabaseUrl || !supabaseKey) throw new Error('Missing Supabase credentials');
+            this.supabase = createClient(supabaseUrl, supabaseKey);
+            this.queue.registerWorker('security_identity', this.workerId);
+            this.queue.updateHeartbeat('idle');
+            console.log(`[🔐 Security Identity Worker] Initialized: ${this.workerId}`);
+        };
+
+        this.start = async function() {
+            if (this.running) return;
+            await this.initialize();
+            this.running = true;
+            this.queue.startHeartbeat();
+            this.poll();
+        };
+
+        this.stop = async function() {
+            this.running = false;
+            if (this.pollTimer) clearTimeout(this.pollTimer);
+            await this.queue.shutdown();
+        };
+
+        this.poll = function() {
+            if (!this.running) return;
+            this.processNextTask()
+                .catch(err => console.error('[🔐 Security Identity Worker] Poll error:', err))
+                .finally(() => { this.pollTimer = setTimeout(() => this.poll(), this.pollInterval); });
+        };
+
+        this.processNextTask = async function() {
+            const taskId = await this.queue.dequeue('security_identity');
+            if (!taskId) return;
+            try {
+                const task = await this.queue.getTask(taskId);
+                if (!task) return;
+                switch (task.payload.event_type) {
+                    case 'auth.attempt': await this.processAuthentication(task.payload); break;
+                    case 'token.validate': await this.validateToken(task.payload); break;
+                    case 'permission.check': await this.checkPermission(task.payload); break;
+                    case 'rate_limit.check': await this.checkRateLimit(task.payload); break;
+                    case 'session.refresh': await this.refreshSession(task.payload); break;
+                    case 'security.audit': await this.performSecurityAudit(task.payload); break;
+                    default: console.log(`[🔐 Security] Unhandled: ${task.payload.event_type}`);
+                }
+                await this.queue.completeTask(taskId, true);
+            } catch (err) {
+                await this.queue.completeTask(taskId, false, err.message);
+            }
+        };
+
+        this.checkTokenPermission = async function(decoded, endpoint, required_permission) {
+            return true; // stub — implement RBAC logic here
+        };
+
+        this.processAuthentication = async function(payload) {
+            const { email, ip_address, user_agent } = payload.data;
+            console.log(`[🔐 Security] Processing authentication for ${email}`);
             // Process auth attempt details
             try {
                 // In a real system, you would verify credentials against a user database
@@ -14,7 +93,7 @@
                         attempted_at: new Date()
                     });
                 
-                #generate-and-return-token
+                // generate-and-return-token
                 // Generate JWT token for successful auth
                 const token = jwt.sign(
                     { 
@@ -64,11 +143,11 @@
             
             console.log(`[🔐 Security] Validating token for endpoint ${endpoint}`);
             
-            #validate-token-details
+            // validate-token-details
             try {
                 const decoded = jwt.verify(token, this.securityConfig.jwtSecret);
                 
-                #check-token-permissions
+                // check-token-permissions
                 // Check if token has required permission for endpoint
                 const hasPermission = await this.checkTokenPermission(decoded, endpoint, required_permission);
                 
@@ -124,7 +203,7 @@
             
             console.log(`[🔐 Security] Checking permission: ${action} on ${resource} for user ${user_id}`);
             
-            #check-permission-details
+            // check-permission-details
             // Get user's role/permissions from database
             const { data: user } = await this.supabase
                 .from('users')
@@ -137,7 +216,7 @@
                 return false;
             }
             
-            #check-if-user-has-permission
+            // check-if-user-has-permission
             // Check if user has permission for the resource/action
             const userPermissions = user.permissions || [];
             const userRole = user.role || 'guest';
@@ -147,7 +226,7 @@
                 return true;
             }
             
-            #check-specific-permission
+            // check-specific-permission
             // Check specific permission
             const permissionGranted = userPermissions.includes(action) || 
                                     userPermissions.includes(`${resource}:${action}`) ||
@@ -187,12 +266,12 @@
             
             console.log(`[🔐 Security] Checking rate limit for ${identifier} on ${endpoint}`);
             
-            #check-rate-limit-details
+            // check-rate-limit-details
             if (!this.securityConfig.rateLimiting.enabled) {
                 return true; // Rate limiting disabled
             }
             
-            #get-current-request-count
+            // get-current-request-count
             // Get current request count for this identifier/endpoint
             const windowStart = new Date(Date.now() - 60 * 1000); // Last minute
             
@@ -206,7 +285,7 @@
             const currentCount = requests.length;
             const maxAllowed = this.securityConfig.rateLimiting.maxRequestsPerMinute;
             
-            #check-if-over-limit
+            // check-if-over-limit
             if (currentCount >= maxAllowed) {
                 await this.supabase
                     .from('rate_limit_log')
@@ -221,7 +300,7 @@
                 console.log(`[🔐 Security] Rate limit exceeded: ${identifier} on ${endpoint} (${currentCount}/${maxAllowed})`);
                 return false;
             } else {
-                #allow-request-and-log
+                // allow-request-and-log
                 await this.supabase
                     .from('rate_limit_log')
                     .insert({
@@ -242,7 +321,7 @@
             
             console.log(`[🔐 Security] Refreshing session ${session_id} for user ${user_id}`);
             
-            #refresh-session-details
+            // refresh-session-details
             // Get current session
             const { data: session } = await this.supabase
                 .from('user_sessions')
@@ -256,7 +335,7 @@
                 return false;
             }
             
-            #check-if-session-needs-refresh
+            // check-if-session-needs-refresh
             const now = new Date();
             const expiresAt = new Date(session.expires_at);
             const timeUntilExpiry = (expiresAt - now) / (1000 * 60); // minutes
@@ -264,7 +343,7 @@
             const renewThreshold = this.securityConfig.session.renewThreshold;
             
             if (timeUntilExpiry <= renewThreshold) {
-                #extend-session-expiry
+                // extend-session-expiry
                 // Extend session
                 const newExpiresAt = new Date(now.getTime() + (this.securityConfig.session.timeoutMinutes * 60 * 1000));
                 
@@ -291,7 +370,7 @@
             
             console.log(`[🔐 Security] Performing security audit: ${audit_type}`);
             
-            #perform-security-audit-details
+            // perform-security-audit-details
             let auditResults = {};
             
             switch (audit_type) {
@@ -320,7 +399,7 @@
                     auditResults = { error: 'Unknown audit type' };
             }
             
-            #store-audit-results
+            // store-audit-results
             // Store audit results
             await this.supabase
                 .from('security_audits')
@@ -336,7 +415,7 @@
             console.log(`[🔐 Security] Security audit completed: ${audit_type}`);
         };
 
-        #helper-methods-for-security-operations
+        // helper-methods-for-security-operations
         this.auditAuthentication = async function(scope, time_period) {
             // Audit authentication attempts
             let startDate;
@@ -369,4 +448,17 @@
             const failedAttempts = authAttempts.filter(attempt => !attempt.success).length;
             const successRate = totalAttempts > 0 ? (totalAttempts - failedAttempts) / totalAttempts : 0;
             
-            #find-top-failing-ips-or-emails
+            // find-top-failing-ips-or-emails
+        };
+    }
+}
+
+// Run worker if called directly
+if (require.main === module) {
+    const worker = new SecurityIdentityWorker();
+    process.on('SIGINT', async () => { await worker.stop(); process.exit(0); });
+    process.on('SIGTERM', async () => { await worker.stop(); process.exit(0); });
+    worker.start().catch(err => { console.error('[🔐 Security Identity Worker] Failed to start:', err); process.exit(1); });
+}
+
+module.exports = SecurityIdentityWorker;

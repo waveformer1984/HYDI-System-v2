@@ -873,7 +873,6 @@ class UrsulaServiceBundle extends EventEmitter {
     
     console.log('[URSULA] Service bundle shutdown complete');
   }
-}
 
   /**
    * Get available services by tier

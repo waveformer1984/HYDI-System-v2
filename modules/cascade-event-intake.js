@@ -100,7 +100,7 @@ class VercelIntakeAdapter {
         project: rawEvent.project,
         status: rawEvent.status,
         error: rawEvent.error,
-        build logs: rawEvent.buildLogs,
+        build_logs: rawEvent.buildLogs,
         ...rawEvent
       },
       timestamp: rawEvent.createdAt || new Date().toISOString()
