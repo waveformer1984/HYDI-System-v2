@@ -12,6 +12,23 @@ try {
 const path = require('path');
 const fs = require('fs');
 
+function cosineSimilarity(vecA, vecB) {
+  if (!vecA || !vecB || vecA.length !== vecB.length) return 0;
+
+  let dotProduct = 0;
+  let normA = 0;
+  let normB = 0;
+
+  for (let i = 0; i < vecA.length; i++) {
+    dotProduct += vecA[i] * vecB[i];
+    normA += vecA[i] * vecA[i];
+    normB += vecB[i] * vecB[i];
+  }
+
+  if (normA === 0 || normB === 0) return 0;
+  return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+}
+
 class HeidiMemory {
   constructor(config = {}) {
     this.dbPath = config.dbPath || path.join(__dirname, '../data/heidi_memory.db');
@@ -227,6 +244,82 @@ class HeidiMemory {
        LIMIT ?`,
       [category, limit]
     );
+  }
+
+  async getTopFacts(limit = 5) {
+    return this.all(
+      `SELECT fact AS content, importance AS confidence, category AS division FROM long_term
+       ORDER BY importance DESC, access_count DESC
+       LIMIT ?`,
+      [limit]
+    );
+  }
+
+  // Local procedural memory: fact + embedding, keyed by (fact, division) for dedup
+  async storeFactWithEmbedding(content, division, confidence, embedding) {
+    const category = division || 'global';
+    const existing = await this.get(
+      `SELECT id FROM long_term WHERE fact = ? AND category = ?`,
+      [content, category]
+    );
+
+    let factId;
+    if (existing) {
+      await this.run(
+        `UPDATE long_term SET importance = ?, last_accessed = CURRENT_TIMESTAMP WHERE id = ?`,
+        [confidence, existing.id]
+      );
+      factId = existing.id;
+    } else {
+      const result = await this.run(
+        `INSERT INTO long_term (fact, category, importance) VALUES (?, ?, ?)`,
+        [content, category, confidence]
+      );
+      factId = result.id;
+    }
+
+    if (embedding) {
+      const existingEmbedding = await this.get(
+        `SELECT id FROM embeddings WHERE source_table = 'long_term' AND source_id = ?`,
+        [factId]
+      );
+      if (existingEmbedding) {
+        await this.run(`UPDATE embeddings SET embedding = ? WHERE id = ?`, [JSON.stringify(embedding), existingEmbedding.id]);
+      } else {
+        await this.run(
+          `INSERT INTO embeddings (content, embedding, source_table, source_id) VALUES (?, ?, 'long_term', ?)`,
+          [content, JSON.stringify(embedding), factId]
+        );
+      }
+    }
+
+    return factId;
+  }
+
+  // Semantic retrieval over locally stored embeddings (no pgvector required)
+  async searchFactsBySimilarity(queryEmbedding, threshold = 0.6, limit = 5) {
+    const rows = await this.all(
+      `SELECT lt.id, lt.fact AS content, lt.importance AS confidence, lt.category AS division, e.embedding
+       FROM embeddings e
+       JOIN long_term lt ON lt.id = e.source_id AND e.source_table = 'long_term'`
+    );
+
+    return rows
+      .map(row => {
+        let embedding;
+        try { embedding = JSON.parse(row.embedding); } catch { return null; }
+        return {
+          id: row.id,
+          content: row.content,
+          confidence: row.confidence,
+          division: row.division,
+          similarity: cosineSimilarity(queryEmbedding, embedding)
+        };
+      })
+      .filter(r => r && r.similarity > threshold)
+      .sort((a, b) => (b.similarity - a.similarity) || (b.confidence - a.confidence))
+      .slice(0, limit)
+      .map(({ similarity, ...fact }) => fact);
   }
 
   async searchFacts(query, limit = 5) {

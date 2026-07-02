@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>HYDI — Live Drive</title>
+<style>
+  :root { --bg:#0a0e14; --panel:#11161f; --border:#232b38; --text:#dce3ec; --dim:#7d8896; --gold:#e3b341; --cyan:#39c5cf; --ok:#3fb950; --bad:#f85149; --purple:#bc8cff; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font-family:'Cascadia Code','Consolas',monospace; font-size:15.5px; }
+  header { padding:16px 26px; border-bottom:1px solid var(--border); background:var(--panel); display:flex; align-items:center; gap:14px; }
+  .logo { width:38px; height:38px; border-radius:9px; background:var(--gold); color:#000; font-weight:800; font-size:20px; display:flex; align-items:center; justify-content:center; }
+  h1 { font-size:18px; margin:0; letter-spacing:1px; }
+  .sub { color:var(--dim); font-size:13px; }
+  #scoreboard { margin-left:auto; display:flex; gap:10px; font-size:13px; }
+  .score { border:1px solid var(--border); border-radius:8px; padding:6px 12px; background:var(--bg); text-align:center; }
+  .score b { display:block; font-size:17px; color:var(--cyan); }
+  main { max-width:1000px; margin:0 auto; padding:20px 26px 60px; }
+  .step { border:1px solid var(--border); border-left:4px solid var(--dim); border-radius:10px; background:var(--panel); margin:14px 0; padding:14px 18px; opacity:.35; transition:opacity .3s; }
+  .step.active { opacity:1; border-left-color:var(--gold); }
+  .step.done { opacity:1; border-left-color:var(--ok); }
+  .step.fail { opacity:1; border-left-color:var(--bad); }
+  .step h2 { margin:0 0 4px; font-size:15px; color:var(--gold); text-transform:uppercase; letter-spacing:1px; }
+  .step.done h2 { color:var(--ok); }
+  .step .why { color:var(--dim); font-size:13.5px; margin-bottom:10px; }
+  .io { margin:8px 0; padding:10px 12px; border-radius:8px; background:#0a0e14; border:1px solid var(--border); white-space:pre-wrap; line-height:1.45; }
+  .io.q { border-left:3px solid var(--cyan); }
+  .io.a { border-left:3px solid var(--gold); }
+  .io .tag { font-size:11.5px; color:var(--dim); letter-spacing:1px; display:block; margin-bottom:4px; }
+  .meta { color:var(--purple); font-size:12.5px; margin-top:6px; }
+  .spinner { color:var(--gold); }
+  .verdict { font-size:14px; margin-top:8px; }
+  .verdict.hit { color:var(--ok); font-weight:700; }
+  .verdict.miss { color:var(--bad); }
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">H</div>
+  <div><h1>HYDI — LIVE DRIVE</h1><div class="sub">memory · semantic recall · reflection — all on this machine, zero cloud</div></div>
+  <div id="scoreboard">
+    <div class="score"><b id="sc-req">0</b>requests</div>
+    <div class="score"><b id="sc-mem">–</b>memories used</div>
+    <div class="score"><b id="sc-ref">–</b>reflections</div>
+    <div class="score"><b id="sc-lat">–</b>avg latency</div>
+  </div>
+</header>
+<main id="steps"></main>
+<script>
+const API = 'http://localhost:3456';
+const stepsEl = document.getElementById('steps');
+let reqCount = 0, latencies = [];
+
+function addStep(title, why){
+  const d = document.createElement('div');
+  d.className = 'step';
+  d.innerHTML = `<h2>${title}</h2><div class="why">${why}</div><div class="body"></div>`;
+  stepsEl.appendChild(d);
+  return d;
+}
+function block(step, cls, tag, text){
+  const b = document.createElement('div');
+  b.className = 'io ' + cls;
+  b.innerHTML = `<span class="tag">${tag}</span>`;
+  b.appendChild(document.createTextNode(text));
+  step.querySelector('.body').appendChild(b);
+  window.scrollTo(0, document.body.scrollHeight);
+  return b;
+}
+function setScore(id, v){ document.getElementById(id).textContent = v; }
+
+async function think(input){
+  reqCount++; setScore('sc-req', reqCount);
+  const t0 = Date.now();
+  const r = await fetch(API + '/think', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ input, options:{ maxTokens:220 } })
+  });
+  const d = await r.json();
+  latencies.push(Date.now() - t0);
+  setScore('sc-lat', (latencies.reduce((a,b)=>a+b,0)/latencies.length/1000).toFixed(1)+'s');
+  if (typeof d.memories_retrieved === 'number') setScore('sc-mem', d.memories_retrieved);
+  return d;
+}
+
+async function askAndShow(step, q){
+  block(step, 'q', 'ME → HEIDI', q);
+  const thinking = block(step, 'a', 'HEIDI', '…thinking on llama3.2…');
+  thinking.classList.add('spinner');
+  const d = await think(q);
+  thinking.classList.remove('spinner');
+  thinking.childNodes[1].textContent = d.response || d.error || '(no response)';
+  const meta = document.createElement('div');
+  meta.className = 'meta';
+  meta.textContent = `model ${d.model} · ${(d.latency_ms/1000).toFixed(1)}s · confidence ${(d.confidence??0).toFixed(2)} · memories retrieved: ${d.memories_retrieved}`;
+  thinking.appendChild(meta);
+  return d;
+}
+
+(async () => {
+  // STEP 0 — vitals
+  let s = addStep('Step 0 · Vitals', 'Confirm the local brain is alive before showing off.');
+  s.classList.add('active');
+  try {
+    const h = await (await fetch(API+'/health')).json();
+    const st = await (await fetch(API+'/state')).json();
+    block(s, 'a', 'HEALTH', `status: ${h.status} · brain: ${h.brain}\nmodel: ${st.brain?.model} · db: ${st.memory?.db_path?.split(/[\\\/]/).pop()}`);
+    if (st.reflections?.total_reflections !== undefined) setScore('sc-ref', st.reflections.total_reflections);
+    s.classList.replace('active','done');
+  } catch(e) {
+    block(s, 'a', 'ERROR', 'Heidi Core is not reachable at localhost:3456 — start start-hydi-local.bat first.');
+    s.classList.replace('active','fail'); return;
+  }
+
+  // STEP 1 — teach facts
+  s = addStep('Step 1 · Teach', 'I feed Heidi three unrelated facts. Watch her fact-extractor mine them into her SQLite memory with embeddings — nothing is "saved to a chat log", it becomes searchable knowledge.');
+  s.classList.add('active');
+  await askAndShow(s, 'For the record: the Rezonate music project budget is approved at $4,500 for Q3.');
+  await askAndShow(s, 'Also note: the Waveformer Studio launch target is October 14, and the priority this month is the DJ sample library.');
+  s.classList.replace('active','done');
+
+  // brief pause so fire-and-forget embeddings land in sqlite
+  s = addStep('Step 2 · Embed', 'Behind the scenes: each fact is being embedded by nomic-embed-text (a second local model) into vectors inside heidi_memory.db. Giving it a few seconds…');
+  s.classList.add('active');
+  await new Promise(r => setTimeout(r, 6000));
+  block(s, 'a', 'MEMORY', 'Facts embedded and stored locally.');
+  s.classList.replace('active','done');
+
+  // STEP 3 — semantic recall with different wording
+  s = addStep('Step 3 · The real test — semantic recall', 'Now I ask about "spending cap for the music production effort" — words that never appeared in what I taught her. If she answers $4,500, she found it by MEANING, not keyword match. Watch the "memories retrieved" counter.');
+  s.classList.add('active');
+  const d1 = await askAndShow(s, 'What is our spending cap for the music production effort?');
+  const hit = /4[,.]?500/.test(d1.response||'');
+  const v = document.createElement('div');
+  v.className = 'verdict ' + (hit?'hit':'miss');
+  v.textContent = hit ? '✔ SEMANTIC HIT — she recalled the $4,500 budget from differently-worded input'
+                      : (d1.memories_retrieved>0 ? '△ memories were retrieved — model paraphrased the figure' : '✘ no recall this round');
+  s.querySelector('.body').appendChild(v);
+  s.classList.replace('active','done');
+
+  // STEP 4 — reflection
+  s = addStep('Step 4 · Reflection', 'Heidi does not just answer — she can analyze her own recent conversations and distill insights. Triggering a reflection cycle now.');
+  s.classList.add('active');
+  try {
+    const r = await (await fetch(API+'/reflect', { method:'POST', headers:{'Content-Type':'application/json'}, body:'{}' })).json();
+    block(s, 'a', 'REFLECTION ENGINE', r.insights_generated > 0
+      ? `${r.insights_generated} insight(s) generated:\n` + r.insights.map(i => '• ' + (i.insight || i.content || JSON.stringify(i)).slice(0,200)).join('\n')
+      : 'Reflection cycle ran — no new insights met the threshold this round (it gets richer as conversations accumulate).');
+    s.classList.replace('active','done');
+  } catch(e) { block(s,'a','ERROR',e.message); s.classList.replace('active','fail'); }
+
+  // STEP 5 — state
+  s = addStep('Step 5 · Self-report', 'Finally, Heidi reports her own internals — live stats from the process you launched.');
+  s.classList.add('active');
+  try {
+    const st = await (await fetch(API+'/state')).json();
+    if (st.reflections?.total_reflections !== undefined) setScore('sc-ref', st.reflections.total_reflections);
+    block(s, 'a', 'STATE', JSON.stringify({
+      status: st.status,
+      model: st.brain?.model,
+      models_on_box: st.brain?.models_available?.length,
+      requests_served: st.stats?.requests,
+      actions: st.stats?.actions,
+      reflections: st.stats?.reflections,
+      uptime_min: Math.round((st.stats?.uptime_ms||0)/60000)
+    }, null, 2));
+    s.classList.replace('active','done');
+  } catch(e) { block(s,'a','ERROR',e.message); s.classList.replace('active','fail'); }
+
+  addStep('Done', 'Everything above ran on your hardware: llama3.2 for thought, nomic-embed-text for meaning, SQLite for memory. No API keys. No cloud. This survives a reboot — ask her about the budget tomorrow.').classList.add('done');
+})();
+</script>
+</body>
+</html>

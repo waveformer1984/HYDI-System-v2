@@ -20,6 +20,10 @@ const PORT = parseInt(process.env.HEIDI_PORT || '3006');
 const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434';
 const LM_STUDIO_URL = process.env.LM_STUDIO_URL || 'http://localhost:1234';
 const DEFAULT_MODEL = process.env.LOCAL_MODEL_NAME || 'llama3';
+// Heidi Core (heidi-core/server.js) — the full local brain with memory +
+// reflection. When it's running, chat is routed through it instead of raw
+// Ollama, so every UI client of this server gets the real Heidi.
+const HEIDI_CORE_URL = process.env.HEIDI_CORE_URL || 'http://localhost:3456';
 
 function getLANIP() {
     for (const ifaces of Object.values(os.networkInterfaces())) {
@@ -129,12 +133,58 @@ app.post('/api/chat', async (req, res) => {
     res.setHeader('Connection', 'keep-alive');
     res.setHeader('X-Accel-Buffering', 'no');
 
-    const send = (data) => res.write(`data: ${JSON.stringify(data)}\n\n`);
+    let sentAny = false;
+    const send = (data) => {
+        if (data.t) sentAny = true;
+        res.write(`data: ${JSON.stringify(data)}\n\n`);
+    };
     const finish = (meta = {}) => { send({ done: true, ...meta }); res.end(); };
 
     const systemPrompt = buildSystemPrompt();
     const selectedModel = model || DEFAULT_MODEL;
 
+    // 1) Heidi Core (memory + reflection brain) — preferred when running.
+    // Uses the /think-stream SSE endpoint so tokens flow through live.
+    if (provider !== 'lmstudio' && provider !== 'ollama') {
+        try {
+            const r = await fetch(`${HEIDI_CORE_URL}/think-stream`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ input: message, options: model ? { model } : {} }),
+                signal: AbortSignal.timeout(180000)
+            });
+            if (r.ok && r.body) {
+                const reader = r.body.getReader();
+                const decoder = new TextDecoder();
+                let buf = '';
+                let meta = null;
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    buf += decoder.decode(value, { stream: true });
+                    const events = buf.split('\n\n');
+                    buf = events.pop();
+                    for (const ev of events) {
+                        const line = ev.split('\n').find(l => l.startsWith('data: '));
+                        if (!line) continue;
+                        try {
+                            const d = JSON.parse(line.slice(6));
+                            if (d.t && d.model !== 'fallback') send({ t: d.t });
+                            if (d.done) meta = d;
+                        } catch {}
+                    }
+                }
+                if (sentAny && meta && meta.model !== 'fallback') {
+                    return finish({ provider: 'heidi-core', model: meta.model, confidence: meta.confidence });
+                }
+            }
+        } catch (e) {
+            console.log('[Chat] Heidi Core unavailable, falling back to raw Ollama:', e.message);
+        }
+        if (sentAny) return finish({ provider: 'heidi-core' });
+    }
+
+    // 2) Raw Ollama
     if (provider !== 'lmstudio') {
         try {
             await streamOllama(message, selectedModel, systemPrompt, send);
@@ -144,6 +194,7 @@ app.post('/api/chat', async (req, res) => {
         }
     }
 
+    // 3) LM Studio
     try {
         await streamLMStudio(message, selectedModel, systemPrompt, send);
         return finish({ provider: 'lmstudio' });
@@ -151,7 +202,12 @@ app.post('/api/chat', async (req, res) => {
         console.log('[Chat] LM Studio unavailable:', e.message);
     }
 
-    // Typed fallback
+    // 4) Typed fallback — but NEVER splice it into a partially-streamed
+    // reply (that caused garbled messages in the UI). If tokens already
+    // went out, just close cleanly with an error flag.
+    if (sentAny) {
+        return finish({ provider: 'interrupted', error: 'model stream dropped mid-response' });
+    }
     const fallback = buildFallback(message);
     for (const char of fallback) {
         send({ t: char });
