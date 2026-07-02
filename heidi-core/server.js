@@ -166,11 +166,20 @@ class HeidiCore {
           });
         }
 
-        // 5. CHECK for action triggers
+        // 5. CHECK for action triggers.
+        // SAFETY: model-detected actions do NOT auto-execute by default. A
+        // small local model hallucinates commands, so autonomous execution is
+        // opt-in via HEIDI_AUTONOMOUS_ACTIONS=true. Otherwise we only record
+        // the suggestion; a human runs it explicitly via the /act endpoint.
         const action = this.detectAction(input, response.text);
-        if (action && this.actions.isSafe(action)) {
-          // Queue action for execution (don't block response)
-          this.executeActionAsync(action);
+        if (action) {
+          const allowed = process.env.HEIDI_AUTONOMOUS_ACTIONS === 'true';
+          if (allowed && this.actions.isSafe(action)) {
+            this.executeActionAsync(action);
+          } else {
+            this.stats.actions_suggested = (this.stats.actions_suggested || 0) + 1;
+            console.log(`[HEIDI] Action SUGGESTED (not run — autonomous execution ${allowed ? 'passed-safety=false' : 'disabled'}): ${action.type} -> ${action.target || action.command}`);
+          }
         }
 
         // OBSERVABILITY: Smart logging (summary by default, full detail on special cases)
@@ -308,8 +317,21 @@ class HeidiCore {
     // ACT - Execute an action
     this.app.post('/act', async (req, res) => {
       try {
+        // /act executes real side effects, so it demands an explicit token
+        // even from localhost — the general middleware waves localhost
+        // through, but CORS is '*', so a drive-by web page on any site you
+        // visit could otherwise POST here. Require HEIDI_SECRET, and if it's
+        // unset, refuse rather than run unauthenticated.
+        const secret = req.headers['x-heidi-secret'];
+        if (!process.env.HEIDI_SECRET) {
+          return res.status(503).json({ error: '/act disabled: set HEIDI_SECRET to enable authenticated action execution' });
+        }
+        if (secret !== process.env.HEIDI_SECRET) {
+          return res.status(403).json({ error: 'Forbidden: /act requires a valid x-heidi-secret header' });
+        }
+
         const action = req.body;
-        
+
         if (!action.type) {
           return res.status(400).json({ error: 'action.type is required' });
         }

@@ -163,17 +163,38 @@ class ActionExecutor {
     return this.spawnProcess(command, commandArgs, { cwd: path.dirname(absolutePath) });
   }
 
+  // Argument patterns that turn a whitelisted binary into an arbitrary-code
+  // execution primitive. If any arg matches, the command is refused.
+  static DANGEROUS_ARG_PATTERNS = [
+    /^-{1,2}(c|e|eval|command|encodedcommand|exec)$/i, // node -e, powershell -Command/-EncodedCommand, etc.
+    /[;&|`$><]/,          // shell metacharacters / redirection / chaining
+    /\$\(/,               // command substitution
+    /\.\.[\/\\]/          // path traversal in an arg
+  ];
+
   /**
-   * Run a command directly
+   * Run a command directly. Hardened: the binary must be whitelisted AND no
+   * argument may smuggle in an inline-eval flag or shell metacharacters.
    */
   async runCommand(command, args = []) {
-    // Safety check: Is command approved?
-    const cmd = command.toLowerCase().split(' ')[0];
+    // Only a bare binary name is allowed — no inline args baked into `command`.
+    if (/\s/.test(command)) {
+      throw new Error(`Command must be a bare executable name, got: '${command}'`);
+    }
+    const cmd = command.toLowerCase();
     if (!this.approvedCommands.has(cmd)) {
       throw new Error(`Command '${cmd}' is not in approved list`);
     }
 
-    return this.spawnProcess(command, args);
+    // Vet every argument.
+    for (const a of args) {
+      const s = String(a);
+      if (ActionExecutor.DANGEROUS_ARG_PATTERNS.some(re => re.test(s))) {
+        throw new Error(`Refused unsafe argument to '${cmd}': ${s}`);
+      }
+    }
+
+    return this.spawnProcess(command, args, { shell: false });
   }
 
   /**
@@ -183,6 +204,7 @@ class ActionExecutor {
     return new Promise((resolve, reject) => {
       const child = spawn(command, args, {
         ...options,
+        shell: false,   // never route through a shell — args stay literal
         timeout: 30000, // 30 second timeout
         env: { ...process.env, NODE_ENV: 'production' }
       });
@@ -305,15 +327,58 @@ class ActionExecutor {
   }
 
   /**
-   * Check if action is safe to execute
+   * Full pre-flight validation used to decide whether an action may run
+   * AUTONOMOUSLY (without a human). This mirrors the enforcement inside
+   * execute()/runScript()/runCommand() so a hallucinated action can never
+   * auto-fire just because its type is on the list.
+   *
+   * Returns true only for actions that are provably safe with no side effects
+   * beyond approved directories/commands/domains.
    */
   isSafe(action) {
     try {
-      if (!this.approvedActions.has(action.type)) return false;
-      // Additional checks can be added here
-      return true;
+      if (!action || !this.approvedActions.has(action.type)) return false;
+
+      switch (action.type) {
+        case 'log_event':
+          return true; // local console log only — always safe
+
+        case 'read_file': {
+          if (!action.target) return false;
+          // No traversal, and must resolve inside the project tree.
+          const abs = path.resolve(action.target);
+          const root = path.resolve(path.join(__dirname, '../../'));
+          return abs.startsWith(root);
+        }
+
+        case 'run_script': {
+          if (!action.target) return false;
+          const abs = path.resolve(action.target);
+          const inApprovedDir = this.approvedScriptDirs.some(dir => abs.startsWith(path.resolve(dir)));
+          const okExt = ['.js', '.ps1', '.sh'].includes(path.extname(abs).toLowerCase());
+          const args = action.args || [];
+          const argsClean = args.every(a =>
+            !ActionExecutor.DANGEROUS_ARG_PATTERNS.some(re => re.test(String(a))));
+          return inApprovedDir && okExt && fs.existsSync(abs) && argsClean;
+        }
+
+        case 'run_command': {
+          if (!action.command || /\s/.test(action.command)) return false;
+          if (!this.approvedCommands.has(action.command.toLowerCase())) return false;
+          return (action.args || []).every(a =>
+            !ActionExecutor.DANGEROUS_ARG_PATTERNS.some(re => re.test(String(a))));
+        }
+
+        // write_file and api_call have real side effects / exfil potential —
+        // never allow them to run autonomously. They still work when invoked
+        // explicitly via execute() with its own checks.
+        case 'write_file':
+        case 'api_call':
+        default:
+          return false;
+      }
     } catch (error) {
-      return false;
+      return false; // fail closed
     }
   }
 }
