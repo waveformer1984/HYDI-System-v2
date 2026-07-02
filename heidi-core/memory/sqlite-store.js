@@ -255,6 +255,11 @@ class HeidiMemory {
     );
   }
 
+  async getFactCount() {
+    const row = await this.get(`SELECT COUNT(*) AS n FROM long_term`);
+    return row ? row.n : 0;
+  }
+
   // Local procedural memory: fact + embedding, keyed by (fact, division) for dedup
   async storeFactWithEmbedding(content, division, confidence, embedding) {
     const category = division || 'global';

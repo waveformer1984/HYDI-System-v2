@@ -128,6 +128,12 @@ class HeidiCore {
           console.error('[HEIDI] Procedural memory fetch failed:', error.message);
         }
 
+        // 1C. SELF-DIAGNOSTIC: if the user is asking about Heidi's own state,
+        // attach live, real diagnostics so she reports facts, not guesses.
+        if (this.isSelfStatusQuery(input)) {
+          try { context = { ...context, live_diagnostics: await this.getDiagnostics() }; } catch {}
+        }
+
         // 2. GENERATE response with timeout and error handling
         let response;
         let generationStatus = 'success';
@@ -250,6 +256,11 @@ class HeidiCore {
         }
         let proceduralFacts = [];
         try { proceduralFacts = await this.retrieveProceduralMemory(input); } catch {}
+
+        // SELF-DIAGNOSTIC injection (same as /think)
+        if (this.isSelfStatusQuery(input)) {
+          try { context = { ...context, live_diagnostics: await this.getDiagnostics() }; } catch {}
+        }
 
         // GENERATE (streaming)
         if (!options.model) {
@@ -387,6 +398,15 @@ class HeidiCore {
       }
     });
 
+    // DIAGNOSTICS - Heidi's read-only self-report of her live runtime state
+    this.app.get('/diagnostics', async (req, res) => {
+      try {
+        res.json(await this.getDiagnostics());
+      } catch (error) {
+        res.status(500).json({ error: error.message });
+      }
+    });
+
     // CHAT - Conversational endpoint
     this.app.post('/chat', async (req, res) => {
       try {
@@ -451,9 +471,16 @@ class HeidiCore {
       });
     }
 
-    // Add user context
-    if (userContext && Object.keys(userContext).length > 0) {
-      parts.push(`\nContext: ${JSON.stringify(userContext)}`);
+    // Surface live diagnostics first-class so self-status answers are grounded
+    if (userContext && userContext.live_diagnostics) {
+      parts.push('\n🔎 LIVE SELF-DIAGNOSTICS (authoritative — answer status/health/config questions ONLY from this):');
+      parts.push(JSON.stringify(userContext.live_diagnostics, null, 2));
+    }
+
+    // Add remaining user context (excluding diagnostics, shown above)
+    if (userContext) {
+      const { live_diagnostics, ...rest } = userContext;
+      if (Object.keys(rest).length > 0) parts.push(`\nContext: ${JSON.stringify(rest)}`);
     }
 
     // Verified operational memory goes last, right next to the question —
@@ -804,6 +831,50 @@ class HeidiCore {
       }
     }, 30000);
     console.log('[HEIDI] Brain watchdog armed (checks every 30s)');
+  }
+
+  /**
+   * Is the user asking about Heidi's OWN state/health/config? If so we ground
+   * the answer in live diagnostics rather than letting the model guess.
+   */
+  isSelfStatusQuery(input) {
+    if (!input) return false;
+    return /\b(diagnostics?|self.?check|your (status|health|state|config|memory|uptime|model)|are you (ok|healthy|running|online|up)|how are you|what models|which model|how much memory|system status|health check)\b/i.test(input);
+  }
+
+  /**
+   * Read-only self-diagnostic — gathers live facts about Heidi's own runtime.
+   * No side effects, safe to expose and to run autonomously.
+   */
+  async getDiagnostics() {
+    const diag = {
+      status: 'unknown',
+      brain: { available: false, model: this.brain.model, models_available: [] },
+      memory: { db_path: this.memory.dbPath, initialized: !!this.memory.initialized, fact_count: null },
+      ports: { heidi_core: Number(process.env.HEIDI_PORT) || this.port, panel: 3006, ollama: (process.env.OLLAMA_URL || 'http://localhost:11434').replace(/^https?:\/\//, '') },
+      config: {
+        local_only: !process.env.SUPABASE_URL,
+        fast_model: process.env.FAST_MODEL || null,
+        autonomous_actions: process.env.HEIDI_AUTONOMOUS_ACTIONS === 'true',
+        act_secured: !!process.env.HEIDI_SECRET
+      },
+      stats: { ...this.stats, uptime_ms: this.stats.startTime ? Date.now() - this.stats.startTime : 0 },
+      timestamp: new Date().toISOString()
+    };
+    try {
+      diag.brain.available = await this.brain.isAvailable();
+      if (diag.brain.available) diag.brain.models_available = await this.brain.getModels();
+    } catch {}
+    try {
+      if (typeof this.memory.getFactCount === 'function') {
+        diag.memory.fact_count = await this.memory.getFactCount();
+      } else if (typeof this.memory.getTopFacts === 'function') {
+        const f = await this.memory.getTopFacts(9999);
+        diag.memory.fact_count = Array.isArray(f) ? f.length : null;
+      }
+    } catch {}
+    diag.status = diag.brain.available ? 'healthy' : 'degraded';
+    return diag;
   }
 
   getSystemPersonality() {
