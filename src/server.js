@@ -271,7 +271,7 @@ app.get('/health', async (req, res) => {
     
     // Get events count
     const { count } = await supabase
-      .from('hydi_events')
+      .from('heidi_events')
       .select('*', { count: 'exact', head: true });
     
     res.json({
@@ -408,42 +408,41 @@ app.post('/process', async (req, res) => {
     // Simple persistence - no retries, no abstraction
     if (result.status === 'processed') {
       try {
-        // Store original event - simple v2 upsert
+        // heidi_events has no external-id column to upsert against (its PK
+        // is an auto-generated uuid), so this is a plain insert. Fields with
+        // no real column (event_id, source, timestamp) are folded into
+        // payload so nothing is silently dropped.
         const { data, error } = await supabase
-          .from('hydi_events')
-          .upsert({
-            event_id: payload.event_id,
-            type: payload.type,
-            source: payload.source,
-            timestamp: payload.timestamp,
-            payload: payload.payload,
-            processed: true,
-            stored_at: new Date().toISOString()
-          }, {
-            onConflict: 'event_id'
+          .from('heidi_events')
+          .insert({
+            event_type: payload.type,
+            division: payload.division,
+            payload: { ...payload.payload, event_id: payload.event_id, source: payload.source, timestamp: payload.timestamp },
+            verdict: result.status === 'processed' ? 'AUTO-APPROVE' : result.status === 'rejected' ? 'BLOCK' : null,
+            context_snapshot: result.validation || null
           });
-        
+
         if (error) {
           throw error;
         }
-        
+
         // Store opportunity if exists
         if (result.opportunity) {
           const { error: oppError } = await supabase
-            .from('hydi_events')
-            .upsert({
-              event_id: result.opportunity.event_id,
-              type: result.opportunity.type,
-              source: 'cascade_opportunity',
-              timestamp: result.opportunity.timestamp,
-              payload: result.opportunity.payload,
-              processed: false,
-              parent_event_id: payload.event_id,
-              stored_at: new Date().toISOString()
-            }, {
-              onConflict: 'event_id'
+            .from('heidi_events')
+            .insert({
+              event_type: result.opportunity.type,
+              division: result.opportunity.division,
+              payload: {
+                ...result.opportunity.payload,
+                event_id: result.opportunity.event_id,
+                source: 'cascade_opportunity',
+                timestamp: result.opportunity.timestamp,
+                parent_event_id: payload.event_id
+              },
+              context_snapshot: result.validation || null
             });
-          
+
           if (oppError) {
             console.error('Opportunity storage failed:', oppError.message);
           }
@@ -536,34 +535,29 @@ app.post('/process', async (req, res) => {
 // Helper function for database persistence
 async function persistEventToDatabase(event, result) {
   try {
-    // Store original event using Supabase v2 upsert pattern
+    // heidi_events has no external-id column to upsert against (its PK is
+    // an auto-generated uuid), so this is a plain insert.
     const { data, error } = await supabase
-      .from('hydi_events')
-      .upsert({
-        event_id: event.event_id,
-        type: event.type,
-        payload: event.payload,
-        processed: true
-      }, {
-        onConflict: 'event_id'
+      .from('heidi_events')
+      .insert({
+        event_type: event.type,
+        division: event.division,
+        payload: { ...event.payload, event_id: event.event_id }
       })
       .select();
-    
+
     if (error) throw error;
-    
+
     // Store opportunity event if exists
     if (result.opportunity) {
       const { error: oppError } = await supabase
-        .from('hydi_events')
-        .upsert({
-          event_id: result.opportunity.event_id,
-          type: result.opportunity.type,
-          payload: result.opportunity.payload,
-          processed: false
-        }, {
-          onConflict: 'event_id'
+        .from('heidi_events')
+        .insert({
+          event_type: result.opportunity.type,
+          division: result.opportunity.division,
+          payload: { ...result.opportunity.payload, event_id: result.opportunity.event_id, parent_event_id: event.event_id }
         });
-      
+
       if (oppError) throw oppError;
     }
     
@@ -579,19 +573,19 @@ app.get('/insight', async (req, res) => {
   try {
     // Get recent events
     const { data, error } = await supabase
-      .from('hydi_events')
+      .from('heidi_events')
       .select('*')
       .order('created_at', { ascending: false })
       .limit(10);
-    
+
     if (error) throw error;
-    
+
     res.json({
       insights: data.map(event => ({
         id: event.id,
-        type: event.type,
+        type: event.event_type,
         timestamp: event.created_at,
-        summary: `Processed ${event.type} event`
+        summary: `Processed ${event.event_type} event`
       })),
       count: data.length
     });
@@ -611,20 +605,19 @@ app.post('/event', async (req, res) => {
     
     // Log system event
     const { data, error } = await supabase
-      .from('hydi_events')
+      .from('heidi_events')
       .insert({
-        event_id: eventData.event_id || `sys-${Date.now()}`,
-        type: eventData.type || 'system_event',
-        payload: eventData.payload || {},
-        processed: true // System events are pre-processed
+        event_type: eventData.type || 'system_event',
+        division: eventData.division,
+        payload: { ...(eventData.payload || {}), event_id: eventData.event_id || `sys-${Date.now()}` }
       })
       .select();
-    
+
     if (error) throw error;
-    
+
     res.json({
       status: 'logged',
-      eventId: data[0]?.event_id
+      eventId: data[0]?.id
     });
   } catch (error) {
     console.error('Event endpoint failed:', error);
@@ -641,9 +634,9 @@ app.get('/opportunities', async (req, res) => {
     const { type, limit = 20 } = req.query;
     
     let query = supabase
-      .from('hydi_events')
+      .from('heidi_events')
       .select('*')
-      .eq('type', 'hyve_opportunity_detected')
+      .eq('event_type', 'hyve_opportunity_detected')
       .order('created_at', { ascending: false });
     
     if (type) {
