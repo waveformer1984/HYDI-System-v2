@@ -374,58 +374,66 @@ class KiloNode {
         'Verify service process is running',
         'Check service logs for crash information'
       ],
-      'STATUS_CODE_400':
-      case 'STATUS_CODE_500':
-        return [
-          'Verify endpoint is accessible',
-          'Check server logs for error details',
-          'Validate request payload and parameters'
-        ];
-      case 'ENV_VAR_MISSING':
-        return [
-          'Check environment variables in deployment',
-          'Verify .env file or config server',
-          'Check if variable was recently removed or renamed'
-        ];
-      case 'VERSION_MISMATCH':
-        return [
-          'Verify expected version in deployment config',
-          'Check actual version installed/running',
-          'Review recent deployment history'
-        ];
-      case 'CONFIG_DIFF':
-        return [
-          'Compare current config with baseline',
-          'Check for unauthorized changes',
-          'Review configuration change logs'
-        ];
-      case 'CORRUPTION_DETECTED':
-      case 'CHECKSUM_MISMATCH':
-      case 'DATA_VALIDATION_FAILED':
-        return [
-          'Verify data checksums against known good values',
-          'Check storage integrity',
-          'Validate data transmission completeness'
-        ];
-      case 'STREAM_DISCONNECTED':
-      case 'CONNECTION_LOST':
-      case 'WEBSOCKET_ERROR':
-        return [
-          'Verify network connectivity',
-          'Check service availability',
-          'Review connection timeout settings'
-        ];
-      default:
-        return [
-          'Perform general system health check',
-          'Review recent deployment and change logs',
-          'Check monitoring alerts and metrics'
-        ];
+      'STATUS_CODE_400': [
+        'Verify endpoint is accessible',
+        'Check server logs for error details',
+        'Validate request payload and parameters'
+      ],
+      'STATUS_CODE_500': [
+        'Verify endpoint is accessible',
+        'Check server logs for error details',
+        'Validate request payload and parameters'
+      ],
+      'ENV_VAR_MISSING': [
+        'Check environment variables in deployment',
+        'Verify .env file or config server',
+        'Check if variable was recently removed or renamed'
+      ],
+      'VERSION_MISMATCH': [
+        'Verify expected version in deployment config',
+        'Check actual version installed/running',
+        'Review recent deployment history'
+      ],
+      'CONFIG_DIFF': [
+        'Compare current config with baseline',
+        'Check for unauthorized changes',
+        'Review configuration change logs'
+      ],
+      'CORRUPTION_DETECTED': [
+        'Verify data checksums against known good values',
+        'Check storage integrity',
+        'Validate data transmission completeness'
+      ],
+      'CHECKSUM_MISMATCH': [
+        'Verify data checksums against known good values',
+        'Check storage integrity',
+        'Validate data transmission completeness'
+      ],
+      'DATA_VALIDATION_FAILED': [
+        'Verify data checksums against known good values',
+        'Check storage integrity',
+        'Validate data transmission completeness'
+      ],
+      'STREAM_DISCONNECTED': [
+        'Verify network connectivity',
+        'Check service availability',
+        'Review connection timeout settings'
+      ],
+      'CONNECTION_LOST': [
+        'Verify network connectivity',
+        'Check service availability',
+        'Review connection timeout settings'
+      ],
+      'WEBSOCKET_ERROR': [
+        'Verify network connectivity',
+        'Check service availability',
+        'Review connection timeout settings'
+      ]
     };
-    
+
     return [...baseSteps, ...(issueSpecificSteps[issue] || [])];
   }
-  
+
   // Generate recommended fix steps based on issue type
   generateRecommendedFixSteps(issue) {
     const baseSteps = [
@@ -450,58 +458,66 @@ class KiloNode {
         'Restart the service or deploy healthy instance',
         'Verify service dependencies are healthy'
       ],
-      'STATUS_CODE_400':
-      case 'STATUS_CODE_500':
-        return [
-          'Review recent code changes to endpoint',
-          'Check server configuration and logs',
-          'Fix client request if issue is on caller side'
-        ];
-      case 'ENV_VAR_MISSING':
-        return [
-          'Add missing environment variable to deployment',
-          'Verify variable value is correct',
-          'Restart services to pick up new variable'
-        ];
-      case 'VERSION_MISMATCH':
-        return [
-          'Deploy correct version of the component',
-          'Verify version matches across all environments',
-          'Update deployment documentation if needed'
-        ];
-      case 'CONFIG_DIFF':
-        return [
-          'Revert unauthorized configuration changes',
-          'Apply approved configuration from baseline',
-          'Verify configuration is consistent across instances'
-        ];
-      case 'CORRUPTION_DETECTED':
-      case 'CHECKSUM_MISMATCH':
-      case 'DATA_VALIDATION_FAILED':
-        return [
-          'Restore data from known good backup',
-          'Investigate root cause of corruption',
-          'Implement additional data validation checks'
-        ];
-      case 'STREAM_DISCONNECTED':
-      case 'CONNECTION_LOST':
-      case 'WEBSOCKET_ERROR':
-        return [
-          'Restart streaming service or connection manager',
-          'Verify network stability',
-          'Check client reconnection logic'
-        ];
-      default:
-        return [
-          'Perform manual investigation of the anomaly',
-          'Consult system documentation and runbooks',
-          'Escalate to specialized team if needed'
-        ];
+      'STATUS_CODE_400': [
+        'Review recent code changes to endpoint',
+        'Check server configuration and logs',
+        'Fix client request if issue is on caller side'
+      ],
+      'STATUS_CODE_500': [
+        'Review recent code changes to endpoint',
+        'Check server configuration and logs',
+        'Fix client request if issue is on caller side'
+      ],
+      'ENV_VAR_MISSING': [
+        'Add missing environment variable to deployment',
+        'Verify variable value is correct',
+        'Restart services to pick up new variable'
+      ],
+      'VERSION_MISMATCH': [
+        'Deploy correct version of the component',
+        'Verify version matches across all environments',
+        'Update deployment documentation if needed'
+      ],
+      'CONFIG_DIFF': [
+        'Revert unauthorized configuration changes',
+        'Apply approved configuration from baseline',
+        'Verify configuration is consistent across instances'
+      ],
+      'CORRUPTION_DETECTED': [
+        'Restore data from known good backup',
+        'Investigate root cause of corruption',
+        'Implement additional data validation checks'
+      ],
+      'CHECKSUM_MISMATCH': [
+        'Restore data from known good backup',
+        'Investigate root cause of corruption',
+        'Implement additional data validation checks'
+      ],
+      'DATA_VALIDATION_FAILED': [
+        'Restore data from known good backup',
+        'Investigate root cause of corruption',
+        'Implement additional data validation checks'
+      ],
+      'STREAM_DISCONNECTED': [
+        'Restart streaming service or connection manager',
+        'Verify network stability',
+        'Check client reconnection logic'
+      ],
+      'CONNECTION_LOST': [
+        'Restart streaming service or connection manager',
+        'Verify network stability',
+        'Check client reconnection logic'
+      ],
+      'WEBSOCKET_ERROR': [
+        'Restart streaming service or connection manager',
+        'Verify network stability',
+        'Check client reconnection logic'
+      ]
     };
-    
+
     return [...baseSteps, ...(issueSpecificSteps[issue] || [])];
   }
-  
+
   // Emit audit log to event bus
   emitAuditLog(auditData) {
     const auditEntry = {
