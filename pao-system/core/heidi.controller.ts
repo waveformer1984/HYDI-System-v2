@@ -44,10 +44,10 @@ export class HeidiController {
 
   constructor() {
     this.eventBus = new EventBus();
-    this.taskRouter = new TaskRouter();
     this.approvalEngine = new ApprovalEngine();
     this.riskEngine = new RiskEngine();
     this.agentRegistry = new AgentRegistry();
+    this.taskRouter = new TaskRouter(this.agentRegistry);
     
     this.systemMetrics = {
       tasks_processed: 0,
