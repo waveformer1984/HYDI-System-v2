@@ -16,6 +16,10 @@ export class AgentRegistry {
     return Array.from(this.agents.values());
   }
 
+  getAllAgentIds(): string[] {
+    return Array.from(this.agents.keys());
+  }
+
   getAgentsByCapability(capability: string): BaseAgent[] {
     return Array.from(this.agents.values()).filter(agent => 
       agent.capabilities.includes(capability)

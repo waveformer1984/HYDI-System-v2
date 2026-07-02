@@ -131,7 +131,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
 
       const text = response.content
-        .filter((b): b is { type: 'text'; text: string } => b.type === 'text')
+        .filter((b): b is { type: 'text'; text: string; citations: any } => b.type === 'text')
         .map((b) => b.text)
         .join('');
 

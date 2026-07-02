@@ -194,8 +194,8 @@ export class ProcurementAgent extends BaseAgent {
 
   private createProcurementPlan(materialsNeeded: any): any {
     // Simplified procurement plan
-    const materialsToProcure = [];
-    const inventoryAvailable = {};
+    const materialsToProcure: any[] = [];
+    const inventoryAvailable: Record<string, any> = {};
     
     // Check each material against inventory (simplified)
     for (const [material, quantity] of Object.entries(materialsNeeded)) {

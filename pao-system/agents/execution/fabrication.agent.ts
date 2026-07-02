@@ -203,19 +203,19 @@ export class FabricationAgent extends BaseAgent {
   private checkMaterialsAvailability(payload: any): any {
     // Simplified materials check
     const requiredMaterials = payload.design_spec.materials || [];
-    const missingMaterials = [];
-    
+    const missingMaterials: any[] = [];
+
     // Simulate inventory check (80% chance each material is available)
     for (const material of requiredMaterials) {
       if (Math.random() > 0.2) { // 20% chance of missing
         missingMaterials.push(material);
       }
     }
-    
+
     return {
       available: missingMaterials.length === 0,
       missing_materials: missingMaterials,
-      available_materials: requiredMaterials.filter(m => !missingMaterials.includes(m))
+      available_materials: requiredMaterials.filter((m: any) => !missingMaterials.includes(m))
     };
   }
 

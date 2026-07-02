@@ -91,7 +91,7 @@ async function dispatchTriggerRedeploy(payload: Record<string, unknown>): Promis
   try {
     const { triggerRedeploy, PROJECT_IDS } = await import('../vercel/vercelAdmin.js');
     const projectKey = (payload.project as string) ?? 'hydi';
-    const projectId = PROJECT_IDS[projectKey];
+    const projectId = PROJECT_IDS[projectKey as keyof typeof PROJECT_IDS];
 
     if (!projectId) {
       return { type: 'trigger_redeploy', success: false, error: `Unknown project key: ${projectKey}` };

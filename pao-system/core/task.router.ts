@@ -40,6 +40,6 @@ export class TaskRouter {
     const agentId = agentIds[0];
     // We would normally get the agent from a registry, but for boilerplate we return a placeholder
     // In practice, the HeidiController would use the AgentRegistry to get the agent instance
-    return { id: agentId, capabilities: [] } as BaseAgent; // Placeholder
+    return new BaseAgent(agentId, []); // Placeholder
   }
 }

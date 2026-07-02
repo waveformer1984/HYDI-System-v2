@@ -1,10 +1,14 @@
 export class BaseAgent {
   id: string;
   capabilities: string[];
+  status: 'active' | 'busy' | 'offline';
+  load: number;
 
   constructor(id: string, capabilities: string[] = []) {
     this.id = id;
     this.capabilities = capabilities;
+    this.status = 'active';
+    this.load = 0;
   }
 
   async handle_event(event: any): Promise<void> {
