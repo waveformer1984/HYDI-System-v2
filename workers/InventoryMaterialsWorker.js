@@ -1,9 +1,100 @@
+const { createClient } = require('@supabase/supabase-js');
+const QueueManager = require('./QueueManager');
+require('dotenv').config();
+
+class InventoryMaterialsWorker {
+    constructor(workerId) {
+        this.workerId = workerId || `inventory-materials-worker-${Date.now()}`;
+        this.running = false;
+        this.pollInterval = 30000;
+        this.pollTimer = null;
+        this.supabase = null;
+        this.queue = new QueueManager();
+        this.lowStockThresholds = {
+            filament_grams: 200,
+            components_count: 20,
+            material_ml: 100,
+            pcb_boards: 5,
+            electronic_components: 10
+        };
+        this.materialConsumption = {
+            '3d_print': { filament_pla: 100, isopropyl_alcohol_ml: 10 },
+            pcb_fabrication: { pcb_board: 1, solder_paste_ml: 5 },
+            cnc_machining: { isopropyl_alcohol_ml: 20 },
+            laser_cutting: { isopropyl_alcohol_ml: 15 }
+        };
+    }
+
+    async initialize() {
+        const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+        const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
+        if (!supabaseUrl || !supabaseKey) throw new Error('Missing Supabase credentials');
+        this.supabase = createClient(supabaseUrl, supabaseKey);
+        this.queue.registerWorker('inventory_materials', this.workerId);
+        this.queue.updateHeartbeat('idle');
+        console.log(`[📦 Inventory & Materials Worker] Initialized: ${this.workerId}`);
+    }
+
+    async start() {
+        if (this.running) return;
+        await this.initialize();
+        this.running = true;
+        this.queue.startHeartbeat();
+        console.log('[📦 Inventory & Materials Worker] Monitoring inventory...');
+        this.poll();
+    }
+
+    async stop() {
+        this.running = false;
+        if (this.pollTimer) clearTimeout(this.pollTimer);
+        await this.queue.shutdown();
+        console.log('[📦 Inventory & Materials Worker] Stopped');
+    }
+
+    poll() {
+        if (!this.running) return;
+        this.routineCheck()
+            .catch(err => console.error('[📦 Inventory & Materials Worker] Error in routine check:', err))
+            .finally(() => { this.pollTimer = setTimeout(() => this.poll(), this.pollInterval); });
+    }
+
+    async routineCheck() {
+        try {
+            const inventory = await this.getAllInventory();
+            const lowStockItems = this.identifyLowStock(inventory);
+            if (lowStockItems.length > 0) {
+                await this.triggerLowStockAlerts(lowStockItems);
+                await this.triggerProcurementForLowStock(lowStockItems);
+            }
+            await this.checkForExpiringItems();
             // Update inventory metrics
             await this.updateInventoryMetrics();
         } catch (err) {
             console.error('[📦 Inventory & Materials Worker] Error in routine check:', err);
         }
     }
+
+    async triggerProcurement(payload) {
+        const { trigger_type, item_types, urgency } = payload.data;
+        console.log(`[📦 Inventory] Triggering procurement: ${trigger_type}`);
+        let procurementList = [];
+        if (trigger_type === 'low_stock') {
+            procurementList = await this.getLowStockItems(item_types);
+        } else if (trigger_type === 'scheduled') {
+            procurementList = await this.getScheduledProcurement(item_types);
+        } else if (item_types) {
+            procurementList = await this.getSpecificProcurementList(item_types);
+        } else {
+            procurementList = await this.getGeneralProcurementNeeds();
+        }
+        for (const item of procurementList) {
+            await this.createProcurementOrder(item, urgency || 'normal');
+        }
+        if (procurementList.length > 0) {
+            await this.notifyProcurementTriggered(procurementList, urgency);
+        }
+    }
+
 
     // Helper methods
     async getAllInventory() {
