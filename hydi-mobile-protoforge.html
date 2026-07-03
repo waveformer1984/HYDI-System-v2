@@ -1,3 +1,11 @@
+<!-- NOTE: the Chat, header health badge, and Stats tabs are wired to the
+     real production backend (pages/api/chat.ts, api/health.js,
+     api/mobile-status.js — the same Supabase/Claude backend the desktop
+     dashboard uses). The Agents / Approve / Grow tabs are still a UI
+     mockup: there is no agent-control API or approval-workflow API behind
+     them yet (agentCmd/resolveApproval/growAction only send to the
+     nonexistent /ws/hydi WebSocket, which Vercel serverless cannot host).
+     Building those out is a separate, larger backend effort. -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1244,26 +1252,26 @@
 
       <div class="stats-row">
         <div class="stat-card">
-          <div class="stat-label">Capital Deployed</div>
+          <div class="stat-label">Revenue (24h)</div>
           <div class="stat-value" id="statCapital">$—</div>
           <div class="stat-trend trend-up" id="statCapitalTrend">— </div>
           <div class="spark-bar" id="sparkCapital"></div>
         </div>
         <div class="stat-card">
-          <div class="stat-label">Agent Actions</div>
+          <div class="stat-label">Auto-Heals</div>
           <div class="stat-value" id="statActions">—</div>
           <div class="stat-sub">last 24 h</div>
           <div class="spark-bar" id="sparkActions"></div>
         </div>
         <div class="stat-card">
-          <div class="stat-label">Success Rate</div>
-          <div class="stat-value" id="statSuccess">—%</div>
+          <div class="stat-label">Active Streams</div>
+          <div class="stat-value" id="statSuccess">—</div>
           <div class="stat-trend" id="statSuccessTrend">—</div>
         </div>
         <div class="stat-card">
-          <div class="stat-label">Trust Score</div>
+          <div class="stat-label">System Status</div>
           <div class="stat-value" id="statTrust">—</div>
-          <div class="stat-sub">avg across agents</div>
+          <div class="stat-sub">HYDI dashboard</div>
         </div>
       </div>
 
@@ -1410,21 +1418,21 @@ window.addEventListener('DOMContentLoaded', () => {
     navigator.serviceWorker.register('/sw.js').catch(() => {});
   }
 
-  // Load Ollama model info
-  fetch('/api/models').then(r => r.json()).then(d => {
+  // Load real backend model status (Claude agent + Supabase orchestrator —
+  // the same system the desktop dashboard uses), not local Ollama.
+  fetch('/api/status').then(r => r.json()).then(d => {
     const badge = document.getElementById('modelBadge');
     const text  = document.getElementById('modelText');
     badge.style.display = 'flex';
-    if (d.ollama_online) {
-      text.textContent = '🤖 ' + d.active_model.split(':')[0];
+    const degraded = d?.model_status?.circuitBreakerActive;
+    if (!degraded) {
+      text.textContent = '🤖 Claude';
       badge.className = 'conn-badge';
-      addChatMsg('hydi',
-        `AI model online: ${d.active_model}. I'm thinking, not scripted — ask me anything about ProtoForge.`);
+      addChatMsg('hydi', "Connected to the live HYDI backend. I'm thinking, not scripted — ask me anything about ProtoForge.");
     } else {
-      text.textContent = '📝 Scripted';
-      badge.className = 'conn-badge off';
-      addChatMsg('hydi',
-        'Running in scripted mode. Install Ollama (ollama.com) then run:\n  ollama pull llama3.2\nRestart Hydi to enable AI replies.');
+      text.textContent = '⚠️ Degraded';
+      badge.className = 'conn-badge warn';
+      addChatMsg('hydi', 'The AI agent is temporarily degraded (circuit breaker active) — falling back to cached responses until it recovers.');
     }
   }).catch(() => {});
 });
@@ -1506,16 +1514,18 @@ async function pollHealth() {
 
 function updateHealthUI(h) {
   if (!h) return;
-  document.getElementById('hJobs').textContent   = h.jobs_queued ?? '—';
+  // Shape from api/health.js: { hydi_status, trend_status, metrics: {...}, last_check }
+  const metrics = h.metrics || {};
+  document.getElementById('hJobs').textContent   = metrics.jobs_queued ?? '—';
   document.getElementById('hTrend').textContent  = h.trend_status ?? '—';
-  document.getElementById('hHeals').textContent  = h.auto_heals_24h ?? '—';
+  document.getElementById('hHeals').textContent  = metrics.auto_heals_24h ?? '—';
   document.getElementById('hLast').textContent   = h.last_check
     ? new Date(h.last_check).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})
     : '—';
 
-  if (h.current_status === 'CRITICAL') setBadge('crit', 'Critical');
-  else if (h.current_status === 'WARNING') setBadge('warn', 'Warning');
-  else if (h.current_status === 'OK') setBadge('ok', 'Online');
+  if (h.hydi_status === 'CRITICAL') setBadge('crit', 'Critical');
+  else if (h.hydi_status === 'WARNING') setBadge('warn', 'Warning');
+  else if (h.hydi_status === 'OK') setBadge('ok', 'Online');
 }
 
 // ── TAB NAVIGATION ───────────────────────────────────────
@@ -1583,24 +1593,61 @@ async function sendChat() {
   autoResize(input);
   showTyping();
 
-  // Try WebSocket first; fall back to HTTP
+  // Try WebSocket first (only alive if a local WS bridge is running — Vercel
+  // serverless cannot host a persistent /ws/hydi); fall back to the same
+  // production HTTP backend the dashboard uses: pages/api/chat.ts (Claude
+  // agent + Supabase memory), which streams SSE and expects
+  // { message, session_id, user_id }.
   const sent = wsSend({ type: 'message', content: text, model: 'hydi', sessionId: CFG.sessionId, timestamp: new Date().toISOString() });
 
   if (!sent) {
-    // HTTP fallback
     try {
       const r = await fetch(CFG.apiBase + '/api/chat', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Session-Id': CFG.sessionId },
-        body: JSON.stringify({ message: text, model: 'hydi' })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: text, session_id: CFG.sessionId, user_id: 'hydi-mobile' })
       });
-      hideTyping();
-      if (r.ok) {
-        const d = await r.json();
-        addChatMsg(d.system || 'hydi', d.response || d.message || 'Processing...');
-      } else {
+
+      if (!r.ok || !r.body) {
+        hideTyping();
         addChatMsg('hydi', buildOfflineReply(text));
+        return;
       }
+
+      const reader = r.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = '';
+      let acc = '';
+      let actions = null;
+      let firstToken = true;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const parts = buf.split('\n\n');
+        buf = parts.pop() || '';
+        for (const part of parts) {
+          const line = part.split('\n').find(l => l.startsWith('data: '));
+          if (!line) continue;
+          const raw = line.slice(6);
+          if (raw === '[DONE]') continue;
+          try {
+            const evt = JSON.parse(raw);
+            if (evt.type === 'content') {
+              if (firstToken) { firstToken = false; hideTyping(); }
+              acc += evt.content;
+            } else if (evt.type === 'actions') {
+              actions = evt.actions;
+            } else if (evt.type === 'error') {
+              acc = acc || `Error: ${evt.error}`;
+            }
+          } catch {}
+        }
+      }
+
+      hideTyping();
+      addChatMsg('hydi', acc || 'Processing...', actions ? actions.map(a => ({ label: `${a.type} · ${a.status}`, handler: '' })) : null);
     } catch {
       hideTyping();
       addChatMsg('hydi', buildOfflineReply(text));
@@ -1839,30 +1886,36 @@ function growAction(action) {
 }
 
 // ── STATS ────────────────────────────────────────────────
+// Real production data: the same /api/mobile-status snapshot used for the
+// header health strip (Supabase system_dashboard + ledger revenue), not a
+// mocked-up "protoforge stats" endpoint that never existed server-side.
 function refreshStats() {
-  fetch(CFG.apiBase + '/api/protoforge/stats')
+  fetch(CFG.apiBase + '/api/mobile-status')
     .then(r => r.json())
     .then(applyStats)
-    .catch(() => applyStats(mockStats()));
-}
-
-function mockStats() {
-  return {
-    capital_deployed: 248500 + Math.random() * 5000,
-    agent_actions: 1247 + Math.floor(Math.random() * 50),
-    success_rate: 0.947,
-    trust_score: 0.82,
-  };
+    .catch(() => applyStats(null));
 }
 
 function applyStats(d) {
-  document.getElementById('statCapital').textContent    = '$' + (d.capital_deployed || 0).toLocaleString(undefined,{maximumFractionDigits:0});
-  document.getElementById('statCapitalTrend').textContent = '▲ growing';
-  document.getElementById('statActions').textContent    = (d.agent_actions || 0).toLocaleString();
-  document.getElementById('statSuccess').textContent    = Math.round((d.success_rate || 0) * 100) + '%';
-  document.getElementById('statSuccessTrend').textContent = '▲ strong';
-  document.getElementById('statSuccessTrend').className = 'stat-trend trend-up';
-  document.getElementById('statTrust').textContent      = ((d.trust_score || 0) * 100).toFixed(0) + '%';
+  if (!d) {
+    document.getElementById('statCapital').textContent = '$—';
+    document.getElementById('statActions').textContent = '—';
+    document.getElementById('statSuccess').textContent = '—';
+    document.getElementById('statTrust').textContent = 'offline';
+    return;
+  }
+  const streams = d.streams || {};
+  const netTotal = Object.values(streams).reduce((sum, s) => sum + (s.net_24h || 0), 0);
+  const activeCount = Object.values(streams).filter(s => s.last).length;
+  const totalCount = Object.keys(streams).length;
+
+  document.getElementById('statCapital').textContent = '$' + Math.round(netTotal).toLocaleString();
+  document.getElementById('statCapitalTrend').textContent = d.alert ? '⚠ ' + d.alert : '▲ nominal';
+  document.getElementById('statActions').textContent = (d.heals_24h ?? 0).toLocaleString();
+  document.getElementById('statSuccess').textContent = `${activeCount}/${totalCount}`;
+  document.getElementById('statSuccessTrend').textContent = d.drift || '—';
+  document.getElementById('statSuccessTrend').className = 'stat-trend ' + (d.ok ? 'trend-up' : 'trend-down');
+  document.getElementById('statTrust').textContent = d.system || 'unknown';
 }
 
 function renderSparkbars() {

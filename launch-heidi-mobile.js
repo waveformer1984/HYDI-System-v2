@@ -1,6 +1,19 @@
 #!/usr/bin/env node
 /**
- * Heidi Local Mobile Chat Server
+ * Heidi Local Mobile Chat Server (dev-only, local Ollama/LM Studio)
+ *
+ * NOTE: This is a standalone LAN-only tool. It does NOT talk to Supabase,
+ * the CASCADE/KILO/ProtoForge pipeline, the ledger, or Stripe revenue
+ * streams — only to whatever Ollama/LM Studio model is running on this
+ * machine (or heidi-core/server.js if also running locally). It is useful
+ * for offline/local model testing but is a different backend than the rest
+ * of the deployed system.
+ *
+ * For the mobile chat surface that is tied into the real production
+ * backend (Supabase-backed Claude agent, same one the dashboard uses), use
+ * the deployed Next.js route instead: pages/mobile-chat.tsx → served at
+ * /mobile-chat once `npm run dev` / the Vercel deployment is running.
+ *
  * Streams from Ollama/LM Studio — open on mobile via LAN URL printed at startup
  *
  * Setup:
