@@ -60,6 +60,16 @@ const systemHandlers = {
 };
 
 export default async function handler(req, res) {
+  // CORS: allow the static mobile chat (GitHub Pages) to call this endpoint.
+  // Auth still relies on the HMAC service token, not the origin.
+  res.setHeader('Access-Control-Allow-Origin', process.env.MOBILE_CHAT_ORIGIN || '*')
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-hydi-service-token')
+  res.setHeader('Access-Control-Max-Age', '86400')
+  if (req.method === 'OPTIONS') {
+    return res.status(204).end()
+  }
+
   // Verify service token before processing any request
   const { valid, reason } = checkServiceToken(req.headers['x-hydi-service-token'])
   if (!valid) {
