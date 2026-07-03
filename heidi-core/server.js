@@ -137,23 +137,38 @@ class HeidiCore {
         // 2. GENERATE response with timeout and error handling
         let response;
         let generationStatus = 'success';
-        try {
-          const prompt = this.buildPromptWithMemory(input, memoryContext, proceduralFacts, context);
-          if (!options.model) {
-            const routed = this.pickModel(input);
-            if (routed) options.model = routed;
-          }
-          response = await this.brain.generate(prompt, options);
-        } catch (error) {
-          console.error('[HEIDI] Generation failed:', error.message);
-          generationStatus = error.message.includes('timeout') ? 'timeout' : 'failed';
-
-          // Fallback response
+        if (this.isUngroundedCapabilityQuery(input)) {
+          // HARD GATE: never let the model free-generate for capabilities that
+          // genuinely have no backing tool (revenue/build/CRM/etc). The
+          // prompt's "never invent" rule is a soft constraint a small local
+          // model can still slip past under load; this makes fabrication for
+          // these categories structurally impossible instead of merely
+          // discouraged.
+          generationStatus = 'no_capability';
           response = {
-            text: this.getFallbackResponse(input, memoryContext),
-            model: 'fallback',
+            text: this.getUngroundedCapabilityResponse(input),
+            model: 'no-tool-available',
             tokens: { prompt: 0, completion: 0 }
           };
+        } else {
+          try {
+            const prompt = this.buildPromptWithMemory(input, memoryContext, proceduralFacts, context);
+            if (!options.model) {
+              const routed = this.pickModel(input);
+              if (routed) options.model = routed;
+            }
+            response = await this.brain.generate(prompt, options);
+          } catch (error) {
+            console.error('[HEIDI] Generation failed:', error.message);
+            generationStatus = error.message.includes('timeout') ? 'timeout' : 'failed';
+
+            // Fallback response
+            response = {
+              text: this.getFallbackResponse(input, memoryContext),
+              model: 'fallback',
+              tokens: { prompt: 0, completion: 0 }
+            };
+          }
         }
 
         // 3. STORE in memory
@@ -267,15 +282,22 @@ class HeidiCore {
           const routed = this.pickModel(input);
           if (routed) options.model = routed;
         }
-        const prompt = this.buildPromptWithMemory(input, memoryContext, proceduralFacts, context);
         let result;
-        try {
-          result = await this.brain.generateStream(prompt, (t) => send({ t }), options);
-        } catch (e) {
-          console.error('[HEIDI] Stream generation failed:', e.message);
-          const fb = this.getFallbackResponse(input, memoryContext);
-          send({ t: fb });
-          result = { text: fb, model: 'fallback', tokens: { prompt: 0, completion: 0 } };
+        if (this.isUngroundedCapabilityQuery(input)) {
+          // Same hard gate as /think — see comment there.
+          const msg = this.getUngroundedCapabilityResponse(input);
+          send({ t: msg });
+          result = { text: msg, model: 'no-tool-available', tokens: { prompt: 0, completion: 0 } };
+        } else {
+          const prompt = this.buildPromptWithMemory(input, memoryContext, proceduralFacts, context);
+          try {
+            result = await this.brain.generateStream(prompt, (t) => send({ t }), options);
+          } catch (e) {
+            console.error('[HEIDI] Stream generation failed:', e.message);
+            const fb = this.getFallbackResponse(input, memoryContext);
+            send({ t: fb });
+            result = { text: fb, model: 'fallback', tokens: { prompt: 0, completion: 0 } };
+          }
         }
 
         // STORE + REFLECT (post-stream, non-blocking for the client)
@@ -843,6 +865,32 @@ class HeidiCore {
   }
 
   /**
+   * Is the user asking about a capability Heidi has NO real backing tool for
+   * (revenue pipeline, build/deploy status, CRM/leads, Stripe/ledger balances,
+   * etc — exactly the categories getSystemPersonality() already tells her to
+   * disclaim)? If so, generation is skipped entirely in favor of a fixed,
+   * truthful "I don't have that in local mode" response — see
+   * getUngroundedCapabilityResponse(). This exists because relying solely on
+   * the system prompt's "never invent" instruction is a soft constraint: a
+   * small local model (llama3.2 / tinyllama / qwen2.5-coder:1.5b class) can
+   * still fabricate a plausible-looking answer under load or with the wrong
+   * sampling settings. Gating in code makes fabrication for these specific
+   * categories structurally impossible rather than merely discouraged.
+   */
+  isUngroundedCapabilityQuery(input) {
+    if (!input) return false;
+    return /\b(revenue pipeline|build status|build number|deploy(?:ment)?s?\s*status|ci\/?cd\s*status|latest (build|deploy)|production (build|deploy)|\bcrm\b|lead pipeline|leads?\s*(list|count|status|pipeline)|quote(?:s)?\s*(list|status|pipeline)|proposals?\s*(list|status)|checkout sessions?|stripe (balance|payout|connect)\s*status|payout status|ledger (balance|status))\b/i.test(input);
+  }
+
+  /**
+   * Fixed, truthful response for isUngroundedCapabilityQuery() matches.
+   * Deliberately NOT model-generated — see comment above.
+   */
+  getUngroundedCapabilityResponse(input) {
+    return "I don't have a live revenue pipeline, build/deployment system, or CRM connected in local mode, so I can't check that. I don't have real data to report here and won't invent a plausible-looking answer (fake IDs, statuses, or model names) to fill the gap. If you need this, it has to come from the actual Stripe/Supabase/CI dashboards directly, or this server needs a real tool wired up for it first.";
+  }
+
+  /**
    * Read-only self-diagnostic — gathers live facts about Heidi's own runtime.
    * No side effects, safe to expose and to run autonomously.
    */
@@ -888,16 +936,18 @@ Your traits:
 
 You have access to:
 - Verified procedural memory from ProtoForge operations
-- System health monitoring
+- Live system diagnostics (brain connectivity, available models, memory fact count, uptime) when present in the Context block below
 - Memory of past interactions
 - Reflections on patterns and insights
 - Ability to execute approved actions
+
+You do NOT have a revenue pipeline, build/deployment system, CRM, or any tool beyond what is listed above. This is local-only mode - there is no live business/CRM/CI data to query.
 
 Ground all responses in the memory context above. If no memory is relevant to the question, say so explicitly.
 
 Be direct. Don't over-explain. Focus on what matters.
 
-Hard rule: NEVER invent commands, file paths, ports, or system features. If a system detail is not in your memory context above, say you don't have it on record instead of guessing.`;
+Hard rule: NEVER invent commands, file paths, ports, system features, or tool call results. If a system detail is not in your memory or Context above, say you don't have it on record. If asked to "use a tool" or "check" something you have no real data source for (revenue, leads, builds, deployments, CRM, etc.), say plainly that you don't have that capability in local mode - never narrate a fake tool call or invent plausible-looking output (fake IDs, statuses, model names) to fill the gap.`;
   }
 
   estimateConfidence(response, memoryContext) {
