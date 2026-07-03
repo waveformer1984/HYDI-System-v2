@@ -10,10 +10,20 @@ import {
 import { getSystemStatus, isReachable } from '../../lib/termux/termuxClient.js';
 import { callAgent, isClaudeAvailable } from '../../lib/claude.js';
 
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
+// Lazy client: a missing SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY must surface
+// as a clean JSON error from the handler, not a cold-start crash (which returns
+// a 500 with no CORS headers and looks like "server not connecting" to clients).
+let _supabase = null;
+function getSupabase() {
+  if (!_supabase) {
+    if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      throw new Error('Supabase env vars not configured (SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY)');
+    }
+    _supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+  }
+  return _supabase;
+}
+const supabase = new Proxy({}, { get: (_, prop) => getSupabase()[prop] });
 
 // ── Service token guard ───────────────────────────────────────────────────────
 // Replaces bare x-user-id header trust. Callers must present an HMAC-SHA256
