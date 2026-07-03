@@ -29,6 +29,9 @@ module.exports = {
   moduleNameMapper: {
     '^.*heidi-core.*ollama-client.*$': '<rootDir>/tests/__mocks__/ollama-client-stub.js',
     '^uuid$': '<rootDir>/tests/__mocks__/uuid-stub.js',
+    // api/ routes import lib/claude with a .js specifier (Next.js resolves it
+    // to the .ts source); mirror that resolution for Jest.
+    '^(.*)/lib/claude\\.js$': '$1/lib/claude.ts',
   },
 
   forceExit: true,

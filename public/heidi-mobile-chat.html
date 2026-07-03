@@ -509,6 +509,11 @@
 
 <div class="health-strip">
     <div class="health-metric">
+        <span class="icon">🛰️</span>
+        <span class="value" id="metricHydi">—</span>
+        <span class="label">backend</span>
+    </div>
+    <div class="health-metric">
         <span class="icon">🤖</span>
         <span class="value" id="metricModels">—</span>
         <span class="label">models</span>
@@ -532,9 +537,13 @@
 
 <div class="quick-actions">
     <div class="quick-action" onclick="sendQuick('status')">📊 Status</div>
+    <div class="quick-action" onclick="sendQuick('@ursula status')">🛰️ Ursula</div>
+    <div class="quick-action" onclick="sendQuick('@infrastructure health')">🏗️ Infra</div>
+    <div class="quick-action" onclick="sendQuick('@hyve opportunity')">🐝 Hyve</div>
+    <div class="quick-action" onclick="sendQuick('@protoforge status')">🌐 ProtoForge</div>
+    <div class="quick-action" onclick="sendQuick('@rezonate status')">🎵 Rezonate</div>
     <div class="quick-action" onclick="sendQuick('models')">🤖 Models</div>
     <div class="quick-action" onclick="sendQuick('help')">💡 What can you do</div>
-    <div class="quick-action" onclick="sendQuick('health')">🔧 Health check</div>
     <div class="quick-action" onclick="sendQuick('clear')">🗑️ Clear chat</div>
 </div>
 
@@ -587,11 +596,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         await loadModels();
         pollHealth();
         addMsg('heidi',
-            "Hi! I'm Heidi, your local ProtoForge AI.\n\nI'm running on your device via Ollama. You can talk to me, ask about your system, or use voice input with the 🎤 button. Enable 🔊 in the header so I speak back to you.",
-            [{ label: '📊 System status', q: 'status' }, { label: '🤖 Available models', q: 'models' }]
+            "Hi! I'm Heidi, your ProtoForge AI.\n\nPlain messages chat with the local model. Prefix a message with @ursula, @cascade, @kilo, @protoforge, @hyve, @infrastructure or @rezonate to route it through the shared HYDI backend — e.g. \"@ursula status\" or \"@infrastructure health\". Voice input 🎤 and voice replies 🔊 are in the header.",
+            [{ label: '🛰️ Ursula system status', q: '@ursula status' }, { label: '🏗️ Infrastructure health', q: '@infrastructure health' }, { label: '🤖 Available models', q: 'models' }]
         );
     } else {
-        addMsg('system', '⚠️ Cannot reach Heidi server. Make sure: node launch-heidi-mobile.js is running on your machine.');
+        addMsg('system', '⚠️ Cannot reach the Heidi server. Run node launch-heidi-mobile.js on your machine, or open this page from the deployed HYDI app.');
         setStatus('offline', 'Server offline');
     }
 });
@@ -607,32 +616,56 @@ async function checkServer() {
 }
 
 // ─── Health polling ───────────────────────────────────────────────────────────
+// Two sources, either may be absent depending on which server hosts the UI:
+//   /api/health        — local AI stack (Ollama/LM Studio) via the launcher
+//   /api/mobile-status — HYDI backend snapshot (deployed app, or proxied)
 async function pollHealth() {
+    let local = null;
+    let backend = null;
+
     try {
         const r = await fetch('/api/health', { signal: AbortSignal.timeout(3000) });
-        if (!r.ok) throw new Error();
-        const h = await r.json();
-        updateHealthUI(h);
-    } catch {
+        if (r.ok) local = await r.json();
+    } catch {}
+
+    try {
+        const r = await fetch('/api/mobile-status', { signal: AbortSignal.timeout(5000) });
+        backend = await r.json();
+    } catch {}
+
+    if (local || backend) {
+        updateHealthUI(local || {}, backend);
+    } else {
         setStatus('off', 'Reconnecting...');
     }
     healthTimer = setTimeout(pollHealth, 30000);
 }
 
-function updateHealthUI(h) {
+function updateHealthUI(h, backend) {
     const badge = document.getElementById('healthBadge');
     const hasAI = h.ollama || h.lmstudio;
+    // Backend reachable if the snapshot came back with a system field
+    // (503 with a payload still means "reachable, alerting"), or the
+    // launcher reported the bridge alive.
+    const hydiUp = Boolean((backend && backend.system) || h.hydi);
+    const hydiAlert = backend && backend.alert;
 
-    badge.textContent = hasAI ? 'AI ON' : 'NO AI';
-    badge.className = 'health-badge ' + (hasAI ? 'ok' : 'warning');
+    badge.textContent = hasAI ? 'AI ON' : hydiUp ? 'HYDI' : 'NO AI';
+    badge.className = 'health-badge ' + (hasAI ? 'ok' : hydiUp ? 'ok' : 'warning');
 
-    const provider = h.ollama ? 'Ollama' : h.lmstudio ? 'LMStudio' : 'none';
+    const provider = h.ollama ? 'Ollama' : h.lmstudio ? 'LMStudio' : hydiUp ? 'HYDI' : 'none';
+    const hydiMetric = document.getElementById('metricHydi');
+    hydiMetric.textContent = hydiUp ? (hydiAlert ? '⚠️ ' + (backend.system || 'alert') : backend?.system || 'up') : 'off';
+    hydiMetric.style.color = hydiUp ? (hydiAlert ? 'var(--status-warning)' : 'var(--status-ok)') : 'var(--status-unknown)';
     document.getElementById('metricModels').textContent = h.models?.length ?? 0;
     document.getElementById('metricProvider').textContent = provider;
     document.getElementById('metricTime').textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-    setStatus(hasAI ? '' : 'warning', hasAI
+    const online = hasAI || hydiUp;
+    setStatus(online ? '' : 'warning', hasAI
         ? `Online · ${currentModel || h.models?.[0] || 'ready'}`
+        : hydiUp
+        ? 'Online · HYDI backend'
         : 'Online · No AI model');
 }
 
@@ -731,10 +764,11 @@ async function sendMessage() {
 
     let fullText = '';
     let provider = 'local';
+    let system = null;
     let firstToken = true;
 
     try {
-        const resp = await fetch('/api/chat', {
+        const resp = await fetch('/api/mobile-chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ message: text, model: currentModel, provider: currentProvider })
@@ -771,7 +805,7 @@ async function sendMessage() {
                             bubble.innerHTML = esc(fullText) + '<span class="streaming-cursor"></span>';
                             scrollBottom();
                         }
-                        if (d.done) provider = d.provider || 'local';
+                        if (d.done) { provider = d.provider || 'local'; system = d.system || null; }
                     } catch {}
                 }
             }
@@ -791,7 +825,9 @@ async function sendMessage() {
     const meta = document.createElement('div');
     meta.className = 'message-meta';
     const timeEl = document.createElement('span');
-    timeEl.textContent = `Heidi · ${now()} · ${provider}`;
+    timeEl.textContent = system
+        ? `${system} · ${now()} · via ${provider}`
+        : `Heidi · ${now()} · ${provider}`;
     meta.appendChild(timeEl);
 
     // Add facts badge to show response is grounded in procedural memory

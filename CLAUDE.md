@@ -126,6 +126,7 @@ All files under `api/` are **Vercel serverless functions** (Next.js API routes).
 | `api/hydi/sync.js` | HYDI state sync |
 | `api/ursula/status.js` | Ursula system status |
 | `api/mobile-status.js` | Compact, 3G-safe system snapshot: health + per-stream revenue in a single round-trip |
+| `api/mobile-chat.js` | Mobile chat endpoint — dispatches to the universal router's `systemHandlers` and streams SSE frames to `public/heidi-mobile-chat.html` |
 | `api/life-flow/route.js` | Life-flow module |
 | `api/events/stream.js` | SSE stream for real-time events |
 | `api/revenue.js` | Revenue engine: leads, quotes, proposals, Stripe checkout, reports |
@@ -270,6 +271,8 @@ Key DB features: RLS enabled on all tables, `system_dashboard` view drives healt
 | `STRIPE_CONNECT_WEBHOOK_SECRET` | Stripe Connect webhook signing secret |
 | `STRIPE_ACCOUNT_GALACTIC_BYTES` et al. | Connect sub-account IDs per revenue stream |
 | `NODE_ENV` | `production` / `development` |
+| `HYDI_SERVICE_SECRET` | Shared HMAC secret for `x-hydi-service-token` auth on `api/chat/route.js`; mint with `lib/auth/generateServiceToken.js`, verify with `lib/auth/verifyServiceToken.js`. Must match the value set on ProtoForgeSite's heidi-chat-portal |
+| `HYDI_API_URL` | Used by `launch-heidi-mobile.js`: URL of the deployed HYDI app; enables the mobile bridge that relays `@system` chat messages to `/api/chat` |
 | `ANTHROPIC_API_KEY` | Enables the native streaming/tool-calling agent (`lib/heidi-agent.ts`); when unset Heidi uses the fallback orchestrator |
 | `ANTHROPIC_BASE_URL` | Optional override of the Anthropic SDK base URL (e.g. a compatible proxy) |
 | `OPENAI_API_KEY` | Hosted memory embeddings (1536-dim) |
