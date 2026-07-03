@@ -558,7 +558,7 @@
             oninput="autoResize(this)"
             onkeypress="onKey(event)"
         ></textarea>
-        <button class="icon-btn send-btn" id="sendBtn" onclick="sendMessage()">
+        <button class="icon-btn send-btn" id="sendBtn" onclick="onSendTap()">
             <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
         </button>
     </div>
@@ -726,14 +726,39 @@ function toggleModelMenu() {
 }
 
 // ─── Sending messages ─────────────────────────────────────────────────────────
+// Watchdog: never leave the UI locked on a hung backend. If nothing arrives
+// within these windows, the request is aborted and the UI is unlocked.
+const FIRST_BYTE_TIMEOUT_MS = 25000;   // time allowed until the first token
+const STREAM_IDLE_TIMEOUT_MS = 90000;  // max silence between tokens mid-stream
+
+let currentAbort = null;
+
+const SEND_ICON = '<svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>';
+const STOP_ICON = '<svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>';
+
+function setStreamingState(on) {
+    isStreaming = on;
+    const sendBtn = document.getElementById('sendBtn');
+    // Send stays tappable while streaming — it becomes a stop button.
+    sendBtn.innerHTML = on ? STOP_ICON : SEND_ICON;
+    sendBtn.title = on ? 'Stop response' : 'Send';
+    document.getElementById('micBtn').disabled = on;
+}
+
+function onSendTap() {
+    if (isStreaming) {
+        currentAbort?.();
+        return;
+    }
+    sendMessage();
+}
+
 async function sendMessage() {
     const input = document.getElementById('msgInput');
     const text = input.value.trim();
     if (!text || isStreaming) return;
 
-    isStreaming = true;
-    document.getElementById('sendBtn').disabled = true;
-    document.getElementById('micBtn').disabled = true;
+    setStreamingState(true);
 
     msgCount++;
     document.getElementById('metricMsgCount').textContent = msgCount;
@@ -766,12 +791,24 @@ async function sendMessage() {
     let provider = 'local';
     let system = null;
     let firstToken = true;
+    let userStopped = false;
+
+    const controller = new AbortController();
+    let watchdog = null;
+    const armWatchdog = (ms) => {
+        clearTimeout(watchdog);
+        watchdog = setTimeout(() => controller.abort(), ms);
+    };
+    currentAbort = () => { userStopped = true; controller.abort(); };
 
     try {
+        armWatchdog(FIRST_BYTE_TIMEOUT_MS);
+
         const resp = await fetch('/api/mobile-chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message: text, model: currentModel, provider: currentProvider })
+            body: JSON.stringify({ message: text, model: currentModel, provider: currentProvider }),
+            signal: controller.signal
         });
 
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
@@ -783,6 +820,7 @@ async function sendMessage() {
         while (true) {
             const { done, value } = await reader.read();
             if (done) break;
+            armWatchdog(STREAM_IDLE_TIMEOUT_MS);
 
             buf += dec.decode(value, { stream: true });
 
@@ -814,12 +852,25 @@ async function sendMessage() {
     } catch (err) {
         typingEl.remove();
         msgEl.style.display = '';
-        fullText = 'Connection error. Is the Heidi server running?\n\nRun: node launch-heidi-mobile.js';
+        if (userStopped) {
+            fullText = fullText ? fullText + '\n\n⏹ Stopped.' : '⏹ Stopped.';
+        } else if (err && err.name === 'AbortError') {
+            fullText = (fullText ? fullText + '\n\n' : '')
+                + '⏱️ The model stopped responding, so I cancelled the request.\n\nCheck that Ollama / Heidi Core is running, then try again.';
+            showAlert('Response timed out', 'warning');
+        } else {
+            fullText = 'Connection error. Is the Heidi server running?\n\nRun: node launch-heidi-mobile.js';
+            showAlert('Cannot reach server', 'error');
+        }
         bubble.textContent = fullText;
-        showAlert('Cannot reach server', 'error');
+    } finally {
+        clearTimeout(watchdog);
+        currentAbort = null;
+        typingEl.remove();
     }
 
     // Finalize
+    msgEl.style.display = '';
     bubble.textContent = fullText || '(empty response)';
 
     const meta = document.createElement('div');
@@ -843,9 +894,7 @@ async function sendMessage() {
 
     if (ttsEnabled && fullText) speak(cleanForTTS(fullText));
 
-    isStreaming = false;
-    document.getElementById('sendBtn').disabled = false;
-    document.getElementById('micBtn').disabled = false;
+    setStreamingState(false);
 }
 
 function sendQuick(cmd) {
