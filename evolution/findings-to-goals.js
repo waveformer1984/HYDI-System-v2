@@ -65,7 +65,7 @@ async function proposeGoals(goalEngine, assessment, opts = {}) {
   if (!opts.approve) return { applied: false, created: [], proposals };
 
   const existing = new Set(
-    (goalEngine.allGoals ? goalEngine.allGoals() : [])
+    (goalEngine.getAllGoals ? goalEngine.getAllGoals() : [])
       .filter((g) => g.status === 'active' && g._source)
       .map((g) => keyOf(g._source))
   );

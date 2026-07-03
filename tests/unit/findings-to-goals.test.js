@@ -9,12 +9,13 @@ function buildAssessment() {
   return assess(events);
 }
 
-// Minimal stand-in for HeidiGoalEngine (addGoal + allGoals).
+// Minimal stand-in for HeidiGoalEngine (addGoal + getAllGoals — must match the real
+// class's method name, or dedup silently no-ops when wired to the real engine).
 function fakeEngine() {
   const goals = [];
   return {
     goals,
-    allGoals: () => goals,
+    getAllGoals: () => goals,
     addGoal: async (objective, priority) => {
       const g = { id: 'g' + (goals.length + 1), objective, priority, status: 'active' };
       goals.push(g);
