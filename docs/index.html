@@ -255,6 +255,10 @@
             <div class="note">Used on-device to sign each request (HMAC-SHA256, <code>x-hydi-service-token</code>). Never leaves your phone except as a short-lived signature. Only enter this on a device you own.</div>
         </div>
         <div class="sheet-actions">
+            <button class="btn ghost" id="testBtn">Test connection</button>
+        </div>
+        <div id="testResults" style="display:none; margin-top:12px; background:var(--bg-elevated); border-radius:10px; padding:12px 14px; font-size:12.5px; line-height:1.9; color:var(--text-secondary); white-space:pre-wrap; word-break:break-word;"></div>
+        <div class="sheet-actions">
             <button class="btn danger" id="clearBtn">Clear chat</button>
             <button class="btn ghost" id="cancelBtn">Cancel</button>
             <button class="btn primary" id="saveBtn">Save</button>
@@ -457,6 +461,70 @@
         closeSheet();
         pollHealth();
     });
+    // ── Connection tester ─────────────────────────────────────────────
+    // Stage-by-stage diagnosis so "server not connecting" becomes actionable.
+    async function testConnection() {
+        const out = $('testResults');
+        out.style.display = 'block';
+        out.textContent = 'Testing…';
+        const urlInput = $('apiUrl').value.trim();
+        const secretInput = $('secret').value.trim();
+        const base = urlInput ? urlInput.replace(/\/+$/, '') : (SAME_ORIGIN ? '' : null);
+        const lines = [];
+
+        if (base === null) {
+            out.textContent = '✗ No API URL set, and this page is not served over http(s) — enter your HYDI deployment URL first.';
+            return;
+        }
+        lines.push(`Target: ${base || location.origin + ' (same origin)'}`);
+
+        // Stage 1: is the deployment reachable at all? (/api/health has open CORS)
+        try {
+            const r = await fetch(`${base}/api/health`, { signal: AbortSignal.timeout(8000) });
+            lines.push(`✓ deployment reachable — /api/health HTTP ${r.status}`);
+        } catch (e) {
+            lines.push(`✗ /api/health unreachable (${e.name === 'TimeoutError' ? 'timeout' : 'fetch failed'})`);
+            lines.push('→ Wrong URL, deployment down, or no internet. Fix the API URL before anything else.');
+            out.textContent = lines.join('\n');
+            return;
+        }
+
+        // Stage 2: can we reach /api/chat cross-origin with auth?
+        if (!secretInput) {
+            lines.push('• skipping /api/chat test — enter the service secret first');
+            out.textContent = lines.join('\n');
+            return;
+        }
+        try {
+            const saved = secret; secret = secretInput;      // sign with the value in the box
+            const token = await mintServiceToken();
+            secret = saved;
+            const r = await fetch(`${base}/api/chat`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'x-hydi-service-token': token },
+                body: JSON.stringify({ message: 'ping', system: 'ursula' }),
+                signal: AbortSignal.timeout(15000),
+            });
+            const d = await r.json().catch(() => ({}));
+            if (r.ok) {
+                lines.push('✓ /api/chat works — auth OK, chat is functional 🎉');
+            } else if (r.status === 401) {
+                lines.push(`✗ /api/chat auth failed: ${d.reason || 'unauthorized'}`);
+                lines.push(d.reason === 'service secret not configured'
+                    ? '→ Set HYDI_SERVICE_SECRET on the deployment (Vercel env), then redeploy.'
+                    : '→ The secret entered here does not match HYDI_SERVICE_SECRET on the deployment.');
+            } else {
+                lines.push(`✗ /api/chat HTTP ${r.status}: ${d.reason || d.error || 'server error'}`);
+                lines.push('→ The function is reachable but failing — check Vercel function logs and env vars (SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY).');
+            }
+        } catch (e) {
+            lines.push(`✗ /api/chat fetch failed (${e.name === 'TimeoutError' ? 'timeout' : 'blocked or crashed'})`);
+            lines.push('→ Health works but chat does not: either the deployment predates CORS on /api/chat (redeploy latest clean-main), or the function crashes at startup (check Vercel logs).');
+        }
+        out.textContent = lines.join('\n');
+    }
+    $('testBtn').addEventListener('click', testConnection);
+
     $('clearBtn').addEventListener('click', () => {
         history = [];
         localStorage.removeItem(LS.history);
