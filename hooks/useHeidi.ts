@@ -78,6 +78,7 @@ export function useHeidi(sessionId: string) {
       let assistantMessage = '';
       let actions: ActionLog[] = [];
       let responseData: Record<string, unknown> | null = null;
+      let streamError: string | null = null;
 
       if (reader) {
         while (true) {
@@ -92,6 +93,7 @@ export function useHeidi(sessionId: string) {
                 if (data.type === 'content') assistantMessage += data.content;
                 else if (data.type === 'actions') actions = data.actions;
                 else if (data.type === 'metadata') responseData = data;
+                else if (data.type === 'error') streamError = data.error;
               } catch {
                 // ignore malformed chunks
               }
@@ -102,6 +104,10 @@ export function useHeidi(sessionId: string) {
         responseData = await response.json() as Record<string, unknown>;
         assistantMessage = responseData.response as string;
         actions = responseData.actions as ActionLog[];
+      }
+
+      if (streamError) {
+        throw new Error(streamError);
       }
 
       const assistantMsg: ChatMessage = {
