@@ -443,6 +443,34 @@ async function handleInfrastructureMessage(message, request) {
   ].join('\n')
 }
 
+async function handleRezonateMessage(message, request) {
+  const lowerMessage = message.toLowerCase();
+
+  if (lowerMessage.includes('revenue') || lowerMessage.includes('sales')) {
+    const cutoff = new Date(Date.now() - 86_400_000).toISOString();
+    const { data } = await supabase
+      .from('ledger')
+      .select('net, created_at')
+      .eq('revenue_stream', 'rezonate')
+      .gte('created_at', cutoff);
+    const net = (data || []).reduce((sum, r) => sum + (r.net || 0), 0);
+    return `🎵 Rezonate: ${data?.length ?? 0} ledger entrie(s) in the last 24h — net $${net.toFixed(2)}`;
+  }
+
+  if (lowerMessage.includes('status')) {
+    const { data } = await supabase
+      .from('system_health')
+      .select('component, status')
+      .ilike('component', '%rezonate%');
+    if (data && data.length) {
+      return `🎵 Rezonate: ${data.map(r => `${r.component}: ${r.status}`).join(', ')}`;
+    }
+    return `🎵 Rezonate: music system online. Try 'revenue' or ask about the song composer.`;
+  }
+
+  return `🎵 Rezonate: music production system. Try 'status' or 'revenue', or use the Song Composer page for composition.`;
+}
+
 // ── Helper utilities ──────────────────────────────────────────────────────────
 
 function extractEventFromMessage(message) {
