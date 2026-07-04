@@ -8,6 +8,11 @@
  * 3. Stubs env vars consumed at module load time (database.js, supabase).
  */
 
+// Node < 22 has no global WebSocket; supabase-js realtime requires one.
+if (!globalThis.WebSocket) {
+  globalThis.WebSocket = require('ws');
+}
+
 // Use in-memory broker unless the caller explicitly set a different transport.
 if (!process.env.BROKER_TRANSPORT) {
   process.env.BROKER_TRANSPORT = 'memory';
