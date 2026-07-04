@@ -47,3 +47,5 @@ to `*` since the HMAC token is what actually gates access.
 - `POST {API}/api/chat` — `{ message, system }`, systems: heidi, ursula,
   cascade, kilo, protoforge, hyve, infrastructure, rezonate
 - `GET {API}/api/mobile-status` — powers the health dot in the header
+
+<!-- pages-deploy: v2 (auto-enablement) -->
