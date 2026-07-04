@@ -247,10 +247,10 @@
             <div class="note">Your HYDI deployment URL. Leave blank if this page is served by the HYDI deployment itself (same origin).</div>
         </div>
         <div class="field">
-            <label for="secret">HYDI service secret</label>
+            <label for="secret">HYDI service secret <span style="color:var(--text-muted)">(optional)</span></label>
             <input id="secret" type="password" autocapitalize="off" autocorrect="off"
-                   placeholder="HYDI_SERVICE_SECRET value">
-            <div class="note">Used on-device to sign each request (HMAC-SHA256, <code>x-hydi-service-token</code>). Never leaves your phone except as a short-lived signature. Only enter this on a device you own.</div>
+                   placeholder="HYDI_SERVICE_SECRET — leave blank for local/Termux node">
+            <div class="note">Required only if the server enforces auth (production Vercel). Used on-device to sign each request (HMAC-SHA256); never leaves your phone except as a short-lived signature. Leave blank for a local Termux node.</div>
         </div>
         <div class="sheet-actions">
             <button class="btn ghost" id="testBtn">Test connection</button>
@@ -356,7 +356,9 @@
     // deployment itself, e.g. from public/hydi-chat.html on Vercel).
     const SAME_ORIGIN = location.protocol.startsWith('http');
     function baseUrl() { return apiUrl ? apiUrl.replace(/\/+$/, '') : ''; }
-    function isConfigured() { return (apiUrl || SAME_ORIGIN) && secret; }
+    // Secret is optional: local/Termux nodes don't require auth. If the server
+    // does require it, the 401 reason is surfaced in the chat.
+    function isConfigured() { return Boolean(apiUrl || SAME_ORIGIN); }
 
     async function send() {
         const text = inputEl.value.trim();
@@ -370,13 +372,16 @@
         showTyping();
 
         try {
-            const token = await mintServiceToken();
+            const headers = { 'Content-Type': 'application/json' };
+            if (secret) {
+                if (!(crypto && crypto.subtle)) {
+                    throw new Error('Web Crypto unavailable — open this page via localhost or HTTPS to use a service secret');
+                }
+                headers['x-hydi-service-token'] = await mintServiceToken();
+            }
             const resp = await fetch(`${baseUrl()}/api/chat`, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'x-hydi-service-token': token,
-                },
+                headers,
                 body: JSON.stringify({ message: text, system }),
                 signal: AbortSignal.timeout(30000),
             });
@@ -487,19 +492,17 @@
             return;
         }
 
-        // Stage 2: can we reach /api/chat cross-origin with auth?
-        if (!secretInput) {
-            lines.push('• skipping /api/chat test — enter the service secret first');
-            out.textContent = lines.join('\n');
-            return;
-        }
+        // Stage 2: can we reach /api/chat (with auth if a secret is provided)?
         try {
-            const saved = secret; secret = secretInput;      // sign with the value in the box
-            const token = await mintServiceToken();
-            secret = saved;
+            const headers = { 'Content-Type': 'application/json' };
+            if (secretInput) {
+                const saved = secret; secret = secretInput;      // sign with the value in the box
+                headers['x-hydi-service-token'] = await mintServiceToken();
+                secret = saved;
+            }
             const r = await fetch(`${base}/api/chat`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'x-hydi-service-token': token },
+                headers,
                 body: JSON.stringify({ message: 'ping', system: 'ursula' }),
                 signal: AbortSignal.timeout(15000),
             });
