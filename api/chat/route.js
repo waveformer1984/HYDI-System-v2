@@ -260,6 +260,42 @@ async function handleHyveMessage(message, request) {
   return `🐝 Hyve: Opportunity collective. Ask about 'opportunity', 'collective', or 'swarm'.`;
 }
 
+async function handleRezonateMessage(message, request) {
+  const lowerMessage = message.toLowerCase();
+
+  if (lowerMessage.includes('project')) {
+    return `🎵 Rezonate: ${await getRezonateProjectStatus()}`;
+  }
+
+  if (lowerMessage.includes('track')) {
+    return `🎵 Rezonate: ${await getRezonateTrackStatus()}`;
+  }
+
+  if (lowerMessage.includes('revenue') || lowerMessage.includes('sales')) {
+    const cutoff = new Date(Date.now() - 86_400_000).toISOString();
+    const { data } = await supabase
+      .from('ledger')
+      .select('net, created_at')
+      .eq('revenue_stream', 'rezonate')
+      .gte('created_at', cutoff);
+    const net = (data || []).reduce((sum, r) => sum + (r.net || 0), 0);
+    return `🎵 Rezonate: ${data?.length ?? 0} ledger entrie(s) in the last 24h — net $${net.toFixed(2)}`;
+  }
+
+  if (lowerMessage.includes('status')) {
+    const { data } = await supabase
+      .from('system_health')
+      .select('component, status')
+      .ilike('component', '%rezonate%');
+    if (data && data.length) {
+      return `🎵 Rezonate: ${data.map(r => `${r.component}: ${r.status}`).join(', ')}`;
+    }
+    return `🎵 Rezonate: music system online. Try 'revenue' or ask about the song composer.`;
+  }
+
+  return `🎵 Rezonate: Audio production suite. Try 'project' or 'track', or ask about 'revenue' or 'status'.`;
+}
+
 async function handleInfrastructureMessage(message, request) {
   const lowerMessage = message.toLowerCase()
 
@@ -443,32 +479,18 @@ async function handleInfrastructureMessage(message, request) {
   ].join('\n')
 }
 
-async function handleRezonateMessage(message, request) {
-  const lowerMessage = message.toLowerCase();
+async function getRezonateProjectStatus() {
+  const { count } = await supabase
+    .from('rezonate_projects')
+    .select('*', { count: 'exact', head: true });
+  return `${count ?? 0} project(s) in workspace`;
+}
 
-  if (lowerMessage.includes('revenue') || lowerMessage.includes('sales')) {
-    const cutoff = new Date(Date.now() - 86_400_000).toISOString();
-    const { data } = await supabase
-      .from('ledger')
-      .select('net, created_at')
-      .eq('revenue_stream', 'rezonate')
-      .gte('created_at', cutoff);
-    const net = (data || []).reduce((sum, r) => sum + (r.net || 0), 0);
-    return `🎵 Rezonate: ${data?.length ?? 0} ledger entrie(s) in the last 24h — net $${net.toFixed(2)}`;
-  }
-
-  if (lowerMessage.includes('status')) {
-    const { data } = await supabase
-      .from('system_health')
-      .select('component, status')
-      .ilike('component', '%rezonate%');
-    if (data && data.length) {
-      return `🎵 Rezonate: ${data.map(r => `${r.component}: ${r.status}`).join(', ')}`;
-    }
-    return `🎵 Rezonate: music system online. Try 'revenue' or ask about the song composer.`;
-  }
-
-  return `🎵 Rezonate: music production system. Try 'status' or 'revenue', or use the Song Composer page for composition.`;
+async function getRezonateTrackStatus() {
+  const { count } = await supabase
+    .from('rezonate_tracks')
+    .select('*', { count: 'exact', head: true });
+  return `${count ?? 0} track(s) recorded`;
 }
 
 // ── Helper utilities ──────────────────────────────────────────────────────────

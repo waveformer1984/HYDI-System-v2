@@ -45,7 +45,7 @@ async function setupVault() {
     console.log('   - project_url: https://akbnfovjdcobifeupvbn.supabase.co');
     console.log('   - publishable_key: sb_publishable_MQjXSIVLjuvhZBVN4GYGQg__R5GZGvC');
     console.log('   - (Optional) service_role_key: [already set in .env]');
-    console.log('\n🔑 Use the encryption key from your .env: sb_secret_K_nr8zA3oCNWvIyj0ItxHA_AV4CkzQt');
+    console.log('\n🔑 Use the encryption key from your .env: <your sb_secret_ key from .env - not shown>');
 
   } catch (err) {
     console.error('Error setting up Vault:', err);

@@ -194,6 +194,13 @@ class ActionExecutor {
       }
     }
 
+    // `echo` is a shell builtin — on Windows there is no echo binary, so
+    // spawning it with shell:false would ENOENT. It is side-effect free, so
+    // emulate it in-process rather than routing through a shell.
+    if (cmd === 'echo') {
+      return { stdout: args.map(String).join(' ') + '\n', stderr: '', exitCode: 0 };
+    }
+
     return this.spawnProcess(command, args, { shell: false });
   }
 

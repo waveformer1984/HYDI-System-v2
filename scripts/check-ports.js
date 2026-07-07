@@ -20,24 +20,51 @@ const colors = {
 };
 
 /**
- * Check if a port is in use
+ * Try to open a TCP connection — success means something is listening.
  */
-function isPortInUse(port) {
+function canConnect(port, host) {
+  return new Promise((resolve) => {
+    const socket = new net.Socket();
+    socket.setTimeout(1000);
+    socket.once('connect', () => {
+      socket.destroy();
+      resolve(true);
+    });
+    socket.once('timeout', () => {
+      socket.destroy();
+      resolve(false);
+    });
+    socket.once('error', () => resolve(false));
+    socket.connect(port, host);
+  });
+}
+
+/**
+ * Try to bind exclusively — on Windows a plain bind to one address can
+ * succeed even while another process listens on the wildcard address,
+ * so `exclusive: true` (SO_EXCLUSIVEADDRUSE) is required for a real test.
+ */
+function canBind(port, host) {
   return new Promise((resolve) => {
     const server = net.createServer();
-    server.once('error', (err) => {
-      if (err.code === 'EADDRINUSE') {
-        resolve(true); // Port is in use
-      } else {
-        resolve(false);
-      }
-    });
+    server.once('error', () => resolve(false));
     server.once('listening', () => {
-      server.close();
-      resolve(false); // Port is available
+      server.close(() => resolve(true));
     });
-    server.listen(port, '127.0.0.1');
+    server.listen({ port, host, exclusive: true });
   });
+}
+
+/**
+ * Check if a port is in use: a live listener on loopback (IPv4 or IPv6)
+ * counts, and so does anything that blocks an exclusive wildcard bind
+ * (e.g. a service bound only to a LAN/Tailscale interface).
+ */
+async function isPortInUse(port) {
+  if (await canConnect(port, '127.0.0.1')) return true;
+  if (await canConnect(port, '::1')) return true;
+  if (!(await canBind(port, '0.0.0.0'))) return true;
+  return false;
 }
 
 /**

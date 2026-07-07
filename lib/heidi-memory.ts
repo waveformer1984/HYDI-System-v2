@@ -56,10 +56,14 @@ export async function storeMemory(
       generateEmbedding(assistantResponse),
     ]);
 
-    await supabase.from('memories').insert([
+    const { error } = await supabase.from('memories').insert([
       { user_id: userId, session_id: sessionId, content: `User: ${userMessage}`, embedding: userEmbedding },
       { user_id: userId, session_id: sessionId, content: `Assistant: ${assistantResponse}`, embedding: assistantEmbedding },
     ]);
+    if (error) {
+      // supabase-js returns errors in-band; without this the write fails silently.
+      console.error('[HeidiMemory] insert failed:', error.message);
+    }
   } catch (error) {
     console.error('[HeidiMemory] storage failed:', error instanceof Error ? error.message : 'Unknown error');
   }

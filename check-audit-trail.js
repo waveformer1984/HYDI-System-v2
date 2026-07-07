@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 const { createClient } = require('@supabase/supabase-js');
-const client = createClient('http://127.0.0.1:54321', 'sb_secret_N7UND0UgjKTVK-Uodkm0Hg_xSvEMPvz');
+const client = createClient('http://127.0.0.1:54321', process.env.SUPABASE_SERVICE_ROLE_KEY);
 
 (async () => {
   const taskId = 'f52d558a-1682-4655-b571-e5aa6200213d';

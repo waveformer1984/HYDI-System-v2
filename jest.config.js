@@ -29,6 +29,10 @@ module.exports = {
   moduleNameMapper: {
     '^.*heidi-core.*ollama-client.*$': '<rootDir>/tests/__mocks__/ollama-client-stub.js',
     '^uuid$': '<rootDir>/tests/__mocks__/uuid-stub.js',
+    // TS-ESM convention: source imports "./x.js" that actually lives at "./x.ts"
+    // (e.g. api/chat/route.js -> lib/claude.ts). Strip the extension and let
+    // Jest's resolver pick .js or .ts, matching Next.js behavior.
+    '^(\\.{1,2}/.*)\\.js$': '$1',
   },
 
   forceExit: true,
