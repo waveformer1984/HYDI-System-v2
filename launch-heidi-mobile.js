@@ -150,11 +150,14 @@ app.post('/api/chat', async (req, res) => {
     const systemPrompt = buildSystemPrompt();
     const selectedModel = model || DEFAULT_MODEL;
 
-    // 1) Heidi Core (memory + reflection brain) — preferred when running.
-    // First choice is /chat-tools (real tool execution: status checks, models,
-    // missions, agent registry). /think-stream is the tool-less fallback for
-    // older cores. Both speak the same SSE protocol.
-    if (provider !== 'lmstudio' && provider !== 'ollama') {
+    // 1) Heidi Core (memory + reflection brain) — the real Heidi, ALWAYS
+    // tried first. The UI's `provider` reports which backend hosts the picked
+    // model; it is NOT a directive to bypass Heidi's tools. Selecting an Ollama
+    // model just chooses a model — tools (status, missions, agents) must still
+    // work. Only an explicit `provider: 'raw'` skips the brain (debug escape).
+    // First choice is /chat-tools (real tool execution); /think-stream is the
+    // tool-less fallback for older cores. Both speak the same SSE protocol.
+    if (provider !== 'raw' && provider !== 'lmstudio') {
         const attempts = ['/chat-tools', '/think-stream'];
         for (const corePath of attempts) {
             if (sentAny) break;
