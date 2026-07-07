@@ -164,6 +164,10 @@ class OllamaClient {
       messages,
       tools,
       stream: false,
+      // Keep the tool model resident between rounds AND between messages. On a
+      // RAM-tight box the model otherwise unloads after Ollama's 5min default
+      // and the next call pays a full reload (~90s), blowing the timeout.
+      keep_alive: options.keepAlive || '1h',
       options: {
         temperature: options.temperature ?? 0.2,
         num_predict: options.maxTokens || 1000

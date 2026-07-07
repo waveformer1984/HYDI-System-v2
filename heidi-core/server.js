@@ -487,8 +487,17 @@ class HeidiCore {
         res.setHeader('X-Accel-Buffering', 'no');
         const send = (d) => res.write(`data: ${JSON.stringify(d)}\n\n`);
 
-        // Tools require a function-calling model; plain llama3 is not one.
-        const model = options.model || process.env.HEIDI_TOOL_MODEL || 'llama3.2:3b';
+        // Tools require a function-calling-capable model. A user-picked model
+        // from the UI dropdown (e.g. qwen2.5-coder:1.5b, tinyllama, plain
+        // llama3) often can't drive tools — honoring it would silently break
+        // tool use. So the tool LOOP always runs on a known-capable model
+        // (HEIDI_TOOL_MODEL); the dropdown pick is only honored when it's on
+        // the tool-capable allowlist.
+        const TOOL_CAPABLE = /^(qwen2\.5:|llama3\.1|llama3\.2|mistral-nemo|firefunction)/i;
+        const toolModel = process.env.HEIDI_TOOL_MODEL || 'llama3.2:3b';
+        const model = (options.model && TOOL_CAPABLE.test(options.model))
+          ? options.model
+          : toolModel;
 
         const messages = [
           {
@@ -507,12 +516,14 @@ class HeidiCore {
 
         const toolsUsed = [];
         let result = null;
-        const MAX_ROUNDS = 4;
+        let hitMaxWithPendingTools = false;
+        const MAX_ROUNDS = 5;
 
         for (let round = 0; round < MAX_ROUNDS; round++) {
           result = await this.brain.chatWithTools(messages, this.toolRegistry.toOllamaTools(), { model, temperature: 0 });
 
           if (!result.tool_calls || result.tool_calls.length === 0) break;
+          if (round === MAX_ROUNDS - 1) { hitMaxWithPendingTools = true; break; }
 
           messages.push({ role: 'assistant', content: result.text || '', tool_calls: result.tool_calls });
           for (const call of result.tool_calls) {
@@ -527,7 +538,25 @@ class HeidiCore {
           }
         }
 
-        const finalText = (result && result.text) || 'No response generated.';
+        // Force a final synthesis: if the model still wanted tools (hit the cap)
+        // or returned no text after tool calls, ask once more WITHOUT tools so
+        // it must produce a written answer from the tool results already in the
+        // message history. This is what prevents the empty-answer failure.
+        let finalText = (result && result.text) ? result.text.trim() : '';
+        if (!finalText || hitMaxWithPendingTools) {
+          try {
+            const synth = await this.brain.chatWithTools(
+              [...messages, { role: 'user', content: 'Now answer my question in plain text using the tool results above. Do not call any more tools.' }],
+              [], // no tools offered — forces a text answer
+              { model, temperature: 0 }
+            );
+            if (synth.text && synth.text.trim()) finalText = synth.text.trim();
+          } catch (e) {
+            console.error('[HEIDI] Tool synthesis failed:', e.message);
+          }
+        }
+        if (!finalText) finalText = 'I ran the tools but could not compose an answer. Tool results: ' +
+          (toolsUsed.length ? toolsUsed.join(', ') : 'none');
         send({ t: finalText });
 
         // STORE — same memory loop as /think, minus reflection noise
