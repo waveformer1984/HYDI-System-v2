@@ -240,6 +240,20 @@ async function handleHyveMessage(message, request) {
   return `🐝 Hyve: Opportunity collective. Ask about 'opportunity', 'collective', or 'swarm'.`;
 }
 
+async function handleRezonateMessage(message, request) {
+  const lowerMessage = message.toLowerCase();
+
+  if (lowerMessage.includes('project')) {
+    return `🎵 Rezonate: ${await getRezonateProjectStatus()}`;
+  }
+
+  if (lowerMessage.includes('track')) {
+    return `🎵 Rezonate: ${await getRezonateTrackStatus()}`;
+  }
+
+  return `🎵 Rezonate: Audio production suite. Try 'project' or 'track'.`;
+}
+
 async function handleInfrastructureMessage(message, request) {
   const lowerMessage = message.toLowerCase()
 
@@ -421,6 +435,20 @@ async function handleInfrastructureMessage(message, request) {
     '  device                              — TermuxBridge battery/storage/uptime',
     '  health / resources / alerts / queue — HYDI system monitoring',
   ].join('\n')
+}
+
+async function getRezonateProjectStatus() {
+  const { count } = await supabase
+    .from('rezonate_projects')
+    .select('*', { count: 'exact', head: true });
+  return `${count ?? 0} project(s) in workspace`;
+}
+
+async function getRezonateTrackStatus() {
+  const { count } = await supabase
+    .from('rezonate_tracks')
+    .select('*', { count: 'exact', head: true });
+  return `${count ?? 0} track(s) recorded`;
 }
 
 // ── Helper utilities ──────────────────────────────────────────────────────────
