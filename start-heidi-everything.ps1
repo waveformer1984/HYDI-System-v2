@@ -226,6 +226,33 @@ if (-not $ollamaCmd) {
 }
 
 # ============================================================
+#  STEP 1.5 -- Local Supabase (the data plane since 2026-07-07;
+#  the cloud projects are dead. Needs Docker Desktop running.)
+# ============================================================
+Log "--- Step 1.5: Local Supabase (:54321) ---"
+if (Test-PortListening -Port 54321) {
+    Log "Local Supabase already up on 54321." "OK"
+} elseif (-not (Get-Command supabase -ErrorAction SilentlyContinue)) {
+    Log "supabase CLI not found -- data plane will be down. Install: scoop install supabase" "FAIL"
+} else {
+    $dockerUp = $false
+    try { docker info 2>&1 | Out-Null; $dockerUp = ($LASTEXITCODE -eq 0) } catch {}
+    if (-not $dockerUp) {
+        Log "Docker Desktop is not running -- start it, then re-run this script for the data plane." "FAIL"
+    } else {
+        Log "Starting local Supabase stack (supabase start)..."
+        Push-Location $Root
+        supabase start 2>&1 | Out-File (Join-Path $LogDir "supabase-start.log") -Append
+        Pop-Location
+        if (Wait-ForPort -Port 54321 -TimeoutSec 120) {
+            Log "Local Supabase up on 54321." "OK"
+        } else {
+            Log "Local Supabase failed to open 54321 -- see $LogDir\supabase-start.log" "FAIL"
+        }
+    }
+}
+
+# ============================================================
 #  STEP 2 -- Services
 # ============================================================
 Log "--- Step 2: Services ---"

@@ -109,9 +109,11 @@ case "$status" in
   *)   fail "PostgREST unreachable (HTTP $status)" ;;
 esac
 
-# Auth API
+# Auth API (GoTrue admin endpoints require a Bearer token, not just apikey —
+# cloud Kong used to translate the apikey header, local Kong does not)
 status=$(curl -s -o /dev/null -w "%{http_code}" \
   -H "apikey: ${KEY}" \
+  -H "Authorization: Bearer ${KEY}" \
   "${BASE}/auth/v1/admin/users?page=1&per_page=1" 2>/dev/null || echo "000")
 case "$status" in
   200) ok "Auth API reachable (HTTP $status)" ;;
