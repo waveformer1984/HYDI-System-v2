@@ -150,6 +150,42 @@ class OllamaClient {
       throw error;
     }
   }
+
+  /**
+   * Chat with function-calling. Returns tool_calls when the model wants to
+   * invoke a tool (requires a tools-capable model, e.g. llama3.2).
+   * Tool rounds legitimately take longer than plain chat, so this uses its
+   * own timeout instead of the client default.
+   */
+  async chatWithTools(messages, tools, options = {}) {
+    const startTime = Date.now();
+    const payload = {
+      model: options.model || this.model,
+      messages,
+      tools,
+      stream: false,
+      options: {
+        temperature: options.temperature ?? 0.2,
+        num_predict: options.maxTokens || 1000
+      }
+    };
+
+    const response = await this.client.post('/api/chat', payload, {
+      timeout: options.timeoutMs || 120000
+    });
+
+    const msg = response.data.message || {};
+    return {
+      text: msg.content || '',
+      tool_calls: msg.tool_calls || [],
+      model: response.data.model,
+      latency_ms: Date.now() - startTime,
+      tokens: {
+        prompt: response.data.prompt_eval_count || 0,
+        completion: response.data.eval_count || 0
+      }
+    };
+  }
 }
 
 module.exports = OllamaClient;

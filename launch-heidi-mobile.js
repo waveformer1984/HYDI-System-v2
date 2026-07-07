@@ -16,14 +16,16 @@ const http = require('http');
 const path = require('path');
 const os = require('os');
 
-const PORT = parseInt(process.env.HEIDI_PORT || '3006');
+// HEIDI_MOBILE_PORT preferred; HEIDI_PORT kept for start-hydi.js compat, but
+// beware: heidi-core's server.js reads the same HEIDI_PORT for ITS port.
+const PORT = parseInt(process.env.HEIDI_MOBILE_PORT || process.env.HEIDI_PORT || '3006');
 const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434';
 const LM_STUDIO_URL = process.env.LM_STUDIO_URL || 'http://localhost:1234';
 const DEFAULT_MODEL = process.env.LOCAL_MODEL_NAME || 'llama3';
 // Heidi Core (heidi-core/server.js) — the full local brain with memory +
 // reflection. When it's running, chat is routed through it instead of raw
 // Ollama, so every UI client of this server gets the real Heidi.
-const HEIDI_CORE_URL = process.env.HEIDI_CORE_URL || 'http://localhost:3456';
+const HEIDI_CORE_URL = process.env.HEIDI_CORE_URL || 'http://localhost:3459';
 
 function getLANIP() {
     for (const ifaces of Object.values(os.networkInterfaces())) {
@@ -104,7 +106,12 @@ app.get('/api/models', async (req, res) => {
 
 // Server + AI health
 app.get('/api/health', async (req, res) => {
-    const status = { server: 'ok', ollama: false, lmstudio: false, models: [] };
+    const status = { server: 'ok', ollama: false, lmstudio: false, heidiCore: false, models: [] };
+
+    try {
+        const r = await fetch(`${HEIDI_CORE_URL}/health`, { signal: AbortSignal.timeout(2000) });
+        if (r.ok) status.heidiCore = true;
+    } catch {}
 
     try {
         const r = await fetch(`${OLLAMA_URL}/api/tags`, { signal: AbortSignal.timeout(2000) });
@@ -144,16 +151,21 @@ app.post('/api/chat', async (req, res) => {
     const selectedModel = model || DEFAULT_MODEL;
 
     // 1) Heidi Core (memory + reflection brain) — preferred when running.
-    // Uses the /think-stream SSE endpoint so tokens flow through live.
+    // First choice is /chat-tools (real tool execution: status checks, models,
+    // missions, agent registry). /think-stream is the tool-less fallback for
+    // older cores. Both speak the same SSE protocol.
     if (provider !== 'lmstudio' && provider !== 'ollama') {
-        try {
-            const r = await fetch(`${HEIDI_CORE_URL}/think-stream`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ input: message, options: model ? { model } : {} }),
-                signal: AbortSignal.timeout(180000)
-            });
-            if (r.ok && r.body) {
+        const attempts = ['/chat-tools', '/think-stream'];
+        for (const corePath of attempts) {
+            if (sentAny) break;
+            try {
+                const r = await fetch(`${HEIDI_CORE_URL}${corePath}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ input: message, options: model ? { model } : {} }),
+                    signal: AbortSignal.timeout(180000)
+                });
+                if (!r.ok || !r.body) continue;
                 const reader = r.body.getReader();
                 const decoder = new TextDecoder();
                 let buf = '';
@@ -175,11 +187,16 @@ app.post('/api/chat', async (req, res) => {
                     }
                 }
                 if (sentAny && meta && meta.model !== 'fallback') {
-                    return finish({ provider: 'heidi-core', model: meta.model, confidence: meta.confidence });
+                    return finish({
+                        provider: `heidi-core`,
+                        model: meta.model,
+                        confidence: meta.confidence,
+                        tools_used: meta.tools_used
+                    });
                 }
+            } catch (e) {
+                console.log(`[Chat] Heidi Core ${corePath} unavailable:`, e.message);
             }
-        } catch (e) {
-            console.log('[Chat] Heidi Core unavailable, falling back to raw Ollama:', e.message);
         }
         if (sentAny) return finish({ provider: 'heidi-core' });
     }
