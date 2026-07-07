@@ -9,7 +9,9 @@ Heidi's chat has two code paths in `pages/api/chat.ts`:
 - **Anthropic agent path** (`lib/heidi-agent.ts`) — native tool-calling + token streaming. Selected when `ANTHROPIC_API_KEY` is set (`isClaudeAvailable()`). Can be exercised $0 against a local Anthropic-compatible proxy — see "Testing the Anthropic native path for $0" below.
 - **Fallback orchestrator path** (`lib/orchestrator.ts`) — used when `ANTHROPIC_API_KEY` is unset. Non-streaming (writes the full response over the same SSE contract). Testable fully locally.
 
-UI path: homepage `pages/index.tsx` → `components/Chat.tsx` → `hooks/useHeidi.ts` POSTs `/api/chat` and parses SSE events (`metadata` / `content` / `actions` / `[DONE]`). The homepage also polls `/api/status`; `useHeidi` calls `/api/status` + `/api/session`.
+UI path (as of PR #162): homepage `pages/index.tsx` is a self-contained full-screen dark chat UI that POSTs `/api/chat` directly and parses SSE events (`metadata` / `content` / `tool` / `actions` / `[DONE]`). It no longer uses `components/Chat.tsx` or `hooks/useHeidi.ts`. The homepage health-checks via `POST /api/heidi {action:'status'}` on mount (returns 404 under `next dev` — see gotcha below). Tailwind is wired via `pages/_app.tsx` importing `styles/globals.css`.
+
+**Fallback chain (as of PR #162):** `pages/api/chat.ts` now wraps the Claude agent in a try/catch — if the Anthropic call fails (e.g. depleted credits), it falls through to the legacy orchestrator instead of returning a raw error. Similarly, `lib/ModelManager.ts` now tries OpenAI when Anthropic fails, instead of giving up after the first provider.
 
 ## Local $0 stack setup
 
