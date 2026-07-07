@@ -56,6 +56,8 @@ function makeRes() {
   const res = {};
   res.status = jest.fn(() => res);
   res.json = jest.fn(() => res);
+  res.setHeader = jest.fn(() => res);
+  res.end = jest.fn(() => res);
   return res;
 }
 

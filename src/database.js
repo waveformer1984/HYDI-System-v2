@@ -2,7 +2,13 @@
 // No duplicates, no ambiguity, no emotional labor for broken imports
 
 const { createClient } = require('@supabase/supabase-js');
+const WebSocket = require('ws');
 const path = require('path');
+
+// Node < 22 has no global WebSocket; supabase-js realtime requires one.
+if (!globalThis.WebSocket) {
+  globalThis.WebSocket = WebSocket;
+}
 require('dotenv').config({ path: path.join(__dirname, '../.env') });
 
 // Validate environment at startup

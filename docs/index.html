@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#0a0a0f">
+    <meta name="description" content="HYDI mobile chat — free static client hosted on GitHub Pages, talks to your HYDI API.">
+    <title>HYDI Chat</title>
+    <link rel="manifest" href="./manifest.webmanifest">
+    <link rel="icon" href="./icons/icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="./icons/icon-192.png">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #12121a;
+            --bg-elevated: #1a1a24;
+            --accent: #64ffda;
+            --accent-dim: rgba(100, 255, 218, 0.1);
+            --text-primary: #e2e8f0;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --status-ok: #10b981;
+            --status-warning: #f59e0b;
+            --status-critical: #ef4444;
+            --status-unknown: #6b7280;
+            --danger-dim: rgba(239, 68, 68, 0.12);
+        }
+
+        html, body { height: 100%; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            height: 100dvh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* ── Header ─────────────────────────────────────── */
+        .header {
+            background: var(--bg-secondary);
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            padding: calc(env(safe-area-inset-top, 0px) + 10px) 14px 10px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            flex-shrink: 0;
+        }
+        .header-left { display: flex; align-items: center; gap: 10px; min-width: 0; }
+        .avatar {
+            width: 38px; height: 38px; border-radius: 50%;
+            background: linear-gradient(135deg, var(--accent), #3b82f6);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 19px; flex-shrink: 0;
+            box-shadow: 0 0 18px rgba(100,255,218,0.25);
+        }
+        .header-info h1 { font-size: 15px; font-weight: 600; white-space: nowrap; }
+        .header-info .sub {
+            font-size: 11px; color: var(--text-secondary);
+            display: flex; align-items: center; gap: 5px;
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        .status-dot {
+            width: 7px; height: 7px; border-radius: 50%;
+            background: var(--status-unknown); flex-shrink: 0;
+        }
+        .status-dot.ok { background: var(--status-ok); animation: pulse 2s infinite; }
+        .status-dot.warning { background: var(--status-warning); animation: pulse 2s infinite; }
+        .status-dot.critical { background: var(--status-critical); animation: pulse 1s infinite; }
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.45} }
+
+        .icon-btn {
+            background: none; border: none; color: var(--text-muted);
+            font-size: 20px; padding: 8px; border-radius: 50%;
+            cursor: pointer; line-height: 1; flex-shrink: 0;
+        }
+        .icon-btn:active { background: var(--accent-dim); color: var(--accent); }
+
+        /* ── System picker ──────────────────────────────── */
+        .systems {
+            display: flex; gap: 6px; padding: 8px 12px;
+            overflow-x: auto; flex-shrink: 0;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            scrollbar-width: none;
+        }
+        .systems::-webkit-scrollbar { display: none; }
+        .sys-chip {
+            padding: 6px 13px; border-radius: 15px; font-size: 12.5px;
+            background: var(--bg-elevated); color: var(--text-secondary);
+            border: 1px solid transparent; white-space: nowrap; cursor: pointer;
+            flex-shrink: 0;
+        }
+        .sys-chip.active {
+            color: var(--accent); background: var(--accent-dim);
+            border-color: rgba(100,255,218,0.35);
+        }
+
+        /* ── Messages ───────────────────────────────────── */
+        .messages {
+            flex: 1; overflow-y: auto; padding: 14px 12px;
+            display: flex; flex-direction: column; gap: 10px;
+            -webkit-overflow-scrolling: touch;
+        }
+        .msg { max-width: 86%; display: flex; flex-direction: column; gap: 3px; }
+        .msg.user { align-self: flex-end; align-items: flex-end; }
+        .msg.bot { align-self: flex-start; align-items: flex-start; }
+        .bubble {
+            padding: 10px 13px; border-radius: 16px; font-size: 14.5px;
+            line-height: 1.45; white-space: pre-wrap; word-break: break-word;
+        }
+        .msg.user .bubble {
+            background: linear-gradient(135deg, rgba(100,255,218,0.16), rgba(59,130,246,0.16));
+            border: 1px solid rgba(100,255,218,0.2);
+            border-bottom-right-radius: 5px;
+        }
+        .msg.bot .bubble {
+            background: var(--bg-elevated);
+            border: 1px solid rgba(255,255,255,0.05);
+            border-bottom-left-radius: 5px;
+        }
+        .msg.error .bubble {
+            background: var(--danger-dim);
+            border-color: rgba(239,68,68,0.3);
+            color: #fca5a5;
+        }
+        .meta { font-size: 10.5px; color: var(--text-muted); padding: 0 4px; }
+
+        .typing { display: flex; gap: 4px; padding: 12px 14px; }
+        .typing span {
+            width: 7px; height: 7px; border-radius: 50%; background: var(--text-muted);
+            animation: blink 1.2s infinite;
+        }
+        .typing span:nth-child(2) { animation-delay: .2s; }
+        .typing span:nth-child(3) { animation-delay: .4s; }
+        @keyframes blink { 0%,80%,100%{opacity:.25} 40%{opacity:1} }
+
+        .empty {
+            margin: auto; text-align: center; color: var(--text-muted);
+            font-size: 13.5px; padding: 24px; line-height: 1.7; max-width: 300px;
+        }
+        .empty .big { font-size: 40px; margin-bottom: 10px; }
+        .empty b { color: var(--text-secondary); }
+
+        /* ── Composer ───────────────────────────────────── */
+        .composer {
+            display: flex; gap: 8px; align-items: flex-end;
+            padding: 10px 12px calc(env(safe-area-inset-bottom, 0px) + 10px);
+            background: var(--bg-secondary);
+            border-top: 1px solid rgba(255,255,255,0.05);
+            flex-shrink: 0;
+        }
+        .composer textarea {
+            flex: 1; resize: none; border: 1px solid rgba(255,255,255,0.08);
+            background: var(--bg-elevated); color: var(--text-primary);
+            border-radius: 20px; padding: 11px 15px; font-size: 15px;
+            font-family: inherit; line-height: 1.4; max-height: 110px;
+            outline: none;
+        }
+        .composer textarea:focus { border-color: rgba(100,255,218,0.35); }
+        .send-btn {
+            width: 44px; height: 44px; border-radius: 50%; border: none;
+            background: linear-gradient(135deg, var(--accent), #3b82f6);
+            color: #04121a; font-size: 19px; cursor: pointer; flex-shrink: 0;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .send-btn:disabled { opacity: .35; }
+
+        /* ── Settings sheet ─────────────────────────────── */
+        .sheet-backdrop {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+            display: none; z-index: 200;
+        }
+        .sheet-backdrop.open { display: block; }
+        .sheet {
+            position: fixed; left: 0; right: 0; bottom: 0; z-index: 201;
+            background: var(--bg-secondary);
+            border-radius: 20px 20px 0 0;
+            padding: 20px 18px calc(env(safe-area-inset-bottom, 0px) + 20px);
+            transform: translateY(105%); transition: transform .25s ease;
+            max-height: 85dvh; overflow-y: auto;
+        }
+        .sheet.open { transform: translateY(0); }
+        .sheet h2 { font-size: 16px; margin-bottom: 4px; }
+        .sheet .hint { font-size: 12px; color: var(--text-muted); margin-bottom: 16px; line-height: 1.5; }
+        .field { margin-bottom: 14px; }
+        .field label { display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 6px; }
+        .field input {
+            width: 100%; background: var(--bg-elevated); color: var(--text-primary);
+            border: 1px solid rgba(255,255,255,0.08); border-radius: 10px;
+            padding: 11px 13px; font-size: 14px; outline: none;
+        }
+        .field input:focus { border-color: rgba(100,255,218,0.35); }
+        .field .note { font-size: 11px; color: var(--text-muted); margin-top: 5px; line-height: 1.4; }
+        .sheet-actions { display: flex; gap: 10px; margin-top: 18px; }
+        .btn {
+            flex: 1; padding: 12px; border-radius: 12px; border: none;
+            font-size: 14px; font-weight: 600; cursor: pointer;
+        }
+        .btn.primary { background: linear-gradient(135deg, var(--accent), #3b82f6); color: #04121a; }
+        .btn.ghost { background: var(--bg-elevated); color: var(--text-secondary); }
+        .btn.danger { background: var(--danger-dim); color: #fca5a5; }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="header-left">
+            <div class="avatar">⚡</div>
+            <div class="header-info">
+                <h1>HYDI</h1>
+                <div class="sub"><span class="status-dot" id="statusDot"></span><span id="statusText">not configured</span></div>
+            </div>
+        </div>
+        <button class="icon-btn" id="settingsBtn" aria-label="Settings">⚙️</button>
+    </header>
+
+    <nav class="systems" id="systems"></nav>
+
+    <main class="messages" id="messages">
+        <div class="empty" id="empty">
+            <div class="big">⚡</div>
+            <b>HYDI mobile chat</b><br>
+            Free static client — hosted on GitHub Pages, talks straight to your HYDI API.<br><br>
+            Tap ⚙️ to set your <b>API URL</b> and <b>service secret</b>, then pick a system and say hi.
+        </div>
+    </main>
+
+    <footer class="composer">
+        <textarea id="input" rows="1" placeholder="Message HYDI…" enterkeyhint="send"></textarea>
+        <button class="send-btn" id="sendBtn" aria-label="Send">➤</button>
+    </footer>
+
+    <div class="sheet-backdrop" id="backdrop"></div>
+    <div class="sheet" id="sheet">
+        <h2>Connection settings</h2>
+        <p class="hint">Everything is stored only in this browser (localStorage) — nothing is sent anywhere except your own HYDI API.</p>
+        <div class="field">
+            <label for="apiUrl">HYDI API base URL</label>
+            <input id="apiUrl" type="url" inputmode="url" autocapitalize="off" autocorrect="off"
+                   placeholder="https://your-hydi.vercel.app">
+            <div class="note">Your HYDI deployment URL. Leave blank if this page is served by the HYDI deployment itself (same origin).</div>
+        </div>
+        <div class="field">
+            <label for="secret">HYDI service secret <span style="color:var(--text-muted)">(optional)</span></label>
+            <input id="secret" type="password" autocapitalize="off" autocorrect="off"
+                   placeholder="HYDI_SERVICE_SECRET — leave blank for local/Termux node">
+            <div class="note">Required only if the server enforces auth (production Vercel). Used on-device to sign each request (HMAC-SHA256); never leaves your phone except as a short-lived signature. Leave blank for a local Termux node.</div>
+        </div>
+        <div class="sheet-actions">
+            <button class="btn ghost" id="testBtn">Test connection</button>
+        </div>
+        <div id="testResults" style="display:none; margin-top:12px; background:var(--bg-elevated); border-radius:10px; padding:12px 14px; font-size:12.5px; line-height:1.9; color:var(--text-secondary); white-space:pre-wrap; word-break:break-word;"></div>
+        <div class="sheet-actions">
+            <button class="btn danger" id="clearBtn">Clear chat</button>
+            <button class="btn ghost" id="cancelBtn">Cancel</button>
+            <button class="btn primary" id="saveBtn">Save</button>
+        </div>
+    </div>
+
+    <script>
+    'use strict';
+
+    // ── Config & state ────────────────────────────────────────────────
+    const LS = {
+        api: 'hydi.apiUrl',
+        secret: 'hydi.serviceSecret',
+        system: 'hydi.system',
+        history: 'hydi.history',
+    };
+    const SYSTEMS = ['heidi', 'ursula', 'cascade', 'kilo', 'protoforge', 'hyve', 'infrastructure', 'rezonate'];
+    const SYS_ICON = {
+        heidi: '🧠', ursula: '📡', cascade: '⚡', kilo: '🔧',
+        protoforge: '🌐', hyve: '🐝', infrastructure: '🏗️', rezonate: '🎵',
+    };
+
+    let apiUrl = localStorage.getItem(LS.api) || '';
+    let secret = localStorage.getItem(LS.secret) || '';
+    let system = localStorage.getItem(LS.system) || 'heidi';
+    let history = [];
+    try { history = JSON.parse(localStorage.getItem(LS.history) || '[]'); } catch (_) { history = []; }
+
+    const $ = (id) => document.getElementById(id);
+    const messagesEl = $('messages'), inputEl = $('input'), sendBtn = $('sendBtn');
+
+    // ── System picker ─────────────────────────────────────────────────
+    function renderSystems() {
+        $('systems').innerHTML = SYSTEMS.map(s =>
+            `<button class="sys-chip${s === system ? ' active' : ''}" data-sys="${s}">${SYS_ICON[s]} ${s}</button>`
+        ).join('');
+    }
+    $('systems').addEventListener('click', (e) => {
+        const chip = e.target.closest('[data-sys]');
+        if (!chip) return;
+        system = chip.dataset.sys;
+        localStorage.setItem(LS.system, system);
+        renderSystems();
+        inputEl.focus();
+    });
+
+    // ── Message rendering ─────────────────────────────────────────────
+    function renderMessage(m) {
+        $('empty')?.remove();
+        const div = document.createElement('div');
+        div.className = `msg ${m.role}${m.isError ? ' error' : ''}`;
+        const bubble = document.createElement('div');
+        bubble.className = 'bubble';
+        bubble.textContent = m.text;
+        const meta = document.createElement('div');
+        meta.className = 'meta';
+        meta.textContent = (m.role === 'user' ? 'you' : m.system || 'hydi') +
+            ' · ' + new Date(m.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        div.append(bubble, meta);
+        messagesEl.appendChild(div);
+        messagesEl.scrollTop = messagesEl.scrollHeight;
+    }
+
+    function pushMessage(m) {
+        history.push(m);
+        if (history.length > 200) history = history.slice(-200);
+        localStorage.setItem(LS.history, JSON.stringify(history));
+        renderMessage(m);
+    }
+
+    function showTyping() {
+        const div = document.createElement('div');
+        div.className = 'msg bot'; div.id = 'typing';
+        div.innerHTML = '<div class="bubble typing"><span></span><span></span><span></span></div>';
+        messagesEl.appendChild(div);
+        messagesEl.scrollTop = messagesEl.scrollHeight;
+    }
+    function hideTyping() { $('typing')?.remove(); }
+
+    // ── Service token (HMAC-SHA256 via Web Crypto) ────────────────────
+    async function mintServiceToken() {
+        const ts = Date.now().toString();
+        const requestId = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2);
+        const service = 'mobile-chat';
+        const payload = `${ts}:${requestId}:${service}`;
+        const key = await crypto.subtle.importKey(
+            'raw', new TextEncoder().encode(secret),
+            { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
+        );
+        const sigBuf = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(payload));
+        const sig = [...new Uint8Array(sigBuf)].map(b => b.toString(16).padStart(2, '0')).join('');
+        return `${ts}.${requestId}.${service}.${sig}`;
+    }
+
+    // ── Sending ───────────────────────────────────────────────────────
+    // Empty API URL = same origin (when this page is served by the HYDI
+    // deployment itself, e.g. from public/hydi-chat.html on Vercel).
+    const SAME_ORIGIN = location.protocol.startsWith('http');
+    function baseUrl() { return apiUrl ? apiUrl.replace(/\/+$/, '') : ''; }
+    // Secret is optional: local/Termux nodes don't require auth. If the server
+    // does require it, the 401 reason is surfaced in the chat.
+    function isConfigured() { return Boolean(apiUrl || SAME_ORIGIN); }
+
+    async function send() {
+        const text = inputEl.value.trim();
+        if (!text) return;
+        if (!isConfigured()) { openSheet(); return; }
+
+        inputEl.value = '';
+        autosize();
+        sendBtn.disabled = true;
+        pushMessage({ role: 'user', text, ts: Date.now() });
+        showTyping();
+
+        try {
+            const headers = { 'Content-Type': 'application/json' };
+            if (secret) {
+                if (!(crypto && crypto.subtle)) {
+                    throw new Error('Web Crypto unavailable — open this page via localhost or HTTPS to use a service secret');
+                }
+                headers['x-hydi-service-token'] = await mintServiceToken();
+            }
+            const resp = await fetch(`${baseUrl()}/api/chat`, {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({ message: text, system }),
+                signal: AbortSignal.timeout(30000),
+            });
+            const data = await resp.json().catch(() => ({}));
+            hideTyping();
+            if (!resp.ok) {
+                const reason = data.reason || data.error || `HTTP ${resp.status}`;
+                pushMessage({ role: 'bot', isError: true, system, ts: Date.now(),
+                    text: resp.status === 401
+                        ? `Auth failed: ${reason}. Check your service secret in ⚙️ settings.`
+                        : `Error: ${reason}` });
+            } else {
+                const r = data.response;
+                const textOut = typeof r === 'string' ? r
+                    : (r && (r.text || JSON.stringify(r, null, 2))) || '(empty response)';
+                pushMessage({ role: 'bot', text: textOut, system: data.system || system, ts: Date.now() });
+            }
+        } catch (err) {
+            hideTyping();
+            const offline = !navigator.onLine;
+            pushMessage({ role: 'bot', isError: true, system, ts: Date.now(),
+                text: offline
+                    ? 'You appear to be offline — message not sent.'
+                    : `Network error: ${err && err.message ? err.message : 'request failed'}. Check the API URL in ⚙️ settings (and that CORS is enabled on /api/chat).` });
+        } finally {
+            sendBtn.disabled = false;
+            messagesEl.scrollTop = messagesEl.scrollHeight;
+        }
+    }
+
+    sendBtn.addEventListener('click', send);
+    inputEl.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+    });
+
+    function autosize() {
+        inputEl.style.height = 'auto';
+        inputEl.style.height = Math.min(inputEl.scrollHeight, 110) + 'px';
+    }
+    inputEl.addEventListener('input', autosize);
+
+    // ── Health badge ──────────────────────────────────────────────────
+    async function pollHealth() {
+        const dot = $('statusDot'), txt = $('statusText');
+        if (!apiUrl && !SAME_ORIGIN) { dot.className = 'status-dot'; txt.textContent = 'not configured'; return; }
+        try {
+            const r = await fetch(`${baseUrl()}/api/mobile-status`, { signal: AbortSignal.timeout(6000) });
+            const d = await r.json();
+            const sys = (d.system || 'unknown').toUpperCase();
+            if (sys === 'OK') { dot.className = 'status-dot ok'; txt.textContent = 'online · OK'; }
+            else if (sys === 'WARNING') { dot.className = 'status-dot warning'; txt.textContent = 'online · warning'; }
+            else if (sys === 'CRITICAL') { dot.className = 'status-dot critical'; txt.textContent = d.alert || 'critical'; }
+            else { dot.className = 'status-dot ok'; txt.textContent = 'online'; }
+        } catch (_) {
+            dot.className = 'status-dot critical';
+            txt.textContent = navigator.onLine ? 'API unreachable' : 'offline';
+        }
+    }
+    setInterval(pollHealth, 45000);
+
+    // ── Settings sheet ────────────────────────────────────────────────
+    function openSheet() {
+        $('apiUrl').value = apiUrl;
+        $('secret').value = secret;
+        $('backdrop').classList.add('open');
+        $('sheet').classList.add('open');
+    }
+    function closeSheet() {
+        $('backdrop').classList.remove('open');
+        $('sheet').classList.remove('open');
+    }
+    $('settingsBtn').addEventListener('click', openSheet);
+    $('backdrop').addEventListener('click', closeSheet);
+    $('cancelBtn').addEventListener('click', closeSheet);
+    $('saveBtn').addEventListener('click', () => {
+        apiUrl = $('apiUrl').value.trim();
+        secret = $('secret').value.trim();
+        localStorage.setItem(LS.api, apiUrl);
+        localStorage.setItem(LS.secret, secret);
+        closeSheet();
+        pollHealth();
+    });
+    // ── Connection tester ─────────────────────────────────────────────
+    // Stage-by-stage diagnosis so "server not connecting" becomes actionable.
+    async function testConnection() {
+        const out = $('testResults');
+        out.style.display = 'block';
+        out.textContent = 'Testing…';
+        const urlInput = $('apiUrl').value.trim();
+        const secretInput = $('secret').value.trim();
+        const base = urlInput ? urlInput.replace(/\/+$/, '') : (SAME_ORIGIN ? '' : null);
+        const lines = [];
+
+        if (base === null) {
+            out.textContent = '✗ No API URL set, and this page is not served over http(s) — enter your HYDI deployment URL first.';
+            return;
+        }
+        lines.push(`Target: ${base || location.origin + ' (same origin)'}`);
+
+        // Stage 1: is the deployment reachable at all? (/api/health has open CORS)
+        try {
+            const r = await fetch(`${base}/api/health`, { signal: AbortSignal.timeout(8000) });
+            lines.push(`✓ deployment reachable — /api/health HTTP ${r.status}`);
+        } catch (e) {
+            lines.push(`✗ /api/health unreachable (${e.name === 'TimeoutError' ? 'timeout' : 'fetch failed'})`);
+            lines.push('→ Wrong URL, deployment down, or no internet. Fix the API URL before anything else.');
+            out.textContent = lines.join('\n');
+            return;
+        }
+
+        // Stage 2: can we reach /api/chat (with auth if a secret is provided)?
+        try {
+            const headers = { 'Content-Type': 'application/json' };
+            if (secretInput) {
+                const saved = secret; secret = secretInput;      // sign with the value in the box
+                headers['x-hydi-service-token'] = await mintServiceToken();
+                secret = saved;
+            }
+            const r = await fetch(`${base}/api/chat`, {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({ message: 'ping', system: 'ursula' }),
+                signal: AbortSignal.timeout(15000),
+            });
+            const d = await r.json().catch(() => ({}));
+            if (r.ok) {
+                lines.push('✓ /api/chat works — auth OK, chat is functional 🎉');
+            } else if (r.status === 401) {
+                lines.push(`✗ /api/chat auth failed: ${d.reason || 'unauthorized'}`);
+                lines.push(d.reason === 'service secret not configured'
+                    ? '→ Set HYDI_SERVICE_SECRET on the deployment (Vercel env), then redeploy.'
+                    : '→ The secret entered here does not match HYDI_SERVICE_SECRET on the deployment.');
+            } else {
+                lines.push(`✗ /api/chat HTTP ${r.status}: ${d.reason || d.error || 'server error'}`);
+                lines.push('→ The function is reachable but failing — check Vercel function logs and env vars (SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY).');
+            }
+        } catch (e) {
+            lines.push(`✗ /api/chat fetch failed (${e.name === 'TimeoutError' ? 'timeout' : 'blocked or crashed'})`);
+            lines.push('→ Health works but chat does not: either the deployment predates CORS on /api/chat (redeploy latest clean-main), or the function crashes at startup (check Vercel logs).');
+        }
+        out.textContent = lines.join('\n');
+    }
+    $('testBtn').addEventListener('click', testConnection);
+
+    $('clearBtn').addEventListener('click', () => {
+        history = [];
+        localStorage.removeItem(LS.history);
+        messagesEl.innerHTML = '';
+        closeSheet();
+    });
+
+    // ── Boot ──────────────────────────────────────────────────────────
+    renderSystems();
+    history.forEach(renderMessage);
+    pollHealth();
+    if (!isConfigured()) setTimeout(openSheet, 600);
+
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('./sw.js').catch(() => {});
+    }
+    </script>
+</body>
+</html>

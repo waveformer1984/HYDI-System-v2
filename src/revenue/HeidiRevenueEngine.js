@@ -11,7 +11,7 @@
  */
 
 const EventEmitter = require('events');
-const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+const stripe = process.env.STRIPE_SECRET_KEY ? require('stripe')(process.env.STRIPE_SECRET_KEY) : null;
 const { supabase } = require('../database');
 
 class HeidiRevenueEngine extends EventEmitter {
@@ -140,7 +140,12 @@ class HeidiRevenueEngine extends EventEmitter {
   
   async initializeStripeProducts() {
     console.log('[REVENUE ENGINE] Initializing Stripe products...');
-    
+
+    if (!stripe) {
+      console.warn('[REVENUE ENGINE] STRIPE_SECRET_KEY not set — skipping Stripe product initialization');
+      return;
+    }
+
     try {
       // Create or update products for each tier
       for (const tier of this.config.defaultTiers) {

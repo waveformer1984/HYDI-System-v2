@@ -56,13 +56,15 @@
     "sqlite3": "^6.0.1",
     "stripe": "^22.2.0",
     "typescript": "^5.0.0",
-    "uuid": "^14.0.0"
+    "uuid": "^11.1.1",
+    "ws": "^8.18.3"
   },
   "devDependencies": {
     "@babel/core": "^7.29.7",
     "@babel/preset-env": "^7.24.0",
     "@babel/preset-typescript": "^7.27.1",
     "@types/jest": "^29.5.14",
+    "@types/pg": "^8.20.0",
     "autoprefixer": "^10.5.0",
     "babel-jest": "^29.7.0",
     "cross-env": "^10.1.0",
@@ -77,7 +79,7 @@
     "brace-expansion": ">=5.0.6",
     "glob": "^10.4.5",
     "qs": ">=6.15.2",
-    "ws": ">=8.20.1",
+    "ws": "$ws",
     "postcss": "$postcss",
     "test-exclude": {
       "glob": "^7.1.6"

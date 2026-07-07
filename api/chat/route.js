@@ -10,10 +10,20 @@ import {
 import { getSystemStatus, isReachable } from '../../lib/termux/termuxClient.js';
 import { callAgent, isClaudeAvailable } from '../../lib/claude.js';
 
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
+// Lazy client: a missing SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY must surface
+// as a clean JSON error from the handler, not a cold-start crash (which returns
+// a 500 with no CORS headers and looks like "server not connecting" to clients).
+let _supabase = null;
+function getSupabase() {
+  if (!_supabase) {
+    if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      throw new Error('Supabase env vars not configured (SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY)');
+    }
+    _supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+  }
+  return _supabase;
+}
+const supabase = new Proxy({}, { get: (_, prop) => getSupabase()[prop] });
 
 // ── Service token guard ───────────────────────────────────────────────────────
 // Replaces bare x-user-id header trust. Callers must present an HMAC-SHA256
@@ -60,6 +70,16 @@ const systemHandlers = {
 };
 
 export default async function handler(req, res) {
+  // CORS: allow the static mobile chat (GitHub Pages) to call this endpoint.
+  // Auth still relies on the HMAC service token, not the origin.
+  res.setHeader('Access-Control-Allow-Origin', process.env.MOBILE_CHAT_ORIGIN || '*')
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-hydi-service-token')
+  res.setHeader('Access-Control-Max-Age', '86400')
+  if (req.method === 'OPTIONS') {
+    return res.status(204).end()
+  }
+
   // Verify service token before processing any request
   const { valid, reason } = checkServiceToken(req.headers['x-hydi-service-token'])
   if (!valid) {
@@ -251,7 +271,29 @@ async function handleRezonateMessage(message, request) {
     return `🎵 Rezonate: ${await getRezonateTrackStatus()}`;
   }
 
-  return `🎵 Rezonate: Audio production suite. Try 'project' or 'track'.`;
+  if (lowerMessage.includes('revenue') || lowerMessage.includes('sales')) {
+    const cutoff = new Date(Date.now() - 86_400_000).toISOString();
+    const { data } = await supabase
+      .from('ledger')
+      .select('net, created_at')
+      .eq('revenue_stream', 'rezonate')
+      .gte('created_at', cutoff);
+    const net = (data || []).reduce((sum, r) => sum + (r.net || 0), 0);
+    return `🎵 Rezonate: ${data?.length ?? 0} ledger entrie(s) in the last 24h — net $${net.toFixed(2)}`;
+  }
+
+  if (lowerMessage.includes('status')) {
+    const { data } = await supabase
+      .from('system_health')
+      .select('component, status')
+      .ilike('component', '%rezonate%');
+    if (data && data.length) {
+      return `🎵 Rezonate: ${data.map(r => `${r.component}: ${r.status}`).join(', ')}`;
+    }
+    return `🎵 Rezonate: music system online. Try 'revenue' or ask about the song composer.`;
+  }
+
+  return `🎵 Rezonate: Audio production suite. Try 'project' or 'track', or ask about 'revenue' or 'status'.`;
 }
 
 async function handleInfrastructureMessage(message, request) {

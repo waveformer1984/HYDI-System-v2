@@ -9,7 +9,11 @@ const { supabase } = require('../database');
 
 class SubscriptionManager {
   constructor() {
-    this.stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+    const stripeKey = process.env.STRIPE_SECRET_KEY;
+    if (!stripeKey) {
+      console.warn('[SubscriptionManager] STRIPE_SECRET_KEY not set — Stripe features disabled');
+    }
+    this.stripe = stripeKey ? new Stripe(stripeKey) : null;
     // this.serviceBundle = new UrsulaServiceBundle(); // Temporarily disabled
     this.setupEventHandlers();
   }
