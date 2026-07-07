@@ -40,20 +40,24 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     if (isClaudeAvailable()) {
-      // Streaming, tool-using path
-      sse(res, { type: 'metadata', model_used: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-6' });
+      try {
+        // Streaming, tool-using path
+        const result = await runHeidiAgentStream({
+          message,
+          sessionId: session_id,
+          userId: user_id,
+          onText: (delta) => sse(res, { type: 'content', content: delta }),
+          onTool: (event) => sse(res, { type: 'tool', tool: event }),
+        });
 
-      const result = await runHeidiAgentStream({
-        message,
-        sessionId: session_id,
-        userId: user_id,
-        onText: (delta) => sse(res, { type: 'content', content: delta }),
-        onTool: (event) => sse(res, { type: 'tool', tool: event }),
-      });
-
-      sse(res, { type: 'actions', actions: result.actions });
-      res.write('data: [DONE]\n\n');
-      return res.end();
+        sse(res, { type: 'metadata', model_used: result.model });
+        sse(res, { type: 'actions', actions: result.actions });
+        res.write('data: [DONE]\n\n');
+        return res.end();
+      } catch (claudeErr) {
+        console.warn('Claude agent failed, falling back to orchestrator:', claudeErr instanceof Error ? claudeErr.message : claudeErr);
+        // Fall through to legacy orchestrator
+      }
     }
 
     // Fallback: legacy non-streaming orchestrator

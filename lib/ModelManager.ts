@@ -184,12 +184,17 @@ export class ModelManager {
     try {
       // Prefer Anthropic (the repo's primary provider), then OpenAI.
       if (process.env.ANTHROPIC_API_KEY) {
-        return await this.generateAnthropicResponse(prompt);
-      } else if (process.env.OPENAI_API_KEY) {
+        const result = await this.generateAnthropicResponse(prompt);
+        if (result.success) return result;
+        console.warn('[ModelManager] Anthropic failed, trying OpenAI:', result.error);
+      }
+      if (process.env.OPENAI_API_KEY) {
         return await this.generateOpenAIResponse(prompt);
-      } else {
+      }
+      if (!process.env.ANTHROPIC_API_KEY && !process.env.OPENAI_API_KEY) {
         throw new Error('No API keys configured (set ANTHROPIC_API_KEY or OPENAI_API_KEY)');
       }
+      throw new Error('All configured API providers failed');
     } catch (error) {
       console.error('[ModelManager] API fallback error:', error);
       return {
