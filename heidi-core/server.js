@@ -39,6 +39,7 @@ const corsMiddleware = (req, res, next) => {
 const HeidiMemory = require('./memory/sqlite-store');
 const ReflectionEngine = require('./reflect/reflection-engine');
 const ActionExecutor = require('./actions/action-executor');
+const ToolRegistry = require('./tools/tool-registry');
 
 class HeidiCore {
   constructor(config = {}) {
@@ -50,6 +51,12 @@ class HeidiCore {
     this.memory = new HeidiMemory(config.memory);
     this.reflection = new ReflectionEngine(this.memory, config.reflection);
     this.actions = new ActionExecutor(config.actions);
+    this.toolRegistry = new ToolRegistry(this.memory, {
+      selfStatus: () => ({
+        uptime_ms: this.stats.startTime ? Date.now() - this.stats.startTime : 0,
+        requests: this.stats.requests
+      })
+    });
 
     // State
     this.isRunning = false;
@@ -461,6 +468,85 @@ class HeidiCore {
       } catch (error) {
         console.error('[HEIDI] Chat error:', error);
         res.status(500).json({ error: error.message });
+      }
+    });
+
+    // CHAT-TOOLS - Conversational endpoint with real tool execution (SSE).
+    // The model can call tools from the ToolRegistry; each call is
+    // permission-checked against agent_registry (Heidi acts at her own level).
+    this.app.post('/chat-tools', async (req, res) => {
+      try {
+        const { input, options = {} } = req.body;
+        if (!input) return res.status(400).json({ error: 'input is required' });
+
+        this.stats.requests++;
+        const startTime = Date.now();
+        res.setHeader('Content-Type', 'text/event-stream');
+        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('Connection', 'keep-alive');
+        res.setHeader('X-Accel-Buffering', 'no');
+        const send = (d) => res.write(`data: ${JSON.stringify(d)}\n\n`);
+
+        // Tools require a function-calling model; plain llama3 is not one.
+        const model = options.model || process.env.HEIDI_TOOL_MODEL || 'llama3.2:3b';
+
+        const messages = [
+          {
+            role: 'system',
+            content: this.getSystemPersonality() +
+              '\n\nYou have REAL tools. For any question about system status, health, ' +
+              'models, agents, missions, or memory, you MUST call the matching tool and ' +
+              'answer ONLY from its result — never invent status information. ' +
+              'When reporting tool results, copy the EXACT names, numbers, and statuses ' +
+              'from the JSON — never write placeholders like "model1" or "service A". ' +
+              'If the result contains a list (models, agents, missions), reproduce every ' +
+              'item by its exact name. Keep the layout compact for a mobile screen.'
+          },
+          { role: 'user', content: input }
+        ];
+
+        const toolsUsed = [];
+        let result = null;
+        const MAX_ROUNDS = 4;
+
+        for (let round = 0; round < MAX_ROUNDS; round++) {
+          result = await this.brain.chatWithTools(messages, this.toolRegistry.toOllamaTools(), { model, temperature: 0 });
+
+          if (!result.tool_calls || result.tool_calls.length === 0) break;
+
+          messages.push({ role: 'assistant', content: result.text || '', tool_calls: result.tool_calls });
+          for (const call of result.tool_calls) {
+            const name = call.function?.name;
+            let args = call.function?.arguments || {};
+            if (typeof args === 'string') { try { args = JSON.parse(args); } catch { args = {}; } }
+
+            send({ t: `⚙️ ${name}…\n` });
+            const toolResult = await this.toolRegistry.execute(name, args, 'Heidi');
+            toolsUsed.push(name);
+            messages.push({ role: 'tool', tool_name: name, content: JSON.stringify(toolResult) });
+          }
+        }
+
+        const finalText = (result && result.text) || 'No response generated.';
+        send({ t: finalText });
+
+        // STORE — same memory loop as /think, minus reflection noise
+        await this.memory.storeShortTerm(input, finalText, { tools_used: toolsUsed }, 0.9)
+          .catch(() => {});
+
+        send({
+          done: true,
+          model,
+          tools_used: toolsUsed,
+          latency_ms: Date.now() - startTime
+        });
+        res.end();
+      } catch (error) {
+        console.error('[HEIDI] Chat-tools error:', error.message);
+        try {
+          res.write(`data: ${JSON.stringify({ error: error.message, done: true })}\n\n`);
+          res.end();
+        } catch {}
       }
     });
   }
