@@ -146,8 +146,7 @@ if ([string]::IsNullOrEmpty($env:SUPABASE_URL) -or $env:SUPABASE_URL -eq "True")
 }
 # NOTE: Load SUPABASE_SERVICE_ROLE_KEY from .env.local or environment
 if ([string]::IsNullOrEmpty($env:SUPABASE_SERVICE_ROLE_KEY) -or $env:SUPABASE_SERVICE_ROLE_KEY -eq "True") {
-    Write-Host "  ⚠️  SUPABASE_SERVICE_ROLE_KEY not set. Load from .env.local or environment." -ForegroundColor Yellow
-    $env:SUPABASE_SERVICE_ROLE_KEY = "sb_secret_N7UND0UgjKTVK-Uodkm0Hg_xSvEMPvz"
+    Write-Host "  ⚠️  SUPABASE_SERVICE_ROLE_KEY not set. Add it to ..\.env.local or the environment." -ForegroundColor Yellow
 }
 Write-Host "  Supabase: $($env:SUPABASE_URL)" -ForegroundColor Green
 
