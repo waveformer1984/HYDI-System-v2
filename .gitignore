@@ -72,3 +72,6 @@ supabase/.temp/
 heidi-core/data/*.db
 heidi-core/data/heidi_goals.json
 hydi.db
+
+# Cloud-bootstrap state describes THIS machine's view of cloud infra — never commit
+.cloud-bootstrap-state.json
