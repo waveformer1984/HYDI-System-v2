@@ -15,7 +15,7 @@ async function configureVault() {
     console.log('🔐 Configuring Vault Secrets\n');
     
     // The secret you provided
-    const providedSecret = 'sb_secret_K_nr8zA3oCNWvIyj0ItxHA_AV4CkzQt';
+    const providedSecret = process.env.SUPABASE_VAULT_SECRET || '';
     
     console.log('📝 Required secrets for automation:');
     console.log('1. project_url - Your Supabase project URL');
