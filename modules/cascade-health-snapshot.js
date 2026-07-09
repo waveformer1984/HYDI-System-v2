@@ -227,7 +227,7 @@ class CascadeHealthSnapshot extends EventEmitter {
   // Update quarantine metrics
   updateQuarantineMetrics() {
     if (this.components.cascade) {
-      const quarantineStatus = this.components.cascade.quarantine_status;
+      const quarantineStatus = this.components.cascade.getStatus().quarantine;
       this.snapshot.quarantine.size = quarantineStatus.total_quarantined || 0;
       
       // Calculate growth rate
@@ -259,8 +259,8 @@ class CascadeHealthSnapshot extends EventEmitter {
   // Update emission metrics
   updateEmissionMetrics() {
     if (this.components.cascade) {
-      const emissionStatus = this.components.cascade.emission_status;
-      
+      const emissionStatus = this.components.cascade.getStatus().emission;
+
       // Track last successful emission
       if (this.components.lastEmissionSuccess) {
         this.snapshot.emissions.last_successful = this.components.lastEmissionSuccess;
@@ -277,25 +277,22 @@ class CascadeHealthSnapshot extends EventEmitter {
 
   // Update component health
   updateComponentHealth() {
-    // Intake component
-    if (this.components.cascade && this.components.cascade.intake_status) {
-      this.snapshot.components.intake = this.components.cascade.intake_status.is_running ? 'healthy' : 'unhealthy';
-    }
-    
+    if (!this.components.cascade) return;
+    const status = this.components.cascade.getStatus();
+
+    // Intake component — no dedicated intake submodule; use CASCADE's own
+    // running state as the proxy for "is intake alive".
+    this.snapshot.components.intake = status.is_running ? 'healthy' : 'unhealthy';
+
     // Classification component
     this.snapshot.components.classification = 'healthy'; // Simplified
-    
+
     // Emission component
-    if (this.components.cascade && this.components.cascade.emission_status) {
-      const emissionStatus = this.components.cascade.emission_status;
-      this.snapshot.components.emission = emissionStatus.is_processing ? 'healthy' : 'degraded';
-    }
-    
+    this.snapshot.components.emission = status.emission.is_processing ? 'healthy' : 'degraded';
+
     // Quarantine component
-    if (this.components.cascade && this.components.cascade.quarantine_status) {
-      const quarantineSize = this.components.cascade.quarantine_status.total_quarantined || 0;
-      this.snapshot.components.quarantine = quarantineSize > 100 ? 'warning' : 'healthy';
-    }
+    const quarantineSize = status.quarantine.total_quarantined || 0;
+    this.snapshot.components.quarantine = quarantineSize > 100 ? 'warning' : 'healthy';
   }
 
   // Calculate overall system health
