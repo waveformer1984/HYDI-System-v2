@@ -172,6 +172,14 @@ class ActionExecutor {
     /\.\.[\/\\]/          // path traversal in an arg
   ];
 
+  // `git` is whitelisted for local, reviewable work (status/diff/commit/log).
+  // `push`/`merge` land changes on a remote or a protected branch — with a
+  // mission worker or chat tool now able to reach run_command at permission
+  // level 3, an unreviewed self-merge is exactly the failure mode this
+  // blocks. gh/hub aren't in approvedCommands at all, so `gh pr merge` is
+  // already refused upstream of this check.
+  static BLOCKED_GIT_SUBCOMMANDS = new Set(['push', 'merge']);
+
   /**
    * Run a command directly. Hardened: the binary must be whitelisted AND no
    * argument may smuggle in an inline-eval flag or shell metacharacters.
@@ -184,6 +192,10 @@ class ActionExecutor {
     const cmd = command.toLowerCase();
     if (!this.approvedCommands.has(cmd)) {
       throw new Error(`Command '${cmd}' is not in approved list`);
+    }
+
+    if (cmd === 'git' && args.length && ActionExecutor.BLOCKED_GIT_SUBCOMMANDS.has(String(args[0]).toLowerCase())) {
+      throw new Error(`Refused: 'git ${args[0]}' requires human execution (landing changes on a remote/protected branch is never autonomous)`);
     }
 
     // Vet every argument.
@@ -371,8 +383,13 @@ class ActionExecutor {
 
         case 'run_command': {
           if (!action.command || /\s/.test(action.command)) return false;
-          if (!this.approvedCommands.has(action.command.toLowerCase())) return false;
-          return (action.args || []).every(a =>
+          const cmd = action.command.toLowerCase();
+          if (!this.approvedCommands.has(cmd)) return false;
+          const args = action.args || [];
+          if (cmd === 'git' && args.length && ActionExecutor.BLOCKED_GIT_SUBCOMMANDS.has(String(args[0]).toLowerCase())) {
+            return false;
+          }
+          return args.every(a =>
             !ActionExecutor.DANGEROUS_ARG_PATTERNS.some(re => re.test(String(a))));
         }
 
