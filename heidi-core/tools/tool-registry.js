@@ -35,12 +35,15 @@ async function probe(url, timeoutMs = 8000) {
 class ToolRegistry {
   /**
    * @param {HeidiMemory} memory  initialized sqlite store (agent_registry + missions live here)
-   * @param {object} opts  { ollamaUrl, selfStatus: () => object }
+   * @param {object} opts  { ollamaUrl, selfStatus: () => object, actions: ActionExecutor }
    */
   constructor(memory, opts = {}) {
     this.memory = memory;
     this.ollamaUrl = opts.ollamaUrl || process.env.OLLAMA_URL || 'http://localhost:11434';
     this.selfStatus = opts.selfStatus || (() => ({}));
+    // Shared with /act and the mission worker -- one executor, one allowlist,
+    // one place that enforces "no git push/merge" (see action-executor.js).
+    this.actions = opts.actions || null;
 
     this.tools = {
       system_status: {
@@ -125,18 +128,22 @@ class ToolRegistry {
 
       create_mission: {
         level: 2,
-        description: 'Add a new mission (persistent goal) to the queue. Priority: 0 low, 1 normal, 2 high, 3 critical.',
+        description: 'Add a new mission (persistent goal) to the queue. Priority: 0 low, 1 normal, 2 high, 3 critical. Optionally attach a structured action (type: run_command|run_script, plus its fields) and assign it to an agent -- the mission worker only ever executes it for real if that agent independently already holds permission_level >= 3 (proposing work here does not grant it). Without a structured action, missions are informational only and the worker leaves them alone.',
         parameters: {
           type: 'object',
           properties: {
             goal: { type: 'string', description: 'What should be accomplished' },
-            priority: { type: 'integer', description: '0-3, default 1' }
+            priority: { type: 'integer', description: '0-3, default 1' },
+            action: { type: 'object', description: 'Optional structured action for the mission worker, e.g. {"type":"restart_service","service":"heidi-mobile-chat"} or {"type":"run_command","command":"git","args":["status"]}' },
+            assigned_agent: { type: 'string', description: 'Agent name whose permission_level gates execution of the action' }
           },
           required: ['goal']
         },
         handler: async (args = {}) => {
           if (!args.goal) return { error: 'goal is required' };
-          const id = await this.memory.createMission(args.goal, args.priority ?? 1);
+          if (args.action && !args.assigned_agent) return { error: 'assigned_agent is required when attaching an action' };
+          const context = args.action ? { action: args.action } : null;
+          const id = await this.memory.createMission(args.goal, args.priority ?? 1, context, args.assigned_agent ?? null);
           return { created: true, mission_id: id };
         }
       },
@@ -185,6 +192,61 @@ class ToolRegistry {
           if (!args.fact) return { error: 'fact is required' };
           const id = await this.memory.storeFact(args.fact, args.category || 'general', 0.7);
           return { stored: true, fact_id: id };
+        }
+      },
+
+      // ── Level 3: approved commands. Reached via /chat-tools, which the
+      // general middleware above already requires HEIDI_SECRET (or localhost)
+      // for -- so a remote caller needs both the secret AND permission_level
+      // >= 3 on the acting agent. Both back onto the SAME ActionExecutor /act
+      // uses, including its git push/merge refusal. ──
+
+      run_command: {
+        level: 3,
+        description: 'Run an approved command (git, npm, node, powershell, echo, cat, ls, dir) and return its output. git push and git merge are always refused -- landing changes on a remote or protected branch requires a human.',
+        parameters: {
+          type: 'object',
+          properties: {
+            command: { type: 'string', description: 'Bare executable name, e.g. "git" or "npm"' },
+            args: { type: 'array', items: { type: 'string' }, description: 'Arguments' }
+          },
+          required: ['command']
+        },
+        handler: async (args = {}) => {
+          if (!this.actions) return { error: 'run_command unavailable: no ActionExecutor configured' };
+          if (!args.command) return { error: 'command is required' };
+          try {
+            const { result } = await this.actions.execute({ type: 'run_command', command: args.command, args: args.args || [] });
+            return result;
+          } catch (e) {
+            return { error: e.message };
+          }
+        }
+      },
+
+      restart_service: {
+        level: 3,
+        description: 'Restart one supervised HYDI module (see boot.config.json for ids, e.g. "heidi-mobile-chat", "protoforge-core", "heidi-web"). Stops only the PID bound to that module\'s own port, then re-launches it via boot-agent -- never a blanket process kill.',
+        parameters: {
+          type: 'object',
+          properties: {
+            service: { type: 'string', description: 'Module id from boot.config.json' }
+          },
+          required: ['service']
+        },
+        handler: async (args = {}) => {
+          if (!this.actions) return { error: 'restart_service unavailable: no ActionExecutor configured' };
+          if (!args.service) return { error: 'service is required' };
+          try {
+            const { result } = await this.actions.execute({
+              type: 'run_script',
+              target: 'scripts/restart-module.js',
+              args: [args.service]
+            });
+            return result;
+          } catch (e) {
+            return { error: e.message };
+          }
         }
       }
     };

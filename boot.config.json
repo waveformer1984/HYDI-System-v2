@@ -37,6 +37,19 @@
       "dependsOn": ["protoforge-core"]
     },
     {
+      "id": "heidi-mobile-chat",
+      "label": "Heidi Mobile Chat (LAN, Ollama/LM Studio bridge)",
+      "type": "process",
+      "enabled": true,
+      "required": false,
+      "command": "node",
+      "args": ["launch-heidi-mobile.js"],
+      "env": { "HEIDI_MOBILE_PORT": "3006" },
+      "port": 3006,
+      "health": { "url": "http://127.0.0.1:3006/api/health", "graceMs": 60000, "intervalMs": 2000 },
+      "dependsOn": []
+    },
+    {
       "id": "hydi-orchestrator",
       "label": "HYDI System Orchestrator (Observe->Decide->Act core loop)",
       "type": "module",

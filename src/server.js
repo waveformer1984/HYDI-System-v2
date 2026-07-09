@@ -1580,26 +1580,29 @@ server.listen(PORT, async () => {
   
   await initializeIntegrations();
   
-  // Service Bundle event listeners
-  subscriptionManager.serviceBundle.on('service_used', (data) => {
-    console.log(`[SERVICE BUNDLE] Service used: ${data.serviceId} by ${data.subscriptionId} - Revenue: $${data.revenue}`);
-  });
-  
-  subscriptionManager.serviceBundle.on('subscription_created', (data) => {
-    console.log(`[SERVICE BUNDLE] New subscription: ${data.tier} for ${data.customerId}`);
-  });
-  
-  subscriptionManager.serviceBundle.on('upsell_trigger', (data) => {
-    console.log(`[SERVICE BUNDLE] Upsell trigger: ${data.customerId} at ${data.usagePercentage.toFixed(1)}% usage`);
-    // Trigger Heidi's usage-to-upsell workflow
-    heidiAutomator.triggerWorkflow('usage_to_upsell', {
-      customerId: data.customerId,
-      subscriptionId: data.subscriptionId,
-      tier: data.tier,
-      usagePercentage: data.usagePercentage,
-      triggerService: data.serviceId
+  // Service Bundle event listeners — serviceBundle is temporarily disabled in
+  // SubscriptionManager's constructor, so guard rather than assume it exists.
+  if (subscriptionManager.serviceBundle) {
+    subscriptionManager.serviceBundle.on('service_used', (data) => {
+      console.log(`[SERVICE BUNDLE] Service used: ${data.serviceId} by ${data.subscriptionId} - Revenue: $${data.revenue}`);
     });
-  });
+
+    subscriptionManager.serviceBundle.on('subscription_created', (data) => {
+      console.log(`[SERVICE BUNDLE] New subscription: ${data.tier} for ${data.customerId}`);
+    });
+
+    subscriptionManager.serviceBundle.on('upsell_trigger', (data) => {
+      console.log(`[SERVICE BUNDLE] Upsell trigger: ${data.customerId} at ${data.usagePercentage.toFixed(1)}% usage`);
+      // Trigger Heidi's usage-to-upsell workflow
+      heidiAutomator.triggerWorkflow('usage_to_upsell', {
+        customerId: data.customerId,
+        subscriptionId: data.subscriptionId,
+        tier: data.tier,
+        usagePercentage: data.usagePercentage,
+        triggerService: data.serviceId
+      });
+    });
+  }
   
   // Setup CASCADE V2 event listeners
   cascade.on('heartbeat', (heartbeat) => {
@@ -1631,24 +1634,27 @@ server.listen(PORT, async () => {
   
   // ── Universal Agent Bus Event Bridges ──
   // Bridge Service Bundle events onto the Agent Bus for unified telemetry
-  subscriptionManager.serviceBundle.on('service_used', (data) => {
-    agentBus.publish('Ursula', 'Heidi', 'service_usage_logged', {
-      customerId: data.subscriptionId,
-      serviceId: data.serviceId,
-      revenue: data.revenue,
-      tier: data.tier
-    }, { priority: agentBus.priorities[data.tier?.toUpperCase()] || 1 });
-  });
-  
-  subscriptionManager.serviceBundle.on('upsell_trigger', (data) => {
-    agentBus.publish('Ursula', 'Heidi', 'upsell_needed', {
-      customerId: data.customerId,
-      subscriptionId: data.subscriptionId,
-      usagePercentage: data.usagePercentage,
-      triggerService: data.serviceId,
-      tier: data.tier
-    }, { priority: agentBus.priorities.PRO });
-  });
+  // (guarded — serviceBundle is temporarily disabled, see block above)
+  if (subscriptionManager.serviceBundle) {
+    subscriptionManager.serviceBundle.on('service_used', (data) => {
+      agentBus.publish('Ursula', 'Heidi', 'service_usage_logged', {
+        customerId: data.subscriptionId,
+        serviceId: data.serviceId,
+        revenue: data.revenue,
+        tier: data.tier
+      }, { priority: agentBus.priorities[data.tier?.toUpperCase()] || 1 });
+    });
+
+    subscriptionManager.serviceBundle.on('upsell_trigger', (data) => {
+      agentBus.publish('Ursula', 'Heidi', 'upsell_needed', {
+        customerId: data.customerId,
+        subscriptionId: data.subscriptionId,
+        usagePercentage: data.usagePercentage,
+        triggerService: data.serviceId,
+        tier: data.tier
+      }, { priority: agentBus.priorities.PRO });
+    });
+  }
   
   // Bridge local model health events to dashboard
   agentBus.on('model_flatlined', (event) => {
@@ -1669,6 +1675,9 @@ server.listen(PORT, async () => {
     console.log('[AGENT BUS] Ursula heartbeat monitor bridged to bus telemetry');
   }
   
+  // cascadeStatus (from cascade.start(), above) is just { status, start_time,
+  // version } — the summary below needs the live stats/system_health shape.
+  const cascadeStats = cascade.getStatus();
   console.log('CASCADE V2:');
   console.log('  - Processed:', cascadeStats.stats.events_processed);
   console.log('  - Rejected:', cascadeStats.stats.events_rejected, '(Schema:', cascadeStats.stats.schema_violations, '| Duplicates:', cascadeStats.stats.duplicate_blocks, '| Low Conf:', cascadeStats.stats.low_confidence_blocks, ')');
@@ -1678,10 +1687,10 @@ server.listen(PORT, async () => {
   console.log('System Health:', cascadeStats.system_health.toUpperCase());
   console.log('Pipeline V2: Schema Lock -> Fingerprint -> Confidence Check -> Hard Classification -> Decision -> Emit (w/ Ack) -> Dead Letter');
   console.log('SERVICE BUNDLE:');
-  console.log('  - Active services:', subscriptionManager.serviceBundle.services.size);
-  console.log('  - Active subscriptions:', subscriptionManager.subscriptions.size);
+  console.log('  - Active services:', subscriptionManager.serviceBundle ? subscriptionManager.serviceBundle.services.size : 'disabled');
+  console.log('  - Active subscriptions:', subscriptionManager.subscriptions ? subscriptionManager.subscriptions.size : 'n/a (DB-backed)');
   console.log('==================\n');
-}, 5000);
+});
 
 // Graceful shutdown
 process.on('SIGTERM', async () => {

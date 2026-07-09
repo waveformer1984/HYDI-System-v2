@@ -40,6 +40,7 @@ const HeidiMemory = require('./memory/sqlite-store');
 const ReflectionEngine = require('./reflect/reflection-engine');
 const ActionExecutor = require('./actions/action-executor');
 const ToolRegistry = require('./tools/tool-registry');
+const MissionWorker = require('./missions/mission-worker');
 
 class HeidiCore {
   constructor(config = {}) {
@@ -52,11 +53,13 @@ class HeidiCore {
     this.reflection = new ReflectionEngine(this.memory, config.reflection);
     this.actions = new ActionExecutor(config.actions);
     this.toolRegistry = new ToolRegistry(this.memory, {
+      actions: this.actions,
       selfStatus: () => ({
         uptime_ms: this.stats.startTime ? Date.now() - this.stats.startTime : 0,
         requests: this.stats.requests
       })
     });
+    this.missionWorker = new MissionWorker(this.memory, this.actions, config.missionWorker);
 
     // State
     this.isRunning = false;
@@ -1159,6 +1162,7 @@ Hard rule: NEVER invent commands, file paths, ports, system features, or tool ca
     this.stats.startTime = Date.now();
     this.isRunning = true;
     this.startBrainWatchdog();
+    this.missionWorker.start();
 
     console.log('[HEIDI] Ready');
   }
@@ -1183,6 +1187,7 @@ if (require.main === module) {
   // Graceful shutdown
   process.on('SIGINT', async () => {
     console.log('\n[HEIDI] Shutting down...');
+    heidi.missionWorker.stop();
     await heidi.memory.close();
     process.exit(0);
   });
