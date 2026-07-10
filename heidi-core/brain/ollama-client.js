@@ -95,6 +95,7 @@ class OllamaClient {
         model: options.model || this.model,
         prompt: prompt,
         stream: false,
+        keep_alive: options.keepAlive || '30m',
         options: {
           temperature: options.temperature || 0.7,
           num_predict: options.maxTokens || 1000
@@ -127,6 +128,7 @@ class OllamaClient {
         model: options.model || this.model,
         messages: messages,
         stream: false,
+        keep_alive: options.keepAlive || '30m',
         options: {
           temperature: options.temperature || 0.7,
           num_predict: options.maxTokens || 1000
