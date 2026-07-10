@@ -1,9 +1,23 @@
 /**
  * HEIDI Core Server
  * The heartbeat of the system
- * 
+ *
  * Simple loop: listen → retrieve → generate → store → reflect → act
  */
+
+// This file previously had NO dotenv call at all -- it only ever saw
+// whatever env vars its launcher explicitly passed through (e.g.
+// start-heidi-everything.ps1's per-service Env hashtable, which only sets
+// HEIDI_PORT/HEIDI_ALLOW_EXEC). Any var added to .env/.env.local silently
+// never reached this process regardless of the file on disk. Resolved
+// relative to __dirname (not cwd) so it works no matter what working
+// directory the launcher starts this process from. dotenv never overwrites
+// a var already present in process.env, so launcher-set values still win.
+try {
+  const path = require('path');
+  require('dotenv').config({ path: path.join(__dirname, '..', '.env.local') });
+  require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
+} catch (_) { /* dotenv optional */ }
 
 const express = require('express');
 const OllamaClient = require('./brain/ollama-client');
