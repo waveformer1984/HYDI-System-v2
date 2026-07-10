@@ -335,6 +335,57 @@ vercel env ls | grep SECRET_NAME
 }
 ```
 
+## Local-First Architecture (decision made 2026-07-10)
+
+J's explicit direction: minimize reliance on external platforms, run Hydi as
+local as possible. This is not aspirational — it's already load-bearing:
+when Vercel's Marketplace billing suspended the cloud Supabase project, the
+system kept running because the data plane had already been moved local.
+
+**What's fully local (no cloud dependency in the critical path):**
+- LLM inference: Ollama, self-hosted. Cloud keys (`ANTHROPIC_API_KEY`,
+  `OPENAI_API_KEY`) are unset/dead and not required.
+- Embeddings: Ollama `nomic-embed-text` (`EMBEDDING_PROVIDER=ollama`).
+- Data plane: local Supabase via Docker (`supabase start`) — Postgres +
+  pgvector + PostgREST, self-hosted. **Docker Desktop must be running.**
+- Execution: `heidi-core`'s mission worker, health observer, and
+  `ActionExecutor` never call out to any cloud service.
+
+**External by necessity, minimized to just the necessary touchpoint:**
+- **Stripe** — no local substitute exists for real card payments. Kept, but
+  should only ever be touched at the actual charge step, not woven through
+  everything else.
+
+**External and deliberately disabled/unused, not deleted:**
+- **Vercel deployment** — not used. No git integration is linked to the
+  Vercel project (confirmed via API: `link: undefined`) — nothing
+  auto-deploys on push. `scripts/cloud-bootstrap/vercel.js` still exists
+  (dormant capability) but isn't part of the normal workflow.
+  `.github/workflows/health-monitor.yml`'s `vercel-api-check.js` step is a
+  read-only diagnostic, not a deploy trigger — safe to leave.
+- **GitHub Pages** — `.github/workflows/deploy-pages.yml` used to
+  auto-publish the mobile chat PWA on every push touching `docs/**`
+  (confirmed Pages was NOT actually enabled when checked, so nothing was
+  live, but the workflow would silently re-enable and publish on the next
+  matching push). Trigger changed to `workflow_dispatch` only — manual, not
+  automatic. Mobile chat is reached via Tailscale
+  (`heidi-pc.tailc50af2.ts.net`) instead.
+
+**External and kept, but reliance reduced:**
+- **GitHub (repo host + Actions CI)** — still the remote and still what
+  `clean-main` branch protection requires checks from. A local git hook
+  (`.githooks/pre-push`, wired up automatically via `npm install`'s
+  `postinstall` → `git config core.hooksPath .githooks`) runs typecheck +
+  the full Jest suite before every push, so day-to-day development has a
+  source of truth that doesn't depend on GitHub Actions being up. This
+  exists directly because Actions sat stuck `queued`, repo-wide, for 24+
+  hours starting 2026-07-08 (see PRs #167-169's merges, which used
+  `gh pr merge --admin` to get past it). Skip the hook once with
+  `git push --no-verify` when genuinely needed.
+- Full self-hosted git (e.g. Gitea, replacing GitHub as the remote
+  entirely) was considered and explicitly declined for now — GitHub stays
+  as the remote/backup, this is about not *depending* on it operationally.
+
 ## Notable Conventions
 
 - **Mixed module styles**: some `api/` files use `export default` (ESM) while others use `module.exports` (CJS). The project's Next.js build handles this, but Edge Functions are pure ESM (Deno).
