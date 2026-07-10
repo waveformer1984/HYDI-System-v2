@@ -38,19 +38,19 @@ HEIDI's decision logic produces three verdicts:
 
 **In Advisory Mode**: AUTO-APPROVE verdicts also route to REVIEW (user can skip if confident)
 
-### HTTP API (Port 3459)
+### HTTP API (Port 3461)
 
 When started with `HEIDI_ADVISORY_MODE=true`, HEIDI opens advisory API:
 
 ```bash
 # List all pending tasks awaiting approval
-GET http://localhost:3459/api/decisions/pending
+GET http://localhost:3461/api/decisions/pending
 
 # Approve and execute a task
-POST http://localhost:3459/api/decisions/{taskId}/approve
+POST http://localhost:3461/api/decisions/{taskId}/approve
 
 # Reject a task (with optional reason)
-POST http://localhost:3459/api/decisions/{taskId}/reject
+POST http://localhost:3461/api/decisions/{taskId}/reject
 Content-Type: application/json
 { "reason": "Risky timing" }
 ```
@@ -121,19 +121,19 @@ Example workflow:
 4. You click ✅ APPROVE → Task executes
 5. Heidi logs decision to `heidi_events` table
 
-### Advisory Control Panel (Port 3459)
+### Advisory Control Panel (Port 3461)
 
 For programmatic access or custom UI:
 
 ```javascript
 // List pending decisions
-const decisions = await fetch('http://localhost:3459/api/decisions/pending').then(r => r.json());
+const decisions = await fetch('http://localhost:3461/api/decisions/pending').then(r => r.json());
 
 // Approve a task
-await fetch(`http://localhost:3459/api/decisions/${taskId}/approve`, { method: 'POST' });
+await fetch(`http://localhost:3461/api/decisions/${taskId}/approve`, { method: 'POST' });
 
 // Reject with reason
-await fetch(`http://localhost:3459/api/decisions/${taskId}/reject`, {
+await fetch(`http://localhost:3461/api/decisions/${taskId}/reject`, {
   method: 'POST',
   body: JSON.stringify({ reason: 'Timing too risky' })
 });

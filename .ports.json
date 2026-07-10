@@ -5,7 +5,7 @@
     "heidi-mobile-chat": {
       "port": 3006,
       "name": "HEIDI Mobile Chat API",
-      "env_var": "HEIDI_PORT",
+      "env_var": "HEIDI_MOBILE_PORT",
       "description": "Ollama/LM Studio chat endpoint for mobile clients",
       "depends_on": ["ollama"]
     },
@@ -19,9 +19,16 @@
     "heidi-core": {
       "port": 3459,
       "name": "HEIDI Core Orchestrator",
-      "env_var": "HEIDI_CORE_PORT",
+      "env_var": "HEIDI_PORT",
       "description": "Central AI orchestration and agent routing",
       "depends_on": ["supabase", "ollama"]
+    },
+    "heidi-advisory": {
+      "port": 3461,
+      "name": "HEIDI Advisory Mode API",
+      "env_var": "HEIDI_ADVISORY_PORT",
+      "description": "Approval/reject API for autonomous decisions (heidi-agent.js, HEIDI_ADVISORY_MODE=true only)",
+      "depends_on": ["supabase"]
     },
     "heidi-bridge": {
       "port": 5050,
