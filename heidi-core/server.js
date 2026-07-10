@@ -55,6 +55,7 @@ const ReflectionEngine = require('./reflect/reflection-engine');
 const ActionExecutor = require('./actions/action-executor');
 const ToolRegistry = require('./tools/tool-registry');
 const MissionWorker = require('./missions/mission-worker');
+const HealthObserver = require('./missions/health-observer');
 
 class HeidiCore {
   constructor(config = {}) {
@@ -74,6 +75,7 @@ class HeidiCore {
       })
     });
     this.missionWorker = new MissionWorker(this.memory, this.actions, config.missionWorker);
+    this.healthObserver = new HealthObserver(this.memory, config.healthObserver);
 
     // State
     this.isRunning = false;
@@ -1243,6 +1245,7 @@ Hard rule: NEVER invent commands, file paths, ports, system features, or tool ca
     this.isRunning = true;
     this.startBrainWatchdog();
     this.missionWorker.start();
+    this.healthObserver.start();
 
     console.log('[HEIDI] Ready');
   }
@@ -1268,6 +1271,7 @@ if (require.main === module) {
   process.on('SIGINT', async () => {
     console.log('\n[HEIDI] Shutting down...');
     heidi.missionWorker.stop();
+    heidi.healthObserver.stop();
     await heidi.memory.close();
     process.exit(0);
   });

@@ -149,6 +149,7 @@ export class ModelManager {
           model, // e.g. llama3 or mistral
           prompt: prompt,
           stream: false,
+          keep_alive: '30m',
           options: {
             temperature: 0.1,
             max_tokens: 1000
