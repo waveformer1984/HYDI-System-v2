@@ -1,9 +1,23 @@
 /**
  * HEIDI Core Server
  * The heartbeat of the system
- * 
+ *
  * Simple loop: listen → retrieve → generate → store → reflect → act
  */
+
+// This file previously had NO dotenv call at all -- it only ever saw
+// whatever env vars its launcher explicitly passed through (e.g.
+// start-heidi-everything.ps1's per-service Env hashtable, which only sets
+// HEIDI_PORT/HEIDI_ALLOW_EXEC). Any var added to .env/.env.local silently
+// never reached this process regardless of the file on disk. Resolved
+// relative to __dirname (not cwd) so it works no matter what working
+// directory the launcher starts this process from. dotenv never overwrites
+// a var already present in process.env, so launcher-set values still win.
+try {
+  const path = require('path');
+  require('dotenv').config({ path: path.join(__dirname, '..', '.env.local') });
+  require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
+} catch (_) { /* dotenv optional */ }
 
 const express = require('express');
 const OllamaClient = require('./brain/ollama-client');
@@ -489,6 +503,21 @@ class HeidiCore {
         res.setHeader('Connection', 'keep-alive');
         res.setHeader('X-Accel-Buffering', 'no');
         const send = (d) => res.write(`data: ${JSON.stringify(d)}\n\n`);
+
+        // Deterministic fast-path: skip the LLM tool-loop entirely for the
+        // handful of parameterless read-only queries that map 1:1 to a tool.
+        // Turns a ~50-100s round-trip (on this box, with this model) into a
+        // single tool call.
+        const fastPathTool = this.matchFastPath(input);
+        if (fastPathTool) {
+          const toolResult = await this.toolRegistry.execute(fastPathTool, {}, 'Heidi');
+          const finalText = this.formatFastPathResult(fastPathTool, toolResult);
+          send({ t: finalText });
+          await this.memory.storeShortTerm(input, finalText, { tools_used: [fastPathTool], fast_path: true }, 0.95)
+            .catch(() => {});
+          send({ done: true, model: 'fast-path', tools_used: [fastPathTool], latency_ms: Date.now() - startTime });
+          return res.end();
+        }
 
         // Tools require a function-calling-capable model. A user-picked model
         // from the UI dropdown (e.g. qwen2.5-coder:1.5b, tinyllama, plain
@@ -980,6 +1009,57 @@ class HeidiCore {
   isSelfStatusQuery(input) {
     if (!input) return false;
     return /\b(diagnostics?|self.?check|your (status|health|state|config|memory|uptime|model)|are you (ok|healthy|running|online|up)|how are you|what models|which model|how much memory|system status|health check)\b/i.test(input);
+  }
+
+  // Deterministic fast-path: these four tools take no parameters, are read-only
+  // (level 1), and map 1:1 from common phrasings -- "status", "list models",
+  // "list agents", "list missions" don't need a multi-round LLM tool-loop to
+  // figure out which tool to call. Everything else (create_mission, run_command,
+  // search_memory, ...) needs argument extraction from free text and still goes
+  // through /chat-tools' normal loop. Order matters: checked top to bottom,
+  // first match wins -- a query matching two patterns just gets one grounded,
+  // correct answer instead of the other, never a wrong one.
+  static FAST_PATH_ROUTES = [
+    { tool: 'list_models', pattern: /\b(list|show|which|what)\b.*\bmodels?\b|\bmodels?\s+(installed|loaded|available)\b/i },
+    { tool: 'list_agents', pattern: /\b(list|show|which|what)\b.*\bagents?\b/i },
+    { tool: 'list_missions', pattern: /\b(list|show|what('s|s)?)\b.*\bmissions?\b/i },
+    { tool: 'system_status', pattern: /\b(status|health check|system health|how are you|are you (ok|okay|up|running|alive|healthy))\b/i },
+  ];
+
+  matchFastPath(input) {
+    if (!input) return null;
+    for (const route of HeidiCore.FAST_PATH_ROUTES) {
+      if (route.pattern.test(input)) return route.tool;
+    }
+    return null;
+  }
+
+  /** Compact, deterministic text rendering of a fast-path tool's raw result -- no LLM involved. */
+  formatFastPathResult(tool, result) {
+    if (result && result.error) return `⚠️ ${result.error}`;
+
+    switch (tool) {
+      case 'system_status': {
+        const services = Object.entries(result.hydi_services || {}).map(([k, v]) => `  ${k}: ${v}`).join('\n');
+        const models = (result.ollama_models_installed || []).join(', ') || 'none';
+        return `🖥️ System status:\n${services}\nModels installed: ${models}`;
+      }
+      case 'list_models': {
+        const installed = (result.installed || []).map((m) => `  ${m.name}${m.size_gb ? ` (${m.size_gb}GB)` : ''}`).join('\n') || '  none';
+        const loaded = (result.loaded || []).join(', ') || 'none';
+        return `🧠 Installed models:\n${installed}\nCurrently loaded: ${loaded}`;
+      }
+      case 'list_agents': {
+        if (!Array.isArray(result) || result.length === 0) return '👥 No registered agents.';
+        return '👥 Agents:\n' + result.map((a) => `  ${a.name} — ${a.role || 'no role'} (level ${a.permission_level}, ${a.enabled ? 'enabled' : 'disabled'})`).join('\n');
+      }
+      case 'list_missions': {
+        if (!Array.isArray(result) || result.length === 0) return '📋 No missions in the queue.';
+        return '📋 Missions:\n' + result.map((m) => `  #${m.id} [${m.status}] (pri ${m.priority}) ${m.goal}`).join('\n');
+      }
+      default:
+        return JSON.stringify(result);
+    }
   }
 
   /**
