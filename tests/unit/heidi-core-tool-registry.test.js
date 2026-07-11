@@ -149,4 +149,73 @@ describe('ToolRegistry: level-3 tools', () => {
       expect(res).toEqual({ stdout: 'restarted', stderr: '', exitCode: 0 });
     });
   });
+
+  describe('tool() decorator and registerTool', () => {
+    it('exposes the tool decorator on the class', () => {
+      expect(typeof ToolRegistry.tool).toBe('function');
+    });
+
+    it('builds this.tools from decorated class fields', () => {
+      const memory = fakeMemory({ permission_level: 1, enabled: 1 });
+      const registry = new ToolRegistry(memory, {});
+
+      expect(registry.tools.system_status).toBeDefined();
+      expect(registry.tools.system_status.level).toBe(1);
+      expect(registry.tools.system_status.description).toMatch(/live health/);
+      expect(registry.tools.system_status.parameters).toEqual({ type: 'object', properties: {}, required: [] });
+      expect(registry.tools.list_models).toBeDefined();
+      expect(registry.tools.list_agents).toBeDefined();
+      expect(registry.tools.run_command).toBeDefined();
+      expect(registry.tools.restart_service).toBeDefined();
+    });
+
+    it('executes a decorated tool and binds `this` to the registry', async () => {
+      const memory = fakeMemory({ permission_level: 1, enabled: 1 });
+      memory.listAgents = jest.fn().mockResolvedValue([{ name: 'Kilo', role: 'assistant', permission_level: 3, enabled: 1 }]);
+      const registry = new ToolRegistry(memory, {});
+
+      const res = await registry.execute('list_agents', {}, 'Kilo');
+
+      expect(Array.isArray(res)).toBe(true);
+      expect(res[0].name).toBe('Kilo');
+      expect(memory.listAgents).toHaveBeenCalledWith(false);
+    });
+
+    it('allows registerTool to add new tools at runtime', async () => {
+      const memory = fakeMemory({ permission_level: 4, enabled: 1 });
+      const registry = new ToolRegistry(memory, {});
+
+      const handler = ToolRegistry.tool({
+        level: 1,
+        description: 'A test tool',
+        parameters: { type: 'object', properties: {}, required: [] }
+      })(async () => ({ ok: true }));
+
+      registry.registerTool('test_tool', handler);
+
+      expect(registry.tools.test_tool).toBeDefined();
+      expect(registry.tools.test_tool.description).toBe('A test tool');
+      const res = await registry.execute('test_tool', {}, 'Kilo');
+      expect(res).toEqual({ ok: true });
+    });
+
+    it('rejects registerTool for handlers not decorated with tool()', () => {
+      const memory = fakeMemory({ permission_level: 4, enabled: 1 });
+      const registry = new ToolRegistry(memory, {});
+
+      expect(() => registry.registerTool('bad_tool', async () => {}))
+        .toThrow(/not decorated with tool/);
+    });
+
+    it('toOllamaTools reflects the registered tool set', () => {
+      const memory = fakeMemory({ permission_level: 1, enabled: 1 });
+      const registry = new ToolRegistry(memory, {});
+
+      const ollama = registry.toOllamaTools();
+      const names = ollama.map(t => t.function.name);
+      expect(names).toContain('system_status');
+      expect(names).toContain('list_models');
+      expect(names).toContain('run_command');
+    });
+  });
 });
