@@ -746,7 +746,9 @@ class HeidiAgent {
    * Start HTTP server for advisory mode approvals
    */
   startAdvisoryServer() {
-    const port = 3459; // Separate port for advisory API
+    // 3459 is heidi-core/server.js's own port (see .ports.json) -- advisory
+    // mode must not collide with it when both run at once.
+    const port = process.env.HEIDI_ADVISORY_PORT || 3461;
 
     this.httpServer = http.createServer(async (req, res) => {
       res.setHeader('Content-Type', 'application/json');

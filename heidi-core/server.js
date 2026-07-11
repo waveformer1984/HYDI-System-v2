@@ -60,7 +60,7 @@ const HealthObserver = require('./missions/health-observer');
 class HeidiCore {
   constructor(config = {}) {
     this.app = express();
-    this.port = config.port || process.env.HEIDI_PORT || 3456;
+    this.port = config.port || process.env.HEIDI_PORT || 3459;
     
     // Core components
     this.brain = new OllamaClient(config.brain);
