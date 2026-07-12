@@ -15,7 +15,8 @@
 // a var already present in process.env, so launcher-set values still win.
 try {
   const path = require('path');
-  require('dotenv').config({ path: path.join(__dirname, '..', '.env.local') });
+  // .env.local takes precedence over system env and .env so local values win
+  require('dotenv').config({ path: path.join(__dirname, '..', '.env.local'), override: true });
   require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 } catch (_) { /* dotenv optional */ }
 
@@ -510,14 +511,14 @@ class HeidiCore {
         // handful of parameterless read-only queries that map 1:1 to a tool.
         // Turns a ~50-100s round-trip (on this box, with this model) into a
         // single tool call.
-        const fastPathTool = this.matchFastPath(input);
-        if (fastPathTool) {
-          const toolResult = await this.toolRegistry.execute(fastPathTool, {}, 'Heidi');
-          const finalText = this.formatFastPathResult(fastPathTool, toolResult);
+        const fastPath = this.matchFastPath(input);
+        if (fastPath) {
+          const toolResult = await this.toolRegistry.execute(fastPath.tool, fastPath.args, 'Heidi');
+          const finalText = this.formatFastPathResult(fastPath.tool, toolResult);
           send({ t: finalText });
-          await this.memory.storeShortTerm(input, finalText, { tools_used: [fastPathTool], fast_path: true }, 0.95)
+          await this.memory.storeShortTerm(input, finalText, { tools_used: [fastPath.tool], fast_path: true }, 0.95)
             .catch(() => {});
-          send({ done: true, model: 'fast-path', tools_used: [fastPathTool], latency_ms: Date.now() - startTime });
+          send({ done: true, model: 'fast-path', tools_used: [fastPath.tool], latency_ms: Date.now() - startTime });
           return res.end();
         }
 
@@ -533,17 +534,22 @@ class HeidiCore {
           ? options.model
           : toolModel;
 
+        const toolsList = this.toolRegistry.toOllamaTools()
+          .map((t) => `- ${t.function.name}: ${t.function.description}`)
+          .join('\n');
+
         const messages = [
           {
             role: 'system',
             content: this.getSystemPersonality() +
-              '\n\nYou have REAL tools. For any question about system status, health, ' +
-              'models, agents, missions, or memory, you MUST call the matching tool and ' +
-              'answer ONLY from its result — never invent status information. ' +
-              'When reporting tool results, copy the EXACT names, numbers, and statuses ' +
-              'from the JSON — never write placeholders like "model1" or "service A". ' +
-              'If the result contains a list (models, agents, missions), reproduce every ' +
-              'item by its exact name. Keep the layout compact for a mobile screen.'
+              '\n\nYou have REAL tools. For every user request, decide if one of the tools below matches. ' +
+              'If it does, you MUST call that tool with the correct arguments. ' +
+              'If the user asks to run a command, call run_command. ' +
+              'If the user wants to create/update/list missions, agents, or memories, call the matching tool. ' +
+              'If the user asks about system status, health, models, or services, call the matching tool. ' +
+              'Answer ONLY from the tool result — never invent status or command output. ' +
+              'When reporting tool results, copy the EXACT names, numbers, and statuses from the JSON. ' +
+              'Keep the layout compact for a mobile screen.\n\nAvailable tools:\n' + toolsList
           },
           { role: 'user', content: input }
         ];
@@ -556,7 +562,14 @@ class HeidiCore {
         for (let round = 0; round < MAX_ROUNDS; round++) {
           result = await this.brain.chatWithTools(messages, this.toolRegistry.toOllamaTools(), { model, temperature: 0 });
 
-          if (!result.tool_calls || result.tool_calls.length === 0) break;
+          if (!result.tool_calls || result.tool_calls.length === 0) {
+            const extracted = this.toolRegistry.extractToolCalls(result.text);
+            if (extracted && extracted.length) {
+              result.tool_calls = extracted;
+            } else {
+              break;
+            }
+          }
           if (round === MAX_ROUNDS - 1) { hitMaxWithPendingTools = true; break; }
 
           messages.push({ role: 'assistant', content: result.text || '', tool_calls: result.tool_calls });
@@ -1022,6 +1035,18 @@ class HeidiCore {
   // first match wins -- a query matching two patterns just gets one grounded,
   // correct answer instead of the other, never a wrong one.
   static FAST_PATH_ROUTES = [
+    {
+      tool: 'run_command',
+      pattern: /^\s*(?:run|execute)\s+(\S+)(?:\s+(.*))?\s*$/i,
+      args: (input) => {
+        const m = input.match(/^\s*(?:run|execute)\s+(\S+)(?:\s+(.*))?\s*$/i);
+        if (!m) return {};
+        return {
+          command: m[1],
+          args: m[2] ? m[2].trim().split(/\s+/) : []
+        };
+      }
+    },
     { tool: 'list_models', pattern: /\b(list|show|which|what)\b.*\bmodels?\b|\bmodels?\s+(installed|loaded|available)\b/i },
     { tool: 'list_agents', pattern: /\b(list|show|which|what)\b.*\bagents?\b/i },
     { tool: 'list_missions', pattern: /\b(list|show|what('s|s)?)\b.*\bmissions?\b/i },
@@ -1031,7 +1056,24 @@ class HeidiCore {
   matchFastPath(input) {
     if (!input) return null;
     for (const route of HeidiCore.FAST_PATH_ROUTES) {
-      if (route.pattern.test(input)) return route.tool;
+      if (!route.pattern.test(input)) continue;
+      const args = route.args ? route.args(input) : {};
+
+      // The run_command route's regex is just "run/execute <word> ...", which
+      // matches ordinary English too ("run the tests", "run away", "run this
+      // by the team first"). Without this check every one of those returns a
+      // confusing "Command 'the' is not in approved list" instead of a real
+      // answer. Cross-check against ActionExecutor's OWN allowlist (the same
+      // one that will gate real execution) rather than a second list here --
+      // one source of truth, so they can't drift apart. If the "command"
+      // isn't actually approved, this was never a command in the first
+      // place: don't fast-path it, let it fall through to the LLM.
+      if (route.tool === 'run_command') {
+        const approved = this.actions && this.actions.approvedCommands;
+        if (!approved || !approved.has(String(args.command || '').toLowerCase())) continue;
+      }
+
+      return { tool: route.tool, args };
     }
     return null;
   }
@@ -1058,6 +1100,12 @@ class HeidiCore {
       case 'list_missions': {
         if (!Array.isArray(result) || result.length === 0) return '📋 No missions in the queue.';
         return '📋 Missions:\n' + result.map((m) => `  #${m.id} [${m.status}] (pri ${m.priority}) ${m.goal}`).join('\n');
+      }
+      case 'run_command': {
+        if (result && typeof result.stdout === 'string') {
+          return `🖥️ Command output:\n${result.stdout.trim() || '(no output)'}`;
+        }
+        return JSON.stringify(result);
       }
       default:
         return JSON.stringify(result);
