@@ -9,8 +9,15 @@
  */
 
 const HeidiCore = require('../../heidi-core/server');
+const ActionExecutor = require('../../heidi-core/actions/action-executor');
 
-const matchFastPath = (input) => HeidiCore.prototype.matchFastPath.call({}, input);
+// matchFastPath's run_command route cross-checks the extracted "command"
+// against ActionExecutor's real approvedCommands set, so tests need a
+// context with a real (or equivalently-shaped) `actions` on it -- not a
+// bare {}. Using a real ActionExecutor instance rather than a hardcoded
+// list here too, so this test can't quietly drift from the real allowlist.
+const fakeThis = () => ({ actions: new ActionExecutor() });
+const matchFastPath = (input) => HeidiCore.prototype.matchFastPath.call(fakeThis(), input);
 const formatFastPathResult = (tool, result) => HeidiCore.prototype.formatFastPathResult.call({}, tool, result);
 
 describe('matchFastPath: routing', () => {
@@ -34,7 +41,7 @@ describe('matchFastPath: routing', () => {
       'how are you',
       'health check',
     ])('matches: "%s"', (input) => {
-      expect(matchFastPath(input)).toBe('system_status');
+      expect(matchFastPath(input)).toEqual({ tool: 'system_status', args: {} });
     });
   });
 
@@ -45,7 +52,7 @@ describe('matchFastPath: routing', () => {
       'which models are installed',
       'show models',
     ])('matches: "%s"', (input) => {
-      expect(matchFastPath(input)).toBe('list_models');
+      expect(matchFastPath(input)).toEqual({ tool: 'list_models', args: {} });
     });
   });
 
@@ -55,7 +62,7 @@ describe('matchFastPath: routing', () => {
       'what agents are registered',
       'show agents',
     ])('matches: "%s"', (input) => {
-      expect(matchFastPath(input)).toBe('list_agents');
+      expect(matchFastPath(input)).toEqual({ tool: 'list_agents', args: {} });
     });
   });
 
@@ -65,7 +72,36 @@ describe('matchFastPath: routing', () => {
       "what's the mission queue look like",
       'show missions',
     ])('matches: "%s"', (input) => {
-      expect(matchFastPath(input)).toBe('list_missions');
+      expect(matchFastPath(input)).toEqual({ tool: 'list_missions', args: {} });
+    });
+  });
+
+  describe('run_command', () => {
+    it('fast-paths "run git diff" with command and args', () => {
+      expect(matchFastPath('run git diff')).toEqual({ tool: 'run_command', args: { command: 'git', args: ['diff'] } });
+    });
+
+    it('fast-paths "execute npm version" with command and args', () => {
+      expect(matchFastPath('execute npm version')).toEqual({ tool: 'run_command', args: { command: 'npm', args: ['version'] } });
+    });
+
+    // Regression coverage: the run_command regex is just "run/execute <word>
+    // ...", which also matches ordinary English. Without cross-checking the
+    // extracted "command" against ActionExecutor's real allowlist, every one
+    // of these previously fast-pathed into a confusing "Command 'the' is not
+    // in approved list" error instead of a normal conversational answer.
+    it.each([
+      'run this by the team first',
+      'run the tests',
+      'run for president',
+      'execute the plan',
+      'run away',
+    ])('does NOT fast-path ordinary English that happens to start with run/execute: "%s"', (input) => {
+      expect(matchFastPath(input)).toBeNull();
+    });
+
+    it('falls back to not-a-match when no actions/approvedCommands context is available (fail closed)', () => {
+      expect(HeidiCore.prototype.matchFastPath.call({}, 'run git diff')).toBeNull();
     });
   });
 
@@ -77,11 +113,11 @@ describe('matchFastPath: routing', () => {
     expect(matchFastPath('restart the mobile chat service for me')).toBeNull();
   });
 
-  it('a query ambiguously containing a trigger word still resolves to a grounded, non-hallucinated tool (acceptable, not a bug)', () => {
-    // "run git status" contains "status" -- the fast-path answers the
-    // system_status question directly rather than leaving it for an LLM to
-    // guess at too. Worst case it's slightly off-topic; it is never wrong.
-    expect(matchFastPath('run git status for me')).toBe('system_status');
+  it('run requests are routed to the run_command fast path, not system_status', () => {
+    expect(matchFastPath('run git status for me')).toEqual({
+      tool: 'run_command',
+      args: { command: 'git', args: ['status', 'for', 'me'] }
+    });
   });
 });
 

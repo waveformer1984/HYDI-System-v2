@@ -10,6 +10,7 @@ jest.mock('fs');
 
 const http = require('http');
 const fs = require('fs');
+const path = require('path'); // real module -- not mocked, path.isAbsolute is pure/no I/O
 const HealthObserver = require('../../heidi-core/missions/health-observer');
 
 const SAMPLE_CONFIG = {
@@ -78,12 +79,17 @@ describe('HealthObserver: debounce', () => {
     await observer.tick(); // failure 2 -- should trigger
 
     expect(memory.createMission).toHaveBeenCalledTimes(1);
-    expect(memory.createMission).toHaveBeenCalledWith(
-      expect.stringContaining('protoforge-core'),
-      2,
-      { action: { type: 'run_script', target: 'scripts/restart-module.js', args: ['protoforge-core'] } },
-      'Heidi'
-    );
+    const [, , context, agent] = memory.createMission.mock.calls[0];
+    expect(agent).toBe('Heidi');
+    expect(context.action.type).toBe('run_script');
+    expect(context.action.args).toEqual(['protoforge-core']);
+    // Regression: target MUST be absolute. ActionExecutor.isSafe() resolves a
+    // relative target against process.cwd() at check time, not this repo's
+    // root -- a bare 'scripts/restart-module.js' string silently fails
+    // isSafe() whenever heidi-core's working directory isn't the repo root,
+    // which blocked every auto-healing restart for hours before this fix.
+    expect(path.isAbsolute(context.action.target)).toBe(true);
+    expect(context.action.target.endsWith('restart-module.js')).toBe(true);
   });
 
   it('a success in between resets the failure counter (no false trigger from intermittent blips)', async () => {

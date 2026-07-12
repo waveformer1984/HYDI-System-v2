@@ -33,6 +33,16 @@ const http = require('http');
 
 const DEFAULT_ASSIGNED_AGENT = 'Heidi'; // already permission_level 3 in agent_registry
 
+// Must be an ABSOLUTE path. ActionExecutor.isSafe()/runScript() resolve a
+// relative target via path.resolve(), which resolves against process.cwd()
+// at the moment the check runs -- NOT this repo's root. Whenever heidi-core
+// is launched with a working directory other than the repo root (any
+// scheduled task or supervisor whose "start in" differs), a bare
+// 'scripts/restart-module.js' string silently fails isSafe() and every
+// restart mission gets blocked forever. __dirname-anchored, so it's correct
+// no matter what launched this process or from where.
+const RESTART_MODULE_SCRIPT = path.join(__dirname, '../../scripts/restart-module.js');
+
 function loadWatchedModules(configPath) {
   const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
   return (config.modules || []).filter(
@@ -129,7 +139,7 @@ class HealthObserver {
     const missionId = await this.memory.createMission(
       `Auto-detected: ${mod.id} failed ${failures} consecutive health checks -- restart it`,
       2,
-      { action: { type: 'run_script', target: 'scripts/restart-module.js', args: [mod.id] } },
+      { action: { type: 'run_script', target: RESTART_MODULE_SCRIPT, args: [mod.id] } },
       this.assignedAgent
     );
     this.lastProposedAt.set(mod.id, Date.now());

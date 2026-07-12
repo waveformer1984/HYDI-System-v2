@@ -6,6 +6,7 @@
  * enforcement that gates them. memory and actions are both mocked.
  */
 
+const path = require('path');
 const ToolRegistry = require('../../heidi-core/tools/tool-registry');
 
 function fakeMemory(agent) {
@@ -133,7 +134,7 @@ describe('ToolRegistry: level-3 tools', () => {
       expect(res.error).toBe('service is required');
     });
 
-    it('delegates to scripts/restart-module.js via run_script', async () => {
+    it('delegates to scripts/restart-module.js via run_script, with an absolute target', async () => {
       const memory = fakeMemory({ permission_level: 3, enabled: 1 });
       const actions = fakeActions();
       actions.execute.mockResolvedValue({ result: { stdout: 'restarted', stderr: '', exitCode: 0 } });
@@ -141,11 +142,17 @@ describe('ToolRegistry: level-3 tools', () => {
 
       const res = await registry.execute('restart_service', { service: 'heidi-mobile-chat' }, 'Kilo');
 
-      expect(actions.execute).toHaveBeenCalledWith({
-        type: 'run_script',
-        target: 'scripts/restart-module.js',
-        args: ['heidi-mobile-chat']
-      });
+      expect(actions.execute).toHaveBeenCalledTimes(1);
+      const calledWith = actions.execute.mock.calls[0][0];
+      expect(calledWith.type).toBe('run_script');
+      expect(calledWith.args).toEqual(['heidi-mobile-chat']);
+      // Regression: target MUST be absolute (path.isAbsolute), not a bare
+      // 'scripts/restart-module.js' string -- ActionExecutor resolves a
+      // relative target against process.cwd() at check time, not this
+      // repo's root, which silently failed isSafe() and blocked every
+      // auto-healing restart mission for hours before this fix.
+      expect(path.isAbsolute(calledWith.target)).toBe(true);
+      expect(calledWith.target.endsWith('restart-module.js')).toBe(true);
       expect(res).toEqual({ stdout: 'restarted', stderr: '', exitCode: 0 });
     });
   });

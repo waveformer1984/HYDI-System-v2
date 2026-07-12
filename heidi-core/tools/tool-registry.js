@@ -16,6 +16,16 @@
  * Levels: 0 observe | 1 read | 2 create | 3 approved commands | 4 full
  */
 
+const path = require('path');
+
+// Must be absolute -- see the identical comment in health-observer.js.
+// ActionExecutor resolves a relative target against process.cwd() at check
+// time, not this repo's root, so a bare 'scripts/restart-module.js' string
+// silently fails isSafe() whenever heidi-core's working directory isn't the
+// repo root (confirmed live: every auto-proposed restart mission for
+// protoforge-core was blocked this way, for hours, before this fix).
+const RESTART_MODULE_SCRIPT = path.join(__dirname, '../../scripts/restart-module.js');
+
 const SERVICE_PROBES = [
   { name: 'heidi-bridge',   url: 'http://127.0.0.1:5050/health' },
   { name: 'dashboard',      url: 'http://127.0.0.1:3000/' },
@@ -295,7 +305,7 @@ class ToolRegistry {
     try {
       const { result } = await this.actions.execute({
         type: 'run_script',
-        target: 'scripts/restart-module.js',
+        target: RESTART_MODULE_SCRIPT,
         args: [args.service]
       });
       return result;
