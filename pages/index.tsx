@@ -196,7 +196,7 @@ export default function HeidiChat() {
   }
 
   return (
-    <div className="flex flex-col h-screen bg-[#0f0f17] text-gray-100">
+    <div className="flex flex-col h-[100dvh] bg-[#0f0f17] text-gray-100">
       {/* Top bar */}
       <header className="flex items-center justify-between px-5 py-3 border-b border-white/[0.06] bg-[#0f0f17]/80 backdrop-blur-sm">
         <div className="flex items-center gap-3">
