@@ -168,13 +168,11 @@ Next.js pages under `pages/`:
 
 React components under `components/`:
 - `AgentBoard.tsx`, `AgentCard.tsx` — agent status and management
-- `Chat.tsx` — Heidi chat interface
-- `StatusPanel.tsx` — system health display
 - `TaskCreateModal.tsx`, `TaskQueue.tsx` — task pipeline UI
 - `components/funding/` — funding-specific components
 - `components/song-composer/` — song composer components
 
-Custom hooks: `hooks/useHeidi.ts` — React hook for Heidi orchestration state.
+The Heidi chat interface itself is a self-contained component directly in `pages/index.tsx` (not `components/`) — it POSTs `/api/chat` and parses the SSE response itself, with no separate hook.
 
 ### Revenue Engine (`revenue-engine/`)
 
