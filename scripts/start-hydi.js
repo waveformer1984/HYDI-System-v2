@@ -94,6 +94,18 @@ const ALL_SERVICES = [
     description: 'Chat API for mobile clients',
   },
   {
+    name: 'Heidi Bridge',
+    key: 'heidi-bridge',
+    cmd: 'python',
+    args: ['C:\\ProtoForge_Ecosystem\\heidi-bridge.py'],
+    getEnv: () => {
+      const config = PORTS_CONFIG.services['heidi-bridge'];
+      return { HEIDI_BRIDGE_PORT: String(config.port) };
+    },
+    background: true,
+    description: 'System monitoring and status bridge (Flask/Python)',
+  },
+  {
     name: 'Next.js Frontend',
     key: 'next-app',
     cmd: 'node',
