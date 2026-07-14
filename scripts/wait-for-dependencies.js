@@ -6,11 +6,20 @@
  * Prevents: orphaned processes, database connection errors, startup race conditions
  *
  * Usage:
- *   node scripts/wait-for-dependencies.js
+ *   node scripts/wait-for-dependencies.js               # check every registry entry
+ *   node scripts/wait-for-dependencies.js <service-key>  # only that service's depends_on
  */
 
 const http = require('http');
 const PORTS_CONFIG = require('../.ports.json');
+
+const targetService = process.argv[2];
+
+if (targetService && !PORTS_CONFIG.services[targetService]) {
+  console.error(`Unknown service '${targetService}' in .ports.json -- refusing to silently check nothing.`);
+  console.error(`Known services: ${Object.keys(PORTS_CONFIG.services).join(', ')}`);
+  process.exit(1);
+}
 
 const colors = {
   green: (s) => `\x1b[32m${s}\x1b[0m`,
@@ -21,14 +30,33 @@ const colors = {
 };
 
 /**
- * Determine which dependencies are critical based on .ports.json registry
- * External services are skipped (assumed to be managed elsewhere)
+ * Determine which dependencies are critical based on .ports.json registry.
+ *
+ * .ports.json's `external` flag means something different to
+ * check-ports.js (which uses it for "Docker/another process legitimately
+ * owns this port, don't flag it as a conflict with our own process") than
+ * it does here. ollama and supabase are both marked external for that
+ * reason, but for local-first HYDI they're required local dependencies
+ * (Ollama daemon / Docker Desktop's local Supabase) this process needs
+ * running -- not services genuinely managed elsewhere that don't need a
+ * reachability check. Only skip truly-external, non-boot-critical entries;
+ * ollama and supabase are always checked when present in the registry.
+ *
+ * When targetService is given, only that service's declared depends_on
+ * (e.g. next-app -> ["supabase"], not ollama) are checked -- gating
+ * `npm run dev` on Supabase shouldn't also require Ollama to be up when
+ * next-app's own registry entry doesn't depend on it.
  */
 function getCriticalDeps() {
   const deps = {};
+  const allowedKeys = targetService
+    ? new Set(PORTS_CONFIG.services[targetService].depends_on || [])
+    : null;
 
   for (const [key, config] of Object.entries(PORTS_CONFIG.services)) {
-    if (config.external) {
+    if (allowedKeys && !allowedKeys.has(key)) continue;
+
+    if (config.external && key !== 'ollama' && key !== 'supabase') {
       console.log(`${colors.gray('ℹ Skipping external service:')} ${config.name}`);
       continue;
     }

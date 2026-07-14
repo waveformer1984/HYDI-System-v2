@@ -5,10 +5,12 @@
   "private": true,
   "scripts": {
     "postinstall": "git config core.hooksPath .githooks || true",
+    "predev": "node scripts/wait-for-dependencies.js next-app",
     "dev": "next dev --hostname 0.0.0.0 --port 3000",
     "server": "node src/server.js",
     "prebuild": "echo 'Prebuild complete'",
     "build": "next build",
+    "prestart": "node scripts/wait-for-dependencies.js next-app",
     "start": "next start",
     "lint": "next lint",
     "test": "jest",

@@ -18,15 +18,22 @@ The six active revenue streams routed through Stripe Connect are: `galactic_byte
 
 ```bash
 npm install          # Install dependencies (Node >= 20 required)
-npm run dev          # Next.js dev server on 0.0.0.0:3000
+npm run dev          # Next.js dev server on 0.0.0.0:3000 (predev gates on local Supabase being reachable)
 npm run build        # Production build
-npm start            # Start production server
+npm start            # Start production server (prestart gates on local Supabase being reachable)
 npm run typecheck    # TypeScript type-check (tsc --noEmit, no emit)
 npm test             # Run Jest unit tests
 npm run test:watch   # Jest in watch mode
 npm run test:coverage  # Jest with coverage report
 npm run test:integration  # Run adversarial integration tests (tests/hdi-adversarial.test.js)
 ```
+
+`predev`/`prestart` run `node scripts/wait-for-dependencies.js next-app`, which fails fast with a clear
+error (instead of the app starting and failing ambiguously per-request) if local Supabase isn't reachable
+on port 54321 within 60s. Scoped to just Supabase, matching `next-app`'s `depends_on` in `.ports.json` —
+it does not also require Ollama. To bypass for a workflow that genuinely doesn't need Supabase, run
+`next dev` / `next start` directly instead of the npm script (npm lifecycle scripts have no `--no-verify`
+equivalent).
 
 Operational scripts at the repo root:
 ```bash
@@ -269,6 +276,7 @@ Key DB features: RLS enabled on all tables, `system_dashboard` view drives healt
 | `STRIPE_ACCOUNT_GALACTIC_BYTES` et al. | Connect sub-account IDs per revenue stream |
 | `WEBHOOK_PROCESSING_ENABLED` | Incident kill switch for `api/webhooks/stripe.js`. Unset/anything other than the literal string `'false'` means processing is ON — only an explicit `'false'` pauses it. Not provisioned by default. |
 | `JWT_SECRET` | Signs/verifies tokens in `workers/SecurityIdentityWorker.js` and `keeper/index.js`. Required — both fail closed (refuse to start / throw) rather than falling back to a hardcoded secret. |
+| `PROTOFORGE_ENFORCE_ACTIONS` | `lib/protoforge/action-gate.ts`'s enforcement switch. Unset/anything but `'true'` means observe-only: every action gets a real KILO hypothesis + ProtoForge decision, but reject/escalate verdicts don't block anything. **Recommended `true` in production** once you've reviewed what the promoted policy (`supabase/migrations/20260714150000_promote_action_type_policy.sql`) actually approves/rejects/escalates for real traffic. |
 | `NODE_ENV` | `production` / `development` |
 | `ANTHROPIC_API_KEY` | Enables the native streaming/tool-calling agent (`lib/heidi-agent.ts`); when unset Heidi uses the fallback orchestrator |
 | `ANTHROPIC_BASE_URL` | Optional override of the Anthropic SDK base URL (e.g. a compatible proxy) |
