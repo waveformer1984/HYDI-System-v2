@@ -64,10 +64,22 @@ jobs:
           for file in $MIGRATION_FILES; do
             VERSION=$(basename "$file" .sql)
             TEST_FILE="tests/migrations/${VERSION}.test.js"
-            
+
+            if [ ! -f "$TEST_FILE" ]; then
+              # Timestamp-prefixed migrations (YYYYMMDDHHMMSS_description.sql,
+              # the current convention) are tested under the timestamp alone,
+              # not the full basename -- e.g. 20260714150000.test.js, not
+              # 20260714150000_promote_action_type_policy.test.js. Only the
+              # legacy NNN_description.sql migrations use the full basename.
+              TIMESTAMP=$(echo "$VERSION" | grep -oE '^[0-9]{8,}' || true)
+              if [ -n "$TIMESTAMP" ]; then
+                TEST_FILE="tests/migrations/${TIMESTAMP}.test.js"
+              fi
+            fi
+
             if [ ! -f "$TEST_FILE" ]; then
               echo "❌ Missing transformer test for migration: $VERSION"
-              echo "   Expected: $TEST_FILE"
+              echo "   Expected: tests/migrations/${VERSION}.test.js (or tests/migrations/${TIMESTAMP:-<timestamp>}.test.js)"
               echo ""
               echo "Every schema migration must include:"
               echo "  1. Up transformer test (old data → new schema)"
@@ -75,7 +87,7 @@ jobs:
               echo "  3. Replay safety verification"
               exit 1
             fi
-            
+
             echo "✅ Transformer test found: $TEST_FILE"
           done
       
