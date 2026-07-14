@@ -15,6 +15,7 @@ import { ModelManager } from './ModelManager';
 import { ActionParser, ParsedResponse } from './ActionParser';
 import { ActionExecutor } from './action-executor';
 import { retrieveMemory, storeMemory } from './heidi-memory';
+import { gateActions, isEnforcing } from './protoforge/action-gate';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 interface ChatRequest {
@@ -174,9 +175,40 @@ Respond with JSON:`;
   /**
    * Execute actions for real and record truthful outcomes in the `actions`
    * audit log (status reflects the actual handler result).
+   *
+   * Every action is first run through KILO -> ProtoForge (lib/protoforge/
+   * action-gate.ts), which records a real decision to the `decisions`
+   * table. Enforcement is opt-in (PROTOFORGE_ENFORCE_ACTIONS=true) — see
+   * action-gate.ts for why blind enforcement would silently reject
+   * everything today. The `actions` table's status column is constrained
+   * to pending/completed/failed (supabase/heidi-init.sql), so a
+   * reject/escalate verdict is recorded as 'failed' with the real
+   * ProtoForge decision in the payload, not as a new status value.
    */
   private async executeActions(actions: ParsedResponse['actions'], sessionId: string): Promise<void> {
-    for (const action of actions) {
+    const verdicts = await gateActions(actions, sessionId);
+    const enforcing = isEnforcing();
+
+    for (const { action, decision, confidence, hypotheses, reasoning } of verdicts) {
+      const gateMeta = {
+        protoforge_decision: decision,
+        protoforge_confidence: confidence,
+        protoforge_hypotheses: hypotheses,
+        protoforge_reasoning: reasoning,
+        protoforge_enforced: enforcing,
+      };
+
+      if (enforcing && (decision === 'reject' || decision === 'escalate')) {
+        console.log(`[Orchestrator] Action ${action.type} ${decision} by ProtoForge — not executed`);
+        await this.supabase.from('actions').insert({
+          session_id: sessionId,
+          task_name: action.type,
+          status: 'failed',
+          payload: { ...action.payload, ...gateMeta },
+        });
+        continue;
+      }
+
       try {
         const outcome = await this.actionExecutor.execute(action, sessionId);
         console.log(`[Orchestrator] Executed action: ${action.type} -> ${outcome.status}`);
@@ -185,7 +217,7 @@ Respond with JSON:`;
           session_id: sessionId,
           task_name: action.type,
           status: outcome.status,
-          payload: { ...action.payload, result: outcome.result, error: outcome.error },
+          payload: { ...action.payload, result: outcome.result, error: outcome.error, ...gateMeta },
         });
       } catch (error) {
         console.error(`[Orchestrator] Action execution failed for ${action.type}:`, error);
@@ -193,7 +225,7 @@ Respond with JSON:`;
           session_id: sessionId,
           task_name: action.type,
           status: 'failed',
-          payload: { ...action.payload, error: error instanceof Error ? error.message : 'Unknown error' },
+          payload: { ...action.payload, error: error instanceof Error ? error.message : 'Unknown error', ...gateMeta },
         });
       }
     }
