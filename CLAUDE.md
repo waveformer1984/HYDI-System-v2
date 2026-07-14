@@ -151,7 +151,9 @@ All files under `api/` are **Vercel serverless functions** (Next.js API routes).
 
 **Observability**: `monitoring-health`, `chaos-runner`, `analytics-service`, `stream-health-watchdog`
 
-**Public services (no JWT)**: `api-gateway`, `notification-service`, `search-service`, `cache-service`, `events-stream`, `file-storage`, `user-management`
+**Public services (no JWT)**: `api-gateway`, `notification-service`, `search-service`, `cache-service`
+
+Despite their grouping above under "Task workers" / "Observability" / etc., `events-stream`, `file-storage`, and `user-management` are **JWT-required** per `supabase/config.toml`, not public.
 
 **Marketing suite (no JWT)**: `brand-awareness`, `campaign-analytics`, `content-management`, `customer-segments`, `email-marketing`, `lead-generation`, `marketing-automation`, `social-media`
 
