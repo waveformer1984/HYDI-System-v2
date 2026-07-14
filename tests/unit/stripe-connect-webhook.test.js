@@ -3,9 +3,11 @@
  * and ledger entry creation. No live services required.
  */
 
+const mockConstructEvent = jest.fn();
+
 jest.mock('stripe', () =>
   jest.fn().mockImplementation(() => ({
-    webhooks: { constructEvent: jest.fn() },
+    webhooks: { constructEvent: (...args) => mockConstructEvent(...args) },
     charges: {
       retrieve: jest.fn().mockResolvedValue({
         id: 'ch_test',
@@ -14,6 +16,8 @@ jest.mock('stripe', () =>
     },
   }))
 );
+
+const mockRpc = jest.fn().mockResolvedValue({ data: 'claim_test', error: null });
 
 jest.mock('@supabase/supabase-js', () => ({
   createClient: jest.fn(() => ({
@@ -30,10 +34,11 @@ jest.mock('@supabase/supabase-js', () => ({
           error: null,
         }),
     }),
+    rpc: (...args) => mockRpc(...args),
   })),
 }));
 
-let determineRevenueStream, FEE_STRUCTURE, REVENUE_STREAM_ACCOUNTS;
+let handler, determineRevenueStream, FEE_STRUCTURE, REVENUE_STREAM_ACCOUNTS;
 
 beforeAll(() => {
   process.env.STRIPE_SECRET_KEY = 'sk_test_fake';
@@ -47,10 +52,58 @@ beforeAll(() => {
   process.env.STRIPE_ACCOUNT_REZONATE = 'acct_rezonate';
   process.env.STRIPE_ACCOUNT_WAVEFORMER_STUDIO = 'acct_waveformer';
 
-  const mod = require('../../api/stripe-connect-webhook');
-  determineRevenueStream = mod.determineRevenueStream;
-  FEE_STRUCTURE = mod.FEE_STRUCTURE;
-  REVENUE_STREAM_ACCOUNTS = mod.REVENUE_STREAM_ACCOUNTS;
+  handler = require('../../api/stripe-connect-webhook');
+  determineRevenueStream = handler.determineRevenueStream;
+  FEE_STRUCTURE = handler.FEE_STRUCTURE;
+  REVENUE_STREAM_ACCOUNTS = handler.REVENUE_STREAM_ACCOUNTS;
+});
+
+function fakeRes() {
+  return {
+    statusCode: null,
+    body: null,
+    status(code) {
+      this.statusCode = code;
+      return this;
+    },
+    json(payload) {
+      this.body = payload;
+      return this;
+    },
+  };
+}
+
+describe('webhook idempotency', () => {
+  beforeEach(() => {
+    mockRpc.mockClear();
+    mockConstructEvent.mockReset();
+    mockConstructEvent.mockReturnValue({
+      id: 'evt_dup_test',
+      type: 'payment_intent.succeeded',
+      data: { object: { id: 'pi_test', amount: 1000, currency: 'usd', metadata: {} } },
+    });
+  });
+
+  it('claims the event via claim_webhook_event before processing', async () => {
+    mockRpc.mockResolvedValueOnce({ data: 'claim_1', error: null });
+    const req = { method: 'POST', headers: { 'stripe-signature': 'sig' }, body: Buffer.from('{}') };
+    await handler(req, fakeRes());
+
+    expect(mockRpc).toHaveBeenCalledWith('claim_webhook_event', {
+      p_event_id: 'evt_dup_test',
+      p_type: 'connect:payment_intent.succeeded',
+    });
+  });
+
+  it('short-circuits with 200 and does not reprocess when the RPC reports a duplicate', async () => {
+    mockRpc.mockResolvedValueOnce({ data: null, error: null });
+    const req = { method: 'POST', headers: { 'stripe-signature': 'sig' }, body: Buffer.from('{}') };
+    const res = fakeRes();
+    await handler(req, res);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toEqual({ received: true, duplicate: true });
+  });
 });
 
 describe('determineRevenueStream', () => {
