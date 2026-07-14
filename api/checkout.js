@@ -1,4 +1,5 @@
 const Stripe = require('stripe');
+const { rateLimit } = require('../lib/rate-limit');
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
@@ -20,6 +21,10 @@ module.exports = async (req, res) => {
 
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  if (!rateLimit(req, res, { name: 'checkout', windowMs: 10 * 60 * 1000, max: 10 })) {
+    return;
   }
 
   // Parse request body properly
