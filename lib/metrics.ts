@@ -2,16 +2,26 @@
  * PHASE 5 METRICS — HYDI_KERNEL_ARCHITECTURE_ROADMAP.md
  *
  * Task success rate, ProtoForge decision distribution + outcome success
- * rate, and work-session planning accuracy — computed by reading tables
- * Phases 1-4 already write to (`actions`, `decisions`, `work_sessions`).
- * No new schema.
+ * rate, work-session planning accuracy, retry counts, and memory retrieval
+ * coverage — computed by reading tables Phases 1-4 already write to plus
+ * two new sentinel `task_name` values in `actions`
+ * (`llm_retry`, `memory_retrieval`, both written by lib/orchestrator.ts).
+ * No new table, no new migration — `actions.task_name` is free text with
+ * no CHECK constraint restricting it to real action types.
  *
- * Two metrics the roadmap named aren't here, on purpose: memory retrieval
- * quality (nothing captures whether retrieved context was actually
- * useful) and user-correction rate (nothing distinguishes "user corrected
- * Heidi" from "user asked something new"). Faking these would be worse
- * than omitting them — they need new signal capture that doesn't exist
- * yet, which is future work, not something to paper over here.
+ * Two metrics the roadmap originally named still aren't fully here, on
+ * purpose:
+ * - "Memory retrieval quality" is represented below as retrieval
+ *   *coverage* (getMemoryRetrievalStats: was any context found at all),
+ *   not quality — there's still no feedback signal for whether retrieved
+ *   context was actually useful to the response. Labeled honestly as
+ *   coverage, not renamed to quality.
+ * - "User-correction rate" is still not built at all. Detecting it needs
+ *   either an explicit feedback UI (thumbs up/down) or a heuristic
+ *   classifier over the next user message — a heuristic here would carry
+ *   real false-positive/negative risk and produce a metric that looks
+ *   authoritative but isn't. That's a product/UX decision, not something
+ *   to fabricate in a backend metrics pass.
  *
  * Also worth knowing: lib/agents/*'s per-agent in-memory metrics
  * (tasksHandled/successCount/...) reset every request — `HeidiOrchestrator`
@@ -224,5 +234,117 @@ export async function getWorkSessionStats(
   } catch (error) {
     console.error('[Metrics] getWorkSessionStats failed:', error instanceof Error ? error.message : 'Unknown error');
     return computeWorkSessionStats([]);
+  }
+}
+
+// ── Retry counts (from `actions`, task_name = 'llm_retry') ──────────────
+
+export interface RetryStats {
+  totalRetries: number;
+  succeeded: number;
+  failed: number;
+  successRate: number | null;
+  byStage: Record<string, { total: number; succeeded: number; failed: number }>;
+}
+
+export function computeRetryStats(rows: Array<{ status: string; payload: { stage?: string } | null }>): RetryStats {
+  let succeeded = 0;
+  let failed = 0;
+  const byStage: Record<string, { total: number; succeeded: number; failed: number }> = {};
+
+  for (const row of rows) {
+    const stage = row.payload?.stage ?? 'unknown';
+    const entry = byStage[stage] ?? { total: 0, succeeded: 0, failed: 0 };
+    entry.total++;
+
+    if (row.status === 'completed') {
+      succeeded++;
+      entry.succeeded++;
+    } else if (row.status === 'failed') {
+      failed++;
+      entry.failed++;
+    }
+
+    byStage[stage] = entry;
+  }
+
+  return {
+    totalRetries: rows.length,
+    succeeded,
+    failed,
+    successRate: rows.length > 0 ? succeeded / rows.length : null,
+    byStage,
+  };
+}
+
+export async function getRetryStats(
+  supabase: SupabaseClient,
+  opts: { sessionId?: string; since?: string; limit?: number } = {},
+): Promise<RetryStats> {
+  try {
+    let query = supabase
+      .from('actions')
+      .select('status, payload')
+      .eq('task_name', 'llm_retry')
+      .limit(opts.limit ?? 1000);
+    if (opts.sessionId) query = query.eq('session_id', opts.sessionId);
+    if (opts.since) query = query.gte('created_at', opts.since);
+    const { data, error } = await query;
+    if (error || !data) return computeRetryStats([]);
+    return computeRetryStats(data as Array<{ status: string; payload: { stage?: string } | null }>);
+  } catch (error) {
+    console.error('[Metrics] getRetryStats failed:', error instanceof Error ? error.message : 'Unknown error');
+    return computeRetryStats([]);
+  }
+}
+
+// ── Memory retrieval coverage (from `actions`, task_name = 'memory_retrieval') ──
+//
+// This is coverage, not quality: whether semantic retrieval found any
+// context at all, not whether that context was useful. See this module's
+// header comment for why "quality" isn't built.
+
+export interface MemoryRetrievalStats {
+  totalRetrievals: number;
+  withContext: number;
+  withoutContext: number;
+  coverageRate: number | null;
+}
+
+export function computeMemoryRetrievalStats(rows: Array<{ payload: { had_context?: boolean } | null }>): MemoryRetrievalStats {
+  let withContext = 0;
+  let withoutContext = 0;
+
+  for (const row of rows) {
+    if (row.payload?.had_context) withContext++;
+    else withoutContext++;
+  }
+
+  return {
+    totalRetrievals: rows.length,
+    withContext,
+    withoutContext,
+    coverageRate: rows.length > 0 ? withContext / rows.length : null,
+  };
+}
+
+export async function getMemoryRetrievalStats(
+  supabase: SupabaseClient,
+  opts: { sessionId?: string; since?: string; limit?: number } = {},
+): Promise<MemoryRetrievalStats> {
+  try {
+    let query = supabase
+      .from('actions')
+      .select('payload')
+      .eq('task_name', 'memory_retrieval')
+      .limit(opts.limit ?? 1000);
+    if (opts.sessionId) query = query.eq('session_id', opts.sessionId);
+    if (opts.since) query = query.gte('created_at', opts.since);
+    const { data, error } = await query;
+    if (error || !data) return computeMemoryRetrievalStats([]);
+    return computeMemoryRetrievalStats(data as Array<{ payload: { had_context?: boolean } | null }>);
+  } catch (error) {
+    console.error('[Metrics] getMemoryRetrievalStats failed:', error instanceof Error ? error.message : 'Unknown error');
+    return computeMemoryRetrievalStats([]);
   }
 }

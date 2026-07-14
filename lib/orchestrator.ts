@@ -27,7 +27,7 @@ import {
   updateWorkSession,
   WorkSession,
 } from './work-sessions';
-import { getDecisionStats, getTaskSuccessRates, getWorkSessionStats } from './metrics';
+import { getDecisionStats, getMemoryRetrievalStats, getRetryStats, getTaskSuccessRates, getWorkSessionStats } from './metrics';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 interface ChatRequest {
@@ -76,7 +76,8 @@ export class HeidiOrchestrator {
     try {
       // 1. Retrieve memory context
       const memoryContext = await this.retrieveMemory(request.message, request.user_id);
-      
+      await this.recordMemoryRetrieval(request.session_id, memoryContext.length > 0);
+
       // 2. Build prompt with memory
       const prompt = this.buildPrompt(request.message, memoryContext);
       
@@ -95,7 +96,7 @@ export class HeidiOrchestrator {
         console.log('[Orchestrator] Invalid response, retrying with corrected prompt');
         const correctedPrompt = ActionParser.generateCorrectedPrompt(prompt, parseResult.error || 'Unknown error');
         const retryResponse = await this.modelManager.generateResponse(correctedPrompt, request.session_id);
-        
+
         const retryParse = ActionParser.parseResponse(retryResponse.content);
         if (retryParse.success && retryParse.response) {
           finalResponse = retryParse.response;
@@ -104,6 +105,7 @@ export class HeidiOrchestrator {
           console.log('[Orchestrator] Retry failed, using safe fallback');
           finalResponse = ActionParser.generateSafeFallback();
         }
+        await this.recordRetry(request.session_id, 'chat_response', retryParse.success, parseResult.error);
       }
       
       // 5. Validate actions
@@ -311,6 +313,53 @@ Respond with JSON:`;
   }
 
   /**
+   * Records whether the self-correction retry loop (ActionParser's chat
+   * JSON contract, PlanParser's plan JSON contract) succeeded after a
+   * malformed first attempt — Phase 5's "retry counts" metric. Reuses the
+   * `actions` table (task_name = 'llm_retry') rather than a new table;
+   * `task_name` has no CHECK constraint restricting it to real action
+   * types. Never throws.
+   */
+  private async recordRetry(
+    sessionId: string,
+    stage: 'chat_response' | 'work_session_plan',
+    succeeded: boolean,
+    originalError?: string,
+  ): Promise<void> {
+    try {
+      await this.supabase.from('actions').insert({
+        session_id: sessionId,
+        task_name: 'llm_retry',
+        status: succeeded ? 'completed' : 'failed',
+        payload: { stage, original_error: originalError },
+      });
+    } catch (error) {
+      console.error('[Orchestrator] Failed to record retry:', error instanceof Error ? error.message : 'Unknown error');
+    }
+  }
+
+  /**
+   * Records whether semantic memory retrieval found relevant context for
+   * this turn — retrieval *coverage*, not *quality* (there's no feedback
+   * signal for whether retrieved context was actually useful, only
+   * whether anything was found; see lib/metrics.ts's header comment).
+   * Reuses the `actions` table (task_name = 'memory_retrieval'). Never
+   * throws.
+   */
+  private async recordMemoryRetrieval(sessionId: string, hadContext: boolean): Promise<void> {
+    try {
+      await this.supabase.from('actions').insert({
+        session_id: sessionId,
+        task_name: 'memory_retrieval',
+        status: 'completed',
+        payload: { had_context: hadContext },
+      });
+    } catch (error) {
+      console.error('[Orchestrator] Failed to record memory retrieval:', error instanceof Error ? error.message : 'Unknown error');
+    }
+  }
+
+  /**
    * Start a Phase 4 work session (see HYDI_KERNEL_ARCHITECTURE_ROADMAP.md):
    * decompose `goal` into an ordered plan using only the existing action
    * vocabulary (this.allowedActionTypes — no new code-editing/test-running/
@@ -324,9 +373,11 @@ Respond with JSON:`;
     let parseResult = PlanParser.parsePlan(modelResponse.content);
     if (!parseResult.success || !parseResult.plan) {
       console.log('[Orchestrator] Invalid plan, retrying with corrected prompt');
+      const originalError = parseResult.error;
       const correctedPrompt = PlanParser.generateCorrectedPrompt(prompt, parseResult.error || 'Unknown error');
       const retryResponse = await this.modelManager.generateResponse(correctedPrompt, sessionId);
       parseResult = PlanParser.parsePlan(retryResponse.content);
+      await this.recordRetry(sessionId, 'work_session_plan', parseResult.success, originalError);
     }
 
     const rawSteps = parseResult.success && parseResult.plan ? parseResult.plan.steps : [];
@@ -392,17 +443,19 @@ Respond with JSON:`;
    * Get system status
    *
    * agent_metrics is per-process (resets every request — see
-   * lib/metrics.ts's module comment for why); task_success_rates,
-   * decision_stats, and work_session_stats are the durable, Phase 5
-   * cross-request signal, read from the actions/decisions/work_sessions
-   * tables. Best-effort: a metrics query failing degrades to an empty
-   * result via lib/metrics.ts's own error handling, never throws here.
+   * lib/metrics.ts's module comment for why); everything else is the
+   * durable, Phase 5 cross-request signal, read from the
+   * actions/decisions/work_sessions tables. Best-effort: a metrics query
+   * failing degrades to an empty result via lib/metrics.ts's own error
+   * handling, never throws here.
    */
   async getSystemStatus() {
-    const [taskSuccessRates, decisionStats, workSessionStats] = await Promise.all([
+    const [taskSuccessRates, decisionStats, workSessionStats, retryStats, memoryRetrievalStats] = await Promise.all([
       getTaskSuccessRates(this.supabase),
       getDecisionStats(this.supabase),
       getWorkSessionStats(this.supabase),
+      getRetryStats(this.supabase),
+      getMemoryRetrievalStats(this.supabase),
     ]);
 
     return {
@@ -413,6 +466,8 @@ Respond with JSON:`;
       task_success_rates: taskSuccessRates,
       decision_stats: decisionStats,
       work_session_stats: workSessionStats,
+      retry_stats: retryStats,
+      memory_retrieval_stats: memoryRetrievalStats,
     };
   }
 }

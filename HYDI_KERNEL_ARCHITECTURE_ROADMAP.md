@@ -296,16 +296,30 @@ current scope.
   were never a durable cross-request signal despite living on a
   `SpecialistAgent`; `lib/metrics.ts` reading from the DB tables directly
   is the actual Phase 5 answer, not a fix to the in-memory counters.
-- ❌ **Retry counts, memory retrieval quality, user-correction rate — not
-  built.** None of the three have a signal to read: retries
-  (`ActionParser`'s and `PlanParser`'s self-correction loops) aren't
-  persisted anywhere, memory retrieval has no feedback on whether
-  retrieved context was useful, and nothing distinguishes "user corrected
-  Heidi" from "user asked something new." Faking these would be worse
-  than omitting them. Each needs new signal capture (e.g. persisting a
-  retry event, capturing explicit user feedback) — that's real,
-  standalone follow-up work, not a Phase 5 afterthought.
-- 18 new tests (`tests/unit/metrics.test.ts`). Full suite: 1084/1084
+- ❌→✅ **Retry counts — built 2026-07-14.** `lib/orchestrator.ts` now
+  records whether `ActionParser`'s and `PlanParser`'s self-correction
+  retries succeeded, via a new `recordRetry()` writing to the `actions`
+  table (`task_name = 'llm_retry'`, no new table — `task_name` has no
+  CHECK constraint restricting it to real action types).
+  `lib/metrics.ts`'s `getRetryStats()` reads it back, grouped by stage
+  (`chat_response` vs `work_session_plan`).
+- ❌→🟡 **Memory retrieval — partially built, honestly relabeled.**
+  `recordMemoryRetrieval()` records whether semantic retrieval found any
+  context at all (`task_name = 'memory_retrieval'`), and
+  `getMemoryRetrievalStats()` reports that as **coverage**, not
+  **quality** — there is still no feedback signal for whether retrieved
+  context was actually *useful* to the response, only whether anything
+  was found. Deliberately not renamed to "quality" to avoid overclaiming
+  what's measured.
+- ❌ **User-correction rate — still not built, on purpose.** Detecting it
+  needs either an explicit feedback UI (thumbs up/down) or a heuristic
+  classifier over the next user message. A heuristic here carries real
+  false-positive/negative risk and would produce a metric that looks
+  authoritative but isn't — that's a product/UX decision, not something
+  to fabricate in a backend metrics pass. Still flagged as real,
+  standalone follow-up work.
+- 10 more new tests for the two additions above
+  (`tests/unit/metrics.test.ts`). Full suite: 1115/1115
   passing, typecheck clean.
 
 ---
