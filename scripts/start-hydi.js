@@ -50,6 +50,14 @@ const ALL_SERVICES = [
     description: 'Local LLM embeddings & inference',
   },
   {
+    name: 'Supabase Edge Functions',
+    key: 'supabase-edge-functions',
+    cmd: 'supabase',
+    args: ['functions', 'serve', '--env-file', '.env.local', '--no-verify-jwt'],
+    background: true,
+    description: 'Local Supabase Edge Functions runtime',
+  },
+  {
     name: 'ProtoForge Core',
     key: 'protoforge-core',
     cmd: 'node',
