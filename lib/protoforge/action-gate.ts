@@ -26,6 +26,15 @@
  * recorded to `decisions`, but nothing is blocked. Set
  * PROTOFORGE_ENFORCE_ACTIONS=true once a real policy has been promoted and
  * you've reviewed what it would actually approve/reject/escalate.
+ *
+ * Do NOT just flip is_active=true on the seed policy in
+ * 20260528000002_policies_table.sql as a shortcut to "promoting a real
+ * policy": its budget-auto-approve rule (`revenue_impact <= 100 →
+ * approve`, no other condition) would match every single action, since
+ * revenue_impact is hardcoded to 0 below — that seed data would auto-approve
+ * everything, not act as a conservative baseline. A real policy needs to be
+ * written for this system's actual action vocabulary (see action_type
+ * below) and reviewed before being made active.
  */
 
 import * as crypto from 'crypto';
@@ -109,6 +118,12 @@ export async function gateActions(actions: GatedAction[], sessionId: string): Pr
         stream: null,
         plan_step: i + 1,
         plan_total_steps: actions.length,
+        // Until a real CASCADE classifier exists, confidence/risk are the
+        // same degenerate values (0 / 1) for every action — action_type is
+        // the only field a policy can currently use to differentiate one
+        // action from another. Without this, no DSL rule can express
+        // "auto-approve reads, escalate emails" at all.
+        action_type: action.type,
       };
     });
 
