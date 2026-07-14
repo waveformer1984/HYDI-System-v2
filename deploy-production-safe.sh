@@ -1,6 +1,6 @@
 #!/bin/bash
 # Production-safe deployment script with rollback guards
-# set -euo pipefail  # Uncomment for production use
+set -euo pipefail
 
 echo "🚀 PRODUCTION DEPLOYMENT WITH REVENUE GENERATION"
 echo "==============================================="
@@ -126,8 +126,8 @@ deploy_functions() {
         if supabase functions deploy "$function" --project-ref "$PROJECT_REF"; then
             success "Function deployed: $function"
         else
-            error "Function deployment failed: $function"
-            ((failed_deployments++))
+            warning "Function deployment failed: $function"
+            failed_deployments=$((failed_deployments + 1))
         fi
     done
     
@@ -170,7 +170,7 @@ run_auth_smoke_tests() {
             success "JWT correctly required for: $function"
         else
             warning "JWT not required for: $function (HTTP $status_code)"
-            ((auth_failures++))
+            auth_failures=$((auth_failures + 1))
         fi
     done
     
@@ -192,7 +192,7 @@ run_auth_smoke_tests() {
             success "Public access working for: $function"
         else
             warning "Public access failed for: $function (HTTP $status_code)"
-            ((auth_failures++))
+            auth_failures=$((auth_failures + 1))
         fi
     done
     
