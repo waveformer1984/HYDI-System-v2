@@ -50,6 +50,18 @@ const ALL_SERVICES = [
     description: 'Local LLM embeddings & inference',
   },
   {
+    name: 'ProtoForge Core',
+    key: 'protoforge-core',
+    cmd: 'node',
+    args: ['src/server.js'],
+    getEnv: () => {
+      const config = PORTS_CONFIG.services['protoforge-core'];
+      return { PORT: String(config.port) };
+    },
+    background: true,
+    description: 'Event pipeline and agent bus backbone',
+  },
+  {
     name: 'HEIDI Core',
     key: 'heidi-core',
     cmd: 'node',
