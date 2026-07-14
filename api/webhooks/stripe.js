@@ -483,17 +483,18 @@ async function deactivateServices(customerId) {
   }
 }
 
-// Vercel API handler
-module.exports.handler = async function(req, res) {
+// Vercel API handler — this must be the module's default export (not a
+// named property) for Vercel/Next.js to recognize and invoke it as a route.
+async function routeHandler(req, res) {
   // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Stripe-Signature');
-  
+
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
-  
+
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
@@ -501,8 +502,11 @@ module.exports.handler = async function(req, res) {
   return handleStripeWebhook(req, res);
 }
 
-// Export for use in Express server
-module.exports = {
-  handleStripeWebhook,
-  SERVICE_TIERS
-};
+// Disable Next.js/Vercel body parsing -- Stripe's signature check in
+// handleStripeWebhook() needs the raw body (req.body is a Buffer when
+// bodyParser: false), not the JSON-parsed object the default parser produces.
+routeHandler.config = { api: { bodyParser: false } };
+
+module.exports = routeHandler;
+module.exports.handleStripeWebhook = handleStripeWebhook;
+module.exports.SERVICE_TIERS = SERVICE_TIERS;

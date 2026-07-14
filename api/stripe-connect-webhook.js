@@ -85,6 +85,24 @@ async function handler(req, res) {
 }
 
 async function handlePaymentIntentSucceeded(paymentIntent) {
+  // IDEMPOTENCY: Stripe delivers webhooks at-least-once and will redeliver
+  // this same event on retry/timeout. Without this guard, a redelivered
+  // payment_intent.succeeded double-books revenue in the ledger.
+  const { data: existingEntry, error: lookupError } = await supabase
+    .from('ledger')
+    .select('transaction_id')
+    .eq('stripe_payment_intent_id', paymentIntent.id)
+    .maybeSingle();
+
+  if (lookupError) throw lookupError;
+
+  if (existingEntry) {
+    console.log(
+      `[Connect Webhook] Duplicate delivery for ${paymentIntent.id}, ledger entry already exists: ${existingEntry.transaction_id}`
+    );
+    return existingEntry;
+  }
+
   const revenueStream = determineRevenueStream(paymentIntent);
   const connectAccountId = REVENUE_STREAM_ACCOUNTS[revenueStream];
 
@@ -140,7 +158,18 @@ async function handlePaymentIntentSucceeded(paymentIntent) {
     .select()
     .single();
 
-  if (error) throw error;
+  if (error) {
+    // Unique-constraint race: a concurrent redelivery of the same event
+    // inserted its row between our lookup above and this insert. The DB
+    // constraint (see 20260714160000_ledger_stripe_payment_intent_unique.sql)
+    // is the authoritative idempotency guard; treat this as already-processed
+    // rather than a failure that would make Stripe retry indefinitely.
+    if (error.code === '23505') {
+      console.log(`[Connect Webhook] Concurrent duplicate insert for ${paymentIntent.id}, ignoring`);
+      return null;
+    }
+    throw error;
+  }
 
   console.log(`[Connect Webhook] Ledger entry created: ${ledgerEntry.transaction_id}`);
   return ledgerEntry;
