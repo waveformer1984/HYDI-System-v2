@@ -60,11 +60,20 @@ and `archive/agents-specialized-orphans/README.md` for the full trail.
   pipeline**, not `modules/{raw-event-ledger-v2,cascade-classifier-v2,kilo-analyzer-v2,protoforge-policy-v2,replay-engine-v2}.js`.
   Deciding fact: `lib/protoforge/policy-engine.js` persists to real Supabase
   tables (`policies`, `decisions` — actual migrations exist); the `modules/*-v2`
-  family is 100% in-memory, no persistence anywhere. Those 5 files stay in
-  `modules/` (not archived) until Phase 1/2 builds a Raw-Ledger + Replay-Engine
-  equivalent against `kilo/`/`lib/protoforge/` and ports
-  `tests/unit/replay-engine.test.js`'s determinism assertions to it — see
-  Phase 1 below.
+  family was 100% in-memory, no persistence anywhere.
+- ✅ **Built and archived the rest.** `lib/protoforge/raw-ledger.ts` (real,
+  Supabase-backed, append-only —
+  `supabase/migrations/20260714120000_raw_event_ledger_table.sql`) and
+  `lib/protoforge/replay-engine.ts` (re-runs a stored event through
+  `kilo/`+`lib/protoforge/`, diffs the result) now exist, with the
+  determinism assertions ported onto them
+  (`tests/unit/replay-engine.test.ts`, 24 tests). The remaining 5
+  `modules/*-v2` files + their test are archived to
+  `archive/heidi-v2-dormant-pipeline/replay-family/`. See that directory's
+  parent README for the honesty note this carries forward: there's still no
+  real CASCADE classifier, so the replay engine's `classify` stage is a
+  deterministic passthrough of the ledger event's stored `event_type`, not
+  real classification.
 - ✅ **Decided: keep `hydi-protoforge`.** The `agent-factory.js`/`business-agents.js`/
   `execution-agents.js`/`workflow-agent.js`/`security-agent.js` roster and its
   `protoforge-main.js` entry point stay as-is — confirmed as an intentionally
@@ -78,10 +87,45 @@ and `archive/agents-specialized-orphans/README.md` for the full trail.
 - This directly unblocks `ROADMAP.md`'s existing Q3 2026 items ("Pipeline observability," "PolicyEngine expansion") — those assume the pipeline is live; today it isn't.
 
 ### Phase 1 — Wire the kernel spine
-- Make `lib/orchestrator.ts` (the confirmed production path under the local-first decision) the one caller of: `kilo/index.js`'s `generateHypotheses()` → `lib/protoforge/auto-gate.js`'s `autoGate()` → the chosen agent roster's `handle_event()`. This turns three dormant, individually-tested systems into one live path instead of three.
-- Fix the `sessions` triple-write problem: pick one module as the single writer (extend `lib/heidi-memory.ts`'s pattern — it already proves centralization works for `memories`), have `ModelManager` and `dispatcher.ts` call through it instead of writing directly.
-- Build a Raw-Ledger + Replay-Engine equivalent against `kilo/`/`lib/protoforge/`: an immutable append-only event store (backed by a real Supabase table, unlike the in-memory `modules/raw-event-ledger-v2.js`) that `kilo/index.js` reads from, plus a replay path that re-runs a stored event through CASCADE→KILO→ProtoForge and diffs the output. Port `tests/unit/replay-engine.test.js`'s determinism assertions onto it. Once this lands, `modules/{raw-event-ledger-v2,cascade-classifier-v2,kilo-analyzer-v2,protoforge-policy-v2,replay-engine-v2}.js` can finally be archived (see Phase 0 status above).
-- Exit criterion: a message through `/api/chat` in production (Ollama path) actually produces a CASCADE classification, a KILO hypothesis, and a ProtoForge approve/reject/escalate decision recorded in the `decisions` table — today none of that happens on the live path.
+
+**Status: mostly executed, 2026-07-14.**
+
+- ✅ `lib/orchestrator.ts` now calls `kilo/index.js`'s `generateHypotheses()`
+  → `lib/protoforge/auto-gate.js`'s `autoGate()` for every proposed action,
+  via `lib/protoforge/action-gate.ts`. Real decisions are recorded to the
+  `decisions` table on every chat turn. **Enforcement is opt-in**
+  (`PROTOFORGE_ENFORCE_ACTIONS=true`) — see `action-gate.ts`'s module
+  comment for why blind enforcement would silently reject every action
+  today (fail-closed policy engine, seed policy deliberately inactive, no
+  real CASCADE ground truth yet). Observe-only by default: nothing is
+  blocked, everything is recorded.
+- ✅ Fixed the `sessions` triple-write problem — `lib/session-state.ts` is
+  now the single writer/reader; `ModelManager`, `dispatcher.ts`, and the
+  `update_database` action tool all delegate to it.
+- ✅ Built the Raw-Ledger + Replay-Engine equivalent against
+  `kilo/`/`lib/protoforge/` (`lib/protoforge/raw-ledger.ts`,
+  `lib/protoforge/replay-engine.ts`) and ported the determinism assertions
+  (`tests/unit/replay-engine.test.ts`). The `modules/*-v2` family is fully
+  archived now (see Phase 0 status above).
+- ⏳ **Not yet done**: nothing currently *appends* to the new
+  `raw_event_ledger` table on the live chat path — `replay-engine.ts` and
+  `raw-ledger.ts` exist and are tested, but `lib/orchestrator.ts` doesn't
+  write to the ledger yet, so there's nothing real to replay in production
+  today. Wiring that in is a further, separate change (changes write volume
+  on every turn) — deliberately not bundled into this pass.
+- ⏳ **Not yet done**: no agent roster is wired to `action-gate.ts`'s output
+  yet — hypotheses are gated but approved/escalated verdicts don't yet
+  route to a specialist agent's `handle_event()`. That's Phase 3.
+- ⏳ **Not yet done**: the new `raw_event_ledger` table exists only as a
+  migration file — it hasn't been applied to any live Supabase project yet
+  (`supabase db push`), consistent with this repo's general migration
+  backlog (see `HYDI_GAME_PLAN.md`'s P0 items on `DATABASE_URL`).
+- Exit criterion (revised): a message through `/api/chat` in production
+  (Ollama path) now does produce a KILO hypothesis and a ProtoForge
+  approve/reject/escalate decision recorded in the `decisions` table for
+  every action — met, in observe-only mode. Full exit (CASCADE
+  classification real, ledger genuinely populated, enforcement safe to
+  flip on) is not yet met — tracked above.
 
 ### Phase 2 — Planning, episodic memory, self-evaluation
 - Extend the hypothesis object (`{confidence, risk, revenue_impact}`) with a step/plan representation so ProtoForge is gating *steps of a plan*, not just single classifications — this is the natural generalization path identified in the audit (item 6), not a new planner.

@@ -13,38 +13,45 @@ alongside it (`test-heidi-v2.js`, `test-fixes.js`), which are not part of
 Moved here: `heidi-v2-orchestrator.js`, `ingestion-layer-v2.js`,
 `emission-layer-v2.js`, `test-heidi-v2.js`, `test-fixes.js`.
 
-## Deliberately NOT moved here
+## replay-family/ — the last 5 files, archived 2026-07-14
 
-Five files from the same pipeline family stay in `modules/` even though they
-are equally unreachable from production:
-
-- `raw-event-ledger-v2.js`
-- `cascade-classifier-v2.js`
-- `kilo-analyzer-v2.js`
-- `protoforge-policy-v2.js`
-- `replay-engine-v2.js`
-
-They have active Jest coverage in `tests/unit/replay-engine.test.js`, which
-exercises the core "same RAW LEDGER input → same pipeline output" determinism
-invariant that both architecture docs describe as central. Moving them would
-break `npm test` / CI.
+`replay-family/raw-event-ledger-v2.js`, `cascade-classifier-v2.js`,
+`kilo-analyzer-v2.js`, `protoforge-policy-v2.js`, `replay-engine-v2.js` (plus
+their test, `replay-family/replay-engine.test.js.bak`) were initially kept
+in `modules/` rather than archived here, because they carried the only Jest
+coverage in the repo for the "same RAW LEDGER input → same pipeline output"
+determinism invariant.
 
 **Decision (2026-07-14): `kilo/` + `lib/protoforge/` is the canonical
 pipeline, not this family.** `lib/protoforge/policy-engine.js` persists to
 real Supabase tables (`policies`, `decisions` — see
 `supabase/migrations/20260528000002_policies_table.sql` and
-`..._decisions_table.sql`); this `modules/*-v2` family is entirely
-in-memory with no persistence anywhere. `kilo/` + `lib/protoforge/` is also
-better tested (3 test files vs. this family's 1) and is what real DB schema
-already exists for.
+`..._decisions_table.sql`); this family was entirely in-memory with no
+persistence anywhere, and was less tested (1 test file vs. `kilo/`+
+`lib/protoforge/`'s 3).
 
-That said, `kilo/` + `lib/protoforge/` currently has **no Raw Ledger or
-Replay Engine equivalent at all** — that concept exists only in this
-deprecated family. So these 5 files stay in `modules/` (not moved to
-archive) until Phase 1/2 of `HYDI_KERNEL_ARCHITECTURE_ROADMAP.md` builds a
-real ledger + replay capability against `kilo/`/`lib/protoforge/` and ports
-`tests/unit/replay-engine.test.js`'s determinism assertions to it. At that
-point this family can be archived outright.
+The blocker — no Raw Ledger or Replay Engine equivalent against
+`kilo/`/`lib/protoforge/` — is now resolved:
+
+- `lib/protoforge/raw-ledger.ts` — real, Supabase-backed, append-only
+  (`supabase/migrations/20260714120000_raw_event_ledger_table.sql`;
+  RLS has no UPDATE/DELETE policy for any role, enforcing immutability at
+  the DB layer, not just in application code).
+- `lib/protoforge/replay-engine.ts` — re-runs a stored event through
+  `kilo/` + `lib/protoforge/` and diffs the result; `normalize()` /
+  `compareWithStoredTrace()` / stats logic is a direct, dependency-free
+  port of `replay-family/replay-engine-v2.js`'s core logic.
+- `tests/unit/replay-engine.test.ts` — the determinism assertions ported
+  onto the new engine (24 tests, dependency-injected instead of
+  `jest.mock`'d module singletons).
+
+Honesty note carried into the new code (see `replay-engine.ts`'s module
+comment): there is still no real CASCADE classifier feeding a ground-truth
+state snapshot, so `createReplayEngine()`'s `classify` stage is a
+deterministic passthrough of the ledger event's own `event_type` field, not
+real classification logic. That gap is unchanged from
+`lib/protoforge/action-gate.ts`'s equivalent note — building a real CASCADE
+classifier is separate future work.
 
 ## Also NOT touched in this pass
 
