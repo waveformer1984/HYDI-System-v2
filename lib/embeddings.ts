@@ -38,6 +38,21 @@ function ollamaBaseUrl(): string {
 }
 
 /**
+ * Embedding request budget (ms). Reuses LOCAL_MODEL_TIMEOUT_MS (same
+ * underlying local Ollama daemon lib/ModelManager.ts budgets against) when
+ * set, with its own EMBEDDING_TIMEOUT_MS override and a 10s default.
+ * Without this, an Ollama process that's up but hung blocks memory writes
+ * indefinitely -- there was previously no AbortSignal on this fetch at all.
+ */
+function embeddingTimeoutMs(): number {
+  const parsed = parseInt(
+    process.env.EMBEDDING_TIMEOUT_MS || process.env.LOCAL_MODEL_TIMEOUT_MS || '',
+    10
+  );
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 10000;
+}
+
+/**
  * Resolve which embedding provider to use. An explicit EMBEDDING_PROVIDER wins;
  * otherwise prefer OpenAI when its key is present, then fall back to Ollama when
  * a local model is enabled.
@@ -75,6 +90,7 @@ async function generateOpenAIEmbedding(input: string): Promise<number[] | null> 
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({ model: OPENAI_EMBEDDING_MODEL, input }),
+    signal: AbortSignal.timeout(embeddingTimeoutMs()),
   });
 
   if (!response.ok) {
@@ -94,6 +110,7 @@ async function generateOllamaEmbedding(input: string): Promise<number[] | null> 
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ model: OLLAMA_EMBEDDING_MODEL, prompt: input }),
+    signal: AbortSignal.timeout(embeddingTimeoutMs()),
   });
 
   if (!response.ok) {

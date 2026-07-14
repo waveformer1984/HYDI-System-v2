@@ -277,6 +277,7 @@ Key DB features: RLS enabled on all tables, `system_dashboard` view drives healt
 | `OLLAMA_EMBEDDING_MODEL` | Local embeddings model (default `nomic-embed-text`); vectors are zero-padded to 1536 dims |
 | `ENABLE_LOCAL_MODEL` / `LOCAL_MODEL_URL` / `LOCAL_MODEL_NAME` | Enable + locate the local Ollama model for inference |
 | `LOCAL_MODEL_TIMEOUT_MS` | Local inference budget in ms (default `5000`); governs both the abort timeout and the success-routing latency gate in `lib/ModelManager.ts` |
+| `EMBEDDING_TIMEOUT_MS` | Embedding request budget in ms (default `10000`) for `lib/embeddings.ts`'s OpenAI/Ollama fetch calls; falls back to `LOCAL_MODEL_TIMEOUT_MS` if unset |
 
 Use `SUPABASE_SERVICE_ROLE_KEY` server-side only. Never expose it to the client.
 

@@ -15,6 +15,8 @@ const EMBEDDING_ENV_KEYS = [
   'ENABLE_LOCAL_MODEL',
   'LOCAL_MODEL_URL',
   'OLLAMA_URL',
+  'EMBEDDING_TIMEOUT_MS',
+  'LOCAL_MODEL_TIMEOUT_MS',
 ];
 
 describe('lib/embeddings', () => {
@@ -130,6 +132,60 @@ describe('lib/embeddings', () => {
         'http://example:11434/api/embeddings',
         expect.objectContaining({ method: 'POST' }),
       );
+    });
+
+    describe('request timeout', () => {
+      it('passes an AbortSignal on the Ollama fetch so a hung daemon cannot block forever', async () => {
+        process.env.EMBEDDING_PROVIDER = 'ollama';
+        const fetchMock = jest.fn().mockResolvedValue({
+          ok: true,
+          json: async () => ({ embedding: [0.1, 0.2] }),
+        });
+        global.fetch = fetchMock as unknown as typeof fetch;
+
+        await generateEmbedding('hi');
+        const [, options] = fetchMock.mock.calls[0];
+        expect(options.signal).toBeInstanceOf(AbortSignal);
+      });
+
+      it('passes an AbortSignal on the OpenAI fetch too', async () => {
+        process.env.OPENAI_API_KEY = 'sk-test';
+        const fetchMock = jest.fn().mockResolvedValue({
+          ok: true,
+          json: async () => ({ data: [{ embedding: Array(EMBEDDING_DIM).fill(0.1) }] }),
+        });
+        global.fetch = fetchMock as unknown as typeof fetch;
+
+        await generateEmbedding('hi');
+        const [, options] = fetchMock.mock.calls[0];
+        expect(options.signal).toBeInstanceOf(AbortSignal);
+      });
+
+      it('degrades to null (does not hang or throw) when the request times out', async () => {
+        process.env.EMBEDDING_PROVIDER = 'ollama';
+        global.fetch = jest.fn().mockImplementation(
+          () =>
+            new Promise((_resolve, reject) => {
+              reject(new DOMException('The operation was aborted.', 'TimeoutError'));
+            }),
+        ) as unknown as typeof fetch;
+
+        await expect(generateEmbedding('hi')).resolves.toBeNull();
+      });
+
+      it('honours EMBEDDING_TIMEOUT_MS as an override', async () => {
+        process.env.EMBEDDING_PROVIDER = 'ollama';
+        process.env.EMBEDDING_TIMEOUT_MS = '2500';
+        global.fetch = jest.fn().mockResolvedValue({
+          ok: true,
+          json: async () => ({ embedding: [0.1] }),
+        }) as unknown as typeof fetch;
+
+        const timeoutSpy = jest.spyOn(AbortSignal, 'timeout');
+        await generateEmbedding('hi');
+        expect(timeoutSpy).toHaveBeenCalledWith(2500);
+        timeoutSpy.mockRestore();
+      });
     });
   });
 });
