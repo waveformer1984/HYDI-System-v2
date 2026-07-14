@@ -158,7 +158,9 @@ class ProvisioningWorker {
     }
 
     async handleCheckoutCompleted(payload) {
-        const session = payload.data;
+        // payload.data is the Stripe Event's `data` wrapper ({ object,
+        // previous_attributes }), not the session itself -- unwrap it.
+        const session = payload.data.object;
         const customerEmail = session.customer_details?.email;
         const customerId = session.customer;
         
@@ -194,7 +196,7 @@ class ProvisioningWorker {
     }
 
     async handlePaymentSucceeded(payload) {
-        const invoice = payload.data;
+        const invoice = payload.data.object;
         const customerId = invoice.customer;
         
         // Get customer email
@@ -225,7 +227,7 @@ class ProvisioningWorker {
     }
 
     async handleSubscriptionCreated(payload) {
-        const subscription = payload.data;
+        const subscription = payload.data.object;
         const customerId = subscription.customer;
         const tier = this.determineTierFromPrice(subscription.items.data[0].price.id);
         
@@ -263,7 +265,7 @@ class ProvisioningWorker {
     }
 
     async handleSubscriptionUpdated(payload) {
-        const subscription = payload.data;
+        const subscription = payload.data.object;
         const customerId = subscription.customer;
         const tier = this.determineTierFromPrice(subscription.items.data[0].price.id);
         
@@ -305,7 +307,7 @@ class ProvisioningWorker {
     }
 
     async handleSubscriptionDeleted(payload) {
-        const subscription = payload.data;
+        const subscription = payload.data.object;
         const customerId = subscription.customer;
         
         // Get customer email

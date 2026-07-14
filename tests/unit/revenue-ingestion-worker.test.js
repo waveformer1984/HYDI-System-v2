@@ -107,3 +107,58 @@ describe('RevenueIngestionWorker - payment_intent.succeeded', () => {
     );
   });
 });
+
+describe('RevenueIngestionWorker - other Stripe event unwrapping', () => {
+  let worker;
+
+  function chainableTable(finalResult = { data: null, error: null }) {
+    const table = {
+      select: jest.fn().mockReturnThis(),
+      insert: jest.fn().mockReturnThis(),
+      update: jest.fn().mockReturnThis(),
+      upsert: jest.fn().mockReturnThis(),
+      eq: jest.fn().mockReturnThis(),
+      maybeSingle: jest.fn().mockResolvedValue(finalResult),
+      single: jest.fn().mockResolvedValue(finalResult),
+      then: undefined,
+    };
+    return table;
+  }
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    worker = new RevenueIngestionWorker('test-worker-2');
+    worker.supabase = { from: jest.fn(() => chainableTable()) };
+  });
+
+  it('handleCheckoutCompleted reads session from payload.data.object, not payload.data', async () => {
+    const session = {
+      customer_details: { email: 'buyer@example.com' },
+      customer: 'cus_1',
+      amount_total: 4900,
+      currency: 'usd',
+      id: 'cs_1',
+      metadata: {},
+    };
+
+    await expect(
+      worker.handleCheckoutCompleted({ event_id: 'evt_a', data: { object: session } })
+    ).resolves.not.toThrow();
+  });
+
+  it('handleSubscriptionCreated reads subscription from payload.data.object, not payload.data', async () => {
+    worker.supabase = {
+      from: jest.fn(() => chainableTable({ data: { id: 'cust_1' }, error: null })),
+    };
+    const subscription = {
+      id: 'sub_1',
+      customer: 'cus_2',
+      items: { data: [{ price: { id: 'price_1' } }] },
+      current_period_start: 1700000000,
+    };
+
+    await expect(
+      worker.handleSubscriptionCreated({ data: { object: subscription } })
+    ).resolves.not.toThrow();
+  });
+});
