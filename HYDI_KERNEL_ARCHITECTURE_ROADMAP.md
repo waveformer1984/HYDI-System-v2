@@ -45,19 +45,119 @@ Also found: `sessions` has three independent, uncoordinated writers (`lib/ModelM
 ## Phased plan
 
 ### Phase 0 — Triage (prerequisite to everything else)
-- Confirm with the maintainer which of the dormant systems are genuinely abandoned vs. "built ahead of being wired up on purpose." Do not delete anything without that confirmation — some of this (e.g. `pao-system/agents/*.ts`'s cleaner state model) is worth keeping as the *target* implementation, just not worth running two more copies of in parallel.
-- Pick one specialist-agent roster (`pao-system/agents/*.ts` recommended — better concurrency model via `status`/`load`/`maxConcurrency`, and it's what `AgentRegistry`/`TaskRouter` already assume) and one hypothesis/policy pipeline (`kilo/` + `lib/protoforge/`, since it already matches the documented architecture and has tests). Archive or delete the alternates (`agents/specialized/agent-factory.js`'s 3-of-15 partial roster, the `modules/*-v2.js` family, `src/server.js`'s module set) once Phase 0 confirms they're not load-bearing elsewhere.
+
+**Status: mostly executed, 2026-07-14.** Findings changed the shape of this
+phase from "delete dead code" to "most of it isn't dead, it's unwired *or*
+externally deployed" — see `archive/heidi-v2-dormant-pipeline/README.md`
+and `archive/agents-specialized-orphans/README.md` for the full trail.
+
+- ✅ Archived (verified zero references anywhere, full test suite +
+  typecheck unchanged both times): `modules/heidi-v2-orchestrator.js`,
+  `ingestion-layer-v2.js`, `emission-layer-v2.js` and their two manual test
+  scripts → `archive/heidi-v2-dormant-pipeline/`. `agents/specialized/command-center.js`,
+  `deployment-manager.js`, `operator-agent.js` → `archive/agents-specialized-orphans/`.
+- ✅ **Decided: `kilo/` + `lib/protoforge/` is the canonical hypothesis/policy
+  pipeline**, not `modules/{raw-event-ledger-v2,cascade-classifier-v2,kilo-analyzer-v2,protoforge-policy-v2,replay-engine-v2}.js`.
+  Deciding fact: `lib/protoforge/policy-engine.js` persists to real Supabase
+  tables (`policies`, `decisions` — actual migrations exist); the `modules/*-v2`
+  family was 100% in-memory, no persistence anywhere.
+- ✅ **Built and archived the rest.** `lib/protoforge/raw-ledger.ts` (real,
+  Supabase-backed, append-only —
+  `supabase/migrations/20260714120000_raw_event_ledger_table.sql`) and
+  `lib/protoforge/replay-engine.ts` (re-runs a stored event through
+  `kilo/`+`lib/protoforge/`, diffs the result) now exist, with the
+  determinism assertions ported onto them
+  (`tests/unit/replay-engine.test.ts`, 24 tests). The remaining 5
+  `modules/*-v2` files + their test are archived to
+  `archive/heidi-v2-dormant-pipeline/replay-family/`. See that directory's
+  parent README for the honesty note this carries forward: there's still no
+  real CASCADE classifier, so the replay engine's `classify` stage is a
+  deterministic passthrough of the ledger event's stored `event_type`, not
+  real classification.
+- ✅ **Decided: keep `hydi-protoforge`.** The `agent-factory.js`/`business-agents.js`/
+  `execution-agents.js`/`workflow-agent.js`/`security-agent.js` roster and its
+  `protoforge-main.js` entry point stay as-is — confirmed as an intentionally
+  kept, real PM2 deployment (`ecosystem.config.js`), not dead code. Not part of
+  the kernel consolidation; out of scope for Phase 1-3 below unless revisited.
+- ⏳ Still open: `pao-system/agents/*.ts` vs. `agents/specialized/*`'s live
+  5-file roster as the specialist-agent implementation Phase 3 builds on —
+  `pao-system/agents/*.ts` has the cleaner state model but zero production
+  usage; `agents/specialized/*`'s roster is a real PM2 deployment but kept
+  separate per the decision above. Revisit at Phase 3, not before.
 - This directly unblocks `ROADMAP.md`'s existing Q3 2026 items ("Pipeline observability," "PolicyEngine expansion") — those assume the pipeline is live; today it isn't.
 
 ### Phase 1 — Wire the kernel spine
-- Make `lib/orchestrator.ts` (the confirmed production path under the local-first decision) the one caller of: `kilo/index.js`'s `generateHypotheses()` → `lib/protoforge/auto-gate.js`'s `autoGate()` → the chosen agent roster's `handle_event()`. This turns three dormant, individually-tested systems into one live path instead of three.
-- Fix the `sessions` triple-write problem: pick one module as the single writer (extend `lib/heidi-memory.ts`'s pattern — it already proves centralization works for `memories`), have `ModelManager` and `dispatcher.ts` call through it instead of writing directly.
-- Exit criterion: a message through `/api/chat` in production (Ollama path) actually produces a CASCADE classification, a KILO hypothesis, and a ProtoForge approve/reject/escalate decision recorded in the `decisions` table — today none of that happens on the live path.
+
+**Status: mostly executed, 2026-07-14.**
+
+- ✅ `lib/orchestrator.ts` now calls `kilo/index.js`'s `generateHypotheses()`
+  → `lib/protoforge/auto-gate.js`'s `autoGate()` for every proposed action,
+  via `lib/protoforge/action-gate.ts`. Real decisions are recorded to the
+  `decisions` table on every chat turn. **Enforcement is opt-in**
+  (`PROTOFORGE_ENFORCE_ACTIONS=true`) — see `action-gate.ts`'s module
+  comment for why blind enforcement would silently reject every action
+  today (fail-closed policy engine, seed policy deliberately inactive, no
+  real CASCADE ground truth yet). Observe-only by default: nothing is
+  blocked, everything is recorded.
+- ✅ Fixed the `sessions` triple-write problem — `lib/session-state.ts` is
+  now the single writer/reader; `ModelManager`, `dispatcher.ts`, and the
+  `update_database` action tool all delegate to it.
+- ✅ Built the Raw-Ledger + Replay-Engine equivalent against
+  `kilo/`/`lib/protoforge/` (`lib/protoforge/raw-ledger.ts`,
+  `lib/protoforge/replay-engine.ts`) and ported the determinism assertions
+  (`tests/unit/replay-engine.test.ts`). The `modules/*-v2` family is fully
+  archived now (see Phase 0 status above).
+- ⏳ **Not yet done**: nothing currently *appends* to the new
+  `raw_event_ledger` table on the live chat path — `replay-engine.ts` and
+  `raw-ledger.ts` exist and are tested, but `lib/orchestrator.ts` doesn't
+  write to the ledger yet, so there's nothing real to replay in production
+  today. Wiring that in is a further, separate change (changes write volume
+  on every turn) — deliberately not bundled into this pass.
+- ⏳ **Not yet done**: no agent roster is wired to `action-gate.ts`'s output
+  yet — hypotheses are gated but approved/escalated verdicts don't yet
+  route to a specialist agent's `handle_event()`. That's Phase 3.
+- ⏳ **Not yet done**: the new `raw_event_ledger` table exists only as a
+  migration file — it hasn't been applied to any live Supabase project yet
+  (`supabase db push`), consistent with this repo's general migration
+  backlog (see `HYDI_GAME_PLAN.md`'s P0 items on `DATABASE_URL`).
+- Exit criterion (revised): a message through `/api/chat` in production
+  (Ollama path) now does produce a KILO hypothesis and a ProtoForge
+  approve/reject/escalate decision recorded in the `decisions` table for
+  every action — met, in observe-only mode. Full exit (CASCADE
+  classification real, ledger genuinely populated, enforcement safe to
+  flip on) is not yet met — tracked above.
 
 ### Phase 2 — Planning, episodic memory, self-evaluation
-- Extend the hypothesis object (`{confidence, risk, revenue_impact}`) with a step/plan representation so ProtoForge is gating *steps of a plan*, not just single classifications — this is the natural generalization path identified in the audit (item 6), not a new planner.
-- Episodic memory: add an `experiences` table (or extend `memories` with a `kind: 'episodic'` row type) storing `{problem, actions_taken, outcome, lesson}`, written by the same action-execution path that already exists in `lib/action-executor.ts`.
-- Self-evaluation: after every `ActionExecutor.execute()` call, record success/failure and feed it into the `decisions` audit trail ProtoForge already writes — extending an existing table beats adding a new one.
+
+**Status: executed, 2026-07-14.**
+
+- ✅ **Self-evaluation**: `lib/protoforge/policy-engine.js`'s `_buildDecision`
+  now assigns a client-generated `decisionId` up front (no need to await
+  the insert to know it), and a new standalone `recordOutcome(decisionId,
+  outcome, detail)` export backfills it. `lib/orchestrator.ts` calls it
+  after every `ActionExecutor.execute()` — success or failure — closing
+  the loop the `decisions` table's `outcome`/`outcome_at`/`outcome_detail`
+  columns were already built for but nothing wrote to.
+- ✅ **Episodic memory**: extended `memories` with a `kind` discriminator
+  rather than a new table (`supabase/migrations/20260714130000_memories_episodic_kind.sql`
+  — `kind text default 'conversation'`, `metadata jsonb`), so episodic rows
+  stay retrievable through the same `search_memories` semantic-search path
+  as conversational memory. `lib/episodic-memory.ts`'s `buildExperience()`
+  distills a turn's action results into `{problem, actions_taken, outcome,
+  lesson}`; `storeExperience()` persists it. Wired into
+  `lib/orchestrator.ts` after every turn that attempted at least one
+  action.
+- ✅ **Plan-step tagging (bounded version)**: `lib/protoforge/action-gate.ts`
+  now tags each hypothesis with `plan_step`/`plan_total_steps` — its
+  position in that turn's action list — so DSL rules *can* reason about
+  multi-step plans (e.g. "only auto-approve step 1"). This is the bounded
+  increment, not a new planner: goal → milestones → tasks hierarchical
+  planning is still open and probably belongs in Phase 4
+  (autonomous work sessions) rather than being retrofitted here.
+- 17 new tests across `tests/unit/protoforge-policy-engine.test.js`,
+  `tests/unit/protoforge-action-gate.test.ts`, and
+  `tests/unit/episodic-memory.test.ts`. Full suite: 1020/1020 passing,
+  typecheck clean.
 
 ### Phase 3 — Multi-agent collaboration
 - Only once Phase 1's single path is proven reliable: bring the chosen 15-role agent roster onto the live path via `AgentRegistry`/`TaskRouter`, replacing the currently-dead `HeidiController` wiring with a real instantiation behind the kernel spine.

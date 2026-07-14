@@ -1,5 +1,5 @@
 // Test the fixes for Dependency Deadlock
-const heidiV2Orchestrator = require('./modules/heidi-v2-orchestrator');
+const heidiV2Orchestrator = require('./heidi-v2-orchestrator');
 
 async function testFixes() {
   console.log('\n=== TESTING DEPENDENCY DEADLOCK FIXES ===\n');

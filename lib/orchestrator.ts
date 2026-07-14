@@ -15,6 +15,8 @@ import { ModelManager } from './ModelManager';
 import { ActionParser, ParsedResponse } from './ActionParser';
 import { ActionExecutor } from './action-executor';
 import { retrieveMemory, storeMemory } from './heidi-memory';
+import { gateActions, isEnforcing } from './protoforge/action-gate';
+import { buildExperience, storeExperience } from './episodic-memory';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 interface ChatRequest {
@@ -101,8 +103,19 @@ export class HeidiOrchestrator {
       }
       
       // 6. Execute actions
-      await this.executeActions(finalResponse.actions, request.session_id);
-      
+      const actionResults = await this.executeActions(finalResponse.actions, request.session_id);
+
+      // 6b. Record an episodic experience for this turn — accumulate what
+      // was attempted and what happened, not just raw conversation.
+      if (actionResults.length > 0) {
+        await storeExperience(
+          this.supabase,
+          request.session_id,
+          request.user_id,
+          buildExperience(request.message, actionResults),
+        );
+      }
+
       // 7. Store conversation in memory
       await this.storeMemory(request.session_id, request.user_id, request.message, finalResponse.response);
       
@@ -173,10 +186,55 @@ Respond with JSON:`;
 
   /**
    * Execute actions for real and record truthful outcomes in the `actions`
-   * audit log (status reflects the actual handler result).
+   * audit log (status reflects the actual handler result). Returns a
+   * summary per action so the caller can build an episodic-memory record
+   * of the turn.
+   *
+   * Every action is first run through KILO -> ProtoForge (lib/protoforge/
+   * action-gate.ts), which records a real decision to the `decisions`
+   * table. Enforcement is opt-in (PROTOFORGE_ENFORCE_ACTIONS=true) — see
+   * action-gate.ts for why blind enforcement would silently reject
+   * everything today. The `actions` table's status column is constrained
+   * to pending/completed/failed (supabase/heidi-init.sql), so a
+   * reject/escalate verdict is recorded as 'failed' with the real
+   * ProtoForge decision in the payload, not as a new status value.
+   *
+   * When an action actually executes, its outcome is backfilled onto the
+   * same ProtoForge decision row via recordOutcome() — the self-evaluation
+   * feedback loop: did the thing ProtoForge approved actually succeed?
+   * Skipped when the action was blocked (there's no execution outcome to
+   * backfill; the decision itself is the terminal state) or when gating
+   * degraded to 'skipped' (no decisionId to backfill against).
    */
-  private async executeActions(actions: ParsedResponse['actions'], sessionId: string): Promise<void> {
-    for (const action of actions) {
+  private async executeActions(
+    actions: ParsedResponse['actions'],
+    sessionId: string,
+  ): Promise<Array<{ type: string; status: 'completed' | 'failed'; error?: string }>> {
+    const verdicts = await gateActions(actions, sessionId);
+    const enforcing = isEnforcing();
+    const results: Array<{ type: string; status: 'completed' | 'failed'; error?: string }> = [];
+
+    for (const { action, decision, confidence, hypotheses, reasoning, decisionId } of verdicts) {
+      const gateMeta = {
+        protoforge_decision: decision,
+        protoforge_confidence: confidence,
+        protoforge_hypotheses: hypotheses,
+        protoforge_reasoning: reasoning,
+        protoforge_enforced: enforcing,
+      };
+
+      if (enforcing && (decision === 'reject' || decision === 'escalate')) {
+        console.log(`[Orchestrator] Action ${action.type} ${decision} by ProtoForge — not executed`);
+        await this.supabase.from('actions').insert({
+          session_id: sessionId,
+          task_name: action.type,
+          status: 'failed',
+          payload: { ...action.payload, ...gateMeta },
+        });
+        results.push({ type: action.type, status: 'failed', error: `blocked by ProtoForge (${decision})` });
+        continue;
+      }
+
       try {
         const outcome = await this.actionExecutor.execute(action, sessionId);
         console.log(`[Orchestrator] Executed action: ${action.type} -> ${outcome.status}`);
@@ -185,17 +243,47 @@ Respond with JSON:`;
           session_id: sessionId,
           task_name: action.type,
           status: outcome.status,
-          payload: { ...action.payload, result: outcome.result, error: outcome.error },
+          payload: { ...action.payload, result: outcome.result, error: outcome.error, ...gateMeta },
         });
+        await this.recordActionOutcome(decisionId, outcome.status === 'completed' ? 'success' : 'failure', {
+          error: outcome.error,
+        });
+        results.push({ type: action.type, status: outcome.status, error: outcome.error });
       } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
         console.error(`[Orchestrator] Action execution failed for ${action.type}:`, error);
         await this.supabase.from('actions').insert({
           session_id: sessionId,
           task_name: action.type,
           status: 'failed',
-          payload: { ...action.payload, error: error instanceof Error ? error.message : 'Unknown error' },
+          payload: { ...action.payload, error: message, ...gateMeta },
         });
+        await this.recordActionOutcome(decisionId, 'failure', { error: message });
+        results.push({ type: action.type, status: 'failed', error: message });
       }
+    }
+
+    return results;
+  }
+
+  /**
+   * Backfill a ProtoForge decision's outcome after execution — the
+   * self-evaluation feedback loop. Never throws: a failure here shouldn't
+   * fail chat processing, it's an audit-trail nicety, not load-bearing.
+   */
+  private async recordActionOutcome(
+    decisionId: string | undefined,
+    outcome: 'success' | 'failure',
+    detail: Record<string, unknown>,
+  ): Promise<void> {
+    if (!decisionId) return;
+    try {
+      const { recordOutcome } = (await import('./protoforge/policy-engine.js')) as unknown as {
+        recordOutcome: (id: string, outcome: string, detail?: Record<string, unknown>) => Promise<void>;
+      };
+      await recordOutcome(decisionId, outcome, detail);
+    } catch (error) {
+      console.error('[Orchestrator] Failed to record ProtoForge outcome:', error instanceof Error ? error.message : 'Unknown error');
     }
   }
 

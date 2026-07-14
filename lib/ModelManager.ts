@@ -20,6 +20,7 @@
  */
 
 import { createClient } from '@supabase/supabase-js';
+import { getSessionState as getSharedSessionState, updateSessionState as updateSharedSessionState, SessionState } from './session-state';
 
 interface ModelResponse {
   content: string;
@@ -27,13 +28,6 @@ interface ModelResponse {
   latency: number;
   success: boolean;
   error?: string;
-}
-
-interface SessionState {
-  session_id: string;
-  tone: 'neutral' | 'focused' | 'degraded' | 'recovery';
-  active_model: 'local' | 'api';
-  last_action_status: 'success' | 'failure' | 'pending';
 }
 
 export class ModelManager {
@@ -320,39 +314,21 @@ export class ModelManager {
   }
 
   /**
-   * Session state management
+   * Session state management — delegates to the shared session-state module
+   * so ModelManager isn't one of several independent `sessions` writers.
    */
   private async updateSessionState(sessionId: string, activeModel: 'local' | 'api', status: 'success' | 'failure'): Promise<void> {
-    try {
-      await this.supabase
-        .from('sessions')
-        .upsert({
-          session_id: sessionId,
-          active_model: activeModel,
-          last_action_status: status,
-          updated_at: new Date().toISOString()
-        });
-    } catch (error) {
-      console.error('[ModelManager] Failed to update session state:', error);
-    }
+    await updateSharedSessionState(this.supabase, sessionId, {
+      active_model: activeModel,
+      last_action_status: status,
+    });
   }
 
   /**
    * Get current session state
    */
   async getSessionState(sessionId: string): Promise<SessionState | null> {
-    try {
-      const { data } = await this.supabase
-        .from('sessions')
-        .select('*')
-        .eq('session_id', sessionId)
-        .single();
-
-      return data;
-    } catch (error) {
-      console.error('[ModelManager] Failed to get session state:', error);
-      return null;
-    }
+    return getSharedSessionState(this.supabase, sessionId);
   }
 
   /**

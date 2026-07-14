@@ -1,7 +1,7 @@
 // Test HEIDI V2 - Single Truth Architecture
 // Demonstrates: RAW LEDGER first, explicit layers, traceable design
 
-const heidiV2Orchestrator = require('./modules/heidi-v2-orchestrator');
+const heidiV2Orchestrator = require('./heidi-v2-orchestrator');
 
 async function runHeidiV2Tests() {
   console.log('\n=== HEIDI V2 - SINGLE TRUTH ARCHITECTURE TEST ===\n');

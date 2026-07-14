@@ -2,13 +2,13 @@
 // Ties all layers together: Ingestion -> RAW LEDGER -> CASCADE -> KILO -> ProtoForge -> Emission
 // Explicit layers with no overlap
 
-const rawEventLedgerV2 = require('./raw-event-ledger-v2');
+const rawEventLedgerV2 = require('./replay-family/raw-event-ledger-v2');
 const ingestionLayerV2 = require('./ingestion-layer-v2');
-const cascadeClassifierV2 = require('./cascade-classifier-v2');
-const kiloAnalyzerV2 = require('./kilo-analyzer-v2');
-const protoforgePolicyV2 = require('./protoforge-policy-v2');
+const cascadeClassifierV2 = require('./replay-family/cascade-classifier-v2');
+const kiloAnalyzerV2 = require('./replay-family/kilo-analyzer-v2');
+const protoforgePolicyV2 = require('./replay-family/protoforge-policy-v2');
 const emissionLayerV2 = require('./emission-layer-v2');
-const replayEngineV2 = require('./replay-engine-v2');
+const replayEngineV2 = require('./replay-family/replay-engine-v2');
 const { EventEmitter } = require('events');
 
 class HeidiV2Orchestrator extends EventEmitter {
