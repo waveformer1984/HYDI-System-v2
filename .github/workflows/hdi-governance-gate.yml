@@ -6,6 +6,13 @@ on:
       - 'supabase/migrations/**'
       - '.windsurf/workflows/hdi-governance-blueprint.md'
       - 'tests/hdi-adversarial.test.js'
+  push:
+    branches:
+      - clean-main
+    paths:
+      - 'supabase/migrations/**'
+      - '.windsurf/workflows/hdi-governance-blueprint.md'
+      - 'tests/hdi-adversarial.test.js'
 
 jobs:
   governance-check:
