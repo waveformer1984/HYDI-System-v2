@@ -1,8 +1,0 @@
-Integrate Supabase Edge Functions runtime and fix monitoring-health probe.
-
-- Add Supabase Edge Functions to scripts/start-hydi.js so the local edge runtime starts with the rest of the stack.
-- Fix supabase/functions/monitoring-health/index.ts to handle POST as well as GET, matching the verify-supabase probe.
-
-Generated with [Devin](https://devin.ai)
-
-Co-Authored-By: Devin <158243242+devin-ai-integration[bot]@users.noreply.github.com>
