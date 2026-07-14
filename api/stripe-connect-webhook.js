@@ -57,6 +57,18 @@ async function handler(req, res) {
 
   console.log(`[Connect Webhook] ${event.type} (${event.id})`);
 
+  // Idempotency guard -- Stripe retries on timeout/non-2xx, which would otherwise
+  // double-insert ledger rows. Shares the same webhook_events table/RPC as api/webhooks/stripe.js.
+  const { data: claimedId } = await supabase.rpc('claim_webhook_event', {
+    p_event_id: event.id,
+    p_type: `connect:${event.type}`,
+  });
+
+  if (!claimedId) {
+    console.log(`[Connect Webhook] Event ${event.id} already processed`);
+    return res.status(200).json({ received: true, duplicate: true });
+  }
+
   try {
     switch (event.type) {
       case 'payment_intent.succeeded':
