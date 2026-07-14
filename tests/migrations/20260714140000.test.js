@@ -55,6 +55,11 @@ describe('Migration 20260714140000 – Work Sessions Table', () => {
     it('trigger function uses CREATE OR REPLACE', () => {
       expect(sql).toMatch(/create or replace function public\.work_sessions_set_updated_at/i);
     });
+
+    it('drops the policy and the trigger before recreating them (neither supports IF NOT EXISTS in Postgres)', () => {
+      expect(sql).toMatch(/^\s*drop policy if exists "work_sessions_service_all"/im);
+      expect(sql).toMatch(/^\s*drop trigger if exists work_sessions_updated_at/im);
+    });
   });
 
   describe('row level security', () => {
@@ -63,7 +68,9 @@ describe('Migration 20260714140000 – Work Sessions Table', () => {
     });
 
     it('restricts the policy to service_role', () => {
-      const policyMatches = sql.match(/CREATE POLICY[\s\S]*?;/gi) || [];
+      // Anchored to line start so a comment mentioning "CREATE POLICY" in
+      // prose doesn't get counted as a statement.
+      const policyMatches = sql.match(/^\s*create policy[\s\S]*?;/gim) || [];
       expect(policyMatches.length).toBe(1);
       expect(policyMatches[0]).toMatch(/to service_role/i);
     });
