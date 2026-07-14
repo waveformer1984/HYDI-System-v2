@@ -128,9 +128,36 @@ and `archive/agents-specialized-orphans/README.md` for the full trail.
   flip on) is not yet met — tracked above.
 
 ### Phase 2 — Planning, episodic memory, self-evaluation
-- Extend the hypothesis object (`{confidence, risk, revenue_impact}`) with a step/plan representation so ProtoForge is gating *steps of a plan*, not just single classifications — this is the natural generalization path identified in the audit (item 6), not a new planner.
-- Episodic memory: add an `experiences` table (or extend `memories` with a `kind: 'episodic'` row type) storing `{problem, actions_taken, outcome, lesson}`, written by the same action-execution path that already exists in `lib/action-executor.ts`.
-- Self-evaluation: after every `ActionExecutor.execute()` call, record success/failure and feed it into the `decisions` audit trail ProtoForge already writes — extending an existing table beats adding a new one.
+
+**Status: executed, 2026-07-14.**
+
+- ✅ **Self-evaluation**: `lib/protoforge/policy-engine.js`'s `_buildDecision`
+  now assigns a client-generated `decisionId` up front (no need to await
+  the insert to know it), and a new standalone `recordOutcome(decisionId,
+  outcome, detail)` export backfills it. `lib/orchestrator.ts` calls it
+  after every `ActionExecutor.execute()` — success or failure — closing
+  the loop the `decisions` table's `outcome`/`outcome_at`/`outcome_detail`
+  columns were already built for but nothing wrote to.
+- ✅ **Episodic memory**: extended `memories` with a `kind` discriminator
+  rather than a new table (`supabase/migrations/20260714130000_memories_episodic_kind.sql`
+  — `kind text default 'conversation'`, `metadata jsonb`), so episodic rows
+  stay retrievable through the same `search_memories` semantic-search path
+  as conversational memory. `lib/episodic-memory.ts`'s `buildExperience()`
+  distills a turn's action results into `{problem, actions_taken, outcome,
+  lesson}`; `storeExperience()` persists it. Wired into
+  `lib/orchestrator.ts` after every turn that attempted at least one
+  action.
+- ✅ **Plan-step tagging (bounded version)**: `lib/protoforge/action-gate.ts`
+  now tags each hypothesis with `plan_step`/`plan_total_steps` — its
+  position in that turn's action list — so DSL rules *can* reason about
+  multi-step plans (e.g. "only auto-approve step 1"). This is the bounded
+  increment, not a new planner: goal → milestones → tasks hierarchical
+  planning is still open and probably belongs in Phase 4
+  (autonomous work sessions) rather than being retrofitted here.
+- 17 new tests across `tests/unit/protoforge-policy-engine.test.js`,
+  `tests/unit/protoforge-action-gate.test.ts`, and
+  `tests/unit/episodic-memory.test.ts`. Full suite: 1020/1020 passing,
+  typecheck clean.
 
 ### Phase 3 — Multi-agent collaboration
 - Only once Phase 1's single path is proven reliable: bring the chosen 15-role agent roster onto the live path via `AgentRegistry`/`TaskRouter`, replacing the currently-dead `HeidiController` wiring with a real instantiation behind the kernel spine.

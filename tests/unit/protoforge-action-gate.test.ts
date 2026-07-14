@@ -109,4 +109,39 @@ describe('action-gate — gateActions', () => {
     const verdicts = await gateActions([{ type: 'create_task', payload: {} }], 'session-4');
     expect(verdicts[0].decision).toBe('skipped');
   });
+
+  test('tags each hypothesis with its plan_step / plan_total_steps position', async () => {
+    mockGenerateHypotheses.mockReturnValue({ hypotheses: [], confidence: 0.5, gate_result: { verified: false } });
+    mockAutoGate.mockResolvedValue({ decisions: [] });
+
+    const actions = [
+      { type: 'create_task', payload: {} },
+      { type: 'send_email', payload: {} },
+      { type: 'schedule_event', payload: {} },
+    ];
+    await gateActions(actions, 'session-5');
+
+    const hypothesesArg = mockAutoGate.mock.calls[0][0];
+    expect(hypothesesArg.map((h: any) => h.plan_step)).toEqual([1, 2, 3]);
+    expect(hypothesesArg.every((h: any) => h.plan_total_steps === 3)).toBe(true);
+  });
+
+  test('propagates the ProtoForge decisionId onto the verdict', async () => {
+    mockGenerateHypotheses.mockReturnValue({ hypotheses: [], confidence: 0.9, gate_result: { verified: true } });
+    mockAutoGate.mockImplementation(async (hypotheses: any[]) => ({
+      decisions: hypotheses.map((h) => ({ hypothesisId: h.id, decision: 'approve', decisionId: `decision-${h.id}` })),
+    }));
+
+    const verdicts = await gateActions([{ type: 'create_task', payload: {} }], 'session-6');
+    const hypothesesArg = mockAutoGate.mock.calls[0][0];
+    expect(verdicts[0].decisionId).toBe(`decision-${hypothesesArg[0].id}`);
+  });
+
+  test('decisionId is undefined when the decision is skipped', async () => {
+    mockGenerateHypotheses.mockReturnValue({ hypotheses: [], confidence: 0, gate_result: { verified: false } });
+    mockAutoGate.mockRejectedValue(new Error('unavailable'));
+
+    const verdicts = await gateActions([{ type: 'create_task', payload: {} }], 'session-7');
+    expect(verdicts[0].decisionId).toBeUndefined();
+  });
 });

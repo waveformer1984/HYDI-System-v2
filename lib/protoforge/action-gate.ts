@@ -41,6 +41,8 @@ export interface ActionGateVerdict {
   confidence: number;
   hypotheses: string[];
   reasoning?: string;
+  /** ProtoForge `decisions` table row id, for recordOutcome() backfill. Absent when 'skipped'. */
+  decisionId?: string;
 }
 
 export function isEnforcing(): boolean {
@@ -78,6 +80,13 @@ export async function gateActions(actions: GatedAction[], sessionId: string): Pr
     const kilo = kiloModule.createKiloEngine();
     const kiloResults = new Map<string, { hypotheses: string[]; confidence: number; gate_result: { verified: boolean } }>();
 
+    // Each hypothesis is tagged with its position in this turn's action
+    // list (plan_step / plan_total_steps) so DSL rules can reason about
+    // multi-step plans, not just isolated actions — e.g. a future rule
+    // could require plan_step === 1 before auto-approving. This is the
+    // bounded version of "gate steps of a plan, not single classifications"
+    // (see HYDI_KERNEL_ARCHITECTURE_ROADMAP.md Phase 2); it doesn't build a
+    // planner, it just carries the sequence info that already exists here.
     const hypotheses = actions.map((action, i) => {
       const fingerprint = crypto
         .createHash('sha256')
@@ -98,6 +107,8 @@ export async function gateActions(actions: GatedAction[], sessionId: string): Pr
         risk: kiloResult.gate_result.verified ? Math.max(0, 1 - kiloResult.confidence) : 1,
         revenue_impact: 0,
         stream: null,
+        plan_step: i + 1,
+        plan_total_steps: actions.length,
       };
     });
 
@@ -115,6 +126,7 @@ export async function gateActions(actions: GatedAction[], sessionId: string): Pr
         confidence: hyp.confidence,
         hypotheses: kiloResult?.hypotheses ?? [],
         reasoning: decision?.reasoning as string | undefined,
+        decisionId: decision?.decisionId as string | undefined,
       };
     });
   } catch (error) {
