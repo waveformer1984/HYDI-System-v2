@@ -37,8 +37,20 @@ is the one to keep and wire up. That decision is deferred, not made here.
 The JS specialist-agent roster (`agents/specialized/agent-factory.js` and
 siblings) and its entry point `protoforge-main.js` were initially proposed
 for archiving alongside this pipeline, but turned out to be more entangled
-than expected: `protoforge-main.js` is registered as a real app in
-`ecosystem.config.js` (PM2), and `agents/specialized/security-agent.js` is
-imported by `agents/ursula/ursula.js`, a separate live system. Archiving
-that island needs its own dedicated review pass, not a batch move — left
-in place pending that review.
+than expected: `protoforge-main.js` is registered as a real app
+(`hydi-protoforge`) in `ecosystem.config.js` (PM2), and
+`DIAGNOSTIC_AND_FIX_GUIDE.md` shows an operator actually running/restarting
+it via PM2 on a real host. A dedicated review (see
+`agents/specialized/README.md`) found this chain — `agent-factory.js`,
+`business-agents.js`, `execution-agents.js`, `workflow-agent.js`,
+`security-agent.js`, plus `modules/protoforge-integration.js` and its
+dependents — is fully self-contained/in-memory (no Supabase, no `kilo/`,
+no `lib/protoforge/`) and has zero Jest coverage, but archiving it is a
+live-deployment decision, not a dead-code one, so it stays in place pending
+the repo owner confirming whether `hydi-protoforge` is still wanted.
+
+Correction: an earlier version of this note claimed
+`agents/specialized/security-agent.js` is imported by `agents/ursula/ursula.js`.
+That was wrong — the follow-up review found `ursula.js` has no dependency on
+`agents/specialized/*` at all; the only real coupling into that roster runs
+through `protoforge-main.js`.
