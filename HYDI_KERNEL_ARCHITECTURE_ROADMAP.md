@@ -7,6 +7,30 @@
 
 ---
 
+## Known gap in the Phase 0 audit (found 2026-07-14, during Phase 3 prep)
+
+`lib/replay-engine.ts` — a fourth independent CASCADE/KILO/ProtoForge-shaped
+implementation, predating this whole roadmap effort — was never found by the
+original audit. It has its own inline classify/hypothesize/decide logic
+(regex-matches real Stripe webhook event types), reads from `keymaker_events`
+(a real, live, populated table — the actual Stripe billing event ledger
+written by the `keymaker-gate`/`stripe-webhook` Edge Functions), and writes
+to `replay_history`. It's reachable only via `api/traces.js` (repo root),
+which — like `api/chat/route.js` before it — isn't actually mounted
+anywhere (no `vercel.json`, no `src/server.js` require, and Vercel
+deployment is confirmed disabled). The real `/api/traces` route,
+`pages/api/traces.js`, queries `keymaker_events` directly and doesn't use
+this file at all.
+
+Net effect: dormant, same as everything else Phase 0 archived, so it
+doesn't contradict the `kilo/`+`lib/protoforge/` canonical-pipeline
+decision. Left in place rather than archived (2026-07-14 decision) since
+it's not urgent and doesn't conflict with anything merged — flagged here
+as a known gap. **Implication:** the original Phase 0 audit was not
+exhaustive; treat "nothing else was found" claims elsewhere in this repo's
+history with appropriate skepticism, and re-check before relying on them
+for a new decision.
+
 ## Recommendation, in priority order
 
 1. **Stop building new orchestrators. Delete or archive the dead ones.** The repo already contains at least five independent orchestration implementations and three independent specialist-agent rosters. Four of the five orchestrators are never instantiated outside their own unit tests — see audit below. Adding a sixth ("the Kernel") without removing the others just makes the map worse.
@@ -160,7 +184,48 @@ and `archive/agents-specialized-orphans/README.md` for the full trail.
   typecheck clean.
 
 ### Phase 3 — Multi-agent collaboration
-- Only once Phase 1's single path is proven reliable: bring the chosen 15-role agent roster onto the live path via `AgentRegistry`/`TaskRouter`, replacing the currently-dead `HeidiController` wiring with a real instantiation behind the kernel spine.
+
+**Status: executed, 2026-07-14, scope revised from the original plan.**
+
+The original plan ("bring the chosen 15-role agent roster onto the live
+path via `AgentRegistry`/`TaskRouter`, replacing the currently-dead
+`HeidiController`") assumed `pao-system/agents/*.ts` was a reusable
+executor backend once wired up. Investigation before writing any code
+found that's wrong: `pao-system/agents/*.ts`'s ~56 event types
+(`DESIGN_CONTAINER_MODULE`, `BUDGET_ALLOCATION`, `GRANT_SEARCH`,
+`HVAC_MANAGEMENT`, ...) are all specific to a simulated company that
+designs/funds/builds physical infrastructure — zero overlap with Heidi's
+real 5 action types (`create_task`, `send_email`, `update_database`,
+`fetch_data`, `schedule_event`). Its `handle_event()` contract
+(`Promise<void>`, fire-and-forget via `console.log`-style event emission)
+is also incompatible with `ActionExecutor`'s typed, awaitable
+`{status, result|error}` shape. `agents/specialized/*.js` was already
+ruled out of scope (Phase 0, it's the separate `hydi-protoforge` PM2
+deployment). Neither roster fits.
+
+- ✅ **Built a small, purpose-fit roster instead**: `lib/agents/` —
+  `TaskAgent`, `EmailAgent`, `DatabaseAgent`, `DataFetchAgent`,
+  `SchedulingAgent`, one per real action type, plus `AgentRegistry`
+  (`lib/agents/registry.ts`). Each agent delegates the actual work to
+  `ActionExecutor` (no duplicated Supabase/email logic — that would just
+  be moving the same code, not adding a layer) and adds per-agent metrics
+  (`tasksHandled`/`successCount`/`failureCount`/`lastActiveAt`) that
+  `ActionExecutor` alone didn't track. That's the real "multi-agent"
+  value this phase adds: per-type ownership and observability, not a
+  reused business-simulation roster.
+- ✅ Wired into `lib/orchestrator.ts`: approved actions route through
+  `agentRegistry.getAgentFor(action.type)` when a matching agent exists,
+  falling back to calling `ActionExecutor` directly otherwise (so a 6th
+  action type doesn't require touching the routing code). Agent metrics
+  surface via `getSystemStatus()`.
+- 17 new tests (`tests/unit/agents.test.ts`). Full suite: 1037/1037
+  passing, typecheck clean.
+- **Known gap found during this phase, not yet resolved**: a fourth,
+  previously-unaudited CASCADE/KILO/ProtoForge-shaped implementation,
+  `lib/replay-engine.ts`, was found dormant (reachable only via the
+  also-unmounted `api/traces.js`) — see the "Known gap in the Phase 0
+  audit" note near the top of this document. Left in place; the original
+  Phase 0 audit was not exhaustive.
 
 ### Phase 4 — Autonomous work sessions
 - Depends on Phase 2's plan representation and Phase 3's multi-agent execution. Not meaningfully startable before those land — this is where "improve the ProtoForge website, plan/execute/test/commit/report" becomes possible, and where `HYDI_GAME_PLAN.md`'s P3 ("make Hydi actionable") graduates from bug-fixing individual core-loop methods to running on the consolidated kernel.
