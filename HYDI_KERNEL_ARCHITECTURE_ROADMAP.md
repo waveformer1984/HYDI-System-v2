@@ -45,13 +45,42 @@ Also found: `sessions` has three independent, uncoordinated writers (`lib/ModelM
 ## Phased plan
 
 ### Phase 0 — Triage (prerequisite to everything else)
-- Confirm with the maintainer which of the dormant systems are genuinely abandoned vs. "built ahead of being wired up on purpose." Do not delete anything without that confirmation — some of this (e.g. `pao-system/agents/*.ts`'s cleaner state model) is worth keeping as the *target* implementation, just not worth running two more copies of in parallel.
-- Pick one specialist-agent roster (`pao-system/agents/*.ts` recommended — better concurrency model via `status`/`load`/`maxConcurrency`, and it's what `AgentRegistry`/`TaskRouter` already assume) and one hypothesis/policy pipeline (`kilo/` + `lib/protoforge/`, since it already matches the documented architecture and has tests). Archive or delete the alternates (`agents/specialized/agent-factory.js`'s 3-of-15 partial roster, the `modules/*-v2.js` family, `src/server.js`'s module set) once Phase 0 confirms they're not load-bearing elsewhere.
+
+**Status: mostly executed, 2026-07-14.** Findings changed the shape of this
+phase from "delete dead code" to "most of it isn't dead, it's unwired *or*
+externally deployed" — see `archive/heidi-v2-dormant-pipeline/README.md`
+and `archive/agents-specialized-orphans/README.md` for the full trail.
+
+- ✅ Archived (verified zero references anywhere, full test suite +
+  typecheck unchanged both times): `modules/heidi-v2-orchestrator.js`,
+  `ingestion-layer-v2.js`, `emission-layer-v2.js` and their two manual test
+  scripts → `archive/heidi-v2-dormant-pipeline/`. `agents/specialized/command-center.js`,
+  `deployment-manager.js`, `operator-agent.js` → `archive/agents-specialized-orphans/`.
+- ✅ **Decided: `kilo/` + `lib/protoforge/` is the canonical hypothesis/policy
+  pipeline**, not `modules/{raw-event-ledger-v2,cascade-classifier-v2,kilo-analyzer-v2,protoforge-policy-v2,replay-engine-v2}.js`.
+  Deciding fact: `lib/protoforge/policy-engine.js` persists to real Supabase
+  tables (`policies`, `decisions` — actual migrations exist); the `modules/*-v2`
+  family is 100% in-memory, no persistence anywhere. Those 5 files stay in
+  `modules/` (not archived) until Phase 1/2 builds a Raw-Ledger + Replay-Engine
+  equivalent against `kilo/`/`lib/protoforge/` and ports
+  `tests/unit/replay-engine.test.js`'s determinism assertions to it — see
+  Phase 1 below.
+- ✅ **Decided: keep `hydi-protoforge`.** The `agent-factory.js`/`business-agents.js`/
+  `execution-agents.js`/`workflow-agent.js`/`security-agent.js` roster and its
+  `protoforge-main.js` entry point stay as-is — confirmed as an intentionally
+  kept, real PM2 deployment (`ecosystem.config.js`), not dead code. Not part of
+  the kernel consolidation; out of scope for Phase 1-3 below unless revisited.
+- ⏳ Still open: `pao-system/agents/*.ts` vs. `agents/specialized/*`'s live
+  5-file roster as the specialist-agent implementation Phase 3 builds on —
+  `pao-system/agents/*.ts` has the cleaner state model but zero production
+  usage; `agents/specialized/*`'s roster is a real PM2 deployment but kept
+  separate per the decision above. Revisit at Phase 3, not before.
 - This directly unblocks `ROADMAP.md`'s existing Q3 2026 items ("Pipeline observability," "PolicyEngine expansion") — those assume the pipeline is live; today it isn't.
 
 ### Phase 1 — Wire the kernel spine
 - Make `lib/orchestrator.ts` (the confirmed production path under the local-first decision) the one caller of: `kilo/index.js`'s `generateHypotheses()` → `lib/protoforge/auto-gate.js`'s `autoGate()` → the chosen agent roster's `handle_event()`. This turns three dormant, individually-tested systems into one live path instead of three.
 - Fix the `sessions` triple-write problem: pick one module as the single writer (extend `lib/heidi-memory.ts`'s pattern — it already proves centralization works for `memories`), have `ModelManager` and `dispatcher.ts` call through it instead of writing directly.
+- Build a Raw-Ledger + Replay-Engine equivalent against `kilo/`/`lib/protoforge/`: an immutable append-only event store (backed by a real Supabase table, unlike the in-memory `modules/raw-event-ledger-v2.js`) that `kilo/index.js` reads from, plus a replay path that re-runs a stored event through CASCADE→KILO→ProtoForge and diffs the output. Port `tests/unit/replay-engine.test.js`'s determinism assertions onto it. Once this lands, `modules/{raw-event-ledger-v2,cascade-classifier-v2,kilo-analyzer-v2,protoforge-policy-v2,replay-engine-v2}.js` can finally be archived (see Phase 0 status above).
 - Exit criterion: a message through `/api/chat` in production (Ollama path) actually produces a CASCADE classification, a KILO hypothesis, and a ProtoForge approve/reject/escalate decision recorded in the `decisions` table — today none of that happens on the live path.
 
 ### Phase 2 — Planning, episodic memory, self-evaluation

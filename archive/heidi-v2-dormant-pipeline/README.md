@@ -27,10 +27,24 @@ are equally unreachable from production:
 They have active Jest coverage in `tests/unit/replay-engine.test.js`, which
 exercises the core "same RAW LEDGER input → same pipeline output" determinism
 invariant that both architecture docs describe as central. Moving them would
-break `npm test` / CI. Before archiving them, either port that test to
-exercise the `kilo/` + `lib/protoforge/` pipeline the roadmap recommends
-building on instead, or decide this family — not `kilo/`/`lib/protoforge/` —
-is the one to keep and wire up. That decision is deferred, not made here.
+break `npm test` / CI.
+
+**Decision (2026-07-14): `kilo/` + `lib/protoforge/` is the canonical
+pipeline, not this family.** `lib/protoforge/policy-engine.js` persists to
+real Supabase tables (`policies`, `decisions` — see
+`supabase/migrations/20260528000002_policies_table.sql` and
+`..._decisions_table.sql`); this `modules/*-v2` family is entirely
+in-memory with no persistence anywhere. `kilo/` + `lib/protoforge/` is also
+better tested (3 test files vs. this family's 1) and is what real DB schema
+already exists for.
+
+That said, `kilo/` + `lib/protoforge/` currently has **no Raw Ledger or
+Replay Engine equivalent at all** — that concept exists only in this
+deprecated family. So these 5 files stay in `modules/` (not moved to
+archive) until Phase 1/2 of `HYDI_KERNEL_ARCHITECTURE_ROADMAP.md` builds a
+real ledger + replay capability against `kilo/`/`lib/protoforge/` and ports
+`tests/unit/replay-engine.test.js`'s determinism assertions to it. At that
+point this family can be archived outright.
 
 ## Also NOT touched in this pass
 
