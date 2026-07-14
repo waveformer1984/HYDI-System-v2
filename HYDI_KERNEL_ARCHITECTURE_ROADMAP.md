@@ -228,10 +228,85 @@ deployment). Neither roster fits.
   Phase 0 audit was not exhaustive.
 
 ### Phase 4 — Autonomous work sessions
-- Depends on Phase 2's plan representation and Phase 3's multi-agent execution. Not meaningfully startable before those land — this is where "improve the ProtoForge website, plan/execute/test/commit/report" becomes possible, and where `HYDI_GAME_PLAN.md`'s P3 ("make Hydi actionable") graduates from bug-fixing individual core-loop methods to running on the consolidated kernel.
+
+**Status: executed, 2026-07-14, scope deliberately narrowed.**
+
+The original wording ("improve the ProtoForge website, plan/execute/test/
+commit/report") implies code-editing, test-running, and git-commit
+capability — none of which exist anywhere in Heidi's live action
+vocabulary today. Building that from scratch is a real escalation in
+capability and risk (autonomous commits to the actual repo) that the
+"reliability before autonomy" principle argues against bolting on right
+after three merged PRs. **Decided (2026-07-14): scope Phase 4 to
+multi-step goal pursuit using only the existing 5 action types** — no new
+tool surface, no code/test/commit capability. The bigger version stays
+possible later, once there's real reliability data (Phase 5) on the
+current scope.
+
+- ✅ `lib/work-sessions.ts`: a stated goal is decomposed into an ordered
+  plan (`PlanParser`, mirroring `lib/ActionParser.ts`'s JSON-contract +
+  retry-once pattern) constrained to `create_task`/`send_email`/
+  `update_database`/`fetch_data`/`schedule_event` — any step outside that
+  list is filtered out, never trusted blindly. Persisted to a new
+  `work_sessions` table (`supabase/migrations/20260714140000_work_sessions_table.sql`
+  — `status` state machine: `planned → in_progress → completed|failed|needs_approval`,
+  enforced via CHECK constraint).
+- ✅ `HeidiOrchestrator.startWorkSession()` / `.runWorkSession()`
+  (`lib/orchestrator.ts`) execute steps **one at a time through the exact
+  same gating pipeline** ordinary chat actions use — `executeActions()`,
+  meaning every step still goes through KILO -> ProtoForge -> the Phase 3
+  agent registry, gets a real decision recorded, and gets a real outcome
+  backfilled. No parallel execution path was built. The run loop is
+  bounded (`maxSteps`, default 5 per call) and **stops on the first
+  failed or ProtoForge-blocked step** rather than blindly continuing —
+  autonomy is bounded by the same reliability gates as everything else,
+  not exempted from them.
+- 20 new tests (`tests/unit/work-sessions.test.ts`) covering the planning
+  contract and persistence helpers. The run-loop control flow itself
+  lives as orchestrator glue, untested directly — consistent with this
+  codebase's existing convention (`lib/orchestrator.ts` has no dedicated
+  test file; its dependencies are unit-tested and the glue relies on
+  that, same as `executeActions` before it).
+- **Not built, deliberately**: a scheduler/cron trigger to advance
+  sessions without a human calling `runWorkSession()` again. This phase
+  gives Heidi the ability to pursue a multi-step goal when asked, not the
+  ability to wake itself up — that's a distinct, larger decision.
 
 ### Phase 5 — Metrics and learning from experience
-- Task success rate, retry counts, planning accuracy, memory retrieval quality, user-correction rate — instrument once Phase 1-2 give a single place (the kernel spine) where every task passes through once, instead of an unknown number of times across five parallel paths.
+
+**Status: executed, 2026-07-14, 3 of 5 named metrics — 2 need signal capture that doesn't exist yet.**
+
+- ✅ `lib/metrics.ts`: reads the tables Phases 1-4 already write to, no new
+  schema. `getTaskSuccessRates()` groups `actions` rows by `task_name`
+  (per-type completed/failed/success-rate). `getDecisionStats()` reads
+  `decisions` for approve/reject/escalate distribution, outcome success
+  rate, and average confidence. `getWorkSessionStats()` reads
+  `work_sessions` for completion rate and **planning accuracy** — the
+  average, across sessions with at least one step, of completed-steps ÷
+  planned-steps. That's a genuine answer to "task success rate" and
+  "planning accuracy" from the roadmap's original list.
+- ✅ Wired into `HeidiOrchestrator.getSystemStatus()`, reachable through
+  the already-live `/api/status` route (`pages/api/status.ts`) — not
+  another built-but-never-called module.
+- ✅ **Found and documented, not silently worked around**: `lib/agents/*`'s
+  per-agent metrics (`tasksHandled`/`successCount`/...) reset every
+  request, because `new HeidiOrchestrator()` is constructed fresh per call
+  in all three routes that use it (`pages/api/chat.ts`, `status.ts`,
+  `session.ts`) — confirmed by grep before writing `lib/metrics.ts`. They
+  were never a durable cross-request signal despite living on a
+  `SpecialistAgent`; `lib/metrics.ts` reading from the DB tables directly
+  is the actual Phase 5 answer, not a fix to the in-memory counters.
+- ❌ **Retry counts, memory retrieval quality, user-correction rate — not
+  built.** None of the three have a signal to read: retries
+  (`ActionParser`'s and `PlanParser`'s self-correction loops) aren't
+  persisted anywhere, memory retrieval has no feedback on whether
+  retrieved context was useful, and nothing distinguishes "user corrected
+  Heidi" from "user asked something new." Faking these would be worse
+  than omitting them. Each needs new signal capture (e.g. persisting a
+  retry event, capturing explicit user feedback) — that's real,
+  standalone follow-up work, not a Phase 5 afterthought.
+- 18 new tests (`tests/unit/metrics.test.ts`). Full suite: 1084/1084
+  passing, typecheck clean.
 
 ---
 

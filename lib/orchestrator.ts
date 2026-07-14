@@ -18,6 +18,16 @@ import { retrieveMemory, storeMemory } from './heidi-memory';
 import { gateActions, isEnforcing } from './protoforge/action-gate';
 import { buildExperience, storeExperience } from './episodic-memory';
 import { AgentRegistry, createDefaultAgentRegistry } from './agents/registry';
+import {
+  buildPlanPrompt,
+  createWorkSession,
+  getWorkSession,
+  nextPendingStep,
+  PlanParser,
+  updateWorkSession,
+  WorkSession,
+} from './work-sessions';
+import { getDecisionStats, getTaskSuccessRates, getWorkSessionStats } from './metrics';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 interface ChatRequest {
@@ -301,6 +311,77 @@ Respond with JSON:`;
   }
 
   /**
+   * Start a Phase 4 work session (see HYDI_KERNEL_ARCHITECTURE_ROADMAP.md):
+   * decompose `goal` into an ordered plan using only the existing action
+   * vocabulary (this.allowedActionTypes — no new code-editing/test-running/
+   * git capability), persist it, then run steps until the plan completes,
+   * a step fails or is ProtoForge-blocked, or `maxSteps` is reached.
+   */
+  async startWorkSession(goal: string, sessionId: string, userId: string, maxSteps = 5): Promise<WorkSession | null> {
+    const prompt = buildPlanPrompt(goal, this.allowedActionTypes);
+    const modelResponse = await this.modelManager.generateResponse(prompt, sessionId);
+
+    let parseResult = PlanParser.parsePlan(modelResponse.content);
+    if (!parseResult.success || !parseResult.plan) {
+      console.log('[Orchestrator] Invalid plan, retrying with corrected prompt');
+      const correctedPrompt = PlanParser.generateCorrectedPrompt(prompt, parseResult.error || 'Unknown error');
+      const retryResponse = await this.modelManager.generateResponse(correctedPrompt, sessionId);
+      parseResult = PlanParser.parsePlan(retryResponse.content);
+    }
+
+    const rawSteps = parseResult.success && parseResult.plan ? parseResult.plan.steps : [];
+    const steps = PlanParser.filterAllowedSteps(rawSteps, this.allowedActionTypes);
+
+    const session = await createWorkSession(this.supabase, { session_id: sessionId, user_id: userId, goal, steps });
+    if (!session) return null;
+
+    return this.runWorkSession(session.id, sessionId, maxSteps);
+  }
+
+  /**
+   * Run pending steps of an existing work session, one at a time, through
+   * the same gating pipeline as ordinary chat actions (executeActions —
+   * KILO -> ProtoForge -> agent registry). Stops on the first
+   * failed/blocked step, when the plan completes, or after `maxSteps` —
+   * bounded per call, not an unbounded loop, per "reliability before
+   * autonomy."
+   */
+  async runWorkSession(workSessionId: string, sessionId: string, maxSteps = 5): Promise<WorkSession | null> {
+    let session = await getWorkSession(this.supabase, workSessionId);
+    if (!session) return null;
+
+    let stepsRun = 0;
+    while (stepsRun < maxSteps) {
+      const step = nextPendingStep(session);
+      if (!step) {
+        session =
+          (await updateWorkSession(this.supabase, workSessionId, {
+            status: 'completed',
+            completed_at: new Date().toISOString(),
+          })) ?? session;
+        break;
+      }
+
+      const [result] = await this.executeActions([{ type: step.type, payload: step.payload }], sessionId);
+      step.status = result.status;
+      step.error = result.error;
+      stepsRun++;
+
+      if (step.status === 'failed') {
+        console.log(`[Orchestrator] Work session ${workSessionId} paused — step ${step.type} failed: ${step.error}`);
+        session =
+          (await updateWorkSession(this.supabase, workSessionId, { status: 'failed', steps: session.steps })) ?? session;
+        break;
+      }
+
+      session =
+        (await updateWorkSession(this.supabase, workSessionId, { status: 'in_progress', steps: session.steps })) ?? session;
+    }
+
+    return session;
+  }
+
+  /**
    * Get session state
    */
   async getSessionState(sessionId: string) {
@@ -309,13 +390,29 @@ Respond with JSON:`;
 
   /**
    * Get system status
+   *
+   * agent_metrics is per-process (resets every request — see
+   * lib/metrics.ts's module comment for why); task_success_rates,
+   * decision_stats, and work_session_stats are the durable, Phase 5
+   * cross-request signal, read from the actions/decisions/work_sessions
+   * tables. Best-effort: a metrics query failing degrades to an empty
+   * result via lib/metrics.ts's own error handling, never throws here.
    */
   async getSystemStatus() {
+    const [taskSuccessRates, decisionStats, workSessionStats] = await Promise.all([
+      getTaskSuccessRates(this.supabase),
+      getDecisionStats(this.supabase),
+      getWorkSessionStats(this.supabase),
+    ]);
+
     return {
       model_status: this.modelManager.getModelStatus(),
       memory_connected: !!this.supabase,
       allowed_actions: this.allowedActionTypes,
-      agent_metrics: this.agentRegistry.getMetricsSnapshot()
+      agent_metrics: this.agentRegistry.getMetricsSnapshot(),
+      task_success_rates: taskSuccessRates,
+      decision_stats: decisionStats,
+      work_session_stats: workSessionStats,
     };
   }
 }
