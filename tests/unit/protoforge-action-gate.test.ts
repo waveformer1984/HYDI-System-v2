@@ -82,6 +82,20 @@ describe('action-gate — gateActions', () => {
     expect(hypothesesArg[0].revenue_impact).toBe(0);
   });
 
+  test('tags each hypothesis with the action_type it came from, so DSL rules can differentiate by action', async () => {
+    mockGenerateHypotheses.mockReturnValue({ hypotheses: [], confidence: 0, gate_result: { verified: false } });
+    mockAutoGate.mockResolvedValue({ decisions: [] });
+
+    const actions = [
+      { type: 'fetch_data', payload: {} },
+      { type: 'send_email', payload: { to: 'x@example.com' } },
+    ];
+    await gateActions(actions, 'session-action-type');
+
+    const hypothesesArg = mockAutoGate.mock.calls[0][0];
+    expect(hypothesesArg.map((h: any) => h.action_type)).toEqual(['fetch_data', 'send_email']);
+  });
+
   test('verified gate result lowers risk with confidence', async () => {
     mockGenerateHypotheses.mockReturnValue({ hypotheses: [], confidence: 0.9, gate_result: { verified: true } });
     mockAutoGate.mockResolvedValue({ decisions: [] });

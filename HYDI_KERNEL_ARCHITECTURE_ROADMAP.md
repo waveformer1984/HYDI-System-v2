@@ -310,6 +310,60 @@ current scope.
 
 ---
 
+## Post-roadmap follow-up: promoting a real ProtoForge policy (2026-07-14)
+
+Asked to "promote a real ProtoForge policy" so `PROTOFORGE_ENFORCE_ACTIONS`
+could eventually be turned on. Two blockers found before that was safe to do:
+
+1. **The seed policy (`baseline-v1`, version 1,
+   `20260528000002_policies_table.sql`) would have been dangerous if simply
+   activated.** Its `budget-auto-approve` rule (`revenue_impact <= 100 →
+   approve`, no other condition) would match *every* action, because
+   `lib/protoforge/action-gate.ts` hardcodes `revenue_impact: 0` for every
+   hypothesis (no real revenue-impact model exists). Flipping `is_active`
+   on that row would have auto-approved everything, the opposite of a
+   conservative baseline.
+2. **The hypothesis object had no field a policy could use to
+   differentiate actions at all.** Confidence and risk are the same
+   degenerate values (0 and 1) for every action today, since no real
+   CASCADE classifier exists yet (see the Phase 1 honesty note). Fixed:
+   `action-gate.ts` now tags each hypothesis with `action_type`
+   (`lib/protoforge/action-gate.ts`), the only meaningful signal available
+   until real classification exists.
+
+With that fixed, wrote and verified a real policy (**not** activating the
+seed row — a new version 2, `action-type-tiered-v1`,
+`supabase/migrations/20260714150000_promote_action_type_policy.sql`),
+tiered by actual blast radius per the maintainer's confirmed choice:
+
+- `fetch_data` (read-only), `create_task` / `schedule_event` (internal,
+  reversible) → **approve**
+- `update_database` (writes, though already scoped to the `sessions`
+  table only), `send_email` (external, irreversible) → **escalate**
+- Nothing auto-rejects; an unrecognized future action type falls back to
+  `escalate` (the policy's own `default`), not `reject`.
+
+Verified against a real local Postgres instance (same rigor as the
+migration-idempotency fix): applying this migration a second time hit a
+subtler bug than the last one — `ON CONFLICT (stream, version) DO NOTHING`
+was insufficient because the row also violates
+`idx_policies_one_active_per_stream` (one active policy per stream) on
+re-run, and Postgres only suppresses the specific arbiter named in
+`ON CONFLICT`, not other unique-constraint violations. Switched to a
+`WHERE NOT EXISTS` guard, verified idempotent across 3 rounds. Also ran
+the actual DSL through `evaluateRules()` for all 5 action types to confirm
+the intended approve/escalate split holds, and turned that into a
+permanent regression test.
+
+**Still not done — deliberately, still blocked on the same thing as
+before:** this migration is not applied to the live Supabase project (no
+credentials/CLI/authenticated MCP access from this session — same
+limitation as the other 3 migrations), and `PROTOFORGE_ENFORCE_ACTIONS`
+has not been set. Applying the migration makes a real policy available to
+evaluate against; it does not by itself turn on enforcement.
+
+---
+
 ## Non-goals (explicit, to prevent scope creep back into the fragmented state)
 
 - No new orchestrator class, event bus, or agent base class until Phase 0's triage is done and confirmed with the maintainer.

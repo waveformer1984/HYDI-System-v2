@@ -315,3 +315,51 @@ describe('recordOutcome()', () => {
     await expect(recordOutcome('decision-2', 'failure', { error: 'boom' })).resolves.toBeUndefined();
   });
 });
+
+// ---------------------------------------------------------------------------
+// The promoted action-type-tiered-v1 policy
+// (supabase/migrations/20260714150000_promote_action_type_policy.sql) —
+// regression test for the exact DSL rules that migration ships, so a future
+// edit can't silently change what auto-approves vs. escalates.
+// ---------------------------------------------------------------------------
+describe('action-type-tiered-v1 policy — real risk tiers', () => {
+  const rules = {
+    version: '1',
+    default: 'escalate',
+    rules: [
+      {
+        id: 'auto-approve-safe-actions',
+        if: { action_type: { in: ['fetch_data', 'create_task', 'schedule_event'] } },
+        then: 'approve',
+        priority: 1,
+      },
+      {
+        id: 'escalate-external-or-write-actions',
+        if: { action_type: { in: ['update_database', 'send_email'] } },
+        then: 'escalate',
+        priority: 2,
+      },
+    ],
+  };
+
+  function decisionFor(actionType) {
+    return evaluateRules(rules, { confidence: 0, risk: 1, revenue_impact: 0, action_type: actionType }).decision;
+  }
+
+  test.each(['fetch_data', 'create_task', 'schedule_event'])('%s auto-approves', (actionType) => {
+    expect(decisionFor(actionType)).toBe('approve');
+  });
+
+  test.each(['update_database', 'send_email'])('%s escalates', (actionType) => {
+    expect(decisionFor(actionType)).toBe('escalate');
+  });
+
+  test('an unknown future action type falls back to escalate, not reject', () => {
+    expect(decisionFor('some_future_action_type')).toBe('escalate');
+  });
+
+  test('nothing in this policy ever produces a reject decision', () => {
+    const allTypes = ['fetch_data', 'create_task', 'schedule_event', 'update_database', 'send_email', 'unknown_type'];
+    expect(allTypes.map(decisionFor)).not.toContain('reject');
+  });
+});
