@@ -2,7 +2,7 @@
 // Emits structured actions to UI, APIs, SSE
 // NO logic, NO classification, NO repair logic
 
-const protoforgePolicyV2 = require('./protoforge-policy-v2');
+const protoforgePolicyV2 = require('../../modules/protoforge-policy-v2');
 const { EventEmitter } = require('events');
 
 class EmissionLayerV2 extends EventEmitter {

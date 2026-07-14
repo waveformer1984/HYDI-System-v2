@@ -2,7 +2,7 @@
 // Accepts events from all sources, normalizes ONLY structure, pushes to RAW LEDGER
 // NO interpretation, NO classification, NO meaning
 
-const rawEventLedgerV2 = require('./raw-event-ledger-v2');
+const rawEventLedgerV2 = require('../../modules/raw-event-ledger-v2');
 const { EventEmitter } = require('events');
 
 class IngestionLayerV2 extends EventEmitter {
