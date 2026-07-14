@@ -8,7 +8,9 @@ const ProtoForgeInfrastructure = require('../modules/protoforge-infrastructure')
 const cascade = require('../modules/cascade-complete-v2');
 const ChatWebSocketServer = require('../modules/chat-websocket-server');
 const { v4: uuidv4 } = require('uuid');
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({ path: path.resolve(__dirname, '../.env.local') });
+require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
 
 // Service Bundle imports
 const serviceRoutes = require('./api/services');
@@ -17,7 +19,6 @@ const SubscriptionManager = require('./services/subscription-manager');
 const HeidiServiceAutomator = require('../modules/heidi-service-automator');
 const LocalModelAdapter = require('./models/local-model-adapter');
 const AdaptationExecutor = require('../modules/adaptation-executor');
-const path = require('path');
 
 // Universal Agent Bus — The Forge Messaging Backbone
 const UniversalAgentBus = require('../modules/universal-agent-bus');
