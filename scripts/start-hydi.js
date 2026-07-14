@@ -53,13 +53,21 @@ const ALL_SERVICES = [
     name: 'HEIDI Core',
     key: 'heidi-core',
     cmd: 'node',
-    args: ['heidi-core/index-clean-3458.js'],
+    args: ['heidi-core/server.js'],
     getEnv: () => {
       const config = PORTS_CONFIG.services['heidi-core'];
-      return { HEIDI_CORE_PORT: String(config.port) };
+      return { HEIDI_PORT: String(config.port) };
     },
     background: true,
     description: 'AI orchestrator & agent router',
+  },
+  {
+    name: 'HEIDI Agent',
+    key: 'heidi-agent',
+    cmd: 'node',
+    args: ['heidi-core/heidi-agent.js'],
+    background: true,
+    description: 'Persistent task worker for agent_bus',
   },
   {
     name: 'HEIDI Mobile Chat',
@@ -68,7 +76,7 @@ const ALL_SERVICES = [
     args: ['launch-heidi-mobile.js'],
     getEnv: () => {
       const config = PORTS_CONFIG.services['heidi-mobile-chat'];
-      return { HEIDI_PORT: String(config.port) };
+      return { HEIDI_MOBILE_PORT: String(config.port) };
     },
     background: true,
     description: 'Chat API for mobile clients',
@@ -76,8 +84,8 @@ const ALL_SERVICES = [
   {
     name: 'Next.js Frontend',
     key: 'next-app',
-    cmd: 'npm',
-    args: ['run', 'dev'],
+    cmd: 'node',
+    args: ['node_modules/next/dist/bin/next', 'dev', '--hostname', '0.0.0.0'],
     getEnv: () => {
       const config = PORTS_CONFIG.services['next-app'];
       return { PORT: String(config.port) };
@@ -233,7 +241,8 @@ async function orchestrate() {
   console.log(`\n${colors.green('✅ All services started!')}`);
   console.log('\nDashboard: http://localhost:3000');
   console.log('Chat API:  http://localhost:3006');
-  console.log('Core:      http://localhost:3458\n');
+  console.log('Core:      http://localhost:3459');
+  console.log('Agent:     node heidi-core/heidi-agent.js\n');
 }
 
 // Start

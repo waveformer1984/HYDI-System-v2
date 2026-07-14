@@ -30,12 +30,16 @@ fail()    { echo -e "${RED}  ✗${NC} $1"; FAIL=$((FAIL + 1)); }
 warn()    { echo -e "${YELLOW}  ⚠${NC} $1"; WARN=$((WARN + 1)); }
 section() { echo -e "\n${CYAN}${BOLD}── $1 ──${NC}"; }
 
-# ── load .env if present ─────────────────────────────────────────────────
-if [[ -f ".env" ]]; then
-  # shellcheck source=/dev/null
-  set -a; source .env; set +a
-  echo -e "${CYAN}Loaded .env${NC}"
-fi
+ # ── load .env files if present ───────────────────────────────────────────
+# .env.local takes precedence and is sourced before .env; strip CRLF so bash
+# doesn't choke on Windows line endings.
+for env_file in .env.local .env; do
+  if [[ -f "$env_file" ]]; then
+    # shellcheck source=/dev/null
+    set -a; source <(tr -d '\r' < "$env_file"); set +a
+    echo -e "${CYAN}Loaded ${env_file}${NC}"
+  fi
+done
 
 echo ""
 echo -e "${BOLD}HYDI System v2 — Supabase Verification${NC}"

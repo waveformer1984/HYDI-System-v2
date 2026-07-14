@@ -35,7 +35,8 @@
       "name": "Heidi Bridge (Flask/Python)",
       "env_var": "HEIDI_BRIDGE_PORT",
       "description": "System monitoring and status bridge",
-      "depends_on": ["supabase"]
+      "depends_on": ["supabase"],
+      "external": true
     },
     "ollama": {
       "port": 11434,
