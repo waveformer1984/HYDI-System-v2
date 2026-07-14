@@ -31,10 +31,16 @@ alter table public.raw_event_ledger enable row level security;
 -- INSERT and SELECT policies exist for service_role. No UPDATE or DELETE
 -- policy is created for any role, so RLS denies those operations outright
 -- regardless of what application code attempts.
+--
+-- CREATE POLICY has no IF NOT EXISTS clause in Postgres, so this migration
+-- drops-then-recreates to stay idempotent on re-run (matches the pattern
+-- already used in 20260707151854_local_baseline_missing_core_objects.sql).
+drop policy if exists "raw_event_ledger_service_insert" on public.raw_event_ledger;
 create policy "raw_event_ledger_service_insert" on public.raw_event_ledger
   for insert to service_role
   with check (true);
 
+drop policy if exists "raw_event_ledger_service_select" on public.raw_event_ledger;
 create policy "raw_event_ledger_service_select" on public.raw_event_ledger
   for select to service_role
   using (true);

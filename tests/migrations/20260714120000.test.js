@@ -39,12 +39,20 @@ describe('Migration 20260714120000 – Raw Event Ledger Table', () => {
     });
 
     it('defines only INSERT and SELECT policies — no UPDATE or DELETE policy', () => {
-      const policyMatches = sql.match(/CREATE POLICY[\s\S]*?;/gi) || [];
+      // Anchored to line start so a comment mentioning "CREATE POLICY" in
+      // prose doesn't get counted as a statement.
+      const policyMatches = sql.match(/^\s*create policy[\s\S]*?;/gim) || [];
       expect(policyMatches.length).toBe(2);
       expect(policyMatches.some((p) => /for insert/i.test(p))).toBe(true);
       expect(policyMatches.some((p) => /for select/i.test(p))).toBe(true);
       expect(policyMatches.some((p) => /for update/i.test(p))).toBe(false);
       expect(policyMatches.some((p) => /for delete/i.test(p))).toBe(false);
+    });
+
+    it('drops each policy before recreating it (CREATE POLICY has no IF NOT EXISTS in Postgres)', () => {
+      const dropMatches = sql.match(/^\s*drop policy if exists[\s\S]*?;/gim) || [];
+      const createMatches = sql.match(/^\s*create policy[\s\S]*?;/gim) || [];
+      expect(dropMatches.length).toBe(createMatches.length);
     });
 
     it('has a hash column for content-integrity verification', () => {
@@ -70,7 +78,7 @@ describe('Migration 20260714120000 – Raw Event Ledger Table', () => {
     });
 
     it('restricts policies to service_role', () => {
-      const policyMatches = sql.match(/CREATE POLICY[\s\S]*?to service_role[\s\S]*?;/gi) || [];
+      const policyMatches = sql.match(/^\s*create policy[\s\S]*?to service_role[\s\S]*?;/gim) || [];
       expect(policyMatches.length).toBe(2);
     });
   });
