@@ -121,8 +121,12 @@ const SERVICE_TIERS = {
 };
 
 async function handleStripeWebhook(req, res) {
-  // GLOBAL KILL SWITCH - Non-negotiable incident control
-  if (process.env.WEBHOOK_PROCESSING_ENABLED !== 'true') {
+  // GLOBAL KILL SWITCH - Non-negotiable incident control.
+  // Opt-IN to pausing (explicit 'false'), not opt-in to processing: this var
+  // is not provisioned in any environment by default, and defaulting an
+  // unset/misconfigured flag to "drop everything with a 200" would silently
+  // swallow every real webhook with no error and no Stripe retry.
+  if (process.env.WEBHOOK_PROCESSING_ENABLED === 'false') {
     console.log('[🛑 KILL SWITCH] Webhook processing paused');
     return res.status(200).send('paused');
   }

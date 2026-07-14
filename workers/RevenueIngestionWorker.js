@@ -9,6 +9,8 @@
 
 const QueueManager = require('./QueueManager');
 const { createClient } = require('@supabase/supabase-js');
+const Stripe = require('stripe');
+const { recordPaymentIntentSucceeded } = require('../lib/billing/connect-ledger');
 require('dotenv').config();
 
 class RevenueIngestionWorker {
@@ -16,6 +18,7 @@ class RevenueIngestionWorker {
         this.workerId = workerId || `revenue-worker-${Date.now()}`;
         this.queue = new QueueManager();
         this.supabase = null;
+        this.stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
         this.running = false;
         this.pollInterval = 5000; // 5 seconds
         this.pollTimer = null;
@@ -119,6 +122,10 @@ class RevenueIngestionWorker {
             
             // Process based on event type
             switch (task.payload.event_type) {
+                case 'payment_intent.succeeded':
+                    await this.handlePaymentIntentSucceeded(task.payload);
+                    break;
+
                 case 'checkout.session.completed':
                     await this.handleCheckoutCompleted(task.payload);
                     break;
@@ -153,6 +160,22 @@ class RevenueIngestionWorker {
             console.error(`[💰 Revenue Worker] Task failed: ${taskId}`, err);
             await this.queue.completeTask(taskId, false, err.message);
         }
+    }
+
+    async handlePaymentIntentSucceeded(payload) {
+        // payload.data is the Stripe Event's `data` wrapper ({ object,
+        // previous_attributes }), not the PaymentIntent itself -- unwrap it.
+        const paymentIntent = payload.data.object;
+
+        // Same fee-split + ledger write api/stripe-connect-webhook.js uses,
+        // so a payment_intent.succeeded event lands in the ledger correctly
+        // whichever of the two webhook endpoints Stripe actually delivers it to.
+        await recordPaymentIntentSucceeded(paymentIntent, {
+            supabase: this.supabase,
+            stripe: this.stripe,
+        });
+
+        console.log(`[💰 Revenue Worker] Processed payment_intent.succeeded: ${paymentIntent.id}`);
     }
 
     async handleCheckoutCompleted(payload) {
