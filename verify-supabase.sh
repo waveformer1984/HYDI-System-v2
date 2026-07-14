@@ -102,13 +102,15 @@ rest_get() {
     "${BASE}${1}" 2>/dev/null || echo "000"
 }
 
-# PostgREST root
+# PostgREST health check using the system_dashboard view (the root /rest/v1/ path
+# can timeout on local Supabase while OpenAPI spec is generated, so we check a real endpoint)
 status=$(curl -s -o /dev/null -w "%{http_code}" \
   -H "apikey: ${KEY}" \
   -H "Authorization: Bearer ${KEY}" \
-  "${BASE}/rest/v1/" 2>/dev/null || echo "000")
+  -H "Prefer: count=exact" \
+  "${BASE}/rest/v1/system_dashboard?limit=0" 2>/dev/null || echo "000")
 case "$status" in
-  200) ok "PostgREST API reachable (HTTP $status)" ;;
+  200|206) ok "PostgREST API reachable (HTTP $status)" ;;
   401) fail "PostgREST: auth rejected (HTTP 401) — check service role key" ;;
   *)   fail "PostgREST unreachable (HTTP $status)" ;;
 esac
