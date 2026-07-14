@@ -268,6 +268,7 @@ Key DB features: RLS enabled on all tables, `system_dashboard` view drives healt
 | `STRIPE_CONNECT_WEBHOOK_SECRET` | Stripe Connect webhook signing secret |
 | `STRIPE_ACCOUNT_GALACTIC_BYTES` et al. | Connect sub-account IDs per revenue stream |
 | `WEBHOOK_PROCESSING_ENABLED` | Incident kill switch for `api/webhooks/stripe.js`. Unset/anything other than the literal string `'false'` means processing is ON — only an explicit `'false'` pauses it. Not provisioned by default. |
+| `JWT_SECRET` | Signs/verifies tokens in `workers/SecurityIdentityWorker.js` and `keeper/index.js`. Required — both fail closed (refuse to start / throw) rather than falling back to a hardcoded secret. |
 | `NODE_ENV` | `production` / `development` |
 | `ANTHROPIC_API_KEY` | Enables the native streaming/tool-calling agent (`lib/heidi-agent.ts`); when unset Heidi uses the fallback orchestrator |
 | `ANTHROPIC_BASE_URL` | Optional override of the Anthropic SDK base URL (e.g. a compatible proxy) |

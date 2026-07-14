@@ -17,6 +17,8 @@ const AnomalyDetectionWorker = require('./AnomalyDetectionWorker');
 const DecisionAssistWorker = require('./DecisionAssistWorker');
 const SecurityIdentityWorker = require('./SecurityIdentityWorker');
 const SyncWorker = require('./SyncWorker');
+const NotificationWorker = require('./NotificationWorker');
+const AuditWorker = require('./AuditWorker');
 const QueueManager = require('./QueueManager');
 const { createClient } = require('@supabase/supabase-js');
 require('dotenv').config();
@@ -94,22 +96,22 @@ class WorkerOrchestrator {
             
             // URSULA workers (communication layer)
             security_identity: {
-                class: null, // To be implemented
+                class: SecurityIdentityWorker,
                 instances: 1,
                 priority: 'critical'
             },
             sync: {
-                class: null, // To be implemented
+                class: SyncWorker,
                 instances: 1,
                 priority: 'high'
             },
             notification: {
-                class: null, // To be implemented
+                class: NotificationWorker,
                 instances: 1,
                 priority: 'medium'
             },
             audit: {
-                class: null, // To be implemented
+                class: AuditWorker,
                 instances: 1,
                 priority: 'low'
             }

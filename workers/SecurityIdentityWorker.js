@@ -12,7 +12,11 @@ class SecurityIdentityWorker {
         this.supabase = null;
         this.queue = new QueueManager();
         this.securityConfig = {
-            jwtSecret: process.env.JWT_SECRET || 'dev-secret-change-in-production',
+            // No fallback: a hardcoded default here would sign real auth
+            // tokens with a secret sitting in public source control the
+            // moment JWT_SECRET is unset. Fail closed instead (see
+            // initialize()).
+            jwtSecret: process.env.JWT_SECRET,
             tokenExpiry: '24h',
             rateLimiting: { enabled: true, maxRequestsPerMinute: 60 },
             session: { timeoutMinutes: 60, renewThreshold: 10 }
@@ -22,6 +26,7 @@ class SecurityIdentityWorker {
             const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
             const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
             if (!supabaseUrl || !supabaseKey) throw new Error('Missing Supabase credentials');
+            if (!this.securityConfig.jwtSecret) throw new Error('JWT_SECRET is required for SecurityIdentityWorker');
             this.supabase = createClient(supabaseUrl, supabaseKey);
             this.queue.registerWorker('security_identity', this.workerId);
             this.queue.updateHeartbeat('idle');
@@ -71,7 +76,26 @@ class SecurityIdentityWorker {
         };
 
         this.checkTokenPermission = async function(decoded, endpoint, required_permission) {
-            return true; // stub — implement RBAC logic here
+            if (!required_permission) return true; // token validity alone is sufficient
+
+            // Same permission model as checkPermission() below: admin role
+            // bypasses, otherwise check the user's permission list against
+            // the bare action, "resource:action", or "resource:*".
+            const { data: user } = await this.supabase
+                .from('users')
+                .select('role, permissions')
+                .eq('email', decoded.email)
+                .maybeSingle();
+
+            if (!user) return false;
+            if (user.role === 'admin') return true;
+
+            const userPermissions = user.permissions || [];
+            return (
+                userPermissions.includes(required_permission) ||
+                userPermissions.includes(`${endpoint}:${required_permission}`) ||
+                userPermissions.includes(`${endpoint}:*`)
+            );
         };
 
         this.processAuthentication = async function(payload) {
@@ -434,21 +458,50 @@ class SecurityIdentityWorker {
                 startDate.setDate(startDate.getDate() - 30);
             }
             
-            const { data: authAttempts } = await this.supabase
+            const { data: allAttempts } = await this.supabase
                 .from('auth_attempts')
                 .select('*')
                 .gte('attempted_at', startDate.toISOString());
-            
-            if (scope && scope === 'failed_only') {
-                // Filter to only failed attempts
-                authAttempts.filter = attempt => !attempt.success;
-            }
-            
+
+            const authAttempts = scope === 'failed_only'
+                ? (allAttempts || []).filter(attempt => !attempt.success)
+                : (allAttempts || []);
+
             const totalAttempts = authAttempts.length;
             const failedAttempts = authAttempts.filter(attempt => !attempt.success).length;
             const successRate = totalAttempts > 0 ? (totalAttempts - failedAttempts) / totalAttempts : 0;
-            
-            // find-top-failing-ips-or-emails
+
+            const failureCounts = {};
+            authAttempts.filter(attempt => !attempt.success).forEach(attempt => {
+                const identifier = attempt.email || attempt.ip_address || 'unknown';
+                failureCounts[identifier] = (failureCounts[identifier] || 0) + 1;
+            });
+            const topFailing = Object.entries(failureCounts)
+                .sort(([, a], [, b]) => b - a)
+                .slice(0, 5)
+                .map(([identifier, count]) => ({ identifier, count }));
+
+            return { scope: scope || 'all', time_period: time_period || '30d', totalAttempts, failedAttempts, successRate, topFailing };
+        };
+
+        // The following audit types are declared in performSecurityAudit's
+        // switch but not yet implemented -- returning a clear "not
+        // implemented" result instead of leaving the method undefined,
+        // which would throw a TypeError on any of these audit_type requests.
+        this.auditAuthorization = async function(scope, time_period) {
+            return { implemented: false, audit_type: 'authorization', scope: scope || 'all', time_period: time_period || '30d' };
+        };
+
+        this.auditRateLimiting = async function(scope, time_period) {
+            return { implemented: false, audit_type: 'rate_limiting', scope: scope || 'all', time_period: time_period || '30d' };
+        };
+
+        this.auditSessionManagement = async function(scope, time_period) {
+            return { implemented: false, audit_type: 'session_management', scope: scope || 'all', time_period: time_period || '30d' };
+        };
+
+        this.auditVulnerabilities = async function(scope, time_period) {
+            return { implemented: false, audit_type: 'vulnerability_scan', scope: scope || 'all', time_period: time_period || '30d' };
         };
     }
 }
