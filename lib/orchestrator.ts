@@ -17,6 +17,7 @@ import { ActionExecutor } from './action-executor';
 import { retrieveMemory, storeMemory } from './heidi-memory';
 import { gateActions, isEnforcing } from './protoforge/action-gate';
 import { buildExperience, storeExperience } from './episodic-memory';
+import { AgentRegistry, createDefaultAgentRegistry } from './agents/registry';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 interface ChatRequest {
@@ -37,6 +38,7 @@ export class HeidiOrchestrator {
   private modelManager: ModelManager;
   private supabase: SupabaseClient;
   private actionExecutor: ActionExecutor;
+  private agentRegistry: AgentRegistry;
   private allowedActionTypes: string[] = [
     'send_email',
     'create_task',
@@ -52,6 +54,7 @@ export class HeidiOrchestrator {
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
     this.actionExecutor = new ActionExecutor(this.supabase);
+    this.agentRegistry = createDefaultAgentRegistry(this.actionExecutor);
   }
 
   /**
@@ -205,6 +208,13 @@ Respond with JSON:`;
    * Skipped when the action was blocked (there's no execution outcome to
    * backfill; the decision itself is the terminal state) or when gating
    * degraded to 'skipped' (no decisionId to backfill against).
+   *
+   * Approved actions execute through `agentRegistry` — the Phase 3
+   * specialist roster (lib/agents/) — which delegates to `actionExecutor`
+   * internally while tracking per-agent metrics. Falls back to calling
+   * `actionExecutor` directly for any action type without a registered
+   * agent, so adding a 6th action type doesn't require touching this
+   * method.
    */
   private async executeActions(
     actions: ParsedResponse['actions'],
@@ -236,8 +246,11 @@ Respond with JSON:`;
       }
 
       try {
-        const outcome = await this.actionExecutor.execute(action, sessionId);
-        console.log(`[Orchestrator] Executed action: ${action.type} -> ${outcome.status}`);
+        const agent = this.agentRegistry.getAgentFor(action.type);
+        const outcome = agent
+          ? await agent.execute(action, sessionId)
+          : await this.actionExecutor.execute(action, sessionId);
+        console.log(`[Orchestrator] Executed action: ${action.type} -> ${outcome.status} (${agent ? agent.id : 'actionExecutor (no registered agent)'})`);
 
         await this.supabase.from('actions').insert({
           session_id: sessionId,
@@ -301,7 +314,8 @@ Respond with JSON:`;
     return {
       model_status: this.modelManager.getModelStatus(),
       memory_connected: !!this.supabase,
-      allowed_actions: this.allowedActionTypes
+      allowed_actions: this.allowedActionTypes,
+      agent_metrics: this.agentRegistry.getMetricsSnapshot()
     };
   }
 }
