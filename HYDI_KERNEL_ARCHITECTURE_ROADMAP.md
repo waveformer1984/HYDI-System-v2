@@ -273,7 +273,40 @@ current scope.
   ability to wake itself up — that's a distinct, larger decision.
 
 ### Phase 5 — Metrics and learning from experience
-- Task success rate, retry counts, planning accuracy, memory retrieval quality, user-correction rate — instrument once Phase 1-2 give a single place (the kernel spine) where every task passes through once, instead of an unknown number of times across five parallel paths.
+
+**Status: executed, 2026-07-14, 3 of 5 named metrics — 2 need signal capture that doesn't exist yet.**
+
+- ✅ `lib/metrics.ts`: reads the tables Phases 1-4 already write to, no new
+  schema. `getTaskSuccessRates()` groups `actions` rows by `task_name`
+  (per-type completed/failed/success-rate). `getDecisionStats()` reads
+  `decisions` for approve/reject/escalate distribution, outcome success
+  rate, and average confidence. `getWorkSessionStats()` reads
+  `work_sessions` for completion rate and **planning accuracy** — the
+  average, across sessions with at least one step, of completed-steps ÷
+  planned-steps. That's a genuine answer to "task success rate" and
+  "planning accuracy" from the roadmap's original list.
+- ✅ Wired into `HeidiOrchestrator.getSystemStatus()`, reachable through
+  the already-live `/api/status` route (`pages/api/status.ts`) — not
+  another built-but-never-called module.
+- ✅ **Found and documented, not silently worked around**: `lib/agents/*`'s
+  per-agent metrics (`tasksHandled`/`successCount`/...) reset every
+  request, because `new HeidiOrchestrator()` is constructed fresh per call
+  in all three routes that use it (`pages/api/chat.ts`, `status.ts`,
+  `session.ts`) — confirmed by grep before writing `lib/metrics.ts`. They
+  were never a durable cross-request signal despite living on a
+  `SpecialistAgent`; `lib/metrics.ts` reading from the DB tables directly
+  is the actual Phase 5 answer, not a fix to the in-memory counters.
+- ❌ **Retry counts, memory retrieval quality, user-correction rate — not
+  built.** None of the three have a signal to read: retries
+  (`ActionParser`'s and `PlanParser`'s self-correction loops) aren't
+  persisted anywhere, memory retrieval has no feedback on whether
+  retrieved context was useful, and nothing distinguishes "user corrected
+  Heidi" from "user asked something new." Faking these would be worse
+  than omitting them. Each needs new signal capture (e.g. persisting a
+  retry event, capturing explicit user feedback) — that's real,
+  standalone follow-up work, not a Phase 5 afterthought.
+- 18 new tests (`tests/unit/metrics.test.ts`). Full suite: 1084/1084
+  passing, typecheck clean.
 
 ---
 

@@ -27,6 +27,7 @@ import {
   updateWorkSession,
   WorkSession,
 } from './work-sessions';
+import { getDecisionStats, getTaskSuccessRates, getWorkSessionStats } from './metrics';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 interface ChatRequest {
@@ -389,13 +390,29 @@ Respond with JSON:`;
 
   /**
    * Get system status
+   *
+   * agent_metrics is per-process (resets every request — see
+   * lib/metrics.ts's module comment for why); task_success_rates,
+   * decision_stats, and work_session_stats are the durable, Phase 5
+   * cross-request signal, read from the actions/decisions/work_sessions
+   * tables. Best-effort: a metrics query failing degrades to an empty
+   * result via lib/metrics.ts's own error handling, never throws here.
    */
   async getSystemStatus() {
+    const [taskSuccessRates, decisionStats, workSessionStats] = await Promise.all([
+      getTaskSuccessRates(this.supabase),
+      getDecisionStats(this.supabase),
+      getWorkSessionStats(this.supabase),
+    ]);
+
     return {
       model_status: this.modelManager.getModelStatus(),
       memory_connected: !!this.supabase,
       allowed_actions: this.allowedActionTypes,
-      agent_metrics: this.agentRegistry.getMetricsSnapshot()
+      agent_metrics: this.agentRegistry.getMetricsSnapshot(),
+      task_success_rates: taskSuccessRates,
+      decision_stats: decisionStats,
+      work_session_stats: workSessionStats,
     };
   }
 }
