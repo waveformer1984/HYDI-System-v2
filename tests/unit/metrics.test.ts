@@ -4,9 +4,13 @@
 
 import {
   computeDecisionStats,
+  computeMemoryRetrievalStats,
+  computeRetryStats,
   computeTaskSuccessRates,
   computeWorkSessionStats,
   getDecisionStats,
+  getMemoryRetrievalStats,
+  getRetryStats,
   getTaskSuccessRates,
   getWorkSessionStats,
 } from '../../lib/metrics';
@@ -190,5 +194,92 @@ describe('getWorkSessionStats', () => {
     const supabase = makeFakeSupabase(null, { message: 'db down' });
     const stats = await getWorkSessionStats(supabase);
     expect(stats.totalSessions).toBe(0);
+  });
+});
+
+describe('computeRetryStats', () => {
+  test('counts succeeded vs failed and groups by stage', () => {
+    const rows = [
+      { status: 'completed', payload: { stage: 'chat_response' } },
+      { status: 'completed', payload: { stage: 'chat_response' } },
+      { status: 'failed', payload: { stage: 'chat_response' } },
+      { status: 'completed', payload: { stage: 'work_session_plan' } },
+    ];
+    const stats = computeRetryStats(rows);
+
+    expect(stats.totalRetries).toBe(4);
+    expect(stats.succeeded).toBe(3);
+    expect(stats.failed).toBe(1);
+    expect(stats.successRate).toBe(0.75);
+    expect(stats.byStage.chat_response).toEqual({ total: 3, succeeded: 2, failed: 1 });
+    expect(stats.byStage.work_session_plan).toEqual({ total: 1, succeeded: 1, failed: 0 });
+  });
+
+  test('missing stage buckets under "unknown"', () => {
+    const stats = computeRetryStats([{ status: 'completed', payload: null }]);
+    expect(stats.byStage.unknown).toEqual({ total: 1, succeeded: 1, failed: 0 });
+  });
+
+  test('empty input returns zeroed stats with null success rate, not NaN', () => {
+    const stats = computeRetryStats([]);
+    expect(stats.totalRetries).toBe(0);
+    expect(stats.successRate).toBeNull();
+    expect(stats.byStage).toEqual({});
+  });
+});
+
+describe('getRetryStats', () => {
+  test('returns computed stats on success', async () => {
+    const supabase = makeFakeSupabase([{ status: 'completed', payload: { stage: 'chat_response' } }]);
+    const stats = await getRetryStats(supabase);
+    expect(stats.succeeded).toBe(1);
+  });
+
+  test('degrades to zeroed stats on error, does not throw', async () => {
+    const supabase = makeFakeSupabase(null, { message: 'db down' });
+    const stats = await getRetryStats(supabase);
+    expect(stats.totalRetries).toBe(0);
+  });
+});
+
+describe('computeMemoryRetrievalStats', () => {
+  test('counts retrievals with and without context', () => {
+    const rows = [
+      { payload: { had_context: true } },
+      { payload: { had_context: true } },
+      { payload: { had_context: false } },
+    ];
+    const stats = computeMemoryRetrievalStats(rows);
+
+    expect(stats.totalRetrievals).toBe(3);
+    expect(stats.withContext).toBe(2);
+    expect(stats.withoutContext).toBe(1);
+    expect(stats.coverageRate).toBeCloseTo(2 / 3);
+  });
+
+  test('missing/null payload counts as without context', () => {
+    const stats = computeMemoryRetrievalStats([{ payload: null }]);
+    expect(stats.withoutContext).toBe(1);
+    expect(stats.withContext).toBe(0);
+  });
+
+  test('empty input returns zeroed stats with null coverage rate, not NaN', () => {
+    const stats = computeMemoryRetrievalStats([]);
+    expect(stats.totalRetrievals).toBe(0);
+    expect(stats.coverageRate).toBeNull();
+  });
+});
+
+describe('getMemoryRetrievalStats', () => {
+  test('returns computed stats on success', async () => {
+    const supabase = makeFakeSupabase([{ payload: { had_context: true } }]);
+    const stats = await getMemoryRetrievalStats(supabase);
+    expect(stats.withContext).toBe(1);
+  });
+
+  test('degrades to zeroed stats on error, does not throw', async () => {
+    const supabase = makeFakeSupabase(null, { message: 'db down' });
+    const stats = await getMemoryRetrievalStats(supabase);
+    expect(stats.totalRetrievals).toBe(0);
   });
 });
