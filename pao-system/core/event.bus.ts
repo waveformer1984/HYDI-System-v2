@@ -177,7 +177,13 @@ export class EventBus extends EventEmitter {
           await subscription.handler(event);
         } catch (error) {
           console.error(`[EVENT BUS] Delivery failed to ${agentId}:`, error);
-          await this.handleDeliveryFailure(event, agentId, error as Error);
+          // error is unknown in strict mode -- normalize instead of blindly
+          // asserting it's an Error, so handleDeliveryFailure's declared
+          // `error: Error` parameter is never a lie.
+          const normalizedError = error instanceof Error
+            ? error
+            : new Error(typeof error === 'string' ? error : 'Unknown error');
+          await this.handleDeliveryFailure(event, agentId, normalizedError);
         }
       }
     });
