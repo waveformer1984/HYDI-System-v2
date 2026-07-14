@@ -25,7 +25,7 @@ class RevenueEngineV2 {
   constructor() {
     this.supabase = supabase;
     this.stripe = stripe;
-    this.realityFilter = new RealityFilter();
+    this.realityFilter = new RealityFilter(this.supabase);
     
     // Enhanced metrics with filter tracking
     this.metrics = {

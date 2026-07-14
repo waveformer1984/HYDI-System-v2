@@ -7,8 +7,15 @@
  * Rules are enforced BEFORE execution, not after failure.
  */
 
+const { createClient } = require('@supabase/supabase-js');
+
 class RealityFilter {
-  constructor() {
+  constructor(supabaseClient = null) {
+    this.supabase = supabaseClient || createClient(
+      process.env.SUPABASE_URL,
+      process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY
+    );
+
     // Hard constraints - these are non-negotiable
     this.constraints = {
       // Lead source validation
@@ -259,7 +266,7 @@ class RealityFilter {
     }
     
     // Check demand validation
-    const demandScore = await this.getDemandScore(category);
+    const demandScore = await this.getDemandScore(category, trendScore);
     if (demandScore < this.constraints.products.minDemandScore) {
       return {
         allowed: false,
@@ -351,42 +358,88 @@ class RealityFilter {
     };
   }
 
-  // Helper methods (simplified implementations)
+  // Helper methods (backed by the real leads/outreach/product_ideas/
+  // product_listings/task_queue tables that revenue-engine/index.js and
+  // revenue-engine-v2.js already write to)
   async getConversionRate(source) {
-    // In real implementation, query database
-    const mockRates = { linkedin: 0.08, referral: 0.15, directory: 0.05, cold_email_proven: 0.03 };
-    return mockRates[source] || 0.01;
+    const { data, error } = await this.supabase
+      .from('leads')
+      .select('converted_at')
+      .eq('source', source);
+
+    if (error || !data || data.length === 0) {
+      // No history yet for this source -- fall back to a conservative
+      // known-source baseline rather than either auto-approving (0 data
+      // points proves nothing) or auto-rejecting a source this filter's
+      // own allowedSources list already trusts.
+      const knownBaseline = { linkedin: 0.08, referral: 0.15, directory: 0.05, cold_email_proven: 0.03 };
+      return knownBaseline[source] ?? 0.01;
+    }
+
+    const converted = data.filter(lead => lead.converted_at).length;
+    return converted / data.length;
   }
 
   async getNewSourcesToday() {
-    // Query database for new sources tested today
-    return Math.floor(Math.random() * 3);
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+
+    const { data, error } = await this.supabase
+      .from('leads')
+      .select('source')
+      .gte('created_at', startOfDay.toISOString());
+
+    if (error || !data) return 0;
+
+    const distinctSources = new Set(data.map(lead => lead.source));
+    const newSources = [...distinctSources].filter(
+      source => !this.constraints.leadSources.allowedSources.includes(source)
+    );
+    return newSources.length;
   }
 
   async getNicheSaturation(niche) {
-    // Calculate saturation based on existing leads and competition
-    return Math.random() * 0.9;
+    const { data, error } = await this.supabase
+      .from('leads')
+      .select('status')
+      .eq('niche', niche);
+
+    if (error || !data || data.length === 0) return 0; // unexplored niche isn't saturated
+
+    const engaged = data.filter(lead => lead.status === 'contacted' || lead.status === 'converted').length;
+    return engaged / data.length;
   }
 
   async getOutreachCountToday() {
-    // Query database for outreach sent today
-    return Math.floor(Math.random() * 50);
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+
+    const { count } = await this.supabase
+      .from('outreach')
+      .select('*', { count: 'exact', head: true })
+      .gte('sent_at', startOfDay.toISOString());
+
+    return count || 0;
   }
 
   calculatePersonalizationScore(template, personalizationData) {
     let score = 0.5;
     const required = this.constraints.outreach.requiredPersonalization;
-    
+
     required.forEach(item => {
       if (personalizationData[item]) score += 0.1;
     });
-    
+
     return Math.min(score, 1);
   }
 
   async calculateLeadRelevance(leads) {
-    // Calculate average relevance score for leads
-    return 0.6 + Math.random() * 0.4;
+    // leads are full row objects (each carries the leads.score 0-100
+    // column, e.g. from revenue-engine-v2.js's scrapeLeads result) --
+    // relevance is that score normalized to [0, 1], not a random guess.
+    if (!leads || leads.length === 0) return 0;
+    const scores = leads.map(lead => (typeof lead.score === 'number' ? lead.score / 100 : 0.5));
+    return scores.reduce((sum, s) => sum + s, 0) / scores.length;
   }
 
   async getEstimatedCost(projectType, quantity) {
@@ -399,19 +452,48 @@ class RealityFilter {
     return baseCosts[projectType] * (quantity / 10);
   }
 
-  async getDemandScore(category) {
-    // Query trend data and market demand
-    return 0.5 + Math.random() * 0.5;
+  async getDemandScore(category, trendScore) {
+    // Prefer the caller's own trend score for this specific product idea
+    // when given (filterProductCreation's params.trendScore); it's a more
+    // current signal than a historical category average.
+    if (typeof trendScore === 'number') {
+      return Math.min(Math.max(trendScore / 100, 0), 1);
+    }
+
+    const { data, error } = await this.supabase
+      .from('product_ideas')
+      .select('trend_score')
+      .eq('category', category)
+      .not('trend_score', 'is', null);
+
+    if (error || !data || data.length === 0) return 0.5; // no history -- neutral, not auto-reject
+
+    const avg = data.reduce((sum, row) => sum + row.trend_score, 0) / data.length;
+    return Math.min(Math.max(avg / 100, 0), 1);
   }
 
   async getProductListingsToday() {
-    // Query database for listings created today
-    return Math.floor(Math.random() * 5);
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+
+    const { count } = await this.supabase
+      .from('product_listings')
+      .select('*', { count: 'exact', head: true })
+      .gte('created_at', startOfDay.toISOString());
+
+    return count || 0;
   }
 
   async getConcurrentTaskCount() {
-    // Query active tasks
-    return Math.floor(Math.random() * 10);
+    // task_queue is the closest real signal available for "tasks
+    // currently in flight" -- there is no dedicated per-execution
+    // tracking table for revenue-engine specifically.
+    const { count } = await this.supabase
+      .from('task_queue')
+      .select('*', { count: 'exact', head: true })
+      .eq('status', 'pending');
+
+    return count || 0;
   }
 
   async runPreChecks(taskId) {
