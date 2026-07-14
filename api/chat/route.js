@@ -9,6 +9,7 @@ import {
 } from '../../lib/vercel/vercelAdmin.js';
 import { getSystemStatus, isReachable } from '../../lib/termux/termuxClient.js';
 import { callAgent, isClaudeAvailable } from '../../lib/claude.js';
+import { rateLimit } from '../../lib/rate-limit.js';
 
 // Lazy client: a missing SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY must surface
 // as a clean JSON error from the handler, not a cold-start crash (which returns
@@ -78,6 +79,10 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Max-Age', '86400')
   if (req.method === 'OPTIONS') {
     return res.status(204).end()
+  }
+
+  if (!rateLimit(req, res, { name: 'chat-router', windowMs: 60 * 1000, max: 30 })) {
+    return;
   }
 
   // Verify service token before processing any request
