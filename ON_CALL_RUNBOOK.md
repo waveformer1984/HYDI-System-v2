@@ -1,5 +1,12 @@
 # ON-CALL RUNBOOK - INCIDENT DECISION TREE
 
+> `WEBHOOK_PROCESSING_ENABLED=false` pauses **both** Stripe webhook
+> consumers: `supabase/functions/stripe-webhook/index.ts` (subscription
+> tiers) and `pages/api/stripe-connect-webhook.js` (Connect revenue-stream
+> ledger routing). Set it wherever each actually runs — a Supabase Edge
+> Function secret for the former, a Next.js process env var for the
+> latter. See DEPLOYMENT.md for the full routing map.
+
 ## WEBHOOK EMERGENCIES
 
 ### High CPU/Load?

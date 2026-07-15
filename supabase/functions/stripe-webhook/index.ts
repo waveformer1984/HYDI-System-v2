@@ -18,6 +18,24 @@ Deno.serve(async (req: Request) => {
     });
   }
 
+  // Emergency kill switch — see ON_CALL_RUNBOOK.md / ROLLBACK_PLAYBOOK.md,
+  // which document flipping WEBHOOK_PROCESSING_ENABLED=false to pause
+  // webhook processing during an incident. Checks for an explicit "false"
+  // (not "processing only when explicitly true") because this function has
+  // always processed events with no gate at all and this sandbox cannot
+  // verify whether the flag is already configured as a Supabase Edge
+  // Function secret in the live deployment — defaulting the other way
+  // risked silently pausing live subscription provisioning the moment this
+  // check shipped. 200 (not 4xx/5xx) so Stripe doesn't retry-storm a
+  // deliberate pause.
+  if (Deno.env.get("WEBHOOK_PROCESSING_ENABLED") === "false") {
+    console.log("[WEBHOOK] KILL SWITCH — processing paused (WEBHOOK_PROCESSING_ENABLED=false)");
+    return new Response(JSON.stringify({ received: true, status: "paused" }), {
+      status: 200,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,

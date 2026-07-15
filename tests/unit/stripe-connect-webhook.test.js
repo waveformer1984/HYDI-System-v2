@@ -73,6 +73,56 @@ function fakeRes() {
   };
 }
 
+describe('emergency kill switch (WEBHOOK_PROCESSING_ENABLED)', () => {
+  afterEach(() => {
+    delete process.env.WEBHOOK_PROCESSING_ENABLED;
+  });
+
+  it('pauses and skips signature verification entirely when explicitly set to "false"', async () => {
+    process.env.WEBHOOK_PROCESSING_ENABLED = 'false';
+    const req = { method: 'POST', headers: { 'stripe-signature': 'sig' }, body: Buffer.from('{}') };
+    const res = fakeRes();
+    await handler(req, res);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toEqual({ received: true, status: 'paused' });
+    expect(mockConstructEvent).not.toHaveBeenCalled();
+  });
+
+  it('processes normally when unset (opt-out, not opt-in — see api/stripe-connect-webhook.js comment)', async () => {
+    delete process.env.WEBHOOK_PROCESSING_ENABLED;
+    mockConstructEvent.mockReturnValue({
+      id: 'evt_killswitch_unset',
+      type: 'payment_intent.succeeded',
+      data: { object: { id: 'pi_test', amount: 1000, currency: 'usd', metadata: {} } },
+    });
+    mockRpc.mockResolvedValueOnce({ data: 'claim_x', error: null });
+    const req = { method: 'POST', headers: { 'stripe-signature': 'sig' }, body: Buffer.from('{}') };
+    const res = fakeRes();
+    await handler(req, res);
+
+    expect(mockConstructEvent).toHaveBeenCalled();
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toEqual({ received: true });
+  });
+
+  it('processes normally when explicitly set to "true"', async () => {
+    process.env.WEBHOOK_PROCESSING_ENABLED = 'true';
+    mockConstructEvent.mockReturnValue({
+      id: 'evt_killswitch_true',
+      type: 'payment_intent.succeeded',
+      data: { object: { id: 'pi_test', amount: 1000, currency: 'usd', metadata: {} } },
+    });
+    mockRpc.mockResolvedValueOnce({ data: 'claim_y', error: null });
+    const req = { method: 'POST', headers: { 'stripe-signature': 'sig' }, body: Buffer.from('{}') };
+    const res = fakeRes();
+    await handler(req, res);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toEqual({ received: true });
+  });
+});
+
 describe('webhook idempotency', () => {
   beforeEach(() => {
     mockRpc.mockClear();

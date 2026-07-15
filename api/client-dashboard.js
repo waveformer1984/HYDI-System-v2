@@ -4,33 +4,53 @@
  */
 
 const { createClient } = require('@supabase/supabase-js');
+const { requireAuth } = require('../lib/auth/requireAuth');
 
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
+// Lazy client: a missing SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY must surface
+// as a clean JSON error from the handler, not a cold-start crash. See
+// api/health.js for the established pattern.
+let _supabase = null;
+function getSupabase() {
+  if (!_supabase) {
+    if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      throw new Error('Supabase env vars not configured (SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY)');
+    }
+    _supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+  }
+  return _supabase;
+}
+const supabase = new Proxy({}, { get: (_, prop) => getSupabase()[prop] });
 
 export default async function handler(req, res) {
   // Set CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-hydi-service-token, x-hydi-device-token');
+
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
-  
+
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
-  
+
+  // This route reads the full financial ledger (gross revenue, fees, net,
+  // monthly breakdown, pending payouts) for any project code passed in —
+  // project codes are the six publicly-documented revenue stream names, so
+  // an unauthenticated version of this endpoint is a full revenue-transparency
+  // leak to anyone who can guess a name. Gate it like the rest of the
+  // mobile-ops surface.
+  const auth = await requireAuth(req, res, supabase, { permission: 'ledger:view', routeName: 'client-dashboard' });
+  if (!auth.ok) return;
+
   // Get project code from query params (e.g., ?project=galactic_bytes)
   const { project } = req.query;
-  
+
   if (!project) {
     return res.status(400).json({ error: 'Project code required' });
   }
-  
+
   try {
     // Fetch ledger entries for this project
     const { data: transactions, error: txError } = await supabase

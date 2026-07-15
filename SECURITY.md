@@ -38,7 +38,7 @@ We will not disclose a vulnerability publicly before a fix is available unless t
 - Authentication and authorisation bypasses in API routes (`api/`)
 - Injection vulnerabilities (SQL, command, header injection) in any layer
 - Secrets exposed in logs, responses, or version control
-- Stripe webhook signature bypass (`api/stripe-connect-webhook.js`, `api/webhooks/stripe.js`)
+- Stripe webhook signature bypass (`api/stripe-connect-webhook.js`, `supabase/functions/stripe-webhook/index.ts`)
 - Supabase RLS policy bypasses on any table
 - KILO being reachable for execution (it must only generate hypotheses)
 - ProtoForge policy engine bypasses (default must be `'reject'`)
@@ -83,7 +83,8 @@ vercel env ls | grep SECRET_NAME
 | Control | Where |
 |---------|-------|
 | Row-Level Security (RLS) | All Supabase tables |
-| Stripe webhook signature validation | `api/stripe-connect-webhook.js`, `api/webhooks/stripe.js` |
+| Stripe webhook signature validation | `api/stripe-connect-webhook.js` (Connect payment routing), `supabase/functions/stripe-webhook/index.ts` (SaaS subscription tiers) |
+| Mobile-ops RBAC gate (`requireAuth`) on financial/control endpoints | `lib/auth/requireAuth.js`, `lib/auth/rbac.js` — see `api/client-dashboard.js`, `api/agent-manager/*`, `api/events/stream.js` |
 | `search_path` pinning on `SECURITY DEFINER` functions | `supabase/migrations/` |
 | KILO execution authority blocked unconditionally | `kilo/index.js` — `execute()` throws |
 | PolicyEngine fail-closed (default `'reject'`) | `lib/protoforge/policy-engine.js` |

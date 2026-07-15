@@ -6,11 +6,31 @@
 const Stripe = require('stripe');
 const { createClient } = require('@supabase/supabase-js');
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
+// Lazy clients: missing env vars must surface as a clean JSON error from the
+// handler, not a cold-start crash (both SDKs throw synchronously on a
+// missing key/URL). See api/health.js for the established pattern.
+let _stripe = null;
+function getStripe() {
+  if (!_stripe) {
+    if (!process.env.STRIPE_SECRET_KEY) {
+      throw new Error('STRIPE_SECRET_KEY is not configured');
+    }
+    _stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+  }
+  return _stripe;
+}
+
+let _supabase = null;
+function getSupabase() {
+  if (!_supabase) {
+    if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      throw new Error('Supabase env vars not configured (SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY)');
+    }
+    _supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+  }
+  return _supabase;
+}
+const supabase = new Proxy({}, { get: (_, prop) => getSupabase()[prop] });
 
 // Revenue stream to Stripe Connect account mapping
 const REVENUE_STREAM_ACCOUNTS = {
@@ -35,6 +55,24 @@ async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
+  // Emergency kill switch — see ON_CALL_RUNBOOK.md / ROLLBACK_PLAYBOOK.md,
+  // which document flipping WEBHOOK_PROCESSING_ENABLED=false to pause
+  // webhook processing during an incident. This route never had that gate
+  // before (the only prior implementation of it lived in the now-archived,
+  // never-reachable api/webhooks/stripe.js — see
+  // archive/legacy-stripe-webhook-implementations/README.md), so unlike
+  // that original, this checks for an explicit "false" rather than
+  // requiring an explicit "true": this route has always processed events
+  // with no gate at all, and this sandbox cannot verify whether
+  // WEBHOOK_PROCESSING_ENABLED is already configured in the real
+  // deployment. Defaulting to "paused unless true" here risked silently
+  // zeroing out ledger writes the moment this route became reachable.
+  // 200 (not 4xx/5xx) so Stripe doesn't retry-storm a deliberate pause.
+  if (process.env.WEBHOOK_PROCESSING_ENABLED === 'false') {
+    console.log('[Connect Webhook] KILL SWITCH — processing paused (WEBHOOK_PROCESSING_ENABLED=false)');
+    return res.status(200).json({ received: true, status: 'paused' });
+  }
+
   const sig = req.headers['stripe-signature'];
   const webhookSecret = process.env.STRIPE_CONNECT_WEBHOOK_SECRET;
 
@@ -49,7 +87,7 @@ async function handler(req, res) {
 
   let event;
   try {
-    event = stripe.webhooks.constructEvent(rawBody, sig, webhookSecret);
+    event = getStripe().webhooks.constructEvent(rawBody, sig, webhookSecret);
   } catch (err) {
     console.error('[Connect Webhook] Signature verification failed:', err.message);
     return res.status(400).json({ error: 'Invalid signature' });
@@ -58,7 +96,8 @@ async function handler(req, res) {
   console.log(`[Connect Webhook] ${event.type} (${event.id})`);
 
   // Idempotency guard -- Stripe retries on timeout/non-2xx, which would otherwise
-  // double-insert ledger rows. Shares the same webhook_events table/RPC as api/webhooks/stripe.js.
+  // double-insert ledger rows. Shares the same claim_webhook_event RPC as the
+  // subscription-tier webhook (supabase/functions/stripe-webhook/index.ts).
   const { data: claimedId } = await supabase.rpc('claim_webhook_event', {
     p_event_id: event.id,
     p_type: `connect:${event.type}`,
@@ -105,7 +144,7 @@ async function handlePaymentIntentSucceeded(paymentIntent) {
   }
 
   const charge = paymentIntent.latest_charge
-    ? await stripe.charges.retrieve(paymentIntent.latest_charge, {
+    ? await getStripe().charges.retrieve(paymentIntent.latest_charge, {
         stripeAccount: connectAccountId,
       })
     : null;

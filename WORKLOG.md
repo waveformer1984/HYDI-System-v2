@@ -4,6 +4,141 @@ Running log of autonomous production-readiness work. Newest entries first.
 
 ---
 
+## 2026-07-15 (third pass) — Checkout/webhook routing consolidation
+
+Branch: `claude/production-readiness-audit-fk9lth` (continuation of the
+prior two same-day sessions). Picked up the single highest-priority item
+the previous pass flagged: ISSUES_FOUND.md #33, "checkout and Stripe
+webhook delivery may be silently broken right now."
+
+### What was found
+
+Traced every "handle a Stripe checkout/webhook" implementation across the
+whole repo rather than guessing which one to fix. Found **four** separate
+implementations of "process a Stripe subscription webhook" (not one, as
+the file names might suggest):
+
+1. `supabase/functions/stripe-webhook/index.ts` — a Supabase Edge
+   Function. Complete: real Deno-compatible async signature verification,
+   idempotent via a unique constraint on `keymaker_events.event_id`
+   (verified against `supabase/migrations/001_keymaker_core.sql`), and its
+   `processEvent()` switch actually invokes its own handler functions.
+2. `api/webhooks/stripe.js` — a Vercel/Express-era Node handler with a
+   real, live bug: `module.exports.handler = ...` was set, then two lines
+   later `module.exports = { handleStripeWebhook, SERVICE_TIERS }`
+   silently replaced the whole exports object, deleting the `.handler`
+   export its own doc comment called "Vercel API handler." Its per-event
+   handler functions were also dead — the actual code path queues every
+   event to a task queue via `WebhookQueueAdapter` instead of calling
+   them, and nothing in the repo consumes those queued tasks.
+3. `stripe-webhook-server.js` — a standalone Express server whose only job
+   was `require`-ing #2 directly (bypassing its broken export). Not
+   started by any `package.json` script, PM2 config, or CI workflow.
+4. `src/webhook-handlers/stripe-webhook.js` — a third, fully independent
+   `StripeWebhookHandler` class targeting a `users`/`api_keys` schema that
+   doesn't otherwise appear anywhere in this codebase, with **no signature
+   verification at all**. Never imported outside its own test file.
+
+Separately, `api/stripe-connect-webhook.js` handles a genuinely different
+concern (Stripe Connect sub-account revenue routing → the `ledger` table)
+and has no Edge Function equivalent — it's the sole implementation of that
+concern, correctly built (signature verification, `claim_webhook_event`
+idempotency), just never reachable.
+
+`api/checkout.js` and `api/checkout-v2.js` were byte-for-byte identical
+since the commit that introduced both (`b473969`) — a straightforward
+duplicate, not two designs.
+
+While tracing the Connect webhook's reachability, also found
+`api/client-dashboard.js` (CLAUDE.md: "Per-project ledger view with fee
+breakdown") had **zero authentication** — any caller supplying
+`?project=galactic_bytes` (or any of the other five *publicly documented*
+revenue stream names) got the full financial ledger for that stream. A
+live, unauthenticated full-company revenue disclosure once bridged, not a
+theoretical IDOR.
+
+Also found `api/events/stream.js` (the mobile-ops live SSE stream) was
+already fully authenticated and using the established lazy-client
+pattern, but — unlike its `heartbeat.js`/`notifications/index.js`
+siblings — was never bridged into `pages/api/`. Apparent oversight in the
+prior pass's bridging sweep.
+
+Finally: porting the archived subscription webhook's
+`WEBHOOK_PROCESSING_ENABLED` kill switch (documented in
+`ON_CALL_RUNBOOK.md`/`ROLLBACK_PLAYBOOK.md`) to the two now-live canonical
+handlers surfaced that this operational safety control had *never*
+actually been reachable — it only existed in dead code (#2 above).
+
+### What was fixed
+
+- Determined and documented the correct production topology (see
+  DEPLOYMENT.md, new this session): Edge Function canonical for
+  subscription tiers, `api/stripe-connect-webhook.js` canonical for
+  Connect routing.
+- Bridged `api/checkout.js` and `api/stripe-connect-webhook.js` into
+  `pages/api/` (the latter re-exporting its `config` too, since Stripe
+  needs the raw body for signature verification).
+- Deleted `api/checkout-v2.js` outright (true duplicate, not archived).
+- Archived the three dead/broken Stripe-webhook implementations (#2-#4
+  above) plus their sole caller (`stripe-webhook-server.js`) and the local
+  dev script that spawned it (`setup-stripe-integration.js`), with a full
+  writeup in `archive/legacy-stripe-webhook-implementations/README.md`.
+  Moved (not deleted) the now-pointless test for #4.
+- Fixed the eager-client-construction cold-start-crash bug (same class as
+  the prior pass's #32) in `api/checkout.js`, `api/stripe-connect-webhook.js`,
+  and `api/client-dashboard.js` — all three now lazily construct their
+  Stripe/Supabase clients.
+- Gated `api/client-dashboard.js` behind `requireAuth('ledger:view')` (new
+  RBAC permission, granted to `owner`/`operator` only) before bridging it
+  into reachability.
+- Bridged `api/events/stream.js` into `pages/api/events/stream.js` with
+  `responseLimit: false` (SSE, not a bounded JSON response).
+- Ported the `WEBHOOK_PROCESSING_ENABLED` kill switch to both canonical
+  webhook handlers (the Edge Function and the Connect route), deliberately
+  flipping its default polarity from "process only when explicitly true"
+  to "pause only when explicitly false" — reusing the original's
+  fail-closed-by-default semantics on routes that had always processed
+  with no gate risked silently zeroing out ledger writes / pausing
+  subscription provisioning the instant this shipped, given this sandbox
+  can't verify the flag's current configuration in the live environment.
+  Documented the reasoning in the archive README and added a header note
+  to `ON_CALL_RUNBOOK.md`.
+- Produced `DEPLOYMENT.md` (new) — the definitive routing map: every
+  `pages/api/**` URL, its `api/**` implementation, auth, and status; every
+  `api/**` file's reachability status and why; the two-webhooks-not-one
+  clarification; manual verification items.
+- Produced `OPERATIONS.md` (new) — operational doc index + current status
+  summary.
+- Updated ISSUES_FOUND.md, ROADMAP.md, SECURITY.md to reflect the above.
+
+### Verification
+
+- `npm run typecheck` — clean.
+- `npm run lint` — exit 0, 0 errors (pre-existing `no-unused-vars`
+  warnings only, unchanged from before this session).
+- `npm test` — 134/134 suites, 1426/1426 tests passing (was 129/129,
+  1344/1344 before this session's new tests: `checkout.test.js`,
+  `client-dashboard.test.js`, `route-bridges.test.js`, plus additions to
+  `stripe-connect-webhook.test.js`).
+- `npm run security-audit` — clean (0 critical/high/medium/low).
+- `tests/unit/no-hardcoded-secrets.test.js` — clean, confirms nothing in
+  this session's diff (including the archived files' new paths)
+  reintroduced a secret-shaped literal.
+
+### Not done in this pass (see ISSUES_FOUND.md / ROADMAP.md / DEPLOYMENT.md)
+
+- Did not bridge `api/chat/route.js`, `api/heidi/route.js`, or
+  `api/ws/route.js` — investigated each individually; none is a safe
+  default guess (admin/infra control surface, a divergent second chat
+  implementation, and a non-functional placeholder respectively). Left as
+  an explicit open decision rather than guessed at.
+- Did not attempt Stripe Dashboard webhook-endpoint verification, Supabase
+  secret rotation, or live-database schema verification — no credentials
+  for any of these from this sandbox. All documented as manual operator
+  actions in DEPLOYMENT.md §4.
+
+---
+
 ## 2026-07-15 (later same day) — Security incident response + route reachability gap
 
 Branch: `claude/protoforge-production-readiness-t4wdn4` (continuation of the

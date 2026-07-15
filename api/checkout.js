@@ -1,7 +1,20 @@
 const Stripe = require('stripe');
 const { rateLimit } = require('../lib/rate-limit');
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+// Lazy client: a missing STRIPE_SECRET_KEY must surface as a clean JSON
+// error from the handler, not a cold-start crash (the Stripe SDK throws
+// synchronously if the key is undefined). See api/health.js for the
+// established pattern.
+let _stripe = null;
+function getStripe() {
+  if (!_stripe) {
+    if (!process.env.STRIPE_SECRET_KEY) {
+      throw new Error('STRIPE_SECRET_KEY is not configured');
+    }
+    _stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+  }
+  return _stripe;
+}
 
 const PRICE_MAP = {
   starter:    process.env.STRIPE_HYDI_STARTER_PRICE_ID,
@@ -48,7 +61,7 @@ module.exports = async (req, res) => {
         return res.status(400).json({ error: 'Company required' });
       }
 
-      const session = await stripe.checkout.sessions.create({
+      const session = await getStripe().checkout.sessions.create({
         mode:               'subscription',
         payment_method_types: ['card'],
         customer_email:     email,

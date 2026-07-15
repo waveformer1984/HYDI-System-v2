@@ -140,11 +140,10 @@ All files under `api/` are **Vercel serverless functions** (Next.js API routes).
 | `api/life-flow/route.js` | Life-flow module |
 | `api/events/stream.js` | SSE stream for real-time events |
 | `api/revenue.js` | Revenue engine: leads, quotes, proposals, Stripe checkout, reports |
-| `api/client-dashboard.js` | Per-project ledger view with fee breakdown |
-| `api/checkout.js` / `api/checkout-v2.js` | Stripe Checkout session creation |
-| `api/stripe-connect-webhook.js` | Main Stripe Connect webhook — routes payments to sub-accounts, writes ledger entries |
-| `api/webhooks/stripe.js` | Standard Stripe webhook handler |
-| `api/local-model.js` | Local model inference integration |
+| `api/client-dashboard.js` | Per-project ledger view with fee breakdown. Bridged at `pages/api/client-dashboard.js`; gated behind `requireAuth('ledger:view')`. |
+| `api/checkout.js` | Stripe Checkout session creation. Bridged at `pages/api/checkout.js`. (`checkout-v2.js` was a byte-for-byte duplicate and has been removed.) |
+| `api/stripe-connect-webhook.js` | Stripe Connect webhook — routes payments to sub-accounts, writes ledger entries. Bridged at `pages/api/stripe-connect-webhook.js`. The *other* Stripe webhook (SaaS subscription tiers) is `supabase/functions/stripe-webhook/index.ts`, an Edge Function, not a Next.js route — see DEPLOYMENT.md §3 for why there are two and what each handles. |
+| `api/local-model.js` | Local model inference integration (a client class, not an HTTP route) |
 
 ### Supabase Edge Functions (`supabase/functions/`)
 
@@ -416,3 +415,4 @@ system kept running because the data plane had already been moved local.
 - **`.sql.skip` files**: migrations with this suffix are intentionally skipped by the runner; they document attempted approaches that were superseded.
 - **`system_dashboard` view**: the central Supabase view consumed by health checks, Ursula status queries, and infrastructure monitoring — if this view is broken, health endpoints degrade gracefully to `503`.
 - **`nnotification.service.ts`**: this file has a double-`n` typo in its name — do not rename it until all imports are updated together.
+- **`api/` vs `pages/api/`**: Next.js's pages router only ever serves `pages/api/**`. A bare top-level `api/` directory is a Vercel-only convention and this deployment doesn't use Vercel — see DEPLOYMENT.md for the definitive routing map of which `api/**` files are bridged into reachability, which are superseded, and which are dead. Adding a new route under `api/` without also adding its `pages/api/` bridge means it will never be reachable.
