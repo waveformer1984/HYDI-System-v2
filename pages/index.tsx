@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback, FormEvent, KeyboardEvent } from 'react'
+import Link from 'next/link'
 
 interface Message {
   id: string
@@ -221,12 +222,12 @@ export default function HeidiChat() {
               {connectionOk ? 'Online' : 'Offline'}
             </span>
           )}
-          <a
+          <Link
             href="/funding"
             className="text-[11px] text-gray-500 hover:text-gray-300 transition-colors"
           >
             Z-Labs
-          </a>
+          </Link>
         </div>
       </header>
 

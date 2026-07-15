@@ -1,9 +1,17 @@
 import { createClient } from '@supabase/supabase-js';
+import { requireAuth } from '../../lib/auth/requireAuth.js';
 
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
+let _supabase = null;
+function getSupabase() {
+  if (!_supabase) {
+    if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      throw new Error('Supabase env vars not configured (SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY)');
+    }
+    _supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+  }
+  return _supabase;
+}
+const supabase = new Proxy({}, { get: (_, prop) => getSupabase()[prop] });
 
 const SECTION_COLORS = [
   '#6366f1', '#8b5cf6', '#ec4899', '#f43f5e',
@@ -83,11 +91,15 @@ function buildFallbackSong(description) {
 }
 
 export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Origin', process.env.MOBILE_CHAT_ORIGIN || '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-hydi-service-token, x-hydi-device-token');
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Method not allowed' });
+
+  // Tighter budget than the default 60/min: each call invokes an LLM.
+  const auth = await requireAuth(req, res, supabase, { permission: 'song_composer:manage', routeName: 'song-composer-generate', rateMax: 10 });
+  if (!auth.ok) return;
 
   const { description, style } = req.body || {};
   if (!description?.trim()) return res.status(400).json({ ok: false, error: 'description is required' });

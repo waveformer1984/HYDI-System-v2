@@ -6,7 +6,7 @@ Required environment variables:
 
 ```
 SUPABASE_URL=https://akbnfovjdcobifeupvbn.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFrYm5mb3ZqZGNvYmlmZXVwdmJuIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MDU2Njg3MCwiZXhwIjoyMDg2MTQyODcwfQ.Z51YOVK9AmcwghphIaKX6vFUSZaYYS05YxfxLQNFXVE
+SUPABASE_SERVICE_ROLE_KEY=<rotate-and-set-from-dashboard-never-commit>
 ```
 
 ## hydi-monitor.vercel.app (or hydi.protoforgeindustries.com)
@@ -15,11 +15,11 @@ Required environment variables:
 ```
 # Supabase
 SUPABASE_URL=https://akbnfovjdcobifeupvbn.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFrYm5mb3ZqZGNvYmlmZXVwdmJuIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MDU2Njg3MCwiZXhwIjoyMDg2MTQyODcwfQ.Z51YOVK9AmcwghphIaKX6vFUSZaYYS05YxfxLQNFXVE
+SUPABASE_SERVICE_ROLE_KEY=<rotate-and-set-from-dashboard-never-commit>
 
 # Stripe
-STRIPE_SECRET_KEY=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
-STRIPE_WEBHOOK_SECRET_01=whsec_Cu0kP2NBJN7EhbRgDVvYqK2iCBwUoivv
+STRIPE_SECRET_KEY=<rotate-and-set-from-dashboard-never-commit>
+STRIPE_WEBHOOK_SECRET_01=<rotate-and-set-from-dashboard-never-commit>
 
 # HYDI Product Price IDs
 STRIPE_HYDI_STARTER_PRICE_ID=price_1TPkhsF3prUQPYI3nRk79WQD

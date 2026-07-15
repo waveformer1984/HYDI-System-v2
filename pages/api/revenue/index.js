@@ -9,10 +9,10 @@ export default async function handler(req, res) {
     case 'GET':
       // Get dashboard overview
       return await revenueAPI.getDashboard(req, res);
-    case 'POST':
+    case 'POST': {
       // Create lead, quote, etc based on action
       const { action } = req.body;
-      
+
       switch (action) {
         case 'create_lead':
           return await revenueAPI.createLead(req, res);
@@ -23,6 +23,7 @@ export default async function handler(req, res) {
         default:
           return res.status(400).json({ success: false, error: 'Unknown action' });
       }
+    }
     default:
       res.setHeader('Allow', ['GET', 'POST']);
       res.status(405).end(`Method ${method} Not Allowed`);

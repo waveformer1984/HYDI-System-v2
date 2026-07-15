@@ -1,18 +1,29 @@
 import { createClient } from '@supabase/supabase-js';
+import { requireAuth } from '../../lib/auth/requireAuth.js';
 
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
+let _supabase = null;
+function getSupabase() {
+  if (!_supabase) {
+    if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      throw new Error('Supabase env vars not configured (SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY)');
+    }
+    _supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+  }
+  return _supabase;
+}
+const supabase = new Proxy({}, { get: (_, prop) => getSupabase()[prop] });
 
 export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Origin', process.env.MOBILE_CHAT_ORIGIN || '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-hydi-service-token, x-hydi-device-token');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   try {
     if (req.method === 'GET') {
+      const auth = await requireAuth(req, res, supabase, { permission: 'song_composer:view', routeName: 'song-composer-songs-get' });
+      if (!auth.ok) return;
+
       const { limit = '20', offset = '0' } = req.query;
 
       const { data, error, count } = await supabase
@@ -35,11 +46,22 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'DELETE') {
+      const auth = await requireAuth(req, res, supabase, { permission: 'song_composer:manage', routeName: 'song-composer-songs-delete' });
+      if (!auth.ok) return;
+
       const { id } = req.query;
       if (!id) return res.status(400).json({ ok: false, error: 'id is required' });
 
-      const { error } = await supabase.from('actions').delete().eq('id', id);
+      // Scope to task_name='song_composition' so this route can only ever
+      // delete rows it owns, never arbitrary rows in the shared 'actions'
+      // table (e.g. agent-manager tasks).
+      const { error, count } = await supabase
+        .from('actions')
+        .delete({ count: 'exact' })
+        .eq('id', id)
+        .eq('task_name', 'song_composition');
       if (error) throw error;
+      if (!count) return res.status(404).json({ ok: false, error: 'song not found' });
 
       return res.status(200).json({ ok: true });
     }

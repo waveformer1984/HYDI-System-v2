@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import Link from 'next/link'
 
 export default function TestSimplePage() {
   const [result, setResult] = useState<Record<string,unknown>|null>(null)
@@ -70,9 +71,9 @@ export default function TestSimplePage() {
         <div className="mt-8 p-4 bg-blue-50 border border-blue-200 rounded">
           <h3 className="font-bold mb-2">Available Test Pages:</h3>
           <ul className="list-disc list-inside space-y-1">
-            <li><a href="/" className="text-blue-600 hover:underline">Main Heidi Interface</a></li>
+            <li><Link href="/" className="text-blue-600 hover:underline">Main Heidi Interface</Link></li>
             <li><a href="/test" className="text-blue-600 hover:underline">Authentication Test</a></li>
-            <li><a href="/test-simple" className="text-blue-600 hover:underline">Simple API Test</a></li>
+            <li><Link href="/test-simple" className="text-blue-600 hover:underline">Simple API Test</Link></li>
           </ul>
         </div>
       </div>

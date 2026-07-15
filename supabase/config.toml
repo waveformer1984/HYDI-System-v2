@@ -491,6 +491,18 @@ verify_jwt = true
 [functions.payment-processor]
 verify_jwt = true
 
+# Previously missing from this table entirely (silently fell back to the
+# platform default, which is true, but relying on an implicit default is
+# what let two functions go effectively unauthorized in practice --
+# verify_jwt only proves *a* valid JWT was presented, not that the caller
+# is privileged, and both functions additionally check for a service_role
+# JWT in their own code now). Listed explicitly here for clarity.
+[functions.stripe-transfer-payout]
+verify_jwt = true
+
+[functions.stripe-connect-admin]
+verify_jwt = true
+
 # Heidi Reflection Service (Header-based auth)
 [functions.heidi-reflect]
 verify_jwt = false

@@ -16,9 +16,9 @@
 | `SUPABASE_ANON_KEY` | ✅ PRESENT | `eyJhbGciOiJIUzI1NiIs...` | ✅ |
 | `SUPABASE_PUBLISHABLE_KEY` | ✅ PRESENT | `sb_publishable_QtlRP...` | No |
 | `SUPABASE_SERVICE_ROLE_KEY` | ✅ PRESENT | `eyJhbGciOiJIUzI1NiIs...` | ✅ |
-| `STRIPE_SECRET_KEY` | ✅ PRESENT | `sk_live_51SWNEGF3prU...` | ✅ |
-| `STRIPE_WEBHOOK_SECRET_01` | ✅ PRESENT | `whsec_Cu0kP2NBJN7Ehb...` | No |
-| `STRIPE_WEBHOOK_SECRET` | ✅ PRESENT | `whsec_VnrIjBX7F1bkBZ...` | No |
+| `STRIPE_SECRET_KEY` | ✅ PRESENT | `<redacted-rotate-in-stripe-dashboard>` | ✅ |
+| `STRIPE_WEBHOOK_SECRET_01` | ✅ PRESENT | `<redacted-rotate-in-stripe-dashboard>` | No |
+| `STRIPE_WEBHOOK_SECRET` | ✅ PRESENT | `<redacted-rotate-in-stripe-dashboard>` | No |
 | `KEEPER_BREAK_GLASS_TOKEN` | ❌ REDACTED | `[REDACTED]` | ✅ |
 
 ### 📊 **LOCAL CONFIGURATION SUMMARY:**

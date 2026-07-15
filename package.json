@@ -88,7 +88,6 @@
     "tailwindcss": "^3.4.19"
   },
   "overrides": {
-    "brace-expansion": ">=5.0.6",
     "glob": "^10.4.5",
     "qs": ">=6.15.2",
     "ws": "$ws",

@@ -1,5 +1,16 @@
 -- Set up pg_cron schedule for action-worker
 -- This will automatically invoke action-worker every minute to process queued actions
+--
+-- SECURITY NOTE (2026-07-15): this migration originally embedded a literal
+-- service_role bearer token directly in the cron command and function body
+-- below. That token must be treated as compromised (it was committed to
+-- source control) and rotated in the Supabase dashboard. The literal value
+-- has been redacted from this file's current tree content; both the cron
+-- job and the function are superseded by
+-- 20260715210000_secure_action_worker_cron.sql, which redefines them to
+-- read the URL/token from Vault instead. This file is left in place only
+-- as a historical record of the original migration and is NOT the source
+-- of truth for the live cron job/function definition.
 
 -- First, ensure pg_cron is enabled
 SELECT cron.schedule(
@@ -9,7 +20,7 @@ SELECT cron.schedule(
   SELECT net.http_post(
     url := 'https://akbnfovjdcobifeupvbn.supabase.co/functions/v1/action-worker',
     headers := jsonb_build_object(
-      'Authorization', 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFrYm5mb3ZqZGNvYmlmZXVwdmJuIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MDU2Njg3MCwiZXhwIjoyMDg2MTQyODcwfQ.Z51YOVK9AmcwghphIaKX6vFUSZaYYS05YxfxLQNFXVE',
+      'Authorization', 'Bearer [REDACTED-ROTATE-AND-USE-VAULT]',
       'Content-Type', 'application/json'
     ),
     body := jsonb_build_object('limit', 10)
@@ -27,12 +38,12 @@ BEGIN
   SELECT net.http_post(
     url := 'https://akbnfovjdcobifeupvbn.supabase.co/functions/v1/action-worker',
     headers := jsonb_build_object(
-      'Authorization', 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFrYm5mb3ZqZGNvYmlmZXVwdmJuIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MDU2Njg3MCwiZXhwIjoyMDg2MTQyODcwfQ.Z51YOVK9AmcwghphIaKX6vFUSZaYYS05YxfxLQNFXVE',
+      'Authorization', 'Bearer [REDACTED-ROTATE-AND-USE-VAULT]',
       'Content-Type', 'application/json'
     ),
     body := jsonb_build_object('limit', p_limit)
   ) INTO v_response;
-  
+
   RETURN v_response;
 END;
 $$ LANGUAGE plpgsql;

@@ -31,11 +31,16 @@ describe('DistributedCompute', () => {
   });
 
   test('detects node timeout', async () => {
-    let failed = null;
-    compute.on('node_failed', (event) => { failed = event; });
+    const failedEvent = new Promise((resolve) => {
+      compute.on('node_failed', resolve);
+    });
     compute.registerNode({ cpu: 1, ram: 1, id: 'node-1' });
     compute.start();
-    await new Promise((r) => setTimeout(r, 300));
+
+    const timeout = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('node_failed was not emitted in time')), 2000);
+    });
+    const failed = await Promise.race([failedEvent, timeout]);
     expect(failed).not.toBeNull();
   });
 });

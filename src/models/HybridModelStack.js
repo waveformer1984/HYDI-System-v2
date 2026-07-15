@@ -311,12 +311,13 @@ class HybridModelStack extends EventEmitter {
   async execute(task, options = {}) {
     const requestId = `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const startTime = Date.now();
-    
+    let strategy;
+
     try {
       console.log(`[HYBRID STACK] Executing task ${requestId}: ${task.type}`);
-      
+
       // Determine execution strategy
-      const strategy = this.determineStrategy(task, options);
+      strategy = this.determineStrategy(task, options);
       
       // Execute with chosen strategy
       const result = await this.executeWithStrategy(task, strategy, requestId);
@@ -337,9 +338,11 @@ class HybridModelStack extends EventEmitter {
       
     } catch (error) {
       console.error(`[HYBRID STACK] Task ${requestId} failed:`, error.message);
-      
-      this.performance[strategy.type].failure++;
-      
+
+      if (strategy && this.performance[strategy.type]) {
+        this.performance[strategy.type].failure++;
+      }
+
       this.emit('inference_failed', {
         requestId,
         task,
@@ -437,10 +440,11 @@ class HybridModelStack extends EventEmitter {
    * LOCAL EXECUTION - Use local models
    */
   async executeLocal(task, strategy, requestId) {
+    let input;
     try {
       console.log(`[HYBRID STACK] Executing locally with model: ${strategy.model}`);
-      
-      const input = this.prepareInput(task);
+
+      input = this.prepareInput(task);
       
       const result = await this.localModels.execute(strategy.model, input, {
         tier: task.tier || 'pro',

@@ -679,17 +679,20 @@ class HYDISystem extends EventEmitter {
       case 'weekly_report':
         return await this.deepLifeArchitect.generateWeeklyReport();
         
-      case 'real_time_analysis':
+      case 'real_time_analysis': {
         const latestAnalysis = this.deepLifeArchitect.currentSession.analysis.slice(-1)[0];
         return latestAnalysis || { error: 'No analysis available' };
-        
-      case 'hardware_telemetry':
+      }
+
+      case 'hardware_telemetry': {
         const latestTelemetry = this.deepLifeArchitect.currentSession.hardwareData.slice(-1)[0];
         return latestTelemetry || { error: 'No telemetry data available' };
-        
-      case 'software_activity':
+      }
+
+      case 'software_activity': {
         const latestActivity = this.deepLifeArchitect.currentSession.softwareData.slice(-1)[0];
         return latestActivity || { error: 'No activity data available' };
+      }
         
       default:
         throw new Error(`Unknown life flow request subtype: ${request.subtype}`);
