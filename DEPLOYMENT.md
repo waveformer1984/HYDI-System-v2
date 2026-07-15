@@ -7,6 +7,17 @@ production-readiness audit (2026-07-15) that traced every routing
 convention in the repo against what's actually executed, rather than
 trusting file presence or documentation alone.
 
+## 0. Scope of this document
+
+This map covers the Next.js `pages/api/**` + top-level `api/**` surface and
+the Supabase Edge Functions. It does **not** cover `src/server.js` — a
+separate Express app (`npm run server`) with its own routes and its own
+`users`/`api_keys`-schema consumers (`src/services/subscription-manager.js`,
+`workers/SecurityIdentityWorker.js`). Whether that app is also live in
+production, and whether it needs its own version of this audit, is an open
+question — see ISSUES_FOUND.md #42. Do not assume "reachable" findings
+below apply to it.
+
 ## 1. What actually serves requests
 
 Per CLAUDE.md's **Local-First Architecture** section, Vercel deployment is

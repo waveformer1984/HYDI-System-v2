@@ -43,13 +43,21 @@ A repo audit found **four** separate pieces of code that all handled
 
 4. `src-webhook-handlers-stripe-webhook.js` (was
    `src/webhook-handlers/stripe-webhook.js`) — a third, fully independent
-   `StripeWebhookHandler` class targeting yet another schema (`users` /
-   `api_keys` tables that don't otherwise appear in this codebase's core
-   table list). It performs **no signature verification at all** — it
-   assumes some caller already verified the event and just hands it a
-   parsed object. Nothing in the repo ever imported or invoked this class
-   outside of its own test file (`stripe-webhook.test.js.bak`, archived
-   alongside it).
+   `StripeWebhookHandler` class targeting a `users`/`api_keys` schema. That
+   schema is real (`supabase/migrations/20260430010000_create_users_table.sql`)
+   and has real consumers elsewhere — `src/services/subscription-manager.js`
+   (wired into `src/server.js`'s separate Express app, started via `npm run
+   server`, not part of the Next.js `pages/api` surface this audit otherwise
+   covers) and `workers/SecurityIdentityWorker.js`. This specific class was
+   still dead, independent of that: it performs **no signature verification
+   at all** (assumes some caller already verified the event and just hands
+   it a parsed object), and nothing in the repo ever imported or invoked it
+   outside its own test file (`stripe-webhook.test.js.bak`, archived
+   alongside it). Whether `src/server.js`'s Express app is itself a live,
+   separately-deployed production surface — and if so, whether *it* has its
+   own webhook wiring that should have called this class instead of leaving
+   it orphaned — is a real open question this pass did not chase down;
+   flagged for a follow-up rather than guessed at here.
 
 `api-webhooks-stripe-test.js` (was `api/webhooks/stripe-test.js`) is a
 diagnostic stub ("Simple Stripe Webhook Test Handler") that never verified

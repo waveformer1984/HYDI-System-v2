@@ -92,6 +92,10 @@ automated sandbox — see DEPLOYMENT.md §4 and ROADMAP.md for full detail):
 3. **Decide the fate of three ambiguous routes** (`api/chat/route.js`,
    `api/heidi/route.js`, `api/ws/route.js`) — left unbridged pending a
    maintainer call on whether each is still wanted. See ISSUES_FOUND.md #34.
+4. **Scope a follow-up audit of `src/server.js`** — a separate Express app
+   (`npm run server`) with its own routing surface, outside this pass's
+   scope (which covered the Next.js `pages/api`/`api/` surface only). See
+   ISSUES_FOUND.md #42 and DEPLOYMENT.md §0.
 
 **Known accepted risks** (documented, not newly introduced): see
 SECURITY.md's "Known Security Limitations" section — primarily the
