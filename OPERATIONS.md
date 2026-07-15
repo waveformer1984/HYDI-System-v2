@@ -77,6 +77,18 @@ deployment procedures. Summary of the current deployment posture:
 - The `WEBHOOK_PROCESSING_ENABLED` emergency kill switch the on-call
   runbooks document now actually works on both live webhook handlers
   (previously it only existed in dead code).
+- **Critical**: `src/server.js`'s `POST /keymaker/keys` let any
+  unauthenticated caller mint their own admin-role API key by simply
+  requesting `{ role: 'admin', tier: 'enterprise' }` in the body — the
+  original check only guarded which `userId` a key was issued for, not
+  the requested `role`/`tier`. That key then passed every
+  `identity.role !== 'admin'` gate elsewhere in the file. Fixed.
+- **High**: `src/middleware/simple-keymaker.js` registered three
+  well-known hardcoded API keys (`sk_test_*`) as valid in every
+  environment including production, and registered an empty-string key
+  mapped to a real tier whenever a production key env var was unset.
+  Fixed — test keys are now development-only; unset env vars no longer
+  register anything.
 
 **Manual operator actions still required** (cannot be completed from an
 automated sandbox — see DEPLOYMENT.md §4 and ROADMAP.md for full detail):
@@ -92,10 +104,18 @@ automated sandbox — see DEPLOYMENT.md §4 and ROADMAP.md for full detail):
 3. **Decide the fate of three ambiguous routes** (`api/chat/route.js`,
    `api/heidi/route.js`, `api/ws/route.js`) — left unbridged pending a
    maintainer call on whether each is still wanted. See ISSUES_FOUND.md #34.
-4. **Scope a follow-up audit of `src/server.js`** — a separate Express app
-   (`npm run server`) with its own routing surface, outside this pass's
-   scope (which covered the Next.js `pages/api`/`api/` surface only). See
-   ISSUES_FOUND.md #42 and DEPLOYMENT.md §0.
+4. **Confirm whether `src/server.js` is deployed anywhere real.** A
+   follow-up pass (2026-07-15) mapped its ~60 routes and fixed two
+   unambiguous bugs in it (see below), but couldn't resolve whether it's
+   actually live — it's absent from `.ports.json`, the orchestrated
+   startup script, and CLAUDE.md's own Commands section, but is a real
+   `package.json` script (`npm run server`) with recent bug-fix history.
+   See DEPLOYMENT.md §5, ISSUES_FOUND.md #42-#44.
+5. **Decide the intended sensitivity of `src/server.js`'s `/infrastructure/*`
+   routes** (currently fully open to any caller — deliberate code, not an
+   oversight) and whether to wire up `Keymaker.requireAccess()`, which
+   exists and works but is never called from any route. See DEPLOYMENT.md
+   §5.
 
 **Known accepted risks** (documented, not newly introduced): see
 SECURITY.md's "Known Security Limitations" section — primarily the

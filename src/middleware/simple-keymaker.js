@@ -5,17 +5,32 @@
 
 class SimpleKeymaker {
   constructor() {
-    // Hardcoded API keys for testing (in production, use env vars or database)
-    this.apiKeys = {
-      'sk_test_starter_123': { tier: 'starter', name: 'Test Starter Key' },
-      'sk_test_pro_456': { tier: 'pro', name: 'Test Pro Key' },
-      'sk_test_enterprise_789': { tier: 'enterprise', name: 'Test Enterprise Key' },
-      // Production keys would be stored securely
-      [process.env.STARTER_API_KEY || '']: { tier: 'starter', name: 'Production Starter' },
-      [process.env.PRO_API_KEY || '']: { tier: 'pro', name: 'Production Pro' },
-      [process.env.ENTERPRISE_API_KEY || '']: { tier: 'enterprise', name: 'Production Enterprise' }
-    };
-    
+    this.apiKeys = {};
+
+    // These well-known strings grant tier access to any caller who knows
+    // them — fine for local dev against a throwaway database, a live
+    // authentication bypass in any real deployment. Never register them
+    // when NODE_ENV=production. See ISSUES_FOUND.md.
+    if (process.env.NODE_ENV !== 'production') {
+      this.apiKeys['sk_test_starter_123'] = { tier: 'starter', name: 'Test Starter Key' };
+      this.apiKeys['sk_test_pro_456'] = { tier: 'pro', name: 'Test Pro Key' };
+      this.apiKeys['sk_test_enterprise_789'] = { tier: 'enterprise', name: 'Test Enterprise Key' };
+    }
+
+    // Only register a production key if its env var is actually set —
+    // the previous version keyed these off `process.env.X || ''`, which
+    // registered an empty-string API key (mapped to a real tier) whenever
+    // the env var was unset.
+    if (process.env.STARTER_API_KEY) {
+      this.apiKeys[process.env.STARTER_API_KEY] = { tier: 'starter', name: 'Production Starter' };
+    }
+    if (process.env.PRO_API_KEY) {
+      this.apiKeys[process.env.PRO_API_KEY] = { tier: 'pro', name: 'Production Pro' };
+    }
+    if (process.env.ENTERPRISE_API_KEY) {
+      this.apiKeys[process.env.ENTERPRISE_API_KEY] = { tier: 'enterprise', name: 'Production Enterprise' };
+    }
+
     console.log('[SIMPLE KEYMAKER] Initialized with ' + Object.keys(this.apiKeys).length + ' keys');
   }
   

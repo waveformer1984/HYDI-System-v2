@@ -9,14 +9,12 @@ trusting file presence or documentation alone.
 
 ## 0. Scope of this document
 
-This map covers the Next.js `pages/api/**` + top-level `api/**` surface and
-the Supabase Edge Functions. It does **not** cover `src/server.js` — a
-separate Express app (`npm run server`) with its own routes and its own
-`users`/`api_keys`-schema consumers (`src/services/subscription-manager.js`,
-`workers/SecurityIdentityWorker.js`). Whether that app is also live in
-production, and whether it needs its own version of this audit, is an open
-question — see ISSUES_FOUND.md #42. Do not assume "reachable" findings
-below apply to it.
+This map covers the Next.js `pages/api/**` + top-level `api/**` surface,
+the Supabase Edge Functions, and (§6, added in a follow-up pass)
+`src/server.js`'s standalone Express app. Do not assume a "reachable"
+finding in one section applies to another — they are three independent
+runtimes with independent routing, independent auth, and (per §6)
+independently uncertain deployment status.
 
 ## 1. What actually serves requests
 
@@ -200,7 +198,103 @@ this system, for two different concerns. Do not conflate them:
   migration; not verified against the live database schema (would need
   Supabase access this sandbox doesn't have).
 
-## 5. Local-first runtime summary (unchanged, see CLAUDE.md for detail)
+## 5. `src/server.js` — a third, separately-mapped Express surface
+
+`src/server.js` (1734 lines, `npm run server` → `node src/server.js`) is a
+standalone Express app with ~60 routes (`/cascade/*`, `/heidi/*`,
+`/infrastructure/*`, `/keymaker/*`, `/insight`, `/opportunities`,
+`/event`, `/process`) plus a WebSocket chat server. It is **not** the same
+thing as `heidi-core/`:
+
+| | `src/server.js` | `heidi-core/index-clean-3458.js` |
+|---|---|---|
+| Default port | `3005` (`process.env.PORT`) | `3459` (`process.env.HEIDI_PORT`, per `.ports.json`) |
+| In `.ports.json`? | **No** — no entry at all | Yes — `heidi-core`, the registry's canonical orchestrator |
+| Launched by `npm run start:hydi` (`scripts/start-hydi.js`)? | **No** | Yes — this is the process it actually starts as "HEIDI Core" |
+| Routes | `/cascade/*`, `/heidi/*`, `/infrastructure/*`, `/keymaker/*` | `/think`, `/task`, `/tasks`, `/phase5/*`, `/revenue/*` (policy/arbitration/governance/bias) |
+| Test coverage | None — no test file `require()`s it | N/A to this comparison |
+
+**Reachability status: genuinely ambiguous, not resolved by this audit.**
+Evidence both ways: it's absent from the port registry, absent from the
+orchestrated startup script, and has zero test coverage (all suggesting
+dead/legacy). But it's also a real `package.json` script
+(`"server": "node src/server.js"` — present in `package.json`, though
+*not* mentioned in CLAUDE.md's own Commands section, so it isn't even
+consistently documented as a way to run this system) and recent audit
+passes fixed real bugs in it specifically
+(ISSUES_FOUND.md #7 `approvedBy`/`approved_by` typo, #8 the `Keymaker`
+class never being wired in) — meaning someone has been treating it as
+live and worth maintaining. **This needs a maintainer answer, not another
+guess**: is `src/server.js` deployed anywhere real today?
+
+### Two real bugs found and fixed regardless of reachability
+
+Both are unambiguous logic/hardening bugs — fixed independent of the
+reachability question above, since "maybe nobody runs this" is not a
+defensible reason to leave a live privilege-escalation path in a
+committed, documented, `npm run`-able server.
+
+1. **Critical — unauthenticated privilege escalation via `POST /keymaker/keys`.**
+   Self-service key issuance only guarded the `userId` field of the
+   request body, not `role` or `tier`. A caller with **no credentials at
+   all** gets `identity = { role: 'guest', tier: 'starter', userId: null }`
+   (`Keymaker.makeAnonymous`), and could `POST /keymaker/keys` with
+   `{ role: 'admin', tier: 'enterprise' }` in the body to receive a
+   freshly issued, valid, admin-role key — which then passed every
+   `identity.role !== 'admin'` gate elsewhere in the file: kill-switch,
+   break-glass, key revocation, the audit log. **Fixed**: extracted the
+   authorization check into `Keymaker.canIssueKeyAs()` (a pure, static,
+   unit-tested method — `tests/unit/keymaker-key-issuance.test.js`) that
+   rejects any `role`/`tier`/`userId` override that doesn't match the
+   caller's own already-resolved identity, unless that identity is
+   already `role: 'admin'`.
+2. **High — hardcoded, always-active test credentials.**
+   `src/middleware/simple-keymaker.js` registered `sk_test_starter_123`,
+   `sk_test_pro_456`, and `sk_test_enterprise_789` as valid API keys
+   unconditionally, in every environment including production — anyone
+   who read this file (or this public repo) could authenticate as any
+   tier with a well-known string. Separately, `[process.env.X || '']`
+   registered an **empty-string key** mapped to a real tier whenever a
+   production key env var was unset. **Fixed**: test keys now only
+   register when `NODE_ENV !== 'production'`; env-var-backed keys only
+   register when the env var is actually set. Regression tests in
+   `tests/unit/simple-keymaker.test.js`.
+
+### Structural gaps found, deliberately not fixed (need a product decision)
+
+Unlike the two bugs above, these are consistent, deliberate design
+choices in the code — changing them is a policy decision, not a bug fix,
+and risks breaking a real caller this sandbox can't see:
+
+- **`SimpleKeymaker.middleware()` exempts every GET request and the
+  entire `/infrastructure/*` path (all methods) from any auth check at
+  all**, by explicit code: `if (req.method === 'GET' || ... ||
+  req.path.startsWith('/infrastructure')) return next();`. This means
+  `GET /infrastructure/revenue` (real revenue stream figures) and
+  `POST /infrastructure/revenue` (writes an arbitrary revenue record from
+  the request body) are both completely open. `Keymaker`'s own service
+  registry disagrees with this — it lists `infrastructure` as requiring
+  `minTier: 'pro', roles: ['admin']` — but that registry is never actually
+  enforced (see next item), so `SimpleKeymaker`'s blanket exemption is
+  what governs in practice.
+- **`Keymaker.requireAccess(serviceId)` — a real, working, tier/role
+  authorization-check method — is never called anywhere in
+  `src/server.js`.** The global `keymaker.middleware()` only populates
+  `req.keymaker.identity` (falling back to an anonymous `guest`/`starter`
+  identity when no key is presented — itself a fail-open default, not
+  fail-closed); enforcement per-route is opt-in via `requireAccess()`, and
+  no route opts in. The handful of routes that do check `identity.role`
+  (the `/keymaker/admin/*` and `/keymaker/keys`/`/keymaker/audit` routes
+  fixed above) do so with ad hoc inline checks, not the shared mechanism
+  built for this.
+
+If a maintainer confirms `src/server.js` is live, the recommended
+follow-up is: decide the intended sensitivity of `/infrastructure/*` and
+either wire `requireAccess()` to it and every other route the `Keymaker`
+service registry describes, or delete the unused registry entries so the
+code doesn't imply protections that don't exist.
+
+## 6. Local-first runtime summary (unchanged, see CLAUDE.md for detail)
 
 - LLM inference / embeddings: Ollama, self-hosted.
 - Data plane: local Supabase via Docker (`supabase start`).

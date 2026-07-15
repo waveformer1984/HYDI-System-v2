@@ -270,6 +270,38 @@ class Keymaker {
       ip: req.ip
     };
   }
+
+  /**
+   * Pure authorization check for POST /keymaker/keys (self-service key
+   * issuance). A caller may only mint a key matching their own
+   * already-resolved identity; only an admin may issue a key for a
+   * different user or with an elevated role/tier.
+   *
+   * Extracted as a static, dependency-free method so it's directly unit
+   * testable without needing to load the whole Express app (see
+   * tests/unit/keymaker-key-issuance.test.js) — src/server.js constructs
+   * many live-ish services at module load and has no existing test
+   * coverage for that reason.
+   *
+   * @param {{role?: string, userId?: string|null, tier?: string}} identity - req.keymaker.identity
+   * @param {{userId?: string, role?: string, tier?: string}} requested - req.body fields
+   * @returns {{allowed: boolean, reason?: string}}
+   */
+  static canIssueKeyAs(identity, requested = {}) {
+    if (identity?.role === 'admin') return { allowed: true };
+
+    const { userId, role, tier } = requested;
+    if (userId && userId !== identity?.userId) {
+      return { allowed: false, reason: 'Admin access required to issue keys for other users' };
+    }
+    if (role && role !== identity?.role) {
+      return { allowed: false, reason: 'Admin access required to issue a key with an elevated role' };
+    }
+    if (tier && tier !== identity?.tier) {
+      return { allowed: false, reason: 'Admin access required to issue a key with an elevated tier' };
+    }
+    return { allowed: true };
+  }
   
   async getSystemState() {
     // Cache system state for 10 seconds

@@ -4,6 +4,123 @@ Running log of autonomous production-readiness work. Newest entries first.
 
 ---
 
+## 2026-07-15 (fourth pass) — `src/server.js` reachability audit
+
+Branch: `claude/production-readiness-audit-fk9lth`. Follow-up to the third
+pass's own recommended next milestone (ISSUES_FOUND.md #42): repeat the
+reachability-mapping exercise for `src/server.js`, a standalone Express
+app (`npm run server`) discovered while archiving
+`src/webhook-handlers/stripe-webhook.js` and explicitly flagged as
+out-of-scope for the checkout/webhook pass.
+
+### What was found
+
+`src/server.js` (1734 lines) is genuinely distinct from `heidi-core/index-clean-3458.js`
+— the process `.ports.json` and `scripts/start-hydi.js` (the documented
+orchestrated startup, `npm run start:hydi`) actually treat as "HEIDI
+Core." `src/server.js` has no entry in `.ports.json`, isn't launched by
+`start-hydi.js`, and has zero test coverage (`grep` confirms no test file
+`require()`s it). All three point toward "legacy/orphaned." But it's also
+a real `package.json` script (though notably absent from CLAUDE.md's own
+Commands section — undocumented even there), and two prior audit passes
+fixed real bugs in it specifically (ISSUES_FOUND #7, #8) — meaning someone
+has been actively treating it as
+worth maintaining. Net: reachability is genuinely unresolved, not
+resolved by this pass — see DEPLOYMENT.md §5 for the full comparison
+table and reasoning.
+
+Regardless of that open question, mapping the file's ~60 routes and its
+two-layer auth setup (`SimpleKeymaker` — crude, hardcoded API keys → tier;
+`Keymaker` — a more complete but half-wired role/tier system backed by
+Supabase) surfaced two real, unambiguous bugs, fixed independent of the
+reachability question:
+
+1. **Critical — unauthenticated privilege escalation.** `POST
+   /keymaker/keys` (self-service key issuance) checked whether the
+   caller could issue a key *for a different `userId`*, but never checked
+   whether the caller could request an elevated `role` or `tier` for
+   *themselves*. A caller with zero credentials resolves to
+   `Keymaker.makeAnonymous()`'s `{ role: 'guest', tier: 'starter', userId:
+   null }`, and could simply `POST { role: 'admin', tier: 'enterprise' }`
+   with no `userId` in the body — the `userId` guard never triggers, and
+   the handler happily does `role || identity?.role || 'guest'`, which
+   evaluates to the attacker-supplied `'admin'` since it's truthy. The
+   resulting key then satisfies every `identity.role !== 'admin'` check
+   elsewhere in the file: `/keymaker/admin/kill-switch`,
+   `/keymaker/admin/break-glass`, `DELETE /keymaker/keys/:keyHash`, `GET
+   /keymaker/audit`. Full unauthenticated admin takeover of the Keymaker
+   subsystem, zero credentials required.
+2. **High — hardcoded, unconditionally-active test credentials.**
+   `src/middleware/simple-keymaker.js` registered `sk_test_starter_123`,
+   `sk_test_pro_456`, `sk_test_enterprise_789` as always-valid API keys —
+   no `NODE_ENV` guard, so they were live in a production deployment of
+   this file exactly as much as a dev one. Same bug class as the
+   `keeper-break-glass` hardcoded-fallback-secret fix from an earlier
+   pass. Also found and fixed while in the same constructor:
+   `[process.env.STARTER_API_KEY || '']` (and its two siblings) silently
+   registered an **empty-string key** mapped to a real tier whenever the
+   corresponding production env var was unset.
+
+### What was fixed
+
+- **#1 above**: extracted the authorization check into
+  `Keymaker.canIssueKeyAs(identity, requested)` — a pure, dependency-free,
+  static method on the existing `Keymaker` class (`src/middleware/keymaker.js`),
+  called from `src/server.js`'s route handler. Chose extraction-into-a-pure-function
+  specifically because `src/server.js` itself can't be feasibly
+  `require()`'d in a unit test (it constructs a queue, a heartbeat
+  monitor, and a WebSocket server as side effects of module load) — this
+  is almost certainly *why* no prior pass added regression coverage for
+  bugs it fixed in this file (#7, #8 in ISSUES_FOUND.md have no
+  accompanying tests either). The extracted method now has 8 unit tests
+  covering the exact escalation path plus the legitimate self-service and
+  admin-override cases (`tests/unit/keymaker-key-issuance.test.js`).
+- **#2 above**: test keys now gated behind `NODE_ENV !== 'production'`;
+  each production key only registers when its env var is actually set (no
+  more `|| ''` fallback creating an empty-string map key). 5 unit tests
+  (`tests/unit/simple-keymaker.test.js`).
+- Documented, but deliberately **not** changed (see DEPLOYMENT.md §5 for
+  the full reasoning): `SimpleKeymaker`'s blanket exemption of every GET
+  request and the entire `/infrastructure/*` path from auth (unlike #1/#2,
+  this is consistent, deliberate code — flipping it risks breaking a real
+  caller this sandbox can't see, and needs a product decision on intended
+  sensitivity, not a unilateral guess); `Keymaker.requireAccess()` — a
+  real, working authorization method with a populated service registry —
+  being wired up in the `Keymaker` class but never actually called from
+  any route.
+- Added DEPLOYMENT.md §5 (the full `src/server.js` vs. `heidi-core/`
+  comparison, the two fixes, and the two open structural findings).
+  Updated ISSUES_FOUND.md (#42 updated with the resolution status, #43-#46
+  new), OPERATIONS.md.
+
+### Verification
+
+- `npm run typecheck` — clean.
+- `npm run lint` — exit 0, 0 errors.
+- `npm test` — 136/136 suites, 1442/1442 tests passing (up from 134/134,
+  1429/1429 before this pass's 2 new test files: `keymaker-key-issuance.test.js`
+  and `simple-keymaker.test.js`).
+
+### Not done in this pass
+
+- Did not determine whether `src/server.js` is actually deployed anywhere
+  real — genuinely couldn't resolve it from repo evidence alone; needs a
+  maintainer answer (see DEPLOYMENT.md §5, ISSUES_FOUND.md #42).
+- Did not change `/infrastructure/*`'s auth-exempt status or wire up
+  `Keymaker.requireAccess()` — both are policy decisions, not bugs, and
+  both are contingent on the reachability question above being answered
+  first (no point hardening a server nobody runs, and no point leaving a
+  real caller broken if someone does).
+- Did not audit the remaining ~50 routes in `src/server.js` line-by-line
+  beyond the auth-layer analysis above (`/cascade/*`, `/heidi/*`,
+  `/opportunities`, `/insight`, `/event`, `/process` were spot-checked,
+  not exhaustively reviewed) — the two bugs found were high-confidence,
+  clear-cut wins; a full line-by-line pass of a 1734-line file was judged
+  lower value than documenting the structural findings and stopping at a
+  defensible, well-verified boundary.
+
+---
+
 ## 2026-07-15 (third pass) — Checkout/webhook routing consolidation
 
 Branch: `claude/production-readiness-audit-fk9lth` (continuation of the

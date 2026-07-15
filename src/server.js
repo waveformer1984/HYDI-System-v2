@@ -1362,12 +1362,21 @@ app.post('/keymaker/keys', async (req, res) => {
   try {
     const { userId, role, tier, durationHours, services, scopes } = req.body;
     const identity = req.keymaker?.identity;
-    
-    // Only admins can issue keys for others
-    if (identity?.role !== 'admin' && userId && userId !== identity?.userId) {
-      return res.status(403).json({ error: 'Admin access required to issue keys for other users' });
+
+    // Self-service issuance may only mint a key matching the caller's own
+    // already-resolved identity. A caller with no key header at all gets
+    // identity = { role: 'guest', tier: 'starter', userId: null }
+    // (Keymaker.makeAnonymous) — the previous version of this check only
+    // guarded `userId`, not `role`/`tier`, so any anonymous caller could
+    // POST { role: 'admin', tier: 'enterprise' } and mint their own admin
+    // key, which then passed every `identity?.role !== 'admin'` gate
+    // elsewhere in this file (kill-switch, break-glass, key revocation,
+    // audit log). See ISSUES_FOUND.md for the incident writeup.
+    const authCheck = Keymaker.canIssueKeyAs(identity, { userId, role, tier });
+    if (!authCheck.allowed) {
+      return res.status(403).json({ error: authCheck.reason });
     }
-    
+
     const result = await keymaker.issueKey(
       userId || identity?.userId,
       role || identity?.role || 'guest',
