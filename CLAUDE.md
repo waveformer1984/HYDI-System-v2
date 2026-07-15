@@ -22,10 +22,21 @@ npm run dev          # Next.js dev server on 0.0.0.0:3000
 npm run build        # Production build
 npm start            # Start production server
 npm run typecheck    # TypeScript type-check (tsc --noEmit, no emit)
+npm run lint         # next lint
 npm test             # Run Jest unit tests
 npm run test:watch   # Jest in watch mode
 npm run test:coverage  # Jest with coverage report
 npm run test:integration  # Run adversarial integration tests (tests/hdi-adversarial.test.js)
+```
+
+HYDI V3 (`src/hydi-v3/`) commands — scoped separately so they don't shadow the repo-wide targets above:
+```bash
+npm run typecheck:hydi-v3         # TypeScript/JSDoc typecheck of V3 code only (tsconfig.typecheck.json)
+npm run lint:hydi-v3              # Lint V3 modules and scripts only
+npm run test:integration:hydi-v3  # HYDI V3 integration tests (tests/integration/hydi-v3-integration.test.js)
+npm run test:soak:hydi-v3         # Long-running V3 stability simulation (scripts/soak-test-v3.js)
+npm run benchmark:performance     # V3 performance benchmarks
+npm run security-audit            # V3 static security audit
 ```
 
 Operational scripts at the repo root:
@@ -305,9 +316,16 @@ tests/
     subscription-manager.test.js
   hdi-adversarial.test.js        # Adversarial / chaos integration tests
   hdi-everything-wrong.test.js   # Edge-case / failure-mode integration tests
+  integration/
+    hydi-v3-integration.test.js  # HYDI V3 integration tests (npm run test:integration:hydi-v3)
+  unit/hydi-v3/                  # HYDI V3 unit tests (npm run typecheck:hydi-v3 / lint:hydi-v3)
 ```
 
 The integration tests (`test:integration`) require live environment variables (`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`).
+
+### HYDI V3 Upgrade
+
+The V3 reliability/autonomy layer lives in `src/hydi-v3` and is wired into `HYDISystem.js`. See the "HYDI V3" commands in the Commands section above for its scoped typecheck/lint/test/benchmark/security-audit targets. Runbooks are in `src/hydi-v3/RUNBOOKS.md`.
 
 ## Secret Handling Protocol
 

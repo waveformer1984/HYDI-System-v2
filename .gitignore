@@ -59,6 +59,11 @@ logs/
 # Heidi local env
 heidi-core.env.local
 
+# Generated runtime data & build info
+data/
+*.tsbuildinfo
+tests/soak-test-report.json
+
 # TypeScript incremental build info
 tsconfig.tsbuildinfo
 

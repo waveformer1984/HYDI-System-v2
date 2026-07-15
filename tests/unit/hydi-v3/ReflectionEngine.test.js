@@ -1,0 +1,44 @@
+const ReflectionEngine = require('../../../src/hydi-v3/ReflectionEngine');
+
+describe('ReflectionEngine', () => {
+  let engine;
+
+  beforeEach(async () => {
+    engine = new ReflectionEngine({ storagePath: '/tmp/hydi-test-reflections' });
+    await engine.initialize();
+  });
+
+  afterEach(() => {
+    engine.destroy();
+  });
+
+  test('reflects on completed mission', async () => {
+    const mission = {
+      id: 'm1',
+      tasks: [
+        { id: 't1', status: 'completed', type: 'outreach', result: { strategy: 'email' } },
+        { id: 't2', status: 'failed', type: 'outreach', error: 'timeout' },
+      ],
+      revenue: 50,
+      replanCount: 0,
+    };
+    const reflection = await engine.reflectOnMission(mission);
+    expect(reflection).toBeTruthy();
+    expect(reflection.missionId).toBe('m1');
+    expect(reflection.rootCauses.length).toBeGreaterThan(0);
+  });
+
+  test('updates strategy rankings', async () => {
+    const mission = {
+      id: 'm1',
+      tasks: [
+        { id: 't1', status: 'completed', type: 'revenue', result: { strategy: 'outreach' } },
+      ],
+      revenue: 10,
+    };
+    await engine.reflectOnMission(mission);
+    const best = engine.getBestStrategy('revenue');
+    expect(best).not.toBeNull();
+    expect(best.strategy).toBe('outreach');
+  });
+});
