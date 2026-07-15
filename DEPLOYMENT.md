@@ -214,18 +214,77 @@ thing as `heidi-core/`:
 | Routes | `/cascade/*`, `/heidi/*`, `/infrastructure/*`, `/keymaker/*` | `/think`, `/task`, `/tasks`, `/phase5/*`, `/revenue/*` (policy/arbitration/governance/bias) |
 | Test coverage | None — no test file `require()`s it | N/A to this comparison |
 
-**Reachability status: genuinely ambiguous, not resolved by this audit.**
-Evidence both ways: it's absent from the port registry, absent from the
-orchestrated startup script, and has zero test coverage (all suggesting
-dead/legacy). But it's also a real `package.json` script
-(`"server": "node src/server.js"` — present in `package.json`, though
-*not* mentioned in CLAUDE.md's own Commands section, so it isn't even
-consistently documented as a way to run this system) and recent audit
-passes fixed real bugs in it specifically
-(ISSUES_FOUND.md #7 `approvedBy`/`approved_by` typo, #8 the `Keymaker`
-class never being wired in) — meaning someone has been treating it as
-live and worth maintaining. **This needs a maintainer answer, not another
-guess**: is `src/server.js` deployed anywhere real today?
+### Reachability status: two competing orchestrators disagree — resolved as far as repo evidence can take it
+
+A follow-up pass (2026-07-15) went looking for a definitive answer and
+found something more specific than "ambiguous": **this repo contains two
+separate, unreconciled boot orchestrators that were never cross-referenced
+with each other**, and they disagree about whether `src/server.js` is core
+infrastructure.
+
+| | `scripts/start-hydi.js` + `.ports.json` | `scripts/boot-agent.js` + `boot.config.json` |
+|---|---|---|
+| What it calls "core" | `heidi-core/index-clean-3458.js` (port 3459) | `src/server.js`, labeled `protoforge-core` (port 3005) |
+| `heidi-web` (Next.js) depends on it? | Not modeled — services listed flat, no `dependsOn` graph | **Yes** — `boot.config.json`'s `heidi-web` entry has `"dependsOn": ["protoforge-core"]` |
+| npm script | `npm run start:hydi` | `npm run boot` / `npm run boot:prod` |
+| Last meaningfully edited | 2026-07-10 (`.ports.json`) | 2026-07-09 (`boot.config.json`, folding in mobile chat) |
+| Is it a real, working implementation or just docs? | Real — `scripts/start-hydi.js` spawns processes, waits on health | Real — `scripts/boot-agent.js` (398 lines) does a topological sort by `dependsOn`, spawns processes, health-gates them |
+
+Both are genuinely implemented (not aspirational documentation), both
+received real commits within a day of each other, and **neither
+references the other or `heidi-core/index-clean-3458.js` vs
+`src/server.js` at all** — this looks like two boot systems built at
+different times that were never reconciled, not one superseding the
+other.
+
+**Evidence leaning toward "yes, `src/server.js` is meant to be live":**
+- `boot.config.json` — the newer of the two configs — explicitly makes the
+  Next.js web layer depend on it, and `BOOT_AGENT.md` ties this directly
+  to CLAUDE.md's own stated architecture principle: "this respects the V2
+  principle of anchoring ground truth (ProtoForge core) before the layers
+  on top come online."
+- `api/ws/route.js` (in the Next.js app itself) tells WebSocket clients to
+  connect to `ws://localhost:3005` for real-time chat/cascade/kilo/protoforge
+  events — the Next.js app's own code treats `src/server.js` as the real
+  backend for that feature.
+- Deployment/feature docs (`HEIDI-DEPLOYMENT-GUIDE.md`, `DEPLOY-CHECKLIST.md`)
+  describe recent, deliberate feature work landing in `src/server.js`
+  (structured model-event logging), not archival maintenance.
+- Two prior audit passes fixed real bugs in it (ISSUES_FOUND.md #7
+  `approvedBy`/`approved_by` typo, #8 the `Keymaker` class never being
+  wired in) — someone has been actively treating it as worth maintaining.
+
+**Evidence leaning the other way:**
+- Absent from `.ports.json` and `scripts/start-hydi.js` entirely.
+- README.md's own "Quick Start" section says only `npm run dev` — no
+  mention of `npm run boot` or starting `src/server.js` separately. (This
+  carries less weight than it first appears: README.md hasn't been
+  touched since 2026-07-01, predating `boot.config.json`'s most recent
+  edit — it's likely just stale, not a considered decision to exclude
+  `src/server.js`.)
+- Zero test coverage, and **zero server-side runtime coupling**: nothing
+  in `pages/`, `lib/`, or the rest of `api/` makes an HTTP call to port
+  3005. The Next.js REST API surface this audit otherwise covers
+  functions completely independently of whether `src/server.js` is
+  running — only the WebSocket-based real-time chat feature actually
+  needs it.
+- This sandbox is a fresh checkout with no running processes, log files,
+  or PID files — there is no way to observe an actual live instance from
+  here, on this occasion or any other.
+
+**Conclusion**: the repo's own most-recently-updated module registry
+(`boot.config.json`) declares `src/server.js` a required dependency of the
+web layer, and the code backs that declaration up in one concrete way
+(the WebSocket redirect). That's stronger evidence than "genuinely
+unknown" — but it still isn't proof of what's running on any actual host
+right now, which no static analysis of a git checkout can provide. If it
+is not currently running, then real-time chat / cascade / kilo /
+protoforge WebSocket features are silently non-functional, while the REST
+`pages/api/**` surface (checkout, webhooks, mobile-ops, etc.) is
+unaffected. **Definitive confirmation requires checking the actual
+deployment host** (a running process on port 3005, a systemd/PM2 unit, or
+simply asking the maintainer) — something no amount of repo archaeology
+can substitute for.
 
 ### Two real bugs found and fixed regardless of reachability
 

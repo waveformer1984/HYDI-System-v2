@@ -104,13 +104,19 @@ automated sandbox — see DEPLOYMENT.md §4 and ROADMAP.md for full detail):
 3. **Decide the fate of three ambiguous routes** (`api/chat/route.js`,
    `api/heidi/route.js`, `api/ws/route.js`) — left unbridged pending a
    maintainer call on whether each is still wanted. See ISSUES_FOUND.md #34.
-4. **Confirm whether `src/server.js` is deployed anywhere real.** A
-   follow-up pass (2026-07-15) mapped its ~60 routes and fixed two
-   unambiguous bugs in it (see below), but couldn't resolve whether it's
-   actually live — it's absent from `.ports.json`, the orchestrated
-   startup script, and CLAUDE.md's own Commands section, but is a real
-   `package.json` script (`npm run server`) with recent bug-fix history.
-   See DEPLOYMENT.md §5, ISSUES_FOUND.md #42-#44.
+4. **Confirm whether `src/server.js` is deployed anywhere real — the
+   final call requires checking the actual host.** A follow-up pass
+   (2026-07-15) found this repo has *two separate, unreconciled boot
+   orchestrators*: one (`scripts/start-hydi.js`+`.ports.json`) treats a
+   different file (`heidi-core/index-clean-3458.js`) as core and never
+   mentions `src/server.js`; the other (`scripts/boot-agent.js`+`boot.config.json`,
+   the more recently updated of the two) treats `src/server.js` as
+   required core infrastructure that the Next.js web layer depends on,
+   consistent with CLAUDE.md's "ground truth anchored first" principle.
+   The Next.js app's own `api/ws/route.js` directs WebSocket clients to
+   `src/server.js`'s port (3005) for real-time features. This is stronger
+   evidence than "unknown," but still not proof of what's running on any
+   real host. See DEPLOYMENT.md §5, ISSUES_FOUND.md #42-#44.
 5. **Decide the intended sensitivity of `src/server.js`'s `/infrastructure/*`
    routes** (currently fully open to any caller — deliberate code, not an
    oversight) and whether to wire up `Keymaker.requireAccess()`, which

@@ -4,6 +4,82 @@ Running log of autonomous production-readiness work. Newest entries first.
 
 ---
 
+## 2026-07-15 (fifth pass) — `src/server.js` reachability, resolved as far as repo evidence allows
+
+Branch: `claude/production-readiness-audit-fk9lth`. Direct follow-up to
+the previous pass's open question ("is `src/server.js` deployed
+anywhere real?" — ISSUES_FOUND.md #42). No code changed this pass;
+documentation-only, but the finding is substantial enough to warrant a
+dedicated entry.
+
+### What was found
+
+Went looking for anything the previous pass hadn't checked:
+`.github/workflows/*.yml` for a deploy/start step referencing
+`src/server.js` (none — `health-monitor.yml` only checks Supabase
+connectivity directly and pings a Vercel API, neither touches port 3005),
+and every repo-wide reference to `src/server.js` outside the file itself.
+That turned up `boot.config.json` — the "HYDI Boot Agent module registry,"
+read by `scripts/boot-agent.js` (`npm run boot`/`npm run boot:prod`, a
+real 398-line implementation, not aspirational docs) — which lists
+`src/server.js` (labeled `protoforge-core`) as `required: true`, and
+critically makes the Next.js web layer's boot entry
+`"dependsOn": ["protoforge-core"]`. `BOOT_AGENT.md` ties this directly to
+CLAUDE.md's own architecture principle: "this respects the V2 principle
+of anchoring ground truth (ProtoForge core) before the layers on top come
+online."
+
+This directly contradicts the previous pass's framing (which only checked
+`scripts/start-hydi.js`+`.ports.json`, a *different* orchestrator that
+treats `heidi-core/index-clean-3458.js` as core and never mentions
+`src/server.js` at all). Git history shows both orchestrators are real,
+both received a meaningful edit within a day of each other
+(`boot.config.json` 2026-07-09, `.ports.json` 2026-07-10), and neither
+references the other — two boot systems built at different times, never
+reconciled, disagreeing about what's foundational.
+
+Checked for actual runtime coupling rather than just config claims:
+`grep`'d `pages/`, `lib/`, and the rest of `api/` for any HTTP call to
+port 3005 — found none. The *only* reference is `api/ws/route.js` (in the
+Next.js app itself), which tells WebSocket clients to connect to
+`ws://localhost:3005` for real-time chat/cascade/kilo/protoforge events.
+So: the REST `pages/api/**` surface this audit otherwise covers runs
+completely independently of `src/server.js`; only WebSocket-based
+real-time features would be silently broken if it isn't running.
+
+Cross-checked README.md's "Quick Start" (`npm run dev` only, no mention of
+`npm run boot` or `src/server.js`) — initially looked like evidence
+against, but `git log` shows README.md hasn't been touched since
+2026-07-01, predating `boot.config.json`'s most recent edit. Likely just
+stale documentation, not a considered exclusion.
+
+Confirmed (as expected) there's no way to observe an actual running
+process from this sandbox — it's a fresh checkout with no PID files, log
+files, or other runtime artifacts.
+
+### Conclusion
+
+Stronger than "genuinely unknown," short of proof: the repo's own
+most-recently-updated module registry declares `src/server.js` a required
+dependency of the web layer, and the code backs that up in one concrete,
+checkable way (the WebSocket redirect). But no static analysis of a git
+checkout can substitute for checking the actual deployment host. Recorded
+the full evidence table in DEPLOYMENT.md §5, updated ISSUES_FOUND.md #42
+and OPERATIONS.md accordingly, and named the two-orchestrators-never-reconciled
+finding explicitly since it's a real, separate piece of technical debt
+regardless of which one (if either) turns out to be "correct."
+
+### Not done in this pass
+
+- Did not attempt to reconcile the two orchestrators (`start-hydi.js` vs
+  `boot-agent.js`) or decide which should win — that's a product decision
+  requiring the maintainer's actual operational knowledge, not something
+  resolvable from git history alone.
+- Did not check for a running process on any real host — no access to
+  one from this sandbox.
+
+---
+
 ## 2026-07-15 (fourth pass) — `src/server.js` reachability audit
 
 Branch: `claude/production-readiness-audit-fk9lth`. Follow-up to the third
