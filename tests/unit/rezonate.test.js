@@ -3,7 +3,21 @@
  *
  * Mocks @supabase/supabase-js and fs so no live services are required.
  * Follows the same mock pattern as tests/unit/stripe-connect-webhook.test.js.
+ * Auth token construction follows tests/unit/agent-manager-control.test.js,
+ * since this route is gated by the same requireAuth() middleware.
  */
+
+const { createHmac } = require('crypto');
+
+const SERVICE_SECRET = 'test-service-secret';
+
+function makeServiceToken(secret = SERVICE_SECRET) {
+  const ts = Date.now().toString();
+  const requestId = 'req-1';
+  const service = 'jest';
+  const sig = createHmac('sha256', secret).update(`${ts}:${requestId}:${service}`).digest('hex');
+  return `${ts}.${requestId}.${service}.${sig}`;
+}
 
 // ── Supabase mock ──────────────────────────────────────────────────────────────
 // We build the chain mock once and expose helper references so individual
@@ -59,6 +73,7 @@ jest.mock('fs', () => ({
 beforeAll(() => {
   process.env.SUPABASE_URL = 'https://fake.supabase.co';
   process.env.SUPABASE_SERVICE_ROLE_KEY = 'fake_service_key';
+  process.env.HYDI_SERVICE_SECRET = SERVICE_SECRET;
 });
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -66,9 +81,11 @@ beforeAll(() => {
 /**
  * Build a minimal mock req/res pair and invoke the handler.
  * Returns the value passed to res.json / res.status(...).json.
+ * Includes a valid x-hydi-service-token by default since the route is
+ * gated by requireAuth(); pass headers to override/omit it explicitly.
  */
-function buildReqRes({ method = 'POST', body = {}, query = {}, headers = {} } = {}) {
-  const req = { method, body, query, headers };
+function buildReqRes({ method = 'POST', body = {}, query = {}, headers } = {}) {
+  const req = { method, body, query, headers: headers || { 'x-hydi-service-token': makeServiceToken() } };
   const res = {
     _status: 200,
     _body: null,
@@ -115,7 +132,7 @@ describe('list_projects', () => {
 
     const { req, res } = buildReqRes({
       body: { action: 'list_projects' },
-      headers: { 'x-user-id': 'user_abc' },
+      headers: { 'x-user-id': 'user_abc', 'x-hydi-service-token': makeServiceToken() },
     });
     await handler(req, res);
 
@@ -191,8 +208,11 @@ describe('dispatch_task', () => {
     expect(res._body.data).toMatchObject({ task_type: 'stem_analysis', status: 'pending' });
     expect(mockFrom).toHaveBeenCalledWith('actions');
 
-    // Verify the inserted object carries the mandatory fields.
-    const insertedArg = mockInsert.mock.calls[0][0];
+    // Verify the inserted object carries the mandatory fields. requireAuth's
+    // own audit logging also calls insert() (on auth_audit_log), so find the
+    // actions-table insert by its shape rather than assuming call index 0.
+    const insertedArg = mockInsert.mock.calls.map((call) => call[0]).find((arg) => arg && arg.task_type === 'stem_analysis');
+    expect(insertedArg).toBeDefined();
     expect(insertedArg.type).toBe('rezonate_task');
     expect(insertedArg.status).toBe('pending');
     expect(insertedArg.task_type).toBe('stem_analysis');
@@ -239,6 +259,31 @@ describe('node_manifest', () => {
     expect(config.capabilities).toBeDefined();
     expect(Array.isArray(config.accepted_task_types)).toBe(true);
     expect(config.accepted_task_types).toContain('stem_analysis');
+  });
+});
+
+// ── authentication ───────────────────────────────────────────────────────────
+describe('authentication', () => {
+  it('rejects requests with no credentials', async () => {
+    const { req, res } = buildReqRes({
+      body: { action: 'list_projects' },
+      headers: {},
+    });
+    await handler(req, res);
+
+    expect(res._status).toBe(401);
+    expect(mockFrom).not.toHaveBeenCalledWith('rezonate_projects');
+  });
+
+  it('rejects requests with an invalid service token', async () => {
+    const { req, res } = buildReqRes({
+      body: { action: 'list_projects' },
+      headers: { 'x-hydi-service-token': '123.req.jest.deadbeef' },
+    });
+    await handler(req, res);
+
+    expect(res._status).toBe(401);
+    expect(mockFrom).not.toHaveBeenCalledWith('rezonate_projects');
   });
 });
 

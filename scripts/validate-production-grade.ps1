@@ -2,9 +2,14 @@
 # Tests: gate failures, alert firing, signal quality, chaos+gate integration
 
 param(
-    [string]$SupabaseUrl = "https://akbnfovjdcobifeupvbn.supabase.co",
-    [string]$AnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFrYm5mb3ZqZGNvYmlmZXVwdmJuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA1NjY4NzAsImV4cCI6MjA4NjE0Mjg3MH0.u_leRiubSHblsSbBI4Yj9ryAIHdB7NB5iBQDRakYWMI"
+    [string]$SupabaseUrl = $env:SUPABASE_URL,
+    [string]$AnonKey = $env:SUPABASE_PUBLISHABLE_KEY
 )
+
+if (-not $SupabaseUrl -or -not $AnonKey) {
+    Write-Host "SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY must be set (env var or -SupabaseUrl/-AnonKey param)." -ForegroundColor Red
+    exit 1
+}
 
 $headers = @{
     "apikey" = $AnonKey

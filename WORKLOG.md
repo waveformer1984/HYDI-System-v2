@@ -4,6 +4,244 @@ Running log of autonomous production-readiness work. Newest entries first.
 
 ---
 
+## 2026-07-15 (later same day) — Security incident response + route reachability gap
+
+Branch: `claude/protoforge-production-readiness-t4wdn4` (continuation of the
+lint/bug-fix session earlier the same day)
+
+Scope note: the driving request for this session asked for a full-platform
+transformation (multi-agent orchestration framework, knowledge graph,
+multi-provider AI routing, comprehensive E2E suite, full observability
+stack, disaster-recovery validation, etc.) — realistically months of work.
+Rather than producing shallow placeholder scaffolding across all of it, this
+session did a real security/production audit and fixed everything it found,
+in depth, with verification. The rest of that mission's scope is listed as
+future work in ISSUES_FOUND.md and ROADMAP.md rather than claimed as done.
+
+### Critical: live credentials hardcoded in tracked files (active incident)
+
+A security audit (delegated to a research subagent, then independently
+verified) found a live Supabase `service_role` JWT — full RLS-bypassing
+database access, project `akbnfovjdcobifeupvbn`, functionally non-expiring
+— hardcoded in **21 tracked files**, including
+`supabase/migrations/20260426122000_action_worker_cron_schedule.sql`, where
+it was embedded directly in a `pg_cron.schedule()` call and a
+`SECURITY DEFINER`-adjacent function body. That means it wasn't just sitting
+in source control — it was very likely also stored, in plaintext, in the
+live database's `cron.job` table. Further sweeps found a live Stripe
+restricted key (`rk_live_...`) and two live Stripe webhook signing secrets
+(`whsec_...`) hardcoded in `vercel-env-checklist.md` and
+`comprehensive-audit-report.md`, and a third webhook secret in a standalone
+`test-webhook.js`.
+
+**This required flagging to the user immediately, mid-session, since key
+rotation is the one part of this incident that can't be done from here** —
+no authenticated Supabase or Stripe dashboard access exists in this
+environment. Editing the files removes the *current* exposure; it does not
+undo the fact that these values are already in git history and must be
+treated as compromised regardless of what happens to the working tree.
+
+Remediation (everything that *could* be done autonomously):
+
+1. **New migration** `20260715210000_secure_action_worker_cron.sql` —
+   redefines `trigger_action_worker()` and its cron schedule to read the
+   invocation URL/JWT from `vault.decrypted_secrets` (Vault secret names
+   `action_worker_project_url` / `action_worker_service_jwt`), matching the
+   pattern the *later* `20260426123500_billing_retry_cron.sql` migration
+   already established correctly. The old migration's literal secret was
+   also redacted from its current tree content (safe to do without
+   disturbing replay order or checksums, since `CREATE OR REPLACE
+   FUNCTION` + unschedule/reschedule in the new, later-timestamped
+   migration fully supersedes it regardless of what the old file leaves
+   behind).
+2. **`add-vault-secrets.js` rewritten**: no more hardcoded values (the old
+   "anon key" wasn't even JWT-shaped — a stale/wrong value), everything
+   sourced from env vars, and it no longer prints secret values to the
+   console on failure (a `SECURITY_PROTOCOL.md` violation the old version
+   had). Now also seeds the two new Vault secrets the migration above
+   needs.
+3. **20 dead one-off scripts/docs deleted** (`create-*.js`, `test-*.js`,
+   `get-*.ps1`, several stale `*.md` troubleshooting notes, a duplicate
+   `revenue-dashboard.html` at repo root that diverged from the actually-
+   served `public/revenue-dashboard.html`) — each confirmed to have zero
+   live references before deletion. Removing them also removed the leaked
+   secrets they carried.
+4. **2 files kept, secrets redacted in place**: `vercel-env-checklist.md`
+   (still-useful env-var checklist; Stripe secret key + both webhook
+   secrets replaced with placeholders), `comprehensive-audit-report.md`
+   (redacted the truncated-but-still-real secret fragments it quoted).
+5. **`scripts/validate-production-grade.ps1`** — hardcoded anon key default
+   replaced with a required `$env:SUPABASE_PUBLISHABLE_KEY` read (script
+   now fails loudly instead of silently using a stale key).
+6. **Two regression-guard tests added**:
+   `tests/migrations/no-hardcoded-secrets.test.js` scans every migration
+   (including `.sql.skip` files) for JWT-shaped literals;
+   `tests/unit/no-hardcoded-secrets.test.js` scans every `git ls-files`
+   tracked file repo-wide for Supabase JWTs, Stripe live/restricted keys,
+   Stripe webhook secrets, AWS keys, and PEM private-key blocks, with a
+   documented, minimal allowlist (a secret-scanner's own detection-pattern
+   list, and the Supabase *anon* key in `public/client-dashboard.html`,
+   which is meant to be public client-side under RLS — a materially
+   different risk class from `service_role`). Both pass clean.
+7. **Not a leak, ruled out explicitly after checking**:
+   `public/client-dashboard.html`'s anon key (by design), and two
+   `cleanup/*.ps1` scripts whose own secret-*detection* regex patterns
+   matched my scanner (they're tools for finding this exact class of bug,
+   not instances of it — interesting that this tooling already existed and
+   apparently was never run against the 21 files above).
+
+### High: `keeper-break-glass` / `keeper-break-glass-simple` auth bypass
+
+Both Edge Functions fell back to a **publicly-known, hardcoded string**
+(`'fallback-secret'`, `'break-glass-secret-test'`) as the verification
+secret whenever `KEEPER_BREAK_GLASS_TOKEN` wasn't configured — meaning
+anyone could forge a valid break-glass token (this system escalates a
+safety circuit-breaker's risk level) using a value visible in this
+now-public source. Both now fail closed (503) instead of authenticating
+against a fallback.
+
+### High: unauthenticated mutating routes with real impact
+
+The audit found several `api/` routes with no auth check at all, each using
+the service-role Supabase client to mutate data:
+
+- `api/song-composer/songs.js` — unauthenticated `DELETE` on the shared
+  `actions` table by raw `id`, no ownership/type scoping (IDOR: could
+  delete unrelated rows, e.g. agent-manager tasks). Fixed: `requireAuth`
+  gate + scoped the delete to `task_name = 'song_composition'` as
+  defense-in-depth even for authorized callers.
+- `api/agent-manager/tasks.js` — unauthenticated task dispatch
+  (POST, triggers real agent execution via the event bus) and
+  cancel/retry (PATCH). Its sibling `control.js` already had
+  `requireAuth`; this one was missed. Fixed, matching the sibling's
+  pattern exactly.
+- `api/agent-manager/agents.js` — unauthenticated read of aggregated
+  agent/task statistics. Lower severity (read-only) but inconsistent with
+  its siblings; added `requireAuth` (`worker:view`) for consistency.
+- `api/hydi/sync.js` — unauthenticated RPC triggers (`auto_heal_from_trends`,
+  `analyze_health_trends`, `evaluate_system_escalation`) and arbitrary
+  event-bus injection. Fixed: `status:view` for GET, new `hydi_sync:trigger`
+  permission for POST.
+- `api/rezonate/route.js` — unauthenticated project/track CRUD + task
+  dispatch, using the `x-user-id` header as trusted identity (a known,
+  already-roadmapped issue — see ROADMAP.md's "cryptographic identity
+  verification" item; this session added an auth *gate* on top without
+  redesigning that deeper per-user-scoping model, which is out of scope for
+  a hardening pass). New `rezonate:manage` permission.
+- `api/life-flow/route.js` — unauthenticated Deep Life Architect request
+  processing. New `life_flow:manage` permission. **Deliberately not made
+  reachable** (see below) — this file instantiates a `HYDISystem` and
+  starts recurring hardware/software-polling timers *at module load*, not
+  per-request, which is a separate, more invasive behavior change than the
+  other routes; flagged for product review rather than unilaterally
+  activated.
+- `api/song-composer/generate.js` — unauthenticated LLM-backed song
+  generation (cost/DoS vector: any caller could trigger unlimited LLM
+  calls). Fixed: `requireAuth` with a tightened 10/min rate limit
+  (default is 60/min) given each call invokes an LLM.
+
+New RBAC permissions added to `lib/auth/rbac.js`:
+`song_composer:view`/`song_composer:manage`, `rezonate:manage`,
+`life_flow:manage`, `hydi_sync:trigger` (operator+owner; `song_composer:view`
+also granted to viewer).
+
+`tests/unit/rezonate.test.js` needed updating: its 11 tests called the
+handler directly with mock req/res objects that had no auth headers, so
+they started failing (correctly) once `requireAuth` was added. Fixed by
+constructing a valid HMAC service token per the pattern already established
+in `tests/unit/agent-manager-control.test.js`, fixed one assertion that
+assumed `mockInsert`'s first call was the handler's own insert (requireAuth's
+audit logging now also calls `insert()`, shifting the index), and added two
+new tests explicitly asserting the auth gate rejects missing/invalid
+credentials — the exact regression this session's fix prevents.
+
+### High: two Stripe-moving Edge Functions had no authorization at all
+
+`stripe-transfer-payout` (moves real money via `stripe.transfers.create`)
+and `stripe-connect-admin` (create/update/retrieve/list/delete Stripe
+Connect accounts) were absent from `supabase/config.toml`'s per-function
+`verify_jwt` table, silently falling back to the platform default —
+which only proves *some* valid Supabase JWT was presented, and the public
+`anon` key satisfies that. Neither function had any code-level check that
+the caller was privileged. Fixed: both now decode the (already
+platform-verified) JWT payload and require `role === 'service_role'`,
+returning 403 otherwise. Also added explicit `verify_jwt = true` entries
+to `config.toml` for both — relying on an implicit default is exactly what
+let this go unnoticed.
+
+### Major finding: the entire top-level `api/` directory was unreachable
+
+While verifying the routes above actually enforce what I'd just added,
+booting `next dev` and curling `/api/health` returned a **404**, not the
+expected response. Investigation confirmed: Next.js's router (`next dev` /
+`next start`, which is how this app actually runs per CLAUDE.md's
+Local-First Architecture pivot — Vercel deployment is explicitly disabled)
+only ever serves `pages/api/*`. A bare top-level `api/` directory is a
+*Vercel-platform-only* convention for auto-detecting serverless functions;
+it means nothing to Next.js itself, and no `middleware.ts`, `next.config.js`
+rewrite, or custom server bridges the gap in this repo.
+
+Of the ~30 files under `api/`, only 2 (`revenue.js`, `traces.js`) have any
+`pages/api/` counterpart at all — meaning this wasn't "old files superseded
+by newer ones," it's that an entire, actively-developed feature surface
+(the "mobile-ops" cluster referenced by `lib/auth/requireAuth.js`'s own doc
+comment, plus health/mobile-status/checkout/Stripe webhooks/chat/
+song-composer/rezonate/etc.) has been unreachable via the real running app,
+undetected, because nothing ever smoke-tested these routes with an actual
+HTTP request against `next dev`. `.github/workflows/health-monitor.yml`'s
+"health check" only runs `test-critical-path.js`, which tests direct
+Supabase connectivity, never an HTTP request to `/api/health` — so this
+gap was invisible to existing CI too.
+
+Fix scope, deliberately conservative given the size and risk:
+
+- Added thin `pages/api/**` re-export bridge files (`export { default }
+  from '../../api/...'`, or `module.exports = require(...)` +
+  `.default = ...` for the one CommonJS file) for: `health.js`,
+  `mobile-status.js` (pure observability, zero risk, explicitly requested
+  by this session's mission), and the entire already-authenticated
+  "mobile-ops" + song-composer + rezonate + hydi-sync cluster this session
+  either found already had `requireAuth` wired or personally added it to
+  (13 more files). Every one of the 16 bridged routes was verified live
+  against a running `next dev` server: auth-gated ones return 401/405 as
+  expected (proving `requireAuth` genuinely executes against a real HTTP
+  request, not just in a unit test's mocked call), and `health`/
+  `mobile-status` return graceful JSON errors given this sandbox's missing
+  Supabase credentials (previously they'd have crashed the whole module at
+  import time — see below).
+- Also fixed a robustness bug the reachability fix surfaced: `api/health.js`
+  and 4 other files constructed their Supabase client at module load
+  (`const supabase = createClient(...)`), so a missing env var crashed the
+  entire module before the handler's own try/catch could run its intended
+  graceful-degradation path. Switched to the lazy-construction-via-Proxy
+  pattern already established in `api/agent-manager/control.js`.
+- **Deliberately did NOT bridge**: `checkout.js`, `checkout-v2.js`,
+  `stripe-connect-webhook.js`, `webhooks/stripe.js`,
+  `webhooks/stripe-test.js` (payment-critical — I can't verify webhook
+  signing-secret configuration or whether there's a reason payments are
+  currently paused from this sandbox; wrong unilateral action here has
+  real financial/security consequences), `life-flow/route.js` (module-load
+  side effects, see above), and the more ambiguous remainder (`chat/route.js`,
+  `heidi/route.js`, `client-dashboard.js`, `ursula/status.js`,
+  `events/stream.js`, `ws/route.js`, `local-model.js`) where I don't have
+  enough confidence about whether they're intentionally superseded by
+  existing `pages/api/` functionality or genuinely just missing. All of
+  these are listed explicitly in ISSUES_FOUND.md as needing a product-level
+  decision, not a guess.
+
+### Verification
+
+- `npm run typecheck` — clean.
+- `npm run lint` — exit 0, only pre-existing warnings.
+- `npm test` — 132/132 suites, 1430/1430 tests, stable across 3 consecutive
+  runs (was 129/129, 1344/1344 before this session's new tests).
+- `npm audit` — 0 vulnerabilities (unchanged).
+- All 16 newly-bridged `pages/api/*` routes independently verified against
+  a live `next dev` server (not just unit-tested): correct 401/405/200/503
+  responses, zero crashes, zero raw stack-trace HTML responses.
+
+---
+
 ## 2026-07-15 — Production-readiness sweep: lint gate repair + real bug fixes
 
 Branch: `claude/protoforge-production-readiness-t4wdn4`

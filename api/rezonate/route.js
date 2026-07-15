@@ -10,12 +10,20 @@
 const { createClient } = require('@supabase/supabase-js');
 const fs = require('fs');
 const path = require('path');
+const { requireAuth } = require('../../lib/auth/requireAuth');
 
 // Initialise Supabase client using service-role key (server-side only).
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
+let _supabase = null;
+function getSupabase() {
+  if (!_supabase) {
+    if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      throw new Error('Supabase env vars not configured (SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY)');
+    }
+    _supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+  }
+  return _supabase;
+}
+const supabase = new Proxy({}, { get: (_, prop) => getSupabase()[prop] });
 
 // Path to the static Rezonate node configuration file.
 const CONFIG_PATH = path.resolve(__dirname, '../../agents/rezonate_node/config.json');
@@ -42,6 +50,15 @@ async function handler(req, res) {
   if (req.method !== 'POST' && req.method !== 'GET') {
     return res.status(405).json({ data: null, error: 'Method not allowed' });
   }
+
+  // ── auth gate ────────────────────────────────────────────────────────────────
+  // Note: per-action data scoping below still trusts the x-user-id header
+  // (see CLAUDE.md's near-term roadmap: "replace the x-user-id header trust
+  // model with cryptographically verified identity tokens" is the tracked
+  // follow-up). This gate only proves *some* valid device/service credential
+  // is present -- it doesn't yet re-derive user identity from it.
+  const auth = await requireAuth(req, res, supabase, { permission: 'rezonate:manage', routeName: 'rezonate-route' });
+  if (!auth.ok) return;
 
   // ── parse action + payload ────────────────────────────────────────────────────
   let action, payload;

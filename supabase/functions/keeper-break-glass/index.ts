@@ -43,22 +43,33 @@ serve(async (req) => {
     }
 
     const token = authHeader.replace('Bearer ', '')
-    
+
+    // Fail closed: break-glass is a safety-circuit override, so it must never
+    // authenticate against a fallback/default secret. If the real secret
+    // isn't configured, reject every request instead of accepting one signed
+    // with a publicly-known placeholder value.
+    const breakGlassSecret = Deno.env.get('KEEPER_BREAK_GLASS_TOKEN')
+    if (!breakGlassSecret) {
+      console.error('KEEPER_BREAK_GLASS_TOKEN is not configured -- rejecting all break-glass requests')
+      return new Response(
+        JSON.stringify({ success: false, message: 'Break-glass is not configured' }),
+        { status: 503, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
     // Verify JWT token (or simple token for testing)
     let payload: any
     try {
       if (token.startsWith('ey')) {
         // JWT token - use the secret as HMAC key
-        const secretKey = Deno.env.get('KEEPER_BREAK_GLASS_TOKEN') || 'fallback-secret'
         const { payload: jwtPayload } = await jwtVerify(
           token,
-          new TextEncoder().encode(secretKey)
+          new TextEncoder().encode(breakGlassSecret)
         )
         payload = jwtPayload
       } else {
         // Simple token validation
-        const expectedToken = Deno.env.get('KEEPER_BREAK_GLASS_TOKEN')
-        if (token !== expectedToken) {
+        if (token !== breakGlassSecret) {
           throw new Error('Invalid token')
         }
         payload = { sub: 'simple-token', role: 'break-glass-operator' }
