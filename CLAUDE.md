@@ -363,15 +363,19 @@ system kept running because the data plane had already been moved local.
   (dormant capability) but isn't part of the normal workflow.
   `.github/workflows/health-monitor.yml`'s `vercel-api-check.js` step is a
   read-only diagnostic, not a deploy trigger — safe to leave.
-- **GitHub Pages** — `.github/workflows/deploy-pages.yml` used to
-  auto-publish the mobile chat PWA on every push touching `docs/**`
-  (confirmed Pages was NOT actually enabled when checked, so nothing was
-  live, but the workflow would silently re-enable and publish on the next
-  matching push). Trigger changed to `workflow_dispatch` only — manual, not
-  automatic. Mobile chat is reached via Tailscale
-  (`heidi-pc.tailc50af2.ts.net`) instead.
-
 **External and kept, but reliance reduced:**
+- **GitHub Pages** — publishes `docs/index.html`, the static mobile chat +
+  Ops (mobile command center) client. Auto-publish was disabled 2026-07-10
+  (confirmed Pages wasn't actually enabled at the time) and re-enabled
+  2026-07-15 (explicit maintainer request, once `docs/index.html` grew a
+  real reason to want it live automatically — PR #190's Ops view).
+  `.github/workflows/deploy-pages.yml` now triggers on push to
+  `docs/**` on `clean-main`, plus `workflow_dispatch` for an on-demand
+  redeploy. The published page still requires the user to enter their own
+  API URL + `HYDI_SERVICE_SECRET` in its ⚙️ settings — GitHub Pages hosts
+  the static shell only, never the backend or any secret. Mobile chat is
+  also still reachable via Tailscale (`heidi-pc.tailc50af2.ts.net`) as an
+  alternative that doesn't require typing in a secret at all.
 - **GitHub (repo host + Actions CI)** — still the remote and still what
   `clean-main` branch protection requires checks from. A local git hook
   (`.githooks/pre-push`, wired up automatically via `npm install`'s
