@@ -21,6 +21,8 @@ const NotificationWorker = require('./NotificationWorker');
 const AuditWorker = require('./AuditWorker');
 const QueueManager = require('./QueueManager');
 const { createClient } = require('@supabase/supabase-js');
+const { createNotification } = require('../lib/notifications/notify');
+const { publish } = require('../lib/realtime/eventBus');
 require('dotenv').config();
 
 class WorkerOrchestrator {
@@ -121,14 +123,15 @@ class WorkerOrchestrator {
     async initialize() {
         const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
         const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
-        
+
         if (!supabaseUrl || !supabaseKey) {
             throw new Error('Missing Supabase credentials');
         }
-        
+
         this.supabase = createClient(supabaseUrl, supabaseKey);
         this.initialized = true;
-        
+        this.commandPollInterval = null;
+
         console.log('[🎼 Orchestrator] Initialized');
     }
 
@@ -150,19 +153,23 @@ class WorkerOrchestrator {
         
         // Start metrics reporting
         this.startMetricsReporting();
-        
+
         // Start health monitoring
         this.startHealthMonitoring();
-        
+
+        // Start polling agent_control_commands (mobile-ops worker control —
+        // see api/agent-manager/control.js, the only writer of that table).
+        this.startCommandPolling();
+
         console.log('[🎼 Orchestrator] All workers started successfully');
     }
 
     async stop() {
         if (!this.running) return;
-        
+
         this.running = false;
         console.log('[🎼 Orchestrator] Shutting down workers...');
-        
+
         // Stop all workers
         const stopPromises = [];
         for (const [workerType, instances] of this.workers) {
@@ -170,9 +177,9 @@ class WorkerOrchestrator {
                 stopPromises.push(worker.stop());
             }
         }
-        
+
         await Promise.all(stopPromises);
-        
+
         // Clear intervals
         if (this.metricsInterval) {
             clearInterval(this.metricsInterval);
@@ -180,8 +187,170 @@ class WorkerOrchestrator {
         if (this.healthInterval) {
             clearInterval(this.healthInterval);
         }
-        
+        if (this.commandPollInterval) {
+            clearInterval(this.commandPollInterval);
+        }
+
         console.log('[🎼 Orchestrator] Shutdown complete');
+    }
+
+    // ── Mobile-ops command queue ──────────────────────────────────────────
+    // Polls agent_control_commands for rows written by
+    // api/agent-manager/control.js (Authentication -> Authorization ->
+    // Command Queue -> Execution -> Audit Log; this is the "Execution" and
+    // "Audit Log" half of that chain — the API layer only ever queues).
+
+    startCommandPolling(intervalMs = 5000) {
+        this.commandPollInterval = setInterval(() => {
+            this.pollControlCommands().catch((err) => {
+                console.error('[🎼 Orchestrator] Command poll failed:', err);
+            });
+        }, intervalMs);
+    }
+
+    async pollControlCommands() {
+        const { data: pending, error } = await this.supabase
+            .from('agent_control_commands')
+            .select('*')
+            .eq('status', 'pending')
+            .order('created_at', { ascending: true })
+            .limit(10);
+
+        if (error) {
+            console.error('[🎼 Orchestrator] Failed to fetch pending commands:', error);
+            return;
+        }
+
+        for (const command of pending || []) {
+            await this.executeControlCommand(command);
+        }
+    }
+
+    async executeControlCommand(command) {
+        const { id, worker_type: workerType, worker_id: workerId, command: action } = command;
+
+        await this.supabase
+            .from('agent_control_commands')
+            .update({ status: 'processing', started_at: new Date().toISOString() })
+            .eq('id', id);
+
+        let result;
+        try {
+            result = await this.runLifecycleAction(action, workerType, workerId);
+
+            await this.supabase
+                .from('agent_control_commands')
+                .update({ status: 'completed', result, completed_at: new Date().toISOString() })
+                .eq('id', id);
+
+            await this.supabase.from('worker_events').insert({
+                worker_id: workerId || workerType,
+                queue_name: workerType,
+                event_type: `control_${action}`,
+                details: { command_id: id, result },
+            }).catch(() => {});
+        } catch (err) {
+            const message = err instanceof Error ? err.message : 'Unknown error';
+            await this.supabase
+                .from('agent_control_commands')
+                .update({ status: 'failed', error_message: message, completed_at: new Date().toISOString() })
+                .eq('id', id);
+
+            await this.supabase.from('worker_events').insert({
+                worker_id: workerId || workerType,
+                queue_name: workerType,
+                event_type: `control_${action}_failed`,
+                details: { command_id: id, error: message },
+            }).catch(() => {});
+
+            await createNotification(this.supabase, {
+                category: 'worker_failure',
+                title: `${workerType} ${action} failed`,
+                body: message,
+                metadata: { command_id: id, worker_type: workerType, worker_id: workerId, action },
+            }).catch(() => {});
+            publish('notification', { category: 'worker_failure', worker_type: workerType, worker_id: workerId, action });
+        }
+    }
+
+    async runLifecycleAction(action, workerType, workerId) {
+        const config = this.workerConfigs[workerType];
+        if (!config || !config.class) {
+            throw new Error(`Unknown or unimplemented worker type: ${workerType}`);
+        }
+
+        switch (action) {
+            case 'start':
+                return this.startWorkerType(workerType);
+            case 'stop':
+                return this.stopWorkerType(workerType, workerId);
+            case 'restart':
+                if (workerId) {
+                    await this.restartWorker(workerId, workerType);
+                    return { restarted: [workerId] };
+                }
+                return this.restartWorkerType(workerType);
+            case 'scale_up':
+                await this.scaleWorker(workerType, 'up');
+                return { scaled: 'up', instances: (this.workers.get(workerType) || []).length };
+            case 'scale_down':
+                await this.scaleWorker(workerType, 'down');
+                return { scaled: 'down', instances: (this.workers.get(workerType) || []).length };
+            default:
+                throw new Error(`Unknown lifecycle action: ${action}`);
+        }
+    }
+
+    /** Start every configured instance of a worker type that isn't already running. */
+    async startWorkerType(workerType) {
+        const config = this.workerConfigs[workerType];
+        const existing = this.workers.get(workerType) || [];
+        const started = [];
+
+        for (let i = existing.length; i < config.instances; i++) {
+            const workerId = `${workerType}-${i + 1}`;
+            const worker = new config.class(workerId);
+            await worker.start();
+            existing.push(worker);
+            started.push(workerId);
+        }
+
+        this.workers.set(workerType, existing);
+        return { started };
+    }
+
+    /** Stop one worker instance (workerId given) or every instance of a type. */
+    async stopWorkerType(workerType, workerId) {
+        const instances = this.workers.get(workerType) || [];
+        const stopped = [];
+
+        if (workerId) {
+            const worker = instances.find((w) => w.workerId === workerId);
+            if (worker) {
+                await worker.stop();
+                instances.splice(instances.indexOf(worker), 1);
+                stopped.push(workerId);
+            }
+        } else {
+            for (const worker of instances) {
+                await worker.stop();
+                stopped.push(worker.workerId);
+            }
+            instances.length = 0;
+        }
+
+        this.workers.set(workerType, instances);
+        return { stopped };
+    }
+
+    async restartWorkerType(workerType) {
+        const instances = [...(this.workers.get(workerType) || [])];
+        const restarted = [];
+        for (const worker of instances) {
+            await this.restartWorker(worker.workerId, workerType);
+            restarted.push(worker.workerId);
+        }
+        return { restarted };
     }
 
     async startWorkersByPriority() {

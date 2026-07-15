@@ -27,7 +27,8 @@
     "stress-test:1h": "cross-env TEST_DURATION=3600000 TASKS_PER_HOUR=60 node heidi-core/phase-5-stress-test.js",
     "boot": "node scripts/boot-agent.js",
     "boot:plan": "node scripts/boot-agent.js --dry-run",
-    "boot:prod": "node scripts/boot-agent.js --prod"
+    "boot:prod": "node scripts/boot-agent.js --prod",
+    "build:capacitor-www": "node scripts/build-capacitor-www.js"
   },
   "keywords": [
     "protoforge",
@@ -61,6 +62,7 @@
     "stripe": "^22.2.2",
     "typescript": "^5.0.0",
     "uuid": "^11.1.1",
+    "web-push": "^3.6.7",
     "ws": "^8.18.3"
   },
   "devDependencies": {
