@@ -54,6 +54,7 @@ const HybridModelStack = require('./models/HybridModelStack');
 const HeidiMemorySystem = require('./memory/HeidiMemorySystem');
 const HeidiActionLayer = require('./actions/HeidiActionLayer');
 const HeidiCoreLoop = require('./core/HeidiCoreLoop');
+const HYDIAutonomyManager = require('./hydi-v3');
 const HeidiSelfAwareness = require('./awareness/HeidiSelfAwareness');
 const HeidiRevenueEngine = require('./revenue/HeidiRevenueEngine');
 const HeidiControlPlane = require('./control/HeidiControlPlane');
@@ -94,7 +95,7 @@ class HYDISystem extends EventEmitter {
     // System state
     this.isRunning = false;
     this.startTime = null;
-    this.version = '2.0.0';
+    this.version = '3.0.0';
     
     // Initialize control plane first (it governs everything)
     this.controlPlane = new HeidiControlPlane({
@@ -113,8 +114,9 @@ class HYDISystem extends EventEmitter {
     // Start control plane feedback loop
     this.controlPlane.startFeedbackLoop();
     
-    console.log('[HYDI SYSTEM] HYDI v2.0.0 initialized');
+    console.log('[HYDI SYSTEM] HYDI v3.0.0 initialized');
     console.log(`[HYDI SYSTEM] Revenue mode: ${this.config.enableRevenueMode ? 'ENABLED' : 'DISABLED'}`);
+    console.log(`[HYDI SYSTEM] Autonomy mode: ENABLED`);
     console.log(`[HYDI SYSTEM] Self-awareness: ${this.config.enableSelfAwareness ? 'ENABLED' : 'DISABLED'}`);
     console.log(`[HYDI SYSTEM] Life-flow analysis: ${this.config.enableLifeFlowAnalysis ? 'ENABLED' : 'DISABLED'}`);
     console.log(`[HYDI SYSTEM] Local-first: ${this.config.localFirst ? 'ENABLED' : 'DISABLED'}`);
@@ -158,7 +160,26 @@ class HYDISystem extends EventEmitter {
       enableAutoActions: this.config.enableAutoActions,
       actionConfidenceThreshold: this.config.confidenceThreshold
     });
-    
+
+    // V3 Autonomy Manager (reliability, mission planning, decision intelligence)
+    this.autonomyManager = new HYDIAutonomyManager({
+      coreLoop: this.coreLoop,
+      orchestrator: this.orchestrator,
+      memorySystem: this.memorySystem,
+      actionLayer: this.actionLayer,
+      modelStack: this.modelStack,
+      config: {
+        enableGracefulShutdown: false,
+        enableMissionPlanning: this.config.enableAutoActions,
+        enableDecisionIntelligence: true,
+        enableReflection: true,
+        enableSelfHealing: true,
+        enableMemoryIntegrity: true,
+        enableObservability: true,
+        enableSecurity: true,
+      }
+    });
+
     // Self-Awareness (if enabled)
     if (this.config.enableSelfAwareness) {
       this.selfAwareness = new HeidiSelfAwareness({
@@ -281,6 +302,9 @@ class HYDISystem extends EventEmitter {
     this.isRunning = true;
     
     try {
+      // Start V3 autonomy layer (patches core loop before core loop starts)
+      await this.autonomyManager.start();
+
       // Start core loop
       await this.coreLoop.start();
       
@@ -323,6 +347,9 @@ class HYDISystem extends EventEmitter {
     try {
       // Stop core loop
       await this.coreLoop.stop();
+
+      // Stop V3 autonomy layer and persist state
+      await this.autonomyManager.stop();
       
       // Note: Other layers continue running in background for persistence
       

@@ -24,7 +24,12 @@ npm start            # Start production server
 npm test             # Run Jest unit tests
 npm run test:watch   # Jest in watch mode
 npm run test:coverage  # Jest with coverage report
-npm run test:integration  # Run adversarial integration tests (tests/hdi-adversarial.test.js)
+npm run test:integration  # Run HYDI V3 integration tests (tests/integration/hydi-v3-integration.test.js)
+npm run test:soak         # Long-running V3 stability simulation
+npm run benchmark:performance  # V3 performance benchmarks
+npm run security-audit    # V3 static security audit
+npm run typecheck         # TypeScript/JSDoc typecheck of V3 code
+npm run lint              # Lint V3 modules and scripts
 ```
 
 Run a single test file:
@@ -170,6 +175,22 @@ tests/
     subscription-manager.test.js
   hdi-adversarial.test.js        # Adversarial / chaos integration tests
   hdi-everything-wrong.test.js   # Edge-case / failure-mode integration tests
+
+### HYDI V3 Upgrade
+
+The V3 reliability/autonomy layer lives in `src/hydi-v3` and is wired into `HYDISystem.js`.
+
+Additional commands:
+
+```bash
+npm run typecheck                 # typecheck new V3 modules and scripts
+npm run test:integration          # HYDI V3 integration tests
+npm run test:soak                 # long-running stability simulation
+npm run benchmark:performance     # V3 performance benchmarks
+npm run security-audit            # V3 static security audit
+```
+
+Runbooks are in `src/hydi-v3/RUNBOOKS.md`.
 ```
 
 The integration tests (`test:integration`) require live environment variables (`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`).

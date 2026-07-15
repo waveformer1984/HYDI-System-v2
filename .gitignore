@@ -1,8 +1,40 @@
+# Dependencies
 node_modules/
-coverage/
-.vercel
-.env*.local
+
+# Next.js
 .next/
 
-# Local Netlify folder
+# Environment — never commit secrets
+.env
+.env.*
+.env*.local
+
+# Vercel / Netlify deploy artifacts
+.vercel
 .netlify
+
+# Build outputs
+dist/
+build/
+/generated/prisma
+
+# Archives
+*.zip
+*.tar.gz
+hydi-system-*.zip
+hydi-system-*.tar.gz
+
+# Logs
+*.log
+logs.txt
+
+# OS
+.DS_Store
+
+# Heidi local env
+heidi-core.env.local
+
+# Generated runtime data & build info
+data/
+*.tsbuildinfo
+tests/soak-test-report.json
