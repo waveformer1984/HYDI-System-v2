@@ -116,12 +116,16 @@ jobs:
       - name: Setup Test Database
         if: steps.schema-check.outputs.schema_changed == 'true'
         run: |
-          # Apply migrations to test database
-          PGPASSWORD=postgres psql -h localhost -U postgres -d hydi_test -f supabase/migrations/00000000000000_initial_schema.sql
-          
-          # Apply new migrations
-          for file in ${{ steps.schema-check.outputs.files }}; do
-            PGPASSWORD=postgres psql -h localhost -U postgres -d hydi_test -f "$file"
+          # There is no single "initial schema" snapshot file in this repo's
+          # history -- it's never existed (verified via full git log, all
+          # branches). Applying the complete, real, ordered migration set is
+          # the honest equivalent, and stays accurate as the sequence grows,
+          # unlike a static snapshot that would silently drift out of sync.
+          # This also covers the PR's own new migrations, already included
+          # in this ordered set from the branch checkout -- no separate pass
+          # needed, which avoids re-running non-idempotent statements twice.
+          for file in $(ls supabase/migrations/*.sql | grep -v '\.sql\.skip$' | sort); do
+            PGPASSWORD=postgres psql -v ON_ERROR_STOP=1 -h localhost -U postgres -d hydi_test -f "$file"
           done
       
       - name: Run Adversarial Tests
