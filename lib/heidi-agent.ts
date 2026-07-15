@@ -55,7 +55,7 @@ export async function runHeidiAgentStream(params: RunHeidiAgentParams): Promise<
   const executor = new ActionExecutor(supabase);
   const client = getAnthropicClient();
 
-  const memoryContext = await retrieveMemory(supabase, message, userId);
+  const memoryContext = await retrieveMemory(supabase, message, userId, sessionId);
   const system = [
     getAgentSystemPrompt('heidi'),
     'You can take real actions using the provided tools. Prefer tools over describing what you would do. Read data with fetch_data before answering data questions.',

@@ -322,6 +322,60 @@ class ToolRegistry {
     }));
   }
 
+  /**
+   * Extract tool calls from free-form model text when the model did not emit
+   * native `tool_calls` (common with small local models). Returns an array in
+   * the Ollama tool_call shape: [{ function: { name, arguments } }].
+   */
+  extractToolCalls(text) {
+    if (!text || typeof text !== 'string') return [];
+
+    const known = new Set(Object.keys(this.tools));
+    const calls = [];
+    const seen = new Set();
+
+    for (const obj of extractTopLevelJsonObjects(text)) {
+      const call = this._parseToolCall(obj, known);
+      if (call) {
+        const key = call.function.name + JSON.stringify(call.function.arguments);
+        if (!seen.has(key)) {
+          seen.add(key);
+          calls.push(call);
+        }
+      }
+    }
+
+    return calls;
+  }
+
+  _parseToolCall(obj, known) {
+    if (!obj || typeof obj !== 'object') return null;
+
+    let name = null;
+    let args = null;
+
+    if (obj.function && typeof obj.function === 'object') {
+      name = obj.function.name;
+      args = obj.function.arguments;
+    } else if (obj.tool && typeof obj.tool === 'string' && obj.arguments !== undefined) {
+      name = obj.tool;
+      args = obj.arguments;
+    } else if (obj.name && typeof obj.name === 'string') {
+      name = obj.name;
+      args = obj.arguments !== undefined ? obj.arguments : obj.args !== undefined ? obj.args : obj.parameters;
+    }
+
+    if (!name || !known.has(name)) return null;
+
+    if (args === null || args === undefined) args = {};
+    if (typeof args === 'string') {
+      try { args = JSON.parse(args); } catch { args = {}; }
+    }
+    if (typeof args !== 'object' || args === null) args = {};
+
+    return { function: { name, arguments: args } };
+  }
+
   /** Execute a tool as the named agent, enforcing the permission ladder. */
   async execute(name, args = {}, agentName = 'Heidi') {
     const tool = this.tools[name];
@@ -355,3 +409,39 @@ class ToolRegistry {
 // Expose the decorator so callers can register tools at runtime or in tests.
 ToolRegistry.tool = tool;
 module.exports = ToolRegistry;
+
+/**
+ * Parse every top-level JSON object from a string, respecting braces inside
+ * strings and escapes. Used by ToolRegistry.extractToolCalls.
+ */
+function extractTopLevelJsonObjects(text) {
+  const objects = [];
+  const n = text.length;
+  let i = 0;
+  while (i < n) {
+    if (text[i] !== '{') { i++; continue; }
+    let depth = 0;
+    let inString = false;
+    let escape = false;
+    let j = i;
+    for (; j < n; j++) {
+      const c = text[j];
+      if (escape) { escape = false; continue; }
+      if (c === '\\') { escape = true; continue; }
+      if (c === '"') { inString = !inString; continue; }
+      if (inString) continue;
+      if (c === '{') { depth++; }
+      else if (c === '}') {
+        depth--;
+        if (depth === 0) { break; }
+      }
+    }
+    if (depth === 0) {
+      try { objects.push(JSON.parse(text.slice(i, j + 1))); } catch { /* not JSON */ }
+      i = j + 1;
+    } else {
+      i++;
+    }
+  }
+  return objects;
+}

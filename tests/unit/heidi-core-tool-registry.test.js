@@ -225,4 +225,59 @@ describe('ToolRegistry: level-3 tools', () => {
       expect(names).toContain('run_command');
     });
   });
+
+  describe('extractToolCalls', () => {
+    function buildRegistry() {
+      return new ToolRegistry(fakeMemory({ permission_level: 1, enabled: 1 }), {});
+    }
+
+    it('returns an empty array for empty or non-string text', () => {
+      const registry = buildRegistry();
+      expect(registry.extractToolCalls('')).toEqual([]);
+      expect(registry.extractToolCalls(null)).toEqual([]);
+      expect(registry.extractToolCalls(undefined)).toEqual([]);
+      expect(registry.extractToolCalls(123)).toEqual([]);
+    });
+
+    it('extracts a tool call from Ollama tool_call JSON shape', () => {
+      const registry = buildRegistry();
+      const text = JSON.stringify({ function: { name: 'system_status', arguments: {} } });
+      const calls = registry.extractToolCalls(text);
+      expect(calls).toEqual([{ function: { name: 'system_status', arguments: {} } }]);
+    });
+
+    it('extracts tool calls from a plain { name, arguments } object', () => {
+      const registry = buildRegistry();
+      const text = 'I will call system_status.\n' + JSON.stringify({ name: 'system_status', arguments: {} });
+      const calls = registry.extractToolCalls(text);
+      expect(calls).toEqual([{ function: { name: 'system_status', arguments: {} } }]);
+    });
+
+    it('extracts run_command with arguments from a code block', () => {
+      const registry = buildRegistry();
+      const text = '\n```json\n{"name":"run_command","arguments":{"command":"git","args":["status"]}}\n```\n';
+      const calls = registry.extractToolCalls(text);
+      expect(calls).toEqual([{ function: { name: 'run_command', arguments: { command: 'git', args: ['status'] } } }]);
+    });
+
+    it('ignores unknown tool names', () => {
+      const registry = buildRegistry();
+      const text = JSON.stringify({ name: 'not_a_real_tool', arguments: {} });
+      expect(registry.extractToolCalls(text)).toEqual([]);
+    });
+
+    it('parses argument string as JSON when possible', () => {
+      const registry = buildRegistry();
+      const text = JSON.stringify({ name: 'restart_service', arguments: '{"service":"heidi-mobile-chat"}' });
+      expect(registry.extractToolCalls(text)).toEqual([
+        { function: { name: 'restart_service', arguments: { service: 'heidi-mobile-chat' } } }
+      ]);
+    });
+
+    it('deduplicates repeated tool calls', () => {
+      const registry = buildRegistry();
+      const text = `${JSON.stringify({ name: 'system_status', arguments: {} })} ${JSON.stringify({ name: 'system_status', arguments: {} })}`;
+      expect(registry.extractToolCalls(text)).toEqual([{ function: { name: 'system_status', arguments: {} } }]);
+    });
+  });
 });
