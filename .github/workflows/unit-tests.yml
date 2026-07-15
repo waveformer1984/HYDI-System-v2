@@ -26,6 +26,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Run ESLint
+        run: npm run lint
+
       - name: Run unit tests with coverage
         run: npm test -- --coverage --forceExit
 

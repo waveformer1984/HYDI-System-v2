@@ -15,5 +15,16 @@
     "no-console": "off",
     "no-constant-condition": ["error", { "checkLoops": false }]
   },
-  "ignorePatterns": ["node_modules", ".next", "coverage", "data", "dist"]
+  "ignorePatterns": ["node_modules", ".next", "coverage", "data", "dist", "archive"],
+  "overrides": [
+    {
+      "files": [
+        "pages/**/*.{js,jsx,ts,tsx}",
+        "components/**/*.{js,jsx,ts,tsx}",
+        "lib/**/*.{js,ts}",
+        "hooks/**/*.{js,ts}"
+      ],
+      "extends": ["next/core-web-vitals"]
+    }
+  ]
 }

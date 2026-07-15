@@ -73,7 +73,7 @@ export default function MidiStatusBar({
         <div className="absolute right-0 top-9 z-40 w-80 bg-gray-950 border border-gray-700 rounded-xl shadow-2xl overflow-hidden">
           <div className="px-4 py-3 border-b border-gray-800">
             <h3 className="text-sm font-semibold text-white">MIDI Mapping</h3>
-            <p className="text-xs text-gray-400 mt-0.5">DDJ-SB3 hot cues A1–A8 jump to sections 1–8 by default. Press "Learn" to remap any pad.</p>
+            <p className="text-xs text-gray-400 mt-0.5">DDJ-SB3 hot cues A1–A8 jump to sections 1–8 by default. Press &quot;Learn&quot; to remap any pad.</p>
           </div>
 
           {/* Connected devices */}

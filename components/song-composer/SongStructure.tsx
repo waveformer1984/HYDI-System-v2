@@ -190,7 +190,7 @@ export default function SongStructure({ song, currentBar, onSectionJump }: Props
                         {lyrics.map((l, i) => (
                           <div key={i} className="flex gap-2 text-xs">
                             <span className="text-gray-600 font-mono w-10 flex-shrink-0">b{l.bar}</span>
-                            <span className="text-gray-300 italic">"{l.text}"</span>
+                            <span className="text-gray-300 italic">&quot;{l.text}&quot;</span>
                           </div>
                         ))}
                       </div>

@@ -295,7 +295,7 @@ export class ModelManager {
   private validateOutput(content: string): boolean {
     try {
       const parsed = JSON.parse(content);
-      return parsed.hasOwnProperty('response') && Array.isArray(parsed.actions);
+      return Object.prototype.hasOwnProperty.call(parsed, 'response') && Array.isArray(parsed.actions);
     } catch {
       return false;
     }

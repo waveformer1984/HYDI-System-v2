@@ -1153,19 +1153,21 @@ class HeidiControlPlane extends EventEmitter {
     console.log(`[CONTROL PLANE] Applying feedback: ${insight.type} -> ${insight.target}`);
     
     switch (insight.type) {
-      case 'model_degradation':
+      case 'model_degradation': {
         // Reduce model weight
         const currentWeight = this.config.modelPerformanceWeights.get(insight.target) || 0.5;
         const newWeight = Math.max(0.1, currentWeight - 0.2);
         this.config.modelPerformanceWeights.set(insight.target, newWeight);
         break;
-        
-      case 'model_excellence':
+      }
+
+      case 'model_excellence': {
         // Increase model weight
-        const currentWeight2 = this.config.modelPerformanceWeights.get(insight.target) || 0.5;
-        const newWeight2 = Math.min(1.0, currentWeight2 + 0.1);
-        this.config.modelPerformanceWeights.set(insight.target, newWeight2);
+        const currentWeight = this.config.modelPerformanceWeights.get(insight.target) || 0.5;
+        const newWeight = Math.min(1.0, currentWeight + 0.1);
+        this.config.modelPerformanceWeights.set(insight.target, newWeight);
         break;
+      }
         
       case 'confidence_miscalibration':
         // Adjust confidence threshold for this action type

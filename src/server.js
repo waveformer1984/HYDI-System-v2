@@ -23,6 +23,7 @@ const path = require('path');
 const UniversalAgentBus = require('../modules/universal-agent-bus');
 const BusGatekeeper = require('./middleware/bus-gatekeeper');
 const SimpleKeymaker = require('./middleware/simple-keymaker');
+const Keymaker = require('./middleware/keymaker');
 
 const app = express();
 const PORT = process.env.PORT || 3005;
@@ -120,6 +121,12 @@ console.log('[SIMPLE KEYMAKER] Initializing simple API key validation...');
 const simpleKeymaker = new SimpleKeymaker();
 app.use(simpleKeymaker.middleware());
 console.log('[SIMPLE KEYMAKER] Middleware active on POST routes');
+
+// ── KEYMAKER ── Access, Routing, Permission Control (backs /keymaker/* routes) ──
+console.log('[KEYMAKER] Initializing access/routing/permission middleware...');
+const keymaker = new Keymaker();
+app.use(keymaker.middleware());
+console.log('[KEYMAKER] Middleware active — populates req.keymaker');
 
 // Start Heidi automator
 heidiAutomator.start();
@@ -1052,7 +1059,7 @@ app.post('/cascade/quarantine/:eventId/release', (req, res) => {
       });
     }
     
-    const result = cascade.manualReleaseFromQuarantine(eventId, approvedBy);
+    const result = cascade.manualReleaseFromQuarantine(eventId, approved_by);
     
     res.json({
       status: 'ok',

@@ -39,7 +39,7 @@ export class ActionParser {
       const parsed = JSON.parse(content);
       
       // Validate structure
-      if (!parsed.hasOwnProperty('response')) {
+      if (!Object.prototype.hasOwnProperty.call(parsed, 'response')) {
         return {
           success: false,
           error: 'Missing "response" field in output'

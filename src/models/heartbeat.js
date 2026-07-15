@@ -14,7 +14,7 @@ class UrsulaModelHeartbeat extends EventEmitter {
     this.adapter = null;
     this.heartbeatInterval = null;
     this.isChecking = false;
-    this.failedModels = new Set();
+    this.failedModels = new Map();
     this.lastCheckTime = null;
     
     // Configuration
@@ -96,7 +96,6 @@ class UrsulaModelHeartbeat extends EventEmitter {
       failedModels.forEach(result => {
         const modelKey = result.modelId;
         if (!this.failedModels.has(modelKey)) {
-          this.failedModels.add(modelKey);
           this.failedModels.set(modelKey, 1);
         } else {
           const count = this.failedModels.get(modelKey) + 1;
@@ -157,7 +156,7 @@ class UrsulaModelHeartbeat extends EventEmitter {
    * @param {string} modelId - The model ID to check
    * @returns {Promise<Object>} Health check result
    */
-  async checkModelHealth(modelId) {
+  async checkSingleModelHealth(modelId) {
     const startTime = Date.now();
     
     try {
@@ -269,8 +268,8 @@ class UrsulaModelHeartbeat extends EventEmitter {
    * @returns {Promise<Array>} Array of health check results
    */
   async checkAllModels() {
-    const promises = this.config.modelsToMonitor.map(modelId => 
-      this.checkModelHealth(modelId)
+    const promises = this.config.modelsToMonitor.map(modelId =>
+      this.checkSingleModelHealth(modelId)
     );
     
     return await Promise.all(promises);

@@ -17,6 +17,7 @@ The core platform is operational:
 - Stream health watchdog Edge Function
 - 17 `SECURITY DEFINER` functions with pinned `search_path`
 - 7-gate DB migration governance CI workflow
+- `npm run lint` (ESLint, TypeScript + Next.js aware) gated in CI on every push/PR
 
 ---
 
