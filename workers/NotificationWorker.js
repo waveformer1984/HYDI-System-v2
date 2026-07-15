@@ -1,4 +1,93 @@
-        this.sendViaChannel = async function(channel, notificationData) {
+const { createClient } = require('@supabase/supabase-js');
+const QueueManager = require('./QueueManager');
+require('dotenv').config();
+
+class NotificationWorker {
+    constructor(workerId) {
+        this.workerId = workerId || `notification-worker-${Date.now()}`;
+        this.running = false;
+        this.pollInterval = 5000;
+        this.pollTimer = null;
+        this.supabase = null;
+        this.queue = new QueueManager();
+        this.notificationChannels = {
+            realtime: { enabled: true },
+            discord: { enabled: !!process.env.DISCORD_WEBHOOK_URL, webhook_url: process.env.DISCORD_WEBHOOK_URL, username: 'ProtoForge', avatar_url: '' },
+            webhooks: { enabled: false, endpoints: [] },
+            email: { enabled: !!process.env.RESEND_API_KEY, from: process.env.EMAIL_FROM || 'noreply@theforge.local' },
+            ui: { enabled: true }
+        };
+        this.templates = {};
+
+        this.initialize = function() {
+            const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+            const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
+            if (!supabaseUrl || !supabaseKey) throw new Error('Missing Supabase credentials');
+            this.supabase = createClient(supabaseUrl, supabaseKey);
+            this.queue.registerWorker('notification', this.workerId);
+            this.queue.updateHeartbeat('idle');
+            console.log(`[📣 Notification Worker] Initialized: ${this.workerId}`);
+        };
+
+        this.start = async function() {
+            if (this.running) return;
+            await this.initialize();
+            this.running = true;
+            this.queue.startHeartbeat();
+            this.poll();
+        };
+
+        this.stop = async function() {
+            this.running = false;
+            if (this.pollTimer) clearTimeout(this.pollTimer);
+            await this.queue.shutdown();
+        };
+
+        this.poll = function() {
+            if (!this.running) return;
+            this.processNextTask()
+                .catch(err => console.error('[📣 Notification Worker] Poll error:', err))
+                .finally(() => { this.pollTimer = setTimeout(() => this.poll(), this.pollInterval); });
+        };
+
+        this.processNextTask = async function() {
+            const taskId = await this.queue.dequeue('notification');
+            if (!taskId) return;
+            try {
+                const task = await this.queue.getTask(taskId);
+                if (!task) return;
+                switch (task.payload.event_type) {
+                    case 'notification.send': await this.sendNotification(task.payload); break;
+                    case 'notification.summary': await this.generateSummary(task.payload); break;
+                    default: console.log(`[📣 Notification] Unhandled: ${task.payload.event_type}`);
+                }
+                await this.queue.completeTask(taskId, true);
+            } catch (err) {
+                await this.queue.completeTask(taskId, false, err.message);
+            }
+        };
+
+        this.sendNotification = async function(payload) {
+            const { recipient, template, data, priority } = payload.data;
+            console.log(`[📣 Notification] Sending ${template} to ${recipient}`);
+            const channels = this.getChannelsForPriority(priority || 5);
+            for (const channel of channels) {
+                try { await this.sendViaChannel(channel, { recipient, template, data, priority }); } catch (e) { /* channel failed, continue */ }
+            }
+        };
+
+        this.generateSummary = async function(payload) {
+            const { time_period } = payload.data || {};
+            console.log(`[📣 Notification] Generating summary for ${time_period}`);
+        };
+
+        this.getChannelsForPriority = function(priority) {
+            if (priority >= 8) return ['realtime', 'discord', 'email'];
+            if (priority >= 5) return ['realtime', 'discord'];
+            return ['realtime'];
+        };
+
+                this.sendViaChannel = async function(channel, notificationData) {
             switch (channel) {
                 case 'realtime':
                     return await this.sendRealtimeNotification(notificationData);

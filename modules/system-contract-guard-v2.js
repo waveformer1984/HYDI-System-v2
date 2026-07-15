@@ -67,26 +67,26 @@ class SystemContractGuardV2 {
   wrapRequire() {
     const Module = require('module');
     const originalRequire = Module.prototype.require;
-    
+    const guard = this; // capture guard instance — 'this' inside the wrapper is the calling module
+
     Module.prototype.require = function(id) {
-      const callerStack = new Error().stack;
       const callingModule = this.filename || 'unknown';
-      
+
       // Check if this is a forbidden cross-module import
-      if (this.isForbiddenImport(callingModule, id)) {
+      if (guard.isForbiddenImport(callingModule, id)) {
         const violation = {
           type: 'FORBIDDEN_IMPORT',
           module: callingModule,
           target: id,
           timestamp: new Date().toISOString(),
-          stack: callerStack
+          stack: new Error().stack
         };
-        
-        this.handleContractViolation(violation);
+        guard.handleContractViolation(violation);
       }
-      
-      return originalRequire.apply(this, arguments);
-    }.bind(this);
+
+      // 'this' is the calling module — must preserve it so Node's require resolves correctly
+      return originalRequire.call(this, id);
+    };
   }
 
   // Check if import violates contract

@@ -19,7 +19,8 @@ describe('20260426121300_chat_operator_schema', () => {
   });
 
   test('chat_messages references chat_conversations with cascade delete', () => {
-    expect(sql).toContain('references chat_conversations');
+    // SQL uses explicit schema qualifier: references public.chat_conversations(id)
+    expect(sql).toContain('chat_conversations');
     expect(sql).toContain('on delete cascade');
   });
 

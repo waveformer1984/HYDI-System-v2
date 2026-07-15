@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>HYDI — Evolution Council</title>
+<style>
+  :root { --bg:#0a0e14; --panel:#11161f; --border:#232b38; --text:#dce3ec; --dim:#7d8896; --gold:#e3b341; --cyan:#39c5cf; --ok:#3fb950; --purple:#bc8cff; }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:'Cascadia Code','Consolas',monospace;font-size:15px;}
+  header{padding:16px 26px;border-bottom:1px solid var(--border);background:var(--panel);display:flex;align-items:center;gap:14px;}
+  .logo{width:38px;height:38px;border-radius:9px;background:var(--gold);color:#000;font-weight:800;font-size:20px;display:flex;align-items:center;justify-content:center;}
+  h1{font-size:18px;margin:0;letter-spacing:1px;}
+  .sub{color:var(--dim);font-size:13px;}
+  main{max-width:1000px;margin:0 auto;padding:20px 26px 80px;}
+  .step{border:1px solid var(--border);border-left:4px solid var(--dim);border-radius:10px;background:var(--panel);margin:14px 0;padding:14px 18px;opacity:.4;transition:opacity .3s;}
+  .step.active{opacity:1;border-left-color:var(--gold);}
+  .step.done{opacity:1;border-left-color:var(--ok);}
+  .step h2{margin:0 0 4px;font-size:14px;color:var(--gold);text-transform:uppercase;letter-spacing:1px;}
+  .step.done h2{color:var(--ok);}
+  .why{color:var(--dim);font-size:13px;margin-bottom:10px;}
+  .io{margin:8px 0;padding:10px 12px;border-radius:8px;background:#0a0e14;border:1px solid var(--border);white-space:pre-wrap;line-height:1.5;}
+  .io.q{border-left:3px solid var(--cyan);}
+  .io.a{border-left:3px solid var(--gold);}
+  .io .tag{font-size:11px;color:var(--dim);letter-spacing:1px;display:block;margin-bottom:4px;}
+  .meta{color:var(--purple);font-size:12px;margin-top:6px;}
+  .spin{color:var(--gold);}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">H</div>
+  <div><h1>HYDI — EVOLUTION COUNCIL</h1><div class="sub">Heidi self-assesses and proposes her own next evolution — live, local, from memory</div></div>
+</header>
+<main id="steps"></main>
+<script>
+const API='http://localhost:3456';
+const steps=document.getElementById('steps');
+function addStep(t,w){const d=document.createElement('div');d.className='step';d.innerHTML=`<h2>${t}</h2><div class="why">${w}</div><div class="body"></div>`;steps.appendChild(d);return d;}
+function blk(s,cls,tag,txt){const b=document.createElement('div');b.className='io '+cls;b.innerHTML=`<span class="tag">${tag}</span>`;b.appendChild(document.createTextNode(txt));s.querySelector('.body').appendChild(b);window.scrollTo(0,document.body.scrollHeight);return b;}
+
+// Stream from Heidi Core's SSE endpoint, rendering tokens live
+async function askStream(step,q){
+  blk(step,'q','ME → HEIDI',q);
+  const a=blk(step,'a','HEIDI','');a.classList.add('spin');
+  const t0=Date.now();let meta=null;
+  try{
+    const r=await fetch(API+'/think-stream',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({input:q,options:{maxTokens:400}})});
+    const reader=r.body.getReader();const dec=new TextDecoder();let buf='';
+    while(true){const{done,value}=await reader.read();if(done)break;
+      buf+=dec.decode(value,{stream:true});const evs=buf.split('\n\n');buf=evs.pop();
+      for(const ev of evs){const line=ev.split('\n').find(l=>l.startsWith('data: '));if(!line)continue;
+        try{const d=JSON.parse(line.slice(6));
+          if(d.t){a.classList.remove('spin');a.childNodes[1].textContent+=d.t;window.scrollTo(0,document.body.scrollHeight);}
+          if(d.done)meta=d;
+        }catch{}}}
+  }catch(e){a.childNodes[1].textContent='Error: '+e.message;}
+  if(meta){const m=document.createElement('div');m.className='meta';m.textContent=`model ${meta.model} · ${((Date.now()-t0)/1000).toFixed(1)}s · confidence ${(meta.confidence??0).toFixed(2)} · memories retrieved: ${meta.memories_retrieved}`;a.appendChild(m);}
+  return a.childNodes[1].textContent;
+}
+
+(async()=>{
+  let s=addStep('Step 0 · Vitals','Confirm the brain is live before convening the council.');s.classList.add('active');
+  try{const h=await(await fetch(API+'/health')).json();const st=await(await fetch(API+'/state')).json();
+    blk(s,'a','HEALTH',`status: ${h.status} · brain: ${h.brain} · model: ${st.brain?.model}\nrequests served: ${st.stats?.requests} · reflections: ${st.stats?.reflections}`);
+    s.classList.replace('active','done');
+  }catch(e){blk(s,'a','ERROR','Heidi Core unreachable at :3456 — run start-hydi-local.bat.');s.classList.replace('active','fail');return;}
+
+  s=addStep('Step 1 · Know thyself','Ask Heidi to state, from memory, what she currently is — proving she answers from her seeded system facts, not guesses.');s.classList.add('active');
+  await askStream(s,'From your verified memory: what are you, what can you do right now, and what runs you? Be specific about ports, models, and how your memory works.');
+  s.classList.replace('active','done');
+
+  s=addStep('Step 2 · Name the gap','Now the real drive — ask her to critique herself and name her single biggest current limitation.');s.classList.add('active');
+  await askStream(s,'Given what you just described, what is your single biggest limitation as a locally-running assistant today? Name one, and explain why it holds you back.');
+  s.classList.replace('active','done');
+
+  s=addStep('Step 3 · Propose the evolution','Ask her to design her own next upgrade — concrete and buildable, not vague.');s.classList.add('active');
+  await askStream(s,'Propose ONE concrete next evolution for yourself that a developer could build this week to fix that limitation. Describe what it does, and why it is the highest-value next step. Keep it practical and local-only.');
+  s.classList.replace('active','done');
+
+  addStep('Heidi has spoken','Her proposal above is now on the record — and stored in her memory as this conversation. J and Claude will pick the direction from here.').classList.add('done');
+})();
+</script>
+</body>
+</html>

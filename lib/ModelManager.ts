@@ -20,6 +20,7 @@
  */
 
 import { createClient } from '@supabase/supabase-js';
+import { getSessionState as getSharedSessionState, updateSessionState as updateSharedSessionState, SessionState } from './session-state';
 
 interface ModelResponse {
   content: string;
@@ -27,13 +28,6 @@ interface ModelResponse {
   latency: number;
   success: boolean;
   error?: string;
-}
-
-interface SessionState {
-  session_id: string;
-  tone: 'neutral' | 'focused' | 'degraded' | 'recovery';
-  active_model: 'local' | 'api';
-  last_action_status: 'success' | 'failure' | 'pending';
 }
 
 export class ModelManager {
@@ -49,11 +43,36 @@ export class ModelManager {
   }
 
   /**
+   * Max local inference budget (ms). Defaults to 5000 (the documented strict
+   * limit); override with LOCAL_MODEL_TIMEOUT_MS for slower local hardware.
+   * Governs both the abort timeout and the success-routing latency gate.
+   */
+  private getLocalTimeoutMs(): number {
+    const parsed = parseInt(process.env.LOCAL_MODEL_TIMEOUT_MS || '', 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 5000;
+  }
+
+  /**
    * Main routing method - NON-NEGOTIABLE routing logic
    */
   async generateResponse(prompt: string, sessionId: string): Promise<ModelResponse> {
     const startTime = Date.now();
-    
+
+    // Skip local inference entirely unless a local model is configured.
+    // On serverless hosts (e.g. Vercel) localhost Ollama is unreachable, so
+    // attempting it just burns the 5s timeout on every request.
+    if (!this.isLocalModelEnabled()) {
+      const apiResponse = await this.generateAPIResponse(prompt, sessionId);
+      await this.updateSessionState(sessionId, 'api', apiResponse.success ? 'success' : 'failure');
+      return {
+        content: apiResponse.content,
+        model: apiResponse.model,
+        latency: Date.now() - startTime,
+        success: apiResponse.success,
+        error: apiResponse.error,
+      };
+    }
+
     // Check circuit breaker
     if (this.isCircuitBreakerActive()) {
       console.log('[ModelManager] Circuit breaker active - using API fallback');
@@ -65,7 +84,7 @@ export class ModelManager {
     const latency = Date.now() - startTime;
 
     // Apply routing rule (NON-NEGOTIABLE)
-    if (localResponse.success && latency < 5000 && this.validateOutput(localResponse.content)) {
+    if (localResponse.success && latency < this.getLocalTimeoutMs() && this.validateOutput(localResponse.content)) {
       // Success - use local response
       await this.updateSessionState(sessionId, 'local', 'success');
       this.consecutiveFailures = 0;
@@ -102,25 +121,35 @@ export class ModelManager {
   }
 
   /**
+   * Whether a local inference endpoint is configured.
+   */
+  private isLocalModelEnabled(): boolean {
+    return process.env.ENABLE_LOCAL_MODEL === 'true' || !!process.env.LOCAL_MODEL_URL;
+  }
+
+  /**
    * Local model generation via Ollama
    */
   private async generateLocalResponse(prompt: string): Promise<{ content: string; success: boolean }> {
     try {
-      const response = await fetch('http://localhost:11434/api/generate', {
+      const baseURL = process.env.LOCAL_MODEL_URL || 'http://localhost:11434';
+      const model = process.env.LOCAL_MODEL_NAME || 'llama3';
+      const response = await fetch(`${baseURL}/api/generate`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: 'llama3', // or mistral
+          model, // e.g. llama3 or mistral
           prompt: prompt,
           stream: false,
+          keep_alive: '30m',
           options: {
             temperature: 0.1,
             max_tokens: 1000
           }
         }),
-        signal: AbortSignal.timeout(5000) // 5 second timeout
+        signal: AbortSignal.timeout(this.getLocalTimeoutMs()) // default 5s; override via LOCAL_MODEL_TIMEOUT_MS
       });
 
       if (!response.ok) {
@@ -148,14 +177,19 @@ export class ModelManager {
    */
   private async generateAPIResponse(prompt: string, sessionId: string): Promise<{ content: string; success: boolean; error?: string; model: string; latency: number }> {
     try {
-      // Try OpenAI first, then Anthropic as fallback
+      // Prefer Anthropic (the repo's primary provider), then OpenAI.
+      if (process.env.ANTHROPIC_API_KEY) {
+        const result = await this.generateAnthropicResponse(prompt);
+        if (result.success) return result;
+        console.warn('[ModelManager] Anthropic failed, trying OpenAI:', result.error);
+      }
       if (process.env.OPENAI_API_KEY) {
         return await this.generateOpenAIResponse(prompt);
-      } else if (process.env.ANTHROPIC_API_KEY) {
-        return await this.generateAnthropicResponse(prompt);
-      } else {
-        throw new Error('No API keys configured');
       }
+      if (!process.env.ANTHROPIC_API_KEY && !process.env.OPENAI_API_KEY) {
+        throw new Error('No API keys configured (set ANTHROPIC_API_KEY or OPENAI_API_KEY)');
+      }
+      throw new Error('All configured API providers failed');
     } catch (error) {
       console.error('[ModelManager] API fallback error:', error);
       return {
@@ -218,46 +252,39 @@ export class ModelManager {
   }
 
   private async generateAnthropicResponse(prompt: string): Promise<{ content: string; success: boolean; error?: string; model: string; latency: number }> {
+    const start = Date.now();
     try {
       const response = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: {
           'x-api-key': process.env.ANTHROPIC_API_KEY!,
           'Content-Type': 'application/json',
-          'anthropic-version': '2023-06-01'
+          'anthropic-version': '2023-06-01',
         },
         body: JSON.stringify({
-          model: 'claude-3-sonnet-20240229',
+          model: 'claude-sonnet-4-6',
           max_tokens: 1000,
-          messages: [
-            {
-              role: 'user',
-              content: `You are Heidi, a production-grade conversational AI assistant. Always respond with valid JSON in the format: {"response": "string", "actions": []}\n\n${prompt}`
-            }
-          ]
-        })
+          system: 'You are Heidi, a production-grade conversational AI assistant. Always respond with valid JSON: {"response": "string", "actions": []}',
+          messages: [{ role: 'user', content: prompt }],
+        }),
       });
 
-      if (!response.ok) {
-        throw new Error(`Anthropic API error: ${response.status}`);
-      }
+      if (!response.ok) throw new Error(`Anthropic API error: ${response.status}`);
+      const data = await response.json() as { content: Array<{ type: string; text: string }> };
 
-      const data = await response.json();
-      
       return {
-        content: data.content[0].text,
+        content: data.content.filter(b => b.type === 'text').map(b => b.text).join(''),
         success: true,
-        model: 'anthropic',
-        latency: 0
+        model: 'claude-sonnet-4-6',
+        latency: Date.now() - start,
       };
-
     } catch (error) {
       return {
         content: '',
         success: false,
         error: error instanceof Error ? error.message : 'Anthropic API error',
-        model: 'anthropic',
-        latency: 0
+        model: 'claude-sonnet-4-6',
+        latency: Date.now() - start,
       };
     }
   }
@@ -287,39 +314,21 @@ export class ModelManager {
   }
 
   /**
-   * Session state management
+   * Session state management — delegates to the shared session-state module
+   * so ModelManager isn't one of several independent `sessions` writers.
    */
   private async updateSessionState(sessionId: string, activeModel: 'local' | 'api', status: 'success' | 'failure'): Promise<void> {
-    try {
-      await this.supabase
-        .from('sessions')
-        .upsert({
-          session_id: sessionId,
-          active_model: activeModel,
-          last_action_status: status,
-          updated_at: new Date().toISOString()
-        });
-    } catch (error) {
-      console.error('[ModelManager] Failed to update session state:', error);
-    }
+    await updateSharedSessionState(this.supabase, sessionId, {
+      active_model: activeModel,
+      last_action_status: status,
+    });
   }
 
   /**
    * Get current session state
    */
   async getSessionState(sessionId: string): Promise<SessionState | null> {
-    try {
-      const { data } = await this.supabase
-        .from('sessions')
-        .select('*')
-        .eq('session_id', sessionId)
-        .single();
-
-      return data;
-    } catch (error) {
-      console.error('[ModelManager] Failed to get session state:', error);
-      return null;
-    }
+    return getSharedSessionState(this.supabase, sessionId);
   }
 
   /**

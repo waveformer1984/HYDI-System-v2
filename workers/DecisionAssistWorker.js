@@ -1,3 +1,19 @@
+const { createClient } = require('@supabase/supabase-js');
+const QueueManager = require('./QueueManager');
+require('dotenv').config();
+
+class DecisionAssistWorker {
+    constructor(workerId) {
+        this.workerId = workerId || `decision-assist-worker-${Date.now()}`;
+        this.running = false;
+        this.pollInterval = 5000;
+        this.pollTimer = null;
+        this.supabase = null;
+        this.queue = new QueueManager();
+        this.decisionThresholds = {
+            'financial_planning': { min_data_points: 10, confidence_threshold: 0.7, factors: ['revenue_trend','cost_efficiency','cash_flow','growth_rate'] },
+            'resource_allocation': { min_data_points: 8, confidence_threshold: 0.65, factors: ['utilization_rate','cost_per_unit','demand_forecast','capacity'] },
+            'risk_assessment': { min_data_points: 20, confidence_threshold: 0.8, factors: ['volatility','exposure','mitigation_options','historical_incidents'] },
             // System optimization decisions
             'system_optimization': {
                 min_data_points: 15,
@@ -120,4 +136,17 @@
             
             console.log(`[🧠 Decision Assist] Analyzing financial data for ${time_period}`);
             
-            #analyze-financial-trends
+            // analyze-financial-trends
+        };
+    }
+}
+
+// Run worker if called directly
+if (require.main === module) {
+    const worker = new DecisionAssistWorker();
+    process.on('SIGINT', async () => { await worker.stop(); process.exit(0); });
+    process.on('SIGTERM', async () => { await worker.stop(); process.exit(0); });
+    worker.start().catch(err => { console.error('[🧠 Decision Assist Worker] Failed to start:', err); process.exit(1); });
+}
+
+module.exports = DecisionAssistWorker;

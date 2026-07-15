@@ -1,0 +1,20 @@
+{
+  "name": "@protoforge/external-policy",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "External policy service - separate deployment, separate failure domain",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "crypto": "^1.0.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  },
+  "keywords": ["policy", "external", "safety", "separation"],
+  "author": "ProtoForge Systems"
+}

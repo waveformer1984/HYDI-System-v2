@@ -344,17 +344,22 @@ class GlobalDriftEvaluator {
     calculateGlobalDriftScore(driftSignals) {
         let weightedScore = 0;
         let maxDrift = 0;
-
-        // driftSignals values are plain numbers (trends), not {weight, window} objects
-        Object.entries(driftSignals).forEach(([signalName, signalValue]) => {
-            const absValue = Math.abs(Number(signalValue) || 0);
-            weightedScore += absValue;
-            maxDrift = Math.max(maxDrift, absValue);
+        
+        Object.entries(driftSignals).forEach(([signal, config]) => {
+            const signalValue = Math.abs(signal);
+            const weight = config.weight;
+            const window = config.window;
+            
+            // Apply window-based weighting (more recent = higher weight)
+            const windowWeight = window === 'short_term' ? 1.2 : window === 'medium_term' ? 1.0 : 0.8;
+            
+            const contribution = signalValue * weight * windowWeight;
+            weightedScore += contribution;
+            maxDrift = Math.max(maxDrift, signalValue);
         });
-
+        
         // Normalize to 0-1 scale
-        const signalCount = Object.keys(driftSignals).length || 1;
-        const normalizedScore = Math.min(1.0, weightedScore / signalCount);
+        const normalizedScore = Math.min(0.1, weightedScore);
         
         return {
             drift_score: normalizedScore,
@@ -486,12 +491,12 @@ class GlobalDriftEvaluator {
                 authority_level: 'parameter_adjustment',
                 constraint: 'meta_regulation_only'
             };
-        }
-
-        return adaptation;
-    }
 
     // SYSTEM ADAPTATION RULES
+
+        }
+        return adaptation;
+    }
 
     applyAdaptationRules(driftScore, regime) {
         const score = driftScore.drift_score;

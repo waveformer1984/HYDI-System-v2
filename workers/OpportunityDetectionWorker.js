@@ -1,3 +1,77 @@
+const { createClient } = require('@supabase/supabase-js');
+const QueueManager = require('./QueueManager');
+require('dotenv').config();
+
+class OpportunityDetectionWorker {
+    constructor(workerId) {
+        this.workerId = workerId || `opportunity-detection-worker-${Date.now()}`;
+        this.running = false;
+        this.pollInterval = 5000;
+        this.pollTimer = null;
+        this.supabase = null;
+        this.queue = new QueueManager();
+        this.opportunityPatterns = {
+            high_frequency_usage: { threshold: 10, window_minutes: 60 },
+            repeated_feature_request: { threshold: 3, window_hours: 168 },
+            abandoned_cart: { threshold: 100 },
+            usage_spike: { threshold: 3 },
+            complementary_usage: { enabled: true }
+        };
+
+        this.initialize = function() {
+            const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+            const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
+            if (!supabaseUrl || !supabaseKey) throw new Error('Missing Supabase credentials');
+            this.supabase = createClient(supabaseUrl, supabaseKey);
+            this.queue.registerWorker('opportunity_detection', this.workerId);
+            this.queue.updateHeartbeat('idle');
+            console.log(`[🔍 Opportunity Detection Worker] Initialized: ${this.workerId}`);
+        };
+
+        this.start = async function() {
+            if (this.running) return;
+            await this.initialize();
+            this.running = true;
+            this.queue.startHeartbeat();
+            this.poll();
+        };
+
+        this.stop = async function() {
+            this.running = false;
+            if (this.pollTimer) clearTimeout(this.pollTimer);
+            await this.queue.shutdown();
+        };
+
+        this.poll = function() {
+            if (!this.running) return;
+            this.processNextTask()
+                .catch(err => console.error('[🔍 Opportunity Detection Worker] Poll error:', err))
+                .finally(() => { this.pollTimer = setTimeout(() => this.poll(), this.pollInterval); });
+        };
+
+        this.processNextTask = async function() {
+            const taskId = await this.queue.dequeue('opportunity_detection');
+            if (!taskId) return;
+            try {
+                const task = await this.queue.getTask(taskId);
+                if (!task) return;
+                switch (task.payload.event_type) {
+                    case 'usage.recorded': await this.analyzeHighFrequencyUsage(task.payload); break;
+                    case 'feature.requested': await this.analyzeFeatureRequests(task.payload); break;
+                    case 'cart.abandoned': await this.analyzeAbandonedCart(task.payload); break;
+                    case 'service.completed': await this.analyzeServiceCompletion(task.payload); break;
+                    case 'behavior.updated': await this.analyzeUserBehavior(task.payload); break;
+                    default: console.log(`[🔍 Opportunity] Unhandled: ${task.payload.event_type}`);
+                }
+                await this.queue.completeTask(taskId, true);
+            } catch (err) {
+                await this.queue.completeTask(taskId, false, err.message);
+            }
+        };
+
+        this.analyzeHighFrequencyUsage = async function(payload) {
+            const { customer_email, service_name } = payload.data;
+            console.log(`[🔍 Opportunity] Analyzing high frequency usage: ${service_name} for ${customer_email}`);
             // Analyze high frequency usage
             const { data: recentUsage } = await this.supabase
                 .from('service_usage_logs')
@@ -190,7 +264,7 @@
                 .from('opportunities_detected')
                 .insert(opportunity);
             
-            #emit-opportunity-event
+            // emit-opportunity-event
             // Emit event to notify other systems
             const queue = new QueueManager();
             await queue.initialize();
@@ -203,7 +277,7 @@
             console.log(`[🔍 Opportunity] Emitted ${opportunityType} opportunity for ${customer_email}`);
         };
 
-        #helper-methods-for-patterns
+        // helper-methods-for-patterns
         this.getOptimalLevel = function(itemType) {
             // Define optimal stock levels for different item types
             const optimalLevels = {

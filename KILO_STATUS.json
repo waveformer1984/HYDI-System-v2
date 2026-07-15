@@ -31,8 +31,9 @@
     },
     "ursula_bridge": {
       "endpoint": "http://localhost:3002/events/stream",
-      "status": "configured",
-      "validation_pending": true
+      "status": "validated",
+      "validation_pending": false,
+      "validation_note": "10 bugs fixed across heartbeat/SSE stream/SSE manager in commit e8f34f2 (2026-05-29); covered by tests/unit/self-healing-service.test.js and tests/unit/redis-stream-broker.test.js, both passing."
     },
     "capabilities": {
       "event_processing": true,

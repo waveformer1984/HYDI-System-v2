@@ -1,0 +1,13 @@
+{
+  "name": "Bad Decision Club",
+  "source": "C:\\Users\\Owner\\AppData\\Local\\Temp\\MicrosoftEdgeDownloads\\2cfb07d5-39c1-4ca1-9c26-9d8eeafa8cf6\\Bad Decision Club.mp3",
+  "bpm": null,
+  "key": null,
+  "stems": [
+    "bass.wav",
+    "drums.wav",
+    "other.wav",
+    "vocals.wav"
+  ],
+  "folder": "C:\\Users\\Owner\\HYDI-System-v2\\rezonate\\stems\\Bad Decision Club"
+}

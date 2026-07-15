@@ -194,12 +194,12 @@ export class ConstructionAgent extends BaseAgent {
     const materialsNeeded = payload.materials_needed || [];
     
     // Simulate availability (70% chance each material is available)
-    const unavailableMaterials = materialsNeeded.filter(m => Math.random() > 0.3);
-    
+    const unavailableMaterials = materialsNeeded.filter((m: any) => Math.random() > 0.3);
+
     return {
       all_available: unavailableMaterials.length === 0,
       unavailable_materials: unavailableMaterials,
-      available_materials: materialsNeeded.filter(m => !unavailableMaterials.includes(m))
+      available_materials: materialsNeeded.filter((m: any) => !unavailableMaterials.includes(m))
     };
   }
 

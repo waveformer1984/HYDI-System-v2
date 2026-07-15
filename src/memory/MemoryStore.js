@@ -8,9 +8,9 @@
  * Write: Buffer (instant) → Supabase (async)
  */
 
-import { getMemoryBuffer } from './MemoryBuffer.js';
+const { getMemoryBuffer } = require('./MemoryBuffer.js');
 
-export class MemoryStore {
+class MemoryStore {
   constructor(supabase) {
     this.db = supabase;
     this.buffer = getMemoryBuffer();
@@ -229,6 +229,8 @@ export class MemoryStore {
 /**
  * Create a memory store instance
  */
-export function createMemoryStore(supabase) {
+function createMemoryStore(supabase) {
   return new MemoryStore(supabase);
 }
+
+module.exports = { MemoryStore, createMemoryStore };

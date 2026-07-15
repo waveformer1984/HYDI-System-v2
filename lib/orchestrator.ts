@@ -13,7 +13,22 @@
 
 import { ModelManager } from './ModelManager';
 import { ActionParser, ParsedResponse } from './ActionParser';
-import { createClient } from '@supabase/supabase-js';
+import { ActionExecutor } from './action-executor';
+import { retrieveMemory, storeMemory } from './heidi-memory';
+import { gateActions, isEnforcing } from './protoforge/action-gate';
+import { buildExperience, storeExperience } from './episodic-memory';
+import { AgentRegistry, createDefaultAgentRegistry } from './agents/registry';
+import {
+  buildPlanPrompt,
+  createWorkSession,
+  getWorkSession,
+  nextPendingStep,
+  PlanParser,
+  updateWorkSession,
+  WorkSession,
+} from './work-sessions';
+import { getDecisionStats, getMemoryRetrievalStats, getRetryStats, getTaskSuccessRates, getWorkSessionStats } from './metrics';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 interface ChatRequest {
   message: string;
@@ -31,7 +46,9 @@ interface ChatResponse {
 
 export class HeidiOrchestrator {
   private modelManager: ModelManager;
-  private supabase: any;
+  private supabase: SupabaseClient;
+  private actionExecutor: ActionExecutor;
+  private agentRegistry: AgentRegistry;
   private allowedActionTypes: string[] = [
     'send_email',
     'create_task',
@@ -46,6 +63,8 @@ export class HeidiOrchestrator {
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
+    this.actionExecutor = new ActionExecutor(this.supabase);
+    this.agentRegistry = createDefaultAgentRegistry(this.actionExecutor);
   }
 
   /**
@@ -56,8 +75,9 @@ export class HeidiOrchestrator {
     
     try {
       // 1. Retrieve memory context
-      const memoryContext = await this.retrieveMemory(request.session_id, request.user_id);
-      
+      const memoryContext = await this.retrieveMemory(request.message, request.user_id);
+      await this.recordMemoryRetrieval(request.session_id, memoryContext.length > 0);
+
       // 2. Build prompt with memory
       const prompt = this.buildPrompt(request.message, memoryContext);
       
@@ -76,7 +96,7 @@ export class HeidiOrchestrator {
         console.log('[Orchestrator] Invalid response, retrying with corrected prompt');
         const correctedPrompt = ActionParser.generateCorrectedPrompt(prompt, parseResult.error || 'Unknown error');
         const retryResponse = await this.modelManager.generateResponse(correctedPrompt, request.session_id);
-        
+
         const retryParse = ActionParser.parseResponse(retryResponse.content);
         if (retryParse.success && retryParse.response) {
           finalResponse = retryParse.response;
@@ -85,6 +105,7 @@ export class HeidiOrchestrator {
           console.log('[Orchestrator] Retry failed, using safe fallback');
           finalResponse = ActionParser.generateSafeFallback();
         }
+        await this.recordRetry(request.session_id, 'chat_response', retryParse.success, parseResult.error);
       }
       
       // 5. Validate actions
@@ -96,9 +117,20 @@ export class HeidiOrchestrator {
         );
       }
       
-      // 6. Execute actions (async, non-blocking)
-      this.executeActions(finalResponse.actions, request.session_id);
-      
+      // 6. Execute actions
+      const actionResults = await this.executeActions(finalResponse.actions, request.session_id);
+
+      // 6b. Record an episodic experience for this turn — accumulate what
+      // was attempted and what happened, not just raw conversation.
+      if (actionResults.length > 0) {
+        await storeExperience(
+          this.supabase,
+          request.session_id,
+          request.user_id,
+          buildExperience(request.message, actionResults),
+        );
+      }
+
       // 7. Store conversation in memory
       await this.storeMemory(request.session_id, request.user_id, request.message, finalResponse.response);
       
@@ -130,41 +162,11 @@ export class HeidiOrchestrator {
   }
 
   /**
-   * Retrieve memory context from Supabase
+   * Retrieve memory context from Supabase via semantic search over the
+   * user's current message. Skips retrieval when embeddings are unavailable.
    */
-  private async retrieveMemory(sessionId: string, userId: string): Promise<string> {
-    try {
-      // Generate embedding for the current message (simplified - in production use actual embedding service)
-      const embedding = await this.generateEmbedding("current message placeholder");
-      
-      // Search for similar memories
-      const { data } = await this.supabase.rpc('search_memories', {
-        query_embedding: embedding,
-        match_count: 5,
-        user_id: userId
-      });
-      
-      if (!data || data.length === 0) {
-        return '';
-      }
-      
-      // Format memory context
-      const memoryContext = data.map((mem: any) => mem.content).join('\n');
-      return `Previous relevant context:\n${memoryContext}`;
-      
-    } catch (error) {
-      console.error('[Orchestrator] Memory retrieval failed:', error);
-      return '';
-    }
-  }
-
-  /**
-   * Generate embedding (simplified placeholder)
-   */
-  private async generateEmbedding(text: string): Promise<number[]> {
-    // In production, use actual embedding service (OpenAI embeddings, etc.)
-    // For now, return a dummy embedding
-    return new Array(1536).fill(0.1);
+  private async retrieveMemory(message: string, userId: string): Promise<string> {
+    return retrieveMemory(this.supabase, message, userId);
   }
 
   /**
@@ -194,70 +196,240 @@ Respond with JSON:`;
    * Store conversation in memory
    */
   private async storeMemory(sessionId: string, userId: string, userMessage: string, assistantResponse: string): Promise<void> {
-    try {
-      // Store user message
-      await this.supabase.from('memories').insert({
-        user_id: userId,
-        session_id: sessionId,
-        content: `User: ${userMessage}`,
-        embedding: await this.generateEmbedding(userMessage)
-      });
-
-      // Store assistant response
-      await this.supabase.from('memories').insert({
-        user_id: userId,
-        session_id: sessionId,
-        content: `Assistant: ${assistantResponse}`,
-        embedding: await this.generateEmbedding(assistantResponse)
-      });
-
-    } catch (error) {
-      console.error('[Orchestrator] Memory storage failed:', error);
-      // Don't fail the entire response if memory storage fails
-    }
+    return storeMemory(this.supabase, sessionId, userId, userMessage, assistantResponse);
   }
 
   /**
-   * Execute actions (async, non-blocking)
+   * Execute actions for real and record truthful outcomes in the `actions`
+   * audit log (status reflects the actual handler result). Returns a
+   * summary per action so the caller can build an episodic-memory record
+   * of the turn.
+   *
+   * Every action is first run through KILO -> ProtoForge (lib/protoforge/
+   * action-gate.ts), which records a real decision to the `decisions`
+   * table. Enforcement is opt-in (PROTOFORGE_ENFORCE_ACTIONS=true) — see
+   * action-gate.ts for why blind enforcement would silently reject
+   * everything today. The `actions` table's status column is constrained
+   * to pending/completed/failed (supabase/heidi-init.sql), so a
+   * reject/escalate verdict is recorded as 'failed' with the real
+   * ProtoForge decision in the payload, not as a new status value.
+   *
+   * When an action actually executes, its outcome is backfilled onto the
+   * same ProtoForge decision row via recordOutcome() — the self-evaluation
+   * feedback loop: did the thing ProtoForge approved actually succeed?
+   * Skipped when the action was blocked (there's no execution outcome to
+   * backfill; the decision itself is the terminal state) or when gating
+   * degraded to 'skipped' (no decisionId to backfill against).
+   *
+   * Approved actions execute through `agentRegistry` — the Phase 3
+   * specialist roster (lib/agents/) — which delegates to `actionExecutor`
+   * internally while tracking per-agent metrics. Falls back to calling
+   * `actionExecutor` directly for any action type without a registered
+   * agent, so adding a 6th action type doesn't require touching this
+   * method.
    */
-  private async executeActions(actions: any[], sessionId: string): Promise<void> {
-    for (const action of actions) {
-      try {
-        // Log action start
-        await this.supabase.from('actions').insert({
-          session_id: sessionId,
-          task_name: action.type,
-          status: 'pending',
-          payload: action.payload
-        });
+  private async executeActions(
+    actions: ParsedResponse['actions'],
+    sessionId: string,
+  ): Promise<Array<{ type: string; status: 'completed' | 'failed'; error?: string }>> {
+    const verdicts = await gateActions(actions, sessionId);
+    const enforcing = isEnforcing();
+    const results: Array<{ type: string; status: 'completed' | 'failed'; error?: string }> = [];
 
-        // Execute action (in production, implement actual action handlers)
-        console.log(`[Orchestrator] Executing action: ${action.type}`, action.payload);
-        
-        // Simulate action execution
-        setTimeout(async () => {
-          const success = Math.random() > 0.1; // 90% success rate for demo
-          
-          await this.supabase
-            .from('actions')
-            .update({ status: success ? 'completed' : 'failed' })
-            .eq('session_id', sessionId)
-            .eq('task_name', action.type)
-            .eq('status', 'pending');
-        }, 1000);
+    for (const { action, decision, confidence, hypotheses, reasoning, decisionId } of verdicts) {
+      const gateMeta = {
+        protoforge_decision: decision,
+        protoforge_confidence: confidence,
+        protoforge_hypotheses: hypotheses,
+        protoforge_reasoning: reasoning,
+        protoforge_enforced: enforcing,
+      };
 
-      } catch (error) {
-        console.error(`[Orchestrator] Action execution failed for ${action.type}:`, error);
-        
-        // Log failure
+      if (enforcing && (decision === 'reject' || decision === 'escalate')) {
+        console.log(`[Orchestrator] Action ${action.type} ${decision} by ProtoForge — not executed`);
         await this.supabase.from('actions').insert({
           session_id: sessionId,
           task_name: action.type,
           status: 'failed',
-          payload: { ...action.payload, error: error instanceof Error ? error.message : 'Unknown error' }
+          payload: { ...action.payload, ...gateMeta },
         });
+        results.push({ type: action.type, status: 'failed', error: `blocked by ProtoForge (${decision})` });
+        continue;
+      }
+
+      try {
+        const agent = this.agentRegistry.getAgentFor(action.type);
+        const outcome = agent
+          ? await agent.execute(action, sessionId)
+          : await this.actionExecutor.execute(action, sessionId);
+        console.log(`[Orchestrator] Executed action: ${action.type} -> ${outcome.status} (${agent ? agent.id : 'actionExecutor (no registered agent)'})`);
+
+        await this.supabase.from('actions').insert({
+          session_id: sessionId,
+          task_name: action.type,
+          status: outcome.status,
+          payload: { ...action.payload, result: outcome.result, error: outcome.error, ...gateMeta },
+        });
+        await this.recordActionOutcome(decisionId, outcome.status === 'completed' ? 'success' : 'failure', {
+          error: outcome.error,
+        });
+        results.push({ type: action.type, status: outcome.status, error: outcome.error });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        console.error(`[Orchestrator] Action execution failed for ${action.type}:`, error);
+        await this.supabase.from('actions').insert({
+          session_id: sessionId,
+          task_name: action.type,
+          status: 'failed',
+          payload: { ...action.payload, error: message, ...gateMeta },
+        });
+        await this.recordActionOutcome(decisionId, 'failure', { error: message });
+        results.push({ type: action.type, status: 'failed', error: message });
       }
     }
+
+    return results;
+  }
+
+  /**
+   * Backfill a ProtoForge decision's outcome after execution — the
+   * self-evaluation feedback loop. Never throws: a failure here shouldn't
+   * fail chat processing, it's an audit-trail nicety, not load-bearing.
+   */
+  private async recordActionOutcome(
+    decisionId: string | undefined,
+    outcome: 'success' | 'failure',
+    detail: Record<string, unknown>,
+  ): Promise<void> {
+    if (!decisionId) return;
+    try {
+      const { recordOutcome } = (await import('./protoforge/policy-engine.js')) as unknown as {
+        recordOutcome: (id: string, outcome: string, detail?: Record<string, unknown>) => Promise<void>;
+      };
+      await recordOutcome(decisionId, outcome, detail);
+    } catch (error) {
+      console.error('[Orchestrator] Failed to record ProtoForge outcome:', error instanceof Error ? error.message : 'Unknown error');
+    }
+  }
+
+  /**
+   * Records whether the self-correction retry loop (ActionParser's chat
+   * JSON contract, PlanParser's plan JSON contract) succeeded after a
+   * malformed first attempt — Phase 5's "retry counts" metric. Reuses the
+   * `actions` table (task_name = 'llm_retry') rather than a new table;
+   * `task_name` has no CHECK constraint restricting it to real action
+   * types. Never throws.
+   */
+  private async recordRetry(
+    sessionId: string,
+    stage: 'chat_response' | 'work_session_plan',
+    succeeded: boolean,
+    originalError?: string,
+  ): Promise<void> {
+    try {
+      await this.supabase.from('actions').insert({
+        session_id: sessionId,
+        task_name: 'llm_retry',
+        status: succeeded ? 'completed' : 'failed',
+        payload: { stage, original_error: originalError },
+      });
+    } catch (error) {
+      console.error('[Orchestrator] Failed to record retry:', error instanceof Error ? error.message : 'Unknown error');
+    }
+  }
+
+  /**
+   * Records whether semantic memory retrieval found relevant context for
+   * this turn — retrieval *coverage*, not *quality* (there's no feedback
+   * signal for whether retrieved context was actually useful, only
+   * whether anything was found; see lib/metrics.ts's header comment).
+   * Reuses the `actions` table (task_name = 'memory_retrieval'). Never
+   * throws.
+   */
+  private async recordMemoryRetrieval(sessionId: string, hadContext: boolean): Promise<void> {
+    try {
+      await this.supabase.from('actions').insert({
+        session_id: sessionId,
+        task_name: 'memory_retrieval',
+        status: 'completed',
+        payload: { had_context: hadContext },
+      });
+    } catch (error) {
+      console.error('[Orchestrator] Failed to record memory retrieval:', error instanceof Error ? error.message : 'Unknown error');
+    }
+  }
+
+  /**
+   * Start a Phase 4 work session (see HYDI_KERNEL_ARCHITECTURE_ROADMAP.md):
+   * decompose `goal` into an ordered plan using only the existing action
+   * vocabulary (this.allowedActionTypes — no new code-editing/test-running/
+   * git capability), persist it, then run steps until the plan completes,
+   * a step fails or is ProtoForge-blocked, or `maxSteps` is reached.
+   */
+  async startWorkSession(goal: string, sessionId: string, userId: string, maxSteps = 5): Promise<WorkSession | null> {
+    const prompt = buildPlanPrompt(goal, this.allowedActionTypes);
+    const modelResponse = await this.modelManager.generateResponse(prompt, sessionId);
+
+    let parseResult = PlanParser.parsePlan(modelResponse.content);
+    if (!parseResult.success || !parseResult.plan) {
+      console.log('[Orchestrator] Invalid plan, retrying with corrected prompt');
+      const originalError = parseResult.error;
+      const correctedPrompt = PlanParser.generateCorrectedPrompt(prompt, parseResult.error || 'Unknown error');
+      const retryResponse = await this.modelManager.generateResponse(correctedPrompt, sessionId);
+      parseResult = PlanParser.parsePlan(retryResponse.content);
+      await this.recordRetry(sessionId, 'work_session_plan', parseResult.success, originalError);
+    }
+
+    const rawSteps = parseResult.success && parseResult.plan ? parseResult.plan.steps : [];
+    const steps = PlanParser.filterAllowedSteps(rawSteps, this.allowedActionTypes);
+
+    const session = await createWorkSession(this.supabase, { session_id: sessionId, user_id: userId, goal, steps });
+    if (!session) return null;
+
+    return this.runWorkSession(session.id, sessionId, maxSteps);
+  }
+
+  /**
+   * Run pending steps of an existing work session, one at a time, through
+   * the same gating pipeline as ordinary chat actions (executeActions —
+   * KILO -> ProtoForge -> agent registry). Stops on the first
+   * failed/blocked step, when the plan completes, or after `maxSteps` —
+   * bounded per call, not an unbounded loop, per "reliability before
+   * autonomy."
+   */
+  async runWorkSession(workSessionId: string, sessionId: string, maxSteps = 5): Promise<WorkSession | null> {
+    let session = await getWorkSession(this.supabase, workSessionId);
+    if (!session) return null;
+
+    let stepsRun = 0;
+    while (stepsRun < maxSteps) {
+      const step = nextPendingStep(session);
+      if (!step) {
+        session =
+          (await updateWorkSession(this.supabase, workSessionId, {
+            status: 'completed',
+            completed_at: new Date().toISOString(),
+          })) ?? session;
+        break;
+      }
+
+      const [result] = await this.executeActions([{ type: step.type, payload: step.payload }], sessionId);
+      step.status = result.status;
+      step.error = result.error;
+      stepsRun++;
+
+      if (step.status === 'failed') {
+        console.log(`[Orchestrator] Work session ${workSessionId} paused — step ${step.type} failed: ${step.error}`);
+        session =
+          (await updateWorkSession(this.supabase, workSessionId, { status: 'failed', steps: session.steps })) ?? session;
+        break;
+      }
+
+      session =
+        (await updateWorkSession(this.supabase, workSessionId, { status: 'in_progress', steps: session.steps })) ?? session;
+    }
+
+    return session;
   }
 
   /**
@@ -269,12 +441,33 @@ Respond with JSON:`;
 
   /**
    * Get system status
+   *
+   * agent_metrics is per-process (resets every request — see
+   * lib/metrics.ts's module comment for why); everything else is the
+   * durable, Phase 5 cross-request signal, read from the
+   * actions/decisions/work_sessions tables. Best-effort: a metrics query
+   * failing degrades to an empty result via lib/metrics.ts's own error
+   * handling, never throws here.
    */
   async getSystemStatus() {
+    const [taskSuccessRates, decisionStats, workSessionStats, retryStats, memoryRetrievalStats] = await Promise.all([
+      getTaskSuccessRates(this.supabase),
+      getDecisionStats(this.supabase),
+      getWorkSessionStats(this.supabase),
+      getRetryStats(this.supabase),
+      getMemoryRetrievalStats(this.supabase),
+    ]);
+
     return {
       model_status: this.modelManager.getModelStatus(),
       memory_connected: !!this.supabase,
-      allowed_actions: this.allowedActionTypes
+      allowed_actions: this.allowedActionTypes,
+      agent_metrics: this.agentRegistry.getMetricsSnapshot(),
+      task_success_rates: taskSuccessRates,
+      decision_stats: decisionStats,
+      work_session_stats: workSessionStats,
+      retry_stats: retryStats,
+      memory_retrieval_stats: memoryRetrievalStats,
     };
   }
 }

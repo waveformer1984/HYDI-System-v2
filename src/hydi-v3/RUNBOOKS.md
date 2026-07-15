@@ -117,7 +117,7 @@ and task dispatch.
 ## 10. Long-Running Stability Simulation
 
 ```bash
-npm run test:soak
+npm run test:soak:hydi-v3
 ```
 
 Runs the `TestingFramework` scenarios: 60 simulated iterations, crash recovery,
@@ -127,13 +127,13 @@ non-zero if any scenario fails.
 
 ## 11. Production Readiness Checklist
 
-1. `npm run lint` passes
-2. `npm run typecheck` passes
+1. `npm run lint:hydi-v3` passes
+2. `npm run typecheck:hydi-v3` passes
 3. `npm test` passes
-4. `npm run test:integration` passes
+4. `npm run test:integration:hydi-v3` passes
 5. `npm run benchmark:performance` passes
 6. `npm run security-audit` passes
-7. `npm run test:soak` passes
+7. `npm run test:soak:hydi-v3` passes
 8. All required environment variables are set
 9. Supabase `system_dashboard` view is healthy
 10. `boot-agent.js` preflight passes

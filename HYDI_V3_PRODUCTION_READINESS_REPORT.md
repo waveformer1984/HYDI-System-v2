@@ -30,18 +30,18 @@ The HYDI V3 Reliability & Autonomy upgrade is complete. All 14 phases have been 
 - `src/HYDISystem.js` now imports `HYDIAutonomyManager` and wires it during `start()`/`initializeLayers()`.
 - `HYDISystem.start()` begins the V3 autonomy layer.
 - `HYDISystem.shutdown()` stops the V3 layer and persists a checkpoint.
-- `package.json` exposes `test:unit`, `test:integration`, `test:lint`, `test:typecheck`, `test:soak`, `benchmark:performance`, `security-audit`.
-- `scripts/performance-benchmark.js`, `scripts/security-audit.js`, `scripts/soak-test.js` are executable operational scripts.
+- `package.json` exposes `lint:hydi-v3`, `typecheck:hydi-v3`, `test:integration:hydi-v3`, `test:soak:hydi-v3`, `benchmark:performance`, `security-audit` — scoped separately from the repo-wide `lint`/`typecheck`/`test:integration` targets to avoid shadowing them.
+- `scripts/performance-benchmark.js`, `scripts/security-audit.js`, `scripts/soak-test-v3.js` are executable operational scripts (`soak-test-v3.js` to avoid colliding with the pre-existing `scripts/soak-test.js` 24-hour production soak test).
 
 ## Validation Results
 
 ```bash
-npm run lint        # pass
-npm run typecheck   # pass
+npm run lint:hydi-v3        # pass
+npm run typecheck:hydi-v3   # pass
 npm test            # 73 suites, 760 tests pass
-npm run test:integration   # 1 suite, 8 tests pass
+npm run test:integration:hydi-v3   # 1 suite, 8 tests pass
 npm run benchmark:performance   # all targets met
-npm run test:soak   # 10/10 scenarios pass
+npm run test:soak:hydi-v3   # 10/10 scenarios pass
 npm run security-audit   # 0 findings, passed
 ```
 

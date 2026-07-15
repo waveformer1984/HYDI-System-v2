@@ -32,3 +32,12 @@ workers/
 *.sql
 *.md
 !.md
+# Un-ignores required for the build/runtime (2026-07-07):
+# - types/ holds the shared TS types imported by components (build broke without it)
+# - api/**/*.js are the Vercel serverless functions (the blanket *.js was
+#   silently excluding every root API route from deployments)
+# - lib/**/*.js are imported by those routes (vercelAdmin.js etc.)
+!types/**/*.ts
+!api/**/*.js
+!lib/**/*.js
+!next.config.js

@@ -17,6 +17,8 @@ const ProtoForgeEventSystem = require('./protoforge-event-system');
 const { AgentFactory } = require('../agents/specialized/agent-factory');
 const { ProcurementAgent, ConstructionAgent, FabricationAgent } = require('../agents/specialized/execution-agents');
 const { FinanceAgent, FundingAgent, RevenueAgent } = require('../agents/specialized/business-agents');
+const WorkflowAgent = require('../agents/specialized/workflow-agent');
+const SecurityAgent = require('../agents/specialized/security-agent');
 
 class ProtoForgeIntegration {
   constructor(config = {}) {
@@ -184,10 +186,10 @@ class ProtoForgeIntegration {
     const marketingAgent = this.createMarketingAgent();
     const communityAgent = this.createCommunityAgent();
     
-    // Layer E: Operations Agents (simplified for now)
+    // Layer E: Operations Agents
     const facilityAgent = this.createFacilityAgent();
-    const securityAgent = this.createSecurityAgent();
-    const workflowAgent = this.createWorkflowAgent();
+    const securityAgent = new SecurityAgent();
+    const workflowAgent = new WorkflowAgent();
     
     // Register all agents
     const allAgents = [
@@ -243,52 +245,7 @@ class ProtoForgeIntegration {
   }
   
   /**
-   * Create simplified outreach agent
-   */
-  createOutreachAgent() {
-    return {
-      name: 'Outreach Agent',
-      type: 'OUTREACH',
-      layer: 'D',
-      capabilities: ['partnership_development', 'email_campaigns', 'proposal_generation'],
-      executeTask: async (task) => {
-        return { success: true, result: `Outreach task ${task.type} completed` };
-      }
-    };
-  }
-  
-  /**
-   * Create simplified marketing agent
-   */
-  createMarketingAgent() {
-    return {
-      name: 'Marketing Agent',
-      type: 'OUTREACH',
-      layer: 'D',
-      capabilities: ['brand_development', 'content_creation', 'campaign_management'],
-      executeTask: async (task) => {
-        return { success: true, result: `Marketing task ${task.type} completed` };
-      }
-    };
-  }
-  
-  /**
-   * Create simplified community agent
-   */
-  createCommunityAgent() {
-    return {
-      name: 'Community Agent',
-      type: 'OUTREACH',
-      layer: 'D',
-      capabilities: ['community_management', 'user_onboarding', 'support'],
-      executeTask: async (task) => {
-        return { success: true, result: `Community task ${task.type} completed` };
-      }
-    };
-  }
-  
-  /**
-   * Create simplified facility agent
+   * Create simplified facility agent (still stub; can be promoted later)
    */
   createFacilityAgent() {
     return {
@@ -301,37 +258,7 @@ class ProtoForgeIntegration {
       }
     };
   }
-  
-  /**
-   * Create simplified security agent
-   */
-  createSecurityAgent() {
-    return {
-      name: 'Security Agent',
-      type: 'OPERATIONS',
-      layer: 'E',
-      capabilities: ['access_control', 'surveillance', 'incident_response'],
-      executeTask: async (task) => {
-        return { success: true, result: `Security task ${task.type} completed` };
-      }
-    };
-  }
-  
-  /**
-   * Create simplified workflow agent
-   */
-  createWorkflowAgent() {
-    return {
-      name: 'Workflow Agent',
-      type: 'OPERATIONS',
-      layer: 'E',
-      capabilities: ['workflow_optimization', 'resource_allocation', 'productivity_monitoring'],
-      executeTask: async (task) => {
-        return { success: true, result: `Workflow task ${task.type} completed` };
-      }
-    };
-  }
-  
+
   /**
    * Set up communication channels between components
    */

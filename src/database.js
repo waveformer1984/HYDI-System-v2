@@ -2,7 +2,13 @@
 // No duplicates, no ambiguity, no emotional labor for broken imports
 
 const { createClient } = require('@supabase/supabase-js');
+const WebSocket = require('ws');
 const path = require('path');
+
+// Node < 22 has no global WebSocket; supabase-js realtime requires one.
+if (!globalThis.WebSocket) {
+  globalThis.WebSocket = WebSocket;
+}
 require('dotenv').config({ path: path.join(__dirname, '../.env') });
 
 // Validate environment at startup
@@ -31,8 +37,8 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 async function testConnection() {
   try {
     const { data, error } = await supabase
-      .from('hydi_events')
-      .select('event_id')
+      .from('heidi_events')
+      .select('id')
       .limit(1);
     
     if (error) {
@@ -51,22 +57,21 @@ async function testConnection() {
 // Simple persistence contract - no retry, no quarantine, no abstraction
 async function persistEvent(event, classification, opportunity) {
   try {
-    // Store original event - simple v2 upsert
+    // heidi_events has no external-id column to upsert against (its PK is an
+    // auto-generated uuid), so this is a plain insert. Fields with no real
+    // column (event_id, source, timestamp) are folded into payload so
+    // nothing is silently dropped.
     const { data, error } = await supabase
-      .from('hydi_events')
-      .upsert({
-        event_id: event.event_id,
-        type: event.type,
-        source: event.source,
-        timestamp: event.timestamp,
-        payload: event.payload,
-        processed: true,
-        stored_at: new Date().toISOString()
-      }, {
-        onConflict: 'event_id'
+      .from('heidi_events')
+      .insert({
+        event_type: event.type,
+        division: event.division,
+        payload: { ...event.payload, event_id: event.event_id, source: event.source, timestamp: event.timestamp },
+        verdict: classification && (classification.verdict || classification.decision) || null,
+        context_snapshot: classification || null
       })
       .select();
-    
+
     if (error) {
       // Return explicit single error reason - no abstraction
       return {
@@ -75,24 +80,24 @@ async function persistEvent(event, classification, opportunity) {
         code: error.code
       };
     }
-    
-    // Store opportunity if exists - simple v2 upsert
+
+    // Store opportunity if exists
     if (opportunity) {
       const { error: oppError } = await supabase
-        .from('hydi_events')
-        .upsert({
-          event_id: opportunity.event_id,
-          type: opportunity.type,
-          source: 'cascade_opportunity',
-          timestamp: opportunity.timestamp,
-          payload: opportunity.payload,
-          processed: false,
-          parent_event_id: event.event_id,
-          stored_at: new Date().toISOString()
-        }, {
-          onConflict: 'event_id'
+        .from('heidi_events')
+        .insert({
+          event_type: opportunity.type,
+          division: opportunity.division,
+          payload: {
+            ...opportunity.payload,
+            event_id: opportunity.event_id,
+            source: 'cascade_opportunity',
+            timestamp: opportunity.timestamp,
+            parent_event_id: event.event_id
+          },
+          context_snapshot: classification || null
         });
-      
+
       if (oppError) {
         return {
           success: false,

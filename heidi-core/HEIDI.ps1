@@ -1,9 +1,19 @@
+# ============================================================================
+# DEPRECATED / NOT USED BY INSTALLER.
+# The canonical HEIDI launcher lives at:
+#   C:\Users\Owner\HYDI-System-v2\heidi-core\HEIDI.ps1
+# install-heidi-autostart.ps1 registers and runs THAT copy, not this one.
+# This file is kept only for reference. Its all-node kill has been removed so it
+# is no longer a footgun, but prefer the v2 copy for any real startup.
+# ============================================================================
+
 # HEIDI - Single Entry Point
 # The ONLY way to start HEIDI. No variants, no mazes.
 
 param(
     [switch]$SkipOllama,
-    [switch]$KillFirst
+    [switch]$KillFirst,
+    [switch]$Server
 )
 
 Set-Location $PSScriptRoot
@@ -31,22 +41,10 @@ $OLLAMA_URL = "http://127.0.0.1:11434"
     } catch {
         Write-Host "  No processes on port $PORT" -ForegroundColor Gray
     }
-    
-    # Kill orphaned node processes
-    try {
-        $nodeProcesses = Get-Process node -ErrorAction SilentlyContinue
-        if ($nodeProcesses) {
-            $nodeProcesses | ForEach-Object {
-                Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue
-                Write-Host "  Killed node process $($_.Id)" -ForegroundColor Green
-            }
-        } else {
-            Write-Host "  No node processes to kill" -ForegroundColor Gray
-        }
-    } catch {
-        Write-Host "  No node processes to kill" -ForegroundColor Gray
-    }
-    
+
+    # (Removed) machine-wide node kill -- see canonical v2 copy. Only port 3458
+    # is ever touched here.
+
     Start-Sleep -Seconds 2
 
 # 2. Ensure Ollama is running (unless skipped)
@@ -111,20 +109,56 @@ if (-not (Test-Path ".\node_modules")) {
 }
 
 # 4. Check for index file
+$agentFile = ".\heidi-agent.js"
 $indexFile = ".\index-clean-3458.js"
-if (-not (Test-Path $indexFile)) {
-    Write-Host "  ERROR: $indexFile not found" -ForegroundColor Red
+
+if ($Server) {
+    $toRun = $indexFile
+} else {
+    $toRun = if (Test-Path $agentFile) { $agentFile } else { $indexFile }
+}
+
+if (-not (Test-Path $toRun)) {
+    Write-Host "  ERROR: Neither $agentFile nor $indexFile found" -ForegroundColor Red
     exit 1
 }
 
-# 5. Start HEIDI
+# 5. Set environment variables for Supabase (load from .env.local or use defaults)
+Write-Host "`nConfiguring environment..." -ForegroundColor Yellow
+
+# Load from .env.local if it exists
+$envLocalPath = Join-Path $PSScriptRoot "..\.env.local"
+if (Test-Path $envLocalPath) {
+    Write-Host "  Loading from .env.local..." -ForegroundColor Gray
+    Get-Content $envLocalPath | ForEach-Object {
+        if ($_ -match '^([^=]+)=(.*)$') {
+            $name = $matches[1].Trim()
+            $value = $matches[2].Trim()
+            # Remove quotes if present
+            if ($value -match '^"(.*)"$') { $value = $matches[1] }
+            Set-Item -Path "env:$name" -Value $value
+        }
+    }
+}
+
+if ([string]::IsNullOrEmpty($env:SUPABASE_URL) -or $env:SUPABASE_URL -eq "True") {
+    $env:SUPABASE_URL = "http://127.0.0.1:54321"
+}
+# NOTE: Load SUPABASE_SERVICE_ROLE_KEY from .env.local or environment
+if ([string]::IsNullOrEmpty($env:SUPABASE_SERVICE_ROLE_KEY) -or $env:SUPABASE_SERVICE_ROLE_KEY -eq "True") {
+    Write-Host "  ⚠️  SUPABASE_SERVICE_ROLE_KEY not set. Add it to ..\.env.local or the environment." -ForegroundColor Yellow
+}
+Write-Host "  Supabase: $($env:SUPABASE_URL)" -ForegroundColor Green
+
+# 6. Start HEIDI
 Write-Host "`nStarting HEIDI..." -ForegroundColor Cyan
 Write-Host "  Port: $PORT" -ForegroundColor Gray
 Write-Host "  Ollama: $(if ($ollamaRunning) { 'Connected' } else { 'Offline' })" -ForegroundColor Gray
-Write-Host "  UI: Open mobile-ui.html in browser" -ForegroundColor Gray
+Write-Host "  Advisory Mode: $($env:HEIDI_ADVISORY_MODE -eq 'true')" -ForegroundColor Gray
+Write-Host "  Agent: $(Split-Path $toRun -Leaf)" -ForegroundColor Gray
 
 try {
-    node $indexFile
+    node $toRun
 } catch {
     Write-Host "  Failed to start HEIDI: $($_.Exception.Message)" -ForegroundColor Red
     exit 1

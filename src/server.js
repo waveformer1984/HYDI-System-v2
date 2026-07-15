@@ -54,12 +54,12 @@ console.log('[CASCADE V2] Features: Schema Lock | Fingerprinting | Confidence Sc
 
 // Initialize system enforcement modules
 const { readinessGate } = require('../modules/readiness-gate');
-// const noSilentSuccessEnforcer = require('../modules/no-silent-success-enforcer'); // Temporarily disabled (iconv-lite error)
-// const { systemContractGuard } = require('../modules/system-contract-guard'); // Temporarily disabled
+const noSilentSuccessEnforcer = require('../modules/no-silent-success-enforcer');
+const { systemContractGuard } = require('../modules/system-contract-guard');
 
 // Start enforcement systems
 readinessGate.start();
-// noSilentSuccessEnforcer.initialize(); // Temporarily disabled
+noSilentSuccessEnforcer.initialize();
 
 console.log('[SYSTEM] Enforcement modules initialized');
 
@@ -271,7 +271,7 @@ app.get('/health', async (req, res) => {
     
     // Get events count
     const { count } = await supabase
-      .from('hydi_events')
+      .from('heidi_events')
       .select('*', { count: 'exact', head: true });
     
     res.json({
@@ -408,42 +408,41 @@ app.post('/process', async (req, res) => {
     // Simple persistence - no retries, no abstraction
     if (result.status === 'processed') {
       try {
-        // Store original event - simple v2 upsert
+        // heidi_events has no external-id column to upsert against (its PK
+        // is an auto-generated uuid), so this is a plain insert. Fields with
+        // no real column (event_id, source, timestamp) are folded into
+        // payload so nothing is silently dropped.
         const { data, error } = await supabase
-          .from('hydi_events')
-          .upsert({
-            event_id: payload.event_id,
-            type: payload.type,
-            source: payload.source,
-            timestamp: payload.timestamp,
-            payload: payload.payload,
-            processed: true,
-            stored_at: new Date().toISOString()
-          }, {
-            onConflict: 'event_id'
+          .from('heidi_events')
+          .insert({
+            event_type: payload.type,
+            division: payload.division,
+            payload: { ...payload.payload, event_id: payload.event_id, source: payload.source, timestamp: payload.timestamp },
+            verdict: result.status === 'processed' ? 'AUTO-APPROVE' : result.status === 'rejected' ? 'BLOCK' : null,
+            context_snapshot: result.validation || null
           });
-        
+
         if (error) {
           throw error;
         }
-        
+
         // Store opportunity if exists
         if (result.opportunity) {
           const { error: oppError } = await supabase
-            .from('hydi_events')
-            .upsert({
-              event_id: result.opportunity.event_id,
-              type: result.opportunity.type,
-              source: 'cascade_opportunity',
-              timestamp: result.opportunity.timestamp,
-              payload: result.opportunity.payload,
-              processed: false,
-              parent_event_id: payload.event_id,
-              stored_at: new Date().toISOString()
-            }, {
-              onConflict: 'event_id'
+            .from('heidi_events')
+            .insert({
+              event_type: result.opportunity.type,
+              division: result.opportunity.division,
+              payload: {
+                ...result.opportunity.payload,
+                event_id: result.opportunity.event_id,
+                source: 'cascade_opportunity',
+                timestamp: result.opportunity.timestamp,
+                parent_event_id: payload.event_id
+              },
+              context_snapshot: result.validation || null
             });
-          
+
           if (oppError) {
             console.error('Opportunity storage failed:', oppError.message);
           }
@@ -536,34 +535,29 @@ app.post('/process', async (req, res) => {
 // Helper function for database persistence
 async function persistEventToDatabase(event, result) {
   try {
-    // Store original event using Supabase v2 upsert pattern
+    // heidi_events has no external-id column to upsert against (its PK is
+    // an auto-generated uuid), so this is a plain insert.
     const { data, error } = await supabase
-      .from('hydi_events')
-      .upsert({
-        event_id: event.event_id,
-        type: event.type,
-        payload: event.payload,
-        processed: true
-      }, {
-        onConflict: 'event_id'
+      .from('heidi_events')
+      .insert({
+        event_type: event.type,
+        division: event.division,
+        payload: { ...event.payload, event_id: event.event_id }
       })
       .select();
-    
+
     if (error) throw error;
-    
+
     // Store opportunity event if exists
     if (result.opportunity) {
       const { error: oppError } = await supabase
-        .from('hydi_events')
-        .upsert({
-          event_id: result.opportunity.event_id,
-          type: result.opportunity.type,
-          payload: result.opportunity.payload,
-          processed: false
-        }, {
-          onConflict: 'event_id'
+        .from('heidi_events')
+        .insert({
+          event_type: result.opportunity.type,
+          division: result.opportunity.division,
+          payload: { ...result.opportunity.payload, event_id: result.opportunity.event_id, parent_event_id: event.event_id }
         });
-      
+
       if (oppError) throw oppError;
     }
     
@@ -579,19 +573,19 @@ app.get('/insight', async (req, res) => {
   try {
     // Get recent events
     const { data, error } = await supabase
-      .from('hydi_events')
+      .from('heidi_events')
       .select('*')
       .order('created_at', { ascending: false })
       .limit(10);
-    
+
     if (error) throw error;
-    
+
     res.json({
       insights: data.map(event => ({
         id: event.id,
-        type: event.type,
+        type: event.event_type,
         timestamp: event.created_at,
-        summary: `Processed ${event.type} event`
+        summary: `Processed ${event.event_type} event`
       })),
       count: data.length
     });
@@ -611,20 +605,19 @@ app.post('/event', async (req, res) => {
     
     // Log system event
     const { data, error } = await supabase
-      .from('hydi_events')
+      .from('heidi_events')
       .insert({
-        event_id: eventData.event_id || `sys-${Date.now()}`,
-        type: eventData.type || 'system_event',
-        payload: eventData.payload || {},
-        processed: true // System events are pre-processed
+        event_type: eventData.type || 'system_event',
+        division: eventData.division,
+        payload: { ...(eventData.payload || {}), event_id: eventData.event_id || `sys-${Date.now()}` }
       })
       .select();
-    
+
     if (error) throw error;
-    
+
     res.json({
       status: 'logged',
-      eventId: data[0]?.event_id
+      eventId: data[0]?.id
     });
   } catch (error) {
     console.error('Event endpoint failed:', error);
@@ -641,9 +634,9 @@ app.get('/opportunities', async (req, res) => {
     const { type, limit = 20 } = req.query;
     
     let query = supabase
-      .from('hydi_events')
+      .from('heidi_events')
       .select('*')
-      .eq('type', 'hyve_opportunity_detected')
+      .eq('event_type', 'hyve_opportunity_detected')
       .order('created_at', { ascending: false });
     
     if (type) {
@@ -722,7 +715,7 @@ infrastructure.on('infrastructure_alert', (alert) => {
 
 infrastructure.on('revenue_tracked', (revenue) => {
   console.log(`[INFRA] Revenue Event: $${revenue.amount} from ${revenue.source} (${revenue.layer})`);
-  
+
   // Broadcast revenue events
   if (ursulaSSE && ursulaSSE.getSubscriberCount() > 0) {
     ursulaSSE.broadcast({
@@ -730,6 +723,41 @@ infrastructure.on('revenue_tracked', (revenue) => {
       message: `Revenue: $${revenue.amount} from ${revenue.source}`,
       data: revenue
     });
+  }
+});
+
+// Bridge infrastructure health snapshot → Supabase every 30 s
+// so Ursula's dashboard reflects Digital Twin + 48V microgrid state
+let _infraSyncErrorLogged = false;
+infrastructure.on('health_update', async (health) => {
+  try {
+    const { error } = await supabase
+      .from('infrastructure_health')
+      .upsert({
+        id: 'singleton',
+        overall:    health.overall,
+        power:      health.power,
+        thermal:    health.thermal,
+        scaffold:   health.scaffold,
+        revenue:    health.revenue,
+        efficiency: health.efficiency,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'id' });
+
+    if (error) {
+      if (!_infraSyncErrorLogged) {
+        console.error('[INFRA] Failed to sync health to Supabase:', error.message);
+        console.error('[INFRA] Run: npx supabase db push  to create the infrastructure_health table');
+        _infraSyncErrorLogged = true;
+      }
+    } else {
+      _infraSyncErrorLogged = false; // reset if it recovers
+    }
+  } catch (err) {
+    if (!_infraSyncErrorLogged) {
+      console.error('[INFRA] health_update bridge error:', err.message);
+      _infraSyncErrorLogged = true;
+    }
   }
 });
 
@@ -1552,26 +1580,29 @@ server.listen(PORT, async () => {
   
   await initializeIntegrations();
   
-  // Service Bundle event listeners
-  subscriptionManager.serviceBundle.on('service_used', (data) => {
-    console.log(`[SERVICE BUNDLE] Service used: ${data.serviceId} by ${data.subscriptionId} - Revenue: $${data.revenue}`);
-  });
-  
-  subscriptionManager.serviceBundle.on('subscription_created', (data) => {
-    console.log(`[SERVICE BUNDLE] New subscription: ${data.tier} for ${data.customerId}`);
-  });
-  
-  subscriptionManager.serviceBundle.on('upsell_trigger', (data) => {
-    console.log(`[SERVICE BUNDLE] Upsell trigger: ${data.customerId} at ${data.usagePercentage.toFixed(1)}% usage`);
-    // Trigger Heidi's usage-to-upsell workflow
-    heidiAutomator.triggerWorkflow('usage_to_upsell', {
-      customerId: data.customerId,
-      subscriptionId: data.subscriptionId,
-      tier: data.tier,
-      usagePercentage: data.usagePercentage,
-      triggerService: data.serviceId
+  // Service Bundle event listeners — serviceBundle is temporarily disabled in
+  // SubscriptionManager's constructor, so guard rather than assume it exists.
+  if (subscriptionManager.serviceBundle) {
+    subscriptionManager.serviceBundle.on('service_used', (data) => {
+      console.log(`[SERVICE BUNDLE] Service used: ${data.serviceId} by ${data.subscriptionId} - Revenue: $${data.revenue}`);
     });
-  });
+
+    subscriptionManager.serviceBundle.on('subscription_created', (data) => {
+      console.log(`[SERVICE BUNDLE] New subscription: ${data.tier} for ${data.customerId}`);
+    });
+
+    subscriptionManager.serviceBundle.on('upsell_trigger', (data) => {
+      console.log(`[SERVICE BUNDLE] Upsell trigger: ${data.customerId} at ${data.usagePercentage.toFixed(1)}% usage`);
+      // Trigger Heidi's usage-to-upsell workflow
+      heidiAutomator.triggerWorkflow('usage_to_upsell', {
+        customerId: data.customerId,
+        subscriptionId: data.subscriptionId,
+        tier: data.tier,
+        usagePercentage: data.usagePercentage,
+        triggerService: data.serviceId
+      });
+    });
+  }
   
   // Setup CASCADE V2 event listeners
   cascade.on('heartbeat', (heartbeat) => {
@@ -1603,24 +1634,27 @@ server.listen(PORT, async () => {
   
   // ── Universal Agent Bus Event Bridges ──
   // Bridge Service Bundle events onto the Agent Bus for unified telemetry
-  subscriptionManager.serviceBundle.on('service_used', (data) => {
-    agentBus.publish('Ursula', 'Heidi', 'service_usage_logged', {
-      customerId: data.subscriptionId,
-      serviceId: data.serviceId,
-      revenue: data.revenue,
-      tier: data.tier
-    }, { priority: agentBus.priorities[data.tier?.toUpperCase()] || 1 });
-  });
-  
-  subscriptionManager.serviceBundle.on('upsell_trigger', (data) => {
-    agentBus.publish('Ursula', 'Heidi', 'upsell_needed', {
-      customerId: data.customerId,
-      subscriptionId: data.subscriptionId,
-      usagePercentage: data.usagePercentage,
-      triggerService: data.serviceId,
-      tier: data.tier
-    }, { priority: agentBus.priorities.PRO });
-  });
+  // (guarded — serviceBundle is temporarily disabled, see block above)
+  if (subscriptionManager.serviceBundle) {
+    subscriptionManager.serviceBundle.on('service_used', (data) => {
+      agentBus.publish('Ursula', 'Heidi', 'service_usage_logged', {
+        customerId: data.subscriptionId,
+        serviceId: data.serviceId,
+        revenue: data.revenue,
+        tier: data.tier
+      }, { priority: agentBus.priorities[data.tier?.toUpperCase()] || 1 });
+    });
+
+    subscriptionManager.serviceBundle.on('upsell_trigger', (data) => {
+      agentBus.publish('Ursula', 'Heidi', 'upsell_needed', {
+        customerId: data.customerId,
+        subscriptionId: data.subscriptionId,
+        usagePercentage: data.usagePercentage,
+        triggerService: data.serviceId,
+        tier: data.tier
+      }, { priority: agentBus.priorities.PRO });
+    });
+  }
   
   // Bridge local model health events to dashboard
   agentBus.on('model_flatlined', (event) => {
@@ -1641,6 +1675,9 @@ server.listen(PORT, async () => {
     console.log('[AGENT BUS] Ursula heartbeat monitor bridged to bus telemetry');
   }
   
+  // cascadeStatus (from cascade.start(), above) is just { status, start_time,
+  // version } — the summary below needs the live stats/system_health shape.
+  const cascadeStats = cascade.getStatus();
   console.log('CASCADE V2:');
   console.log('  - Processed:', cascadeStats.stats.events_processed);
   console.log('  - Rejected:', cascadeStats.stats.events_rejected, '(Schema:', cascadeStats.stats.schema_violations, '| Duplicates:', cascadeStats.stats.duplicate_blocks, '| Low Conf:', cascadeStats.stats.low_confidence_blocks, ')');
@@ -1650,10 +1687,10 @@ server.listen(PORT, async () => {
   console.log('System Health:', cascadeStats.system_health.toUpperCase());
   console.log('Pipeline V2: Schema Lock -> Fingerprint -> Confidence Check -> Hard Classification -> Decision -> Emit (w/ Ack) -> Dead Letter');
   console.log('SERVICE BUNDLE:');
-  console.log('  - Active services:', subscriptionManager.serviceBundle.services.size);
-  console.log('  - Active subscriptions:', subscriptionManager.subscriptions.size);
+  console.log('  - Active services:', subscriptionManager.serviceBundle ? subscriptionManager.serviceBundle.services.size : 'disabled');
+  console.log('  - Active subscriptions:', subscriptionManager.subscriptions ? subscriptionManager.subscriptions.size : 'n/a (DB-backed)');
   console.log('==================\n');
-}, 5000);
+});
 
 // Graceful shutdown
 process.on('SIGTERM', async () => {
@@ -1682,12 +1719,9 @@ process.on('SIGTERM', async () => {
   process.exit(0);
 });
 
-// Start the server
-app.listen(PORT, () => {
-  console.log(`[SERVER] HYDI Server listening on port ${PORT}`);
-  console.log(`[SERVER] Health check: http://localhost:${PORT}/health`);
-  console.log(`[SERVER] Heidi insights: http://localhost:${PORT}/heidi/insights`);
-});
+// server.listen(PORT) above (line ~1542) is the authoritative listener — it wraps app
+// with an http.Server so WebSocket support works. Do not add a second app.listen here.
 
 // Export app for testing
 module.exports = app;
+

@@ -1,0 +1,893 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HYDI Dev Optimizer - Autonomous Code Analysis & Patching</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.6;
+            color: #1a1a1a;
+            background: #ffffff;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+
+        header {
+            padding: 20px 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .header-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            font-size: 24px;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+        }
+
+        nav a {
+            color: rgba(255,255,255,0.9);
+            text-decoration: none;
+            margin-left: 30px;
+            font-size: 14px;
+            transition: opacity 0.3s;
+        }
+
+        nav a:hover {
+            opacity: 0.7;
+        }
+
+        .cta-button {
+            background: white;
+            color: #667eea;
+            padding: 10px 20px;
+            border-radius: 6px;
+            font-weight: 600;
+            text-decoration: none;
+            margin-left: 20px;
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+
+        .cta-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+
+        .hero {
+            padding: 100px 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            text-align: center;
+        }
+
+        .hero h1 {
+            font-size: 56px;
+            margin-bottom: 20px;
+            line-height: 1.2;
+            font-weight: 700;
+        }
+
+        .hero p {
+            font-size: 22px;
+            margin-bottom: 40px;
+            opacity: 0.95;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .hero-buttons {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+        }
+
+        .btn-primary {
+            background: white;
+            color: #667eea;
+            padding: 16px 40px;
+            border-radius: 8px;
+            font-weight: 600;
+            text-decoration: none;
+            font-size: 16px;
+            cursor: pointer;
+            border: none;
+            transition: all 0.3s;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.3);
+        }
+
+        .btn-secondary {
+            background: transparent;
+            color: white;
+            padding: 16px 40px;
+            border: 2px solid white;
+            border-radius: 8px;
+            font-weight: 600;
+            text-decoration: none;
+            font-size: 16px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .btn-secondary:hover {
+            background: rgba(255,255,255,0.1);
+        }
+
+        section {
+            padding: 80px 0;
+        }
+
+        section h2 {
+            font-size: 44px;
+            margin-bottom: 50px;
+            text-align: center;
+        }
+
+        .problem-section {
+            background: #f8f9fa;
+        }
+
+        .problem-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 60px;
+            align-items: center;
+        }
+
+        .problem-text h3 {
+            font-size: 28px;
+            margin-bottom: 20px;
+            color: #667eea;
+        }
+
+        .problem-text p {
+            font-size: 16px;
+            margin-bottom: 15px;
+            color: #555;
+            line-height: 1.8;
+        }
+
+        .problem-list {
+            list-style: none;
+            margin-top: 30px;
+        }
+
+        .problem-list li {
+            padding: 12px 0;
+            padding-left: 30px;
+            position: relative;
+            font-size: 15px;
+            color: #555;
+        }
+
+        .problem-list li:before {
+            content: "✗";
+            position: absolute;
+            left: 0;
+            color: #e74c3c;
+            font-weight: bold;
+            font-size: 18px;
+        }
+
+        .problem-visual {
+            background: white;
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 2px 20px rgba(0,0,0,0.08);
+        }
+
+        .problem-visual pre {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 20px;
+            border-radius: 8px;
+            overflow-x: auto;
+            font-size: 13px;
+            line-height: 1.5;
+        }
+
+        .solution-section {
+            background: white;
+        }
+
+        .solution-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 60px;
+            align-items: center;
+        }
+
+        .solution-steps {
+            display: flex;
+            flex-direction: column;
+            gap: 30px;
+        }
+
+        .step {
+            display: flex;
+            gap: 20px;
+        }
+
+        .step-number {
+            background: #667eea;
+            color: white;
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            flex-shrink: 0;
+            font-size: 24px;
+        }
+
+        .step-content h4 {
+            font-size: 18px;
+            margin-bottom: 8px;
+            color: #1a1a1a;
+        }
+
+        .step-content p {
+            color: #666;
+            font-size: 15px;
+        }
+
+        .solution-visual {
+            background: #f8f9fa;
+            padding: 40px;
+            border-radius: 12px;
+            border-left: 4px solid #667eea;
+        }
+
+        .solution-visual h4 {
+            font-size: 16px;
+            margin-bottom: 15px;
+            color: #667eea;
+        }
+
+        .solution-visual pre {
+            background: white;
+            color: #1a1a1a;
+            padding: 15px;
+            border-radius: 6px;
+            overflow-x: auto;
+            font-size: 12px;
+            line-height: 1.5;
+        }
+
+        .features-section {
+            background: #f8f9fa;
+        }
+
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 40px;
+        }
+
+        .feature-card {
+            background: white;
+            padding: 40px 30px;
+            border-radius: 12px;
+            box-shadow: 0 2px 15px rgba(0,0,0,0.08);
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+
+        .feature-card:hover {
+            transform: translateY(-8px);
+            box-shadow: 0 8px 30px rgba(0,0,0,0.12);
+        }
+
+        .feature-icon {
+            font-size: 36px;
+            margin-bottom: 20px;
+        }
+
+        .feature-card h3 {
+            font-size: 20px;
+            margin-bottom: 12px;
+            color: #1a1a1a;
+        }
+
+        .feature-card p {
+            color: #666;
+            font-size: 14px;
+            line-height: 1.7;
+        }
+
+        .pricing-section {
+            background: white;
+        }
+
+        .pricing-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 30px;
+            margin-top: 50px;
+        }
+
+        .pricing-card {
+            border: 2px solid #e0e0e0;
+            border-radius: 12px;
+            padding: 40px 30px;
+            text-align: center;
+            transition: all 0.3s;
+        }
+
+        .pricing-card.featured {
+            border-color: #667eea;
+            box-shadow: 0 8px 30px rgba(102, 126, 234, 0.15);
+            transform: scale(1.05);
+        }
+
+        .pricing-card h3 {
+            font-size: 22px;
+            margin-bottom: 15px;
+            color: #1a1a1a;
+        }
+
+        .price {
+            font-size: 48px;
+            font-weight: 700;
+            color: #667eea;
+            margin: 20px 0;
+        }
+
+        .price-period {
+            color: #999;
+            font-size: 14px;
+            margin-bottom: 30px;
+        }
+
+        .price-features {
+            list-style: none;
+            margin: 30px 0;
+            text-align: left;
+        }
+
+        .price-features li {
+            padding: 12px 0;
+            border-bottom: 1px solid #f0f0f0;
+            color: #666;
+            font-size: 14px;
+        }
+
+        .price-features li:last-child {
+            border-bottom: none;
+        }
+
+        .price-features li:before {
+            content: "✓";
+            color: #27ae60;
+            font-weight: bold;
+            margin-right: 10px;
+        }
+
+        .pricing-btn {
+            background: #667eea;
+            color: white;
+            padding: 14px 30px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 600;
+            display: inline-block;
+            margin-top: 20px;
+            cursor: pointer;
+            border: none;
+            transition: all 0.3s;
+            width: 100%;
+        }
+
+        .pricing-btn:hover {
+            background: #5568d3;
+        }
+
+        .social-proof {
+            background: #f8f9fa;
+            padding: 40px;
+            border-radius: 12px;
+            margin-top: 50px;
+        }
+
+        .proof-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 30px;
+            text-align: center;
+        }
+
+        .proof-item h4 {
+            font-size: 32px;
+            font-weight: 700;
+            color: #667eea;
+            margin-bottom: 10px;
+        }
+
+        .proof-item p {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .cta-section {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            text-align: center;
+            padding: 100px 0;
+        }
+
+        .cta-section h2 {
+            color: white;
+            font-size: 48px;
+            margin-bottom: 20px;
+        }
+
+        .cta-section p {
+            font-size: 20px;
+            margin-bottom: 40px;
+            opacity: 0.95;
+        }
+
+        footer {
+            background: #1a1a1a;
+            color: white;
+            text-align: center;
+            padding: 40px 0;
+            font-size: 14px;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+        }
+
+        .modal-content {
+            background-color: white;
+            margin: 5% auto;
+            padding: 40px;
+            border-radius: 12px;
+            width: 100%;
+            max-width: 500px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        }
+
+        .close {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .close:hover {
+            color: black;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #1a1a1a;
+        }
+
+        .form-group input,
+        .form-group textarea {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-family: inherit;
+            font-size: 14px;
+        }
+
+        .form-group textarea {
+            resize: vertical;
+            min-height: 100px;
+        }
+
+        .submit-btn {
+            background: #667eea;
+            color: white;
+            padding: 14px;
+            border: none;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            width: 100%;
+            font-size: 16px;
+            transition: all 0.3s;
+        }
+
+        .submit-btn:hover {
+            background: #5568d3;
+        }
+
+        @media (max-width: 768px) {
+            .hero h1 {
+                font-size: 36px;
+            }
+
+            .hero p {
+                font-size: 18px;
+            }
+
+            section h2 {
+                font-size: 32px;
+            }
+
+            .problem-grid,
+            .solution-grid,
+            .features-grid,
+            .pricing-grid,
+            .proof-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .pricing-card.featured {
+                transform: scale(1);
+            }
+
+            .hero-buttons {
+                flex-direction: column;
+            }
+
+            nav {
+                display: none;
+            }
+
+            header {
+                padding: 15px 0;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <div class="header-content">
+                <div class="logo">⚡ HYDI</div>
+                <nav>
+                    <a href="#features">Features</a>
+                    <a href="#pricing">Pricing</a>
+                    <a href="#how-it-works">How It Works</a>
+                    <button class="cta-button" onclick="openSignup()">Start Free</button>
+                </nav>
+            </div>
+        </div>
+    </header>
+
+    <section class="hero">
+        <div class="container">
+            <h1>Stop letting autonomous agents loose on your code without a digital foreman.</h1>
+            <p>HYDI automatically analyzes your staging environment, detects bugs and performance drift, and generates safe pull requests—all without human overhead.</p>
+            <div class="hero-buttons">
+                <button class="btn-primary" onclick="openSignup()">Join the Beta</button>
+                <button class="btn-secondary" onclick="document.getElementById('features').scrollIntoView({ behavior: 'smooth' })">See How It Works</button>
+            </div>
+        </div>
+    </section>
+
+    <section class="problem-section">
+        <div class="container">
+            <h2>The Real Problem</h2>
+            <div class="problem-grid">
+                <div class="problem-text">
+                    <h3>Your team wastes time hunting for the same bugs.</h3>
+                    <p>Engineers spend 15-25% of their time tracking down preventable issues:</p>
+                    <ul class="problem-list">
+                        <li>Performance regressions in production</li>
+                        <li>N+1 database queries missed in code review</li>
+                        <li>Syntax errors and code quality debt</li>
+                        <li>Dependency vulnerabilities</li>
+                        <li>Memory leaks and resource exhaustion</li>
+                    </ul>
+                    <p style="margin-top: 30px; color: #888;">These are automatable. Existing tools flag issues and stop. HYDI fixes them.</p>
+                </div>
+                <div class="problem-visual">
+                    <p style="color: #999; margin-bottom: 15px; font-size: 13px;">Without HYDI:</p>
+                    <pre>// N+1 query detected by code review
+for (const user of users) {
+  const posts = db.query(
+    'SELECT * FROM posts WHERE user_id = ?',
+    user.id
+  );
+  // ^^ This runs 1000x in a loop
+}</pre>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="solution-section" id="how-it-works">
+        <div class="container">
+            <h2>How HYDI Works</h2>
+            <div class="solution-grid">
+                <div class="solution-steps">
+                    <div class="step">
+                        <div class="step-number">1</div>
+                        <div class="step-content">
+                            <h4>Scan</h4>
+                            <p>Real file analysis: regex antipatterns, npm audit vulnerabilities, syntax errors, database bottlenecks</p>
+                        </div>
+                    </div>
+                    <div class="step">
+                        <div class="step-number">2</div>
+                        <div class="step-content">
+                            <h4>Synthesize</h4>
+                            <p>Phase 5 autonomous reasoning generates intelligent fixes using proven reasoning patterns</p>
+                        </div>
+                    </div>
+                    <div class="step">
+                        <div class="step-number">3</div>
+                        <div class="step-content">
+                            <h4>Review</h4>
+                            <p>Create draft pull requests with confidence scores and detailed explanations for human review</p>
+                        </div>
+                    </div>
+                    <div class="step">
+                        <div class="step-number">4</div>
+                        <div class="step-content">
+                            <h4>Learn</h4>
+                            <p>System learns which fixes work best over time, improving accuracy with every deployment</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="solution-visual">
+                    <h4>Real detection example:</h4>
+                    <pre>$ hydi run --repo staging
+[HYDI] Analyzing codebase...
+[HYDI] Found 12 issues:
+  - 3 performance antipatterns
+  - 2 syntax errors
+  - 4 N+1 query patterns
+  - 3 dependency vulnerabilities
+[HYDI] Generated 8 fixes (89% confidence avg)
+[HYDI] Created PR #47: Fix sequential async ops
+[HYDI] Created PR #48: Add connection pooling
+[HYDI] Waiting for review...</pre>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="features-section" id="features">
+        <div class="container">
+            <h2>Why Teams Choose HYDI</h2>
+            <div class="features-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">🔍</div>
+                    <h3>Real Detection</h3>
+                    <p>Not regex rules. File scanning finds performance antipatterns, npm audits catch vulnerabilities, node --check validates syntax.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🧠</div>
+                    <h3>Intelligent Synthesis</h3>
+                    <p>Phase 5 autonomous reasoning generates context-aware fixes, not templates. Confidence scores show which fixes are production-ready.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🔒</div>
+                    <h3>Safe Execution</h3>
+                    <p>Sandbox environment. All changes become draft PRs for human review. Your code is never modified without approval.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">📊</div>
+                    <h3>Pattern Memory</h3>
+                    <p>Learns which fixes work best across your codebases. Gets smarter every deployment.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">⚡</div>
+                    <h3>Zero Setup</h3>
+                    <p>GitHub OAuth. Connect your repo. One command to analyze. No infrastructure.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🎯</div>
+                    <h3>Proven Results</h3>
+                    <p>Diagnosed disk allocation crisis, optimized regex performance 95%, eliminated database bottlenecks. Tested on real systems.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="pricing-section" id="pricing">
+        <div class="container">
+            <h2>Simple, Transparent Pricing</h2>
+            <div class="pricing-grid">
+                <div class="pricing-card">
+                    <h3>Free</h3>
+                    <div class="price">$0</div>
+                    <div class="price-period">forever</div>
+                    <ul class="price-features">
+                        <li>1 repository</li>
+                        <li>5 PRs per week</li>
+                        <li>Daily scans</li>
+                        <li>Community support</li>
+                    </ul>
+                    <button class="pricing-btn" onclick="openSignup()">Get Started</button>
+                </div>
+                <div class="pricing-card featured">
+                    <h3>Pro</h3>
+                    <div class="price">$299</div>
+                    <div class="price-period">per month</div>
+                    <ul class="price-features">
+                        <li>5 repositories</li>
+                        <li>Unlimited PRs</li>
+                        <li>Hourly scans</li>
+                        <li>Custom detection rules</li>
+                        <li>Priority support</li>
+                    </ul>
+                    <button class="pricing-btn" onclick="openSignup()">Start Pro Trial</button>
+                </div>
+                <div class="pricing-card">
+                    <h3>Enterprise</h3>
+                    <div class="price">Custom</div>
+                    <div class="price-period">contact us</div>
+                    <ul class="price-features">
+                        <li>Unlimited repos</li>
+                        <li>Real-time scanning</li>
+                        <li>Self-hosted option</li>
+                        <li>SLA guarantees</li>
+                        <li>Dedicated support</li>
+                    </ul>
+                    <button class="pricing-btn" onclick="openSignup()">Schedule Demo</button>
+                </div>
+            </div>
+
+            <div class="social-proof">
+                <h3 style="font-size: 24px; margin-bottom: 30px;">Already Proving Value</h3>
+                <div class="proof-grid">
+                    <div class="proof-item">
+                        <h4>95%</h4>
+                        <p>Latency reduction (regex optimization)</p>
+                    </div>
+                    <div class="proof-item">
+                        <h4>10x</h4>
+                        <p>Database query speedup (N+1 elimination)</p>
+                    </div>
+                    <div class="proof-item">
+                        <h4>8GB/week</h4>
+                        <p>Disk waste prevented (allocation optimization)</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="cta-section">
+        <div class="container">
+            <h2>Ready to Stop Manual Code Reviews?</h2>
+            <p>Join beta testers who are shipping faster without the headache.</p>
+            <button class="btn-primary" onclick="openSignup()" style="background: white; color: #667eea;">Get Free Access</button>
+        </div>
+    </section>
+
+    <footer>
+        <div class="container">
+            <p>&copy; 2026 HYDI. Built with Phase 5 autonomous reasoning.</p>
+            <p style="margin-top: 10px; opacity: 0.7;">🚀 Currently in beta. Early adopters get lifetime 50% discount.</p>
+        </div>
+    </footer>
+
+    <!-- Signup Modal -->
+    <div id="signupModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeSignup()">&times;</span>
+            <h2 style="margin-bottom: 30px;">Join the HYDI Beta</h2>
+            <form name="beta-signup" method="POST" data-netlify="true" netlify-honeypot="bot-field" onsubmit="handleSignup(event)">
+                <input type="hidden" name="form-name" value="beta-signup">
+                <p style="display:none"><input name="bot-field"></p>
+                <div class="form-group">
+                    <label for="name">Name</label>
+                    <input type="text" id="name" name="name" required>
+                </div>
+                <div class="form-group">
+                    <label for="email">Email</label>
+                    <input type="email" id="email" name="email" required>
+                </div>
+                <div class="form-group">
+                    <label for="company">Company</label>
+                    <input type="text" id="company" name="company">
+                </div>
+                <div class="form-group">
+                    <label for="message">What problem does HYDI solve for you?</label>
+                    <textarea id="message" name="message" required></textarea>
+                </div>
+                <button type="submit" class="submit-btn">Join Beta</button>
+            </form>
+            <p style="margin-top: 20px; text-align: center; color: #999; font-size: 13px;">We'll send you access in 24 hours.</p>
+        </div>
+    </div>
+
+    <script>
+        function openSignup() {
+            document.getElementById('signupModal').style.display = 'block';
+        }
+
+        function closeSignup() {
+            document.getElementById('signupModal').style.display = 'none';
+        }
+
+        function handleSignup(event) {
+            event.preventDefault();
+            const form = event.target;
+            const name = document.getElementById('name').value;
+            const btn = form.querySelector('.submit-btn');
+            btn.textContent = 'Sending...';
+            btn.disabled = true;
+
+            fetch('/', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams(new FormData(form)).toString()
+            })
+            .then(() => {
+                btn.textContent = 'Sent!';
+                setTimeout(() => {
+                    form.reset();
+                    closeSignup();
+                    btn.textContent = 'Join Beta';
+                    btn.disabled = false;
+                }, 1500);
+            })
+            .catch(() => {
+                btn.textContent = 'Try again';
+                btn.disabled = false;
+            });
+        }
+
+        // Close modal when clicking outside
+        window.onclick = function(event) {
+            const modal = document.getElementById('signupModal');
+            if (event.target == modal) {
+                modal.style.display = 'none';
+            }
+        }
+
+        // Smooth scroll for navigation
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({ behavior: 'smooth' });
+                }
+            });
+        });
+    </script>
+</body>
+</html>

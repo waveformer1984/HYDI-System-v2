@@ -8,11 +8,23 @@ import {
   setupDeployHooks, PROJECT_IDS,
 } from '../../lib/vercel/vercelAdmin.js';
 import { getSystemStatus, isReachable } from '../../lib/termux/termuxClient.js';
+import { callAgent, isClaudeAvailable } from '../../lib/claude.js';
+import { rateLimit } from '../../lib/rate-limit.js';
 
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
+// Lazy client: a missing SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY must surface
+// as a clean JSON error from the handler, not a cold-start crash (which returns
+// a 500 with no CORS headers and looks like "server not connecting" to clients).
+let _supabase = null;
+function getSupabase() {
+  if (!_supabase) {
+    if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      throw new Error('Supabase env vars not configured (SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY)');
+    }
+    _supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+  }
+  return _supabase;
+}
+const supabase = new Proxy({}, { get: (_, prop) => getSupabase()[prop] });
 
 // ── Service token guard ───────────────────────────────────────────────────────
 // Replaces bare x-user-id header trust. Callers must present an HMAC-SHA256
@@ -54,10 +66,25 @@ const systemHandlers = {
   kilo: handleKiloMessage,
   protoforge: handleProtoForgeMessage,
   hyve: handleHyveMessage,
-  infrastructure: handleInfrastructureMessage
+  infrastructure: handleInfrastructureMessage,
+  rezonate: handleRezonateMessage
 };
 
 export default async function handler(req, res) {
+  // CORS: allow the static mobile chat (GitHub Pages) to call this endpoint.
+  // Auth still relies on the HMAC service token, not the origin.
+  res.setHeader('Access-Control-Allow-Origin', process.env.MOBILE_CHAT_ORIGIN || '*')
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-hydi-service-token')
+  res.setHeader('Access-Control-Max-Age', '86400')
+  if (req.method === 'OPTIONS') {
+    return res.status(204).end()
+  }
+
+  if (!rateLimit(req, res, { name: 'chat-router', windowMs: 60 * 1000, max: 30 })) {
+    return;
+  }
+
   // Verify service token before processing any request
   const { valid, reason } = checkServiceToken(req.headers['x-hydi-service-token'])
   if (!valid) {
@@ -153,7 +180,7 @@ async function handleHeidiMessage(message, request) {
   const lowerMessage = message.toLowerCase();
   
   if (lowerMessage.includes('analyze')) {
-    return `🧠 Heidi: Analysis complete. Context integrity: ${getContextIntegrity()}`;
+    return `🧠 Heidi: Analysis complete. Context integrity: ${await getContextIntegrity()}`;
   }
   
   return {
@@ -174,11 +201,11 @@ async function handleCascadeMessage(message, request) {
   }
   
   if (lowerMessage.includes('status')) {
-    return `⚡ CASCADE: ${getCascadeStatus()}`;
+    return `⚡ CASCADE: ${await getCascadeStatus()}`;
   }
-  
+
   if (lowerMessage.includes('quarantine')) {
-    return `⚡ CASCADE: Quarantine status - ${getQuarantineStatus()}`;
+    return `⚡ CASCADE: Quarantine status - ${await getQuarantineStatus()}`;
   }
   
   return `⚡ CASCADE: Event processing system. Try 'process <event>', 'status', or 'quarantine'.`;
@@ -188,15 +215,15 @@ async function handleKiloMessage(message, request) {
   const lowerMessage = message.toLowerCase();
   
   if (lowerMessage.includes('hypothesis') || lowerMessage.includes('repair')) {
-    return `🔧 KILO: Generating repair hypothesis based on current system state... ${generateHypothesis()}`;
+    return `🔧 KILO: Generating repair hypothesis based on current system state... ${await generateHypothesis()}`;
   }
-  
+
   if (lowerMessage.includes('validate')) {
-    return `🔧 KILO: Validation complete - ${getValidationResult()}`;
+    return `🔧 KILO: Validation complete - ${await getValidationResult()}`;
   }
-  
+
   if (lowerMessage.includes('manifest')) {
-    return `🔧 KILO: Repair manifest ready - ${getRepairManifest()}`;
+    return `🔧 KILO: Repair manifest ready - ${await getRepairManifest()}`;
   }
   
   return `🔧 KILO: Repair hypothesis engine. Ask about 'hypothesis', 'validate', or 'manifest'.`;
@@ -206,15 +233,15 @@ async function handleProtoForgeMessage(message, request) {
   const lowerMessage = message.toLowerCase();
   
   if (lowerMessage.includes('status')) {
-    return `🌐 ProtoForge: Core system status - ${getProtoForgeStatus()}`;
+    return `🌐 ProtoForge: Core system status - ${await getProtoForgeStatus()}`;
   }
-  
+
   if (lowerMessage.includes('modules')) {
-    return `🌐 ProtoForge: Active modules - ${getActiveModules()}`;
+    return `🌐 ProtoForge: Active modules - ${await getActiveModules()}`;
   }
-  
+
   if (lowerMessage.includes('govern')) {
-    return `🌐 ProtoForge: Governance status - ${getGovernanceStatus()}`;
+    return `🌐 ProtoForge: Governance status - ${await getGovernanceStatus()}`;
   }
   
   return `🌐 ProtoForge: Core system coordination. Try 'status', 'modules', or 'govern'.`;
@@ -224,18 +251,54 @@ async function handleHyveMessage(message, request) {
   const lowerMessage = message.toLowerCase();
   
   if (lowerMessage.includes('opportunity')) {
-    return `🐝 Hyve: Current opportunities - ${getOpportunities()}`;
+    return `🐝 Hyve: Current opportunities - ${await getOpportunities()}`;
   }
   
   if (lowerMessage.includes('collective')) {
-    return `🐝 Hyve: Collective status - ${getCollectiveStatus()}`;
+    return `🐝 Hyve: Collective status - ${await getCollectiveStatus()}`;
   }
-  
+
   if (lowerMessage.includes('swarm')) {
-    return `🐝 Hyve: Swarm intelligence active - ${getSwarmStatus()}`;
+    return `🐝 Hyve: Swarm intelligence active - ${await getSwarmStatus()}`;
   }
   
   return `🐝 Hyve: Opportunity collective. Ask about 'opportunity', 'collective', or 'swarm'.`;
+}
+
+async function handleRezonateMessage(message, request) {
+  const lowerMessage = message.toLowerCase();
+
+  if (lowerMessage.includes('project')) {
+    return `🎵 Rezonate: ${await getRezonateProjectStatus()}`;
+  }
+
+  if (lowerMessage.includes('track')) {
+    return `🎵 Rezonate: ${await getRezonateTrackStatus()}`;
+  }
+
+  if (lowerMessage.includes('revenue') || lowerMessage.includes('sales')) {
+    const cutoff = new Date(Date.now() - 86_400_000).toISOString();
+    const { data } = await supabase
+      .from('ledger')
+      .select('net, created_at')
+      .eq('revenue_stream', 'rezonate')
+      .gte('created_at', cutoff);
+    const net = (data || []).reduce((sum, r) => sum + (r.net || 0), 0);
+    return `🎵 Rezonate: ${data?.length ?? 0} ledger entrie(s) in the last 24h — net $${net.toFixed(2)}`;
+  }
+
+  if (lowerMessage.includes('status')) {
+    const { data } = await supabase
+      .from('system_health')
+      .select('component, status')
+      .ilike('component', '%rezonate%');
+    if (data && data.length) {
+      return `🎵 Rezonate: ${data.map(r => `${r.component}: ${r.status}`).join(', ')}`;
+    }
+    return `🎵 Rezonate: music system online. Try 'revenue' or ask about the song composer.`;
+  }
+
+  return `🎵 Rezonate: Audio production suite. Try 'project' or 'track', or ask about 'revenue' or 'status'.`;
 }
 
 async function handleInfrastructureMessage(message, request) {
@@ -421,32 +484,134 @@ async function handleInfrastructureMessage(message, request) {
   ].join('\n')
 }
 
-// ── Helper stubs ──────────────────────────────────────────────────────────────
+async function getRezonateProjectStatus() {
+  const { count } = await supabase
+    .from('rezonate_projects')
+    .select('*', { count: 'exact', head: true });
+  return `${count ?? 0} project(s) in workspace`;
+}
+
+async function getRezonateTrackStatus() {
+  const { count } = await supabase
+    .from('rezonate_tracks')
+    .select('*', { count: 'exact', head: true });
+  return `${count ?? 0} track(s) recorded`;
+}
+
+// ── Helper utilities ──────────────────────────────────────────────────────────
 
 function extractEventFromMessage(message) {
   const match = message.match(/event[:\s]+(.+)$/i);
   return match ? match[1].trim() : null;
 }
 
-function getContextIntegrity() {
-  return (Math.random() * 100).toFixed(1) + '%';
+async function getContextIntegrity() {
+  const { data } = await supabase.from('system_dashboard').select('critical_pct, warning_pct').single();
+  if (!data) return 'unknown';
+  const integrity = (100 - (data.critical_pct || 0) - (data.warning_pct || 0) / 2).toFixed(1);
+  return `${integrity}%`;
 }
 
 async function processCascadeEvent(event) {
+  const { data, error } = await supabase
+    .from('cascade_events')
+    .insert({ event_type: event, status: 'queued', payload: { raw: event } })
+    .select()
+    .single();
+  if (error) return { classification: 'UNKNOWN', confidence: '0.00' };
   return {
-    classification: 'INFRA_FAILURE',
-    confidence: (Math.random() * 0.5 + 0.5).toFixed(2)
+    classification: data.event_type?.toUpperCase() || 'QUEUED',
+    confidence: '1.00'
   };
 }
 
-function getCascadeStatus() { return 'Processing events normally. Queue: 0'; }
-function getQuarantineStatus() { return '2 events quarantined'; }
-function generateHypothesis() { return 'Hypothesis: Database connection pool exhaustion'; }
-function getValidationResult() { return 'Hypothesis validated with 85% confidence'; }
-function getRepairManifest() { return 'Manifest ready for INFRA_FAILURE'; }
-function getProtoForgeStatus() { return 'All systems operational'; }
-function getActiveModules() { return 'CASCADE, KILO, Heidi, Ursula, Hyve'; }
-function getGovernanceStatus() { return 'All policies compliant'; }
-function getOpportunities() { return '3 optimization opportunities detected'; }
-function getCollectiveStatus() { return 'Swarm intelligence: ACTIVE'; }
-function getSwarmStatus() { return '12 agents collaborating'; }
+async function getCascadeStatus() {
+  const { count } = await supabase
+    .from('cascade_events')
+    .select('*', { count: 'exact', head: true })
+    .eq('status', 'queued');
+  const { count: deadCount } = await supabase
+    .from('dead_letters')
+    .select('*', { count: 'exact', head: true });
+  return `Processing events normally. Queue: ${count ?? 0} | Dead letters: ${deadCount ?? 0}`;
+}
+
+async function getQuarantineStatus() {
+  const { count } = await supabase
+    .from('quarantine')
+    .select('*', { count: 'exact', head: true });
+  return `${count ?? 0} events quarantined`;
+}
+
+async function generateHypothesis() {
+  const { data } = await supabase.rpc('analyze_health_trends');
+  if (!data) return 'No hypothesis available — health trends unavailable';
+  return `Hypothesis: ${data.trend_reason || 'System stable, no repair needed'}`;
+}
+
+async function getValidationResult() {
+  const { data } = await supabase.from('system_dashboard').select('current_status, trend_status').single();
+  if (!data) return 'Validation unavailable';
+  const ok = data.current_status === 'OK';
+  return `${ok ? 'Validated' : 'Flagged'} — status: ${data.current_status}, trend: ${data.trend_status}`;
+}
+
+async function getRepairManifest() {
+  const { data } = await supabase.rpc('auto_heal_from_trends');
+  if (!data) return 'No manifest generated';
+  return data.healed > 0
+    ? `Manifest applied: ${data.healed} heal(s) — ${(data.actions || []).join(', ')}`
+    : 'No repairs required at this time';
+}
+
+async function getProtoForgeStatus() {
+  const { data } = await supabase.from('system_dashboard').select('current_status, trend_status, jobs_queued, jobs_failed').single();
+  if (!data) return 'Status unavailable';
+  return `${data.current_status} (trend: ${data.trend_status}) · Queue: ${data.jobs_queued} queued / ${data.jobs_failed} failed`;
+}
+
+async function getActiveModules() {
+  const { data } = await supabase.from('system_health').select('component, status').order('component');
+  if (!data || !data.length) return 'CASCADE, KILO, Heidi, Ursula, Hyve';
+  return data.map(r => `${r.component}:${r.status}`).join(', ');
+}
+
+async function getGovernanceStatus() {
+  const { data } = await supabase.from('system_dashboard').select('escalation_level, escalation_reason').single();
+  if (!data) return 'Governance status unavailable';
+  return data.escalation_level === 'OK'
+    ? 'All policies compliant'
+    : `Escalation: ${data.escalation_level} — ${data.escalation_reason}`;
+}
+
+async function getOpportunities() {
+  const { count } = await supabase
+    .from('leads')
+    .select('*', { count: 'exact', head: true })
+    .eq('status', 'new');
+  return `${count ?? 0} new leads / optimization opportunities`;
+}
+
+async function getCollectiveStatus() {
+  // Pull the live HYDI dashboard status so the collective reflects real system health
+  const { data } = await supabase
+    .from('system_dashboard')
+    .select('current_status, trend_status, jobs_queued, auto_heals_24h')
+    .single();
+  if (!data) return 'Swarm intelligence: ACTIVE (status unavailable)';
+  return `Swarm intelligence: ${data.current_status} | trend: ${data.trend_status} | queue: ${data.jobs_queued ?? 0} | auto-heals 24h: ${data.auto_heals_24h ?? 0}`;
+}
+
+async function getSwarmStatus() {
+  // Count agents with a heartbeat in the last 5 minutes (active lease holders)
+  const cutoff = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+  const { data, count } = await supabase
+    .from('agent_leases')
+    .select('lease_owner', { count: 'exact', head: false })
+    .gte('heartbeat_at', cutoff);
+  const activeCount = count ?? (data ? data.length : 0);
+  if (activeCount === 0) return 'No agents with active leases in the last 5 min';
+  const names = data ? [...new Set(data.map(r => r.lease_owner))].slice(0, 5).join(', ') : '';
+  const suffix = names ? `: ${names}` : '';
+  return `${activeCount} agent lease${activeCount !== 1 ? 's' : ''} active${suffix}`;
+}

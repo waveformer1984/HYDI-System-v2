@@ -56,7 +56,7 @@ class PreFlightGate {
     console.log(`[GATE] Registering component: ${component.name}`);
     
     // Validate required fields
-    const validation = this.validateRegistration(component);
+    const validation = await this.validateRegistration(component);
     if (!validation.valid) {
       throw new Error(`Registration validation failed: ${validation.errors.join(', ')}`);
     }
@@ -87,7 +87,7 @@ class PreFlightGate {
     return updated;
   }
   
-  validateRegistration(component) {
+  async validateRegistration(component) {
     const errors = [];
     const warnings = [];
     

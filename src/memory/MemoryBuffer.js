@@ -5,7 +5,7 @@
  * No network dependency, no latency, no uncertainty
  */
 
-export class MemoryBuffer {
+class MemoryBuffer {
   constructor() {
     // In-memory storage
     this.buffer = new Map();
@@ -288,13 +288,15 @@ export class MemoryBuffer {
  */
 let globalBuffer = null;
 
-export function getMemoryBuffer() {
+function getMemoryBuffer() {
   if (!globalBuffer) {
     globalBuffer = new MemoryBuffer();
   }
   return globalBuffer;
 }
 
-export function createMemoryBuffer() {
+function createMemoryBuffer() {
   return new MemoryBuffer();
 }
+
+module.exports = { MemoryBuffer, getMemoryBuffer, createMemoryBuffer };

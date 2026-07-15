@@ -1,0 +1,16 @@
+{
+  "name": "@protoforge/runtime-system",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Runtime system with separated decision and execution layers",
+  "main": "bridge/index.js",
+  "scripts": {
+    "start": "node bridge/index.js",
+    "stop": "node -e \"process.exit(0)\" bridge/index.js"
+  },
+  "dependencies": {
+    "worker_threads": "^0.0.1"
+  },
+  "keywords": ["runtime", "decision", "execution", "safety", "policy"],
+  "author": "ProtoForge Systems"
+}

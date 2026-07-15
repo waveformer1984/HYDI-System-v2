@@ -198,7 +198,7 @@ describe('HeidiCoreLoop', () => {
 
     it('sets shouldProceed=false when confidence is below threshold', async () => {
       const loop = makeLoop({ actionConfidenceThreshold: 0.7 });
-      jest.spyOn(loop, 'calculateTaskConfidence').mockReturnValue(0.4); // below 0.7
+      jest.spyOn(loop, 'calculateTaskConfidence').mockReturnValue(0.4);
       jest.spyOn(loop, 'calculateTaskRisk').mockReturnValue(0.1);
       jest.spyOn(loop, 'assessFeasibility').mockReturnValue(0.9);
       jest.spyOn(loop, 'identifyOpportunity').mockReturnValue(0.5);
@@ -212,7 +212,7 @@ describe('HeidiCoreLoop', () => {
     it('sets shouldProceed=false when risk is too high', async () => {
       const loop = makeLoop({ actionConfidenceThreshold: 0.5 });
       jest.spyOn(loop, 'calculateTaskConfidence').mockReturnValue(0.9);
-      jest.spyOn(loop, 'calculateTaskRisk').mockReturnValue(0.85); // above 0.8
+      jest.spyOn(loop, 'calculateTaskRisk').mockReturnValue(0.85);
       jest.spyOn(loop, 'assessFeasibility').mockReturnValue(0.9);
       jest.spyOn(loop, 'identifyOpportunity').mockReturnValue(0.5);
       jest.spyOn(loop, 'assessUrgency').mockReturnValue(0.3);
@@ -238,7 +238,6 @@ describe('HeidiCoreLoop', () => {
       const loop = makeLoop();
       const evaluation = { shouldProceed: true, confidence: 0.9 };
       const task = { type: 'analysis' };
-      // orchestrator is already mocked to return { decision: { strategy: 'local' } }
       const decision = await loop.makeDecision(task, {}, evaluation, 'loop_test');
       expect(decision.action).toBe('proceed');
       expect(decision.strategy).toBeDefined();
@@ -371,17 +370,14 @@ describe('HeidiCoreLoop', () => {
   describe('loop history management', () => {
     it('trims history to 500 when it exceeds 1000 entries', async () => {
       const loop = makeLoop();
-      // Seed 1000 entries
       loop.loopHistory = Array.from({ length: 1000 }, (_, i) => ({ id: `old_${i}` }));
 
-      // Manually trigger what executeLoop does after a result
       loop.loopHistory.push({ id: 'new_1' });
       if (loop.loopHistory.length > 1000) {
         loop.loopHistory = loop.loopHistory.slice(-500);
       }
 
       expect(loop.loopHistory).toHaveLength(500);
-      // The new entry should be the last one
       expect(loop.loopHistory[499].id).toBe('new_1');
     });
   });
@@ -394,7 +390,6 @@ describe('HeidiCoreLoop', () => {
       const onComplete = jest.fn();
       loop.on('loop_completed', onComplete);
 
-      // Mock the inner loop so we don't need all the subsystem wiring
       jest.spyOn(loop, 'executeHeidiLoop').mockResolvedValue({ task: 'analysis', success: true });
       jest.spyOn(loop, 'updateMetrics').mockImplementation(() => {});
 

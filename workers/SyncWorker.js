@@ -1,4 +1,17 @@
-        // Sync configuration
+const { createClient } = require('@supabase/supabase-js');
+const QueueManager = require('./QueueManager');
+require('dotenv').config();
+
+class SyncWorker {
+    constructor(workerId) {
+        this.workerId = workerId || `sync-worker-${Date.now()}`;
+        this.running = false;
+        this.pollInterval = 5000;
+        this.pollTimer = null;
+        this.supabase = null;
+        this.queue = new QueueManager();
+        this.syncIntervals = {};
+                // Sync configuration
         this.syncConfig = {
             // Sync intervals (in milliseconds)
             db_to_services: 30000, // 30 seconds
@@ -46,7 +59,7 @@
             // Start polling
             this.poll();
             
-            #start-sync-intervals
+            // start-sync-intervals
         };
 
         this.stop = async function() {
@@ -56,7 +69,7 @@
                 clearTimeout(this.pollTimer);
             }
             
-            #clear-sync-intervals
+            // clear-sync-intervals
             
             await this.queue.shutdown();
             console.log('[🔄 Sync Worker] Stopped');
@@ -127,7 +140,7 @@
             
             console.log(`[🔄 Sync] Performing sync: ${direction} for ${scope}`);
             
-            #perform-db-to-services-sync
+            // perform-db-to-services-sync
             switch (direction) {
                 case 'db_to_services':
                     await this.syncDatabaseToServices(scope, force);
@@ -159,7 +172,7 @@
             
             console.log(`[🔄 Sync] Resolving conflict: ${conflict_type}`);
             
-            #resolve-conflict-based-on-strategy
+            // resolve-conflict-based-on-strategy
             const strategy = resolution_strategy || this.syncConfig.conflictResolution.strategy;
             
             let resolutionResult;
@@ -182,7 +195,7 @@
                     resolutionResult = { error: 'Unknown resolution strategy' };
             }
             
-            #store-resolution-result
+            // store-resolution-result
             // Store resolution result
             await this.supabase
                 .from('sync_conflicts')
@@ -203,7 +216,7 @@
             
             console.log(`[🔄 Sync] Checking for drift: ${scope}`);
             
-            #check-drift-between-systems
+            // check-drift-between-systems
             const driftResults = await this.detectDrift(scope, tolerance || 0.01); // 1% default tolerance
             
             if (driftResults.drift_detected) {
@@ -227,10 +240,10 @@
             
             console.log(`[🔄 Sync] Checking consistency: ${scope}`);
             
-            #check-consistency-within-scope
+            // check-consistency-within-scope
             const consistencyResults = await this.checkConsistencyWithinScope(scope, check_type);
             
-            #store-consistency-results
+            // store-consistency-results
             await this.supabase
                 .from('consistency_checks')
                 .insert({
@@ -248,11 +261,11 @@
             }
         };
 
-        #helper-methods-for-sync-operations
+        // helper-methods-for-sync-operations
         this.syncDatabaseToServices = async function(scope, force) {
             console.log(`[🔄 Sync] Syncing database to services: ${scope}`);
             
-            #implement-db-to-services-logic
+            // implement-db-to-services-logic
             // This would involve:
             // 1. Reading from database
             // 2. Pushing changes to services via APIs or event bus
@@ -265,7 +278,7 @@
         this.syncServicesToDatabase = async function(scope, force) {
             console.log(`[🔄 Sync] Syncing services to database: ${scope}`);
             
-            #implement-services-to-db-logic
+            // implement-services-to-db-logic
             // This would involve:
             // 1. Pulling from services
             // 2. Updating database records
@@ -278,7 +291,7 @@
         this.syncLocalToRemote = async function(scope, force) {
             console.log(`[🔄 Sync] Syncing local to remote: ${scope}`);
             
-            #implement-local-to-remote-logic
+            // implement-local-to-remote-logic
             // This would involve:
             // 1. Reading local files/storage
             // 2. Pushing to remote storage/services
@@ -291,7 +304,7 @@
         this.syncRemoteToLocal = async function(scope, force) {
             console.log(`[🔄 Sync] Syncing remote to local: ${scope}`);
             
-            #implement-remote-to-local-logic
+            // implement-remote-to-local-logic
             // This would involve:
             // 1. Pulling from remote storage/services
             // 2. Updating local files/storage
@@ -304,7 +317,7 @@
         this.syncBidirectional = async function(scope, force) {
             console.log(`[🔄 Sync] Performing bidirectional sync: ${scope}`);
             
-            #implement-bidirectional-sync-logic
+            // implement-bidirectional-sync-logic
             // This would involve:
             // 1. Sync in both directions with conflict detection
             // 2. Applying conflict resolution rules
@@ -316,7 +329,7 @@
         this.resolveByTimestamp = async function(items) {
             console.log(`[🔄 Sync] Resolving conflicts by timestamp wins`);
             
-            #resolve-by-timestamp-logic
+            // resolve-by-timestamp-logic
             // Sort by timestamp (newest wins) and return the latest version
             const sortedItems = items.sort((a, b) => {
                 const timeA = new Date(a.updated_at || a.timestamp || 0).getTime();
@@ -335,7 +348,7 @@
         this.resolveBySource = async function(items, preferredSource) {
             console.log(`[🔄 Sync] Resolving conflicts by source wins: ${preferredSource}`);
             
-            #resolve-by-source-logic
+            // resolve-by-source-logic
             // Find item from preferred source, otherwise fallback to timestamp wins
             const preferredItem = items.find(item => item.source === preferredSource);
             
@@ -356,7 +369,7 @@
         this.resolveByManualMerge = async function(items) {
             console.log(`[🔄 Sync] Resolving conflicts by manual merge`);
             
-            #resolve-by-manual-merge-logic
+            // resolve-by-manual-merge-logic
             // This would require human intervention or complex merge logic
             // For now, we'll flag for manual review
             return {
@@ -371,21 +384,21 @@
             // Simulate sync work
             console.log(`[🔄 Sync] Simulating ${direction} sync for ${scope}`);
             
-            #simulate-sync-work
+            // simulate-sync-work
             // In a real implementation, this would do actual sync work
             await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate 1 second of work
             
-            #log-sync-completion
+            // log-sync-completion
             console.log(`[🔄 Sync] Completed ${direction} sync for ${scope}`);
         };
 
         this.detectDrift = async function(scope, tolerance) {
             console.log(`[🔄 Sync] Detecting drift for ${scope} with tolerance ${tolerance}`);
             
-            #implement-drift-detection-logic
+            // implement-drift-detection-logic
             // This would compare values between systems and calculate drift percentage
             
-            #simulate-drift-check
+            // simulate-drift-check
             // For simulation, return random drift value
             const driftPercentage = Math.random() * 0.05; // 0-5% drift
             
@@ -405,10 +418,10 @@
         this.checkConsistencyWithinScope = async function(scope, check_type) {
             console.log(`[🔄 Sync] Checking consistency within ${scope} for ${check_type}`);
             
-            #implement-consistency-checking-logic
+            // implement-consistency-checking-logic
             // This would check for consistency within a specific scope
             
-            #simulate-consistency-check
+            // simulate-consistency-check
             // For simulation, randomly determine if consistent
             const isConsistent = Math.random() > 0.3; // 70% chance of being consistent
             
@@ -427,7 +440,7 @@
             };
         };
 
-        #start-sync-intervals
+        // start-sync-intervals
         this.startSyncIntervals = function() {
             // Start periodic sync operations based on configuration
             this.dbToServicesInterval = setInterval(async () => {

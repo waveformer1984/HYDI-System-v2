@@ -9,6 +9,30 @@ node_modules/
 .env.*
 .env*.local
 
+# Local Netlify folder
+.netlify
+
+# Heidi runtime secrets
+.vapid-keys.json
+**/.vapid-keys.json
+
+# Secret env files — never track, rotate keys if already in history
+.env.backup
+.env.production
+.env.test-jwt
+.env.secret
+.env.secrets
+*-key-guide.md
+get-supabase-credentials.js
+*-steps.md
+get-correct-key.md
+fix-env.js
+direct-instructions.md
+exact-steps.md
+final-key-guide.md
+visual-guide.md
+revenue-dashboard.html
+
 # Vercel / Netlify deploy artifacts
 .vercel
 .netlify
@@ -27,6 +51,7 @@ hydi-system-*.tar.gz
 # Logs
 *.log
 logs.txt
+logs/
 
 # OS
 .DS_Store
@@ -38,3 +63,20 @@ heidi-core.env.local
 data/
 *.tsbuildinfo
 tests/soak-test-report.json
+
+# TypeScript incremental build info
+tsconfig.tsbuildinfo
+
+# Misc runtime/dev artifacts
+actions-runner/
+heidi_snapshot.json
+watchdog-state.json
+supabase/.temp/
+
+# Heidi local-only runtime data — never commit, never let a checkout clobber it
+heidi-core/data/*.db
+heidi-core/data/heidi_goals.json
+hydi.db
+
+# Cloud-bootstrap state describes THIS machine's view of cloud infra — never commit
+.cloud-bootstrap-state.json

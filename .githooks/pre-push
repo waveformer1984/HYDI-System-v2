@@ -1,0 +1,30 @@
+#!/bin/sh
+# Local pre-push gate -- runs the same checks GitHub Actions' typecheck and
+# Jest Unit Tests steps run, so day-to-day development has a source of
+# truth that doesn't depend on GitHub's CI being up. (Direct motivation:
+# GitHub Actions sat stuck queued, repo-wide, for 24+ hours starting
+# 2026-07-08 -- see project-hydi-actions-outage memory.)
+#
+# GitHub remains the remote and branch protection still requires its
+# checks before merge -- this hook doesn't replace that, it just means a
+# push never has to wait on or trust GitHub's uptime to know locally
+# whether a change is good.
+#
+# Skip once (e.g. a deliberate WIP push) with: git push --no-verify
+
+echo "[pre-push] Running typecheck..."
+npm run typecheck
+if [ $? -ne 0 ]; then
+  echo "[pre-push] typecheck failed -- push aborted (use --no-verify to skip)"
+  exit 1
+fi
+
+echo "[pre-push] Running test suite..."
+npm test
+if [ $? -ne 0 ]; then
+  echo "[pre-push] tests failed -- push aborted (use --no-verify to skip)"
+  exit 1
+fi
+
+echo "[pre-push] All checks passed."
+exit 0

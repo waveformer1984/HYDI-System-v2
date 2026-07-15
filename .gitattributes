@@ -1,0 +1,6 @@
+# Shell scripts must keep LF line endings regardless of platform -- a
+# CRLF-corrupted shebang line breaks execution on strict interpreters, and
+# .githooks/pre-push specifically needs to run reliably via git's own hook
+# runner on every push.
+.githooks/* text eol=lf
+*.sh text eol=lf

@@ -12,6 +12,23 @@ try {
 const path = require('path');
 const fs = require('fs');
 
+function cosineSimilarity(vecA, vecB) {
+  if (!vecA || !vecB || vecA.length !== vecB.length) return 0;
+
+  let dotProduct = 0;
+  let normA = 0;
+  let normB = 0;
+
+  for (let i = 0; i < vecA.length; i++) {
+    dotProduct += vecA[i] * vecB[i];
+    normA += vecA[i] * vecA[i];
+    normB += vecB[i] * vecB[i];
+  }
+
+  if (normA === 0 || normB === 0) return 0;
+  return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+}
+
 class HeidiMemory {
   constructor(config = {}) {
     this.dbPath = config.dbPath || path.join(__dirname, '../data/heidi_memory.db');
@@ -28,7 +45,9 @@ class HeidiMemory {
         short_term: [],
         long_term: [],
         reflections: [],
-        system_state: []
+        system_state: [],
+        missions: [],
+        agent_registry: []
       };
       this.initialized = true;
       console.warn('');
@@ -116,6 +135,31 @@ class HeidiMemory {
         source_table TEXT,
         source_id INTEGER,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`,
+
+      // Missions - persistent goal queue (unlike the ATQ's in-memory queue, survives restarts)
+      `CREATE TABLE IF NOT EXISTS missions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        goal TEXT NOT NULL,
+        status TEXT DEFAULT 'pending', -- pending | active | blocked | completed | failed | cancelled
+        priority INTEGER DEFAULT 1,    -- 0 low, 1 normal, 2 high, 3 critical
+        assigned_agent TEXT,
+        context TEXT,                  -- JSON
+        result TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME
+      )`,
+
+      // Agent registry - permission levels defined in C:\ProtoForge_Ecosystem\Agent_Sandbox\PERMISSIONS.md
+      `CREATE TABLE IF NOT EXISTS agent_registry (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL UNIQUE,
+        role TEXT,
+        entry_point TEXT,
+        permission_level INTEGER DEFAULT 0, -- 0 observe | 1 read | 2 create | 3 approved commands | 4 full
+        enabled INTEGER DEFAULT 1,
+        last_seen DATETIME,
+        registered_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )`
     ];
 
@@ -128,7 +172,8 @@ class HeidiMemory {
     await this.run(`CREATE INDEX IF NOT EXISTS idx_long_term_category ON long_term(category)`);
     await this.run(`CREATE INDEX IF NOT EXISTS idx_reflections_pattern ON reflections(pattern_type)`);
     await this.run(`CREATE INDEX IF NOT EXISTS idx_system_state_type ON system_state(state_type)`);
-    
+    await this.run(`CREATE INDEX IF NOT EXISTS idx_missions_status ON missions(status, priority)`);
+
     console.log('[HEIDI Memory] Tables created');
   }
 
@@ -229,6 +274,87 @@ class HeidiMemory {
     );
   }
 
+  async getTopFacts(limit = 5) {
+    return this.all(
+      `SELECT fact AS content, importance AS confidence, category AS division FROM long_term
+       ORDER BY importance DESC, access_count DESC
+       LIMIT ?`,
+      [limit]
+    );
+  }
+
+  async getFactCount() {
+    const row = await this.get(`SELECT COUNT(*) AS n FROM long_term`);
+    return row ? row.n : 0;
+  }
+
+  // Local procedural memory: fact + embedding, keyed by (fact, division) for dedup
+  async storeFactWithEmbedding(content, division, confidence, embedding) {
+    const category = division || 'global';
+    const existing = await this.get(
+      `SELECT id FROM long_term WHERE fact = ? AND category = ?`,
+      [content, category]
+    );
+
+    let factId;
+    if (existing) {
+      await this.run(
+        `UPDATE long_term SET importance = ?, last_accessed = CURRENT_TIMESTAMP WHERE id = ?`,
+        [confidence, existing.id]
+      );
+      factId = existing.id;
+    } else {
+      const result = await this.run(
+        `INSERT INTO long_term (fact, category, importance) VALUES (?, ?, ?)`,
+        [content, category, confidence]
+      );
+      factId = result.id;
+    }
+
+    if (embedding) {
+      const existingEmbedding = await this.get(
+        `SELECT id FROM embeddings WHERE source_table = 'long_term' AND source_id = ?`,
+        [factId]
+      );
+      if (existingEmbedding) {
+        await this.run(`UPDATE embeddings SET embedding = ? WHERE id = ?`, [JSON.stringify(embedding), existingEmbedding.id]);
+      } else {
+        await this.run(
+          `INSERT INTO embeddings (content, embedding, source_table, source_id) VALUES (?, ?, 'long_term', ?)`,
+          [content, JSON.stringify(embedding), factId]
+        );
+      }
+    }
+
+    return factId;
+  }
+
+  // Semantic retrieval over locally stored embeddings (no pgvector required)
+  async searchFactsBySimilarity(queryEmbedding, threshold = 0.6, limit = 5) {
+    const rows = await this.all(
+      `SELECT lt.id, lt.fact AS content, lt.importance AS confidence, lt.category AS division, e.embedding
+       FROM embeddings e
+       JOIN long_term lt ON lt.id = e.source_id AND e.source_table = 'long_term'`
+    );
+
+    return rows
+      .map(row => {
+        let embedding;
+        try { embedding = JSON.parse(row.embedding); } catch { return null; }
+        return {
+          id: row.id,
+          content: row.content,
+          confidence: row.confidence,
+          division: row.division,
+          similarity: cosineSimilarity(queryEmbedding, embedding)
+        };
+      })
+      .filter(r => r && r.similarity > threshold)
+      .sort((a, b) => (b.similarity - a.similarity) || (b.confidence - a.confidence))
+      .slice(0, limit)
+      .map(({ similarity, ...fact }) => fact);
+  }
+
   async searchFacts(query, limit = 5) {
     // Simple keyword search (can be enhanced with vector search later)
     const keywords = query.toLowerCase().split(' ').filter(w => w.length > 3);
@@ -315,6 +441,134 @@ class HeidiMemory {
        LIMIT ?`,
       [stateType, limit]
     );
+  }
+
+  // Mission queue operations - persistent goals (see C:\ProtoForge_Ecosystem\CANONICAL.md)
+  async createMission(goal, priority = 1, context = null, assignedAgent = null) {
+    if (!sqlite3 && this.inMemoryData) {
+      const id = this.inMemoryData.missions.length + 1;
+      this.inMemoryData.missions.push({
+        id, goal, status: 'pending', priority, assigned_agent: assignedAgent,
+        context: JSON.stringify(context), result: null,
+        created_at: new Date().toISOString(), updated_at: null
+      });
+      return id;
+    }
+
+    const result = await this.run(
+      `INSERT INTO missions (goal, priority, context, assigned_agent) VALUES (?, ?, ?, ?)`,
+      [goal, priority, JSON.stringify(context), assignedAgent]
+    );
+    return result.id;
+  }
+
+  async nextMission() {
+    if (!sqlite3 && this.inMemoryData) {
+      return this.inMemoryData.missions
+        .filter(m => m.status === 'pending')
+        .sort((a, b) => (b.priority - a.priority) || (a.id - b.id))[0] || null;
+    }
+
+    return this.get(
+      `SELECT * FROM missions WHERE status = 'pending' ORDER BY priority DESC, id ASC LIMIT 1`
+    );
+  }
+
+  async updateMission(id, status, result = null) {
+    if (!sqlite3 && this.inMemoryData) {
+      const mission = this.inMemoryData.missions.find(m => m.id === id);
+      if (mission) {
+        mission.status = status;
+        if (result !== null) mission.result = typeof result === 'string' ? result : JSON.stringify(result);
+        mission.updated_at = new Date().toISOString();
+      }
+      return mission ? 1 : 0;
+    }
+
+    const res = await this.run(
+      `UPDATE missions SET status = ?, result = COALESCE(?, result), updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+      [status, result === null ? null : (typeof result === 'string' ? result : JSON.stringify(result)), id]
+    );
+    return res.changes;
+  }
+
+  async getMissions(status = null, limit = 20) {
+    if (!sqlite3 && this.inMemoryData) {
+      return this.inMemoryData.missions
+        .filter(m => !status || m.status === status)
+        .slice(-limit);
+    }
+
+    if (status) {
+      return this.all(
+        `SELECT * FROM missions WHERE status = ? ORDER BY priority DESC, created_at DESC LIMIT ?`,
+        [status, limit]
+      );
+    }
+    return this.all(`SELECT * FROM missions ORDER BY priority DESC, created_at DESC LIMIT ?`, [limit]);
+  }
+
+  // Agent registry operations - levels defined in Agent_Sandbox\PERMISSIONS.md
+  async registerAgent(name, role, entryPoint = null, permissionLevel = 0) {
+    if (!sqlite3 && this.inMemoryData) {
+      let agent = this.inMemoryData.agent_registry.find(a => a.name === name);
+      if (agent) {
+        Object.assign(agent, { role, entry_point: entryPoint, last_seen: new Date().toISOString() });
+        return agent.id;
+      }
+      const id = this.inMemoryData.agent_registry.length + 1;
+      this.inMemoryData.agent_registry.push({
+        id, name, role, entry_point: entryPoint, permission_level: permissionLevel,
+        enabled: 1, last_seen: new Date().toISOString(), registered_at: new Date().toISOString()
+      });
+      return id;
+    }
+
+    const existing = await this.get(`SELECT id FROM agent_registry WHERE name = ?`, [name]);
+    if (existing) {
+      // Re-registration refreshes metadata but never silently raises permission_level
+      await this.run(
+        `UPDATE agent_registry SET role = ?, entry_point = ?, last_seen = CURRENT_TIMESTAMP WHERE id = ?`,
+        [role, entryPoint, existing.id]
+      );
+      return existing.id;
+    }
+    const result = await this.run(
+      `INSERT INTO agent_registry (name, role, entry_point, permission_level, last_seen) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+      [name, role, entryPoint, permissionLevel]
+    );
+    return result.id;
+  }
+
+  async getAgent(name) {
+    if (!sqlite3 && this.inMemoryData) {
+      return this.inMemoryData.agent_registry.find(a => a.name === name) || null;
+    }
+    return this.get(`SELECT * FROM agent_registry WHERE name = ?`, [name]);
+  }
+
+  async listAgents(enabledOnly = true) {
+    if (!sqlite3 && this.inMemoryData) {
+      return this.inMemoryData.agent_registry.filter(a => !enabledOnly || a.enabled);
+    }
+    if (enabledOnly) {
+      return this.all(`SELECT * FROM agent_registry WHERE enabled = 1 ORDER BY name`);
+    }
+    return this.all(`SELECT * FROM agent_registry ORDER BY name`);
+  }
+
+  async setAgentPermission(name, level) {
+    const clamped = Math.max(0, Math.min(4, level));
+    if (!sqlite3 && this.inMemoryData) {
+      const agent = this.inMemoryData.agent_registry.find(a => a.name === name);
+      if (agent) agent.permission_level = clamped;
+      return agent ? 1 : 0;
+    }
+    const res = await this.run(
+      `UPDATE agent_registry SET permission_level = ? WHERE name = ?`,
+      [clamped, name]
+    );
+    return res.changes;
   }
 
   // Build context for LLM

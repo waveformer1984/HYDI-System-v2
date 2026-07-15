@@ -1,3 +1,79 @@
+const { createClient } = require('@supabase/supabase-js');
+const QueueManager = require('./QueueManager');
+require('dotenv').config();
+
+class CostMarginWorker {
+    constructor(workerId) {
+        this.workerId = workerId || `cost-margin-worker-${Date.now()}`;
+        this.running = false;
+        this.pollInterval = 5000;
+        this.pollTimer = null;
+        this.supabase = null;
+        this.queue = new QueueManager();
+        this.costRates = {
+            labor: { fabrication: 45, assembly: 35, design: 60, testing: 40 },
+            machine: { '3d_printer': 2.5, cnc: 15, laser: 8, pcb_mill: 12 },
+            material: { filament_pla: 0.025, filament_abs: 0.03, solder_paste: 0.5, isopropyl_alcohol: 0.01 }
+        };
+
+        this.initialize = function() {
+            const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+            const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
+            if (!supabaseUrl || !supabaseKey) throw new Error('Missing Supabase credentials');
+            this.supabase = createClient(supabaseUrl, supabaseKey);
+            this.queue.registerWorker('cost_margin', this.workerId);
+            this.queue.updateHeartbeat('idle');
+            console.log(`[💸 Cost & Margin Worker] Initialized: ${this.workerId}`);
+        };
+
+        this.start = async function() {
+            if (this.running) return;
+            await this.initialize();
+            this.running = true;
+            this.queue.startHeartbeat();
+            this.poll();
+        };
+
+        this.stop = async function() {
+            this.running = false;
+            if (this.pollTimer) clearTimeout(this.pollTimer);
+            await this.queue.shutdown();
+        };
+
+        this.poll = function() {
+            if (!this.running) return;
+            this.processNextTask()
+                .catch(err => console.error('[💸 Cost & Margin Worker] Poll error:', err))
+                .finally(() => { this.pollTimer = setTimeout(() => this.poll(), this.pollInterval); });
+        };
+
+        this.processNextTask = async function() {
+            const taskId = await this.queue.dequeue('cost_margin');
+            if (!taskId) return;
+            try {
+                const task = await this.queue.getTask(taskId);
+                if (!task) return;
+                switch (task.payload.event_type) {
+                    case 'analytics.generate': await this.generateCostAnalytics(task.payload); break;
+                    default: console.log(`[💸 Cost & Margin] Unhandled: ${task.payload.event_type}`);
+                }
+                await this.queue.completeTask(taskId, true);
+            } catch (err) {
+                await this.queue.completeTask(taskId, false, err.message);
+            }
+        };
+
+        this.generateCostAnalytics = async function(payload) {
+            const { time_period, include_details } = payload.data || {};
+            console.log(`[💸 Cost & Margin] Generating cost analytics for ${time_period}`);
+            const since = new Date(Date.now() - 30*24*60*60*1000).toISOString();
+            const { data: jobCosts } = await this.supabase.from('job_costs').select('*').gte('created_at', since);
+            const { data: revenueTransactions } = await this.supabase.from('transactions').select('*').gte('created_at', since);
+            const totalRevenue = (revenueTransactions || []).reduce((s,t) => s + (parseFloat(t.amount)||0), 0);
+            const totalCost = (jobCosts || []).reduce((s,j) => s + (parseFloat(j.total_cost)||0), 0);
+            const totalProfit = totalRevenue - totalCost;
+            const marginPercentage = totalRevenue > 0 ? (totalProfit / totalRevenue) * 100 : 0;
+            const analytics = { time_period, total_revenue: totalRevenue, total_cost: totalCost, total_profit: totalProfit, margin_percentage: marginPercentage, generated_at: new Date().toISOString() };
             // Store analytics and return if details requested
             await this.supabase
                 .from('cost_analytics')
@@ -15,7 +91,7 @@
             }
         };
 
-        #helper-methods-definitions
+        // helper-methods-definitions
 
         this.getAverageLaborRate = function(job_type) {
             // Return average labor rate for job type

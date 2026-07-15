@@ -1422,10 +1422,11 @@ result = response.json()`
       await this.generateWeeklySystemWins();
     }, 7 * 24 * 60 * 60 * 1000);
     
-    // Monthly success stories
+    // Monthly success stories — capped at 24 days (Node.js 32-bit setTimeout max is ~24.8 days)
+    const MONTHLY_INTERVAL = 24 * 24 * 60 * 60 * 1000; // 24 days, safe for 32-bit int
     setInterval(async () => {
       await this.triggerWorkflow('success_story', { customerId: 'all' });
-    }, 30 * 24 * 60 * 60 * 1000);
+    }, MONTHLY_INTERVAL);
   }
 
   /**

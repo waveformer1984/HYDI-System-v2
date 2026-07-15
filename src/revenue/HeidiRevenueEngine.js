@@ -11,7 +11,7 @@
  */
 
 const EventEmitter = require('events');
-const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+const stripe = process.env.STRIPE_SECRET_KEY ? require('stripe')(process.env.STRIPE_SECRET_KEY) : null;
 const { supabase } = require('../database');
 
 class HeidiRevenueEngine extends EventEmitter {
@@ -140,7 +140,12 @@ class HeidiRevenueEngine extends EventEmitter {
   
   async initializeStripeProducts() {
     console.log('[REVENUE ENGINE] Initializing Stripe products...');
-    
+
+    if (!stripe) {
+      console.warn('[REVENUE ENGINE] STRIPE_SECRET_KEY not set — skipping Stripe product initialization');
+      return;
+    }
+
     try {
       // Create or update products for each tier
       for (const tier of this.config.defaultTiers) {
@@ -975,23 +980,27 @@ class HeidiRevenueEngine extends EventEmitter {
   }
   
   async loadExistingOffers() {
+    if (this._offersDbDisabled) return; // schema absent — skip without spamming
     try {
       // Load existing offers from database
       const { data, error } = await supabase
         .from('offers')
         .select('*')
         .eq('status', 'active');
-      
+
       if (error) throw error;
-      
+
       for (const offer of data || []) {
         this.activeOffers.set(offer.offer_id, offer.offer_data);
       }
-      
+
       console.log(`[REVENUE ENGINE] Loaded ${this.activeOffers.size} existing offers`);
-      
+
     } catch (error) {
-      console.error('[REVENUE ENGINE] Failed to load existing offers:', error.message);
+      // Disable offers DB access after the first failure (e.g. missing 'offers'
+      // table) so it doesn't log every cycle. Apply the migration to enable it.
+      this._offersDbDisabled = true;
+      console.warn('[REVENUE ENGINE] Offers DB off (apply migration 20260617_heidi_orchestrator_schema.sql):', error.message);
     }
   }
   
@@ -1000,6 +1009,7 @@ class HeidiRevenueEngine extends EventEmitter {
    */
   
   async storeOfferInDatabase(offer) {
+    if (this._offersDbDisabled) return; // schema absent — skip without spamming
     try {
       const { data, error } = await supabase
         .from('offers')
@@ -1010,11 +1020,12 @@ class HeidiRevenueEngine extends EventEmitter {
           status: 'active',
           created_at: new Date().toISOString()
         });
-      
+
       if (error) throw error;
-      
+
     } catch (error) {
-      console.error('[REVENUE ENGINE] Failed to store offer:', error.message);
+      this._offersDbDisabled = true;
+      console.warn('[REVENUE ENGINE] Offers DB off (apply migration 20260617_heidi_orchestrator_schema.sql):', error.message);
     }
   }
   

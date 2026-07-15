@@ -1,7 +1,7 @@
 import { useState } from 'react'
 
 export default function TestSimplePage() {
-  const [result, setResult] = useState<any>(null)
+  const [result, setResult] = useState<Record<string,unknown>|null>(null)
   const [error, setError] = useState<string>('')
   const [loading, setLoading] = useState(false)
 
@@ -11,22 +11,17 @@ export default function TestSimplePage() {
     setResult(null)
     
     try {
-      // Test the execute API directly without auth first
       const resp = await fetch("/api/execute", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           session_id: "test-session-" + Date.now(),
           user_id: "test-user",
-          actions: [
-            {
-              idempotency_key: "test-" + Date.now(),
-              task_name: "echo",
-              payload: { hello: "world" },
-            },
-          ],
+          actions: [{
+            idempotency_key: "test-" + Date.now(),
+            task_name: "echo",
+            payload: { hello: "world" },
+          }],
         }),
       });
 

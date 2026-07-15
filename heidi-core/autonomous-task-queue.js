@@ -113,6 +113,7 @@ class AutonomousTaskQueue {
       case 'check_ollama':         return this._checkOllama();
       case 'synthesize_insight':   return this._synthesizeInsight(ctx);
       case 'summarize_history':    return this._summarizeHistory();
+      case 'run_optimizer_scan':   return this._runOptimizerScan(ctx);
       default:
         throw new Error(`Unknown task type: ${type}`);
     }
@@ -283,6 +284,43 @@ class AutonomousTaskQueue {
     this.log.log(`[ATQ] summarize — sessions:${sessions.length} msgs:${totalMsgs} mem:${(newBytes/1024).toFixed(1)}KB`);
 
     return { sessions: sessions.length, totalMsgs, memoryBytes: newBytes };
+  }
+
+  async _runOptimizerScan(ctx = {}) {
+    const SCAN_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+    // Read last scan time from db
+    await this.db.read();
+    const lastScan = this.db.data.lastOptimizerScan || 0;
+    const now = Date.now();
+
+    if (now - lastScan < SCAN_INTERVAL_MS && !ctx.force) {
+      const nextMs = SCAN_INTERVAL_MS - (now - lastScan);
+      const nextHrs = (nextMs / 3600000).toFixed(1);
+      this.log.log(`[ATQ] optimizer scan — skipped, next in ${nextHrs}h`);
+      // Re-schedule check in 1 hour
+      return { skipped: true, nextScanIn: nextMs, followUp: [{ type: 'run_optimizer_scan', priority: 'low' }] };
+    }
+
+    // Dynamically resolve the optimizer instance via global (set in index-clean-3458.js)
+    const optimizer = global._hydiOptimizer;
+    if (!optimizer) {
+      this.log.warn('[ATQ] optimizer scan — optimizer not available');
+      return { skipped: true, reason: 'optimizer not initialized', followUp: [{ type: 'run_optimizer_scan', priority: 'low' }] };
+    }
+
+    this.log.log('[ATQ] optimizer scan — starting nightly scan');
+    const result = await optimizer.runOptimizationCycle();
+
+    // Persist scan time
+    await this.db.read();
+    this.db.data.lastOptimizerScan = now;
+    await this.db.write();
+
+    this.log.log(`[ATQ] optimizer scan — complete: ${result.issueCount} issues, ${result.fixCount} fixes (${result.executionTime}ms)`);
+
+    // Re-schedule in 24h
+    return { ...result, followUp: [{ type: 'run_optimizer_scan', priority: 'low' }] };
   }
 
   async _ollamaAvailable() {
