@@ -60,7 +60,7 @@ export class HeidiOrchestrator {
     
     try {
       // 1. Retrieve memory context
-      const memoryContext = await this.retrieveMemory(request.message, request.user_id);
+      const memoryContext = await this.retrieveMemory(request.message, request.user_id, request.session_id);
       
       // 2. Build prompt with memory
       const prompt = this.buildPrompt(request.message, memoryContext);
@@ -137,8 +137,8 @@ export class HeidiOrchestrator {
    * Retrieve memory context from Supabase via semantic search over the
    * user's current message. Skips retrieval when embeddings are unavailable.
    */
-  private async retrieveMemory(message: string, userId: string): Promise<string> {
-    return retrieveMemory(this.supabase, message, userId);
+  private async retrieveMemory(message: string, userId: string, sessionId: string): Promise<string> {
+    return retrieveMemory(this.supabase, message, userId, sessionId);
   }
 
   /**
