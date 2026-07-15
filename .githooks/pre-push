@@ -19,6 +19,13 @@ if [ $? -ne 0 ]; then
   exit 1
 fi
 
+echo "[pre-push] Running lint..."
+npm run lint
+if [ $? -ne 0 ]; then
+  echo "[pre-push] lint failed -- push aborted (use --no-verify to skip)"
+  exit 1
+fi
+
 echo "[pre-push] Running test suite..."
 npm test
 if [ $? -ne 0 ]; then

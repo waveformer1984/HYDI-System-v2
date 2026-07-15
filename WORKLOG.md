@@ -145,6 +145,17 @@ problems rather than speculative refactors.
    actually meaningful and passing, so a regression like item 1 can't
    land silently again.
 
+8. **Found `.githooks/pre-push` was never actually executable.** The
+   file was committed to git with mode `100644` instead of `100755`, so
+   it has silently no-op'd on every push in every clone since it was
+   added — CLAUDE.md describes it as load-bearing precisely because
+   GitHub Actions once sat stuck `queued` for 24+ hours, but the local
+   fallback it documents was never actually running. Confirmed directly:
+   this session's own `git push` printed "the hook was ignored because
+   it's not set as executable." Fixed with `chmod +x` (git tracks the
+   mode change), and added a `lint` step to the hook itself (it only ran
+   typecheck + test before) so local pushes match the CI gate.
+
 ### Verification
 
 - `npm install` — 0 vulnerabilities, before and after.
