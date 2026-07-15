@@ -150,10 +150,13 @@ class WorkerOrchestrator {
         
         // Start metrics reporting
         this.startMetricsReporting();
-        
+
         // Start health monitoring
         this.startHealthMonitoring();
-        
+
+        // Start remote command polling (mobile ops: start/stop/restart via API)
+        this.startCommandPolling();
+
         console.log('[🎼 Orchestrator] All workers started successfully');
     }
 
@@ -180,7 +183,10 @@ class WorkerOrchestrator {
         if (this.healthInterval) {
             clearInterval(this.healthInterval);
         }
-        
+        if (this.commandInterval) {
+            clearInterval(this.commandInterval);
+        }
+
         console.log('[🎼 Orchestrator] Shutdown complete');
     }
 
@@ -311,6 +317,118 @@ class WorkerOrchestrator {
         } catch (err) {
             console.error(`[🎼 Orchestrator] ✗ Failed to restart ${workerId}:`, err);
         }
+    }
+
+    // ── Remote command polling (mobile ops) ──────────────────────────────────
+    // Vercel serverless functions can't hold a reference to this long-lived
+    // process, so mobile control requests are written to
+    // agent_control_commands by api/agent-manager/control.js and picked up
+    // here instead of being invoked directly.
+
+    startCommandPolling() {
+        this.commandInterval = setInterval(() => {
+            this.pollCommands().catch(err => {
+                console.error('[🎼 Orchestrator] Command polling error:', err);
+            });
+        }, 5000); // Every 5 seconds
+    }
+
+    async pollCommands() {
+        const { data: commands, error } = await this.supabase
+            .from('agent_control_commands')
+            .select('*')
+            .eq('status', 'pending')
+            .order('created_at', { ascending: true })
+            .limit(5);
+
+        if (error) {
+            console.error('[🎼 Orchestrator] Failed to fetch pending commands:', error);
+            return;
+        }
+
+        for (const command of (commands || [])) {
+            await this.executeCommand(command);
+        }
+    }
+
+    async executeCommand(command) {
+        const { id, worker_type: workerType, command: action } = command;
+
+        await this.supabase
+            .from('agent_control_commands')
+            .update({ status: 'acknowledged' })
+            .eq('id', id);
+
+        try {
+            if (!this.workerConfigs[workerType]) {
+                throw new Error(`Unknown worker type: ${workerType}`);
+            }
+            if (!this.workerConfigs[workerType].class) {
+                throw new Error(`Worker type ${workerType} not implemented`);
+            }
+
+            let resultMessage;
+            if (action === 'start') {
+                resultMessage = await this.startWorkerType(workerType);
+            } else if (action === 'stop') {
+                resultMessage = await this.stopWorkerType(workerType);
+            } else if (action === 'restart') {
+                await this.stopWorkerType(workerType);
+                resultMessage = await this.startWorkerType(workerType);
+            } else {
+                throw new Error(`Unknown command: ${action}`);
+            }
+
+            await this.supabase
+                .from('agent_control_commands')
+                .update({ status: 'completed', result_message: resultMessage, processed_at: new Date().toISOString() })
+                .eq('id', id);
+
+            await this.supabase
+                .from('worker_events')
+                .insert({ worker_id: null, queue_name: workerType, event_type: 'control_command', details: { command: action, requested_by: command.requested_by, result: resultMessage } });
+
+            console.log(`[🎼 Orchestrator] Command ${action} on ${workerType} completed: ${resultMessage}`);
+        } catch (err) {
+            const message = err instanceof Error ? err.message : 'Unknown error';
+            await this.supabase
+                .from('agent_control_commands')
+                .update({ status: 'failed', result_message: message, processed_at: new Date().toISOString() })
+                .eq('id', id);
+            console.error(`[🎼 Orchestrator] Command ${action} on ${workerType} failed:`, message);
+        }
+    }
+
+    async startWorkerType(workerType) {
+        const config = this.workerConfigs[workerType];
+        const instances = this.workers.get(workerType) || [];
+
+        if (instances.length >= config.instances) {
+            return `${workerType} already running (${instances.length} instance(s))`;
+        }
+
+        const started = [];
+        for (let i = instances.length; i < config.instances; i++) {
+            const workerId = `${workerType}-${i + 1}`;
+            const worker = new config.class(workerId);
+            await worker.start();
+            instances.push(worker);
+            started.push(workerId);
+        }
+        this.workers.set(workerType, instances);
+        return `started ${started.length} instance(s): ${started.join(', ')}`;
+    }
+
+    async stopWorkerType(workerType) {
+        const instances = this.workers.get(workerType) || [];
+        if (instances.length === 0) {
+            return `${workerType} already stopped`;
+        }
+
+        await Promise.all(instances.map(w => w.stop()));
+        const count = instances.length;
+        this.workers.set(workerType, []);
+        return `stopped ${count} instance(s)`;
     }
 
     async gatherMetrics() {

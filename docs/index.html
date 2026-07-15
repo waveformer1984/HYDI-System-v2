@@ -208,6 +208,17 @@
         .btn.primary { background: linear-gradient(135deg, var(--accent), #3b82f6); color: #04121a; }
         .btn.ghost { background: var(--bg-elevated); color: var(--text-secondary); }
         .btn.danger { background: var(--danger-dim); color: #fca5a5; }
+
+        /* ── Worker fleet sheet ─────────────────────────── */
+        .worker-row {
+            display: flex; align-items: center; gap: 8px;
+            padding: 9px 0; border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+        .worker-row:last-child { border-bottom: none; }
+        .worker-name { flex: 1; font-size: 13.5px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .worker-row .btn {
+            flex: none; padding: 6px 10px; font-size: 11.5px; border-radius: 8px;
+        }
     </style>
 </head>
 <body>
@@ -219,6 +230,7 @@
                 <div class="sub"><span class="status-dot" id="statusDot"></span><span id="statusText">not configured</span></div>
             </div>
         </div>
+        <button class="icon-btn" id="workersBtn" aria-label="Workers">🤖</button>
         <button class="icon-btn" id="settingsBtn" aria-label="Settings">⚙️</button>
     </header>
 
@@ -265,6 +277,17 @@
         </div>
     </div>
 
+    <div class="sheet" id="workersSheet">
+        <h2>Worker fleet</h2>
+        <p class="hint">Start, stop, or restart HYDI's background workers. Commands are queued and picked up by the running orchestrator within a few seconds — they are not instant. Stopping a worker requires confirmation.</p>
+        <div id="workersList"></div>
+        <h2 style="margin-top:18px; font-size:13px; color:var(--text-secondary);">Recent commands</h2>
+        <div id="commandsLog" style="font-size:12px; color:var(--text-muted); line-height:1.7; white-space:pre-wrap; word-break:break-word; margin-top:6px;">—</div>
+        <div class="sheet-actions">
+            <button class="btn ghost" id="workersCancelBtn">Close</button>
+        </div>
+    </div>
+
     <script>
     'use strict';
 
@@ -280,6 +303,13 @@
         heidi: '🧠', ursula: '📡', cascade: '⚡', kilo: '🔧',
         protoforge: '🌐', hyve: '🐝', infrastructure: '🏗️', rezonate: '🎵',
     };
+    // Must stay in sync with KNOWN_WORKER_TYPES in api/agent-manager/control.js
+    const WORKER_TYPES = [
+        'revenue_ingestion', 'task_router', 'event_bus',
+        'provisioning', 'fabrication', 'inventory', 'cost_margin',
+        'opportunity_detection', 'behavior_pattern', 'anomaly_detection', 'decision_assist',
+        'security_identity', 'sync', 'notification', 'audit',
+    ];
 
     let apiUrl = localStorage.getItem(LS.api) || '';
     let secret = localStorage.getItem(LS.secret) || '';
@@ -456,7 +486,7 @@
         $('sheet').classList.remove('open');
     }
     $('settingsBtn').addEventListener('click', openSheet);
-    $('backdrop').addEventListener('click', closeSheet);
+    $('backdrop').addEventListener('click', () => { closeSheet(); closeWorkersSheet(); });
     $('cancelBtn').addEventListener('click', closeSheet);
     $('saveBtn').addEventListener('click', () => {
         apiUrl = $('apiUrl').value.trim();
@@ -534,6 +564,82 @@
         messagesEl.innerHTML = '';
         closeSheet();
     });
+
+    // ── Worker fleet (start/stop/restart) ──────────────────────────────
+    function renderWorkers() {
+        $('workersList').innerHTML = WORKER_TYPES.map(w => `
+            <div class="worker-row">
+                <span class="worker-name">${w}</span>
+                <button class="btn ghost" data-worker="${w}" data-cmd="start">Start</button>
+                <button class="btn ghost" data-worker="${w}" data-cmd="restart">Restart</button>
+                <button class="btn danger" data-worker="${w}" data-cmd="stop">Stop</button>
+            </div>
+        `).join('');
+    }
+
+    async function loadCommandsLog() {
+        const log = $('commandsLog');
+        if (!isConfigured()) { log.textContent = 'Configure the API URL in ⚙️ settings first.'; return; }
+        log.textContent = 'Loading…';
+        try {
+            const headers = {};
+            if (secret) headers['x-hydi-service-token'] = await mintServiceToken();
+            const r = await fetch(`${baseUrl()}/api/agent-manager/control`, { headers, signal: AbortSignal.timeout(10000) });
+            const d = await r.json().catch(() => ({}));
+            if (!r.ok) { log.textContent = `Error: ${d.error || d.reason || `HTTP ${r.status}`}`; return; }
+            const rows = d.commands || [];
+            log.textContent = rows.length
+                ? rows.map(c => `${c.status === 'completed' ? '✓' : c.status === 'failed' ? '✗' : '…'} ${c.command} ${c.worker_type} — ${c.status}${c.result_message ? ': ' + c.result_message : ''}`).join('\n')
+                : 'No commands yet.';
+        } catch (err) {
+            log.textContent = `Network error: ${err && err.message ? err.message : 'request failed'}`;
+        }
+    }
+
+    async function sendCommand(workerType, command) {
+        if (!isConfigured()) { openSheet(); return; }
+        if (command === 'stop' && !confirm(`Stop all "${workerType}" worker instances? This takes them out of the pipeline until restarted.`)) {
+            return;
+        }
+        try {
+            const headers = { 'Content-Type': 'application/json' };
+            if (secret) headers['x-hydi-service-token'] = await mintServiceToken();
+            const r = await fetch(`${baseUrl()}/api/agent-manager/control`, {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({ worker_type: workerType, command, confirm: command === 'stop' }),
+                signal: AbortSignal.timeout(15000),
+            });
+            const d = await r.json().catch(() => ({}));
+            if (!r.ok) {
+                $('commandsLog').textContent = `✗ ${command} ${workerType} rejected: ${d.error || d.reason || `HTTP ${r.status}`}`;
+                return;
+            }
+        } catch (err) {
+            $('commandsLog').textContent = `Network error: ${err && err.message ? err.message : 'request failed'}`;
+            return;
+        }
+        loadCommandsLog();
+    }
+
+    $('workersList')?.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-worker]');
+        if (!btn) return;
+        sendCommand(btn.dataset.worker, btn.dataset.cmd);
+    });
+
+    function openWorkersSheet() {
+        renderWorkers();
+        $('backdrop').classList.add('open');
+        $('workersSheet').classList.add('open');
+        loadCommandsLog();
+    }
+    function closeWorkersSheet() {
+        $('backdrop').classList.remove('open');
+        $('workersSheet').classList.remove('open');
+    }
+    $('workersBtn').addEventListener('click', openWorkersSheet);
+    $('workersCancelBtn').addEventListener('click', closeWorkersSheet);
 
     // ── Boot ──────────────────────────────────────────────────────────
     renderSystems();
