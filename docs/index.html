@@ -83,6 +83,44 @@
             cursor: pointer; line-height: 1; flex-shrink: 0;
         }
         .icon-btn:active { background: var(--accent-dim); color: var(--accent); }
+        .icon-btn { position: relative; }
+        .ops-badge {
+            position: absolute; top: 2px; right: 2px; min-width: 15px; height: 15px;
+            border-radius: 8px; background: var(--status-critical); color: #fff;
+            font-size: 9.5px; font-weight: 700; line-height: 15px; padding: 0 3px;
+        }
+
+        /* ── Ops sheet ──────────────────────────────────── */
+        .ops-score-row { display: flex; align-items: baseline; gap: 10px; margin-bottom: 14px; }
+        .ops-score { font-size: 34px; font-weight: 700; color: var(--accent); }
+        .ops-score-label { font-size: 12px; color: var(--text-secondary); }
+        .ops-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 16px; }
+        .ops-sub {
+            background: var(--bg-elevated); border-radius: 10px; padding: 8px 10px;
+            font-size: 12px; display: flex; justify-content: space-between; align-items: center;
+        }
+        .ops-section-title {
+            font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px;
+            color: var(--text-muted); margin: 16px 0 8px;
+        }
+        .ops-card {
+            background: var(--bg-elevated); border-radius: 10px; padding: 10px 12px;
+            margin-bottom: 8px; font-size: 13px;
+        }
+        .ops-card-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+        .ops-sub2 { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+        .ops-btn-row { display: flex; gap: 6px; flex-shrink: 0; }
+        .ops-mini-btn {
+            background: var(--bg-primary); border: 1px solid rgba(255,255,255,0.08); color: var(--text-primary);
+            border-radius: 7px; padding: 5px 9px; font-size: 12px; cursor: pointer;
+        }
+        .ops-mini-btn:active { border-color: var(--accent); color: var(--accent); }
+        .ops-search-row { display: flex; gap: 6px; margin-bottom: 8px; }
+        .ops-search-row input {
+            flex: 1; background: var(--bg-elevated); color: var(--text-primary);
+            border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 10px 12px; font-size: 13px;
+        }
+        .ops-empty { color: var(--text-muted); font-size: 12.5px; padding: 10px 2px; }
 
         /* ── System picker ──────────────────────────────── */
         .systems {
@@ -219,6 +257,7 @@
                 <div class="sub"><span class="status-dot" id="statusDot"></span><span id="statusText">not configured</span></div>
             </div>
         </div>
+        <button class="icon-btn" id="opsBtn" aria-label="Operations">🛰️<span class="ops-badge" id="opsBadge" style="display:none">0</span></button>
         <button class="icon-btn" id="settingsBtn" aria-label="Settings">⚙️</button>
     </header>
 
@@ -262,6 +301,37 @@
             <button class="btn danger" id="clearBtn">Clear chat</button>
             <button class="btn ghost" id="cancelBtn">Cancel</button>
             <button class="btn primary" id="saveBtn">Save</button>
+        </div>
+    </div>
+
+    <div class="sheet-backdrop" id="opsBackdrop"></div>
+    <div class="sheet" id="opsSheet" style="max-height: 88dvh">
+        <h2>HYDI Operations</h2>
+        <p class="hint">Uses the same API URL / service secret as chat (⚙️ settings). Nothing extra to configure.</p>
+
+        <div class="ops-score-row">
+            <div class="ops-score" id="opsScore">—</div>
+            <div class="ops-score-label" id="opsScoreLabel">not connected</div>
+        </div>
+
+        <div class="ops-grid" id="opsSubGrid"></div>
+
+        <div class="ops-section-title">Worker Fleet</div>
+        <div id="opsWorkers"><div class="ops-empty">Open with a configured API URL to see live workers.</div></div>
+
+        <div class="ops-section-title">Memory Search</div>
+        <div class="ops-search-row">
+            <input id="opsMemQ" type="text" placeholder="Search memories…">
+            <button class="ops-mini-btn" id="opsMemBtn">🔎</button>
+        </div>
+        <div id="opsMemResults"></div>
+
+        <div class="ops-section-title">Notifications</div>
+        <div id="opsNotifs"><div class="ops-empty">No notifications.</div></div>
+
+        <div class="sheet-actions">
+            <button class="btn ghost" id="opsRefreshBtn">↻ Refresh</button>
+            <button class="btn ghost" id="opsCloseBtn">Close</button>
         </div>
     </div>
 
@@ -534,6 +604,127 @@
         messagesEl.innerHTML = '';
         closeSheet();
     });
+
+    // ── Ops (mobile command center) ─────────────────────────────────────
+    // Reuses this page's existing apiUrl/secret (⚙️ settings) — the same
+    // HMAC service token minted for /api/chat is accepted by every
+    // mobile-ops route (lib/auth/requireAuth.js treats a valid service
+    // token as role 'owner'), so there's no separate device-pairing step
+    // needed for this statically-hosted client.
+    async function opsFetch(path, opts = {}) {
+        const headers = Object.assign({ 'Content-Type': 'application/json' }, opts.headers || {});
+        if (secret) headers['x-hydi-service-token'] = await mintServiceToken();
+        return fetch(`${baseUrl()}${path}`, Object.assign({}, opts, { headers, signal: AbortSignal.timeout(10000) }));
+    }
+
+    function opsStatusEmoji(status) {
+        return { healthy: '🟢', degraded: '🟡', critical: '🔴', offline: '⚫', unknown: '⚪' }[status] || '⚪';
+    }
+    function opsSeverityEmoji(sev) {
+        return { critical: '🚨', operational: 'ℹ️', approval: '⚠️', info: '💬' }[sev] || '💬';
+    }
+
+    async function loadOpsHealth() {
+        try {
+            const r = await opsFetch('/api/status/system');
+            if (!r.ok) { $('opsScoreLabel').textContent = r.status === 401 ? 'auth failed — check secret' : `HTTP ${r.status}`; return; }
+            const d = await r.json();
+            $('opsScore').textContent = d.health_score;
+            $('opsScoreLabel').textContent = d.overall_status + (d.offline_subsystems.length ? ` · ${d.offline_subsystems.length} offline` : '');
+            $('opsSubGrid').innerHTML = Object.entries(d.subsystems).map(([name, s]) =>
+                `<div class="ops-sub"><span>${name}</span><span>${opsStatusEmoji(s.status)}</span></div>`
+            ).join('');
+
+            const list = $('opsWorkers');
+            if (!d.workers || d.workers.length === 0) {
+                list.innerHTML = '<div class="ops-empty">No workers running.</div>';
+            } else {
+                list.innerHTML = d.workers.map(w => `
+                    <div class="ops-card">
+                        <div class="ops-card-row">
+                            <div>
+                                <div>${w.worker_id}</div>
+                                <div class="ops-sub2">${opsStatusEmoji(w.status)} ${w.status} · ${w.processed_count||0} done · ${w.error_count||0} errors</div>
+                            </div>
+                            <div class="ops-btn-row">
+                                <button class="ops-mini-btn" data-restart="${w.worker_type}|${w.worker_id}">⟳</button>
+                                <button class="ops-mini-btn" data-stop="${w.worker_type}|${w.worker_id}">⏹</button>
+                            </div>
+                        </div>
+                    </div>`).join('');
+            }
+        } catch (err) {
+            $('opsScoreLabel').textContent = navigator.onLine ? 'unreachable' : 'offline';
+        }
+    }
+
+    $('opsWorkers').addEventListener('click', async (e) => {
+        const restart = e.target.closest('[data-restart]');
+        const stop = e.target.closest('[data-stop]');
+        const target = restart || stop;
+        if (!target) return;
+        const [workerType, workerId] = (restart ? target.dataset.restart : target.dataset.stop).split('|');
+        const command = restart ? 'restart' : 'stop';
+        try {
+            const r = await opsFetch('/api/agent-manager/control', {
+                method: 'POST', body: JSON.stringify({ worker_type: workerType, worker_id: workerId, command }),
+            });
+            if (r.status === 403) { alert('Not authorized for that action.'); return; }
+            setTimeout(loadOpsHealth, 1500);
+        } catch (_) { alert('Command not sent — offline or unreachable.'); }
+    });
+
+    async function loadOpsNotifications() {
+        try {
+            const r = await opsFetch('/api/notifications?unread=true');
+            if (!r.ok) return;
+            const d = await r.json();
+            if (d.unread_count > 0) { $('opsBadge').style.display = 'block'; $('opsBadge').textContent = d.unread_count; }
+            else { $('opsBadge').style.display = 'none'; }
+            const box = $('opsNotifs');
+            box.innerHTML = (!d.notifications || d.notifications.length === 0)
+                ? '<div class="ops-empty">No notifications.</div>'
+                : d.notifications.map(n => `
+                    <div class="ops-card">
+                        <div>${opsSeverityEmoji(n.severity)} ${n.title}</div>
+                        ${n.body ? `<div class="ops-sub2">${n.body}</div>` : ''}
+                    </div>`).join('');
+        } catch (_) { /* leave prior notifications visible */ }
+    }
+
+    async function searchOpsMemory() {
+        const q = $('opsMemQ').value.trim();
+        const results = $('opsMemResults');
+        if (!q) { results.innerHTML = ''; return; }
+        try {
+            const r = await opsFetch('/api/memory/search?q=' + encodeURIComponent(q));
+            if (!r.ok) { results.innerHTML = '<div class="ops-empty">Search failed.</div>'; return; }
+            const d = await r.json();
+            results.innerHTML = (!d.memories || d.memories.length === 0)
+                ? '<div class="ops-empty">No memories found.</div>'
+                : d.memories.map(m => `<div class="ops-card">${m.content}<div class="ops-sub2">${m.kind} · importance ${m.importance_score}</div></div>`).join('');
+        } catch (_) { results.innerHTML = '<div class="ops-empty">Offline — search unavailable.</div>'; }
+    }
+    $('opsMemBtn').addEventListener('click', searchOpsMemory);
+    $('opsMemQ').addEventListener('keydown', (e) => { if (e.key === 'Enter') searchOpsMemory(); });
+
+    function loadOps() { loadOpsHealth(); loadOpsNotifications(); }
+
+    function openOpsSheet() {
+        if (!isConfigured()) { openSheet(); return; }
+        $('opsBackdrop').classList.add('open');
+        $('opsSheet').classList.add('open');
+        loadOps();
+    }
+    function closeOpsSheet() {
+        $('opsBackdrop').classList.remove('open');
+        $('opsSheet').classList.remove('open');
+    }
+    $('opsBtn').addEventListener('click', openOpsSheet);
+    $('opsBackdrop').addEventListener('click', closeOpsSheet);
+    $('opsCloseBtn').addEventListener('click', closeOpsSheet);
+    $('opsRefreshBtn').addEventListener('click', loadOps);
+    if (isConfigured()) { loadOpsNotifications(); setInterval(loadOpsNotifications, 60000); }
 
     // ── Boot ──────────────────────────────────────────────────────────
     renderSystems();
