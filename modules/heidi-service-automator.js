@@ -1404,6 +1404,206 @@ result = response.json()`
   }
 
   /**
+   * Success story: identify metrics for the case study
+   */
+  async identifySuccessMetrics(task) {
+    const { customerId } = task.data;
+    const subscription = await this.getSubscription(customerId);
+    const topServices = await this.getServiceUsageBreakdown(customerId);
+    
+    const metrics = {
+      customerId,
+      topServices: topServices.slice(0, 3),
+      subscriptionTier: subscription?.tier || 'unknown',
+      generatedAt: new Date().toISOString()
+    };
+    
+    task.data.successMetrics = metrics;
+    await this.storeAnalysis(customerId, 'success_metrics', metrics);
+    console.log(`[HEIDI] Success metrics identified for ${customerId}`);
+  }
+
+  /**
+   * Success story: generate a case-study outline
+   */
+  async generateCaseStudyOutline(task) {
+    const { customerId, successMetrics } = task.data;
+    const caseStudy = {
+      title: `How ${customerId} accelerated with Ursula`,
+      metrics: successMetrics || { topServices: [] },
+      outline: [
+        'Customer background and goals',
+        'Implementation of Ursula services',
+        'Measured outcomes and top services',
+        'Next steps and expansion opportunities'
+      ],
+      generatedAt: new Date().toISOString()
+    };
+    
+    task.data.caseStudy = caseStudy;
+    await this.storeAnalysis(customerId, 'case_study_outline', caseStudy);
+    console.log(`[HEIDI] Case study outline generated for ${customerId}`);
+  }
+
+  /**
+   * Success story: request a customer testimonial
+   */
+  async requestCustomerTestimonial(task) {
+    const { customerId, caseStudy } = task.data;
+    
+    const email = {
+      to: customerId,
+      subject: 'We would love to share your success story',
+      template: 'testimonial_request',
+      data: {
+        caseStudyTitle: caseStudy?.title || 'Your Ursula success story',
+        testimonialUrl: `${process.env.BASE_URL}/testimonial`
+      }
+    };
+    
+    await this.sendEmail(email);
+    console.log(`[HEIDI] Testimonial request sent to ${customerId}`);
+  }
+
+  /**
+   * Success story: publish the story internally
+   */
+  async publishSuccessStory(task) {
+    const { customerId, caseStudy } = task.data;
+    
+    await this.storeAnalysis(customerId, 'published_success_story', {
+      caseStudy: caseStudy || { title: `Success story for ${customerId}` },
+      publishedAt: new Date().toISOString()
+    });
+    
+    await supabase
+      .from('notifications')
+      .insert({
+        recipient: customerId,
+        type: 'success_story_published',
+        channel: 'email',
+        status: 'pending',
+        content: `Your success story has been published: ${caseStudy?.title || 'Ursula success story'}`,
+        metadata: { caseStudy }
+      });
+    
+    console.log(`[HEIDI] Success story published for ${customerId}`);
+  }
+
+  /**
+   * Retention: follow up if no response to the retention offer
+   */
+  async followUpIfNoResponse(task) {
+    const { offers = [] } = task.data;
+    
+    for (const { customerId, offer } of offers) {
+      const email = {
+        to: customerId,
+        subject: 'One more reason to stay with Ursula',
+        template: 'retention_followup',
+        data: { offer }
+      };
+      
+      await this.sendEmail(email);
+    }
+    
+    console.log(`[HEIDI] Retention follow-up sent to ${offers.length} customers`);
+  }
+
+  /**
+   * Support: analyze a support ticket
+   */
+  async analyzeSupportTicket(task) {
+    const { customerId, ticketId, subject, body } = task.data;
+    
+    const analysis = {
+      ticketId,
+      subject,
+      body,
+      sentiment: 'neutral',
+      priority: 'normal',
+      analyzedAt: new Date().toISOString()
+    };
+    
+    task.data.supportAnalysis = analysis;
+    await this.storeAnalysis(customerId, 'support_ticket', analysis);
+    console.log(`[HEIDI] Support ticket analyzed for ${customerId}`);
+  }
+
+  /**
+   * Support: suggest solutions for the analyzed ticket
+   */
+  async suggestSolutions(task) {
+    const { customerId, supportAnalysis } = task.data;
+    
+    const solutions = {
+      suggested: [
+        'Check the documentation and quickstart guide',
+        'Verify API key and service endpoints',
+        'Contact support if the issue persists'
+      ],
+      generatedAt: new Date().toISOString()
+    };
+    
+    task.data.solutions = solutions;
+    await this.storeAnalysis(customerId, 'suggested_solutions', solutions);
+    console.log(`[HEIDI] Suggested solutions for ${customerId}`);
+  }
+
+  /**
+   * Support: escalate if the ticket requires human intervention
+   */
+  async escalateIfNeeded(task) {
+    const { customerId, supportAnalysis, escalate = false } = task.data;
+    
+    if (escalate) {
+      const email = {
+        to: 'support@ursula.ai',
+        subject: `Escalated support ticket from ${customerId}`,
+        template: 'support_escalation',
+        data: { supportAnalysis, customerId }
+      };
+      
+      await this.sendEmail(email);
+      
+      await supabase
+        .from('notifications')
+        .insert({
+          recipient: 'support@ursula.ai',
+          type: 'support_escalation',
+          channel: 'email',
+          status: 'pending',
+          content: `Escalated support ticket from ${customerId}: ${supportAnalysis?.subject || 'No subject'}`,
+          metadata: { customerId, supportAnalysis }
+        });
+      
+      console.log(`[HEIDI] Support ticket escalated for ${customerId}`);
+    } else {
+      console.log(`[HEIDI] Support ticket not escalated for ${customerId}`);
+    }
+  }
+
+  /**
+   * Support: notify the customer of the resolution
+   */
+  async notifyCustomer(task) {
+    const { customerId, solutions, supportAnalysis } = task.data;
+    
+    const email = {
+      to: customerId,
+      subject: `Update on your support request: ${supportAnalysis?.subject || 'Your ticket'}`,
+      template: 'support_resolution',
+      data: {
+        supportAnalysis,
+        solutions: solutions?.suggested || []
+      }
+    };
+    
+    await this.sendEmail(email);
+    console.log(`[HEIDI] Customer notified for ${customerId}`);
+  }
+
+  /**
    * Schedule periodic tasks
    */
   schedulePeriodicTasks() {

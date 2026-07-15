@@ -83,6 +83,12 @@ class HeidiCoreLoop extends EventEmitter {
     // Wire up event listeners
     this.setupEventListeners();
     
+    // Bind the core loop handler and observation step so methods like
+    // getRecentRevenue() always execute on the HeidiCoreLoop instance even if
+    // the handler reference is passed around (e.g. setTimeout, event emitters).
+    this.executeHeidiLoop = this.executeHeidiLoop.bind(this);
+    this.observe = this.observe.bind(this);
+    
     console.log('[CORE LOOP] Heidi Core Loop initialized');
     console.log(`[CORE LOOP] Loop interval: ${this.config.loopInterval}ms`);
     console.log(`[CORE LOOP] Revenue mode: ${this.config.enableRevenueMode ? 'ENABLED' : 'DISABLED'}`);
