@@ -1,11 +1,16 @@
 name: Deploy Mobile Chat to GitHub Pages
 
-# Local-only architecture decision (2026-07-10): Hydi's mobile chat is
-# reached via Tailscale (heidi-pc.tailc50af2.ts.net) now, so this no longer
-# needs to auto-publish a public GitHub Pages site on every docs/ push --
-# that was a second silent external-hosting path alongside Vercel. Trigger
-# is manual-only; the capability stays available if ever needed again.
+# Local-only architecture decision (2026-07-10) set this to manual-only
+# (workflow_dispatch) to avoid a second silent external-hosting path
+# alongside Vercel. Re-enabled auto-publish-on-push (2026-07-15, explicit
+# maintainer request) now that docs/index.html carries the mobile-ops Ops
+# view (PR #190) and there's an actual reason to want it live automatically.
+# workflow_dispatch stays available too for an on-demand redeploy.
 on:
+  push:
+    branches: [clean-main]
+    paths:
+      - 'docs/**'
   workflow_dispatch:
 
 permissions:

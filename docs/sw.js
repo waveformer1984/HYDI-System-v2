@@ -4,7 +4,7 @@
  * API calls always go to the network.
  */
 
-const CACHE = 'hydi-gh-chat-v1';
+const CACHE = 'hydi-gh-chat-v2'; // v2: adds the Ops (mobile command center) sheet
 const PRECACHE = [
   './',
   './index.html',
