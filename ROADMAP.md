@@ -29,13 +29,24 @@ drop-everything, P1 is next up, P2 is scheduled but not urgent.
 **P0 — blocking / operator action required:**
 1. **Rotate the credentials leaked 2026-07-15** (still outstanding — see
    below). Cannot be completed from any sandbox; requires dashboard access.
-2. **Duplicate open PRs for the same issue**: #197 and #198 both close
-   issue #195 (self-hosted CI runner offline) with overlapping fixes —
-   both switch every workflow from `runs-on: self-hosted` to
-   `ubuntu-latest`; #198 additionally adds a stuck-queue alert to
-   `health-monitor.yml`. Two independent sessions picked up the same
-   issue concurrently. Recommend merging #198 (superset of #197's fix)
-   and closing #197 to avoid divergent CI config landing from both.
+2. ~~**Duplicate open PRs for the same issue**: #197 and #198 both close
+   issue #195~~ **Consolidated 2026-07-16** — #197 closed as a duplicate,
+   #198 kept (it was the superset: same 5 workflow changes plus the
+   stuck-queue alert and `OPERATIONS.md` update).
+2a. **New finding while consolidating: #198's own CI is still failing**,
+    not just stuck-queued. Both `Jest Unit Tests` and the CodeQL analyze
+    job complete with `conclusion: failure` in ~3-4 seconds on
+    `ubuntu-latest`, with `runner_id: 0` — never actually assigned to a
+    runner. That session already tried retriggering twice believing an
+    Actions spending-limit fix had resolved it ("chore: retrigger CI after
+    spending-limit fix") — both retriggers failed identically. This points
+    at either an incomplete spending-limit fix or a separate account/repo
+    level block on GitHub-hosted runners (Settings → Actions → General,
+    Settings → Billing → spending limits) — needs dashboard access to
+    diagnose further, same as the credential rotation above. **Do not merge
+    #198 until a check actually goes green** — merging now trades "stuck
+    queued forever" for "fails immediately every time," which isn't
+    actually a trustworthy CI signal either.
 
 **P1 — high impact/risk, not yet started:**
 3. Cryptographic identity verification to replace the `x-user-id`
