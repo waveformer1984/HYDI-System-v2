@@ -112,6 +112,10 @@ drop-everything, P1 is next up, P2 is scheduled but not urgent.
   claiming "no exposed secrets" and a fully Vercel-hosted deployment model
   that's since been confirmed unused) →
   `archive/stale-april-2026-deployment-reports/`.
+- Local-First execution plan Phase 0: archived the last dead Vercel
+  artifacts (`.vercelignore`, `apps/ursula-frontend/vercel.json`,
+  `scripts/cloud-bootstrap/vercel.js`) → `archive/dead-vercel-config/`. See
+  "Local-First execution plan" under Near-term below.
 
 ---
 
@@ -153,6 +157,36 @@ the operator can confirm (e.g. `pm2 list`).
 
 ### Security: cryptographic identity verification
 Replace the current `x-user-id` header trust model with cryptographically verified identity tokens. This is the highest-priority security item and is a prerequisite for any public-facing expansion.
+
+### Local-First execution plan
+Full inventory + phased path in `LOCAL_FIRST_EXECUTION_PLAN.md` for
+replacing every external platform this system depends on with a
+local/self-hosted equivalent, wherever one exists — extends `CLAUDE.md`'s
+Local-First Architecture decision (2026-07-10) from a status summary into
+something executable.
+
+- **Phase 0 (✅ done 2026-07-16)**: archived the last dead Vercel
+  artifacts now that Vercel deployment is confirmed unused — see the
+  audit findings above.
+- **Phase 1 (🔜 runbook + migration script ready, execution pending host
+  access)**: promote the already-proven local Supabase Docker stack from
+  dev-only to the actual production data plane, replacing the cloud
+  project entirely. `LOCAL_FIRST_PHASE1_RUNBOOK.md` has the full
+  step-by-step; `scripts/migrate-to-local-supabase.sh` automates the
+  data-only migration + per-table row-count verification. **Confirmed
+  2026-07-16: no Claude Code Remote sandbox session can execute this
+  phase's actual migration** — no DNS resolution for the Tailscale host,
+  generic outbound HTTPS 403s everywhere except the git remote (even via
+  the environment's own web-fetch tool), no `supabase` CLI installed. This
+  needs to be run by an operator, or a session with real access to
+  `heidi-pc`, following the runbook.
+- **Phase 2 (🔜)**: Edge Functions — no code changes needed, all 42 already
+  run identically under `supabase functions serve`.
+- **Phase 3 (🔜, low priority)**: GitHub Pages → local static serving.
+- **Out of scope**: Stripe (no self-hosted payment processor exists) and
+  GitHub itself (self-hosting already explicitly declined per the
+  2026-07-10 decision) — see `LOCAL_FIRST_EXECUTION_PLAN.md` for the full
+  reasoning.
 
 ### Pipeline observability
 - Structured trace IDs flowing through all six layers end-to-end
