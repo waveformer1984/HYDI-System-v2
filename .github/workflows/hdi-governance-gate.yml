@@ -17,7 +17,7 @@ on:
 jobs:
   governance-check:
     name: Governance Contract Validation
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     
     services:
       postgres:
@@ -189,7 +189,7 @@ jobs:
   # Post-merge: Update frozen contracts
   update-contracts:
     name: Update Frozen Contracts
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/clean-main'
     needs: governance-check
     

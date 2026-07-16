@@ -75,58 +75,26 @@ class SecurityIdentityWorker {
         };
 
         this.checkTokenPermission = async function(decoded, endpoint, required_permission) {
-            return true; // stub — implement RBAC logic here
+            // No RBAC implementation exists yet. Returning true unconditionally
+            // would let any validly-signed JWT pass every permission check
+            // regardless of what it was actually issued for. Fail closed until
+            // real per-token permission logic is implemented (see ISSUES_FOUND.md #44).
+            return false;
         };
 
         this.processAuthentication = async function(payload) {
             const { email, ip_address, user_agent } = payload.data;
             console.log(`[🔐 Security] Processing authentication for ${email}`);
-            // Process auth attempt details
+            // This event's payload carries no password/API-key/credential to
+            // verify against anything -- and this codebase has no user/password
+            // schema at all (its actual identity model is API-key based, see
+            // src/middleware/keymaker.js and the `api_keys` table). Simulating
+            // success regardless of input would let anyone impersonate any
+            // email. Fail closed and log the attempt as rejected until real
+            // credential verification is designed and wired up (see
+            // ISSUES_FOUND.md #44) -- never issue a token from here.
+            const failureReason = 'no credential verification implemented for auth.attempt; rejecting';
             try {
-                // In a real system, you would verify credentials against a user database
-                // For now, we'll simulate a successful authentication for demo purposes
-                
-                // Log the attempt
-                await this.supabase
-                    .from('auth_attempts')
-                    .insert({
-                        email: email,
-                        ip_address: ip_address,
-                        user_agent: user_agent,
-                        success: true, // Simulate success
-                        attempted_at: new Date()
-                    });
-                
-                // generate-and-return-token
-                // Generate JWT token for successful auth
-                const token = jwt.sign(
-                    { 
-                        email: email,
-                        issued_at: Math.floor(Date.now() / 1000)
-                    },
-                    this.securityConfig.jwtSecret,
-                    { expiresIn: this.securityConfig.tokenExpiry }
-                );
-                
-                // Return token through event bus
-                const queue = new QueueManager();
-                await queue.initialize();
-                
-                await queue.enqueue('notification', {
-                    event_type: 'notification.send',
-                    data: {
-                        recipient: email,
-                        template: 'auth.success',
-                        data: {
-                            token: token,
-                            expires_in: this.securityConfig.tokenExpiry
-                        }
-                    }
-                }, 8); // High priority
-                
-                console.log(`[🔐 Security] Auth successful for ${email}`);
-            } catch (error) {
-                // Log failed attempt
                 await this.supabase
                     .from('auth_attempts')
                     .insert({
@@ -134,12 +102,13 @@ class SecurityIdentityWorker {
                         ip_address: ip_address,
                         user_agent: user_agent,
                         success: false,
-                        failure_reason: error.message,
+                        failure_reason: failureReason,
                         attempted_at: new Date()
                     });
-                
-                console.log(`[🔐 Security] Auth failed for ${email}: ${error.message}`);
+            } catch (error) {
+                console.error(`[🔐 Security] Failed to log rejected auth attempt for ${email}: ${error.message}`);
             }
+            console.log(`[🔐 Security] Auth rejected for ${email}: ${failureReason}`);
         };
 
         this.validateToken = async function(payload) {

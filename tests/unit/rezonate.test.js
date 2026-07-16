@@ -68,6 +68,7 @@ const FAKE_CONFIG = {
 jest.mock('fs', () => ({
   readFileSync: jest.fn(() => JSON.stringify(FAKE_CONFIG)),
 }));
+const fs = require('fs');
 
 // ── environment variables ──────────────────────────────────────────────────────
 beforeAll(() => {
@@ -107,16 +108,30 @@ function buildReqRes({ method = 'POST', body = {}, query = {}, headers } = {}) {
 // Load the handler after mocks are in place.
 const handler = require('../../api/rezonate/route.js');
 
-// Reset call counts between tests to keep assertions clean.
+// The chain object every `.select()`/`.insert()`/`.eq()` call resolves to by
+// default (i.e. "keep chaining"). Reused below wherever a test needs to
+// explicitly queue a pass-through link ahead of a resolving one, e.g. when
+// an action now does an ownership-check query before its real query and
+// both happen to call the same mocked method (see list_tracks below).
+const chainSelf = { select: mockSelect, insert: mockInsert, eq: mockEq, single: mockSingle };
+
+// Reset call counts *and* any queued once-implementations between tests --
+// jest.clearAllMocks() only clears call history, not queued
+// mockResolvedValueOnce/mockReturnValueOnce values, so a test that errors
+// out before consuming all of its queued values could otherwise leak them
+// into the next test. mockReset() clears both, but is only applied to the
+// specific chain mocks below (not jest.resetAllMocks() globally) so it
+// doesn't also wipe the @supabase/supabase-js / fs jest.mock() factory
+// implementations declared above.
 beforeEach(() => {
   jest.clearAllMocks();
-  // Re-attach chained return values after clearAllMocks resets them.
-  mockFrom.mockReturnValue({
-    select: mockSelect,
-    insert: mockInsert,
-    eq: mockEq,
-    single: mockSingle,
-  });
+  mockSingle.mockReset();
+  mockSelect.mockReset();
+  mockInsert.mockReset();
+  mockEq.mockReset();
+  mockFrom.mockReset();
+  // Re-attach chained return values after mockReset() clears them.
+  mockFrom.mockReturnValue(chainSelf);
   mockSelect.mockReturnThis();
   mockInsert.mockReturnThis();
   mockEq.mockReturnThis();
@@ -182,6 +197,129 @@ describe('create_project', () => {
 
     expect(res._status).toBe(400);
     expect(res._body.error).toMatch(/name/i);
+  });
+});
+
+// ── get_project ──────────────────────────────────────────────────────────────
+describe('get_project', () => {
+  it('returns the project when it belongs to the requesting user', async () => {
+    const project = { id: 'proj_1', name: 'My Album', user_id: 'user_abc' };
+    // First .single() call is the ownership check (projectBelongsToUser),
+    // second is the actual fetch.
+    mockSingle.mockResolvedValueOnce({ data: { user_id: 'user_abc' }, error: null });
+    mockSingle.mockResolvedValueOnce({ data: project, error: null });
+
+    const { req, res } = buildReqRes({
+      body: { action: 'get_project', payload: { project_id: 'proj_1' } },
+      headers: { 'x-user-id': 'user_abc', 'x-hydi-service-token': makeServiceToken() },
+    });
+    await handler(req, res);
+
+    expect(res._status).toBe(200);
+    expect(res._body).toEqual({ data: project, error: null });
+  });
+
+  it('returns 404 when the project belongs to a different user', async () => {
+    // Ownership check finds no row scoped to this user.
+    mockSingle.mockResolvedValueOnce({ data: null, error: { message: 'no rows' } });
+
+    const { req, res } = buildReqRes({
+      body: { action: 'get_project', payload: { project_id: 'proj_1' } },
+      headers: { 'x-user-id': 'someone_else', 'x-hydi-service-token': makeServiceToken() },
+    });
+    await handler(req, res);
+
+    expect(res._status).toBe(404);
+    expect(mockSingle).toHaveBeenCalledTimes(1); // never reaches the real fetch
+  });
+
+  it('returns 400 when payload.project_id is missing', async () => {
+    const { req, res } = buildReqRes({
+      body: { action: 'get_project', payload: {} },
+    });
+    await handler(req, res);
+
+    expect(res._status).toBe(400);
+    expect(res._body.error).toMatch(/project_id/i);
+  });
+});
+
+// ── list_tracks ────────────────────────────────────────────────────────────────
+describe('list_tracks', () => {
+  it('returns tracks when the parent project belongs to the requesting user', async () => {
+    const tracks = [{ id: 'track_1', project_id: 'proj_1', name: 'Drums' }];
+    mockSingle.mockResolvedValueOnce({ data: { user_id: 'user_abc' }, error: null }); // ownership check
+    // eq() is called twice in this flow: once by the ownership check
+    // (which must keep chaining into .single()) and once by list_tracks'
+    // own query (which resolves the promise directly) -- queue both in call order.
+    mockEq.mockReturnValueOnce(chainSelf); // ownership check's .eq('id', ...)
+    mockEq.mockResolvedValueOnce({ data: tracks, error: null }); // list_tracks' own .eq('project_id', ...)
+
+    const { req, res } = buildReqRes({
+      body: { action: 'list_tracks', payload: { project_id: 'proj_1' } },
+      headers: { 'x-user-id': 'user_abc', 'x-hydi-service-token': makeServiceToken() },
+    });
+    await handler(req, res);
+
+    expect(res._status).toBe(200);
+    expect(res._body).toEqual({ data: tracks, error: null });
+  });
+
+  it('returns 404 without querying tracks when the project belongs to a different user', async () => {
+    mockSingle.mockResolvedValueOnce({ data: null, error: { message: 'no rows' } });
+
+    const { req, res } = buildReqRes({
+      body: { action: 'list_tracks', payload: { project_id: 'proj_1' } },
+      headers: { 'x-user-id': 'someone_else', 'x-hydi-service-token': makeServiceToken() },
+    });
+    await handler(req, res);
+
+    expect(res._status).toBe(404);
+    expect(mockFrom).not.toHaveBeenCalledWith('rezonate_tracks');
+  });
+});
+
+// ── add_track ────────────────────────────────────────────────────────────────
+describe('add_track', () => {
+  it('inserts a track when the parent project belongs to the requesting user', async () => {
+    const track = { id: 'track_new', project_id: 'proj_1', name: 'Bass', type: 'audio' };
+    mockSingle.mockResolvedValueOnce({ data: { user_id: 'user_abc' }, error: null }); // ownership check
+    mockSingle.mockResolvedValueOnce({ data: track, error: null }); // insert().select().single()
+
+    const { req, res } = buildReqRes({
+      body: { action: 'add_track', payload: { project_id: 'proj_1', name: 'Bass', type: 'audio' } },
+      headers: { 'x-user-id': 'user_abc', 'x-hydi-service-token': makeServiceToken() },
+    });
+    await handler(req, res);
+
+    expect(res._status).toBe(201);
+    expect(res._body).toEqual({ data: track, error: null });
+  });
+
+  it('returns 404 without inserting when the project belongs to a different user', async () => {
+    mockSingle.mockResolvedValueOnce({ data: null, error: { message: 'no rows' } });
+
+    const { req, res } = buildReqRes({
+      body: { action: 'add_track', payload: { project_id: 'proj_1', name: 'Bass' } },
+      headers: { 'x-user-id': 'someone_else', 'x-hydi-service-token': makeServiceToken() },
+    });
+    await handler(req, res);
+
+    expect(res._status).toBe(404);
+    // requireAuth's own audit logging also calls insert() (on
+    // auth_audit_log) -- confirm no insert was made into rezonate_tracks
+    // specifically, rather than asserting insert() was never called at all.
+    expect(mockFrom).not.toHaveBeenCalledWith('rezonate_tracks');
+  });
+
+  it('returns 400 when required payload fields are missing', async () => {
+    const { req, res } = buildReqRes({
+      body: { action: 'add_track', payload: { project_id: 'proj_1' } },
+    });
+    await handler(req, res);
+
+    expect(res._status).toBe(400);
+    expect(res._body.error).toMatch(/project_id.*name|name.*project_id/i);
   });
 });
 
