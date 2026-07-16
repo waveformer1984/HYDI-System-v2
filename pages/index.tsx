@@ -8,6 +8,7 @@ interface Message {
   timestamp: Date
   isStreaming?: boolean
   tools?: ToolEvent[]
+  actions?: ActionEvent[]
 }
 
 interface ToolEvent {
@@ -15,6 +16,14 @@ interface ToolEvent {
   status: string
   result?: unknown
   error?: string
+}
+
+interface ActionEvent {
+  type: string
+  status: 'completed' | 'failed' | 'pending_approval'
+  error?: string
+  actionId?: string
+  resolving?: boolean
 }
 
 export default function HeidiChat() {
@@ -136,6 +145,14 @@ export default function HeidiChat() {
                     : m
                 )
               )
+            } else if (data.type === 'actions' && Array.isArray(data.actions)) {
+              setMessages(prev =>
+                prev.map(m =>
+                  m.id === assistantId
+                    ? { ...m, actions: data.actions as ActionEvent[] }
+                    : m
+                )
+              )
             } else if (data.type === 'error') {
               throw new Error(data.error)
             }
@@ -175,6 +192,55 @@ export default function HeidiChat() {
       inputRef.current?.focus()
     }
   }, [isLoading, sessionId])
+
+  const resolveAction = useCallback(async (messageId: string, actionId: string, decision: 'approve' | 'reject') => {
+    setMessages(prev =>
+      prev.map(m =>
+        m.id === messageId
+          ? { ...m, actions: m.actions?.map(a => (a.actionId === actionId ? { ...a, resolving: true } : a)) }
+          : m
+      )
+    )
+
+    try {
+      const res = await fetch(`/api/actions/${actionId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ decision }),
+      })
+      const data = await res.json()
+      const nextStatus: ActionEvent['status'] = res.ok && data.status === 'completed' ? 'completed' : 'failed'
+      const nextError = res.ok ? data.error : data.error || 'Failed to resolve action'
+
+      setMessages(prev =>
+        prev.map(m =>
+          m.id === messageId
+            ? {
+                ...m,
+                actions: m.actions?.map(a =>
+                  a.actionId === actionId ? { ...a, status: nextStatus, error: nextError, resolving: false } : a
+                ),
+              }
+            : m
+        )
+      )
+    } catch (err) {
+      setMessages(prev =>
+        prev.map(m =>
+          m.id === messageId
+            ? {
+                ...m,
+                actions: m.actions?.map(a =>
+                  a.actionId === actionId
+                    ? { ...a, status: 'failed', error: err instanceof Error ? err.message : 'Network error', resolving: false }
+                    : a
+                ),
+              }
+            : m
+        )
+      )
+    }
+  }, [])
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault()
@@ -275,6 +341,8 @@ export default function HeidiChat() {
                   content={msg.content}
                   isStreaming={!!msg.isStreaming}
                   tools={msg.tools}
+                  actions={msg.actions}
+                  onResolveAction={(actionId, decision) => resolveAction(msg.id, actionId, decision)}
                 />
               )}
             </div>
@@ -375,10 +443,14 @@ function AssistantBubble({
   content,
   isStreaming,
   tools,
+  actions,
+  onResolveAction,
 }: {
   content: string
   isStreaming: boolean
   tools?: ToolEvent[]
+  actions?: ActionEvent[]
+  onResolveAction?: (actionId: string, decision: 'approve' | 'reject') => void
 }) {
   return (
     <div className="flex gap-3">
@@ -402,6 +474,63 @@ function AssistantBubble({
                   <span className="text-red-400/70 truncate ml-auto">
                     {tool.error}
                   </span>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Actions (executed, or awaiting approval) */}
+        {actions && actions.length > 0 && (
+          <div className="mb-2 space-y-1.5">
+            {actions.map((action, i) => (
+              <div
+                key={action.actionId || i}
+                className={`text-[11px] rounded-lg px-2.5 py-2 border ${
+                  action.status === 'pending_approval'
+                    ? 'bg-amber-400/[0.06] border-amber-400/20'
+                    : action.status === 'failed'
+                    ? 'bg-red-400/[0.04] border-red-400/10'
+                    : 'bg-white/[0.02] border-white/[0.04]'
+                }`}
+              >
+                <div className="flex items-center gap-2 text-gray-400">
+                  <span
+                    className={
+                      action.status === 'completed'
+                        ? 'text-emerald-400/70'
+                        : action.status === 'failed'
+                        ? 'text-red-400/70'
+                        : 'text-amber-400/70'
+                    }
+                  >
+                    {action.status === 'completed' ? '\u2713' : action.status === 'failed' ? '\u2717' : '\u23F3'}
+                  </span>
+                  <span className="font-mono">{action.type}</span>
+                  <span className="ml-auto text-gray-600">
+                    {action.status === 'pending_approval' ? 'needs your approval' : action.status}
+                  </span>
+                </div>
+                {action.error && (
+                  <div className="text-red-400/70 mt-1 truncate">{action.error}</div>
+                )}
+                {action.status === 'pending_approval' && action.actionId && onResolveAction && (
+                  <div className="flex gap-2 mt-2">
+                    <button
+                      onClick={() => onResolveAction(action.actionId!, 'approve')}
+                      disabled={action.resolving}
+                      className="px-2.5 py-1 rounded-md bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/20 disabled:opacity-40 transition-colors"
+                    >
+                      Approve
+                    </button>
+                    <button
+                      onClick={() => onResolveAction(action.actionId!, 'reject')}
+                      disabled={action.resolving}
+                      className="px-2.5 py-1 rounded-md bg-white/[0.04] hover:bg-white/[0.08] text-gray-400 border border-white/[0.06] disabled:opacity-40 transition-colors"
+                    >
+                      Reject
+                    </button>
+                  </div>
                 )}
               </div>
             ))}
