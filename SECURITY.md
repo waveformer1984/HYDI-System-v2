@@ -60,6 +60,8 @@ These are documented, accepted limitations. They do not need to be reported as n
 
 API routes accept `x-user-id` HTTP headers as the identity claim. These headers are **not cryptographically verified**. A caller that can set arbitrary headers can assert any identity. Cryptographic hardening (signed JWTs or mutual TLS) is on the roadmap. Do not build trust on `x-user-id` alone for high-privilege operations.
 
+Only two routes actually read this header for anything: `api/rezonate/route.js` and the currently-unreachable `api/life-flow/route.js`. `api/rezonate/route.js`'s `get_project`/`list_tracks`/`add_track` previously performed no ownership check at all (fixed 2026-07-16, `ISSUES_FOUND.md` #48 — they now at least confirm the project belongs to whatever `userId` the request claims, closing the "any caller reads/writes any project" gap even though that `userId` itself still isn't verified). Two separate, unconnected identity scaffolds already exist in this codebase that a real fix could build on — the working HMAC device/service-token system (`lib/auth/deviceAuth.js`) already used by `requireAuth`, or the dormant Supabase Auth scaffolding (`rezonate_projects.user_id REFERENCES auth.users(id)` with correct RLS already written) — but there's no login/signup flow anywhere and the route uses the service-role key (bypasses RLS), so neither is actually wired up today. Deciding between them is a product call for the maintainer, not something to guess at silently.
+
 ### Integration tests require live credentials
 
 `npm run test:integration` requires `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` in the environment. These must never be committed or logged. See `SECURITY_PROTOCOL.md` for the secret-handling protocol.

@@ -38,6 +38,30 @@ function loadNodeConfig() {
 }
 
 /**
+ * Confirms `project_id` belongs to `userId` before an action is allowed to
+ * read or write anything scoped to that project (get_project, list_tracks,
+ * add_track). Matches the existing list_projects/create_project posture:
+ * when no x-user-id header is present at all, this route doesn't yet
+ * enforce per-user identity end-to-end (see CLAUDE.md's roadmap item on
+ * cryptographic identity verification -- x-user-id itself isn't
+ * cryptographically verified yet), so it returns true unscoped rather than
+ * changing that separate, larger, already-tracked behavior here. Once a
+ * userId IS present, though, a caller must not be able to touch a project
+ * it doesn't claim to own -- previously these three actions performed no
+ * ownership check at all, regardless of the header.
+ */
+async function projectBelongsToUser(project_id, userId) {
+  if (!userId) return true;
+  const { data, error } = await supabase
+    .from('rezonate_projects')
+    .select('user_id')
+    .eq('id', project_id)
+    .single();
+  if (error || !data) return false;
+  return data.user_id === userId;
+}
+
+/**
  * Main handler — dispatches POST / GET requests to the appropriate action.
  *
  * POST body: { action: string, payload?: object }
@@ -57,6 +81,9 @@ async function handler(req, res) {
   // model with cryptographically verified identity tokens" is the tracked
   // follow-up). This gate only proves *some* valid device/service credential
   // is present -- it doesn't yet re-derive user identity from it.
+  // get_project/list_tracks/add_track do at least now check that the
+  // project itself belongs to that (still-unverified) user id -- previously
+  // they didn't check project ownership at all (see ISSUES_FOUND.md #48).
   const auth = await requireAuth(req, res, supabase, { permission: 'rezonate:manage', routeName: 'rezonate-route' });
   if (!auth.ok) return;
 
@@ -127,6 +154,9 @@ async function handler(req, res) {
         if (!project_id) {
           return res.status(400).json({ data: null, error: 'payload.project_id is required' });
         }
+        if (!(await projectBelongsToUser(project_id, userId))) {
+          return res.status(404).json({ data: null, error: 'project not found' });
+        }
         const { data, error } = await supabase
           .from('rezonate_projects')
           .select('*')
@@ -144,6 +174,9 @@ async function handler(req, res) {
         const { project_id } = payload;
         if (!project_id) {
           return res.status(400).json({ data: null, error: 'payload.project_id is required' });
+        }
+        if (!(await projectBelongsToUser(project_id, userId))) {
+          return res.status(404).json({ data: null, error: 'project not found' });
         }
         const { data, error } = await supabase
           .from('rezonate_tracks')
@@ -163,6 +196,9 @@ async function handler(req, res) {
           return res
             .status(400)
             .json({ data: null, error: 'payload.project_id and payload.name are required' });
+        }
+        if (!(await projectBelongsToUser(project_id, userId))) {
+          return res.status(404).json({ data: null, error: 'project not found' });
         }
         const record = {
           project_id,

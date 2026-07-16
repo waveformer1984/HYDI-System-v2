@@ -39,7 +39,25 @@ drop-everything, P1 is next up, P2 is scheduled but not urgent.
 
 **P1 — high impact/risk, not yet started:**
 3. Cryptographic identity verification to replace the `x-user-id`
-   header-trust model (unchanged top priority — see below).
+   header-trust model (unchanged top priority — see below). **Reviewed
+   2026-07-16 before starting** (not yet decided): this conflates two
+   different problems. Caller/device identity is already solved (real HMAC
+   crypto in `lib/auth/deviceAuth.js`). Only the *data-owner* identity used
+   by `api/rezonate/route.js` (and the unreachable `api/life-flow/route.js`)
+   is unverified, and there are two unconnected, half-built scaffolds
+   already in the codebase that could become the real source of it —
+   extending the existing device/service token to carry a `user_id` claim,
+   vs. wiring up the dormant Supabase Auth scaffolding (`auth.users` FK +
+   correct RLS already exist, but no login/signup UI exists anywhere and
+   the route uses the service-role key, bypassing RLS regardless). Which
+   one to build out is a product decision — see `SECURITY.md`. In the
+   meantime, the narrower "some actions had zero ownership check at all"
+   gap this surfaced is fixed — see item 3a.
+3a. `api/rezonate/route.js`'s `get_project`/`list_tracks`/`add_track` had
+    **no ownership check at all** (not just an unverified header — nothing).
+    **Fixed 2026-07-16** (`ISSUES_FOUND.md` #48): all three now confirm the
+    project belongs to the request's `userId` before proceeding. The
+    `userId` itself is still unverified pending the decision in item 3.
 4. ~~`workers/SecurityIdentityWorker.js`'s `processAuthentication()` always
    succeeds regardless of submitted credentials~~ **Fixed 2026-07-16** —
    now fails closed (`ISSUES_FOUND.md` #47). Still open: no real
