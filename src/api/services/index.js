@@ -150,9 +150,16 @@ router.get('/usage', /* authenticateToken, */ async (req, res) => {
  */
 router.post('/subscriptions/checkout', /* authenticateToken, */ async (req, res) => {
   try {
-    const { tier, customerId: bodyCustomerId } = req.body;
-    // For testing: allow customerId in body when auth is disabled
-    const customerId = req.user?.stripeCustomerId || bodyCustomerId || 'cus_test_default';
+    // authenticateToken (which would populate req.user) is not currently
+    // wired up on this router -- see the commented-out import above. Rather
+    // than trust a client-supplied customerId (which would let any caller
+    // create a checkout session against an arbitrary Stripe customer), fail
+    // closed until real authentication is in place.
+    if (!req.user?.stripeCustomerId) {
+      return res.status(401).json({ success: false, error: 'Unauthorized' });
+    }
+    const { tier } = req.body;
+    const customerId = req.user.stripeCustomerId;
 
     if (!['starter', 'pro', 'enterprise'].includes(tier)) {
       return res.status(400).json({

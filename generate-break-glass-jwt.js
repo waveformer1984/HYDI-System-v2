@@ -6,10 +6,16 @@ async function generateBreakGlassJWT() {
   console.log('============================');
   
   try {
-    const secret = new TextEncoder().encode(
-      process.env.KEEPER_BREAK_GLASS_TOKEN || 'fallback-secret'
-    );
-    
+    if (!process.env.KEEPER_BREAK_GLASS_TOKEN) {
+      throw new Error(
+        'KEEPER_BREAK_GLASS_TOKEN is not set. The Edge Function this token is ' +
+        'for (supabase/functions/keeper-break-glass) fails closed (503) with no ' +
+        'configured secret, so a JWT signed with a fallback value here would ' +
+        'never actually authenticate against it -- set the real secret instead.'
+      );
+    }
+    const secret = new TextEncoder().encode(process.env.KEEPER_BREAK_GLASS_TOKEN);
+
     const payload = {
       sub: 'break-glass-operator',
       role: 'break-glass-operator',

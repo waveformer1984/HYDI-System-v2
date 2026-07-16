@@ -13,7 +13,13 @@ class EnforcementBoundary {
     this.immutableConfig = new Map();
     this.contradictionLog = [];
     this.boundaryLogPath = './boundary-state.json';
-    this.boundarySecret = process.env.BOUNDARY_SECRET || 'default_boundary_secret';
+    // No hardcoded fallback -- a publicly-known default here would let anyone
+    // lock/unlock this boundary, defeating its entire purpose (a control
+    // surface deliberately meant to be un-influenceable by upstream systems).
+    // With no BOUNDARY_SECRET configured this is `null`, and lockBoundary()/
+    // unlockBoundary() already reject a null/missing externalAuth, so this
+    // fails closed instead of accepting a well-known default.
+    this.boundarySecret = process.env.BOUNDARY_SECRET || null;
     
     this.initializeBoundary();
     this.loadImmutableState();

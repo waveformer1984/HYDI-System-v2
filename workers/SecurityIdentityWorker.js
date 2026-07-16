@@ -12,13 +12,17 @@ class SecurityIdentityWorker {
         this.supabase = null;
         this.queue = new QueueManager();
         this.securityConfig = {
-            jwtSecret: process.env.JWT_SECRET || 'dev-secret-change-in-production',
+            // No hardcoded fallback -- a publicly-known default secret here would let
+            // anyone forge valid auth JWTs for whatever this worker gates. Fail closed
+            // instead (see initialize() below).
+            jwtSecret: process.env.JWT_SECRET || null,
             tokenExpiry: '24h',
             rateLimiting: { enabled: true, maxRequestsPerMinute: 60 },
             session: { timeoutMinutes: 60, renewThreshold: 10 }
         };
 
         this.initialize = function() {
+            if (!this.securityConfig.jwtSecret) throw new Error('Missing JWT_SECRET');
             const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
             const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
             if (!supabaseUrl || !supabaseKey) throw new Error('Missing Supabase credentials');
