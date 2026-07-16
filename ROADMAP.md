@@ -31,21 +31,31 @@ the keys themselves are still live until rotated in the Supabase and
 Stripe dashboards — this session had no authenticated access to do that
 part. Treat as compromised until rotated.
 
-### URGENT: confirm what's actually deployed and reachable
-2026-07-15's audit found the entire top-level `api/` directory (~30 files)
-is unreachable via this repo's actual `next dev`/`next start` runtime —
-Next.js only serves `pages/api/*`; a bare `api/` folder is a Vercel-only
-convention, and Vercel deployment is explicitly disabled per this doc's
-Local-First Architecture section. 16 low-risk routes (health checks,
-already-authenticated mobile-ops/song-composer/rezonate endpoints) were
-bridged into `pages/api/` and verified reachable. **Checkout
-(`checkout.js`/`checkout-v2.js`) and Stripe webhook delivery
-(`stripe-connect-webhook.js`, `webhooks/stripe.js`) were deliberately left
-unbridged** — if this Next.js app is what's actually serving production
-traffic, payments may be silently broken right now. This needs a human
-decision (confirm the real deployment topology, then either bridge these
-routes or fix whatever the actual serving path is), not another automated
-guess. See `ISSUES_FOUND.md` #31-#34 for the full file-by-file breakdown.
+### RESOLVED (2026-07-15, third pass): checkout and Stripe webhooks are now reachable
+Checkout (`api/checkout.js`, bridged to `pages/api/checkout.js`) and both
+Stripe webhook handlers (`api/stripe-connect-webhook.js`,
+`api/webhooks/stripe.js`, bridged to their `pages/api/` equivalents) are
+now part of Next.js's actual served route set — confirmed with a real
+`npm run build`. Two additional latent bugs that would have broken them
+even after bridging were also found and fixed: a clobbered module export
+in `webhooks/stripe.js`, and both handlers reading `req.body` directly
+instead of buffering the raw request stream (Next.js does not
+auto-populate `req.body` when `bodyParser: false` is set, which raw-body
+Stripe signature verification requires). See `ISSUES_FOUND.md` #38-#41 and
+`DEPLOYMENT.md` for the full routing map.
+
+**Still open**: the top-level `api/` directory as a whole remains a dead
+Vercel-only convention under this deployment model (~13 files still
+unbridged — see `DEPLOYMENT.md`'s reachability table). More importantly,
+**this audit could not confirm from inside the sandbox which of this
+repo's several possible "production" processes (`next start`, the separate
+Express server at `src/server.js`, or the PM2-managed fleet described in
+`ecosystem.config.js` — `heidi-core/server.js`, `hydi-processor.js`,
+`protoforge-main.js`, `agents/ursula/ursula.js`, `apps/ursula-frontend`) is
+actually running on the real host right now.** `DEPLOYMENT.md` documents
+what's *reachable in principle* per each process's own code; whether each
+process is *actually started* on the operator's machine is something only
+the operator can confirm (e.g. `pm2 list`).
 
 ### Security: cryptographic identity verification
 Replace the current `x-user-id` header trust model with cryptographically verified identity tokens. This is the highest-priority security item and is a prerequisite for any public-facing expansion.
