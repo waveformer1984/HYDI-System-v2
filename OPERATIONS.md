@@ -88,35 +88,41 @@ worker does not appear to be started by any current entry point, but if
 work ever wires `start-workers.js`/`WorkerOrchestrator` into a live
 process, this must be fixed first.
 
-### 5. Bring the self-hosted Actions runner back online — see issue #195
+### 5. Self-hosted Actions runner outage — mitigated 2026-07-16, see issue #195
 
-Discovered 2026-07-16: no self-hosted runner is currently picking up
-GitHub Actions jobs. Every workflow requiring `runs-on: self-hosted`
-(`unit-tests.yml`, `codeql.yml`, `hdi-governance-gate.yml`,
-`health-monitor.yml`, `test-procedural-memory.yml`) has been stuck
-`queued` — never `in_progress`, never completing — repo-wide, across
-every branch, for at least the past ~9 days. This is the same class of
-incident `CLAUDE.md` already describes as happening 2026-07-08, except
-the evidence gathered this time indicates it never actually recovered;
-the pre-push hook and repeated admin-merges (including PR #194) have been
-masking a dead runner, not routing around a one-off blip.
+Discovered 2026-07-16: no self-hosted runner was picking up GitHub Actions
+jobs. Every workflow requiring `runs-on: self-hosted` (`unit-tests.yml`,
+`codeql.yml`, `hdi-governance-gate.yml`, `health-monitor.yml`,
+`test-procedural-memory.yml`) had been stuck `queued` — never
+`in_progress`, never completing — repo-wide, across every branch, for at
+least ~9 days. This was the same class of incident `CLAUDE.md` already
+describes as happening 2026-07-08, except the evidence gathered this time
+indicated it never actually recovered; the pre-push hook and repeated
+admin-merges (including PR #194) had been masking a dead runner, not
+routing around a one-off blip.
 
-Practical consequence right now: **CI is not a trustworthy signal.**
-Until the runner is back online, the local commands in "Verification
-steps" below (run manually, and via the pre-push hook) are the only real
-source of truth — a green PR checklist here does not mean GitHub Actions
-actually ran anything.
+**Mitigation applied**: all five workflows above were switched from
+`runs-on: self-hosted` to `runs-on: ubuntu-latest`, since the actual
+runner host (a Windows machine, `heidi-pc`) is outside what a coding
+session can reach or restart. `health-monitor.yml` also gained a "Check
+for stuck Actions runs" step that fails (and trips its existing
+`health-alert` issue escalation) whenever any workflow run has sat
+`queued` for 15+ minutes, so a future runner outage — self-hosted or
+otherwise — surfaces as an alert instead of silently masking for 9 days.
 
-Full diagnostic evidence and suggested recovery steps (check the
-`actions-runner` service on the host, confirm status at Settings →
-Actions → Runners, re-register if the token expired) are in
-[issue #195](https://github.com/waveformer1984/HYDI-System-v2/issues/195).
+This still leaves the underlying question of whether `heidi-pc`'s
+`actions-runner` service should be restarted/re-registered so CI can move
+back to self-hosted execution (recovery steps are in
+[issue #195](https://github.com/waveformer1984/HYDI-System-v2/issues/195)),
+or whether `ubuntu-latest` should just stay as the long-term choice — that
+tradeoff (GitHub Actions minutes cost vs. local-first execution) is a
+maintainer call, not something this fix decided.
 
 ## Verification steps after any deployment-affecting change
 
-**Note**: with the runner outage in item 5 above unresolved, these are the
-only checks that actually run today — do not rely on a green GitHub
-Actions check until issue #195 is fixed.
+**Note**: as of the 2026-07-16 mitigation above, GitHub Actions runs on
+`ubuntu-latest` and should be a trustworthy signal again. The local
+commands below remain useful for fast iteration before pushing.
 
 ```bash
 npm run typecheck        # tsc --noEmit
