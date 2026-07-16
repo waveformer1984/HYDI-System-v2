@@ -64,19 +64,34 @@ API routes accept `x-user-id` HTTP headers as the identity claim. These headers 
 
 `npm run test:integration` requires `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` in the environment. These must never be committed or logged. See `SECURITY_PROTOCOL.md` for the secret-handling protocol.
 
-### `workers/SecurityIdentityWorker.js` must not be wired into a real auth path
+### `workers/SecurityIdentityWorker.js` has no real credential verification, even though it now fails closed
 
-`processAuthentication()` currently simulates a successful authentication for
-any submitted email with no credential check at all (its own comment says
-so). The hardcoded fallback JWT secret this worker used to sign/verify with
-was fixed 2026-07-15 (it now fails closed if `JWT_SECRET` is unset), but the
-auth-always-succeeds stub is untouched and unrelated to that fix. No startup
-path in this repo (`package.json` scripts, `ecosystem.config.js`,
-`scripts/start-hydi.js`, `boot.config.json`) currently starts this worker,
-so it is believed dead today — but that isn't independently verifiable from
-outside the operator's real host. **Do not enqueue `auth.attempt` tasks to
-the `security_identity` queue in production until real credential
-verification is implemented.** See `ISSUES_FOUND.md` #44.
+`processAuthentication()` used to simulate a successful authentication (and
+issue a real JWT) for any submitted email with no credential check at all.
+Fixed 2026-07-16: it now unconditionally rejects every `auth.attempt` and
+never issues a token, since the task payload it receives (`email`,
+`ip_address`, `user_agent`) carries no password/API-key/credential to check
+in the first place — this codebase has no password-based user schema at
+all; its actual identity model is API-key based (see
+`src/middleware/keymaker.js`, the `api_keys`/`keymaker_keys` tables).
+`checkTokenPermission()` likewise used to return `true` unconditionally
+(no RBAC implementation exists behind it) and now returns `false` by
+default. The hardcoded fallback JWT secret this worker used to sign/verify
+with was separately fixed 2026-07-15 (fails closed if `JWT_SECRET` is
+unset).
+
+**This closes the "anyone can get a token" hole, but does not add real
+authentication** — there still is no way for a legitimate caller to
+actually authenticate through this worker. Designing that (e.g. extending
+the payload to carry an API key checked against the existing
+`keymaker_keys` table, vs. a new password-based flow, vs. retiring this
+queue-based path in favor of the already-live `Keymaker` Express
+middleware) is a product/architecture decision for the maintainer, not
+something this fix should guess at. No startup path in this repo
+(`package.json` scripts, `ecosystem.config.js`, `scripts/start-hydi.js`,
+`boot.config.json`) currently starts this worker, so it is believed dead
+today — but that isn't independently verifiable from outside the
+operator's real host. See `ISSUES_FOUND.md` #44.
 
 ### Several parallel, unreachable Stripe implementations exist
 

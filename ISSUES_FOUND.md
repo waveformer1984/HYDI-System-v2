@@ -5,6 +5,14 @@ the narrative of what was fixed and why; this file is the flat list.
 
 ---
 
+## Fixed this session (2026-07-16, follow-up audit)
+
+| # | Issue | File(s) | Status |
+|---|-------|---------|--------|
+| 47 | **Follow-up to #44.** `processAuthentication()` still simulated a successful authentication (and issued a real JWT for it) for any submitted email — the always-succeeds stub flagged in #44 was left open on 2026-07-15 pending a credential-schema decision. `checkTokenPermission()` had the same shape of problem: it returned `true` unconditionally with no RBAC implementation behind it, so any validly-signed JWT would pass every permission check in `validateToken()`. | `workers/SecurityIdentityWorker.js` | **Fixed — fails closed.** `processAuthentication()` now unconditionally logs every `auth.attempt` as rejected and never issues a token, since the payload it receives (`email`/`ip_address`/`user_agent`) carries no credential to check in the first place — this codebase has no password-based user schema at all (identity here is API-key based, see `src/middleware/keymaker.js`). `checkTokenPermission()` now returns `false` by default. **Real credential verification is still not implemented** — deciding how a legitimate caller should actually authenticate through this worker (extend the payload to carry an API key checked against `keymaker_keys`, a new password-based flow, or retiring this queue-based path in favor of the already-live `Keymaker` Express middleware) is a product/architecture decision left to the maintainer, not guessed at here. This worker still isn't started by any confirmed-live entry point (unchanged from #44). Extended `tests/unit/security-identity-worker-fail-closed.test.js` with regression coverage for both fail-closed behaviors. |
+
+---
+
 ## Fixed this session (2026-07-15, production readiness audit — same day, third pass)
 
 Resolves the "URGENT: confirm what's actually deployed" item from `ROADMAP.md`

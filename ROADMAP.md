@@ -40,10 +40,13 @@ drop-everything, P1 is next up, P2 is scheduled but not urgent.
 **P1 — high impact/risk, not yet started:**
 3. Cryptographic identity verification to replace the `x-user-id`
    header-trust model (unchanged top priority — see below).
-4. `workers/SecurityIdentityWorker.js`'s `processAuthentication()` always
-   succeeds regardless of submitted credentials (`ISSUES_FOUND.md` #44).
-   Not wired into any live entry point today, but must be fixed for real
-   before this worker is ever started in production.
+4. ~~`workers/SecurityIdentityWorker.js`'s `processAuthentication()` always
+   succeeds regardless of submitted credentials~~ **Fixed 2026-07-16** —
+   now fails closed (`ISSUES_FOUND.md` #47). Still open: no real
+   credential verification exists for this worker at all (the payload
+   carries nothing to verify against) — designing that path, or deciding
+   to retire it in favor of the already-live `Keymaker` middleware, is a
+   product decision for the maintainer.
 5. Consolidate the **4 parallel, unreachable Stripe
    checkout/webhook implementations** (`src/webhook-handlers/stripe-webhook.js`,
    `src/api/services/index.js`'s bundle, the standalone
