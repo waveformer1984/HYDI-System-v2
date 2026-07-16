@@ -21,6 +21,68 @@ The core platform is operational:
 
 ---
 
+## 2026-07-16 audit: prioritized findings
+
+Repository-wide audit pass. Ranked by impact × risk; P0 is
+drop-everything, P1 is next up, P2 is scheduled but not urgent.
+
+**P0 — blocking / operator action required:**
+1. **Rotate the credentials leaked 2026-07-15** (still outstanding — see
+   below). Cannot be completed from any sandbox; requires dashboard access.
+2. **Duplicate open PRs for the same issue**: #197 and #198 both close
+   issue #195 (self-hosted CI runner offline) with overlapping fixes —
+   both switch every workflow from `runs-on: self-hosted` to
+   `ubuntu-latest`; #198 additionally adds a stuck-queue alert to
+   `health-monitor.yml`. Two independent sessions picked up the same
+   issue concurrently. Recommend merging #198 (superset of #197's fix)
+   and closing #197 to avoid divergent CI config landing from both.
+
+**P1 — high impact/risk, not yet started:**
+3. Cryptographic identity verification to replace the `x-user-id`
+   header-trust model (unchanged top priority — see below).
+4. `workers/SecurityIdentityWorker.js`'s `processAuthentication()` always
+   succeeds regardless of submitted credentials (`ISSUES_FOUND.md` #44).
+   Not wired into any live entry point today, but must be fixed for real
+   before this worker is ever started in production.
+5. Consolidate the **4 parallel, unreachable Stripe
+   checkout/webhook implementations** (`src/webhook-handlers/stripe-webhook.js`,
+   `src/api/services/index.js`'s bundle, the standalone
+   `stripe-webhook-server.js`, and the stale `hydi-monitor-deploy/`
+   sub-deployment) — needs a maintainer decision on which billing model
+   is current before the other three can be archived or deleted
+   (`ISSUES_FOUND.md`, "Investigated, not fixed").
+6. Per-file review of the remaining ambiguous unbridged `api/**` routes
+   (`ISSUES_FOUND.md` #34) to tell "intentionally superseded by
+   `pages/api/**`" from "also just missing".
+
+**P2 — scheduled, lower urgency:**
+7. JWT enforcement audit across all 42 Supabase Edge Functions + rate
+   limiting on the public (no-JWT) ones (already listed under Edge
+   Function hardening below).
+8. ~150 `no-unused-vars` ESLint warnings (`ISSUES_FOUND.md` #18) — cosmetic,
+   large surface area, best done file-by-file rather than mechanically.
+9. `tests/unit/hydi-v3/WatchdogSupervisor.test.js` has the same
+   fixed-`setTimeout`-vs-own-interval race already fixed in two sibling
+   tests (`ISSUES_FOUND.md` #10, #19) — not currently observed flaky, but
+   worth the same `Promise.race` treatment proactively.
+10. `AGENT_REGISTRY`'s Rezonate endpoint path in
+    `api/agent-manager/agents.js` doesn't match the file's actual
+    resolved route (`ISSUES_FOUND.md` #37) — cheap, low-risk, not blocking.
+
+**Done this pass (housekeeping):**
+- Archived 3 confirmed-orphaned dead-code files flagged in a prior audit's
+  follow-up list but never actioned: `modules/keymaker-core.js`,
+  `emergency/break-glass-implementation.js`,
+  `keeper/emergency/break-glass.js` → `archive/dead-keymaker-and-break-glass-prototypes/`.
+- Archived 7 stale April 26, 2026 "✅ PRODUCTION READY" / "✅ COMPLETE
+  SUCCESS" reports that actively contradicted the current, accurate
+  `DEPLOYMENT.md` / `OPERATIONS.md` / `SECURITY.md` (a stale audit report
+  claiming "no exposed secrets" and a fully Vercel-hosted deployment model
+  that's since been confirmed unused) →
+  `archive/stale-april-2026-deployment-reports/`.
+
+---
+
 ## Near-term (Q3 2026)
 
 ### URGENT: rotate the credentials leaked 2026-07-15
