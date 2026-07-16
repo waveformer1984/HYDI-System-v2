@@ -47,30 +47,42 @@ Deliberately **not** touched in this phase:
 - `.github/workflows/health-monitor.yml`'s `vercel-api-check.js` step —
   an intentionally-kept read-only diagnostic, not a deploy trigger.
 
-## Phase 1 — promote local Supabase to production 🔜
+## Phase 1 — promote local Supabase to production 🔜 (runbook ready, execution pending host access)
 
 The self-hosted Docker stack already exists and is exercised every time a
 dev session runs `supabase start` (`STARTUP_GUIDE.md`). The work here is
 promoting that same stack from "local dev convenience" to "the actual
-production data plane," replacing the cloud project entirely:
+production data plane," replacing the cloud project entirely. Full
+step-by-step instructions are in **`LOCAL_FIRST_PHASE1_RUNBOOK.md`**,
+with **`scripts/migrate-to-local-supabase.sh`** automating the data-only
+migration + row-count verification step. Summary:
 
 1. Run the Docker stack persistently on a real always-on host — `heidi-pc`
    is already that host per the existing docs.
-2. Re-point every env var currently aimed at
+2. Migrate the schema (`supabase/migrations/*.sql`, in order) into the new
+   instance.
+3. Migrate data: `scripts/migrate-to-local-supabase.sh`, which dumps from
+   the cloud project, restores into the new local instance, and verifies
+   every table's row count matches before declaring success.
+4. Re-point every env var currently aimed at
    `https://akbnfovjdcobifeupvbn.supabase.co` (`SUPABASE_URL`,
    `NEXT_PUBLIC_SUPABASE_URL`) at the local instance, reachable over
-   Tailscale rather than exposed to the public internet.
-3. Migrate data: `pg_dump` from the cloud project, restore into the local
-   Postgres.
-4. Re-point `.mcp.json` and `health-monitor.yml`'s health checks at the
-   local instance.
+   Tailscale rather than exposed to the public internet — plus `.mcp.json`
+   and `health-monitor.yml`'s health checks.
 5. Decommission the cloud project once the local one has run clean for a
    burn-in period.
 
-This is the one phase with real operational weight (data migration,
-host uptime, backup strategy) — the rest of this plan is comparatively
-cheap. Not started; needs a maintainer go-ahead on hosting logistics
-(backup/restore strategy, uptime expectations) before execution.
+**Confirmed 2026-07-16: no Claude Code Remote sandbox session can execute
+steps 1-3 itself.** DNS doesn't resolve the Tailscale host from the
+sandbox, generic outbound HTTPS returns `403` for every host tried
+(including via the environment's own web-fetch tool) except the git
+remote, and the `supabase` CLI isn't installed. This is real infrastructure
+work an operator (or a session with actual host access) has to run by
+hand, following the runbook — a sandbox session can prepare/review the
+runbook and script, and handle the config-only parts of step 4 (`.mcp.json`,
+`health-monitor.yml`), but not the rest. This is also the one phase with
+real operational weight (data migration, host uptime, backup strategy) —
+the rest of this plan is comparatively cheap.
 
 ## Phase 2 — Edge Functions 🔜
 
