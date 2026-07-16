@@ -23,7 +23,7 @@ export interface PlannedStep {
 }
 
 export interface WorkSessionStep extends PlannedStep {
-  status: 'pending' | 'completed' | 'failed';
+  status: 'pending' | 'completed' | 'failed' | 'pending_approval';
   error?: string;
 }
 

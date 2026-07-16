@@ -141,7 +141,7 @@ export class HeidiOrchestrator {
       
       return {
         response: finalResponse.response,
-        actions: finalResponse.actions,
+        actions: actionResults,
         model_used: modelResponse.model,
         latency: totalLatency,
         session_state: sessionState
@@ -227,14 +227,23 @@ Respond with JSON:`;
    * `actionExecutor` directly for any action type without a registered
    * agent, so adding a 6th action type doesn't require touching this
    * method.
+   *
+   * A 'reject' verdict (enforcing only) blocks the action outright — it
+   * never executes and there is nothing to review later. An 'escalate'
+   * verdict does NOT block: it parks the action as a `pending` row carrying
+   * everything lib/action-approval.ts needs to run it later (action type,
+   * payload, decisionId), and returns status 'pending_approval' instead of
+   * executing or failing. The chat UI surfaces these as approve/reject
+   * cards; resolving one calls lib/action-approval.ts directly, not this
+   * method, so a human decision is never re-gated through KILO/ProtoForge.
    */
   private async executeActions(
     actions: ParsedResponse['actions'],
     sessionId: string,
-  ): Promise<Array<{ type: string; status: 'completed' | 'failed'; error?: string }>> {
+  ): Promise<Array<{ type: string; status: 'completed' | 'failed' | 'pending_approval'; error?: string; actionId?: string }>> {
     const verdicts = await gateActions(actions, sessionId);
     const enforcing = isEnforcing();
-    const results: Array<{ type: string; status: 'completed' | 'failed'; error?: string }> = [];
+    const results: Array<{ type: string; status: 'completed' | 'failed' | 'pending_approval'; error?: string; actionId?: string }> = [];
 
     for (const { action, decision, confidence, hypotheses, reasoning, decisionId } of verdicts) {
       const gateMeta = {
@@ -245,8 +254,8 @@ Respond with JSON:`;
         protoforge_enforced: enforcing,
       };
 
-      if (enforcing && (decision === 'reject' || decision === 'escalate')) {
-        console.log(`[Orchestrator] Action ${action.type} ${decision} by ProtoForge — not executed`);
+      if (enforcing && decision === 'reject') {
+        console.log(`[Orchestrator] Action ${action.type} rejected by ProtoForge — not executed`);
         await this.supabase.from('actions').insert({
           session_id: sessionId,
           task_name: action.type,
@@ -257,6 +266,33 @@ Respond with JSON:`;
         continue;
       }
 
+      if (enforcing && decision === 'escalate') {
+        console.log(`[Orchestrator] Action ${action.type} escalated by ProtoForge — awaiting human approval`);
+        const { data, error } = await this.supabase
+          .from('actions')
+          .insert({
+            session_id: sessionId,
+            task_name: action.type,
+            status: 'pending',
+            payload: {
+              ...gateMeta,
+              protoforge_pending_approval: true,
+              protoforge_action_type: action.type,
+              protoforge_action_payload: action.payload,
+              protoforge_decision_id: decisionId,
+            },
+          })
+          .select('id')
+          .single();
+        if (error) {
+          console.error('[Orchestrator] Failed to queue escalated action:', error.message);
+          results.push({ type: action.type, status: 'failed', error: `escalation queue failed: ${error.message}` });
+          continue;
+        }
+        results.push({ type: action.type, status: 'pending_approval', actionId: data?.id });
+        continue;
+      }
+
       try {
         const agent = this.agentRegistry.getAgentFor(action.type);
         const outcome = agent
@@ -264,16 +300,20 @@ Respond with JSON:`;
           : await this.actionExecutor.execute(action, sessionId);
         console.log(`[Orchestrator] Executed action: ${action.type} -> ${outcome.status} (${agent ? agent.id : 'actionExecutor (no registered agent)'})`);
 
-        await this.supabase.from('actions').insert({
-          session_id: sessionId,
-          task_name: action.type,
-          status: outcome.status,
-          payload: { ...action.payload, result: outcome.result, error: outcome.error, ...gateMeta },
-        });
+        const { data } = await this.supabase
+          .from('actions')
+          .insert({
+            session_id: sessionId,
+            task_name: action.type,
+            status: outcome.status,
+            payload: { ...action.payload, result: outcome.result, error: outcome.error, ...gateMeta },
+          })
+          .select('id')
+          .single();
         await this.recordActionOutcome(decisionId, outcome.status === 'completed' ? 'success' : 'failure', {
           error: outcome.error,
         });
-        results.push({ type: action.type, status: outcome.status, error: outcome.error });
+        results.push({ type: action.type, status: outcome.status, error: outcome.error, actionId: data?.id });
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown error';
         console.error(`[Orchestrator] Action execution failed for ${action.type}:`, error);
@@ -417,6 +457,13 @@ Respond with JSON:`;
       step.status = result.status;
       step.error = result.error;
       stepsRun++;
+
+      if (step.status === 'pending_approval') {
+        console.log(`[Orchestrator] Work session ${workSessionId} paused — step ${step.type} awaiting human approval`);
+        session =
+          (await updateWorkSession(this.supabase, workSessionId, { status: 'needs_approval', steps: session.steps })) ?? session;
+        break;
+      }
 
       if (step.status === 'failed') {
         console.log(`[Orchestrator] Work session ${workSessionId} paused — step ${step.type} failed: ${step.error}`);
