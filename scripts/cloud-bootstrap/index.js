@@ -4,7 +4,7 @@
 /**
  * Cloud bootstrap orchestrator — "run locally, set up cloud services as we go."
  *
- * For each service module (supabase, vercel, stripe): verify() first; if not
+ * For each service module (supabase, stripe): verify() first; if not
  * already verified, attempt provision() once, then verify() again. Every run
  * is idempotent and safe to re-invoke — this is exactly what lets Heidi call
  * it repeatedly as an allowlisted `run_script` action (scripts/ is already an
@@ -12,11 +12,15 @@
  * executor changes.
  *
  * Usage:
- *   node scripts/cloud-bootstrap/index.js [--force] [--only=supabase,vercel]
+ *   node scripts/cloud-bootstrap/index.js [--force] [--only=supabase,stripe]
  *
  * Exit code is 0 even when a service is 'blocked' — blocked means "a human
  * must act", not "this script failed". Exit code is 1 only on an internal
  * crash (a service module throwing instead of returning a result object).
+ *
+ * The `vercel` module was removed 2026-07-16 (Local-First execution plan,
+ * Phase 0) — Vercel deployment is confirmed unused (see CLAUDE.md), so
+ * there was nothing left for it to verify/provision.
  */
 
 const path = require('path');
@@ -24,7 +28,6 @@ const { loadState, saveState, recordResult, planRuns, DEFAULT_STATE_PATH } = req
 
 const SERVICES = {
   supabase: require('./supabase'),
-  vercel: require('./vercel'),
   stripe: require('./stripe'),
 };
 
