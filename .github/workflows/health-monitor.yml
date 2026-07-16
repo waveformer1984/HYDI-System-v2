@@ -12,10 +12,34 @@ jobs:
     permissions:
       contents: read
       issues: write
+      actions: read
 
     steps:
     - name: Checkout code
       uses: actions/checkout@v7
+
+    - name: Check for stuck Actions runs
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        echo "🔍 Checking for Actions runs stuck in 'queued' (e.g. an offline self-hosted runner — see issue #195)"
+        THRESHOLD_MINUTES=15
+        NOW=$(date -u +%s)
+        STUCK=0
+        for run_id in $(gh api "repos/${{ github.repository }}/actions/runs?status=queued&per_page=50" --jq '.workflow_runs[].id'); do
+          CREATED=$(gh api "repos/${{ github.repository }}/actions/runs/$run_id" --jq '.created_at')
+          CREATED_TS=$(date -u -d "$CREATED" +%s)
+          AGE_MIN=$(( (NOW - CREATED_TS) / 60 ))
+          if [ "$AGE_MIN" -ge "$THRESHOLD_MINUTES" ]; then
+            echo "❌ Run $run_id has been queued for ${AGE_MIN}m (threshold ${THRESHOLD_MINUTES}m): ${{ github.server_url }}/${{ github.repository }}/actions/runs/$run_id"
+            STUCK=1
+          fi
+        done
+        if [ "$STUCK" -eq 1 ]; then
+          echo "One or more Actions runs are stuck in 'queued' — likely no runner is picking up jobs."
+          exit 1
+        fi
+        echo "✅ No stuck queued runs"
 
     - name: Setup Node.js
       uses: actions/setup-node@v6
