@@ -64,6 +64,38 @@ API routes accept `x-user-id` HTTP headers as the identity claim. These headers 
 
 `npm run test:integration` requires `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` in the environment. These must never be committed or logged. See `SECURITY_PROTOCOL.md` for the secret-handling protocol.
 
+### `workers/SecurityIdentityWorker.js` must not be wired into a real auth path
+
+`processAuthentication()` currently simulates a successful authentication for
+any submitted email with no credential check at all (its own comment says
+so). The hardcoded fallback JWT secret this worker used to sign/verify with
+was fixed 2026-07-15 (it now fails closed if `JWT_SECRET` is unset), but the
+auth-always-succeeds stub is untouched and unrelated to that fix. No startup
+path in this repo (`package.json` scripts, `ecosystem.config.js`,
+`scripts/start-hydi.js`, `boot.config.json`) currently starts this worker,
+so it is believed dead today — but that isn't independently verifiable from
+outside the operator's real host. **Do not enqueue `auth.attempt` tasks to
+the `security_identity` queue in production until real credential
+verification is implemented.** See `ISSUES_FOUND.md` #44.
+
+### Several parallel, unreachable Stripe implementations exist
+
+Beyond the two webhook handlers and one checkout handler documented as "in
+scope" above (now bridged into `pages/api/` and confirmed reachable — see
+`DEPLOYMENT.md`), the repo contains at least three other Stripe
+checkout/webhook code paths that are **not** part of the confirmed-live
+`pages/api` surface: `src/webhook-handlers/stripe-webhook.js` (a
+class-based handler targeting a different `users`/`api_keys` schema),
+`src/api/services/index.js`'s `/subscriptions/checkout` +
+`/webhooks/stripe` (mounted into the separate, unclear-reachability
+Express server at `src/server.js`), and the standalone
+`stripe-webhook-server.js` micro-server (not referenced by any
+`package.json` script). None of these are covered by this policy's
+Stripe-webhook-signature-bypass scope unless/until a maintainer confirms
+one of them is actually live — report against the confirmed-live pair
+(`api/stripe-connect-webhook.js`, `api/webhooks/stripe.js`) unless you have
+independent evidence one of the others is deployed.
+
 ## Secret Handling
 
 Secrets must **never** be displayed, echoed, logged, or pasted. Use direct injection:
@@ -83,10 +115,14 @@ vercel env ls | grep SECRET_NAME
 | Control | Where |
 |---------|-------|
 | Row-Level Security (RLS) | All Supabase tables |
-| Stripe webhook signature validation | `api/stripe-connect-webhook.js`, `api/webhooks/stripe.js` |
+| Stripe webhook signature validation, with raw-body reading correct for Next.js's `bodyParser: false` semantics | `api/stripe-connect-webhook.js`, `api/webhooks/stripe.js`, `lib/get-raw-body.js` |
+| Stripe webhook idempotency (`claim_webhook_event` RPC) | `api/stripe-connect-webhook.js`, `api/webhooks/stripe.js` |
+| Checkout + Stripe webhook routes bridged into the confirmed-live `pages/api/**` surface | `pages/api/checkout.js`, `pages/api/stripe-connect-webhook.js`, `pages/api/webhooks/stripe.js` |
 | `search_path` pinning on `SECURITY DEFINER` functions | `supabase/migrations/` |
 | KILO execution authority blocked unconditionally | `kilo/index.js` — `execute()` throws |
 | PolicyEngine fail-closed (default `'reject'`) | `lib/protoforge/policy-engine.js` |
+| No hardcoded fallback secrets for HMAC/JWT signing (fail closed if unconfigured) | `supabase/functions/keeper-break-glass{,-simple}`, `workers/SecurityIdentityWorker.js`, `apps/ursula-frontend/runtime/enforcement-boundary/index.js`, `generate-break-glass-jwt.js` |
+| Automated secret-pattern scan of every git-tracked file | `tests/unit/no-hardcoded-secrets.test.js` (runs in `npm test`) |
 | CodeQL static analysis | `.github/workflows/codeql.yml` (scheduled) |
 | Governance gate for DB migrations | `.github/workflows/hdi-governance-gate.yml` |
 
