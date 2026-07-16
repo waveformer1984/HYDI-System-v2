@@ -110,19 +110,35 @@ for stuck Actions runs" step that fails (and trips its existing
 `queued` for 15+ minutes, so a future runner outage — self-hosted or
 otherwise — surfaces as an alert instead of silently masking for 9 days.
 
-This still leaves the underlying question of whether `heidi-pc`'s
-`actions-runner` service should be restarted/re-registered so CI can move
-back to self-hosted execution (recovery steps are in
-[issue #195](https://github.com/waveformer1984/HYDI-System-v2/issues/195)),
-or whether `ubuntu-latest` should just stay as the long-term choice — that
-tradeoff (GitHub Actions minutes cost vs. local-first execution) is a
-maintainer call, not something this fix decided.
+**Update, still 2026-07-16, GitHub-hosted runners are also blocked**: after
+switching to `ubuntu-latest`, every job has instead completed with
+`conclusion: failure` in ~3-5 seconds with `runner_id: 0` and `0ms`
+billable runtime — meaning GitHub rejects the job before any runner is
+ever assigned, not a real test/lint/CodeQL failure. This persisted through
+two account-side fixes attempted in sequence (raising the Actions spending
+limit, then clearing a past-due account balance), so it isn't either of
+those — and since this repo is public, GitHub-hosted minutes should be
+free regardless of spending limit. Remaining unexplored candidates:
+Settings → Actions → General → "Actions permissions" restricting runners
+below what the workflows request, or an org-level policy overriding the
+repo. Nobody has chased this further yet.
+
+**Decision (2026-07-16)**: rather than keep chasing the GitHub-side block,
+the local pre-push hook (`.githooks/pre-push`, wired up automatically via
+`npm install`'s `postinstall` → `git config core.hooksPath .githooks`) is
+the actual gate for day-to-day work — it runs `typecheck`, `lint`, and the
+full Jest suite before every push. GitHub Actions is treated as
+best-effort/optional until someone confirms hosted runners actually pick
+up a job end-to-end; do not treat a red or stuck GitHub Actions check as
+blocking, and do not treat a green one as more trustworthy than the local
+hook having passed.
 
 ## Verification steps after any deployment-affecting change
 
-**Note**: as of the 2026-07-16 mitigation above, GitHub Actions runs on
-`ubuntu-latest` and should be a trustworthy signal again. The local
-commands below remain useful for fast iteration before pushing.
+**Note**: GitHub Actions is not currently a trustworthy signal (see item 5
+above) — hosted runners reject jobs before they start, for reasons still
+unconfirmed. The local commands below (already run automatically by the
+pre-push hook) are the real source of truth today.
 
 ```bash
 npm run typecheck        # tsc --noEmit
