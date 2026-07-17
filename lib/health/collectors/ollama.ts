@@ -1,4 +1,5 @@
 import type { HealthCollector, HealthSnapshot, OllamaHealth } from '../types';
+import { getMetricsService } from '../../metrics';
 
 const DEFAULT_BASE_URL = process.env.LOCAL_MODEL_URL ||
   process.env.OLLAMA_URL ||
@@ -44,14 +45,15 @@ export class OllamaHealthCollector implements HealthCollector {
 
       const latency = Date.now() - start;
       const loadedModels = await this.getLoadedModels();
+      const metrics = getMetricsService();
 
       return {
         status: latency < 2000 ? 'healthy' : 'degraded',
         baseURL: this.baseURL,
         reachable: true,
         loadedModels,
-        modelLoadTimeMs: null,
-        averageInferenceLatencyMs: null,
+        modelLoadTimeMs: metrics.getLastLoadDurationMs('local'),
+        averageInferenceLatencyMs: metrics.getAverageInferenceLatencyMs('local'),
       };
     } catch (error) {
       return {
