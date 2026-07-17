@@ -2,6 +2,7 @@
 // HYDI State Transition Gateway - Atomic transitions with invariant enforcement
 
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
+import { requireServiceRole } from "../_shared/security.ts";
 
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL")!,
@@ -47,9 +48,16 @@ Deno.serve(async (req: Request) => {
     });
   }
   
+  // Internal-only state-transition gateway: any caller who can invoke it
+  // can advance HYDI run state. verify_jwt=true alone only proves *a* JWT
+  // was presented (the public anon key qualifies), not that the caller is
+  // privileged -- see ISSUES_FOUND.md.
+  const authError = requireServiceRole(req);
+  if (authError) return authError;
+
   const body = await req.json() as TransitionRequest;
   const { run_id, from, to, payload, actor, idempotency_key } = body;
-  
+
   try {
     // 1. Validate actor permission
     if (!ACTOR_PERMISSIONS[actor]?.includes(to)) {

@@ -69,6 +69,17 @@ drop-everything, P1 is next up, P2 is scheduled but not urgent.
     **Fixed 2026-07-16** (`ISSUES_FOUND.md` #48): all three now confirm the
     project belongs to the request's `userId` before proceeding. The
     `userId` itself is still unverified pending the decision in item 3.
+3b. **New, urgent follow-up (2026-07-17):** fixing the `pages/api/actions/[id].ts`
+    human-review-bypass vulnerability (`ISSUES_FOUND.md` #56) means the
+    dashboard's approve/reject buttons (`pages/index.tsx`) now get a 401 —
+    that page has no credential-storage mechanism at all today (no login,
+    no token in `localStorage`, nothing). Wiring one in (matching the
+    pattern the GitHub Pages mobile client already uses — a ⚙️ settings
+    dialog where the operator types in `HYDI_SERVICE_SECRET` once) is the
+    top recommended next task. This is a narrower, more tractable slice of
+    item 3's larger identity question: `pages/index.tsx` only needs *a*
+    credential to reach the existing `requireAuth()` gate, not full
+    per-user cryptographic identity.
 4. ~~`workers/SecurityIdentityWorker.js`'s `processAuthentication()` always
    succeeds regardless of submitted credentials~~ **Fixed 2026-07-16** —
    now fails closed (`ISSUES_FOUND.md` #47). Still open: no real
@@ -96,9 +107,22 @@ drop-everything, P1 is next up, P2 is scheduled but not urgent.
    need.
 
 **P2 — scheduled, lower urgency:**
-7. JWT enforcement audit across all 42 Supabase Edge Functions + rate
-   limiting on the public (no-JWT) ones (already listed under Edge
-   Function hardening below).
+7. ~~JWT enforcement audit across all 42 Supabase Edge Functions + rate
+   limiting on the public (no-JWT) ones~~ **Done 2026-07-17**
+   (`ISSUES_FOUND.md` #55-#66). 15 functions had no explicit `verify_jwt`
+   entry and no code-level auth check at all — now gated with a new shared
+   `requireServiceRole()` helper (`supabase/functions/_shared/security.ts`).
+   All 14 intentionally-public functions now have rate limiting. Also
+   surfaced and fixed two critical findings beyond the Edge Function scope
+   this item named: `pages/api/actions/[id].ts` let anyone bypass
+   ProtoForge's human-review escalation with zero auth (now gated,
+   **breaking change for the dashboard UI** — see item 3b below), and
+   `chat-operator` trusted a client-supplied `user_id` to authorize real
+   refunds (now cross-checked against the session's real owner). Also
+   found and left open, needing a maintainer decision:
+   `supabase/functions/stripe-worker`'s live role vs. the already-public
+   `stripe-webhook` function is ambiguous (`ISSUES_FOUND.md` #63) — same
+   class of call as item 5 below.
 8. ~150 `no-unused-vars` ESLint warnings (`ISSUES_FOUND.md` #18) — cosmetic,
    large surface area, best done file-by-file rather than mechanically.
 9. ~~`tests/unit/hydi-v3/WatchdogSupervisor.test.js` has the same
@@ -222,8 +246,10 @@ something executable.
 - Audit trail for accepted vs. rejected hypotheses in the `decisions` table
 
 ### Edge Function hardening
-- JWT enforcement audit across all 42 functions
-- Rate limiting on public (no-JWT) functions
+- ~~JWT enforcement audit across all 42 functions~~ **Done 2026-07-17**,
+  see P2 item 7 above.
+- ~~Rate limiting on public (no-JWT) functions~~ **Done 2026-07-17**, see
+  P2 item 7 above.
 - Chaos runner integration into CI
 
 ---

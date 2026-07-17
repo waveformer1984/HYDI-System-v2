@@ -7,6 +7,7 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.32.0";
+import { rateLimit } from "../_shared/security.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -18,6 +19,13 @@ serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
+
+  // "The door" -- every request passes through here, and the real
+  // allow/deny decision is made inside keymaker_validate_and_route() based
+  // on key_hash. Rate limit to blunt key_hash brute-forcing / credential
+  // stuffing against that RPC (see ISSUES_FOUND.md).
+  const limited = rateLimit(req, { name: "keymaker-gate", windowMs: 60_000, max: 30 });
+  if (limited) return limited;
 
   try {
     const supabase = createClient(

@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2.49.8";
+import { requireServiceRole } from "../_shared/security.ts";
 
 type ExecuteRequest = {
   action_id?: string;
@@ -165,6 +166,14 @@ Deno.serve(async (req: Request) => {
     }
     
     if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
+
+    // Internal-only: runs whitelisted tools (create_invoice,
+    // pause_subscription, create_support_ticket) using the service-role
+    // key. verify_jwt=true alone only proves *a* JWT was presented (the
+    // public anon key qualifies), not that the caller is privileged -- see
+    // ISSUES_FOUND.md.
+    const authError = requireServiceRole(req);
+    if (authError) return authError;
 
     const body = (await req.json().catch(() => ({}))) as ExecuteRequest;
     const actions = await fetchQueuedActions(body);

@@ -1,5 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2.49.8";
 import Stripe from "npm:stripe@14.21.0";
+import { rateLimit } from "../_shared/security.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -17,6 +18,12 @@ Deno.serve(async (req: Request) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
+
+  // Generous budget so real Stripe retry bursts are never affected -- this
+  // is defense-in-depth against pure junk traffic, not the primary gate
+  // (Stripe signature verification below is).
+  const limited = rateLimit(req, { name: "stripe-webhook", windowMs: 60_000, max: 120 });
+  if (limited) return limited;
 
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL")!,

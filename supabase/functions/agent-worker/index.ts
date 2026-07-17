@@ -6,6 +6,7 @@
  */
 
 import { createClient } from "npm:@supabase/supabase-js@2.49.8";
+import { requireServiceRole } from "../_shared/security.ts";
 
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL")!,
@@ -54,6 +55,13 @@ Deno.serve(async (req: Request) => {
         { status: 405, headers: corsHeaders }
       );
     }
+
+    // Internal-only: claims and executes jobs (including stripe.webhook
+    // job payloads) using the service-role key. verify_jwt=true alone only
+    // proves *a* JWT was presented (the public anon key qualifies), not
+    // that the caller is privileged -- see ISSUES_FOUND.md.
+    const authError = requireServiceRole(req);
+    if (authError) return authError;
 
     const body = await req.json().catch(() => ({}));
     const { action = "claim" } = body;

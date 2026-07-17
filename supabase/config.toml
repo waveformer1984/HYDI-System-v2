@@ -506,3 +506,88 @@ verify_jwt = true
 # Heidi Reflection Service (Header-based auth)
 [functions.heidi-reflect]
 verify_jwt = false
+
+# ============================================================
+# 2026-07-17 audit: the 15 functions below had no explicit entry at all
+# (silently relying on the platform default, verify_jwt = true). That
+# default only proves *a* validly-signed JWT was presented -- the public
+# anon key satisfies it too -- so every one of these was reachable by any
+# caller holding nothing more than the publishable anon key. All now
+# additionally check for a service-role Bearer token in their own code
+# (via supabase/functions/_shared/security.ts's requireServiceRole()),
+# same pattern as stripe-transfer-payout/stripe-connect-admin above. See
+# ISSUES_FOUND.md for the full per-function writeup.
+# ============================================================
+
+[functions.action-worker]
+verify_jwt = true
+
+[functions.agent-worker]
+verify_jwt = true
+
+[functions.billing-retry-worker]
+verify_jwt = true
+
+[functions.chaos-runner]
+verify_jwt = true
+
+[functions.hydi-transition]
+verify_jwt = true
+
+[functions.monthly-payout-calculation]
+verify_jwt = true
+
+[functions.protoforge-calibration]
+verify_jwt = true
+
+[functions.tool-executor]
+verify_jwt = true
+
+# chat-operator is meant to be called directly by an end user's browser
+# (customer support / refund chat), so it cannot be gated behind
+# service-role like the internal workers above -- see ISSUES_FOUND.md for
+# the client-supplied-user_id finding and the session-ownership check
+# added to mitigate it instead.
+[functions.chat-operator]
+verify_jwt = true
+
+# keeper-break-glass{,-simple} and keymaker-gate already implement their
+# own crypto/shared-secret checks in code (fail-closed) and are meant to
+# be reachable without a Supabase user JWT -- verify_jwt = true here is
+# still the safer platform-level default (requires *a* valid JWT in
+# addition to the function's own check) since none of these are meant to
+# be called by a bare anonymous request either.
+[functions.keeper-break-glass]
+verify_jwt = true
+
+[functions.keeper-break-glass-simple]
+verify_jwt = true
+
+[functions.keymaker-gate]
+verify_jwt = true
+
+# rezonate-engine and stream-health-watchdog are intentionally
+# verify_jwt = false at the platform layer (documented in each function's
+# own header comment) so they can be invoked by internal service-role
+# callers without a user token -- both now enforce that requirement in
+# code instead of relying on the platform gate alone (requireServiceRole()
+# for rezonate-engine; the existing HYDI_WATCHDOG_KEY header check, fixed
+# 2026-07-17 to fail closed, for stream-health-watchdog).
+[functions.rezonate-engine]
+verify_jwt = false
+
+[functions.stream-health-watchdog]
+verify_jwt = false
+
+# stripe-worker is NOT listed here deliberately. Its role is ambiguous --
+# it does its own Stripe signature verification (a real, sufficient gate
+# for a webhook receiver) but real Stripe webhook deliveries never carry a
+# Supabase JWT, so if it's meant to receive them directly, the implicit
+# verify_jwt = true default would already be blocking every real delivery
+# at the platform layer before the function's own signature check ever
+# runs. It's also invoked internally by billing-retry-worker with the
+# service-role key, which does satisfy verify_jwt = true. Which of these
+# is the actual live path -- and whether stripe-worker is a duplicate of
+# the already-public stripe-webhook function above -- needs a maintainer
+# decision (same class of call as the parallel-Stripe-implementations item
+# in ROADMAP.md), not a guess. See ISSUES_FOUND.md.

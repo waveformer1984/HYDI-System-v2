@@ -1,6 +1,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { jwtVerify } from 'https://deno.land/x/jose@v4.1.5/index.ts'
+import { rateLimit } from '../_shared/security.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -33,6 +34,11 @@ serve(async (req) => {
   }
 
   try {
+    // Break-glass overrides a safety circuit -- rate limit brute-force /
+    // flood attempts against it regardless of the auth outcome below.
+    const limited = rateLimit(req, { name: 'keeper-break-glass', windowMs: 60_000, max: 10 })
+    if (limited) return limited
+
     // Verify authorization
     const authHeader = req.headers.get('Authorization')
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
