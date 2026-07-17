@@ -5,13 +5,26 @@
 
 const axios = require('axios');
 
+function isRealApiKey(key) {
+  if (!key || key.trim().length < 30) return false;
+  const normalized = key.toLowerCase();
+  if (normalized.includes('your') || normalized.includes('placeholder') || normalized.includes('example')) return false;
+  return normalized.startsWith('sk-ant') || normalized.startsWith('sk-');
+}
+
+function parseTimeoutMs(value) {
+  const parsed = parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
 class LocalModelClient {
   constructor(config = {}) {
-    this.baseURL = config.baseURL || 'http://localhost:11434'; // Ollama default
-    this.model = config.model || 'llama2';
-    this.provider = config.provider || 'ollama'; // ollama, lmstudio, custom
-    this.timeout = config.timeout || 30000;
-    
+    this.baseURL = config.baseURL || process.env.LOCAL_MODEL_URL || process.env.OLLAMA_URL || 'http://localhost:11434';
+    this.model = config.model || process.env.LOCAL_MODEL_NAME || process.env.OLLAMA_MODEL || 'llama3.2:3b';
+    this.provider = config.provider || process.env.LOCAL_MODEL_PROVIDER || 'ollama';
+    // Cold model loads can take 30-60 s; 60 s default prevents aborts.
+    this.timeout = config.timeout || parseTimeoutMs(process.env.LOCAL_MODEL_TIMEOUT_MS) || 60000;
+
     this.client = axios.create({
       baseURL: this.baseURL,
       timeout: this.timeout,
@@ -84,19 +97,27 @@ class LocalModelClient {
    * Build payload for different providers
    */
   buildPayload(prompt, options) {
-    const baseOptions = {
-      temperature: options.temperature || 0.7,
-      max_tokens: options.max_tokens || 1000,
-      stream: false
-    };
+    const temperature = options.temperature || 0.7;
+    const numPredict = options.max_tokens || options.num_predict || 1000;
 
     if (this.provider === 'ollama') {
       return {
         model: this.model,
         prompt: this.buildPrompt(prompt),
-        ...baseOptions
+        stream: false,
+        keep_alive: '30m',
+        options: {
+          temperature,
+          num_predict: numPredict
+        }
       };
     } else if (this.provider === 'lmstudio') {
+      const baseOptions = {
+        temperature,
+        max_tokens: numPredict,
+        stream: false
+      };
+
       return {
         model: this.model,
         messages: [
@@ -271,11 +292,11 @@ class HeidiLocalHandler {
       : message;
 
     try {
-      if (process.env.ANTHROPIC_API_KEY) {
+      if (isRealApiKey(process.env.ANTHROPIC_API_KEY)) {
         const resp = await axios.post(
           'https://api.anthropic.com/v1/messages',
           {
-            model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-6',
+            model: process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-20241022',
             max_tokens: 1000,
             system: systemPrompt,
             messages: [{ role: 'user', content: userContent }],
@@ -296,7 +317,7 @@ class HeidiLocalHandler {
         return { text, model: resp.data.model, provider: 'anthropic', usage: resp.data.usage };
       }
 
-      if (process.env.OPENAI_API_KEY) {
+      if (isRealApiKey(process.env.OPENAI_API_KEY)) {
         const resp = await axios.post(
           'https://api.openai.com/v1/chat/completions',
           {
