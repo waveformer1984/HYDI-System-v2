@@ -5,6 +5,7 @@
  */
 
 import { createClient } from '@supabase/supabase-js';
+import { requireAuth } from '../../lib/auth/requireAuth.js';
 
 const PIPELINE_STAGES = [
   'ingestion',
@@ -24,6 +25,12 @@ export default async function handler(req, res) {
     process.env.SUPABASE_URL,
     process.env.SUPABASE_SERVICE_ROLE_KEY
   );
+
+  // Exposes raw RAW EVENT LEDGER payloads -- internal operational data, not
+  // meant to be publicly readable. Was previously unauthenticated -- see
+  // ISSUES_FOUND.md.
+  const auth = await requireAuth(req, res, supabase, { permission: 'traces:view', routeName: 'traces' });
+  if (!auth.ok) return;
 
   const limit = Math.min(parseInt(req.query.limit || '50', 10), 200);
   const typeFilter = req.query.type || null;

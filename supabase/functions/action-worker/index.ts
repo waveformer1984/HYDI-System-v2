@@ -1,10 +1,6 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
+import { corsHeaders, requireServiceRole } from '../_shared/security.ts'
 
 // Process queued actions
 async function processQueuedActions(supabase: any, limit: number = 10) {
@@ -97,9 +93,16 @@ serve(async (req) => {
     }
     
     if (method === 'POST') {
+      // Internal-only: processes queued operator_actions using the
+      // service-role key. verify_jwt=true alone only proves *a* JWT was
+      // presented (the public anon key qualifies), not that the caller is
+      // privileged -- see ISSUES_FOUND.md.
+      const authError = requireServiceRole(req)
+      if (authError) return authError
+
       const body = await req.json()
       const { limit = 10, batch_mode = false, action_id } = body
-      
+
       // Initialize Supabase client
       const supabase = createClient(
         Deno.env.get('SUPABASE_URL')!,

@@ -2,6 +2,7 @@
 // HYDI Chaos Runner - Deterministic chaos testing with bounded concurrency
 
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
+import { requireServiceRole } from "../_shared/security.ts";
 
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL")!,
@@ -343,8 +344,15 @@ Deno.serve(async (req: Request) => {
     });
   }
   
+  // Internal QA tool: launches bounded-concurrency test runs that write
+  // many DB rows. verify_jwt=true alone only proves *a* JWT was presented
+  // (the public anon key qualifies), not that the caller is privileged --
+  // see ISSUES_FOUND.md.
+  const authError = requireServiceRole(req);
+  if (authError) return authError;
+
   const body = await req.json() as ChaosConfig;
-  
+
   // Fetch chaos run config
   const { data: runConfig, error: runErr } = await supabase
     .from("chaos_runs")

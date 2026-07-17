@@ -26,6 +26,32 @@ interface ActionEvent {
   resolving?: boolean
 }
 
+// Same localStorage key and HMAC-signing scheme as docs/index.html (the
+// GitHub Pages mobile client) and api/chat/route.js's checkServiceToken().
+// Approving/rejecting a ProtoForge-escalated action requires the
+// 'actions:approve' permission (lib/auth/rbac.js) as of 2026-07-17 -- see
+// ISSUES_FOUND.md #56 -- so this page now needs a credential to reach that
+// gate. Stored only in this browser; never sent anywhere but this page's
+// own /api/actions/:id.
+const SERVICE_SECRET_KEY = 'hydi.serviceSecret'
+
+async function mintServiceToken(secret: string): Promise<string> {
+  const ts = Date.now().toString()
+  const requestId = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2)
+  const service = 'heidi-dashboard'
+  const payload = `${ts}:${requestId}:${service}`
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  )
+  const sigBuf = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(payload))
+  const sig = [...new Uint8Array(sigBuf)].map(b => b.toString(16).padStart(2, '0')).join('')
+  return `${ts}.${requestId}.${service}.${sig}`
+}
+
 export default function HeidiChat() {
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
@@ -34,10 +60,27 @@ export default function HeidiChat() {
   const [model, setModel] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [connectionOk, setConnectionOk] = useState<boolean | null>(null)
+  const [serviceSecret, setServiceSecret] = useState('')
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [secretDraft, setSecretDraft] = useState('')
 
   const scrollRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const abortRef = useRef<AbortController | null>(null)
+
+  // localStorage is only available client-side -- load after mount to
+  // avoid an SSR/client hydration mismatch.
+  useEffect(() => {
+    const stored = localStorage.getItem(SERVICE_SECRET_KEY) || ''
+    setServiceSecret(stored)
+    setSecretDraft(stored)
+  }, [])
+
+  const saveServiceSecret = useCallback(() => {
+    localStorage.setItem(SERVICE_SECRET_KEY, secretDraft)
+    setServiceSecret(secretDraft)
+    setSettingsOpen(false)
+  }, [secretDraft])
 
   // Health check on mount
   useEffect(() => {
@@ -203,14 +246,23 @@ export default function HeidiChat() {
     )
 
     try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+      if (serviceSecret) {
+        headers['x-hydi-service-token'] = await mintServiceToken(serviceSecret)
+      }
+
       const res = await fetch(`/api/actions/${actionId}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ decision }),
       })
       const data = await res.json()
       const nextStatus: ActionEvent['status'] = res.ok && data.status === 'completed' ? 'completed' : 'failed'
-      const nextError = res.ok ? data.error : data.error || 'Failed to resolve action'
+      const nextError = res.ok
+        ? data.error
+        : res.status === 401 || res.status === 403
+        ? 'Not authorized to approve actions. Set your service secret in ⚙️ settings.'
+        : data.error || 'Failed to resolve action'
 
       setMessages(prev =>
         prev.map(m =>
@@ -240,7 +292,7 @@ export default function HeidiChat() {
         )
       )
     }
-  }, [])
+  }, [serviceSecret])
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault()
@@ -294,8 +346,61 @@ export default function HeidiChat() {
           >
             Z-Labs
           </Link>
+          <button
+            onClick={() => {
+              setSecretDraft(serviceSecret)
+              setSettingsOpen(true)
+            }}
+            aria-label="Settings"
+            title="Settings"
+            className="text-gray-500 hover:text-gray-300 transition-colors"
+          >
+            <SettingsIcon />
+          </button>
         </div>
       </header>
+
+      {/* Settings panel */}
+      {settingsOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4"
+          onClick={() => setSettingsOpen(false)}
+        >
+          <div
+            className="w-full max-w-sm bg-[#16161f] border border-white/[0.08] rounded-2xl p-5"
+            onClick={e => e.stopPropagation()}
+          >
+            <h2 className="text-sm font-semibold text-gray-200 mb-1">Connection settings</h2>
+            <p className="text-[11px] text-gray-500 mb-4">
+              Approving or rejecting a ProtoForge-escalated action requires a service
+              secret (<code className="text-gray-400">HYDI_SERVICE_SECRET</code>). Stored
+              only in this browser (localStorage) — never sent anywhere but this page&apos;s
+              own API.
+            </p>
+            <input
+              type="password"
+              value={secretDraft}
+              onChange={e => setSecretDraft(e.target.value)}
+              placeholder="HYDI_SERVICE_SECRET"
+              className="w-full bg-white/[0.04] border border-white/[0.08] rounded-lg px-3 py-2 text-sm text-gray-100 placeholder-gray-600 outline-none focus:border-violet-500/40 mb-4"
+            />
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => setSettingsOpen(false)}
+                className="px-3 py-1.5 text-xs text-gray-400 hover:text-gray-200 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={saveServiceSecret}
+                className="px-3 py-1.5 text-xs rounded-lg bg-violet-600 hover:bg-violet-500 text-white transition-colors"
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Messages area */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto chat-scroll">
@@ -571,6 +676,15 @@ function StopIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
       <rect x="6" y="6" width="12" height="12" rx="2" />
+    </svg>
+  )
+}
+
+function SettingsIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
     </svg>
   )
 }

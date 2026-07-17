@@ -1,8 +1,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import Stripe from 'https://esm.sh/stripe@14.21.0'
-
-console.log("=== STRIPE WORKER V3 DEPLOYED ===")
+import { rateLimit } from '../_shared/security.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -10,51 +9,32 @@ const corsHeaders = {
 }
 
 serve(async (req) => {
-  // CANARY LOG - FIRST LINE EXECUTION
-  console.log("=== STRIPE WORKER V3 ACTIVE HIT ===", new Date().toISOString())
-  console.log("=== REQUEST METHOD:", req.method)
-  console.log("=== RAW ENTRY HIT - BEFORE ANY PROCESSING ===")
-  
-  // Initialize environment check
-  const webhookSecret = Deno.env.get('STRIPE_WEBHOOK_SECRET_01')
-  console.log("=== SECRET LENGTH CHECK:", webhookSecret?.length || 0)
-  console.log("=== SECRET EXISTS CHECK:", !!webhookSecret)
-  
-  console.log("=== REQUEST HEADERS:", Object.fromEntries(req.headers.entries()))
-
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
-    console.log("=== CORS PREFLIGHT ===")
     return new Response('ok', { headers: corsHeaders })
   }
 
+  // Generous budget so real Stripe retry bursts / internal
+  // billing-retry-worker calls are never affected -- defense-in-depth
+  // against pure junk traffic, not the primary gate (signature
+  // verification below is).
+  const limited = rateLimit(req, { name: 'stripe-worker', windowMs: 60_000, max: 120 })
+  if (limited) return limited
+
   try {
-    console.log("=== INITIATING WEBHOOK PROCESSING ===")
-    
     // Initialize Supabase
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
-    console.log("=== SUPABASE CLIENT CREATED ===")
 
     // Initialize Stripe
     const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY')!)
-    console.log("=== STRIPE CLIENT CREATED ===")
-    console.log("=== USING SECRET FROM ENV CHECK ===")
 
     // --- Signature inputs ---
     const sig = req.headers.get('stripe-signature');
     const webhookSecretRaw = Deno.env.get('STRIPE_WEBHOOK_SECRET_01') ?? Deno.env.get('STRIPE_WEBHOOK_SECRET');
     const webhookSecret = webhookSecretRaw?.trim();
-    
-    // Debug logging
-    console.log("=== DEBUG VALUES ===");
-    console.log("Signature header exists:", !!sig);
-    console.log("Signature header value:", sig?.substring(0, 50) + "...");
-    console.log("Webhook secret exists:", !!webhookSecret);
-    console.log("Webhook secret length:", webhookSecret?.length || 0);
-    console.log("Webhook secret starts with:", webhookSecret?.substring(0, 10) + "...");
-    
+
     // Hard guards before constructEvent
     if (!sig) {
       return new Response(
@@ -88,13 +68,7 @@ serve(async (req) => {
     
     // CRITICAL: raw body only, read once
     const body = await req.text();
-    console.log("=== RAW BODY LENGTH:", body.length);
-    console.log("=== SIG LENGTH:", sig.length);
-    console.log("=== SECRET LENGTH:", webhookSecret.length);
-    console.log("=== SECRET START:", webhookSecret.substring(0, 10) + "...");
-    console.log("=== RAW BODY START:", body.substring(0, 100));
-    console.log("=== SIGNATURE HEADER:", sig);
-    
+
     // --- Verify signature ---
     let event: Stripe.Event;
     try {
