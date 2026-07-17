@@ -5,16 +5,38 @@ import { randomUUID } from 'crypto';
 import { Redis } from '@upstash/redis';
 import { ensureDeliveries, markOfferPaidFromWebhook } from '@/lib/revenue-engine/engine';
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2026-05-27.dahlia',
-});
+// Stripe has no local-dev substitute (CLAUDE.md), but constructing it
+// unconditionally at module load crashed this route the moment it was hit
+// without STRIPE_SECRET_KEY configured -- mirrors the lazy-getter pattern
+// already used by lib/revenue-engine/engine.ts's getStripeClient().
+let stripeClient: Stripe | null | undefined;
+function getStripeClient(): Stripe | null {
+  if (stripeClient !== undefined) return stripeClient;
+  stripeClient = process.env.STRIPE_SECRET_KEY
+    ? new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: '2026-05-27.dahlia' })
+    : null;
+  return stripeClient;
+}
 
 // Redis for idempotency tracking
+// Redis.fromEnv() does NOT throw when its env vars are missing -- it only
+// console.warns and returns a client with url/token undefined, which then
+// fails every command it's asked to run. The try/catch below never caught
+// anything as a result. Check the same vars fromEnv() itself checks (plus
+// its Vercel KV fallback names) before constructing, so the memory fallback
+// actually engages when Redis isn't configured.
 let redis: Redis | null = null;
-try {
-  redis = Redis.fromEnv();
-} catch {
-  console.warn('[WEBHOOK] Redis not available, using memory fallback for idempotency');
+const hasRedisConfig =
+  (process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL) &&
+  (process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN);
+if (hasRedisConfig) {
+  try {
+    redis = Redis.fromEnv();
+  } catch {
+    console.warn('[WEBHOOK] Redis not available, using memory fallback for idempotency');
+  }
+} else {
+  console.warn('[WEBHOOK] Redis not configured, using memory fallback for idempotency');
 }
 
 // Memory fallback for idempotency
@@ -223,6 +245,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         console.log('[WEBHOOK] Test mode - parsing event without signature verification');
         event = JSON.parse(body);
       } else {
+        const stripe = getStripeClient();
+        if (!stripe) {
+          console.log('[WEBHOOK] STRIPE_SECRET_KEY not configured');
+          return NextResponse.json(
+            { error: 'Stripe not configured' },
+            { status: 503 }
+          );
+        }
         event = stripe.webhooks.constructEvent(body, signature!, process.env.STRIPE_WEBHOOK_SECRET!);
         console.log('[WEBHOOK] Event verified:', event.type);
         console.log('[WEBHOOK] Event ID:', event.id);
