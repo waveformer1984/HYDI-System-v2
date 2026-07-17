@@ -47,6 +47,26 @@ drop-everything, P1 is next up, P2 is scheduled but not urgent.
     #198 until a check actually goes green** — merging now trades "stuck
     queued forever" for "fails immediately every time," which isn't
     actually a trustworthy CI signal either.
+2b. **2026-07-17 follow-up: confirmed repo-wide, not workflow-specific.**
+    Checked the last several runs of all three active, frequently-triggered
+    workflows (`unit-tests.yml`, `codeql.yml`, `health-monitor.yml`,
+    including a scheduled Health Monitor run and a run on a feature branch,
+    not just `clean-main`) — every one fails within 3-25 seconds with the
+    same `runner_id: 0` symptom. All 8 workflows in the repo report
+    `state: "active"`, ruling out "Actions disabled" at the repo/workflow
+    level. `get_workflow_run_usage` on a failing run shows `total_ms: 0`
+    billable UBUNTU runner time — the runner was never dispatched at all,
+    which reads more like an account/repo-level block on GitHub-hosted
+    runners than a mid-run spending-limit cutoff (that would normally show
+    some partial billable time before being killed). No tool available to
+    any sandbox session exposes the `actions/permissions` or account-billing
+    API, so this still needs a human to check, specifically:
+    `github.com/waveformer1984/HYDI-System-v2/settings/actions` (Actions
+    permissions not disabled) and `github.com/settings/billing/summary` or
+    `.../budgets` (spending limit not $0 / account not paused). If both
+    check out clean, this may warrant a GitHub support ticket — instant
+    failure with zero billable time and no runner assignment isn't a normal
+    "ran out of minutes" pattern.
 
 **P1 — high impact/risk, not yet started:**
 3. Cryptographic identity verification to replace the `x-user-id`
