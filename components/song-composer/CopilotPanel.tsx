@@ -31,6 +31,7 @@ const QUICK_PROMPTS = [
 ];
 
 export default function CopilotPanel({ song, currentBar }: Props) {
+  const [sessionId] = useState(() => `song-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
   const [messages, setMessages] = useState<Message[]>([
     {
       role: 'hydi',
@@ -82,21 +83,49 @@ Give specific, actionable musical advice. Keep responses concise (2-4 sentences)
     setLoading(true);
 
     try {
-      const res = await fetch('/api/chat/route', {
+      const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          message: text,
-          system: buildSystemPrompt(),
+          message: `${buildSystemPrompt()}\n\nUser: ${text}`,
+          session_id: sessionId,
+          user_id: 'song-composer-user',
         }),
       });
 
-      const data = await res.json();
-      const reply = data.response || data.content || 'I couldn\'t process that — try rephrasing.';
+      if (!res.ok || !res.body) {
+        throw new Error(`Server error (${res.status})`);
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let reply = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ') || line === 'data: [DONE]') continue;
+          try {
+            const data = JSON.parse(line.slice(6));
+            if (data.type === 'content') reply += data.content;
+            else if (data.type === 'error') throw new Error(data.error);
+          } catch (parseErr) {
+            if (parseErr instanceof SyntaxError) continue;
+            throw parseErr;
+          }
+        }
+      }
 
       setMessages((prev) => [
         ...prev,
-        { role: 'hydi', content: reply, timestamp: new Date() },
+        { role: 'hydi', content: reply || 'I couldn\'t process that — try rephrasing.', timestamp: new Date() },
       ]);
     } catch {
       setMessages((prev) => [

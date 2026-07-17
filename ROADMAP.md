@@ -105,7 +105,16 @@ drop-everything, P1 is next up, P2 is scheduled but not urgent.
    `client-dashboard.js` deliberately left unbridged — both lack any auth
    and bridging them as-is would introduce a live vulnerability rather
    than fix a gap; see `ISSUES_FOUND.md` #53-#54 for what a real fix would
-   need.
+   need. **Follow-on found the same day by a parallel session**
+   (`ISSUES_FOUND.md` #55): `components/song-composer/CopilotPanel.tsx`
+   was calling `/api/chat/route` with a payload shape that route never
+   accepted (a freeform system prompt instead of one of the 8 fixed
+   routing keys) and no HMAC service token — bridging the route doesn't
+   fix that, since a browser can't safely hold the token anyway. Fixed by
+   repointing `CopilotPanel` at the real, already-live, unauthenticated
+   `/api/chat` instead (the same SSE contract `pages/index.tsx`'s Heidi
+   chat already uses), folding the song-context prompt into the message
+   text since that endpoint has no separate system-prompt param.
 
 **P2 — scheduled, lower urgency:**
 7. ~~JWT enforcement audit across all 42 Supabase Edge Functions + rate
@@ -127,13 +136,11 @@ drop-everything, P1 is next up, P2 is scheduled but not urgent.
 8. ~150 `no-unused-vars` ESLint warnings (`ISSUES_FOUND.md` #18) — cosmetic,
    large surface area, best done file-by-file rather than mechanically.
 9. ~~`tests/unit/hydi-v3/WatchdogSupervisor.test.js` has the same
-   fixed-`setTimeout`-vs-own-interval race~~ **Done 2026-07-17** — switched
-   to `Promise.race` against the actual emitted event, same treatment as
-   `ISSUES_FOUND.md` #10.
+   fixed-`setTimeout`-vs-own-interval race~~ **Fixed** in PR #202
+   (2026-07-16).
 10. ~~`AGENT_REGISTRY`'s Rezonate endpoint path in
     `api/agent-manager/agents.js` doesn't match the file's actual
-    resolved route~~ **Done 2026-07-17** — corrected to
-    `/api/rezonate/route`.
+    resolved route~~ **Fixed** in PR #202 (2026-07-16).
 
 **Done this pass (housekeeping):**
 - Archived 3 confirmed-orphaned dead-code files flagged in a prior audit's
