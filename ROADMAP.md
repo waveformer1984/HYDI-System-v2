@@ -69,17 +69,18 @@ drop-everything, P1 is next up, P2 is scheduled but not urgent.
     **Fixed 2026-07-16** (`ISSUES_FOUND.md` #48): all three now confirm the
     project belongs to the request's `userId` before proceeding. The
     `userId` itself is still unverified pending the decision in item 3.
-3b. **New, urgent follow-up (2026-07-17):** fixing the `pages/api/actions/[id].ts`
-    human-review-bypass vulnerability (`ISSUES_FOUND.md` #56) means the
-    dashboard's approve/reject buttons (`pages/index.tsx`) now get a 401 —
-    that page has no credential-storage mechanism at all today (no login,
-    no token in `localStorage`, nothing). Wiring one in (matching the
-    pattern the GitHub Pages mobile client already uses — a ⚙️ settings
-    dialog where the operator types in `HYDI_SERVICE_SECRET` once) is the
-    top recommended next task. This is a narrower, more tractable slice of
-    item 3's larger identity question: `pages/index.tsx` only needs *a*
-    credential to reach the existing `requireAuth()` gate, not full
-    per-user cryptographic identity.
+3b. ~~Fixing the `pages/api/actions/[id].ts` human-review-bypass
+    vulnerability (`ISSUES_FOUND.md` #56) meant the dashboard's
+    approve/reject buttons (`pages/index.tsx`) got a 401, since that page
+    had no credential-storage mechanism at all.~~ **Fixed 2026-07-17** —
+    added a ⚙️ settings panel (matching the pattern the GitHub Pages
+    mobile client already uses) where the operator enters
+    `HYDI_SERVICE_SECRET` once; stored in `localStorage`, minted into an
+    HMAC `x-hydi-service-token` client-side via Web Crypto on each
+    approve/reject call. Verified end-to-end with Playwright against a
+    real `next dev` server: panel opens/saves/persists across reload, and
+    the client-minted token is byte-for-byte identical to what
+    `lib/auth/verifyServiceToken.js` computes server-side.
 4. ~~`workers/SecurityIdentityWorker.js`'s `processAuthentication()` always
    succeeds regardless of submitted credentials~~ **Fixed 2026-07-16** —
    now fails closed (`ISSUES_FOUND.md` #47). Still open: no real
