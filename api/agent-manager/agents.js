@@ -68,7 +68,7 @@ const AGENT_REGISTRY = [
     role: 'Audio / DAW Node',
     layer: 'CREATIVE',
     capabilities: ['stem_analysis', 'mix_analysis', 'audio_export', 'nft_mint', 'rights_verify', 'session_recall', 'hardware_map', 'beat_generate'],
-    endpoint: '/api/rezonate',
+    endpoint: '/api/rezonate/route',
   },
   {
     id: 'waveformer',
