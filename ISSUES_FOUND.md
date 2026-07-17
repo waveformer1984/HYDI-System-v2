@@ -5,6 +5,26 @@ the narrative of what was fixed and why; this file is the flat list.
 
 ---
 
+## Fixed this session (2026-07-17, unbridged-routes review)
+
+Resolves `ROADMAP.md` item 6 / issue #34 (per-file review of the 7
+remaining ambiguous unbridged `api/` routes).
+
+| # | Issue | File(s) | Status |
+|---|-------|---------|--------|
+| 49 | `api/events/stream.js` (the mobile-ops live SSE push channel — fully implemented, `requireAuth`-gated, documented in `docs/MOBILE_OPERATIONS.md`'s route table, and covered by `tests/unit/events-stream.test.js`) was never bridged into `pages/api/`, so it 404s under this app's actual serving path. Confirmed live caller: `hydi-mobile-protoforge.html`'s Ops tab opens `new EventSource(\`${CFG.apiBase}/api/events/stream?device_token=...\`)` on load — this was a real, active break in the mobile command-center's real-time push feature (the 30s poll fallback masked it from being obviously broken). | `api/events/stream.js` | **Fixed** — bridged via `pages/api/events/stream.js` (`export { default } from '../../../api/events/stream.js'`), same pattern as the 16 routes bridged 2026-07-15. |
+| 50 | `components/song-composer/CopilotPanel.tsx`'s `sendMessage` POSTed to `/api/chat/route` with `{ message, system: buildSystemPrompt() }`. Two independent problems, either one fatal on its own: (1) `/api/chat/route` was never bridged into `pages/api/`, so the request 404s before any handler runs; (2) even bridged, `api/chat/route.js`'s handler expects `system` to be one of 8 fixed dispatch keys (`'ursula'`, `'heidi'`, `'cascade'`, ...) and rejects anything else with `400 Unknown system`, and separately requires an HMAC `x-hydi-service-token` the browser has no safe way to compute (it's derived from a server-only secret) — CopilotPanel supplied neither. The Song Composer's AI copilot panel has never worked in production. | `components/song-composer/CopilotPanel.tsx` | **Fixed** — repointed at the real, live, unauthenticated `/api/chat` (`pages/api/chat.ts`, the same SSE `{message, session_id, user_id}` contract `pages/index.tsx`'s Heidi chat already uses successfully), added a per-mount `session_id`, and folded the song-context system prompt into the message text (the shared `/api/chat` contract has no separate system-prompt param). Not addressed: `api/chat/route.js` itself is still unbridged — see the "Investigated, not fixed" note below for why bridging it wouldn't have fixed CopilotPanel anyway, and no other confirmed caller needs it reachable over HTTP right now. |
+
+### Investigated, not fixed (out of scope for this pass)
+
+- **`api/chat/route.js`** — left unbridged. Its only confirmed HTTP-level caller was `CopilotPanel.tsx` (fixed above, now calls `/api/chat` instead); its other references are all informational `endpoint` metadata in `AGENT_REGISTRY` (`api/agent-manager/agents.js`, itself just displayed by the agent-manager UI, never fetched) or `require()`s from its own test file. Matches CLAUDE.md's documented role ("dispatches `{message, system}` to the correct named agent"), so bridging it remains directionally correct future work, but nothing in the live app currently calls it with a valid `system` key + service token — bridging it now with no verified correct caller isn't a safe, testable change.
+- **`api/heidi/route.js`**, **`api/ursula/status.js`** — same shape as above: only referenced as `AGENT_REGISTRY` `endpoint` metadata (not fetched by anything), no confirmed live HTTP caller found. Left unbridged pending a maintainer decision on whether these `endpoint` fields are meant to become real links or are purely descriptive.
+- **`api/client-dashboard.js`** — zero references anywhere except itself; `dashboard/client-view.html` has one *commented-out* line showing what a real integration would look like (`// const response = await fetch(\`/api/client-dashboard?project=${project}\`);`), currently using mock data instead. Reads as an intentionally-unfinished feature, not a missing bridge. Also constructs its Supabase client eagerly at module load (the same crash-on-missing-env-var pattern fixed elsewhere per issue #32) — not fixed here since the route isn't reachable regardless.
+- **`api/ws/route.js`** — a non-functional placeholder (`GET` returns a static JSON blob describing `ws://localhost:3005/ws/*` endpoints that don't exist under this deployment model); zero callers found. Dead code, not a missing bridge.
+- **`api/local-model.js`** — not an API route at all despite living under `api/`: no default-exported handler, just a `module.exports = { LocalModelClient, HeidiLocalHandler }` library pair, actually consumed via `require()` by `api/heidi/route.js` and `modules/heidi-websocket-server.js`. Was miscategorized as one of the "7 ambiguous unbridged routes" in issue #34 — it was never a route to bridge in the first place.
+
+---
+
 ## Fixed this session (2026-07-16, follow-up audit)
 
 | # | Issue | File(s) | Status |

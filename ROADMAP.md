@@ -83,9 +83,32 @@ drop-everything, P1 is next up, P2 is scheduled but not urgent.
    sub-deployment) — needs a maintainer decision on which billing model
    is current before the other three can be archived or deleted
    (`ISSUES_FOUND.md`, "Investigated, not fixed").
-6. Per-file review of the remaining ambiguous unbridged `api/**` routes
-   (`ISSUES_FOUND.md` #34) to tell "intentionally superseded by
-   `pages/api/**`" from "also just missing".
+6. ~~Per-file review of the remaining ambiguous unbridged `api/**` routes~~
+   **Reviewed 2026-07-17** (`ISSUES_FOUND.md` #49): of the 7 files, only
+   `api/events/stream.js` had a confirmed live caller (the mobile PWA's
+   `EventSource`) hitting a route that 404s under `next dev`/`next
+   start` — bridged into `pages/api/events/stream.js`, same pattern as
+   the prior 16 routes. `api/chat/route.js` also had a confirmed live
+   caller (`components/song-composer/CopilotPanel.tsx`) but calling it
+   wouldn't have worked even if bridged — its `{message, system}`
+   contract expects `system` to be one of 8 fixed routing keys
+   (`ursula`/`heidi`/`cascade`/...), not the freeform system-prompt
+   string `CopilotPanel` was sending, and the route requires an HMAC
+   `x-hydi-service-token` a browser can't safely hold. Fixed at the
+   actual bug instead: repointed `CopilotPanel` at the real, already-live,
+   unauthenticated `/api/chat` (the same SSE contract `pages/index.tsx`
+   already uses), folding the song-context system prompt into the
+   message text since that endpoint has no separate system-prompt
+   param. `api/heidi/route.js` and `api/ursula/status.js` are referenced
+   only as informational `endpoint` metadata in `AGENT_REGISTRY`
+   (`api/agent-manager/agents.js`) — nothing actually fetches those URLs
+   — so left unbridged pending confirmation they're meant to be live
+   endpoints rather than just documentation. `api/client-dashboard.js`
+   and `api/ws/route.js` have zero callers anywhere (the one match for
+   the former is a commented-out line in `dashboard/client-view.html`)
+   and `api/local-model.js` isn't a route at all (no default-exported
+   handler — it's a plain library module living under `api/` by
+   mistake), so none of those three were touched.
 
 **P2 — scheduled, lower urgency:**
 7. JWT enforcement audit across all 42 Supabase Edge Functions + rate
@@ -93,13 +116,12 @@ drop-everything, P1 is next up, P2 is scheduled but not urgent.
    Function hardening below).
 8. ~150 `no-unused-vars` ESLint warnings (`ISSUES_FOUND.md` #18) — cosmetic,
    large surface area, best done file-by-file rather than mechanically.
-9. `tests/unit/hydi-v3/WatchdogSupervisor.test.js` has the same
-   fixed-`setTimeout`-vs-own-interval race already fixed in two sibling
-   tests (`ISSUES_FOUND.md` #10, #19) — not currently observed flaky, but
-   worth the same `Promise.race` treatment proactively.
-10. `AGENT_REGISTRY`'s Rezonate endpoint path in
+9. ~~`tests/unit/hydi-v3/WatchdogSupervisor.test.js` has the same
+   fixed-`setTimeout`-vs-own-interval race~~ **Fixed** in PR #202
+   (2026-07-16).
+10. ~~`AGENT_REGISTRY`'s Rezonate endpoint path in
     `api/agent-manager/agents.js` doesn't match the file's actual
-    resolved route (`ISSUES_FOUND.md` #37) — cheap, low-risk, not blocking.
+    resolved route~~ **Fixed** in PR #202 (2026-07-16).
 
 **Done this pass (housekeeping):**
 - Archived 3 confirmed-orphaned dead-code files flagged in a prior audit's
