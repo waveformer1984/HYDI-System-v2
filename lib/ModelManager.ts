@@ -6,6 +6,7 @@
  * - Allow a realistic inference budget (cold model load can take 30-60 s)
  * - If local is unreachable, times out, returns malformed output -> trigger API fallback
  * - Fallback = OpenAI or Anthropic, but only when a real key is configured
+ * - Emit per-request metrics to the central MetricsService
  *
  * Routing Rule:
  * if (localModel.success && outputValid)
@@ -19,20 +20,34 @@
  * - If failures >= 3 -> force API/degradation mode for 60 seconds, then auto-recover.
  */
 
+import { randomUUID } from 'crypto';
 import { createClient } from '@supabase/supabase-js';
+import { getMetricsService, type PartialInferenceMetric } from './metrics';
 
-interface ModelResponse {
+export interface InferenceMetadata {
+  provider: string;
+  selectedModel: string;
+  loadDurationMs?: number | null;
+  evalDurationMs?: number | null;
+  promptTokens?: number | null;
+  completionTokens?: number | null;
+  totalTokens?: number | null;
+}
+
+export interface ModelResponse {
   content: string;
   model: string;
   latency: number;
   success: boolean;
   error?: string;
+  metadata?: InferenceMetadata;
 }
 
 interface LocalResponse {
   content: string;
   success: boolean;
   error?: string;
+  metadata?: InferenceMetadata;
 }
 
 interface ApiResponse {
@@ -41,6 +56,7 @@ interface ApiResponse {
   error?: string;
   model: string;
   latency: number;
+  metadata?: InferenceMetadata;
 }
 
 interface SessionState {
@@ -154,70 +170,91 @@ export class ModelManager {
   /**
    * Main routing method. Prefers local, falls back to API only on real failure.
    */
-  async generateResponse(prompt: string, sessionId: string): Promise<ModelResponse> {
+  async generateResponse(
+    prompt: string,
+    sessionId: string,
+    context?: {
+      requestId?: string;
+      memoryLookupDurationMs?: number;
+      actionExecutionDurationMs?: number;
+      recordMetrics?: boolean;
+    }
+  ): Promise<ModelResponse> {
     const startTime = Date.now();
+    const requestId = context?.requestId || randomUUID();
+    let response: ModelResponse;
+    let fallbackReason: string | null = null;
 
     if (this.isCircuitBreakerActive()) {
       console.log('[ModelManager] Circuit breaker active - using API fallback');
-      const apiResponse = await this.generateAPIResponse(prompt, sessionId);
-      const totalLatency = Date.now() - startTime;
-      await this.updateSessionState(sessionId, 'api', apiResponse.success ? 'success' : 'failure');
-      return {
-        content: apiResponse.content,
-        model: 'api',
-        latency: totalLatency,
-        success: apiResponse.success,
-        error: apiResponse.error,
-      };
-    }
-
-    if (!(await this.isLocalModelEnabled())) {
+      fallbackReason = 'circuit-breaker';
+      response = await this.generateAPIResponse(prompt, sessionId);
+    } else if (!(await this.isLocalModelEnabled())) {
       console.log('[ModelManager] Local model not enabled or unreachable - using API fallback');
-      const apiResponse = await this.generateAPIResponse(prompt, sessionId);
-      const totalLatency = Date.now() - startTime;
-      await this.updateSessionState(sessionId, 'api', apiResponse.success ? 'success' : 'failure');
-      return {
-        content: apiResponse.content,
-        model: 'api',
-        latency: totalLatency,
-        success: apiResponse.success,
-        error: apiResponse.error,
-      };
+      fallbackReason = 'local-unreachable';
+      response = await this.generateAPIResponse(prompt, sessionId);
+    } else {
+      const localResponse = await this.generateLocalResponse(prompt);
+
+      if (localResponse.success && this.validateOutput(localResponse.content)) {
+        const latency = Date.now() - startTime;
+        await this.updateSessionState(sessionId, 'local', 'success');
+        ModelManager.consecutiveFailures = 0;
+        response = {
+          content: localResponse.content,
+          model: 'local',
+          latency,
+          success: true,
+          metadata: localResponse.metadata,
+        };
+      } else {
+        console.log('[ModelManager] Local model failed, triggering fallback');
+        ModelManager.consecutiveFailures++;
+
+        if (ModelManager.consecutiveFailures >= 3) {
+          this.activateCircuitBreaker();
+        }
+
+        fallbackReason = localResponse.error || 'local-invalid-output';
+        response = await this.generateAPIResponse(prompt, sessionId);
+      }
     }
 
-    const localResponse = await this.generateLocalResponse(prompt);
-
-    if (localResponse.success && this.validateOutput(localResponse.content)) {
-      const latency = Date.now() - startTime;
-      await this.updateSessionState(sessionId, 'local', 'success');
-      ModelManager.consecutiveFailures = 0;
-      return {
-        content: localResponse.content,
-        model: 'local',
-        latency,
-        success: true,
-      };
-    }
-
-    console.log('[ModelManager] Local model failed, triggering fallback');
-    ModelManager.consecutiveFailures++;
-
-    if (ModelManager.consecutiveFailures >= 3) {
-      this.activateCircuitBreaker();
-    }
-
-    const apiResponse = await this.generateAPIResponse(prompt, sessionId);
     const totalLatency = Date.now() - startTime;
+    response.latency = totalLatency;
 
-    await this.updateSessionState(sessionId, 'api', apiResponse.success ? 'success' : 'failure');
+    await this.updateSessionState(
+      sessionId,
+      response.model === 'local' ? 'local' : 'api',
+      response.success ? 'success' : 'failure'
+    );
 
-    return {
-      content: apiResponse.content,
-      model: 'api',
-      latency: totalLatency,
-      success: apiResponse.success,
-      error: apiResponse.error,
-    };
+    const metadata = response.metadata;
+    const errors = response.error ? [response.error] : undefined;
+
+    if (context?.recordMetrics !== false) {
+      getMetricsService().record({
+        requestId,
+        conversationId: sessionId,
+        provider: metadata?.provider ?? response.model,
+        selectedModel: metadata?.selectedModel ?? 'unknown',
+        promptLength: prompt.length,
+        responseLength: response.content.length,
+        latencyMs: totalLatency,
+        loadDurationMs: metadata?.loadDurationMs,
+        evalDurationMs: metadata?.evalDurationMs,
+        memoryLookupDurationMs: context?.memoryLookupDurationMs,
+        actionExecutionDurationMs: context?.actionExecutionDurationMs,
+        promptTokens: metadata?.promptTokens,
+        completionTokens: metadata?.completionTokens,
+        totalTokens: metadata?.totalTokens,
+        errors,
+        retryCount: fallbackReason ? 1 : 0,
+        fallbackReason,
+      });
+    }
+
+    return response;
   }
 
   /**
@@ -255,11 +292,34 @@ export class ModelManager {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
 
-      const data = (await response.json()) as { response?: string };
+      const data = (await response.json()) as {
+        response?: string;
+        load_duration?: number;
+        eval_duration?: number;
+        prompt_eval_count?: number;
+        eval_count?: number;
+      };
+
+      const modelName = this.getLocalModelName();
+      const loadDurationMs = data.load_duration ? data.load_duration / 1e6 : null;
+      const evalDurationMs = data.eval_duration ? data.eval_duration / 1e6 : null;
+      const promptTokens = typeof data.prompt_eval_count === 'number' ? data.prompt_eval_count : null;
+      const completionTokens = typeof data.eval_count === 'number' ? data.eval_count : null;
+      const totalTokens =
+        promptTokens != null && completionTokens != null ? promptTokens + completionTokens : null;
 
       return {
         content: data.response || '',
         success: true,
+        metadata: {
+          provider: 'local',
+          selectedModel: modelName,
+          loadDurationMs,
+          evalDurationMs,
+          promptTokens,
+          completionTokens,
+          totalTokens,
+        },
       };
     } catch (error) {
       clearTimeout(timer);
@@ -343,6 +403,7 @@ export class ModelManager {
 
   private async generateOpenAIResponse(prompt: string): Promise<ApiResponse> {
     const start = Date.now();
+    const model = process.env.OPENAI_MODEL || 'gpt-4o-mini';
     try {
       const response = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
@@ -351,7 +412,7 @@ export class ModelManager {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+          model,
           messages: [
             {
               role: 'system',
@@ -371,13 +432,26 @@ export class ModelManager {
 
       const data = (await response.json()) as {
         choices: Array<{ message: { content: string } }>;
+        usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
       };
+
+      const usage = data.usage;
+      const promptTokens = usage?.prompt_tokens ?? null;
+      const completionTokens = usage?.completion_tokens ?? null;
+      const totalTokens = usage?.total_tokens ?? null;
 
       return {
         content: data.choices[0]?.message?.content || '',
         success: true,
         model: 'openai',
         latency: Date.now() - start,
+        metadata: {
+          provider: 'openai',
+          selectedModel: model,
+          promptTokens,
+          completionTokens,
+          totalTokens,
+        },
       };
     } catch (error) {
       return {
@@ -392,6 +466,7 @@ export class ModelManager {
 
   private async generateAnthropicResponse(prompt: string): Promise<ApiResponse> {
     const start = Date.now();
+    const model = process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-20241022';
     try {
       const response = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
@@ -401,7 +476,7 @@ export class ModelManager {
           'anthropic-version': '2023-06-01',
         },
         body: JSON.stringify({
-          model: process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-20241022',
+          model,
           max_tokens: 1000,
           system:
             'You are Heidi, a production-grade conversational AI assistant. Always respond with valid JSON: {"response": "string", "actions": []}',
@@ -415,13 +490,27 @@ export class ModelManager {
 
       const data = (await response.json()) as {
         content: Array<{ type: string; text: string }>;
+        usage?: { input_tokens?: number; output_tokens?: number };
       };
+
+      const usage = data.usage;
+      const promptTokens = usage?.input_tokens ?? null;
+      const completionTokens = usage?.output_tokens ?? null;
+      const totalTokens =
+        promptTokens != null && completionTokens != null ? promptTokens + completionTokens : null;
 
       return {
         content: data.content.filter((b) => b.type === 'text').map((b) => b.text).join(''),
         success: true,
         model: 'anthropic',
         latency: Date.now() - start,
+        metadata: {
+          provider: 'anthropic',
+          selectedModel: model,
+          promptTokens,
+          completionTokens,
+          totalTokens,
+        },
       };
     } catch (error) {
       return {
