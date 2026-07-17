@@ -68,7 +68,7 @@ $ npm run check:ports
 
   ✓ Available  Port 3006  — HEIDI Mobile Chat API
   ✓ Available  Port 3000  — Next.js DashHub Frontend
-  ✓ Available  Port 3458  — HEIDI Core Orchestrator
+  ✓ Available  Port 3459  — HEIDI Core Orchestrator
   ✓ Available  Port 5050  — Heidi Bridge (Flask/Python)
   ✓ Available  Port 11434 — Ollama Local LLM Server
   ✓ Available  Port 54321 — Supabase Local (PostgreSQL)
@@ -166,7 +166,7 @@ Each service waits for its dependencies:
 
 Dashboard: http://localhost:3000
 Chat API:  http://localhost:3006
-Core:      http://localhost:3458
+Core:      http://localhost:3459
 ```
 
 ---
@@ -248,7 +248,7 @@ Ollama (independent, started in parallel)
 | Supabase DB | 54321 | — |
 | Supabase REST | 3001 | Supabase |
 | Ollama | 11434 | — |
-| HEIDI Core | 3458 | Supabase, Ollama |
+| HEIDI Core | 3459 | Supabase, Ollama |
 | HEIDI Mobile Chat | 3006 | Ollama |
 | Next.js Frontend | 3000 | Supabase |
 | Heidi Bridge (Python) | 5050 | Supabase |
@@ -263,7 +263,7 @@ Set these in `.env.local` to customize ports:
 # Override default ports
 PORT=3000                  # Next.js
 HEIDI_PORT=3006           # HEIDI Mobile Chat
-HEIDI_CORE_PORT=3458      # HEIDI Core
+HEIDI_CORE_PORT=3459      # HEIDI Core
 HEIDI_BRIDGE_PORT=5050    # Heidi Bridge
 SUPABASE_DB_PORT=54321    # Supabase (if running locally)
 OLLAMA_PORT=11434         # Ollama

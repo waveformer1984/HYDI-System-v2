@@ -28,12 +28,11 @@ function getCriticalDeps() {
   const deps = {};
 
   for (const [key, config] of Object.entries(PORTS_CONFIG.services)) {
-    if (config.external) {
-      console.log(`${colors.gray('ℹ Skipping external service:')} ${config.name}`);
-      continue;
-    }
-
-    // Map service key to health check config
+    // Map service key to health check config. This runs even for services
+    // marked `external: true` -- external means "not spawned by
+    // start-hydi.js", not "skip health-gating for it". Ollama and Supabase
+    // are both external (managed by the user / `supabase start`) and both
+    // critical, so they must be checked here, not skipped.
     if (key === 'ollama') {
       deps.ollama = {
         port: config.port,
@@ -41,6 +40,7 @@ function getCriticalDeps() {
         timeout: 30000,
         description: 'Local LLM embeddings',
       };
+      continue;
     }
     if (key === 'supabase') {
       deps.supabase = {
@@ -49,6 +49,11 @@ function getCriticalDeps() {
         timeout: 30000,
         description: 'PostgreSQL database',
       };
+      continue;
+    }
+
+    if (config.external) {
+      console.log(`${colors.gray('ℹ Skipping external service:')} ${config.name}`);
     }
   }
 

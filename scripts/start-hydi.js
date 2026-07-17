@@ -231,9 +231,9 @@ async function orchestrate() {
   }
 
   console.log(`\n${colors.green('✅ All services started!')}`);
-  console.log('\nDashboard: http://localhost:3000');
-  console.log('Chat API:  http://localhost:3006');
-  console.log('Core:      http://localhost:3458\n');
+  console.log(`\nDashboard: http://localhost:${PORTS_CONFIG.services['next-app'].port}`);
+  console.log(`Chat API:  http://localhost:${PORTS_CONFIG.services['heidi-mobile-chat'].port}`);
+  console.log(`Core:      http://localhost:${PORTS_CONFIG.services['heidi-core'].port}\n`);
 }
 
 // Start
