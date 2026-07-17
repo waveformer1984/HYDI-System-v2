@@ -39,11 +39,17 @@ class HeidiAgent {
     this.reflectionInterval = 3600000; // reflect every hour
     this.decisionBounds = null;
 
-    // Supabase client
-    this.supabase = createClient(
-      process.env.SUPABASE_URL,
-      process.env.SUPABASE_SERVICE_ROLE_KEY
-    );
+    // Supabase is OPTIONAL — in local-only mode (no SUPABASE_URL/key set) it
+    // is disabled entirely: lease coordination is unnecessary for a single
+    // solo instance, the task queue is simply empty, and decision/reflection
+    // logging degrades to console output instead of a persisted audit trail.
+    const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
+    this.supabase = (process.env.SUPABASE_URL && SUPABASE_KEY)
+      ? createClient(process.env.SUPABASE_URL, SUPABASE_KEY)
+      : null;
+    if (!this.supabase) {
+      console.log('[HEIDI-AGENT] LOCAL-ONLY MODE: Supabase disabled — lease/task-queue/reflection persistence are no-ops');
+    }
 
     // State tracking
     this.isRunning = false;
@@ -78,6 +84,15 @@ class HeidiAgent {
    * Returns true if lease is held, false if someone else has it
    */
   async claimLease() {
+    if (!this.supabase) {
+      // No other instance to contend with locally -- grant immediately.
+      if (!this.leaseClaimed) {
+        console.log('[HEIDI-AGENT] LOCAL-ONLY MODE: lease auto-granted (no coordination needed)');
+      }
+      this.leaseClaimed = true;
+      return true;
+    }
+
     try {
       const now = new Date();
       const expiresAt = new Date(now.getTime() + this.leaseTTL * 1000);
@@ -130,6 +145,12 @@ class HeidiAgent {
    * Load decision bounds (AUTO-APPROVE threshold, BLOCK criteria, etc)
    */
   async loadDecisionBounds() {
+    if (!this.supabase) {
+      this.decisionBounds = { auto_approve_threshold: 0.85 };
+      console.log('[HEIDI-AGENT] LOCAL-ONLY MODE: using default decision bounds (auto_approve_threshold=0.85)');
+      return true;
+    }
+
     try {
       const { data, error } = await this.supabase
         .from('heidi_decision_bounds')
@@ -155,6 +176,8 @@ class HeidiAgent {
    * Return all tasks with status='pending'
    */
   async pollTasks() {
+    if (!this.supabase) return []; // no shared queue to poll locally
+
     try {
       const { data, error } = await this.supabase
         .from('agent_bus')
@@ -179,6 +202,8 @@ class HeidiAgent {
    * Retrieve relevant procedural memory facts for a task
    */
   async retrieveRelevantFacts(task) {
+    if (!this.supabase) return []; // no procedural memory table locally
+
     try {
       // Build a search query from task payload
       const taskDescription = JSON.stringify(task.payload).substring(0, 200);
@@ -288,10 +313,12 @@ class HeidiAgent {
       console.log(`[HEIDI-AGENT] Executing task: ${task.id}`);
 
       // Update task status to executing
-      await this.supabase
-        .from('agent_bus')
-        .update({ status: 'executing' })
-        .eq('id', task.id);
+      if (this.supabase) {
+        await this.supabase
+          .from('agent_bus')
+          .update({ status: 'executing' })
+          .eq('id', task.id);
+      }
 
       // Execute task (payload contains the action)
       let result = { success: false };
@@ -310,10 +337,12 @@ class HeidiAgent {
 
       // Update task status
       const finalStatus = result.success ? 'completed' : 'failed';
-      await this.supabase
-        .from('agent_bus')
-        .update({ status: finalStatus, result })
-        .eq('id', task.id);
+      if (this.supabase) {
+        await this.supabase
+          .from('agent_bus')
+          .update({ status: finalStatus, result })
+          .eq('id', task.id);
+      }
 
       // Log the event with memory traceability
       await this.logEvent(task, 'AUTO-APPROVE', `Executed: ${result.success ? 'success' : 'failed'}`, decision.memory_ids);
@@ -348,6 +377,11 @@ class HeidiAgent {
    * Log decision event to heidi_events
    */
   async logEvent(task, verdict, reason, memoryIds = []) {
+    if (!this.supabase) {
+      console.log(`[HEIDI-AGENT] (local) decision event: task=${task.id} verdict=${verdict} reason="${reason}"`);
+      return;
+    }
+
     try {
       const { error } = await this.supabase
         .from('heidi_events')
@@ -378,6 +412,11 @@ class HeidiAgent {
    * Called when a task receives human feedback (approved, rejected, needs changes)
    */
   async processFeedback(eventId, feedback) {
+    if (!this.supabase) {
+      console.log(`[HEIDI-AGENT] LOCAL-ONLY MODE: feedback for event ${eventId} not persisted`, feedback);
+      return;
+    }
+
     try {
       const { approval, outcome, notes } = feedback;
       // approval: 'approved' | 'rejected' | 'needs-changes'
@@ -429,6 +468,8 @@ class HeidiAgent {
    * Failed decisions → -3% confidence (floor 0.50)
    */
   async updateFactConfidence(factId, wasSuccessful) {
+    if (!this.supabase) return; // no procedural memory table locally
+
     try {
       // Fetch current confidence
       const { data: fact, error: fetchError } = await this.supabase
@@ -506,6 +547,7 @@ class HeidiAgent {
    */
   async reflect() {
     if (!this.leaseClaimed) return;
+    if (!this.supabase) return; // no persisted decision events to reflect on locally
 
     try {
       console.log('[HEIDI-AGENT] Running reflection cycle...');
@@ -565,6 +607,10 @@ class HeidiAgent {
    * Handle user approval/rejection in advisory mode
    */
   async handleAdvisoryAction(taskId, action, reason = '') {
+    if (!this.supabase) {
+      return { success: false, error: 'Advisory actions require Supabase -- no local task queue to act on' };
+    }
+
     try {
       if (!['approve', 'reject'].includes(action)) {
         return { success: false, error: 'Invalid action (must be approve or reject)' };
@@ -763,6 +809,12 @@ class HeidiAgent {
 
       // GET /api/decisions/pending - List pending REVIEW decisions
       if (req.method === 'GET' && req.url === '/api/decisions/pending') {
+        if (!this.supabase) {
+          res.writeHead(200);
+          res.end(JSON.stringify({ decisions: [], note: 'LOCAL-ONLY MODE: no Supabase-backed task queue' }));
+          return;
+        }
+
         try {
           const { data, error } = await this.supabase
             .from('agent_bus')
@@ -901,7 +953,7 @@ class HeidiAgent {
     }
 
     // Release lease
-    if (this.leaseClaimed) {
+    if (this.leaseClaimed && this.supabase) {
       try {
         await this.supabase
           .from('heidi_decision_bounds')
