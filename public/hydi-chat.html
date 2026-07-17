@@ -226,7 +226,7 @@
         <div class="empty" id="empty">
             <div class="big">⚡</div>
             <b>HYDI mobile chat</b><br>
-            Single-file client — works from Vercel, Termux, or straight off your phone. No GitHub needed.<br><br>
+            Single-file client — works from a local/Tailscale HYDI server, Termux, or straight off your phone. No GitHub needed.<br><br>
             Tap ⚙️ to set your <b>API URL</b> and <b>service secret</b>, then pick a system and say hi.
         </div>
     </main>
@@ -243,14 +243,14 @@
         <div class="field">
             <label for="apiUrl">HYDI API base URL</label>
             <input id="apiUrl" type="url" inputmode="url" autocapitalize="off" autocorrect="off"
-                   placeholder="https://your-hydi.vercel.app">
-            <div class="note">Your HYDI deployment URL. Leave blank if this page is served by the HYDI deployment itself (same origin).</div>
+                   placeholder="https://heidi-pc.your-tailnet.ts.net">
+            <div class="note">Your HYDI server URL — typically a Tailscale HTTPS address for a local-first deployment. Leave blank if this page is served by the HYDI server itself (same origin).</div>
         </div>
         <div class="field">
             <label for="secret">HYDI service secret <span style="color:var(--text-muted)">(optional)</span></label>
             <input id="secret" type="password" autocapitalize="off" autocorrect="off"
                    placeholder="HYDI_SERVICE_SECRET — leave blank for local/Termux node">
-            <div class="note">Required only if the server enforces auth (production Vercel). Used on-device to sign each request (HMAC-SHA256); never leaves your phone except as a short-lived signature. Leave blank for a local Termux node.</div>
+            <div class="note">Required only if the server enforces auth. Used on-device to sign each request (HMAC-SHA256); never leaves your phone except as a short-lived signature. Leave blank for a local/Termux node that doesn't enforce auth.</div>
         </div>
         <div class="sheet-actions">
             <button class="btn ghost" id="testBtn">Test connection</button>
@@ -353,7 +353,7 @@
 
     // ── Sending ───────────────────────────────────────────────────────
     // Empty API URL = same origin (when this page is served by the HYDI
-    // deployment itself, e.g. from public/hydi-chat.html on Vercel).
+    // server itself, e.g. from public/hydi-chat.html).
     const SAME_ORIGIN = location.protocol.startsWith('http');
     function baseUrl() { return apiUrl ? apiUrl.replace(/\/+$/, '') : ''; }
     // Secret is optional: local/Termux nodes don't require auth. If the server
@@ -379,7 +379,11 @@
                 }
                 headers['x-hydi-service-token'] = await mintServiceToken();
             }
-            const resp = await fetch(`${baseUrl()}/api/chat`, {
+            // Note: the multi-system HMAC-gated router lives at /api/chat/route,
+            // not /api/chat (that path is Heidi's own single-agent streaming
+            // endpoint with an incompatible session_id/user_id + SSE contract —
+            // see CLAUDE.md's Local-First Architecture / ROADMAP.md #55).
+            const resp = await fetch(`${baseUrl()}/api/chat/route`, {
                 method: 'POST',
                 headers,
                 body: JSON.stringify({ message: text, system }),
@@ -500,7 +504,7 @@
                 headers['x-hydi-service-token'] = await mintServiceToken();
                 secret = saved;
             }
-            const r = await fetch(`${base}/api/chat`, {
+            const r = await fetch(`${base}/api/chat/route`, {
                 method: 'POST',
                 headers,
                 body: JSON.stringify({ message: 'ping', system: 'ursula' }),
@@ -512,15 +516,15 @@
             } else if (r.status === 401) {
                 lines.push(`✗ /api/chat auth failed: ${d.reason || 'unauthorized'}`);
                 lines.push(d.reason === 'service secret not configured'
-                    ? '→ Set HYDI_SERVICE_SECRET on the deployment (Vercel env), then redeploy.'
-                    : '→ The secret entered here does not match HYDI_SERVICE_SECRET on the deployment.');
+                    ? '→ Set HYDI_SERVICE_SECRET on the server, then restart it.'
+                    : '→ The secret entered here does not match HYDI_SERVICE_SECRET on the server.');
             } else {
                 lines.push(`✗ /api/chat HTTP ${r.status}: ${d.reason || d.error || 'server error'}`);
-                lines.push('→ The function is reachable but failing — check Vercel function logs and env vars (SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY).');
+                lines.push('→ The server is reachable but failing — check its logs and env vars (SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY).');
             }
         } catch (e) {
             lines.push(`✗ /api/chat fetch failed (${e.name === 'TimeoutError' ? 'timeout' : 'blocked or crashed'})`);
-            lines.push('→ Health works but chat does not: either the deployment predates CORS on /api/chat (redeploy latest clean-main), or the function crashes at startup (check Vercel logs).');
+            lines.push('→ Health works but chat does not: either the server predates CORS on /api/chat (pull latest clean-main), or the API route crashes at startup (check server logs).');
         }
         out.textContent = lines.join('\n');
     }

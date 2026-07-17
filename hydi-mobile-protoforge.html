@@ -1655,17 +1655,38 @@ async function sendChat() {
   const sent = wsSend({ type: 'message', content: text, model: 'hydi', sessionId: CFG.sessionId, timestamp: new Date().toISOString() });
 
   if (!sent) {
-    // HTTP fallback
+    // HTTP fallback — /ws/hydi has no live server, so this is the path that
+    // actually runs in practice. Matches pages/index.tsx's contract for
+    // /api/chat (pages/api/chat.ts): session_id + user_id in, an SSE stream
+    // of { type: 'content', content } deltas out (not a single JSON body).
     try {
       const r = await fetch(CFG.apiBase + '/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-Session-Id': CFG.sessionId },
-        body: JSON.stringify({ message: text, model: 'hydi' })
+        body: JSON.stringify({ message: text, session_id: CFG.sessionId, user_id: 'mobile-ops' })
       });
       hideTyping();
-      if (r.ok) {
-        const d = await r.json();
-        addChatMsg(d.system || 'hydi', d.response || d.message || 'Processing...');
+      if (r.ok && r.body) {
+        const reader = r.body.getReader();
+        const decoder = new TextDecoder();
+        let buf = '', reply = '', streamErr = null;
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buf += decoder.decode(value, { stream: true });
+          const events = buf.split('\n\n');
+          buf = events.pop();
+          for (const ev of events) {
+            const line = ev.split('\n').find(l => l.startsWith('data: '));
+            if (!line || line === 'data: [DONE]') continue;
+            try {
+              const d = JSON.parse(line.slice(6));
+              if (d.type === 'content') reply += d.content;
+              if (d.type === 'error') streamErr = d.error;
+            } catch (_) { /* ignore malformed chunk */ }
+          }
+        }
+        addChatMsg('hydi', reply || (streamErr ? `Error: ${streamErr}` : buildOfflineReply(text)));
       } else {
         addChatMsg('hydi', buildOfflineReply(text));
       }

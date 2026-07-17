@@ -115,6 +115,17 @@ drop-everything, P1 is next up, P2 is scheduled but not urgent.
    `/api/chat` instead (the same SSE contract `pages/index.tsx`'s Heidi
    chat already uses), folding the song-context prompt into the message
    text since that endpoint has no separate system-prompt param.
+   **Second follow-on found 2026-07-17** (`ISSUES_FOUND.md` #67-#68), same
+   root cause hitting the mobile clients this time: `docs/index.html` and
+   `public/hydi-chat.html` were calling bare `/api/chat` (needed
+   `/api/chat/route` for their HMAC + system-picker contract) and
+   `hydi-mobile-protoforge.html` — the actual canonical mobile PWA
+   (`manifest.json`'s `start_url`) — was calling `/api/chat` with neither
+   required field for either handler. All three fixed and verified
+   end-to-end against a running `next dev` server (not just by inspection);
+   also fixed stale Vercel-deployment guidance in the same files
+   (`ISSUES_FOUND.md` #69) that contradicted the Local-First Architecture
+   decision below.
 
 **P2 — scheduled, lower urgency:**
 7. ~~JWT enforcement audit across all 42 Supabase Edge Functions + rate
