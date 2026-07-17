@@ -7,10 +7,18 @@ const { routeEvent } = require('./core/hydi-router');
 // HYDI Processor - Core Logic with Exponential Backoff
 class HYDIProcessor {
   constructor() {
-    this.supabase = createClient(
-      process.env.SUPABASE_URL,
-      process.env.SUPABASE_SERVICE_ROLE_KEY
-    );
+    // Supabase is OPTIONAL -- in local-only mode (no SUPABASE_URL/key set)
+    // the event ledger write/read below degrade to console logging instead
+    // of crashing. This class is constructed eagerly at module load (see
+    // bottom of file), so an unconditional createClient() here would crash
+    // any consumer that merely `require()`s this module, not just direct runs.
+    const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
+    this.supabase = (process.env.SUPABASE_URL && SUPABASE_KEY)
+      ? createClient(process.env.SUPABASE_URL, SUPABASE_KEY)
+      : null;
+    if (!this.supabase) {
+      console.log('LOCAL-ONLY MODE: Supabase disabled — event ledger writes are console-logged, not persisted');
+    }
     this.chaosMode = process.env.CHAOS_MODE || 'NONE';
   }
 
@@ -42,8 +50,13 @@ class HYDIProcessor {
   }
 
   async writeEventWithRetry(event, maxRetries = 3) {
+    if (!this.supabase) {
+      console.log(`LOCAL-ONLY MODE: event ${event.event_id} (${event.type} from ${event.source}) not persisted to hydi_events`);
+      return { success: true, data: event };
+    }
+
     let lastError;
-    
+
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
         console.log(`WRITE ATTEMPT: ${event.event_id} - attempt ${attempt + 1}/${maxRetries + 1}`);
@@ -83,6 +96,10 @@ class HYDIProcessor {
   }
 
   async getEventStats() {
+    if (!this.supabase) {
+      return { note: 'LOCAL-ONLY MODE: no Supabase-backed event ledger' };
+    }
+
     try {
       const { data, error } = await this.supabase
         .from('hydi_events')

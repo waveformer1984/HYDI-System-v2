@@ -31,10 +31,13 @@ class ConsumerLoop {
     this.registry = registry;
     this.breaker = breaker;
     this.log = logger;
-    this.supabase = supabase || createClient(
-      process.env.SUPABASE_URL,
-      process.env.SUPABASE_SERVICE_ROLE_KEY
-    );
+    // Supabase is OPTIONAL -- in local-only mode (no SUPABASE_URL/key set and
+    // no client injected) there's no hydi_events table to poll, so start()
+    // below logs and no-ops instead of crashing at construction time.
+    const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
+    this.supabase = supabase || ((process.env.SUPABASE_URL && SUPABASE_KEY)
+      ? createClient(process.env.SUPABASE_URL, SUPABASE_KEY)
+      : null);
     this.batch = parseInt(process.env.HYDI_CONSUMER_BATCH || '10', 10);
     this.intervalMs = parseInt(process.env.HYDI_CONSUMER_INTERVAL_MS || '2000', 10);
     this.timeoutMs = parseInt(process.env.HYDI_CONSUMER_TIMEOUT_MS || '8000', 10);
@@ -53,6 +56,10 @@ class ConsumerLoop {
 
   async start() {
     if (this.running) return;
+    if (!this.supabase) {
+      this.log.log('[consumer] LOCAL-ONLY MODE: no Supabase-backed hydi_events table to poll -- not starting');
+      return;
+    }
     this.running = true;
     this._stopRequested = false;
     this.metrics.startedAt = new Date().toISOString();
