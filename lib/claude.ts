@@ -96,7 +96,7 @@ export async function callAgent(
 
   const client = getClient();
   const response = await client.messages.create({
-    model: 'claude-haiku-4-5-20251001',
+    model: process.env.ANTHROPIC_MODEL || 'claude-3-5-haiku-20241022',
     max_tokens: maxTokens,
     system,
     messages: [{ role: 'user', content: message }],
@@ -124,7 +124,7 @@ export async function callAgentSonnet(
 
   const client = getClient();
   const response = await client.messages.create({
-    model: 'claude-sonnet-4-6',
+    model: process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-20241022',
     max_tokens: maxTokens,
     system,
     messages: [{ role: 'user', content: message }],
@@ -136,6 +136,13 @@ export async function callAgentSonnet(
     .join('');
 }
 
+function isRealApiKey(key: string | undefined): boolean {
+  if (!key || key.trim().length < 30) return false;
+  const normalized = key.toLowerCase();
+  if (normalized.includes('your') || normalized.includes('placeholder') || normalized.includes('example')) return false;
+  return normalized.startsWith('sk-ant') || normalized.startsWith('sk-');
+}
+
 export function isClaudeAvailable(): boolean {
-  return !!process.env.ANTHROPIC_API_KEY;
+  return isRealApiKey(process.env.ANTHROPIC_API_KEY);
 }

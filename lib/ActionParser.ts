@@ -32,11 +32,64 @@ export interface ParsedResponse {
 
 export class ActionParser {
   /**
-   * Parse and validate LLM output
+   * Extract the first balanced JSON object from a possibly noisy string.
+   * Helps when models wrap JSON in markdown fences or add prose.
+   */
+  private static extractJSON(content: string): string | null {
+    const cleaned = content
+      .replace(/```json/g, '')
+      .replace(/```/g, '')
+      .trim();
+
+    let firstBrace = cleaned.indexOf('{');
+    if (firstBrace === -1) return null;
+
+    let depth = 0;
+    let inString = false;
+    let escape = false;
+    for (let i = firstBrace; i < cleaned.length; i++) {
+      const char = cleaned[i];
+      if (inString) {
+        if (escape) {
+          escape = false;
+          continue;
+        }
+        if (char === '\\') {
+          escape = true;
+          continue;
+        }
+        if (char === '"') inString = false;
+      } else {
+        if (char === '"') {
+          inString = true;
+        } else if (char === '{') {
+          depth++;
+        } else if (char === '}') {
+          depth--;
+          if (depth === 0) {
+            return cleaned.slice(firstBrace, i + 1);
+          }
+        }
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Parse and validate LLM output. Tolerates JSON embedded in markdown/prose.
    */
   static parseResponse(content: string): { success: boolean; response?: ParsedResponse; error?: string } {
     try {
-      const parsed = JSON.parse(content);
+      let raw = content.trim();
+      let parsed: any;
+
+      try {
+        parsed = JSON.parse(raw);
+      } catch {
+        const extracted = ActionParser.extractJSON(raw);
+        if (!extracted) throw new Error('No JSON object found');
+        parsed = JSON.parse(extracted);
+      }
       
       // Validate structure
       if (!parsed.hasOwnProperty('response')) {
