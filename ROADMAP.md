@@ -84,31 +84,25 @@ drop-everything, P1 is next up, P2 is scheduled but not urgent.
    is current before the other three can be archived or deleted
    (`ISSUES_FOUND.md`, "Investigated, not fixed").
 6. ~~Per-file review of the remaining ambiguous unbridged `api/**` routes~~
-   **Reviewed 2026-07-17** (`ISSUES_FOUND.md` #49): of the 7 files, only
-   `api/events/stream.js` had a confirmed live caller (the mobile PWA's
-   `EventSource`) hitting a route that 404s under `next dev`/`next
-   start` — bridged into `pages/api/events/stream.js`, same pattern as
-   the prior 16 routes. `api/chat/route.js` also had a confirmed live
-   caller (`components/song-composer/CopilotPanel.tsx`) but calling it
-   wouldn't have worked even if bridged — its `{message, system}`
-   contract expects `system` to be one of 8 fixed routing keys
-   (`ursula`/`heidi`/`cascade`/...), not the freeform system-prompt
-   string `CopilotPanel` was sending, and the route requires an HMAC
-   `x-hydi-service-token` a browser can't safely hold. Fixed at the
-   actual bug instead: repointed `CopilotPanel` at the real, already-live,
-   unauthenticated `/api/chat` (the same SSE contract `pages/index.tsx`
-   already uses), folding the song-context system prompt into the
-   message text since that endpoint has no separate system-prompt
-   param. `api/heidi/route.js` and `api/ursula/status.js` are referenced
-   only as informational `endpoint` metadata in `AGENT_REGISTRY`
-   (`api/agent-manager/agents.js`) — nothing actually fetches those URLs
-   — so left unbridged pending confirmation they're meant to be live
-   endpoints rather than just documentation. `api/client-dashboard.js`
-   and `api/ws/route.js` have zero callers anywhere (the one match for
-   the former is a commented-out line in `dashboard/client-view.html`)
-   and `api/local-model.js` isn't a route at all (no default-exported
-   handler — it's a plain library module living under `api/` by
-   mistake), so none of those three were touched.
+   **Done 2026-07-17** (`ISSUES_FOUND.md` #49-#54). `chat/route.js`,
+   `ursula/status.js`, `events/stream.js` bridged into `pages/api/**`
+   (each confirmed genuinely live and distinct from any `pages/api`
+   sibling, not superseded); bridging `chat/route.js` also surfaced and
+   fixed a real `.js`/`.ts` import-extension bug that broke `next build`.
+   `ws/route.js` archived as confirmed-dead. `heidi/route.js` and
+   `client-dashboard.js` deliberately left unbridged — both lack any auth
+   and bridging them as-is would introduce a live vulnerability rather
+   than fix a gap; see `ISSUES_FOUND.md` #53-#54 for what a real fix would
+   need. **Follow-on found the same day by a parallel session**
+   (`ISSUES_FOUND.md` #55): `components/song-composer/CopilotPanel.tsx`
+   was calling `/api/chat/route` with a payload shape that route never
+   accepted (a freeform system prompt instead of one of the 8 fixed
+   routing keys) and no HMAC service token — bridging the route doesn't
+   fix that, since a browser can't safely hold the token anyway. Fixed by
+   repointing `CopilotPanel` at the real, already-live, unauthenticated
+   `/api/chat` instead (the same SSE contract `pages/index.tsx`'s Heidi
+   chat already uses), folding the song-context prompt into the message
+   text since that endpoint has no separate system-prompt param.
 
 **P2 — scheduled, lower urgency:**
 7. JWT enforcement audit across all 42 Supabase Edge Functions + rate
