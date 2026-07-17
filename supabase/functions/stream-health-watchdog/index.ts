@@ -1,6 +1,17 @@
 // Stream Health Watchdog — alerts via Resend when any revenue stream goes 24h silent.
 // Invoke on a schedule (pg_cron) or manually via POST.
-// JWT: false (internal only — restrict via HYDI_WATCHDOG_KEY header).
+//
+// JWT: this file previously claimed "false (internal only — restrict via
+// HYDI_WATCHDOG_KEY header)", but this function has never actually had an
+// entry in supabase/config.toml, so the platform default of true has been
+// silently enforced all along -- and no pg_cron job wiring this function up
+// exists anywhere in supabase/migrations/, so there's no evidence either
+// setting is actually required in production. Set explicitly to true in
+// config.toml (2026-07 JWT audit) to match the behavior that's actually been
+// running; the HYDI_WATCHDOG_KEY header check below is now fail-closed
+// regardless. If this needs to be invoked by a caller that can't present a
+// Supabase JWT (e.g. an external cron service hitting only x-watchdog-key),
+// that's a deliberate config.toml change for whoever wires up the schedule.
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
@@ -23,16 +34,24 @@ const cors = {
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
 
-  // Lightweight shared-secret guard (not crypto-grade, but keeps crawlers out)
+  // Lightweight shared-secret guard (not crypto-grade, but keeps crawlers out).
+  // Fail closed: if the secret isn't configured, reject every request rather
+  // than silently skipping the check (this endpoint reads the ledger and can
+  // trigger outbound alert emails).
   const watchdogKey = Deno.env.get('HYDI_WATCHDOG_KEY');
-  if (watchdogKey) {
-    const provided = req.headers.get('x-watchdog-key');
-    if (provided !== watchdogKey) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-        status: 401,
-        headers: { ...cors, 'Content-Type': 'application/json' },
-      });
-    }
+  if (!watchdogKey) {
+    console.error('HYDI_WATCHDOG_KEY is not configured -- rejecting all requests');
+    return new Response(JSON.stringify({ error: 'Watchdog is not configured' }), {
+      status: 503,
+      headers: { ...cors, 'Content-Type': 'application/json' },
+    });
+  }
+  const provided = req.headers.get('x-watchdog-key');
+  if (provided !== watchdogKey) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      status: 401,
+      headers: { ...cors, 'Content-Type': 'application/json' },
+    });
   }
 
   const supabase = createClient(

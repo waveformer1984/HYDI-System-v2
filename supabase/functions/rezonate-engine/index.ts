@@ -5,10 +5,15 @@
  * routes it to the appropriate stub handler, updates the `actions` table, and
  * returns a structured result.
  *
- * JWT enforcement: disabled here so the function can be invoked by internal
- * service-role callers without a user token.  To enable per-user JWT
- * validation, set `verify_jwt = true` for this function in
- * `supabase/config.toml`.
+ * JWT enforcement: this file previously claimed enforcement was "disabled
+ * here so the function can be invoked by internal service-role callers
+ * without a user token" -- but this function has never actually had an
+ * entry in supabase/config.toml, so the platform default of
+ * `verify_jwt = true` has been silently enforced all along (a service-role
+ * key is itself a valid JWT, so internal callers were never actually
+ * blocked by this). Set explicitly to true in config.toml (2026-07 JWT
+ * audit) to match the behavior that's actually been running and stop this
+ * comment contradicting it.
  */
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'

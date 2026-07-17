@@ -506,3 +506,61 @@ verify_jwt = true
 # Heidi Reflection Service (Header-based auth)
 [functions.heidi-reflect]
 verify_jwt = false
+
+# ============================================================
+# 2026-07 JWT audit: the following 15 functions had no entry in this file
+# at all and were silently relying on the platform default of
+# verify_jwt = true. That's the correct/intended value for every one of
+# them (task workers, billing/payout, break-glass/keymaker auth
+# infrastructure, and internal cron-triggered jobs -- none of these should
+# ever be reachable without a valid Supabase JWT), so no enforcement
+# behavior changes here. Listed explicitly so future audits don't have to
+# re-derive this from scratch, matching the precedent already set above for
+# stripe-transfer-payout / stripe-connect-admin. See rezonate-engine's and
+# stream-health-watchdog's own file headers for two cases where the missing
+# entry had drifted out of sync with what the function's code comments
+# claimed.
+[functions.action-worker]
+verify_jwt = true
+
+[functions.agent-worker]
+verify_jwt = true
+
+[functions.billing-retry-worker]
+verify_jwt = true
+
+[functions.chaos-runner]
+verify_jwt = true
+
+[functions.chat-operator]
+verify_jwt = true
+
+[functions.hydi-transition]
+verify_jwt = true
+
+[functions.keeper-break-glass]
+verify_jwt = true
+
+[functions.keeper-break-glass-simple]
+verify_jwt = true
+
+[functions.keymaker-gate]
+verify_jwt = true
+
+[functions.monthly-payout-calculation]
+verify_jwt = true
+
+[functions.protoforge-calibration]
+verify_jwt = true
+
+[functions.rezonate-engine]
+verify_jwt = true
+
+[functions.stream-health-watchdog]
+verify_jwt = true
+
+[functions.stripe-worker]
+verify_jwt = true
+
+[functions.tool-executor]
+verify_jwt = true

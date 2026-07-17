@@ -88,18 +88,43 @@ drop-everything, P1 is next up, P2 is scheduled but not urgent.
    `pages/api/**`" from "also just missing".
 
 **P2 — scheduled, lower urgency:**
-7. JWT enforcement audit across all 42 Supabase Edge Functions + rate
-   limiting on the public (no-JWT) ones (already listed under Edge
-   Function hardening below).
+7. ~~JWT enforcement audit across all 42 Supabase Edge Functions~~ **Config
+   gap closed 2026-07-17**: 15 of the repo's 44 Edge Function directories
+   (`action-worker`, `agent-worker`, `billing-retry-worker`, `chaos-runner`,
+   `chat-operator`, `hydi-transition`, `keeper-break-glass`,
+   `keeper-break-glass-simple`, `keymaker-gate`,
+   `monthly-payout-calculation`, `protoforge-calibration`,
+   `rezonate-engine`, `stream-health-watchdog`, `stripe-worker`,
+   `tool-executor`) had no entry in `supabase/config.toml` at all and were
+   silently relying on the platform default (`verify_jwt = true`, the
+   correct value for all 15 — no enforcement behavior changed, just made
+   explicit). Two had actively misleading file-header comments claiming
+   `verify_jwt = false` was in effect when it never had been —
+   `rezonate-engine` and `stream-health-watchdog` — both corrected.
+   `stream-health-watchdog` additionally had a real fail-open bug: its
+   `HYDI_WATCHDOG_KEY` shared-secret check only ran `if (watchdogKey)` was
+   set, silently skipping auth entirely if the env var was never
+   configured — fixed to fail closed (503), matching the pattern already
+   used in `keeper-break-glass`. Also corrected two stale comments in
+   `stripe-connect-admin`/`stripe-transfer-payout` that still claimed they
+   were unlisted in `config.toml` after a prior audit pass had already
+   listed them. **Still open**: rate limiting on the 14 public (no-JWT)
+   functions — not attempted this pass, needs a design decision on
+   mechanism (Postgres-backed counter vs. an external store like Upstash;
+   Deno edge instances don't share in-memory state) before implementation,
+   not a cheap fix.
 8. ~150 `no-unused-vars` ESLint warnings (`ISSUES_FOUND.md` #18) — cosmetic,
    large surface area, best done file-by-file rather than mechanically.
-9. `tests/unit/hydi-v3/WatchdogSupervisor.test.js` has the same
+9. ~~`tests/unit/hydi-v3/WatchdogSupervisor.test.js` has the same
    fixed-`setTimeout`-vs-own-interval race already fixed in two sibling
-   tests (`ISSUES_FOUND.md` #10, #19) — not currently observed flaky, but
-   worth the same `Promise.race` treatment proactively.
-10. `AGENT_REGISTRY`'s Rezonate endpoint path in
+   tests~~ **Fixed 2026-07-16** (PR #202): both tests switched to
+   `Promise.race` against the actual emitted event (`agent_dead` /
+   `agent_recovered`).
+10. ~~`AGENT_REGISTRY`'s Rezonate endpoint path in
     `api/agent-manager/agents.js` doesn't match the file's actual
-    resolved route (`ISSUES_FOUND.md` #37) — cheap, low-risk, not blocking.
+    resolved route~~ **Fixed 2026-07-16** (PR #202): corrected to
+    `/api/rezonate/route`, matching the convention already used by
+    `chat`/`hyve`.
 
 **Done this pass (housekeeping):**
 - Archived 3 confirmed-orphaned dead-code files flagged in a prior audit's
