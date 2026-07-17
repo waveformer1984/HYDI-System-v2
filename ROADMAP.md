@@ -83,9 +83,17 @@ drop-everything, P1 is next up, P2 is scheduled but not urgent.
    sub-deployment) — needs a maintainer decision on which billing model
    is current before the other three can be archived or deleted
    (`ISSUES_FOUND.md`, "Investigated, not fixed").
-6. Per-file review of the remaining ambiguous unbridged `api/**` routes
-   (`ISSUES_FOUND.md` #34) to tell "intentionally superseded by
-   `pages/api/**`" from "also just missing".
+6. ~~Per-file review of the remaining ambiguous unbridged `api/**` routes~~
+   **Done 2026-07-17** (`ISSUES_FOUND.md` #49-#54). `chat/route.js`,
+   `ursula/status.js`, `events/stream.js` bridged into `pages/api/**`
+   (each confirmed genuinely live and distinct from any `pages/api`
+   sibling, not superseded); bridging `chat/route.js` also surfaced and
+   fixed a real `.js`/`.ts` import-extension bug that broke `next build`.
+   `ws/route.js` archived as confirmed-dead. `heidi/route.js` and
+   `client-dashboard.js` deliberately left unbridged — both lack any auth
+   and bridging them as-is would introduce a live vulnerability rather
+   than fix a gap; see `ISSUES_FOUND.md` #53-#54 for what a real fix would
+   need.
 
 **P2 — scheduled, lower urgency:**
 7. JWT enforcement audit across all 42 Supabase Edge Functions + rate
@@ -93,13 +101,14 @@ drop-everything, P1 is next up, P2 is scheduled but not urgent.
    Function hardening below).
 8. ~150 `no-unused-vars` ESLint warnings (`ISSUES_FOUND.md` #18) — cosmetic,
    large surface area, best done file-by-file rather than mechanically.
-9. `tests/unit/hydi-v3/WatchdogSupervisor.test.js` has the same
-   fixed-`setTimeout`-vs-own-interval race already fixed in two sibling
-   tests (`ISSUES_FOUND.md` #10, #19) — not currently observed flaky, but
-   worth the same `Promise.race` treatment proactively.
-10. `AGENT_REGISTRY`'s Rezonate endpoint path in
+9. ~~`tests/unit/hydi-v3/WatchdogSupervisor.test.js` has the same
+   fixed-`setTimeout`-vs-own-interval race~~ **Done 2026-07-17** — switched
+   to `Promise.race` against the actual emitted event, same treatment as
+   `ISSUES_FOUND.md` #10.
+10. ~~`AGENT_REGISTRY`'s Rezonate endpoint path in
     `api/agent-manager/agents.js` doesn't match the file's actual
-    resolved route (`ISSUES_FOUND.md` #37) — cheap, low-risk, not blocking.
+    resolved route~~ **Done 2026-07-17** — corrected to
+    `/api/rezonate/route`.
 
 **Done this pass (housekeeping):**
 - Archived 3 confirmed-orphaned dead-code files flagged in a prior audit's

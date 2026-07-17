@@ -8,7 +8,7 @@ import {
   setupDeployHooks, PROJECT_IDS,
 } from '../../lib/vercel/vercelAdmin.js';
 import { getSystemStatus, isReachable } from '../../lib/termux/termuxClient.js';
-import { callAgent, isClaudeAvailable } from '../../lib/claude.js';
+import { callAgent, isClaudeAvailable } from '../../lib/claude';
 import { rateLimit } from '../../lib/rate-limit.js';
 
 // Lazy client: a missing SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY must surface

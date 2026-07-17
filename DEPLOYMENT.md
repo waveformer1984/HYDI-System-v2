@@ -84,6 +84,9 @@ and PM2 is configured to run it. See "How to verify" below.
 | `/api/revenue`, `/api/revenue/{cycle,leads,report}` | `pages/api/revenue/*.js` | Native `pages/api` implementation — **not** a bridge. `api/revenue.js` (top-level) is a separate, dormant fourth implementation; see `HYDI_KERNEL_ARCHITECTURE_ROADMAP.md` for the divergence writeup. |
 | `/api/traces` | `pages/api/traces.js` | Native; `api/traces.js` (top-level) is dormant |
 | `/api/funding/chat` | `pages/api/funding/chat.ts` | |
+| `/api/ursula/status` | `pages/api/ursula/status.js` → bridges `api/ursula/status.js` | **Fixed 2026-07-17.** Public, read-only health snapshot; also fixed a module-load-time Supabase client construction bug (matches the #32 fix pattern). |
+| `/api/events/stream` | `pages/api/events/stream.js` → bridges `api/events/stream.js` | **Fixed 2026-07-17.** `requireAuth`-gated SSE stream; consumed by `hydi-mobile-protoforge.html`. |
+| `/api/chat/route` | `pages/api/chat/route.js` → bridges `api/chat/route.js` | **Fixed 2026-07-17.** HMAC service-token-gated "universal chat router" — distinct from `/api/chat` above, not a duplicate. Bridging surfaced and fixed a `.js`/`.ts` import-extension bug (`'../../lib/claude.js'` → `'../../lib/claude'`) that broke `next build`. |
 
 ## Unbridged / dead under this deployment model
 
@@ -91,9 +94,8 @@ These exist only under top-level `api/` with no `pages/api/` counterpart —
 404 under `next dev`/`next start`, and unreachable under Vercel too since
 Vercel is disabled:
 
-`client-dashboard.js`, `local-model.js`, `ursula/status.js`,
-`webhooks/stripe-test.js`, `ws/route.js`, `chat/route.js`,
-`events/stream.js`, `life-flow/route.js`, `heidi/route.js`.
+`client-dashboard.js`, `local-model.js`,
+`webhooks/stripe-test.js`, `life-flow/route.js`, `heidi/route.js`.
 
 `webhooks/stripe-test.js` was deliberately left unbridged in the 2026-07-15
 pass — it's a diagnostic-only endpoint (echoes back signature-header
@@ -101,8 +103,13 @@ presence, no real function) with no product purpose documented anywhere,
 not payment-critical. `life-flow/route.js` was left unbridged in the prior
 (2026-07-15, security) pass because it starts recurring background timers
 at module load, which is unsafe to activate as a side effect of bridging
-without a product decision. The rest are genuinely ambiguous — see
-`ISSUES_FOUND.md` #34.
+without a product decision. `ws/route.js` was archived 2026-07-17 as
+confirmed-dead (see `archive/dead-ws-placeholder/`). `heidi/route.js` and
+`client-dashboard.js` were reviewed 2026-07-17 and deliberately left
+unbridged — both lack any authentication, and bridging them as-is would be
+a new vulnerability rather than a fix; see `ISSUES_FOUND.md` #53-#54.
+`local-model.js` is not a route at all (no default export) — it's a plain
+library `require()`d by `heidi/route.js`.
 
 ## Stripe routing (checkout + both webhooks)
 
