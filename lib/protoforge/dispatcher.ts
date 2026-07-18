@@ -67,6 +67,7 @@ async function dispatchUpdateSession(payload: Record<string, unknown>): Promise<
   const sessionId = payload.session_id as string | undefined;
   if (!sessionId) return { type: 'update_session', success: false, error: 'session_id required' };
 
+  // eslint-disable-next-line no-unused-vars -- destructured only to exclude session_id from `fields`
   const { session_id: _ignored, ...fields } = payload;
   const { error } = await updateSessionState(getSupabase(), sessionId, fields);
 
@@ -117,7 +118,7 @@ async function dispatchRestartService(payload: Record<string, unknown>): Promise
 
 const DISPATCH_TABLE: Record<
   string,
-  (payload: Record<string, unknown>) => Promise<DispatchResult>
+  (_payload: Record<string, unknown>) => Promise<DispatchResult>
 > = {
   create_task: dispatchCreateTask,
   send_alert: dispatchSendAlert,

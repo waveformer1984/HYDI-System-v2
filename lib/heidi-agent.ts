@@ -32,8 +32,8 @@ export interface RunHeidiAgentParams {
   message: string;
   sessionId: string;
   userId: string;
-  onText: (delta: string) => void;
-  onTool?: (event: AgentToolEvent) => void;
+  onText: (_delta: string) => void;
+  onTool?: (_event: AgentToolEvent) => void;
 }
 
 export interface RunHeidiAgentResult {

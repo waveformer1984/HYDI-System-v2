@@ -37,6 +37,7 @@ export abstract class SpecialistAgent {
     lastActiveAt: null,
   };
 
+  // eslint-disable-next-line no-unused-vars -- TS parameter property; assigned to this.actionExecutor and used below (base eslint no-unused-vars doesn't recognize parameter-property assignment as a use)
   constructor(protected readonly actionExecutor: ActionExecutor) {}
 
   canHandle(actionType: string): boolean {
