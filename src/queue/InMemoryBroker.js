@@ -37,7 +37,7 @@ class InMemoryBroker extends MessageBroker {
    * @param {import('./MessageBroker').PublishOptions} [options]
    * @returns {Promise<string>}
    */
-  async publish(topic, message, options = {}) {
+  async publish(topic, message, _options = {}) {
     if (!this._messages.has(topic)) this._messages.set(topic, []);
     const id = message.id || `mem-${Date.now()}-${Math.random().toString(36).substr(2, 8)}`;
     const entry = { id, message: { ...message, id } };

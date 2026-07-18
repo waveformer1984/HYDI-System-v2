@@ -13,7 +13,7 @@ const EventEmitter = require('events');
 const { v4: uuidv4 } = require('uuid');
 const LocalModelAdapter = require('../models/local-model-adapter');
 const OllamaClient = require('../../heidi-core/brain/ollama-client');
-const { supabase } = require('../database');
+require('../database');
 
 class HeidiOrchestrator extends EventEmitter {
   constructor(config = {}) {
@@ -412,7 +412,7 @@ class HeidiOrchestrator extends EventEmitter {
   /**
    * TASK HANDLERS - Specialized routing logic
    */
-  async handleRevenueTask(task) {
+  async handleRevenueTask(_task) {
     console.log('[ORCHESTRATOR] Revenue task - highest priority');
     
     return {
@@ -423,7 +423,7 @@ class HeidiOrchestrator extends EventEmitter {
     };
   }
   
-  async handleCriticalTask(task) {
+  async handleCriticalTask(_task) {
     console.log('[ORCHESTRATOR] Critical task - high reliability');
     
     return {
@@ -434,7 +434,7 @@ class HeidiOrchestrator extends EventEmitter {
     };
   }
   
-  async handleStandardTask(task) {
+  async handleStandardTask(_task) {
     console.log('[ORCHESTRATOR] Standard task - cost effective');
     
     return {
@@ -445,7 +445,7 @@ class HeidiOrchestrator extends EventEmitter {
     };
   }
   
-  async handleReflectionTask(task) {
+  async handleReflectionTask(_task) {
     console.log('[ORCHESTRATOR] Reflection task - local only');
     
     return {
@@ -456,7 +456,7 @@ class HeidiOrchestrator extends EventEmitter {
     };
   }
   
-  async handleTechnicalTask(task) {
+  async handleTechnicalTask(_task) {
     console.log('[ORCHESTRATOR] Technical task - specialist models');
     
     return {
@@ -692,23 +692,23 @@ class HeidiOrchestrator extends EventEmitter {
     return result ? 0.7 : 0;
   }
 
-  calculateRevenueImpact(task, result) {
+  calculateRevenueImpact(_task, _result) {
     return 0;
   }
 
-  estimateConversionProbability(result) {
+  estimateConversionProbability(_result) {
     return 0;
   }
 
-  compareConfidenceVsReality(task, measurement) {
+  compareConfidenceVsReality(_task, _measurement) {
     return 0;
   }
 
-  detectPatterns(task, measurement) {
+  detectPatterns(_task, _measurement) {
     return [];
   }
 
-  shouldChangeStrategy(measurement) {
+  shouldChangeStrategy(_measurement) {
     return false;
   }
 

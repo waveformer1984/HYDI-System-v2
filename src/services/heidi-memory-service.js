@@ -274,7 +274,7 @@ class HeidiMemoryService {
             const startTime = Date.now();
             
             // Test basic connectivity
-            const { data, error } = await this.supabase
+            const { error } = await this.supabase
                 .from('theme_predictions')
                 .select('count')
                 .limit(1);

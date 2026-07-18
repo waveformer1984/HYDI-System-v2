@@ -278,8 +278,6 @@ class HeidiRevenueEngine extends EventEmitter {
   
   determineOfferType(context) {
     // Based on user behavior, time, and other factors
-    const types = ['new_user', 'upgrade', 'retention', 'cross_sell', 'flash_sale'];
-    
     if (context.isNewUser) return 'new_user';
     if (context.currentTier && context.currentTier !== 'enterprise') return 'upgrade';
     if (context.riskOfChurn) return 'retention';
@@ -908,7 +906,7 @@ class HeidiRevenueEngine extends EventEmitter {
     return Math.abs(hash);
   }
   
-  async generateLandingPage(type, context) {
+  async generateLandingPage(type, _context) {
     // Generate landing page content
     const templates = {
       new_user: 'Welcome! Get started with HYDI AI at a special price.',
@@ -926,7 +924,7 @@ class HeidiRevenueEngine extends EventEmitter {
     };
   }
   
-  async generateEmailTemplate(type, context) {
+  async generateEmailTemplate(type, _context) {
     // Generate email template
     const templates = {
       new_user: {
@@ -1011,7 +1009,7 @@ class HeidiRevenueEngine extends EventEmitter {
   async storeOfferInDatabase(offer) {
     if (this._offersDbDisabled) return; // schema absent — skip without spamming
     try {
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from('offers')
         .insert({
           offer_id: offer.id,
@@ -1031,7 +1029,7 @@ class HeidiRevenueEngine extends EventEmitter {
   
   async storeConversionInDatabase(tracking) {
     try {
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from('conversions')
         .insert({
           session_id: tracking.sessionId,
@@ -1048,7 +1046,7 @@ class HeidiRevenueEngine extends EventEmitter {
   
   async storeABTestInDatabase(test) {
     try {
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from('ab_tests')
         .insert({
           test_id: test.id,
@@ -1065,7 +1063,7 @@ class HeidiRevenueEngine extends EventEmitter {
   
   async storeCheckoutInDatabase(session) {
     try {
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from('checkouts')
         .insert({
           session_id: session.id,
@@ -1082,7 +1080,7 @@ class HeidiRevenueEngine extends EventEmitter {
   
   async storePaymentInDatabase(invoice) {
     try {
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from('payments')
         .insert({
           invoice_id: invoice.id,
@@ -1099,7 +1097,7 @@ class HeidiRevenueEngine extends EventEmitter {
   
   async storeSubscriptionInDatabase(subscription) {
     try {
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from('subscriptions')
         .insert({
           subscription_id: subscription.id,
