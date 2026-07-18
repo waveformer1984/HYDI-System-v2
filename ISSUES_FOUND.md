@@ -5,6 +5,14 @@ the narrative of what was fixed and why; this file is the flat list.
 
 ---
 
+## Fixed this session (2026-07-18, homepage health-check badge)
+
+| # | Issue | File(s) | Status |
+|---|-------|---------|--------|
+| 70 | `pages/index.tsx`'s Heidi chat portal ran a mount-time health check against `POST /api/heidi {action:'status'}` to drive its Online/Offline badge. `/api/heidi` only exists at root `api/heidi/route.js` and was deliberately left unbridged into `pages/api` (#53: it's unauthenticated and forwards prompts to a cloud LLM fallback — bridging it as-is would be a cost/DoS vector). Under `next dev`/`next start` this made `POST /api/heidi` 404 unconditionally, so the badge showed "Offline" on every load regardless of whether chat itself actually worked — misleading anyone using the badge to judge portal health. Chat send itself was unaffected (it correctly uses `pages/api/chat.ts`, per #51/#55's precedent). | `pages/index.tsx` | **Fixed** — repointed the mount-time health check at `GET /api/status` (`pages/api/status.ts`), which is already bridged, safe (no auth required, degrades to a 200 `DEGRADED_STATUS` on backend failure rather than erroring), and requires no new endpoint. It has no `currentModel` field, so the model-name badge continues to be set from the first chat response's `metadata` SSE event only, same as before. Do not repoint this back at `/api/heidi` without adding real auth to `api/heidi/route.js` first. |
+
+---
+
 ## Fixed this session (2026-07-17, mobile chat was completely broken end-to-end)
 
 Triggered by "get HYDI operational from mobile" — every mobile-facing chat
