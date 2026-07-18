@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState, useCallback } from 'react';
+import React, { useRef, useState, useCallback } from 'react';
 
 interface Section {
   id: string;
@@ -26,8 +26,8 @@ interface Props {
   bpm: number;
   currentBar: number;
   playing: boolean;
-  onSeek: (bar: number) => void;
-  onSectionClick: (section: Section) => void;
+  onSeek: (_bar: number) => void;
+  onSectionClick: (_section: Section) => void;
 }
 
 const BAR_WIDTH = 28;
@@ -37,7 +37,7 @@ const RULER_H = 24;
 const LABEL_W = 96;
 
 export default function ArrangementTimeline({
-  sections, layers, totalBars, bpm, currentBar, playing, onSeek, onSectionClick,
+  sections, layers, totalBars, bpm, currentBar, playing: _playing, onSeek, onSectionClick,
 }: Props) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [hoveredSection, setHoveredSection] = useState<string | null>(null);

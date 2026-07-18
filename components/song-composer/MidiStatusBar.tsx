@@ -15,7 +15,7 @@ interface Props {
   lastAction: string | null;
   mapping: Record<string, MidiMapping>;
   onConnect: () => void;
-  onLearnPad: (sectionIndex: number, sectionName: string) => Promise<void>;
+  onLearnPad: (_sectionIndex: number, _sectionName: string) => Promise<void>;
   sections: { id: string; name: string }[];
 }
 

@@ -34,7 +34,7 @@ interface Song {
 interface Props {
   song: Song;
   currentBar: number;
-  onSectionJump: (bar: number) => void;
+  onSectionJump: (_bar: number) => void;
 }
 
 const NOTE_COLORS: Record<string, string> = {

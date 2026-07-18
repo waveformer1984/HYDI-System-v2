@@ -15,7 +15,7 @@ interface Sample {
 interface Props {
   songBpm: number;
   songKey: string;
-  onAddLayer: (sample: Sample, startBar: number) => void;
+  onAddLayer: (_sample: Sample, _startBar: number) => void;
 }
 
 const TYPE_COLORS: Record<string, string> = {
@@ -29,7 +29,7 @@ function formatSize(kb: number) {
   return kb > 1024 ? `${(kb / 1024).toFixed(1)} MB` : `${kb} KB`;
 }
 
-export default function SampleLibrary({ songBpm, songKey, onAddLayer }: Props) {
+export default function SampleLibrary({ songBpm, songKey: _songKey, onAddLayer }: Props) {
   const [samples, setSamples] = useState<Sample[]>([]);
   const [dragging, setDragging] = useState(false);
   const [playing, setPlaying] = useState<string | null>(null);
