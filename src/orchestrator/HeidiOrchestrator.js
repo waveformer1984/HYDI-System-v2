@@ -14,6 +14,7 @@ const { v4: uuidv4 } = require('uuid');
 const LocalModelAdapter = require('../models/local-model-adapter');
 const OllamaClient = require('../../heidi-core/brain/ollama-client');
 require('../database');
+const logger = require('../../lib/structured-logger').child({ component: 'HeidiOrchestrator' });
 
 class HeidiOrchestrator extends EventEmitter {
   constructor(config = {}) {
@@ -87,9 +88,9 @@ class HeidiOrchestrator extends EventEmitter {
     this.lastDriftCheck = Date.now();
     this.confidenceHistory = [];
     
-    console.log('[ORCHESTRATOR] Heidi Orchestrator initialized');
-    console.log('[ORCHESTRATOR] Revenue priority:', this.config.revenuePriority ? 'ENABLED' : 'DISABLED');
-    console.log('[ORCHESTRATOR] Confidence threshold:', this.config.confidenceThreshold);
+    logger.info('Heidi Orchestrator initialized');
+    logger.info('Revenue priority configured', { revenuePriority: this.config.revenuePriority ? 'ENABLED' : 'DISABLED' });
+    logger.info('Confidence threshold configured', { confidenceThreshold: this.config.confidenceThreshold });
   }
   
   /**
@@ -100,7 +101,7 @@ class HeidiOrchestrator extends EventEmitter {
     const startTime = Date.now();
     
     try {
-      console.log(`[ORCHESTRATOR] Processing task ${taskId}: ${task.type}`);
+      logger.info('Processing task', { taskId, taskType: task.type });
       
       // Enrich task with metadata
       task = {
@@ -126,7 +127,7 @@ class HeidiOrchestrator extends EventEmitter {
       return result;
       
     } catch (error) {
-      console.error(`[ORCHESTRATOR] Task ${taskId} failed:`, error.message);
+      logger.error('Task failed', { taskId, error });
       
       this.metrics.tasksFailed++;
       
@@ -142,7 +143,7 @@ class HeidiOrchestrator extends EventEmitter {
   async executeHeidiLoop(task) {
     const loopId = `loop_${Date.now()}`;
     
-    console.log(`[HEIDI LOOP] Starting loop ${loopId} for task ${task.id}`);
+    logger.info('Starting Heidi loop', { loopId, taskId: task.id });
     
     // 1. OBSERVE - Capture current state
     const observation = await this.observe(task);
@@ -178,7 +179,7 @@ class HeidiOrchestrator extends EventEmitter {
       timestamp: new Date().toISOString()
     };
     
-    console.log(`[HEIDI LOOP] Completed loop ${loopId} in ${Date.now() - parseInt(loopId.split('_')[1])}ms`);
+    logger.info('Completed Heidi loop', { loopId, durationMs: Date.now() - parseInt(loopId.split('_')[1]) });
     
     return result;
   }
@@ -298,7 +299,7 @@ class HeidiOrchestrator extends EventEmitter {
     } catch (error) {
       // Try fallback if available
       if (decision.fallback) {
-        console.log(`[ORCHESTRATOR] Primary model failed, trying fallback: ${decision.fallback}`);
+        logger.info('Primary model failed, trying fallback', { fallback: decision.fallback });
         
         try {
           const fallbackResult = await this.executeLocalModel(decision.fallback, task);
@@ -313,7 +314,7 @@ class HeidiOrchestrator extends EventEmitter {
             originalError: error.message
           };
         } catch (fallbackError) {
-          console.error(`[ORCHESTRATOR] Fallback also failed:`, fallbackError.message);
+          logger.error('Fallback also failed', { error: fallbackError });
         }
       }
       
@@ -413,7 +414,7 @@ class HeidiOrchestrator extends EventEmitter {
    * TASK HANDLERS - Specialized routing logic
    */
   async handleRevenueTask(_task) {
-    console.log('[ORCHESTRATOR] Revenue task - highest priority');
+    logger.info('Revenue task - highest priority');
     
     return {
       model: 'gpt-4-local', // Best local model for revenue
@@ -424,7 +425,7 @@ class HeidiOrchestrator extends EventEmitter {
   }
   
   async handleCriticalTask(_task) {
-    console.log('[ORCHESTRATOR] Critical task - high reliability');
+    logger.info('Critical task - high reliability');
     
     return {
       model: 'gpt-4-local',
@@ -435,7 +436,7 @@ class HeidiOrchestrator extends EventEmitter {
   }
   
   async handleStandardTask(_task) {
-    console.log('[ORCHESTRATOR] Standard task - cost effective');
+    logger.info('Standard task - cost effective');
     
     return {
       model: 'gpt-35-turbo',
@@ -446,7 +447,7 @@ class HeidiOrchestrator extends EventEmitter {
   }
   
   async handleReflectionTask(_task) {
-    console.log('[ORCHESTRATOR] Reflection task - local only');
+    logger.info('Reflection task - local only');
     
     return {
       model: 'local-llama',
@@ -457,7 +458,7 @@ class HeidiOrchestrator extends EventEmitter {
   }
   
   async handleTechnicalTask(_task) {
-    console.log('[ORCHESTRATOR] Technical task - specialist models');
+    logger.info('Technical task - specialist models');
     
     return {
       model: 'code-specialist',
@@ -484,7 +485,7 @@ class HeidiOrchestrator extends EventEmitter {
       return result;
       
     } catch (error) {
-      console.error(`[ORCHESTRATOR] Local model ${modelId} failed:`, error.message);
+      logger.error('Local model failed', { modelId, error });
       throw error;
     }
   }
@@ -492,7 +493,7 @@ class HeidiOrchestrator extends EventEmitter {
   async executeExternalModel(modelId, task) {
     // TODO: Implement external model execution (OpenAI, Claude, etc.)
     // For now, fallback to local
-    console.log(`[ORCHESTRATOR] External model ${modelId} not implemented, falling back to local`);
+    logger.info('External model not implemented, falling back to local', { modelId });
     return this.executeLocalModel('gpt-4-local', task);
   }
   
@@ -502,7 +503,7 @@ class HeidiOrchestrator extends EventEmitter {
     
     // If confidence is low, try external enhancement
     if (localResult.confidence < 0.8) {
-      console.log('[ORCHESTRATOR] Low confidence from local model, enhancing with external');
+      logger.info('Low confidence from local model, enhancing with external');
       // TODO: Implement external enhancement
     }
     
@@ -662,7 +663,7 @@ class HeidiOrchestrator extends EventEmitter {
     this.driftScore = 0;
     this.confidenceHistory = [];
 
-    console.log('[ORCHESTRATOR] Reset completed');
+    logger.info('Reset completed');
   }
 
   // ── Telemetry / scoring helpers ────────────────────────────────────────────

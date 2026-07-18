@@ -13,6 +13,7 @@
 const EventEmitter = require('events');
 const stripe = process.env.STRIPE_SECRET_KEY ? require('stripe')(process.env.STRIPE_SECRET_KEY) : null;
 const { supabase } = require('../database');
+const logger = require('../../lib/structured-logger').child({ component: 'HeidiRevenueEngine' });
 
 class HeidiRevenueEngine extends EventEmitter {
   constructor(config = {}) {
@@ -102,9 +103,9 @@ class HeidiRevenueEngine extends EventEmitter {
     // Initialize
     this.initialize();
     
-    console.log('[REVENUE ENGINE] Heidi Revenue Engine initialized');
-    console.log(`[REVENUE ENGINE] Revenue tracking: ${this.config.enableRevenueTracking ? 'ENABLED' : 'DISABLED'}`);
-    console.log(`[REVENUE ENGINE] Auto offers: ${this.config.enableAutoOffers ? 'ENABLED' : 'DISABLED'}`);
+    logger.info('Heidi Revenue Engine initialized');
+    logger.info('Revenue tracking configured', { revenueTracking: this.config.enableRevenueTracking ? 'ENABLED' : 'DISABLED' });
+    logger.info('Auto offers configured', { autoOffers: this.config.enableAutoOffers ? 'ENABLED' : 'DISABLED' });
   }
   
   async initialize() {
@@ -126,10 +127,10 @@ class HeidiRevenueEngine extends EventEmitter {
       // Start conversion tracking cleanup
       this.startConversionTrackingCleanup();
       
-      console.log('[REVENUE ENGINE] Revenue engine initialized successfully');
-      
+      logger.info('Revenue engine initialized successfully');
+
     } catch (error) {
-      console.error('[REVENUE ENGINE] Initialization failed:', error.message);
+      logger.error('Initialization failed', { error });
       throw error;
     }
   }
@@ -139,10 +140,10 @@ class HeidiRevenueEngine extends EventEmitter {
    */
   
   async initializeStripeProducts() {
-    console.log('[REVENUE ENGINE] Initializing Stripe products...');
+    logger.info('Initializing Stripe products...');
 
     if (!stripe) {
-      console.warn('[REVENUE ENGINE] STRIPE_SECRET_KEY not set — skipping Stripe product initialization');
+      logger.warn('STRIPE_SECRET_KEY not set — skipping Stripe product initialization');
       return;
     }
 
@@ -152,10 +153,10 @@ class HeidiRevenueEngine extends EventEmitter {
         await this.createOrUpdateStripeProduct(tier);
       }
       
-      console.log(`[REVENUE ENGINE] Initialized ${this.config.defaultTiers.length} Stripe products`);
-      
+      logger.info('Initialized Stripe products', { count: this.config.defaultTiers.length });
+
     } catch (error) {
-      console.error('[REVENUE ENGINE] Stripe initialization failed:', error.message);
+      logger.error('Stripe initialization failed', { error });
       throw error;
     }
   }
@@ -216,10 +217,10 @@ class HeidiRevenueEngine extends EventEmitter {
         });
       }
       
-      console.log(`[REVENUE ENGINE] Stripe product ready: ${tier.name} ($${tier.price}/month)`);
-      
+      logger.info('Stripe product ready', { tierName: tier.name, price: tier.price });
+
     } catch (error) {
-      console.error(`[REVENUE ENGINE] Failed to create Stripe product for ${tier.name}:`, error.message);
+      logger.error('Failed to create Stripe product', { tierName: tier.name, error });
       throw error;
     }
   }
@@ -232,7 +233,7 @@ class HeidiRevenueEngine extends EventEmitter {
     const offerId = `offer_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
     try {
-      console.log(`[REVENUE ENGINE] Generating offer: ${offerId}`);
+      logger.info('Generating offer', { offerId });
       
       // Determine offer type based on context
       const offerType = this.determineOfferType(context);
@@ -266,12 +267,12 @@ class HeidiRevenueEngine extends EventEmitter {
         context
       });
       
-      console.log(`[REVENUE ENGINE] Offer generated: ${offerId} (${offerType})`);
-      
+      logger.info('Offer generated', { offerId, offerType });
+
       return offer;
-      
+
     } catch (error) {
-      console.error(`[REVENUE ENGINE] Offer generation failed: ${offerId}:`, error.message);
+      logger.error('Offer generation failed', { offerId, error });
       throw error;
     }
   }
@@ -436,7 +437,7 @@ class HeidiRevenueEngine extends EventEmitter {
       };
       
     } catch (error) {
-      console.error('[REVENUE ENGINE] Checkout session creation failed:', error.message);
+      logger.error('Checkout session creation failed', { error });
       throw error;
     }
   }
@@ -520,7 +521,7 @@ class HeidiRevenueEngine extends EventEmitter {
       conversionTime: tracking.conversionTime - tracking.startTime
     });
     
-    console.log(`[REVENUE ENGINE] Conversion tracked: ${sessionId} ($${amount})`);
+    logger.info('Conversion tracked', { sessionId, amount });
   }
   
   updateRevenue(amount) {
@@ -586,7 +587,7 @@ class HeidiRevenueEngine extends EventEmitter {
     
     this.emit('ab_test_created', { testId, test });
     
-    console.log(`[REVENUE ENGINE] A/B test created: ${testId} (${test.name})`);
+    logger.info('A/B test created', { testId, testName: test.name });
     
     return test;
   }
@@ -642,7 +643,7 @@ class HeidiRevenueEngine extends EventEmitter {
     
     this.emit('ab_test_concluded', { testId, test, winner });
     
-    console.log(`[REVENUE ENGINE] A/B test concluded: ${testId} - Winner: ${winner.variantId}`);
+    logger.info('A/B test concluded', { testId, winnerVariantId: winner.variantId });
   }
   
   calculateABTestWinner(test) {
@@ -676,7 +677,7 @@ class HeidiRevenueEngine extends EventEmitter {
       try {
         // Check if we should generate new offers
         if (this.activeOffers.size >= this.config.maxConcurrentOffers) {
-          console.log('[REVENUE ENGINE] Max concurrent offers reached');
+          logger.info('Max concurrent offers reached');
           return;
         }
         
@@ -688,12 +689,12 @@ class HeidiRevenueEngine extends EventEmitter {
           try {
             await this.generateOffer(opportunity.context);
           } catch (error) {
-            console.error('[REVENUE ENGINE] Auto offer generation failed:', error.message);
+            logger.error('Auto offer generation failed', { error });
           }
         }
         
       } catch (error) {
-        console.error('[REVENUE ENGINE] Offer generation cycle failed:', error.message);
+        logger.error('Offer generation cycle failed', { error });
       }
       
       // Schedule next generation
@@ -782,7 +783,7 @@ class HeidiRevenueEngine extends EventEmitter {
         });
         
       } catch (error) {
-        console.error('[REVENUE ENGINE] Revenue monitoring failed:', error.message);
+        logger.error('Revenue monitoring failed', { error });
       }
       
       // Schedule next monitoring
@@ -799,7 +800,7 @@ class HeidiRevenueEngine extends EventEmitter {
   
   async handleStripeWebhook(event) {
     try {
-      console.log(`[REVENUE ENGINE] Processing Stripe webhook: ${event.type}`);
+      logger.info('Processing Stripe webhook', { eventType: event.type });
       
       switch (event.type) {
         case 'checkout.session.completed':
@@ -823,11 +824,11 @@ class HeidiRevenueEngine extends EventEmitter {
           break;
           
         default:
-          console.log(`[REVENUE ENGINE] Unhandled webhook type: ${event.type}`);
+          logger.info('Unhandled webhook type', { eventType: event.type });
       }
       
     } catch (error) {
-      console.error('[REVENUE ENGINE] Webhook handling failed:', error.message);
+      logger.error('Webhook handling failed', { error });
       throw error;
     }
   }
@@ -836,7 +837,7 @@ class HeidiRevenueEngine extends EventEmitter {
     const offerId = session.metadata?.offerId;
     const offerType = session.metadata?.offerType;
     
-    console.log(`[REVENUE ENGINE] Checkout completed: ${session.id} (offer: ${offerId})`);
+    logger.info('Checkout completed', { sessionId: session.id, offerId });
     
     // Update offer status
     if (offerId && this.activeOffers.has(offerId)) {
@@ -853,7 +854,7 @@ class HeidiRevenueEngine extends EventEmitter {
   }
   
   async handlePaymentSucceeded(invoice) {
-    console.log(`[REVENUE ENGINE] Payment succeeded: ${invoice.id} ($${invoice.amount_paid / 100})`);
+    logger.info('Payment succeeded', { invoiceId: invoice.id, amount: invoice.amount_paid / 100 });
     
     // Update revenue
     const amount = invoice.amount_paid / 100;
@@ -866,7 +867,7 @@ class HeidiRevenueEngine extends EventEmitter {
   }
   
   async handlePaymentFailed(invoice) {
-    console.log(`[REVENUE ENGINE] Payment failed: ${invoice.id}`);
+    logger.info('Payment failed', { invoiceId: invoice.id });
     
     // Store in database
     await this.storePaymentInDatabase(invoice);
@@ -875,7 +876,7 @@ class HeidiRevenueEngine extends EventEmitter {
   }
   
   async handleSubscriptionCreated(subscription) {
-    console.log(`[REVENUE ENGINE] Subscription created: ${subscription.id}`);
+    logger.info('Subscription created', { subscriptionId: subscription.id });
     
     // Store in database
     await this.storeSubscriptionInDatabase(subscription);
@@ -884,7 +885,7 @@ class HeidiRevenueEngine extends EventEmitter {
   }
   
   async handleSubscriptionDeleted(subscription) {
-    console.log(`[REVENUE ENGINE] Subscription deleted: ${subscription.id}`);
+    logger.info('Subscription deleted', { subscriptionId: subscription.id });
     
     // Store in database
     await this.storeSubscriptionInDatabase(subscription);
@@ -966,7 +967,7 @@ class HeidiRevenueEngine extends EventEmitter {
         }
         
       } catch (error) {
-        console.error('[REVENUE ENGINE] Conversion tracking cleanup failed:', error.message);
+        logger.error('Conversion tracking cleanup failed', { error });
       }
       
       // Schedule next cleanup
@@ -992,13 +993,13 @@ class HeidiRevenueEngine extends EventEmitter {
         this.activeOffers.set(offer.offer_id, offer.offer_data);
       }
 
-      console.log(`[REVENUE ENGINE] Loaded ${this.activeOffers.size} existing offers`);
+      logger.info('Loaded existing offers', { count: this.activeOffers.size });
 
     } catch (error) {
       // Disable offers DB access after the first failure (e.g. missing 'offers'
       // table) so it doesn't log every cycle. Apply the migration to enable it.
       this._offersDbDisabled = true;
-      console.warn('[REVENUE ENGINE] Offers DB off (apply migration 20260617_heidi_orchestrator_schema.sql):', error.message);
+      logger.warn('Offers DB off (apply migration 20260617_heidi_orchestrator_schema.sql)', { error });
     }
   }
   
@@ -1023,7 +1024,7 @@ class HeidiRevenueEngine extends EventEmitter {
 
     } catch (error) {
       this._offersDbDisabled = true;
-      console.warn('[REVENUE ENGINE] Offers DB off (apply migration 20260617_heidi_orchestrator_schema.sql):', error.message);
+      logger.warn('Offers DB off (apply migration 20260617_heidi_orchestrator_schema.sql)', { error });
     }
   }
   
@@ -1040,7 +1041,7 @@ class HeidiRevenueEngine extends EventEmitter {
       if (error) throw error;
       
     } catch (error) {
-      console.error('[REVENUE ENGINE] Failed to store conversion:', error.message);
+      logger.error('Failed to store conversion', { error });
     }
   }
   
@@ -1057,7 +1058,7 @@ class HeidiRevenueEngine extends EventEmitter {
       if (error) throw error;
       
     } catch (error) {
-      console.error('[REVENUE ENGINE] Failed to store A/B test:', error.message);
+      logger.error('Failed to store A/B test', { error });
     }
   }
   
@@ -1074,7 +1075,7 @@ class HeidiRevenueEngine extends EventEmitter {
       if (error) throw error;
       
     } catch (error) {
-      console.error('[REVENUE ENGINE] Failed to store checkout:', error.message);
+      logger.error('Failed to store checkout', { error });
     }
   }
   
@@ -1091,7 +1092,7 @@ class HeidiRevenueEngine extends EventEmitter {
       if (error) throw error;
       
     } catch (error) {
-      console.error('[REVENUE ENGINE] Failed to store payment:', error.message);
+      logger.error('Failed to store payment', { error });
     }
   }
   
@@ -1108,7 +1109,7 @@ class HeidiRevenueEngine extends EventEmitter {
       if (error) throw error;
       
     } catch (error) {
-      console.error('[REVENUE ENGINE] Failed to store subscription:', error.message);
+      logger.error('Failed to store subscription', { error });
     }
   }
   
@@ -1178,7 +1179,7 @@ class HeidiRevenueEngine extends EventEmitter {
     // Clear A/B tests
     this.abTests.clear();
     
-    console.log('[REVENUE ENGINE] Reset completed');
+    logger.info('Reset completed');
   }
 }
 

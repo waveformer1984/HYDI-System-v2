@@ -19,6 +19,7 @@ const HeidiMemorySystem = require('../memory/HeidiMemorySystem');
 const HeidiActionLayer = require('../actions/HeidiActionLayer');
 const selfHealing = require('../healing/SelfHealingService');
 const redisStream = require('../queue/RedisStreamBroker');
+const logger = require('../../lib/structured-logger').child({ component: 'HeidiCoreLoop' });
 
 class HeidiCoreLoop extends EventEmitter {
   constructor(config = {}) {
@@ -83,9 +84,9 @@ class HeidiCoreLoop extends EventEmitter {
     // Wire up event listeners
     this.setupEventListeners();
     
-    console.log('[CORE LOOP] Heidi Core Loop initialized');
-    console.log(`[CORE LOOP] Loop interval: ${this.config.loopInterval}ms`);
-    console.log(`[CORE LOOP] Revenue mode: ${this.config.enableRevenueMode ? 'ENABLED' : 'DISABLED'}`);
+    logger.info('Heidi Core Loop initialized');
+    logger.info('Loop interval configured', { loopIntervalMs: this.config.loopInterval });
+    logger.info('Revenue mode configured', { revenueMode: this.config.enableRevenueMode ? 'ENABLED' : 'DISABLED' });
   }
   
   setupEventListeners() {
@@ -127,11 +128,11 @@ class HeidiCoreLoop extends EventEmitter {
    */
   async start() {
     if (this.isRunning) {
-      console.log('[CORE LOOP] Already running');
+      logger.info('Already running');
       return;
     }
-    
-    console.log('[CORE LOOP] Starting Heidi Core Loop...');
+
+    logger.info('Starting Heidi Core Loop...');
     this.isRunning = true;
     
     // Start the main loop
@@ -146,7 +147,7 @@ class HeidiCoreLoop extends EventEmitter {
     // Emit start event
     this.emit('loop_started', { timestamp: Date.now() });
     
-    console.log('[CORE LOOP] Heidi Core Loop started');
+    logger.info('Heidi Core Loop started');
   }
   
   /**
@@ -154,23 +155,23 @@ class HeidiCoreLoop extends EventEmitter {
    */
   async stop() {
     if (!this.isRunning) {
-      console.log('[CORE LOOP] Not running');
+      logger.info('Not running');
       return;
     }
-    
-    console.log('[CORE LOOP] Stopping Heidi Core Loop...');
+
+    logger.info('Stopping Heidi Core Loop...');
     this.isRunning = false;
-    
+
     // Wait for active loops to complete
     while (this.activeLoops.size > 0) {
-      console.log(`[CORE LOOP] Waiting for ${this.activeLoops.size} active loops to complete...`);
+      logger.info('Waiting for active loops to complete', { activeLoops: this.activeLoops.size });
       await new Promise(resolve => setTimeout(resolve, 1000));
     }
-    
+
     // Emit stop event
     this.emit('loop_stopped', { timestamp: Date.now() });
-    
-    console.log('[CORE LOOP] Heidi Core Loop stopped');
+
+    logger.info('Heidi Core Loop stopped');
   }
   
   /**
@@ -183,7 +184,7 @@ class HeidiCoreLoop extends EventEmitter {
       try {
         // Check concurrent loop limit
         if (this.activeLoops.size >= this.config.maxConcurrentLoops) {
-          console.log(`[CORE LOOP] Max concurrent loops reached (${this.activeLoops.size})`);
+          logger.info('Max concurrent loops reached', { activeLoops: this.activeLoops.size });
           setTimeout(mainLoop, this.config.loopInterval);
           return;
         }
@@ -197,7 +198,7 @@ class HeidiCoreLoop extends EventEmitter {
         }
         
       } catch (error) {
-        console.error('[CORE LOOP] Main loop error:', error.message);
+        logger.error('Main loop error', { error });
         this.metrics.loopsFailed++;
       }
       
@@ -217,26 +218,26 @@ class HeidiCoreLoop extends EventEmitter {
       if (!this.isRunning) return;
       
       try {
-        console.log('[CORE LOOP] Running observation cycle...');
-        
+        logger.info('Running observation cycle...');
+
         const observation = await this.observe();
-        
+
         // Store observation in memory
         this.memorySystem.storeContext(`observation_${Date.now()}`, observation);
-        
+
         // Check if immediate action is needed
         const urgentTasks = await this.identifyUrgentTasks(observation);
-        
+
         for (const task of urgentTasks) {
-          console.log(`[CORE LOOP] Urgent task identified: ${task.type}`);
+          logger.info('Urgent task identified', { taskType: task.type });
           await this.executeLoop(task);
         }
-        
+
         this.metrics.observations++;
         this.lastObservation = Date.now();
-        
+
       } catch (error) {
-        console.error('[CORE LOOP] Observation cycle error:', error.message);
+        logger.error('Observation cycle error', { error });
       }
       
       // Schedule next observation
@@ -255,19 +256,19 @@ class HeidiCoreLoop extends EventEmitter {
       if (!this.isRunning) return;
       
       try {
-        console.log('[CORE LOOP] Running reflection cycle...');
-        
+        logger.info('Running reflection cycle...');
+
         const reflection = await this.memorySystem.runReflection();
-        
+
         // Apply adaptations if needed
         if (reflection.recommendations.length > 0) {
           await this.applyAdaptations(reflection.recommendations);
         }
-        
+
         this.lastReflection = Date.now();
-        
+
       } catch (error) {
-        console.error('[CORE LOOP] Reflection cycle error:', error.message);
+        logger.error('Reflection cycle error', { error });
       }
       
       // Schedule next reflection
@@ -286,7 +287,7 @@ class HeidiCoreLoop extends EventEmitter {
     const startTime = Date.now();
     
     try {
-      console.log(`[CORE LOOP] Executing loop ${loopId}: ${task.type}`);
+      logger.info('Executing loop', { loopId, taskType: task.type });
       
       // Track active loop
       this.activeLoops.set(loopId, {
@@ -324,12 +325,12 @@ class HeidiCoreLoop extends EventEmitter {
         duration: loopTime
       });
       
-      console.log(`[CORE LOOP] Loop completed: ${loopId} (${loopTime}ms)`);
+      logger.info('Loop completed', { loopId, loopTimeMs: loopTime });
       
       return result;
       
     } catch (error) {
-      console.error(`[CORE LOOP] Loop failed: ${loopId} - ${error.message}`);
+      logger.error('Loop failed', { loopId, error });
       
       this.metrics.loopsFailed++;
       
@@ -347,7 +348,7 @@ class HeidiCoreLoop extends EventEmitter {
       // Self-healing: ask Claude for a corrective retry task
       selfHealing.healFromCrash(task, error.message, loopId).then(heal => {
         if (heal?.should_retry && heal.corrected_task) {
-          console.log(`[SELF-HEAL] Scheduling corrective retry for ${loopId}`);
+          logger.info('Self-heal: scheduling corrective retry', { loopId });
           setTimeout(() => this.executeLoop(heal.corrected_task).catch(() => {}), 5000);
         }
       }).catch(() => {});
@@ -371,7 +372,7 @@ class HeidiCoreLoop extends EventEmitter {
    * THE HEIDI LOOP IMPLEMENTATION
    */
   async executeHeidiLoop(task, loopId) {
-    console.log(`[HEIDI LOOP] Starting ${task.type} loop: ${loopId}`);
+    logger.info('Starting Heidi loop', { taskType: task.type, loopId });
     
     // 1. OBSERVE - Capture current state
     const observation = await this.observeForTask(task, loopId);
@@ -410,7 +411,7 @@ class HeidiCoreLoop extends EventEmitter {
     // Store loop result in memory
     this.memorySystem.storeSession(loopId, result, 'loops');
     
-    console.log(`[HEIDI LOOP] Completed ${task.type} loop: ${loopId}`);
+    logger.info('Completed Heidi loop', { taskType: task.type, loopId });
     
     return result;
   }
@@ -552,7 +553,7 @@ class HeidiCoreLoop extends EventEmitter {
       };
       
     } catch (error) {
-      console.error(`[CORE LOOP] Action failed for ${loopId}:`, error.message);
+      logger.error('Action failed', { loopId, error });
       
       return {
         status: 'failed',
@@ -788,7 +789,7 @@ class HeidiCoreLoop extends EventEmitter {
   }
   
   async applyAdaptation(adaptation) {
-    console.log(`[CORE LOOP] Applying adaptation: ${adaptation.type}`);
+    logger.info('Applying adaptation', { adaptationType: adaptation.type });
     
     switch (adaptation.type) {
       case 'strategy_avoidance':
@@ -811,7 +812,7 @@ class HeidiCoreLoop extends EventEmitter {
         break;
         
       default:
-        console.log(`[CORE LOOP] Unknown adaptation type: ${adaptation.type}`);
+        logger.info('Unknown adaptation type', { adaptationType: adaptation.type });
     }
   }
   
@@ -820,32 +821,32 @@ class HeidiCoreLoop extends EventEmitter {
    */
   
   handleTaskCompleted(event) {
-    console.log(`[CORE LOOP] Task completed: ${event.task.id}`);
+    logger.info('Task completed', { taskId: event.task.id });
   }
-  
+
   handleTaskFailed(event) {
-    console.log(`[CORE LOOP] Task failed: ${event.task.id} - ${event.error}`);
+    logger.info('Task failed', { taskId: event.task.id, error: event.error });
   }
-  
+
   handleReflectionCompleted(reflection) {
-    console.log(`[CORE LOOP] Reflection completed: ${reflection.id}`);
+    logger.info('Reflection completed', { reflectionId: reflection.id });
   }
-  
+
   handleDriftUpdated(drift) {
-    console.log(`[CORE LOOP] Drift updated: ${drift.score.toFixed(3)}`);
+    logger.info('Drift updated', { driftScore: drift.score });
   }
-  
+
   handleActionCompleted(event) {
-    console.log(`[CORE LOOP] Action completed: ${event.actionId}`);
+    logger.info('Action completed', { actionId: event.actionId });
   }
-  
+
   handleRevenueTracked(revenue) {
     this.metrics.revenueGenerated += revenue.amount;
-    console.log(`[CORE LOOP] Revenue tracked: $${revenue.amount.toFixed(2)}`);
+    logger.info('Revenue tracked', { amount: revenue.amount });
   }
-  
+
   handleInferenceCompleted(event) {
-    console.log(`[CORE LOOP] Inference completed: ${event.requestId}`);
+    logger.info('Inference completed', { requestId: event.requestId });
   }
   
   /**
@@ -1052,7 +1053,7 @@ class HeidiCoreLoop extends EventEmitter {
     await this.memorySystem.reset();
     await this.actionLayer.reset();
     
-    console.log('[CORE LOOP] Reset completed');
+    logger.info('Reset completed');
   }
 }
 

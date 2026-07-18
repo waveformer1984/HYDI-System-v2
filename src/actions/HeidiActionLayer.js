@@ -17,6 +17,7 @@ const { spawn } = require('child_process');
 const fs = require('fs').promises;
 const path = require('path');
 const { supabase } = require('../database');
+const logger = require('../../lib/structured-logger').child({ component: 'HeidiActionLayer' });
 
 class HeidiActionLayer extends EventEmitter {
   constructor(config = {}) {
@@ -66,9 +67,9 @@ class HeidiActionLayer extends EventEmitter {
     // Initialize action modules
     this.initializeActions();
     
-    console.log('[ACTION LAYER] Heidi Action Layer initialized');
-    console.log(`[ACTION LAYER] Revenue actions: ${this.config.enableRevenueActions ? 'ENABLED' : 'DISABLED'}`);
-    console.log(`[ACTION LAYER] Script execution: ${this.config.enableScriptExecution ? 'ENABLED' : 'DISABLED'}`);
+    logger.info('Heidi Action Layer initialized');
+    logger.info('Revenue actions configured', { revenueActions: this.config.enableRevenueActions ? 'ENABLED' : 'DISABLED' });
+    logger.info('Script execution configured', { scriptExecution: this.config.enableScriptExecution ? 'ENABLED' : 'DISABLED' });
   }
   
   initializeActions() {
@@ -84,7 +85,7 @@ class HeidiActionLayer extends EventEmitter {
     this.registerAction('update_subscription', this.updateSubscription.bind(this));
     this.registerAction('send_webhook', this.sendWebhook.bind(this));
     
-    console.log('[ACTION LAYER] Registered 10 action types');
+    logger.info('Registered action types', { count: 10 });
   }
   
   /**
@@ -109,7 +110,7 @@ class HeidiActionLayer extends EventEmitter {
     const startTime = Date.now();
     
     try {
-      console.log(`[ACTION LAYER] Executing ${actionType}: ${actionId}`);
+      logger.info('Executing action', { actionType, actionId });
       
       // Check if action exists
       const action = this.actions.get(actionType);
@@ -179,7 +180,7 @@ class HeidiActionLayer extends EventEmitter {
         context
       });
       
-      console.log(`[ACTION LAYER] Action completed: ${actionId} (${latency}ms)`);
+      logger.info('Action completed', { actionId, latencyMs: latency });
       
       return {
         success: true,
@@ -218,7 +219,7 @@ class HeidiActionLayer extends EventEmitter {
         context
       });
       
-      console.error(`[ACTION LAYER] Action failed: ${actionId} - ${error.message}`);
+      logger.error('Action failed', { actionId, error });
       
       throw error;
     } finally {
@@ -244,7 +245,7 @@ class HeidiActionLayer extends EventEmitter {
     const stripe = require('stripe')(this.config.stripeSecretKey);
     
     try {
-      console.log(`[STRIPE] Processing payment: $${params.amount}`);
+      logger.info('Stripe: processing payment', { amount: params.amount });
       
       const paymentIntent = await stripe.paymentIntents.create({
         amount: Math.round(params.amount * 100), // Convert to cents
@@ -273,7 +274,7 @@ class HeidiActionLayer extends EventEmitter {
       };
       
     } catch (error) {
-      console.error('[STRIPE] Payment failed:', error.message);
+      logger.error('Stripe: payment failed', { error });
       throw error;
     }
   }
@@ -287,7 +288,7 @@ class HeidiActionLayer extends EventEmitter {
     const stripe = require('stripe')(this.config.stripeSecretKey);
     
     try {
-      console.log(`[STRIPE] Creating checkout session for: ${params.productName}`);
+      logger.info('Stripe: creating checkout session', { productName: params.productName });
       
       const session = await stripe.checkout.sessions.create({
         payment_method_types: ['card'],
@@ -325,7 +326,7 @@ class HeidiActionLayer extends EventEmitter {
       };
       
     } catch (error) {
-      console.error('[STRIPE] Checkout creation failed:', error.message);
+      logger.error('Stripe: checkout creation failed', { error });
       throw error;
     }
   }
@@ -335,7 +336,7 @@ class HeidiActionLayer extends EventEmitter {
     const stripe = require('stripe')(this.config.stripeSecretKey);
     
     try {
-      console.log(`[STRIPE] Processing refund: $${params.amount}`);
+      logger.info('Stripe: processing refund', { amount: params.amount });
       
       const refund = await stripe.refunds.create({
         payment_intent: params.paymentIntentId,
@@ -360,7 +361,7 @@ class HeidiActionLayer extends EventEmitter {
       };
       
     } catch (error) {
-      console.error('[STRIPE] Refund failed:', error.message);
+      logger.error('Stripe: refund failed', { error });
       throw error;
     }
   }
@@ -370,7 +371,7 @@ class HeidiActionLayer extends EventEmitter {
     const stripe = require('stripe')(this.config.stripeSecretKey);
     
     try {
-      console.log(`[STRIPE] Updating subscription: ${params.subscriptionId}`);
+      logger.info('Stripe: updating subscription', { subscriptionId: params.subscriptionId });
       
       const subscription = await stripe.subscriptions.update(params.subscriptionId, {
         metadata: params.metadata,
@@ -393,7 +394,7 @@ class HeidiActionLayer extends EventEmitter {
       };
       
     } catch (error) {
-      console.error('[STRIPE] Subscription update failed:', error.message);
+      logger.error('Stripe: subscription update failed', { error });
       throw error;
     }
   }
@@ -409,7 +410,7 @@ class HeidiActionLayer extends EventEmitter {
     }
     
     try {
-      console.log(`[EMAIL] Sending to ${params.to}: ${params.subject}`);
+      logger.info('Email: sending', { to: params.to, subject: params.subject });
       
       let result;
       
@@ -440,7 +441,7 @@ class HeidiActionLayer extends EventEmitter {
       };
       
     } catch (error) {
-      console.error('[EMAIL] Send failed:', error.message);
+      logger.error('Email: send failed', { error });
       throw error;
     }
   }
@@ -483,7 +484,7 @@ class HeidiActionLayer extends EventEmitter {
   // Send webhook
   async sendWebhook(params, _context) {
     try {
-      console.log(`[WEBHOOK] Sending to ${params.url}`);
+      logger.info('Webhook: sending', { url: params.url });
       
       const response = await fetch(params.url, {
         method: params.method || 'POST',
@@ -517,7 +518,7 @@ class HeidiActionLayer extends EventEmitter {
       };
       
     } catch (error) {
-      console.error('[WEBHOOK] Send failed:', error.message);
+      logger.error('Webhook: send failed', { error });
       throw error;
     }
   }
@@ -529,7 +530,7 @@ class HeidiActionLayer extends EventEmitter {
   // Update database
   async updateDatabase(params, _context) {
     try {
-      console.log(`[DATABASE] Updating ${params.table}`);
+      logger.info('Database: updating', { table: params.table });
       
       let result;
       
@@ -561,7 +562,7 @@ class HeidiActionLayer extends EventEmitter {
       return result;
       
     } catch (error) {
-      console.error('[DATABASE] Update failed:', error.message);
+      logger.error('Database: update failed', { error });
       throw error;
     }
   }
@@ -619,7 +620,7 @@ class HeidiActionLayer extends EventEmitter {
     }
     
     try {
-      console.log(`[SCRIPT] Launching: ${params.script}`);
+      logger.info('Script: launching', { script: params.script });
       
       const scriptPath = path.join(this.config.scriptPath, params.script);
       
@@ -639,7 +640,7 @@ class HeidiActionLayer extends EventEmitter {
       return result;
       
     } catch (error) {
-      console.error('[SCRIPT] Execution failed:', error.message);
+      logger.error('Script: execution failed', { error });
       throw error;
     }
   }
@@ -689,7 +690,7 @@ class HeidiActionLayer extends EventEmitter {
   // Generate offer
   async generateOffer(params, _context) {
     try {
-      console.log(`[OFFER] Generating: ${params.type}`);
+      logger.info('Offer: generating', { offerType: params.type });
       
       const offer = {
         id: `offer_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
@@ -720,7 +721,7 @@ class HeidiActionLayer extends EventEmitter {
       };
       
     } catch (error) {
-      console.error('[OFFER] Generation failed:', error.message);
+      logger.error('Offer: generation failed', { error });
       throw error;
     }
   }
@@ -776,7 +777,7 @@ class HeidiActionLayer extends EventEmitter {
   // Deploy page
   async deployPage(params, _context) {
     try {
-      console.log(`[DEPLOY] Deploying: ${params.pageId}`);
+      logger.info('Deploy: deploying', { pageId: params.pageId });
       
       const deployment = {
         id: `deploy_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
@@ -815,7 +816,7 @@ class HeidiActionLayer extends EventEmitter {
       };
       
     } catch (error) {
-      console.error('[DEPLOY] Deployment failed:', error.message);
+      logger.error('Deploy: deployment failed', { error });
       throw error;
     }
   }
@@ -838,7 +839,7 @@ class HeidiActionLayer extends EventEmitter {
       if (error) throw error;
       
     } catch (error) {
-      console.error('[ACTION LAYER] Failed to store payment event:', error.message);
+      logger.error('Failed to store payment event', { error });
     }
   }
   
@@ -856,7 +857,7 @@ class HeidiActionLayer extends EventEmitter {
       if (error) throw error;
       
     } catch (error) {
-      console.error('[ACTION LAYER] Failed to store communication event:', error.message);
+      logger.error('Failed to store communication event', { error });
     }
   }
   
@@ -874,7 +875,7 @@ class HeidiActionLayer extends EventEmitter {
       if (error) throw error;
       
     } catch (error) {
-      console.error('[ACTION LAYER] Failed to store system event:', error.message);
+      logger.error('Failed to store system event', { error });
     }
   }
   
@@ -891,7 +892,7 @@ class HeidiActionLayer extends EventEmitter {
       if (error) throw error;
       
     } catch (error) {
-      console.error('[ACTION LAYER] Failed to store offer:', error.message);
+      logger.error('Failed to store offer', { error });
     }
   }
   
@@ -908,7 +909,7 @@ class HeidiActionLayer extends EventEmitter {
       if (error) throw error;
       
     } catch (error) {
-      console.error('[ACTION LAYER] Failed to store deployment:', error.message);
+      logger.error('Failed to store deployment', { error });
     }
   }
   
@@ -1013,7 +1014,7 @@ class HeidiActionLayer extends EventEmitter {
       action.avgLatency = 0;
     }
     
-    console.log('[ACTION LAYER] Reset completed');
+    logger.info('Reset completed');
   }
 }
 
