@@ -4,6 +4,7 @@ const { EventEmitter } = require('events');
 const { randomUUID } = require('crypto');
 const fs = require('fs').promises;
 const path = require('path');
+const logger = require('../../lib/structured-logger').child({ component: 'ReflectionEngine' });
 
 /**
  * ReflectionEngine generates a permanent reflection for every completed mission
@@ -41,7 +42,7 @@ class ReflectionEngine extends EventEmitter {
       await fs.mkdir(this.config.storagePath, { recursive: true });
       await this.load();
     } catch (err) {
-      console.error('[REFLECTION ENGINE] Initialization failed:', err.message);
+      logger.error('[REFLECTION ENGINE] Initialization failed', { error: err.message });
     }
     this._loaded = true;
   }
@@ -263,7 +264,7 @@ class ReflectionEngine extends EventEmitter {
       const file = path.join(this.config.storagePath, 'reflections.json');
       await fs.writeFile(file, JSON.stringify({ reflections: this.reflections, rankings }, null, 2));
     } catch (err) {
-      console.error('[REFLECTION ENGINE] Persist failed:', err.message);
+      logger.error('[REFLECTION ENGINE] Persist failed', { error: err.message });
     }
   }
 

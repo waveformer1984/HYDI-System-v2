@@ -7,6 +7,7 @@
 const { LocalModelAdapter } = require('./local-model-adapter');
 const { supabase } = require('../database');
 const EventEmitter = require('events');
+const logger = require('../../lib/structured-logger').child({ component: 'UrsulaModelHeartbeat' });
 
 class UrsulaModelHeartbeat extends EventEmitter {
   constructor() {
@@ -38,29 +39,29 @@ class UrsulaModelHeartbeat extends EventEmitter {
    */
   async start() {
     if (this.heartbeatInterval) {
-      console.log('[HEARTBEAT] Already running');
+      logger.info('[HEARTBEAT] Already running');
       return;
     }
 
     try {
-      console.log('[HEARTBEAT] Initializing Local Model Adapter...');
+      logger.info('[HEARTBEAT] Initializing Local Model Adapter...');
       this.adapter = new LocalModelAdapter();
-      
+
       // Wait a bit for models to initialize
       await new Promise(resolve => setTimeout(resolve, 5000));
-      
-      console.log('[HEARTBEAT] Starting heartbeat monitoring...');
+
+      logger.info('[HEARTBEAT] Starting heartbeat monitoring...');
       this.heartbeatInterval = setInterval(() => {
         this.checkModelHealth();
       }, this.config.checkInterval);
-      
+
       // Do an immediate check
       await this.checkModelHealth();
-      
+
       this.emit('heartbeat_started');
-      console.log('[HEARTBEAT] ✅ Heartbeat monitoring started');
+      logger.info('[HEARTBEAT] ✅ Heartbeat monitoring started');
     } catch (error) {
-      console.error('[HEARTBEAT] ❌ Failed to start heartbeat:', error.message);
+      logger.error('[HEARTBEAT] ❌ Failed to start heartbeat', { error: error.message });
       this.emit('heartbeat_error', { error: error.message });
     }
   }
@@ -72,7 +73,7 @@ class UrsulaModelHeartbeat extends EventEmitter {
     if (this.heartbeatInterval) {
       clearInterval(this.heartbeatInterval);
       this.heartbeatInterval = null;
-      console.log('[HEARTBEAT] Heartbeat monitoring stopped');
+      logger.info('[HEARTBEAT] Heartbeat monitoring stopped');
       this.emit('heartbeat_stopped');
     }
   }
@@ -87,7 +88,7 @@ class UrsulaModelHeartbeat extends EventEmitter {
     this.lastCheckTime = new Date();
     
     try {
-      console.log(`[HEARTBEAT] 🔍 Checking model health at ${this.lastCheckTime.toISOString()}`);
+      logger.info(`[HEARTBEAT] 🔍 Checking model health at ${this.lastCheckTime.toISOString()}`);
       
       const results = await this.checkAllModels();
       const failedModels = results.filter(r => !r.healthy);
@@ -117,14 +118,14 @@ class UrsulaModelHeartbeat extends EventEmitter {
       });
       
       if (criticallyFailed.length > 0) {
-        console.log(`[HEARTBEAT] ⚠️  ${criticallyFailed.length} models have failed ${this.config.maxConsecutiveFailures}+ consecutive checks`);
+        logger.info(`[HEARTBEAT] ⚠️  ${criticallyFailed.length} models have failed ${this.config.maxConsecutiveFailures}+ consecutive checks`);
         await this.recoverFailedModels(criticallyFailed);
       }
       
       // Log summary
       const healthyCount = results.filter(r => r.healthy).length;
       const totalCount = results.length;
-      console.log(`[HEARTBEAT] 📊 Health Check: ${healthyCount}/${totalCount} models healthy`);
+      logger.info(`[HEARTBEAT] 📊 Health Check: ${healthyCount}/${totalCount} models healthy`);
       
       // Emit heartbeat event for monitoring systems
       this.emit('heartbeat_check', {
@@ -144,7 +145,7 @@ class UrsulaModelHeartbeat extends EventEmitter {
       });
       
     } catch (error) {
-      console.error('[HEARTBEAT] ❌ Error during health check:', error.message);
+      logger.error('[HEARTBEAT] ❌ Error during health check', { error: error.message });
       this.emit('heartbeat_error', { error: error.message });
     } finally {
       this.isChecking = false;
@@ -280,11 +281,11 @@ class UrsulaModelHeartbeat extends EventEmitter {
    * @param {Array<string>} modelIds - Array of model IDs to recover
    */
   async recoverFailedModels(modelIds) {
-    console.log(`[HEARTBEAT] 🔧 Attempting to recover ${modelIds.length} failed models...`);
-    
+    logger.info(`[HEARTBEAT] 🔧 Attempting to recover ${modelIds.length} failed models...`);
+
     for (const modelId of modelIds) {
       try {
-        console.log(`[HEARTBEAT] 🔄 Recovering model: ${modelId}`);
+        logger.info(`[HEARTBEAT] 🔄 Recovering model: ${modelId}`);
         
         // Try to unload and reload the model
         if (this.adapter.models.has(modelId)) {
@@ -298,7 +299,7 @@ class UrsulaModelHeartbeat extends EventEmitter {
         const modelConfig = this.adapter.modelConfigs[modelId];
         if (modelConfig) {
           await this.adapter.loadModel(modelId, modelConfig);
-          console.log(`[HEARTBEAT] ✅ Model ${modelId} recovered successfully`);
+          logger.info(`[HEARTBEAT] ✅ Model ${modelId} recovered successfully`);
           
           // Reset failure count
           this.failedModels.delete(modelId);
@@ -309,10 +310,10 @@ class UrsulaModelHeartbeat extends EventEmitter {
             recoveryMethod: 'reload'
           });
         } else {
-          console.error(`[HEARTBEAT] ❌ No configuration found for model: ${modelId}`);
+          logger.error(`[HEARTBEAT] ❌ No configuration found for model: ${modelId}`);
         }
       } catch (error) {
-        console.error(`[HEARTBEAT] ❌ Failed to recover model ${modelId}:`, error.message);
+        logger.error(`[HEARTBEAT] ❌ Failed to recover model ${modelId}`, { error: error.message });
         
         this.emit('model_recovery_failed_via_heartbeat', {
           modelId,
@@ -342,7 +343,7 @@ class UrsulaModelHeartbeat extends EventEmitter {
         });
     } catch (error) {
       // Don't let database failures stop the heartbeat
-      console.warn('[HEARTBEAT] ⚠️  Failed to store metrics:', error.message);
+      logger.warn('[HEARTBEAT] ⚠️  Failed to store metrics', { error: error.message });
     }
   }
 
@@ -373,18 +374,18 @@ if (require.main === module) {
       
       // Graceful shutdown
       process.on('SIGINT', async () => {
-        console.log('\n[HEARTBEAT] 🛑 Received shutdown signal');
+        logger.info('\n[HEARTBEAT] 🛑 Received shutdown signal');
         ursulaModelHeartbeat.stop();
         process.exit(0);
       });
-      
+
       process.on('SIGTERM', async () => {
-        console.log('\n[HEARTBEAT] 🛑 Received termination signal');
+        logger.info('\n[HEARTBEAT] 🛑 Received termination signal');
         ursulaModelHeartbeat.stop();
         process.exit(0);
       });
     } catch (error) {
-      console.error('[HEARTBEAT] ❌ Fatal error starting heartbeat:', error.message);
+      logger.error('[HEARTBEAT] ❌ Fatal error starting heartbeat', { error: error.message });
       process.exit(1);
     }
   };

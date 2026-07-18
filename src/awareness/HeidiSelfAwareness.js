@@ -18,6 +18,7 @@
 const EventEmitter = require('events');
 const fs = require('fs').promises;
 const path = require('path');
+const logger = require('../../lib/structured-logger').child({ component: 'HeidiSelfAwareness' });
 
 class HeidiSelfAwareness extends EventEmitter {
   constructor(config = {}) {
@@ -115,9 +116,9 @@ class HeidiSelfAwareness extends EventEmitter {
     // Initialize
     this.initialize();
     
-    console.log('[SELF-AWARENESS] Heidi Self-Awareness initialized');
-    console.log(`[SELF-AWARENESS] Drift threshold: ${this.config.driftThreshold}`);
-    console.log(`[SELF-AWARENESS] Reflection interval: ${this.config.reflectionInterval}ms`);
+    logger.info('[SELF-AWARENESS] Heidi Self-Awareness initialized');
+    logger.info(`[SELF-AWARENESS] Drift threshold: ${this.config.driftThreshold}`);
+    logger.info(`[SELF-AWARENESS] Reflection interval: ${this.config.reflectionInterval}ms`);
   }
   
   async initialize() {
@@ -133,10 +134,10 @@ class HeidiSelfAwareness extends EventEmitter {
       this.startReflectionEngine();
       this.startSelfAssessment();
       
-      console.log('[SELF-AWARENESS] Self-awareness system initialized');
-      
+      logger.info('[SELF-AWARENESS] Self-awareness system initialized');
+
     } catch (error) {
-      console.error('[SELF-AWARENESS] Initialization failed:', error.message);
+      logger.error('[SELF-AWARENESS] Initialization failed', { error: error.message });
       throw error;
     }
   }
@@ -177,7 +178,7 @@ class HeidiSelfAwareness extends EventEmitter {
     // Emit tracking event
     this.emit('action_tracked', actionRecord);
     
-    console.log(`[SELF-AWARENESS] Action tracked: ${actionRecord.type} (success: ${actionRecord.success})`);
+    logger.info(`[SELF-AWARENESS] Action tracked: ${actionRecord.type} (success: ${actionRecord.success})`);
   }
   
   updateMetrics(action) {
@@ -268,7 +269,7 @@ class HeidiSelfAwareness extends EventEmitter {
       try {
         await this.calculateDrift();
       } catch (error) {
-        console.error('[SELF-AWARENESS] Drift detection failed:', error.message);
+        logger.error('[SELF-AWARENESS] Drift detection failed', { error: error.message });
       }
       
       // Schedule next check
@@ -283,7 +284,7 @@ class HeidiSelfAwareness extends EventEmitter {
     const recentActions = this.actionHistory.slice(-this.config.driftWindow);
     
     if (recentActions.length < 10) {
-      console.log('[SELF-AWARENESS] Insufficient data for drift calculation');
+      logger.info('[SELF-AWARENESS] Insufficient data for drift calculation');
       return;
     }
     
@@ -340,7 +341,7 @@ class HeidiSelfAwareness extends EventEmitter {
       critical: overallDrift > this.config.driftThreshold
     });
     
-    console.log(`[SELF-AWARENESS] Drift calculated: ${overallDrift.toFixed(3)} (trend: ${trend})`);
+    logger.info(`[SELF-AWARENESS] Drift calculated: ${overallDrift.toFixed(3)} (trend: ${trend})`);
   }
   
   calculateConfidenceDrift(actions) {
@@ -403,7 +404,7 @@ class HeidiSelfAwareness extends EventEmitter {
   }
   
   handleHighDrift(driftScore) {
-    console.warn(`[SELF-AWARENESS] HIGH DRIFT DETECTED: ${driftScore.toFixed(3)}`);
+    logger.warn(`[SELF-AWARENESS] HIGH DRIFT DETECTED: ${driftScore.toFixed(3)}`);
     
     // Emit high drift alert
     this.emit('high_drift', {
@@ -479,7 +480,7 @@ class HeidiSelfAwareness extends EventEmitter {
         this.emit('reflection_completed', reflection);
         
       } catch (error) {
-        console.error('[SELF-AWARENESS] Reflection failed:', error.message);
+        logger.error('[SELF-AWARENESS] Reflection failed', { error: error.message });
       }
       
       // Schedule next reflection
@@ -493,7 +494,7 @@ class HeidiSelfAwareness extends EventEmitter {
   async runReflection() {
     const reflectionId = `reflection_${Date.now()}`;
     
-    console.log(`[SELF-AWARENESS] Running reflection: ${reflectionId}`);
+    logger.info(`[SELF-AWARENESS] Running reflection: ${reflectionId}`);
     
     const recentActions = this.actionHistory.slice(-this.config.reflectionDepth);
     
@@ -530,7 +531,7 @@ class HeidiSelfAwareness extends EventEmitter {
     // Store reflection
     await this.storeReflection(reflection);
     
-    console.log(`[SELF-AWARENESS] Reflection completed: ${reflectionId} (${reflection.duration}ms)`);
+    logger.info(`[SELF-AWARENESS] Reflection completed: ${reflectionId} (${reflection.duration}ms)`);
     
     return reflection;
   }
@@ -824,10 +825,10 @@ class HeidiSelfAwareness extends EventEmitter {
         
         this.emit('self_assessment_completed', assessment);
         
-        console.log(`[SELF-AWARENESS] Self-assessment: ${assessment.overallLevel} (confidence: ${assessment.confidence.toFixed(2)})`);
-        
+        logger.info(`[SELF-AWARENESS] Self-assessment: ${assessment.overallLevel} (confidence: ${assessment.confidence.toFixed(2)})`);
+
       } catch (error) {
-        console.error('[SELF-AWARENESS] Self-assessment failed:', error.message);
+        logger.error('[SELF-AWARENESS] Self-assessment failed', { error: error.message });
       }
       
       // Schedule next assessment
@@ -1046,7 +1047,7 @@ class HeidiSelfAwareness extends EventEmitter {
       await fs.writeFile(filePath, JSON.stringify(reflections, null, 2));
       
     } catch (error) {
-      console.error('[SELF-AWARENESS] Failed to store reflection:', error.message);
+      logger.error('[SELF-AWARENESS] Failed to store reflection', { error: error.message });
     }
   }
   
@@ -1057,13 +1058,13 @@ class HeidiSelfAwareness extends EventEmitter {
       try {
         const data = await fs.readFile(reflectionsPath, 'utf8');
         this.reflections = JSON.parse(data);
-        console.log(`[SELF-AWARENESS] Loaded ${this.reflections.length} historical reflections`);
+        logger.info(`[SELF-AWARENESS] Loaded ${this.reflections.length} historical reflections`);
       } catch (error) {
-        console.log('[SELF-AWARENESS] No historical reflections found');
+        logger.info('[SELF-AWARENESS] No historical reflections found');
       }
-      
+
     } catch (error) {
-      console.error('[SELF-AWARENESS] Failed to load historical data:', error.message);
+      logger.error('[SELF-AWARENESS] Failed to load historical data', { error: error.message });
     }
   }
   
@@ -1149,7 +1150,7 @@ class HeidiSelfAwareness extends EventEmitter {
       contradictions: []
     };
     
-    console.log('[SELF-AWARENESS] Reset completed');
+    logger.info('[SELF-AWARENESS] Reset completed');
   }
 }
 

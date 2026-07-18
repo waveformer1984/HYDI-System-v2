@@ -16,6 +16,7 @@ const EventEmitter = require('events');
 const axios = require('axios');
 const LocalModelAdapter = require('./local-model-adapter');
 const OllamaClient = require('../../heidi-core/brain/ollama-client');
+const logger = require('../../lib/structured-logger').child({ component: 'HybridModelStack' });
 
 class HybridModelStack extends EventEmitter {
   constructor(config = {}) {
@@ -178,15 +179,15 @@ class HybridModelStack extends EventEmitter {
   }
   
   async initialize() {
-    console.log('[HYBRID STACK] Initializing Hybrid Model Stack...');
-    
+    logger.info('[HYBRID STACK] Initializing Hybrid Model Stack...');
+
     // Check local model availability
     const localAvailable = await this.ollamaClient.isAvailable();
-    console.log(`[HYBRID STACK] Local models available: ${localAvailable ? 'YES' : 'NO'}`);
-    
+    logger.info(`[HYBRID STACK] Local models available: ${localAvailable ? 'YES' : 'NO'}`);
+
     if (localAvailable) {
       const models = await this.ollamaClient.getModels();
-      console.log(`[HYBRID STACK] Found ${models.length} local models:`, models.join(', '));
+      logger.info(`[HYBRID STACK] Found ${models.length} local models`, { models: models.join(', ') });
     }
     
     // Check external API keys
@@ -198,8 +199,8 @@ class HybridModelStack extends EventEmitter {
     // Start cost monitoring
     this.startCostMonitoring();
     
-    console.log('[HYBRID STACK] Hybrid Model Stack initialized');
-    console.log(`[HYBRID STACK] Strategy: ${this.config.localFirst ? 'LOCAL_FIRST' : 'EXTERNAL_FIRST'}`);
+    logger.info('[HYBRID STACK] Hybrid Model Stack initialized');
+    logger.info(`[HYBRID STACK] Strategy: ${this.config.localFirst ? 'LOCAL_FIRST' : 'EXTERNAL_FIRST'}`);
   }
   
   /**
@@ -314,7 +315,7 @@ class HybridModelStack extends EventEmitter {
     let strategy;
 
     try {
-      console.log(`[HYBRID STACK] Executing task ${requestId}: ${task.type}`);
+      logger.info(`[HYBRID STACK] Executing task ${requestId}: ${task.type}`);
 
       // Determine execution strategy
       strategy = this.determineStrategy(task, options);
@@ -337,7 +338,7 @@ class HybridModelStack extends EventEmitter {
       return result;
       
     } catch (error) {
-      console.error(`[HYBRID STACK] Task ${requestId} failed:`, error.message);
+      logger.error(`[HYBRID STACK] Task ${requestId} failed`, { error: error.message });
 
       if (strategy && this.performance[strategy.type]) {
         this.performance[strategy.type].failure++;
@@ -369,7 +370,7 @@ class HybridModelStack extends EventEmitter {
     
     // Check budget constraints
     if (this.costTracker.daily >= this.config.dailyBudget) {
-      console.log('[HYBRID STACK] Daily budget exceeded, forcing local models');
+      logger.info('[HYBRID STACK] Daily budget exceeded, forcing local models');
       return {
         type: 'local',
         model: this.selectBestLocalModel(task),
@@ -442,7 +443,7 @@ class HybridModelStack extends EventEmitter {
   async executeLocal(task, strategy, requestId) {
     let input;
     try {
-      console.log(`[HYBRID STACK] Executing locally with model: ${strategy.model}`);
+      logger.info(`[HYBRID STACK] Executing locally with model: ${strategy.model}`);
 
       input = this.prepareInput(task);
       
@@ -464,7 +465,7 @@ class HybridModelStack extends EventEmitter {
     } catch (error) {
       // Try fallback if available
       if (strategy.fallback && this.config.enableFailover) {
-        console.log(`[HYBRID STACK] Local model failed, trying fallback: ${strategy.fallback}`);
+        logger.info(`[HYBRID STACK] Local model failed, trying fallback: ${strategy.fallback}`);
         
         try {
           const fallbackResult = await this.localModels.execute(strategy.fallback, input, {
@@ -486,7 +487,7 @@ class HybridModelStack extends EventEmitter {
           };
           
         } catch (fallbackError) {
-          console.error(`[HYBRID STACK] Fallback also failed:`, fallbackError.message);
+          logger.error(`[HYBRID STACK] Fallback also failed`, { error: fallbackError.message });
         }
       }
       
@@ -508,7 +509,7 @@ class HybridModelStack extends EventEmitter {
     }
     
     try {
-      console.log(`[HYBRID STACK] Executing externally with ${strategy.provider}:${strategy.model}`);
+      logger.info(`[HYBRID STACK] Executing externally with ${strategy.provider}:${strategy.model}`);
       
       const input = this.prepareInput(task);
       const cost = this.calculateCost(strategy.provider, strategy.model, input);
@@ -533,11 +534,11 @@ class HybridModelStack extends EventEmitter {
       };
       
     } catch (error) {
-      console.error(`[HYBRID STACK] External execution failed:`, error.message);
-      
+      logger.error(`[HYBRID STACK] External execution failed`, { error: error.message });
+
       // Fallback to local if enabled
       if (this.config.enableFailover) {
-        console.log('[HYBRID STACK] External failed, falling back to local');
+        logger.info('[HYBRID STACK] External failed, falling back to local');
         
         return await this.executeLocal(task, {
           model: this.selectBestLocalModel(task),
@@ -554,7 +555,7 @@ class HybridModelStack extends EventEmitter {
    * HYBRID EXECUTION - Local first, external enhancement if needed
    */
   async executeHybrid(task, strategy, requestId) {
-    console.log('[HYBRID STACK] Executing hybrid strategy');
+    logger.info('[HYBRID STACK] Executing hybrid strategy');
     
     // First, try local
     const localResult = await this.executeLocal(task, {
@@ -567,11 +568,11 @@ class HybridModelStack extends EventEmitter {
     const quality = this.assessQuality(localResult);
     
     if (quality.confidence >= this.config.externalThreshold) {
-      console.log('[HYBRID STACK] Local result sufficient, skipping external');
+      logger.info('[HYBRID STACK] Local result sufficient, skipping external');
       return localResult;
     }
-    
-    console.log('[HYBRID STACK] Local quality insufficient, enhancing with external');
+
+    logger.info('[HYBRID STACK] Local quality insufficient, enhancing with external');
     
     // Enhance with external model
     const enhancedTask = {
@@ -912,13 +913,13 @@ class HybridModelStack extends EventEmitter {
     for (const [provider, config] of Object.entries(this.externalModels)) {
       if (config.apiKey) {
         available.push(provider);
-        console.log(`[HYBRID STACK] ${provider.toUpperCase()} API key configured`);
+        logger.info(`[HYBRID STACK] ${provider.toUpperCase()} API key configured`);
       } else {
-        console.log(`[HYBRID STACK] ${provider.toUpperCase()} API key NOT configured`);
+        logger.info(`[HYBRID STACK] ${provider.toUpperCase()} API key NOT configured`);
       }
     }
-    
-    console.log(`[HYBRID STACK] External providers available: ${available.length} (${available.join(', ')})`);
+
+    logger.info(`[HYBRID STACK] External providers available: ${available.length} (${available.join(', ')})`);
   }
   
   startCostMonitoring() {
@@ -928,7 +929,7 @@ class HybridModelStack extends EventEmitter {
       const lastReset = new Date(this.costTracker.lastReset);
       
       if (now.getDate() !== lastReset.getDate() || now.getMonth() !== lastReset.getMonth()) {
-        console.log(`[HYBRID STACK] Resetting daily cost tracker. Yesterday: $${this.costTracker.daily.toFixed(4)}`);
+        logger.info(`[HYBRID STACK] Resetting daily cost tracker. Yesterday: $${this.costTracker.daily.toFixed(4)}`);
         this.costTracker.daily = 0;
         this.costTracker.lastReset = Date.now();
       }
@@ -989,7 +990,7 @@ class HybridModelStack extends EventEmitter {
       fallbacks: 0
     };
     
-    console.log('[HYBRID STACK] Reset completed');
+    logger.info('[HYBRID STACK] Reset completed');
   }
 }
 

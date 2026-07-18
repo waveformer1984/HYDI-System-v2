@@ -4,6 +4,7 @@ const { EventEmitter } = require('events');
 const { randomUUID } = require('crypto');
 const fs = require('fs').promises;
 const path = require('path');
+const logger = require('../../lib/structured-logger').child({ component: 'MissionPlanner' });
 
 /**
  * MissionPlanner replaces isolated task execution with mission planning.
@@ -36,7 +37,7 @@ class MissionPlanner extends EventEmitter {
       await fs.mkdir(this.config.storagePath, { recursive: true });
       await this.loadMissions();
     } catch (err) {
-      console.error('[MISSION PLANNER] Initialization failed:', err.message);
+      logger.error('[MISSION PLANNER] Initialization failed', { error: err.message });
     }
     this._loaded = true;
   }
@@ -436,7 +437,7 @@ class MissionPlanner extends EventEmitter {
       const file = path.join(this.config.storagePath, 'missions.json');
       await fs.writeFile(file, JSON.stringify(payload, this._mapReplacer, 2));
     } catch (err) {
-      console.error('[MISSION PLANNER] Persist failed:', err.message);
+      logger.error('[MISSION PLANNER] Persist failed', { error: err.message });
     }
   }
 

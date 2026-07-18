@@ -9,6 +9,7 @@ const EventEmitter = require('events');
 const os = require('os');
 const fs = require('fs').promises;
 const path = require('path');
+const logger = require('../../lib/structured-logger').child({ component: 'DeepLifeArchitect' });
 
 class DeepLifeArchitect extends EventEmitter {
   constructor(config = {}) {
@@ -75,9 +76,9 @@ class DeepLifeArchitect extends EventEmitter {
       await fs.mkdir(path.join(this.config.dataPath, 'sessions'), { recursive: true });
       await fs.mkdir(path.join(this.config.dataPath, 'daily'), { recursive: true });
       await fs.mkdir(path.join(this.config.dataPath, 'weekly'), { recursive: true });
-      console.log('[DEEP LIFE ARCHITECT] Data directory initialized');
+      logger.info('[DEEP LIFE ARCHITECT] Data directory initialized');
     } catch (error) {
-      console.error('[DEEP LIFE ARCHITECT] Failed to initialize data directory:', error.message);
+      logger.error('[DEEP LIFE ARCHITECT] Failed to initialize data directory', { error: error.message });
     }
   }
   
@@ -107,8 +108,8 @@ class DeepLifeArchitect extends EventEmitter {
     this.startSoftwareMonitoring();
     this.startAnalysisEngine();
     
-    console.log(`[DEEP LIFE ARCHITECT] Session started: ${this.currentSession.id}`);
-    console.log(`[DEEP LIFE ARCHITECT] User intent: "${userIntent}"`);
+    logger.info(`[DEEP LIFE ARCHITECT] Session started: ${this.currentSession.id}`);
+    logger.info(`[DEEP LIFE ARCHITECT] User intent: "${userIntent}"`);
     
     this.emit('session_started', {
       sessionId: this.currentSession.id,
@@ -138,7 +139,7 @@ class DeepLifeArchitect extends EventEmitter {
     // Store session data
     await this.storeSession();
     
-    console.log(`[DEEP LIFE ARCHITECT] Session ended: ${this.currentSession.id}`);
+    logger.info(`[DEEP LIFE ARCHITECT] Session ended: ${this.currentSession.id}`);
     
     this.emit('session_ended', {
       sessionId: this.currentSession.id,
@@ -163,7 +164,7 @@ class DeepLifeArchitect extends EventEmitter {
         this.emit('hardware_telemetry', telemetry);
         
       } catch (error) {
-        console.error('[DEEP LIFE ARCHITECT] Hardware telemetry error:', error.message);
+        logger.error('[DEEP LIFE ARCHITECT] Hardware telemetry error', { error: error.message });
       }
     }, this.config.hardwareInterval);
   }
@@ -245,7 +246,7 @@ class DeepLifeArchitect extends EventEmitter {
         this.emit('software_activity', activity);
         
       } catch (error) {
-        console.error('[DEEP LIFE ARCHITECT] Software activity error:', error.message);
+        logger.error('[DEEP LIFE ARCHITECT] Software activity error', { error: error.message });
       }
     }, this.config.softwareInterval);
   }
@@ -355,7 +356,7 @@ class DeepLifeArchitect extends EventEmitter {
         this.emit('analysis_completed', analysis);
         
       } catch (error) {
-        console.error('[DEEP LIFE ARCHITECT] Analysis error:', error.message);
+        logger.error('[DEEP LIFE ARCHITECT] Analysis error', { error: error.message });
       }
     }, this.config.analysisInterval);
   }
@@ -778,10 +779,10 @@ class DeepLifeArchitect extends EventEmitter {
       // Update historical data
       this.updateHistoricalData(sessionData);
       
-      console.log(`[DEEP LIFE ARCHITECT] Session stored: ${this.currentSession.id}`);
-      
+      logger.info(`[DEEP LIFE ARCHITECT] Session stored: ${this.currentSession.id}`);
+
     } catch (error) {
-      console.error('[DEEP LIFE ARCHITECT] Failed to store session:', error.message);
+      logger.error('[DEEP LIFE ARCHITECT] Failed to store session', { error: error.message });
     }
   }
   
@@ -1010,7 +1011,7 @@ class DeepLifeArchitect extends EventEmitter {
       sessions: new Map()
     };
     
-    console.log('[DEEP LIFE ARCHITECT] System reset completed');
+    logger.info('[DEEP LIFE ARCHITECT] System reset completed');
   }
 }
 

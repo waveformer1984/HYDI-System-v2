@@ -3,6 +3,7 @@
 const { randomUUID } = require('crypto');
 const fs = require('fs').promises;
 const path = require('path');
+const logger = require('../../lib/structured-logger').child({ component: 'DecisionIntelligence' });
 
 /**
  * DecisionIntelligence records every autonomous decision, validates it before
@@ -42,7 +43,7 @@ class DecisionIntelligence {
         }
       }
     } catch (err) {
-      console.error('[DECISION INTELLIGENCE] Initialization failed:', err.message);
+      logger.error('[DECISION INTELLIGENCE] Initialization failed', { error: err.message });
     }
     this._loaded = true;
   }
@@ -210,7 +211,7 @@ class DecisionIntelligence {
       const file = path.join(this.config.storagePath, 'decision_history.json');
       await fs.writeFile(file, JSON.stringify(this.decisions, null, 2));
     } catch (err) {
-      console.error('[DECISION INTELLIGENCE] Persist failed:', err.message);
+      logger.error('[DECISION INTELLIGENCE] Persist failed', { error: err.message });
     }
   }
 

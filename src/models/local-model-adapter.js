@@ -7,6 +7,7 @@ const { spawn } = require('child_process');
 const fs = require('fs').promises;
 const path = require('path');
 const EventEmitter = require('events');
+const logger = require('../../lib/structured-logger').child({ component: 'LocalModelAdapter' });
 
 class LocalModelAdapter extends EventEmitter {
   constructor() {
@@ -135,14 +136,14 @@ class LocalModelAdapter extends EventEmitter {
    * Initialize all local models
    */
   async initializeModels() {
-    console.log('Initializing local models...');
-    
+    logger.info('Initializing local models...');
+
     for (const [modelId, config] of Object.entries(this.modelConfigs)) {
       try {
         await this.loadModel(modelId, config);
-        console.log(`✓ Model loaded: ${modelId}`);
+        logger.info(`✓ Model loaded: ${modelId}`);
       } catch (error) {
-        console.error(`✗ Failed to load model ${modelId}:`, error.message);
+        logger.error(`✗ Failed to load model ${modelId}`, { error: error.message });
       }
     }
   }
@@ -416,7 +417,7 @@ class LocalModelAdapter extends EventEmitter {
       return decodeURIComponent(String(iid));
       
     } catch (error) {
-      console.warn(`[IID] Failed to decode inference request ID: ${iid}`, error.message);
+      logger.warn(`[IID] Failed to decode inference request ID: ${iid}`, { error: error.message });
       // Return original as fallback
       return typeof iid === 'string' ? iid : String(iid);
     }
@@ -455,7 +456,7 @@ class LocalModelAdapter extends EventEmitter {
       this.degradationCounters = this.degradationCounters || {};
       this.degradationCounters[modelId] = (this.degradationCounters[modelId] || 0) + 1;
       
-      console.log(`[LATENCY] model: ${modelId}, latency_ms: ${latency}, threshold: ${threshold}, status: DEGRADED, counter: ${this.degradationCounters[modelId]}`);
+      logger.info(`[LATENCY] model: ${modelId}, latency_ms: ${latency}, threshold: ${threshold}, status: DEGRADED, counter: ${this.degradationCounters[modelId]}`);
       
       // Emit for monitoring but DON'T auto-fallback
       this.emit('model_latency_degraded', {
@@ -967,7 +968,7 @@ class LocalModelAdapter extends EventEmitter {
    * Download model if not exists
    */
   async downloadModel(modelId, _modelPath) {
-    console.log(`Downloading model ${modelId}...`);
+    logger.info(`Downloading model ${modelId}...`);
     // Implementation would download from model repository
   }
 
@@ -996,7 +997,7 @@ class LocalModelAdapter extends EventEmitter {
     if (model && model.process) {
       model.process.kill();
       this.models.delete(modelId);
-      console.log(`Model unloaded: ${modelId}`);
+      logger.info(`Model unloaded: ${modelId}`);
     }
   }
 
@@ -1041,7 +1042,7 @@ class LocalModelAdapter extends EventEmitter {
     // Trip circuit breaker if threshold reached
     if (cb.failures >= this.fallbackConfig.circuitBreakerThreshold) {
       cb.disabled = true;
-      console.log(`[CIRCUIT BREAKER] Model ${modelId} disabled after ${cb.failures} failures`);
+      logger.info(`[CIRCUIT BREAKER] Model ${modelId} disabled after ${cb.failures} failures`);
       this.emit('circuit_breaker_tripped', { modelId, failures: cb.failures });
     }
     
@@ -1089,7 +1090,7 @@ class LocalModelAdapter extends EventEmitter {
     const startTime = Date.now();
     
     try {
-      console.log(`[CLOUD] ☁️ Failover to Firebase Functions for ${modelId}`);
+      logger.info(`[CLOUD] ☁️ Failover to Firebase Functions for ${modelId}`);
       
       const response = await fetch(`${this.cloudFailover.firebaseFunctionsUrl}/modelInference`, {
         method: 'POST',
@@ -1108,8 +1109,8 @@ class LocalModelAdapter extends EventEmitter {
       this.cloudFailover.failoverCount++;
       this.cloudFailover.lastFailover = Date.now();
       
-      console.log(`[CLOUD] ✅ Firebase response in ${latency}ms`);
-      
+      logger.info(`[CLOUD] ✅ Firebase response in ${latency}ms`);
+
       this.emit('cloud_failover_success', {
         modelId,
         latency,
@@ -1118,7 +1119,7 @@ class LocalModelAdapter extends EventEmitter {
       
       return result;
     } catch (error) {
-      console.error(`[CLOUD] ❌ Firebase failover failed:`, error.message);
+      logger.error(`[CLOUD] ❌ Firebase failover failed`, { error: error.message });
       this.emit('cloud_failover_error', { modelId, error: error.message });
       throw error;
     }
@@ -1135,7 +1136,7 @@ class LocalModelAdapter extends EventEmitter {
     const startTime = Date.now();
     
     try {
-      console.log(`[AI STUDIO] 🤖 Safety valve - calling Gemini API`);
+      logger.info(`[AI STUDIO] 🤖 Safety valve - calling Gemini API`);
       
       const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent', {
         method: 'POST',
@@ -1162,7 +1163,7 @@ class LocalModelAdapter extends EventEmitter {
       const data = await response.json();
       const latency = Date.now() - startTime;
       
-      console.log(`[AI STUDIO] ✅ Gemini response in ${latency}ms`);
+      logger.info(`[AI STUDIO] ✅ Gemini response in ${latency}ms`);
       
       this.emit('gemini_safety_valve_used', {
         latency,
@@ -1176,7 +1177,7 @@ class LocalModelAdapter extends EventEmitter {
         source: 'ai_studio_safety_valve'
       };
     } catch (error) {
-      console.error(`[AI STUDIO] ❌ Gemini safety valve failed:`, error.message);
+      logger.error(`[AI STUDIO] ❌ Gemini safety valve failed`, { error: error.message });
       throw error;
     }
   }
@@ -1189,7 +1190,7 @@ class LocalModelAdapter extends EventEmitter {
     
     // Failover if local latency exceeds threshold
     if (latencyMs > this.cloudFailover.latencyThreshold) {
-      console.log(`[FAILOVER] Local latency ${latencyMs}ms exceeds threshold ${this.cloudFailover.latencyThreshold}ms`);
+      logger.info(`[FAILOVER] Local latency ${latencyMs}ms exceeds threshold ${this.cloudFailover.latencyThreshold}ms`);
       return true;
     }
     
@@ -1199,7 +1200,7 @@ class LocalModelAdapter extends EventEmitter {
     );
     
     if (allModelsBroken) {
-      console.log(`[FAILOVER] All local models circuit-broken, using cloud`);
+      logger.info(`[FAILOVER] All local models circuit-broken, using cloud`);
       return true;
     }
     
@@ -1210,7 +1211,7 @@ class LocalModelAdapter extends EventEmitter {
    * Start system monitoring for Dynamic Concurrency Scaling
    */
   startSystemMonitoring() {
-    console.log('[SYSTEM] Starting Dynamic Concurrency Scaling monitor...');
+    logger.info('[SYSTEM] Starting Dynamic Concurrency Scaling monitor...');
     
     setInterval(async () => {
       try {
@@ -1223,17 +1224,17 @@ class LocalModelAdapter extends EventEmitter {
         // LOCKED: Dynamic throttling - temp >= 80°C or CPU >= 90%
         if (temp >= 80 || cpu >= 90) {
           if (!this.systemMonitor.throttlingActive) {
-            console.log(`[SYSTEM] 🔥 THROTTLING ACTIVATED - Temp: ${temp}°C, CPU: ${cpu}%`);
+            logger.info(`[SYSTEM] 🔥 THROTTLING ACTIVATED - Temp: ${temp}°C, CPU: ${cpu}%`);
             this.systemMonitor.throttlingActive = true;
             this.throttleStarterRequests();
           }
         } else if ((temp < 70 && cpu < 75) && this.systemMonitor.throttlingActive) {
-          console.log(`[SYSTEM] 🧊 THROTTLING DEACTIVATED - Temp: ${temp}°C, CPU: ${cpu}%`);
+          logger.info(`[SYSTEM] 🧊 THROTTLING DEACTIVATED - Temp: ${temp}°C, CPU: ${cpu}%`);
           this.systemMonitor.throttlingActive = false;
           this.restoreNormalProcessing();
         }
       } catch (error) {
-        console.error('[SYSTEM] Monitoring error:', error.message);
+        logger.error('[SYSTEM] Monitoring error', { error: error.message });
       }
     }, 5000); // Check every 5 seconds
   }
@@ -1253,7 +1254,7 @@ class LocalModelAdapter extends EventEmitter {
       timestamp: new Date()
     });
     
-    console.log('[SYSTEM] Starter tier throttled: 50% speed, Enterprise priority enabled');
+    logger.info('[SYSTEM] Starter tier throttled: 50% speed, Enterprise priority enabled');
   }
 
   /**
@@ -1270,7 +1271,7 @@ class LocalModelAdapter extends EventEmitter {
       timestamp: new Date()
     });
     
-    console.log('[SYSTEM] Normal processing restored');
+    logger.info('[SYSTEM] Normal processing restored');
   }
 
   /**
@@ -1327,12 +1328,12 @@ class LocalModelAdapter extends EventEmitter {
    * Start hung model monitor
    */
   startHungModelMonitor() {
-    console.log('[SYSTEM] Starting hung model monitor...');
+    logger.info('[SYSTEM] Starting hung model monitor...');
     
     setInterval(() => {
       this.modelProcesses.forEach((process, modelId) => {
         if (process.lastActivity && (Date.now() - process.lastActivity) > this.systemMonitor.hungModelTimeout) {
-          console.log(`[RECOVERY] Model ${modelId} hung detected, initiating recovery...`);
+          logger.info(`[RECOVERY] Model ${modelId} hung detected, initiating recovery...`);
           this.handleHungModel(modelId);
         }
       });
@@ -1343,7 +1344,7 @@ class LocalModelAdapter extends EventEmitter {
    * Handle hung model recovery
    */
   async handleHungModel(modelId) {
-    console.log(`[RECOVERY] Initiating recovery for hung model: ${modelId}`);
+    logger.info(`[RECOVERY] Initiating recovery for hung model: ${modelId}`);
     
     // Kill the hung model process
     if (this.modelProcesses.has(modelId)) {
@@ -1351,7 +1352,7 @@ class LocalModelAdapter extends EventEmitter {
       try {
         process.kill('SIGKILL');
       } catch (e) {
-        console.log(`[RECOVERY] Process already terminated: ${modelId}`);
+        logger.info(`[RECOVERY] Process already terminated: ${modelId}`);
       }
       this.modelProcesses.delete(modelId);
     }
@@ -1364,7 +1365,7 @@ class LocalModelAdapter extends EventEmitter {
       const config = this.modelConfigs[modelId];
       if (config) {
         await this.loadModel(modelId, config);
-        console.log(`[RECOVERY] ✅ Model ${modelId} recovered successfully`);
+        logger.info(`[RECOVERY] ✅ Model ${modelId} recovered successfully`);
         
         this.emit('model_recovered', {
           modelId,
@@ -1375,7 +1376,7 @@ class LocalModelAdapter extends EventEmitter {
         return true;
       }
     } catch (error) {
-      console.error(`[RECOVERY] ❌ Failed to recover model ${modelId}:`, error.message);
+      logger.error(`[RECOVERY] ❌ Failed to recover model ${modelId}`, { error: error.message });
       
       this.emit('model_recovery_failed', {
         modelId,
@@ -1391,7 +1392,7 @@ class LocalModelAdapter extends EventEmitter {
    * Shutdown all models
    */
   async shutdown() {
-    console.log('Shutting down local models...');
+    logger.info('Shutting down local models...');
     
     for (const [, model] of this.models) {
       if (model.process) {
@@ -1400,7 +1401,7 @@ class LocalModelAdapter extends EventEmitter {
     }
 
     this.models.clear();
-    console.log('All models shut down');
+    logger.info('All models shut down');
   }
 }
 
