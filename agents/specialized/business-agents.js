@@ -1497,7 +1497,7 @@ class RevenueAgent extends SpecializedAgent {
   }
   
   calculateLicensingRevenue(capabilities) {
-    const licenseTypes = capabilities.rotation_system ? 1 : 0;
+    let licenseTypes = capabilities.rotation_system ? 1 : 0;
     licenseTypes += capabilities.hinge_technology ? 1 : 0;
     
     const upfrontFee = 50000; // $50,000 per license type
@@ -1526,7 +1526,7 @@ class RevenueAgent extends SpecializedAgent {
   }
   
   calculateAIRevenue(capabilities) {
-    const systemTypes = capabilities.ai_systems ? 1 : 0;
+    let systemTypes = capabilities.ai_systems ? 1 : 0;
     systemTypes += capabilities.automation ? 1 : 0;
     
     const monthlySubscription = 5000; // $5,000 per system per month

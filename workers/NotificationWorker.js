@@ -349,7 +349,7 @@ This is an automated message from ProtoForge.
         
         <div class="data">
             <strong>Data:</strong><br>
-            ${JSON.stringify(notificationData.data, null, 2).replace(/\n/g, '<br>').replace(/  /g, '&nbsp;&nbsp;')}
+            ${JSON.stringify(notificationData.data, null, 2).replace(/\n/g, '<br>').replace(/ {2}/g, '&nbsp;&nbsp;')}
         </div>
         
         <p>This is an automated message from ProtoForge.</p>

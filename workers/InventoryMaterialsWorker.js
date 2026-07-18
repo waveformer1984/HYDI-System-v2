@@ -276,7 +276,7 @@ class InventoryMaterialsWorker {
         await this.supabase
             .from('material_reservations')
             .insert({
-                customer_email,
+                customer_email: customerEmail,
                 reserved_materials: requiredMaterials,
                 reserved_at: new Date(),
                 expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours

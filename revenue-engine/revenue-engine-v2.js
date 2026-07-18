@@ -150,12 +150,12 @@ class RevenueEngineV2 {
     });
     
     // Update metrics
-    this.updateMetrics(taskType, result, filterScore, cascadeScore);
-    
+    this.updateMetrics(taskType, result, filterResult.score, cascadeScore);
+
     return {
       success: true,
       result: result,
-      filterScore: filterScore,
+      filterScore: filterResult.score,
       cascadeScore: cascadeScore,
       stage: 'completed'
     };
@@ -485,26 +485,28 @@ async function main() {
     case 'cycle':
       await engine.runRevenueCycle();
       break;
-    case 'health':
+    case 'health': {
       const health = await engine.getSystemHealth();
       console.log(JSON.stringify(health, null, 2));
       break;
+    }
     case 'constraints':
       console.log(JSON.stringify(engine.realityFilter.getConstraints(), null, 2));
       break;
-    case 'test-filter':
+    case 'test-filter': {
       // Test the filter with various scenarios
       const tests = [
         { task: 'scrape_leads', params: { source: 'random_scrape', niche: 'test' } },
         { task: 'send_outreach', params: { template: 'Dear friend, act now!', leads: [] } },
         { task: 'create_quote', params: { projectType: 'custom_print', basePrice: 50 } }
       ];
-      
+
       for (const test of tests) {
         const result = await engine.realityFilter.filterTask(test.task, test.params);
         console.log(`${test.task}: ${result.allowed ? '✅' : '❌'} ${result.reason}`);
       }
       break;
+    }
     default:
       console.log('HYDI Revenue Engine V2 - With Reality Filter\n');
       console.log('Commands:');

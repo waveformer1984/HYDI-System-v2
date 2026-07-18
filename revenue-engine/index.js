@@ -616,7 +616,7 @@ async function main() {
     case 'outreach':
       await engine.sendOutreach();
       break;
-    case 'proposal':
+    case 'proposal': {
       const leadId = process.argv[3];
       if (!leadId) {
         console.error('Usage: node revenue-engine/index.js proposal <lead_id>');
@@ -624,6 +624,7 @@ async function main() {
       }
       await engine.generateProposal(leadId);
       break;
+    }
     case 'quote':
       await engine.createInstantQuote({
         projectType: process.argv[3] || 'custom_print',
@@ -632,7 +633,7 @@ async function main() {
         rushOrder: process.argv[6] === 'rush'
       });
       break;
-    case 'checkout':
+    case 'checkout': {
       const quoteId = process.argv[3];
       const email = process.argv[4];
       if (!quoteId || !email) {
@@ -641,16 +642,18 @@ async function main() {
       }
       await engine.createStripeCheckout(quoteId, email);
       break;
+    }
     case 'products':
       await engine.generateProductIdeas(parseInt(process.argv[3]) || 5);
       break;
     case 'list':
       await engine.createProductListing(process.argv[3], process.argv[4]);
       break;
-    case 'report':
+    case 'report': {
       const report = await engine.getRevenueReport(process.argv[3] || 'today');
       console.log(JSON.stringify(report, null, 2));
       break;
+    }
     default:
       console.log('HYDI Revenue Engine - 5 Core Money Systems\n');
       console.log('Commands:');
