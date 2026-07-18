@@ -82,18 +82,16 @@ export default function HeidiChat() {
     setSettingsOpen(false)
   }, [secretDraft])
 
-  // Health check on mount
+  // Health check on mount. /api/heidi (api/heidi/route.js) is unauthenticated
+  // and deliberately left unbridged into pages/api -- see ISSUES_FOUND.md #53
+  // -- so it 404s under next dev/start and this badge was permanently stuck
+  // "Offline". /api/status is the real bridged, already-safe status endpoint
+  // (pages/api/status.ts); it has no currentModel field, so that continues
+  // to come from the first chat response's metadata event instead.
   useEffect(() => {
-    fetch('/api/heidi', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'status' }),
-    })
+    fetch('/api/status')
       .then(r => r.ok ? r.json() : null)
-      .then(d => {
-        setConnectionOk(true)
-        if (d?.currentModel) setModel(d.currentModel)
-      })
+      .then(() => setConnectionOk(true))
       .catch(() => setConnectionOk(false))
   }, [])
 
