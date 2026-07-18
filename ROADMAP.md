@@ -176,17 +176,19 @@ drop-everything, P1 is next up, P2 is scheduled but not urgent.
 10. ~~`AGENT_REGISTRY`'s Rezonate endpoint path in
     `api/agent-manager/agents.js` doesn't match the file's actual
     resolved route~~ **Fixed** in PR #202 (2026-07-16).
-11. **Mostly done, 2026-07-18** (started and continued same day):
+11. **Mostly done, 2026-07-18** (started and continued same day, twice):
     structured logging migration. Added redaction + correlation-ID
     support to `lib/structured-logger.js` (previously used by only 3
     files) and migrated `console.*` → `logger.*` in `workers/` (302/302,
-    all 19 files) and `src/` (690/690, all 37 files — the whole main
+    all 19 files), `src/` (690/690, all 37 files — the whole main
     application/pipeline layer: `server.js`, `HYDISystem.js`, the core
     loop, control plane, memory system, models, revenue engine, and
-    more) in full, and mostly in `agents/` (52/113 — the remaining 61 is
-    genuine interactive CLI output in `agents/hid/`, deliberately left
-    alone, see `ISSUES_FOUND.md` #72) and `revenue-engine/` (66/91 —
-    remaining 25 is each file's own `main()` CLI dispatcher, same
+    more), and `api/` (78/78, all 19 files — Vercel-style serverless
+    routes, including the payment-critical Stripe webhook/checkout
+    handlers) in full, and mostly in `agents/` (52/113 — the remaining
+    61 is genuine interactive CLI output in `agents/hid/`, deliberately
+    left alone, see `ISSUES_FOUND.md` #72) and `revenue-engine/` (66/91
+    — remaining 25 is each file's own `main()` CLI dispatcher, same
     reasoning). While doing this, discovered and fixed a real,
     previously-invisible gap: `next lint`'s default scan scope is only
     `pages/`, `components/`, `lib/`, `src/` — `workers/`, `agents/`,
@@ -199,13 +201,17 @@ drop-everything, P1 is next up, P2 is scheduled but not urgent.
     access, and an unintepolated template literal in `server.js`), both
     fixed, plus several lower-severity suspected bugs flagged for
     follow-up rather than fixed in the same pass (see `ISSUES_FOUND.md`
-    #75-#76). **Still open**: ~162 `console.*` calls remain unmigrated
-    across `api/` (78), `lib/` (67), `pages/` (14), `components/` (3) —
-    good candidate for the same file-by-file follow-up treatment item 8
-    got, not a mechanical sweep (some of these, like item 8's précis
-    warned, are genuine CLI output rather than service logs). The 123
-    Deno Edge Function `console.*` calls remain untouched — need a
-    separate Deno-native logger, out of scope for `lib/structured-logger.js`
+    #75-#76). `api/webhooks/stripe.js` (the largest single file in the
+    `api/` pass) turned up several more suspected dead-code findings
+    (five unused webhook handler functions, an always-`'starter'` tier
+    resolver) also flagged rather than fixed — see `ISSUES_FOUND.md`
+    #77. **Still open**: ~84 `console.*` calls remain unmigrated across
+    `lib/` (67), `pages/` (14), `components/` (3) — good candidate for
+    the same file-by-file follow-up treatment item 8 got, not a
+    mechanical sweep (some of these, like item 8's précis warned, are
+    genuine CLI output rather than service logs). The 123 Deno Edge
+    Function `console.*` calls remain untouched — need a separate
+    Deno-native logger, out of scope for `lib/structured-logger.js`
     (which is a Node/CommonJS module using `fs`).
 
 **Done this pass (housekeeping):**

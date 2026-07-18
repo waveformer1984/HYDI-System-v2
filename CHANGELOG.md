@@ -8,7 +8,7 @@ All notable changes to HYDI System v2 are documented here. The format follows [K
 - Secret redaction and correlation-ID propagation (`AsyncLocalStorage`) in `lib/structured-logger.js`, plus its first test coverage (`tests/unit/structured-logger.test.js`, 11 tests). See `ISSUES_FOUND.md` #72.
 
 ### Changed
-- Migrated `console.*` logging to the structured logger in `workers/` (all 19 files, 302 calls), `src/` (all 37 files, 690 calls — the whole main application/pipeline layer), and mostly in `agents/`/`revenue-engine/` (118 of 204 calls; the rest is deliberately-preserved interactive CLI output). `api/`, `lib/`, `pages/`, `components/` still use `console.*` (~162 calls) and are tracked as a follow-up (`ROADMAP.md` near-term item 11), as do the Deno Edge Functions (need their own logger).
+- Migrated `console.*` logging to the structured logger in `workers/` (all 19 files, 302 calls), `src/` (all 37 files, 690 calls — the whole main application/pipeline layer), `api/` (all 19 files, 78 calls — including the payment-critical Stripe webhook/checkout handlers), and mostly in `agents/`/`revenue-engine/` (118 of 204 calls; the rest is deliberately-preserved interactive CLI output). `lib/`, `pages/`, `components/` still use `console.*` (~84 calls) and are tracked as a follow-up (`ROADMAP.md` near-term item 11), as do the Deno Edge Functions (need their own logger).
 - Expanded `next.config.js`'s `eslint.dirs` to cover `workers/`, `agents/`, `revenue-engine/`, `api/`, `kilo/` — `npm run lint` (and therefore CI's lint gate) had silently never scanned them before. Set `no-console` to `"warn"`.
 
 ### Fixed

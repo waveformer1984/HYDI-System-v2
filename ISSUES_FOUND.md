@@ -5,6 +5,18 @@ the narrative of what was fixed and why; this file is the flat list.
 
 ---
 
+## Fixed this session (2026-07-18, structured logging migration continued again: api/)
+
+Continues the migration from earlier the same day (#75-#76 below) into the
+top-level `api/` directory (Vercel-style serverless routes).
+
+| # | Issue | File(s) | Status |
+|---|-------|---------|--------|
+| 77 | All 78 `console.*` calls in `api/` (19 files, including the payment-critical `api/webhooks/stripe.js`, `api/stripe-connect-webhook.js`, `api/checkout.js`) had no structure, redaction, or correlation. `api/**` mixes ESM (`import`/`export`) and CJS (`require`/`module.exports`) per `CLAUDE.md`'s documented convention, needing per-file handling rather than one mechanical pattern. | 19 files under `api/` | **Fixed** — migrated to `lib/structured-logger.js`. Pure-ESM files use `import baseLogger from '.../structured-logger.js'; const logger = baseLogger.child({...});`; CJS and mixed-style files use `require(...).child({...})`, matching each file's existing dependency-import convention. Payment-critical files were kept to logging identifiers only (event id/type, session id, customer email, tier) — never full Stripe objects, raw payloads, or signatures. `api/` `console.*` migration is now fully complete (0 remaining calls). One net improvement found along the way: `api/events/stream.js` previously discarded the stack trace on thrown non-`Error` values (`err instanceof Error ? err.message : err`); now passes the raw `err` straight to `logger.error`, which already special-cases `Error` objects into `{name, message, stack}` — same information, stack trace no longer dropped. |
+| — | While migrating `api/webhooks/stripe.js` (its largest single file, 30 calls), several more suspected dead-code findings surfaced: `handleCheckoutCompleted`/`handlePaymentSucceeded`/`handleSubscriptionCreated`/`handleSubscriptionUpdated`/`handleSubscriptionDeleted` are all defined but never called anywhere in the file (actual dispatch goes through `webhookQueue.handleWebhook(event)` instead — these look like leftovers from a pre-queue architecture); `heidiOutreach`/`agentBus` are instantiated at module load but never referenced afterward; `determineTierFromPrice(priceId)` ignores its argument entirely and always returns `'starter'`, meaning Pro/Enterprise subscription events would be mis-tiered as Starter if those dead handlers were ever wired back up. | `api/webhooks/stripe.js` | **Not fixed — flagged for follow-up.** All confirmed by `eslint`'s `no-unused-vars` catching the dead functions/vars; not fixed in this pass to keep the logging-migration diff reviewable and because this file is already documented elsewhere (`ISSUES_FOUND.md`'s "Investigated, not fixed" section, `ROADMAP.md` item 5) as one of several parallel, ambiguous-status Stripe implementations pending a maintainer decision on which billing model is canonical — fixing dead code in a file whose own continued existence is in question isn't this pass's call to make. |
+
+---
+
 ## Fixed this session (2026-07-18, structured logging migration continued: src/)
 
 Continues the migration from earlier the same day (#72-#74 below) into
