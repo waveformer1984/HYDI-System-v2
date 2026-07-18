@@ -9,6 +9,7 @@ const cascade = require('../modules/cascade-complete-v2');
 const ChatWebSocketServer = require('../modules/chat-websocket-server');
 const { v4: uuidv4 } = require('uuid');
 require('dotenv').config();
+const logger = require('../lib/structured-logger').child({ component: 'HeidiServer' });
 
 // Service Bundle imports
 const serviceRoutes = require('./api/services');
@@ -33,9 +34,8 @@ app.use(express.json());
 
 // Global error logger - catch silent failures
 app.use((err, req, res, _next) => {
-  console.error('[GLOBAL ERROR]:', err.message);
-  console.error('[GLOBAL ERROR STACK]:', err.stack);
-  res.status(400).json({ 
+  logger.error('Global error', { error: err, path: req.path, method: req.method });
+  res.status(400).json({
     error: err.message,
     type: 'express_error',
     path: req.path,
@@ -50,8 +50,8 @@ const heidi = new HydiContextualConscience();
 const infrastructure = new ProtoForgeInfrastructure();
 
 // Initialize CASCADE V2 - Enhanced Event Processing System
-console.log('[CASCADE V2] Initializing enhanced event processing system...');
-console.log('[CASCADE V2] Features: Schema Lock | Fingerprinting | Confidence Scoring | Hard Classification | Health Snapshots | Ack Tracking | Dead Letters');
+logger.info('CASCADE V2: Initializing enhanced event processing system');
+logger.info('CASCADE V2: Features enabled', { features: ['Schema Lock', 'Fingerprinting', 'Confidence Scoring', 'Hard Classification', 'Health Snapshots', 'Ack Tracking', 'Dead Letters'] });
 
 // Initialize system enforcement modules
 const { readinessGate } = require('../modules/readiness-gate');
@@ -62,16 +62,16 @@ require('../modules/system-contract-guard');
 readinessGate.start();
 noSilentSuccessEnforcer.initialize();
 
-console.log('[SYSTEM] Enforcement modules initialized');
+logger.info('SYSTEM: Enforcement modules initialized');
 
 // Initialize Service Bundle components
-console.log('[SERVICE BUNDLE] Initializing service bundle components...');
+logger.info('SERVICE BUNDLE: Initializing service bundle components');
 const subscriptionManager = new SubscriptionManager();
 const heidiAutomator = new HeidiServiceAutomator();
 const localModelAdapter = new LocalModelAdapter();
 
 // ── Universal Agent Bus ── The Forge Messaging Backbone ──
-console.log('[AGENT BUS] Initializing Universal Agent Bus v1.0...');
+logger.info('AGENT BUS: Initializing Universal Agent Bus v1.0');
 const agentBus = new UniversalAgentBus({ name: 'UrsulaForgeBus', version: '1.0.0' });
 
 // Register all 13 local models with heartbeat monitoring + backup routes
@@ -98,53 +98,52 @@ modelRegistry.forEach(m => agentBus.registerModel(m.id, {
 
 // Start model heartbeat monitor (60s pings, auto-redirect on flatline)
 agentBus.startHeartbeatMonitor();
-console.log('[AGENT BUS] Heartbeat monitor active for 13 local models');
+logger.info('AGENT BUS: Heartbeat monitor active for 13 local models');
 
 // Start Universal Observer (watches all bus events, auto-notifies Heidi on failures)
 agentBus.startUniversalObserver();
-console.log('[AGENT BUS] Universal Observer watching bus telemetry');
+logger.info('AGENT BUS: Universal Observer watching bus telemetry');
 
 // Restore in-flight messages from pending_tasks table after restart
 agentBus.restoreInFlight().then(restored => {
-  console.log(`[AGENT BUS] Restored ${restored?.count || 0} in-flight messages from database`);
+  logger.info('AGENT BUS: Restored in-flight messages from database', { count: restored?.count || 0 });
 }).catch(err => {
-  console.error('[AGENT BUS] Restore error:', err.message);
+  logger.error('AGENT BUS: Restore error', { error: err });
 });
 
 // Gatekeeper middleware applied to all service routes
 const busGatekeeper = new BusGatekeeper(agentBus);
 app.use('/api/services', busGatekeeper.middleware());
-console.log('[AGENT BUS] Gatekeeper middleware active on /api/services/*');
+logger.info('AGENT BUS: Gatekeeper middleware active on /api/services/*');
 
 // ── SIMPLE KEYMAKER ── API Key → Tier Access ──
-console.log('[SIMPLE KEYMAKER] Initializing simple API key validation...');
+logger.info('SIMPLE KEYMAKER: Initializing simple API key validation');
 const simpleKeymaker = new SimpleKeymaker();
 app.use(simpleKeymaker.middleware());
-console.log('[SIMPLE KEYMAKER] Middleware active on POST routes');
+logger.info('SIMPLE KEYMAKER: Middleware active on POST routes');
 
 // ── KEYMAKER ── Access, Routing, Permission Control (backs /keymaker/* routes) ──
-console.log('[KEYMAKER] Initializing access/routing/permission middleware...');
+logger.info('KEYMAKER: Initializing access/routing/permission middleware');
 const keymaker = new Keymaker();
 app.use(keymaker.middleware());
-console.log('[KEYMAKER] Middleware active — populates req.keymaker');
+logger.info('KEYMAKER: Middleware active — populates req.keymaker');
 
 // Start Heidi automator
 heidiAutomator.start();
-console.log('[SERVICE BUNDLE] Heidi automator started');
-console.log('[SERVICE BUNDLE] Local model adapter initialized');
+logger.info('SERVICE BUNDLE: Heidi automator started');
+logger.info('SERVICE BUNDLE: Local model adapter initialized');
 
 // Initialize Adaptation Executor - makes insights actionable
 new AdaptationExecutor({
   confidenceThreshold: 0.7,
   autoExecuteSafe: true
 });
-console.log('[SERVICE BUNDLE] Adaptation executor initialized');
+logger.info('SERVICE BUNDLE: Adaptation executor initialized');
 
 // Wire adaptation executor to model events
 localModelAdapter.on('inference_complete', (event) => {
   // Structured logging for model performance
-  console.log(JSON.stringify({
-    timestamp: new Date().toISOString(),
+  logger.info('Model inference complete', {
     model: event.modelId,
     latency: event.processingTime,
     success: true,
@@ -152,36 +151,33 @@ localModelAdapter.on('inference_complete', (event) => {
     confidence: event.result?.confidence || 0,
     tier: event.tier,
     priority: event.priority
-  }));
+  });
 });
 
 localModelAdapter.on('inference_error', (event) => {
   // Structured logging for model errors
-  console.log(JSON.stringify({
-    timestamp: new Date().toISOString(),
+  logger.info('Model inference error', {
     model: event.modelId,
     latency: event.processingTime,
     success: false,
     error: event.error,
     tier: event.tier
-  }));
+  });
 });
 
 localModelAdapter.on('model_flatlined', (event) => {
-  console.log(JSON.stringify({
-    timestamp: new Date().toISOString(),
+  logger.info('Model flatlined', {
     model: event.modelId,
     failover: true,
     backup_route: event.backupRoute,
     event_type: 'model_flatline'
-  }));
+  });
 });
 
 // Heidi event handlers
 heidi.on('high_violation_risk', (alert) => {
-  console.log(`[HEIDI] HIGH VIOLATION RISK: ${(alert.risk * 100).toFixed(1)}%`);
-  console.log(`[HEIDI] Recommendation: ${alert.recommendation.action}`);
-  
+  logger.info('HEIDI: High violation risk', { riskPercent: Number((alert.risk * 100).toFixed(1)), recommendationAction: alert.recommendation.action });
+
   // Could trigger Ursula to speak this
   if (ursulaSSE && ursulaSSE.getSubscriberCount() > 0) {
     ursulaSSE.broadcast({
@@ -194,27 +190,25 @@ heidi.on('high_violation_risk', (alert) => {
 });
 
 heidi.on('proof_of_work_created', (certification) => {
-  console.log(`[HEIDI] Proof of Work certified: ${certification.artifactId} (Quality: ${(certification.qualityScore * 100).toFixed(1)}%)`);
+  logger.info('HEIDI: Proof of Work certified', { artifactId: certification.artifactId, qualityScorePercent: Number((certification.qualityScore * 100).toFixed(1)) });
 });
 
 heidi.on('value_leak_detected', (leak) => {
-  console.log(`[HEIDI] Value Leak Detected: ${leak.problemType} - $${leak.estimatedValue.monthly.toFixed(2)}/month potential`);
+  logger.info('HEIDI: Value leak detected', { problemType: leak.problemType, estimatedMonthlyValue: Number(leak.estimatedValue.monthly.toFixed(2)) });
 });
 
 heidi.on('monetization_opportunities', (opportunities) => {
-  console.log(`[HEIDI] Top ${opportunities.length} monetization opportunities identified`);
-  opportunities.forEach((opp, i) => {
-    console.log(`  ${i + 1}. ${opp.problemType}: $${opp.estimatedValue.monthly.toFixed(2)}/month`);
+  logger.info('HEIDI: Top monetization opportunities identified', {
+    count: opportunities.length,
+    opportunities: opportunities.map((opp) => ({ problemType: opp.problemType, estimatedMonthlyValue: Number(opp.estimatedValue.monthly.toFixed(2)) }))
   });
 });
 
 // Bare test endpoint - no middleware, no auth, just truth
 app.post('/bare-test', (req, res) => {
-  console.log('[BARE TEST] Request received');
-  console.log('[BARE TEST] Body:', JSON.stringify(req.body));
-  console.log('[BARE TEST] Headers:', Object.keys(req.headers));
-  
-  res.json({ 
+  logger.info('BARE TEST: Request received', { body: req.body, headers: Object.keys(req.headers) });
+
+  res.json({
     ok: true, 
     body: req.body,
     timestamp: new Date().toISOString() 
@@ -228,14 +222,11 @@ app.get('/test-get', (req, res) => {
 
 // Simple test endpoint - proves the loop works
 app.post('/test-loop', async (req, res) => {
-  console.log('[TEST LOOP] Request received');
-  console.log('[TEST LOOP] Headers:', Object.keys(req.headers));
-  console.log('[TEST LOOP] API Key:', req.headers['x-api-key']);
-  console.log('[TEST LOOP] Body:', JSON.stringify(req.body));
-  
+  logger.info('TEST LOOP: Request received', { headers: Object.keys(req.headers), apiKey: req.headers['x-api-key'], body: req.body });
+
   // Check tier access
   if (!req.apiKey || !SimpleKeymaker.checkTierAccess('starter', req.apiKey.tier)) {
-    console.log('[TEST LOOP] Access denied - tier:', req.apiKey?.tier || 'none');
+    logger.info('TEST LOOP: Access denied', { tier: req.apiKey?.tier || 'none' });
     return res.status(403).json({
       error: 'Insufficient tier',
       required: 'starter',
@@ -254,15 +245,15 @@ app.post('/test-loop', async (req, res) => {
       status: 'success'
     };
     
-    console.log(`[TEST LOOP] ${req.apiKey.tier} user processed event: ${req.body.event_id}`);
-    
+    logger.info('TEST LOOP: User processed event', { tier: req.apiKey.tier, eventId: req.body.event_id });
+
     res.json({
       success: true,
       data: result
     });
-    
+
   } catch (error) {
-    console.error('[TEST LOOP] Processing error:', error);
+    logger.error('TEST LOOP: Processing error', { error });
     res.status(500).json({
       success: false,
       error: error.message
@@ -275,19 +266,19 @@ app.get('/health', async (req, res) => {
   try {
     // Get module count (placeholder)
     const moduleCount = 0;
-    
+
     // Get events count
     const { count } = await supabase
       .from('heidi_events')
       .select('*', { count: 'exact', head: true });
-    
+
     res.json({
       status: 'ok',
       modules: moduleCount,
       events: count || 0
     });
   } catch (error) {
-    console.error('Health check failed:', error);
+    logger.error('Health check failed', { error });
     res.status(500).json({
       status: 'error',
       message: error.message
@@ -310,7 +301,7 @@ app.get('/integrity', (req, res) => {
       timestamp: new Date().toISOString()
     });
   } catch (error) {
-    console.error('Integrity check failed:', error);
+    logger.error('Integrity check failed', { error });
     res.status(500).json({
       status: 'error',
       message: error.message
@@ -338,7 +329,7 @@ app.get('/evolution', (req, res) => {
       timestamp: new Date().toISOString()
     });
   } catch (error) {
-    console.error('Evolution protocol check failed:', error);
+    logger.error('Evolution protocol check failed', { error });
     res.status(500).json({
       status: 'error',
       message: error.message
@@ -367,7 +358,7 @@ app.get('/prime', (req, res) => {
       timestamp: new Date().toISOString()
     });
   } catch (error) {
-    console.error('Prime Directive check failed:', error);
+    logger.error('Prime Directive check failed', { error });
     res.status(500).json({
       status: 'error',
       message: error.message
@@ -391,20 +382,20 @@ app.post('/process', async (req, res) => {
   const cycleId = `process_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   
   // TODO: Re-enable noSilentSuccessEnforcer when iconv-lite issue is fixed
-  console.log(`[PROCESS] Starting cycle ${cycleId}`);
-  
+  logger.info('PROCESS: Starting cycle', { cycleId });
+
   try {
-    console.log(`[PROCESS] Cascade processing started for ${req.body.event_id}`);
-    
+    logger.info('PROCESS: Cascade processing started', { eventId: req.body.event_id });
+
     const payload = req.body;
-    
+
     // Enforce event continuity through ProtoForge pipeline
     // event -> validate -> classify -> emit -> persist -> broadcast
     const result = await protoforgeEventBus.processEvent(payload);
-    
+
     // Record cascade processing completion
-    console.log(`[PROCESS] Cascade completed: ${result.status} for ${payload.event_id}`);
-    console.log(`[PROCESS] Validation: ${result.validation?.status}, Opportunity: ${!!result.opportunity}`);
+    logger.info('PROCESS: Cascade completed', { status: result.status, eventId: payload.event_id });
+    logger.info('PROCESS: Validation result', { validationStatus: result.validation?.status, hasOpportunity: !!result.opportunity });
     
     // Update readiness gate metrics based on cascade processing
     readinessGate.updateCascadeMetrics(
@@ -451,20 +442,20 @@ app.post('/process', async (req, res) => {
             });
 
           if (oppError) {
-            console.error('Opportunity storage failed:', oppError.message);
+            logger.error('Opportunity storage failed', { error: oppError.message });
           }
         }
-        
+
         result.persistence_status = 'STORED';
         result.persistence_error = null;
-        
+
       } catch (err) {
-        console.error('Persistence failed:', {
-          event_id: payload.event_id,
+        logger.error('Persistence failed', {
+          eventId: payload.event_id,
           stage: 'persistence',
           error: err.message
         });
-        
+
         result.persistence_status = 'FAILED';
         result.persistence_error = err.message;
       }
@@ -500,7 +491,7 @@ app.post('/process', async (req, res) => {
     }
     
     // Record protoforge state
-    console.log(`[PROCESS] Protoforge state: ${protoforgeState}, KILO involved: ${kiloInvolved}`);
+    logger.info('PROCESS: Protoforge state', { protoforgeState, kiloInvolved });
     
     // TODO: Re-enable noSilentSuccessEnforcer when iconv-lite issue is fixed
     
@@ -524,12 +515,12 @@ app.post('/process', async (req, res) => {
     
   } catch (error) {
     // Record error state in cycle
-    console.error(`[PROCESS] Error in cycle ${cycleId}:`, error.message);
-    
+    logger.error('PROCESS: Error in cycle', { cycleId, error: error.message });
+
     // Mark protoforge as failed
-    console.error(`[PROCESS] Protoforge failed for ${req.body.event_id}:`, error.message);
-    
-    console.error('Process endpoint failed:', error);
+    logger.error('PROCESS: Protoforge failed', { eventId: req.body.event_id, error: error.message });
+
+    logger.error('Process endpoint failed', { error });
     res.status(500).json({
       status: 'error',
       message: error.message,
@@ -561,7 +552,7 @@ app.get('/insight', async (req, res) => {
       count: data.length
     });
   } catch (error) {
-    console.error('Insight endpoint failed:', error);
+    logger.error('Insight endpoint failed', { error });
     res.status(500).json({
       status: 'error',
       message: error.message
@@ -591,7 +582,7 @@ app.post('/event', async (req, res) => {
       eventId: data[0]?.id
     });
   } catch (error) {
-    console.error('Event endpoint failed:', error);
+    logger.error('Event endpoint failed', { error });
     res.status(500).json({
       status: 'error',
       message: error.message
@@ -636,7 +627,7 @@ app.get('/opportunities', async (req, res) => {
       count: opportunities.length
     });
   } catch (error) {
-    console.error('Opportunities endpoint failed:', error);
+    logger.error('Opportunities endpoint failed', { error });
     res.status(500).json({
       status: 'error',
       message: error.message
@@ -646,7 +637,7 @@ app.get('/opportunities', async (req, res) => {
 
 // Infrastructure event handlers - The Physical Body Speaks
 infrastructure.on('infrastructure_alert', (alert) => {
-  console.log(`[INFRA] ${alert.layer.toUpperCase()} Alert: ${alert.alert.message}`);
+  logger.info('INFRA: Alert', { layer: alert.layer.toUpperCase(), message: alert.alert.message });
   
   // Process through CASCADE
   cascade.processEvent({
@@ -685,7 +676,7 @@ infrastructure.on('infrastructure_alert', (alert) => {
 });
 
 infrastructure.on('revenue_tracked', (revenue) => {
-  console.log(`[INFRA] Revenue Event: $${revenue.amount} from ${revenue.source} (${revenue.layer})`);
+  logger.info('INFRA: Revenue event', { amount: revenue.amount, source: revenue.source, layer: revenue.layer });
 
   // Broadcast revenue events
   if (ursulaSSE && ursulaSSE.getSubscriberCount() > 0) {
@@ -717,8 +708,7 @@ infrastructure.on('health_update', async (health) => {
 
     if (error) {
       if (!_infraSyncErrorLogged) {
-        console.error('[INFRA] Failed to sync health to Supabase:', error.message);
-        console.error('[INFRA] Run: npx supabase db push  to create the infrastructure_health table');
+        logger.error('INFRA: Failed to sync health to Supabase', { error: error.message, hint: 'Run: npx supabase db push  to create the infrastructure_health table' });
         _infraSyncErrorLogged = true;
       }
     } else {
@@ -726,7 +716,7 @@ infrastructure.on('health_update', async (health) => {
     }
   } catch (err) {
     if (!_infraSyncErrorLogged) {
-      console.error('[INFRA] health_update bridge error:', err.message);
+      logger.error('INFRA: health_update bridge error', { error: err.message });
       _infraSyncErrorLogged = true;
     }
   }
@@ -917,7 +907,7 @@ app.get('/events/stream', (req, res) => {
     'Access-Control-Allow-Headers': 'Cache-Control'
   });
   
-  console.log('[URSULA] New client connected to SSE stream');
+  logger.info('URSULA: New client connected to SSE stream');
   
   // Add client to manager
   const clientId = ursulaSSE.addClient(res);
@@ -932,7 +922,7 @@ app.get('/events/stream', (req, res) => {
   
   // Handle client disconnect
   req.on('close', () => {
-    console.log('[URSULA] Client disconnected from SSE stream');
+    logger.info('URSULA: Client disconnected from SSE stream');
     ursulaSSE.removeClient(clientId);
   });
   
@@ -1456,25 +1446,25 @@ app.post('/keymaker/admin/break-glass', async (req, res) => {
   }
 });
 
-console.log('[KEYMAKER] API routes registered: /keymaker/*');
+logger.info('KEYMAKER: API routes registered: /keymaker/*');
 
 // Initialize ProtoForge event bus integration
 async function initializeIntegrations() {
   try {
     // Ursula SSE stream is ready - The Voice of the Machine
-    console.log('[URSULA] SSE stream ready - Central Nervous System active');
-    
+    logger.info('URSULA: SSE stream ready - Central Nervous System active');
+
     // Subscribe ProtoForge to relevant events - Ursula as the Broadcaster
     protoforgeEventBus.subscribe('hyve_opportunity_detected', (opportunityEvent) => {
-      console.log(`[PROTOFORGE] Hyve opportunity: ${opportunityEvent.payload.opportunity_classification.opportunity_type}`);
-      
+      logger.info('PROTOFORGE: Hyve opportunity', { opportunityType: opportunityEvent.payload.opportunity_classification.opportunity_type });
+
       // Broadcast to Ursula SSE - The Voice of the Machine
       const broadcastCount = ursulaSSE.broadcast({
         type: 'hyve_opportunity',
         message: `Opportunity detected: ${opportunityEvent.payload.opportunity_classification.opportunity_type}`,
         data: opportunityEvent
       });
-      console.log(`[URSULA] Broadcast to ${broadcastCount} subscribers`);
+      logger.info('URSULA: Broadcast to subscribers', { broadcastCount });
     });
     
     protoforgeEventBus.subscribe('validation_complete', (validationEvent) => {
@@ -1523,12 +1513,12 @@ async function initializeIntegrations() {
       });
     });
     
-    console.log('[PROTOFORGE] Event bus integrated with server');
-    console.log('[URSULA] SSE stream ACTIVE - Broadcasting to all nodes');
-    console.log('[SYSTEM] The Forge is ALIVE - All systems connected');
-    
+    logger.info('PROTOFORGE: Event bus integrated with server');
+    logger.info('URSULA: SSE stream ACTIVE - Broadcasting to all nodes');
+    logger.info('SYSTEM: The Forge is ALIVE - All systems connected');
+
   } catch (error) {
-    console.error('Failed to initialize integrations:', error);
+    logger.error('Failed to initialize integrations', { error });
   }
 }
 
@@ -1539,31 +1529,31 @@ const server = http.createServer(app);
 new ChatWebSocketServer(server);
 
 server.listen(PORT, async () => {
-  console.log(`Server running on port ${PORT}`);
-  console.log('ProtoForge Validation Gate - Operational');
-  console.log('[DATABASE] Single Supabase client initialized');
-  console.log('[CHAT WS] WebSocket server initialized - Connect to ws://localhost:${PORT}/ws/<system>');
-  
+  logger.info('Server running on port', { port: PORT });
+  logger.info('ProtoForge Validation Gate - Operational');
+  logger.info('DATABASE: Single Supabase client initialized');
+  logger.info('[CHAT WS] WebSocket server initialized - Connect to ws://localhost:${PORT}/ws/<system>');
+
   // Start CASCADE V2 system
   const cascadeStatus = cascade.start();
-  console.log('[CASCADE V2]', cascadeStatus.status.toUpperCase(), '- Enhanced event processing active');
-  console.log('[CASCADE V2] Version:', cascadeStatus.version);
-  
+  logger.info('CASCADE V2: Enhanced event processing active', { status: cascadeStatus.status.toUpperCase() });
+  logger.info('CASCADE V2: Version', { version: cascadeStatus.version });
+
   await initializeIntegrations();
   
   // Service Bundle event listeners — serviceBundle is temporarily disabled in
   // SubscriptionManager's constructor, so guard rather than assume it exists.
   if (subscriptionManager.serviceBundle) {
     subscriptionManager.serviceBundle.on('service_used', (data) => {
-      console.log(`[SERVICE BUNDLE] Service used: ${data.serviceId} by ${data.subscriptionId} - Revenue: $${data.revenue}`);
+      logger.info('SERVICE BUNDLE: Service used', { serviceId: data.serviceId, subscriptionId: data.subscriptionId, revenue: data.revenue });
     });
 
     subscriptionManager.serviceBundle.on('subscription_created', (data) => {
-      console.log(`[SERVICE BUNDLE] New subscription: ${data.tier} for ${data.customerId}`);
+      logger.info('SERVICE BUNDLE: New subscription', { tier: data.tier, customerId: data.customerId });
     });
 
     subscriptionManager.serviceBundle.on('upsell_trigger', (data) => {
-      console.log(`[SERVICE BUNDLE] Upsell trigger: ${data.customerId} at ${data.usagePercentage.toFixed(1)}% usage`);
+      logger.info('SERVICE BUNDLE: Upsell trigger', { customerId: data.customerId, usagePercentage: Number(data.usagePercentage.toFixed(1)) });
       // Trigger Heidi's usage-to-upsell workflow
       heidiAutomator.triggerWorkflow('usage_to_upsell', {
         customerId: data.customerId,
@@ -1577,29 +1567,33 @@ server.listen(PORT, async () => {
   
   // Setup CASCADE V2 event listeners
   cascade.on('heartbeat', (heartbeat) => {
-    console.log(`[CASCADE V2] Heartbeat: ${heartbeat.status} - Active modules: ${heartbeat.active_modules.length}`);
+    logger.info('CASCADE V2: Heartbeat', { status: heartbeat.status, activeModuleCount: heartbeat.active_modules.length });
   });
-  
+
   cascade.on('emission_success', (success) => {
-    console.log(`[CASCADE V2] Emission successful: ${success.event_id} -> ${success.target_system} (ack: ${success.acknowledged})`);
+    logger.info('CASCADE V2: Emission successful', { eventId: success.event_id, targetSystem: success.target_system, acknowledged: success.acknowledged });
   });
-  
+
   cascade.on('quarantine_resolved', (record) => {
-    console.log(`[CASCADE V2] Quarantine resolved: ${record.event_id}`);
+    logger.info('CASCADE V2: Quarantine resolved', { eventId: record.event_id });
   });
-  
+
   cascade.on('event_dead_lettered', (deadLetter) => {
-    console.log(`[CASCADE V2] Event dead-lettered: ${deadLetter.event_id} - Reason: ${deadLetter.dead_letter_reason}`);
+    logger.info('CASCADE V2: Event dead-lettered', { eventId: deadLetter.event_id, reason: deadLetter.dead_letter_reason });
   });
-  
+
   cascade.on('schema_violation', (violation) => {
-    console.log(`[CASCADE V2] Schema violation: ${violation.event.event_id} - Errors: ${violation.violations.length}`);
+    logger.info('CASCADE V2: Schema violation', { eventId: violation.event.event_id, errorCount: violation.violations.length });
   });
-  
+
   cascade.on('health_snapshot', (snapshot) => {
     // Log every 5th snapshot to avoid spam
     if (Math.random() < 0.2) {
-      console.log(`[CASCADE V2] Health: ${snapshot.system_health} | Throughput: ${snapshot.event_throughput.current.toFixed(2)}/s | Error ratio: ${(snapshot.error_ratio.current * 100).toFixed(1)}%`);
+      logger.info('CASCADE V2: Health', {
+        systemHealth: snapshot.system_health,
+        throughputPerSec: Number(snapshot.event_throughput.current.toFixed(2)),
+        errorRatioPercent: Number((snapshot.error_ratio.current * 100).toFixed(1))
+      });
     }
   });
   
@@ -1629,64 +1623,66 @@ server.listen(PORT, async () => {
   
   // Bridge local model health events to dashboard
   agentBus.on('model_flatlined', (event) => {
-    console.log(`[AGENT BUS] ALERT: Model ${event.modelId} flatlined — redirecting to ${event.backupRoute || 'NONE'}`);
+    logger.info('AGENT BUS: ALERT Model flatlined', { modelId: event.modelId, backupRoute: event.backupRoute || 'NONE' });
   });
-  
+
   agentBus.on('model_redirect', (event) => {
-    console.log(`[AGENT BUS] Redirect: ${event.from} -> ${event.to} (${event.reason})`);
+    logger.info('AGENT BUS: Redirect', { from: event.from, to: event.to, reason: event.reason });
   });
-  
+
   agentBus.on('fail_event', (fail) => {
-    console.log(`[AGENT BUS] FAIL EVENT: ${fail.action} for ${fail.customerId || 'system'} — ${fail.error}`);
+    logger.info('AGENT BUS: Fail event', { action: fail.action, customerId: fail.customerId || 'system', error: fail.error });
   });
-  
+
   // Bridge Ursula heartbeat to the Agent Bus
   const ursulaHeartbeat = require('../modules/ursula-heartbeat');
   if (ursulaHeartbeat) {
-    console.log('[AGENT BUS] Ursula heartbeat monitor bridged to bus telemetry');
+    logger.info('AGENT BUS: Ursula heartbeat monitor bridged to bus telemetry');
   }
   
   // cascadeStatus (from cascade.start(), above) is just { status, start_time,
   // version } — the summary below needs the live stats/system_health shape.
   const cascadeStats = cascade.getStatus();
-  console.log('CASCADE V2:');
-  console.log('  - Processed:', cascadeStats.stats.events_processed);
-  console.log('  - Rejected:', cascadeStats.stats.events_rejected, '(Schema:', cascadeStats.stats.schema_violations, '| Duplicates:', cascadeStats.stats.duplicate_blocks, '| Low Conf:', cascadeStats.stats.low_confidence_blocks, ')');
-  console.log('  - Quarantined:', cascadeStats.stats.events_quarantined);
-  console.log('  - Dead-lettered:', cascadeStats.stats.events_dead_lettered);
-  console.log('  - Repair manifests:', cascadeStats.stats.repair_manifests_generated);
-  console.log('System Health:', cascadeStats.system_health.toUpperCase());
-  console.log('Pipeline V2: Schema Lock -> Fingerprint -> Confidence Check -> Hard Classification -> Decision -> Emit (w/ Ack) -> Dead Letter');
-  console.log('SERVICE BUNDLE:');
-  console.log('  - Active services:', subscriptionManager.serviceBundle ? subscriptionManager.serviceBundle.services.size : 'disabled');
-  console.log('  - Active subscriptions:', subscriptionManager.subscriptions ? subscriptionManager.subscriptions.size : 'n/a (DB-backed)');
-  console.log('==================\n');
+  logger.info('Startup summary: CASCADE V2', {
+    processed: cascadeStats.stats.events_processed,
+    rejected: cascadeStats.stats.events_rejected,
+    rejectedSchemaViolations: cascadeStats.stats.schema_violations,
+    rejectedDuplicates: cascadeStats.stats.duplicate_blocks,
+    rejectedLowConfidence: cascadeStats.stats.low_confidence_blocks,
+    quarantined: cascadeStats.stats.events_quarantined,
+    deadLettered: cascadeStats.stats.events_dead_lettered,
+    repairManifestsGenerated: cascadeStats.stats.repair_manifests_generated,
+    systemHealth: cascadeStats.system_health.toUpperCase(),
+    pipeline: 'Schema Lock -> Fingerprint -> Confidence Check -> Hard Classification -> Decision -> Emit (w/ Ack) -> Dead Letter',
+    serviceBundleActiveServices: subscriptionManager.serviceBundle ? subscriptionManager.serviceBundle.services.size : 'disabled',
+    serviceBundleActiveSubscriptions: subscriptionManager.subscriptions ? subscriptionManager.subscriptions.size : 'n/a (DB-backed)'
+  });
 });
 
 // Graceful shutdown
 process.on('SIGTERM', async () => {
-  console.log('\n[SHUTDOWN] Gracefully shutting down Forge ecosystem...');
+  logger.info('SHUTDOWN: Gracefully shutting down Forge ecosystem');
 
   // 1. Persist in-flight Agent Bus messages to pending_tasks table
-  console.log('[SHUTDOWN] Persisting in-flight Agent Bus messages...');
+  logger.info('SHUTDOWN: Persisting in-flight Agent Bus messages');
   try {
     await agentBus.persistInFlight();
     await agentBus.flushTelemetry(true);
     agentBus.stopHeartbeatMonitor();
-    console.log('[SHUTDOWN] Agent Bus state persisted and telemetry flushed');
+    logger.info('SHUTDOWN: Agent Bus state persisted and telemetry flushed');
   } catch (err) {
-    console.error('[SHUTDOWN] Agent Bus persistence error:', err.message);
+    logger.error('SHUTDOWN: Agent Bus persistence error', { error: err.message });
   }
 
   // 2. Stop Heidi automator
   heidiAutomator.stop();
-  console.log('[SHUTDOWN] Heidi automator stopped');
+  logger.info('SHUTDOWN: Heidi automator stopped');
 
   // 3. Shutdown local model adapter
   await localModelAdapter.shutdown();
-  console.log('[SHUTDOWN] Local model adapter shut down');
+  logger.info('SHUTDOWN: Local model adapter shut down');
 
-  console.log('[SHUTDOWN] Forge ecosystem shutdown complete');
+  logger.info('SHUTDOWN: Forge ecosystem shutdown complete');
   process.exit(0);
 });
 
