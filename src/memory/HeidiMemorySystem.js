@@ -12,6 +12,7 @@ const EventEmitter = require('events');
 const { supabase } = require('../database');
 const fs = require('fs').promises;
 const path = require('path');
+const logger = require('../../lib/structured-logger').child({ component: 'HeidiMemorySystem' });
 
 class HeidiMemorySystem extends EventEmitter {
   constructor(config = {}) {
@@ -71,9 +72,9 @@ class HeidiMemorySystem extends EventEmitter {
     this.initialize();
     this.startMaintenanceTasks();
 
-    console.log('[MEMORY] Heidi Memory System initialized');
-    console.log(`[MEMORY] Session TTL: ${this.config.sessionTTL}ms`);
-    console.log(`[MEMORY] Reflection interval: ${this.config.reflectionInterval}ms`);
+    logger.info('Heidi Memory System initialized');
+    logger.info('Session TTL configured', { sessionTTLMs: this.config.sessionTTL });
+    logger.info('Reflection interval configured', { reflectionIntervalMs: this.config.reflectionInterval });
   }
 
   async initialize() {
@@ -86,9 +87,9 @@ class HeidiMemorySystem extends EventEmitter {
       if (this._destroyed) return;
       await this.initializeDatabaseTables();
       if (this._destroyed) return;
-      console.log('[MEMORY] Memory system initialized successfully');
+      logger.info('Memory system initialized successfully');
     } catch (error) {
-      if (!this._destroyed) console.error('[MEMORY] Initialization failed:', error.message);
+      if (!this._destroyed) logger.error('Initialization failed', { error });
     }
   }
 
@@ -116,14 +117,14 @@ class HeidiMemorySystem extends EventEmitter {
 
   storeTask(taskId, task) {
     this.storeSession(taskId, task, 'tasks');
-    console.log(`[MEMORY] Task stored in session: ${taskId}`);
+    logger.info('Task stored in session', { taskId });
   }
 
   getTask(taskId) { return this.getSession(taskId, 'tasks'); }
 
   storeGoal(goalId, goal) {
     this.storeSession(goalId, goal, 'goals');
-    console.log(`[MEMORY] Goal stored in session: ${goalId}`);
+    logger.info('Goal stored in session', { goalId });
   }
 
   getGoal(goalId) { return this.getSession(goalId, 'goals'); }
@@ -139,9 +140,9 @@ class HeidiMemorySystem extends EventEmitter {
       if (error) throw error;
       this.dbMemory.userProfiles.set(userId, { ...profile, updated_at: profileData.updated_at });
       this.emit('user_profile_stored', { userId, profile });
-      console.log(`[MEMORY] User profile stored: ${userId}`);
+      logger.info('User profile stored', { userId });
     } catch (error) {
-      console.error(`[MEMORY] Failed to store user profile ${userId}:`, error.message);
+      logger.error('Failed to store user profile', { userId, error });
       throw error;
     }
   }
@@ -158,7 +159,7 @@ class HeidiMemorySystem extends EventEmitter {
       }
       return null;
     } catch (error) {
-      console.error(`[MEMORY] Failed to get user profile ${userId}:`, error.message);
+      logger.error('Failed to get user profile', { userId, error });
       throw error;
     }
   }
@@ -181,9 +182,9 @@ class HeidiMemorySystem extends EventEmitter {
       if (error) throw error;
       this.dbMemory.decisions.set(decision.id, decision);
       this.emit('decision_stored', { decisionId: decision.id, decision });
-      console.log(`[MEMORY] Decision stored: ${decision.id}`);
+      logger.info('Decision stored', { decisionId: decision.id });
     } catch (error) {
-      console.error(`[MEMORY] Failed to store decision ${decision.id}:`, error.message);
+      logger.error('Failed to store decision', { decisionId: decision.id, error });
       throw error;
     }
   }
@@ -196,7 +197,7 @@ class HeidiMemorySystem extends EventEmitter {
       if (error) throw error;
       return data || [];
     } catch (error) {
-      console.error('[MEMORY] Failed to get recent decisions:', error.message);
+      logger.error('Failed to get recent decisions', { error });
       throw error;
     }
   }
@@ -217,9 +218,9 @@ class HeidiMemorySystem extends EventEmitter {
       if (error) throw error;
       this.dbMemory.revenue.set(event.id, event);
       this.emit('revenue_event_stored', { eventId: event.id, event });
-      console.log(`[MEMORY] Revenue event stored: ${event.id} ($${event.amount})`);
+      logger.info('Revenue event stored', { eventId: event.id, amount: event.amount });
     } catch (error) {
-      console.error(`[MEMORY] Failed to store revenue event ${event.id}:`, error.message);
+      logger.error('Failed to store revenue event', { eventId: event.id, error });
       throw error;
     }
   }
@@ -237,9 +238,9 @@ class HeidiMemorySystem extends EventEmitter {
       if (error) throw error;
       this.dbMemory.performance.set(performance.id, performance);
       this.emit('performance_stored', { performanceId: performance.id, performance });
-      console.log(`[MEMORY] Performance metric stored: ${performance.id}`);
+      logger.info('Performance metric stored', { performanceId: performance.id });
     } catch (error) {
-      console.error(`[MEMORY] Failed to store performance ${performance.id}:`, error.message);
+      logger.error('Failed to store performance', { performanceId: performance.id, error });
       throw error;
     }
   }
@@ -250,14 +251,14 @@ class HeidiMemorySystem extends EventEmitter {
     const entry = { id: strategyId, strategy, outcome, timestamp: Date.now(), effectiveness: this.calculateEffectiveness(strategy, outcome) };
     this.reflectiveMemory.whatWorked.set(strategyId, entry);
     this.emit('what_worked_stored', { strategyId, entry });
-    console.log(`[MEMORY] Strategy that worked: ${strategyId}`);
+    logger.info('Strategy that worked', { strategyId });
   }
 
   storeWhatFailed(strategyId, strategy, error, context) {
     const entry = { id: strategyId, strategy, error, context, timestamp: Date.now(), severity: this.assessFailureSeverity(error, context) };
     this.reflectiveMemory.whatFailed.set(strategyId, entry);
     this.emit('what_failed_stored', { strategyId, entry });
-    console.log(`[MEMORY] Strategy that failed: ${strategyId}`);
+    logger.info('Strategy that failed', { strategyId });
   }
 
   trackConfidenceVsReality(taskId, expectedConfidence, actualOutcome) {
@@ -274,7 +275,7 @@ class HeidiMemorySystem extends EventEmitter {
     }
     this.updateDriftScore();
     this.emit('confidence_tracked', { taskId, entry });
-    console.log(`[MEMORY] Confidence vs reality tracked: ${taskId} (accuracy: ${entry.accuracy.toFixed(2)})`);
+    logger.info('Confidence vs reality tracked', { taskId, accuracy: Number(entry.accuracy.toFixed(2)) });
   }
 
   storePattern(pattern) {
@@ -282,7 +283,7 @@ class HeidiMemorySystem extends EventEmitter {
     this.reflectiveMemory.patterns.push(entry);
     if (this.reflectiveMemory.patterns.length > this.config.maxReflectionHistory) this.reflectiveMemory.patterns.shift();
     this.emit('pattern_detected', { pattern: entry });
-    console.log(`[MEMORY] Pattern detected: ${entry.type}`);
+    logger.info('Pattern detected', { patternType: entry.type });
   }
 
   storeAdaptation(adaptation) {
@@ -290,7 +291,7 @@ class HeidiMemorySystem extends EventEmitter {
     this.reflectiveMemory.adaptations.push(entry);
     if (this.reflectiveMemory.adaptations.length > this.config.maxReflectionHistory) this.reflectiveMemory.adaptations.shift();
     this.emit('adaptation_made', { adaptation: entry });
-    console.log(`[MEMORY] Adaptation made: ${entry.type}`);
+    logger.info('Adaptation made', { adaptationType: entry.type });
   }
 
   // ── Reflection engine ──────────────────────────────────────────────────
@@ -299,7 +300,7 @@ class HeidiMemorySystem extends EventEmitter {
     if (this._destroyed) return;
     const reflectionId = `reflection_${Date.now()}`;
     try {
-      if (!this._destroyed) console.log(`[MEMORY] Starting reflection cycle: ${reflectionId}`);
+      if (!this._destroyed) logger.info('Starting reflection cycle', { reflectionId });
       const reflection = {
         id: reflectionId,
         timestamp: Date.now(),
@@ -313,10 +314,10 @@ class HeidiMemorySystem extends EventEmitter {
       await this.persistReflection(reflection);
       this.reflectiveMemory.lastReflection = Date.now();
       if (!this._destroyed) this.emit('reflection_completed', reflection);
-      if (!this._destroyed) console.log(`[MEMORY] Reflection completed: ${reflectionId}`);
+      if (!this._destroyed) logger.info('Reflection completed', { reflectionId });
       return reflection;
     } catch (error) {
-      if (!this._destroyed) console.error(`[MEMORY] Reflection failed: ${reflectionId}:`, error.message);
+      if (!this._destroyed) logger.error('Reflection failed', { reflectionId, error });
       throw error;
     }
   }
@@ -459,18 +460,18 @@ class HeidiMemorySystem extends EventEmitter {
     if (oldestKey) {
       memory.delete(oldestKey);
       this.sessionMemory.lastAccess.delete(oldestKey);
-      console.log(`[MEMORY] Evicted oldest session item: ${oldestKey}`);
+      logger.info('Evicted oldest session item', { oldestKey });
     }
   }
 
   // ── Persistence and maintenance ────────────────────────────────────────
 
   async initializeDatabaseTables() {
-    if (!this._destroyed) console.log('[MEMORY] Database tables assumed to exist');
+    if (!this._destroyed) logger.info('Database tables assumed to exist');
   }
 
   async loadDatabaseCache() {
-    if (!this._destroyed) console.log('[MEMORY] Loading database cache...');
+    if (!this._destroyed) logger.info('Loading database cache');
   }
 
   // Maps serialize to {} under JSON.stringify; convert to/from [k,v] entry arrays.
@@ -502,13 +503,13 @@ class HeidiMemorySystem extends EventEmitter {
         // into Maps so storeWhatWorked/storeWhatFailed can call .set() on them.
         this.reflectiveMemory.whatWorked = this._toReflectiveMap(parsed.whatWorked);
         this.reflectiveMemory.whatFailed = this._toReflectiveMap(parsed.whatFailed);
-        if (!this._destroyed) console.log('[MEMORY] Reflective memory loaded from disk');
+        if (!this._destroyed) logger.info('Reflective memory loaded from disk');
       } catch (error) {
         if (error.code !== 'ENOENT') throw error;
-        if (!this._destroyed) console.log('[MEMORY] No existing reflective memory found, starting fresh');
+        if (!this._destroyed) logger.info('No existing reflective memory found, starting fresh');
       }
     } catch (error) {
-      if (!this._destroyed) console.error('[MEMORY] Failed to load reflective memory:', error.message);
+      if (!this._destroyed) logger.error('Failed to load reflective memory', { error });
     }
   }
 
@@ -519,7 +520,7 @@ class HeidiMemorySystem extends EventEmitter {
       await fs.writeFile(filePath, JSON.stringify(this._serializeReflective({ lastReflection: Date.now() }), null, 2));
       if (this.config.enablePersistence && !this._destroyed) await this.storeReflectionInDatabase(reflection);
     } catch (error) {
-      if (!this._destroyed) console.error('[MEMORY] Failed to persist reflection:', error.message);
+      if (!this._destroyed) logger.error('Failed to persist reflection', { error });
     }
   }
 
@@ -537,7 +538,7 @@ class HeidiMemorySystem extends EventEmitter {
       // Disable DB persistence after the first failure (e.g. table absent) so it
       // doesn't log every cycle. Local JSON persistence still works.
       this._reflectionDbDisabled = true;
-      if (!this._destroyed) console.warn('[MEMORY] Reflection DB persistence off (apply migration 20260617_heidi_orchestrator_schema.sql):', error.message);
+      if (!this._destroyed) logger.warn('Reflection DB persistence off (apply migration 20260617_heidi_orchestrator_schema.sql)', { error });
     }
   }
 
@@ -550,7 +551,7 @@ class HeidiMemorySystem extends EventEmitter {
       if (this._destroyed) return;
       if (Date.now() - this.reflectiveMemory.lastReflection >= this.config.reflectionInterval) {
         this.runReflection().catch(err => {
-          if (!this._destroyed) console.error('[MEMORY] Reflection cycle failed:', err.message);
+          if (!this._destroyed) logger.error('Reflection cycle failed', { error: err });
         });
       }
     }, 60000);
@@ -577,7 +578,7 @@ class HeidiMemorySystem extends EventEmitter {
         }
       }
     }
-    if (cleaned > 0) console.log(`[MEMORY] Cleaned ${cleaned} expired session items`);
+    if (cleaned > 0) logger.info('Cleaned expired session items', { cleaned });
   }
 
   async persistReflectiveMemory() {
@@ -586,7 +587,7 @@ class HeidiMemorySystem extends EventEmitter {
       const filePath = path.join(this.config.localStoragePath, 'reflective_memory.json');
       await fs.writeFile(filePath, JSON.stringify(this._serializeReflective({ lastSaved: Date.now() }), null, 2));
     } catch (error) {
-      if (!this._destroyed) console.error('[MEMORY] Failed to persist reflective memory:', error.message);
+      if (!this._destroyed) logger.error('Failed to persist reflective memory', { error });
     }
   }
 
@@ -636,7 +637,7 @@ class HeidiMemorySystem extends EventEmitter {
     for (const cache of Object.keys(this.dbMemory)) this.dbMemory[cache].clear();
     this.reflectiveMemory = { whatWorked: new Map(), whatFailed: new Map(), confidenceReality: [], driftScore: 0, patterns: [], adaptations: [], lastReflection: Date.now() };
     this.driftScore = 0;
-    console.log('[MEMORY] Memory system reset completed');
+    logger.info('Memory system reset completed');
   }
 }
 

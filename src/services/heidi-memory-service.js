@@ -4,6 +4,7 @@
  */
 
 const { createClient } = require('@supabase/supabase-js');
+const logger = require('../../lib/structured-logger').child({ component: 'HeidiMemoryService' });
 
 class HeidiMemoryService {
     constructor(supabaseUrl, supabaseKey) {
@@ -54,10 +55,10 @@ class HeidiMemoryService {
             this.cache.delete(`theme_accuracy_${theme}`);
             this.cache.delete('system_calibration');
 
-            console.log(`[MEMORY] Recorded prediction: ${taskId} -> ${theme} (${confidence.toFixed(2)})`);
+            logger.info('Recorded prediction', { taskId, theme, confidence: Number(confidence.toFixed(2)) });
             return data;
         } catch (error) {
-            console.error('[MEMORY] Failed to record prediction:', error);
+            logger.error('Failed to record prediction', { error });
             throw error;
         }
     }
@@ -81,10 +82,10 @@ class HeidiMemoryService {
             this.cache.delete(`theme_accuracy_${actualTheme}`);
             this.cache.delete('system_calibration');
 
-            console.log(`[MEMORY] Recorded outcome: ${taskId} -> ${actualTheme} (${wasCorrect ? 'correct' : 'wrong'})`);
+            logger.info('Recorded outcome', { taskId, actualTheme, wasCorrect });
             return data;
         } catch (error) {
-            console.error('[MEMORY] Failed to record outcome:', error);
+            logger.error('Failed to record outcome', { error });
             throw error;
         }
     }
@@ -107,7 +108,7 @@ class HeidiMemoryService {
             this.setCached(cacheKey, data);
             return data;
         } catch (error) {
-            console.error('[MEMORY] Failed to get theme accuracy:', error);
+            logger.error('Failed to get theme accuracy', { error });
             // Return default on error
             return { rolling_accuracy: 0.5, correct: 0, incorrect: 0 };
         }
@@ -131,7 +132,7 @@ class HeidiMemoryService {
             this.setCached(cacheKey, data);
             return data;
         } catch (error) {
-            console.error('[MEMORY] Failed to get system calibration:', error);
+            logger.error('Failed to get system calibration', { error });
             return {
                 total_predictions: 0,
                 overall_accuracy: 0.0,
@@ -152,7 +153,7 @@ class HeidiMemoryService {
 
             return data;
         } catch (error) {
-            console.error('[MEMORY] Failed to get theme calibration:', error);
+            logger.error('Failed to get theme calibration', { error });
             return null;
         }
     }
@@ -178,10 +179,10 @@ class HeidiMemoryService {
 
             if (error) throw error;
 
-            console.log(`[MEMORY] Stored reflection for task: ${reflection.taskId}`);
+            logger.info('Stored reflection for task', { taskId: reflection.taskId });
             return data;
         } catch (error) {
-            console.error('[MEMORY] Failed to store reflection:', error);
+            logger.error('Failed to store reflection', { error });
             throw error;
         }
     }
@@ -203,10 +204,10 @@ class HeidiMemoryService {
 
             if (error) throw error;
 
-            console.error(`[MEMORY] Logged system misalignment: ${event.severity} severity`);
+            logger.error('Logged system misalignment', { severity: event.severity });
             return data;
         } catch (error) {
-            console.error('[MEMORY] Failed to log misalignment:', error);
+            logger.error('Failed to log misalignment', { error });
             throw error;
         }
     }
@@ -223,7 +224,7 @@ class HeidiMemoryService {
             if (error) throw error;
             return data;
         } catch (error) {
-            console.error('[MEMORY] Failed to get reflections:', error);
+            logger.error('Failed to get reflections', { error });
             return [];
         }
     }
@@ -246,7 +247,7 @@ class HeidiMemoryService {
             if (error) throw error;
             return data;
         } catch (error) {
-            console.error('[MEMORY] Failed to get overconfidence events:', error);
+            logger.error('Failed to get overconfidence events', { error });
             return [];
         }
     }
@@ -263,7 +264,7 @@ class HeidiMemoryService {
             if (error) throw error;
             return data;
         } catch (error) {
-            console.error('[MEMORY] Failed to get misalignment events:', error);
+            logger.error('Failed to get misalignment events', { error });
             return [];
         }
     }

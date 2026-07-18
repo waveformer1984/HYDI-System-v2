@@ -4,6 +4,8 @@
  * Includes negative state caching for expired subscriptions
  */
 
+const logger = require('../../lib/structured-logger').child({ component: 'SubscriptionCache' });
+
 class SubscriptionCache {
   constructor() {
     // L1: In-memory (5 min TTL) - ultra fast
@@ -169,7 +171,7 @@ class SubscriptionCache {
       }
       
       if (l1Cleaned > 0 || l2Cleaned > 0) {
-        console.log(`[CACHE] Cleanup: L1=${l1Cleaned}, L2=${l2Cleaned}`);
+        logger.info('Cache cleanup', { l1Cleaned, l2Cleaned });
       }
     }, 60 * 1000); // Every minute
   }

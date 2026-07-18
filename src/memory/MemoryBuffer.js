@@ -5,6 +5,8 @@
  * No network dependency, no latency, no uncertainty
  */
 
+const logger = require('../../lib/structured-logger').child({ component: 'MemoryBuffer' });
+
 class MemoryBuffer {
   constructor() {
     // In-memory storage
@@ -198,16 +200,16 @@ class MemoryBuffer {
           const batch = toFlush.slice(i, i + batchSize);
           
           await Promise.all(
-            batch.map(item => 
+            batch.map(item =>
               persistenceLayer.write(item.table, item.data)
-                .catch(e => console.error('[BUFFER] Flush failed:', e))
+                .catch(e => logger.error('Flush failed', { table: item.table, error: e }))
             )
           );
         }
-        
-        console.log(`[BUFFER] Flushed ${toFlush.length} items to persistence`);
+
+        logger.info('Flushed items to persistence', { count: toFlush.length });
       } catch (e) {
-        console.error('[BUFFER] Flush error:', e);
+        logger.error('Flush error', { error: e });
         // Items stay in buffer for retry
         this.flushQueue.unshift(...toFlush);
       }
@@ -234,9 +236,9 @@ class MemoryBuffer {
       });
       
       this.buffer.set(table, tableMap);
-      console.log(`[BUFFER] Loaded ${data.length} items into ${table} buffer`);
+      logger.info('Loaded items into buffer', { count: data.length, table });
     } catch (e) {
-      console.error(`[BUFFER] Failed to load ${table}:`, e);
+      logger.error('Failed to load table into buffer', { table, error: e });
     }
   }
 

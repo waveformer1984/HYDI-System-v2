@@ -6,12 +6,13 @@
 const Stripe = require('stripe');
 // const UrsulaServiceBundle = require('../../modules/ursula-service-bundle'); // Temporarily disabled due to syntax errors
 const { supabase } = require('../database');
+const logger = require('../../lib/structured-logger').child({ component: 'SubscriptionManager' });
 
 class SubscriptionManager {
   constructor() {
     const stripeKey = process.env.STRIPE_SECRET_KEY;
     if (!stripeKey) {
-      console.warn('[SubscriptionManager] STRIPE_SECRET_KEY not set — Stripe features disabled');
+      logger.warn('STRIPE_SECRET_KEY not set — Stripe features disabled');
     }
     this.stripe = stripeKey ? new Stripe(stripeKey) : null;
     // this.serviceBundle = new UrsulaServiceBundle(); // Temporarily disabled
@@ -101,7 +102,7 @@ class SubscriptionManager {
 
       if (error) throw error;
     } catch (error) {
-      console.error('Failed to record usage:', error);
+      logger.error('Failed to record usage', { error });
     }
   }
 
@@ -129,7 +130,7 @@ class SubscriptionManager {
         apiDocsUrl: `${process.env.BASE_URL}/docs/api`
       });
     } catch (heidiError) {
-      console.error(`[DEATH LOOP GUARD] Heidi API key delivery failed for ${data.customerId}:`, heidiError.message);
+      logger.error('[DEATH LOOP GUARD] Heidi API key delivery failed', { customerId: data.customerId, error: heidiError });
       // Customer still gets API key - they can find it in dashboard later
     }
 
@@ -142,7 +143,7 @@ class SubscriptionManager {
         apiKey: apiKey.key
       });
     } catch (heidiError) {
-      console.error(`[DEATH LOOP GUARD] Heidi welcome sequence failed for ${data.customerId}:`, heidiError.message);
+      logger.error('[DEATH LOOP GUARD] Heidi welcome sequence failed', { customerId: data.customerId, error: heidiError });
       // Customer still has working subscription - welcome email is non-critical
     }
 
@@ -150,12 +151,12 @@ class SubscriptionManager {
     try {
       await this.scheduleOnboarding(data);
     } catch (heidiError) {
-      console.error(`[DEATH LOOP GUARD] Heidi onboarding scheduling failed for ${data.customerId}:`, heidiError.message);
+      logger.error('[DEATH LOOP GUARD] Heidi onboarding scheduling failed', { customerId: data.customerId, error: heidiError });
       // Onboarding is delayed but subscription is still active
     }
-    
-    console.log(`[SUBSCRIPTION] New ${data.tier} subscription created for ${data.customerId} with API key ${apiKey.hash.substring(0, 8)}...`);
-    console.log(`[HEIDI] 'Keys to the Kingdom' API key delivery triggered immediately for ${data.customerId}`);
+
+    logger.info('New subscription created', { tier: data.tier, customerId: data.customerId, apiKeyHashPrefix: apiKey.hash.substring(0, 8) });
+    logger.info("[HEIDI] 'Keys to the Kingdom' API key delivery triggered immediately", { customerId: data.customerId });
   }
 
   /**
@@ -215,11 +216,11 @@ class SubscriptionManager {
         })
         .eq('subscription_id', subscriptionId);
       
-      console.log(`[API KEY] Generated ${tier} key with ${permissions.serviceIds.length} services`);
-      
+      logger.info('Generated API key', { tier, serviceCount: permissions.serviceIds.length });
+
       return { key, hash, permissions };
     } catch (error) {
-      console.error('Failed to store API key:', error);
+      logger.error('Failed to store API key', { error });
       throw error;
     }
   }
@@ -231,7 +232,7 @@ class SubscriptionManager {
   async triggerHeidiWorkflow(workflow, data) {
     try {
       // This would integrate with Heidi's workflow system
-      console.log(`[HEIDI] Triggering workflow: ${workflow} for ${data.customerId || 'unknown'}`);
+      logger.info('[HEIDI] Triggering workflow', { workflow, customerId: data.customerId || 'unknown' });
       
       // Store in database for Heidi to process
       const { error } = await supabase
@@ -245,12 +246,12 @@ class SubscriptionManager {
         });
 
       if (error) throw error;
-      
-      console.log(`[HEIDI] Workflow ${workflow} queued successfully`);
+
+      logger.info('[HEIDI] Workflow queued successfully', { workflow });
     } catch (error) {
       // DEATH LOOP GUARD: Log but NEVER throw - Heidi failures must not crash callers
-      console.error(`[DEATH LOOP GUARD] Heidi workflow '${workflow}' failed:`, error.message);
-      console.error(`[DEATH LOOP GUARD] Workflow data:`, JSON.stringify(data, null, 2));
+      logger.error("[DEATH LOOP GUARD] Heidi workflow failed", { workflow, error });
+      logger.error('[DEATH LOOP GUARD] Workflow data', { data });
       // Swallow the error - callers assume success and continue processing
       // Heidi tasks can be manually replayed from logs if needed
     }
@@ -296,7 +297,7 @@ class SubscriptionManager {
 
       if (error) throw error;
     } catch (error) {
-      console.error('Failed to queue marketing content:', error);
+      logger.error('Failed to queue marketing content', { error });
     }
   }
 
@@ -345,7 +346,7 @@ class SubscriptionManager {
 
       return analytics;
     } catch (error) {
-      console.error('Failed to get analytics:', error);
+      logger.error('Failed to get analytics', { error });
       return null;
     }
   }
@@ -362,7 +363,7 @@ class SubscriptionManager {
     try {
       event = this.stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
     } catch (err) {
-      console.log(`Webhook signature verification failed:`, err.message);
+      logger.info('Webhook signature verification failed', { error: err });
       return res.status(400).send(`Webhook Error: ${err.message}`);
     }
 
@@ -380,8 +381,7 @@ class SubscriptionManager {
       }
     } catch (handlerError) {
       // CRITICAL: Log but NEVER crash the webhook handler - Stripe will retry if needed
-      console.error(`[DEATH LOOP GUARD] Webhook handler error (${event.type}):`, handlerError.message);
-      console.error('[DEATH LOOP GUARD] Stack trace:', handlerError.stack);
+      logger.error('[DEATH LOOP GUARD] Webhook handler error', { eventType: event.type, error: handlerError });
       // Still return 200 to Stripe so it doesn't retry indefinitely
       // The error is logged for manual investigation
     }
@@ -395,8 +395,8 @@ class SubscriptionManager {
   async handlePaymentFailure(invoice) {
     const customerId = invoice.customer;
     const subscriptionId = invoice.subscription;
-    
-    console.log(`Payment failed for customer ${customerId}, subscription ${subscriptionId}`);
+
+    logger.info('Payment failed', { customerId, subscriptionId });
     
     // Get subscription details
     const { data: subscription } = await supabase
@@ -417,10 +417,10 @@ class SubscriptionManager {
           nextPaymentAttempt: new Date(invoice.next_payment_attempt * 1000)
         });
       } catch (heidiError) {
-        console.error(`[DEATH LOOP GUARD] Heidi payment recovery failed for ${customerId}:`, heidiError.message);
+        logger.error('[DEATH LOOP GUARD] Heidi payment recovery failed', { customerId, error: heidiError });
         // Continue processing - Stripe webhook succeeds even if Heidi notification fails
       }
-      
+
       // Update subscription status (critical - always try this even if Heidi fails)
       try {
         await supabase
@@ -432,7 +432,7 @@ class SubscriptionManager {
           })
           .eq('subscription_id', subscription.subscription_id);
       } catch (dbError) {
-        console.error(`[DEATH LOOP GUARD] DB update failed for payment failure ${subscription.subscription_id}:`, dbError.message);
+        logger.error('[DEATH LOOP GUARD] DB update failed for payment failure', { subscriptionId: subscription.subscription_id, error: dbError });
         // Log but don't crash - subscription status may be stale but engine stays alive
       }
     }
@@ -443,8 +443,8 @@ class SubscriptionManager {
    */
   async handleSubscriptionDeleted(subscription) {
     const customerId = subscription.customer;
-    
-    console.log(`Subscription deleted for customer ${customerId}`);
+
+    logger.info('Subscription deleted', { customerId });
     
     // Get customer details
     const { data: customerSub } = await supabase
@@ -465,7 +465,7 @@ class SubscriptionManager {
           finalAttempt: true
         });
       } catch (heidiError) {
-        console.error(`[DEATH LOOP GUARD] Heidi final recovery failed for ${customerId}:`, heidiError.message);
+        logger.error('[DEATH LOOP GUARD] Heidi final recovery failed', { customerId, error: heidiError });
         // Continue processing - subscription deletion succeeds even if Heidi notification fails
       }
     }
@@ -498,7 +498,7 @@ class SubscriptionManager {
         .update({ tier: newTier })
         .eq('stripe_subscription_id', subscriptionId);
     } catch (error) {
-      console.error('Failed to update local subscription:', error);
+      logger.error('Failed to update local subscription', { error });
     }
 
     return updatedSubscription;
@@ -522,7 +522,7 @@ class SubscriptionManager {
         })
         .eq('stripe_subscription_id', subscriptionId);
     } catch (error) {
-      console.error('Failed to cancel local subscription:', error);
+      logger.error('Failed to cancel local subscription', { error });
     }
 
     return subscription;
@@ -558,7 +558,7 @@ class SubscriptionManager {
         }
       };
     } catch (error) {
-      console.error('Failed to get usage report:', error);
+      logger.error('Failed to get usage report', { error });
       return null;
     }
   }

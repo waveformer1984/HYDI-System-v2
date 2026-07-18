@@ -9,6 +9,7 @@
  */
 
 const { getMemoryBuffer } = require('./MemoryBuffer.js');
+const logger = require('../../lib/structured-logger').child({ component: 'MemoryStore' });
 
 class MemoryStore {
   constructor(supabase) {
@@ -21,19 +22,19 @@ class MemoryStore {
    * Write data - INSTANT to buffer, async to Supabase
    */
   async write(table, data) {
-    console.log(`[MEMORY] Writing to ${table} (buffer first)...`);
-    
+    logger.info('Writing to table (buffer first)', { table });
+
     // Generate key for buffer
     const key = data.task_id || data.taskId || data.id || `gen_${Date.now()}_${Math.random()}`;
-    console.log(`[MEMORY] Writing with key: ${key}`);
-    
+    logger.info('Writing with key', { key });
+
     // Write to buffer INSTANT - this is the truth
     const buffered = this.buffer.write(table, key, data);
-    
+
     // Async flush to Supabase (non-blocking)
     this.buffer.flushToPersistence(this);
-    
-    console.log(`[MEMORY] ✓ Buffered: ${table} (instant)`);
+
+    logger.info('Buffered write complete (instant)', { table });
     return buffered;
   }
 
@@ -41,35 +42,35 @@ class MemoryStore {
    * Read data - Buffer first, then Supabase
    */
   async read(table, query = {}) {
-    console.log(`[MEMORY] Reading from ${table} (buffer first)...`);
-    
+    logger.info('Reading from table (buffer first)', { table });
+
     // Try buffer first - INSTANT
     if (Object.keys(query).length === 0) {
       // No filters - get all from buffer
       const buffered = this.buffer.readAll(table);
       if (buffered.length > 0) {
-        console.log(`[MEMORY] ✓ Buffer hit: ${buffered.length} rows`);
+        logger.info('Buffer hit', { rows: buffered.length });
         return buffered;
       }
     } else if (query.task_id) {
       // Specific task_id - check buffer
       const buffered = this.buffer.read(table, query.task_id);
       if (buffered) {
-        console.log(`[MEMORY] ✓ Buffer hit: ${query.task_id}`);
+        logger.info('Buffer hit', { taskId: query.task_id });
         return [buffered];
       }
     } else {
       // Complex query - try buffer query
       const buffered = this.buffer.query(table, query);
       if (buffered.length > 0) {
-        console.log(`[MEMORY] ✓ Buffer query hit: ${buffered.length} rows`);
+        logger.info('Buffer query hit', { rows: buffered.length });
         return buffered;
       }
     }
-    
+
     // Buffer miss - try Supabase
-    console.log(`[MEMORY] Buffer miss, trying Supabase...`);
-    
+    logger.info('Buffer miss, trying Supabase', { table });
+
     let q = this.db.from(table).select('*');
 
     // Apply filters
@@ -82,11 +83,11 @@ class MemoryStore {
     const { data, error } = await q;
 
     if (error) {
-      console.error(`[MEMORY READ FAIL] ${table}:`, error);
+      logger.error('Memory read failed', { table, error });
       throw new Error(`Memory read failed: ${error.message}`);
     }
 
-    console.log(`[MEMORY] ✓ Supabase read: ${data.length} rows`);
+    logger.info('Supabase read complete', { rows: data.length });
     return data;
   }
 
@@ -94,18 +95,18 @@ class MemoryStore {
    * Aggregate data - Buffer first, then Supabase
    */
   async aggregate(table, column, filters = {}) {
-    console.log(`[MEMORY] Aggregating ${column} from ${table} (buffer first)...`);
-    
+    logger.info('Aggregating column from table (buffer first)', { table, column });
+
     // Try buffer first
     const buffered = this.buffer.aggregate(table, column);
     if (buffered.length > 0) {
-      console.log(`[MEMORY] ✓ Buffer aggregate: ${buffered.length} values`);
+      logger.info('Buffer aggregate hit', { values: buffered.length });
       return buffered;
     }
-    
+
     // Buffer miss - try Supabase
-    console.log(`[MEMORY] Buffer miss, aggregating from Supabase...`);
-    
+    logger.info('Buffer miss, aggregating from Supabase', { table, column });
+
     let q = this.db.from(table).select(column);
 
     // Apply filters
@@ -118,11 +119,11 @@ class MemoryStore {
     const { data, error } = await q;
 
     if (error) {
-      console.error(`[MEMORY AGGREGATE FAIL] ${table}:`, error);
+      logger.error('Memory aggregate failed', { table, error });
       throw new Error(`Memory aggregate failed: ${error.message}`);
     }
 
-    console.log(`[MEMORY] ✓ Supabase aggregate: ${data.length} values`);
+    logger.info('Supabase aggregate complete', { values: data.length });
     return data;
   }
 
@@ -136,14 +137,14 @@ class MemoryStore {
     
     // Verify in buffer (instant)
     const key = data[verifyField] || data.task_id || data.taskId || data.id;
-    console.log(`[MEMORY] Verifying with key: ${key} from data:`, Object.keys(data));
+    logger.info('Verifying with key', { key, dataKeys: Object.keys(data) });
     const verify = this.buffer.read(table, key);
-    
+
     if (!verify) {
       throw new Error(`[MEMORY INCONSISTENCY] Buffer write failed for ${table}`);
     }
-    
-    console.log(`[MEMORY] ✓ Buffer write-verify complete for ${table}`);
+
+    logger.info('Buffer write-verify complete', { table });
     return verify;
   }
 
@@ -151,25 +152,25 @@ class MemoryStore {
    * Check if table exists and is accessible
    */
   async verifyTable(table) {
-    console.log(`[MEMORY] Verifying table ${table}...`);
-    
+    logger.info('Verifying table', { table });
+
     try {
       const { error } = await this.db
         .from(table)
         .select('*')
         .limit(1);
-      
+
       if (error) {
         if (error.message.includes('does not exist')) {
           throw new Error(`[MEMORY] Table ${table} does not exist`);
         }
         throw error;
       }
-      
-      console.log(`[MEMORY] ✓ Table ${table} is accessible`);
+
+      logger.info('Table is accessible', { table });
       return true;
     } catch (e) {
-      console.error(`[MEMORY] ✗ Table ${table} verification failed:`, e.message);
+      logger.error('Table verification failed', { table, error: e });
       return false;
     }
   }
@@ -178,32 +179,32 @@ class MemoryStore {
    * Initialize required tables
    */
   async initialize() {
-    console.log('[MEMORY] Initializing memory store...');
-    
+    logger.info('Initializing memory store');
+
     const requiredTables = [
       'task_outcomes',
       'cascade_kills',
       'threshold_adaptations'
     ];
-    
+
     let allExist = true;
-    
+
     for (const table of requiredTables) {
       const exists = await this.verifyTable(table);
       if (!exists) {
         allExist = false;
-        console.error(`[MEMORY] Required table missing: ${table}`);
+        logger.error('Required table missing', { table });
       }
     }
-    
+
     if (!allExist) {
       throw new Error(
         '[MEMORY] Initialization failed: Missing required tables. ' +
         'Run the SQL in Supabase dashboard first.'
       );
     }
-    
-    console.log('[MEMORY] ✓ All required tables verified');
+
+    logger.info('All required tables verified');
     return true;
   }
 
@@ -218,7 +219,7 @@ class MemoryStore {
       stats.cascade_kills = (await this.read('cascade_kills')).length;
       stats.threshold_adaptations = (await this.read('threshold_adaptations')).length;
     } catch (e) {
-      console.error('[MEMORY] Failed to get stats:', e.message);
+      logger.error('Failed to get stats', { error: e });
       stats.error = e.message;
     }
     
