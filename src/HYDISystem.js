@@ -49,6 +49,7 @@
 
 const EventEmitter = require('events');
 const path = require('path');
+const logger = require('../lib/structured-logger').child({ component: 'HYDISystem' });
 const HeidiOrchestrator = require('./orchestrator/HeidiOrchestrator');
 const HybridModelStack = require('./models/HybridModelStack');
 const HeidiMemorySystem = require('./memory/HeidiMemorySystem');
@@ -114,16 +115,17 @@ class HYDISystem extends EventEmitter {
     // Start control plane feedback loop
     this.controlPlane.startFeedbackLoop();
     
-    console.log('[HYDI SYSTEM] HYDI v3.0.0 initialized');
-    console.log(`[HYDI SYSTEM] Revenue mode: ${this.config.enableRevenueMode ? 'ENABLED' : 'DISABLED'}`);
-    console.log(`[HYDI SYSTEM] Autonomy mode: ENABLED`);
-    console.log(`[HYDI SYSTEM] Self-awareness: ${this.config.enableSelfAwareness ? 'ENABLED' : 'DISABLED'}`);
-    console.log(`[HYDI SYSTEM] Life-flow analysis: ${this.config.enableLifeFlowAnalysis ? 'ENABLED' : 'DISABLED'}`);
-    console.log(`[HYDI SYSTEM] Local-first: ${this.config.localFirst ? 'ENABLED' : 'DISABLED'}`);
+    logger.info('HYDI v3.0.0 initialized', {
+      revenueMode: this.config.enableRevenueMode,
+      autonomyMode: true,
+      selfAwareness: this.config.enableSelfAwareness,
+      lifeFlowAnalysis: this.config.enableLifeFlowAnalysis,
+      localFirst: this.config.localFirst,
+    });
   }
-  
+
   initializeLayers() {
-    console.log('[HYDI SYSTEM] Initializing layers...');
+    logger.info('Initializing layers...');
     
     // Layer 2: Orchestrator (The Brainstem)
     this.orchestrator = new HeidiOrchestrator({
@@ -209,11 +211,11 @@ class HYDISystem extends EventEmitter {
       });
     }
     
-    console.log('[HYDI SYSTEM] All layers initialized');
+    logger.info('All layers initialized');
   }
-  
+
   setupLayerCommunication() {
-    console.log('[HYDI SYSTEM] Setting up layer communication...');
+    logger.info('Setting up layer communication...');
     
     // Core Loop → Other Layers
     this.coreLoop.on('loop_completed', (event) => {
@@ -284,7 +286,7 @@ class HYDISystem extends EventEmitter {
       });
     }
     
-    console.log('[HYDI SYSTEM] Layer communication established');
+    logger.info('Layer communication established');
   }
   
   /**
@@ -293,11 +295,11 @@ class HYDISystem extends EventEmitter {
   
   async start() {
     if (this.isRunning) {
-      console.log('[HYDI SYSTEM] Already running');
+      logger.info('Already running');
       return;
     }
     
-    console.log('[HYDI SYSTEM] Starting HYDI System...');
+    logger.info('Starting HYDI System...');
     this.startTime = Date.now();
     this.isRunning = true;
     
@@ -325,11 +327,10 @@ class HYDISystem extends EventEmitter {
         config: this.config
       });
       
-      console.log('[HYDI SYSTEM] HYDI System started successfully');
-      console.log(`[HYDI SYSTEM] All layers operational`);
+      logger.info('HYDI System started successfully', { allLayersOperational: true });
       
     } catch (error) {
-      console.error('[HYDI SYSTEM] Failed to start:', error.message);
+      logger.error('Failed to start', { error });
       this.isRunning = false;
       throw error;
     }
@@ -337,11 +338,11 @@ class HYDISystem extends EventEmitter {
   
   async stop() {
     if (!this.isRunning) {
-      console.log('[HYDI SYSTEM] Not running');
+      logger.info('Not running');
       return;
     }
     
-    console.log('[HYDI SYSTEM] Stopping HYDI System...');
+    logger.info('Stopping HYDI System...');
     this.isRunning = false;
     
     try {
@@ -361,10 +362,10 @@ class HYDISystem extends EventEmitter {
         uptime: Date.now() - this.startTime
       });
       
-      console.log('[HYDI SYSTEM] HYDI System stopped');
+      logger.info('HYDI System stopped');
       
     } catch (error) {
-      console.error('[HYDI SYSTEM] Failed to stop:', error.message);
+      logger.error('Failed to stop', { error });
       throw error;
     }
   }
@@ -382,7 +383,7 @@ class HYDISystem extends EventEmitter {
     const startTime = Date.now();
     
     try {
-      console.log(`[HYDI SYSTEM] Processing request: ${requestId} (${request.type})`);
+      logger.info('Processing request', { requestId, requestType: request.type });
       
       // Enrich request
       const enrichedRequest = {
@@ -428,7 +429,7 @@ class HYDISystem extends EventEmitter {
         duration: Date.now() - startTime
       });
       
-      console.log(`[HYDI SYSTEM] Request completed: ${requestId} (${Date.now() - startTime}ms)`);
+      logger.info('Request completed', { requestId, durationMs: Date.now() - startTime });
       
       return {
         success: true,
@@ -438,7 +439,7 @@ class HYDISystem extends EventEmitter {
       };
       
     } catch (error) {
-      console.error(`[HYDI SYSTEM] Request failed: ${requestId} - ${error.message}`);
+      logger.error('Request failed', { requestId, error });
       
       // Track failure in self-awareness
       if (this.selfAwareness) {
@@ -709,7 +710,7 @@ class HYDISystem extends EventEmitter {
    */
   
   handleLoopCompleted(event) {
-    console.log(`[HYDI SYSTEM] Loop completed: ${event.loopId}`);
+    logger.info('Loop completed', { loopId: event.loopId });
     
     // Track loop in self-awareness
     if (this.selfAwareness) {
@@ -727,7 +728,7 @@ class HYDISystem extends EventEmitter {
   }
   
   handleLoopFailed(event) {
-    console.log(`[HYDI SYSTEM] Loop failed: ${event.loopId} - ${event.error}`);
+    logger.error('Loop failed', { loopId: event.loopId, error: event.error });
     
     // Track failure in self-awareness
     if (this.selfAwareness) {
@@ -745,11 +746,11 @@ class HYDISystem extends EventEmitter {
   }
   
   handleHighDrift(event) {
-    console.warn(`[HYDI SYSTEM] High drift detected: ${event.score.toFixed(3)}`);
+    logger.warn('High drift detected', { driftScore: event.score });
     
     // Take corrective action
     if (event.score > 0.5) {
-      console.log('[HYDI SYSTEM] Taking emergency action due to high drift');
+      logger.info('Taking emergency action due to high drift');
       
       // Reduce confidence threshold
       this.config.confidenceThreshold = Math.max(0.5, this.config.confidenceThreshold - 0.1);
@@ -760,11 +761,11 @@ class HYDISystem extends EventEmitter {
   }
   
   handleReflectionCompleted(reflection) {
-    console.log(`[HYDI SYSTEM] Reflection completed: ${reflection.id}`);
+    logger.info('Reflection completed', { reflectionId: reflection.id });
     
     // Apply adaptations if needed
     if (reflection.recommendations.length > 0) {
-      console.log(`[HYDI SYSTEM] Applying ${reflection.recommendations.length} adaptations`);
+      logger.info('Applying adaptations', { count: reflection.recommendations.length });
       
       for (const recommendation of reflection.recommendations) {
         this.applyAdaptation(recommendation);
@@ -773,7 +774,7 @@ class HYDISystem extends EventEmitter {
   }
   
   handleRevenueUpdated(event) {
-    console.log(`[HYDI SYSTEM] Revenue updated: $${event.amount.toFixed(2)} (total: $${event.total.toFixed(2)})`);
+    logger.info('Revenue updated', { amount: event.amount, total: event.total });
     
     // Track revenue in self-awareness
     if (this.selfAwareness) {
@@ -791,7 +792,7 @@ class HYDISystem extends EventEmitter {
   }
   
   handleConversionCompleted(event) {
-    console.log(`[HYDI SYSTEM] Conversion completed: ${event.sessionId} ($${event.amount})`);
+    logger.info('Conversion completed', { sessionId: event.sessionId, amount: event.amount });
     
     // Store conversion in memory
     this.memorySystem.storeRevenueEvent({
@@ -803,7 +804,7 @@ class HYDISystem extends EventEmitter {
   }
   
   handleActionCompleted(event) {
-    console.log(`[HYDI SYSTEM] Action completed: ${event.actionId}`);
+    logger.info('Action completed', { actionId: event.actionId });
     
     // Track in self-awareness
     if (this.selfAwareness) {
@@ -821,22 +822,22 @@ class HYDISystem extends EventEmitter {
   }
   
   handleRevenueTracked(event) {
-    console.log(`[HYDI SYSTEM] Revenue tracked: $${event.amount.toFixed(2)}`);
+    logger.info('Revenue tracked', { amount: event.amount });
   }
   
   handleMemoryReflectionCompleted(reflection) {
-    console.log(`[HYDI SYSTEM] Memory reflection completed: ${reflection.id}`);
+    logger.info('Memory reflection completed', { reflectionId: reflection.id });
   }
   
   handleAdaptationCompleted(event) {
-    console.log(`[HYDI SYSTEM] Control plane adaptation completed: ${event.adaptations.length} adjustments`);
+    logger.info('Control plane adaptation completed', { adjustmentCount: event.adaptations.length });
     
     // Emit to other layers that adaptation occurred
     this.emit('system_adapted', event);
   }
   
   handleLearningRecorded(record) {
-    console.log(`[HYDI SYSTEM] Learning recorded: ${record.actionType} (success: ${record.success})`);
+    logger.info('Learning recorded', { actionType: record.actionType, success: record.success });
     
     // Update self-awareness if available
     if (this.selfAwareness) {
@@ -855,7 +856,7 @@ class HYDISystem extends EventEmitter {
   }
   
   handleLifeFlowSessionStarted(event) {
-    console.log(`[HYDI SYSTEM] Life-flow session started: ${event.sessionId} (${event.intent})`);
+    logger.info('Life-flow session started', { sessionId: event.sessionId, intent: event.intent });
     
     // Store in memory system
     this.memorySystem.storeTask(event.sessionId, {
@@ -870,7 +871,7 @@ class HYDISystem extends EventEmitter {
   }
   
   handleLifeFlowSessionEnded(event) {
-    console.log(`[HYDI SYSTEM] Life-flow session ended: ${event.sessionId} (${event.duration}ms)`);
+    logger.info('Life-flow session ended', { sessionId: event.sessionId, durationMs: event.duration });
     
     // Store in memory system
     this.memorySystem.storeTask(event.sessionId, {
@@ -900,7 +901,7 @@ class HYDISystem extends EventEmitter {
   }
   
   handleLifeFlowAnalysisCompleted(analysis) {
-    console.log(`[HYDI SYSTEM] Life-flow analysis completed: efficiency ${analysis.efficiency.toFixed(3)}`);
+    logger.info('Life-flow analysis completed', { efficiency: analysis.efficiency });
     
     // Store analysis in memory
     this.memorySystem.storeTask(`analysis_${analysis.timestamp}`, {
@@ -927,7 +928,7 @@ class HYDISystem extends EventEmitter {
    */
   
   applyAdaptation(recommendation) {
-    console.log(`[HYDI SYSTEM] Applying adaptation: ${recommendation.action}`);
+    logger.info('Applying adaptation', { action: recommendation.action });
     
     switch (recommendation.action) {
       case 'reduce_confidence_threshold':
@@ -940,7 +941,7 @@ class HYDISystem extends EventEmitter {
         
       case 'switch_primary_model':
         // This would update model stack preferences
-        console.log(`[HYDI SYSTEM] Switching primary model to: ${recommendation.target}`);
+        logger.info('Switching primary model', { target: recommendation.target });
         break;
         
       case 'reduce_external_usage':
@@ -948,7 +949,7 @@ class HYDISystem extends EventEmitter {
         break;
         
       default:
-        console.log(`[HYDI SYSTEM] Unknown adaptation: ${recommendation.action}`);
+        logger.warn('Unknown adaptation', { action: recommendation.action });
     }
   }
   
@@ -1066,7 +1067,7 @@ class HYDISystem extends EventEmitter {
    */
   
   async handleWebhook(provider, event) {
-    console.log(`[HYDI SYSTEM] Handling webhook: ${provider} - ${event.type}`);
+    logger.info('Handling webhook', { provider, eventType: event.type });
     
     switch (provider) {
       case 'stripe':
@@ -1076,7 +1077,7 @@ class HYDISystem extends EventEmitter {
         break;
         
       default:
-        console.log(`[HYDI SYSTEM] Unknown webhook provider: ${provider}`);
+        logger.warn('Unknown webhook provider', { provider });
     }
   }
   
@@ -1085,7 +1086,7 @@ class HYDISystem extends EventEmitter {
    */
   
   async reset() {
-    console.log('[HYDI SYSTEM] Resetting HYDI System...');
+    logger.info('Resetting HYDI System...');
     
     // Reset control plane first
     await this.controlPlane.reset();
@@ -1109,15 +1110,15 @@ class HYDISystem extends EventEmitter {
       await this.deepLifeArchitect.reset();
     }
     
-    console.log('[HYDI SYSTEM] Reset completed');
+    logger.info('Reset completed');
   }
   
   async shutdown() {
-    console.log('[HYDI SYSTEM] Shutting down HYDI System...');
+    logger.info('Shutting down HYDI System...');
     
     await this.stop();
     
-    console.log('[HYDI SYSTEM] Shutdown completed');
+    logger.info('Shutdown completed');
   }
 }
 
