@@ -232,7 +232,7 @@ class HeidiActionLayer extends EventEmitter {
    */
   
   // Execute Stripe payment
-  async executeStripePayment(params, context) {
+  async executeStripePayment(params, _context) {
     if (!this.config.enableRevenueActions) {
       throw new Error('Revenue actions are disabled');
     }
@@ -279,7 +279,7 @@ class HeidiActionLayer extends EventEmitter {
   }
   
   // Create checkout session
-  async createCheckout(params, context) {
+  async createCheckout(params, _context) {
     if (!this.config.enableRevenueActions) {
       throw new Error('Revenue actions are disabled');
     }
@@ -331,7 +331,7 @@ class HeidiActionLayer extends EventEmitter {
   }
   
   // Refund payment
-  async refundPayment(params, context) {
+  async refundPayment(params, _context) {
     const stripe = require('stripe')(this.config.stripeSecretKey);
     
     try {
@@ -366,7 +366,7 @@ class HeidiActionLayer extends EventEmitter {
   }
   
   // Update subscription
-  async updateSubscription(params, context) {
+  async updateSubscription(params, _context) {
     const stripe = require('stripe')(this.config.stripeSecretKey);
     
     try {
@@ -403,7 +403,7 @@ class HeidiActionLayer extends EventEmitter {
    */
   
   // Send email
-  async sendEmail(params, context) {
+  async sendEmail(params, _context) {
     if (!this.config.emailApiKey) {
       throw new Error('Email API key not configured');
     }
@@ -481,7 +481,7 @@ class HeidiActionLayer extends EventEmitter {
   }
   
   // Send webhook
-  async sendWebhook(params, context) {
+  async sendWebhook(params, _context) {
     try {
       console.log(`[WEBHOOK] Sending to ${params.url}`);
       
@@ -527,7 +527,7 @@ class HeidiActionLayer extends EventEmitter {
    */
   
   // Update database
-  async updateDatabase(params, context) {
+  async updateDatabase(params, _context) {
     try {
       console.log(`[DATABASE] Updating ${params.table}`);
       
@@ -613,7 +613,7 @@ class HeidiActionLayer extends EventEmitter {
    */
   
   // Launch script
-  async launchScript(params, context) {
+  async launchScript(params, _context) {
     if (!this.config.enableScriptExecution) {
       throw new Error('Script execution is disabled');
     }
@@ -687,7 +687,7 @@ class HeidiActionLayer extends EventEmitter {
    */
   
   // Generate offer
-  async generateOffer(params, context) {
+  async generateOffer(params, _context) {
     try {
       console.log(`[OFFER] Generating: ${params.type}`);
       
@@ -774,7 +774,7 @@ class HeidiActionLayer extends EventEmitter {
    */
   
   // Deploy page
-  async deployPage(params, context) {
+  async deployPage(params, _context) {
     try {
       console.log(`[DEPLOY] Deploying: ${params.pageId}`);
       
@@ -826,7 +826,7 @@ class HeidiActionLayer extends EventEmitter {
   
   async storePaymentEvent(event) {
     try {
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from('payment_events')
         .insert({
           event_id: `payment_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
@@ -844,7 +844,7 @@ class HeidiActionLayer extends EventEmitter {
   
   async storeCommunicationEvent(event) {
     try {
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from('communication_events')
         .insert({
           event_id: `comm_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
@@ -862,7 +862,7 @@ class HeidiActionLayer extends EventEmitter {
   
   async storeSystemEvent(event) {
     try {
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from('system_events')
         .insert({
           event_id: `system_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
@@ -880,7 +880,7 @@ class HeidiActionLayer extends EventEmitter {
   
   async storeOffer(offer) {
     try {
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from('offers')
         .insert({
           offer_id: offer.id,
@@ -897,7 +897,7 @@ class HeidiActionLayer extends EventEmitter {
   
   async storeDeployment(deployment) {
     try {
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from('deployments')
         .insert({
           deployment_id: deployment.id,

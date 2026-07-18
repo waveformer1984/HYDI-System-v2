@@ -315,7 +315,7 @@ class PreFlightGate {
     return check;
   }
   
-  async checkComponentCreation(action, context) {
+  async checkComponentCreation(action, _context) {
     const componentName = action.params?.name;
     
     if (!componentName) {
@@ -380,7 +380,7 @@ class PreFlightGate {
     };
   }
   
-  async checkActionRedundancy(action, context) {
+  async checkActionRedundancy(action, _context) {
     // Look for similar actions in inventory
     if (!this.auditor.inventory) {
       return { isRedundant: false };
