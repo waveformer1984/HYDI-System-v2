@@ -12,6 +12,7 @@ const { createClient } = require('@supabase/supabase-js');
 const Stripe = require('stripe');
 const fs = require('fs');
 const path = require('path');
+const logger = require('../lib/structured-logger').child({ component: 'RevenueEngine' });
 
 // Bootstrap
 const supabase = createClient(
@@ -41,7 +42,7 @@ class RevenueEngine {
    * Scrapes and compiles leads for 3D printing services
    */
   async scrapeLeads(niche = '3d_printing', location = 'local') {
-    console.log(`[REVENUE] Scraping leads for ${niche} (${location})...`);
+    logger.info('Scraping leads', { niche, location });
     
     // Simulated lead scraping (replace with actual scraping logic)
     const mockLeads = [
@@ -84,7 +85,7 @@ class RevenueEngine {
 
     this.metrics.leadsScraped += mockLeads.length;
     
-    console.log(`[REVENUE] Scraped ${mockLeads.length} leads`);
+    logger.info('Leads scraped', { count: mockLeads.length });
     return mockLeads;
   }
 
@@ -92,7 +93,7 @@ class RevenueEngine {
    * Auto-send cold outreach emails to leads
    */
   async sendOutreach(leadIds = null) {
-    console.log('[REVENUE] Sending outreach emails...');
+    logger.info('Sending outreach emails');
     
     // Get leads that haven't been contacted
     let query = this.supabase.from('leads').select('*').eq('status', 'new');
@@ -100,7 +101,7 @@ class RevenueEngine {
     
     const { data: leads, error } = await query.limit(10);
     if (error || !leads?.length) {
-      console.log('[REVENUE] No new leads to contact');
+      logger.info('No new leads to contact');
       return [];
     }
 
@@ -129,11 +130,11 @@ class RevenueEngine {
       }).eq('id', lead.id);
       
       outreachResults.push({ lead: lead.company, email: email.subject });
-      
-      console.log(`[REVENUE] ✓ Outreach sent to ${lead.company}`);
+
+      logger.info('Outreach sent', { company: lead.company });
     }
 
-    console.log(`[REVENUE] Sent ${outreachResults.length} outreach emails`);
+    logger.info('Outreach emails sent', { count: outreachResults.length });
     return outreachResults;
   }
 
@@ -182,7 +183,7 @@ HYDI Auto-Systems`
    * Generates personalized proposals based on lead data
    */
   async generateProposal(leadId, projectType = 'custom_print') {
-    console.log(`[REVENUE] Generating proposal for ${leadId}...`);
+    logger.info('Generating proposal', { leadId });
     
     // Get lead data
     const { data: lead } = await this.supabase.from('leads').select('*').eq('id', leadId).single();
@@ -209,7 +210,7 @@ HYDI Auto-Systems`
     
     this.metrics.proposalsGenerated++;
     
-    console.log(`[REVENUE] ✓ Proposal generated: ${proposal.id}`);
+    logger.info('Proposal generated', { proposalId: proposal.id });
     return proposal;
   }
 
@@ -246,7 +247,7 @@ HYDI Auto-Systems`
    * Creates instant quotes and Stripe checkout sessions
    */
   async createInstantQuote(params) {
-    console.log('[REVENUE] Creating instant quote...');
+    logger.info('Creating instant quote');
     
     const { projectType, quantity, complexity, rushOrder } = params;
     
@@ -278,17 +279,17 @@ HYDI Auto-Systems`
 
     await this.supabase.from('quotes').insert(quote);
     
-    console.log(`[REVENUE] ✓ Quote created: $${quote.total}`);
+    logger.info('Quote created', { total: quote.total });
     return quote;
   }
 
   async createStripeCheckout(quoteId, customerEmail) {
     if (!this.stripe) {
-      console.error('[REVENUE] ❌ Stripe not configured');
+      logger.error('Stripe not configured');
       return null;
     }
-    
-    console.log(`[REVENUE] Creating Stripe checkout for ${quoteId}...`);
+
+    logger.info('Creating Stripe checkout', { quoteId });
     
     // Get quote
     const { data: quote } = await this.supabase.from('quotes').select('*').eq('id', quoteId).single();
@@ -328,7 +329,7 @@ HYDI Auto-Systems`
 
     this.metrics.checkoutsCreated++;
     
-    console.log(`[REVENUE] ✓ Checkout created: ${session.url}`);
+    logger.info('Checkout created', { url: session.url });
     return { sessionId: session.id, url: session.url };
   }
 
@@ -337,7 +338,7 @@ HYDI Auto-Systems`
    * Generates 3D product ideas and manages listings
    */
   async generateProductIdeas(count = 5) {
-    console.log(`[REVENUE] Generating ${count} product ideas...`);
+    logger.info('Generating product ideas', { count });
     
     const trends = await this.scrapeTrends();
     const ideas = [];
@@ -359,7 +360,7 @@ HYDI Auto-Systems`
       ideas.push(idea);
     }
 
-    console.log(`[REVENUE] ✓ Generated ${ideas.length} product ideas`);
+    logger.info('Product ideas generated', { count: ideas.length });
     return ideas;
   }
 
@@ -384,7 +385,7 @@ HYDI Auto-Systems`
   }
 
   async createProductListing(ideaId, platform = 'etsy') {
-    console.log(`[REVENUE] Creating ${platform} listing for ${ideaId}...`);
+    logger.info('Creating product listing', { platform, ideaId });
     
     // Get idea
     const { data: idea } = await this.supabase.from('product_ideas').select('*').eq('id', ideaId).single();
@@ -411,7 +412,7 @@ HYDI Auto-Systems`
     
     this.metrics.productsListed++;
     
-    console.log(`[REVENUE] ✓ Listing created: ${listing.title}`);
+    logger.info('Listing created', { title: listing.title });
     return listing;
   }
 
@@ -433,7 +434,7 @@ Ships within 2-3 business days.`;
    * Tracks and reports all revenue metrics
    */
   async getRevenueReport(period = 'today') {
-    console.log(`[REVENUE] Generating ${period} revenue report...`);
+    logger.info('Generating revenue report', { period });
     
     const now = new Date();
     let startDate;
@@ -504,7 +505,7 @@ Ships within 2-3 business days.`;
       generated_at: new Date().toISOString()
     };
 
-    console.log(`[REVENUE] ✓ Report generated: $${totalRevenue} revenue`);
+    logger.info('Revenue report generated', { totalRevenue });
     return report;
   }
 
@@ -555,16 +556,14 @@ Ships within 2-3 business days.`;
    * Run complete revenue cycle
    */
   async runRevenueCycle() {
-    console.log('\n═══════════════════════════════════════════');
-    console.log('      HYDI REVENUE ENGINE CYCLE');
-    console.log('═══════════════════════════════════════════\n');
+    logger.info('Revenue cycle starting');
 
     // 1. Scrape leads
     const leads = await this.scrapeLeads();
     const leadScore = this.scoreTask('lead_scraping', { leadsScraped: leads.length });
-    console.log(`[CASCADE] Lead scraping score: ${leadScore.toFixed(2)}`);
+    logger.info('CASCADE score computed', { taskType: 'lead_scraping', score: leadScore });
     if (this.shouldKillTask('lead_scraping', leadScore)) {
-      console.log('[CASCADE] ⚠️ Killing low-performing lead scraping');
+      logger.warn('CASCADE killing low-performing task', { taskType: 'lead_scraping', score: leadScore });
     }
 
     // 2. Send outreach
@@ -589,11 +588,11 @@ Ships within 2-3 business days.`;
     // 6. Generate report
     const report = await this.getRevenueReport('today');
 
-    console.log('\n═══════════════════════════════════════════');
-    console.log('      CYCLE COMPLETE');
-    console.log('═══════════════════════════════════════════');
-    console.log(`Leads: ${leads.length} | Outreach: ${outreach.length} | Revenue: $${report.revenue.total}`);
-    console.log('═══════════════════════════════════════════\n');
+    logger.info('Revenue cycle complete', {
+      leadsCount: leads.length,
+      outreachCount: outreach.length,
+      totalRevenue: report.revenue.total
+    });
 
     return {
       metrics: this.metrics,
