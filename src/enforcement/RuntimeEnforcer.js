@@ -19,6 +19,7 @@
 const fs = require('fs').promises;
 const path = require('path');
 const { execSync } = require('child_process');
+const logger = require('../../lib/structured-logger').child({ component: 'RuntimeEnforcer' });
 
 class RuntimeEnforcer {
   constructor(config = {}) {
@@ -55,9 +56,9 @@ class RuntimeEnforcer {
       this.hookModuleLoader();
     }
     
-    console.log('[RUNTIME ENFORCER] Initialized');
-    console.log(`[ENFORCER] Mode: ${this.config.enforcementMode}`);
-    console.log(`[ENFORCER] Module hooking: ${this.config.enableModuleHooking ? 'ENABLED' : 'DISABLED'}`);
+    logger.info('Runtime enforcer initialized');
+    logger.info('Enforcer mode', { mode: this.config.enforcementMode });
+    logger.info('Enforcer module hooking', { moduleHooking: this.config.enableModuleHooking ? 'ENABLED' : 'DISABLED' });
   }
   
   /**
@@ -71,12 +72,12 @@ class RuntimeEnforcer {
       // Build runtime registries
       this.buildRegistries();
       
-      console.log('[ENFORCER] Manifest loaded and validated');
-      console.log(`[ENFORCER] Registered services: ${this.registeredServices.size}`);
-      
+      logger.info('Manifest loaded and validated');
+      logger.info('Registered services count', { registeredServices: this.registeredServices.size });
+
       return true;
     } catch (error) {
-      console.error('[ENFORCER] Failed to load manifest:', error.message);
+      logger.error('Failed to load manifest', { error });
       
       if (this.config.enforcementMode === 'strict') {
         throw new Error('Runtime enforcement: Manifest not found or invalid');
@@ -124,7 +125,7 @@ class RuntimeEnforcer {
         }
         
         if (!validation.allowed && enforcer.config.enforcementMode === 'permissive') {
-          console.warn(`[ENFORCER] Import not allowed but permitted: ${request} - ${validation.reason}`);
+          logger.warn('Import not allowed but permitted', { request, reason: validation.reason });
           enforcer.logViolation('import_violation', request, validation.reason);
         }
       }
@@ -135,7 +136,7 @@ class RuntimeEnforcer {
     // Store enforcer globally for hook access
     globalThis.__hydiEnforcer = this;
     
-    console.log('[ENFORCER] Module loader hooked');
+    logger.info('Module loader hooked');
   }
   
   /**
@@ -331,7 +332,7 @@ class RuntimeEnforcer {
       return { passed: true, violations: 0 };
     }
     
-    console.log('[ENFORCER] Validating build...');
+    logger.info('Validating build');
     
     const buildValidation = {
       passed: true,
@@ -369,13 +370,13 @@ class RuntimeEnforcer {
     }
     
     // Report results
-    console.log(`[ENFORCER] Build validation: ${buildValidation.passed ? 'PASSED' : 'FAILED'}`);
-    console.log(`[ENFORCER] Violations: ${buildValidation.violations.length}`);
-    console.log(`[ENFORCER] Errors: ${buildValidation.errors.length}`);
-    
+    logger.info('Build validation result', { passed: buildValidation.passed ? 'PASSED' : 'FAILED' });
+    logger.info('Build validation violations', { violations: buildValidation.violations.length });
+    logger.info('Build validation errors', { errors: buildValidation.errors.length });
+
     // Fail build if not passed
     if (!buildValidation.passed && this.config.enforcementMode === 'strict') {
-      console.error('[ENFORCER] Build failed due to violations');
+      logger.error('Build failed due to violations');
       process.exit(this.config.ciExitCode);
     }
     
@@ -398,7 +399,7 @@ class RuntimeEnforcer {
         }
       }
     } catch (error) {
-      console.error('[ENFORCER] Failed to scan for unregistered files:', error.message);
+      logger.error('Failed to scan for unregistered files', { error });
     }
     
     return unregistered;
@@ -487,7 +488,7 @@ class RuntimeEnforcer {
       this.violations = this.violations.slice(-500);
     }
     
-    console.warn(`[ENFORCER] Violation logged: ${type} - ${target} - ${reason}`);
+    logger.warn('Violation logged', { type, target, reason });
   }
   
   /**
@@ -598,7 +599,7 @@ class RuntimeEnforcer {
     this.violations = [];
     this.enforcementLog = [];
     
-    console.log('[ENFORCER] Runtime enforcer reset');
+    logger.info('Runtime enforcer reset');
   }
 }
 

@@ -5,13 +5,14 @@
 
 const Stripe = require('stripe');
 const { supabase } = require('../database');
+const logger = require('../../lib/structured-logger').child({ component: 'StripeWebhookHandler' });
 
 // eslint-disable-next-line no-unused-vars -- kept as-is pending maintainer decision on this file's structure (see CLAUDE.md)
 const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY) : null;
 
 class StripeWebhookHandler {
   async handleEvent(event) {
-    console.log(`[WEBHOOK] Processing ${event.type}`);
+    logger.info('Processing event', { eventType: event.type });
     
     switch (event.type) {
       case 'checkout.session.completed':
@@ -32,7 +33,7 @@ class StripeWebhookHandler {
         break;
         
       default:
-        console.log(`[WEBHOOK] Unhandled event type: ${event.type}`);
+        logger.info('Unhandled event type', { eventType: event.type });
     }
   }
   
@@ -42,7 +43,7 @@ class StripeWebhookHandler {
     const email = metadata?.email || session.customer_details?.email;
     const tier = this.getTierFromPriceId(session.display_items?.[0]?.price?.id);
     
-    console.log(`[WEBHOOK] New checkout: ${customer_id} → ${tier}`);
+    logger.info('New checkout', { customerId: customer_id, tier });
     
     // Upsert user
     const { data: user, error: userError } = await supabase
@@ -59,14 +60,14 @@ class StripeWebhookHandler {
       .single();
       
     if (userError) {
-      console.error('[WEBHOOK] User creation failed:', userError);
+      logger.error('User creation failed', { error: userError });
       throw userError;
     }
-    
+
     // Generate API key for immediate access
     await this.generateAPIKey(user.id, tier);
-    
-    console.log(`[WEBHOOK] User created: ${user.id} (${tier})`);
+
+    logger.info('User created', { userId: user.id, tier });
   }
   
   async handlePaymentSucceeded(invoice) {
@@ -84,11 +85,11 @@ class StripeWebhookHandler {
       .single();
       
     if (error) {
-      console.error('[WEBHOOK] Payment update failed:', error);
+      logger.error('Payment update failed', { error });
       return;
     }
-    
-    console.log(`[WEBHOOK] Payment confirmed: ${customer} → ${user.tier}`);
+
+    logger.info('Payment confirmed', { customer, tier: user.tier });
   }
   
   async handleSubscriptionChange(subscription) {
@@ -110,14 +111,14 @@ class StripeWebhookHandler {
       .single();
       
     if (error) {
-      console.error('[WEBHOOK] Subscription update failed:', error);
+      logger.error('Subscription update failed', { error });
       return;
     }
-    
+
     // Update API key tier
     await this.updateAPIKeyTier(user.id, tier);
-    
-    console.log(`[WEBHOOK] Subscription updated: ${customer} → ${tier} (${status})`);
+
+    logger.info('Subscription updated', { customer, tier, status });
   }
   
   async handleSubscriptionCanceled(subscription) {
@@ -136,14 +137,14 @@ class StripeWebhookHandler {
       .single();
       
     if (error) {
-      console.error('[WEBHOOK] Cancellation failed:', error);
+      logger.error('Cancellation failed', { error });
       return;
     }
-    
+
     // Update API key tier
     await this.updateAPIKeyTier(user.id, 'starter');
-    
-    console.log(`[WEBHOOK] Subscription canceled: ${customer} → starter`);
+
+    logger.info('Subscription canceled', { customer, tier: 'starter' });
   }
   
   getTierFromPriceId(priceId) {
@@ -172,11 +173,11 @@ class StripeWebhookHandler {
       });
       
     if (error) {
-      console.error('[WEBHOOK] API key creation failed:', error);
+      logger.error('API key creation failed', { error });
       return null;
     }
-    
-    console.log(`[WEBHOOK] API key generated for user ${userId}`);
+
+    logger.info('API key generated', { userId });
     return key;
   }
   
@@ -187,7 +188,7 @@ class StripeWebhookHandler {
       .eq('user_id', userId);
       
     if (error) {
-      console.error('[WEBHOOK] API key tier update failed:', error);
+      logger.error('API key tier update failed', { error });
     }
   }
 }

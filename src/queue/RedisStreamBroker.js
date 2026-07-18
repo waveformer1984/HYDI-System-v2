@@ -10,6 +10,8 @@
  *   hydi:edge-results   — results returned from edge nodes
  */
 
+const logger = require('../../lib/structured-logger').child({ component: 'RedisStreamBroker' });
+
 async function redisPost(command) {
   const UPSTASH_URL = process.env.UPSTASH_REDIS_REST_URL;
   const UPSTASH_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -25,13 +27,13 @@ async function redisPost(command) {
       signal: AbortSignal.timeout(4000),
     });
     if (!res.ok) {
-      console.warn(`[REDIS] POST failed: ${res.status}`);
+      logger.warn('POST failed', { status: res.status });
       return null;
     }
     const data = await res.json();
     return data.result ?? null;
   } catch (e) {
-    console.warn(`[REDIS] POST error: ${e.message}`);
+    logger.warn('POST error', { error: e });
     return null;
   }
 }

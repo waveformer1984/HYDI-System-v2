@@ -8,6 +8,7 @@
 
 const crypto = require('crypto');
 const { supabase } = require('../database');
+const logger = require('../../lib/structured-logger').child({ component: 'Keymaker' });
 
 class Keymaker {
   constructor(config = {}) {
@@ -21,7 +22,7 @@ class Keymaker {
     this.services = new Map();
     this.registerDefaultServices();
     
-    console.log('[KEYMAKER] Express middleware initialized');
+    logger.info('Express middleware initialized');
   }
   
   registerDefaultServices() {
@@ -84,7 +85,7 @@ class Keymaker {
         next();
         
       } catch (err) {
-        console.error('[KEYMAKER] Middleware error:', err.message);
+        logger.error('Middleware error', { error: err });
         // Non-fatal: continue with anonymous
         req.keymaker = { identity: this.makeAnonymous(req), key: null, error: err.message };
         next();
@@ -119,7 +120,7 @@ class Keymaker {
         next();
         
       } catch (err) {
-        console.error('[KEYMAKER] Access check error:', err.message);
+        logger.error('Access check error', { error: err });
         return res.status(500).json({ error: 'Access control error', code: 'KEYMAKER_ERROR' });
       }
     };
@@ -288,7 +289,7 @@ class Keymaker {
       this.stateFetchedAt = Date.now();
       return this.systemState;
     } catch (err) {
-      console.warn('[KEYMAKER] Could not fetch system state, using defaults');
+      logger.warn('Could not fetch system state, using defaults', { error: err });
       return { load_level: 'normal', health_status: 'green', maintenance_mode: false };
     }
   }

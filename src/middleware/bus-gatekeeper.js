@@ -6,6 +6,7 @@
  */
 
 const UniversalAgentBus = require('../../modules/universal-agent-bus');
+const logger = require('../../lib/structured-logger').child({ component: 'BusGatekeeper' });
 
 class BusGatekeeper {
   constructor(bus) {
@@ -67,7 +68,7 @@ class BusGatekeeper {
         }
       }
       if (cleaned > 0) {
-        console.log(`[GATEKEEPER] Cache cleanup: removed ${cleaned} expired entries, ${this.subscriptionCache.size} remaining`);
+        logger.info('Cache cleanup', { removed: cleaned, remaining: this.subscriptionCache.size });
       }
     }, 60 * 1000); // Clean every minute
   }

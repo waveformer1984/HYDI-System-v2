@@ -9,6 +9,7 @@
  */
 
 const RuntimeEnforcer = require('./RuntimeEnforcer');
+const logger = require('../../lib/structured-logger').child({ component: 'ModuleHook' });
 
 let enforcer = null;
 
@@ -17,10 +18,10 @@ let enforcer = null;
  */
 function install() {
   if (enforcer) {
-    console.log('[MODULE HOOK] Already installed');
+    logger.info('Already installed');
     return;
   }
-  
+
   enforcer = new RuntimeEnforcer({
     manifestPath: require('path').resolve(__dirname, '../../system-manifest.json'),
     enforcementMode: 'strict',
@@ -28,15 +29,15 @@ function install() {
     validateImports: true,
     enableServiceValidation: true
   });
-  
+
   // Load manifest
   enforcer.loadManifest().then(() => {
-    console.log('[MODULE HOOK] Runtime enforcement active');
+    logger.info('Runtime enforcement active');
   }).catch(error => {
-    console.error('[MODULE HOOK] Failed to load manifest:', error.message);
+    logger.error('Failed to load manifest', { error });
   });
-  
-  console.log('[MODULE HOOK] Installed');
+
+  logger.info('Installed');
 }
 
 /**
@@ -70,7 +71,7 @@ function createServiceProxy(serviceName) {
 
 // Auto-install if this module is required
 if (require.main === module) {
-  console.log('[MODULE HOOK] Auto-installing module hook...');
+  logger.info('Auto-installing module hook...');
   install();
 }
 

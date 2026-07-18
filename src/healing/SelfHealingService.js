@@ -1,6 +1,7 @@
 'use strict';
 
 const https = require('https');
+const logger = require('../../lib/structured-logger').child({ component: 'SelfHealingService' });
 
 class SelfHealingService {
   constructor(config = {}) {
@@ -25,10 +26,10 @@ class SelfHealingService {
         max_tokens: this.config.maxTokens,
         messages: [{ role: 'user', content: `Diagnose and correct:\n${JSON.stringify(issue)}` }],
       }, apiKey);
-      if (!this._destroyed) console.log('[SELF-HEALING] Diagnosis complete');
+      if (!this._destroyed) logger.info('Diagnosis complete');
       return result;
     } catch (err) {
-      if (!this._destroyed) console.error('[SELF-HEALING] diagnoseAndCorrect failed:', err.message);
+      if (!this._destroyed) logger.error('diagnoseAndCorrect failed', { error: err });
       return null;
     }
   }
@@ -45,10 +46,10 @@ class SelfHealingService {
         max_tokens: this.config.maxTokens,
         messages: [{ role: 'user', content: `Service crashed: ${errorMsg}\nSuggest recovery.` }],
       }, apiKey);
-      if (!this._destroyed) console.log('[SELF-HEALING] Crash recovery strategy generated');
+      if (!this._destroyed) logger.info('Crash recovery strategy generated');
       return result;
     } catch (err) {
-      if (!this._destroyed) console.error('[SELF-HEALING] healFromCrash failed:', err.message);
+      if (!this._destroyed) logger.error('healFromCrash failed', { error: err });
       return null;
     }
   }

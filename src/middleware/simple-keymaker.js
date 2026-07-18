@@ -3,6 +3,8 @@
  * No database, no drama, just working code
  */
 
+const logger = require('../../lib/structured-logger').child({ component: 'SimpleKeymaker' });
+
 class SimpleKeymaker {
   constructor() {
     // Hardcoded API keys for testing (in production, use env vars or database)
@@ -16,24 +18,24 @@ class SimpleKeymaker {
       [process.env.ENTERPRISE_API_KEY || '']: { tier: 'enterprise', name: 'Production Enterprise' }
     };
     
-    console.log('[SIMPLE KEYMAKER] Initialized with ' + Object.keys(this.apiKeys).length + ' keys');
+    logger.info('Initialized', { keyCount: Object.keys(this.apiKeys).length });
   }
-  
+
   middleware() {
     return (req, res, next) => {
-      console.log('[SIMPLE KEYMAKER] Request:', req.method, req.path);
-      
+      logger.info('Request', { method: req.method, path: req.path });
+
       // Skip public paths, GET requests, and test endpoints
       if (req.method === 'GET' || req.path === '/health' || req.path === '/integrity' || req.path.startsWith('/infrastructure') || req.path === '/bare-test') {
-        console.log('[SIMPLE KEYMAKER] Skipping auth for:', req.path);
+        logger.info('Skipping auth', { path: req.path });
         return next();
       }
-      
-      console.log('[SIMPLE KEYMAKER] Checking auth for:', req.method, req.path);
-      
+
+      logger.info('Checking auth', { method: req.method, path: req.path });
+
       // Get API key from header or query
       const apiKey = req.headers['x-api-key'] || req.query.api_key;
-      console.log('[SIMPLE KEYMAKER] API Key found:', !!apiKey);
+      logger.info('API key found', { present: !!apiKey });
       
       if (!apiKey) {
         return res.status(401).json({
@@ -59,7 +61,7 @@ class SimpleKeymaker {
         validated: true
       };
       
-      console.log(`[SIMPLE KEYMAKER] ${keyInfo.tier} access granted via ${keyInfo.name}`);
+      logger.info('Access granted', { tier: keyInfo.tier, keyName: keyInfo.name });
       next();
     };
   }

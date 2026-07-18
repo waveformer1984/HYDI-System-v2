@@ -4,6 +4,7 @@
 const { createClient } = require('@supabase/supabase-js');
 const WebSocket = require('ws');
 const path = require('path');
+const logger = require('../lib/structured-logger').child({ component: 'Database' });
 
 // Node < 22 has no global WebSocket; supabase-js realtime requires one.
 if (!globalThis.WebSocket) {
@@ -23,8 +24,8 @@ if (supabaseKey && supabaseKey.startsWith('"')) {
   supabaseKey = supabaseKey.slice(1, -1);
 }
 
-console.log('[DATABASE] SUPABASE_URL:', supabaseUrl ? supabaseUrl.substring(0, 20) + '...' : 'MISSING');
-console.log('[DATABASE] SUPABASE_KEY:', supabaseKey ? supabaseKey.substring(0, 20) + '...' : 'MISSING');
+logger.info('SUPABASE_URL', { preview: supabaseUrl ? supabaseUrl.substring(0, 20) + '...' : 'MISSING' });
+logger.info('SUPABASE_KEY', { preview: supabaseKey ? supabaseKey.substring(0, 20) + '...' : 'MISSING' });
 
 if (!supabaseUrl || !supabaseKey) {
   throw new Error('CRITICAL: Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY in .env file');
@@ -42,14 +43,14 @@ async function testConnection() {
       .limit(1);
     
     if (error) {
-      console.error('Database connection test failed:', error);
+      logger.error('Database connection test failed', { error });
       return false;
     }
-    
-    console.log('Database connection: OK');
+
+    logger.info('Database connection: OK');
     return true;
   } catch (error) {
-    console.error('Database connection test error:', error);
+    logger.error('Database connection test error', { error });
     return false;
   }
 }

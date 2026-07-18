@@ -1,6 +1,7 @@
 'use strict';
 
 const MessageBroker = require('./MessageBroker');
+const logger = require('../../lib/structured-logger').child({ component: 'RedisStreamsBroker' });
 
 let Redis = null;
 try { Redis = require('ioredis'); } catch { /* ioredis not installed */ }
@@ -36,7 +37,7 @@ class RedisStreamsBroker extends MessageBroker {
       retryStrategy: (times) => Math.min(times * 200, 5000),
     });
     this._redis.on('error', (err) => {
-      if (!this._destroyed) console.error('[BROKER:redis] connection error:', err.message);
+      if (!this._destroyed) logger.error('Connection error', { error: err });
     });
     await this._redis.connect();
     this._connected = true;
@@ -75,7 +76,7 @@ class RedisStreamsBroker extends MessageBroker {
       .then(() => this._startPoller(topic, consumerGroup, handler))
       .catch((err) => {
         if (!this._destroyed) {
-          console.error(`[BROKER:redis] subscribe failed for ${topic}:${consumerGroup}:`, err.message);
+          logger.error('Subscribe failed', { topic, consumerGroup, error: err });
         }
       });
   }
@@ -116,7 +117,7 @@ class RedisStreamsBroker extends MessageBroker {
         }
       } catch (err) {
         if (!this._destroyed) {
-          console.error(`[BROKER:redis] poll error ${key}:`, err.message);
+          logger.error('Poll error', { key, error: err });
         }
       }
     };
