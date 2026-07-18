@@ -5,6 +5,21 @@ the narrative of what was fixed and why; this file is the flat list.
 
 ---
 
+## Fixed this session (2026-07-18, no-unused-vars cleanup)
+
+Resolves `ROADMAP.md` P2 #8 / issue #18 below — the "good candidate for a
+dedicated follow-up pass" item flagged since the 2026-07-15 lint-gate fix.
+By 2026-07-18 the warning count had grown from ~150 to 201 across 49 files
+as the codebase grew. Fixed file-by-file (not a mechanical sweep) via six
+parallel review passes split by directory, each independently verified with
+`npx eslint` before merging. Full detail in `WORKLOG.md`; flat summary here.
+
+| # | Issue | File(s) | Status |
+|---|-------|---------|--------|
+| 71 | 201 `no-unused-vars` warnings across 49 files in `pages/`, `components/`, `lib/`, `src/`: unused callback/prop-type parameters, dead local variables, one dead unused import (`uuid` in `src/middleware/keymaker.js`), and two entirely dead functions (`src/queue/RedisStreamBroker.js`'s `redisCommand`, `src/server.js`'s `persistEventToDatabase`). | 49 files, see commits on this branch | **Fixed** — unused parameters that are part of a shared handler/callback/prop-type signature contract were prefixed with `_` (matches the project's `argsIgnorePattern: "^_"` ESLint config) rather than removed, since deleting them would change positional signatures other code or type contracts depend on. Unused local variables/imports with no side effects were deleted outright; where the right-hand side had a real side effect (a Supabase `await ... insert()`/`select()` call, `AdaptationExecutor`/`ChatWebSocketServer` construction, etc.) the call was kept running and only the unused result binding was dropped. Two genuine dead functions found along the way were deleted. Two false positives (TS parameter properties assigned to `this.*`, which base ESLint's `no-unused-vars` can't see are used) were left in place with a targeted `eslint-disable-next-line` comment instead of being incorrectly renamed. Full repo-wide `npm run lint` now reports 0 warnings, 0 errors; `npm run typecheck` and the full Jest suite (142 suites / 1487 tests) reconfirmed clean after every batch. No exports, function signatures, or runtime behavior changed anywhere. |
+
+---
+
 ## Fixed this session (2026-07-18, homepage health-check badge)
 
 | # | Issue | File(s) | Status |
@@ -129,7 +144,7 @@ and issue #33 below. Full architecture findings in `DEPLOYMENT.md`.
 | 15 | `pages/index.tsx`, `pages/funding.tsx`, `pages/test-simple.tsx` used raw `<a href="/...">` for internal navigation instead of Next.js `<Link>`, forcing a full page reload instead of client-side routing (`@next/next/no-html-link-for-pages`). | `pages/*.tsx` | **Fixed** — swapped to `<Link>`. |
 | 16 | 2x `react/no-unescaped-entities` — literal `"` in JSX text. | `components/song-composer/{MidiStatusBar,SongStructure}.tsx` | **Fixed** — escaped to `&quot;`. |
 | 17 | `.githooks/pre-push` — the local safety-net hook CLAUDE.md describes as load-bearing ("day-to-day development has a source of truth that doesn't depend on GitHub Actions being up") — was committed to git with mode `100644` (non-executable), so it has silently no-op'd on every push, for every clone of this repo, since it was added. `git push` in this session printed `hint: The '.githooks/pre-push' hook was ignored because it's not set as executable.` | `.githooks/pre-push` | **Fixed** — `chmod +x`; git now tracks it as `100755`. Also added a `lint` step to the hook (it only ran typecheck + test before) now that lint is meaningful and CI-gated. |
-| 18 | ~150 `no-unused-vars` ESLint *warnings* across `src/`, `lib/`, `components/` (now that lint actually runs) — unused function args, unused destructured values, an unused `useEffect` import. | many, see `npm run lint` output | **Open — Low severity.** Cosmetic/dead-parameter cleanup; large surface area, left out of this pass to keep the diff focused on correctness bugs. Good candidate for a dedicated follow-up pass, ideally file-by-file rather than a mechanical sweep since some `context`/`task` params are part of a shared handler signature contract. |
+| 18 | ~150 `no-unused-vars` ESLint *warnings* across `src/`, `lib/`, `components/` (now that lint actually runs) — unused function args, unused destructured values, an unused `useEffect` import. | many, see `npm run lint` output | **Fixed 2026-07-18** — see the dedicated entry below. Had grown to 201 warnings across 49 files by the time this pass ran; now 0. |
 | 19 | `tests/unit/hydi-v3/WatchdogSupervisor.test.js` uses the same fixed-`setTimeout`-vs-own-interval pattern as the two tests fixed in #10, but was not observed to be flaky across several runs in this session. | `tests/unit/hydi-v3/WatchdogSupervisor.test.js` | **Fixed** — same `Promise.race`-against-the-real-event treatment as #10 (2s ceiling), applied to `marks dead agent when heartbeat times out` and `recovers agent on restart`. Verified with 5 back-to-back runs, all green. |
 
 ---

@@ -164,8 +164,10 @@ drop-everything, P1 is next up, P2 is scheduled but not urgent.
    `supabase/functions/stripe-worker`'s live role vs. the already-public
    `stripe-webhook` function is ambiguous (`ISSUES_FOUND.md` #63) — same
    class of call as item 5 below.
-8. ~150 `no-unused-vars` ESLint warnings (`ISSUES_FOUND.md` #18) — cosmetic,
-   large surface area, best done file-by-file rather than mechanically.
+8. ~~~150 `no-unused-vars` ESLint warnings (`ISSUES_FOUND.md` #18)~~ **Fixed
+   2026-07-18** (`ISSUES_FOUND.md` #71) — had grown to 201 across 49 files;
+   cleaned up file-by-file as originally recommended, not mechanically.
+   `npm run lint` now reports 0 warnings, 0 errors repo-wide.
 9. ~~`tests/unit/hydi-v3/WatchdogSupervisor.test.js` has the same
    fixed-`setTimeout`-vs-own-interval race~~ **Fixed** in PR #202
    (2026-07-16).

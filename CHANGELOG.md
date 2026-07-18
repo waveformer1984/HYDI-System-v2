@@ -4,6 +4,10 @@ All notable changes to HYDI System v2 are documented here. The format follows [K
 
 ## [Unreleased]
 
+### Fixed
+- Eliminated all 201 `no-unused-vars` ESLint warnings across 49 files in `pages/`, `components/`, `lib/`, `src/` (`ROADMAP.md` P2 #8, `ISSUES_FOUND.md` #71) — `npm run lint` now reports 0 warnings, 0 errors repo-wide. Two entirely dead functions removed (`src/queue/RedisStreamBroker.js`'s `redisCommand`, `src/server.js`'s `persistEventToDatabase`); no exports, signatures, or runtime behavior changed.
+- Corrected `ISSUES_FOUND.md` #19's stale status — the `WatchdogSupervisor.test.js` flaky-race fix had already landed in a prior commit but was still documented as open.
+
 ## [2026-06-27] — Documentation suite expansion
 
 ### Added
