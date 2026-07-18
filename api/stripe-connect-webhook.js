@@ -6,6 +6,7 @@
 const Stripe = require('stripe');
 const { createClient } = require('@supabase/supabase-js');
 const { getRawBody } = require('../lib/get-raw-body');
+const logger = require('../lib/structured-logger').child({ component: 'StripeConnectWebhook' });
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 const supabase = createClient(
@@ -40,7 +41,7 @@ async function handler(req, res) {
   const webhookSecret = process.env.STRIPE_CONNECT_WEBHOOK_SECRET;
 
   if (!webhookSecret) {
-    console.error('[Connect Webhook] STRIPE_CONNECT_WEBHOOK_SECRET is not set');
+    logger.error('STRIPE_CONNECT_WEBHOOK_SECRET is not set');
     return res.status(500).json({ error: 'Webhook secret not configured' });
   }
 
@@ -52,11 +53,11 @@ async function handler(req, res) {
     const rawBody = await getRawBody(req);
     event = stripe.webhooks.constructEvent(rawBody, sig, webhookSecret);
   } catch (err) {
-    console.error('[Connect Webhook] Signature verification failed:', err.message);
+    logger.error('Signature verification failed', { error: err.message });
     return res.status(400).json({ error: 'Invalid signature' });
   }
 
-  console.log(`[Connect Webhook] ${event.type} (${event.id})`);
+  logger.info('Webhook event received', { eventType: event.type, eventId: event.id });
 
   // Idempotency guard -- Stripe retries on timeout/non-2xx, which would otherwise
   // double-insert ledger rows. Shares the same webhook_events table/RPC as api/webhooks/stripe.js.
@@ -66,7 +67,7 @@ async function handler(req, res) {
   });
 
   if (!claimedId) {
-    console.log(`[Connect Webhook] Event ${event.id} already processed`);
+    logger.info('Event already processed', { eventId: event.id });
     return res.status(200).json({ received: true, duplicate: true });
   }
 
@@ -88,11 +89,11 @@ async function handler(req, res) {
         await handlePayoutPaid(event.data.object);
         break;
       default:
-        console.log(`[Connect Webhook] Unhandled: ${event.type}`);
+        logger.info('Unhandled event type', { eventType: event.type });
     }
     return res.status(200).json({ received: true });
   } catch (error) {
-    console.error('[Connect Webhook] Processing error:', error);
+    logger.error('Processing error', { error });
     return res.status(500).json({ error: 'Internal server error' });
   }
 }
@@ -118,9 +119,11 @@ async function handlePaymentIntentSucceeded(paymentIntent) {
     (gross * FEE_STRUCTURE.stripe_fee_percent) / 100 + FEE_STRUCTURE.stripe_fixed_fee;
   const net = gross - platformFee - agentFee - stripeFee;
 
-  console.log(
-    `[Connect Webhook] ${revenueStream} -- gross $${gross.toFixed(2)}, net $${net.toFixed(2)}`
-  );
+  logger.info('Payment intent succeeded', {
+    revenueStream,
+    grossAmount: gross,
+    netAmount: net,
+  });
 
   const { data: ledgerEntry, error } = await supabase
     .from('ledger')
@@ -155,7 +158,7 @@ async function handlePaymentIntentSucceeded(paymentIntent) {
 
   if (error) throw error;
 
-  console.log(`[Connect Webhook] Ledger entry created: ${ledgerEntry.transaction_id}`);
+  logger.info('Ledger entry created', { transactionId: ledgerEntry.transaction_id });
   return ledgerEntry;
 }
 
@@ -200,7 +203,7 @@ async function handlePayoutPaid(payout) {
       payout_completed_at: new Date().toISOString(),
     })
     .eq('payout_batch_id', payout.id);
-  console.log(`[Connect Webhook] Payout settled: ${payout.id} -- $${payout.amount / 100}`);
+  logger.info('Payout settled', { payoutId: payout.id, amount: payout.amount / 100 });
 }
 
 function determineRevenueStream(paymentIntent) {
@@ -219,9 +222,9 @@ function determineRevenueStream(paymentIntent) {
   if (desc.includes('rezonate')) return 'rezonate';
   if (desc.includes('waveformer') || desc.includes('studio')) return 'waveformer_studio';
 
-  console.warn(
-    `[Connect Webhook] Cannot determine revenue stream for ${paymentIntent.id}, defaulting to galactic_bytes`
-  );
+  logger.warn('Cannot determine revenue stream, defaulting to galactic_bytes', {
+    paymentIntentId: paymentIntent.id,
+  });
   return 'galactic_bytes';
 }
 

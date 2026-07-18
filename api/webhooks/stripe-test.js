@@ -2,6 +2,10 @@
  * Simple Stripe Webhook Test Handler
  */
 
+import logger from '../../lib/structured-logger.js';
+
+const log = logger.child({ component: 'StripeWebhookTest' });
+
 export default async function handler(req, res) {
   // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -20,7 +24,7 @@ export default async function handler(req, res) {
     const sig = req.headers['stripe-signature'];
     const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
     
-    console.log('Webhook received:', {
+    log.info('Webhook received', {
       signature: sig ? 'present' : 'missing',
       secret: webhookSecret ? 'configured' : 'missing',
       body: req.body ? 'present' : 'missing'
@@ -36,7 +40,7 @@ export default async function handler(req, res) {
     });
 
   } catch (error) {
-    console.error('Webhook error:', error);
+    log.error('Webhook error', { error });
     return res.status(500).json({
       error: error.message,
       timestamp: new Date().toISOString()

@@ -1,5 +1,6 @@
 const Stripe = require('stripe');
 const { rateLimit } = require('../lib/rate-limit');
+const logger = require('../lib/structured-logger').child({ component: 'Checkout' });
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
@@ -60,13 +61,13 @@ module.exports = async (req, res) => {
 
       return res.status(200).json({ url: session.url });
     } catch (error) {
-      console.error('Checkout session creation failed:', error);
+      logger.error('Checkout session creation failed', { error });
       return res.status(500).json({ error: 'Failed to create checkout session' });
     }
   });
 
   req.on('error', (error) => {
-    console.error('Request error:', error);
+    logger.error('Request error', { error });
     if (!res.headersSent) {
       res.status(500).json({ error: 'Request error' });
     }
