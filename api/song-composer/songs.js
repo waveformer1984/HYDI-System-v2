@@ -1,5 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
 import { requireAuth } from '../../lib/auth/requireAuth.js';
+import baseLogger from '../../lib/structured-logger.js';
+
+const logger = baseLogger.child({ component: 'SongComposerSongs' });
 
 let _supabase = null;
 function getSupabase() {
@@ -68,7 +71,7 @@ export default async function handler(req, res) {
 
     return res.status(405).json({ ok: false, error: 'Method not allowed' });
   } catch (err) {
-    console.error('[song-composer/songs]', err);
+    logger.error('[song-composer/songs] Request failed', { error: err });
     return res.status(500).json({ ok: false, error: err.message });
   }
 }

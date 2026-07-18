@@ -1,5 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
 import { requireAuth } from '../../lib/auth/requireAuth.js';
+import baseLogger from '../../lib/structured-logger.js';
+
+const logger = baseLogger.child({ component: 'AgentManagerTasks' });
 
 let _supabase = null;
 function getSupabase() {
@@ -124,7 +127,7 @@ export default async function handler(req, res) {
 
     return res.status(405).json({ ok: false, error: 'Method not allowed' });
   } catch (err) {
-    console.error('[agent-manager/tasks]', err);
+    logger.error('[agent-manager/tasks] Request failed', { error: err });
     return res.status(500).json({ ok: false, error: err.message });
   }
 }

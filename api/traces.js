@@ -1,6 +1,8 @@
 import { ReplayEngine } from '../lib/replay-engine'
+import baseLogger from '../lib/structured-logger.js'
 
 const engine = new ReplayEngine()
+const logger = baseLogger.child({ component: 'Traces' })
 
 export default async function handler(req, res) {
   try {
@@ -21,7 +23,7 @@ export default async function handler(req, res) {
 
     return res.status(405).json({ error: 'Method not allowed' })
   } catch (error) {
-    console.error('[TRACES]', error)
+    logger.error('[TRACES] Request failed', { error })
     return res.status(500).json({ error: error instanceof Error ? error.message : 'Internal error' })
   }
 }

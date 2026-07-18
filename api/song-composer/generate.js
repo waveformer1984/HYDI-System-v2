@@ -1,5 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
 import { requireAuth } from '../../lib/auth/requireAuth.js';
+import baseLogger from '../../lib/structured-logger.js';
+
+const logger = baseLogger.child({ component: 'SongComposerGenerate' });
 
 let _supabase = null;
 function getSupabase() {
@@ -163,7 +166,7 @@ export default async function handler(req, res) {
     .select()
     .single();
 
-  if (saveErr) console.warn('[song-composer/generate] save error:', saveErr.message);
+  if (saveErr) logger.warn('[song-composer/generate] save error', { error: saveErr.message });
 
   return res.status(200).json({
     ok: true,

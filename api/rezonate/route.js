@@ -11,6 +11,7 @@ const { createClient } = require('@supabase/supabase-js');
 const fs = require('fs');
 const path = require('path');
 const { requireAuth } = require('../../lib/auth/requireAuth');
+const logger = require('../../lib/structured-logger').child({ component: 'RezonateRoute' });
 
 // Initialise Supabase client using service-role key (server-side only).
 let _supabase = null;
@@ -116,7 +117,7 @@ async function handler(req, res) {
         }
         const { data, error } = await query;
         if (error) {
-          console.error('[Rezonate] list_projects error:', error);
+          logger.error('[Rezonate] list_projects error', { error });
           return res.status(500).json({ data: null, error: error.message });
         }
         return res.status(200).json({ data, error: null });
@@ -142,7 +143,7 @@ async function handler(req, res) {
           .select()
           .single();
         if (error) {
-          console.error('[Rezonate] create_project error:', error);
+          logger.error('[Rezonate] create_project error', { error });
           return res.status(500).json({ data: null, error: error.message });
         }
         return res.status(201).json({ data, error: null });
@@ -163,7 +164,7 @@ async function handler(req, res) {
           .eq('id', project_id)
           .single();
         if (error) {
-          console.error('[Rezonate] get_project error:', error);
+          logger.error('[Rezonate] get_project error', { error });
           return res.status(500).json({ data: null, error: error.message });
         }
         return res.status(200).json({ data, error: null });
@@ -183,7 +184,7 @@ async function handler(req, res) {
           .select('*')
           .eq('project_id', project_id);
         if (error) {
-          console.error('[Rezonate] list_tracks error:', error);
+          logger.error('[Rezonate] list_tracks error', { error });
           return res.status(500).json({ data: null, error: error.message });
         }
         return res.status(200).json({ data, error: null });
@@ -212,7 +213,7 @@ async function handler(req, res) {
           .select()
           .single();
         if (error) {
-          console.error('[Rezonate] add_track error:', error);
+          logger.error('[Rezonate] add_track error', { error });
           return res.status(500).json({ data: null, error: error.message });
         }
         return res.status(201).json({ data, error: null });
@@ -249,7 +250,7 @@ async function handler(req, res) {
           .select()
           .single();
         if (error) {
-          console.error('[Rezonate] dispatch_task error:', error);
+          logger.error('[Rezonate] dispatch_task error', { error });
           return res.status(500).json({ data: null, error: error.message });
         }
         return res.status(201).json({ data, error: null });
@@ -266,7 +267,7 @@ async function handler(req, res) {
         return res.status(400).json({ data: null, error: `Unknown action: ${action}` });
     }
   } catch (err) {
-    console.error('[Rezonate] Unhandled error:', err);
+    logger.error('[Rezonate] Unhandled error', { error: err });
     return res.status(500).json({ data: null, error: 'Internal server error' });
   }
 }
