@@ -175,7 +175,7 @@ export class ModelManager {
   /**
    * API fallback generation (OpenAI or Anthropic)
    */
-  private async generateAPIResponse(prompt: string, sessionId: string): Promise<{ content: string; success: boolean; error?: string; model: string; latency: number }> {
+  private async generateAPIResponse(prompt: string, _sessionId: string): Promise<{ content: string; success: boolean; error?: string; model: string; latency: number }> {
     try {
       // Prefer Anthropic (the repo's primary provider), then OpenAI.
       if (process.env.ANTHROPIC_API_KEY) {

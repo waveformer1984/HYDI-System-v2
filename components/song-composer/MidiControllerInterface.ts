@@ -26,8 +26,8 @@ export interface MidiAction {
   rawChannel?: number;
 }
 
-export type MidiMessageHandler = (action: MidiAction, raw: { status: number; note: number; velocity: number }) => void;
-export type DeviceChangeHandler = (devices: MidiDevice[]) => void;
+export type MidiMessageHandler = (_action: MidiAction, _raw: { status: number; note: number; velocity: number }) => void;
+export type DeviceChangeHandler = (_devices: MidiDevice[]) => void;
 
 // ─── DDJ-SB3 default pad → action mapping ────────────────────────────────────
 // DDJ-SB3 Hot Cues deck A: notes 0x00–0x07 on channel 6 (status 0x95)
@@ -71,7 +71,7 @@ export class MidiControllerInterface {
 
   // Learning mode state
   private learningKey: string | null = null;           // composite key being learned
-  private learnCallback: ((note: number, channel: number) => void) | null = null;
+  private learnCallback: ((_note: number, _channel: number) => void) | null = null;
 
   // ── Public API ──────────────────────────────────────────────────────────────
 

@@ -61,6 +61,7 @@ export default function CopilotPanel({ song, currentBar }: Props) {
         },
       ]);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally scoped to song?.title only: this should re-notify when a *different* song is loaded (title change), not on every re-render where the parent passes a new `song` object reference with the same title (which would spam duplicate "Song updated" chat messages).
   }, [song?.title]);
 
   const buildSystemPrompt = () => {

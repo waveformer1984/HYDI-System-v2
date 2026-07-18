@@ -160,7 +160,7 @@ class HeidiControlPlane extends EventEmitter {
   }
   
   // TASK 2: CASCADE v3 Adaptive Model Routing
-  evaluateLocalModels(task, models, context) {
+  evaluateLocalModels(task, models, _context) {
     if (models.length === 0) {
       return { confidence: 0, recommendedModel: null, reason: 'no_local_models' };
     }
@@ -233,7 +233,7 @@ class HeidiControlPlane extends EventEmitter {
     return modelData.task_type[taskType];
   }
   
-  calculateModelScore(performance, task) {
+  calculateModelScore(performance, _task) {
     // CASCADE v3: f(performance, cost, latency, confidence_match)
     const successRateWeight = 0.4;
     const latencyWeight = 0.2;
@@ -254,7 +254,7 @@ class HeidiControlPlane extends EventEmitter {
     return Math.max(0, Math.min(1, score));
   }
   
-  generateJustification(performance, score) {
+  generateJustification(performance, _score) {
     const reasons = [];
     
     if (performance.success_rate > 0.8) {
@@ -292,7 +292,7 @@ class HeidiControlPlane extends EventEmitter {
     }
   }
   
-  evaluateExternalModels(task, models, context) {
+  evaluateExternalModels(task, models, _context) {
     if (models.length === 0) {
       return { confidence: 0, recommendedModel: null, reason: 'no_external_models' };
     }
@@ -703,7 +703,6 @@ class HeidiControlPlane extends EventEmitter {
     performance.avg_latency = (performance.avg_latency * (performance.total_calls - 1) + newLatency) / performance.total_calls;
     
     // Update confidence calibration error
-    const expectedSuccess = feedbackPacket.expected_outcome.success;
     const actualSuccess = feedbackPacket.success_boolean;
     const confidenceError = Math.abs(feedbackPacket.expected_outcome.confidence - (actualSuccess ? 1 : 0));
     performance.confidence_calibration_error = (performance.confidence_calibration_error * (performance.total_calls - 1) + confidenceError) / performance.total_calls;
@@ -1211,21 +1210,7 @@ class HeidiControlPlane extends EventEmitter {
     }
   }
   
-  logDecision(decision, task, context) {
-    // Store decision for analysis
-    const decisionRecord = {
-      ...decision,
-      task: {
-        type: task.type,
-        id: task.id
-      },
-      context: {
-        tier: context.tier,
-        userId: context.userId
-      },
-      timestamp: Date.now()
-    };
-    
+  logDecision(decision, _task, _context) {
     // This would be stored in memory system for analysis
     console.log(`[CONTROL PLANE] Decision logged: ${decision.strategy} -> ${decision.model?.id}`);
   }

@@ -1,7 +1,7 @@
 const express = require('express');
 const http = require('http');
 const protoforgeEventBus = require('../modules/protoforge-event-bus');
-const { testConnection, persistEvent, supabase } = require('./database');
+const { supabase } = require('./database');
 const ursulaSSE = require('../modules/ursula-sse-manager');
 const HydiContextualConscience = require('../modules/hydi-contextual-conscience');
 const ProtoForgeInfrastructure = require('../modules/protoforge-infrastructure');
@@ -32,7 +32,7 @@ const PORT = process.env.PORT || 3005;
 app.use(express.json());
 
 // Global error logger - catch silent failures
-app.use((err, req, res, next) => {
+app.use((err, req, res, _next) => {
   console.error('[GLOBAL ERROR]:', err.message);
   console.error('[GLOBAL ERROR STACK]:', err.stack);
   res.status(400).json({ 
@@ -56,7 +56,7 @@ console.log('[CASCADE V2] Features: Schema Lock | Fingerprinting | Confidence Sc
 // Initialize system enforcement modules
 const { readinessGate } = require('../modules/readiness-gate');
 const noSilentSuccessEnforcer = require('../modules/no-silent-success-enforcer');
-const { systemContractGuard } = require('../modules/system-contract-guard');
+require('../modules/system-contract-guard');
 
 // Start enforcement systems
 readinessGate.start();
@@ -134,7 +134,7 @@ console.log('[SERVICE BUNDLE] Heidi automator started');
 console.log('[SERVICE BUNDLE] Local model adapter initialized');
 
 // Initialize Adaptation Executor - makes insights actionable
-const adaptationExecutor = new AdaptationExecutor({
+new AdaptationExecutor({
   confidenceThreshold: 0.7,
   autoExecuteSafe: true
 });
@@ -419,7 +419,7 @@ app.post('/process', async (req, res) => {
         // is an auto-generated uuid), so this is a plain insert. Fields with
         // no real column (event_id, source, timestamp) are folded into
         // payload so nothing is silently dropped.
-        const { data, error } = await supabase
+        const { error } = await supabase
           .from('heidi_events')
           .insert({
             event_type: payload.type,
@@ -538,42 +538,6 @@ app.post('/process', async (req, res) => {
     });
   }
 });
-
-// Helper function for database persistence
-async function persistEventToDatabase(event, result) {
-  try {
-    // heidi_events has no external-id column to upsert against (its PK is
-    // an auto-generated uuid), so this is a plain insert.
-    const { data, error } = await supabase
-      .from('heidi_events')
-      .insert({
-        event_type: event.type,
-        division: event.division,
-        payload: { ...event.payload, event_id: event.event_id }
-      })
-      .select();
-
-    if (error) throw error;
-
-    // Store opportunity event if exists
-    if (result.opportunity) {
-      const { error: oppError } = await supabase
-        .from('heidi_events')
-        .insert({
-          event_type: result.opportunity.type,
-          division: result.opportunity.division,
-          payload: { ...result.opportunity.payload, event_id: result.opportunity.event_id, parent_event_id: event.event_id }
-        });
-
-      if (oppError) throw oppError;
-    }
-    
-    console.log('Event persisted successfully');
-  } catch (error) {
-    console.error('Database persistence failed:', error);
-    throw error;
-  }
-}
 
 // Insight endpoint
 app.get('/insight', async (req, res) => {
@@ -1572,7 +1536,7 @@ async function initializeIntegrations() {
 const server = http.createServer(app);
 
 // Initialize WebSocket chat server
-const chatServer = new ChatWebSocketServer(server);
+new ChatWebSocketServer(server);
 
 server.listen(PORT, async () => {
   console.log(`Server running on port ${PORT}`);

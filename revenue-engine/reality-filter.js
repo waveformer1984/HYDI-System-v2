@@ -1,11 +1,13 @@
 /**
  * HYDI Reality Filter Layer
- * 
+ *
  * Sits above CASCADE. Prevents stupid tasks from being born.
  * Answers: "What should NOT happen?"
- * 
+ *
  * Rules are enforced BEFORE execution, not after failure.
  */
+
+const logger = require('../lib/structured-logger').child({ component: 'RealityFilter' });
 
 class RealityFilter {
   constructor() {
@@ -70,7 +72,7 @@ class RealityFilter {
    * Returns { allowed: boolean, reason: string, score: number }
    */
   async filterTask(taskType, params, context = {}) {
-    console.log(`[REALITY FILTER] Evaluating: ${taskType}`);
+    logger.info('Evaluating task', { taskType });
     
     switch (taskType) {
       case 'scrape_leads':
@@ -428,10 +430,10 @@ class RealityFilter {
   async learnFromOutcome(taskType, params, outcome) {
     if (outcome.success) {
       // This worked - maybe we can be slightly more permissive
-      console.log(`[REALITY FILTER] Learning from success: ${taskType}`);
+      logger.info('Learning from success', { taskType });
     } else {
       // This failed - tighten constraints
-      console.log(`[REALITY FILTER] Learning from failure: ${taskType} - ${outcome.reason}`);
+      logger.info('Learning from failure', { taskType, reason: outcome.reason });
       
       // Store failure pattern
       const pattern = JSON.stringify(params);

@@ -276,7 +276,7 @@ class ModelRateLimiter extends EventEmitter {
       tierBreakdown: { starter: 0, pro: 0, enterprise: 0 }
     };
     
-    for (const [key, requests] of this.requestLog) {
+    for (const [key] of this.requestLog) {
       const [userId, modelId] = key.split('_');
       stats.totalTrackedUsers.add(userId);
       stats.activeModels.add(modelId);

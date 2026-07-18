@@ -10,6 +10,7 @@
 const QueueManager = require('./QueueManager');
 const { createClient } = require('@supabase/supabase-js');
 const ServiceProvisioner = require('../modules/service-provisioner');
+const logger = require('../lib/structured-logger').child({ component: 'ProvisioningWorker' });
 
 class ProvisioningWorker {
     constructor(workerId = null) {
@@ -59,20 +60,20 @@ class ProvisioningWorker {
         await this.queue.registerWorker('provisioning', this.workerId);
         await this.queue.updateHeartbeat('idle');
         
-        console.log(`[⚙️ Provisioning Worker] Initialized: ${this.workerId}`);
+        logger.info('Initialized', { workerId: this.workerId });
     }
 
     async start() {
         if (this.running) {
-            console.log('[⚙️ Provisioning Worker] Already running');
+            logger.info('Already running');
             return;
         }
-        
+
         await this.initialize();
         this.running = true;
         this.queue.startHeartbeat();
-        
-        console.log('[⚙️ Provisioning Worker] Starting to process provisioning tasks...');
+
+        logger.info('Starting to process provisioning tasks');
         
         // Start polling
         this.poll();
@@ -86,15 +87,15 @@ class ProvisioningWorker {
         }
         
         await this.queue.shutdown();
-        console.log('[⚙️ Provisioning Worker] Stopped');
+        logger.info('Stopped');
     }
 
     poll() {
         if (!this.running) return;
-        
+
         this.processNextTask()
             .catch(err => {
-                console.error('[⚙️ Provisioning Worker] Error in poll:', err);
+                logger.error('Error in poll', { error: err });
             })
             .finally(() => {
                 // Schedule next poll
@@ -112,11 +113,11 @@ class ProvisioningWorker {
         try {
             const task = await this.queue.getTask(taskId);
             if (!task) {
-                console.error(`[⚙️ Provisioning Worker] Task not found: ${taskId}`);
+                logger.error('Task not found', { taskId });
                 return;
             }
-            
-            console.log(`[⚙️ Provisioning Worker] Processing task: ${task.payload.event_type}`);
+
+            logger.info('Processing task', { eventType: task.payload.event_type });
             
             // Process based on event type
             switch (task.payload.event_type) {
@@ -145,14 +146,14 @@ class ProvisioningWorker {
                     break;
                     
                 default:
-                    console.log(`[⚙️ Provisioning Worker] Unhandled event type: ${task.payload.event_type}`);
+                    logger.info('Unhandled event type', { eventType: task.payload.event_type });
             }
-            
+
             // Mark task as completed
             await this.queue.completeTask(taskId, true);
-            
+
         } catch (err) {
-            console.error(`[⚙️ Provisioning Worker] Task failed: ${taskId}`, err);
+            logger.error('Task failed', { taskId, error: err });
             await this.queue.completeTask(taskId, false, err.message);
         }
     }
@@ -190,7 +191,7 @@ class ProvisioningWorker {
         // Trigger any fabrication workflows if needed
         await this.triggerFabricationIfNeeded(customerData);
         
-        console.log(`[⚙️ Provisioning] Provisioned ${tier} services for ${customerEmail}`);
+        logger.info('Provisioned services', { tier, customerEmail });
     }
 
     async handlePaymentSucceeded(payload) {
@@ -205,10 +206,10 @@ class ProvisioningWorker {
             .single();
         
         if (!customer) {
-            console.warn(`[⚙️ Provisioning] Customer not found for Stripe ID: ${customerId}`);
+            logger.warn('Customer not found for Stripe ID', { customerId });
             return;
         }
-        
+
         // For subscription payments, ensure services are still active
         if (invoice.subscription) {
             // Services should remain active, just validate
@@ -217,11 +218,11 @@ class ProvisioningWorker {
                 .select('*')
                 .eq('customer_email', customer.email)
                 .eq('status', 'active');
-                
-            console.log(`[⚙️ Provisioning] Validated ${services?.length || 0} active services for ${customer.email}`);
+
+            logger.info('Validated active services', { activeServiceCount: services?.length || 0, customerEmail: customer.email });
         }
-        
-        console.log(`[⚙️ Provisioning] Processed payment: ${invoice.id} for ${customer.email}`);
+
+        logger.info('Processed payment', { invoiceId: invoice.id, customerEmail: customer.email });
     }
 
     async handleSubscriptionCreated(payload) {
@@ -237,16 +238,16 @@ class ProvisioningWorker {
             .single();
         
         if (!customer) {
-            console.warn(`[⚙️ Provisioning] Customer not found for Stripe ID: ${customerId}`);
+            logger.warn('Customer not found for Stripe ID', { customerId });
             return;
         }
-        
+
         // Get service list for this tier
         const tierConfig = this.serviceTiers[tier];
         if (!tierConfig) {
             throw new Error(`Unknown tier: ${tier}`);
         }
-        
+
         // Prepare customer data for provisioning
         const customerData = {
             customer_email: customer.email,
@@ -255,11 +256,11 @@ class ProvisioningWorker {
             services: tierConfig.services,
             limits: tierConfig.limits
         };
-        
+
         // Provision services
         await this.serviceProvisioner.provisionServices(customerData);
-        
-        console.log(`[⚙️ Provisioning] Subscription created: ${subscription.id} for ${customer.email}`);
+
+        logger.info('Subscription created', { subscriptionId: subscription.id, customerEmail: customer.email });
     }
 
     async handleSubscriptionUpdated(payload) {
@@ -275,13 +276,13 @@ class ProvisioningWorker {
             .single();
         
         if (!customer) {
-            console.warn(`[⚙️ Provisioning] Customer not found for Stripe ID: ${customerId}`);
+            logger.warn('Customer not found for Stripe ID', { customerId });
             return;
         }
-        
+
         // Check if tier changed
         if (customer.tier !== tier) {
-            console.log(`[⚙️ Provisioning] Tier changed for ${customer.email}: ${customer.tier} -> ${tier}`);
+            logger.info('Tier changed', { customerEmail: customer.email, oldTier: customer.tier, newTier: tier });
             
             // Deactivate old services
             await this.serviceProvisioner.deactivateServices(customerId);
@@ -300,8 +301,8 @@ class ProvisioningWorker {
                 await this.serviceProvisioner.provisionServices(customerData);
             }
         }
-        
-        console.log(`[⚙️ Provisioning] Subscription updated: ${subscription.id} for ${customer.email}`);
+
+        logger.info('Subscription updated', { subscriptionId: subscription.id, customerEmail: customer.email });
     }
 
     async handleSubscriptionDeleted(payload) {
@@ -316,21 +317,21 @@ class ProvisioningWorker {
             .single();
         
         if (!customer) {
-            console.warn(`[⚙️ Provisioning] Customer not found for Stripe ID: ${customerId}`);
+            logger.warn('Customer not found for Stripe ID', { customerId });
             return;
         }
-        
+
         // Deactivate all services
         await this.serviceProvisioner.deactivateServices(customerId);
-        
-        console.log(`[⚙️ Provisioning] Subscription deleted: ${subscription.id} for ${customer.email}`);
+
+        logger.info('Subscription deleted', { subscriptionId: subscription.id, customerEmail: customer.email });
     }
 
     async handleFabricationRequest(payload) {
         // Handle fabrication job requests
         const { customer_email, job_type, specifications, priority = 3 } = payload.data;
-        
-        console.log(`[⚙️ Provisioning] Processing fabrication request: ${job_type} for ${customer_email}`);
+
+        logger.info('Processing fabrication request', { jobType: job_type, customerEmail: customer_email });
         
         // Validate customer has access to fabrication services
         const { data: customer } = await this.supabase
@@ -348,7 +349,7 @@ class ProvisioningWorker {
         const hasFabricationAccess = ['pro', 'enterprise'].includes(customer.tier);
         
         if (!hasFabricationAccess) {
-            console.log(`[⚙️ Provisioning] Customer ${customer_email} does not have fabrication access`);
+            logger.info('Customer does not have fabrication access', { customerEmail: customer_email });
             return;
         }
         
@@ -364,7 +365,7 @@ class ProvisioningWorker {
             processed_by: 'provisioning_worker'
         }, priority);
         
-        console.log(`[⚙️ Provisioning] Fabrication job queued: ${job_type}`);
+        logger.info('Fabrication job queued', { jobType: job_type });
     }
 
     async triggerFabricationIfNeeded(customerData) {
@@ -376,7 +377,7 @@ class ProvisioningWorker {
         );
         
         if (hasFabricationServices) {
-            console.log(`[⚙️ Provisioning] Triggering fabrication workflow for ${customerData.customer_email}`);
+            logger.info('Triggering fabrication workflow', { customerEmail: customerData.customer_email });
             
             // Enqueue a generic fabrication readiness check
             await this.queue.enqueue('fabrication', {
@@ -448,20 +449,20 @@ if (require.main === module) {
     
     // Handle graceful shutdown
     process.on('SIGINT', async () => {
-        console.log('\n[⚙️ Provisioning Worker] Shutting down...');
+        logger.info('Shutting down');
         await worker.stop();
         process.exit(0);
     });
-    
+
     process.on('SIGTERM', async () => {
-        console.log('\n[⚙️ Provisioning Worker] Shutting down...');
+        logger.info('Shutting down');
         await worker.stop();
         process.exit(0);
     });
-    
+
     // Start worker
     worker.start().catch(err => {
-        console.error('[⚙️ Provisioning Worker] Failed to start:', err);
+        logger.error('Failed to start', { error: err });
         process.exit(1);
     });
 }

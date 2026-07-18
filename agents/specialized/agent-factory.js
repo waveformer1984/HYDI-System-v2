@@ -31,6 +31,7 @@
 
 const EventEmitter = require('events');
 const { v4: uuidv4 } = require('uuid');
+const logger = require('../../lib/structured-logger').child({ component: 'AgentFactory' });
 
 class SpecializedAgent extends EventEmitter {
   constructor(config) {
@@ -63,7 +64,7 @@ class SpecializedAgent extends EventEmitter {
     this.messageQueue = [];
     this.lastHeartbeat = Date.now();
     
-    console.log(`[AGENT] ${this.name} (${this.type} - Layer ${this.layer}) initialized`);
+    logger.info('Agent initialized', { name: this.name, type: this.type, layer: this.layer });
   }
   
   async executeTask(task) {
@@ -72,7 +73,7 @@ class SpecializedAgent extends EventEmitter {
     this.currentTask = task;
     
     try {
-      console.log(`[AGENT] ${this.name} executing: ${task.type}`);
+      logger.info('Agent executing task', { name: this.name, taskType: task.type });
       
       // Execute task based on agent type
       const result = await this.processTask(task);
@@ -91,7 +92,7 @@ class SpecializedAgent extends EventEmitter {
         result
       });
       
-      console.log(`[AGENT] ${this.name} completed: ${task.type} in ${executionTime}ms`);
+      logger.info('Agent completed task', { name: this.name, taskType: task.type, executionTimeMs: executionTime });
       
       return result;
       
@@ -109,7 +110,7 @@ class SpecializedAgent extends EventEmitter {
         error: error.message
       });
       
-      console.error(`[AGENT] ${this.name} failed: ${task.type} - ${error.message}`);
+      logger.error('Agent task failed', { name: this.name, taskType: task.type, error });
       
       throw error;
     }

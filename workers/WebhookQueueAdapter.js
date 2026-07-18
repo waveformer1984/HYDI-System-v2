@@ -7,6 +7,7 @@
 const QueueManager = require('./QueueManager');
 const { createClient } = require('@supabase/supabase-js');
 require('dotenv').config();
+const logger = require('../lib/structured-logger').child({ component: 'WebhookQueueAdapter' });
 
 class WebhookQueueAdapter {
     constructor() {
@@ -33,7 +34,7 @@ class WebhookQueueAdapter {
     async handleWebhook(event) {
         if (!this.initialized) await this.initialize();
         
-        console.log(`[🔗 Webhook Adapter] Queueing event: ${event.type}`);
+        logger.info('Queueing event', { eventType: event.type });
         
         // Validate webhook (basic checks)
         if (!event.id || !event.type) {
@@ -48,7 +49,7 @@ class WebhookQueueAdapter {
             .maybeSingle();
         
         if (existing) {
-            console.log(`[🔗 Webhook Adapter] Duplicate event: ${event.id}`);
+            logger.info('Duplicate event', { eventId: event.id });
             return { status: 'duplicate', eventId: existing.id };
         }
         
@@ -79,7 +80,7 @@ class WebhookQueueAdapter {
             priority: this.getEventPriority(event.type)
         }, this.getEventPriority(event.type));
         
-        console.log(`[🔗 Webhook Adapter] Event queued: ${event.type} -> task:${taskId}`);
+        logger.info('Event queued', { eventType: event.type, taskId });
         
         return {
             status: 'queued',
@@ -189,11 +190,11 @@ class WebhookQueueAdapter {
                 
                 replayed.push(webhook.id);
             } catch (err) {
-                console.error(`[🔗 Webhook Adapter] Failed to replay ${webhook.id}:`, err);
+                logger.error('Failed to replay webhook', { webhookId: webhook.id, error: err });
             }
         }
-        
-        console.log(`[🔗 Webhook Adapter] Replayed ${replayed.length} failed webhooks`);
+
+        logger.info('Replayed failed webhooks', { replayedCount: replayed.length });
         return replayed;
     }
 
@@ -212,8 +213,8 @@ class WebhookQueueAdapter {
             .in('status', ['completed', 'failed']);
         
         if (error) throw error;
-        
-        console.log(`[🔗 Webhook Adapter] Cleaned up webhooks older than ${daysOld} days`);
+
+        logger.info('Cleaned up old webhooks', { daysOld });
     }
 }
 

@@ -1,6 +1,7 @@
 const { createClient } = require('@supabase/supabase-js');
 const QueueManager = require('./QueueManager');
 require('dotenv').config();
+const logger = require('../lib/structured-logger').child({ component: 'AuditWorker' });
 
 class AuditWorker {
     constructor(workerId) {
@@ -26,7 +27,7 @@ class AuditWorker {
             this.supabase = createClient(supabaseUrl, supabaseKey);
             this.queue.registerWorker('audit', this.workerId);
             this.queue.updateHeartbeat('idle');
-            console.log(`[📋 Audit Worker] Initialized: ${this.workerId}`);
+            logger.info('Audit Worker initialized', { workerId: this.workerId });
         };
 
         this.start = async function() {
@@ -34,7 +35,7 @@ class AuditWorker {
             await this.initialize();
             this.running = true;
             this.queue.startHeartbeat();
-            console.log('[📋 Audit Worker] Starting audit monitoring...');
+            logger.info('Starting audit monitoring');
             this.poll();
         };
 
@@ -42,13 +43,13 @@ class AuditWorker {
             this.running = false;
             if (this.pollTimer) clearTimeout(this.pollTimer);
             await this.queue.shutdown();
-            console.log('[📋 Audit Worker] Stopped');
+            logger.info('Audit Worker stopped');
         };
 
         this.poll = function() {
             if (!this.running) return;
             this.processNextTask()
-                .catch(err => console.error('[📋 Audit Worker] Poll error:', err))
+                .catch(err => logger.error('Audit Worker poll error', { error: err }))
                 .finally(() => { this.pollTimer = setTimeout(() => this.poll(), this.pollInterval); });
         };
 
@@ -78,7 +79,7 @@ class AuditWorker {
                 recorded_at: new Date().toISOString()
             };
             await this.supabase.from('audit_log').insert(event);
-            console.log(`[📋 Audit] Recorded: ${event.event_type}`);
+            logger.info('Recorded audit event', { eventType: event.event_type });
         };
     }
 }
@@ -88,7 +89,7 @@ if (require.main === module) {
     const worker = new AuditWorker();
     process.on('SIGINT', async () => { await worker.stop(); process.exit(0); });
     process.on('SIGTERM', async () => { await worker.stop(); process.exit(0); });
-    worker.start().catch(err => { console.error('[📋 Audit Worker] Failed to start:', err); process.exit(1); });
+    worker.start().catch(err => { logger.error('Audit Worker failed to start', { error: err }); process.exit(1); });
 }
 
 module.exports = AuditWorker;

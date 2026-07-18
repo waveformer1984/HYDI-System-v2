@@ -553,7 +553,7 @@ function AssistantBubble({
   isStreaming: boolean
   tools?: ToolEvent[]
   actions?: ActionEvent[]
-  onResolveAction?: (actionId: string, decision: 'approve' | 'reject') => void
+  onResolveAction?: (_actionId: string, _decision: 'approve' | 'reject') => void
 }) {
   return (
     <div className="flex gap-3">

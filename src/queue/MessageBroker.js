@@ -49,7 +49,7 @@ class MessageBroker {
    * @param {PublishOptions} [options]
    * @returns {Promise<string>} messageId assigned by the broker
    */
-  async publish(topic, message, options = {}) {
+  async publish(topic, message, _options = {}) {
     throw new Error('Not implemented: publish()');
   }
 
@@ -60,7 +60,7 @@ class MessageBroker {
    * @param {string} consumerGroup
    * @param {(event: HYDIEvent) => Promise<void>} handler
    */
-  subscribe(topic, consumerGroup, handler) {
+  subscribe(_topic, _consumerGroup, _handler) {
     throw new Error('Not implemented: subscribe()');
   }
 
@@ -71,7 +71,7 @@ class MessageBroker {
    * @param {string} messageId
    * @returns {Promise<void>}
    */
-  async ack(topic, consumerGroup, messageId) {
+  async ack(_topic, _consumerGroup, _messageId) {
     throw new Error('Not implemented: ack()');
   }
 
@@ -82,7 +82,7 @@ class MessageBroker {
    * @param {string} messageId
    * @returns {Promise<void>}
    */
-  async nack(topic, consumerGroup, messageId) {
+  async nack(_topic, _consumerGroup, _messageId) {
     throw new Error('Not implemented: nack()');
   }
 

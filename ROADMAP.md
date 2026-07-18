@@ -164,14 +164,38 @@ drop-everything, P1 is next up, P2 is scheduled but not urgent.
    `supabase/functions/stripe-worker`'s live role vs. the already-public
    `stripe-webhook` function is ambiguous (`ISSUES_FOUND.md` #63) — same
    class of call as item 5 below.
-8. ~150 `no-unused-vars` ESLint warnings (`ISSUES_FOUND.md` #18) — cosmetic,
-   large surface area, best done file-by-file rather than mechanically.
+8. ~~~150 `no-unused-vars` ESLint warnings (`ISSUES_FOUND.md` #18)~~ **Fixed
+   2026-07-18** (`ISSUES_FOUND.md` #71) — had grown to 201 across 49 files;
+   cleaned up file-by-file as originally recommended, not mechanically.
+   `npm run lint` reported 0 warnings, 0 errors repo-wide at the time —
+   but see item 11 below: that was only ever true for `next lint`'s
+   default scan scope, which silently excluded about half the backend.
 9. ~~`tests/unit/hydi-v3/WatchdogSupervisor.test.js` has the same
    fixed-`setTimeout`-vs-own-interval race~~ **Fixed** in PR #202
    (2026-07-16).
 10. ~~`AGENT_REGISTRY`'s Rezonate endpoint path in
     `api/agent-manager/agents.js` doesn't match the file's actual
     resolved route~~ **Fixed** in PR #202 (2026-07-16).
+11. **Partially done, 2026-07-18**: structured logging migration. Added
+    redaction + correlation-ID support to `lib/structured-logger.js`
+    (previously used by only 3 files) and migrated `console.*` →
+    `logger.*` in `workers/` (302/302 calls, all 19 files) and mostly in
+    `agents/` (52/113 — the remaining 61 are genuine interactive CLI
+    output in `agents/hid/`, deliberately left alone, see
+    `ISSUES_FOUND.md` #72) and `revenue-engine/` (66/91 — remaining 25
+    are each file's own `main()` CLI dispatcher, same reasoning). While
+    doing this, discovered and fixed a real, previously-invisible gap:
+    `next lint`'s default scan scope is only `pages/`, `components/`,
+    `lib/`, `src/` — `workers/`, `agents/`, `revenue-engine/`, `api/`,
+    and `kilo/` were never actually linted by `npm run lint` (or CI's
+    lint gate) at all. Expanding `next.config.js`'s `eslint.dirs` to
+    cover them surfaced 4 real runtime bugs (see `ISSUES_FOUND.md` #72)
+    and ~35 pre-existing lint errors, all now fixed. **Still open**:
+    ~938 `console.*` calls remain unmigrated across `src/` (690, by far
+    the largest), `api/` (78), `lib/` (67), `pages/` (14), `components/`
+    (3) — good candidate for the same file-by-file follow-up treatment
+    item 8 got, not a mechanical sweep (some of these, like item 8's
+    précis warned, are genuine CLI output rather than service logs).
 
 **Done this pass (housekeeping):**
 - Archived 3 confirmed-orphaned dead-code files flagged in a prior audit's

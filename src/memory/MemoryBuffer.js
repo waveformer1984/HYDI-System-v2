@@ -106,7 +106,7 @@ class MemoryBuffer {
     
     const results = [];
     
-    for (const [key, value] of tableMap) {
+    for (const [, value] of tableMap) {
       let matches = true;
       
       // Check each filter

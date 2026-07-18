@@ -17,7 +17,7 @@ export interface MixdownLayer {
 export interface MixdownOptions {
   bpm: number;
   sampleRate?: number;   // default 44100
-  onProgress?: (pct: number, stage: string) => void;
+  onProgress?: (_pct: number, _stage: string) => void;
 }
 
 export interface MixdownResult {

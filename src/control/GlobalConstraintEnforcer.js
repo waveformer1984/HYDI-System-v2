@@ -222,7 +222,7 @@ class GlobalConstraintEnforcer extends EventEmitter {
     return variance / (modelCounts.size * expected * expected);
   }
   
-  calculatePerformanceConsistency(metrics) {
+  calculatePerformanceConsistency(_metrics) {
     const recentPerformance = this.getRecentPerformance(this.config.shortHorizon);
     
     if (recentPerformance.length < 5) {
@@ -289,7 +289,7 @@ class GlobalConstraintEnforcer extends EventEmitter {
     return weightedStability;
   }
   
-  calculateWindowStability(windowName, horizon) {
+  calculateWindowStability(windowName, _horizon) {
     const window = this.longHorizonMetrics[windowName];
     
     if (window.length < 2) {
@@ -327,7 +327,6 @@ class GlobalConstraintEnforcer extends EventEmitter {
     }
     
     // Check for greedy patterns
-    const recentRevenue = this.getRecentRevenue(this.config.shortHorizon);
     const revenueVolatility = this.calculateRevenueVolatility();
     
     // High revenue + high volatility = potential greed
@@ -436,7 +435,7 @@ class GlobalConstraintEnforcer extends EventEmitter {
    * GOVERNANCE ENFORCEMENT ENTRY POINT
    */
   
-  enforceConstraints(decision, action, context) {
+  enforceConstraints(decision, action, _context) {
     console.log(`[GCE] Enforcing global constraints...`);
     
     const enforcement = {

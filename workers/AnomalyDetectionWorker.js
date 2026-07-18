@@ -1,6 +1,7 @@
 const { createClient } = require('@supabase/supabase-js');
 const QueueManager = require('./QueueManager');
 require('dotenv').config();
+const logger = require('../lib/structured-logger').child({ component: 'AnomalyDetectionWorker' });
 
 class AnomalyDetectionWorker {
     constructor(workerId) {
@@ -25,7 +26,7 @@ class AnomalyDetectionWorker {
             this.supabase = createClient(supabaseUrl, supabaseKey);
             this.queue.registerWorker('anomaly_detection', this.workerId);
             this.queue.updateHeartbeat('idle');
-            console.log(`[⚠️ Anomaly Detection Worker] Initialized: ${this.workerId}`);
+            logger.info('Anomaly Detection Worker initialized', { workerId: this.workerId });
         };
 
         this.start = async function() {
@@ -33,7 +34,7 @@ class AnomalyDetectionWorker {
             await this.initialize();
             this.running = true;
             this.queue.startHeartbeat();
-            console.log('[⚠️ Anomaly Detection Worker] Monitoring for anomalies...');
+            logger.info('Monitoring for anomalies');
             this.poll();
         };
 
@@ -41,13 +42,13 @@ class AnomalyDetectionWorker {
             this.running = false;
             if (this.pollTimer) clearTimeout(this.pollTimer);
             await this.queue.shutdown();
-            console.log('[⚠️ Anomaly Detection Worker] Stopped');
+            logger.info('Anomaly Detection Worker stopped');
         };
 
         this.poll = function() {
             if (!this.running) return;
             this.processNextTask()
-                .catch(err => console.error('[⚠️ Anomaly Detection Worker] Poll error:', err))
+                .catch(err => logger.error('Anomaly Detection Worker poll error', { error: err }))
                 .finally(() => { this.pollTimer = setTimeout(() => this.poll(), this.pollInterval); });
         };
 
@@ -63,18 +64,18 @@ class AnomalyDetectionWorker {
                     case 'system.metrics': await this.checkSystemAnomalies(task.payload); break;
                     case 'api.response': await this.checkResponseTimeAnomalies(task.payload); break;
                     case 'behavior.update': await this.checkBehaviorAnomalies(task.payload); break;
-                    default: console.log(`[⚠️ Anomaly] Unhandled: ${task.payload.event_type}`);
+                    default: logger.info('Unhandled anomaly event type', { eventType: task.payload.event_type });
                 }
                 await this.queue.completeTask(taskId, true);
             } catch (err) {
-                console.error(`[⚠️ Anomaly Detection Worker] Task failed: ${taskId}`, err);
+                logger.error('Anomaly Detection Worker task failed', { taskId, error: err });
                 await this.queue.completeTask(taskId, false, err.message);
             }
         };
 
         this.checkQueueAnomalies = async function(payload) {
             const { queue_name, pending_jobs } = payload.data;
-            console.log(`[⚠️ Anomaly] Checking queue anomalies for ${queue_name}`);
+            logger.info('Checking queue anomalies', { queueName: queue_name });
             const queues = [queue_name];
             for (const queue_name of queues) {
                 // Check for queue length anomaly (backup indicator)
@@ -86,7 +87,7 @@ class AnomalyDetectionWorker {
                         suggested_action: 'investigate_processing_speed_or_scale_workers'
                     });
                     
-                    console.log(`[⚠️ Anomaly] Queue backup detected: ${queue_name} has ${pending_jobs} pending jobs`);
+                    logger.info('Queue backup detected', { queueName: queue_name, pendingJobs: pending_jobs });
                 }
             }
         };
@@ -94,7 +95,7 @@ class AnomalyDetectionWorker {
         this.checkJobAnomalies = async function(payload) {
             const { job_id, job_type, success, duration } = payload.data;
             
-            console.log(`[⚠️ Anomaly] Checking job anomalies for ${job_type} job ${job_id}`);
+            logger.info('Checking job anomalies', { jobType: job_type, jobId: job_id });
             
             // check-failed-job-patterns
             // Check for failed job spikes
@@ -118,7 +119,7 @@ class AnomalyDetectionWorker {
                         suggested_action: 'investigate_job_processing_issues_or_check_dependencies'
                     });
                     
-                    console.log(`[⚠️ Anomaly] Failed job spike detected: ${job_type} has ${(failureRate*100).toFixed(1)}% failure rate (${failedJobs}/${recentJobs.length})`);
+                    logger.info('Failed job spike detected', { jobType: job_type, failureRatePercent: Number((failureRate * 100).toFixed(1)), failedJobs, sampleSize: recentJobs.length });
                 }
             }
         };
@@ -126,7 +127,7 @@ class AnomalyDetectionWorker {
         this.checkSystemAnomalies = async function(payload) {
             const { metrics } = payload.data;
             
-            console.log(`[⚠️ Anomaly] Checking system resource anomalies`);
+            logger.info('Checking system resource anomalies');
             
             // check-resource-exhaustion
             // Check for resource exhaustion
@@ -165,14 +166,14 @@ class AnomalyDetectionWorker {
                     suggested_action: 'investigate_resource_usage_or_scale_infrastructure'
                 });
                 
-                console.log(`[⚠️ Anomaly] Resource exhaustion detected: ${anomalies.map(a => `${a.type}: ${a.value}${a.unit}`).join(', ')}`);
+                logger.info('Resource exhaustion detected', { anomalies: anomalies.map(a => ({ type: a.type, value: a.value, unit: a.unit })) });
             }
         };
 
         this.checkResponseTimeAnomalies = async function(payload) {
             const { endpoint, response_time_ms, timestamp } = payload.data;
             
-            console.log(`[⚠️ Anomaly] Checking response time anomalies for ${endpoint}`);
+            logger.info('Checking response time anomalies', { endpoint });
             
             // check-slow-response-pattern
             // Check for slow response times
@@ -196,7 +197,7 @@ class AnomalyDetectionWorker {
                         suggested_action: 'investigate_endpoint_performance_or_scale_resources'
                     });
                     
-                    console.log(`[⚠️ Anomaly] Slow response detected: ${endpoint} has been slow (>${this.anomalyThresholds.slow_response.threshold_ms}ms) for ${slowResponses.length} consecutive samples`);
+                    logger.info('Slow response detected', { endpoint, thresholdMs: this.anomalyThresholds.slow_response.threshold_ms, consecutiveSlowSamples: slowResponses.length });
                 }
             }
         };
@@ -204,7 +205,7 @@ class AnomalyDetectionWorker {
         this.checkBehaviorAnomalies = async function(payload) {
             const { behavior_type, value, baseline, deviation } = payload.data;
             
-            console.log(`[⚠️ Anomaly] Checking behavior anomalies: ${behavior_type}`);
+            logger.info('Checking behavior anomalies', { behaviorType: behavior_type });
             
             // check-unusual-patterns
             // Check for unusual patterns using statistical deviation
@@ -221,7 +222,7 @@ class AnomalyDetectionWorker {
                         suggested_action: 'investigate_behavior_change_or_check_data_quality'
                     });
                     
-                    console.log(`[⚠️ Anomaly] Unusual pattern detected: ${behavior_type} deviates by ${deviation} from baseline ${baseline}`);
+                    logger.info('Unusual pattern detected', { behaviorType: behavior_type, deviation, baseline });
                 }
             }
         };
@@ -254,11 +255,11 @@ class AnomalyDetectionWorker {
             // Trigger auto-recovery flows if applicable
             await this.triggerAutoRecovery(anomalyType, details);
             
-            console.log(`[⚠️ Anomaly] Emitted ${anomalyType} anomaly alert`);
+            logger.info('Emitted anomaly alert', { anomalyType });
         };
 
         this.triggerAutoRecovery = async function(anomalyType, details) {
-            console.log(`[⚠️ Anomaly] Checking auto-recovery options for ${anomalyType}`);
+            logger.info('Checking auto-recovery options', { anomalyType });
             
             // auto-recovery-strategies
             switch (anomalyType) {
@@ -278,14 +279,14 @@ class AnomalyDetectionWorker {
                     break;
                     
                 default:
-                    console.log(`[⚠️ Anomaly] No auto-recovery strategy for ${anomalyType}`);
+                    logger.info('No auto-recovery strategy for anomaly type', { anomalyType });
             }
         };
 
         this.attemptQueueRecovery = async function(details) {
             const { queue_name } = details;
-            
-            console.log(`[⚠️ Anomaly] Attempting queue recovery for ${queue_name}`);
+
+            logger.info('Attempting queue recovery', { queueName: queue_name });
             
             // attempt-restarting-workers-for-queue
             // Try to restart workers for this queue
@@ -295,25 +296,25 @@ class AnomalyDetectionWorker {
             // get-worker-count-for-queue-and-restart-them
             // This would integrate with the orchestrator to restart workers
             // For now, we'll just log the intention
-            console.log(`[⚠️ Anomaly] Would restart workers for queue ${queue_name} (integration with orchestrator needed)`);
+            logger.info('Would restart workers for queue (integration with orchestrator needed)', { queueName: queue_name });
         };
 
         this.attemptJobRecovery = async function(details) {
             const { job_type } = details;
             
-            console.log(`[⚠️ Anomaly] Attempting job recovery for ${job_type}`);
+            logger.info('Attempting job recovery', { jobType: job_type });
             
             // attempt-dependency-check-or-rollback
             // This would check dependencies or suggest rollback
-            console.log(`[⚠️ Anomaly] Would check dependencies for job type ${job_type} (integration needed)`);
+            logger.info('Would check dependencies for job type (integration needed)', { jobType: job_type });
         };
 
         this.attemptResourceRecovery = async function(details) {
-            console.log(`[⚠️ Anomaly] Attempting resource recovery`);
+            logger.info('Attempting resource recovery');
             
             // attempt-cleanup-or-scaling
             // attempt-garbage-collection-or-cache-clearing
-            console.log(`[⚠️ Anomaly] Would attempt resource cleanup or scaling (integration needed)`);
+            logger.info('Would attempt resource cleanup or scaling (integration needed)');
         };
 
         // helper-methods
@@ -333,20 +334,20 @@ if (require.main === module) {
     
     // Handle graceful shutdown
     process.on('SIGINT', async () => {
-        console.log('\n[⚠️ Anomaly Detection Worker] Shutting down...');
+        logger.info('Anomaly Detection Worker shutting down');
         await worker.stop();
         process.exit(0);
     });
-    
+
     process.on('SIGTERM', async () => {
-        console.log('\n[⚠️ Anomaly Detection Worker] Shutting down...');
+        logger.info('Anomaly Detection Worker shutting down');
         await worker.stop();
         process.exit(0);
     });
-    
+
     // Start worker
     worker.start().catch(err => {
-        console.error('[⚠️ Anomaly Detection Worker] Failed to start:', err);
+        logger.error('Anomaly Detection Worker failed to start', { error: err });
         process.exit(1);
     });
 }

@@ -34,7 +34,7 @@ const LAYER_COLORS: Record<string, string> = {
 
 interface Props {
   agent: Agent;
-  onDispatch: (agent: Agent) => void;
+  onDispatch: (_agent: Agent) => void;
 }
 
 export default function AgentCard({ agent, onDispatch }: Props) {

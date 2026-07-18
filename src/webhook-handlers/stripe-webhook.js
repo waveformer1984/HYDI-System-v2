@@ -6,6 +6,7 @@
 const Stripe = require('stripe');
 const { supabase } = require('../database');
 
+// eslint-disable-next-line no-unused-vars -- kept as-is pending maintainer decision on this file's structure (see CLAUDE.md)
 const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY) : null;
 
 class StripeWebhookHandler {
@@ -70,7 +71,7 @@ class StripeWebhookHandler {
   
   async handlePaymentSucceeded(invoice) {
     // Payment succeeded - ensure subscription is active
-    const { customer, subscription } = invoice;
+    const { customer } = invoice;
     
     const { data: user, error } = await supabase
       .from('users')

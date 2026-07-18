@@ -132,7 +132,7 @@ class MemoryStore {
    */
   async writeAndVerify(table, data, verifyField = 'task_id') {
     // Write to buffer (instant truth)
-    const result = await this.write(table, data);
+    await this.write(table, data);
     
     // Verify in buffer (instant)
     const key = data[verifyField] || data.task_id || data.taskId || data.id;
@@ -154,7 +154,7 @@ class MemoryStore {
     console.log(`[MEMORY] Verifying table ${table}...`);
     
     try {
-      const { data, error } = await this.db
+      const { error } = await this.db
         .from(table)
         .select('*')
         .limit(1);

@@ -96,10 +96,10 @@ export interface ProtoForgeResult {
 }
 
 export interface ReplayDeps {
-  getEvent: (fingerprint: string) => Promise<LedgerEvent | null>;
-  classify: (event: LedgerEvent) => Promise<CascadeResult | null>;
-  generateHypotheses: (event: LedgerEvent, cascadeResult: CascadeResult) => Promise<KiloResult | null>;
-  decide: (event: LedgerEvent, cascadeResult: CascadeResult, kiloResult: KiloResult) => Promise<ProtoForgeResult | null>;
+  getEvent: (_fingerprint: string) => Promise<LedgerEvent | null>;
+  classify: (_event: LedgerEvent) => Promise<CascadeResult | null>;
+  generateHypotheses: (_event: LedgerEvent, _cascadeResult: CascadeResult) => Promise<KiloResult | null>;
+  decide: (_event: LedgerEvent, _cascadeResult: CascadeResult, _kiloResult: KiloResult) => Promise<ProtoForgeResult | null>;
 }
 
 export class ReplayEngine {
@@ -108,6 +108,7 @@ export class ReplayEngine {
   driftEvents: DriftResult[] = [];
   stats = { totalReplays: 0, successfulReplays: 0, driftDetected: 0, averageReplayTime: 0, tracesStored: 0 };
 
+  // eslint-disable-next-line no-unused-vars -- TS parameter property; assigned to this.deps and used throughout this class (base eslint no-unused-vars doesn't recognize parameter-property assignment as a use)
   constructor(private deps: ReplayDeps) {}
 
   /** Stabilizes a stage's output for deterministic comparison. */
@@ -290,7 +291,7 @@ export function createReplayEngine(supabase: import('@supabase/supabase-js').Sup
     classify: async (event) => ({ classification: event.event_type, confidence: 1.0 }),
     generateHypotheses: async (event, cascadeResult) => {
       const kiloModule = (await import('../../kilo/index.js')) as unknown as {
-        createKiloEngine: () => { generateHypotheses: (payload: Record<string, unknown>) => { hypotheses: string[] } };
+        createKiloEngine: () => { generateHypotheses: (_payload: Record<string, unknown>) => { hypotheses: string[] } };
       };
       const kilo = kiloModule.createKiloEngine();
       return kilo.generateHypotheses({
@@ -299,9 +300,9 @@ export function createReplayEngine(supabase: import('@supabase/supabase-js').Sup
         ...event.payload,
       });
     },
-    decide: async (event, cascadeResult, kiloResult) => {
+    decide: async (event, cascadeResult, _kiloResult) => {
       const autoGateModule = (await import('./auto-gate.js')) as unknown as {
-        autoGate: (hyps: Array<Record<string, unknown>>, stream: string | null) => Promise<{ decisions: Array<Record<string, unknown>> }>;
+        autoGate: (_hyps: Array<Record<string, unknown>>, _stream: string | null) => Promise<{ decisions: Array<Record<string, unknown>> }>;
       };
       const result = await autoGateModule.autoGate(
         [

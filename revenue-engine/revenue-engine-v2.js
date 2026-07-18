@@ -11,6 +11,7 @@
 const { createClient } = require('@supabase/supabase-js');
 const Stripe = require('stripe');
 const RealityFilter = require('./reality-filter');
+const logger = require('../lib/structured-logger').child({ component: 'RevenueEngineV2' });
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -53,21 +54,21 @@ class RevenueEngineV2 {
    * Enhanced task execution with Reality Filter
    */
   async executeTask(taskType, params, context = {}) {
-    console.log(`\n[REVENUE V2] Executing: ${taskType}`);
-    
+    logger.info('Executing task', { taskType });
+
     // STEP 1: Reality Filter Check
     const filterResult = await this.realityFilter.filterTask(taskType, params, context);
-    
+
     if (!filterResult.allowed) {
       this.metrics.tasksBlocked++;
-      
+
       // Track block reason
       const reason = filterResult.reason;
       this.metrics.filterBlockReasons.set(reason, (this.metrics.filterBlockReasons.get(reason) || 0) + 1);
-      
-      console.log(`[REALITY FILTER] ❌ BLOCKED: ${reason}`);
-      console.log(`[REVENUE V2] Task prevented - no waste of resources\n`);
-      
+
+      logger.info('Task blocked by reality filter', { taskType, reason });
+      logger.info('Task prevented, no waste of resources', { taskType });
+
       return {
         success: false,
         blocked: true,
@@ -76,9 +77,9 @@ class RevenueEngineV2 {
         stage: 'reality_filter'
       };
     }
-    
+
     this.metrics.tasksAllowed++;
-    console.log(`[REALITY FILTER] ✅ ALLOWED: ${filterResult.reason} (score: ${filterResult.score.toFixed(2)})`);
+    logger.info('Task allowed by reality filter', { taskType, reason: filterResult.reason, score: filterResult.score });
     
     // STEP 2: Execute the task
     let result;
@@ -100,8 +101,8 @@ class RevenueEngineV2 {
           throw new Error(`Unknown task type: ${taskType}`);
       }
     } catch (error) {
-      console.error(`[REVENUE V2] Execution failed: ${error.message}`);
-      
+      logger.error('Task execution failed', { taskType, error });
+
       // Learn from failure
       await this.realityFilter.learnFromOutcome(taskType, params, { 
         success: false, 
@@ -118,12 +119,12 @@ class RevenueEngineV2 {
     
     // STEP 3: CASCADE Scoring
     const cascadeScore = this.scoreTaskForCascade(taskType, result);
-    console.log(`[CASCADE] Score: ${cascadeScore.toFixed(2)}`);
-    
+    logger.info('CASCADE score computed', { taskType, cascadeScore });
+
     if (this.shouldCascadeKill(taskType, cascadeScore)) {
       this.metrics.cascadeKilled++;
-      console.log(`[CASCADE] ❌ KILLED: Performance below threshold`);
-      
+      logger.info('CASCADE killed task: performance below threshold', { taskType, cascadeScore });
+
       // Learn from failure
       await this.realityFilter.learnFromOutcome(taskType, params, { 
         success: false, 
@@ -141,7 +142,7 @@ class RevenueEngineV2 {
     }
     
     // STEP 4: Success - Learn and track
-    console.log(`[CASCADE] ✅ SURVIVED: Task completed successfully`);
+    logger.info('CASCADE: task survived, completed successfully', { taskType });
     
     await this.realityFilter.learnFromOutcome(taskType, params, { 
       success: true, 
@@ -149,12 +150,12 @@ class RevenueEngineV2 {
     });
     
     // Update metrics
-    this.updateMetrics(taskType, result, filterScore, cascadeScore);
-    
+    this.updateMetrics(taskType, result, filterResult.score, cascadeScore);
+
     return {
       success: true,
       result: result,
-      filterScore: filterScore,
+      filterScore: filterResult.score,
       cascadeScore: cascadeScore,
       stage: 'completed'
     };
@@ -164,15 +165,13 @@ class RevenueEngineV2 {
    * Enhanced revenue cycle with Reality Filter
    */
   async runRevenueCycle() {
-    console.log('\n═══════════════════════════════════════════');
-    console.log('   HYDI REVENUE ENGINE V2 - WITH REALITY FILTER');
-    console.log('═══════════════════════════════════════════\n');
+    logger.info('Revenue cycle starting');
 
     const cycleResults = [];
     let totalRevenue = 0;
 
     // Task 1: Scrape leads
-    console.log('📍 TASK 1: Lead Scraping');
+    logger.info('Task 1: lead scraping starting');
     const scrapeResult = await this.executeTask('scrape_leads', {
       source: 'linkedin',
       niche: 'prototyping',
@@ -182,7 +181,7 @@ class RevenueEngineV2 {
 
     // Task 2: Send outreach (only if leads were scraped)
     if (scrapeResult.success && scrapeResult.result.leads) {
-      console.log('\n📍 TASK 2: Outreach');
+      logger.info('Task 2: outreach starting');
       const outreachResult = await this.executeTask('send_outreach', {
         leads: scrapeResult.result.leads,
         template: 'Hi {{company_name}}, noticed you need {{specific_need}}...',
@@ -192,7 +191,7 @@ class RevenueEngineV2 {
     }
 
     // Task 3: Create quote
-    console.log('\n📍 TASK 3: Quote Creation');
+    logger.info('Task 3: quote creation starting');
     const quoteResult = await this.executeTask('create_quote', {
       projectType: 'custom_print',
       quantity: 5,
@@ -203,7 +202,7 @@ class RevenueEngineV2 {
     cycleResults.push({ task: 'create_quote', result: quoteResult });
 
     // Task 4: Generate products
-    console.log('\n📍 TASK 4: Product Generation');
+    logger.info('Task 4: product generation starting');
     const productResult = await this.executeTask('create_product', {
       category: 'organizers',
       estimatedCost: 8,
@@ -221,24 +220,22 @@ class RevenueEngineV2 {
     this.metrics.systemEfficiency = systemEfficiency;
 
     // Generate report
-    console.log('\n═══════════════════════════════════════════');
-    console.log('           CYCLE COMPLETE');
-    console.log('═══════════════════════════════════════════');
-    console.log(`✅ Successful: ${successfulTasks}/${cycleResults.length}`);
-    console.log(`🚫 Blocked by Filter: ${blockedTasks}`);
-    console.log(`⚔️  Killed by CASCADE: ${cascadeKilled}`);
-    console.log(`📊 System Efficiency: ${(systemEfficiency * 100).toFixed(1)}%`);
-    console.log(`💰 Total Revenue: $${totalRevenue.toFixed(2)}`);
-    
+    logger.info('Revenue cycle complete', {
+      successfulTasks,
+      totalTasks: cycleResults.length,
+      blockedTasks,
+      cascadeKilled,
+      systemEfficiencyPercent: Number((systemEfficiency * 100).toFixed(1)),
+      totalRevenue: Number(totalRevenue.toFixed(2))
+    });
+
     // Show block reasons if any
     if (this.metrics.filterBlockReasons.size > 0) {
-      console.log('\n🚫 Block Reasons:');
+      logger.info('Reporting filter block reasons', { reasonCount: this.metrics.filterBlockReasons.size });
       for (const [reason, count] of this.metrics.filterBlockReasons) {
-        console.log(`   ${reason}: ${count}`);
+        logger.info('Block reason', { reason, count });
       }
     }
-    
-    console.log('═══════════════════════════════════════════\n');
 
     return {
       cycleResults,
@@ -309,7 +306,7 @@ class RevenueEngineV2 {
    * Original methods (unchanged but now called through executeTask)
    */
   async scrapeLeads(params) {
-    console.log(`[REVENUE] Scraping leads for ${params.niche} from ${params.source}...`);
+    logger.info('Scraping leads', { niche: params.niche, source: params.source });
     
     const mockLeads = [
       { 
@@ -338,12 +335,12 @@ class RevenueEngineV2 {
       await this.supabase.from('leads').upsert(lead, { onConflict: 'id' });
     }
 
-    console.log(`[REVENUE] ✓ Scraped ${mockLeads.length} leads`);
+    logger.info('Leads scraped', { count: mockLeads.length });
     return { leads: mockLeads };
   }
 
   async sendOutreach(params) {
-    console.log(`[REVENUE] Sending outreach to ${params.leads.length} leads...`);
+    logger.info('Sending outreach', { leadCount: params.leads.length });
     
     const outreachResults = [];
     
@@ -361,12 +358,12 @@ class RevenueEngineV2 {
       outreachResults.push({ lead: lead.company, email: outreach.email_subject });
     }
 
-    console.log(`[REVENUE] ✓ Sent ${outreachResults.length} outreach emails`);
+    logger.info('Outreach emails sent', { count: outreachResults.length });
     return { outreach: outreachResults };
   }
 
   async createInstantQuote(params) {
-    console.log('[REVENUE] Creating instant quote...');
+    logger.info('Creating instant quote');
     
     const pricing = this.calculatePricing(params.projectType);
     let total = pricing.base + (params.quantity * pricing.rate);
@@ -392,12 +389,12 @@ class RevenueEngineV2 {
 
     await this.supabase.from('quotes').insert(quote);
     
-    console.log(`[REVENUE] ✓ Quote created: $${quote.total}`);
+    logger.info('Quote created', { total: quote.total });
     return quote;
   }
 
   async generateProductIdeas(params) {
-    console.log(`[REVENUE] Generating products for ${params.category}...`);
+    logger.info('Generating products', { category: params.category });
     
     const products = [
       {
@@ -416,7 +413,7 @@ class RevenueEngineV2 {
       await this.supabase.from('product_ideas').insert(product);
     }
 
-    console.log(`[REVENUE] ✓ Generated ${products.length} products`);
+    logger.info('Products generated', { count: products.length });
     return { products };
   }
 
@@ -488,26 +485,28 @@ async function main() {
     case 'cycle':
       await engine.runRevenueCycle();
       break;
-    case 'health':
+    case 'health': {
       const health = await engine.getSystemHealth();
       console.log(JSON.stringify(health, null, 2));
       break;
+    }
     case 'constraints':
       console.log(JSON.stringify(engine.realityFilter.getConstraints(), null, 2));
       break;
-    case 'test-filter':
+    case 'test-filter': {
       // Test the filter with various scenarios
       const tests = [
         { task: 'scrape_leads', params: { source: 'random_scrape', niche: 'test' } },
         { task: 'send_outreach', params: { template: 'Dear friend, act now!', leads: [] } },
         { task: 'create_quote', params: { projectType: 'custom_print', basePrice: 50 } }
       ];
-      
+
       for (const test of tests) {
         const result = await engine.realityFilter.filterTask(test.task, test.params);
         console.log(`${test.task}: ${result.allowed ? '✅' : '❌'} ${result.reason}`);
       }
       break;
+    }
     default:
       console.log('HYDI Revenue Engine V2 - With Reality Filter\n');
       console.log('Commands:');

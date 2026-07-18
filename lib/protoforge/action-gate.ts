@@ -71,8 +71,8 @@ export async function gateActions(actions: GatedAction[], sessionId: string): Pr
     // kilo/index.js and auto-gate.js are CommonJS; dynamic import mirrors
     // the existing pattern in lib/protoforge/dispatcher.ts.
     const kiloModule = (await import('../../kilo/index.js')) as unknown as {
-      createKiloEngine: (opts?: Record<string, unknown>) => {
-        generateHypotheses: (payload: Record<string, unknown>) => {
+      createKiloEngine: (_opts?: Record<string, unknown>) => {
+        generateHypotheses: (_payload: Record<string, unknown>) => {
           hypotheses: string[];
           confidence: number;
           gate_result: { verified: boolean };
@@ -81,8 +81,8 @@ export async function gateActions(actions: GatedAction[], sessionId: string): Pr
     };
     const autoGateModule = (await import('./auto-gate.js')) as unknown as {
       autoGate: (
-        hypotheses: Array<Record<string, unknown>>,
-        stream: string | null,
+        _hypotheses: Array<Record<string, unknown>>,
+        _stream: string | null,
       ) => Promise<{ decisions: Array<Record<string, unknown>> }>;
     };
 

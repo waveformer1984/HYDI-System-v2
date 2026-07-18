@@ -99,4 +99,4 @@ export default async function handler(req, res) {
       hint:  'Check SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY env vars in Vercel',
     });
   }
-};
+}

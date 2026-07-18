@@ -1,6 +1,7 @@
 const { createClient } = require('@supabase/supabase-js');
 const QueueManager = require('./QueueManager');
 require('dotenv').config();
+const logger = require('../lib/structured-logger').child({ component: 'SyncWorker' });
 
 class SyncWorker {
     constructor(workerId) {
@@ -41,12 +42,12 @@ class SyncWorker {
             this.queue.registerWorker('sync', this.workerId);
             this.queue.updateHeartbeat('idle');
             
-            console.log(`[🔄 Sync Worker] Initialized: ${this.workerId}`);
+            logger.info('Sync Worker initialized', { workerId: this.workerId });
         };
 
         this.start = async function() {
             if (this.running) {
-                console.log('[🔄 Sync Worker] Already running');
+                logger.info('Sync Worker already running');
                 return;
             }
             
@@ -54,7 +55,7 @@ class SyncWorker {
             this.running = true;
             this.queue.startHeartbeat();
             
-            console.log('[🔄 Sync Worker] Starting to synchronize systems...');
+            logger.info('Starting to synchronize systems');
             
             // Start polling
             this.poll();
@@ -72,7 +73,7 @@ class SyncWorker {
             // clear-sync-intervals
             
             await this.queue.shutdown();
-            console.log('[🔄 Sync Worker] Stopped');
+            logger.info('Sync Worker stopped');
         };
 
         this.poll = function() {
@@ -80,7 +81,7 @@ class SyncWorker {
             
             this.processNextTask()
                 .catch(err => {
-                    console.error('[🔄 Sync Worker] Error in poll:', err);
+                    logger.error('Sync Worker error in poll', { error: err });
                 })
                 .finally(() => {
                     // Schedule next poll
@@ -98,11 +99,11 @@ class SyncWorker {
             try {
                 const task = await this.queue.getTask(taskId);
                 if (!task) {
-                    console.error(`[🔄 Sync Worker] Task not found: ${taskId}`);
+                    logger.error('Sync Worker task not found', { taskId });
                     return;
                 }
-                
-                console.log(`[🔄 Sync Worker] Processing task: ${task.payload.event_type}`);
+
+                logger.info('Processing task', { eventType: task.payload.event_type });
                 
                 // Process based on event type
                 switch (task.payload.event_type) {
@@ -123,14 +124,14 @@ class SyncWorker {
                         break;
                         
                     default:
-                        console.log(`[🔄 Sync Worker] Unhandled event type: ${task.payload.event_type}`);
+                        logger.info('Unhandled event type', { eventType: task.payload.event_type });
                 }
-                
+
                 // Mark task as completed
                 await this.queue.completeTask(taskId, true);
-                
+
             } catch (err) {
-                console.error(`[🔄 Sync Worker] Task failed: ${taskId}`, err);
+                logger.error('Sync Worker task failed', { taskId, error: err });
                 await this.queue.completeTask(taskId, false, err.message);
             }
         };
@@ -138,7 +139,7 @@ class SyncWorker {
         this.performSync = async function(payload) {
             const { direction, scope, force } = payload.data;
             
-            console.log(`[🔄 Sync] Performing sync: ${direction} for ${scope}`);
+            logger.info('Performing sync', { direction, scope });
             
             // perform-db-to-services-sync
             switch (direction) {
@@ -163,14 +164,14 @@ class SyncWorker {
                     break;
                     
                 default:
-                    console.log(`[🔄 Sync] Unknown sync direction: ${direction}`);
+                    logger.info('Unknown sync direction', { direction });
             }
         };
 
         this.resolveConflict = async function(payload) {
             const { conflict_type, items, resolution_strategy } = payload.data;
             
-            console.log(`[🔄 Sync] Resolving conflict: ${conflict_type}`);
+            logger.info('Resolving conflict', { conflictType: conflict_type });
             
             // resolve-conflict-based-on-strategy
             const strategy = resolution_strategy || this.syncConfig.conflictResolution.strategy;
@@ -191,7 +192,7 @@ class SyncWorker {
                     break;
                     
                 default:
-                    console.log(`[🔄 Sync] Unknown resolution strategy: ${strategy}`);
+                    logger.info('Unknown resolution strategy', { strategy });
                     resolutionResult = { error: 'Unknown resolution strategy' };
             }
             
@@ -208,13 +209,13 @@ class SyncWorker {
                     resolved_at: new Date()
                 });
             
-            console.log(`[🔄 Sync] Conflict resolution completed: ${conflict_type}`);
+            logger.info('Conflict resolution completed', { conflictType: conflict_type });
         };
 
         this.checkForDrift = async function(payload) {
             const { scope, tolerance } = payload.data;
             
-            console.log(`[🔄 Sync] Checking for drift: ${scope}`);
+            logger.info('Checking for drift', { scope });
             
             // check-drift-between-systems
             const driftResults = await this.detectDrift(scope, tolerance || 0.01); // 1% default tolerance
@@ -229,16 +230,16 @@ class SyncWorker {
                         detected_at: new Date()
                     });
                 
-                console.log(`[🔄 Sync] Drift detected: ${scope} - ${driftResults.drift_percentage.toFixed(2)}% drift`);
+                logger.info('Drift detected', { scope, driftPercentage: Number(driftResults.drift_percentage.toFixed(2)) });
             } else {
-                console.log(`[🔄 Sync] No significant drift detected: ${scope}`);
+                logger.info('No significant drift detected', { scope });
             }
         };
 
         this.checkConsistency = async function(payload) {
             const { scope, check_type } = payload.data;
             
-            console.log(`[🔄 Sync] Checking consistency: ${scope}`);
+            logger.info('Checking consistency', { scope });
             
             // check-consistency-within-scope
             const consistencyResults = await this.checkConsistencyWithinScope(scope, check_type);
@@ -255,15 +256,15 @@ class SyncWorker {
                 });
             
             if (consistencyResults.consistent) {
-                console.log(`[🔄 Sync] Consistency check passed: ${scope}`);
+                logger.info('Consistency check passed', { scope });
             } else {
-                console.log(`[🔄 Sync] Consistency check failed: ${scope} - ${consistencyResults.inconsistencies.length} issues found`);
+                logger.info('Consistency check failed', { scope, issuesFound: consistencyResults.inconsistencies.length });
             }
         };
 
         // helper-methods-for-sync-operations
         this.syncDatabaseToServices = async function(scope, force) {
-            console.log(`[🔄 Sync] Syncing database to services: ${scope}`);
+            logger.info('Syncing database to services', { scope });
             
             // implement-db-to-services-logic
             // This would involve:
@@ -276,7 +277,7 @@ class SyncWorker {
         };
 
         this.syncServicesToDatabase = async function(scope, force) {
-            console.log(`[🔄 Sync] Syncing services to database: ${scope}`);
+            logger.info('Syncing services to database', { scope });
             
             // implement-services-to-db-logic
             // This would involve:
@@ -289,7 +290,7 @@ class SyncWorker {
         };
 
         this.syncLocalToRemote = async function(scope, force) {
-            console.log(`[🔄 Sync] Syncing local to remote: ${scope}`);
+            logger.info('Syncing local to remote', { scope });
             
             // implement-local-to-remote-logic
             // This would involve:
@@ -302,7 +303,7 @@ class SyncWorker {
         };
 
         this.syncRemoteToLocal = async function(scope, force) {
-            console.log(`[🔄 Sync] Syncing remote to local: ${scope}`);
+            logger.info('Syncing remote to local', { scope });
             
             // implement-remote-to-local-logic
             // This would involve:
@@ -315,7 +316,7 @@ class SyncWorker {
         };
 
         this.syncBidirectional = async function(scope, force) {
-            console.log(`[🔄 Sync] Performing bidirectional sync: ${scope}`);
+            logger.info('Performing bidirectional sync', { scope });
             
             // implement-bidirectional-sync-logic
             // This would involve:
@@ -327,7 +328,7 @@ class SyncWorker {
         };
 
         this.resolveByTimestamp = async function(items) {
-            console.log(`[🔄 Sync] Resolving conflicts by timestamp wins`);
+            logger.info('Resolving conflicts by timestamp wins');
             
             // resolve-by-timestamp-logic
             // Sort by timestamp (newest wins) and return the latest version
@@ -346,7 +347,7 @@ class SyncWorker {
         };
 
         this.resolveBySource = async function(items, preferredSource) {
-            console.log(`[🔄 Sync] Resolving conflicts by source wins: ${preferredSource}`);
+            logger.info('Resolving conflicts by source wins', { preferredSource });
             
             // resolve-by-source-logic
             // Find item from preferred source, otherwise fallback to timestamp wins
@@ -367,7 +368,7 @@ class SyncWorker {
         };
 
         this.resolveByManualMerge = async function(items) {
-            console.log(`[🔄 Sync] Resolving conflicts by manual merge`);
+            logger.info('Resolving conflicts by manual merge');
             
             // resolve-by-manual-merge-logic
             // This would require human intervention or complex merge logic
@@ -382,18 +383,18 @@ class SyncWorker {
 
         this.syncSimulation = async function(scope, direction) {
             // Simulate sync work
-            console.log(`[🔄 Sync] Simulating ${direction} sync for ${scope}`);
+            logger.info('Simulating sync', { direction, scope });
             
             // simulate-sync-work
             // In a real implementation, this would do actual sync work
             await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate 1 second of work
             
             // log-sync-completion
-            console.log(`[🔄 Sync] Completed ${direction} sync for ${scope}`);
+            logger.info('Completed sync', { direction, scope });
         };
 
         this.detectDrift = async function(scope, tolerance) {
-            console.log(`[🔄 Sync] Detecting drift for ${scope} with tolerance ${tolerance}`);
+            logger.info('Detecting drift', { scope, tolerance });
             
             // implement-drift-detection-logic
             // This would compare values between systems and calculate drift percentage
@@ -416,7 +417,7 @@ class SyncWorker {
         };
 
         this.checkConsistencyWithinScope = async function(scope, check_type) {
-            console.log(`[🔄 Sync] Checking consistency within ${scope} for ${check_type}`);
+            logger.info('Checking consistency within scope', { scope, checkType: check_type });
             
             // implement-consistency-checking-logic
             // This would check for consistency within a specific scope
@@ -447,7 +448,7 @@ class SyncWorker {
                 try {
                     await this.syncDatabaseToServices('all', false);
                 } catch (err) {
-                    console.error('[🔄 Sync] Error in DB to Services sync:', err);
+                    logger.error('Error in DB to Services sync', { error: err });
                 }
             }, this.syncConfig.db_to_services);
             
@@ -455,7 +456,7 @@ class SyncWorker {
                 try {
                     await this.syncServicesToDatabase('all', false);
                 } catch (err) {
-                    console.error('[🔄 Sync] Error in Services to DB sync:', err);
+                    logger.error('Error in Services to DB sync', { error: err });
                 }
             }, this.syncConfig.services_to_db);
             
@@ -463,7 +464,7 @@ class SyncWorker {
                 try {
                     await this.syncLocalToRemote('all', false);
                 } catch (err) {
-                    console.error('[🔄 Sync] Error in Local to Remote sync:', err);
+                    logger.error('Error in Local to Remote sync', { error: err });
                 }
             }, this.syncConfig.local_to_remote);
             
@@ -471,7 +472,7 @@ class SyncWorker {
                 try {
                     await this.syncRemoteToLocal('all', false);
                 } catch (err) {
-                    console.error('[🔄 Sync] Error in Remote to Local sync:', err);
+                    logger.error('Error in Remote to Local sync', { error: err });
                 }
             }, this.syncConfig.remote_to_local);
         };
@@ -499,20 +500,20 @@ if (require.main === module) {
     
     // Handle graceful shutdown
     process.on('SIGINT', async () => {
-        console.log('\n[🔄 Sync Worker] Shutting down...');
+        logger.info('Sync Worker shutting down');
         await worker.stop();
         process.exit(0);
     });
-    
+
     process.on('SIGTERM', async () => {
-        console.log('\n[🔄 Sync Worker] Shutting down...');
+        logger.info('Sync Worker shutting down');
         await worker.stop();
         process.exit(0);
     });
-    
+
     // Start worker
     worker.start().catch(err => {
-        console.error('[🔄 Sync Worker] Failed to start:', err);
+        logger.error('Sync Worker failed to start', { error: err });
         process.exit(1);
     });
 }

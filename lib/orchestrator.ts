@@ -344,7 +344,7 @@ Respond with JSON:`;
     if (!decisionId) return;
     try {
       const { recordOutcome } = (await import('./protoforge/policy-engine.js')) as unknown as {
-        recordOutcome: (id: string, outcome: string, detail?: Record<string, unknown>) => Promise<void>;
+        recordOutcome: (_id: string, _outcome: string, _detail?: Record<string, unknown>) => Promise<void>;
       };
       await recordOutcome(decisionId, outcome, detail);
     } catch (error) {

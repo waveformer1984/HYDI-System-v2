@@ -1,6 +1,7 @@
 const { createClient } = require('@supabase/supabase-js');
 const QueueManager = require('./QueueManager');
 require('dotenv').config();
+const logger = require('../lib/structured-logger').child({ component: 'NotificationWorker' });
 
 class NotificationWorker {
     constructor(workerId) {
@@ -26,7 +27,7 @@ class NotificationWorker {
             this.supabase = createClient(supabaseUrl, supabaseKey);
             this.queue.registerWorker('notification', this.workerId);
             this.queue.updateHeartbeat('idle');
-            console.log(`[📣 Notification Worker] Initialized: ${this.workerId}`);
+            logger.info('Initialized', { workerId: this.workerId });
         };
 
         this.start = async function() {
@@ -46,7 +47,7 @@ class NotificationWorker {
         this.poll = function() {
             if (!this.running) return;
             this.processNextTask()
-                .catch(err => console.error('[📣 Notification Worker] Poll error:', err))
+                .catch(err => logger.error('Poll error', { error: err }))
                 .finally(() => { this.pollTimer = setTimeout(() => this.poll(), this.pollInterval); });
         };
 
@@ -59,7 +60,7 @@ class NotificationWorker {
                 switch (task.payload.event_type) {
                     case 'notification.send': await this.sendNotification(task.payload); break;
                     case 'notification.summary': await this.generateSummary(task.payload); break;
-                    default: console.log(`[📣 Notification] Unhandled: ${task.payload.event_type}`);
+                    default: logger.info('Unhandled event type', { eventType: task.payload.event_type });
                 }
                 await this.queue.completeTask(taskId, true);
             } catch (err) {
@@ -69,7 +70,7 @@ class NotificationWorker {
 
         this.sendNotification = async function(payload) {
             const { recipient, template, data, priority } = payload.data;
-            console.log(`[📣 Notification] Sending ${template} to ${recipient}`);
+            logger.info('Sending notification', { template, recipient });
             const channels = this.getChannelsForPriority(priority || 5);
             for (const channel of channels) {
                 try { await this.sendViaChannel(channel, { recipient, template, data, priority }); } catch (e) { /* channel failed, continue */ }
@@ -78,7 +79,7 @@ class NotificationWorker {
 
         this.generateSummary = async function(payload) {
             const { time_period } = payload.data || {};
-            console.log(`[📣 Notification] Generating summary for ${time_period}`);
+            logger.info('Generating summary', { timePeriod: time_period });
         };
 
         this.getChannelsForPriority = function(priority) {
@@ -123,7 +124,7 @@ class NotificationWorker {
                     channel: 'realtime'
                 });
                 
-            console.log(`[📣 Notification] Realtime notification stored for ${notificationData.recipient}`);
+            logger.info('Realtime notification stored', { recipient: notificationData.recipient });
         };
 
         this.sendDiscordNotification = async function(notificationData) {
@@ -273,7 +274,7 @@ class NotificationWorker {
             // Send email
             const info = await transporter.sendMail(mailOptions);
             
-            console.log(`[📣 Notification] Email sent: ${info.messageId}`);
+            logger.info('Email sent', { messageId: info.messageId });
             
             // Log sent notification
             await this.supabase
@@ -304,7 +305,7 @@ class NotificationWorker {
                     expires_at: new Date(Date.now() + (this.notificationChannels.ui.retention_hours * 60 * 60 * 1000))
                 });
                 
-            console.log(`[📣 Notification] UI notification stored for ${notificationData.recipient}`);
+            logger.info('UI notification stored', { recipient: notificationData.recipient });
         };
 
         this.generateEmailText = function(notificationData) {
@@ -348,7 +349,7 @@ This is an automated message from ProtoForge.
         
         <div class="data">
             <strong>Data:</strong><br>
-            ${JSON.stringify(notificationData.data, null, 2).replace(/\n/g, '<br>').replace(/  /g, '&nbsp;&nbsp;')}
+            ${JSON.stringify(notificationData.data, null, 2).replace(/\n/g, '<br>').replace(/ {2}/g, '&nbsp;&nbsp;')}
         </div>
         
         <p>This is an automated message from ProtoForge.</p>
@@ -377,7 +378,7 @@ This is an automated message from ProtoForge.
         };
 
         this.generateNotificationSummary = async function(summary_type, time_period) {
-            console.log(`[📣 Notification] Generating ${summary_type} summary for ${time_period}`);
+            logger.info('Generating summary', { summaryType: summary_type, timePeriod: time_period });
             
             let startDate;
             if (time_period === 'today') {
@@ -531,20 +532,20 @@ if (require.main === module) {
     
     // Handle graceful shutdown
     process.on('SIGINT', async () => {
-        console.log('\n[📣 Notification Worker] Shutting down...');
+        logger.info('Shutting down');
         await worker.stop();
         process.exit(0);
     });
-    
+
     process.on('SIGTERM', async () => {
-        console.log('\n[📣 Notification Worker] Shutting down...');
+        logger.info('Shutting down');
         await worker.stop();
         process.exit(0);
     });
-    
+
     // Start worker
     worker.start().catch(err => {
-        console.error('[📣 Notification Worker] Failed to start:', err);
+        logger.error('Failed to start', { error: err });
         process.exit(1);
     });
 }

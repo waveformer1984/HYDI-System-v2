@@ -217,7 +217,6 @@ router.post('/subscriptions/portal', /* authenticateToken, */ async (req, res) =
  */
 router.get('/subscriptions', /* authenticateToken, */ async (req, res) => {
   try {
-    const subscriptionId = req.user.subscriptionId;
     const report = await subscriptionManager.getCustomerUsageReport(
       req.user.id
     );
