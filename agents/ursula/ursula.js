@@ -16,6 +16,7 @@
 
 const path = require('path');
 const fs   = require('fs');
+const logger = require('../../lib/structured-logger').child({ component: 'Ursula' });
 
 // ── Resolve HYDI_System root ──
 const DEFAULT_HYDI_PATH = path.resolve(__dirname, '..', '..');
@@ -24,7 +25,7 @@ const HYDI_ROOT = process.env.HYDI_SYSTEM_PATH || DEFAULT_HYDI_PATH;
 function hydiModule(mod) {
   const p = path.join(HYDI_ROOT, 'modules', mod);
   if (fs.existsSync(p + '.js')) return require(p);
-  console.warn(`[URSULA] Module not found: ${p}. Running in degraded mode.`);
+  logger.warn('Module not found, running in degraded mode', { modulePath: p });
   return null;
 }
 
@@ -37,7 +38,7 @@ try {
   SSEManager  = hydiModule('ursula-sse-manager');
   Heartbeat   = hydiModule('ursula-heartbeat');
 } catch (e) {
-  console.error('[URSULA] Failed to load canonical modules:', e.message);
+  logger.error('Failed to load canonical modules', { error: e });
 }
 
 // ── Load OS-layer modules (new: registry, health, recovery, workflows, resources) ──
@@ -47,28 +48,28 @@ try {
   RecoveryEngine  = hydiModule('recovery-engine');
   WorkflowOrchestrator = hydiModule('workflow-orchestrator');
 } catch (e) {
-  console.error('[URSULA] Failed to load OS-layer modules:', e.message);
+  logger.error('Failed to load OS-layer modules', { error: e });
 }
 
 let ResourceManager;
 try {
   ResourceManager = hydiModule('resource-manager');
 } catch (e) {
-  console.error('[URSULA] Failed to load ResourceManager:', e.message);
+  logger.error('Failed to load ResourceManager', { error: e });
 }
 
 let StateManager;
 try {
   StateManager = hydiModule('state-manager');
 } catch (e) {
-  console.error('[URSULA] Failed to load StateManager:', e.message);
+  logger.error('Failed to load StateManager', { error: e });
 }
 
 let DeploymentManager;
 try {
   DeploymentManager = hydiModule('deployment-manager');
 } catch (e) {
-  console.error('[URSULA] Failed to load DeploymentManager:', e.message);
+  logger.error('Failed to load DeploymentManager', { error: e });
 }
 
 // ── Express & HTTP ──
@@ -109,7 +110,7 @@ async function initOSLayer() {
   if (StateManager) {
     stateManager = new StateManager();
     await stateManager.initialize();
-    console.log('   ✅ State Manager:', stateManager.memoryMode ? 'in-memory' : 'SQLite');
+    logger.info('State Manager initialized', { mode: stateManager.memoryMode ? 'in-memory' : 'SQLite' });
   }
 
   if (ServiceRegistry) {
@@ -124,14 +125,14 @@ async function initOSLayer() {
       capabilities: ['health_endpoint', 'sse_stream', 'intent_handler', 'service_registry', 'workflow_orchestrator', 'resource_manager', 'state_manager']
     });
     registry.startHeartbeatMonitor();
-    console.log('   ✅ Service Registry: initialized');
+    logger.info('Service Registry initialized');
   }
 
   if (HealthManager) {
     healthManager = new HealthManager();
     if (registry) healthManager.setRegistry(registry);
     healthManager.start();
-    console.log('   ✅ Health Manager: monitoring started');
+    logger.info('Health Manager monitoring started');
   }
 
   if (RecoveryEngine) {
@@ -151,7 +152,7 @@ async function initOSLayer() {
         // Attempt may not exist on error, skip persist
       });
     }
-    console.log('   ✅ Recovery Engine: ready');
+    logger.info('Recovery Engine ready');
   }
 
   if (WorkflowOrchestrator) {
@@ -198,17 +199,17 @@ async function initOSLayer() {
         workflowOrchestrator.activeCount++;
       }
       if (activeWorkflows.length > 0) {
-        console.log(`   🔄 Restored ${activeWorkflows.length} active workflow(s) from state`);
+        logger.info('Restored active workflows from state', { count: activeWorkflows.length });
       }
     }
-    console.log('   ✅ Workflow Orchestrator: ready');
+    logger.info('Workflow Orchestrator ready');
   }
 
   if (ResourceManager) {
     resourceManager = new ResourceManager();
     if (registry) resourceManager.setRegistry(registry);
     resourceManager.start();
-    console.log('   ✅ Resource Manager: monitoring started');
+    logger.info('Resource Manager monitoring started');
   }
 
   if (DeploymentManager) {
@@ -217,7 +218,7 @@ async function initOSLayer() {
     if (registry) deploymentManager.setRegistry(registry);
     if (healthManager) deploymentManager.setHealthManager(healthManager);
     if (recoveryEngine) deploymentManager.setRecoveryEngine(recoveryEngine);
-    console.log('   ✅ Deployment Manager: ready');
+    logger.info('Deployment Manager ready');
   }
 }
 
@@ -449,10 +450,7 @@ function parseIntent(input) {
 
 // ── Start ──
 async function start() {
-  console.log('🏗️  URSULA AGENT BOOTSTRAP (Canonical)');
-  console.log('   HYDI Root:', HYDI_ROOT);
-  console.log('   Port:', PORT);
-  console.log('');
+  logger.info('Ursula Agent bootstrap starting', { mode: 'canonical', hydiRoot: HYDI_ROOT, port: PORT });
 
   if (ServiceBundle) {
     try {
@@ -461,49 +459,49 @@ async function start() {
         : ServiceBundle;
       if (bundle && bundle.services) {
         state.servicesRegistered = bundle.services.size;
-        console.log('   ✅ Service Bundle:', state.servicesRegistered, 'services');
+        logger.info('Service Bundle loaded', { servicesRegistered: state.servicesRegistered });
       } else {
-        console.log('   ⚠️  Service Bundle loaded but no services registry found');
+        logger.info('Service Bundle loaded but no services registry found');
       }
     } catch (e) {
-      console.log('   ⚠️  Service Bundle init error:', e.message);
+      logger.info('Service Bundle init error', { error: e });
     }
   } else {
-    console.log('   ⚠️  Service Bundle: NOT LOADED');
+    logger.info('Service Bundle not loaded');
   }
 
-  if (SSEManager) console.log('   ✅ SSE Manager: ready');
-  else            console.log('   ⚠️  SSE Manager: NOT LOADED');
+  if (SSEManager) logger.info('SSE Manager ready');
+  else            logger.info('SSE Manager not loaded');
 
-  if (Heartbeat)  console.log('   ✅ Heartbeat module: present');
-  else            console.log('   ⚠️  Heartbeat: NOT LOADED');
+  if (Heartbeat)  logger.info('Heartbeat module present');
+  else            logger.info('Heartbeat module not loaded');
 
   // ── Initialize OS Layer ──
-  console.log('');
-  console.log('🔧 Initializing HYDI OS Layer...');
+  logger.info('Initializing HYDI OS Layer');
   await initOSLayer();
 
   server.listen(PORT, () => {
     state.status = 'running';
-    console.log('');
-    console.log(`🚀 Ursula Agent running on http://localhost:${PORT}`);
-    console.log(`   Health:       http://localhost:${PORT}/health`);
-    console.log(`   System:       http://localhost:${PORT}/system/status`);
-    console.log(`   Registry:     http://localhost:${PORT}/system/registry`);
-    console.log(`   Health:       http://localhost:${PORT}/system/health`);
-    console.log(`   Resources:    http://localhost:${PORT}/system/resources`);
-    console.log(`   Audit:        http://localhost:${PORT}/system/audit`);
-    console.log(`   Deploy:       POST http://localhost:${PORT}/deploy`);
-    console.log(`   DeployStatus: http://localhost:${PORT}/deploy/status`);
-    console.log(`   Workflows:    http://localhost:${PORT}/workflows`);
-    console.log(`   Stream:       http://localhost:${PORT}/stream`);
-    console.log(`   Intent:       POST http://localhost:${PORT}/intent`);
-    console.log('');
-    console.log('   HYDI OS Layer: ServiceRegistry + HealthManager + RecoveryEngine + WorkflowOrchestrator + ResourceManager + StateManager + DeploymentManager');
+    logger.info('Ursula Agent running', {
+      url: `http://localhost:${PORT}`,
+      endpoints: {
+        health: `http://localhost:${PORT}/health`,
+        system: `http://localhost:${PORT}/system/status`,
+        registry: `http://localhost:${PORT}/system/registry`,
+        systemHealth: `http://localhost:${PORT}/system/health`,
+        resources: `http://localhost:${PORT}/system/resources`,
+        audit: `http://localhost:${PORT}/system/audit`,
+        deploy: `POST http://localhost:${PORT}/deploy`,
+        deployStatus: `http://localhost:${PORT}/deploy/status`,
+        workflows: `http://localhost:${PORT}/workflows`,
+        stream: `http://localhost:${PORT}/stream`,
+        intent: `POST http://localhost:${PORT}/intent`
+      },
+      osLayer: ['ServiceRegistry', 'HealthManager', 'RecoveryEngine', 'WorkflowOrchestrator', 'ResourceManager', 'StateManager', 'DeploymentManager']
+    });
   });
 }
 
 start().catch(err => {
-  console.error('❌ Fatal startup error:', err);
-  process.exit(1);
+  logger.fatal('Fatal startup error', { error: err });
 });

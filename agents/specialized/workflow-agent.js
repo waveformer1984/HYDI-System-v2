@@ -11,6 +11,7 @@
  */
 
 const EventEmitter = require('events');
+const logger = require('../../lib/structured-logger').child({ component: 'WorkflowAgent' });
 
 class WorkflowAgent extends EventEmitter {
   constructor(config = {}) {
@@ -43,14 +44,14 @@ class WorkflowAgent extends EventEmitter {
       averageQueueDepth: 0
     };
 
-    console.log(`[WORKFLOW AGENT] Initialized: ${this.name}`);
+    logger.info('Workflow Agent initialized', { name: this.name });
   }
 
   async executeTask(task) {
     this.currentTask = task;
     this.status = 'busy';
 
-    console.log(`[WORKFLOW AGENT] Executing task: ${task.type}`);
+    logger.info('Workflow Agent executing task', { taskType: task.type });
 
     try {
       let result;
