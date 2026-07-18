@@ -6,6 +6,7 @@
 const { createClient } = require('@supabase/supabase-js');
 require('dotenv').config();
 const { v4: uuidv4 } = require('uuid');
+const logger = require('../lib/structured-logger').child({ component: 'QueueManager' });
 
 class QueueManager {
     constructor() {
@@ -44,8 +45,8 @@ class QueueManager {
             });
         
         if (error) throw error;
-        
-        console.log(`[📋 Queue] Worker registered: ${workerId} (${workerType})`);
+
+        logger.info('Worker registered', { workerId, workerType });
     }
 
     /**
@@ -62,8 +63,8 @@ class QueueManager {
         });
         
         if (error) throw error;
-        
-        console.log(`[📋 Queue] Task enqueued: ${queueName} (ID: ${data})`);
+
+        logger.info('Task enqueued', { queueName, taskId: data });
         return data;
     }
 
@@ -81,7 +82,7 @@ class QueueManager {
         if (error) throw error;
         
         if (data) {
-            console.log(`[📋 Queue] Task dequeued: ${queueName} (ID: ${data})`);
+            logger.info('Task dequeued', { queueName, taskId: data });
         }
         
         return data;
@@ -101,8 +102,8 @@ class QueueManager {
         });
         
         if (error) throw error;
-        
-        console.log(`[📋 Queue] Task ${success ? 'completed' : 'failed'}: ${taskId}`);
+
+        logger.info('Task finished', { taskId, success });
     }
 
     /**

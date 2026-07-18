@@ -1,6 +1,7 @@
 const { createClient } = require('@supabase/supabase-js');
 const QueueManager = require('./QueueManager');
 require('dotenv').config();
+const logger = require('../lib/structured-logger').child({ component: 'InventoryMaterialsWorker' });
 
 class InventoryMaterialsWorker {
     constructor(workerId) {
@@ -32,7 +33,7 @@ class InventoryMaterialsWorker {
         this.supabase = createClient(supabaseUrl, supabaseKey);
         this.queue.registerWorker('inventory_materials', this.workerId);
         this.queue.updateHeartbeat('idle');
-        console.log(`[📦 Inventory & Materials Worker] Initialized: ${this.workerId}`);
+        logger.info('Inventory & Materials Worker initialized', { workerId: this.workerId });
     }
 
     async start() {
@@ -40,7 +41,7 @@ class InventoryMaterialsWorker {
         await this.initialize();
         this.running = true;
         this.queue.startHeartbeat();
-        console.log('[📦 Inventory & Materials Worker] Monitoring inventory...');
+        logger.info('Monitoring inventory');
         this.poll();
     }
 
@@ -48,13 +49,13 @@ class InventoryMaterialsWorker {
         this.running = false;
         if (this.pollTimer) clearTimeout(this.pollTimer);
         await this.queue.shutdown();
-        console.log('[📦 Inventory & Materials Worker] Stopped');
+        logger.info('Inventory & Materials Worker stopped');
     }
 
     poll() {
         if (!this.running) return;
         this.routineCheck()
-            .catch(err => console.error('[📦 Inventory & Materials Worker] Error in routine check:', err))
+            .catch(err => logger.error('Error in routine check', { error: err }))
             .finally(() => { this.pollTimer = setTimeout(() => this.poll(), this.pollInterval); });
     }
 
@@ -70,13 +71,13 @@ class InventoryMaterialsWorker {
             // Update inventory metrics
             await this.updateInventoryMetrics();
         } catch (err) {
-            console.error('[📦 Inventory & Materials Worker] Error in routine check:', err);
+            logger.error('Error in routine check', { error: err });
         }
     }
 
     async triggerProcurement(payload) {
         const { trigger_type, item_types, urgency } = payload.data;
-        console.log(`[📦 Inventory] Triggering procurement: ${trigger_type}`);
+        logger.info('Triggering procurement', { triggerType: trigger_type });
         let procurementList = [];
         if (trigger_type === 'low_stock') {
             procurementList = await this.getLowStockItems(item_types);
@@ -410,7 +411,7 @@ class InventoryMaterialsWorker {
                 notes: `Auto-generated: ${item.order_reason}`
             });
             
-        console.log(`[📦 Inventory] Created procurement order for ${item.name} (x${item.order_quantity})`);
+        logger.info('Created procurement order', { itemName: item.name, quantity: item.order_quantity });
     }
 
     async notifyProcurementTriggered(procurementList, urgency) {
@@ -438,7 +439,7 @@ class InventoryMaterialsWorker {
             .gte('warranty_expiry', new Date()); // Not already expired
         
         if (expiringItems && expiringItems.length > 0) {
-            console.log(`[📦 Inventory] Found ${expiringItems.length} items expiring soon`);
+            logger.info('Found items expiring soon', { count: expiringItems.length });
             
             await this.queue.enqueue('notification', {
                 event_type: 'notification.send',
@@ -505,20 +506,20 @@ if (require.main === module) {
     
     // Handle graceful shutdown
     process.on('SIGINT', async () => {
-        console.log('\n[📦 Inventory & Materials Worker] Shutting down...');
+        logger.info('Inventory & Materials Worker shutting down');
         await worker.stop();
         process.exit(0);
     });
-    
+
     process.on('SIGTERM', async () => {
-        console.log('\n[📦 Inventory & Materials Worker] Shutting down...');
+        logger.info('Inventory & Materials Worker shutting down');
         await worker.stop();
         process.exit(0);
     });
-    
+
     // Start worker
     worker.start().catch(err => {
-        console.error('[📦 Inventory & Materials Worker] Failed to start:', err);
+        logger.error('Inventory & Materials Worker failed to start', { error: err });
         process.exit(1);
     });
 }

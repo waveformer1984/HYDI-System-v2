@@ -10,6 +10,7 @@
 const QueueManager = require('./QueueManager');
 const { createClient } = require('@supabase/supabase-js');
 require('dotenv').config();
+const logger = require('../lib/structured-logger').child({ component: 'RevenueIngestionWorker' });
 
 class RevenueIngestionWorker {
     constructor(workerId = null) {
@@ -58,20 +59,20 @@ class RevenueIngestionWorker {
         await this.queue.registerWorker('revenue_ingestion', this.workerId);
         await this.queue.updateHeartbeat('idle');
         
-        console.log(`[💰 Revenue Worker] Initialized: ${this.workerId}`);
+        logger.info('Initialized', { workerId: this.workerId });
     }
 
     async start() {
         if (this.running) {
-            console.log('[💰 Revenue Worker] Already running');
+            logger.info('Already running');
             return;
         }
-        
+
         await this.initialize();
         this.running = true;
         this.queue.startHeartbeat();
-        
-        console.log('[💰 Revenue Worker] Starting to poll for tasks...');
+
+        logger.info('Starting to poll for tasks');
         
         // Start polling
         this.poll();
@@ -85,15 +86,15 @@ class RevenueIngestionWorker {
         }
         
         await this.queue.shutdown();
-        console.log('[💰 Revenue Worker] Stopped');
+        logger.info('Stopped');
     }
 
     poll() {
         if (!this.running) return;
-        
+
         this.processNextTask()
             .catch(err => {
-                console.error('[💰 Revenue Worker] Error in poll:', err);
+                logger.error('Error in poll', { error: err });
             })
             .finally(() => {
                 // Schedule next poll
@@ -111,11 +112,11 @@ class RevenueIngestionWorker {
         try {
             const task = await this.queue.getTask(taskId);
             if (!task) {
-                console.error(`[💰 Revenue Worker] Task not found: ${taskId}`);
+                logger.error('Task not found', { taskId });
                 return;
             }
-            
-            console.log(`[💰 Revenue Worker] Processing task: ${task.payload.event_type}`);
+
+            logger.info('Processing task', { eventType: task.payload.event_type });
             
             // Process based on event type
             switch (task.payload.event_type) {
@@ -140,17 +141,17 @@ class RevenueIngestionWorker {
                     break;
                     
                 default:
-                    console.log(`[💰 Revenue Worker] Unhandled event type: ${task.payload.event_type}`);
+                    logger.info('Unhandled event type', { eventType: task.payload.event_type });
             }
-            
+
             // Mark task as completed
             await this.queue.completeTask(taskId, true);
-            
+
             // Trigger downstream provisioning
             await this.triggerProvisioning(task.payload);
-            
+
         } catch (err) {
-            console.error(`[💰 Revenue Worker] Task failed: ${taskId}`, err);
+            logger.error('Task failed', { taskId, error: err });
             await this.queue.completeTask(taskId, false, err.message);
         }
     }
@@ -183,7 +184,7 @@ class RevenueIngestionWorker {
             }
         });
         
-        console.log(`[💰 Revenue] Processed checkout: ${customerEmail} (${tier} tier)`);
+        logger.info('Processed checkout', { customerEmail, tier });
     }
 
     async handlePaymentSucceeded(payload) {
@@ -212,7 +213,7 @@ class RevenueIngestionWorker {
             });
         }
         
-        console.log(`[💰 Revenue] Processed payment: ${invoice.id}`);
+        logger.info('Processed payment', { invoiceId: invoice.id });
     }
 
     async handleSubscriptionCreated(payload) {
@@ -228,7 +229,7 @@ class RevenueIngestionWorker {
             starts_at: subscription.current_period_start
         });
         
-        console.log(`[💰 Revenue] Subscription created: ${subscription.id}`);
+        logger.info('Subscription created', { subscriptionId: subscription.id });
     }
 
     async handleSubscriptionUpdated(payload) {
@@ -244,7 +245,7 @@ class RevenueIngestionWorker {
             current_period_end: subscription.current_period_end
         });
         
-        console.log(`[💰 Revenue] Subscription updated: ${subscription.id}`);
+        logger.info('Subscription updated', { subscriptionId: subscription.id });
     }
 
     async handleSubscriptionDeleted(payload) {
@@ -254,7 +255,7 @@ class RevenueIngestionWorker {
         // Deactivate customer's services
         await this.deactivateCustomerServices(customerId);
         
-        console.log(`[💰 Revenue] Subscription deleted: ${subscription.id}`);
+        logger.info('Subscription deleted', { subscriptionId: subscription.id });
     }
 
     async createOrUpdateCustomer(email, stripeCustomerId, tier, session) {
@@ -380,20 +381,20 @@ if (require.main === module) {
     
     // Handle graceful shutdown
     process.on('SIGINT', async () => {
-        console.log('\n[💰 Revenue Worker] Shutting down...');
+        logger.info('Shutting down');
         await worker.stop();
         process.exit(0);
     });
-    
+
     process.on('SIGTERM', async () => {
-        console.log('\n[💰 Revenue Worker] Shutting down...');
+        logger.info('Shutting down');
         await worker.stop();
         process.exit(0);
     });
-    
+
     // Start worker
     worker.start().catch(err => {
-        console.error('[💰 Revenue Worker] Failed to start:', err);
+        logger.error('Failed to start', { error: err });
         process.exit(1);
     });
 }

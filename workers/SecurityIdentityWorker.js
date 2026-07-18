@@ -2,6 +2,7 @@ const { createClient } = require('@supabase/supabase-js');
 const QueueManager = require('./QueueManager');
 const jwt = require('jsonwebtoken');
 require('dotenv').config();
+const logger = require('../lib/structured-logger').child({ component: 'SecurityIdentityWorker' });
 
 class SecurityIdentityWorker {
     constructor(workerId) {
@@ -29,7 +30,7 @@ class SecurityIdentityWorker {
             this.supabase = createClient(supabaseUrl, supabaseKey);
             this.queue.registerWorker('security_identity', this.workerId);
             this.queue.updateHeartbeat('idle');
-            console.log(`[🔐 Security Identity Worker] Initialized: ${this.workerId}`);
+            logger.info('Security Identity Worker initialized', { workerId: this.workerId });
         };
 
         this.start = async function() {
@@ -49,7 +50,7 @@ class SecurityIdentityWorker {
         this.poll = function() {
             if (!this.running) return;
             this.processNextTask()
-                .catch(err => console.error('[🔐 Security Identity Worker] Poll error:', err))
+                .catch(err => logger.error('Security Identity Worker poll error', { error: err }))
                 .finally(() => { this.pollTimer = setTimeout(() => this.poll(), this.pollInterval); });
         };
 
@@ -66,7 +67,7 @@ class SecurityIdentityWorker {
                     case 'rate_limit.check': await this.checkRateLimit(task.payload); break;
                     case 'session.refresh': await this.refreshSession(task.payload); break;
                     case 'security.audit': await this.performSecurityAudit(task.payload); break;
-                    default: console.log(`[🔐 Security] Unhandled: ${task.payload.event_type}`);
+                    default: logger.info('Unhandled security event type', { eventType: task.payload.event_type });
                 }
                 await this.queue.completeTask(taskId, true);
             } catch (err) {
@@ -84,7 +85,7 @@ class SecurityIdentityWorker {
 
         this.processAuthentication = async function(payload) {
             const { email, ip_address, user_agent } = payload.data;
-            console.log(`[🔐 Security] Processing authentication for ${email}`);
+            logger.info('Processing authentication', { email });
             // This event's payload carries no password/API-key/credential to
             // verify against anything -- and this codebase has no user/password
             // schema at all (its actual identity model is API-key based, see
@@ -106,15 +107,15 @@ class SecurityIdentityWorker {
                         attempted_at: new Date()
                     });
             } catch (error) {
-                console.error(`[🔐 Security] Failed to log rejected auth attempt for ${email}: ${error.message}`);
+                logger.error('Failed to log rejected auth attempt', { email, error });
             }
-            console.log(`[🔐 Security] Auth rejected for ${email}: ${failureReason}`);
+            logger.info('Auth rejected', { email, failureReason });
         };
 
         this.validateToken = async function(payload) {
             const { token, endpoint, required_permission } = payload.data;
             
-            console.log(`[🔐 Security] Validating token for endpoint ${endpoint}`);
+            logger.info('Validating token', { endpoint });
             
             // validate-token-details
             try {
@@ -137,7 +138,7 @@ class SecurityIdentityWorker {
                             validated_at: new Date()
                         });
                     
-                    console.log(`[🔐 Security] Token valid for ${decoded.email} on ${endpoint}`);
+                    logger.info('Token valid', { email: decoded.email, endpoint });
                 } else {
                     // Token valid but insufficient permissions
                     await this.supabase
@@ -151,7 +152,7 @@ class SecurityIdentityWorker {
                             validated_at: new Date()
                         });
                     
-                    console.log(`[🔐 Security] Token valid but insufficient permissions for ${decoded.email} on ${endpoint}`);
+                    logger.info('Token valid but insufficient permissions', { email: decoded.email, endpoint });
                 }
             } catch (error) {
                 // Invalid or expired token
@@ -167,14 +168,14 @@ class SecurityIdentityWorker {
                         validated_at: new Date()
                     });
                 
-                console.log(`[🔐 Security] Token validation failed: ${error.message}`);
+                logger.info('Token validation failed', { error });
             }
         };
 
         this.checkPermission = async function(payload) {
             const { user_id, resource, action } = payload.data;
             
-            console.log(`[🔐 Security] Checking permission: ${action} on ${resource} for user ${user_id}`);
+            logger.info('Checking permission', { action, resource, userId: user_id });
             
             // check-permission-details
             // Get user's role/permissions from database
@@ -185,7 +186,7 @@ class SecurityIdentityWorker {
                 .single();
             
             if (!user) {
-                console.log(`[🔐 Security] User not found: ${user_id}`);
+                logger.info('User not found', { userId: user_id });
                 return false;
             }
             
@@ -216,7 +217,7 @@ class SecurityIdentityWorker {
                         checked_at: new Date()
                     });
                 
-                console.log(`[🔐 Security] Permission granted: ${action} on ${resource} for user ${user_id}`);
+                logger.info('Permission granted', { action, resource, userId: user_id });
                 return true;
             } else {
                 await this.supabase
@@ -229,7 +230,7 @@ class SecurityIdentityWorker {
                         checked_at: new Date()
                     });
                 
-                console.log(`[🔐 Security] Permission denied: ${action} on ${resource} for user ${user_id}`);
+                logger.info('Permission denied', { action, resource, userId: user_id });
                 return false;
             }
         };
@@ -237,7 +238,7 @@ class SecurityIdentityWorker {
         this.checkRateLimit = async function(payload) {
             const { identifier, endpoint, ip_address } = payload.data;
             
-            console.log(`[🔐 Security] Checking rate limit for ${identifier} on ${endpoint}`);
+            logger.info('Checking rate limit', { identifier, endpoint });
             
             // check-rate-limit-details
             if (!this.securityConfig.rateLimiting.enabled) {
@@ -270,7 +271,7 @@ class SecurityIdentityWorker {
                         timestamp: new Date()
                     });
                 
-                console.log(`[🔐 Security] Rate limit exceeded: ${identifier} on ${endpoint} (${currentCount}/${maxAllowed})`);
+                logger.info('Rate limit exceeded', { identifier, endpoint, currentCount, maxAllowed });
                 return false;
             } else {
                 // allow-request-and-log
@@ -284,7 +285,7 @@ class SecurityIdentityWorker {
                         timestamp: new Date()
                     });
                 
-                console.log(`[🔐 Security] Request allowed: ${identifier} on ${endpoint} (${currentCount + 1}/${maxAllowed})`);
+                logger.info('Request allowed', { identifier, endpoint, currentCount: currentCount + 1, maxAllowed });
                 return true;
             }
         };
@@ -292,7 +293,7 @@ class SecurityIdentityWorker {
         this.refreshSession = async function(payload) {
             const { session_id, user_id } = payload.data;
             
-            console.log(`[🔐 Security] Refreshing session ${session_id} for user ${user_id}`);
+            logger.info('Refreshing session', { sessionId: session_id, userId: user_id });
             
             // refresh-session-details
             // Get current session
@@ -304,7 +305,7 @@ class SecurityIdentityWorker {
                 .single();
             
             if (!session) {
-                console.log(`[🔐 Security] Session not found: ${session_id}`);
+                logger.info('Session not found', { sessionId: session_id });
                 return false;
             }
             
@@ -330,10 +331,10 @@ class SecurityIdentityWorker {
                     .eq('session_id', session_id)
                     .eq('user_id', user_id);
                 
-                console.log(`[🔐 Security] Session refreshed: ${session_id} (expires in ${this.securityConfig.session.timeoutMinutes} minutes)`);
+                logger.info('Session refreshed', { sessionId: session_id, expiresInMinutes: this.securityConfig.session.timeoutMinutes });
                 return true;
             } else {
-                console.log(`[🔐 Security] Session does not need refresh yet: ${session_id} (expires in ${timeUntilExpiry.toFixed(1)} minutes)`);
+                logger.info('Session does not need refresh yet', { sessionId: session_id, expiresInMinutes: Number(timeUntilExpiry.toFixed(1)) });
                 return false; // No need to refresh yet
             }
         };
@@ -341,7 +342,7 @@ class SecurityIdentityWorker {
         this.performSecurityAudit = async function(payload) {
             const { audit_type, scope, time_period } = payload.data;
             
-            console.log(`[🔐 Security] Performing security audit: ${audit_type}`);
+            logger.info('Performing security audit', { auditType: audit_type });
             
             // perform-security-audit-details
             let auditResults = {};
@@ -368,7 +369,7 @@ class SecurityIdentityWorker {
                     break;
                     
                 default:
-                    console.log(`[🔐 Security] Unknown audit type: ${audit_type}`);
+                    logger.info('Unknown audit type', { auditType: audit_type });
                     auditResults = { error: 'Unknown audit type' };
             }
             
@@ -385,7 +386,7 @@ class SecurityIdentityWorker {
                     performed_at: new Date()
                 });
             
-            console.log(`[🔐 Security] Security audit completed: ${audit_type}`);
+            logger.info('Security audit completed', { auditType: audit_type });
         };
 
         // helper-methods-for-security-operations
@@ -431,7 +432,7 @@ if (require.main === module) {
     const worker = new SecurityIdentityWorker();
     process.on('SIGINT', async () => { await worker.stop(); process.exit(0); });
     process.on('SIGTERM', async () => { await worker.stop(); process.exit(0); });
-    worker.start().catch(err => { console.error('[🔐 Security Identity Worker] Failed to start:', err); process.exit(1); });
+    worker.start().catch(err => { logger.error('Security Identity Worker failed to start', { error: err }); process.exit(1); });
 }
 
 module.exports = SecurityIdentityWorker;

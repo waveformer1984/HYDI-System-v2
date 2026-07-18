@@ -6,6 +6,7 @@
 const { Worker, isMainThread, parentPort, workerData } = require('worker_threads');
 const os = require('os');
 const { performance } = require('perf_hooks');
+const logger = require('../lib/structured-logger').child({ component: 'ResourceEnforcement' });
 
 class ResourceEnforcement {
   constructor(options = {}) {
@@ -224,7 +225,7 @@ class EnforcedWorker {
     violation.workerId = this.workerId;
     this.violations.push(violation);
     
-    console.log(`[WORKER] Violation in ${this.workerId}:`, violation);
+    logger.warn('Violation detected', { workerId: this.workerId, violation });
     
     // Take action based on violation type
     switch (violation.type) {
@@ -247,7 +248,7 @@ class EnforcedWorker {
    * Terminate worker
    */
   terminateWorker(reason) {
-    console.log(`[WORKER] Terminating ${this.workerId}: ${reason}`);
+    logger.warn('Terminating worker', { workerId: this.workerId, reason });
     
     if (this.monitoring) {
       clearInterval(this.monitoring);
@@ -328,7 +329,7 @@ class WorkerResourceMonitor {
         if (message.type === 'check_resources') {
           this.sendResourceUpdate();
         } else if (message.type === 'warning') {
-          console.warn(`[WORKER] Warning: ${message.reason}`);
+          logger.warn('Warning received', { reason: message.reason });
         }
       });
     }

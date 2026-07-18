@@ -24,6 +24,7 @@ const { createClient } = require('@supabase/supabase-js');
 const { createNotification } = require('../lib/notifications/notify');
 const { publish } = require('../lib/realtime/eventBus');
 require('dotenv').config();
+const logger = require('../lib/structured-logger').child({ component: 'WorkerOrchestrator' });
 
 class WorkerOrchestrator {
     constructor() {
@@ -132,21 +133,21 @@ class WorkerOrchestrator {
         this.initialized = true;
         this.commandPollInterval = null;
 
-        console.log('[🎼 Orchestrator] Initialized');
+        logger.info('Initialized');
     }
 
     async start() {
         if (this.running) {
-            console.log('[🎼 Orchestrator] Already running');
+            logger.info('Already running');
             return;
         }
-        
+
         if (!this.initialized) {
             await this.initialize();
         }
-        
+
         this.running = true;
-        console.log('[🎼 Orchestrator] Starting worker ecosystem...');
+        logger.info('Starting worker ecosystem');
         
         // Start workers in priority order
         await this.startWorkersByPriority();
@@ -161,14 +162,14 @@ class WorkerOrchestrator {
         // see api/agent-manager/control.js, the only writer of that table).
         this.startCommandPolling();
 
-        console.log('[🎼 Orchestrator] All workers started successfully');
+        logger.info('All workers started successfully');
     }
 
     async stop() {
         if (!this.running) return;
 
         this.running = false;
-        console.log('[🎼 Orchestrator] Shutting down workers...');
+        logger.info('Shutting down workers');
 
         // Stop all workers
         const stopPromises = [];
@@ -191,7 +192,7 @@ class WorkerOrchestrator {
             clearInterval(this.commandPollInterval);
         }
 
-        console.log('[🎼 Orchestrator] Shutdown complete');
+        logger.info('Shutdown complete');
     }
 
     // ── Mobile-ops command queue ──────────────────────────────────────────
@@ -203,7 +204,7 @@ class WorkerOrchestrator {
     startCommandPolling(intervalMs = 5000) {
         this.commandPollInterval = setInterval(() => {
             this.pollControlCommands().catch((err) => {
-                console.error('[🎼 Orchestrator] Command poll failed:', err);
+                logger.error('Command poll failed', { error: err });
             });
         }, intervalMs);
     }
@@ -217,7 +218,7 @@ class WorkerOrchestrator {
             .limit(10);
 
         if (error) {
-            console.error('[🎼 Orchestrator] Failed to fetch pending commands:', error);
+            logger.error('Failed to fetch pending commands', { error });
             return;
         }
 
@@ -370,11 +371,11 @@ class WorkerOrchestrator {
             const config = this.workerConfigs[workerType];
             
             if (!config.class) {
-                console.log(`[🎼 Orchestrator] Skipping ${workerType} (not implemented)`);
+                logger.info('Skipping worker type (not implemented)', { workerType });
                 continue;
             }
-            
-            console.log(`[🎼 Orchestrator] Starting ${workerType} workers...`);
+
+            logger.info('Starting workers', { workerType });
             
             const instances = [];
             for (let i = 0; i < config.instances; i++) {
@@ -384,9 +385,9 @@ class WorkerOrchestrator {
                 try {
                     await worker.start();
                     instances.push(worker);
-                    console.log(`[🎼 Orchestrator] ✓ Started worker: ${workerId}`);
+                    logger.info('Started worker', { workerId });
                 } catch (err) {
-                    console.error(`[🎼 Orchestrator] ✗ Failed to start ${workerId}:`, err);
+                    logger.error('Failed to start worker', { workerId, error: err });
                 }
             }
             
@@ -411,7 +412,7 @@ class WorkerOrchestrator {
                 });
             
             // Log summary
-            console.log('[🎼 Orchestrator] Metrics:', {
+            logger.info('Metrics', {
                 workers: metrics.totalWorkers,
                 queues: Object.keys(metrics.queueStats).length,
                 healthy: metrics.systemHealth.healthy_workers
@@ -441,12 +442,12 @@ class WorkerOrchestrator {
             const lastHeartbeat = new Date(status.last_heartbeat);
             
             if (lastHeartbeat < staleThreshold && status.status !== 'stopped') {
-                console.warn(`[🎼 Orchestrator] Worker ${status.worker_id} is stale (last heartbeat: ${status.last_heartbeat})`);
-                
+                logger.warn('Worker is stale', { workerId: status.worker_id, lastHeartbeat: status.last_heartbeat });
+
                 // Try to restart if critical
                 const workerType = status.worker_id.split('-')[0];
                 if (this.workerConfigs[workerType]?.priority === 'critical') {
-                    console.log(`[🎼 Orchestrator] Attempting to restart critical worker: ${status.worker_id}`);
+                    logger.info('Attempting to restart critical worker', { workerId: status.worker_id });
                     await this.restartWorker(status.worker_id, workerType);
                 }
             }
@@ -466,19 +467,19 @@ class WorkerOrchestrator {
                 await existingWorker.stop();
                 instances.splice(instances.indexOf(existingWorker), 1);
             } catch (err) {
-                console.error(`[🎼 Orchestrator] Error stopping worker ${workerId}:`, err);
+                logger.error('Error stopping worker', { workerId, error: err });
             }
         }
-        
+
         // Start new instance
         try {
             const newWorker = new config.class(workerId);
             await newWorker.start();
             instances.push(newWorker);
             this.workers.set(workerType, instances);
-            console.log(`[🎼 Orchestrator] ✓ Restarted worker: ${workerId}`);
+            logger.info('Restarted worker', { workerId });
         } catch (err) {
-            console.error(`[🎼 Orchestrator] ✗ Failed to restart ${workerId}:`, err);
+            logger.error('Failed to restart worker', { workerId, error: err });
         }
     }
 
@@ -540,13 +541,13 @@ class WorkerOrchestrator {
             await newWorker.start();
             instances.push(newWorker);
             this.workers.set(workerType, instances);
-            
-            console.log(`[🎼 Orchestrator] Scaled up ${workerType} to ${currentCount + 1} instances`);
+
+            logger.info('Scaled up', { workerType, instanceCount: currentCount + 1 });
         } else if (direction === 'down' && currentCount > 1) {
             const worker = instances.pop();
             await worker.stop();
-            
-            console.log(`[🎼 Orchestrator] Scaled down ${workerType} to ${currentCount - 1} instances`);
+
+            logger.info('Scaled down', { workerType, instanceCount: currentCount - 1 });
         }
     }
 
@@ -575,20 +576,20 @@ if (require.main === module) {
     
     // Handle graceful shutdown
     process.on('SIGINT', async () => {
-        console.log('\n[🎼 Orchestrator] Shutting down...');
+        logger.info('Shutting down');
         await orchestrator.stop();
         process.exit(0);
     });
-    
+
     process.on('SIGTERM', async () => {
-        console.log('\n[🎼 Orchestrator] Shutting down...');
+        logger.info('Shutting down');
         await orchestrator.stop();
         process.exit(0);
     });
-    
+
     // Start orchestrator
     orchestrator.start().catch(err => {
-        console.error('[🎼 Orchestrator] Failed to start:', err);
+        logger.error('Failed to start', { error: err });
         process.exit(1);
     });
 }
