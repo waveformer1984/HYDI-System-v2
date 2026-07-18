@@ -1532,7 +1532,7 @@ server.listen(PORT, async () => {
   logger.info('Server running on port', { port: PORT });
   logger.info('ProtoForge Validation Gate - Operational');
   logger.info('DATABASE: Single Supabase client initialized');
-  logger.info('[CHAT WS] WebSocket server initialized - Connect to ws://localhost:${PORT}/ws/<system>');
+  logger.info('WebSocket server initialized', { url: `ws://localhost:${PORT}/ws/<system>` });
 
   // Start CASCADE V2 system
   const cascadeStatus = cascade.start();

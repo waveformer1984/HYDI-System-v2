@@ -432,20 +432,24 @@ class RuntimeEnforcer {
       throw new Error(`Runtime enforcement: Service access denied - ${serviceName}\\n${validation.reason}`);
     }
     
-    // Return proxy that validates all operations
+    // Return proxy that validates all operations. Trap handlers must be
+    // arrow functions here -- a Proxy invokes handler methods with `this`
+    // bound to the handler object itself, not the RuntimeEnforcer instance,
+    // so a regular method would throw "this.validateService is not a
+    // function" on every access.
     return new Proxy({}, {
-      get(target, prop) {
+      get: (target, prop) => {
         const operationValidation = this.validateService(serviceName, prop);
-        
+
         if (!operationValidation.allowed) {
           throw new Error(`Runtime enforcement: Operation denied - ${serviceName}.${prop}\\n${operationValidation.reason}`);
         }
-        
+
         // Return the actual service
         return this.getServiceInstance(serviceName);
       },
-      
-      has(target, prop) {
+
+      has: (target, prop) => {
         const operationValidation = this.validateService(serviceName, 'access');
         return operationValidation.allowed && Object.prototype.hasOwnProperty.call(this.getServiceInstance(serviceName), prop);
       }
