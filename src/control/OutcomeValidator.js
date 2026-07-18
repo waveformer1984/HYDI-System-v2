@@ -9,6 +9,7 @@
 
 const { createClient } = require('@supabase/supabase-js');
 const { MemoryStore } = require('../memory/MemoryStore.js');
+const logger = require('../../lib/structured-logger').child({ component: 'OutcomeValidator' });
 
 class OutcomeValidator {
   constructor() {
@@ -48,7 +49,7 @@ class OutcomeValidator {
     this.lastAdaptation = Date.now();
     this.adaptationInterval = 24 * 60 * 60 * 1000; // Daily adaptation
     
-    console.log('[OUTCOME VALIDATOR] Initialized - Ready to learn from reality');
+    logger.info('Outcome Validator initialized - ready to learn from reality');
   }
 
   /**
@@ -68,7 +69,7 @@ class OutcomeValidator {
     };
     
     // Store in database with verification
-    console.log('[OUTCOME] Record keys:', Object.keys(record));
+    logger.info('Record keys', { keys: Object.keys(record) });
     await this.memory.writeAndVerify('task_outcomes', record, 'task_id');
     
     // Add to buffer for immediate learning
@@ -79,7 +80,7 @@ class OutcomeValidator {
       await this.adaptThresholds();
     }
     
-    console.log(`[OUTCOME VALIDATOR] Recorded outcome for ${task.type}: ${outcome.success ? 'SUCCESS' : 'FAILURE'}`);
+    logger.info('Recorded outcome', { taskType: task.type, result: outcome.success ? 'SUCCESS' : 'FAILURE' });
     
     return record;
   }
@@ -120,7 +121,7 @@ class OutcomeValidator {
    * Adapt CASCADE thresholds based on real outcomes
    */
   async adaptThresholds() {
-    console.log('\n[OUTCOME VALIDATOR] 🔄 Adapting thresholds based on outcomes...');
+    logger.info('Adapting thresholds based on outcomes');
     
     const now = Date.now();
     // Remove time constraint for testing
@@ -151,9 +152,9 @@ class OutcomeValidator {
     for (const adaptation of adaptations) {
       if (adaptation.confidence >= this.learningConfig.confidenceThreshold) {
         this.applyAdaptation(adaptation);
-        console.log(`[OUTCOME VALIDATOR] ✅ Applied: ${adaptation.description}`);
+        logger.info('Adaptation applied', { description: adaptation.description });
       } else {
-        console.log(`[OUTCOME VALIDATOR] ⚠️ Skipped (low confidence): ${adaptation.description}`);
+        logger.info('Adaptation skipped (low confidence)', { description: adaptation.description });
       }
     }
     
@@ -169,10 +170,10 @@ class OutcomeValidator {
         thresholds_after: this.thresholds
       });
     } catch (e) {
-      console.error('[OUTCOME VALIDATOR] Failed to store adaptation:', e.message);
+      logger.error('Failed to store adaptation', { error: e });
     }
-    
-    console.log('[OUTCOME VALIDATOR] Adaptation cycle complete\n');
+
+    logger.info('Adaptation cycle complete');
   }
 
   /**
@@ -244,7 +245,7 @@ class OutcomeValidator {
     
     return null;
     } catch (e) {
-      console.error('[OUTCOME VALIDATOR] Failed to adapt lead source thresholds:', e.message);
+      logger.error('Failed to adapt lead source thresholds', { error: e });
       return null;
     }
   }
@@ -472,7 +473,7 @@ class OutcomeValidator {
    * Force adaptation cycle (for testing)
    */
   async forceAdaptation() {
-    console.log('[OUTCOME VALIDATOR] Forcing adaptation cycle...');
+    logger.info('Forcing adaptation cycle');
     await this.adaptThresholds();
   }
 

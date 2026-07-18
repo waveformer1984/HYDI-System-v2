@@ -15,6 +15,7 @@
 const SystemAuditor = require('./SystemAuditor');
 const fs = require('fs').promises;
 const path = require('path');
+const logger = require('../../lib/structured-logger').child({ component: 'PreFlightGate' });
 
 class PreFlightGate {
   constructor(config = {}) {
@@ -44,16 +45,16 @@ class PreFlightGate {
     
     this.registrationLog = [];
     
-    console.log('[PRE-FLIGHT GATE] Initialized');
-    console.log(`[GATE] Blocking enabled: ${this.config.enableBlocking}`);
-    console.log(`[GATE] Registration required: ${this.config.requireRegistration}`);
+    logger.info('Pre-Flight Gate initialized');
+    logger.info('Blocking enabled', { enableBlocking: this.config.enableBlocking });
+    logger.info('Registration required', { requireRegistration: this.config.requireRegistration });
   }
   
   /**
    * REGISTRATION STEP - Required before anything new can exist
    */
   async registerComponent(component) {
-    console.log(`[GATE] Registering component: ${component.name}`);
+    logger.info('Registering component', { componentName: component.name });
     
     // Validate required fields
     const validation = await this.validateRegistration(component);
@@ -82,7 +83,7 @@ class PreFlightGate {
       location: component.location
     });
     
-    console.log(`[GATE] Component registered successfully: ${component.name}`);
+    logger.info('Component registered successfully', { componentName: component.name });
     
     return updated;
   }
@@ -209,7 +210,7 @@ class PreFlightGate {
       // Write back to file
       await fs.writeFile(manifestPath, JSON.stringify(manifest, null, 2));
       
-      console.log(`[GATE] Added ${component.name} to manifest in category ${category}`);
+      logger.info('Added component to manifest', { componentName: component.name, category });
       
       return manifest;
       
@@ -245,7 +246,7 @@ class PreFlightGate {
    * PRE-FLIGHT CHECK - Before execution
    */
   async preFlightCheck(action, context = {}) {
-    console.log(`[GATE] Pre-flight check for action: ${action.type}`);
+    logger.info('Pre-flight check for action', { actionType: action.type });
     
     const check = {
       allowed: true,
@@ -258,7 +259,7 @@ class PreFlightGate {
     
     // Check if action is in exception list
     if (this.config.allowExceptions.includes(action.type)) {
-      console.log(`[GATE] Action ${action.type} is in exception list - allowed`);
+      logger.info('Action is in exception list - allowed', { actionType: action.type });
       return check;
     }
     
@@ -306,10 +307,10 @@ class PreFlightGate {
       violations: check.violations.length
     });
     
-    console.log(`[GATE] Pre-flight check result: ${check.allowed ? 'ALLOWED' : 'BLOCKED'}`);
-    
+    logger.info('Pre-flight check result', { result: check.allowed ? 'ALLOWED' : 'BLOCKED' });
+
     if (check.blocked) {
-      console.log(`[GATE] BLOCKED: ${check.violations.map(v => v.message).join(', ')}`);
+      logger.info('Pre-flight check blocked', { violations: check.violations.map(v => v.message).join(', ') });
     }
     
     return check;
@@ -406,7 +407,7 @@ class PreFlightGate {
    * VERIFICATION MODE - Heidi as observer, not participant
    */
   async verifyBeforeBuild(proposal) {
-    console.log(`[GATE] Verifying build proposal: ${proposal.name}`);
+    logger.info('Verifying build proposal', { proposalName: proposal.name });
     
     const verification = {
       verified: false,
@@ -463,7 +464,7 @@ class PreFlightGate {
     
     verification.verified = verification.findings.length === 0 || !verification.blocked;
     
-    console.log(`[GATE] Verification result: ${verification.verified ? 'VERIFIED' : 'BLOCKED'}`);
+    logger.info('Verification result', { result: verification.verified ? 'VERIFIED' : 'BLOCKED' });
     
     return verification;
   }
@@ -571,7 +572,7 @@ class PreFlightGate {
   
   async reset() {
     this.registrationLog = [];
-    console.log('[GATE] Registration log reset');
+    logger.info('Registration log reset');
   }
 }
 

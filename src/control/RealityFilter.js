@@ -7,6 +7,7 @@
 
 const { createClient } = require('@supabase/supabase-js');
 const { MemoryStore } = require('../memory/MemoryStore.js');
+const logger = require('../../lib/structured-logger').child({ component: 'RealityFilter' });
 
 class RealityFilter {
   constructor() {
@@ -104,7 +105,7 @@ class RealityFilter {
       }
     } catch (e) {
       // Table might not exist - continue with other checks
-      console.log(`[CASCADE] Lead check failed: ${e.message}`);
+      logger.info('Lead check failed', { error: e });
     }
 
     // Check probation queue
@@ -115,7 +116,7 @@ class RealityFilter {
       }
     } catch (e) {
       // Table might not exist
-      console.log(`[CASCADE] Probation check failed: ${e.message}`);
+      logger.info('Probation check failed', { error: e });
     }
 
     // Add to probation queue
@@ -125,7 +126,7 @@ class RealityFilter {
         created_at: new Date().toISOString()
       });
     } catch (e) {
-      console.log(`[CASCADE] Failed to add to probation: ${e.message}`);
+      logger.info('Failed to add to probation', { error: e });
     }
 
     return { 
@@ -254,9 +255,9 @@ class RealityFilter {
         kill_reason: reason,
         killed_at: new Date().toISOString()
       });
-      console.log(`[CASCADE] Logged kill: ${task.type} - ${reason}`);
+      logger.info('Logged kill', { taskType: task.type, reason });
     } catch (e) {
-      console.error(`[CASCADE] Failed to log kill: ${e.message}`);
+      logger.error('Failed to log kill', { error: e });
     }
   }
 }

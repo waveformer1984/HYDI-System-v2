@@ -15,6 +15,7 @@
 const fs = require('fs').promises;
 const path = require('path');
 const { execSync } = require('child_process');
+const logger = require('../../lib/structured-logger').child({ component: 'SystemAuditor' });
 
 class SystemAuditor {
   constructor(config = {}) {
@@ -52,9 +53,9 @@ class SystemAuditor {
     this.violations = [];
     this.dependencyGraph = null;
     
-    console.log('[SYSTEM AUDITOR] Initialized');
-    console.log(`[AUDITOR] Repo root: ${this.config.repoRoot}`);
-    console.log(`[AUDITOR] Manifest: ${this.config.manifestPath}`);
+    logger.info('System Auditor initialized');
+    logger.info('Repo root', { repoRoot: this.config.repoRoot });
+    logger.info('Manifest path', { manifestPath: this.config.manifestPath });
   }
   
   /**
@@ -65,12 +66,12 @@ class SystemAuditor {
       const manifestData = await fs.readFile(this.config.manifestPath, 'utf8');
       this.manifest = JSON.parse(manifestData);
       
-      console.log('[AUDITOR] System manifest loaded successfully');
-      console.log(`[AUDITOR] Manifest version: ${this.manifest.manifest.version}`);
-      
+      logger.info('System manifest loaded successfully');
+      logger.info('Manifest version', { version: this.manifest.manifest.version });
+
       return true;
     } catch (error) {
-      console.error('[AUDITOR] Failed to load manifest:', error.message);
+      logger.error('Failed to load manifest', { error });
       this.manifest = null;
       return false;
     }
@@ -80,7 +81,7 @@ class SystemAuditor {
    * 2. Live inventory scan - discover what actually exists
    */
   async scanInventory() {
-    console.log('[AUDITOR] Starting live inventory scan...');
+    logger.info('Starting live inventory scan');
     
     this.inventory = {
       files: [],
@@ -104,11 +105,12 @@ class SystemAuditor {
       await this.analyzeFile(file);
     }
     
-    console.log(`[AUDITOR] Inventory scan completed:`);
-    console.log(`  Files scanned: ${files.length}`);
-    console.log(`  Functions found: ${this.inventory.functions.length}`);
-    console.log(`  Classes found: ${this.inventory.classes.length}`);
-    console.log(`  Imports found: ${this.inventory.imports.length}`);
+    logger.info('Inventory scan completed', {
+      filesScanned: files.length,
+      functionsFound: this.inventory.functions.length,
+      classesFound: this.inventory.classes.length,
+      importsFound: this.inventory.imports.length
+    });
     
     return this.inventory;
   }
@@ -138,7 +140,7 @@ class SystemAuditor {
         }
       }
     } catch (error) {
-      console.error('[AUDITOR] File scan failed:', error.message);
+      logger.error('File scan failed', { error });
     }
     
     return files;
@@ -181,7 +183,7 @@ class SystemAuditor {
       this.inventory.externalIntegrations.push(...integrations);
       
     } catch (error) {
-      console.error(`[AUDITOR] Failed to analyze ${file.relativePath}:`, error.message);
+      logger.error('Failed to analyze file', { file: file.relativePath, error });
     }
   }
   
@@ -385,7 +387,7 @@ class SystemAuditor {
       throw new Error('Inventory not loaded. Run scanInventory() first.');
     }
     
-    console.log('[AUDITOR] Detecting redundancies...');
+    logger.info('Detecting redundancies');
     this.duplicates = [];
     
     // Check for duplicate function names
@@ -430,9 +432,9 @@ class SystemAuditor {
       }
     }
     
-    console.log(`[AUDITOR] Found ${this.duplicates.length} redundancies:`);
+    logger.info('Found redundancies', { count: this.duplicates.length });
     this.duplicates.forEach(dup => {
-      console.log(`  ${dup.type}: ${dup.name || dup.pattern} (${dup.locations.length} locations)`);
+      logger.info('Redundancy detail', { type: dup.type, name: dup.name || dup.pattern, locationCount: dup.locations.length });
     });
     
     return this.duplicates;
@@ -446,7 +448,7 @@ class SystemAuditor {
       throw new Error('Inventory not loaded. Run scanInventory() first.');
     }
     
-    console.log('[AUDITOR] Building dependency graph...');
+    logger.info('Building dependency graph');
     
     this.dependencyGraph = {
       nodes: [],
@@ -490,11 +492,12 @@ class SystemAuditor {
     
     this.dependencyGraph.orphans = allNodes.filter(node => !connectedNodes.has(node.id));
     
-    console.log(`[AUDITOR] Dependency graph built:`);
-    console.log(`  Nodes: ${this.dependencyGraph.nodes.length}`);
-    console.log(`  Edges: ${this.dependencyGraph.edges.length}`);
-    console.log(`  Circular dependencies: ${this.dependencyGraph.circular.length}`);
-    console.log(`  Orphan nodes: ${this.dependencyGraph.orphans.length}`);
+    logger.info('Dependency graph built', {
+      nodes: this.dependencyGraph.nodes.length,
+      edges: this.dependencyGraph.edges.length,
+      circularDependencies: this.dependencyGraph.circular.length,
+      orphanNodes: this.dependencyGraph.orphans.length
+    });
     
     return this.dependencyGraph;
   }
@@ -537,7 +540,7 @@ class SystemAuditor {
    * 5. Pre-flight check for new additions
    */
   async preFlightCheck(newComponent) {
-    console.log('[AUDITOR] Running pre-flight check...');
+    logger.info('Running pre-flight check');
     
     const check = {
       allowed: true,
@@ -593,9 +596,11 @@ class SystemAuditor {
       check.allowed = false;
     }
     
-    console.log(`[AUDITOR] Pre-flight check result: ${check.allowed ? 'ALLOWED' : 'BLOCKED'}`);
-    console.log(`  Violations: ${check.violations.length}`);
-    console.log(`  Recommendations: ${check.recommendations.length}`);
+    logger.info('Pre-flight check result', {
+      result: check.allowed ? 'ALLOWED' : 'BLOCKED',
+      violations: check.violations.length,
+      recommendations: check.recommendations.length
+    });
     
     return check;
   }
@@ -692,7 +697,7 @@ class SystemAuditor {
    * 6. Automated system audit
    */
   async runAudit() {
-    console.log('[AUDITOR] Running automated system audit...');
+    logger.info('Running automated system audit');
     
     const audit = {
       timestamp: new Date().toISOString(),
@@ -757,16 +762,17 @@ class SystemAuditor {
       // Store audit results
       await this.storeAuditResults(audit);
       
-      console.log(`[AUDITOR] Audit completed:`);
-      console.log(`  Health score: ${audit.summary.healthScore.toFixed(2)}/1.0`);
-      console.log(`  Duplicates: ${audit.summary.totalDuplicates}`);
-      console.log(`  Violations: ${audit.summary.totalViolations}`);
-      console.log(`  Recommendations: ${audit.recommendations.length}`);
-      
+      logger.info('Audit completed', {
+        healthScore: audit.summary.healthScore.toFixed(2),
+        duplicates: audit.summary.totalDuplicates,
+        violations: audit.summary.totalViolations,
+        recommendations: audit.recommendations.length
+      });
+
       return audit;
-      
+
     } catch (error) {
-      console.error('[AUDITOR] Audit failed:', error.message);
+      logger.error('Audit failed', { error });
       audit.error = error.message;
       return audit;
     }
@@ -879,9 +885,9 @@ class SystemAuditor {
     try {
       const auditPath = path.join(this.config.repoRoot, 'audit-results.json');
       await fs.writeFile(auditPath, JSON.stringify(audit, null, 2));
-      console.log(`[AUDITOR] Audit results stored to ${auditPath}`);
+      logger.info('Audit results stored', { auditPath });
     } catch (error) {
-      console.error('[AUDITOR] Failed to store audit results:', error.message);
+      logger.error('Failed to store audit results', { error });
     }
   }
   

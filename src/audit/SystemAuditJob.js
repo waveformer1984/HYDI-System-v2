@@ -12,6 +12,7 @@ const SystemAuditor = require('./SystemAuditor');
 const PreFlightGate = require('./PreFlightGate');
 const fs = require('fs').promises;
 const path = require('path');
+const logger = require('../../lib/structured-logger').child({ component: 'SystemAuditJob' });
 
 class SystemAuditJob {
   constructor(config = {}) {
@@ -45,8 +46,8 @@ class SystemAuditJob {
     this.lastAudit = null;
     this.auditHistory = [];
     
-    console.log('[AUDIT JOB] System Audit Job initialized');
-    console.log(`[AUDIT] Audit interval: ${this.config.auditInterval / 3600000} hours`);
+    logger.info('System Audit Job initialized');
+    logger.info('Audit interval configured', { intervalHours: this.config.auditInterval / 3600000 });
   }
   
   /**
@@ -54,11 +55,11 @@ class SystemAuditJob {
    */
   async start() {
     if (this.isRunning) {
-      console.log('[AUDIT] Audit job already running');
+      logger.info('Audit job already running');
       return;
     }
-    
-    console.log('[AUDIT] Starting automated audit job...');
+
+    logger.info('Starting automated audit job');
     this.isRunning = true;
     
     // Run initial audit
@@ -67,7 +68,7 @@ class SystemAuditJob {
     // Schedule recurring audits
     this.scheduleNextAudit();
     
-    console.log('[AUDIT] Automated audit job started');
+    logger.info('Automated audit job started');
   }
   
   /**
@@ -75,18 +76,18 @@ class SystemAuditJob {
    */
   async stop() {
     if (!this.isRunning) {
-      console.log('[AUDIT] Audit job not running');
+      logger.info('Audit job not running');
       return;
     }
-    
-    console.log('[AUDIT] Stopping automated audit job...');
+
+    logger.info('Stopping automated audit job');
     this.isRunning = false;
     
     if (this.auditTimer) {
       clearTimeout(this.auditTimer);
     }
     
-    console.log('[AUDIT] Automated audit job stopped');
+    logger.info('Automated audit job stopped');
   }
   
   /**
@@ -99,7 +100,7 @@ class SystemAuditJob {
       try {
         await this.runAudit();
       } catch (error) {
-        console.error('[AUDIT] Scheduled audit failed:', error.message);
+        logger.error('Scheduled audit failed', { error });
       }
       
       // Schedule next audit
@@ -111,7 +112,7 @@ class SystemAuditJob {
    * Run the complete system audit
    */
   async runAudit() {
-    console.log('[AUDIT] Running system audit...');
+    logger.info('Running system audit');
     
     const auditStart = Date.now();
     
@@ -145,14 +146,16 @@ class SystemAuditJob {
       this.lastAudit = currentAudit;
       
       const duration = Date.now() - auditStart;
-      console.log(`[AUDIT] Audit completed in ${duration}ms`);
-      console.log(`[AUDIT] Health score: ${summary.healthScore.toFixed(2)}`);
-      console.log(`[AUDIT] Changes detected: ${changes.totalChanges}`);
+      logger.info('Audit completed', {
+        durationMs: duration,
+        healthScore: summary.healthScore.toFixed(2),
+        changesDetected: changes.totalChanges
+      });
       
       return currentAudit;
       
     } catch (error) {
-      console.error('[AUDIT] Audit failed:', error.message);
+      logger.error('Audit failed', { error });
       
       // Store error
       const errorAudit = {
@@ -174,7 +177,7 @@ class SystemAuditJob {
       const data = await fs.readFile(this.config.auditResultsPath, 'utf8');
       return JSON.parse(data);
     } catch (error) {
-      console.log('[AUDIT] No previous audit found');
+      logger.info('No previous audit found');
       return null;
     }
   }
@@ -368,9 +371,9 @@ class SystemAuditJob {
     
     try {
       await fs.writeFile(this.config.auditResultsPath, JSON.stringify(auditData, null, 2));
-      console.log(`[AUDIT] Audit results stored to ${this.config.auditResultsPath}`);
+      logger.info('Audit results stored', { auditResultsPath: this.config.auditResultsPath });
     } catch (error) {
-      console.error('[AUDIT] Failed to store audit results:', error.message);
+      logger.error('Failed to store audit results', { error });
     }
   }
   
@@ -408,7 +411,7 @@ class SystemAuditJob {
       this.auditHistory = history;
       
     } catch (error) {
-      console.error('[AUDIT] Failed to update audit history:', error.message);
+      logger.error('Failed to update audit history', { error });
     }
   }
   
@@ -418,7 +421,7 @@ class SystemAuditJob {
   async checkAlerts(audit, summary) {
     for (const alert of summary.alerts) {
       if (alert.severity === 'high') {
-        console.warn(`[AUDIT] HIGH SEVERITY ALERT: ${alert.message}`);
+        logger.warn('High severity alert', { message: alert.message });
         
         // Could trigger additional actions here
         // - Send to monitoring system
@@ -438,10 +441,14 @@ class SystemAuditJob {
     
     try {
       // This would send to webhook, Slack, Discord, etc.
-      console.log(`[AUDIT] Notification would be sent to ${this.config.notificationWebhook}`);
-      console.log(`[AUDIT] Health score: ${summary.healthScore.toFixed(2)}, Changes: ${summary.changes.total}, Alerts: ${summary.alerts.length}`);
+      logger.info('Notification would be sent', {
+        webhook: this.config.notificationWebhook,
+        healthScore: summary.healthScore.toFixed(2),
+        changes: summary.changes.total,
+        alerts: summary.alerts.length
+      });
     } catch (error) {
-      console.error('[AUDIT] Failed to send notifications:', error.message);
+      logger.error('Failed to send notifications', { error });
     }
   }
   

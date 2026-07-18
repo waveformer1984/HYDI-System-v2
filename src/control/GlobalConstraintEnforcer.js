@@ -18,6 +18,7 @@
  */
 
 const EventEmitter = require('events');
+const logger = require('../../lib/structured-logger').child({ component: 'GlobalConstraintEnforcer' });
 
 class GlobalConstraintEnforcer extends EventEmitter {
   constructor(config = {}) {
@@ -86,9 +87,9 @@ class GlobalConstraintEnforcer extends EventEmitter {
       monthWindow: []
     };
     
-    console.log('[GLOBAL CONSTRAINT ENFORCER] Initialized');
-    console.log(`[GCE] Exploration rate: ${this.config.minExplorationRate * 100}%`);
-    console.log(`[GCE] Max volatility: ${this.config.maxVolatilityScore}`);
+    logger.info('Global Constraint Enforcer initialized');
+    logger.info('Exploration rate configured', { explorationRatePercent: this.config.minExplorationRate * 100 });
+    logger.info('Max volatility configured', { maxVolatilityScore: this.config.maxVolatilityScore });
   }
   
   /**
@@ -96,7 +97,7 @@ class GlobalConstraintEnforcer extends EventEmitter {
    */
   
   enforceExplorationConstraint(modelSelection, availableModels) {
-    console.log(`[GCE] Enforcing exploration constraint...`);
+    logger.info('Enforcing exploration constraint');
     
     // Calculate current exploration rate
     const recentSelections = this.getRecentSelections(this.config.shortHorizon);
@@ -109,7 +110,10 @@ class GlobalConstraintEnforcer extends EventEmitter {
     const needsExploration = this.explorationState.currentRate < this.config.minExplorationRate;
     
     if (needsExploration) {
-      console.log(`[GCE] Exploration required. Current: ${(this.explorationState.currentRate * 100).toFixed(1)}%, Required: ${(this.config.minExplorationRate * 100).toFixed(1)}%`);
+      logger.info('Exploration required', {
+        currentRatePercent: (this.explorationState.currentRate * 100).toFixed(1),
+        requiredRatePercent: (this.config.minExplorationRate * 100).toFixed(1)
+      });
       
       // Force exploration by selecting a less-used model
       const explorationCandidate = this.selectExplorationCandidate(modelSelection, availableModels, recentSelections);
@@ -118,7 +122,7 @@ class GlobalConstraintEnforcer extends EventEmitter {
         this.explorationState.lastExploration = Date.now();
         this.explorationState.explorationBudget++;
         
-        console.log(`[GCE] Forced exploration: ${explorationCandidate.modelId} (overriding ${modelSelection.modelId})`);
+        logger.info('Forced exploration', { newModelId: explorationCandidate.modelId, overriddenModelId: modelSelection.modelId });
         
         // Log overfitting prevention
         this.violations.overfitting.push({
@@ -181,7 +185,7 @@ class GlobalConstraintEnforcer extends EventEmitter {
     
     // Check if volatility exceeds threshold
     if (volatilityScore > this.config.maxVolatilityScore) {
-      console.warn(`[GCE] High volatility detected: ${volatilityScore.toFixed(3)} > ${this.config.maxVolatilityScore}`);
+      logger.warn('High volatility detected', { volatilityScore: volatilityScore.toFixed(3), maxVolatilityScore: this.config.maxVolatilityScore });
       
       this.violations.volatility.push({
         timestamp: Date.now(),
@@ -331,7 +335,7 @@ class GlobalConstraintEnforcer extends EventEmitter {
     
     // High revenue + high volatility = potential greed
     if (revenueImpact > 100 && revenueVolatility > this.config.maxRevenueVolatility) {
-      console.warn(`[GCE] Potential revenue greed detected: $${revenueImpact} with volatility ${revenueVolatility.toFixed(3)}`);
+      logger.warn('Potential revenue greed detected', { revenueImpact, volatility: revenueVolatility.toFixed(3) });
       
       this.violations.greed.push({
         timestamp: Date.now(),
@@ -352,7 +356,7 @@ class GlobalConstraintEnforcer extends EventEmitter {
     // Check long-term revenue stability
     const longTermStability = this.calculateLongHorizonStability();
     if (longTermStability < 0.3 && revenueImpact > 50) {
-      console.warn(`[GCE] Blocking revenue action due to long-term instability: ${longTermStability.toFixed(3)}`);
+      logger.warn('Blocking revenue action due to long-term instability', { longTermStability: longTermStability.toFixed(3) });
       
       return {
         allowed: false,
@@ -436,7 +440,7 @@ class GlobalConstraintEnforcer extends EventEmitter {
    */
   
   enforceConstraints(decision, action, _context) {
-    console.log(`[GCE] Enforcing global constraints...`);
+    logger.info('Enforcing global constraints');
     
     const enforcement = {
       original: { decision, action },
@@ -506,8 +510,11 @@ class GlobalConstraintEnforcer extends EventEmitter {
     // Emit enforcement event
     this.emit('constraints_enforced', enforcement);
     
-    console.log(`[GCE] Constraints enforced: ${enforcement.overrides.length} overrides, ${enforcement.penalties.length} penalties`);
-    console.log(`[GCE] System stability: ${stabilityScore.toFixed(3)}`);
+    logger.info('Constraints enforced', {
+      overrides: enforcement.overrides.length,
+      penalties: enforcement.penalties.length,
+      systemStability: stabilityScore.toFixed(3)
+    });
     
     return enforcement;
   }
@@ -678,7 +685,7 @@ class GlobalConstraintEnforcer extends EventEmitter {
       monthWindow: []
     };
     
-    console.log('[GCE] Global Constraint Enforcer reset completed');
+    logger.info('Global Constraint Enforcer reset completed');
   }
 }
 

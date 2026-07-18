@@ -27,6 +27,7 @@ const EventEmitter = require('events');
 const GlobalConstraintEnforcer = require('./GlobalConstraintEnforcer');
 const RealityFilter = require('./RealityFilter');
 const OutcomeValidator = require('./OutcomeValidator');
+const logger = require('../../lib/structured-logger').child({ component: 'HeidiControlPlane' });
 
 class HeidiControlPlane extends EventEmitter {
   constructor(config = {}) {
@@ -127,10 +128,10 @@ class HeidiControlPlane extends EventEmitter {
     // Initialize action permissions
     this.initializeActionPermissions();
     
-    console.log('[CONTROL PLANE] Heidi Control Plane initialized');
-    console.log(`[CONTROL PLANE] Sandbox mode: ${this.config.sandboxMode ? 'ENABLED' : 'DISABLED'}`);
-    console.log(`[CONTROL PLANE] Adaptive learning: ${this.config.enableAdaptiveLearning ? 'ENABLED' : 'DISABLED'}`);
-    console.log(`[CONTROL PLANE] Global constraints: ENABLED`);
+    logger.info('Heidi Control Plane initialized');
+    logger.info('Sandbox mode', { sandboxMode: this.config.sandboxMode ? 'ENABLED' : 'DISABLED' });
+    logger.info('Adaptive learning', { adaptiveLearning: this.config.enableAdaptiveLearning ? 'ENABLED' : 'DISABLED' });
+    logger.info('Global constraints', { globalConstraints: 'ENABLED' });
   }
   
   /**
@@ -138,7 +139,7 @@ class HeidiControlPlane extends EventEmitter {
    */
   
   async routeDecision(task, availableModels, context = {}) {
-    console.log(`[CONTROL PLANE] Routing decision for task: ${task.type}`);
+    logger.info('Routing decision for task', { taskType: task.type });
     
     // Step 1: Check if local models can handle it
     const localModels = availableModels.filter(m => m.type === 'local');
@@ -351,7 +352,7 @@ class HeidiControlPlane extends EventEmitter {
     const governance = this.globalConstraintEnforcer.enforceConstraints(decision, { type: task.type }, context);
     
     if (!governance.allowed) {
-      console.warn(`[CONTROL PLANE] Decision blocked by global constraints: ${governance.reason}`);
+      logger.warn('Decision blocked by global constraints', { reason: governance.reason });
       
       return {
         ...decision,
@@ -364,7 +365,7 @@ class HeidiControlPlane extends EventEmitter {
     
     // Apply governance overrides
     if (governance.overrides.length > 0) {
-      console.log(`[CONTROL PLANE] Governance overrides applied: ${governance.overrides.length}`);
+      logger.info('Governance overrides applied', { count: governance.overrides.length });
       
       for (const override of governance.overrides) {
         if (override.type === 'exploration' && override.override) {
@@ -377,7 +378,7 @@ class HeidiControlPlane extends EventEmitter {
     
     // Apply governance penalties
     if (governance.penalties.length > 0) {
-      console.log(`[CONTROL PLANE] Governance penalties applied: ${governance.penalties.length}`);
+      logger.info('Governance penalties applied', { count: governance.penalties.length });
       decision.confidence = governance.finalDecision.confidence;
     }
     
@@ -389,7 +390,7 @@ class HeidiControlPlane extends EventEmitter {
       this.globalConstraintEnforcer.recordModelSelection(decision.model.id, task.id);
     }
     
-    console.log(`[CONTROL PLANE] Decision authorized: ${strategy} -> ${decision.model?.id} (confidence: ${decision.confidence.toFixed(3)})`);
+    logger.info('Decision authorized', { strategy, modelId: decision.model?.id, confidence: decision.confidence.toFixed(3) });
     
     return {
       ...decision,
@@ -402,12 +403,12 @@ class HeidiControlPlane extends EventEmitter {
    */
   
   async gateAction(action, context = {}) {
-    console.log(`[CONTROL PLANE] Gating action: ${action.type}`);
+    logger.info('Gating action', { actionType: action.type });
     
     // STEP 0: Reality Filter (CASCADE) - kills bad tasks before they're born
     const realityCheck = await this.realityFilter.filter(action);
     if (!realityCheck.approved) {
-      console.warn(`[CASCADE] Task killed: ${realityCheck.reason}`);
+      logger.warn('CASCADE task killed', { reason: realityCheck.reason });
       await this.realityFilter.logKill(action, realityCheck.reason);
       
       return {
@@ -445,7 +446,7 @@ class HeidiControlPlane extends EventEmitter {
     );
     
     if (!governance.allowed) {
-      console.warn(`[CONTROL PLANE] Action blocked by global constraints: ${governance.reason}`);
+      logger.warn('Action blocked by global constraints', { reason: governance.reason });
       
       return {
         allowed: false,
@@ -611,7 +612,7 @@ class HeidiControlPlane extends EventEmitter {
   
   // TASK 4: CASCADE v3 Feedback Injection Loop
   recordActionOutcome(action, outcome) {
-    console.log(`[CONTROL PLANE] Recording outcome for action: ${action.id}`);
+    logger.info('Recording outcome for action', { actionId: action.id });
     
     // CASCADE v3: Create structured feedback packet
     const feedbackPacket = {
@@ -773,7 +774,7 @@ class HeidiControlPlane extends EventEmitter {
     
     performance.lastUpdated = Date.now();
     
-    console.log(`[CONTROL PLANE] Updated model performance: ${modelId} (success rate: ${performance.successRate.toFixed(3)})`);
+    logger.info('Updated model performance', { modelId, successRate: performance.successRate.toFixed(3) });
   }
   
   updateActionPermissions(record) {
@@ -797,11 +798,11 @@ class HeidiControlPlane extends EventEmitter {
       if (successRate > 0.9 && permission.level === 'sandbox') {
         permission.level = 'production';
         permission.reason = 'high_success_rate_promotion';
-        console.log(`[CONTROL PLANE] Promoted action ${actionType} to production level`);
+        logger.info('Promoted action to production level', { actionType });
       } else if (successRate < 0.5 && permission.level === 'production') {
         permission.level = 'sandbox';
         permission.reason = 'low_success_rate_demotion';
-        console.log(`[CONTROL PLANE] Demoted action ${actionType} to sandbox level`);
+        logger.info('Demoted action to sandbox level', { actionType });
       }
       
       this.state.actionPermissions.set(actionType, permission);
@@ -852,7 +853,7 @@ class HeidiControlPlane extends EventEmitter {
   }
   
   handleDriftTrigger(taskType, driftScore, feedbackPacket) {
-    console.warn(`[CONTROL PLANE] High drift detected: ${taskType} (${driftScore.toFixed(3)})`);
+    logger.warn('High drift detected', { taskType, driftScore: driftScore.toFixed(3) });
     
     const trigger = {
       timestamp: Date.now(),
@@ -888,7 +889,7 @@ class HeidiControlPlane extends EventEmitter {
   }
   
   rerankModelsForTask(taskType) {
-    console.log(`[CONTROL PLANE] Reranking models for task: ${taskType}`);
+    logger.info('Reranking models for task', { taskType });
     
     // Get all models with performance data for this task
     const modelScores = [];
@@ -907,11 +908,11 @@ class HeidiControlPlane extends EventEmitter {
     // Update rankings
     this.state.modelRankings.set(taskType, modelScores);
     
-    console.log(`[CONTROL PLANE] Updated rankings for ${taskType}:`, modelScores.slice(0, 3).map(m => `${m.modelId}(${m.score.toFixed(3)})`));
+    logger.info('Updated rankings', { taskType, topModels: modelScores.slice(0, 3).map(m => `${m.modelId}(${m.score.toFixed(3)})`) });
   }
   
   adjustStrategyForTask(taskType) {
-    console.log(`[CONTROL PLANE] Adjusting strategy for task: ${taskType}`);
+    logger.info('Adjusting strategy for task', { taskType });
     
     // Increase confidence threshold for this task type
     // This would be used by the orchestrator
@@ -927,7 +928,7 @@ class HeidiControlPlane extends EventEmitter {
   }
   
   enableEscalationForTask(taskType) {
-    console.log(`[CONTROL PLANE] Enabling escalation for task: ${taskType}`);
+    logger.info('Enabling escalation for task', { taskType });
     
     // Lower external justification threshold for this task type
     const adjustment = {
@@ -973,7 +974,7 @@ class HeidiControlPlane extends EventEmitter {
       // Update system revenue alignment
       this.updateRevenueAlignment();
       
-      console.log(`[CONTROL PLANE] Revenue influence updated: ${modelId} +$${revenueDelta.toFixed(2)} (boost: ${influence.selection_boost.toFixed(3)})`);
+      logger.info('Revenue influence updated', { modelId, revenueDelta: revenueDelta.toFixed(2), selectionBoost: influence.selection_boost.toFixed(3) });
     }
   }
   
@@ -997,7 +998,7 @@ class HeidiControlPlane extends EventEmitter {
       return;
     }
     
-    console.log('[CONTROL PLANE] Triggering CASCADE v3 adaptation cycle...');
+    logger.info('Triggering CASCADE v3 adaptation cycle');
     
     const adaptations = [];
     
@@ -1048,7 +1049,7 @@ class HeidiControlPlane extends EventEmitter {
     // Emit adaptation event
     this.emit('adaptation_completed', adaptationRecord);
     
-    console.log(`[CONTROL PLANE] CASCADE v3 adaptation completed: ${adaptations.length} adjustments (revenue alignment: $${this.state.revenueAlignment.toFixed(2)}/action)`);
+    logger.info('CASCADE v3 adaptation completed', { adjustments: adaptations.length, revenueAlignmentPerAction: this.state.revenueAlignment.toFixed(2) });
   }
   
   /**
@@ -1060,7 +1061,7 @@ class HeidiControlPlane extends EventEmitter {
       try {
         await this.runFeedbackCycle();
       } catch (error) {
-        console.error('[CONTROL PLANE] Feedback cycle failed:', error.message);
+        logger.error('Feedback cycle failed', { error });
       }
       
       // Schedule next cycle
@@ -1070,11 +1071,11 @@ class HeidiControlPlane extends EventEmitter {
     // Start feedback loop
     feedbackCycle();
     
-    console.log('[CONTROL PLANE] Feedback loop started');
+    logger.info('Feedback loop started');
   }
   
   async runFeedbackCycle() {
-    console.log('[CONTROL PLANE] Running feedback cycle...');
+    logger.info('Running feedback cycle');
     
     // Analyze recent performance
     const recentActions = this.state.learningHistory.filter(r => 
@@ -1082,7 +1083,7 @@ class HeidiControlPlane extends EventEmitter {
     );
     
     if (recentActions.length < 5) {
-      console.log('[CONTROL PLANE] Insufficient data for feedback cycle');
+      logger.info('Insufficient data for feedback cycle');
       return;
     }
     
@@ -1149,7 +1150,7 @@ class HeidiControlPlane extends EventEmitter {
   }
   
   async applyFeedback(insight) {
-    console.log(`[CONTROL PLANE] Applying feedback: ${insight.type} -> ${insight.target}`);
+    logger.info('Applying feedback', { insightType: insight.type, target: insight.target });
     
     switch (insight.type) {
       case 'model_degradation': {
@@ -1171,7 +1172,7 @@ class HeidiControlPlane extends EventEmitter {
       case 'confidence_miscalibration':
         // Adjust confidence threshold for this action type
         // This would need to be implemented in the orchestrator
-        console.log(`[CONTROL PLANE] Confidence miscalibration detected for ${insight.target}`);
+        logger.info('Confidence miscalibration detected', { target: insight.target });
         break;
     }
   }
@@ -1212,7 +1213,7 @@ class HeidiControlPlane extends EventEmitter {
   
   logDecision(decision, _task, _context) {
     // This would be stored in memory system for analysis
-    console.log(`[CONTROL PLANE] Decision logged: ${decision.strategy} -> ${decision.model?.id}`);
+    logger.info('Decision logged', { strategy: decision.strategy, modelId: decision.model?.id });
   }
   
   groupBy(items, key) {
@@ -1396,7 +1397,7 @@ class HeidiControlPlane extends EventEmitter {
    * Record task outcome for learning
    */
   async recordTaskOutcome(task, execution, outcome) {
-    console.log(`[CONTROL PLANE] Recording outcome for task ${task.id}`);
+    logger.info('Recording outcome for task', { taskId: task.id });
     
     // Record in Outcome Validator
     const outcomeRecord = await this.outcomeValidator.recordOutcome(task, execution, outcome);
@@ -1436,7 +1437,7 @@ class HeidiControlPlane extends EventEmitter {
     this.realityFilter.rules.productDemandValidation.minSignalCount = Math.ceil(thresholds.productMinDemandScore);
     this.realityFilter.rules.executionMargin.minMarginPercent = thresholds.executionMinMargin * 100;
     
-    console.log('[CONTROL PLANE] Updated Reality Filter thresholds based on outcomes');
+    logger.info('Updated Reality Filter thresholds based on outcomes');
   }
 
   /**
@@ -1525,7 +1526,7 @@ class HeidiControlPlane extends EventEmitter {
     this.initializeModelTracking();
     this.initializeActionPermissions();
     
-    console.log('[CONTROL PLANE] Reset completed');
+    logger.info('Reset completed');
   }
 }
 
