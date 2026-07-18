@@ -4,9 +4,17 @@ All notable changes to HYDI System v2 are documented here. The format follows [K
 
 ## [Unreleased]
 
+### Added
+- Secret redaction and correlation-ID propagation (`AsyncLocalStorage`) in `lib/structured-logger.js`, plus its first test coverage (`tests/unit/structured-logger.test.js`, 11 tests). See `ISSUES_FOUND.md` #72.
+
+### Changed
+- Migrated `console.*` logging to the structured logger in `workers/` (all 19 files, 302 calls) and mostly in `agents/`/`revenue-engine/` (118 of 204 calls; the rest is deliberately-preserved interactive CLI output). `src/`, `api/`, `lib/`, `pages/` still use `console.*` and are tracked as a follow-up (`ROADMAP.md` near-term item 11).
+- Expanded `next.config.js`'s `eslint.dirs` to cover `workers/`, `agents/`, `revenue-engine/`, `api/`, `kilo/` — `npm run lint` (and therefore CI's lint gate) had silently never scanned them before. Set `no-console` to `"warn"`.
+
 ### Fixed
-- Eliminated all 201 `no-unused-vars` ESLint warnings across 49 files in `pages/`, `components/`, `lib/`, `src/` (`ROADMAP.md` P2 #8, `ISSUES_FOUND.md` #71) — `npm run lint` now reports 0 warnings, 0 errors repo-wide. Two entirely dead functions removed (`src/queue/RedisStreamBroker.js`'s `redisCommand`, `src/server.js`'s `persistEventToDatabase`); no exports, signatures, or runtime behavior changed.
+- Eliminated all 201 `no-unused-vars` ESLint warnings across 49 files in `pages/`, `components/`, `lib/`, `src/` (`ROADMAP.md` P2 #8, `ISSUES_FOUND.md` #71). Two entirely dead functions removed (`src/queue/RedisStreamBroker.js`'s `redisCommand`, `src/server.js`'s `persistEventToDatabase`); no exports, signatures, or runtime behavior changed.
 - Corrected `ISSUES_FOUND.md` #19's stale status — the `WatchdogSupervisor.test.js` flaky-race fix had already landed in a prior commit but was still documented as open.
+- 4 real runtime bugs found by the lint-scope expansion above, all previously invisible to CI: an undefined-variable `ReferenceError` in `workers/InventoryMaterialsWorker.js`'s material-reservation insert, a `ReferenceError` on every *successful* task completion in `revenue-engine/revenue-engine-v2.js`'s `executeTask()`, and a `TypeError`-on-certain-inputs `const` reassignment bug in two `agents/specialized/business-agents.js` revenue calculators. See `ISSUES_FOUND.md` #74.
 
 ## [2026-06-27] — Documentation suite expansion
 
