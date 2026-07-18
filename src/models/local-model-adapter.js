@@ -480,7 +480,6 @@ class LocalModelAdapter extends EventEmitter {
    * Execute with real-time priority for Enterprise
    */
   async executePriority(modelId, input, options) {
-    const model = this.models.get(modelId);
     const startTime = Date.now();
     
     try {
@@ -612,8 +611,7 @@ class LocalModelAdapter extends EventEmitter {
    */
   async executeDirect(modelId, input, options) {
     const model = this.models.get(modelId);
-    const startTime = Date.now();
-    
+
     switch (model.type) {
       case 'llama':
       case 'codellama':
@@ -664,7 +662,7 @@ class LocalModelAdapter extends EventEmitter {
   /**
    * Execute classification
    */
-  async executeClassification(modelId, input) {
+  async executeClassification(modelId, _input) {
     const model = this.models.get(modelId);
     
     // Mock classification - would use actual model
@@ -686,8 +684,6 @@ class LocalModelAdapter extends EventEmitter {
    * Execute code parsing
    */
   async executeCodeParsing(modelId, input) {
-    const model = this.models.get(modelId);
-    
     // Parse code structure
     const ast = this.parseCode(input.code, input.language);
     
@@ -703,7 +699,7 @@ class LocalModelAdapter extends EventEmitter {
   /**
    * Execute custom model
    */
-  async executeCustom(modelId, input, options) {
+  async executeCustom(modelId, input, _options) {
     const model = this.models.get(modelId);
     
     // Execute custom model process
@@ -763,7 +759,7 @@ class LocalModelAdapter extends EventEmitter {
   /**
    * Prepare prompt for Llama models
    */
-  preparePrompt(input, options) {
+  preparePrompt(input, _options) {
     if (typeof input === 'string') {
       return input;
     }
@@ -843,7 +839,7 @@ class LocalModelAdapter extends EventEmitter {
   /**
    * Extract functions from AST
    */
-  extractFunctions(ast) {
+  extractFunctions(_ast) {
     // Mock function extraction
     return [];
   }
@@ -851,7 +847,7 @@ class LocalModelAdapter extends EventEmitter {
   /**
    * Extract classes from AST
    */
-  extractClasses(ast) {
+  extractClasses(_ast) {
     // Mock class extraction
     return [];
   }
@@ -859,7 +855,7 @@ class LocalModelAdapter extends EventEmitter {
   /**
    * Extract imports from AST
    */
-  extractImports(ast) {
+  extractImports(_ast) {
     // Mock import extraction
     return [];
   }
@@ -867,7 +863,7 @@ class LocalModelAdapter extends EventEmitter {
   /**
    * Calculate code complexity
    */
-  calculateComplexity(ast) {
+  calculateComplexity(_ast) {
     // Mock complexity calculation
     return Math.floor(Math.random() * 50) + 1;
   }
@@ -875,7 +871,7 @@ class LocalModelAdapter extends EventEmitter {
   /**
    * Run custom model process
    */
-  async runCustomModel(modelPath, input, config) {
+  async runCustomModel(modelPath, input, _config) {
     return new Promise((resolve, reject) => {
       const process = spawn('python', [modelPath, JSON.stringify(input)]);
       let output = '';
@@ -910,7 +906,7 @@ class LocalModelAdapter extends EventEmitter {
   /**
    * Run TensorFlow inference
    */
-  async runTensorFlowInference(modelPath, features) {
+  async runTensorFlowInference(_modelPath, _features) {
     // Mock TensorFlow inference
     return {
       prediction: Math.random(),
@@ -921,7 +917,7 @@ class LocalModelAdapter extends EventEmitter {
   /**
    * Run OCR
    */
-  async runOCR(imageUrl, languages) {
+  async runOCR(_imageUrl, _languages) {
     // Mock OCR result
     return {
       text: 'Extracted text from image',
@@ -933,7 +929,7 @@ class LocalModelAdapter extends EventEmitter {
   /**
    * Evaluate rules
    */
-  evaluateRules(rules, input) {
+  evaluateRules(_rules, _input) {
     // Mock rule evaluation
     return {
       matched: ['rule1', 'rule2'],
@@ -962,7 +958,7 @@ class LocalModelAdapter extends EventEmitter {
   /**
    * Generate SQL query
    */
-  generateSQL(query, schema, dialect) {
+  generateSQL(query, _schema, _dialect) {
     // Mock SQL generation
     return `SELECT * FROM table WHERE condition = '${query}'`;
   }
@@ -970,7 +966,7 @@ class LocalModelAdapter extends EventEmitter {
   /**
    * Download model if not exists
    */
-  async downloadModel(modelId, modelPath) {
+  async downloadModel(modelId, _modelPath) {
     console.log(`Downloading model ${modelId}...`);
     // Implementation would download from model repository
   }
@@ -1397,12 +1393,12 @@ class LocalModelAdapter extends EventEmitter {
   async shutdown() {
     console.log('Shutting down local models...');
     
-    for (const [modelId, model] of this.models) {
+    for (const [, model] of this.models) {
       if (model.process) {
         model.process.kill();
       }
     }
-    
+
     this.models.clear();
     console.log('All models shut down');
   }

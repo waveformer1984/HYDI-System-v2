@@ -626,7 +626,7 @@ class HybridModelStack extends EventEmitter {
     return 'gpt-3.5-turbo';
   }
   
-  selectExternalProvider(task) {
+  selectExternalProvider(_task) {
     // Check API key availability and cost
     if (this.externalModels.openai.apiKey) return 'openai';
     if (this.externalModels.anthropic.apiKey) return 'anthropic';
@@ -688,7 +688,7 @@ class HybridModelStack extends EventEmitter {
     }
   }
   
-  async callOpenAI(model, input, requestId) {
+  async callOpenAI(model, input, _requestId) {
     const provider = this.externalModels.openai;
     
     const payload = {
@@ -714,7 +714,7 @@ class HybridModelStack extends EventEmitter {
     };
   }
   
-  async callAnthropic(model, input, requestId) {
+  async callAnthropic(model, input, _requestId) {
     const provider = this.externalModels.anthropic;
     
     const payload = {
@@ -740,7 +740,7 @@ class HybridModelStack extends EventEmitter {
     };
   }
 
-  async callGemini(model, input, requestId) {
+  async callGemini(model, input, _requestId) {
     const provider = this.externalModels.gemini;
     
     const payload = {

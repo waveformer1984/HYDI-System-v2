@@ -175,7 +175,7 @@ class UrsulaModelHeartbeat extends EventEmitter {
       });
       
       // Race between execution and timeout
-      const result = await Promise.race([resultPromise, timeoutPromise]);
+      await Promise.race([resultPromise, timeoutPromise]);
       
       const responseTime = Date.now() - startTime;
       
