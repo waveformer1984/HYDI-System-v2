@@ -58,3 +58,19 @@ install the Termux:Boot app to start it automatically after reboot.
   uses. For purely on-phone use (localhost), no secret is fine.
 - `.env.hydi` holds your service-role key. It stays on the phone; never
   commit it. `chmod 600 .env.hydi` if you're cautious.
+
+## Optional: full repo clone + manual Vercel deploy
+
+The quick-start above is the default, local-first path — no Vercel needed.
+If you specifically want to build/ship a Vercel deploy by hand from your
+phone (not auto-deploy-on-push, which stays disabled per CLAUDE.md's
+Local-First Architecture section), use:
+
+```bash
+bash setup-termux-vercel.sh    # clones the full repo, npm install, vercel link
+cd ~/HYDI-System-v2
+vercel --prod                  # run this whenever you actually want to deploy
+```
+
+The script is safe to re-run — it `git pull`s instead of failing on an
+already-cloned repo, and skips `vercel login`/`link` once already done.
