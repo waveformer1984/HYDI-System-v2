@@ -30,6 +30,22 @@ import {
 import { getDecisionStats, getMemoryRetrievalStats, getRetryStats, getTaskSuccessRates, getWorkSessionStats } from './metrics';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
+// Lazy client: a missing NEXT_PUBLIC_SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY
+// must surface as a normal caught error inside processChat's try/catch (which
+// degrades to a friendly fallback reply), not a crash at construction time
+// that skips straight past it. Same pattern as api/chat/route.js's getSupabase().
+let _supabase: SupabaseClient | null = null;
+function getSupabase(): SupabaseClient {
+  if (!_supabase) {
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      throw new Error('Supabase env vars not configured (NEXT_PUBLIC_SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY)');
+    }
+    _supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+  }
+  return _supabase;
+}
+const supabaseProxy = new Proxy({}, { get: (_, prop) => (getSupabase() as any)[prop] }) as SupabaseClient;
+
 interface ChatRequest {
   message: string;
   session_id: string;
@@ -59,10 +75,7 @@ export class HeidiOrchestrator {
 
   constructor() {
     this.modelManager = new ModelManager();
-    this.supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    );
+    this.supabase = supabaseProxy;
     this.actionExecutor = new ActionExecutor(this.supabase);
     this.agentRegistry = createDefaultAgentRegistry(this.actionExecutor);
   }
@@ -507,7 +520,10 @@ Respond with JSON:`;
 
     return {
       model_status: this.modelManager.getModelStatus(),
-      memory_connected: !!this.supabase,
+      // this.supabase is now a lazy Proxy (always truthy) so it can no
+      // longer stand in for "is Supabase actually configured" — check the
+      // env vars it depends on directly instead.
+      memory_connected: !!(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY),
       allowed_actions: this.allowedActionTypes,
       agent_metrics: this.agentRegistry.getMetricsSnapshot(),
       task_success_rates: taskSuccessRates,

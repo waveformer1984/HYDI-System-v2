@@ -19,7 +19,7 @@
  * Auto-recover after cooldown
  */
 
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { getSessionState as getSharedSessionState, updateSessionState as updateSharedSessionState, SessionState } from './session-state';
 
 interface ModelResponse {
@@ -30,16 +30,29 @@ interface ModelResponse {
   error?: string;
 }
 
+// Lazy client: a missing NEXT_PUBLIC_SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY
+// must surface as a normal caught error inside processChat's try/catch (which
+// degrades to a friendly fallback reply), not a crash at construction time
+// that skips straight past it. Same pattern as api/chat/route.js's getSupabase().
+let _supabase: SupabaseClient | null = null;
+function getSupabase(): SupabaseClient {
+  if (!_supabase) {
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      throw new Error('Supabase env vars not configured (NEXT_PUBLIC_SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY)');
+    }
+    _supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+  }
+  return _supabase;
+}
+const supabaseProxy = new Proxy({}, { get: (_, prop) => (getSupabase() as any)[prop] }) as SupabaseClient;
+
 export class ModelManager {
   private consecutiveFailures: number = 0;
   private circuitBreakerUntil: number = 0;
-  private supabase: any;
+  private supabase: SupabaseClient;
 
   constructor() {
-    this.supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    );
+    this.supabase = supabaseProxy;
   }
 
   /**
