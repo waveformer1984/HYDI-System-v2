@@ -74,3 +74,23 @@ vercel --prod                  # run this whenever you actually want to deploy
 
 The script is safe to re-run — it `git pull`s instead of failing on an
 already-cloned repo, and skips `vercel login`/`link` once already done.
+
+### Troubleshooting: "destination path ... already exists"
+
+If you typed the setup commands in one at a time instead of running
+`setup-termux-vercel.sh` as a script, a bare `git clone` fails with:
+
+```
+fatal: destination path 'HYDI-System-v2' already exists and is not an empty directory.
+```
+
+That just means `~/HYDI-System-v2` is already cloned from an earlier run —
+don't re-clone, pull instead:
+
+```bash
+cd ~/HYDI-System-v2
+git pull --ff-only
+```
+
+Re-running `setup-termux-vercel.sh` itself avoids this entirely — it already
+checks for an existing clone and pulls instead of cloning.
