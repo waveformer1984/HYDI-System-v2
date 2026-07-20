@@ -633,6 +633,18 @@ class UrsulaServiceBundle extends EventEmitter {
   }
 
   /**
+   * Wire up local-model health monitoring. UrsulaModelHeartbeat (../src/models/heartbeat)
+   * exports an already-constructed singleton, not a class -- shared across every
+   * consumer, not `new`'d here.
+   */
+  initializeHeartbeat() {
+    this.heartbeat = UrsulaModelHeartbeat;
+    this.heartbeat.start().catch((error) => {
+      console.error('[URSULA] Heartbeat failed to start:', error.message);
+    });
+  }
+
+  /**
    * Register a service in the bundle
    */
   registerService(serviceId, config) {
@@ -1009,10 +1021,14 @@ class UrsulaServiceBundle extends EventEmitter {
    * Map Stripe price to tier
    */
   mapStripePriceToTier(priceId) {
+    // Real Stripe price IDs (price_1Oxxxx...) never match literal strings like
+    // 'price_starter' -- that placeholder mapping meant every real subscription,
+    // regardless of tier paid for, silently fell back to 'starter'. Use the same
+    // env-configured price IDs the rest of the checkout paths use.
     const priceMap = {
-      'price_starter': 'starter',
-      'price_pro': 'pro',
-      'price_enterprise': 'enterprise'
+      [process.env.STRIPE_HYDI_STARTER_PRICE_ID]: 'starter',
+      [process.env.STRIPE_HYDI_PRO_PRICE_ID]: 'pro',
+      [process.env.STRIPE_HYDI_ENTERPRISE_PRICE_ID]: 'enterprise'
     };
     return priceMap[priceId] || 'starter';
   }

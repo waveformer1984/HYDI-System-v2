@@ -4,7 +4,7 @@
  */
 
 const Stripe = require('stripe');
-// const UrsulaServiceBundle = require('../../modules/ursula-service-bundle'); // Temporarily disabled due to syntax errors
+const UrsulaServiceBundle = require('../../modules/ursula-service-bundle');
 const { supabase } = require('../database');
 
 class SubscriptionManager {
@@ -14,7 +14,7 @@ class SubscriptionManager {
       console.warn('[SubscriptionManager] STRIPE_SECRET_KEY not set — Stripe features disabled');
     }
     this.stripe = stripeKey ? new Stripe(stripeKey) : null;
-    // this.serviceBundle = new UrsulaServiceBundle(); // Temporarily disabled
+    this.serviceBundle = new UrsulaServiceBundle();
     this.setupEventHandlers();
   }
 
@@ -22,17 +22,17 @@ class SubscriptionManager {
    * Setup event handlers for the service bundle
    */
   setupEventHandlers() {
-    // this.serviceBundle.on('service_used', async (data) => {
-    //   await this.recordServiceUsage(data);
-    // });
+    this.serviceBundle.on('service_used', async (data) => {
+      await this.recordServiceUsage(data);
+    });
 
-    // this.serviceBundle.on('subscription_created', async (data) => {
-    //   await this.handleNewSubscription(data);
-    // });
+    this.serviceBundle.on('subscription_created', async (data) => {
+      await this.handleNewSubscription(data);
+    });
 
-    // this.serviceBundle.on('marketing_content_generated', async (data) => {
-    //   await this.publishMarketingContent(data);
-    // });
+    this.serviceBundle.on('marketing_content_generated', async (data) => {
+      await this.publishMarketingContent(data);
+    });
   }
 
   /**
