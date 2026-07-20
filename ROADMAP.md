@@ -109,12 +109,12 @@ drop-everything, P1 is next up, P2 is scheduled but not urgent.
    to retire it in favor of the already-live `Keymaker` middleware, is a
    product decision for the maintainer.
 5. ~~Consolidate the **4 parallel, unreachable Stripe
-   checkout/webhook implementations**~~ **Partially resolved 2026-07-19**:
-   a full comparison (`ISSUES_FOUND.md`, "Investigated, not fixed") found
-   this was really 5 distinct billing/data models, not 4 copies of one —
-   two of which (`api/checkout.js`+`api/webhooks/stripe.js`'s tiered SaaS
-   model, and `api/stripe-connect-webhook.js`'s per-project Connect model)
-   are already live simultaneously. Of the rest: `src/webhook-handlers/stripe-webhook.js`
+   checkout/webhook implementations**~~ **Resolved 2026-07-19**: a full
+   comparison (`ISSUES_FOUND.md`, "Investigated, not fixed") found this was
+   really 5 distinct billing/data models, not 4 copies of one — two of
+   which (`api/checkout.js`+`api/webhooks/stripe.js`'s tiered SaaS model,
+   and `api/stripe-connect-webhook.js`'s per-project Connect model) are
+   already live simultaneously. `src/webhook-handlers/stripe-webhook.js`
    (a 3rd, `users`/`api_keys`-based tiered model referenced only by its own
    test) and the stale `hydi-monitor-deploy/` sub-deployment (an obsolete
    predecessor of the live tiered model, writing to an orphaned
@@ -122,13 +122,27 @@ drop-everything, P1 is next up, P2 is scheduled but not urgent.
    archived to `archive/superseded-stripe-implementations/`. The standalone
    `stripe-webhook-server.js` turned out not to be a competing model at
    all — it's a thin Express wrapper calling the live
-   `api/webhooks/stripe.js` handler directly — so it was left in place, no
-   decision needed. **Still open**: `src/api/services/index.js`'s Ursula
-   service-bundle router (mounted into `src/server.js`) is a 4th, genuinely
-   different model (per-service metered execution, not just tiers) whose
-   fate is still a maintainer decision — see `ISSUES_FOUND.md` #136 for why
-   most of its routes are broken regardless (`UrsulaServiceBundle`
-   commented out due to syntax errors).
+   `api/webhooks/stripe.js` handler directly — left in place, no decision
+   needed. The 4th and last one, `src/api/services/index.js`'s Ursula
+   service-bundle router (per-service metered execution, not just tiers) —
+   maintainer chose "fix and keep it": `UrsulaServiceBundle`'s missing
+   `initializeHeartbeat()` method (constructor threw on every
+   instantiation, not a syntax error as `ISSUES_FOUND.md` #136 originally
+   described), its Stripe-price-to-tier mapping (silently downgraded every
+   real subscription to 'starter'), and `SimpleKeymaker`'s hardcoded test
+   API keys were all fixed. `SubscriptionManager` was adapted to the schema
+   that's actually migrated (`users`/`api_keys`, chosen over writing new
+   migrations) since it was writing to a `subscriptions` table and
+   `api_keys` columns that never existed. `src/api/services/index.js` now
+   has real DB-backed auth (`requireApiKeyUser`) in place of an import of a
+   module that never existed. `src/server.js` (which mounts this router)
+   was added to `ecosystem.config.js`'s PM2 fleet (`hydi-service-bundle`,
+   port 3007 — its own default of 3005 collides with `ursula-agent`). Known
+   remaining gaps, accepted as part of "reuse existing tables": no
+   `service_usage`/`marketing_queue`/`heidi_tasks` tables (those writes
+   fail soft, already caught/logged), and `/analytics` +
+   `/marketing/trigger` stay permanently 403 since no `role` column or
+   admin-key issuance path exists.
 6. ~~Per-file review of the remaining ambiguous unbridged `api/**` routes~~
    **Done 2026-07-17** (`ISSUES_FOUND.md` #49-#54). `chat/route.js`,
    `ursula/status.js`, `events/stream.js` bridged into `pages/api/**`
@@ -256,11 +270,12 @@ Stripe signature verification requires). See `ISSUES_FOUND.md` #38-#41 and
 Vercel-only convention under this deployment model (~13 files still
 unbridged — see `DEPLOYMENT.md`'s reachability table). More importantly,
 **this audit could not confirm from inside the sandbox which of this
-repo's several possible "production" processes (`next start`, the separate
-Express server at `src/server.js`, or the PM2-managed fleet described in
-`ecosystem.config.js` — `heidi-core/server.js`, `hydi-processor.js`,
-`protoforge-main.js`, `agents/ursula/ursula.js`, `apps/ursula-frontend`) is
-actually running on the real host right now.** `DEPLOYMENT.md` documents
+repo's several possible "production" processes (`next start`, or the
+PM2-managed fleet described in `ecosystem.config.js` —
+`heidi-core/server.js`, `hydi-processor.js`, `protoforge-main.js`,
+`agents/ursula/ursula.js`, `apps/ursula-frontend`, and, as of 2026-07-19,
+`src/server.js` under the app name `hydi-service-bundle`) is actually
+running on the real host right now.** `DEPLOYMENT.md` documents
 what's *reachable in principle* per each process's own code; whether each
 process is *actually started* on the operator's machine is something only
 the operator can confirm (e.g. `pm2 list`).

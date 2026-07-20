@@ -75,6 +75,30 @@
       log_date_format: 'YYYY-MM-DD HH:mm:ss Z'
     },
     {
+      // Mounts src/api/services (the Ursula service-bundle checkout/billing
+      // router) plus /keymaker, /cascade, /heidi, /infrastructure. Not
+      // previously in this fleet -- DEPLOYMENT.md marked its production
+      // reachability "Unclear" since nothing started it. PORT is set
+      // explicitly to 3007 because its own default (3005) collides with
+      // ursula-agent below.
+      name: 'hydi-service-bundle',
+      script: 'src/server.js',
+      cwd: 'C:\\Users\\Owner\\HYDI_System',
+      instances: 1,
+      exec_mode: 'fork',
+      env: {
+        NODE_ENV: 'production',
+        ENVIRONMENT: 'production',
+        PORT: 3007
+      },
+      autorestart: true,
+      watch: false,
+      max_memory_restart: '512M',
+      min_uptime: '10s',
+      max_restarts: 10,
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z'
+    },
+    {
       name: 'ursula-frontend',
       script: 'node_modules/next/dist/bin/next',
       args: 'start',

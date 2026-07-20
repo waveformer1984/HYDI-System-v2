@@ -118,18 +118,20 @@ handler targeting a `users`/`api_keys` schema) was confirmed fully
 orphaned and clearly superseded, and archived to
 `archive/superseded-stripe-implementations/` along with the stale
 `hydi-monitor-deploy/` sub-deployment — see `ROADMAP.md` item 5 for the
-full comparison. Still outstanding: `src/api/services/index.js`'s
-`/subscriptions/checkout` + `/webhooks/stripe` (mounted into the separate,
-unclear-reachability Express server at `src/server.js`) is a genuinely
-different model (per-service metered execution) still pending a
-maintainer decision. `stripe-webhook-server.js` is not a separate model —
-it's a thin wrapper calling the confirmed-live `api/webhooks/stripe.js`
-handler directly, so it's out of scope for this note. None of the
-remaining open items are covered by this policy's
-Stripe-webhook-signature-bypass scope unless/until a maintainer confirms
-`src/server.js` is actually live — report against the confirmed-live pair
-(`api/stripe-connect-webhook.js`, `api/webhooks/stripe.js`) unless you have
-independent evidence otherwise.
+full comparison. `src/api/services/index.js`'s `/subscriptions/checkout` +
+`/webhooks/stripe` (the Ursula service-bundle model, per-service metered
+execution) was fixed and given real API-key auth 2026-07-19, and
+`src/server.js` (which mounts it) was added to `ecosystem.config.js`'s PM2
+fleet the same day (app name `hydi-service-bundle`, port 3007) — see
+`DEPLOYMENT.md`'s entry-point table. `stripe-webhook-server.js` is not a
+separate model — it's a thin wrapper calling the confirmed-live
+`api/webhooks/stripe.js` handler directly, so it's out of scope for this
+note. This Stripe surface is now in scope for this policy's
+Stripe-webhook-signature-bypass reporting alongside the confirmed-live pair
+(`api/stripe-connect-webhook.js`, `api/webhooks/stripe.js`); as with the
+rest of the PM2 fleet, no sandbox session can confirm the process is
+actually running on the real host at any given moment, only that it's
+configured to.
 
 ### `pages/api/traces.js` and `pages/api/revenue/*.js` were unauthenticated — fixed 2026-07-17
 
