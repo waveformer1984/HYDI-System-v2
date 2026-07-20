@@ -42,6 +42,10 @@ export async function retrieveMemory(
 
 /**
  * Persist the user message and assistant response as memories.
+ *
+ * Skips rows that already exist verbatim for this (user_id, session_id) pair —
+ * e.g. a retried request or a duplicate chat submission — so the table doesn't
+ * accumulate identical rows and embeddings aren't regenerated needlessly.
  */
 export async function storeMemory(
   supabase: SupabaseClient,
@@ -51,15 +55,44 @@ export async function storeMemory(
   assistantResponse: string,
 ): Promise<void> {
   try {
-    const [userEmbedding, assistantEmbedding] = await Promise.all([
-      generateEmbedding(userMessage),
-      generateEmbedding(assistantResponse),
-    ]);
+    const candidates = [
+      { content: `User: ${userMessage}`, text: userMessage },
+      { content: `Assistant: ${assistantResponse}`, text: assistantResponse },
+    ];
 
-    const { error } = await supabase.from('memories').insert([
-      { user_id: userId, session_id: sessionId, content: `User: ${userMessage}`, embedding: userEmbedding },
-      { user_id: userId, session_id: sessionId, content: `Assistant: ${assistantResponse}`, embedding: assistantEmbedding },
-    ]);
+    let existingContents = new Set<string>();
+    try {
+      const { data: existing } = await supabase
+        .from('memories')
+        .select('content')
+        .eq('user_id', userId)
+        .eq('session_id', sessionId)
+        .in(
+          'content',
+          candidates.map((c) => c.content),
+        );
+      existingContents = new Set((existing || []).map((row: { content: string }) => row.content));
+    } catch (dedupError) {
+      // Dedup check is best-effort; if it fails, fall through and store normally.
+      console.error(
+        '[HeidiMemory] dedup check failed:',
+        dedupError instanceof Error ? dedupError.message : 'Unknown error',
+      );
+    }
+
+    const toStore = candidates.filter((c) => !existingContents.has(c.content));
+    if (toStore.length === 0) return;
+
+    const embeddings = await Promise.all(toStore.map((c) => generateEmbedding(c.text)));
+
+    const { error } = await supabase.from('memories').insert(
+      toStore.map((c, i) => ({
+        user_id: userId,
+        session_id: sessionId,
+        content: c.content,
+        embedding: embeddings[i],
+      })),
+    );
     if (error) {
       // supabase-js returns errors in-band; without this the write fails silently.
       console.error('[HeidiMemory] insert failed:', error.message);

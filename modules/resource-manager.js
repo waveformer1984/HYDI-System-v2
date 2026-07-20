@@ -14,6 +14,7 @@
 
 const EventEmitter = require('events');
 const os = require('os');
+const { exec } = require('child_process');
 
 class ResourceManager extends EventEmitter {
   constructor(config = {}) {
@@ -26,11 +27,19 @@ class ResourceManager extends EventEmitter {
       agentThreshold: 50,    // max agents before throttling
       pollInterval: 5000,    // 5s
       throttleStep: 0.2,     // reduce load by 20% when throttling
+      gpuSampleTimeout: 2000, // ms, budget for the nvidia-smi child process
       ...config
     };
 
     this.registry = null;
     this.eventSystem = null;
+
+    // GPU sampling is async (spawns nvidia-smi) but sampleResources() runs
+    // synchronously on a timer, so we cache the last known value and refresh
+    // it in the background rather than blocking the poll loop.
+    this._gpuAvailable = null; // null = undetermined, true/false once probed
+    this._gpuSampleInFlight = false;
+    this._lastGpuPercent = 0;
 
     this.resources = {
       cpu: { current: 0, peak: 0, history: [] },
@@ -135,12 +144,51 @@ class ResourceManager extends EventEmitter {
   }
 
   /**
-   * Sample GPU utilization (placeholder — real implementation would parse nvidia-smi)
+   * Sample GPU utilization. Returns the last known value synchronously (the
+   * poll loop can't block on a child process) and kicks off a background
+   * refresh via nvidia-smi. Once nvidia-smi is confirmed unavailable, no
+   * further attempts are made and this always returns 0.
    */
   sampleGPU() {
-    // TODO: Implement actual GPU sampling via nvidia-smi or rocm-smi
-    // For now, return 0 to avoid false positives
-    return 0;
+    if (this._gpuAvailable === false) return 0;
+
+    if (!this._gpuSampleInFlight) {
+      this._gpuSampleInFlight = true;
+      this._refreshGPU();
+    }
+
+    return this._lastGpuPercent;
+  }
+
+  /**
+   * Spawn nvidia-smi to sample utilization across all visible GPUs and
+   * average them. Degrades to gpuAvailable=false on any error (missing
+   * binary, no GPU, timeout) so we stop paying the exec cost.
+   */
+  _refreshGPU() {
+    exec(
+      'nvidia-smi --query-gpu=utilization.gpu --format=csv,noheader,nounits',
+      { timeout: this.config.gpuSampleTimeout },
+      (err, stdout) => {
+        this._gpuSampleInFlight = false;
+
+        if (err) {
+          this._gpuAvailable = false;
+          this._lastGpuPercent = 0;
+          return;
+        }
+
+        this._gpuAvailable = true;
+        const values = String(stdout)
+          .split('\n')
+          .map((line) => parseInt(line.trim(), 10))
+          .filter((n) => !Number.isNaN(n));
+
+        this._lastGpuPercent = values.length > 0
+          ? Math.round(values.reduce((sum, v) => sum + v, 0) / values.length)
+          : 0;
+      }
+    );
   }
 
   /**
