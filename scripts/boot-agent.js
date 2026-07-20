@@ -191,11 +191,25 @@ const running = []; // { mod, child | instance, type }
 let shuttingDown = false;
 let failed = false;
 
+// Module env values of the form "${VAR_NAME}" are resolved against the
+// boot agent's own process.env at spawn time (e.g. "${HEIDI_TLS_CERT}"
+// pulls in whatever HEIDI_TLS_CERT is set to in .env) rather than being
+// passed through as that literal placeholder string. Resolves to '' when
+// the referenced var is unset, matching how an absent env var already
+// behaves.
+function resolveEnvValue(val) {
+  const m = /^\$\{([A-Za-z_][A-Za-z0-9_]*)\}$/.exec(val);
+  return m ? (process.env[m[1]] || '') : val;
+}
+
 function spawnProcess(mod) {
   const args = (flags.prod && mod.argsProd) ? mod.argsProd : mod.args || [];
+  const resolvedEnv = Object.fromEntries(
+    Object.entries(mod.env || {}).map(([k, v]) => [k, resolveEnvValue(v)])
+  );
   const child = spawn(mod.command, args, {
     cwd: ROOT,
-    env: { ...process.env, ...(mod.env || {}) },
+    env: { ...process.env, ...resolvedEnv },
     shell: true, // resolves npm/python on Windows + PATH lookups everywhere
   });
   child.exitedEarly = false;
