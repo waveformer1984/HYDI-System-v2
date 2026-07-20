@@ -1,14 +1,28 @@
-﻿module.exports = {
+const path = require('path');
+
+// Determine the base directory: Windows dev path or GitHub Actions CI path
+const getBaseDir = () => {
+  if (process.env.ENVIRONMENT === 'production') {
+    // Production: Windows dev machine
+    return 'C:\\Users\\Owner\\HYDI_System';
+  }
+  // CI/Local development: use current working directory
+  return process.cwd();
+};
+
+const baseDir = getBaseDir();
+
+module.exports = {
   apps: [
     {
       name: 'heidi',
       script: 'heidi-core/server.js',
-      cwd: 'C:\\Users\\Owner\\HYDI_System',
+      cwd: baseDir,
       instances: 1,
       exec_mode: 'fork',
       env: {
-        NODE_ENV: 'production',
-        ENVIRONMENT: 'production',
+        NODE_ENV: process.env.NODE_ENV || 'development',
+        ENVIRONMENT: process.env.ENVIRONMENT || 'development',
         HEIDI_PORT: '3456'
       },
       autorestart: true,
@@ -21,12 +35,12 @@
     {
       name: 'hydi-processor',
       script: 'hydi-processor.js',
-      cwd: 'C:\\Users\\Owner\\HYDI_System',
+      cwd: baseDir,
       instances: 1,
       exec_mode: 'fork',
       env: {
-        NODE_ENV: 'production',
-        ENVIRONMENT: 'production',
+        NODE_ENV: process.env.NODE_ENV || 'development',
+        ENVIRONMENT: process.env.ENVIRONMENT || 'development',
         HYDI_CONSUMER_ENABLED: 'true'
       },
       autorestart: true,
@@ -40,12 +54,12 @@
       name: 'hydi-protoforge',
       script: 'protoforge-main.js',
       args: 'start',
-      cwd: 'C:\\Users\\Owner\\HYDI_System',
+      cwd: baseDir,
       instances: 1,
       exec_mode: 'fork',
       env: {
-        NODE_ENV: 'production',
-        ENVIRONMENT: 'production',
+        NODE_ENV: process.env.NODE_ENV || 'development',
+        ENVIRONMENT: process.env.ENVIRONMENT || 'development',
         PORT: 3002
       },
       autorestart: true,
@@ -58,14 +72,14 @@
     {
       name: 'ursula-agent',
       script: 'agents/ursula/ursula.js',
-      cwd: 'C:\\Users\\Owner\\HYDI_System',
+      cwd: baseDir,
       instances: 1,
       exec_mode: 'fork',
       env: {
-        NODE_ENV: 'production',
-        ENVIRONMENT: 'production',
+        NODE_ENV: process.env.NODE_ENV || 'development',
+        ENVIRONMENT: process.env.ENVIRONMENT || 'development',
         URSULA_PORT: 3005,
-        HYDI_SYSTEM_PATH: 'C:\\Users\\Owner\\HYDI_System'
+        HYDI_SYSTEM_PATH: baseDir
       },
       autorestart: true,
       watch: false,
@@ -83,12 +97,12 @@
       // ursula-agent below.
       name: 'hydi-service-bundle',
       script: 'src/server.js',
-      cwd: 'C:\\Users\\Owner\\HYDI_System',
+      cwd: baseDir,
       instances: 1,
       exec_mode: 'fork',
       env: {
-        NODE_ENV: 'production',
-        ENVIRONMENT: 'production',
+        NODE_ENV: process.env.NODE_ENV || 'development',
+        ENVIRONMENT: process.env.ENVIRONMENT || 'development',
         PORT: 3007
       },
       autorestart: true,
@@ -102,12 +116,12 @@
       name: 'ursula-frontend',
       script: 'node_modules/next/dist/bin/next',
       args: 'start',
-      cwd: 'C:\\Users\\Owner\\HYDI_System\\apps\\ursula-frontend',
+      cwd: path.join(baseDir, 'apps/ursula-frontend'),
       instances: 1,
       exec_mode: 'fork',
       env: {
-        NODE_ENV: 'production',
-        ENVIRONMENT: 'production',
+        NODE_ENV: process.env.NODE_ENV || 'development',
+        ENVIRONMENT: process.env.ENVIRONMENT || 'development',
         PORT: 3001
       },
       autorestart: true,
@@ -119,5 +133,3 @@
     }
   ]
 };
-
-
