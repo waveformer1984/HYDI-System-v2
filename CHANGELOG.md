@@ -5,6 +5,7 @@ All notable changes to HYDI System v2 are documented here. The format follows [K
 ## [Unreleased]
 
 ### Added
+- ProtoForge DSL: `contains`, `startsWith`, and `regex` operators, plus `all`/`any` multi-condition grouping (nests arbitrarily, composes with plain field conditions). Fully backward compatible with existing policies. See `ISSUES_FOUND.md` #75.
 - Secret redaction and correlation-ID propagation (`AsyncLocalStorage`) in `lib/structured-logger.js`, plus its first test coverage (`tests/unit/structured-logger.test.js`, 11 tests). See `ISSUES_FOUND.md` #72.
 
 ### Changed

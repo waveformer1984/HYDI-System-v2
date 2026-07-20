@@ -207,7 +207,7 @@ Standalone implementation of the KILO hypothesis generator:
 
 Implements ProtoForge's policy layer (pipeline layer [5]) with a runtime-configurable rule DSL:
 
-- `lib/protoforge/policy-engine.js` — evaluates KILO hypotheses against priority-ordered rules loaded from Supabase. DSL operators: `gte`, `lte`, `gt`, `lt`, `eq`, `neq`, `in`, `nin`. Fail-closed: default decision is `'reject'`. Decisions: `'approve' | 'reject' | 'escalate'`. Hot-reloads rule changes via Supabase Realtime — no restart required.
+- `lib/protoforge/policy-engine.js` — evaluates KILO hypotheses against priority-ordered rules loaded from Supabase. DSL operators: `gte`, `lte`, `gt`, `lt`, `eq`, `neq`, `in`, `nin`, `contains`, `startsWith`, `regex`. Multi-condition grouping via reserved `all`/`any` condition keys (arrays of nested conditions, nest arbitrarily). Fail-closed: default decision is `'reject'`. Decisions: `'approve' | 'reject' | 'escalate'`. Hot-reloads rule changes via Supabase Realtime — no restart required.
 - `lib/protoforge/auto-gate.js` — automatic wrapper that runs PolicyEngine on every KILO output before it reaches the Emission Layer.
 - `supabase/functions/protoforge-calibration/` — Edge Function running the calibration feedback loop; adjusts rule weights based on actual outcomes via the `calibrate_protoforge_decisions()` RPC.
 - DB tables: `policies` (rules), `decisions` (audit log).

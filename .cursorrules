@@ -84,7 +84,7 @@ Use `SUPABASE_SERVICE_ROLE_KEY` server-side only — never expose to client.
 
 ## DSL Policy Engine
 
-Operators: `gte`, `lte`, `gt`, `lt`, `eq`, `neq`, `in`, `nin`. Rules load from Supabase and hot-reload via Realtime. Do not hardcode rules in application code.
+Operators: `gte`, `lte`, `gt`, `lt`, `eq`, `neq`, `in`, `nin`, `contains`, `startsWith`, `regex`. Grouping: `all`/`any` reserved condition keys hold arrays of nested conditions. Rules load from Supabase and hot-reload via Realtime. Do not hardcode rules in application code.
 
 ## What Not To Do
 

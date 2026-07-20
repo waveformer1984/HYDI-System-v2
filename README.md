@@ -86,7 +86,7 @@ npx jest tests/unit/heidi-core-loop.test.js --verbose
 
 ### Policy Engine (`lib/protoforge/`)
 
-- `policy-engine.js` — evaluates KILO hypotheses against Supabase-loaded rules. DSL operators: `gte`, `lte`, `gt`, `lt`, `eq`, `neq`, `in`, `nin`. Fail-closed: default is `'reject'`. Hot-reloads via Supabase Realtime.
+- `policy-engine.js` — evaluates KILO hypotheses against Supabase-loaded rules. DSL operators: `gte`, `lte`, `gt`, `lt`, `eq`, `neq`, `in`, `nin`, `contains`, `startsWith`, `regex`. Multi-condition grouping via `all`/`any`. Fail-closed: default is `'reject'`. Hot-reloads via Supabase Realtime.
 - `auto-gate.js` — wraps PolicyEngine; runs automatically on every KILO output.
 - `supabase/functions/protoforge-calibration/` — Edge Function that runs the calibration feedback loop via `calibrate_protoforge_decisions()` RPC.
 

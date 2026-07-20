@@ -71,7 +71,7 @@ npx jest --testNamePattern="should classify events"
 ### PolicyEngine
 
 - `lib/protoforge/policy-engine.js` is **fail-closed**: default decision is `'reject'` when no rule matches. Do not change this default.
-- DSL operators: `gte`, `lte`, `gt`, `lt`, `eq`, `neq`, `in`, `nin` — do not invent new operators; add them to the DSL loader instead.
+- DSL operators: `gte`, `lte`, `gt`, `lt`, `eq`, `neq`, `in`, `nin`, `contains`, `startsWith`, `regex` — do not invent new operators; add them to the DSL loader instead. Multi-condition grouping via reserved `all`/`any` condition keys (arrays of nested conditions).
 - Rules live in Supabase (`policies` table) and hot-reload via Realtime — do not hardcode rules in application code.
 
 ### Cooldown Windows

@@ -290,9 +290,14 @@ something executable.
 - Replay Engine automated regression suite running on every PR
 
 ### PolicyEngine expansion
-- Additional DSL operators (`contains`, `startsWith`, `regex`)
-- Multi-condition rule grouping (`all`, `any`)
-- Rule version history in the `policies` table
+- ~~Additional DSL operators (`contains`, `startsWith`, `regex`)~~ **Done
+  2026-07-20** — see `ISSUES_FOUND.md` #75.
+- ~~Multi-condition rule grouping (`all`, `any`)~~ **Done 2026-07-20**, same
+  entry — reserved condition keys holding arrays of nested conditions,
+  nest arbitrarily and compose with plain field conditions in the same
+  object (implicit AND).
+- Rule version history in the `policies` table (still open — requires a
+  schema migration, not attempted this pass)
 
 ---
 

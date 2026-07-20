@@ -57,6 +57,89 @@ describe('matchCondition — DSL operators', () => {
   test('unknown operator throws', () => {
     expect(() => matchCondition({ x: { unknown_op: 1 } }, { x: 1 })).toThrow('Unknown DSL operator');
   });
+  test('contains passes when substring is present', () => {
+    expect(matchCondition({ reasoning: { contains: 'timeout' } }, { reasoning: 'request timeout observed' })).toBe(true);
+  });
+  test('contains fails when substring is absent', () => {
+    expect(matchCondition({ reasoning: { contains: 'timeout' } }, { reasoning: 'all good' })).toBe(false);
+  });
+  test('contains passes when array field includes the value', () => {
+    expect(matchCondition({ tags: { contains: 'urgent' } }, { tags: ['urgent', 'billing'] })).toBe(true);
+  });
+  test('contains fails when array field lacks the value', () => {
+    expect(matchCondition({ tags: { contains: 'urgent' } }, { tags: ['billing'] })).toBe(false);
+  });
+  test('contains fails on non-string/non-array field', () => {
+    expect(matchCondition({ confidence: { contains: 5 } }, { confidence: 0.9 })).toBe(false);
+  });
+  test('startsWith passes on matching prefix', () => {
+    expect(matchCondition({ stream: { startsWith: 'galactic' } }, { stream: 'galactic_bytes' })).toBe(true);
+  });
+  test('startsWith fails on non-matching prefix', () => {
+    expect(matchCondition({ stream: { startsWith: 'galactic' } }, { stream: 'rezonate' })).toBe(false);
+  });
+  test('regex passes on matching pattern', () => {
+    expect(matchCondition({ action_type: { regex: '^send_' } }, { action_type: 'send_email' })).toBe(true);
+  });
+  test('regex fails on non-matching pattern', () => {
+    expect(matchCondition({ action_type: { regex: '^send_' } }, { action_type: 'fetch_data' })).toBe(false);
+  });
+  test('regex supports mid-string patterns, not just anchored ones', () => {
+    expect(matchCondition({ stream: { regex: 'bytes' } }, { stream: 'galactic_bytes' })).toBe(true);
+  });
+  test('invalid regex pattern throws (surfaces bad policy config immediately)', () => {
+    expect(() => matchCondition({ x: { regex: '(' } }, { x: 'anything' })).toThrow();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// matchCondition — all/any grouping
+// ---------------------------------------------------------------------------
+describe('matchCondition — all/any grouping', () => {
+  test('any passes when at least one sub-condition matches', () => {
+    const cond = { any: [{ stream: { eq: 'rezonate' } }, { stream: { eq: 'lipi_v2' } }] };
+    expect(matchCondition(cond, { stream: 'lipi_v2' })).toBe(true);
+  });
+  test('any fails when no sub-condition matches', () => {
+    const cond = { any: [{ stream: { eq: 'rezonate' } }, { stream: { eq: 'lipi_v2' } }] };
+    expect(matchCondition(cond, { stream: 'galactic_bytes' })).toBe(false);
+  });
+  test('all passes only when every sub-condition matches', () => {
+    const cond = { all: [{ confidence: { gte: 0.8 } }, { risk: { lte: 0.2 } }] };
+    expect(matchCondition(cond, { confidence: 0.9, risk: 0.1 })).toBe(true);
+    expect(matchCondition(cond, { confidence: 0.9, risk: 0.5 })).toBe(false);
+  });
+  test('any/all nest arbitrarily', () => {
+    const cond = {
+      all: [
+        { confidence: { gte: 0.8 } },
+        { any: [{ stream: { eq: 'rezonate' } }, { stream: { eq: 'lipi_v2' } }] },
+      ],
+    };
+    expect(matchCondition(cond, { confidence: 0.9, stream: 'lipi_v2' })).toBe(true);
+    expect(matchCondition(cond, { confidence: 0.9, stream: 'galactic_bytes' })).toBe(false);
+    expect(matchCondition(cond, { confidence: 0.5, stream: 'lipi_v2' })).toBe(false);
+  });
+  test('any/all can combine with plain field conditions in the same object (implicit AND)', () => {
+    const cond = {
+      confidence: { gte: 0.5 },
+      any: [{ risk: { lte: 0.1 } }, { stream: { eq: 'rezonate' } }],
+    };
+    expect(matchCondition(cond, { confidence: 0.6, risk: 0.05, stream: 'galactic_bytes' })).toBe(true);
+    expect(matchCondition(cond, { confidence: 0.6, risk: 0.9, stream: 'rezonate' })).toBe(true);
+    expect(matchCondition(cond, { confidence: 0.4, risk: 0.05, stream: 'rezonate' })).toBe(false);
+    expect(matchCondition(cond, { confidence: 0.6, risk: 0.9, stream: 'galactic_bytes' })).toBe(false);
+  });
+  test("'all' with a non-array value throws", () => {
+    expect(() => matchCondition({ all: { confidence: { gte: 0.5 } } }, { confidence: 0.9 })).toThrow(
+      "'all' must be an array"
+    );
+  });
+  test("'any' with a non-array value throws", () => {
+    expect(() => matchCondition({ any: { confidence: { gte: 0.5 } } }, { confidence: 0.9 })).toThrow(
+      "'any' must be an array"
+    );
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -134,6 +217,23 @@ describe('evaluateRules — rule tree', () => {
     const result = evaluateRules(rules, { confidence: 0.10 });
     expect(result.decision).toBe('escalate');
     expect(result.matchedRuleId).toBe('catch-all');
+  });
+
+  test('rule using any/regex grouping in its if clause', () => {
+    const rules = {
+      default: 'reject',
+      rules: [
+        {
+          id: 'premium-stream-or-refund-action',
+          if: { any: [{ stream: { in: ['rezonate', 'waveformer_studio'] } }, { action_type: { regex: '^refund_' } }] },
+          then: 'escalate',
+          priority: 1,
+        },
+      ],
+    };
+    expect(evaluateRules(rules, { stream: 'rezonate', action_type: 'create_task' }).decision).toBe('escalate');
+    expect(evaluateRules(rules, { stream: 'galactic_bytes', action_type: 'refund_customer' }).decision).toBe('escalate');
+    expect(evaluateRules(rules, { stream: 'galactic_bytes', action_type: 'create_task' }).decision).toBe('reject');
   });
 });
 

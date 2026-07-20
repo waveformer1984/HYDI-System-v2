@@ -5,6 +5,20 @@ the narrative of what was fixed and why; this file is the flat list.
 
 ---
 
+## Fixed this session (2026-07-20, PolicyEngine DSL expansion)
+
+Resolves `ROADMAP.md`'s "PolicyEngine expansion" near-term item (two of its
+three sub-items; rule version history in the `policies` table remains open,
+see below). Baseline check before starting: `npm run typecheck`, `npm run
+lint`, and `npm test` (143 suites / 1498 tests) all passed clean with no
+regressions found, so this pass is additive rather than a bugfix.
+
+| # | Issue | File(s) | Status |
+|---|-------|---------|--------|
+| 75 | `lib/protoforge/policy-engine.js`'s DSL only supported 8 comparison operators (`gte`/`lte`/`gt`/`lt`/`eq`/`neq`/`in`/`nin`) with implicit-AND-across-fields as the only grouping — no way to express "field matches one of several string patterns," "action type starts with a prefix," or "condition A AND (condition B OR condition C)" without either duplicating rules or falling back to a broader `in` list. `ROADMAP.md` already named this as a planned near-term expansion. | `lib/protoforge/policy-engine.js` | **Fixed** — added `contains` (string substring or array membership), `startsWith`, and `regex` (with a pattern-compile cache keyed by pattern string, since rules re-evaluate per hypothesis) operators. Added reserved `all`/`any` condition keys holding arrays of nested condition objects — `all` requires every sub-condition to match (AND), `any` requires at least one (OR); both nest arbitrarily and can combine with plain field conditions in the same object (implicit AND with the group's own result). An invalid regex pattern or a non-array `all`/`any` value throws immediately (same fail-loud precedent as the existing "unknown operator" behavior — a malformed policy surfaces at evaluation time rather than silently misbehaving). Added 19 new tests to `tests/unit/protoforge-policy-engine.test.js` (was 43, now 62) covering each new operator, nested grouping, mixed grouping+field conditions, the two new error paths, and an `evaluateRules` integration test exercising `any`+`regex` together inside a real rule. No changes to the existing 8 operators, rule-priority semantics, or the `Decision` object shape — fully backward compatible with every policy already in `supabase/migrations/`. `README.md`, `CLAUDE.md`, `AGENTS.md`, `.cursorrules` operator lists updated to match. **Rule version history in the `policies` table (`ROADMAP.md`'s third sub-item) was not attempted this pass** — it requires a schema migration + the 7-gate `hdi-governance-gate.yml` review, a larger and separable unit of work. |
+
+---
+
 ## Fixed this session (2026-07-18, structured logging migration + lint-scope gap)
 
 Resolves `ROADMAP.md` near-term item 11. Started as "migrate console.log to
