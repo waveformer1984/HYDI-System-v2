@@ -38,6 +38,9 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import structuredLogger from './structured-logger';
+
+const logger = structuredLogger.child({ component: 'Metrics' });
 
 // ── Task success rate (from `actions`) ──────────────────────────────────
 
@@ -82,7 +85,7 @@ export async function getTaskSuccessRates(
     if (error || !data) return [];
     return computeTaskSuccessRates(data as Array<{ task_name: string | null; status: string }>);
   } catch (error) {
-    console.error('[Metrics] getTaskSuccessRates failed:', error instanceof Error ? error.message : 'Unknown error');
+    logger.error('getTaskSuccessRates failed', { error: error instanceof Error ? error.message : 'Unknown error' });
     return [];
   }
 }
@@ -155,7 +158,7 @@ export async function getDecisionStats(
     if (error || !data) return computeDecisionStats([]);
     return computeDecisionStats(data as Array<{ decision: string; outcome: string | null; confidence: number | null }>);
   } catch (error) {
-    console.error('[Metrics] getDecisionStats failed:', error instanceof Error ? error.message : 'Unknown error');
+    logger.error('getDecisionStats failed', { error: error instanceof Error ? error.message : 'Unknown error' });
     return computeDecisionStats([]);
   }
 }
@@ -232,7 +235,7 @@ export async function getWorkSessionStats(
     if (error || !data) return computeWorkSessionStats([]);
     return computeWorkSessionStats(data as Array<{ status: string; steps: Array<{ status: string }> }>);
   } catch (error) {
-    console.error('[Metrics] getWorkSessionStats failed:', error instanceof Error ? error.message : 'Unknown error');
+    logger.error('getWorkSessionStats failed', { error: error instanceof Error ? error.message : 'Unknown error' });
     return computeWorkSessionStats([]);
   }
 }
@@ -293,7 +296,7 @@ export async function getRetryStats(
     if (error || !data) return computeRetryStats([]);
     return computeRetryStats(data as Array<{ status: string; payload: { stage?: string } | null }>);
   } catch (error) {
-    console.error('[Metrics] getRetryStats failed:', error instanceof Error ? error.message : 'Unknown error');
+    logger.error('getRetryStats failed', { error: error instanceof Error ? error.message : 'Unknown error' });
     return computeRetryStats([]);
   }
 }
@@ -344,7 +347,7 @@ export async function getMemoryRetrievalStats(
     if (error || !data) return computeMemoryRetrievalStats([]);
     return computeMemoryRetrievalStats(data as Array<{ payload: { had_context?: boolean } | null }>);
   } catch (error) {
-    console.error('[Metrics] getMemoryRetrievalStats failed:', error instanceof Error ? error.message : 'Unknown error');
+    logger.error('getMemoryRetrievalStats failed', { error: error instanceof Error ? error.message : 'Unknown error' });
     return computeMemoryRetrievalStats([]);
   }
 }

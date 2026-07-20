@@ -1,5 +1,6 @@
 const RevenueEngine = require('../../../revenue-engine');
 const { requireAuth } = require('../../../lib/auth/requireAuth.js');
+const logger = require('../../../lib/structured-logger').child({ component: 'api/revenue/cycle' });
 
 const engine = new RevenueEngine();
 
@@ -22,8 +23,8 @@ export default async function handler(req, res) {
       report: result.report 
     });
   } catch (error) {
-    console.error('Revenue cycle error:', error);
-    res.status(500).json({ 
+    logger.error('Revenue cycle error', { error: error.message });
+    res.status(500).json({
       success: false, 
       error: error.message 
     });

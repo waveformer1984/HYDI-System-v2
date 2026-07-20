@@ -21,6 +21,9 @@
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { getSessionState as getSharedSessionState, updateSessionState as updateSharedSessionState, SessionState } from './session-state';
+import structuredLogger from './structured-logger';
+
+const logger = structuredLogger.child({ component: 'ModelManager' });
 
 interface ModelResponse {
   content: string;
@@ -88,7 +91,7 @@ export class ModelManager {
 
     // Check circuit breaker
     if (this.isCircuitBreakerActive()) {
-      console.log('[ModelManager] Circuit breaker active - using API fallback');
+      logger.info('Circuit breaker active - using API fallback');
       return await this.generateAPIResponse(prompt, sessionId);
     }
 
@@ -110,7 +113,7 @@ export class ModelManager {
       };
     } else {
       // Failure - trigger fallback
-      console.log('[ModelManager] Local model failed, triggering fallback');
+      logger.info('Local model failed, triggering fallback');
       this.consecutiveFailures++;
       
       // Check circuit breaker condition
@@ -177,7 +180,7 @@ export class ModelManager {
       };
 
     } catch (error) {
-      console.error('[ModelManager] Local model error:', error);
+      logger.error('Local model error', { error: error instanceof Error ? error.message : String(error) });
       return {
         content: '',
         success: false
@@ -194,7 +197,7 @@ export class ModelManager {
       if (process.env.ANTHROPIC_API_KEY) {
         const result = await this.generateAnthropicResponse(prompt);
         if (result.success) return result;
-        console.warn('[ModelManager] Anthropic failed, trying OpenAI:', result.error);
+        logger.warn('Anthropic failed, trying OpenAI', { error: result.error });
       }
       if (process.env.OPENAI_API_KEY) {
         return await this.generateOpenAIResponse(prompt);
@@ -204,7 +207,7 @@ export class ModelManager {
       }
       throw new Error('All configured API providers failed');
     } catch (error) {
-      console.error('[ModelManager] API fallback error:', error);
+      logger.error('API fallback error', { error: error instanceof Error ? error.message : String(error) });
       return {
         content: 'I apologize, but I\'m experiencing technical difficulties. Please try again.',
         success: false,
@@ -322,7 +325,7 @@ export class ModelManager {
   }
 
   private activateCircuitBreaker(): void {
-    console.log('[ModelManager] Activating circuit breaker for 60 seconds');
+    logger.info('Activating circuit breaker for 60 seconds');
     this.circuitBreakerUntil = Date.now() + 60000; // 60 seconds
   }
 

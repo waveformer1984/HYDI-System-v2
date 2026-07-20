@@ -9,8 +9,11 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { SessionState } from '../types/index';
+import structuredLogger from './structured-logger';
 
 export type { SessionState };
+
+const logger = structuredLogger.child({ component: 'SessionState' });
 
 /**
  * Upsert fields onto a session row. `updated_at` is always stamped with the
@@ -28,13 +31,13 @@ export async function updateSessionState(
       updated_at: new Date().toISOString(),
     });
     if (error) {
-      console.error('[SessionState] update failed:', error.message);
+      logger.error('update failed', { error: error.message });
       return { error: error.message };
     }
     return {};
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
-    console.error('[SessionState] update failed:', message);
+    logger.error('update failed', { error: message });
     return { error: message };
   }
 }
@@ -51,7 +54,7 @@ export async function getSessionState(
       .single();
     return data;
   } catch (error) {
-    console.error('[SessionState] get failed:', error instanceof Error ? error.message : 'Unknown error');
+    logger.error('get failed', { error: error instanceof Error ? error.message : 'Unknown error' });
     return null;
   }
 }

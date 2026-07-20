@@ -1,5 +1,8 @@
 import { createClient } from '@supabase/supabase-js'
 import type { SupabaseClient } from '@supabase/supabase-js'
+import structuredLogger from './structured-logger'
+
+const logger = structuredLogger.child({ component: 'bootstrap' })
 
 // Track initialization state
 let supabase: SupabaseClient | null = null
@@ -70,7 +73,7 @@ async function initializePostgres(): Promise<any> {
 
     return pg
   } catch (error) {
-    console.error('Postgres initialization failed:', error)
+    logger.error('Postgres initialization failed', { error: error instanceof Error ? error.message : String(error) })
     pg = null
     return null
   }

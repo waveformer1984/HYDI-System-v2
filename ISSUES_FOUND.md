@@ -5,6 +5,25 @@ the narrative of what was fixed and why; this file is the flat list.
 
 ---
 
+## Fixed this session (2026-07-20, structured logging migration — lib/ and pages/api/** closed)
+
+Continues `ROADMAP.md` item 11/12 (2026-07-18's structured-logging migration
+left `lib/` (67 calls), `pages/` (14), `components/` (3), `api/` (78), and
+`src/` (690) unmigrated). This session closed `lib/` and `pages/api/**`
+completely and resolved `components/` as an intentional, documented
+exception rather than a gap.
+
+| # | Issue | File(s) | Status |
+|---|-------|---------|--------|
+| 75 | 67 `console.*` calls across 16 files in `lib/` had no structure, redaction, or correlation — same gap already fixed for `workers/`, `agents/`, and `revenue-engine/`. Includes the ProtoForge policy engine/auto-gate/action-gate/dispatcher/raw-ledger modules (`lib/protoforge/*`), the orchestrator (`lib/orchestrator.ts`), `lib/ModelManager.ts`, `lib/action-approval.ts`, and the memory/embeddings/metrics/session-state helper modules. | 16 files under `lib/**` | **Fixed** — migrated to `logger.*` via `structured-logger.js`'s `.child({ component })` pattern, one child logger per module tagged with its own name (`ProtoForge`, `ActionGate`, `AutoGate`, `RawLedger`, `Orchestrator`, `ModelManager`, `ActionApproval`, `Metrics`, `HeidiMemory`, `EpisodicMemory`, `WorkSessions`, `SessionState`, `Embeddings`, `bootstrap`, `termuxClient`). No message text or log semantics changed beyond dropping the now-redundant `[Bracket]` component prefixes (the `component` field carries that instead). |
+| 76 | Migrating `lib/protoforge/policy-engine.js` and three of its consuming test files (`tests/unit/protoforge-policy-engine.test.js`, `tests/unit/work-sessions.test.ts`, `tests/unit/metrics.test.ts`, `tests/unit/episodic-memory.test.ts`) surfaced a real test/implementation coupling: those tests asserted directly on `jest.spyOn(console, 'error'/'warn')`, which silently stops matching once the module under test calls `logger.error()`/`logger.warn()` instead — `lib/structured-logger.js`'s `_consoleOutput()` always writes through `console.log()` regardless of the entry's actual level, so a `console.error` spy simply never fires post-migration (a false failure, not a real regression). | 4 test files under `tests/unit/**` | **Fixed** — repointed all four to `jest.spyOn(StructuredLogger.prototype, 'error'/'warn')` instead of the global `console` object. This is also a better assertion than before: it verifies the logger API was invoked with the right message, not an implementation detail of what the logger's current sink happens to call. Full suite reconfirmed green after the change (143 suites / 1498 tests). |
+| 77 | 14 `console.*` calls across 7 files in `pages/api/**` (`revenue/cycle.js`, `traces.js`, `actions/[id].ts`, `session.ts`, `status.ts`, `chat.ts`, `execute.ts`) had the same gap as #75. `execute.ts` is the already-documented mock demo stub (`ISSUES_FOUND.md` #66) — migrated anyway for consistency since these are still real log call sites that will matter if/when the stub is wired to real services. | 7 files under `pages/api/**` | **Fixed** — same `.child({ component: 'api/...' })` pattern. Verified no test in the repo asserts on `console.*` output from any of these seven files before making the change. |
+| 78 | `components/song-composer/MidiControllerInterface.ts`'s 3 `console.*` calls were the entirety of `ROADMAP.md`'s "`components/` (3)" still-open count. Investigated whether these should be migrated too. | `components/song-composer/MidiControllerInterface.ts` | **Investigated, not a bug — resolved as an intentional exception, not a gap.** This file runs client-side in the browser (Web MIDI API access), and `lib/structured-logger.js` is a Node-only module (`fs`, `path`, `async_hooks`) that cannot execute in a browser bundle. Left as `console.*`, same class of documented exception as `agents/hid/`'s interactive CLI output (`ISSUES_FOUND.md` #72). This fully closes out `ROADMAP.md`'s `components/` line item — it was never actually open, just unclassified. |
+
+**Still open** (unchanged from 2026-07-18): `api/` (78 calls, top-level Vercel-convention directory, distinct from `pages/api/**`) and `src/` (690, by far the largest) — same file-by-file treatment recommended, not a mechanical sweep. `npm test` (143 suites / 1498 tests), `npm run typecheck`, `npm run lint` (0 errors), and `npm run build` all verified green after this session's changes.
+
+---
+
 ## Fixed this session (2026-07-18, structured logging migration + lint-scope gap)
 
 Resolves `ROADMAP.md` near-term item 11. Started as "migrate console.log to

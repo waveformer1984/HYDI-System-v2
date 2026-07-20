@@ -1,6 +1,9 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { HeidiOrchestrator } from '../../lib/orchestrator';
 import type { SystemStatus } from '../../types/index';
+import structuredLogger from '../../lib/structured-logger';
+
+const logger = structuredLogger.child({ component: 'api/status' });
 
 const DEGRADED_STATUS: SystemStatus = {
   model_status: { consecutiveFailures: 0, circuitBreakerActive: false, circuitBreakerCooldown: 0 },
@@ -14,7 +17,7 @@ export default async function handler(_req: NextApiRequest, res: NextApiResponse
     const status = await orchestrator.getSystemStatus();
     res.status(200).json(status);
   } catch (error) {
-    console.error('[api/status] Failed to get system status:', error instanceof Error ? error.message : 'Unknown error');
+    logger.error('Failed to get system status', { error: error instanceof Error ? error.message : 'Unknown error' });
     res.status(200).json(DEGRADED_STATUS);
   }
 }

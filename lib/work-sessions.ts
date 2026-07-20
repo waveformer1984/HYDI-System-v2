@@ -16,6 +16,9 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import structuredLogger from './structured-logger';
+
+const logger = structuredLogger.child({ component: 'WorkSessions' });
 
 export interface PlannedStep {
   type: string;
@@ -125,12 +128,12 @@ export async function createWorkSession(
       .single();
 
     if (error) {
-      console.error('[WorkSessions] create failed:', error.message);
+      logger.error('create failed', { error: error.message });
       return null;
     }
     return data as WorkSession;
   } catch (error) {
-    console.error('[WorkSessions] create failed:', error instanceof Error ? error.message : 'Unknown error');
+    logger.error('create failed', { error: error instanceof Error ? error.message : 'Unknown error' });
     return null;
   }
 }
@@ -140,7 +143,7 @@ export async function getWorkSession(supabase: SupabaseClient, id: string): Prom
     const { data } = await supabase.from('work_sessions').select('*').eq('id', id).maybeSingle();
     return (data as WorkSession) ?? null;
   } catch (error) {
-    console.error('[WorkSessions] get failed:', error instanceof Error ? error.message : 'Unknown error');
+    logger.error('get failed', { error: error instanceof Error ? error.message : 'Unknown error' });
     return null;
   }
 }
@@ -153,12 +156,12 @@ export async function updateWorkSession(
   try {
     const { data, error } = await supabase.from('work_sessions').update(fields).eq('id', id).select().single();
     if (error) {
-      console.error('[WorkSessions] update failed:', error.message);
+      logger.error('update failed', { error: error.message });
       return null;
     }
     return data as WorkSession;
   } catch (error) {
-    console.error('[WorkSessions] update failed:', error instanceof Error ? error.message : 'Unknown error');
+    logger.error('update failed', { error: error instanceof Error ? error.message : 'Unknown error' });
     return null;
   }
 }

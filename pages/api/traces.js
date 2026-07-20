@@ -6,6 +6,9 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { requireAuth } from '../../lib/auth/requireAuth.js';
+import structuredLogger from '../../lib/structured-logger';
+
+const logger = structuredLogger.child({ component: 'api/traces' });
 
 const PIPELINE_STAGES = [
   'ingestion',
@@ -48,7 +51,7 @@ export default async function handler(req, res) {
   const { data: events, error } = await query;
 
   if (error) {
-    console.error('[traces] DB error:', error.message);
+    logger.error('DB error', { error: error.message });
     return res.status(500).json({ error: error.message });
   }
 

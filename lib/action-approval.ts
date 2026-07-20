@@ -13,6 +13,9 @@
 import { createClient } from '@supabase/supabase-js';
 import { ActionExecutor } from './action-executor';
 import { createDefaultAgentRegistry } from './agents/registry';
+import structuredLogger from './structured-logger';
+
+const logger = structuredLogger.child({ component: 'ActionApproval' });
 
 export interface ResolveActionResult {
   ok: boolean;
@@ -38,7 +41,7 @@ async function backfillDecisionOutcome(decisionId: string | undefined, outcome: 
     };
     await recordOutcome(decisionId, outcome, detail);
   } catch (error) {
-    console.error('[ActionApproval] Failed to record ProtoForge outcome:', error instanceof Error ? error.message : 'Unknown error');
+    logger.error('Failed to record ProtoForge outcome', { error: error instanceof Error ? error.message : 'Unknown error' });
   }
 }
 

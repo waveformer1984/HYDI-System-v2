@@ -10,6 +10,9 @@ import { createClient } from '@supabase/supabase-js';
 import { NextApiRequest, NextApiResponse } from 'next';
 import { resolvePendingAction } from '../../../lib/action-approval';
 import { requireAuth } from '../../../lib/auth/requireAuth.js';
+import structuredLogger from '../../../lib/structured-logger';
+
+const logger = structuredLogger.child({ component: 'api/actions' });
 
 let _supabase: ReturnType<typeof createClient> | null = null;
 function getSupabase() {
@@ -54,7 +57,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
     return res.status(200).json(result);
   } catch (error) {
-    console.error('[api/actions] resolution failed:', error);
+    logger.error('resolution failed', { error: error instanceof Error ? error.message : 'Unknown error' });
     return res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' });
   }
 }

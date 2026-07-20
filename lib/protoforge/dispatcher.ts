@@ -1,5 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
 import { updateSessionState } from '../session-state';
+import structuredLogger from '../structured-logger';
+
+const logger = structuredLogger.child({ component: 'ProtoForge' });
 
 export interface DispatchAction {
   type: string;
@@ -45,7 +48,7 @@ async function dispatchSendAlert(payload: Record<string, unknown>): Promise<Disp
   });
 
   if (error) return { type: 'send_alert', success: false, error: error.message };
-  console.warn('[ProtoForge][ALERT]', payload.message ?? JSON.stringify(payload));
+  logger.warn('ALERT', { message: payload.message ?? JSON.stringify(payload) });
   return { type: 'send_alert', success: true };
 }
 

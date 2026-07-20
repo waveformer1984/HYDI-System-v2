@@ -5,6 +5,9 @@
  */
 
 import { NextApiRequest, NextApiResponse } from 'next';
+import structuredLogger from '../../lib/structured-logger';
+
+const logger = structuredLogger.child({ component: 'api/execute' });
 
 interface ExecuteRequest {
   session_id: string;
@@ -77,7 +80,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           result
         });
       } catch (error) {
-        console.error(`Action execution failed for ${action.type}:`, error);
+        logger.error('Action execution failed', { actionType: action.type, error: error instanceof Error ? error.message : String(error) });
         results.push({
           action,
           status: 'failed',
@@ -95,8 +98,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     });
 
   } catch (error) {
-    console.error('Execute API error:', error);
-    res.status(500).json({ 
+    logger.error('Execute API error', { error: error instanceof Error ? error.message : String(error) });
+    res.status(500).json({
       error: 'Internal server error',
       message: error instanceof Error ? error.message : 'Unknown error'
     });
@@ -128,30 +131,30 @@ async function executeAction(type: string, payload: Record<string, any>, session
  */
 async function sendEmail(payload: any, _sessionId: string): Promise<any> {
   // In production, integrate with actual email service
-  console.log(`[ACTION] Sending email:`, payload);
+  logger.info('Sending email', { payload });
   return { sent: true, message_id: `msg_${Date.now()}` };
 }
 
 async function createTask(payload: any, _sessionId: string): Promise<any> {
   // In production, integrate with task management system
-  console.log(`[ACTION] Creating task:`, payload);
+  logger.info('Creating task', { payload });
   return { task_id: `task_${Date.now()}`, created: true };
 }
 
 async function updateDatabase(payload: any, _sessionId: string): Promise<any> {
   // In production, integrate with database service
-  console.log(`[ACTION] Updating database:`, payload);
+  logger.info('Updating database', { payload });
   return { updated: true, affected_rows: 1 };
 }
 
 async function fetchData(payload: any, _sessionId: string): Promise<any> {
   // In production, integrate with data service
-  console.log(`[ACTION] Fetching data:`, payload);
+  logger.info('Fetching data', { payload });
   return { data: `sample_data_${Date.now()}`, count: 42 };
 }
 
 async function scheduleEvent(payload: any, _sessionId: string): Promise<any> {
   // In production, integrate with scheduling service
-  console.log(`[ACTION] Scheduling event:`, payload);
+  logger.info('Scheduling event', { payload });
   return { scheduled: true, event_id: `event_${Date.now()}` };
 }

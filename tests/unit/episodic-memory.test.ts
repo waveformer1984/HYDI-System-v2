@@ -3,6 +3,7 @@
  */
 
 import { buildExperience, storeExperience, ActionOutcome } from '../../lib/episodic-memory';
+import { StructuredLogger } from '../../lib/structured-logger';
 
 jest.mock('../../lib/embeddings', () => ({
   generateEmbedding: jest.fn(async () => [0.1, 0.2, 0.3]),
@@ -96,7 +97,7 @@ describe('storeExperience', () => {
   });
 
   test('logs and does not throw when the insert errors', async () => {
-    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const errorSpy = jest.spyOn(StructuredLogger.prototype, 'error').mockImplementation(() => {});
     const supabase: any = {
       from: () => ({ insert: async () => ({ error: { message: 'db down' } }) }),
     };
@@ -105,7 +106,7 @@ describe('storeExperience', () => {
   });
 
   test('logs and does not throw when the client itself throws', async () => {
-    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const errorSpy = jest.spyOn(StructuredLogger.prototype, 'error').mockImplementation(() => {});
     const supabase: any = {
       from: () => {
         throw new Error('boom');

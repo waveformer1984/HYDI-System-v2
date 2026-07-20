@@ -14,6 +14,7 @@ import {
   getTaskSuccessRates,
   getWorkSessionStats,
 } from '../../lib/metrics';
+import { StructuredLogger } from '../../lib/structured-logger';
 
 describe('computeTaskSuccessRates', () => {
   test('groups by task_name and computes per-type success rate', () => {
@@ -161,7 +162,7 @@ describe('getTaskSuccessRates', () => {
   });
 
   test('returns empty array when the client itself throws', async () => {
-    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const errorSpy = jest.spyOn(StructuredLogger.prototype, 'error').mockImplementation(() => {});
     const supabase = { from: () => { throw new Error('boom'); } } as any;
     await expect(getTaskSuccessRates(supabase)).resolves.toEqual([]);
     expect(errorSpy).toHaveBeenCalled();

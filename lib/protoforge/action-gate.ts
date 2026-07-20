@@ -38,6 +38,9 @@
  */
 
 import * as crypto from 'crypto';
+import structuredLogger from '../structured-logger';
+
+const logger = structuredLogger.child({ component: 'ActionGate' });
 
 export interface GatedAction {
   type: string;
@@ -145,7 +148,7 @@ export async function gateActions(actions: GatedAction[], sessionId: string): Pr
       };
     });
   } catch (error) {
-    console.error('[ActionGate] KILO/ProtoForge gating unavailable, skipping:', error instanceof Error ? error.message : 'Unknown error');
+    logger.error('KILO/ProtoForge gating unavailable, skipping', { error: error instanceof Error ? error.message : 'Unknown error' });
     return actions.map((action) => ({ action, decision: 'skipped' as const, confidence: 0, hypotheses: [] }));
   }
 }

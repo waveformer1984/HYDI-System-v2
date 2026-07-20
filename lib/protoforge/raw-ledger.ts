@@ -12,6 +12,9 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import * as crypto from 'crypto';
+import structuredLogger from '../structured-logger';
+
+const logger = structuredLogger.child({ component: 'RawLedger' });
 
 export interface RawEvent {
   fingerprint: string;
@@ -54,13 +57,13 @@ export async function appendEvent(
       .single();
 
     if (error) {
-      console.error('[RawLedger] append failed:', error.message);
+      logger.error('append failed', { error: error.message });
       return { error: error.message };
     }
     return { record: data as RawEventRecord };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
-    console.error('[RawLedger] append failed:', message);
+    logger.error('append failed', { error: message });
     return { error: message };
   }
 }
@@ -77,7 +80,7 @@ export async function getEventByFingerprint(
       .maybeSingle();
     return (data as RawEventRecord) ?? null;
   } catch (error) {
-    console.error('[RawLedger] read failed:', error instanceof Error ? error.message : 'Unknown error');
+    logger.error('read failed', { error: error instanceof Error ? error.message : 'Unknown error' });
     return null;
   }
 }

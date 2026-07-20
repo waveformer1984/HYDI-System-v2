@@ -11,6 +11,9 @@ import { NextApiRequest, NextApiResponse } from 'next';
 import { isClaudeAvailable } from '../../lib/claude';
 import { runHeidiAgentStream } from '../../lib/heidi-agent';
 import { HeidiOrchestrator } from '../../lib/orchestrator';
+import structuredLogger from '../../lib/structured-logger';
+
+const logger = structuredLogger.child({ component: 'api/chat' });
 
 interface ChatRequest {
   message: string;
@@ -55,7 +58,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         res.write('data: [DONE]\n\n');
         return res.end();
       } catch (claudeErr) {
-        console.warn('Claude agent failed, falling back to orchestrator:', claudeErr instanceof Error ? claudeErr.message : claudeErr);
+        logger.warn('Claude agent failed, falling back to orchestrator', { error: claudeErr instanceof Error ? claudeErr.message : String(claudeErr) });
         // Fall through to legacy orchestrator
       }
     }
@@ -77,7 +80,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     res.write('data: [DONE]\n\n');
     return res.end();
   } catch (error) {
-    console.error('Chat API error:', error);
+    logger.error('Chat API error', { error: error instanceof Error ? error.message : String(error) });
     const messageText = error instanceof Error ? error.message : 'Unknown error';
     if (!res.headersSent) {
       return res.status(500).json({ error: 'Internal server error', message: messageText });

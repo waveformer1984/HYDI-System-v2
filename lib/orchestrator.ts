@@ -29,6 +29,9 @@ import {
 } from './work-sessions';
 import { getDecisionStats, getMemoryRetrievalStats, getRetryStats, getTaskSuccessRates, getWorkSessionStats } from './metrics';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import structuredLogger from './structured-logger';
+
+const logger = structuredLogger.child({ component: 'Orchestrator' });
 
 // Lazy client: a missing NEXT_PUBLIC_SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY
 // must surface as a normal caught error inside processChat's try/catch (which
@@ -106,7 +109,7 @@ export class HeidiOrchestrator {
         finalResponse = parseResult.response;
       } else {
         // Self-correction loop - retry once
-        console.log('[Orchestrator] Invalid response, retrying with corrected prompt');
+        logger.info('Invalid response, retrying with corrected prompt');
         const correctedPrompt = ActionParser.generateCorrectedPrompt(prompt, parseResult.error || 'Unknown error');
         const retryResponse = await this.modelManager.generateResponse(correctedPrompt, request.session_id);
 
@@ -115,7 +118,7 @@ export class HeidiOrchestrator {
           finalResponse = retryParse.response;
         } else {
           // Still invalid - use safe fallback
-          console.log('[Orchestrator] Retry failed, using safe fallback');
+          logger.info('Retry failed, using safe fallback');
           finalResponse = ActionParser.generateSafeFallback();
         }
         await this.recordRetry(request.session_id, 'chat_response', retryParse.success, parseResult.error);
@@ -124,7 +127,7 @@ export class HeidiOrchestrator {
       // 5. Validate actions
       const actionValidation = ActionParser.validateActions(finalResponse.actions, this.allowedActionTypes);
       if (!actionValidation.valid) {
-        console.log('[Orchestrator] Invalid actions detected, filtering');
+        logger.info('Invalid actions detected, filtering');
         finalResponse.actions = finalResponse.actions.filter(action => 
           this.allowedActionTypes.includes(action.type)
         );
@@ -161,7 +164,7 @@ export class HeidiOrchestrator {
       };
       
     } catch (error) {
-      console.error('[Orchestrator] Chat processing failed:', error);
+      logger.error('Chat processing failed', { error: error instanceof Error ? error.message : String(error) });
       
       // Return safe fallback on any error
       return {
@@ -268,7 +271,7 @@ Respond with JSON:`;
       };
 
       if (enforcing && decision === 'reject') {
-        console.log(`[Orchestrator] Action ${action.type} rejected by ProtoForge — not executed`);
+        logger.info('Action rejected by ProtoForge — not executed', { actionType: action.type });
         await this.supabase.from('actions').insert({
           session_id: sessionId,
           task_name: action.type,
@@ -280,7 +283,7 @@ Respond with JSON:`;
       }
 
       if (enforcing && decision === 'escalate') {
-        console.log(`[Orchestrator] Action ${action.type} escalated by ProtoForge — awaiting human approval`);
+        logger.info('Action escalated by ProtoForge — awaiting human approval', { actionType: action.type });
         const { data, error } = await this.supabase
           .from('actions')
           .insert({
@@ -298,7 +301,7 @@ Respond with JSON:`;
           .select('id')
           .single();
         if (error) {
-          console.error('[Orchestrator] Failed to queue escalated action:', error.message);
+          logger.error('Failed to queue escalated action', { error: error.message });
           results.push({ type: action.type, status: 'failed', error: `escalation queue failed: ${error.message}` });
           continue;
         }
@@ -311,7 +314,7 @@ Respond with JSON:`;
         const outcome = agent
           ? await agent.execute(action, sessionId)
           : await this.actionExecutor.execute(action, sessionId);
-        console.log(`[Orchestrator] Executed action: ${action.type} -> ${outcome.status} (${agent ? agent.id : 'actionExecutor (no registered agent)'})`);
+        logger.info('Executed action', { actionType: action.type, status: outcome.status, agent: agent ? agent.id : 'actionExecutor (no registered agent)' });
 
         const { data } = await this.supabase
           .from('actions')
@@ -329,7 +332,7 @@ Respond with JSON:`;
         results.push({ type: action.type, status: outcome.status, error: outcome.error, actionId: data?.id });
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown error';
-        console.error(`[Orchestrator] Action execution failed for ${action.type}:`, error);
+        logger.error('Action execution failed', { actionType: action.type, error: message });
         await this.supabase.from('actions').insert({
           session_id: sessionId,
           task_name: action.type,
@@ -361,7 +364,7 @@ Respond with JSON:`;
       };
       await recordOutcome(decisionId, outcome, detail);
     } catch (error) {
-      console.error('[Orchestrator] Failed to record ProtoForge outcome:', error instanceof Error ? error.message : 'Unknown error');
+      logger.error('Failed to record ProtoForge outcome', { error: error instanceof Error ? error.message : 'Unknown error' });
     }
   }
 
@@ -387,7 +390,7 @@ Respond with JSON:`;
         payload: { stage, original_error: originalError },
       });
     } catch (error) {
-      console.error('[Orchestrator] Failed to record retry:', error instanceof Error ? error.message : 'Unknown error');
+      logger.error('Failed to record retry', { error: error instanceof Error ? error.message : 'Unknown error' });
     }
   }
 
@@ -408,7 +411,7 @@ Respond with JSON:`;
         payload: { had_context: hadContext },
       });
     } catch (error) {
-      console.error('[Orchestrator] Failed to record memory retrieval:', error instanceof Error ? error.message : 'Unknown error');
+      logger.error('Failed to record memory retrieval', { error: error instanceof Error ? error.message : 'Unknown error' });
     }
   }
 
@@ -425,7 +428,7 @@ Respond with JSON:`;
 
     let parseResult = PlanParser.parsePlan(modelResponse.content);
     if (!parseResult.success || !parseResult.plan) {
-      console.log('[Orchestrator] Invalid plan, retrying with corrected prompt');
+      logger.info('Invalid plan, retrying with corrected prompt');
       const originalError = parseResult.error;
       const correctedPrompt = PlanParser.generateCorrectedPrompt(prompt, parseResult.error || 'Unknown error');
       const retryResponse = await this.modelManager.generateResponse(correctedPrompt, sessionId);
@@ -472,14 +475,14 @@ Respond with JSON:`;
       stepsRun++;
 
       if (step.status === 'pending_approval') {
-        console.log(`[Orchestrator] Work session ${workSessionId} paused — step ${step.type} awaiting human approval`);
+        logger.info('Work session paused — step awaiting human approval', { workSessionId, stepType: step.type });
         session =
           (await updateWorkSession(this.supabase, workSessionId, { status: 'needs_approval', steps: session.steps })) ?? session;
         break;
       }
 
       if (step.status === 'failed') {
-        console.log(`[Orchestrator] Work session ${workSessionId} paused — step ${step.type} failed: ${step.error}`);
+        logger.info('Work session paused — step failed', { workSessionId, stepType: step.type, error: step.error });
         session =
           (await updateWorkSession(this.supabase, workSessionId, { status: 'failed', steps: session.steps })) ?? session;
         break;

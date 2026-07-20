@@ -11,6 +11,9 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { generateEmbedding } from './embeddings';
+import structuredLogger from './structured-logger';
+
+const logger = structuredLogger.child({ component: 'HeidiMemory' });
 
 /**
  * Retrieve relevant prior context via semantic search over the user message.
@@ -35,7 +38,7 @@ export async function retrieveMemory(
     const context = (data as Array<{ content: string }>).map((m) => m.content).join('\n');
     return `Previous relevant context:\n${context}`;
   } catch (error) {
-    console.error('[HeidiMemory] retrieval failed:', error instanceof Error ? error.message : 'Unknown error');
+    logger.error('retrieval failed', { error: error instanceof Error ? error.message : 'Unknown error' });
     return '';
   }
 }
@@ -62,9 +65,9 @@ export async function storeMemory(
     ]);
     if (error) {
       // supabase-js returns errors in-band; without this the write fails silently.
-      console.error('[HeidiMemory] insert failed:', error.message);
+      logger.error('insert failed', { error: error.message });
     }
   } catch (error) {
-    console.error('[HeidiMemory] storage failed:', error instanceof Error ? error.message : 'Unknown error');
+    logger.error('storage failed', { error: error instanceof Error ? error.message : 'Unknown error' });
   }
 }

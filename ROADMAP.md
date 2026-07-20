@@ -196,6 +196,32 @@ drop-everything, P1 is next up, P2 is scheduled but not urgent.
     (3) — good candidate for the same file-by-file follow-up treatment
     item 8 got, not a mechanical sweep (some of these, like item 8's
     précis warned, are genuine CLI output rather than service logs).
+12. **2026-07-20 follow-up: `lib/` and `pages/` fully closed, `components/`
+    resolved as an intentional exception.** Migrated all 67 `console.*`
+    calls across 16 files in `lib/` (including the 5-file `lib/protoforge/`
+    ProtoForge policy engine, auto-gate, action-gate, dispatcher, and raw
+    ledger modules, plus `lib/orchestrator.ts`, `lib/ModelManager.ts`,
+    `lib/action-approval.ts`) and all 14 calls across 7 files in
+    `pages/api/**` to `logger.*`, each tagged with a `.child({ component })`
+    matching the file/module name. `components/song-composer/
+    MidiControllerInterface.ts`'s 3 calls were deliberately left as
+    `console.*` and are not a gap: that file runs in the browser (Web MIDI
+    API), and `lib/structured-logger.js` is a Node module (`fs`,
+    `async_hooks`) that cannot run client-side — same class of exception as
+    `agents/hid/`'s interactive CLI output in item 11. Found one real test
+    coupling while doing this: three test files (`tests/unit/
+    protoforge-policy-engine.test.js`, `tests/unit/work-sessions.test.ts`,
+    `tests/unit/metrics.test.ts`, `tests/unit/episodic-memory.test.ts`)
+    asserted on `console.error`/`console.warn` directly, which broke once
+    those modules routed through the logger (the logger's own sink always
+    writes via `console.log`, regardless of level — see
+    `lib/structured-logger.js`'s `_consoleOutput`). Fixed by spying on
+    `StructuredLogger.prototype.error`/`.warn` instead of the global
+    `console` object, which is more correct anyway (asserts the logger API
+    was called, not an implementation detail of its current sink). **Still
+    open**: `api/` (78 calls) and `src/` (690, by far the largest) —
+    unchanged from item 11, same file-by-file treatment recommended, not a
+    mechanical sweep.
 
 **Done this pass (housekeeping):**
 - Archived 3 confirmed-orphaned dead-code files flagged in a prior audit's

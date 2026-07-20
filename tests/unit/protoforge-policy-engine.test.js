@@ -1,6 +1,7 @@
 'use strict';
 
 const { PolicyEngine, evaluateRules, matchCondition, recordOutcome } = require('../../lib/protoforge/policy-engine');
+const { StructuredLogger } = require('../../lib/structured-logger');
 
 // ---------------------------------------------------------------------------
 // matchCondition — unit tests for operator DSL
@@ -301,7 +302,7 @@ describe('recordOutcome()', () => {
   test('warns and resolves without throwing when Supabase env vars are missing', async () => {
     delete process.env.SUPABASE_URL;
     delete process.env.SUPABASE_SERVICE_ROLE_KEY;
-    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    const warnSpy = jest.spyOn(StructuredLogger.prototype, 'warn').mockImplementation(() => {});
 
     await expect(recordOutcome('decision-1', 'success')).resolves.toBeUndefined();
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Supabase env vars missing'));
@@ -310,7 +311,7 @@ describe('recordOutcome()', () => {
   test('never throws even if the underlying client rejects (network failure)', async () => {
     process.env.SUPABASE_URL = 'http://localhost:1';
     process.env.SUPABASE_SERVICE_ROLE_KEY = 'fake-key';
-    jest.spyOn(console, 'error').mockImplementation(() => {});
+    jest.spyOn(StructuredLogger.prototype, 'error').mockImplementation(() => {});
 
     await expect(recordOutcome('decision-2', 'failure', { error: 'boom' })).resolves.toBeUndefined();
   });

@@ -12,6 +12,7 @@ import {
   updateWorkSession,
   WorkSession,
 } from '../../lib/work-sessions';
+import { StructuredLogger } from '../../lib/structured-logger';
 
 describe('buildPlanPrompt', () => {
   test('includes the goal and the allowed action types', () => {
@@ -112,7 +113,7 @@ describe('createWorkSession', () => {
   });
 
   test('returns null and logs when the insert errors', async () => {
-    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const errorSpy = jest.spyOn(StructuredLogger.prototype, 'error').mockImplementation(() => {});
     const supabase = makeFakeSupabase({
       insert: () => ({ select: () => ({ single: async () => ({ data: null, error: { message: 'db down' } }) }) }),
     });
@@ -140,7 +141,7 @@ describe('getWorkSession', () => {
   });
 
   test('returns null instead of throwing when the client throws', async () => {
-    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const errorSpy = jest.spyOn(StructuredLogger.prototype, 'error').mockImplementation(() => {});
     const supabase = { from: () => { throw new Error('boom'); } } as any;
     await expect(getWorkSession(supabase, 'x')).resolves.toBeNull();
     expect(errorSpy).toHaveBeenCalled();
@@ -162,7 +163,7 @@ describe('updateWorkSession', () => {
   });
 
   test('returns null and logs on error', async () => {
-    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const errorSpy = jest.spyOn(StructuredLogger.prototype, 'error').mockImplementation(() => {});
     const supabase = makeFakeSupabase({
       update: () => ({ eq: () => ({ select: () => ({ single: async () => ({ data: null, error: { message: 'nope' } }) }) }) }),
     });

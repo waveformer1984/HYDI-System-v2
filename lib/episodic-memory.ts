@@ -11,6 +11,9 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { generateEmbedding } from './embeddings';
+import structuredLogger from './structured-logger';
+
+const logger = structuredLogger.child({ component: 'EpisodicMemory' });
 
 export interface ActionOutcome {
   type: string;
@@ -83,9 +86,9 @@ export async function storeExperience(
     });
 
     if (error) {
-      console.error('[EpisodicMemory] insert failed:', error.message);
+      logger.error('insert failed', { error: error.message });
     }
   } catch (error) {
-    console.error('[EpisodicMemory] storage failed:', error instanceof Error ? error.message : 'Unknown error');
+    logger.error('storage failed', { error: error instanceof Error ? error.message : 'Unknown error' });
   }
 }

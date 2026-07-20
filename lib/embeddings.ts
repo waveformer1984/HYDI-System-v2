@@ -18,6 +18,10 @@
  * retrieval) instead of writing a degenerate constant vector.
  */
 
+import structuredLogger from './structured-logger';
+
+const logger = structuredLogger.child({ component: 'Embeddings' });
+
 export const EMBEDDING_DIM = 1536;
 
 const OPENAI_EMBEDDING_MODEL = process.env.EMBEDDING_MODEL || 'text-embedding-3-small';
@@ -127,7 +131,7 @@ export async function generateEmbedding(text: string): Promise<number[] | null> 
       ? await generateOllamaEmbedding(input)
       : await generateOpenAIEmbedding(input);
   } catch (error) {
-    console.error('[Embeddings] Generation failed:', error instanceof Error ? error.message : 'Unknown error');
+    logger.error('Generation failed', { error: error instanceof Error ? error.message : 'Unknown error' });
     return null;
   }
 }
