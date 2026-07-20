@@ -40,7 +40,7 @@ stated explicitly rather than guessed.
 |---|---|---|---|---|
 | `pages/**`, `pages/api/**` (Next.js) | Yes | 3000 (`next dev`/`next start`) | 25+ page routes, 30 API routes (table below) | **Confirmed live.** The only directory Next.js itself will ever serve as pages/API routes — no `vercel.json`, no `app/` router, no custom server wrapping Next. `npm run dev`/`npm start` are the documented commands in `README.md` and `CLAUDE.md`. |
 | top-level `api/**` | Yes | n/a | 31 files, mirrors some of `pages/api/**` | **Dead.** A bare `api/` directory only has meaning under Vercel's serverless convention. Vercel deployment is confirmed disabled (CLAUDE.md: `link: undefined`, no auto-deploy). Files here only matter as the source that `pages/api/*` bridge files re-export from. |
-| `src/server.js` (`npm run server`) | Yes | 3005 (`PORT`) | ~48 routes: `/keymaker/*`, `/cascade/*`, `/heidi/*`, `/infrastructure/*`, `/api/services/*` (mounts `src/api/services/index.js`), health/integrity/event endpoints | **Unclear.** A separate Express app, entirely independent of Next.js. Not referenced by `ecosystem.config.js`, `scripts/start-hydi.js`, or any CI workflow. Optionally started via `boot.config.json`'s `protoforge-core` module or `launch-chat-portal.js`. Its default port (3005) collides with `agents/ursula/ursula.js`'s default `URSULA_PORT` if both run unconfigured. |
+| `src/server.js` (`npm run server`) | Yes | 3007 (`PORT`, PM2-managed) | ~48 routes: `/keymaker/*`, `/cascade/*`, `/heidi/*`, `/infrastructure/*`, `/api/services/*` (mounts `src/api/services/index.js`), health/integrity/event endpoints | **PM2-managed (per `ecosystem.config.js`, app name `hydi-service-bundle`)**, added 2026-07-19 once the router it mounts (`src/api/services/index.js`, the Ursula service-bundle checkout/billing flow) was fixed and given real auth — see `ROADMAP.md` item 5. Explicitly pinned to `PORT: 3007` since its own default (3005) collides with `agents/ursula/ursula.js`'s default `URSULA_PORT`. Same caveat as the rest of the PM2 fleet: this audit runs in an ephemeral sandbox with no access to the real Windows host, so it cannot confirm the process is running *right now*, only that it's configured to. |
 | `heidi-core/server.js` | Yes | `HEIDI_PORT` | ~9 routes | **PM2-managed (per `ecosystem.config.js`, app name `heidi`).** `DIAGNOSTIC_AND_FIX_GUIDE.md` documents an operator restarting this via `pm2 restart heidi` on a real (Windows) host — real operational evidence it runs there, but this audit has no way to check whether it's running *right now*. |
 | `hydi-processor.js` | Yes | `PROCESSOR_PORT` (3003) | ~8 routes | **PM2-managed** (app name `hydi-processor`), same caveat as above. |
 | `protoforge-main.js` | Yes | `PORT` (3002) | 1 route (`GET /health`, raw `http`, not Express) | **PM2-managed** (app name `hydi-protoforge`), same caveat. Explicitly confirmed non-dead by `HYDI_KERNEL_ARCHITECTURE_ROADMAP.md`. |
@@ -48,7 +48,7 @@ stated explicitly rather than guessed.
 | `apps/ursula-frontend/` | Yes | 3001 (`next start`, per PM2 args) | Separate full Next.js app, not audited route-by-route in this pass | **PM2-managed** (app name `ursula-frontend`), same caveat. |
 | `heidi-core/index-clean-3458.js` | Yes | `HEIDI_CORE_PORT`/`HEIDI_PORT` (3458) | ~66 routes: `/think`, `/task`, `/queue/*`, `/phase5/*`, `/revenue/*`, `/optimizer/*`, etc. | **start-hydi.js/boot-managed**, distinct from PM2's `heidi-core/server.js` (two different files, same conceptual role). Started by `scripts/start-hydi.js` and `boot.config.json`. |
 | `launch-heidi-mobile.js` | Yes | `HEIDI_MOBILE_PORT`/`HEIDI_PORT` (3006) | `GET /`, `/heidi-mobile`, `/heidi`, `/api/models`, `/api/health`, `POST /api/chat` | **start-hydi.js/boot-managed.** Matches the Tailscale-reachable mobile chat CLAUDE.md describes (`heidi-pc.tailc50af2.ts.net`). |
-| `hydi-monitor-deploy/` | Yes | n/a | Separate, self-contained sub-project (own `package.json`, `vercel.json`, `netlify.toml`, checked-in `.next` build) | **Dead/archived.** Not referenced by the root `package.json`, not part of the main app's dependency graph. Superseded by the main app's `api/`/`pages/api`. Kept around as a reference implementation (its `pages/api/webhook.js` is a correct example of raw-body reading under `bodyParser: false`, cited below) but should not be treated as a deployment target. |
+| `hydi-monitor-deploy/` | Moved 2026-07-19 | n/a | Separate, self-contained sub-project (own `package.json`, `vercel.json`, `netlify.toml`, checked-in `.next` build) | **Archived.** Confirmed superseded by the main app's `api/`/`pages/api` (its checkout/webhook logic was an obvious predecessor of the now-live pair, writing to an orphaned `hydi_subscriptions` table). Moved to `archive/superseded-stripe-implementations/hydi-monitor-deploy/` — its `pages/api/webhook.js` remains there as the raw-body reference cited below. |
 
 `ecosystem.config.js`'s `cwd: 'C:\Users\Owner\HYDI_System'` entries are not
 stale placeholders — they're a real Windows-host path outside this
@@ -159,9 +159,9 @@ have broken both webhooks even once reachable:
    fails signature verification). The handler receives the raw,
    unconsumed request stream and must read it itself. This was verified
    against Next.js's actual documented behavior and cross-checked against
-   a working reference already dormant in this repo
-   (`hydi-monitor-deploy/pages/api/webhook.js`, which correctly uses
-   `micro`'s `buffer(req)`). Fixed with a small local helper,
+   a working reference already dormant in this repo (now archived at
+   `archive/superseded-stripe-implementations/hydi-monitor-deploy/pages/api/webhook.js`,
+   which correctly uses `micro`'s `buffer(req)`). Fixed with a small local helper,
    `lib/get-raw-body.js`, rather than adding the `micro` dependency —
    it passes through unchanged if `req.body` is already a Buffer/string
    (so the standalone Express consumer below, and existing unit tests
@@ -169,35 +169,46 @@ have broken both webhooks even once reachable:
 
 ### Other Stripe implementations that exist but are not part of this routing
 
-These were found during the audit and are **not** modified — they're
-either dead code or live on a process whose production status this audit
-could not confirm (see the entry-point table above):
+**Update 2026-07-19**: a full comparison of every Stripe surface in the
+repo found 5 distinct billing/data models (not 4 copies of one), 2 of
+which are already live simultaneously — see `ROADMAP.md` item 5 and
+`archive/superseded-stripe-implementations/README.md` for the full
+writeup. Current state:
 
-- **`stripe-webhook-server.js`** (repo root) — a standalone Express
-  micro-server dedicated to Stripe webhooks, correctly using
-  `express.raw({ type: 'application/json' })` (so it already got raw-body
-  reading right) and calling `handleStripeWebhook` from
-  `api/webhooks/stripe.js` directly. Not referenced by any `package.json`
-  script — would need to be started manually (`node stripe-webhook-server.js`).
+- **`stripe-webhook-server.js`** (repo root) — **kept, no decision
+  needed.** Not actually a competing model: a standalone Express
+  micro-server that correctly uses `express.raw({ type: 'application/json' })`
+  and calls `handleStripeWebhook` from `api/webhooks/stripe.js` (the live
+  handler) directly. Not referenced by any `package.json` script — would
+  need to be started manually (`node stripe-webhook-server.js`) as an
+  alternate way to run the same live logic outside Next.js.
 - **`src/api/services/index.js`**'s `POST /subscriptions/checkout` and
   `POST /webhooks/stripe` — Express routes mounted into `src/server.js`
   under `/api/services`, backed by `src/services/subscription-manager.js`.
+  **Still open** — a genuinely 4th, distinct model (per-service metered
+  execution via the "Ursula service bundle", not just subscription tiers).
   Whether `src/server.js` is actually running in production is unconfirmed
-  (see entry-point table). The checkout route had its own, separate
-  security bug (see `ISSUES_FOUND.md` #42) that was fixed regardless of
-  this router's reachability status, since the fix is small and safe either way.
-- **`src/webhook-handlers/stripe-webhook.js`** — a class-based
-  `StripeWebhookHandler` targeting an entirely different data model
-  (`users`/`api_keys` tables — a per-tier API-key SaaS model, not the
-  Connect sub-account ledger model CLAUDE.md documents as current). Only
-  referenced by its own unit test (`tests/unit/stripe-webhook.test.js`) —
-  fully orphaned from any live route.
+  (see entry-point table). Note: most of this router's routes
+  (`/services`, `/services/:id/execute`, `/usage`, `/bundle`, `/analytics`)
+  throw at runtime regardless of reachability —
+  `subscriptionManager.serviceBundle` is never constructed
+  (`UrsulaServiceBundle` commented out due to syntax errors, see
+  `ISSUES_FOUND.md`). Only `/subscriptions/checkout` and `/webhooks/stripe`
+  are currently functional.
+- **`src/webhook-handlers/stripe-webhook.js`** — **archived.** A
+  class-based `StripeWebhookHandler` targeting an entirely different data
+  model (`users`/`api_keys` tables — a per-tier API-key SaaS model).
+  Confirmed fully orphaned (only its own unit test referenced it) and
+  clearly superseded by the live, tested, hardened
+  `api/checkout.js`+`api/webhooks/stripe.js` pair, which already
+  implements the same tier concept. Moved to
+  `archive/superseded-stripe-implementations/`, along with its test.
+- **`hydi-monitor-deploy/`** — **archived** (see entry-point table above).
 
-Consolidating these into one implementation would require a maintainer
-decision on which billing model (Connect sub-accounts vs. per-tier API
-keys vs. the Ursula service bundle) is actually the current product —
-this audit does not have enough context to make that call, so all three
-were left as-is and documented rather than guessed at or deleted.
+Consolidating `src/api/services/index.js`'s Ursula service bundle (the one
+remaining open item) still requires a maintainer decision: is per-service
+metered execution a product still wanted, or also dead? This audit does
+not have enough context to make that call.
 
 ## How to verify what's actually running (operator action)
 

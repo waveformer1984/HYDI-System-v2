@@ -5,17 +5,26 @@
 
 class SimpleKeymaker {
   constructor() {
-    // Hardcoded API keys for testing (in production, use env vars or database)
-    this.apiKeys = {
-      'sk_test_starter_123': { tier: 'starter', name: 'Test Starter Key' },
-      'sk_test_pro_456': { tier: 'pro', name: 'Test Pro Key' },
-      'sk_test_enterprise_789': { tier: 'enterprise', name: 'Test Enterprise Key' },
-      // Production keys would be stored securely
-      [process.env.STARTER_API_KEY || '']: { tier: 'starter', name: 'Production Starter' },
-      [process.env.PRO_API_KEY || '']: { tier: 'pro', name: 'Production Pro' },
-      [process.env.ENTERPRISE_API_KEY || '']: { tier: 'enterprise', name: 'Production Enterprise' }
-    };
-    
+    // No hardcoded keys: publicly-known constants like the old
+    // 'sk_test_starter_123' / 'sk_test_pro_456' / 'sk_test_enterprise_789'
+    // would grant real tier access on any deployment that hadn't overridden
+    // this file. Only env-configured keys are accepted, and unset vars are
+    // dropped entirely rather than defaulting to '' (multiple unset vars
+    // would otherwise collide on the same '' object key).
+    this.apiKeys = {};
+    const envKeys = [
+      [process.env.STARTER_API_KEY, { tier: 'starter', name: 'Production Starter' }],
+      [process.env.PRO_API_KEY, { tier: 'pro', name: 'Production Pro' }],
+      [process.env.ENTERPRISE_API_KEY, { tier: 'enterprise', name: 'Production Enterprise' }],
+    ];
+    for (const [key, info] of envKeys) {
+      if (key) this.apiKeys[key] = info;
+    }
+
+    if (Object.keys(this.apiKeys).length === 0) {
+      console.warn('[SIMPLE KEYMAKER] No STARTER_API_KEY/PRO_API_KEY/ENTERPRISE_API_KEY configured — every POST request will be rejected with 401 until at least one is set.');
+    }
+
     console.log('[SIMPLE KEYMAKER] Initialized with ' + Object.keys(this.apiKeys).length + ' keys');
   }
   

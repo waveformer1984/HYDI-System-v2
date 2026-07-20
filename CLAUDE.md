@@ -381,9 +381,10 @@ system kept running because the data plane had already been moved local.
   (`scripts/cloud-bootstrap/vercel.js`) and dead config
   (`.vercelignore`, `apps/ursula-frontend/vercel.json`) were archived
   2026-07-16 to `archive/dead-vercel-config/` as Phase 0 of
-  `LOCAL_FIRST_EXECUTION_PLAN.md`; `hydi-monitor-deploy/vercel.json` was
-  deliberately left in place pending the separate stale-sub-deployment
-  consolidation decision tracked in `ROADMAP.md`.
+  `LOCAL_FIRST_EXECUTION_PLAN.md`; `hydi-monitor-deploy/` (including its
+  `vercel.json`) was confirmed superseded and archived in full 2026-07-19
+  to `archive/superseded-stripe-implementations/` once the stale
+  sub-deployment consolidation decision tracked in `ROADMAP.md` resolved.
   `.github/workflows/health-monitor.yml`'s `vercel-api-check.js` step is a
   read-only diagnostic, not a deploy trigger — safe to leave.
 **External and kept, but reliance reduced:**

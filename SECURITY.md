@@ -111,19 +111,27 @@ A full audit of all 42 Supabase Edge Functions against `supabase/config.toml`'s 
 
 Beyond the two webhook handlers and one checkout handler documented as "in
 scope" above (now bridged into `pages/api/` and confirmed reachable — see
-`DEPLOYMENT.md`), the repo contains at least three other Stripe
-checkout/webhook code paths that are **not** part of the confirmed-live
-`pages/api` surface: `src/webhook-handlers/stripe-webhook.js` (a
-class-based handler targeting a different `users`/`api_keys` schema),
-`src/api/services/index.js`'s `/subscriptions/checkout` +
-`/webhooks/stripe` (mounted into the separate, unclear-reachability
-Express server at `src/server.js`), and the standalone
-`stripe-webhook-server.js` micro-server (not referenced by any
-`package.json` script). None of these are covered by this policy's
-Stripe-webhook-signature-bypass scope unless/until a maintainer confirms
-one of them is actually live — report against the confirmed-live pair
-(`api/stripe-connect-webhook.js`, `api/webhooks/stripe.js`) unless you have
-independent evidence one of the others is deployed.
+`DEPLOYMENT.md`), the repo contained several other Stripe checkout/webhook
+code paths not part of the confirmed-live `pages/api` surface. **Update
+2026-07-19**: `src/webhook-handlers/stripe-webhook.js` (the class-based
+handler targeting a `users`/`api_keys` schema) was confirmed fully
+orphaned and clearly superseded, and archived to
+`archive/superseded-stripe-implementations/` along with the stale
+`hydi-monitor-deploy/` sub-deployment — see `ROADMAP.md` item 5 for the
+full comparison. `src/api/services/index.js`'s `/subscriptions/checkout` +
+`/webhooks/stripe` (the Ursula service-bundle model, per-service metered
+execution) was fixed and given real API-key auth 2026-07-19, and
+`src/server.js` (which mounts it) was added to `ecosystem.config.js`'s PM2
+fleet the same day (app name `hydi-service-bundle`, port 3007) — see
+`DEPLOYMENT.md`'s entry-point table. `stripe-webhook-server.js` is not a
+separate model — it's a thin wrapper calling the confirmed-live
+`api/webhooks/stripe.js` handler directly, so it's out of scope for this
+note. This Stripe surface is now in scope for this policy's
+Stripe-webhook-signature-bypass reporting alongside the confirmed-live pair
+(`api/stripe-connect-webhook.js`, `api/webhooks/stripe.js`); as with the
+rest of the PM2 fleet, no sandbox session can confirm the process is
+actually running on the real host at any given moment, only that it's
+configured to.
 
 ### `pages/api/traces.js` and `pages/api/revenue/*.js` were unauthenticated — fixed 2026-07-17
 

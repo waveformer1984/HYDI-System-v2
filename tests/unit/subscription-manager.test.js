@@ -31,7 +31,11 @@ jest.mock('../../src/database', () => ({
   supabase: {
     from: jest.fn(() => ({
       insert: jest.fn().mockResolvedValue({ data: [], error: null }),
-      upsert: jest.fn(() => ({ select: jest.fn().mockResolvedValue({ data: [], error: null }) })),
+      upsert: jest.fn(() => ({
+        select: jest.fn(() => ({
+          single: jest.fn().mockResolvedValue({ data: { id: 'user_1' }, error: null }),
+        })),
+      })),
       select: jest.fn(() => ({
         eq: jest.fn(() => ({ single: jest.fn().mockResolvedValue({ data: null, error: null }) })),
       })),
@@ -84,25 +88,30 @@ describe('SubscriptionManager', () => {
 
   describe('generateApiKey', () => {
     test('starter grants 8 services', async () => {
-      const { permissions } = await manager.generateApiKey('cus_1', 'sub_1', 'starter');
+      const { permissions } = await manager.generateApiKey('cus_1', 'starter');
       expect(permissions.serviceIds).toHaveLength(8);
       expect(permissions.priorityAccess).toBe(false);
     });
 
     test('pro grants 20 services', async () => {
-      const { permissions } = await manager.generateApiKey('cus_2', 'sub_2', 'pro');
+      const { permissions } = await manager.generateApiKey('cus_2', 'pro');
       expect(permissions.serviceIds).toHaveLength(20);
     });
 
     test('enterprise grants 30 services with priority', async () => {
-      const { permissions } = await manager.generateApiKey('cus_3', 'sub_3', 'enterprise');
+      const { permissions } = await manager.generateApiKey('cus_3', 'enterprise');
       expect(permissions.serviceIds).toHaveLength(30);
       expect(permissions.priorityAccess).toBe(true);
     });
 
     test('key is a 64-char hex string', async () => {
-      const { key } = await manager.generateApiKey('cus_1', 'sub_1', 'pro');
+      const { key } = await manager.generateApiKey('cus_1', 'pro');
       expect(key).toMatch(/^[0-9a-f]{64}$/);
+    });
+
+    test('resolves the users row via upsert and returns its id', async () => {
+      const { userId } = await manager.generateApiKey('cus_1', 'starter');
+      expect(userId).toBe('user_1');
     });
   });
 
