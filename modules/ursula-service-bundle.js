@@ -898,6 +898,17 @@ class UrsulaServiceBundle extends EventEmitter {
   }
 
   /**
+   * Find this bundle's in-memory subscription record for a Stripe customer.
+   * Subscriptions live only in `this.subscriptions` (keyed by this bundle's
+   * own generated id, not the customer id) -- there is no persisted
+   * subscriptions table to join against instead.
+   */
+  getSubscriptionByCustomerId(customerId) {
+    return Array.from(this.subscriptions.values())
+      .find((s) => s.customerId === customerId) || null;
+  }
+
+  /**
    * Get usage metrics
    */
   getUsageMetrics(subscriptionId) {

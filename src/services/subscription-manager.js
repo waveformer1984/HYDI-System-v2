@@ -110,7 +110,7 @@ class SubscriptionManager {
    */
   async handleNewSubscription(data) {
     // Generate API key with service permissions
-    const apiKey = await this.generateApiKey(data.customerId, data.subscriptionId, data.tier);
+    const apiKey = await this.generateApiKey(data.customerId, data.tier);
     
     // DEATH LOOP GUARD: Each Heidi trigger is isolated - one failure doesn't kill the others
     // IMMEDIATE: Send "Keys to the Kingdom" API key delivery
@@ -159,12 +159,18 @@ class SubscriptionManager {
   }
 
   /**
-   * Generate API key with 30-service permission matrix
+   * Generate an API key for a customer and persist it against the real
+   * migrated schema (supabase/migrations/20260430010000_create_users_table.sql):
+   * `users` (keyed by stripe_customer_id) + `api_keys` (user_id/key_hash/tier).
+   * There is no `subscriptions` table and no `permissions` column on
+   * `api_keys` -- the 30-service permission matrix below is derived
+   * on-the-fly from tier (it's a pure function of tier, so it never needed
+   * its own storage) rather than persisted.
    */
-  async generateApiKey(customerId, subscriptionId, tier) {
+  async generateApiKey(customerId, tier) {
     const crypto = require('crypto');
-    
-    // LOCKED: 30-service permission matrix
+
+    // 30-service permission matrix, purely derived from tier
     const servicePermissions = {
       starter: {
         serviceIds: [1, 2, 3, 4, 5, 6, 7, 8], // Services 1-8
@@ -182,42 +188,42 @@ class SubscriptionManager {
         apiLimit: Infinity
       }
     };
-    
+
     const permissions = servicePermissions[tier];
-    
+
     // Generate secure API key
     const key = crypto.randomBytes(32).toString('hex');
     const hash = crypto.createHash('sha256').update(key).digest('hex');
-    
-    // Store in Ursula DB
+
     try {
-      await supabase
+      // Resolve (or create) the users row for this Stripe customer -- api_keys.user_id
+      // is a FK into users, there's no customer_id column on api_keys itself.
+      const { data: user, error: userError } = await supabase
+        .from('users')
+        .upsert(
+          { stripe_customer_id: customerId, tier, subscription_status: 'active' },
+          { onConflict: 'stripe_customer_id' }
+        )
+        .select()
+        .single();
+
+      if (userError) throw userError;
+
+      const { error: keyError } = await supabase
         .from('api_keys')
         .insert({
-          id: require('uuid').v4(),
-          subscription_id: subscriptionId,
-          customer_id: customerId,
+          user_id: user.id,
           key_hash: hash,
           name: `${tier.charAt(0).toUpperCase() + tier.slice(1)} API Key`,
-          permissions: permissions,
-          tier: tier,
-          created_at: new Date(),
+          tier,
           expires_at: null // No expiration for active subscriptions
         });
-      
-      // Update subscription with permissions
-      await supabase
-        .from('subscriptions')
-        .update({
-          service_permissions: permissions,
-          api_key_hash: hash,
-          updated_at: new Date()
-        })
-        .eq('subscription_id', subscriptionId);
-      
-      console.log(`[API KEY] Generated ${tier} key with ${permissions.serviceIds.length} services`);
-      
-      return { key, hash, permissions };
+
+      if (keyError) throw keyError;
+
+      console.log(`[API KEY] Generated ${tier} key with ${permissions.serviceIds.length} services for user ${user.id}`);
+
+      return { key, hash, permissions, userId: user.id };
     } catch (error) {
       console.error('Failed to store API key:', error);
       throw error;
@@ -306,7 +312,7 @@ class SubscriptionManager {
   async getSubscriptionAnalytics() {
     try {
       const { data: subscriptions, error } = await supabase
-        .from('subscriptions')
+        .from('users')
         .select('*');
 
       if (error) throw error;
@@ -395,24 +401,25 @@ class SubscriptionManager {
   async handlePaymentFailure(invoice) {
     const customerId = invoice.customer;
     const subscriptionId = invoice.subscription;
-    
+
     console.log(`Payment failed for customer ${customerId}, subscription ${subscriptionId}`);
-    
-    // Get subscription details
-    const { data: subscription } = await supabase
-      .from('subscriptions')
+
+    // Get user details (there is no separate subscriptions table -- see
+    // generateApiKey's comment for the real migrated schema)
+    const { data: user } = await supabase
+      .from('users')
       .select('*')
       .eq('stripe_subscription_id', subscriptionId)
       .single();
-    
-    if (subscription) {
+
+    if (user) {
       // DEATH LOOP GUARD: Heidi trigger isolated - failure here must NOT crash webhook
       try {
         // Trigger Heidi's payment recovery workflow
         await this.triggerHeidiWorkflow('payment_recovery', {
           customerId,
-          subscriptionId: subscription.subscription_id,
-          tier: subscription.tier,
+          subscriptionId,
+          tier: user.tier,
           amount: invoice.amount_due / 100,
           nextPaymentAttempt: new Date(invoice.next_payment_attempt * 1000)
         });
@@ -420,19 +427,17 @@ class SubscriptionManager {
         console.error(`[DEATH LOOP GUARD] Heidi payment recovery failed for ${customerId}:`, heidiError.message);
         // Continue processing - Stripe webhook succeeds even if Heidi notification fails
       }
-      
-      // Update subscription status (critical - always try this even if Heidi fails)
+
+      // Update subscription status (critical - always try this even if Heidi fails).
+      // users.subscription_status is CHECK-constrained; 'past_due' is the closest
+      // valid value to "payment failed but not yet canceled".
       try {
         await supabase
-          .from('subscriptions')
-          .update({
-            status: 'payment_failed',
-            payment_failed_at: new Date(),
-            updated_at: new Date()
-          })
-          .eq('subscription_id', subscription.subscription_id);
+          .from('users')
+          .update({ subscription_status: 'past_due' })
+          .eq('id', user.id);
       } catch (dbError) {
-        console.error(`[DEATH LOOP GUARD] DB update failed for payment failure ${subscription.subscription_id}:`, dbError.message);
+        console.error(`[DEATH LOOP GUARD] DB update failed for payment failure ${user.id}:`, dbError.message);
         // Log but don't crash - subscription status may be stale but engine stays alive
       }
     }
@@ -443,25 +448,25 @@ class SubscriptionManager {
    */
   async handleSubscriptionDeleted(subscription) {
     const customerId = subscription.customer;
-    
+
     console.log(`Subscription deleted for customer ${customerId}`);
-    
-    // Get customer details
-    const { data: customerSub } = await supabase
-      .from('subscriptions')
+
+    // Get customer details (users table -- see generateApiKey's comment)
+    const { data: user } = await supabase
+      .from('users')
       .select('*')
       .eq('stripe_customer_id', customerId)
-      .eq('status', 'active')
+      .eq('subscription_status', 'active')
       .single();
-    
-    if (customerSub) {
+
+    if (user) {
       // DEATH LOOP GUARD: Heidi trigger isolated - failure must NOT crash subscription deletion processing
       try {
         // Trigger final recovery attempt
         await this.triggerHeidiWorkflow('payment_recovery', {
           customerId,
-          subscriptionId: customerSub.subscription_id,
-          tier: customerSub.tier,
+          subscriptionId: user.stripe_subscription_id,
+          tier: user.tier,
           finalAttempt: true
         });
       } catch (heidiError) {
@@ -491,10 +496,10 @@ class SubscriptionManager {
       proration_behavior: 'create_prorations'
     });
 
-    // Update local records
+    // Update local records (users table -- see generateApiKey's comment)
     try {
       await supabase
-        .from('subscriptions')
+        .from('users')
         .update({ tier: newTier })
         .eq('stripe_subscription_id', subscriptionId);
     } catch (error) {
@@ -512,14 +517,12 @@ class SubscriptionManager {
       cancel_at_period_end: true
     });
 
-    // Update local records
+    // Update local records. users has no active/canceled_at columns -- only
+    // subscription_status (CHECK-constrained; 'canceled' is a valid value).
     try {
       await supabase
-        .from('subscriptions')
-        .update({ 
-          active: false,
-          canceled_at: new Date()
-        })
+        .from('users')
+        .update({ subscription_status: 'canceled' })
         .eq('stripe_subscription_id', subscriptionId);
     } catch (error) {
       console.error('Failed to cancel local subscription:', error);
@@ -533,23 +536,29 @@ class SubscriptionManager {
    */
   async getCustomerUsageReport(customerId) {
     try {
-      const { data: subscription } = await supabase
-        .from('subscriptions')
+      const { data: user } = await supabase
+        .from('users')
         .select('*')
-        .eq('customer_id', customerId)
+        .eq('stripe_customer_id', customerId)
         .single();
 
-      if (!subscription) return null;
+      if (!user) return null;
 
-      const metrics = this.serviceBundle.getUsageMetrics(subscription.id);
-      
+      // The service bundle tracks subscriptions in-memory only, keyed by its
+      // own generated id (not users.id, and not persisted) -- look it up by
+      // customer id rather than joining against a stored subscription id.
+      const bundleSubscription = this.serviceBundle.getSubscriptionByCustomerId(customerId);
+      const metrics = bundleSubscription
+        ? this.serviceBundle.getUsageMetrics(bundleSubscription.id)
+        : null;
+
       // Add billing information
       const stripeSubscription = await this.stripe.subscriptions.retrieve(
-        subscription.stripe_subscription_id
+        user.stripe_subscription_id
       );
 
       return {
-        subscription,
+        user,
         usage: metrics,
         billing: {
           current_period_start: stripeSubscription.current_period_start,

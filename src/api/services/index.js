@@ -4,12 +4,79 @@
  */
 
 const express = require('express');
+const crypto = require('crypto');
 const SubscriptionManager = require('../../services/subscription-manager');
-// const { authenticateToken } = require('../../middleware/auth'); // Missing module
+const { supabase } = require('../../database');
 const rateLimit = require('express-rate-limit');
 
 const router = express.Router();
 const subscriptionManager = new SubscriptionManager();
+
+/**
+ * Resolve the caller's identity from a real, database-backed API key
+ * (the api_keys/users tables from
+ * supabase/migrations/20260430010000_create_users_table.sql), replacing the
+ * `authenticateToken` this router used to import from a module that never
+ * existed. Populates req.user with everything the routes below need:
+ * `tier`/`role` for permission checks, `stripeCustomerId`/
+ * `stripeSubscriptionId` for real Stripe API calls, and `subscriptionId` for
+ * the service bundle's in-memory usage tracking (see
+ * UrsulaServiceBundle.getSubscriptionByCustomerId) -- these are three
+ * different ID spaces and must not be used interchangeably.
+ */
+const requireApiKeyUser = async (req, res, next) => {
+  const apiKey = req.headers['x-api-key'];
+  if (!apiKey) {
+    return res.status(401).json({ success: false, error: 'API key required' });
+  }
+
+  const keyHash = crypto.createHash('sha256').update(apiKey).digest('hex');
+
+  try {
+    const { data: keyRow, error: keyError } = await supabase
+      .from('api_keys')
+      .select('user_id, tier, expires_at')
+      .eq('key_hash', keyHash)
+      .single();
+
+    if (keyError || !keyRow) {
+      return res.status(401).json({ success: false, error: 'Invalid API key' });
+    }
+    if (keyRow.expires_at && new Date(keyRow.expires_at) < new Date()) {
+      return res.status(401).json({ success: false, error: 'API key expired' });
+    }
+
+    const { data: user, error: userError } = await supabase
+      .from('users')
+      .select('id, tier, stripe_customer_id, stripe_subscription_id')
+      .eq('id', keyRow.user_id)
+      .single();
+
+    if (userError || !user) {
+      return res.status(401).json({ success: false, error: 'Invalid API key' });
+    }
+
+    const bundleSubscription = subscriptionManager.serviceBundle.getSubscriptionByCustomerId(user.stripe_customer_id);
+
+    req.user = {
+      id: user.id,
+      tier: keyRow.tier || user.tier,
+      stripeCustomerId: user.stripe_customer_id,
+      stripeSubscriptionId: user.stripe_subscription_id,
+      subscriptionId: bundleSubscription ? bundleSubscription.id : null,
+      // No role column exists on users/api_keys yet -- admin-gated routes
+      // (/analytics, /marketing/trigger below) fail closed until a real
+      // admin designation is added; this isn't a stopgap default, it's the
+      // only value any real key can currently carry.
+      role: 'customer',
+    };
+
+    next();
+  } catch (error) {
+    console.error('[SERVICE BUNDLE AUTH] Lookup failed:', error.message);
+    res.status(500).json({ success: false, error: 'Authentication failed' });
+  }
+};
 
 // Rate limiting for API calls
 const apiLimiter = rateLimit({
@@ -25,7 +92,7 @@ router.use(apiLimiter);
 /**
  * Get all available services
  */
-router.get('/services', /* authenticateToken, */ async (req, res) => {
+router.get('/services', async (req, res) => {
   try {
     const { tier = 'starter' } = req.query;
     const services = subscriptionManager.serviceBundle.getServicesByTier(tier);
@@ -92,7 +159,7 @@ const checkServicePermission = (req, res, next) => {
 /**
  * Execute a service
  */
-router.post('/services/:serviceId/execute', /* authenticateToken, */ checkServicePermission, async (req, res) => {
+router.post('/services/:serviceId/execute', requireApiKeyUser, checkServicePermission, async (req, res) => {
   try {
     const { serviceId } = req.params;
     const { input } = req.body;
@@ -128,7 +195,7 @@ router.post('/services/:serviceId/execute', /* authenticateToken, */ checkServic
 /**
  * Get service usage metrics
  */
-router.get('/usage', /* authenticateToken, */ async (req, res) => {
+router.get('/usage', requireApiKeyUser, async (req, res) => {
   try {
     const subscriptionId = req.user.subscriptionId;
     const metrics = subscriptionManager.serviceBundle.getUsageMetrics(subscriptionId);
@@ -148,13 +215,8 @@ router.get('/usage', /* authenticateToken, */ async (req, res) => {
 /**
  * Create subscription checkout session
  */
-router.post('/subscriptions/checkout', /* authenticateToken, */ async (req, res) => {
+router.post('/subscriptions/checkout', requireApiKeyUser, async (req, res) => {
   try {
-    // authenticateToken (which would populate req.user) is not currently
-    // wired up on this router -- see the commented-out import above. Rather
-    // than trust a client-supplied customerId (which would let any caller
-    // create a checkout session against an arbitrary Stripe customer), fail
-    // closed until real authentication is in place.
     if (!req.user?.stripeCustomerId) {
       return res.status(401).json({ success: false, error: 'Unauthorized' });
     }
@@ -193,7 +255,7 @@ router.post('/subscriptions/checkout', /* authenticateToken, */ async (req, res)
 /**
  * Create customer portal session
  */
-router.post('/subscriptions/portal', /* authenticateToken, */ async (req, res) => {
+router.post('/subscriptions/portal', requireApiKeyUser, async (req, res) => {
   try {
     const customerId = req.user.stripeCustomerId;
     const session = await subscriptionManager.createPortalSession(customerId);
@@ -215,10 +277,10 @@ router.post('/subscriptions/portal', /* authenticateToken, */ async (req, res) =
 /**
  * Get subscription details
  */
-router.get('/subscriptions', /* authenticateToken, */ async (req, res) => {
+router.get('/subscriptions', requireApiKeyUser, async (req, res) => {
   try {
     const report = await subscriptionManager.getCustomerUsageReport(
-      req.user.id
+      req.user.stripeCustomerId
     );
 
     res.json({
@@ -236,10 +298,13 @@ router.get('/subscriptions', /* authenticateToken, */ async (req, res) => {
 /**
  * Upgrade/downgrade subscription
  */
-router.put('/subscriptions', /* authenticateToken, */ async (req, res) => {
+router.put('/subscriptions', requireApiKeyUser, async (req, res) => {
   try {
     const { newTier } = req.body;
-    const subscriptionId = req.user.subscriptionId;
+    // updateSubscription calls stripe.subscriptions.retrieve/update, which
+    // need the real Stripe subscription id -- not the service bundle's
+    // in-memory subscriptionId (a separate, unrelated id space).
+    const stripeSubscriptionId = req.user.stripeSubscriptionId;
 
     if (!['starter', 'pro', 'enterprise'].includes(newTier)) {
       return res.status(400).json({
@@ -249,7 +314,7 @@ router.put('/subscriptions', /* authenticateToken, */ async (req, res) => {
     }
 
     const updatedSubscription = await subscriptionManager.updateSubscription(
-      subscriptionId,
+      stripeSubscriptionId,
       newTier
     );
 
@@ -268,11 +333,12 @@ router.put('/subscriptions', /* authenticateToken, */ async (req, res) => {
 /**
  * Cancel subscription
  */
-router.delete('/subscriptions', /* authenticateToken, */ async (req, res) => {
+router.delete('/subscriptions', requireApiKeyUser, async (req, res) => {
   try {
-    const subscriptionId = req.user.subscriptionId;
+    // Real Stripe subscription id -- see the PUT /subscriptions comment above.
+    const stripeSubscriptionId = req.user.stripeSubscriptionId;
     const canceledSubscription = await subscriptionManager.cancelSubscription(
-      subscriptionId
+      stripeSubscriptionId
     );
 
     res.json({
@@ -319,7 +385,7 @@ router.get('/bundle', async (req, res) => {
 /**
  * Get analytics (admin only)
  */
-router.get('/analytics', /* authenticateToken, */ async (req, res) => {
+router.get('/analytics', requireApiKeyUser, async (req, res) => {
   try {
     // Check if user is admin
     if (req.user.role !== 'admin') {
@@ -346,7 +412,7 @@ router.get('/analytics', /* authenticateToken, */ async (req, res) => {
 /**
  * Trigger self-marketing (admin only)
  */
-router.post('/marketing/trigger', /* authenticateToken, */ async (req, res) => {
+router.post('/marketing/trigger', requireApiKeyUser, async (req, res) => {
   try {
     // Check if user is admin
     if (req.user.role !== 'admin') {
