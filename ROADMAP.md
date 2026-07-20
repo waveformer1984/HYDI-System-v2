@@ -108,13 +108,27 @@ drop-everything, P1 is next up, P2 is scheduled but not urgent.
    carries nothing to verify against) — designing that path, or deciding
    to retire it in favor of the already-live `Keymaker` middleware, is a
    product decision for the maintainer.
-5. Consolidate the **4 parallel, unreachable Stripe
-   checkout/webhook implementations** (`src/webhook-handlers/stripe-webhook.js`,
-   `src/api/services/index.js`'s bundle, the standalone
-   `stripe-webhook-server.js`, and the stale `hydi-monitor-deploy/`
-   sub-deployment) — needs a maintainer decision on which billing model
-   is current before the other three can be archived or deleted
-   (`ISSUES_FOUND.md`, "Investigated, not fixed").
+5. ~~Consolidate the **4 parallel, unreachable Stripe
+   checkout/webhook implementations**~~ **Partially resolved 2026-07-19**:
+   a full comparison (`ISSUES_FOUND.md`, "Investigated, not fixed") found
+   this was really 5 distinct billing/data models, not 4 copies of one —
+   two of which (`api/checkout.js`+`api/webhooks/stripe.js`'s tiered SaaS
+   model, and `api/stripe-connect-webhook.js`'s per-project Connect model)
+   are already live simultaneously. Of the rest: `src/webhook-handlers/stripe-webhook.js`
+   (a 3rd, `users`/`api_keys`-based tiered model referenced only by its own
+   test) and the stale `hydi-monitor-deploy/` sub-deployment (an obsolete
+   predecessor of the live tiered model, writing to an orphaned
+   `hydi_subscriptions` table) were confirmed clearly superseded and
+   archived to `archive/superseded-stripe-implementations/`. The standalone
+   `stripe-webhook-server.js` turned out not to be a competing model at
+   all — it's a thin Express wrapper calling the live
+   `api/webhooks/stripe.js` handler directly — so it was left in place, no
+   decision needed. **Still open**: `src/api/services/index.js`'s Ursula
+   service-bundle router (mounted into `src/server.js`) is a 4th, genuinely
+   different model (per-service metered execution, not just tiers) whose
+   fate is still a maintainer decision — see `ISSUES_FOUND.md` #136 for why
+   most of its routes are broken regardless (`UrsulaServiceBundle`
+   commented out due to syntax errors).
 6. ~~Per-file review of the remaining ambiguous unbridged `api/**` routes~~
    **Done 2026-07-17** (`ISSUES_FOUND.md` #49-#54). `chat/route.js`,
    `ursula/status.js`, `events/stream.js` bridged into `pages/api/**`

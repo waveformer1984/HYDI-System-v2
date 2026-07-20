@@ -43,7 +43,9 @@ Deliberately **not** touched in this phase:
 - `hydi-monitor-deploy/vercel.json` — that whole directory is a separate
   stale sub-deployment already tracked under `ROADMAP.md`'s P1 item to
   consolidate the four parallel Stripe checkout/webhook implementations.
-  Archiving it belongs to that decision, not this cleanup.
+  Archiving it belongs to that decision, not this cleanup. **Resolved
+  2026-07-19**: the whole directory was confirmed superseded and archived
+  to `archive/superseded-stripe-implementations/` — see `ROADMAP.md` item 5.
 - `.github/workflows/health-monitor.yml`'s `vercel-api-check.js` step —
   an intentionally-kept read-only diagnostic, not a deploy trigger.
 
