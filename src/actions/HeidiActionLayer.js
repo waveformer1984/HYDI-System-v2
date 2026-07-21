@@ -17,6 +17,7 @@ const { spawn } = require('child_process');
 const fs = require('fs').promises;
 const path = require('path');
 const { supabase } = require('../database');
+const { assertPublicHttpUrl } = require('../../lib/ssrf-guard');
 
 class HeidiActionLayer extends EventEmitter {
   constructor(config = {}) {
@@ -134,13 +135,14 @@ class HeidiActionLayer extends EventEmitter {
       });
       
       // Execute the action
+      let timeoutHandle;
       const result = await Promise.race([
         action.handler(params, context),
-        new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('ACTION_TIMEOUT')), this.config.actionTimeout)
-        )
-      ]);
-      
+        new Promise((_, reject) => {
+          timeoutHandle = setTimeout(() => reject(new Error('ACTION_TIMEOUT')), this.config.actionTimeout);
+        })
+      ]).finally(() => clearTimeout(timeoutHandle));
+
       const latency = Date.now() - startTime;
       
       // Update action stats
@@ -483,8 +485,10 @@ class HeidiActionLayer extends EventEmitter {
   // Send webhook
   async sendWebhook(params, _context) {
     try {
+      await assertPublicHttpUrl(params.url);
+
       console.log(`[WEBHOOK] Sending to ${params.url}`);
-      
+
       const response = await fetch(params.url, {
         method: params.method || 'POST',
         headers: {

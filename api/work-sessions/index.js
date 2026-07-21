@@ -34,7 +34,16 @@ export default async function handler(req, res) {
   if (!auth.ok) return;
 
   let sessionQuery = supabase.from('work_sessions').select('*').order('created_at', { ascending: false }).limit(25);
-  if (permission === 'work_sessions:view_own' && req.query.user_id) {
+  if (permission === 'work_sessions:view_own') {
+    // NOTE: user_id is a free-text field on work_sessions with no
+    // cryptographic link to the caller's device identity (same unresolved
+    // gap as api/rezonate/route.js's x-user-id trust model — see
+    // ROADMAP.md's identity-verification item). Requiring it here at least
+    // closes the full-bypass case where omitting it returned every user's
+    // sessions unfiltered to a low-trust 'agent'-role caller.
+    if (!req.query.user_id) {
+      return res.status(400).json({ error: 'user_id is required when own=true' });
+    }
     sessionQuery = sessionQuery.eq('user_id', req.query.user_id);
   }
 

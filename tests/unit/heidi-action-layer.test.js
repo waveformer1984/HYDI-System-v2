@@ -290,6 +290,46 @@ describe('HeidiActionLayer', () => {
     });
   });
 
+  // ── sendWebhook (SSRF guard) ──────────────────────────────────────────────
+
+  describe('sendWebhook', () => {
+    const originalFetch = global.fetch;
+
+    afterEach(() => {
+      global.fetch = originalFetch;
+    });
+
+    it('blocks a webhook targeting a private/internal IP literal without ever calling fetch', async () => {
+      global.fetch = jest.fn();
+      const layer = makeLayer();
+      await expect(
+        layer.executeAction('send_webhook', { url: 'http://169.254.169.254/latest/meta-data/', data: {} }, {})
+      ).rejects.toThrow(/private|internal/i);
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
+
+    it('blocks a webhook targeting localhost without ever calling fetch', async () => {
+      global.fetch = jest.fn();
+      const layer = makeLayer();
+      await expect(
+        layer.executeAction('send_webhook', { url: 'http://localhost:9000/hook', data: {} }, {})
+      ).rejects.toThrow(/localhost/i);
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
+
+    it('allows a public IP-literal https URL through to fetch', async () => {
+      global.fetch = jest.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: jest.fn().mockResolvedValue({ received: true }),
+      });
+      const layer = makeLayer();
+      const result = await layer.executeAction('send_webhook', { url: 'https://93.184.216.34/hook', data: {} }, {});
+      expect(global.fetch).toHaveBeenCalledWith('https://93.184.216.34/hook', expect.any(Object));
+      expect(result.result.success).toBe(true);
+    });
+  });
+
   // ── getStatus ─────────────────────────────────────────────────────────────
 
   describe('getStatus', () => {

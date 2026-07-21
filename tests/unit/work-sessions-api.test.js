@@ -1,6 +1,7 @@
 'use strict';
 
 const { createHmac } = require('crypto');
+const { generateDeviceSecret, deriveSigningKey, signDeviceToken } = require('../../lib/auth/deviceAuth');
 
 const SERVICE_SECRET = 'test-service-secret';
 function makeServiceToken(secret = SERVICE_SECRET) {
@@ -28,17 +29,31 @@ const mockSessions = [
   },
 ];
 
+let mockDevices = {};
+const eqCalls = [];
+
 jest.mock('@supabase/supabase-js', () => ({
   createClient: jest.fn(() => ({
     from: jest.fn((table) => {
       if (table === 'auth_audit_log') return { insert: jest.fn(async () => ({ error: null })) };
+      if (table === 'devices') {
+        return {
+          select: () => ({
+            eq: (_f, value) => ({ maybeSingle: async () => ({ data: mockDevices[value] || null, error: null }) }),
+          }),
+        };
+      }
       if (table === 'work_sessions') {
         return {
           select: jest.fn(() => {
             const chain = {
               order: jest.fn(() => chain),
-              limit: jest.fn(async () => ({ data: mockSessions, error: null })),
-              eq: jest.fn(() => chain),
+              limit: jest.fn(() => chain),
+              eq: jest.fn((field, value) => {
+                eqCalls.push([field, value]);
+                return chain;
+              }),
+              then: (resolve) => resolve({ data: mockSessions, error: null }),
             };
             return chain;
           }),
@@ -62,8 +77,17 @@ beforeAll(() => {
 });
 
 beforeEach(() => {
+  mockDevices = {};
+  eqCalls.length = 0;
   require('../../lib/rate-limit').__reset();
 });
+
+function agentToken() {
+  const secret = generateDeviceSecret();
+  const signingKey = deriveSigningKey(secret);
+  mockDevices['agent-phone'] = { device_id: 'agent-phone', role: 'agent', status: 'approved', secret_hash: signingKey };
+  return signDeviceToken('agent-phone', signingKey);
+}
 
 describe('api/work-sessions/index.js', () => {
   it('rejects unauthenticated requests', async () => {
@@ -93,5 +117,25 @@ describe('api/work-sessions/index.js', () => {
     const res = makeRes();
     await handler({ method: 'GET', headers: { 'x-hydi-service-token': makeServiceToken() }, query: {} }, res);
     expect(res.json.mock.calls[0][0].queue_depth).toBe(2);
+  });
+
+  it('rejects own=true with no user_id instead of returning every user\'s sessions unfiltered', async () => {
+    const res = makeRes();
+    await handler(
+      { method: 'GET', headers: { 'x-hydi-device-token': agentToken() }, query: { own: 'true' } },
+      res
+    );
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(eqCalls).toHaveLength(0);
+  });
+
+  it('scopes own=true to the supplied user_id', async () => {
+    const res = makeRes();
+    await handler(
+      { method: 'GET', headers: { 'x-hydi-device-token': agentToken() }, query: { own: 'true', user_id: 'user-42' } },
+      res
+    );
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(eqCalls).toContainEqual(['user_id', 'user-42']);
   });
 });
