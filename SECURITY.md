@@ -56,6 +56,18 @@ We will not disclose a vulnerability publicly before a fix is available unless t
 
 These are documented, accepted limitations. They do not need to be reported as new vulnerabilities:
 
+### `ledger` table granted read access to every authenticated Supabase user — fixed 2026-07-21
+
+`20260425161640_add_stripe_connect_subaccount_support.sql` added an `"Authenticated users read-only"` RLS policy (`USING (true)`) to the `ledger` table — financial data (gross/fee/net amounts, `customer_email`/`customer_name`, payout status) with no `user_id`/owner column at all to scope a policy by. Every confirmed-live route that legitimately reads this table already uses the service-role key server-side (which bypasses RLS entirely), so the policy provided no product function and only left an open door for any Supabase Auth session to read every client's complete financial ledger directly via PostgREST. Fixed 2026-07-21 — `20260721013000_remove_ledger_authenticated_read_policy.sql` drops the policy; the service-role policy is untouched. See `ISSUES_FOUND.md` #76.
+
+### `api/work-sessions/index.js`'s `own=true` mode could return every user's sessions — fixed 2026-07-21
+
+The `work_sessions:view_own` path (granted to the low-trust `agent` device role) scoped its query by a client-supplied `?user_id=` and applied no filter at all when that param was omitted, so an `agent`-role caller could see every user's work sessions simply by leaving `user_id` off. Fixed 2026-07-21 — now returns 400 when `own=true` is passed without `user_id`. The narrower gap (a caller can still supply *any* `user_id`, since `work_sessions.user_id` has no cryptographic link to the caller's device identity) is the same unresolved identity-verification item as the `x-user-id` limitation documented below for `api/rezonate/route.js` — not solved here. See `ISSUES_FOUND.md` #77.
+
+### SSRF hardening added to `HeidiActionLayer`'s `sendWebhook` — fixed 2026-07-21
+
+`src/actions/HeidiActionLayer.js`'s `sendWebhook` action (live, reachable core infrastructure used by both `HYDISystem.js` and `HeidiCoreLoop.js`) fetched a caller-supplied `params.url` with no validation at all. Fixed 2026-07-21 — added `lib/ssrf-guard.js`, which resolves the target hostname and rejects loopback/link-local/RFC1918/RFC4193/cloud-metadata addresses and non-`http(s)` schemes before the fetch runs. See `ISSUES_FOUND.md` #78.
+
 ### Header-based identity assertion
 
 API routes accept `x-user-id` HTTP headers as the identity claim. These headers are **not cryptographically verified**. A caller that can set arbitrary headers can assert any identity. Cryptographic hardening (signed JWTs or mutual TLS) is on the roadmap. Do not build trust on `x-user-id` alone for high-privilege operations.
@@ -168,6 +180,7 @@ vercel env ls | grep SECRET_NAME
 | PolicyEngine fail-closed (default `'reject'`) | `lib/protoforge/policy-engine.js` |
 | No hardcoded fallback secrets for HMAC/JWT signing (fail closed if unconfigured) | `supabase/functions/keeper-break-glass{,-simple}`, `workers/SecurityIdentityWorker.js`, `apps/ursula-frontend/runtime/enforcement-boundary/index.js`, `generate-break-glass-jwt.js` |
 | Automated secret-pattern scan of every git-tracked file | `tests/unit/no-hardcoded-secrets.test.js` (runs in `npm test`) |
+| SSRF guard on outbound webhook fetches (blocks loopback/link-local/private/metadata targets) | `lib/ssrf-guard.js`, wired into `src/actions/HeidiActionLayer.js`'s `sendWebhook` |
 | CodeQL static analysis | `.github/workflows/codeql.yml` (scheduled) |
 | Governance gate for DB migrations | `.github/workflows/hdi-governance-gate.yml` |
 

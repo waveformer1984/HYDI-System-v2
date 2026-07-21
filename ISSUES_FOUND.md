@@ -5,6 +5,46 @@ the narrative of what was fixed and why; this file is the flat list.
 
 ---
 
+## Fixed this session (2026-07-21, production-readiness pass: deps, security, logging)
+
+Full baseline (lint/typecheck/test/build/audit) confirmed green before
+starting. A repository-wide security sweep (cross-referenced against this
+file's existing audit trail to avoid re-litigating settled items) surfaced
+two new findings; both fixed with regression tests. Also closed out
+`ROADMAP.md` item 11 (structured logging migration) for the last
+unmigrated production-route directory.
+
+| # | Issue | File(s) | Status |
+|---|-------|---------|--------|
+| 75 | `npm audit` reported 3 vulnerabilities: `body-parser` DoS (via `express-rate-limit`'s `express` dependency), `node-tar` crash/DoS (via `sqlite3`'s `node-gyp`), and a high-severity `brace-expansion` ReDoS pulled in by `@typescript-eslint/typescript-estree`'s `minimatch@10.2.5`. | `package.json`, `package-lock.json` | **Fixed.** `body-parser`/`tar` resolved via plain `npm audit fix` (patch bumps). `brace-expansion` needed care: issue #2 in this file (2026-07-15) already tried a blanket `"brace-expansion": ">=5.0.6"` override and had to revert it after it broke `next lint` (`TypeError: expand is not a function`) — v5's export shape is incompatible with the `minimatch@3.x`/`9.x` consumers elsewhere in the tree that expect v1/v2. This time the override is scoped to only the vulnerable path: `"minimatch@10.2.5": { "brace-expansion": ">=5.0.7" }`, leaving every other `minimatch` consumer's own resolution untouched. Verified `npm audit` → 0 vulnerabilities, `next lint` runs clean (no `expand is not a function`), and the full suite still passes. |
+| 76 | **Critical.** The `ledger` table (financial data: gross/fee/net amounts, `customer_email`/`customer_name`, payout status — no `user_id`/owner column exists on it at all) had an `"Authenticated users read-only"` RLS policy (`USING (true)`, added by `20260425161640_add_stripe_connect_subaccount_support.sql`) granting **every** Supabase `authenticated`-role caller full read access to every client's/project's complete financial ledger. Every confirmed-live route that legitimately reads this table (`pages/api/client-dashboard.js`, `pages/api/revenue/*.js`, payout/reconciliation functions) already uses the service-role key server-side, which bypasses RLS entirely — so the policy served no product function and only left an open door for any Supabase Auth session to read every client's raw financial data directly via PostgREST/the client SDK. | `supabase/migrations/20260721013000_remove_ledger_authenticated_read_policy.sql` | **Fixed** — new migration drops the policy (governance rules forbid editing a historical migration in place); the service-role policy is untouched. Added `tests/migrations/20260721013000.test.js` (4 tests, governance-gate requirement). |
+| 77 | **High.** `pages/api/work-sessions/index.js`'s `own=true` mode (`work_sessions:view_own`, granted to the low-trust `agent` device role) scoped its query by a **client-supplied** `?user_id=` and applied **no filter at all** when that param was omitted — so an `agent`-role caller could see every user's work sessions just by leaving `user_id` off, completely defeating the distinction from the broader `work_sessions:view` permission. `work_sessions.user_id` is a free-text field with no cryptographic link to the caller's device identity (`devices` has no `user_id` column at all) — the same class of gap as `api/rezonate/route.js`'s `x-user-id` trust model (`ROADMAP.md`'s top identity item). | `api/work-sessions/index.js` | **Partially fixed** — now returns 400 when `own=true` is passed without `user_id`, closing the full-bypass case. The narrower gap (a caller can still supply *any* `user_id` and see that one user's sessions) is the same unresolved identity-verification architecture item already tracked for `api/rezonate/route.js`; not solved here, flagged rather than guessed at. Added 2 regression tests to `tests/unit/work-sessions-api.test.js`. |
+| 78 | `src/actions/HeidiActionLayer.js`'s `sendWebhook` — a live, reachable action in the core action layer used by both `HYDISystem.js` and `HeidiCoreLoop.js` (not a dead code path) — `fetch()`ed `params.url` with **zero validation**, a classic SSRF shape. Live risk today is reduced by its only external entry point (`api/life-flow/route.js`) being deliberately unbridged, but the code-level gap sits in shared, reusable infrastructure. | `src/actions/HeidiActionLayer.js` | **Fixed** — added `lib/ssrf-guard.js` (`assertPublicHttpUrl()`), which resolves the target hostname and rejects loopback/link-local/RFC1918/RFC4193/cloud-metadata addresses and non-`http(s)` schemes before the `fetch` ever runs. Wired into `sendWebhook`. Added `tests/unit/ssrf-guard.test.js` (23 tests) and 3 integration tests in `tests/unit/heidi-action-layer.test.js`. |
+| 79 | Same file's `executeAction()` raced every action against a `setTimeout` via `Promise.race` but never cleared the timer once the race settled — a real handle leak on **every single action execution**, confirmed with `jest --detectOpenHandles` (4 leaked `Timeout` handles reported, all pointing at this line), not just a test-harness artifact. | `src/actions/HeidiActionLayer.js` | **Fixed** — captures the timeout handle and clears it in a `.finally()`. Re-ran the full suite with `--detectOpenHandles`: 0 leaked handles (down from 4). |
+| 80 | Continuation of issue #72 (structured logging migration, still open for `api/`: 78 calls / 19 files at the time). | `api/**/*.js` (19 files) | **Fixed** — all 78 migrated to `lib/structured-logger.js` via a per-file module-scoped child logger. Verified the CJS logger singleton interops correctly with this directory's mixed ESM/CJS styles via a real `next build` after the first file, then per-file against existing tests as each was converted, then the full suite again at the end. 0 `console.*` calls remain under `api/`. |
+
+**Reconfirmed, not fixed (already tracked):** `ROADMAP.md`'s P0 CI item
+(2b) — every GitHub Actions run across every branch and workflow still
+fails within 3-5 seconds with `runner_id: 0` (no runner ever assigned,
+zero billable time), unchanged from the 2026-07-16/17 diagnosis. Checked
+again today (2026-07-21): all workflow YAML files are still syntactically
+valid and correctly configured — this is a platform/account-level block
+on GitHub-hosted runners, not a workflow defect, and still needs
+`github.com/waveformer1984/HYDI-System-v2/settings/actions` and
+`github.com/settings/billing` checked by a human with dashboard access.
+
+**Investigated, no new action:** the security sweep re-confirmed several
+previously-documented open items are still in the same state — `api/heidi/route.js`
+(unauthenticated LLM-forwarding, deliberately left unbridged, #53),
+`api/client-dashboard.js` (unauthenticated ledger-by-project, deliberately
+left unbridged, #54), `supabase/functions/notification-service`
+(unauthenticated real Twilio/SendGrid relay if those keys are ever
+configured, #62), and `supabase/functions/stripe-worker`'s ambiguous
+`verify_jwt` status (#63). No new information surfaced on any of these;
+not re-litigated.
+
+---
+
 ## Fixed this session (2026-07-18, structured logging migration + lint-scope gap)
 
 Resolves `ROADMAP.md` near-term item 11. Started as "migrate console.log to

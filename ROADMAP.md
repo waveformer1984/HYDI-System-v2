@@ -67,6 +67,16 @@ drop-everything, P1 is next up, P2 is scheduled but not urgent.
     check out clean, this may warrant a GitHub support ticket — instant
     failure with zero billable time and no runner assignment isn't a normal
     "ran out of minutes" pattern.
+2c. **2026-07-21 reconfirmation: unchanged, still repo-wide.** Checked the
+    most recent runs (through today) of `unit-tests.yml`, `codeql.yml`, and
+    `health-monitor.yml` across `clean-main`, dependabot branches, and
+    feature branches — every single one still fails in ~3-5 seconds with
+    `runner_id: 0`, going back at least to 2026-07-18. All workflow YAML
+    files were re-validated (`yaml.safe_load` on all 6) and are
+    syntactically correct — this is not a workflow-definition bug, it
+    remains a platform/account-level block on GitHub-hosted runners.
+    Still needs the same dashboard checks as 2b; no sandbox-side fix
+    exists.
 
 **P1 — high impact/risk, not yet started:**
 3. Cryptographic identity verification to replace the `x-user-id`
@@ -218,12 +228,14 @@ drop-everything, P1 is next up, P2 is scheduled but not urgent.
     and `kilo/` were never actually linted by `npm run lint` (or CI's
     lint gate) at all. Expanding `next.config.js`'s `eslint.dirs` to
     cover them surfaced 4 real runtime bugs (see `ISSUES_FOUND.md` #72)
-    and ~35 pre-existing lint errors, all now fixed. **Still open**:
-    ~938 `console.*` calls remain unmigrated across `src/` (690, by far
-    the largest), `api/` (78), `lib/` (67), `pages/` (14), `components/`
-    (3) — good candidate for the same file-by-file follow-up treatment
-    item 8 got, not a mechanical sweep (some of these, like item 8's
-    précis warned, are genuine CLI output rather than service logs).
+    and ~35 pre-existing lint errors, all now fixed. **2026-07-21**:
+    `api/` (78 calls, 19 files) migrated in full — see `ISSUES_FOUND.md`
+    #80. **Still open**: ~860 `console.*` calls remain unmigrated across
+    `src/` (690, by far the largest), `lib/` (67), `pages/` (14),
+    `components/` (3) — good candidate for the same file-by-file
+    follow-up treatment item 8 got, not a mechanical sweep (some of
+    these, like item 8's précis warned, are genuine CLI output rather
+    than service logs).
 
 **Done this pass (housekeeping):**
 - Archived 3 confirmed-orphaned dead-code files flagged in a prior audit's

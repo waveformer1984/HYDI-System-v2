@@ -4,6 +4,147 @@ Running log of autonomous production-readiness work. Newest entries first.
 
 ---
 
+## 2026-07-21 — Production-readiness pass: dependency vulns, security sweep, logging migration
+
+Branch: `claude/hydi-production-readiness-kygafa`
+
+### Baseline
+
+Fresh clone, `npm install`, then the full verification suite before
+touching anything: `npm run typecheck` (clean), `npm run lint` (0 errors,
+pre-existing warnings only), `npm test` (144 suites / 1489 tests, all
+passing), `npm run build` (succeeds), plus the scoped HYDI V3 targets
+(`typecheck:hydi-v3`, `lint:hydi-v3`, `security-audit` — all clean/passed).
+`npm audit` was the one red flag: 3 vulnerabilities (1 low, 1 high, 1
+critical).
+
+### Dependency vulnerabilities
+
+`body-parser` (DoS via `express-rate-limit`'s `express` dependency) and
+`node-tar` (crash/DoS via `sqlite3`'s `node-gyp`) were fixed with a plain
+`npm audit fix` — patch bumps, no breaking changes. The third,
+`brace-expansion` (high-severity ReDoS via
+`@typescript-eslint/typescript-estree`'s `minimatch@10.2.5`), needed more
+care: `ISSUES_FOUND.md` #2 (2026-07-15) already tried a blanket
+`"brace-expansion": ">=5.0.6"` override and had to revert it after it
+broke `next lint` with `TypeError: expand is not a function` — v5's export
+shape isn't compatible with the `minimatch@3.x`/`9.x` consumers elsewhere
+in the tree (ESLint's own dependency chain) that expect the v1/v2 API.
+This session hit the identical crash on the first attempt at a blanket
+override, confirming the old finding still applies. The fix this time is
+scoped to just the vulnerable path — `"minimatch@10.2.5": {
+"brace-expansion": ">=5.0.7" }` in `package.json`'s `overrides` — leaving
+every other `minimatch` consumer's own resolution untouched. Verified:
+`npm audit` → 0 vulnerabilities, `npm ls brace-expansion` shows only the
+targeted path overridden, `next lint`/typecheck/full suite/build all still
+pass.
+
+### Security sweep
+
+Delegated a repository-wide search (secrets, authn/authz, SSRF, injection,
+XSS, CSRF, insecure deserialization, webhook signatures, privilege
+escalation) to a research subagent, explicitly instructed to cross-check
+findings against `ISSUES_FOUND.md`'s existing audit trail first so
+already-settled items wouldn't be re-litigated. Two new, verified findings
+came back, both fixed with regression tests:
+
+1. **`ledger` table RLS.** The Stripe-Connect migration
+   (`20260425161640_add_stripe_connect_subaccount_support.sql`) granted
+   every Supabase `authenticated`-role caller unrestricted `SELECT` on the
+   entire financial ledger (`USING (true)`) — and there's no
+   `user_id`/owner column on the table at all to scope a real policy by.
+   Every route that legitimately reads this data already uses the
+   service-role key server-side (bypassing RLS), so the policy served no
+   product purpose. Fixed with a new migration
+   (`20260721013000_remove_ledger_authenticated_read_policy.sql`) that
+   drops it — governance rules forbid editing a historical migration in
+   place. Added the required governance-gate test
+   (`tests/migrations/20260721013000.test.js`).
+
+2. **`api/work-sessions/index.js` IDOR.** The `own=true`
+   (`work_sessions:view_own`) path scoped its query by a client-supplied
+   `?user_id=` and applied *no filter at all* when that param was
+   omitted — a low-trust `agent`-role device could see every user's work
+   sessions just by leaving it off. Fixed to fail closed (400) when
+   `user_id` is missing. The deeper gap — `work_sessions.user_id` has no
+   cryptographic link to the caller's device identity at all — is the same
+   unresolved architecture item already tracked for
+   `api/rezonate/route.js`'s `x-user-id` model; not solved here, just no
+   longer fully bypassable. Added 2 regression tests.
+
+While verifying the sweep's findings, also found (not part of the
+delegated report, found while reading `src/actions/HeidiActionLayer.js` to
+assess the SSRF-shaped lead the sweep flagged):
+
+3. **SSRF in `sendWebhook`.** This is a live action in the core action
+   layer (used by both `HYDISystem.js` and `HeidiCoreLoop.js`, not a dead
+   path) and fetched a caller-supplied URL with zero validation. Added
+   `lib/ssrf-guard.js` — resolves the hostname, rejects
+   loopback/link-local/RFC1918/RFC4193/cloud-metadata targets and
+   non-`http(s)` schemes before the fetch runs. 23 new unit tests plus 3
+   integration tests against the real `sendWebhook` call path.
+
+4. **Timer leak in `executeAction`.** Running the full suite with
+   `--detectOpenHandles` (to sanity-check the SSRF fix's tests weren't
+   introducing their own leaks) surfaced a real, pre-existing one instead:
+   `executeAction`'s `Promise.race([action.handler(...), new Promise((_,
+   reject) => setTimeout(...))])` never cleared the timeout once the race
+   settled — a leaked `Timeout` handle on every single action execution,
+   confirmed by four handles reported at that exact line. Fixed with a
+   `.finally(() => clearTimeout(...))`. Re-ran with `--detectOpenHandles`:
+   0 leaked handles.
+
+### CI/CD
+
+Reconfirmed `ROADMAP.md`'s top P0 item (GitHub Actions failing repo-wide
+with `runner_id: 0` in ~3-5 seconds) is unchanged as of today — same
+symptom across `unit-tests.yml`, `codeql.yml`, and `health-monitor.yml`,
+on `clean-main` and feature/dependabot branches alike. Re-validated all 6
+workflow YAML files parse correctly (`yaml.safe_load`), ruling out a
+workflow-definition regression as the cause. This remains a
+platform/account-level block on GitHub-hosted runners that only someone
+with dashboard access (`settings/actions`, `settings/billing`) can
+diagnose further — nothing actionable from inside this sandbox beyond
+reconfirming it's still happening and still isn't a workflow bug.
+
+### Structured logging migration (ROADMAP item 11)
+
+Migrated the last unmigrated production-route directory, `api/`: 78
+`console.*` calls across 19 files, all converted to
+`lib/structured-logger.js` child loggers (one per file, component-tagged).
+Verified the CJS logger singleton interops correctly with this directory's
+mixed ESM/CJS module styles via a real `next build` after the first file
+(`api/health.js`), then reconfirmed per-file against each file's existing
+tests as it was converted (`ursula-status`, `traces-auth`,
+`stripe-connect-webhook`, `webhooks-stripe` all still passing), then the
+full suite again at the end. 0 `console.*` calls remain under `api/`.
+
+### Verification
+
+- `npm audit` — 0 vulnerabilities (was 3).
+- `npm run typecheck` — clean.
+- `npm run lint` — 0 errors (pre-existing warnings only, unchanged).
+- `npm test` — 146/146 suites, 1522/1522 tests (was 144/1489; +33 new
+  tests: 4 migration governance, 2 work-sessions IDOR, 3 sendWebhook SSRF,
+  23 ssrf-guard unit, 1 migration file addition).
+- `npm run build` — succeeds.
+- `npx jest --detectOpenHandles` — 0 leaked handles (was 4).
+- `npm run security-audit` (HYDI V3 scoped) — 0 findings, passed.
+
+### Not done in this pass (see ISSUES_FOUND.md / ROADMAP.md)
+
+- CI/CD is blocked on external dashboard access, not code — see above.
+- `api/heidi/route.js` and `api/client-dashboard.js` remain deliberately
+  unauthenticated-and-unbridged (pre-existing decisions, re-confirmed
+  unchanged, not touched).
+- The remaining ~860 unmigrated `console.*` calls (`src/`, `lib/`,
+  `pages/`, `components/`) are a good candidate for the next
+  structured-logging pass, same file-by-file treatment as `api/` got here.
+- `supabase/functions/stripe-worker`'s ambiguous `verify_jwt` status
+  still needs a maintainer decision (unchanged from prior sessions).
+
+---
+
 ## 2026-07-15 (later same day) — Security incident response + route reachability gap
 
 Branch: `claude/protoforge-production-readiness-t4wdn4` (continuation of the
