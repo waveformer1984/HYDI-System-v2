@@ -113,12 +113,27 @@ from within Termux itself for this):
    Verify with `adb shell dumpsys deviceidle whitelist | grep termux` — no
    output means it isn't whitelisted yet.
 
-2. **Permanent phantom-process-killer fix** — still open. The generic Android
-   Doze whitelist above helps, but some OEM battery managers (Samsung Device
-   Care, MIUI, OnePlus/Oppo "Battery Optimization", etc.) layer their own
-   background-kill logic on top that ADB's `deviceidle` whitelist doesn't
-   reach. The right one-liner depends on which OEM this phone is — needs
-   confirming before it can be added here as a concrete command.
+2. **Permanent phantom-process-killer fix** (Samsung Galaxy S10 FE, One UI /
+   Android 12+). This is the actual AOSP "phantom process killer" — a
+   system-level limit on child processes introduced in Android 12 that hits
+   Termux hard because Termux/proot spawn many short-lived processes. Raise
+   the cap so it effectively never triggers:
+   ```bash
+   adb shell "settings put global settings_enable_monitor_phantom_procs false"
+   adb shell "device_config set_sync_disabled_for_tests persistent"
+   adb shell "device_config put activity_manager max_phantom_processes 2147483647"
+   ```
+   Verify with:
+   ```bash
+   adb shell "device_config get activity_manager max_phantom_processes"
+   ```
+   This resets on some OTA updates, so re-check it after any system update.
+
+   Separately, Samsung's own Device Care sits on top of this and isn't
+   ADB-settable — do this once by hand on the phone: **Settings → Battery
+   and device care → Battery → Background usage limits →** move Termux (and
+   Termux:Boot) out of "Sleeping apps" / "Deep sleeping apps" and into the
+   **never-sleeping** list.
 
 3. **Thin-client mode verification** — once on the same network as Frank,
    confirm `FRANK_IP` (currently assumed `192.168.1.100`, unverified) and set
