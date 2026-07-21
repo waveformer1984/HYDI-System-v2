@@ -5,6 +5,9 @@
  */
 
 import { createClient } from '@supabase/supabase-js';
+import structuredLogger from '../lib/structured-logger';
+
+const logger = structuredLogger.child({ component: 'api/health' });
 
 // Constructed lazily (not at module load) so a missing env var surfaces as
 // a graceful 503 from the handler's own try/catch below, instead of
@@ -43,7 +46,7 @@ export default async function handler(req, res) {
       .single();
 
     if (dashError) {
-      console.error('Dashboard fetch error:', dashError);
+      logger.error('Dashboard fetch error', { error: dashError });
       return res.status(503).json({
         status: 'unavailable',
         timestamp: new Date().toISOString(),
@@ -89,7 +92,7 @@ export default async function handler(req, res) {
     });
 
   } catch (error) {
-    console.error('Health check error:', error);
+    logger.error('Health check error', { error });
     res.status(500).json({
       status: 'error',
       message: error.message,

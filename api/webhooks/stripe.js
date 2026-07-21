@@ -8,6 +8,7 @@ const HeidiRevenueOutreach = require('../../modules/heidi-revenue-outreach');
 const UniversalAgentBus = require('../../modules/universal-agent-bus');
 const WebhookQueueAdapter = require('../../workers/WebhookQueueAdapter');
 const { getRawBody } = require('../../lib/get-raw-body');
+const logger = require('../../lib/structured-logger').child({ component: 'api/webhooks/stripe' });
 
 require('dotenv').config();
 
@@ -86,7 +87,7 @@ const cascadeGate = (event) => {
     // 2. Threshold Validation
     if (confidenceScore < CASCADE_SETTINGS.CONFIDENCE_THRESHOLD) {
         if (CASCADE_SETTINGS.LOG_LOW_SIGNAL) {
-            console.warn(`[🛡️ CASCADE REJECT] Low confidence event (${confidenceScore}) for ID: ${event.id}`);
+            logger.warn('CASCADE reject: low confidence event', { confidenceScore, eventId: event.id });
         }
         return { authorized: false, reason: 'LOW_SIGNAL_REJECTION' };
     }
@@ -124,7 +125,7 @@ const SERVICE_TIERS = {
 async function handleStripeWebhook(req, res) {
   // GLOBAL KILL SWITCH - Non-negotiable incident control
   if (process.env.WEBHOOK_PROCESSING_ENABLED !== 'true') {
-    console.log('[🛑 KILL SWITCH] Webhook processing paused');
+    logger.info('Kill switch: webhook processing paused');
     return res.status(200).send('paused');
   }
   
@@ -141,7 +142,7 @@ async function handleStripeWebhook(req, res) {
     const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
     event = stripe.webhooks.constructEvent(rawBody, sig, webhookSecret);
   } catch (err) {
-    console.log('Webhook signature verification failed:', err.message);
+    logger.warn('Webhook signature verification failed', { error: err.message });
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
 
@@ -153,7 +154,7 @@ async function handleStripeWebhook(req, res) {
   
   // Already processed
   if (!eventId) {
-    console.log(`[🔄 IDEMPOTENCY] Event ${event.id} already processed`);
+    logger.info('Event already processed', { eventId: event.id });
     return res.status(200).send('duplicate');
   }
 
@@ -162,7 +163,7 @@ async function handleStripeWebhook(req, res) {
   
   if (!gateStatus.authorized) {
     // Return 200 to Stripe to stop retries, but drop the data from the pipeline
-    console.log(`[🛡️ CASCADE ACTION] Event ${event.id} dropped: ${gateStatus.reason}`);
+    logger.info('CASCADE dropped event', { eventId: event.id, reason: gateStatus.reason });
     return res.status(200).json({ 
       status: 'dropped', 
       reason: gateStatus.reason,
@@ -171,7 +172,7 @@ async function handleStripeWebhook(req, res) {
   }
 
   // GATE 3: URSULA (Queue for async processing)
-  console.log(`[🚀 CASCADE PASSED] Queuing event for processing: ${event.type}`);
+  logger.info('CASCADE passed, queuing event', { type: event.type });
 
   try {
     // Queue the event for async processing
@@ -194,7 +195,7 @@ async function handleStripeWebhook(req, res) {
       taskId: queueResult.taskId
     });
   } catch (err) {
-    console.error(`[⚡ QUEUE FAIL] Failed to queue event: ${err.message}`);
+    logger.error('Failed to queue event', { error: err.message });
     
     // MARK EVENT AS FAILED
     try {
@@ -206,7 +207,7 @@ async function handleStripeWebhook(req, res) {
         })
         .eq('id', eventId);
     } catch (recordErr) {
-      console.error('Failed to update event status:', recordErr.message);
+      logger.error('Failed to update event status', { error: recordErr.message });
     }
     
     res.status(500).send('Queue Error');
@@ -214,13 +215,13 @@ async function handleStripeWebhook(req, res) {
 }
 
 async function handleCheckoutCompleted(session) {
-  console.log('Checkout completed:', session.id);
+  logger.info('Checkout completed', { sessionId: session.id });
   
   const customerEmail = session.customer_details?.email;
   const customerId = session.customer;
   
   if (!customerEmail) {
-    console.error('No customer email in session');
+    logger.error('No customer email in session');
     return;
   }
 
@@ -241,11 +242,11 @@ async function handleCheckoutCompleted(session) {
     currency: session.currency
   });
   
-  console.log(`Successfully provisioned ${tier} services for ${customerEmail}`);
+  logger.info('Successfully provisioned services', { tier, customerEmail });
 }
 
 async function handlePaymentSucceeded(invoice) {
-  console.log('Payment succeeded:', invoice.id);
+  logger.info('Payment succeeded', { invoiceId: invoice.id });
   
   const customerId = invoice.customer;
   
@@ -259,7 +260,7 @@ async function handlePaymentSucceeded(invoice) {
 }
 
 async function handleSubscriptionCreated(subscription) {
-  console.log('Subscription created:', subscription.id);
+  logger.info('Subscription created', { subscriptionId: subscription.id });
   
   const customerId = subscription.customer;
   const tier = determineTierFromPrice(subscription.items.data[0].price.id);
@@ -269,7 +270,7 @@ async function handleSubscriptionCreated(subscription) {
 }
 
 async function handleSubscriptionUpdated(subscription) {
-  console.log('Subscription updated:', subscription.id);
+  logger.info('Subscription updated', { subscriptionId: subscription.id });
   
   const customerId = subscription.customer;
   const tier = determineTierFromPrice(subscription.items.data[0].price.id);
@@ -279,7 +280,7 @@ async function handleSubscriptionUpdated(subscription) {
 }
 
 async function handleSubscriptionDeleted(subscription) {
-  console.log('Subscription deleted:', subscription.id);
+  logger.info('Subscription deleted', { subscriptionId: subscription.id });
   
   const customerId = subscription.customer;
   
@@ -335,10 +336,10 @@ async function createPaidLead(email, customerId, tier, session) {
     
     if (error) throw error;
     
-    console.log(`Created paid lead for ${email} (${tier} tier)`);
+    logger.info('Created paid lead', { email, tier });
     return data[0];
   } catch (err) {
-    console.error('Failed to create paid lead:', err);
+    logger.error('Failed to create paid lead', { error: err });
     throw err;
   }
 }
@@ -346,7 +347,7 @@ async function createPaidLead(email, customerId, tier, session) {
 async function provisionServices(email, tier, customerId) {
   const tierConfig = SERVICE_TIERS[tier];
   
-  console.log(`Provisioning ${tierConfig.services.length} services for ${email}`);
+  logger.info('Provisioning services', { serviceCount: tierConfig.services.length, email });
   
   // STRIPE CUSTOMER SYNC LOGIC
   let customer;
@@ -408,9 +409,9 @@ async function provisionServices(email, tier, customerId) {
           provisioned_at: new Date().toISOString()
         }
       });
-      console.log(`✅ Service provisioned: ${serviceName}`);
+      logger.info('Service provisioned', { serviceName });
     } catch (err) {
-      console.error(`❌ Service provisioning failed: ${serviceName}`, err.message);
+      logger.error('Service provisioning failed', { serviceName, error: err.message });
       throw err;
     }
   }
@@ -436,16 +437,16 @@ async function updateHeidiMemory(email, interactionType, data) {
         interaction_data: data
       });
   } catch (err) {
-    console.error('Failed to update Heidi memory:', err);
+    logger.error('Failed to update Heidi memory', { error: err });
   }
 }
 
 async function updateRevenueMetrics(amount, currency) {
   try {
     // This would update a revenue tracking table
-    console.log(`Revenue updated: ${amount} ${currency}`);
+    logger.info('Revenue updated', { amount, currency });
   } catch (err) {
-    console.error('Failed to update revenue metrics:', err);
+    logger.error('Failed to update revenue metrics', { error: err });
   }
 }
 
@@ -455,7 +456,7 @@ async function getCustomerEmail(customerId) {
     const customer = await stripe.customers.retrieve(customerId);
     return { email: customer.email };
   } catch (err) {
-    console.error('Failed to get customer:', err);
+    logger.error('Failed to get customer', { error: err });
     return null;
   }
 }
@@ -463,27 +464,27 @@ async function getCustomerEmail(customerId) {
 async function updateCustomerTier(customerId, tier, subscription) {
   try {
     // Update customer's tier in database
-    console.log(`Updated customer ${customerId} to ${tier} tier`);
+    logger.info('Updated customer tier', { customerId, tier });
   } catch (err) {
-    console.error('Failed to update customer tier:', err);
+    logger.error('Failed to update customer tier', { error: err });
   }
 }
 
 async function extendSubscriptionServices(customerId, invoice) {
   try {
     // Extend service access
-    console.log(`Extended services for customer ${customerId}`);
+    logger.info('Extended services for customer', { customerId });
   } catch (err) {
-    console.error('Failed to extend services:', err);
+    logger.error('Failed to extend services', { error: err });
   }
 }
 
 async function deactivateServices(customerId) {
   try {
     // Deactivate customer's services
-    console.log(`Deactivated services for customer ${customerId}`);
+    logger.info('Deactivated services for customer', { customerId });
   } catch (err) {
-    console.error('Failed to deactivate services:', err);
+    logger.error('Failed to deactivate services', { error: err });
   }
 }
 

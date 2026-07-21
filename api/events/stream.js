@@ -22,6 +22,9 @@ import { createClient } from '@supabase/supabase-js';
 import { requireAuth } from '../../lib/auth/requireAuth.js';
 import { bus } from '../../lib/realtime/eventBus.js';
 import { computeSubsystemHealth } from '../../lib/realtime/healthScore.js';
+import structuredLogger from '../../lib/structured-logger';
+
+const logger = structuredLogger.child({ component: 'api/events/stream' });
 
 let _supabase = null;
 function getSupabase() {
@@ -61,7 +64,7 @@ function startOfflineSweep() {
         }
       }
     } catch (err) {
-      console.error('[HYDI Stream] Offline sweep failed:', err instanceof Error ? err.message : err);
+      logger.error('Offline sweep failed', { error: err instanceof Error ? err.message : err });
     }
   }, SWEEP_INTERVAL_MS);
   timer.unref();

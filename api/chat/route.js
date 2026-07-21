@@ -10,6 +10,9 @@ import {
 import { getSystemStatus, isReachable } from '../../lib/termux/termuxClient.js';
 import { callAgent, isClaudeAvailable } from '../../lib/claude';
 import { rateLimit } from '../../lib/rate-limit.js';
+import structuredLogger from '../../lib/structured-logger';
+
+const logger = structuredLogger.child({ component: 'api/chat/route' });
 
 // Lazy client: a missing SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY must surface
 // as a clean JSON error from the handler, not a cold-start crash (which returns
@@ -120,7 +123,7 @@ export default async function handler(req, res) {
     });
     
   } catch (error) {
-    console.error('Chat router error:', error);
+    logger.error('Chat router error', { error });
     return res.status(500).json({
       error: error.message
     });
@@ -165,7 +168,7 @@ async function handleUrsulaMessage(message, request) {
       
       return response;
     } catch (error) {
-      console.error('Ursula status query error:', error);
+      logger.error('Ursula status query error', { error });
       return `❓ Ursula: I'm unable to check system status right now. Error: ${error.message}`;
     }
   }

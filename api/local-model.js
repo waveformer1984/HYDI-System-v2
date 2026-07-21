@@ -4,6 +4,10 @@
  */
 
 const axios = require('axios');
+const structuredLogger = require('../lib/structured-logger');
+
+const modelLogger = structuredLogger.child({ component: 'LocalModelClient' });
+const heidiLogger = structuredLogger.child({ component: 'HeidiLocalHandler' });
 
 class LocalModelClient {
   constructor(config = {}) {
@@ -53,7 +57,7 @@ class LocalModelClient {
       }
       return [];
     } catch (error) {
-      console.error('[LocalModel] Failed to get models:', error.message);
+      modelLogger.error('Failed to get models', { error: error.message });
       return [];
     }
   }
@@ -75,7 +79,7 @@ class LocalModelClient {
       
       throw new Error(`Unsupported provider: ${this.provider}`);
     } catch (error) {
-      console.error('[LocalModel] Generation failed:', error.message);
+      modelLogger.error('Generation failed', { error: error.message });
       throw error;
     }
   }
@@ -220,7 +224,7 @@ class HeidiLocalHandler {
       throw new Error('No models available in local service.');
     }
     
-    console.log(`[Heidi] Local model connected. Available models: ${models.join(', ')}`);
+    heidiLogger.info('Local model connected', { models });
     return models;
   }
 
@@ -241,7 +245,7 @@ class HeidiLocalHandler {
         usage: response.usage
       };
     } catch (error) {
-      console.error('[Heidi] Local model generation failed:', error.message);
+      heidiLogger.error('Local model generation failed', { error: error.message });
 
       // Cloud fallback (works on serverless where the local model is unreachable)
       const cloud = await this.tryCloudFallback(message, healthContext);
@@ -323,7 +327,7 @@ class HeidiLocalHandler {
         };
       }
     } catch (err) {
-      console.error('[Heidi] Cloud fallback failed:', err.message);
+      heidiLogger.error('Cloud fallback failed', { error: err.message });
     }
     return null;
   }
@@ -354,7 +358,7 @@ class HeidiLocalHandler {
         return this.healthCache;
       }
     } catch (error) {
-      console.error('[Heidi] Failed to fetch health context:', error);
+      heidiLogger.error('Failed to fetch health context', { error });
     }
     
     return null;
@@ -386,7 +390,7 @@ class HeidiLocalHandler {
     }
     
     this.client.model = modelName;
-    console.log(`[Heidi] Switched to model: ${modelName}`);
+    heidiLogger.info('Switched model', { modelName });
   }
 }
 

@@ -4,6 +4,7 @@
  */
 
 const { createClient } = require('@supabase/supabase-js');
+const logger = require('../lib/structured-logger').child({ component: 'api/client-dashboard' });
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -145,7 +146,7 @@ export default async function handler(req, res) {
     res.status(200).json(dashboard);
     
   } catch (error) {
-    console.error('Client dashboard error:', error);
+    logger.error('Client dashboard error', { error });
     res.status(500).json({ error: 'Internal server error' });
   }
 }

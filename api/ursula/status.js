@@ -5,6 +5,9 @@
  */
 
 import { createClient } from '@supabase/supabase-js';
+import structuredLogger from '../../lib/structured-logger';
+
+const logger = structuredLogger.child({ component: 'api/ursula/status' });
 
 // Lazy client: a missing SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY must surface
 // as a clean JSON error from the handler, not a cold-start crash at module
@@ -53,7 +56,7 @@ export default async function handler(req, res) {
     const { data: heal, error: healError } = await supabase.rpc('auto_heal_from_trends');
     
     if (healError) {
-      console.error('Auto-heal RPC error:', healError);
+      logger.error('Auto-heal RPC error', { error: healError });
     }
 
     // Fetch dashboard view and infrastructure health snapshot in parallel
@@ -66,7 +69,7 @@ export default async function handler(req, res) {
     ]);
 
     if (dashError) {
-      console.error('Dashboard fetch error:', dashError);
+      logger.error('Dashboard fetch error', { error: dashError });
       return res.status(503).json({
         status: 'error',
         message: 'Unable to retrieve system status',
@@ -124,7 +127,7 @@ export default async function handler(req, res) {
     });
 
   } catch (error) {
-    console.error('Ursula status error:', error);
+    logger.error('Ursula status error', { error });
     res.status(500).json({
       status: 'error',
       message: error.message,

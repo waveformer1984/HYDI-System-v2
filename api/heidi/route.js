@@ -5,6 +5,7 @@
 
 const { HeidiLocalHandler } = require('../local-model');
 const { rateLimit } = require('../../lib/rate-limit');
+const logger = require('../../lib/structured-logger').child({ component: 'api/heidi/route' });
 
 // Initialize Heidi handler
 const heidiHandler = new HeidiLocalHandler({
@@ -23,10 +24,10 @@ async function initializeHeidi() {
   try {
     await heidiHandler.initialize();
     isInitialized = true;
-    console.log('[Heidi] Initialized successfully');
+    logger.info('Initialized successfully');
   } catch (error) {
     initError = error.message;
-    console.error('[Heidi] Initialization failed:', error);
+    logger.error('Initialization failed', { error });
   }
 }
 
@@ -76,7 +77,7 @@ export default async function handler(req, res) {
     });
     
   } catch (error) {
-    console.error('[Heidi] Handler error:', error);
+    logger.error('Handler error', { error });
     return res.status(500).json({
       error: error.message,
       initialized: isInitialized,

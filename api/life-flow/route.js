@@ -8,6 +8,7 @@
 const HYDISystem = require('../../src/HYDISystem');
 const { createClient } = require('@supabase/supabase-js');
 const { requireAuth } = require('../../lib/auth/requireAuth');
+const logger = require('../../lib/structured-logger').child({ component: 'api/life-flow/route' });
 
 let _supabase = null;
 function getSupabase() {
@@ -32,7 +33,7 @@ const hydiSystem = new HYDISystem({
 });
 
 // Start the system
-hydiSystem.start().catch(console.error);
+hydiSystem.start().catch((error) => logger.error('HYDI system start failed', { error }));
 
 export default async function handler(req, res) {
   // Enable CORS
@@ -78,7 +79,7 @@ export default async function handler(req, res) {
     });
     
   } catch (error) {
-    console.error('[LIFE-FLOW API] Error:', error.message);
+    logger.error('Life-flow API error', { error: error.message });
     
     return res.status(500).json({
       success: false,

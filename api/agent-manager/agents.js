@@ -1,5 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
 import { requireAuth } from '../../lib/auth/requireAuth.js';
+import structuredLogger from '../../lib/structured-logger';
+
+const logger = structuredLogger.child({ component: 'api/agent-manager/agents' });
 
 let _supabase = null;
 function getSupabase() {
@@ -150,7 +153,7 @@ export default async function handler(req, res) {
       timestamp: new Date().toISOString(),
     });
   } catch (err) {
-    console.error('[agent-manager/agents]', err);
+    logger.error('agent-manager/agents request failed', { error: err });
     return res.status(500).json({ ok: false, error: err.message });
   }
 }
