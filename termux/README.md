@@ -94,3 +94,33 @@ git pull --ff-only
 
 Re-running `setup-termux-vercel.sh` itself avoids this entirely — it already
 checks for an existing clone and pulls instead of cloning.
+
+## ADB fixes — run once you have USB access to Frank
+
+The phone's Android battery manager (the "phantom process killer") keeps
+suspending Termux in the background, which kills Ollama/`launch-heidi-mobile.js`
+mid-task. `termux-wake-lock` and pm2's `autorestart` only help once the app is
+already exempted — they can't resurrect a process after Android kills the
+whole Termux app. These need a real ADB session (ADB over USB doesn't work
+from within Termux itself for this):
+
+1. **Battery optimization whitelist for Termux** (confirmed fix, exact command):
+   ```bash
+   adb shell dumpsys deviceidle whitelist +com.termux
+   # if Termux:Boot is installed as a separate package too:
+   adb shell dumpsys deviceidle whitelist +com.termux.boot
+   ```
+   Verify with `adb shell dumpsys deviceidle whitelist | grep termux` — no
+   output means it isn't whitelisted yet.
+
+2. **Permanent phantom-process-killer fix** — still open. The generic Android
+   Doze whitelist above helps, but some OEM battery managers (Samsung Device
+   Care, MIUI, OnePlus/Oppo "Battery Optimization", etc.) layer their own
+   background-kill logic on top that ADB's `deviceidle` whitelist doesn't
+   reach. The right one-liner depends on which OEM this phone is — needs
+   confirming before it can be added here as a concrete command.
+
+3. **Thin-client mode verification** — once on the same network as Frank,
+   confirm `FRANK_IP` (currently assumed `192.168.1.100`, unverified) and set
+   it so the phone can point at Frank's Ollama instead of running inference
+   on-device.
