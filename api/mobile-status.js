@@ -4,6 +4,7 @@
  */
 
 import { createClient } from '@supabase/supabase-js';
+import { requireAuth } from '../lib/auth/requireAuth.js';
 
 // Constructed lazily (not at module load) so a missing env var surfaces as
 // a graceful 503 from the handler's own try/catch below, instead of
@@ -30,13 +31,16 @@ const STREAMS = [
 ];
 
 export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Origin', process.env.MOBILE_CHAT_ORIGIN || '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-hydi-service-token, x-hydi-device-token');
   res.setHeader('Cache-Control', 'no-store');
 
-  if (req.method === 'OPTIONS') return res.status(200).end();
+  if (req.method === 'OPTIONS') return res.status(204).end();
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
+
+  const auth = await requireAuth(req, res, supabase, { permission: 'status:view', routeName: 'mobile-status' });
+  if (!auth.ok) return;
 
   const started = Date.now();
 

@@ -504,7 +504,7 @@
         const dot = $('statusDot'), txt = $('statusText');
         if (!apiUrl && !SAME_ORIGIN) { dot.className = 'status-dot'; txt.textContent = 'not configured'; return; }
         try {
-            const r = await fetch(`${baseUrl()}/api/mobile-status`, { signal: AbortSignal.timeout(6000) });
+            const r = await opsFetch('/api/mobile-status', { method: 'GET' });
             const d = await r.json();
             const sys = (d.system || 'unknown').toUpperCase();
             if (sys === 'OK') { dot.className = 'status-dot ok'; txt.textContent = 'online · OK'; }
