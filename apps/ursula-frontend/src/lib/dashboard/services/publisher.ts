@@ -13,6 +13,7 @@ import type {
 } from '@/lib/dashboard/types';
 import { fetchMonitoringHealth } from './monitoring-service';
 import { fetchRevenueForProject, REVENUE_STREAMS } from './revenue-service';
+import { getRevenueSummaries as getProjectedRevenueSummaries } from '@repo/lib/commercial/projections/bootstrap';
 
 const POLL_INTERVAL_MS = 2000;
 
@@ -259,9 +260,29 @@ async function fetchNetworkStatus(): Promise<NetworkNode[]> {
 }
 
 async function fetchRevenueSummaries(): Promise<RevenueSummary[]> {
-  const live = await Promise.all(REVENUE_STREAMS.map((stream) => fetchRevenueForProject(stream)));
-  const real = live.filter((r): r is RevenueSummary => r !== null);
-  if (real.length > 0) return real;
+  // Projection state is built from commercial events on the Event Fabric.
+  // When a stream has live event data, prefer it; otherwise fall back to the
+  // legacy ledger fetcher (or mock data if Supabase is unavailable).
+  const projected = getProjectedRevenueSummaries();
+  const projectedByStream = new Map(
+    projected
+      .filter((s) => s.gross > 0 || s.pendingPayout > 0 || s.paidOut > 0)
+      .map((s) => [s.revenueStream, s as RevenueSummary])
+  );
+
+  const legacy = await Promise.all(
+    REVENUE_STREAMS.filter((stream) => !projectedByStream.has(stream)).map((stream) =>
+      fetchRevenueForProject(stream)
+    )
+  );
+  const real = legacy.filter((r): r is RevenueSummary => r !== null);
+
+  const combined = [
+    ...projectedByStream.values(),
+    ...real,
+  ].sort((a, b) => a.revenueStream.localeCompare(b.revenueStream));
+
+  if (combined.length > 0) return combined;
 
   return [
     {
