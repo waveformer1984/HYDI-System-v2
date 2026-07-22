@@ -243,6 +243,49 @@ drop-everything, P1 is next up, P2 is scheduled but not urgent.
 
 ---
 
+## 2026-07-22 review: mobile capabilities
+
+Reviewed everything the mobile surface (`hydi-mobile-protoforge.html`'s Ops
+tab, `docs/index.html`'s GitHub Pages client, `docs/MOBILE_OPERATIONS.md`'s
+own tech-debt list) claimed vs. what actually worked, then fixed the
+concretely fixable gaps found:
+
+- **Cross-process live push was silently broken.** `workers/WorkerOrchestrator.js`
+  runs as its own process (per `ecosystem.config.js`), separate from the
+  Next.js server that serves `api/events/stream.js` — so its local
+  `lib/realtime/eventBus.js` `publish()` calls never reached a connected
+  phone; a completed worker command only ever surfaced on the next 30s REST
+  poll. Independently, `lib/notifications/notify.js`'s `createNotification()`
+  never called `publish()` at all, despite the client already listening for
+  a `notification` SSE event. **Fixed**: `api/events/stream.js` now runs a
+  `startRealtimeBridge()` (one subscription per process, not per connection)
+  over Supabase Realtime `postgres_changes` on `agent_control_commands`
+  (UPDATE) and `notifications` (INSERT), re-emitting onto the same bus every
+  SSE client already listens to. New `command_result` event type; the Ops
+  tab now refreshes worker cards on it.
+  `supabase/migrations/20260722120000_realtime_mobile_ops_bridge.sql` adds
+  both tables to the `supabase_realtime` publication (not applied to any
+  live database — same no-DB-access caveat as every other pending migration
+  here). See `docs/MOBILE_OPERATIONS.md`.
+- **`WorkerOrchestrator.js` wasn't process-managed anywhere** — the mobile
+  command queue (`agent_control_commands`) accepted requests forever but
+  nothing polled it continuously. Added the `hydi-worker-orchestrator` app
+  to `ecosystem.config.js`.
+- **`manifest.json`'s Capacitor build referenced dangling icon paths** —
+  `icons/icon-192.png`/`icon-512.png` didn't exist at the repo root (only
+  under `docs/icons/`, a separate client). Copied them over.
+- **Not done, deliberately**: consolidating the three parallel SSE
+  implementations, implementing durable event-log replay for a reconnecting
+  `EventSource` (the REST snapshot catch-up this repo already has is an
+  accepted design tradeoff, not an oversight — see
+  `docs/MOBILE_OPERATIONS.md`), and replacing the intentional `prompt()`
+  device-pairing flow with a QR-code UI (explicitly deferred as
+  single-operator-appropriate). None of these are silent gaps; all three
+  are already named in `docs/MOBILE_OPERATIONS.md`'s tech-debt list with
+  the reasoning for leaving them.
+
+---
+
 ## Near-term (Q3 2026)
 
 ### URGENT: rotate the credentials leaked 2026-07-15

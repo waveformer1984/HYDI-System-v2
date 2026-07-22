@@ -80,6 +80,26 @@ server also sends `retry: 3000` and a monotonic `id:` per event.
 pre-existing and were **not** wired to the new shared bus by this change —
 see Tech Debt.
 
+**2026-07-22 fix: the EventEmitter bus didn't actually bridge processes.**
+`workers/WorkerOrchestrator.js` (the process that executes queued worker
+commands and creates `worker_failure` notifications) runs as its own PM2
+app, not inside the Next.js server — so its local `publish()` calls landed
+in a `bus` instance no phone was ever listening to. A mobile client only
+ever saw a completed command via the 30s REST poll, never live, and
+`createNotification()` never called `publish()` at all — the `notification`
+event type existed in the client's `EventSource` listener but nothing ever
+fired it outside of web-push. Fixed by adding a **Realtime bridge**:
+`api/events/stream.js`'s `startRealtimeBridge()` subscribes once per
+process (not once per connection) to Supabase Realtime `postgres_changes`
+on `agent_control_commands` (UPDATE — both success and failure paths update
+this row) and `notifications` (INSERT), re-emitting them onto the same
+local `bus` every connected SSE client already listens to.
+`supabase/migrations/20260722120000_realtime_mobile_ops_bridge.sql` adds
+both tables to the `supabase_realtime` publication (idempotent). A new
+`command_result` event type carries the row's `status`/`result`/
+`error_message`; `hydi-mobile-protoforge.html`'s Ops tab now refreshes the
+worker cards on it instead of only on the 30s poll.
+
 ## Security model (Phase 4)
 
 ```
@@ -233,12 +253,13 @@ nothing new executes plans.
 
 ## Remaining technical debt
 
-- **Migrations not applied to any live database** — no authenticated Supabase access from this session, consistent with every other pending migration in this repo currently.
-- **`WorkerOrchestrator.js` isn't process-managed anywhere** (not in `package.json` scripts, no PM2 entry) — the command queue does nothing until something runs it continuously. Pre-existing gap, not introduced here.
+- **Migrations not applied to any live database** — no authenticated Supabase access from this session, consistent with every other pending migration in this repo currently. This now includes `20260722120000_realtime_mobile_ops_bridge.sql`; until it's applied, `startRealtimeBridge()` subscribes successfully but `agent_control_commands`/`notifications` never actually emit `postgres_changes` (degrades to REST-poll-only, not an error).
+- ~~**`WorkerOrchestrator.js` isn't process-managed anywhere**~~ **Fixed 2026-07-22** — added the `hydi-worker-orchestrator` app to `ecosystem.config.js`. Same "can't confirm it's actually running on the real host right now" caveat as every other PM2-managed process in this repo (see `DEPLOYMENT.md`).
+- ~~**Cross-process live push was silently broken**~~ **Fixed 2026-07-22**: `WorkerOrchestrator.js` runs as its own process, so its local `publish()` calls never reached a phone's SSE connection in the Next.js process — a completed command only ever surfaced via the 30s REST poll, and `createNotification()` never called `publish()` at all despite the client already listening for a `notification` event. `api/events/stream.js`'s `startRealtimeBridge()` now subscribes once per process to Supabase Realtime `postgres_changes` on `agent_control_commands` (UPDATE) and `notifications` (INSERT) and re-emits them onto the same local bus every SSE client already listens to — one shared subscription regardless of client count. New `command_result` event type; `hydi-mobile-protoforge.html`'s Ops tab refreshes worker cards on it.
 - **Three parallel SSE implementations** (`api/events/stream.js` here, `src/server.js`'s inline route, `modules/ursula-sse-stream.js`) — only the first was touched. Consolidating onto `lib/realtime/eventBus.js` is real follow-up work, not done here to avoid guessing which one is actually live without maintainer input.
 - **`rave_voice` and `botforge` have no heartbeat source** — they'll show `unknown` until something is wired to call `/api/heartbeat` for them. Neither subsystem exists as identifiable code in this repo yet (verified before writing the status system).
 - **EventSource reconnection doesn't replay missed events** — `id:`/`retry:` are sent for correct native reconnect behavior, but there's no durable event log to replay from; a client that's offline for a while relies on the REST snapshot (`/api/status/system`) to catch up, not stream replay.
 - **Capacitor is config-only** — `capacitor.config.json` and the `www/` staging script exist and were tested; `@capacitor/core`/`@capacitor/android` are not installed and no APK has been built (no Android SDK/Gradle in this environment). Biometric auth and a true background service are not implemented — they need the native shell to exist first.
 - **Device pairing is a `prompt()` flow** — deliberately simple for a single-operator tool per `CLAUDE.md`; a real onboarding UI (QR-code pairing, etc.) is future work if this becomes multi-user.
-- **`manifest.json`'s icon references are dangling** (`icons/icon-192.png`, `icon-512.png` don't exist in the repo) — pre-existing, flagged because it will block a real Capacitor/Android build.
+- ~~**`manifest.json`'s icon references are dangling**~~ **Fixed 2026-07-22** — added `icons/icon-192.png`, `icon-512.png`, `icon.svg` at repo root (copied from the already-existing `docs/icons/` set used by the GitHub Pages client), so `scripts/build-capacitor-www.js` no longer warns about a missing launcher icon.
 - **Session/token expiration is purely the 5-minute HMAC replay window** — there's no separate revocable session concept beyond device revocation; acceptable for this threat model (personal tool, device-level revocation exists) but worth naming explicitly as a design choice, not an oversight.

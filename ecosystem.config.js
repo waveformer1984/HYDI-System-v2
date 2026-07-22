@@ -113,6 +113,30 @@ module.exports = {
       log_date_format: 'YYYY-MM-DD HH:mm:ss Z'
     },
     {
+      // workers/WorkerOrchestrator.js — starts the worker fleet and, per
+      // its "Mobile-ops command queue" section, polls agent_control_commands
+      // every 5s so mobile Ops-tab worker start/stop/restart/scale requests
+      // (queued by api/agent-manager/control.js) actually execute. Without
+      // this entry the queue accepted commands forever but nothing ever
+      // consumed them — see docs/MOBILE_OPERATIONS.md's tech-debt list,
+      // "WorkerOrchestrator.js isn't process-managed anywhere".
+      name: 'hydi-worker-orchestrator',
+      script: 'workers/WorkerOrchestrator.js',
+      cwd: baseDir,
+      instances: 1,
+      exec_mode: 'fork',
+      env: {
+        NODE_ENV: process.env.NODE_ENV || 'development',
+        ENVIRONMENT: process.env.ENVIRONMENT || 'development',
+      },
+      autorestart: true,
+      watch: false,
+      max_memory_restart: '512M',
+      min_uptime: '10s',
+      max_restarts: 10,
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z'
+    },
+    {
       name: 'ursula-frontend',
       script: 'node_modules/next/dist/bin/next',
       args: 'start',

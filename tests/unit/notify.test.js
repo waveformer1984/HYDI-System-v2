@@ -7,6 +7,7 @@ jest.mock('web-push', () => ({
 }));
 
 const { createNotification, deliverPush } = require('../../lib/notifications/notify');
+const { bus } = require('../../lib/realtime/eventBus');
 
 function mockSupabase({ notifications = [], subscriptions = [], preferences = {} } = {}) {
   const updates = [];
@@ -110,5 +111,19 @@ describe('createNotification', () => {
     });
     await createNotification(supabase, { category: 'security_event', title: 'Alert', device_id: 'phone-1' });
     expect(mockSendNotification).not.toHaveBeenCalled();
+  });
+
+  it('publishes onto the shared event bus so a same-process SSE client sees it immediately', async () => {
+    const supabase = mockSupabase();
+    const received = [];
+    const onEvent = (e) => received.push(e);
+    bus.on('event', onEvent);
+    try {
+      const notification = await createNotification(supabase, { category: 'task_completed', title: 'Report ready', device_id: 'phone-1' });
+      expect(received).toHaveLength(1);
+      expect(received[0]).toMatchObject({ type: 'notification', id: notification.id, category: 'task_completed', title: 'Report ready', device_id: 'phone-1' });
+    } finally {
+      bus.off('event', onEvent);
+    }
   });
 });

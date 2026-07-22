@@ -30,6 +30,25 @@ function makeReq(headers = {}, query = {}) {
   return req;
 }
 
+// Captures postgres_changes callbacks registered by startRealtimeBridge() so
+// tests can simulate a Realtime event arriving from another process (the
+// real-world case being workers/WorkerOrchestrator.js, which runs outside
+// the Next.js server — see api/events/stream.js's header comment).
+const mockRealtimeCallbacks = {};
+function mockMakeChannel() {
+  const channel = {
+    on: jest.fn((_event, filter, cb) => {
+      mockRealtimeCallbacks[filter.table] = cb;
+      return channel;
+    }),
+    subscribe: jest.fn((cb) => {
+      if (cb) cb('SUBSCRIBED');
+      return channel;
+    }),
+  };
+  return channel;
+}
+
 jest.mock('@supabase/supabase-js', () => ({
   createClient: jest.fn(() => ({
     from: jest.fn((table) => {
@@ -37,6 +56,7 @@ jest.mock('@supabase/supabase-js', () => ({
       if (table === 'hydi_subsystem_status') return { select: jest.fn(async () => ({ data: [], error: null })) };
       throw new Error(`unexpected table ${table}`);
     }),
+    channel: jest.fn(() => mockMakeChannel()),
   })),
 }));
 
@@ -105,5 +125,54 @@ describe('api/events/stream.js', () => {
     const listenersBefore = bus.listenerCount('event');
     req.emit('close');
     expect(bus.listenerCount('event')).toBe(listenersBefore - 1);
+  });
+
+  describe('Realtime bridge (cross-process events from workers/WorkerOrchestrator.js)', () => {
+    it('subscribes once to postgres_changes on agent_control_commands and notifications', () => {
+      // The bridge starts lazily on the first authenticated connection made
+      // anywhere above in this file — by this point it must have registered
+      // both handlers, exactly once each (one shared subscription for every
+      // connected client, not one per connection).
+      expect(mockRealtimeCallbacks['agent_control_commands']).toBeInstanceOf(Function);
+      expect(mockRealtimeCallbacks['notifications']).toBeInstanceOf(Function);
+    });
+
+    it('forwards an agent_control_commands UPDATE as a command_result event to connected clients', async () => {
+      const req = makeReq({ 'x-hydi-service-token': makeServiceToken() });
+      const res = makeRes();
+      await handler(req, res);
+      res.write.mockClear();
+
+      mockRealtimeCallbacks['agent_control_commands']({
+        new: { id: 'cmd-1', worker_type: 'revenue_ingestion', worker_id: null, command: 'restart', status: 'completed', result: { ok: true }, error_message: null },
+      });
+
+      const written = res.write.mock.calls.map((c) => c[0]).join('');
+      expect(written).toContain('event: command_result');
+      expect(written).toContain('"command_id":"cmd-1"');
+      expect(written).toContain('"status":"completed"');
+      req.emit('close');
+    });
+
+    it('forwards a notifications INSERT as a notification event to connected clients', async () => {
+      const req = makeReq({ 'x-hydi-service-token': makeServiceToken() });
+      const res = makeRes();
+      await handler(req, res);
+      res.write.mockClear();
+
+      mockRealtimeCallbacks['notifications']({
+        new: { id: 'notif-1', category: 'worker_failure', severity: 'critical', title: 'revenue_ingestion restart failed', body: 'boom', device_id: null },
+      });
+
+      const written = res.write.mock.calls.map((c) => c[0]).join('');
+      expect(written).toContain('event: notification');
+      expect(written).toContain('"title":"revenue_ingestion restart failed"');
+      req.emit('close');
+    });
+
+    it('ignores a payload with no new row instead of throwing', async () => {
+      expect(() => mockRealtimeCallbacks['agent_control_commands']({ old: { id: 'cmd-2' } })).not.toThrow();
+      expect(() => mockRealtimeCallbacks['notifications']({ old: { id: 'notif-2' } })).not.toThrow();
+    });
   });
 });

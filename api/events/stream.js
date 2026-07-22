@@ -5,6 +5,20 @@
 // (lib/realtime/eventBus.js — see that file for why an EventEmitter is the
 // right primitive in this single-process, local-first deployment).
 //
+// Cross-process bridge (fixes a real gap the EventEmitter-only design had):
+// workers/WorkerOrchestrator.js runs as its own Node process (see
+// ecosystem.config.js), not inside the Next.js server, so its local
+// `publish()` calls never reach this process's `bus` — a phone connected
+// here would never see a worker command complete except via the 30s REST
+// poll. startRealtimeBridge() below subscribes once per process to Supabase
+// Realtime postgres_changes on `agent_control_commands` (every status
+// transition, so both success and failure reach the client — see
+// WorkerOrchestrator.executeControlCommand, which updates this row on both
+// paths) and `notifications` (every category, not just worker_failure),
+// re-emitting them onto the same local `bus` every SSE connection already
+// listens to. One subscription serves every connected client, same pattern
+// as startOfflineSweep() below. See docs/MOBILE_OPERATIONS.md.
+//
 // Known gap, flagged rather than silently left: this is a *third* SSE
 // implementation in the repo alongside src/server.js's inline
 // `/events/stream` route and modules/ursula-sse-stream.js's standalone
@@ -37,6 +51,67 @@ const supabase = new Proxy({}, { get: (_, prop) => getSupabase()[prop] });
 
 const SWEEP_INTERVAL_MS = 30 * 1000; // matches CLAUDE.md's 30s drift-observation cadence
 let sweepStarted = false;
+let realtimeBridgeStarted = false;
+
+/** Bridges Postgres changes written by processes other than this one (chiefly
+ *  workers/WorkerOrchestrator.js) onto the local bus, so every connected SSE
+ *  client sees them without polling. Subscribed once per process, not once
+ *  per connection. Degrades silently to REST-poll-only if Realtime is
+ *  unreachable — matches lib/protoforge/policy-engine.js's existing
+ *  Supabase Realtime usage/error-handling pattern. */
+function startRealtimeBridge() {
+  if (realtimeBridgeStarted) return;
+  realtimeBridgeStarted = true;
+
+  try {
+    getSupabase()
+      .channel('hydi-mobile-ops-bridge')
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'agent_control_commands' },
+        (payload) => {
+          const row = payload.new;
+          if (!row) return;
+          bus.emit('event', {
+            type: 'command_result',
+            command_id: row.id,
+            worker_type: row.worker_type,
+            worker_id: row.worker_id,
+            command: row.command,
+            status: row.status,
+            result: row.result,
+            error_message: row.error_message,
+            timestamp: new Date().toISOString(),
+          });
+        },
+      )
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'notifications' },
+        (payload) => {
+          const row = payload.new;
+          if (!row) return;
+          bus.emit('event', {
+            type: 'notification',
+            id: row.id,
+            category: row.category,
+            severity: row.severity,
+            title: row.title,
+            body: row.body,
+            device_id: row.device_id,
+            timestamp: new Date().toISOString(),
+          });
+        },
+      )
+      .subscribe((status) => {
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          console.warn('[HYDI Stream] Realtime bridge degraded — falling back to REST poll only:', status);
+        }
+      });
+  } catch (err) {
+    console.warn('[HYDI Stream] Realtime bridge failed to start:', err instanceof Error ? err.message : err);
+  }
+}
 
 /** Periodically re-derives health for subsystems that have stopped heartbeating entirely — a
  *  subsystem going silent never triggers a new write on its own, so nothing else re-checks it. */
@@ -104,6 +179,7 @@ export default async function handler(req, res) {
   const onEvent = (event) => write(event);
   bus.on('event', onEvent);
   startOfflineSweep();
+  startRealtimeBridge();
 
   const heartbeat = setInterval(() => write({ type: 'heartbeat' }), 30000);
 

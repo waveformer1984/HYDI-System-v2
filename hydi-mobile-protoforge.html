@@ -2211,6 +2211,12 @@ async function connectOpsStream() {
     OPS.es = new EventSource(url);
     OPS.es.addEventListener('subsystem_status', () => loadOpsHealth());
     OPS.es.addEventListener('notification', () => loadOpsNotifications());
+    // Worker start/stop/restart/scale requests complete in a separate
+    // process (workers/WorkerOrchestrator.js, see ecosystem.config.js) —
+    // this event is bridged from there via Supabase Realtime by
+    // api/events/stream.js so the card grid updates the moment a queued
+    // command finishes instead of waiting up to 30s for the next poll.
+    OPS.es.addEventListener('command_result', () => loadOpsWorkers());
     OPS.es.onerror = () => { if (OPS.es) { OPS.es.close(); OPS.es = null; } setTimeout(connectOpsStream, 5000); };
   } catch (_) { /* EventSource unsupported or blocked — poll fallback below covers it */ }
 }
