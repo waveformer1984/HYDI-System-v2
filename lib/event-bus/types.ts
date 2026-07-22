@@ -31,6 +31,7 @@ export interface PublishOptions {
   version?: number;
   correlationId?: string;
   traceId?: string;
+  timestamp?: string;
   causationId?: string;
 }
 

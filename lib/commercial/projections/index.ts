@@ -6,3 +6,4 @@ export { createCustomerProjection } from './customer-projection';
 export type { CustomerProjectionState, CustomerState } from './customer-projection';
 export { createSubscriptionProjection } from './subscription-projection';
 export type { SubscriptionProjectionState, SubscriptionState, SubscriptionStatus, SubscriptionTier } from './subscription-projection';
+export { EventBusEventsProjectionAdapter } from './event-bus-events-adapter';
