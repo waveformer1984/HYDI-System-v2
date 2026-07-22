@@ -2,17 +2,40 @@ export type EventPriority = 'high' | 'normal' | 'low';
 
 export interface BusEvent<T = unknown> {
   id: string;
+  /** Event schema version. New event schemas bump this number; consumers must ignore or migrate unknown major versions. */
+  version: number;
   type: string;
   payload: T;
   priority: EventPriority;
   timestamp: string;
-  source?: string;
+  source: string;
   handled?: boolean;
   handlerCount: number;
   errors?: string[];
+  /** Groups related events — e.g. a request() and its matching response. */
+  correlationId?: string;
+  /** Threads a whole causal chain across multiple publishes. Auto-propagated via AsyncLocalStorage when omitted. */
+  traceId?: string;
+  /** The id of the event that directly caused this one. Auto-propagated via AsyncLocalStorage when omitted. */
+  causationId?: string;
+}
+
+export interface BusEventValidationError {
+  field: string;
+  message: string;
 }
 
 export interface PublishOptions {
+  priority?: EventPriority;
+  source?: string;
+  version?: number;
+  correlationId?: string;
+  traceId?: string;
+  causationId?: string;
+}
+
+export interface RequestOptions {
+  timeoutMs?: number;
   priority?: EventPriority;
   source?: string;
 }

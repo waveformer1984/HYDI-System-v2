@@ -127,4 +127,24 @@ describe('EventBus', () => {
 
     expect(handler).toHaveBeenCalledTimes(1);
   });
+
+  test('a fresh top-level publish gets no correlationId/causationId and starts its own trace', async () => {
+    const event = await bus.publish('standalone', null);
+
+    expect(event.correlationId).toBeUndefined();
+    expect(event.causationId).toBeUndefined();
+    expect(event.traceId).toBe(event.id); // no ambient context => this event is its own trace root
+  });
+
+  test('explicit correlationId/traceId/causationId in options are preserved as-is', async () => {
+    const event = await bus.publish('explicit', null, {
+      correlationId: 'corr-1',
+      traceId: 'trace-1',
+      causationId: 'cause-1',
+    });
+
+    expect(event.correlationId).toBe('corr-1');
+    expect(event.traceId).toBe('trace-1');
+    expect(event.causationId).toBe('cause-1');
+  });
 });

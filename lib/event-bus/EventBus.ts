@@ -1,4 +1,6 @@
 import { randomUUID } from 'crypto';
+import { eventContext } from './context';
+import { validateBusEvent } from './validation';
 import type {
   BusEvent,
   EventBusConfig,
@@ -6,6 +8,7 @@ import type {
   EventHistoryQuery,
   EventPriority,
   PublishOptions,
+  RequestOptions,
   SubscribeOptions,
   Subscription,
 } from './types';
@@ -65,19 +68,141 @@ export class EventBus {
     payload: T,
     options: PublishOptions = {}
   ): Promise<BusEvent<T>> {
+    const id = randomUUID();
+
+    // Resolved synchronously, at call time — not later inside dispatch().
+    // processQueue() is reentrant-guarded, not reentrant-safe: a handler
+    // that calls publish() recursively has its nested event sit in `queue`
+    // and get drained later by the OUTER loop, after the AsyncLocalStorage
+    // context would otherwise have already exited. Reading the store here
+    // sidesteps that entirely, and works for the pervasive
+    // `void eventBus.publish(...)` fire-and-forget pattern too, since
+    // capture doesn't depend on the caller awaiting.
+    const store = eventContext.getStore();
+    const causationId = options.causationId ?? store?.eventId;
+    const traceId = options.traceId ?? store?.traceId ?? id; // no store => this event starts a new trace
+
     const event: BusEvent<T> = {
-      id: randomUUID(),
+      id,
+      version: options.version ?? 1,
       type,
       payload,
       priority: options.priority ?? 'normal',
       timestamp: new Date().toISOString(),
-      source: options.source,
+      source: options.source ?? 'unknown',
       handlerCount: 0,
+      correlationId: options.correlationId,
+      traceId,
+      causationId,
     };
+
+    const validation = validateBusEvent(event);
+    if (!validation.valid) {
+      const summary = validation.errors.map((e) => `${e.field}: ${e.message}`).join('; ');
+      throw new Error(`Invalid BusEvent: ${summary}`);
+    }
 
     this.queue.push(event);
     await this.processQueue();
     return event;
+  }
+
+  /** Pure sugar over publish() — dispatch() already unions '*' wildcard subscribers with type-matched ones, so this is not a separate delivery path. Documented alias for NEXUS's "broadcast" capability. */
+  broadcast<T = unknown>(type: string, payload: T, options: PublishOptions = {}): Promise<BusEvent<T>> {
+    return this.publish(type, payload, options);
+  }
+
+  /**
+   * Publishes `type` and waits for a matching `${type}:response` event
+   * (correlated by id). Rejects on timeout (default 5000ms), cleaning up
+   * its temporary subscription either way.
+   */
+  async request<TReq = unknown, TRes = unknown>(
+    type: string,
+    payload: TReq,
+    options: RequestOptions = {}
+  ): Promise<BusEvent<TRes>> {
+    const correlationId = randomUUID();
+    const timeoutMs = options.timeoutMs ?? 5000;
+
+    return new Promise<BusEvent<TRes>>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.unsubscribe(subId);
+        reject(new Error(`request timed out after ${timeoutMs}ms: ${type}`));
+      }, timeoutMs);
+
+      const subId = this.subscribe<TRes>(`${type}:response`, (event) => {
+        if (event.correlationId !== correlationId) return; // not ours — shared response channel
+        clearTimeout(timer);
+        this.unsubscribe(subId);
+        resolve(event);
+      });
+
+      this.publish(type, payload, { priority: options.priority, source: options.source, correlationId }).catch((error) => {
+        clearTimeout(timer);
+        this.unsubscribe(subId);
+        reject(error);
+      });
+    });
+  }
+
+  /**
+   * Sugar for answering a request() — publishes `${requestEvent.type}:response`
+   * with correlationId/causationId copied from the request. The `:response`
+   * suffix is documented convention, not enforced: calling this on an event
+   * that didn't carry a correlationId just publishes something nothing is
+   * waiting for, rather than throwing.
+   */
+  respond<TRes = unknown>(
+    requestEvent: BusEvent<unknown>,
+    payload: TRes,
+    options: PublishOptions = {}
+  ): Promise<BusEvent<TRes>> {
+    return this.publish(`${requestEvent.type}:response`, payload, {
+      ...options,
+      correlationId: requestEvent.correlationId,
+      causationId: requestEvent.id,
+    });
+  }
+
+  /** All events sharing a traceId, in chronological order. Reconstructs a whole causal chain, per NEXUS's "every decision must be reconstructable." */
+  getTrace(traceId: string): BusEvent[] {
+    return this.history.filter((e) => e.traceId === traceId);
+  }
+
+  /**
+   * Walks backward from `eventId` via causationId to its root. A chain
+   * truncates wherever an ancestor has aged out of the maxHistory ring
+   * buffer — same inherent limitation getTrace() has.
+   */
+  getCausationChain(eventId: string): BusEvent[] {
+    const byId = new Map(this.history.map((e) => [e.id, e]));
+    const chain: BusEvent[] = [];
+    const seen = new Set<string>();
+
+    let current = byId.get(eventId);
+    while (current && !seen.has(current.id)) {
+      chain.push(current);
+      seen.add(current.id);
+      current = current.causationId ? byId.get(current.causationId) : undefined;
+    }
+
+    return chain;
+  }
+
+  /**
+   * Read-side replay for a late-joining consumer or reconstructing derived
+   * state: invokes `handler` once per historical event matching `query`, in
+   * chronological order, with a shallow clone of each event (never the live
+   * object). Never touches queue/history/subscriptions — cannot corrupt the
+   * real audit trail or re-trigger real subscribers.
+   */
+  async replay(query: EventHistoryQuery, handler: EventHandler): Promise<number> {
+    const events = [...this.getHistory(query)].reverse(); // getHistory() is newest-first; replay wants chronological
+    for (const event of events) {
+      await handler({ ...event });
+    }
+    return events.length;
   }
 
   getHistory(query: EventHistoryQuery = {}): BusEvent[] {
@@ -159,7 +284,7 @@ export class EventBus {
 
     for (const sub of handlers) {
       try {
-        await sub.handler(event);
+        await eventContext.run({ eventId: event.id, traceId: event.traceId ?? event.id }, () => sub.handler(event));
         count++;
         if (sub.once) {
           this.unsubscribe(sub.id);

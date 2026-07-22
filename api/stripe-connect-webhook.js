@@ -71,6 +71,22 @@ async function handler(req, res) {
   }
 
   try {
+    const ingress = await import('../lib/commercial/ingress-adapter');
+
+    switch (event.type) {
+      case 'payment_intent.succeeded':
+      case 'payment_intent.payment_failed':
+      case 'charge.refunded':
+      case 'payout.created':
+      case 'payout.paid': {
+        const { type, payload, source, correlationId } = ingress.adaptStripeConnectEvent(event);
+        await ingress.publishCommercialEvent(type, payload, { source, correlationId });
+        break;
+      }
+      default:
+        console.log(`[Connect Webhook] Unhandled: ${event.type}`);
+    }
+
     switch (event.type) {
       case 'payment_intent.succeeded':
         await handlePaymentIntentSucceeded(event.data.object);
@@ -87,9 +103,8 @@ async function handler(req, res) {
       case 'payout.paid':
         await handlePayoutPaid(event.data.object);
         break;
-      default:
-        console.log(`[Connect Webhook] Unhandled: ${event.type}`);
     }
+
     return res.status(200).json({ received: true });
   } catch (error) {
     console.error('[Connect Webhook] Processing error:', error);
