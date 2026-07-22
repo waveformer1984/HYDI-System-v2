@@ -1,3 +1,4 @@
+import { createClient } from '@supabase/supabase-js';
 import { getEventBus, type EventBus } from '@repo/lib/event-bus';
 import type {
   AgentRuntime,
@@ -14,6 +15,7 @@ import type {
 import { fetchMonitoringHealth } from './monitoring-service';
 import { fetchRevenueForProject, REVENUE_STREAMS } from './revenue-service';
 import { getRevenueSummaries as getProjectedRevenueSummaries } from '@repo/lib/commercial/projections/bootstrap';
+import { EventBusEventsProjectionAdapter } from '@repo/lib/commercial/projections';
 
 const POLL_INTERVAL_MS = 2000;
 
@@ -21,6 +23,7 @@ class DashboardPublisher {
   private bus: EventBus;
   private started = false;
   private interval: ReturnType<typeof setInterval> | null = null;
+  private adapter: EventBusEventsProjectionAdapter | null = null;
 
   constructor(bus: EventBus) {
     this.bus = bus;
@@ -30,6 +33,14 @@ class DashboardPublisher {
     if (this.started) return;
     this.started = true;
 
+    const url = process.env.SUPABASE_URL;
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (url && key) {
+      const supabase = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
+      this.adapter = new EventBusEventsProjectionAdapter({ supabase, bus: this.bus });
+      this.adapter.start();
+    }
+
     this.publishInitialSnapshot().catch((err) => console.error('[Publisher] Initial snapshot failed:', err));
 
     this.interval = setInterval(() => {
@@ -38,6 +49,10 @@ class DashboardPublisher {
   }
 
   stop(): void {
+    if (this.adapter) {
+      this.adapter.stop();
+      this.adapter = null;
+    }
     if (this.interval) {
       clearInterval(this.interval);
       this.interval = null;

@@ -88,7 +88,7 @@ export class EventBus {
       type,
       payload,
       priority: options.priority ?? 'normal',
-      timestamp: new Date().toISOString(),
+      timestamp: options.timestamp ?? new Date().toISOString(),
       source: options.source ?? 'unknown',
       handlerCount: 0,
       correlationId: options.correlationId,
