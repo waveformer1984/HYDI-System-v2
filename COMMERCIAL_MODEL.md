@@ -167,10 +167,10 @@ non-commercial events get via `EventRecorder.getCausationChain()`.
 **Current state:** `apps/ursula-frontend/src/app/api/stripe-webhook/route.ts` now publishes
 `payment.received` events through the **Ingress Adapter** into `lib/event-bus/EventBus` before
 creating downstream tasks/offers. `api/stripe-connect-webhook.js` and `supabase/functions/stripe-webhook/index.ts`
-still write directly to `ledger`/`event_bus_events` and must be brought into the same path.
-The `billing-engine` / `billing-retry-worker` Edge Functions still emit directly to
-`event_bus_events` (Postgres) rather than through the Event Fabric. The relationship between
-`event_bus_events` and `lib/event-bus/EventRecorder` must be documented and converged.
+still write directly to `event_bus_events` and are mirrored into the Event Fabric by the
+`EventBusEventsProjectionAdapter`. `event_bus_events` remains the durable fan-out
+projection/queue; new code should publish to the Event Fabric directly and let the projection
+adapter fan out to Postgres.
 
 Fix, in order:
 1. Every Stripe webhook handler, manual invoice action, ForgeFinder sale, and future marketplace
@@ -180,9 +180,9 @@ Fix, in order:
    write is the source of truth for billing state and the event is the source of truth for the
    timeline.
 2. `event_bus_events` (Postgres, async worker queue) is the durable fan-out projection of the
-   Event Fabric. New code must not write directly to it; it should publish to the Event Fabric
-   and a projection adapter will fan out to Postgres. Existing direct writes in Edge Functions
-   and SQL are legacy and will be migrated in Phase 6.
+   Event Fabric. New code publishes to the Event Fabric and the `EventBusEventsProjectionAdapter`
+   fans out to Postgres. Existing direct writes in Edge Functions and SQL are bridged into the
+   Fabric by the same adapter; they will be migrated to the Ingress Adapter over time.
 3. Replay reuses `EventRecorder.replay(query, handler)` unchanged — a "replay all commercial
    events for customer X" query is just `query({ source: 'stripe-webhook' })` filtered
    client-side by payload, no new replay infrastructure needed.
@@ -270,8 +270,8 @@ belong to the commercial domain and which tables they read from and write to.
 2. ~~Does `event_bus_events` get deprecated in favor of `lib/event-bus`, or do they stay
    separate with a documented sync? (§6)~~ **Resolved:** `lib/event-bus/EventBus` is the
    single logical bus; `event_bus_events` (Postgres) is a durable fan-out projection/queue.
-   New code publishes to the Event Fabric; legacy direct Postgres writes will be migrated in
-   Phase 6.
+   The `EventBusEventsProjectionAdapter` (Phase 6) bridges legacy direct Postgres writes into
+   the Fabric; new code publishes to the Event Fabric directly.
 3. `financial_ledger` rename — confirm no external tooling (Stripe reconciliation scripts,
    BI queries) references the `ledger` table name directly before renaming.
 4. Which of the six revenue streams, if any, need metered billing (Usage Meter) in the next
@@ -279,8 +279,9 @@ belong to the commercial domain and which tables they read from and write to.
 
 ### Phase 4 projection completeness note
 
-Until Phase 6 migrates the remaining Edge Function/SQL `event_bus_events` writers, the Event
-Fabric only contains commercial events from Node/Next.js ingress points (`api/stripe-connect-webhook.js`,
-`apps/ursula-frontend/src/app/api/stripe-webhook/route.ts`). Phase 4 projections must treat
-this as a known-partial stream and document that events arriving through Supabase Edge Functions
-(`billing-engine`, `billing-retry-worker`, `stripe-webhook`) are not yet mirrored to the Fabric.
+Phase 6 added the `EventBusEventsProjectionAdapter`, which mirrors unprojected rows from
+`event_bus_events` into the Event Fabric. Commercial events from Node/Next.js ingress points
+(`api/stripe-connect-webhook.js`, `apps/ursula-frontend/src/app/api/stripe-webhook/route.ts`)
+enter the Fabric directly; events from legacy Edge Functions and SQL writers now enter via the
+adapter. Projections should treat the stream as complete once the adapter is running, while
+continuing to ignore unsupported event types.
