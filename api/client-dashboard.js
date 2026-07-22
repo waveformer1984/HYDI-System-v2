@@ -2,7 +2,7 @@
  * Client Dashboard API — compatibility adapter
  *
  * Thin HTTP wrapper around lib/dashboard/revenue-service.js.
- * All ledger aggregation now lives in one shared module.
+ * All financial_ledger aggregation now lives in one shared module.
  */
 
 const { fetchClientDashboard } = require('../lib/dashboard/revenue-service');
