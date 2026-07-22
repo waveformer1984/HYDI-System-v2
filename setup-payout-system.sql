@@ -32,10 +32,10 @@ CREATE TABLE IF NOT EXISTS payouts (
     updated_at timestamptz default now()
 );
 
--- Create ledger table if it doesn't exist
-CREATE TABLE IF NOT EXISTS ledger (
+-- Create financial_ledger table if it doesn't exist
+CREATE TABLE IF NOT EXISTS financial_ledger (
     transaction_id uuid primary key default gen_random_uuid(),
-    timestamp timestamptz default now(),
+    created_at timestamptz default now(),
     source_account text not null,
     amount_gross numeric not null,
     platform_fee_percent numeric not null,
@@ -53,14 +53,14 @@ CREATE INDEX IF NOT EXISTS idx_clients_stripe_customer ON clients(stripe_custome
 CREATE INDEX IF NOT EXISTS idx_payouts_client_id ON payouts(client_id);
 CREATE INDEX IF NOT EXISTS idx_payouts_status ON payouts(status);
 CREATE INDEX IF NOT EXISTS idx_payouts_period ON payouts(period_start, period_end);
-CREATE INDEX IF NOT EXISTS idx_ledger_source_account ON ledger(source_account);
-CREATE INDEX IF NOT EXISTS idx_ledger_timestamp ON ledger(timestamp);
-CREATE INDEX IF NOT EXISTS idx_ledger_status ON ledger(status);
+CREATE INDEX IF NOT EXISTS idx_financial_ledger_source_account ON financial_ledger(source_account);
+CREATE INDEX IF NOT EXISTS idx_financial_ledger_created_at ON financial_ledger(created_at);
+CREATE INDEX IF NOT EXISTS idx_financial_ledger_status ON financial_ledger(status);
 
 -- Enable RLS
 ALTER TABLE clients ENABLE ROW LEVEL SECURITY;
 ALTER TABLE payouts ENABLE ROW LEVEL SECURITY;
-ALTER TABLE ledger ENABLE ROW LEVEL SECURITY;
+ALTER TABLE financial_ledger ENABLE ROW LEVEL SECURITY;
 
 -- Create service role policies
 CREATE POLICY IF NOT EXISTS "service_role_all_clients" ON clients
@@ -69,7 +69,7 @@ CREATE POLICY IF NOT EXISTS "service_role_all_clients" ON clients
 CREATE POLICY IF NOT EXISTS "service_role_all_payouts" ON payouts
     FOR ALL USING (auth.role() = 'service_role');
 
-CREATE POLICY IF NOT EXISTS "service_role_all_ledger" ON ledger
+CREATE POLICY IF NOT EXISTS "service_role_all_financial_ledger" ON financial_ledger
     FOR ALL USING (auth.role() = 'service_role');
 
 -- Test data for Galactic Bytes
@@ -84,4 +84,4 @@ SELECT 'clients' as table_name, count(*) as row_count FROM clients
 UNION ALL
 SELECT 'payouts' as table_name, count(*) as row_count FROM payouts
 UNION ALL
-SELECT 'ledger' as table_name, count(*) as row_count FROM ledger;
+SELECT 'financial_ledger' as table_name, count(*) as row_count FROM financial_ledger;

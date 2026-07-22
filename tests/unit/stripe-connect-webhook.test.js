@@ -1,6 +1,6 @@
 /**
  * Unit tests for Stripe Connect webhook — revenue stream routing, fee structure,
- * and ledger entry creation. No live services required.
+ * and financial_ledger entry creation. No live services required.
  */
 
 jest.mock('stripe', () =>

@@ -180,7 +180,7 @@ export class DatabaseHealthCollector implements HealthCollector {
     const hasStripe = !!process.env.STRIPE_SECRET_KEY;
     try {
       const { count, error } = await db
-        .from('ledger')
+        .from('financial_ledger')
         .select('*', { count: 'exact', head: true })
         .limit(1);
       if (error) throw error;

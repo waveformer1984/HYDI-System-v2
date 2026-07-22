@@ -131,11 +131,11 @@ async function processClientPayout(
   // Query ledger for this client's earnings in the period
   // Match by project_name as the source_account
   const { data: ledgerEntries, error: ledgerError } = await supabase
-    .from('ledger')
+    .from('financial_ledger')
     .select('*')
     .eq('source_account', client.project_name)
-    .gte('timestamp', `${periodStart}T00:00:00Z`)
-    .lte('timestamp', `${periodEnd}T23:59:59Z`)
+    .gte('created_at', `${periodStart}T00:00:00Z`)
+    .lte('created_at', `${periodEnd}T23:59:59Z`)
     .eq('status', 'completed');
 
   if (ledgerError) {

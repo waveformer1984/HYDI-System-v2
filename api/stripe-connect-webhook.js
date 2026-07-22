@@ -1,6 +1,6 @@
 /**
  * Stripe Connect Webhook Handler
- * Routes payments to correct sub-account and writes ledger entries
+ * Routes payments to correct sub-account and writes financial_ledger entries
  */
 
 const Stripe = require('stripe');
@@ -125,7 +125,7 @@ async function handlePaymentIntentSucceeded(paymentIntent) {
   );
 
   const { data: ledgerEntry, error } = await supabase
-    .from('ledger')
+    .from('financial_ledger')
     .insert({
       stripe_payment_intent_id: paymentIntent.id,
       stripe_charge_id: charge?.id || null,
@@ -133,10 +133,6 @@ async function handlePaymentIntentSucceeded(paymentIntent) {
       revenue_stream: revenueStream,
       project_code: revenueStream,
       amount_gross: gross,
-      platform_fee_amount: platformFee,
-      agent_fee_amount: agentFee,
-      stripe_fee_amount: stripeFee,
-      net_amount: net,
       currency: paymentIntent.currency.toLowerCase(),
       platform_fee_percent: FEE_STRUCTURE.platform_fee_percent,
       agent_fee_percent: FEE_STRUCTURE.agent_fee_percent,
@@ -163,14 +159,14 @@ async function handlePaymentIntentSucceeded(paymentIntent) {
 
 async function handlePaymentIntentFailed(paymentIntent) {
   await supabase
-    .from('ledger')
+    .from('financial_ledger')
     .update({ status: 'failed' })
     .eq('stripe_payment_intent_id', paymentIntent.id);
 }
 
 async function handleChargeRefunded(charge) {
   await supabase
-    .from('ledger')
+    .from('financial_ledger')
     .update({
       status: 'refunded',
       metadata: {
@@ -183,7 +179,7 @@ async function handleChargeRefunded(charge) {
 
 async function handlePayoutCreated(payout) {
   await supabase
-    .from('ledger')
+    .from('financial_ledger')
     .update({
       status: 'payout_initiated',
       payout_batch_id: payout.id,
@@ -196,7 +192,7 @@ async function handlePayoutCreated(payout) {
 
 async function handlePayoutPaid(payout) {
   await supabase
-    .from('ledger')
+    .from('financial_ledger')
     .update({
       status: 'payout_completed',
       payout_completed_at: new Date().toISOString(),

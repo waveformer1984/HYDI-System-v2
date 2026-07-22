@@ -37,7 +37,7 @@ export default async function handler(req, res) {
         .select('current_status,escalation_level,trend_status,jobs_failed,auto_heals_24h')
         .single(),
       supabase
-        .from('ledger')
+        .from('financial_ledger')
         .select('revenue_stream,net,created_at')
         .in('revenue_stream', STREAMS)
         .order('created_at', { ascending: false })
