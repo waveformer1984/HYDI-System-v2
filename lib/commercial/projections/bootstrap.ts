@@ -1,20 +1,34 @@
 import { getEventBus } from '../../event-bus';
 import { ProjectionEngine } from './projection-engine';
 import { createRevenueProjection, toRevenueSummary, REVENUE_STREAMS } from './revenue-projection';
+import { createCustomerProjection } from './customer-projection';
+import { createSubscriptionProjection } from './subscription-projection';
 import type { Projection } from './projection-engine';
-import type { RevenueProjectionState, RevenueStreamSummary, RevenueSummaryView } from './revenue-projection';
+import type { RevenueProjectionState, RevenueSummaryView } from './revenue-projection';
+import type { CustomerProjectionState } from './customer-projection';
+import type { SubscriptionProjectionState } from './subscription-projection';
 
 let engine: ProjectionEngine | null = null;
 let revenueProjection: Projection<RevenueProjectionState> | null = null;
+let customerProjection: Projection<CustomerProjectionState> | null = null;
+let subscriptionProjection: Projection<SubscriptionProjectionState> | null = null;
 
 function ensureEngine(): ProjectionEngine {
   if (!engine) {
     engine = new ProjectionEngine(getEventBus());
     revenueProjection = createRevenueProjection();
+    customerProjection = createCustomerProjection();
+    subscriptionProjection = createSubscriptionProjection();
     engine.register(revenueProjection);
+    engine.register(customerProjection);
+    engine.register(subscriptionProjection);
     engine.start();
   }
   return engine;
+}
+
+export function getProjectionEngine(): ProjectionEngine {
+  return ensureEngine();
 }
 
 export function getRevenueProjection(): Projection<RevenueProjectionState> {
@@ -22,8 +36,14 @@ export function getRevenueProjection(): Projection<RevenueProjectionState> {
   return revenueProjection!;
 }
 
-export function getProjectionEngine(): ProjectionEngine {
-  return ensureEngine();
+export function getCustomerProjection(): Projection<CustomerProjectionState> {
+  ensureEngine();
+  return customerProjection!;
+}
+
+export function getSubscriptionProjection(): Projection<SubscriptionProjectionState> {
+  ensureEngine();
+  return subscriptionProjection!;
 }
 
 export function getRevenueSummaries(): RevenueSummaryView[] {
