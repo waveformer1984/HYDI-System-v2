@@ -9,7 +9,7 @@
     "prebuild": "echo 'Prebuild complete'",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint src/hydi-v3 tests/unit/hydi-v3 scripts/performance-benchmark.js scripts/security-audit.js scripts/soak-test.js",
+    "lint": "eslint src/hydi-v3 tests/unit/hydi-v3 scripts/performance-benchmark.js scripts/security-audit.js scripts/soak-test.js scripts/production-readiness-score.js",
     "typecheck": "tsc --noEmit -p tsconfig.typecheck.json",
     "test": "jest",
     "test:watch": "jest --watch",
@@ -17,7 +17,10 @@
     "test:integration": "jest tests/integration/hydi-v3-integration.test.js --testMatch=\"**/*.test.js\" --runInBand --forceExit",
     "test:soak": "node scripts/soak-test.js",
     "benchmark:performance": "node scripts/performance-benchmark.js",
-    "security-audit": "node scripts/security-audit.js"
+    "security-audit": "node scripts/security-audit.js",
+    "production-readiness-score": "node scripts/production-readiness-score.js",
+    "validate:hydi": "node scripts/continuous-validation.js",
+    "validate:release": "node scripts/continuous-validation.js --full --release"
   },
   "keywords": [
     "protoforge",

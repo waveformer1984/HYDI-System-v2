@@ -68,6 +68,9 @@ class HeidiMemorySystem extends EventEmitter {
     // Drift score (also stored in reflectiveMemory.driftScore, but tracked here too)
     this.driftScore = 0;
 
+    // Active maintenance timers
+    this._maintenanceTimers = [];
+
     // Initialize storage
     this.initialize();
 
@@ -867,23 +870,43 @@ class HeidiMemorySystem extends EventEmitter {
   
   startMaintenanceTasks() {
     // Clean up expired session memory
-    setInterval(() => {
+    const cleanupTimer = setInterval(() => {
       this.cleanupSessionMemory();
     }, 60000); // Every minute
-    
+    if (cleanupTimer.unref) cleanupTimer.unref();
+    this._maintenanceTimers.push(cleanupTimer);
+
     // Run reflection cycle
-    setInterval(() => {
+    const reflectionTimer = setInterval(() => {
       if (Date.now() - this.reflectiveMemory.lastReflection >= this.config.reflectionInterval) {
         this.runReflection().catch(error => {
           console.error('[MEMORY] Reflection cycle failed:', error.message);
         });
       }
     }, 60000); // Check every minute
-    
+    if (reflectionTimer.unref) reflectionTimer.unref();
+    this._maintenanceTimers.push(reflectionTimer);
+
     // Persist reflective memory
-    setInterval(() => {
+    const persistTimer = setInterval(() => {
       this.persistReflectiveMemory();
     }, 300000); // Every 5 minutes
+    if (persistTimer.unref) persistTimer.unref();
+    this._maintenanceTimers.push(persistTimer);
+  }
+
+  stopMaintenanceTasks() {
+    for (const timer of this._maintenanceTimers) {
+      clearInterval(timer);
+    }
+    this._maintenanceTimers = [];
+  }
+
+  destroy() {
+    this.stopMaintenanceTasks();
+    this.sessionMemory = null;
+    this.dbMemory = null;
+    this.reflectiveMemory = null;
   }
   
   cleanupSessionMemory() {

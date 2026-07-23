@@ -18,7 +18,11 @@
     "tests/unit/hydi-v3/**/*.js",
     "scripts/performance-benchmark.js",
     "scripts/security-audit.js",
-    "scripts/soak-test.js"
+    "scripts/soak-test.js",
+    "scripts/chaos-runner.js",
+    "scripts/production-readiness-score.js",
+    "scripts/observability-dashboard.js",
+    "scripts/performance-trend.js"
   ],
   "exclude": ["node_modules", ".next", "coverage"]
 }

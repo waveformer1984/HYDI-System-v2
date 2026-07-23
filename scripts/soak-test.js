@@ -1,7 +1,11 @@
 #!/usr/bin/env node
 'use strict';
 
+const path = require('path');
+const fs = require('fs').promises;
+const os = require('os');
 const HYDIAutonomyManager = require('../src/hydi-v3');
+const SoakTest = require('../src/hydi-v3/SoakTest');
 
 function createFakeCoreLoop() {
   const activeLoops = new Map();
@@ -16,6 +20,7 @@ function createFakeCoreLoop() {
       queueDepth: 0,
       activeLoopCount: activeLoops.size,
       retryCount: 0,
+      dbConnections: 0,
     }),
     getAvailableResources: () => ({ cpu: 0.8, memory: 0.7 }),
     getMemoryUsage: () => 0.3,
@@ -27,35 +32,40 @@ function createFakeCoreLoop() {
 }
 
 async function main() {
+  const dataPath = path.join(os.tmpdir(), `hydi-soak-${Date.now()}-${Math.random().toString(36).slice(2)}`);
   const coreLoop = createFakeCoreLoop();
   const manager = new HYDIAutonomyManager({
     coreLoop,
     config: {
+      dataPath,
       enableGracefulShutdown: false,
-      enableMemoryIntegrity: true,
+      enableMemoryIntegrity: false,
       enableSecurity: true,
-      enableObservability: true,
+      enableObservability: false,
+      enableHeartbeat: false,
+      enableWatchdog: true,
+      enableSelfHealing: true,
+      enableReflection: false,
+      enableDistributedCompute: false,
     },
   });
 
   await manager.start();
 
-  const testReport = await manager.runTestSuite();
-  const perfReport = await manager.runPerformanceBenchmarks();
+  const report = await SoakTest.runSoak(manager, 24 * 60 * 60 * 1000, {
+    simulated: true,
+    tickCount: 100,
+    leakThreshold: 0.01,
+    degradationThreshold: 0.2,
+  });
 
   await manager.stop();
-
-  const report = {
-    timestamp: new Date().toISOString(),
-    tests: testReport,
-    performance: perfReport,
-    status: manager.getStatus(),
-  };
+  manager.destroy();
+  await fs.rm(dataPath, { recursive: true, force: true }).catch(() => {});
 
   console.log(JSON.stringify(report, null, 2));
 
-  const failed = (testReport.failed || 0) + (perfReport.failed || 0);
-  process.exit(failed > 0 ? 1 : 0);
+  process.exit(report.passed ? 0 : 1);
 }
 
 main().catch((err) => {
