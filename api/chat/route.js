@@ -1,7 +1,6 @@
 // Universal Chat Router - Routes messages to appropriate systems
 // Fixed for Node.js/Express (not Next.js)
 
-import { createHmac, timingSafeEqual } from 'crypto';
 import { createClient } from '@supabase/supabase-js';
 import {
   getLatestDeployment, triggerRedeploy, listEnvVars, setEnvVar,
@@ -10,6 +9,7 @@ import {
 import { getSystemStatus, isReachable } from '../../lib/termux/termuxClient.js';
 import { callAgent, isClaudeAvailable } from '../../lib/claude';
 import { rateLimit } from '../../lib/rate-limit.js';
+import { verifyServiceToken } from '../../lib/auth/verifyServiceToken.js';
 
 // Lazy client: a missing SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY must surface
 // as a clean JSON error from the handler, not a cold-start crash (which returns
@@ -29,33 +29,8 @@ const supabase = new Proxy({}, { get: (_, prop) => getSupabase()[prop] });
 // ── Service token guard ───────────────────────────────────────────────────────
 // Replaces bare x-user-id header trust. Callers must present an HMAC-SHA256
 // token in x-hydi-service-token signed with the shared HYDI_SERVICE_SECRET.
-
-const SERVICE_TOKEN_WINDOW_MS = 5 * 60 * 1000
-
-function checkServiceToken(token) {
-  const secret = process.env.HYDI_SERVICE_SECRET
-  if (!token) return { valid: false, reason: 'missing token' }
-  if (!secret) return { valid: false, reason: 'service secret not configured' }
-  const parts = token.split('.')
-  if (parts.length !== 4) return { valid: false, reason: 'malformed token' }
-  const [ts, requestId, service, sig] = parts
-  const timestamp = parseInt(ts, 10)
-  if (isNaN(timestamp) || Math.abs(Date.now() - timestamp) > SERVICE_TOKEN_WINDOW_MS) {
-    return { valid: false, reason: 'token expired or clock skew exceeds 5 minutes' }
-  }
-  const payload = `${ts}:${requestId}:${service}`
-  const expected = createHmac('sha256', secret).update(payload).digest('hex')
-  try {
-    const expectedBuf = Buffer.from(expected, 'hex')
-    const sigBuf = Buffer.from(sig, 'hex')
-    if (expectedBuf.length !== sigBuf.length || !timingSafeEqual(expectedBuf, sigBuf)) {
-      return { valid: false, reason: 'signature mismatch' }
-    }
-  } catch (_) {
-    return { valid: false, reason: 'invalid signature encoding' }
-  }
-  return { valid: true, service, requestId }
-}
+// Verification itself lives in lib/auth/verifyServiceToken.js — shared with
+// every other mobile-ops route so the two copies can't drift apart.
 
 // ── System handlers ───────────────────────────────────────────────────────────
 
@@ -86,7 +61,7 @@ export default async function handler(req, res) {
   }
 
   // Verify service token before processing any request
-  const { valid, reason } = checkServiceToken(req.headers['x-hydi-service-token'])
+  const { valid, reason } = verifyServiceToken(req.headers['x-hydi-service-token'])
   if (!valid) {
     return res.status(401).json({ error: 'Unauthorized', reason })
   }
