@@ -8,7 +8,7 @@ interface HYDIRequest {
   message: string;
   context?: {
     user?: string;
-    [key: string]: any;
+    [key: string]: unknown;
   };
 }
 
