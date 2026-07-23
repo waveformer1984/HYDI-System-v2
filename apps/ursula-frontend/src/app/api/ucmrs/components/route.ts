@@ -2,20 +2,20 @@ import { NextRequest, NextResponse } from 'next/server';
 import { Component, CreateComponentRequest, UpdateComponentRequest, CrossCheckResponse } from '@/lib/ucmrs/types';
 
 // Mock database - replace with actual DB connection
-let components: Component[] = [];
+const components: Component[] = [];
 let nextId = 1;
 
 // GET /api/ucmrs/components - List all components with cross-check
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
-  const module = searchParams.get('module');
+  const moduleParam = searchParams.get('module');
   const category = searchParams.get('category');
   const includeAlerts = searchParams.get('includeAlerts') === 'true';
 
   let filteredComponents = components;
 
-  if (module) {
-    filteredComponents = filteredComponents.filter(c => c.module_name === module);
+  if (moduleParam) {
+    filteredComponents = filteredComponents.filter(c => c.module_name === moduleParam);
   }
 
   if (category) {

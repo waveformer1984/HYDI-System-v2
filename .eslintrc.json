@@ -1,34 +1,74 @@
 {
   "root": true,
-  "env": {
-    "node": true,
-    "jest": true,
-    "es2022": true
-  },
+  "extends": [
+    "next/core-web-vitals"
+  ],
   "parserOptions": {
-    "ecmaVersion": 2022,
-    "sourceType": "script"
+    "ecmaVersion": 2022
   },
-  "extends": ["eslint:recommended"],
-  "rules": {
-    "no-unused-vars": ["warn", { "argsIgnorePattern": "^_" }],
-    "no-console": "warn",
-    "no-constant-condition": ["error", { "checkLoops": false }]
-  },
-  "ignorePatterns": ["node_modules", ".next", "coverage", "data", "dist", "archive"],
   "overrides": [
     {
-      "files": [
-        "pages/**/*.{js,jsx,ts,tsx}",
-        "components/**/*.{js,jsx,ts,tsx}",
-        "lib/**/*.{js,ts}",
-        "hooks/**/*.{js,ts}"
+      "files": ["*.ts", "*.tsx"],
+      "excludedFiles": ["supabase/functions/**/*.ts", "**/*.test.ts", "**/*.test.tsx"],
+      "extends": [
+        "next/typescript"
       ],
-      "extends": ["next/core-web-vitals"]
+      "parser": "@typescript-eslint/parser",
+      "parserOptions": {
+        "sourceType": "module"
+      }
     },
     {
-      "files": ["api/**/*.{js,ts}"],
-      "parserOptions": { "sourceType": "module" }
+      "files": ["**/*.test.ts", "**/*.test.tsx"],
+      "extends": [
+        "next/typescript"
+      ],
+      "rules": {
+        "@typescript-eslint/no-explicit-any": "off",
+        "@typescript-eslint/no-require-imports": "off",
+        "@typescript-eslint/no-unused-vars": ["warn", { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }]
+      }
+    },
+    {
+      "files": ["*.js", "*.jsx"],
+      "parserOptions": {
+        "sourceType": "script"
+      },
+      "rules": {
+        "@typescript-eslint/no-require-imports": "off",
+        "@typescript-eslint/no-unused-vars": "off",
+        "no-unused-vars": ["warn", { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }],
+        "@typescript-eslint/no-explicit-any": "off"
+      }
+    },
+    {
+      "files": ["api/**/*.js", "api/**/*.jsx", "pages/**/*.js", "pages/**/*.jsx", "components/**/*.js", "components/**/*.jsx", "lib/**/*.js", "lib/**/*.jsx", "src/**/*.js", "src/**/*.jsx", "apps/**/*.js", "apps/**/*.jsx"],
+      "parserOptions": {
+        "sourceType": "module"
+      }
+    },
+    {
+      "files": ["ursula-api-hydi-sync.js"],
+      "parserOptions": {
+        "sourceType": "module"
+      }
+    },
+    {
+      "files": ["*.jsx"],
+      "parserOptions": {
+        "sourceType": "module"
+      }
     }
+  ],
+  "ignorePatterns": [
+    "node_modules/",
+    ".next/",
+    "dist/",
+    "coverage/",
+    "**/node_modules/**",
+    "data/",
+    "logs/",
+    "archive/",
+    "supabase/functions/**"
   ]
 }

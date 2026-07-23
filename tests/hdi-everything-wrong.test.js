@@ -398,4 +398,20 @@ async function runEverythingWrongTest() {
 
   if (allPassed) {
     console.log('✅ ALL VALIDATIONS PASSED');
-    console.log('System survives 
+    console.log('System survives everything wrong');
+  } else {
+    console.log('❌ SOME VALIDATIONS FAILED');
+  }
+
+  return allPassed;
+}
+
+if (require.main === module) {
+  runEverythingWrongTest()
+    .then(passed => process.exit(passed ? 0 : 1))
+    .catch(e => {
+      console.error(e);
+      process.exit(1);
+    });
+}
+
