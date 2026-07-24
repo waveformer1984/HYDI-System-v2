@@ -17,16 +17,11 @@ describe('HeartbeatSystem', () => {
   });
 
   test('detects missing heartbeat', async () => {
-    const missingEvent = new Promise((resolve) => {
-      heartbeat.on('heartbeat_missing', resolve);
-    });
+    let missing = null;
+    heartbeat.on('heartbeat_missing', (m) => { missing = m; });
     heartbeat.registerPublisher('service-1', () => ({ timestamp: Date.now() - 1000 }));
     heartbeat.start();
-
-    const timeout = new Promise((_, reject) => {
-      setTimeout(() => reject(new Error('heartbeat_missing was not emitted in time')), 2000);
-    });
-    const missing = await Promise.race([missingEvent, timeout]);
+    await new Promise((r) => setTimeout(r, 250));
     expect(missing).not.toBeNull();
     expect(missing[0].serviceId).toBe('service-1');
   });
