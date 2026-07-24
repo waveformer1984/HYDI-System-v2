@@ -547,7 +547,7 @@ export default function ColtersCommandModule() {
 
         {/* KPI Dashboard */}
         <div className="mb-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Today's Performance</h2>
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">Today&apos;s Performance</h2>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
             {MOCK_KPIS.map((kpi, index) => {
               const Icon = kpi.icon;
@@ -577,11 +577,11 @@ export default function ColtersCommandModule() {
         {/* Main Content Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           
-          {/* Today's Schedule */}
+          {/* Today&apos;s Schedule */}
           <div className="lg:col-span-2">
             <div className="bg-white rounded-lg border border-gray-200">
               <div className="p-4 border-b border-gray-200">
-                <h2 className="text-lg font-semibold text-gray-900">Today's Schedule</h2>
+                <h2 className="text-lg font-semibold text-gray-900">Today&apos;s Schedule</h2>
               </div>
               <div className="p-4">
                 <div className="space-y-3">

@@ -569,11 +569,11 @@ export default function UrsulaSalesDashboard() {
                     <div className="space-y-3">
                       <div className="border rounded-lg p-3">
                         <div className="text-sm font-medium text-gray-900 mb-1">LinkedIn DM - Lead Packs</div>
-                        <p className="text-sm text-gray-600">"I noticed you're [doing X]. I put together qualified lead lists for businesses like yours — 10 verified leads for $49. Want me to send a sample?"</p>
+                        <p className="text-sm text-gray-600">&quot;I noticed you&apos;re [doing X]. I put together qualified lead lists for businesses like yours — 10 verified leads for $49. Want me to send a sample?&quot;</p>
                       </div>
                       <div className="border rounded-lg p-3">
                         <div className="text-sm font-medium text-gray-900 mb-1">LinkedIn DM - Payment Processing</div>
-                        <p className="text-sm text-gray-600">"Saw you're selling [product/service]. I built a payment system with Stripe + PayPal smart routing that picks the cheapest processor per transaction. Saves most businesses 15-30% on fees."</p>
+                        <p className="text-sm text-gray-600">&quot;Saw you&apos;re selling [product/service]. I built a payment system with Stripe + PayPal smart routing that picks the cheapest processor per transaction. Saves most businesses 15-30% on fees.&quot;</p>
                       </div>
                     </div>
                   </section>

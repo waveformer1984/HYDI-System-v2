@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { Component, IntegrationAudit } from '@/lib/ucmrs/types';
 
 // Mock database - replace with actual DB connection
-let integrationAudits: IntegrationAudit[] = [];
+const integrationAudits: IntegrationAudit[] = [];
 let nextId = 1;
 
 // GET /api/ucmrs/integration - Get integration status and tiers
