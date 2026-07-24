@@ -1,0 +1,249 @@
+{
+  "generatedAt": "2026-07-24T01:35:44.791Z",
+  "tables": [
+    {
+      "name": "memories",
+      "source": "supabase\\heidi-init.sql"
+    },
+    {
+      "name": "actions",
+      "source": "supabase\\heidi-init.sql"
+    },
+    {
+      "name": "sessions",
+      "source": "supabase\\heidi-init.sql"
+    },
+    {
+      "name": "public.keymaker_services",
+      "source": "supabase\\migrations\\001_keymaker_core.sql"
+    },
+    {
+      "name": "public.keymaker_keys",
+      "source": "supabase\\migrations\\001_keymaker_core.sql"
+    },
+    {
+      "name": "public.keymaker_access_log",
+      "source": "supabase\\migrations\\001_keymaker_core.sql"
+    },
+    {
+      "name": "public.keymaker_system_state",
+      "source": "supabase\\migrations\\001_keymaker_core.sql"
+    },
+    {
+      "name": "public.keymaker_events",
+      "source": "supabase\\migrations\\001_keymaker_core.sql"
+    },
+    {
+      "name": "public.keymaker_jobs",
+      "source": "supabase\\migrations\\001_keymaker_core.sql"
+    },
+    {
+      "name": "public.keymaker_config",
+      "source": "supabase\\migrations\\001_keymaker_core.sql"
+    },
+    {
+      "name": "public.event_bus_events",
+      "source": "supabase\\migrations\\20260424010000_fix_event_bus_dependency.sql"
+    },
+    {
+      "name": "hydi_subscriptions",
+      "source": "supabase\\migrations\\20260424145243_hydi_monetization.sql"
+    },
+    {
+      "name": "hydi_client_health_runs",
+      "source": "supabase\\migrations\\20260424145243_hydi_monetization.sql"
+    },
+    {
+      "name": "hydi_schedules",
+      "source": "supabase\\migrations\\20260424145243_hydi_monetization.sql"
+    },
+    {
+      "name": "public.webhook_events",
+      "source": "supabase\\migrations\\20260424152159_hydi_update_webhook_events.sql"
+    },
+    {
+      "name": "public.chaos_runs",
+      "source": "supabase\\migrations\\20260424220000_hdi_chaos_safety_schema.sql"
+    },
+    {
+      "name": "public.chaos_run_instances",
+      "source": "supabase\\migrations\\20260424220000_hdi_chaos_safety_schema.sql"
+    },
+    {
+      "name": "public.chaos_fault_injections",
+      "source": "supabase\\migrations\\20260424220000_hdi_chaos_safety_schema.sql"
+    },
+    {
+      "name": "public.side_effect_ledger",
+      "source": "supabase\\migrations\\20260424220000_hdi_chaos_safety_schema.sql"
+    },
+    {
+      "name": "public.replay_integrity_checks",
+      "source": "supabase\\migrations\\20260424220000_hdi_chaos_safety_schema.sql"
+    },
+    {
+      "name": "public.agent_leases",
+      "source": "supabase\\migrations\\20260424220000_hdi_chaos_safety_schema.sql"
+    },
+    {
+      "name": "ledger",
+      "source": "supabase\\migrations\\20260425104500_create_ledger_table.sql"
+    },
+    {
+      "name": "clients",
+      "source": "supabase\\migrations\\20260425105500_create_clients_table.sql"
+    },
+    {
+      "name": "payouts",
+      "source": "supabase\\migrations\\20260425110000_create_payouts_table.sql"
+    },
+    {
+      "name": "ledger",
+      "source": "supabase\\migrations\\20260425161640_add_stripe_connect_subaccount_support.sql"
+    },
+    {
+      "name": "public.chat_conversations",
+      "source": "supabase\\migrations\\20260426121300_chat_operator_schema.sql"
+    },
+    {
+      "name": "public.chat_messages",
+      "source": "supabase\\migrations\\20260426121300_chat_operator_schema.sql"
+    },
+    {
+      "name": "public.operator_actions",
+      "source": "supabase\\migrations\\20260426121300_chat_operator_schema.sql"
+    },
+    {
+      "name": "public.notifications",
+      "source": "supabase\\migrations\\20260426122500_notifications_table.sql"
+    },
+    {
+      "name": "public.event_bus_events",
+      "source": "supabase\\migrations\\20260426140000_fix_event_bus_dependency.sql"
+    },
+    {
+      "name": "theme_predictions",
+      "source": "supabase\\migrations\\20260429150000_heidi_memory_layer.sql"
+    },
+    {
+      "name": "theme_outcomes",
+      "source": "supabase\\migrations\\20260429150000_heidi_memory_layer.sql"
+    },
+    {
+      "name": "theme_accuracy",
+      "source": "supabase\\migrations\\20260429150000_heidi_memory_layer.sql"
+    },
+    {
+      "name": "overconfidence_events",
+      "source": "supabase\\migrations\\20260429150000_heidi_memory_layer.sql"
+    },
+    {
+      "name": "heidi_reflections",
+      "source": "supabase\\migrations\\20260429150000_heidi_memory_layer.sql"
+    },
+    {
+      "name": "system_misalignment_events",
+      "source": "supabase\\migrations\\20260429150000_heidi_memory_layer.sql"
+    },
+    {
+      "name": "users",
+      "source": "supabase\\migrations\\20260430010000_create_users_table.sql"
+    },
+    {
+      "name": "api_keys",
+      "source": "supabase\\migrations\\20260430010000_create_users_table.sql"
+    },
+    {
+      "name": "public.pending_tasks",
+      "source": "supabase\\migrations\\20260430160000_create_pending_tasks.sql"
+    },
+    {
+      "name": "memory_entities",
+      "source": "supabase\\migrations\\20260515000000_hydi_phase3_memory_layer.sql"
+    },
+    {
+      "name": "memory_relations",
+      "source": "supabase\\migrations\\20260515000000_hydi_phase3_memory_layer.sql"
+    },
+    {
+      "name": "replay_history",
+      "source": "supabase\\migrations\\20260516000001_create_replay_history.sql"
+    },
+    {
+      "name": "public.heidi_telemetry",
+      "source": "supabase\\migrations\\20260627000001_heidi_telemetry_foundation.sql"
+    },
+    {
+      "name": "public.heidi_metrics_snapshots",
+      "source": "supabase\\migrations\\20260627000001_heidi_telemetry_foundation.sql"
+    },
+    {
+      "name": "public.heidi_performance_baseline",
+      "source": "supabase\\migrations\\20260627000001_heidi_telemetry_foundation.sql"
+    },
+    {
+      "name": "public.heidi_module_performance",
+      "source": "supabase\\migrations\\20260627000001_heidi_telemetry_foundation.sql"
+    },
+    {
+      "name": "public.heidi_drift_detection",
+      "source": "supabase\\migrations\\20260627000001_heidi_telemetry_foundation.sql"
+    },
+    {
+      "name": "public.heidi_analysis_results",
+      "source": "supabase\\migrations\\20260627000002_heidi_analysis_foundation.sql"
+    },
+    {
+      "name": "public.heidi_patterns",
+      "source": "supabase\\migrations\\20260627000002_heidi_analysis_foundation.sql"
+    },
+    {
+      "name": "public.heidi_root_causes",
+      "source": "supabase\\migrations\\20260627000002_heidi_analysis_foundation.sql"
+    },
+    {
+      "name": "public.heidi_capabilities",
+      "source": "supabase\\migrations\\20260627000002_heidi_analysis_foundation.sql"
+    },
+    {
+      "name": "public.heidi_anomalies",
+      "source": "supabase\\migrations\\20260627000002_heidi_analysis_foundation.sql"
+    },
+    {
+      "name": "public.heidi_trends",
+      "source": "supabase\\migrations\\20260627000002_heidi_analysis_foundation.sql"
+    },
+    {
+      "name": "public.heidi_recommendations",
+      "source": "supabase\\migrations\\20260627000003_heidi_recommendations_foundation.sql"
+    },
+    {
+      "name": "public.heidi_recommendation_scoring",
+      "source": "supabase\\migrations\\20260627000003_heidi_recommendations_foundation.sql"
+    },
+    {
+      "name": "public.heidi_versions",
+      "source": "supabase\\migrations\\20260627000004_heidi_lifecycle_complete.sql"
+    },
+    {
+      "name": "public.heidi_experiments",
+      "source": "supabase\\migrations\\20260627000004_heidi_lifecycle_complete.sql"
+    },
+    {
+      "name": "public.heidi_deployments",
+      "source": "supabase\\migrations\\20260627000004_heidi_lifecycle_complete.sql"
+    },
+    {
+      "name": "public.heidi_approvals",
+      "source": "supabase\\migrations\\20260627000004_heidi_lifecycle_complete.sql"
+    },
+    {
+      "name": "public.heidi_improvement_cycles",
+      "source": "supabase\\migrations\\20260627000004_heidi_lifecycle_complete.sql"
+    },
+    {
+      "name": "public.heidi_audit_log",
+      "source": "supabase\\migrations\\20260627000004_heidi_lifecycle_complete.sql"
+    }
+  ]
+}

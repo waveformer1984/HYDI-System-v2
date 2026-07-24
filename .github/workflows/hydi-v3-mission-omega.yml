@@ -1,0 +1,103 @@
+name: HYDI V3 Mission Omega
+
+on:
+  push:
+    branches: [clean-main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  mission-omega:
+    name: HYDI V3 Mission Omega Readiness Gate
+    runs-on: ubuntu-latest
+
+    env:
+      NODE_ENV: test
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL || 'http://localhost:54321' }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.test' }}
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL || 'http://localhost:54321' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint V3 modules and scripts
+        run: npm run lint
+
+      - name: Typecheck V3 code
+        run: npm run typecheck
+
+      - name: Run unit tests
+        run: npm test -- --coverage --forceExit
+
+      - name: Run integration tests
+        run: npm run test:integration
+
+      - name: Run performance benchmarks
+        run: npm run benchmark:performance
+
+      - name: Run soak test
+        run: npm run test:soak
+
+      - name: Run security audit
+        run: npm run security-audit
+
+      - name: Compute production readiness score
+        run: npm run production-readiness-score
+
+      - name: Upload lint artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hydi-v3-lint-state
+          path: .eslintcache
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hydi-v3-coverage-report
+          path: coverage/
+          retention-days: 14
+          if-no-files-found: ignore
+
+      - name: Upload benchmark report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hydi-v3-benchmark-report
+          path: data/perf-benchmark/
+          retention-days: 14
+          if-no-files-found: ignore
+
+      - name: Upload security audit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hydi-v3-security-audit-report
+          path: security-audit-report.json
+          retention-days: 14
+          if-no-files-found: ignore
+
+      - name: Upload production readiness report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hydi-v3-production-readiness-report
+          path: production-readiness-report.json
+          retention-days: 14
+          if-no-files-found: ignore

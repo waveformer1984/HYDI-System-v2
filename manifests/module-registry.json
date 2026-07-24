@@ -1,0 +1,17 @@
+{
+  "generatedAt": "2026-07-24T01:35:44.092Z",
+  "modules": [
+    {
+      "id": "mod-a",
+      "name": "mod-a",
+      "version": "1.0.0",
+      "enabled": true,
+      "initialized": true,
+      "running": true,
+      "capabilities": [
+        "compute"
+      ],
+      "consumes": []
+    }
+  ]
+}

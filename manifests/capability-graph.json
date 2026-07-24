@@ -1,0 +1,23 @@
+{
+  "generatedAt": "2026-07-24T01:35:44.092Z",
+  "providers": {
+    "compute": [
+      "mod-a"
+    ]
+  },
+  "consumers": {},
+  "dependencies": {
+    "mod-a": []
+  },
+  "moduleCapabilities": {
+    "mod-a": {
+      "provides": [
+        "compute"
+      ],
+      "consumes": [],
+      "dependencies": []
+    }
+  },
+  "conflicts": [],
+  "missing": []
+}
