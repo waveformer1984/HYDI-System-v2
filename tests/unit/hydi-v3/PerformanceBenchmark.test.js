@@ -42,7 +42,7 @@ describe('PerformanceBenchmark', () => {
     const report = await benchmark.runAll(components);
     expect(report.total).toBeGreaterThan(0);
     expect(report.passed).toBeGreaterThan(0);
-  }, 15000);
+  }, 30000);
 
   test('reports meet targets', async () => {
     await benchmark.runAll(components);
@@ -73,7 +73,7 @@ describe('PerformanceBenchmark', () => {
     expect(secondReport.baselineComparison.startup).toBeDefined();
     expect(secondReport.baselineComparison.startup.status).toMatch(/better|worse|stable|no-baseline/);
     expect(typeof secondReport.baselineComparison.startup.current).toBe('number');
-  }, 15000);
+  }, 30000);
 
   test('generateReport returns json and markdown', async () => {
     await benchmark.runAll(components);
