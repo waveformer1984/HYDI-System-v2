@@ -134,7 +134,7 @@ async function processClientPayout(
   // Query ledger for this client's earnings in the period
   // Match by project_name as the source_account
   const { data: ledgerEntries, error: ledgerError } = await supabase
-    .from('ledger')
+    .from('financial_ledger')
     .select('*')
     .eq('source_account', client.project_name)
     .gte('created_at', `${periodStart}T00:00:00Z`)

@@ -3,7 +3,7 @@ import { MonetizationSprint, CreateSprintRequest, SPRINT_TEMPLATE } from '@/lib/
 import { ProductCandidate } from '@/lib/ucmrs/types-ral';
 
 // Mock database - replace with actual DB connection
-let sprints: MonetizationSprint[] = [];
+const sprints: MonetizationSprint[] = [];
 let nextId = 1;
 let nextSprintNumber = 1;
 

@@ -101,8 +101,8 @@ class RuntimeEnforcer {
     }
     
     // Register allowed modules
-    for (const module of this.config.allowedModules) {
-      this.registeredModules.add(module);
+    for (const mod of this.config.allowedModules) {
+      this.registeredModules.add(mod);
     }
   }
   

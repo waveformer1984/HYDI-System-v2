@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { Module } from '@/lib/ucmrs/types';
 
 // Mock database - replace with actual DB connection
-let modules: Module[] = [];
+const modules: Module[] = [];
 let nextId = 1;
 
 // GET /api/ucmrs/modules - List all modules with health metrics
@@ -12,17 +12,17 @@ export async function GET(request: NextRequest) {
   const includeHealth = searchParams.get('includeHealth') === 'true';
 
   if (moduleName) {
-    const module = modules.find(m => m.module_name === moduleName);
-    if (!module) {
+    const foundModule = modules.find(m => m.module_name === moduleName);
+    if (!foundModule) {
       return NextResponse.json({ error: 'Module not found' }, { status: 404 });
     }
 
     if (includeHealth) {
-      const health = await calculateModuleHealth(module);
-      return NextResponse.json({ module, health });
+      const health = await calculateModuleHealth(foundModule);
+      return NextResponse.json({ module: foundModule, health });
     }
 
-    return NextResponse.json({ module });
+    return NextResponse.json({ module: foundModule });
   }
 
   if (includeHealth) {
@@ -143,13 +143,13 @@ export async function PUT(request: NextRequest) {
 export async function GET_STRATEGY(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const id = searchParams.get('id') || '';
-  const module = modules.find(m => m.id === id);
+  const foundModule = modules.find(m => m.id === id);
 
-  if (!module) {
+  if (!foundModule) {
     return NextResponse.json({ error: 'Module not found' }, { status: 404 });
   }
 
-  const strategy = generateModuleStrategy(module);
+  const strategy = generateModuleStrategy(foundModule);
   return NextResponse.json(strategy);
 }
 
@@ -157,19 +157,19 @@ export async function GET_STRATEGY(request: NextRequest) {
 export async function RECALCULATE(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const id = searchParams.get('id') || '';
-  const module = modules.find(m => m.id === id);
+  const foundModule = modules.find(m => m.id === id);
 
-  if (!module) {
+  if (!foundModule) {
     return NextResponse.json({ error: 'Module not found' }, { status: 404 });
   }
 
   try {
     // This would normally query the components table
     // For now, we'll simulate the calculation
-    const recalculatedMetrics = await calculateModuleMetrics(module.module_name);
+    const recalculatedMetrics = await calculateModuleMetrics(foundModule.module_name);
     
     const updatedModule = {
-      ...module,
+      ...foundModule,
       ...recalculatedMetrics,
       updated_at: new Date().toISOString()
     };

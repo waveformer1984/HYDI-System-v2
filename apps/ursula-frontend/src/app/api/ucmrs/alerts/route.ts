@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { CrossCheckAlert, CrossCheckRule } from '@/lib/ucmrs/types';
 
 // Mock database - replace with actual DB connection
-let alerts: CrossCheckAlert[] = [];
+const alerts: CrossCheckAlert[] = [];
 let nextId = 1;
 
 // GET /api/ucmrs/alerts - Get cross-check alerts with filtering

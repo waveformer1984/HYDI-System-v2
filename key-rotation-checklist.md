@@ -35,10 +35,10 @@
 - [ ] Update Edge Function secrets: `supabase secrets set STRIPE_WEBHOOK_SECRET_01=NEW_SECRET`
 
 ## 📋 STEP 3: OTHER KEYS
-### Break Glass Token (MISSING - needs creation)
-- [ ] Generate new token: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`
-- [ ] Update .env file: KEEPER_BREAK_GLASS_TOKEN
-- [ ] Update Edge Function secrets: `supabase secrets set KEEPER_BREAK_GLASS_TOKEN=NEW_TOKEN`
+### Break Glass Token
+- [x] Generate new token
+- [x] Update .env file: KEEPER_BREAK_GLASS_TOKEN
+- [ ] Update Edge Function secrets (remote only): `supabase secrets set KEEPER_BREAK_GLASS_TOKEN=NEW_TOKEN`
 
 ## 📋 STEP 4: VERIFICATION
 After EACH key rotation:
@@ -64,4 +64,4 @@ If everything breaks:
 - Service Role Key: ✅ WORKING
 - Anon Key: ✅ PRESENT (test has schema issue)
 - Stripe Keys: ✅ PRESENT
-- Break Glass Token: ❌ MISSING
+- Break Glass Token: ✅ PRESENT (local .env/.env.local) — remote Edge Function secrets set pending

@@ -1,6 +1,6 @@
 /**
  * Stripe Connect Webhook Handler
- * Routes payments to correct sub-account and writes ledger entries
+ * Routes payments to correct sub-account and writes financial_ledger entries
  */
 
 const Stripe = require('stripe');
@@ -71,6 +71,22 @@ async function handler(req, res) {
   }
 
   try {
+    const ingress = await import('../lib/commercial/ingress-adapter');
+
+    switch (event.type) {
+      case 'payment_intent.succeeded':
+      case 'payment_intent.payment_failed':
+      case 'charge.refunded':
+      case 'payout.created':
+      case 'payout.paid': {
+        const { type, payload, source, correlationId } = ingress.adaptStripeConnectEvent(event);
+        await ingress.publishCommercialEvent(type, payload, { source, correlationId });
+        break;
+      }
+      default:
+        console.log(`[Connect Webhook] Unhandled: ${event.type}`);
+    }
+
     switch (event.type) {
       case 'payment_intent.succeeded':
         await handlePaymentIntentSucceeded(event.data.object);
@@ -87,9 +103,8 @@ async function handler(req, res) {
       case 'payout.paid':
         await handlePayoutPaid(event.data.object);
         break;
-      default:
-        console.log(`[Connect Webhook] Unhandled: ${event.type}`);
     }
+
     return res.status(200).json({ received: true });
   } catch (error) {
     console.error('[Connect Webhook] Processing error:', error);
@@ -123,7 +138,7 @@ async function handlePaymentIntentSucceeded(paymentIntent) {
   );
 
   const { data: ledgerEntry, error } = await supabase
-    .from('ledger')
+    .from('financial_ledger')
     .insert({
       stripe_payment_intent_id: paymentIntent.id,
       stripe_charge_id: charge?.id || null,
@@ -131,10 +146,6 @@ async function handlePaymentIntentSucceeded(paymentIntent) {
       revenue_stream: revenueStream,
       project_code: revenueStream,
       amount_gross: gross,
-      platform_fee_amount: platformFee,
-      agent_fee_amount: agentFee,
-      stripe_fee_amount: stripeFee,
-      net_amount: net,
       currency: paymentIntent.currency.toLowerCase(),
       platform_fee_percent: FEE_STRUCTURE.platform_fee_percent,
       agent_fee_percent: FEE_STRUCTURE.agent_fee_percent,
@@ -161,14 +172,14 @@ async function handlePaymentIntentSucceeded(paymentIntent) {
 
 async function handlePaymentIntentFailed(paymentIntent) {
   await supabase
-    .from('ledger')
+    .from('financial_ledger')
     .update({ status: 'failed' })
     .eq('stripe_payment_intent_id', paymentIntent.id);
 }
 
 async function handleChargeRefunded(charge) {
   await supabase
-    .from('ledger')
+    .from('financial_ledger')
     .update({
       status: 'refunded',
       metadata: {
@@ -181,7 +192,7 @@ async function handleChargeRefunded(charge) {
 
 async function handlePayoutCreated(payout) {
   await supabase
-    .from('ledger')
+    .from('financial_ledger')
     .update({
       status: 'payout_initiated',
       payout_batch_id: payout.id,
@@ -194,7 +205,7 @@ async function handlePayoutCreated(payout) {
 
 async function handlePayoutPaid(payout) {
   await supabase
-    .from('ledger')
+    .from('financial_ledger')
     .update({
       status: 'payout_completed',
       payout_completed_at: new Date().toISOString(),

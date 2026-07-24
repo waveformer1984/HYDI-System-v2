@@ -78,11 +78,11 @@ SELECT
     COALESCE(p.total_payouts, 0) as total_payouts
 FROM clients c
 LEFT JOIN (
-    SELECT client_id, SUM(amount_gross) as total_earnings
-    FROM ledger 
+    SELECT customer_id, SUM(amount_gross) as total_earnings
+    FROM financial_ledger 
     WHERE status = 'completed'
-    GROUP BY client_id
-) l ON c.id = l.client_id
+    GROUP BY customer_id
+) l ON c.id = l.customer_id
 LEFT JOIN (
     SELECT client_id, SUM(amount) as total_payouts  
     FROM payouts
@@ -102,8 +102,8 @@ WHERE (
 -- Performance and security indexes
 CREATE INDEX IF NOT EXISTS idx_payouts_client_id ON payouts(client_id);
 CREATE INDEX IF NOT EXISTS idx_payouts_status ON payouts(status);
-CREATE INDEX IF NOT EXISTS idx_ledger_client_id ON ledger(client_id);
-CREATE INDEX IF NOT EXISTS idx_ledger_status ON ledger(status);
+CREATE INDEX IF NOT EXISTS idx_financial_ledger_customer_id ON financial_ledger(customer_id);
+CREATE INDEX IF NOT EXISTS idx_financial_ledger_status ON financial_ledger(status);
 CREATE INDEX IF NOT EXISTS idx_clients_status ON clients(status);
 
 -- =====================================================

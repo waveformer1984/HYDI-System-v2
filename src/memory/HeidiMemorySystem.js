@@ -248,6 +248,9 @@ class HeidiMemorySystem extends EventEmitter {
 
   storeWhatWorked(strategyId, strategy, outcome) {
     const entry = { id: strategyId, strategy, outcome, timestamp: Date.now(), effectiveness: this.calculateEffectiveness(strategy, outcome) };
+    // Ensure whatWorked is a Map before calling .set(); on some load paths it can
+    // be rehydrated as a plain object/entry array from JSON.
+    this.reflectiveMemory.whatWorked = this._toReflectiveMap(this.reflectiveMemory.whatWorked);
     this.reflectiveMemory.whatWorked.set(strategyId, entry);
     this.emit('what_worked_stored', { strategyId, entry });
     console.log(`[MEMORY] Strategy that worked: ${strategyId}`);
@@ -255,6 +258,9 @@ class HeidiMemorySystem extends EventEmitter {
 
   storeWhatFailed(strategyId, strategy, error, context) {
     const entry = { id: strategyId, strategy, error, context, timestamp: Date.now(), severity: this.assessFailureSeverity(error, context) };
+    // Ensure whatFailed is a Map before calling .set(); on some load paths it can
+    // be rehydrated as a plain object/entry array from JSON.
+    this.reflectiveMemory.whatFailed = this._toReflectiveMap(this.reflectiveMemory.whatFailed);
     this.reflectiveMemory.whatFailed.set(strategyId, entry);
     this.emit('what_failed_stored', { strategyId, entry });
     console.log(`[MEMORY] Strategy that failed: ${strategyId}`);

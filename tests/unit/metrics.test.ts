@@ -1,5 +1,5 @@
 /**
- * Unit tests for lib/metrics.ts — Phase 5 instrumentation.
+ * Unit tests for lib/agent-metrics.ts — Phase 5 instrumentation.
  */
 
 import {
@@ -13,7 +13,7 @@ import {
   getRetryStats,
   getTaskSuccessRates,
   getWorkSessionStats,
-} from '../../lib/metrics';
+} from '../../lib/agent-metrics';
 
 describe('computeTaskSuccessRates', () => {
   test('groups by task_name and computes per-type success rate', () => {

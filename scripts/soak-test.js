@@ -46,7 +46,7 @@ class SoakTest {
   /**
    * Make HTTP request to health endpoint
    */
-  async makeRequest(url = 'http://localhost:3000/health') {
+  async makeRequest(url = 'http://localhost:3000/api/health') {
     return new Promise((resolve) => {
       const startTime = Date.now();
 

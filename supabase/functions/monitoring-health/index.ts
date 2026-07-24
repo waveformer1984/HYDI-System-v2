@@ -11,17 +11,17 @@ serve(async (req) => {
   }
 
   try {
-    if (req.method === 'GET') {
+    if (req.method === 'GET' || req.method === 'POST') {
       const health = {
         status: 'healthy',
         service: 'monitoring',
         timestamp: new Date().toISOString(),
         uptime: performance.now()
       }
-      
+
       return new Response(
         JSON.stringify(health),
-        { 
+        {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           status: 200
         }

@@ -50,16 +50,44 @@ const ALL_SERVICES = [
     description: 'Local LLM embeddings & inference',
   },
   {
+    name: 'Supabase Edge Functions',
+    key: 'supabase-edge-functions',
+    cmd: 'supabase',
+    args: ['functions', 'serve', '--env-file', '.env.local', '--no-verify-jwt'],
+    background: true,
+    description: 'Local Supabase Edge Functions runtime',
+  },
+  {
+    name: 'ProtoForge Core',
+    key: 'protoforge-core',
+    cmd: 'node',
+    args: ['src/server.js'],
+    getEnv: () => {
+      const config = PORTS_CONFIG.services['protoforge-core'];
+      return { PORT: String(config.port) };
+    },
+    background: true,
+    description: 'Event pipeline and agent bus backbone',
+  },
+  {
     name: 'HEIDI Core',
     key: 'heidi-core',
     cmd: 'node',
-    args: ['heidi-core/index-clean-3458.js'],
+    args: ['heidi-core/server.js'],
     getEnv: () => {
       const config = PORTS_CONFIG.services['heidi-core'];
-      return { HEIDI_CORE_PORT: String(config.port) };
+      return { HEIDI_PORT: String(config.port) };
     },
     background: true,
     description: 'AI orchestrator & agent router',
+  },
+  {
+    name: 'HEIDI Agent',
+    key: 'heidi-agent',
+    cmd: 'node',
+    args: ['heidi-core/heidi-agent.js'],
+    background: true,
+    description: 'Persistent task worker for agent_bus',
   },
   {
     name: 'HEIDI Mobile Chat',
@@ -68,16 +96,28 @@ const ALL_SERVICES = [
     args: ['launch-heidi-mobile.js'],
     getEnv: () => {
       const config = PORTS_CONFIG.services['heidi-mobile-chat'];
-      return { HEIDI_PORT: String(config.port) };
+      return { HEIDI_MOBILE_PORT: String(config.port) };
     },
     background: true,
     description: 'Chat API for mobile clients',
   },
   {
+    name: 'Heidi Bridge',
+    key: 'heidi-bridge',
+    cmd: 'python',
+    args: ['C:\\ProtoForge_Ecosystem\\heidi-bridge.py'],
+    getEnv: () => {
+      const config = PORTS_CONFIG.services['heidi-bridge'];
+      return { HEIDI_BRIDGE_PORT: String(config.port) };
+    },
+    background: true,
+    description: 'System monitoring and status bridge (Flask/Python)',
+  },
+  {
     name: 'Next.js Frontend',
     key: 'next-app',
-    cmd: 'npm',
-    args: ['run', 'dev'],
+    cmd: 'node',
+    args: ['node_modules/next/dist/bin/next', 'dev', '--hostname', '0.0.0.0'],
     getEnv: () => {
       const config = PORTS_CONFIG.services['next-app'];
       return { PORT: String(config.port) };
@@ -233,7 +273,8 @@ async function orchestrate() {
   console.log(`\n${colors.green('✅ All services started!')}`);
   console.log('\nDashboard: http://localhost:3000');
   console.log('Chat API:  http://localhost:3006');
-  console.log('Core:      http://localhost:3458\n');
+  console.log('Core:      http://localhost:3459');
+  console.log('Agent:     node heidi-core/heidi-agent.js\n');
 }
 
 // Start

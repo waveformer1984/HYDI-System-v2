@@ -4,7 +4,7 @@ import { Component } from '@/lib/ucmrs/types';
 import { ProductCandidate } from '@/lib/ucmrs/types-ral';
 
 // Mock database - replace with actual DB connection
-let triggers: RevenueTrigger[] = [];
+const triggers: RevenueTrigger[] = [];
 let nextId = 1;
 
 // GET /api/ucmrs/ral/triggers - Get active revenue triggers

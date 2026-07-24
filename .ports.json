@@ -16,6 +16,13 @@
       "description": "React dashboard and admin UI",
       "depends_on": ["supabase"]
     },
+    "protoforge-core": {
+      "port": 3005,
+      "name": "ProtoForge Core (CASCADE/KILO/ProtoForge + Agent Bus)",
+      "env_var": "PORT",
+      "description": "Event pipeline and agent bus backbone",
+      "depends_on": ["supabase"]
+    },
     "heidi-core": {
       "port": 3459,
       "name": "HEIDI Core Orchestrator",
