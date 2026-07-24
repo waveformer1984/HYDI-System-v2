@@ -41,7 +41,7 @@ describe('DistributedCompute', () => {
 
   test('electLeader picks highest capability node and breaks ties by oldest registration', () => {
     const nodeA = compute.registerNode({ cpu: 1, ram: 1, capabilities: ['general'], registeredAt: 1000 });
-    const nodeB = compute.registerNode({ cpu: 0.5, ram: 0.5, capabilities: ['general'], registeredAt: 2000 });
+    compute.registerNode({ cpu: 0.5, ram: 0.5, capabilities: ['general'], registeredAt: 2000 });
     const leader = compute.electLeader();
     expect(leader.id).toBe(nodeA);
 
