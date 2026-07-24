@@ -41,7 +41,7 @@ export class ActionParser {
       .replace(/```/g, '')
       .trim();
 
-    let firstBrace = cleaned.indexOf('{');
+    const firstBrace = cleaned.indexOf('{');
     if (firstBrace === -1) return null;
 
     let depth = 0;
@@ -80,7 +80,7 @@ export class ActionParser {
    */
   static parseResponse(content: string): { success: boolean; response?: ParsedResponse; error?: string } {
     try {
-      let raw = content.trim();
+      const raw = content.trim();
       let parsed: any;
 
       try {

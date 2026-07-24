@@ -29,7 +29,7 @@ import {
   updateWorkSession,
   WorkSession,
 } from './work-sessions';
-import { getDecisionStats, getMemoryRetrievalStats, getRetryStats, getTaskSuccessRates, getWorkSessionStats } from './metrics';
+import { getDecisionStats, getMemoryRetrievalStats, getRetryStats, getTaskSuccessRates, getWorkSessionStats } from './agent-metrics';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { getMetricsService, type PartialInferenceMetric } from './metrics';
 
