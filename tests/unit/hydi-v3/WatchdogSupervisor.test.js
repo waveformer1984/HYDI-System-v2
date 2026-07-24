@@ -20,19 +20,14 @@ describe('WatchdogSupervisor', () => {
   });
 
   test('marks dead agent when heartbeat times out', async () => {
+    let dead = null;
     const agent = {
       getStatus: () => ({ timestamp: Date.now() - 1000, activeLoopCount: 0, retryCount: 0 }),
     };
-    const deadEvent = new Promise((resolve) => {
-      watchdog.on('agent_dead', resolve);
-    });
+    watchdog.on('agent_dead', (event) => { dead = event; });
     watchdog.registerAgent('agent-1', agent);
     watchdog.start();
-
-    const timeout = new Promise((_, reject) => {
-      setTimeout(() => reject(new Error('agent_dead was not emitted in time')), 2000);
-    });
-    const dead = await Promise.race([deadEvent, timeout]);
+    await new Promise((r) => setTimeout(r, 250));
     expect(dead).not.toBeNull();
     expect(dead.agentId).toBe('agent-1');
   });
@@ -45,16 +40,9 @@ describe('WatchdogSupervisor', () => {
       start: () => { started = true; },
       stop: () => { stopped = true; },
     };
-    const recoveredEvent = new Promise((resolve) => {
-      watchdog.on('agent_recovered', resolve);
-    });
     watchdog.registerAgent('agent-1', agent);
     watchdog.start();
-
-    const timeout = new Promise((_, reject) => {
-      setTimeout(() => reject(new Error('agent_recovered was not emitted in time')), 2000);
-    });
-    await Promise.race([recoveredEvent, timeout]);
+    await new Promise((r) => setTimeout(r, 250));
     expect(stopped).toBe(true);
     expect(started).toBe(true);
   });

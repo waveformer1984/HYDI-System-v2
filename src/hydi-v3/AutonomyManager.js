@@ -16,6 +16,7 @@ const SecurityAuditor = require('./SecurityAuditor');
 const TestingFramework = require('./TestingFramework');
 const PerformanceBenchmark = require('./PerformanceBenchmark');
 const CheckpointStore = require('./CheckpointStore');
+const CudaPoolManager = require('./CudaPoolManager');
 
 /**
  * HYDIAutonomyManager orchestrates the HYDI V3 reliability and autonomy layer.
@@ -46,6 +47,7 @@ class HYDIAutonomyManager extends EventEmitter {
       enableMemoryIntegrity: components.config?.enableMemoryIntegrity !== false,
       enableObservability: components.config?.enableObservability !== false,
       enableSecurity: components.config?.enableSecurity !== false,
+      enableCudaPool: components.config?.enableCudaPool === true,
       ...components.config,
     };
 
@@ -77,6 +79,9 @@ class HYDIAutonomyManager extends EventEmitter {
     this.securityAuditor = new SecurityAuditor();
     this.testingFramework = new TestingFramework();
     this.performanceBenchmark = new PerformanceBenchmark();
+    this.cudaPoolManager = this.config.enableCudaPool
+      ? new CudaPoolManager({ dataPath: path.join(this.config.dataPath, 'cuda-pool') })
+      : null;
 
     this.setupInternalListeners();
   }
@@ -115,6 +120,10 @@ class HYDIAutonomyManager extends EventEmitter {
     if (this.config.enableDistributedCompute) {
       this.distributedCompute.start();
       this.distributedCompute.registerNode(this.distributedCompute.getLocalNode());
+    }
+
+    if (this.config.enableCudaPool && this.cudaPoolManager) {
+      await this.cudaPoolManager.initialize();
     }
 
     if (this.config.enableSelfHealing) {
@@ -173,6 +182,10 @@ class HYDIAutonomyManager extends EventEmitter {
     this.selfHealing.stop();
     this.memoryIntegrity.stop();
     this.distributedCompute.stop();
+
+    if (this.cudaPoolManager) {
+      await this.cudaPoolManager.shutdown();
+    }
 
     if (this._originalGetPendingTasks && this.coreLoop) {
       this.coreLoop.getPendingTasks = this._originalGetPendingTasks;

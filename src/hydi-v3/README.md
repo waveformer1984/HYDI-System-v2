@@ -63,12 +63,12 @@ await manager.stop();
 ## Scripts
 
 - `npm run test` — unit tests
-- `npm run test:integration:hydi-v3` — HYDI V3 integration tests
-- `npm run test:soak:hydi-v3` — long-running stability simulation
+- `npm run test:integration` — HYDI V3 integration tests
+- `npm run test:soak` — long-running stability simulation
 - `npm run benchmark:performance` — performance benchmarks
 - `npm run security-audit` — static security audit of new modules
-- `npm run lint:hydi-v3` — lint V3 code and scripts
-- `npm run typecheck:hydi-v3` — typecheck V3 code and scripts
+- `npm run lint` — lint V3 code and scripts
+- `npm run typecheck` — typecheck V3 code and scripts
 
 ## Data
 
