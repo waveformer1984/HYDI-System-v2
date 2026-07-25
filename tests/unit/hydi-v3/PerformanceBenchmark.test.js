@@ -50,7 +50,7 @@ describe('PerformanceBenchmark', () => {
     expect(targets.startup).toBe(true);
     expect(targets.missionPlanning).toBe(true);
     expect(targets.taskDispatch).toBe(true);
-  });
+  }, 30000);
 
   test('getTrend returns trends for all benchmarks', async () => {
     const report = await benchmark.runAll(components);

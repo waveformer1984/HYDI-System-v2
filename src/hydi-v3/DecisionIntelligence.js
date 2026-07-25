@@ -18,12 +18,16 @@ class DecisionIntelligence {
       maxHistory: config.maxHistory || 10000,
       dangerScoreThreshold: config.dangerScoreThreshold || 0.9,
       lowConfidenceThreshold: config.lowConfidenceThreshold || 0.3,
+      persistDebounceMs: config.persistDebounceMs ?? 50,
       ...config,
     };
 
     this.decisions = [];
     this._loaded = false;
     this._destroyed = false;
+    this._persistTimer = null;
+    this._persistPromise = null;
+    this._persistResolve = null;
   }
 
   async initialize() {
@@ -49,6 +53,15 @@ class DecisionIntelligence {
 
   destroy() {
     this._destroyed = true;
+    if (this._persistTimer) {
+      clearTimeout(this._persistTimer);
+      this._persistTimer = null;
+    }
+    if (this._persistResolve) {
+      this._persistResolve();
+      this._persistResolve = null;
+      this._persistPromise = null;
+    }
   }
 
   /**
@@ -205,12 +218,37 @@ class DecisionIntelligence {
 
   async persist() {
     if (this._destroyed) return;
+    if (this._persistTimer) {
+      clearTimeout(this._persistTimer);
+      this._persistTimer = null;
+    }
+    const previousResolve = this._persistResolve;
+    this._persistPromise = new Promise((resolve) => {
+      this._persistResolve = resolve;
+    });
+    if (previousResolve) previousResolve();
+    this._persistTimer = setTimeout(() => {
+      this._persistTimer = null;
+      this._doPersist().finally(() => {
+        if (this._persistResolve) {
+          this._persistResolve();
+          this._persistResolve = null;
+          this._persistPromise = null;
+        }
+      });
+    }, this.config.persistDebounceMs).unref();
+    return this._persistPromise;
+  }
+
+  async _doPersist() {
     try {
       await fs.mkdir(this.config.storagePath, { recursive: true });
       const file = path.join(this.config.storagePath, 'decision_history.json');
       await fs.writeFile(file, JSON.stringify(this.decisions, null, 2));
     } catch (err) {
-      console.error('[DECISION INTELLIGENCE] Persist failed:', err.message);
+      if (!this._destroyed) {
+        console.error('[DECISION INTELLIGENCE] Persist failed:', err.message);
+      }
     }
   }
 
