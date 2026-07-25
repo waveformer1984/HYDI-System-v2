@@ -7,7 +7,9 @@ const {
   setupGlobalErrorHandlers,
   uninstallGlobalErrorHandlers,
 } = require('../../lib/error-recovery');
+const { __reset, startSweeping, stopSweeping } = require('../../lib/rate-limit');
 const HeidiActionLayer = require('../../src/actions/HeidiActionLayer');
+const LocalModelAdapter = require('../../src/models/local-model-adapter');
 
 describe('Process lifecycle cleanup', () => {
   afterEach(() => {
@@ -157,6 +159,74 @@ describe('Process lifecycle cleanup', () => {
       expect(layer._childProcesses.size).toBe(0);
       try {
         fs.unlinkSync(slowScript);
+      } catch (e) {
+        // ignore
+      }
+    });
+  });
+
+  describe('rate-limit', () => {
+    afterEach(() => {
+      stopSweeping();
+    });
+
+    test('__reset stops the background sweep interval', () => {
+      __reset();
+      jest.useFakeTimers({ legacyFakeTimers: true });
+      expect(jest.getTimerCount()).toBe(0);
+      startSweeping();
+      expect(jest.getTimerCount()).toBe(1);
+      stopSweeping();
+      expect(jest.getTimerCount()).toBe(0);
+    });
+  });
+
+  describe('LocalModelAdapter child processes', () => {
+    let adapter;
+
+    beforeEach(() => {
+      adapter = new LocalModelAdapter({ startMonitoring: false });
+    });
+
+    afterEach(async () => {
+      await adapter.destroy();
+    });
+
+    test('runTrackedProcess runs a script and cleans up', async () => {
+      const script = path.join(os.tmpdir(), 'heidi-tracked-script.js');
+      fs.writeFileSync(script, `process.stdout.write('ok'); process.exit(0);\n`);
+      try {
+        const output = await adapter.runTrackedProcess('node', [script], 2000);
+        expect(output).toBe('ok');
+        expect(adapter.modelProcesses.size).toBe(0);
+      } finally {
+        try { fs.unlinkSync(script); } catch (e) { /* ignore */ }
+      }
+    });
+
+    test('runTrackedProcess times out and kills long-running scripts', async () => {
+      const script = path.join(os.tmpdir(), 'heidi-tracked-slow.js');
+      fs.writeFileSync(script, `setTimeout(() => {}, 60000);\n`);
+      try {
+        await expect(adapter.runTrackedProcess('node', [script], 50)).rejects.toThrow(
+          /timed out/
+        );
+        expect(adapter.modelProcesses.size).toBe(0);
+      } finally {
+        try { fs.unlinkSync(script); } catch (e) { /* ignore */ }
+      }
+    });
+
+    test('destroy kills running tracked process', async () => {
+      const script = path.join(os.tmpdir(), 'heidi-tracked-destroy.js');
+      fs.writeFileSync(script, `setTimeout(() => {}, 60000);\n`);
+      const promise = adapter.runTrackedProcess('node', [script], 60000);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      await adapter.destroy();
+      await expect(promise).rejects.toThrow();
+      expect(adapter.modelProcesses.size).toBe(0);
+      try {
+        fs.unlinkSync(script);
       } catch (e) {
         // ignore
       }

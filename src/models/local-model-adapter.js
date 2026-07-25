@@ -845,39 +845,96 @@ class LocalModelAdapter extends EventEmitter {
   }
 
   /**
+   * Spawn a child process, track it for cleanup, enforce timeout,
+   * and collect stdout/stderr. Returns a Promise that resolves on exit code 0.
+   */
+  runTrackedProcess(command, args, timeoutMs = 30000, outputTransformer) {
+    if (this._destroyed) {
+      return Promise.reject(new Error('LocalModelAdapter has been destroyed'));
+    }
+
+    return new Promise((resolve, reject) => {
+      let output = '';
+      let errorOutput = '';
+      let timedOut = false;
+      let timeoutHandle;
+      let closed = false;
+
+      const child = spawn(command, args);
+      this.modelProcesses.set(child.pid, child);
+
+      const cleanup = () => {
+        this.modelProcesses.delete(child.pid);
+        child.stdout.removeAllListeners('data');
+        if (child.stderr) child.stderr.removeAllListeners('data');
+        child.removeAllListeners('close');
+        child.removeAllListeners('error');
+        if (timeoutHandle) clearTimeout(timeoutHandle);
+      };
+
+      const closeHandler = (code) => {
+        if (closed) return;
+        closed = true;
+        cleanup();
+        if (timedOut) {
+          reject(new Error(`Model process timed out after ${timeoutMs}ms`));
+        } else if (code === 0) {
+          try {
+            resolve(outputTransformer ? outputTransformer(output, errorOutput) : output);
+          } catch (e) {
+            reject(e);
+          }
+        } else {
+          reject(new Error(`Model process exited with code ${code}: ${errorOutput || 'no stderr'}`));
+        }
+      };
+
+      timeoutHandle = setTimeout(() => {
+        timedOut = true;
+        try {
+          child.kill('SIGTERM');
+        } catch (e) {
+          // process already gone
+        }
+      }, timeoutMs);
+
+      child.stdout.on('data', (data) => {
+        output += data.toString();
+      });
+
+      if (child.stderr) {
+        child.stderr.on('data', (data) => {
+          errorOutput += data.toString();
+        });
+      }
+
+      child.on('close', closeHandler);
+      child.on('error', (err) => {
+        if (closed) return;
+        closed = true;
+        cleanup();
+        reject(err);
+      });
+    });
+  }
+
+  /**
    * Run Llama inference process
    */
   async runLlamaInference(modelPath, params) {
-    return new Promise((resolve, reject) => {
-      const args = [
-        '-m', modelPath,
-        '-p', params.prompt,
-        '--temp', params.temperature.toString(),
-        '-n', params.maxTokens.toString(),
-        '-c', params.contextSize.toString()
-      ];
-      
-      const process = spawn('./bin/main', args);
-      let output = '';
-      
-      process.stdout.on('data', (data) => {
-        output += data.toString();
-      });
-      
-      process.on('close', (code) => {
-        if (code === 0) {
-          resolve({
-            output: output.trim(),
-            tokens: output.split(' ').length,
-            confidence: 0.95
-          });
-        } else {
-          reject(new Error(`Llama process exited with code ${code}`));
-        }
-      });
-      
-      process.on('error', reject);
-    });
+    const args = [
+      '-m', modelPath,
+      '-p', params.prompt,
+      '--temp', params.temperature.toString(),
+      '-n', params.maxTokens.toString(),
+      '-c', params.contextSize.toString()
+    ];
+
+    return this.runTrackedProcess('./bin/main', args, params.timeout || 30000, (output) => ({
+      output: output.trim(),
+      tokens: output.split(' ').length,
+      confidence: 0.95
+    }));
   }
 
   /**
@@ -927,28 +984,16 @@ class LocalModelAdapter extends EventEmitter {
   /**
    * Run custom model process
    */
-  async runCustomModel(modelPath, input, _config) {
-    return new Promise((resolve, reject) => {
-      const process = spawn('python', [modelPath, JSON.stringify(input)]);
-      let output = '';
-      
-      process.stdout.on('data', (data) => {
-        output += data.toString();
-      });
-      
-      process.on('close', (code) => {
-        if (code === 0) {
-          try {
-            resolve(JSON.parse(output));
-          } catch (e) {
-            reject(new Error('Invalid JSON output from custom model'));
-          }
-        } else {
-          reject(new Error(`Custom model process exited with code ${code}`));
-        }
-      });
-      
-      process.on('error', reject);
+  async runCustomModel(modelPath, input, config = {}) {
+    const args = [modelPath, JSON.stringify(input)];
+    const timeoutMs = config.timeout || 30000;
+
+    return this.runTrackedProcess('python', args, timeoutMs, (output) => {
+      try {
+        return JSON.parse(output);
+      } catch (e) {
+        throw new Error('Invalid JSON output from custom model');
+      }
     });
   }
 
