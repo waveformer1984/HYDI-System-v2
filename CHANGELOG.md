@@ -6,6 +6,7 @@ All notable changes to HYDI System v2 are documented here. The format follows [K
 
 ### Added
 - Secret redaction and correlation-ID propagation (`AsyncLocalStorage`) in `lib/structured-logger.js`, plus its first test coverage (`tests/unit/structured-logger.test.js`, 11 tests). See `ISSUES_FOUND.md` #72.
+- End-to-end shutdown and recovery test suite `tests/unit/hydi-v3/ShutdownRecovery.test.js` covering graceful shutdown persistence, restart state restoration, repeated start/stop cycle integrity, and `GracefulShutdown`-coordinated flush with recovery-time assertions.
 
 ### Changed
 - Migrated `console.*` logging to the structured logger in `workers/` (all 19 files, 302 calls) and mostly in `agents/`/`revenue-engine/` (118 of 204 calls; the rest is deliberately-preserved interactive CLI output). `src/`, `api/`, `lib/`, `pages/` still use `console.*` and are tracked as a follow-up (`ROADMAP.md` near-term item 11).
