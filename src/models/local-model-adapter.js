@@ -9,7 +9,7 @@ const path = require('path');
 const EventEmitter = require('events');
 
 class LocalModelAdapter extends EventEmitter {
-  constructor() {
+  constructor(options = {}) {
     super();
     this.models = new Map();
     this.modelProcesses = new Map();
@@ -125,10 +125,56 @@ class LocalModelAdapter extends EventEmitter {
     
     this.batchQueue = [];
     this.batchTimer = null;
+    this.systemMonitoringInterval = null;
+    this.hungModelMonitorInterval = null;
+    this._destroyed = false;
+    this._initPromise = null;
 
-    this.initializeModels();
-    this.startSystemMonitoring();
-    this.startHungModelMonitor();
+    const autoInitialize = options.autoInitialize !== undefined
+      ? options.autoInitialize
+      : process.env.NODE_ENV !== 'test';
+    if (autoInitialize) {
+      this._initPromise = this.initializeModels();
+    }
+
+    const startMonitoring = options.startMonitoring !== undefined
+      ? options.startMonitoring
+      : process.env.NODE_ENV !== 'test';
+    if (startMonitoring) {
+      this.startSystemMonitoring();
+      this.startHungModelMonitor();
+    }
+  }
+
+  async destroy() {
+    this._destroyed = true;
+    if (this._initPromise) {
+      await this._initPromise.catch(() => {});
+      this._initPromise = null;
+    }
+    if (this.systemMonitoringInterval) {
+      clearInterval(this.systemMonitoringInterval);
+      this.systemMonitoringInterval = null;
+    }
+    if (this.hungModelMonitorInterval) {
+      clearInterval(this.hungModelMonitorInterval);
+      this.hungModelMonitorInterval = null;
+    }
+    if (this.batchTimer) {
+      clearTimeout(this.batchTimer);
+      this.batchTimer = null;
+    }
+    for (const [modelId, process] of this.modelProcesses.entries()) {
+      try {
+        process.kill('SIGKILL');
+      } catch (e) {
+        // Process already terminated
+      }
+    }
+    this.modelProcesses.clear();
+    this.models.clear();
+    this.batchQueue = [];
+    this.removeAllListeners();
   }
 
   /**
@@ -138,8 +184,10 @@ class LocalModelAdapter extends EventEmitter {
     console.log('Initializing local models...');
     
     for (const [modelId, config] of Object.entries(this.modelConfigs)) {
+      if (this._destroyed) break;
       try {
         await this.loadModel(modelId, config);
+        if (this._destroyed) break;
         console.log(`✓ Model loaded: ${modelId}`);
       } catch (error) {
         console.error(`✗ Failed to load model ${modelId}:`, error.message);
@@ -151,6 +199,7 @@ class LocalModelAdapter extends EventEmitter {
    * Load a specific model
    */
   async loadModel(modelId, config) {
+    if (this._destroyed) return;
     switch (config.type) {
       case 'llama':
       case 'codellama':
@@ -186,15 +235,18 @@ class LocalModelAdapter extends EventEmitter {
    * Load Llama-based model
    */
   async loadLlamaModel(modelId, config) {
+    if (this._destroyed) return;
     // Check if model file exists
     const modelPath = path.resolve(config.path);
     try {
       await fs.access(modelPath);
     } catch {
+      if (this._destroyed) return;
       // Download model if not exists
       await this.downloadModel(modelId, modelPath);
     }
 
+    if (this._destroyed) return;
     this.models.set(modelId, {
       type: config.type,
       path: modelPath,
@@ -314,23 +366,24 @@ class LocalModelAdapter extends EventEmitter {
     const EXECUTION_TIMEOUT = options.timeout || 8000;
     
     const startTime = Date.now();
-    
+    let timeoutId;
+
     try {
       // Race between execution and timeout
       const result = await Promise.race([
-        tier === 'enterprise' 
+        tier === 'enterprise'
           ? this.executePriority(modelId, input, { ...options, inferenceRequestId })
           : this.executeBatched(modelId, input, { ...options, inferenceRequestId }),
-        new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('MODEL_TIMEOUT')), EXECUTION_TIMEOUT)
-        )
+        new Promise((_, reject) => {
+          timeoutId = setTimeout(() => reject(new Error('MODEL_TIMEOUT')), EXECUTION_TIMEOUT);
+        })
       ]);
-      
+
       const latency = Date.now() - startTime;
-      
+
       // SOFT LATENCY SIGNAL: Track but DO NOT auto-fallback
       this.trackLatency(modelId, latency);
-      
+
       // Attach decoded IID to result for tracking
       if (inferenceRequestId) {
         result.inferenceRequestId = inferenceRequestId;
@@ -340,12 +393,12 @@ class LocalModelAdapter extends EventEmitter {
           iidTimestamp: new Date().toISOString()
         };
       }
-      
+
       return result;
-      
+
     } catch (error) {
       const latency = Date.now() - startTime;
-      
+
       if (error.message === 'MODEL_TIMEOUT') {
         // Log timeout for telemetry with IID if available
         this.emit('model_timeout', {
@@ -361,6 +414,8 @@ class LocalModelAdapter extends EventEmitter {
       // Track error latency too
       this.trackLatency(modelId, latency, true);
       throw error;
+    } finally {
+      if (timeoutId) clearTimeout(timeoutId);
     }
   }
 
@@ -569,6 +624,7 @@ class LocalModelAdapter extends EventEmitter {
     // Set timer for next batch if items remain
     if (this.batchQueue.length > 0 && !this.batchTimer) {
       this.batchTimer = setTimeout(() => this.processBatch(), 100);
+      if (this.batchTimer.unref) this.batchTimer.unref();
     }
   }
 
@@ -967,6 +1023,7 @@ class LocalModelAdapter extends EventEmitter {
    * Download model if not exists
    */
   async downloadModel(modelId, _modelPath) {
+    if (this._destroyed) return;
     console.log(`Downloading model ${modelId}...`);
     // Implementation would download from model repository
   }
@@ -1210,9 +1267,10 @@ class LocalModelAdapter extends EventEmitter {
    * Start system monitoring for Dynamic Concurrency Scaling
    */
   startSystemMonitoring() {
+    if (this.systemMonitoringInterval || this._destroyed) return;
     console.log('[SYSTEM] Starting Dynamic Concurrency Scaling monitor...');
     
-    setInterval(async () => {
+    this.systemMonitoringInterval = setInterval(async () => {
       try {
         const temp = await this.getCpuTemperature();
         const cpu = await this.getCpuUsage();
@@ -1236,6 +1294,7 @@ class LocalModelAdapter extends EventEmitter {
         console.error('[SYSTEM] Monitoring error:', error.message);
       }
     }, 5000); // Check every 5 seconds
+    if (this.systemMonitoringInterval.unref) this.systemMonitoringInterval.unref();
   }
 
   /**
@@ -1327,9 +1386,10 @@ class LocalModelAdapter extends EventEmitter {
    * Start hung model monitor
    */
   startHungModelMonitor() {
+    if (this.hungModelMonitorInterval || this._destroyed) return;
     console.log('[SYSTEM] Starting hung model monitor...');
     
-    setInterval(() => {
+    this.hungModelMonitorInterval = setInterval(() => {
       this.modelProcesses.forEach((process, modelId) => {
         if (process.lastActivity && (Date.now() - process.lastActivity) > this.systemMonitor.hungModelTimeout) {
           console.log(`[RECOVERY] Model ${modelId} hung detected, initiating recovery...`);
@@ -1337,6 +1397,7 @@ class LocalModelAdapter extends EventEmitter {
         }
       });
     }, 10000); // Check every 10 seconds
+    if (this.hungModelMonitorInterval.unref) this.hungModelMonitorInterval.unref();
   }
 
   /**

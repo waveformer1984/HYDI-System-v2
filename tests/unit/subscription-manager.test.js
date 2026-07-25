@@ -59,6 +59,9 @@ describe('SubscriptionManager', () => {
   });
 
   afterEach(() => {
+    if (manager && typeof manager.destroy === 'function') {
+      return manager.destroy();
+    }
     jest.clearAllMocks();
   });
 

@@ -68,8 +68,15 @@ class HeidiMemorySystem extends EventEmitter {
     this.reflectionTimer = null;
     this.persistTimer = null;
 
-    this.initialize();
-    this.startMaintenanceTasks();
+    const autoInitialize = config.autoInitialize !== undefined
+      ? config.autoInitialize
+      : process.env.NODE_ENV !== 'test';
+    const startMaintenance = config.startMaintenance !== undefined
+      ? config.startMaintenance
+      : process.env.NODE_ENV !== 'test';
+
+    if (autoInitialize) this.initialize();
+    if (startMaintenance) this.startMaintenanceTasks();
 
     console.log('[MEMORY] Heidi Memory System initialized');
     console.log(`[MEMORY] Session TTL: ${this.config.sessionTTL}ms`);

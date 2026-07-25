@@ -939,11 +939,14 @@ class HybridModelStack extends EventEmitter {
   }
 
   /**
-   * Stop background timers. Call in afterAll / afterEach when testing.
+   * Stop background timers and tear down subsystems. Call in afterAll / afterEach when testing.
    */
-  destroy() {
+  async destroy() {
     clearInterval(this._monitorInterval);
     this._monitorInterval = null;
+    if (this.localModels && typeof this.localModels.destroy === 'function') {
+      await this.localModels.destroy();
+    }
   }
   
   /**

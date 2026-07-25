@@ -35,8 +35,8 @@ module.exports = {
     '^(\\.{1,2}/.*)\\.js$': '$1',
   },
 
-  forceExit: true,
-  detectOpenHandles: false,
+  forceExit: false,
+  detectOpenHandles: true,
   testTimeout: 15000,
   clearMocks: true,
   verbose: true,
