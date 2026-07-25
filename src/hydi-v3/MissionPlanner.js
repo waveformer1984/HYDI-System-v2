@@ -31,6 +31,7 @@ class MissionPlanner extends EventEmitter {
     this._persistTimer = null;
     this._persistPromise = null;
     this._persistResolve = null;
+    this._persistInFlight = false;
   }
 
   async initialize() {
@@ -46,16 +47,18 @@ class MissionPlanner extends EventEmitter {
   }
 
   async destroy() {
-    const hadPendingPersist = Boolean(this._persistTimer);
+    const hadPendingTimer = Boolean(this._persistTimer);
     if (this._persistTimer) {
       clearTimeout(this._persistTimer);
       this._persistTimer = null;
     }
     this._destroyed = true;
-    if (hadPendingPersist) {
-      // A mutation was debounced but not yet written -- flush it now rather
-      // than silently drop it. The debounce timer is .unref()'d so a natural
-      // process exit would otherwise skip it entirely.
+    // If a flush or debounced persist is in flight, wait for it before
+    // clearing in-memory state so we don't serialize an empty map.
+    if (this._persistInFlight && this._persistPromise) {
+      await this._persistPromise;
+    }
+    if (hadPendingTimer) {
       await this._doPersist();
     }
     if (this._persistResolve) {
@@ -63,6 +66,7 @@ class MissionPlanner extends EventEmitter {
       this._persistResolve = null;
       this._persistPromise = null;
     }
+    this._persistInFlight = false;
     this.missions.clear();
     this.activeTasks.clear();
   }
@@ -458,7 +462,9 @@ class MissionPlanner extends EventEmitter {
     if (previousResolve) previousResolve();
     this._persistTimer = setTimeout(() => {
       this._persistTimer = null;
+      this._persistInFlight = true;
       this._doPersist().finally(() => {
+        this._persistInFlight = false;
         if (this._persistResolve) {
           this._persistResolve();
           this._persistResolve = null;
@@ -467,6 +473,31 @@ class MissionPlanner extends EventEmitter {
       });
     }, this.config.persistDebounceMs).unref();
     return this._persistPromise;
+  }
+
+  async flush() {
+    if (this._destroyed) return;
+    if (this._persistTimer) {
+      clearTimeout(this._persistTimer);
+      this._persistTimer = null;
+    }
+    if (this._persistInFlight && this._persistPromise) {
+      await this._persistPromise;
+    }
+    this._persistInFlight = true;
+    this._persistPromise = new Promise((resolve) => {
+      this._persistResolve = resolve;
+    });
+    try {
+      await this._doPersist();
+    } finally {
+      this._persistInFlight = false;
+      if (this._persistResolve) {
+        this._persistResolve();
+        this._persistResolve = null;
+        this._persistPromise = null;
+      }
+    }
   }
 
   async _doPersist() {

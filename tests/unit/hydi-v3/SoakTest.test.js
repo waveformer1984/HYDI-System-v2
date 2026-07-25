@@ -54,7 +54,7 @@ describe('SoakTest', () => {
 
   afterEach(async () => {
     await manager.stop();
-    manager.destroy();
+    await manager.destroy();
     await fs.rm(dataPath, { recursive: true, force: true }).catch(() => {});
   });
 

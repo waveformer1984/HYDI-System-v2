@@ -205,9 +205,9 @@ class HYDIAutonomyManager extends EventEmitter {
 
   async persistAll() {
     try {
-      await this.missionPlanner.persist();
-      await this.decisionIntelligence.persist();
-      await this.reflectionEngine.persist();
+      await this.missionPlanner.flush();
+      await this.decisionIntelligence.flush();
+      await this.reflectionEngine.flush();
     } catch (err) {
       this.emit('persist_error', err);
     }
@@ -417,17 +417,21 @@ class HYDIAutonomyManager extends EventEmitter {
     });
   }
 
-  destroy() {
-    this.stop().catch(() => {});
-    this.watchdog.destroy();
-    this.heartbeat.destroy();
-    this.gracefulShutdown.destroy();
-    this.decisionIntelligence.destroy();
-    this.missionPlanner.destroy();
-    this.reflectionEngine.destroy();
-    this.selfHealing.destroy();
-    this.distributedCompute.destroy();
-    this.memoryIntegrity.destroy();
+  async destroy() {
+    if (!this._stopped) {
+      await this.stop();
+    }
+    await Promise.allSettled([
+      this.watchdog.destroy?.(),
+      this.heartbeat.destroy?.(),
+      this.gracefulShutdown.destroy?.(),
+      this.decisionIntelligence.destroy?.(),
+      this.missionPlanner.destroy?.(),
+      this.reflectionEngine.destroy?.(),
+      this.selfHealing.destroy?.(),
+      this.distributedCompute.destroy?.(),
+      this.memoryIntegrity.destroy?.(),
+    ]);
     this.removeAllListeners();
   }
 }

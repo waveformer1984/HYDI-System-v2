@@ -36,6 +36,7 @@ class ReflectionEngine extends EventEmitter {
     this._persistTimer = null;
     this._persistPromise = null;
     this._persistResolve = null;
+    this._persistInFlight = false;
   }
 
   async initialize() {
@@ -51,16 +52,16 @@ class ReflectionEngine extends EventEmitter {
   }
 
   async destroy() {
-    const hadPendingPersist = Boolean(this._persistTimer);
+    const hadPendingTimer = Boolean(this._persistTimer);
     if (this._persistTimer) {
       clearTimeout(this._persistTimer);
       this._persistTimer = null;
     }
     this._destroyed = true;
-    if (hadPendingPersist) {
-      // A mutation was debounced but not yet written -- flush it now rather
-      // than silently drop it. The debounce timer is .unref()'d so a natural
-      // process exit would otherwise skip it entirely.
+    if (this._persistInFlight && this._persistPromise) {
+      await this._persistPromise;
+    }
+    if (hadPendingTimer) {
       await this._doPersist();
     }
     if (this._persistResolve) {
@@ -68,6 +69,7 @@ class ReflectionEngine extends EventEmitter {
       this._persistResolve = null;
       this._persistPromise = null;
     }
+    this._persistInFlight = false;
     this.reflections = [];
     for (const cat of Object.keys(this.strategyRankings)) {
       this.strategyRankings[cat].clear();
@@ -285,7 +287,9 @@ class ReflectionEngine extends EventEmitter {
     if (previousResolve) previousResolve();
     this._persistTimer = setTimeout(() => {
       this._persistTimer = null;
+      this._persistInFlight = true;
       this._doPersist().finally(() => {
+        this._persistInFlight = false;
         if (this._persistResolve) {
           this._persistResolve();
           this._persistResolve = null;
@@ -294,6 +298,31 @@ class ReflectionEngine extends EventEmitter {
       });
     }, this.config.persistDebounceMs).unref();
     return this._persistPromise;
+  }
+
+  async flush() {
+    if (this._destroyed) return;
+    if (this._persistTimer) {
+      clearTimeout(this._persistTimer);
+      this._persistTimer = null;
+    }
+    if (this._persistInFlight && this._persistPromise) {
+      await this._persistPromise;
+    }
+    this._persistInFlight = true;
+    this._persistPromise = new Promise((resolve) => {
+      this._persistResolve = resolve;
+    });
+    try {
+      await this._doPersist();
+    } finally {
+      this._persistInFlight = false;
+      if (this._persistResolve) {
+        this._persistResolve();
+        this._persistResolve = null;
+        this._persistPromise = null;
+      }
+    }
   }
 
   async _doPersist() {

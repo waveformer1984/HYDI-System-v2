@@ -57,7 +57,7 @@ describe('Shutdown and Recovery', () => {
 
   afterEach(async () => {
     await manager.stop().catch(() => {});
-    manager.destroy();
+    await manager.destroy().catch(() => {});
     await fs.rm(dataPath, { recursive: true, force: true }).catch(() => {});
   });
 
