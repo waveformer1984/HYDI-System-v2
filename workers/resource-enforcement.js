@@ -111,6 +111,17 @@ class ResourceEnforcement {
     
     return stats;
   }
+
+  /**
+   * Destroy all enforced workers and clear state
+   */
+  destroy() {
+    for (const enforced of this.enforcedWorkers.values()) {
+      enforced.destroy();
+    }
+    this.enforcedWorkers.clear();
+    this.violations.clear();
+  }
 }
 
 /**
@@ -125,7 +136,8 @@ class EnforcedWorker {
     this.startTime = Date.now();
     this.active = true;
     this.monitoring = null;
-    
+    this._terminated = false;
+
     this.setupMonitoring();
     this.setupEventHandlers();
   }
@@ -145,28 +157,33 @@ class EnforcedWorker {
    * Setup event handlers
    */
   setupEventHandlers() {
-    this.worker.on('message', (message) => {
+    this._onMessage = (message) => {
       if (message.type === 'resource_update') {
         this.handleResourceUpdate(message.resources);
       } else if (message.type === 'violation') {
         this.handleViolation(message.violation);
       }
-    });
-    
-    this.worker.on('error', (error) => {
+    };
+
+    this._onError = (error) => {
       this.handleViolation({
         type: 'worker_error',
         message: error.message,
         timestamp: Date.now()
       });
-    });
-    
-    this.worker.on('exit', (code) => {
+    };
+
+    this._onExit = () => {
       this.active = false;
       if (this.monitoring) {
         clearInterval(this.monitoring);
+        this.monitoring = null;
       }
-    });
+    };
+
+    this.worker.on('message', this._onMessage);
+    this.worker.on('error', this._onError);
+    this.worker.on('exit', this._onExit);
   }
 
   /**
@@ -248,14 +265,33 @@ class EnforcedWorker {
    * Terminate worker
    */
   terminateWorker(reason) {
+    if (this._terminated) return;
+    this._terminated = true;
     logger.warn('Terminating worker', { workerId: this.workerId, reason });
-    
+
     if (this.monitoring) {
       clearInterval(this.monitoring);
+      this.monitoring = null;
     }
-    
-    this.worker.terminate();
+
+    try {
+      this.worker.terminate();
+    } catch (e) {
+      // already terminated
+    }
     this.active = false;
+  }
+
+  /**
+   * Full cleanup: stop monitoring, remove listeners, terminate worker
+   */
+  destroy() {
+    this.terminateWorker('Destroyed');
+    if (this.worker && this._onMessage) {
+      this.worker.off('message', this._onMessage);
+      this.worker.off('error', this._onError);
+      this.worker.off('exit', this._onExit);
+    }
   }
 
   /**
@@ -309,7 +345,9 @@ class WorkerResourceMonitor {
       startTime: Date.now(),
       openFiles: 0
     };
-    
+    this._interval = null;
+    this._onMessage = null;
+
     this.setupMonitoring();
   }
 
@@ -319,19 +357,34 @@ class WorkerResourceMonitor {
   setupMonitoring() {
     if (!isMainThread && parentPort) {
       // Update resources periodically
-      setInterval(() => {
+      this._interval = setInterval(() => {
         this.updateResources();
         this.sendResourceUpdate();
       }, 1000);
-      
+
       // Handle messages from main thread
-      parentPort.on('message', (message) => {
+      this._onMessage = (message) => {
         if (message.type === 'check_resources') {
           this.sendResourceUpdate();
         } else if (message.type === 'warning') {
           logger.warn('Warning received', { reason: message.reason });
         }
-      });
+      };
+      parentPort.on('message', this._onMessage);
+    }
+  }
+
+  /**
+   * Stop monitoring and clean up worker-side listeners
+   */
+  destroy() {
+    if (this._interval) {
+      clearInterval(this._interval);
+      this._interval = null;
+    }
+    if (!isMainThread && parentPort && this._onMessage) {
+      parentPort.off('message', this._onMessage);
+      this._onMessage = null;
     }
   }
 

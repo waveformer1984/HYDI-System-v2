@@ -51,10 +51,13 @@ class HeidiActionLayer extends EventEmitter {
     
     // Active actions tracking
     this.activeActions = new Map();
-    
+
+    // Tracked child processes for lifecycle cleanup
+    this._childProcesses = new Set();
+
     // Action history
     this.actionHistory = [];
-    
+
     // Revenue tracking
     this.revenue = {
       generated: 0,
@@ -646,39 +649,71 @@ class HeidiActionLayer extends EventEmitter {
     }
   }
   
-  async executeScript(scriptPath, args = [], env = {}) {
+  async executeScript(scriptPath, args = [], env = {}, options = {}) {
     return new Promise((resolve, reject) => {
       const startTime = Date.now();
-      
+      const timeoutMs = options.timeout || this.config.actionTimeout || 30000;
+
       const child = spawn('node', [scriptPath, ...args], {
         env: { ...process.env, ...env },
         stdio: 'pipe'
       });
-      
+
+      this._childProcesses.add(child);
+
       let stdout = '';
       let stderr = '';
-      
+      let timedOut = false;
+      let timeoutHandle;
+
+      const cleanup = () => {
+        this._childProcesses.delete(child);
+        child.stdout.removeAllListeners('data');
+        child.stderr.removeAllListeners('data');
+        child.removeAllListeners('close');
+        child.removeAllListeners('error');
+        if (timeoutHandle) clearTimeout(timeoutHandle);
+      };
+
+      const killChild = (signal = 'SIGTERM') => {
+        try {
+          child.kill(signal);
+        } catch (e) {
+          // process already gone
+        }
+      };
+
+      timeoutHandle = setTimeout(() => {
+        timedOut = true;
+        killChild('SIGTERM');
+      }, timeoutMs);
+
       child.stdout.on('data', (data) => {
         stdout += data.toString();
       });
-      
+
       child.stderr.on('data', (data) => {
         stderr += data.toString();
       });
-      
+
       child.on('close', (code) => {
         const duration = Date.now() - startTime;
-        
-        resolve({
-          exitCode: code,
-          stdout,
-          stderr,
-          duration,
-          success: code === 0
-        });
+        cleanup();
+        if (timedOut) {
+          reject(new Error(`Script execution timed out after ${timeoutMs}ms`));
+        } else {
+          resolve({
+            exitCode: code,
+            stdout,
+            stderr,
+            duration,
+            success: code === 0
+          });
+        }
       });
-      
+
       child.on('error', (error) => {
+        cleanup();
         reject(error);
       });
     });
@@ -1023,6 +1058,16 @@ class HeidiActionLayer extends EventEmitter {
     this.actions.clear();
     this.activeActions.clear();
     this.actionHistory = [];
+
+    for (const child of this._childProcesses) {
+      try {
+        child.kill('SIGTERM');
+      } catch (e) {
+        // already terminated
+      }
+    }
+    this._childProcesses.clear();
+
     this.removeAllListeners();
   }
 }

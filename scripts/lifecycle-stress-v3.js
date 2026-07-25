@@ -32,7 +32,7 @@ function trackTimers() {
 }
 
 async function main() {
-  const ITERATIONS = 100;
+  const ITERATIONS = 1000;
   const activeTimers = trackTimers();
 
   const manager = new HYDIAutonomyManager({
