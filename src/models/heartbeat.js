@@ -4,7 +4,7 @@
  * Designed to close the "Silent Failure" gap in Ursula's local model execution
  */
 
-const { LocalModelAdapter } = require('./local-model-adapter');
+const LocalModelAdapter = require('./local-model-adapter');
 const { supabase } = require('../database');
 const EventEmitter = require('events');
 

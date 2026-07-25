@@ -718,7 +718,7 @@ class UrsulaServiceBundle extends EventEmitter {
 
     try {
       // Get local model adapter instance
-      const { LocalModelAdapter } = require('../src/models/local-model-adapter');
+      const LocalModelAdapter = require('../src/models/local-model-adapter');
       const modelAdapter = new LocalModelAdapter();
       
       // Execute with local model and tier-based priority
