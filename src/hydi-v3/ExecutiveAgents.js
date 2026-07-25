@@ -13,12 +13,12 @@ class ExecutiveAgent {
     this.name = name;
   }
 
-  report(memory) {
+  report(_memory) {
     throw new Error('report() must be implemented');
   }
 
-  _find(memory, query) {
-    return memory.find(query);
+  _find(_memory, query) {
+    return _memory.find(query);
   }
 }
 

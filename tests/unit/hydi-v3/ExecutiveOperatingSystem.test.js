@@ -89,7 +89,7 @@ describe('ExecutiveOperatingSystem', () => {
 
   test('detects deadline, equipment, and blocked-project risks', () => {
     const printer = memory.put({ type: 'equipment', name: 'Printer', status: 'maintenance' });
-    const project = memory.put({ type: 'project', name: 'Widget', status: 'active', payload: { deadline: Date.now() - 1000 } });
+    memory.put({ type: 'project', name: 'Widget', status: 'active', payload: { deadline: Date.now() - 1000 } });
     const dependent = memory.put({ type: 'project', name: 'Dependent', status: 'active' });
     memory.relate(dependent, printer, 'depends-on');
 
