@@ -50,11 +50,18 @@ class ReflectionEngine extends EventEmitter {
     this._loaded = true;
   }
 
-  destroy() {
-    this._destroyed = true;
+  async destroy() {
+    const hadPendingPersist = Boolean(this._persistTimer);
     if (this._persistTimer) {
       clearTimeout(this._persistTimer);
       this._persistTimer = null;
+    }
+    this._destroyed = true;
+    if (hadPendingPersist) {
+      // A mutation was debounced but not yet written -- flush it now rather
+      // than silently drop it. The debounce timer is .unref()'d so a natural
+      // process exit would otherwise skip it entirely.
+      await this._doPersist();
     }
     if (this._persistResolve) {
       this._persistResolve();

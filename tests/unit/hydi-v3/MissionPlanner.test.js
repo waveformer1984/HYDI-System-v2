@@ -1,15 +1,21 @@
 const MissionPlanner = require('../../../src/hydi-v3/MissionPlanner');
+const fs = require('fs').promises;
+const path = require('path');
+const os = require('os');
 
 describe('MissionPlanner', () => {
   let planner;
+  let storagePath;
 
   beforeEach(async () => {
-    planner = new MissionPlanner({ storagePath: '/tmp/hydi-test-missions' });
+    storagePath = path.join(os.tmpdir(), `hydi-test-missions-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    planner = new MissionPlanner({ storagePath });
     await planner.initialize();
   });
 
-  afterEach(() => {
-    planner.destroy();
+  afterEach(async () => {
+    await planner.destroy();
+    await fs.rm(storagePath, { recursive: true, force: true }).catch(() => {});
   });
 
   test('creates mission and adds task', () => {
