@@ -57,6 +57,10 @@ class ProjectPlanner extends EventEmitter {
     this.storePath = path.join(this.config.dataPath, 'project-planner.json');
   }
 
+  async initialize() {
+    return this.start();
+  }
+
   async start() {
     if (this._destroyed) throw new Error('ProjectPlanner has been destroyed');
     if (this._started) return;
@@ -65,6 +69,50 @@ class ProjectPlanner extends EventEmitter {
     await this._load();
     this._started = true;
     this.config.logger.log('[ProjectPlanner] started');
+  }
+
+  /**
+   * Force an immediate persistence flush to disk.
+   */
+  async flush() {
+    return this._flush();
+  }
+
+  /**
+   * Verify internal consistency and report health diagnostics.
+   */
+  healthCheck() {
+    const checks = {
+      initialized: !this._destroyed,
+      noOrphanTasks: true,
+      dependencyTargetsExist: true,
+      milestoneCoverage: true,
+    };
+    const allTaskIds = new Set();
+
+    for (const project of this.projects.values()) {
+      const projectTaskIds = new Set(project.tasks.map((t) => t.id));
+      for (const t of project.tasks) {
+        allTaskIds.add(t.id);
+        if (!['pending', 'in_progress', 'completed', 'failed', 'cancelled'].includes(t.status)) {
+          checks.noOrphanTasks = false;
+        }
+        for (const dep of t.dependencies) {
+          if (!projectTaskIds.has(dep)) {
+            checks.dependencyTargetsExist = false;
+          }
+        }
+      }
+      const coveredMilestones = new Set(project.tasks.map((t) => t.milestoneId));
+      for (const m of project.milestones) {
+        if (!coveredMilestones.has(m.id)) {
+          checks.milestoneCoverage = false;
+        }
+      }
+    }
+
+    const ok = Object.values(checks).every(Boolean);
+    return { ok, checks, projects: this.projects.size, totalTasks: allTaskIds.size };
   }
 
   stop() {

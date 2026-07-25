@@ -178,6 +178,30 @@ describe('ProjectPlanner', () => {
     await recovered.destroy();
   });
 
+  test('initialize, healthCheck, and flush are supported', async () => {
+    planner.createProject({ name: 'Health', goals: ['goal'] });
+    await planner.initialize();
+    expect(planner._started).toBe(true);
+    await planner.flush();
+    const health = planner.healthCheck();
+    expect(health.ok).toBe(true);
+    expect(health.checks.dependencyTargetsExist).toBe(true);
+    expect(health.checks.noOrphanTasks).toBe(true);
+    expect(health.checks.milestoneCoverage).toBe(true);
+  });
+
+  test('gracefully handles edge cases', () => {
+    expect(() => planner.createProject({})).not.toThrow();
+    const emptyProjectId = planner.createProject({ goals: [] });
+    expect(planner.getProject(emptyProjectId).tasks.length).toBe(0);
+    expect(planner.deleteProject('nonexistent')).toBe(false);
+    expect(() => planner.prioritize('nonexistent')).toThrow();
+    expect(() => planner.toTaskEngine('nonexistent', {})).toThrow();
+    expect(planner.getBacklog(null, { status: 'completed' })).toEqual([]);
+    const health = planner.healthCheck();
+    expect(health.ok).toBe(true);
+  });
+
   test('benchmark: plans 50 projects in under one second', () => {
     const start = Date.now();
     for (let i = 0; i < 50; i += 1) {
