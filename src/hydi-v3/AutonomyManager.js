@@ -163,7 +163,9 @@ class HYDIAutonomyManager extends EventEmitter {
       if (this._dashboardInterval.unref) this._dashboardInterval.unref();
     }
 
-    this.emit('started', { startTime: this.startTime });
+    const recoveryDuration = Date.now() - this.startTime;
+    this.observability.recordRecovery(recoveryDuration);
+    this.emit('started', { startTime: this.startTime, recoveryDuration });
   }
 
   async stop() {
@@ -171,6 +173,7 @@ class HYDIAutonomyManager extends EventEmitter {
     this._stopped = true;
 
     this.emit('stopping');
+    const shutdownStart = Date.now();
 
     if (this._heartbeatInterval) clearInterval(this._heartbeatInterval);
     if (this._dashboardInterval) clearInterval(this._dashboardInterval);
@@ -200,16 +203,26 @@ class HYDIAutonomyManager extends EventEmitter {
 
     await this.persistAll();
 
-    this.emit('stopped', { uptime: this.getUptime() });
+    const shutdownDuration = Date.now() - shutdownStart;
+    this.observability.recordShutdown(shutdownDuration);
+
+    this.emit('stopped', { uptime: this.getUptime(), shutdownDuration });
   }
 
   async persistAll() {
+    const pendingWrites =
+      (this.missionPlanner._persistTimer ? 1 : 0) +
+      (this.decisionIntelligence._persistTimer ? 1 : 0) +
+      (this.reflectionEngine._persistTimer ? 1 : 0);
+    const flushStart = Date.now();
     try {
       await this.missionPlanner.flush();
       await this.decisionIntelligence.flush();
       await this.reflectionEngine.flush();
+      this.observability.recordFlush(Date.now() - flushStart, pendingWrites, false);
     } catch (err) {
       this.emit('persist_error', err);
+      this.observability.recordFlush(Date.now() - flushStart, pendingWrites, true);
     }
   }
 

@@ -41,6 +41,13 @@ class ObservabilityDashboard extends EventEmitter {
     this._lastSnapshot = null;
     this._lastSources = null;
     this._watched = new WeakSet();
+    this.persistence = {
+      flushDurations: [],
+      shutdownDurations: [],
+      recoveryDurations: [],
+      failedPersists: 0,
+      pendingWrites: 0,
+    };
   }
 
   recordSnapshot(sources = {}) {
@@ -191,6 +198,49 @@ class ObservabilityDashboard extends EventEmitter {
     }
   }
 
+  recordFlush(durationMs, pendingWrites = 0, failed = false) {
+    this.persistence.flushDurations.push(durationMs);
+    this.persistence.pendingWrites = pendingWrites;
+    if (failed) this.persistence.failedPersists += 1;
+    if (this.persistence.flushDurations.length > this.config.historyLimit) {
+      this.persistence.flushDurations.shift();
+    }
+  }
+
+  recordShutdown(durationMs) {
+    this.persistence.shutdownDurations.push(durationMs);
+    if (this.persistence.shutdownDurations.length > this.config.historyLimit) {
+      this.persistence.shutdownDurations.shift();
+    }
+  }
+
+  recordRecovery(durationMs) {
+    this.persistence.recoveryDurations.push(durationMs);
+    if (this.persistence.recoveryDurations.length > this.config.historyLimit) {
+      this.persistence.recoveryDurations.shift();
+    }
+  }
+
+  getPersistenceMetrics() {
+    const summarize = (arr) => {
+      if (!arr.length) return { count: 0, average: 0, max: 0, last: 0 };
+      const sum = arr.reduce((a, b) => a + b, 0);
+      return {
+        count: arr.length,
+        average: Math.round(sum / arr.length),
+        max: Math.max(...arr),
+        last: arr[arr.length - 1],
+      };
+    };
+    return {
+      pendingWrites: this.persistence.pendingWrites,
+      failedPersists: this.persistence.failedPersists,
+      flush: summarize(this.persistence.flushDurations),
+      shutdown: summarize(this.persistence.shutdownDurations),
+      recovery: summarize(this.persistence.recoveryDurations),
+    };
+  }
+
   getRecoveryEventCount(sources) {
     this.attachRecoveryListeners(sources);
     return this.recoveryEvents.length;
@@ -219,6 +269,7 @@ class ObservabilityDashboard extends EventEmitter {
       missionReplay: this.getMissionReplay(null, sources),
       historicalAnalytics: this.getHistoricalAnalytics(),
       healthScore: snapshot.healthScore,
+      persistence: this.getPersistenceMetrics(),
     };
   }
 
@@ -493,6 +544,7 @@ class ObservabilityDashboard extends EventEmitter {
     return {
       snapshots: this.history.timestamps.length,
       lastSnapshot: this.history.timestamps[this.history.timestamps.length - 1] || null,
+      persistence: this.getPersistenceMetrics(),
     };
   }
 }
