@@ -164,6 +164,7 @@ class HYDIAutonomyManager extends EventEmitter {
     }
 
     const recoveryDuration = Date.now() - this.startTime;
+    this.observability.recordStartupLatency(recoveryDuration);
     this.observability.recordRecovery(recoveryDuration);
     this.emit('started', { startTime: this.startTime, recoveryDuration });
   }
@@ -205,8 +206,10 @@ class HYDIAutonomyManager extends EventEmitter {
 
     const shutdownDuration = Date.now() - shutdownStart;
     this.observability.recordShutdown(shutdownDuration);
+    this.observability.recordShutdownLatency(shutdownDuration);
 
     this.emit('stopped', { uptime: this.getUptime(), shutdownDuration });
+    this._started = false;
   }
 
   async persistAll() {
@@ -444,6 +447,13 @@ class HYDIAutonomyManager extends EventEmitter {
       this.selfHealing.destroy?.(),
       this.distributedCompute.destroy?.(),
       this.memoryIntegrity.destroy?.(),
+      this.cudaPoolManager?.destroy?.(),
+      this.actionLayer?.destroy?.(),
+      this.observability?.destroy?.(),
+      this.memorySystem?.destroy?.(),
+      this.modelStack?.destroy?.(),
+      this.coreLoop?.destroy?.(),
+      this.securityAuditor?.destroy?.(),
     ]);
     this.removeAllListeners();
   }

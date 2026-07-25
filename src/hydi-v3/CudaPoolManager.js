@@ -403,6 +403,17 @@ class CudaPoolManager extends EventEmitter {
     this.queue = [];
     this.emit('shutdown');
   }
+  
+  /**
+   * Idempotent full teardown
+   */
+  async destroy() {
+    await this.shutdown();
+    this.allocations.clear();
+    this.runtimes.clear();
+    this.gpus = [];
+    this.removeAllListeners();
+  }
 }
 
 module.exports = CudaPoolManager;

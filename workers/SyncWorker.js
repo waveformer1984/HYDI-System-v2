@@ -71,6 +71,7 @@ class SyncWorker {
             }
             
             // clear-sync-intervals
+            this.clearSyncIntervals();
             
             await this.queue.shutdown();
             logger.info('Sync Worker stopped');

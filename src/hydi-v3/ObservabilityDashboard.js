@@ -48,6 +48,17 @@ class ObservabilityDashboard extends EventEmitter {
       failedPersists: 0,
       pendingWrites: 0,
     };
+
+    this.lifecycle = {
+      activeTimers: 0,
+      pendingPromises: 0,
+      queuedPersistence: 0,
+      shutdownLatencies: [],
+      startupLatencies: [],
+      restartLatencies: [],
+      cleanupFailures: 0,
+      recoverySuccesses: 0,
+    };
   }
 
   recordSnapshot(sources = {}) {
@@ -238,6 +249,45 @@ class ObservabilityDashboard extends EventEmitter {
       flush: summarize(this.persistence.flushDurations),
       shutdown: summarize(this.persistence.shutdownDurations),
       recovery: summarize(this.persistence.recoveryDurations),
+    };
+  }
+
+  recordActiveTimers(count) { this.lifecycle.activeTimers = count; }
+
+  recordPendingPromises(count) { this.lifecycle.pendingPromises = count; }
+
+  recordQueuedPersistence(count) { this.lifecycle.queuedPersistence = count; }
+
+  recordShutdownLatency(ms) { this._pushLifecycle('shutdownLatencies', ms); }
+
+  recordStartupLatency(ms) { this._pushLifecycle('startupLatencies', ms); }
+
+  recordRestartLatency(ms) { this._pushLifecycle('restartLatencies', ms); }
+
+  recordCleanupFailure() { this.lifecycle.cleanupFailures += 1; }
+
+  recordRecoverySuccess() { this.lifecycle.recoverySuccesses += 1; }
+
+  _pushLifecycle(field, value) {
+    this.lifecycle[field].push(value);
+    if (this.lifecycle[field].length > this.config.historyLimit) this.lifecycle[field].shift();
+  }
+
+  getLifecycleMetrics() {
+    const summarize = (arr) => {
+      if (!arr.length) return { count: 0, average: 0, max: 0, last: 0 };
+      const sum = arr.reduce((a, b) => a + b, 0);
+      return { count: arr.length, average: Math.round(sum / arr.length), max: Math.max(...arr), last: arr[arr.length - 1] };
+    };
+    return {
+      activeTimers: this.lifecycle.activeTimers,
+      pendingPromises: this.lifecycle.pendingPromises,
+      queuedPersistence: this.lifecycle.queuedPersistence,
+      shutdownLatency: summarize(this.lifecycle.shutdownLatencies),
+      startupLatency: summarize(this.lifecycle.startupLatencies),
+      restartLatency: summarize(this.lifecycle.restartLatencies),
+      cleanupFailures: this.lifecycle.cleanupFailures,
+      recoverySuccesses: this.lifecycle.recoverySuccesses,
     };
   }
 
@@ -545,7 +595,17 @@ class ObservabilityDashboard extends EventEmitter {
       snapshots: this.history.timestamps.length,
       lastSnapshot: this.history.timestamps[this.history.timestamps.length - 1] || null,
       persistence: this.getPersistenceMetrics(),
+      lifecycle: this.getLifecycleMetrics(),
     };
+  }
+
+  destroy() {
+    for (const key of Object.keys(this.history)) {
+      this.history[key] = [];
+    }
+    this.recoveryEvents = [];
+    this._watched = new WeakSet();
+    this.removeAllListeners();
   }
 }
 

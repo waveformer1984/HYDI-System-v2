@@ -697,7 +697,7 @@ class HeidiRevenueEngine extends EventEmitter {
       }
       
       // Schedule next generation
-      setTimeout(generateOffers, this.config.offerGenerationInterval);
+      this._offerGenerationTimeout = setTimeout(generateOffers, this.config.offerGenerationInterval);
     };
     
     // Start offer generation
@@ -786,7 +786,7 @@ class HeidiRevenueEngine extends EventEmitter {
       }
       
       // Schedule next monitoring
-      setTimeout(monitor, 60000); // Every minute
+      this._monitorTimeout = setTimeout(monitor, 60000); // Every minute
     };
     
     // Start monitoring
@@ -970,7 +970,7 @@ class HeidiRevenueEngine extends EventEmitter {
       }
       
       // Schedule next cleanup
-      setTimeout(cleanup, 300000); // Every 5 minutes
+      this._cleanupTimeout = setTimeout(cleanup, 300000); // Every 5 minutes
     };
     
     // Start cleanup
@@ -1179,6 +1179,32 @@ class HeidiRevenueEngine extends EventEmitter {
     this.abTests.clear();
     
     console.log('[REVENUE ENGINE] Reset completed');
+  }
+  
+  /**
+   * Stop all background timeout loops
+   */
+  stop() {
+    if (this._offerGenerationTimeout) {
+      clearTimeout(this._offerGenerationTimeout);
+      this._offerGenerationTimeout = null;
+    }
+    if (this._monitorTimeout) {
+      clearTimeout(this._monitorTimeout);
+      this._monitorTimeout = null;
+    }
+    if (this._cleanupTimeout) {
+      clearTimeout(this._cleanupTimeout);
+      this._cleanupTimeout = null;
+    }
+  }
+  
+  /**
+   * Full teardown
+   */
+  destroy() {
+    this.stop();
+    this.removeAllListeners();
   }
 }
 

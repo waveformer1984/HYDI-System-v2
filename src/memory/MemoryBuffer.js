@@ -216,8 +216,8 @@ class MemoryBuffer {
     this.flushing = false;
     
     // Continue if more items queued
-    if (this.flushQueue.length > 0) {
-      setTimeout(() => this.flushToPersistence(persistenceLayer), 1000);
+    if (this.flushQueue.length > 0 && !this._destroyed) {
+      this._retryTimeout = setTimeout(() => this.flushToPersistence(persistenceLayer), 1000);
     }
   }
 
@@ -280,6 +280,19 @@ class MemoryBuffer {
       await this.flushToPersistence(persistenceLayer);
       await new Promise(resolve => setTimeout(resolve, 100));
     }
+  }
+  
+  /**
+   * Cancel pending retry and release in-memory state
+   */
+  destroy() {
+    this._destroyed = true;
+    if (this._retryTimeout) {
+      clearTimeout(this._retryTimeout);
+      this._retryTimeout = null;
+    }
+    this.buffer.clear();
+    this.flushQueue = [];
   }
 }
 

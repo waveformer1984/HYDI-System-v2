@@ -1017,6 +1017,14 @@ class HeidiActionLayer extends EventEmitter {
     
     console.log('[ACTION LAYER] Reset completed');
   }
+
+  destroy() {
+    this.reset();
+    this.actions.clear();
+    this.activeActions.clear();
+    this.actionHistory = [];
+    this.removeAllListeners();
+  }
 }
 
 module.exports = HeidiActionLayer;
