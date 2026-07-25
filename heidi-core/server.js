@@ -1000,21 +1000,45 @@ class HeidiCore {
    * we never spawn-storm). Keeps Heidi's brain alive unattended.
    */
   startBrainWatchdog() {
+    if (this._brainWatchdogTimer) return;
     const { spawn } = require('child_process');
-    let lastRevive = 0;
-    setInterval(async () => {
+    this._brainLastRevive = 0;
+    this._brainWatchdogTimer = setInterval(async () => {
       try {
+        if (this._destroyed) return;
         if (await this.brain.isAvailable()) return;
-        if (Date.now() - lastRevive < 90000) return;
-        lastRevive = Date.now();
+        if (Date.now() - this._brainLastRevive < 90000) return;
+        this._brainLastRevive = Date.now();
         console.warn('[HEIDI Watchdog] Ollama not responding — attempting revive (ollama serve)...');
-        const p = spawn('ollama', ['serve'], { detached: true, stdio: 'ignore', shell: true });
-        p.unref();
+        if (this._brainProcess) {
+          try { this._brainProcess.kill(); } catch (e) { /* already dead */ }
+        }
+        this._brainProcess = spawn('ollama', ['serve'], { detached: true, stdio: 'ignore', shell: true });
+        this._brainProcess.unref();
       } catch (e) {
         console.error('[HEIDI Watchdog]', e.message);
       }
     }, 30000);
     console.log('[HEIDI] Brain watchdog armed (checks every 30s)');
+  }
+
+  /**
+   * Stop the brain watchdog and clean up the revived Ollama process.
+   */
+  stopBrainWatchdog() {
+    if (this._brainWatchdogTimer) {
+      clearInterval(this._brainWatchdogTimer);
+      this._brainWatchdogTimer = null;
+    }
+    if (this._brainProcess) {
+      try {
+        this._brainProcess.kill('SIGTERM');
+      } catch (e) {
+        // already terminated
+      }
+      this._brainProcess = null;
+    }
+    this._brainLastRevive = 0;
   }
 
   /**
@@ -1299,15 +1323,31 @@ Hard rule: NEVER invent commands, file paths, ports, system features, or tool ca
   }
 }
 
+async function gracefulShutdown(signal) {
+  console.log(`\n[HEIDI] ${signal} received - shutting down...`);
+  try {
+    heidi.missionWorker.stop();
+    heidi.healthObserver.stop();
+    heidi.stopBrainWatchdog();
+    if (heidi.server) {
+      await new Promise((resolve) => heidi.server.close(resolve));
+    }
+    await heidi.memory.close();
+  } catch (e) {
+    console.error('[HEIDI] Shutdown error:', e.message);
+  }
+  process.exit(0);
+}
+
 // Start if run directly
 if (require.main === module) {
   const heidi = new HeidiCore();
-  
+
   heidi.initialize().then(() => {
     console.log('[HEIDI] 4-layer self-awareness stack operational');
-    
+
     // Start Express server
-    heidi.app.listen(heidi.port, () => {
+    heidi.server = heidi.app.listen(heidi.port, () => {
       console.log(`[HEIDI] Server listening on port ${heidi.port}`);
     });
   }).catch(error => {
@@ -1315,14 +1355,8 @@ if (require.main === module) {
     process.exit(1);
   });
 
-  // Graceful shutdown
-  process.on('SIGINT', async () => {
-    console.log('\n[HEIDI] Shutting down...');
-    heidi.missionWorker.stop();
-    heidi.healthObserver.stop();
-    await heidi.memory.close();
-    process.exit(0);
-  });
+  process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+  process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 }
 
 module.exports = HeidiCore;

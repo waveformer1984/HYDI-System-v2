@@ -258,29 +258,52 @@ class RecoveryEngine extends EventEmitter {
   executeCommand(command, serviceId) {
     return new Promise((resolve) => {
       const child = spawn(command, { shell: true, detached: true });
+      if (serviceId) {
+        if (!this._activeRecoveries) this._activeRecoveries = new Map();
+        this._activeRecoveries.set(serviceId, child);
+      }
 
       let stdout = '';
       let stderr = '';
+      let resolved = false;
+
+      const cleanup = () => {
+        if (timeoutHandle) clearTimeout(timeoutHandle);
+        child.stdout.removeAllListeners('data');
+        child.stderr.removeAllListeners('data');
+        child.removeAllListeners('close');
+        child.removeAllListeners('error');
+        if (serviceId && this._activeRecoveries) {
+          this._activeRecoveries.delete(serviceId);
+        }
+      };
+
+      const finish = (result) => {
+        if (resolved) return;
+        resolved = true;
+        cleanup();
+        resolve(result);
+      };
 
       child.stdout.on('data', (data) => { stdout += data; });
       child.stderr.on('data', (data) => { stderr += data; });
 
       child.on('close', (code) => {
         if (code === 0) {
-          resolve({ success: true, stdout, stderr });
+          finish({ success: true, stdout, stderr });
         } else {
-          resolve({ success: false, error: `Exit code ${code}`, stderr, stdout });
+          finish({ success: false, error: `Exit code ${code}`, stderr, stdout });
         }
       });
 
       child.on('error', (err) => {
-        resolve({ success: false, error: err.message });
+        finish({ success: false, error: err.message });
       });
 
       // Timeout after 30s
-      setTimeout(() => {
-        child.kill('SIGTERM');
-        resolve({ success: false, error: 'Restart command timed out' });
+      const timeoutHandle = setTimeout(() => {
+        try { child.kill('SIGTERM'); } catch (e) { /* already dead */ }
+        finish({ success: false, error: 'Restart command timed out' });
       }, 30000);
     });
   }
@@ -373,6 +396,22 @@ class RecoveryEngine extends EventEmitter {
       pending,
       recentAttempts: this.recoveryLog.slice(-10)
     };
+  }
+
+  /**
+   * Clean up all recovery state and terminate active child processes.
+   */
+  destroy() {
+    if (this._activeRecoveries) {
+      for (const child of this._activeRecoveries.values()) {
+        try { child.kill('SIGTERM'); } catch (e) { /* already dead */ }
+      }
+      this._activeRecoveries.clear();
+    }
+    this.pendingRecoveries.clear();
+    this.playbooks.clear();
+    this.recoveryLog = [];
+    this.removeAllListeners();
   }
 }
 

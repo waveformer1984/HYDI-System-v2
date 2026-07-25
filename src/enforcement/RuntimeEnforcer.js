@@ -387,7 +387,7 @@ class RuntimeEnforcer {
     
     try {
       // Find all JS files in the project
-      const output = execSync('find . -name "*.js" -not -path "./node_modules/*" -not -path "./.git/*"', { encoding: 'utf8' });
+      const output = execSync('find . -name "*.js" -not -path "./node_modules/*" -not -path "./.git/*"', { encoding: 'utf8', timeout: 30000 });
       const files = output.trim().split('\n').filter(f => f.length > 0);
       
       for (const file of files) {
