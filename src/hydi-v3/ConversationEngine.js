@@ -157,6 +157,11 @@ class ConversationEngine {
   }
 
   _whatChanged() {
+    if (this.executiveOS && this.executiveOS.recentActivitySummary) {
+      const summary = this.executiveOS.recentActivitySummary(86400000);
+      const lines = ['What changed today:', '', ...summary.lines];
+      return this._respond('what-changed', { text: lines.join('\n'), ...summary });
+    }
     if (!this.timeline) return this._respond('what-changed', { text: 'Executive timeline is not connected.' });
     const since = this.lastBriefingAt || (Date.now() - 86400000);
     const diff = this.timeline.since(since);

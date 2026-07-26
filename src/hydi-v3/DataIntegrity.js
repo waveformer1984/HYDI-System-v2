@@ -104,7 +104,7 @@ function normalizeEntity(entity) {
   return normalized;
 }
 
-const VALID_TYPES = new Set(['project', 'client', 'vendor', 'equipment', 'opportunity', 'task', 'decision']);
+const VALID_TYPES = new Set(['project', 'client', 'vendor', 'equipment', 'opportunity', 'task', 'decision', 'activity']);
 
 function validateEntity(entity) {
   const errors = [];

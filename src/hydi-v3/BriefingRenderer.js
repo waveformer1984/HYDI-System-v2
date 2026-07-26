@@ -84,6 +84,7 @@ function toSections(briefing) {
   const actions = Array.isArray(briefing.priorityActions) ? briefing.priorityActions : [];
   const recommendations = Array.isArray(briefing.recommendations) ? briefing.recommendations : [];
   const missingData = Array.isArray(briefing.missingData) ? briefing.missingData : [];
+  const recentActivity = Array.isArray(briefing.recentActivity) ? briefing.recentActivity : [];
   const flagship = briefing.resonateStatus || { tracked: false };
 
   const sections = [
@@ -92,6 +93,12 @@ function toSections(briefing) {
       title: 'Executive Summary',
       tone: 'primary',
       lines: [briefing.executiveSummary || 'No executive summary generated.'],
+    },
+    {
+      id: 'recent-activity',
+      title: 'Recent Activity',
+      tone: 'neutral',
+      lines: recentActivity.length ? recentActivity : ['No recent project activity.'],
     },
     {
       id: 'strategic-objectives',

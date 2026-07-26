@@ -112,6 +112,7 @@ class ExecutiveCockpit extends EventEmitter {
     if (/^(history|executions|recent actions|log)$/.test(t)) return { command: 'history' };
     if (/^(workflows|active workflows|what is active)$/.test(t)) return { command: 'workflows' };
     if (/^(startup|health|startup check|system health)$/.test(t)) return { command: 'startup' };
+    if (/^(what changed|what changed today|what's new|whats new)$/.test(t)) return { command: 'what-changed' };
     if (/^approve\s+(.+)$/.test(t)) return { command: 'approve', id: t.match(/^approve\s+(.+)$/)[1].trim() };
     if (/^reject\s+(.+)$/.test(t)) return { command: 'reject', id: t.match(/^reject\s+(.+)$/)[1].trim() };
     if (/^priority\s+(.+)$/.test(t)) {
@@ -157,6 +158,9 @@ class ExecutiveCockpit extends EventEmitter {
         break;
       case 'startup':
         response = await this.startupCheck();
+        break;
+      case 'what-changed':
+        response = this.whatChanged();
         break;
       case 'help':
         response = this.getHelp();
@@ -217,6 +221,14 @@ class ExecutiveCockpit extends EventEmitter {
       lines.push('', 'Risks:', ...data.risks.map((r) => `- ${r}`));
     }
     return { text: lines.join('\n'), ...data };
+  }
+
+  whatChanged() {
+    if (!this.executiveOS) return { text: 'ExecutiveOperatingSystem not connected.' };
+    const summary = this.executiveOS.recentActivitySummary(86400000);
+    const lines = ['What changed today:', ''];
+    lines.push(...summary.lines);
+    return { text: lines.join('\n'), ...summary };
   }
 
   focusForToday() {

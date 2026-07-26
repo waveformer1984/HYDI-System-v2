@@ -8,7 +8,7 @@ const { normalizeEntity, validateEntity } = require('./DataIntegrity');
 const PERSISTENCE_VERSION = 2;
 
 const ENTITY_TYPES = new Set([
-  'project', 'client', 'vendor', 'equipment', 'opportunity', 'task', 'decision',
+  'project', 'client', 'vendor', 'equipment', 'opportunity', 'task', 'decision', 'activity',
 ]);
 
 const PRIORITY = {
@@ -234,6 +234,7 @@ class BusinessMemory extends EventEmitter {
     }
     if (query.minValue !== undefined) results = results.filter((e) => e.value >= query.minValue);
     if (query.maxEffort !== undefined) results = results.filter((e) => e.effort <= query.maxEffort);
+    if (query.since !== undefined) results = results.filter((e) => (e.createdAt || e.timestamp || 0) >= query.since);
 
     if (query.sortBy === 'value') {
       results.sort((a, b) => b.value - a.value);

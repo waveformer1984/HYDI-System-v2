@@ -38,12 +38,16 @@ class ExecutiveOperatingSystem extends EventEmitter {
     this.observability = config.observability || null;
     this.strategicObjectives = config.strategicObjectives || new StrategicObjectives({ ownerPriority: config.ownerPriority || 'default' });
     this.trustEngine = new TrustEngine({ businessMemory: this.memory, strategicObjectives: this.strategicObjectives, logger: this.config.logger });
+    this.eventBus = config.eventBus || null;
+    this.executiveTimeline = config.executiveTimeline || null;
+    this.auditLedger = config.auditLedger || null;
 
     this.agents = new Map();
     this.lastBriefing = null;
     this.decisions = [];
 
     this._registerDefaultAgents();
+    this._signalHandler = this._onBusinessSignal.bind(this);
 
     this._persistTimer = null;
     this._persistPending = false;
@@ -84,6 +88,7 @@ class ExecutiveOperatingSystem extends EventEmitter {
 
     await this._ensureDataDir();
     await this._load();
+    this._attachBus();
     this._started = true;
     this.config.logger.log('[ExecutiveOS] started');
   }
@@ -97,6 +102,7 @@ class ExecutiveOperatingSystem extends EventEmitter {
       clearTimeout(this._persistTimer);
       this._persistTimer = null;
     }
+    this._detachBus();
     this._started = false;
     this.config.logger.log('[ExecutiveOS] stopped');
   }
@@ -110,6 +116,66 @@ class ExecutiveOperatingSystem extends EventEmitter {
     this.decisions = [];
     this.removeAllListeners();
     this._destroyed = true;
+  }
+
+  _attachBus() {
+    if (!this.eventBus || this._busAttached) return;
+    this.eventBus.subscribe('BusinessSignal', this._signalHandler);
+    this._busAttached = true;
+  }
+
+  _detachBus() {
+    if (!this.eventBus || !this._busAttached) return;
+    this.eventBus.unsubscribe('BusinessSignal', this._signalHandler);
+    this._busAttached = false;
+  }
+
+  _onBusinessSignal(event) {
+    const p = event.payload || {};
+    const id = `activity_${event.id}`;
+
+    if (this.memory) {
+      try {
+        this.memory.put({
+          id,
+          type: 'activity',
+          name: p.interpretation || `Activity in ${p.project || 'project'}`,
+          value: 1,
+          tags: [p.strategicObjective, p.subsystem, p.impact, 'business-signal'].filter(Boolean),
+          payload: {
+            project: p.project,
+            subsystem: p.subsystem,
+            objective: p.strategicObjective,
+            fileCategory: p.fileCategory,
+            impact: p.impact,
+            originatingEvent: p.originatingEvent,
+            interpretation: p.interpretation,
+          },
+        });
+      } catch (e) {
+        this.config.logger.error('[ExecutiveOS] failed to record activity', { error: e instanceof Error ? e.message : String(e) });
+      }
+    }
+
+    if (this.executiveTimeline) {
+      this.executiveTimeline.record({
+        category: 'business-signal',
+        summary: p.interpretation || `${p.project} ${p.subsystem} ${p.originatingEvent}`,
+        source: p.project,
+        payload: p,
+      });
+    }
+
+    if (this.auditLedger) {
+      this.auditLedger.record({
+        category: 'business-signal',
+        actor: 'ExecutiveOperatingSystem',
+        subjectId: id,
+        payload: p,
+      });
+    }
+
+    this.emit('business-signal-processed', { id, project: p.project, objective: p.strategicObjective });
   }
 
   healthCheck() {
@@ -159,11 +225,49 @@ class ExecutiveOperatingSystem extends EventEmitter {
       agentReports: reports,
     };
 
+    const recentActivity = this.recentActivitySummary(86400000);
+    briefing.recentActivity = recentActivity.lines;
+    briefing.activityCounts = recentActivity.counts;
+
     this.lastBriefing = briefing;
-    this.decisions.push({ at: Date.now(), type: 'briefing', summary: `Generated briefing with ${priorityActions.length} actions, ${risks.length} risks` });
+    this.decisions.push({ at: Date.now(), type: 'briefing', summary: `Generated briefing with ${priorityActions.length} actions, ${risks.length} risks, ${recentActivity.lines.length} activity lines` });
     this._persist();
     this.emit('briefing', briefing);
     return briefing;
+  }
+
+  recentActivitySummary(sinceMs = 86400000) {
+    if (!this.memory) return { lines: ['No memory connected.'], counts: {} };
+    const cutoff = Date.now() - sinceMs;
+    const activities = this.memory.find ? this.memory.find({ type: 'activity', since: cutoff }) : [];
+    const byObjective = {};
+    const bySubsystem = {};
+    for (const a of activities) {
+      const p = a.payload || {};
+      const objective = p.objective || a.objective;
+      const subsystem = p.subsystem || a.subsystem;
+      const project = p.project || a.project || objective;
+      if (!a || !objective) continue;
+      byObjective[objective] = (byObjective[objective] || 0) + 1;
+      if (subsystem) bySubsystem[`${project}:${subsystem}`] = (bySubsystem[`${project}:${subsystem}`] || 0) + 1;
+    }
+
+    const lines = [];
+    const sortedObjectives = Object.entries(byObjective).sort((a, b) => b[1] - a[1]);
+    if (sortedObjectives.length === 0) {
+      lines.push('No recent project activity.');
+    } else {
+      for (const [objective, count] of sortedObjectives) {
+        lines.push(`${count} activity signal${count === 1 ? '' : 's'} for ${objective}.`);
+      }
+      const topSubsystems = Object.entries(bySubsystem).sort((a, b) => b[1] - a[1]).slice(0, 3);
+      for (const [key, count] of topSubsystems) {
+        const [project, subsystem] = key.split(':');
+        lines.push(`  ${subsystem} in ${project}: ${count} event${count === 1 ? '' : 's'}.`);
+      }
+    }
+
+    return { lines, counts: { ...byObjective, ...bySubsystem } };
   }
 
   getStatus(agentReports = {}) {

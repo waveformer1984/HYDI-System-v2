@@ -54,6 +54,7 @@ describe('BriefingRenderer', () => {
     const model = BriefingRenderer.toSections(makeBriefing());
     expect(model.sections.map((s) => s.id)).toEqual([
       'executive-summary',
+      'recent-activity',
       'strategic-objectives',
       'flagship-status',
       'operations',

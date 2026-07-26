@@ -147,4 +147,32 @@ describe('ExecutiveOperatingSystem', () => {
     const elapsed = Date.now() - start;
     expect(elapsed).toBeLessThan(1000);
   });
+
+  test('consumes BusinessSignal events and surfaces activity in briefings', async () => {
+    const BusinessEventBus = require('../../../src/hydi-v3/BusinessEventBus');
+    const bus = new BusinessEventBus({ maxHistory: 100 });
+    const osWithBus = new ExecutiveOperatingSystem({
+      dataPath,
+      businessMemory: memory,
+      eventBus: bus,
+      logger: { log: () => {}, error: () => {} },
+    });
+    await osWithBus.start();
+
+    bus.emit('BusinessSignal', {
+      interpretation: 'Resonate Audio Engine updated',
+      strategicObjective: 'resonate',
+      subsystem: 'Audio Engine',
+      project: 'Resonate',
+      fileCategory: 'source',
+      originatingEvent: 'FileModified',
+      impact: 'engineering-progress',
+    }, 'Test');
+
+    const briefing = osWithBus.morningBriefing();
+    expect(briefing.recentActivity).toContain('1 activity signal for resonate.');
+    expect(briefing.recentActivity.some((l) => l.includes('Audio Engine'))).toBe(true);
+    await osWithBus.destroy();
+    bus.destroy();
+  });
 });
