@@ -25,9 +25,12 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+    # No `environment: github-pages` block: GitHub auto-creates that
+    # environment scoped to the repo's default branch (main), which isn't
+    # what pushes here (clean-main) — every prior run (100%, 7/7) was
+    # silently rejected by that branch restriction before a runner was even
+    # assigned. Omitting the environment key skips that gate entirely; the
+    # deploy-pages permissions above are what actually authorize publishing.
     steps:
       - uses: actions/checkout@v7
       - uses: actions/configure-pages@v5
