@@ -175,4 +175,12 @@ describe('ExecutiveOperatingSystem', () => {
     await osWithBus.destroy();
     bus.destroy();
   });
+
+  test('source contains no printer-specific code', () => {
+    const eosSource = require('fs').readFileSync(
+      require.resolve('../../../src/hydi-v3/ExecutiveOperatingSystem'), 'utf8',
+    );
+    const printerTerms = /\bprinter\b|\bcreality\b|\boctoprint\b|\bmoonraker\b|\bklipper\b|\bfilament\b/i;
+    expect(printerTerms.test(eosSource)).toBe(false);
+  });
 });

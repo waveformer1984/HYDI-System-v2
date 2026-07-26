@@ -15,6 +15,12 @@ const ApprovalCenter = require('./ApprovalCenter');
 const SessionMemory = require('./SessionMemory');
 const ConversationEngine = require('./ConversationEngine');
 const ConsoleAPI = require('./ConsoleAPI');
+const BusinessEventBus = require('./BusinessEventBus');
+const BusinessSignalInterpreter = require('./BusinessSignalInterpreter');
+const ManufacturingSignalInterpreter = require('./ManufacturingSignalInterpreter');
+const EquipmentRegistry = require('./EquipmentRegistry');
+const PrinterSensor = require('./PrinterSensor');
+const GitSensor = require('./GitSensor');
 
 const SILENT_LOGGER = { log: () => {}, error: () => {}, warn: () => {} };
 
@@ -53,6 +59,22 @@ class OperatorSession {
     /** Optional OperatorMode enforcing --dry-run / --offline. */
     this.mode = config.mode || null;
 
+    /**
+     * Sensing layer (Phase 18A/18B/18C). The bus is always constructed so the
+     * Executive OS has something to subscribe to; individual sensors are
+     * opt-in, because a sensor is an observation of the outside world and
+     * should never start watching without being asked.
+     */
+    this.eventBus = config.eventBus || new BusinessEventBus({ logger: this.config.logger });
+    this.signalInterpreter = null;
+    this.manufacturingSignalInterpreter = null;
+    this.gitSensor = null;
+    this.printerSensor = null;
+    this.sensors = [];
+    this._gitConfig = config.git || null;
+    this._printerConfig = config.printer || null;
+    this._simulateManufacturing = config.simulateManufacturing === true;
+
     this.memory = null;
     this.executiveOS = null;
     this.taskEngine = null;
@@ -85,6 +107,7 @@ class OperatorSession {
       ...shared,
       businessMemory: this.memory,
       ownerPriority: this.config.ownerPriority,
+      eventBus: this.eventBus,
     });
     await this.executiveOS.start();
 
@@ -169,6 +192,40 @@ class OperatorSession {
     });
     // -----------------------------------------------------------------------
 
+    // --- Phase 18C: sensing layer ------------------------------------------
+    // The interpreter turns raw sensor events into BusinessSignals, which is
+    // the only event type the Executive OS subscribes to. Sensors are attached
+    // after it, so nothing is published before there is a consumer.
+    this.signalInterpreter = new BusinessSignalInterpreter({ eventBus: this.eventBus });
+    this.manufacturingSignalInterpreter = new ManufacturingSignalInterpreter({ eventBus: this.eventBus });
+
+    if (this._gitConfig) {
+      this.gitSensor = new GitSensor({
+        dataPath,
+        logger,
+        eventBus: this.eventBus,
+        ...this._gitConfig,
+      });
+      await this.gitSensor.start();
+      this.sensors.push(this.gitSensor);
+    }
+
+    if (this._simulateManufacturing || this._printerConfig) {
+      const registry = this._printerConfig && this._printerConfig.registry
+        ? this._printerConfig.registry
+        : new EquipmentRegistry();
+      this.printerSensor = new PrinterSensor({
+        registry,
+        eventBus: this.eventBus,
+        logger,
+        simulate: this._simulateManufacturing,
+        ...this._printerConfig,
+      });
+      await this.printerSensor.start();
+      this.sensors.push(this.printerSensor);
+    }
+    // -----------------------------------------------------------------------
+
     // Phase 16: run-mode enforcement is installed last, so it wraps the fully
     // constructed mutation authorities. Installing it here rather than in the
     // CLI means every surface built on an OperatorSession inherits the same
@@ -223,8 +280,12 @@ class OperatorSession {
       sessionMemory: this.sessionMemory ? this.sessionMemory.healthCheck().ok : false,
       conversationEngine: this.conversationEngine ? this.conversationEngine.healthCheck().ok : false,
       consoleAPI: this.consoleAPI ? this.consoleAPI.healthCheck().ok : false,
+      eventBus: !!this.eventBus,
     };
-    return { ok: Object.values(parts).every(Boolean), checks: parts };
+    // Sensors are reported but never gate overall health: a repository that is
+    // absent or unreadable is a missing observation, not a broken system.
+    const sensors = this.sensors.map((sensor) => sensor.healthCheck());
+    return { ok: Object.values(parts).every(Boolean), checks: parts, sensors };
   }
 
   /**
@@ -233,6 +294,9 @@ class OperatorSession {
    */
   _components() {
     return [
+      // Sensors first: stop observing before anything downstream is torn down,
+      // so a poll in flight cannot publish into a half-destroyed stack.
+      ...this.sensors,
       this.timeline, this.sessionMemory,
       this.cockpit, this.executionGateway, this.workflowEngine,
       this.taskEngine, this.executiveOS, this.memory,
@@ -287,6 +351,12 @@ class OperatorSession {
         }
       }
     }
+
+    // The interpreters hold '*' subscriptions; detach before tearing the bus
+    // down so a late event cannot reach a destroyed consumer.
+    if (this.signalInterpreter) this.signalInterpreter.detach();
+    if (this.manufacturingSignalInterpreter) this.manufacturingSignalInterpreter.detach();
+    if (this.eventBus) this.eventBus.destroy();
   }
 
   _assertReady() {

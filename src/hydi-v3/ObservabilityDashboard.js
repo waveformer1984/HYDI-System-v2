@@ -49,6 +49,20 @@ class ObservabilityDashboard extends EventEmitter {
       pendingWrites: 0,
     };
 
+    this.manufacturing = {
+      runningJobs: 0,
+      idleMachines: 0,
+      offlineMachines: 0,
+      failedJobs: 0,
+      materialAlerts: 0,
+      recentActivity: [],
+    };
+    this._running = new Set();
+    this._idle = new Set();
+    this._offline = new Set();
+    this._businessBusHandler = null;
+    this._businessBus = null;
+
     this.lifecycle = {
       activeTimers: 0,
       pendingPromises: 0,
@@ -209,6 +223,75 @@ class ObservabilityDashboard extends EventEmitter {
     }
   }
 
+  attachBusinessEventBus(bus) {
+    if (!bus || this._businessBus) return;
+    this._businessBus = bus;
+    this._businessBusHandler = (event) => {
+      if (event.type === 'BusinessSignal' && event.payload) {
+        this.recordBusinessSignal(event.payload);
+      }
+    };
+    bus.subscribe('BusinessSignal', this._businessBusHandler);
+  }
+
+  detachBusinessEventBus() {
+    if (this._businessBus && this._businessBusHandler) {
+      this._businessBus.unsubscribe('BusinessSignal', this._businessBusHandler);
+    }
+    this._businessBus = null;
+    this._businessBusHandler = null;
+  }
+
+  recordBusinessSignal(payload) {
+    if (payload.strategicObjective !== 'manufacturing' && payload.subsystem !== 'Manufacturing Floor') {
+      return;
+    }
+    const equipmentId = payload.equipmentId || payload.project;
+    const interpretation = payload.interpretation || payload.originatingEvent;
+    if (interpretation) {
+      this.manufacturing.recentActivity.unshift({
+        at: Date.now(),
+        interpretation,
+        impact: payload.impact,
+      });
+      if (this.manufacturing.recentActivity.length > 20) {
+        this.manufacturing.recentActivity = this.manufacturing.recentActivity.slice(0, 20);
+      }
+    }
+
+    const event = payload.originatingEvent;
+    if (event === 'PrinterStarted' || event === 'PrinterResumed') {
+      this._running.add(equipmentId);
+      this._idle.delete(equipmentId);
+      this._offline.delete(equipmentId);
+    } else if (event === 'PrinterCompleted') {
+      this._running.delete(equipmentId);
+    } else if (event === 'PrinterFailed') {
+      this._running.delete(equipmentId);
+      this.manufacturing.failedJobs += 1;
+    } else if (event === 'PrinterPaused') {
+      this._running.delete(equipmentId);
+    } else if (event === 'PrinterIdle') {
+      this._running.delete(equipmentId);
+      this._idle.add(equipmentId);
+      this._offline.delete(equipmentId);
+    } else if (event === 'PrinterOffline') {
+      this._running.delete(equipmentId);
+      this._idle.delete(equipmentId);
+      this._offline.add(equipmentId);
+    } else if (event === 'MaterialLow') {
+      this.manufacturing.materialAlerts += 1;
+    }
+
+    this.manufacturing.runningJobs = this._running.size;
+    this.manufacturing.idleMachines = this._idle.size;
+    this.manufacturing.offlineMachines = this._offline.size;
+  }
+
+  getManufacturingStatus() {
+    return { ...this.manufacturing };
+  }
+
   recordFlush(durationMs, pendingWrites = 0, failed = false) {
     this.persistence.flushDurations.push(durationMs);
     this.persistence.pendingWrites = pendingWrites;
@@ -320,6 +403,7 @@ class ObservabilityDashboard extends EventEmitter {
       historicalAnalytics: this.getHistoricalAnalytics(),
       healthScore: snapshot.healthScore,
       persistence: this.getPersistenceMetrics(),
+      manufacturingStatus: this.getManufacturingStatus(),
     };
   }
 

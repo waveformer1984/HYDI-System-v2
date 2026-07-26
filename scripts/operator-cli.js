@@ -25,6 +25,14 @@
  *   --dry-run        Simulate or refuse every mutating action; execute nothing
  *   --offline        Refuse network-dependent actions and verify local-only
  *   --no-history     Do not seed or persist readline history
+ *   --git [path]     Attach the Git sensor to a repository (defaults to cwd)
+ *   --git-poll <ms>  Git poll interval (default 60000; 0 disables polling)
+ *   --git-project <name>  Project label for git signals (default: directory
+ *                    name). Set this to match a strategic objective — e.g.
+ *                    "Resonate" — so commits score against the right objective
+ *                    instead of falling through to "default".
+ *   --simulate-manufacturing  Run the printer sensor in simulation mode and
+ *                    emit realistic manufacturing events.
  *   --shutdown-timeout <ms>  Bound the graceful shutdown drain (default 10000)
  *
  * All actions still route through ExecutionGateway approval rules. The CLI is
@@ -54,6 +62,20 @@ function parseFlags(argv) {
   return flags;
 }
 
+/**
+ * Sensors are opt-in: `--git` with no value watches the current directory,
+ * `--git <path>` watches that repository. Absent the flag, no sensor starts and
+ * the event bus simply carries no git events.
+ */
+function gitConfig(flags) {
+  if (!flags.git) return null;
+  return {
+    cwd: typeof flags.git === 'string' ? path.resolve(process.cwd(), flags.git) : process.cwd(),
+    pollIntervalMs: flags['git-poll'] !== undefined ? Number(flags['git-poll']) : undefined,
+    project: typeof flags['git-project'] === 'string' ? flags['git-project'] : undefined,
+  };
+}
+
 async function main() {
   const flags = parseFlags(process.argv.slice(2));
   const colour = !(flags['no-colour'] || flags['no-color'] || process.env.NO_COLOR)
@@ -70,6 +92,8 @@ async function main() {
       : path.resolve(__dirname, '..', 'data'),
     ownerPriority: typeof flags.priority === 'string' ? flags.priority : 'default',
     mode,
+    git: gitConfig(flags),
+    simulateManufacturing: !!flags['simulate-manufacturing'],
   });
 
   await session.start();
@@ -89,6 +113,18 @@ async function main() {
   }
 
   console.log(cli.banner);
+  if (session.gitSensor) {
+    const health = session.gitSensor.healthCheck();
+    console.log(health.checks.repositoryAvailable
+      ? `Git sensor: watching ${session.gitSensor.cwd} as "${session.gitSensor.project}"`
+      : `Git sensor: inactive (${health.unavailableReason})`);
+  }
+  if (session.printerSensor) {
+    const health = session.printerSensor.healthCheck();
+    console.log(health.simulating
+      ? `Printer sensor: simulation mode (${health.equipmentName})`
+      : `Printer sensor: monitoring ${health.equipmentName}`);
+  }
   if (mode.enabled) {
     console.log(`Mode: ${mode.describe()}`);
     const offlineCheck = mode.verifyOffline(session);

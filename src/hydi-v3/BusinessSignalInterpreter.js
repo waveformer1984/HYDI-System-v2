@@ -80,6 +80,7 @@ class BusinessSignalInterpreter {
     const subsystem = p.subsystem || detectSubsystem(relPath, displayProject);
     const fileCategory = p.fileCategory || detectFileCategory(relPath);
     const interpretation = this._interpretation(event.type, { ...p, project: displayProject });
+    if (interpretation === null) return null;
     return {
       type: 'BusinessSignal',
       source: 'BusinessSignalInterpreter',
@@ -117,13 +118,40 @@ class BusinessSignalInterpreter {
       case 'BuildArtifactGenerated': return `Build artifact generated in ${base}`;
       case 'ProjectInactive': return `${base} has been inactive`;
       case 'ProjectActive': return `${base} is active again`;
-      default: return `Activity in ${base}`;
+
+      // Git events. The sensor reports facts about a repository; the meaning
+      // of those facts is assigned here, so GitSensor stays free of business
+      // vocabulary and the Executive OS never learns that git exists.
+      case 'CommitCreated': {
+        const who = p.author ? ` by ${p.author}` : '';
+        const scope = p.fileCount ? ` (${p.fileCount} file${p.fileCount === 1 ? '' : 's'})` : '';
+        return `Work committed to ${base}${who}${scope}: ${p.subject || 'no message'}`;
+      }
+      case 'BranchCreated': return `New line of work started in ${base}: branch ${p.branch}`;
+      case 'BranchDeleted': return `Line of work closed in ${base}: branch ${p.branch}`;
+      case 'BranchStale': {
+        const days = p.staleForMs ? Math.floor(p.staleForMs / 86400000) : 0;
+        return `Branch ${p.branch} in ${base} has been untouched for ${days} day${days === 1 ? '' : 's'}`;
+      }
+      case 'WorkingTreeDirty': {
+        const n = p.fileCount || 0;
+        return `Uncommitted work in ${base}: ${n} file${n === 1 ? '' : 's'} not yet committed`;
+      }
+      case 'WorkingTreeClean': return `${base} working tree is clean; all work is committed`;
+
+      default: return null;
     }
   }
 
   _impact(type, fileCategory) {
     if (type === 'BuildArtifactGenerated') return 'artifact-output';
     if (type === 'ProjectInactive') return 'risk-stale';
+    if (type === 'CommitCreated') return 'engineering-delivered';
+    if (type === 'BranchCreated') return 'engineering-started';
+    if (type === 'BranchDeleted') return 'engineering-closed';
+    if (type === 'BranchStale') return 'risk-stale';
+    if (type === 'WorkingTreeDirty') return 'risk-uncommitted';
+    if (type === 'WorkingTreeClean') return 'engineering-progress';
     if (fileCategory === 'cad-artifact' || fileCategory === 'manufacturing-artifact') return 'manufacturing-ready';
     if (fileCategory === 'audio-asset') return 'creative-ready';
     if (fileCategory === 'source') return 'engineering-progress';

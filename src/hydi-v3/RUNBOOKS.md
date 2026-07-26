@@ -249,3 +249,54 @@ A second Ctrl-C exits immediately with 130, so a wedged flush cannot trap you.
 Up/Down recalls commands from previous sessions. History is stored in
 SessionMemory (`data/session-memory.json`), capped, de-duplicated, and skips
 blank lines. Disable with `--no-history`.
+
+## 14. Git Sensor
+
+Publishes git activity to `BusinessEventBus`, where the existing
+`BusinessSignalInterpreter` turns it into `BusinessSignal`s that the Executive
+OS already consumes. The Executive OS has no knowledge that git exists.
+
+```bash
+node scripts/operator-cli.js --git                        # watch cwd
+node scripts/operator-cli.js --git /path/to/repo --git-project "Resonate"
+node scripts/operator-cli.js --git . --git-poll 30000     # poll every 30s
+node scripts/operator-cli.js --git . --git-poll 0         # manual poll only
+```
+
+Without `--git` no sensor starts and the bus carries no git events.
+
+**Set `--git-project` to a strategic objective name.** It defaults to the
+directory name; for this repo that is `HYDI_System`, which matches no objective,
+so commits would score as `default` rather than `operations`.
+
+### Event types
+
+| Event | Impact |
+| --- | --- |
+| `CommitCreated` | `engineering-delivered` |
+| `BranchCreated` | `engineering-started` |
+| `BranchDeleted` | `engineering-closed` |
+| `BranchStale` | `risk-stale` |
+| `WorkingTreeDirty` | `risk-uncommitted` |
+| `WorkingTreeClean` | `engineering-progress` |
+
+### Behaviour to expect
+
+- **First run publishes no commits.** HEAD is adopted as a baseline so history
+  is not replayed as fresh activity. Present-state facts — stale branches and
+  uncommitted work — *are* reported on the first run, because they describe now.
+- **A steady repository produces zero events.** Everything is edge-triggered
+  against the previous poll, so polling frequently does not create noise.
+- **Restarting does not replay.** The cursor is persisted to
+  `data/git-sensor-<project>.json`. If it becomes unknown (rebased away, or a
+  store copied between repositories) the sensor falls back to a cold read rather
+  than breaking.
+- **No git, or not a repository, is not an error.** The sensor reports itself
+  inactive with a reason and never gates session health.
+
+### Safety
+
+`GitRepository` is read-only by construction: it uses `execFile` (no shell, so
+commit messages and branch names cannot inject commands) and permits only
+`rev-parse`, `log`, `show`, `status`, `for-each-ref`, and `symbolic-ref`.
+`commit`, `push`, `reset`, `clean`, and `checkout` are refused.

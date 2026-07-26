@@ -120,6 +120,17 @@ function buildMatchers(actual, negated) {
       check(Math.abs(actual - n) < 10 ** -digits / 2, `expected ${stringify(actual)} close to ${n}`);
     },
     toBeInstanceOf(ctor) { check(actual instanceof ctor, `expected value to be instance of ${ctor.name}`); },
+    toHaveBeenCalled() {
+      check(!!(actual && actual.mock) && actual.mock.calls.length > 0, 'expected mock to have been called');
+    },
+    toHaveBeenCalledTimes(n) {
+      const count = actual && actual.mock ? actual.mock.calls.length : -1;
+      check(count === n, `expected mock to have been called ${n} time(s), got ${count}`);
+    },
+    toHaveBeenCalledWith(...args) {
+      const calls = actual && actual.mock ? actual.mock.calls : [];
+      check(calls.some((call) => deepEqual(call, args)), `expected mock to have been called with ${stringify(args)}`);
+    },
     toHaveProperty(key) {
       check(actual != null && Object.prototype.hasOwnProperty.call(actual, key), `expected object to have property ${key}`);
     },
@@ -222,7 +233,22 @@ async function runSuite(suite, trail) {
       for (const node of hooks) {
         for (const hook of node.before) await hook();
       }
-      await t.fn();
+      // Jest's callback style: a test declaring a parameter finishes when it
+      // calls done(), not when it returns.
+      if (t.fn.length > 0) {
+        await new Promise((resolve, reject) => {
+          const done = (error) => (error ? reject(error) : resolve());
+          done.fail = reject;
+          try {
+            const returned = t.fn(done);
+            if (returned && typeof returned.then === 'function') returned.catch(reject);
+          } catch (error) {
+            reject(error);
+          }
+        });
+      } else {
+        await t.fn();
+      }
       state.passed++;
       console.log(`  ✓ ${title}`);
     } catch (error) {

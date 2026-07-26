@@ -265,6 +265,21 @@ class ExecutiveOperatingSystem extends EventEmitter {
         const [project, subsystem] = key.split(':');
         lines.push(`  ${subsystem} in ${project}: ${count} event${count === 1 ? '' : 's'}.`);
       }
+
+      // Counts alone tell the owner that something happened but never what.
+      // Each signal already carries a human-readable interpretation; surfacing
+      // the most recent few turns "1 activity signal for resonate" into
+      // something actionable without changing the aggregate lines above.
+      const recent = activities
+        .slice()
+        .sort((a, b) => (b.updatedAt || b.createdAt || 0) - (a.updatedAt || a.createdAt || 0))
+        .slice(0, 3)
+        .map((a) => (a.payload && a.payload.interpretation) || a.name)
+        .filter(Boolean);
+      if (recent.length > 0) {
+        lines.push('Most recent:');
+        for (const item of recent) lines.push(`  ${item}`);
+      }
     }
 
     return { lines, counts: { ...byObjective, ...bySubsystem } };
