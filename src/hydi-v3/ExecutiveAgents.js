@@ -150,6 +150,30 @@ class TechnicalArchitect extends ExecutiveAgent {
   }
 }
 
+class ProductManager extends ExecutiveAgent {
+  constructor() {
+    super('Product Manager');
+  }
+
+  report(memory) {
+    const flagships = memory.find({ tags: ['flagship'] });
+    const primary = flagships[0];
+    const flagshipEntities = primary ? memory.find({ tags: [primary.id] }) : [];
+    const signals = memory.find({ tags: ['signal', 'customer-signal'] });
+    const roadmap = memory.find({ tags: ['milestone'] });
+    const completed = roadmap.filter((m) => m.status === 'completed').length;
+    const total = roadmap.length || 1;
+    const topSignal = signals.sort((a, b) => (b.value || 0) - (a.value || 0))[0] || null;
+    return {
+      flagship: primary ? primary.name : 'No flagship registered',
+      flagshipEntities: flagshipEntities.map((r) => ({ id: r.id, name: r.name, status: r.status })),
+      releaseReadiness: completed / total,
+      customerSignals: signals.length,
+      topSignal: topSignal ? { id: topSignal.id, name: topSignal.name } : null,
+    };
+  }
+}
+
 module.exports = {
   ExecutiveAgent,
   OperationsManager,
@@ -159,4 +183,5 @@ module.exports = {
   CreativeDirector,
   FinanceAnalyst,
   TechnicalArchitect,
+  ProductManager,
 };

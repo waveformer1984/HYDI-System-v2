@@ -36,6 +36,7 @@ function clamp(n, min, max) {
 class BusinessMemory extends EventEmitter {
   constructor(config = {}) {
     super();
+    const StrategicObjectives = require('./StrategicObjectives');
     this.config = {
       dataPath: config.dataPath || path.resolve(__dirname, '../../data'),
       persistDebounceMs: config.persistDebounceMs ?? 50,
@@ -43,6 +44,7 @@ class BusinessMemory extends EventEmitter {
       ...config,
     };
 
+    this.strategicObjectives = config.strategicObjectives || new StrategicObjectives();
     this.entities = new Map();
     this.relationships = new Map();
     this._persistTimer = null;
@@ -261,9 +263,12 @@ class BusinessMemory extends EventEmitter {
   // -------------------------------------------------------------------------
 
   _score(entity) {
+    if (this.strategicObjectives) {
+      return this.strategicObjectives.score(entity).score;
+    }
     const effort = Math.max(entity.effort || 1, 1);
     const risk = 1 - clamp(entity.risk || 0, 0, 1);
-    return (entity.value || 0) * risk / effort;
+    return ((entity.value || 0) * risk) / effort;
   }
 
   // -------------------------------------------------------------------------

@@ -3,6 +3,7 @@
 const fs = require('fs').promises;
 const path = require('path');
 const { EventEmitter } = require('events');
+const StrategicObjectives = require('./StrategicObjectives');
 
 const PERSISTENCE_VERSION = 1;
 
@@ -91,6 +92,7 @@ class BusinessWorkflowEngine extends EventEmitter {
     this.memory = config.businessMemory || null;
     this.executiveOS = config.executiveOS || null;
     this.taskEngine = config.taskEngine || null;
+    this.strategicObjectives = config.strategicObjectives || new StrategicObjectives({ ownerPriority: 'default' });
 
     this.workflows = new Map();
     this.outcomes = [];
@@ -197,17 +199,22 @@ class BusinessWorkflowEngine extends EventEmitter {
     return recommendations
       .map((rec, index) => {
         const meta = this._inferWorkflowType(rec.action);
+        const scored = this.strategicObjectives
+          ? this.strategicObjectives.scoreRecommendation(rec, this.strategicObjectives.ownerPriority)
+          : { score: BusinessValueScorer.score({
+              value: this._extractValue(rec.expectedImpact) || 0,
+              effort: 1,
+              urgency: rec.urgency ?? 0.5,
+              strategic: rec.strategic ?? 1,
+            }), reason: 'base' };
         return {
           ...rec,
           id: `rec_${index}_${Date.now()}`,
           type: meta.type,
           assignedAgent: meta.agent,
-          score: BusinessValueScorer.score({
-            value: this._extractValue(rec.expectedImpact) || 0,
-            effort: 1,
-            urgency: rec.urgency ?? 0.5,
-            strategic: rec.strategic ?? 1,
-          }),
+          score: scored.score,
+          scoreReason: scored.reason,
+          objective: scored.objective,
         };
       })
       .sort((a, b) => b.score - a.score)

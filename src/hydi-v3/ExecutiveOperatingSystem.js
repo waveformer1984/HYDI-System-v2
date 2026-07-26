@@ -3,9 +3,10 @@
 const fs = require('fs').promises;
 const path = require('path');
 const { EventEmitter } = require('events');
+const StrategicObjectives = require('./StrategicObjectives');
 const {
   OperationsManager, SalesManager, ManufacturingManager, ResearchManager,
-  CreativeDirector, FinanceAnalyst, TechnicalArchitect,
+  CreativeDirector, FinanceAnalyst, TechnicalArchitect, ProductManager,
 } = require('./ExecutiveAgents');
 
 const PERSISTENCE_VERSION = 1;
@@ -33,6 +34,7 @@ class ExecutiveOperatingSystem extends EventEmitter {
     this.taskEngine = config.taskEngine || null;
     this.planner = config.projectPlanner || null;
     this.observability = config.observability || null;
+    this.strategicObjectives = config.strategicObjectives || new StrategicObjectives({ ownerPriority: config.ownerPriority || 'default' });
 
     this.agents = new Map();
     this.lastBriefing = null;
@@ -56,6 +58,7 @@ class ExecutiveOperatingSystem extends EventEmitter {
     this.addAgent(new CreativeDirector());
     this.addAgent(new FinanceAnalyst());
     this.addAgent(new TechnicalArchitect());
+    this.addAgent(new ProductManager());
   }
 
   addAgent(agent) {
@@ -136,14 +139,20 @@ class ExecutiveOperatingSystem extends EventEmitter {
     const status = this.getStatus(reports);
     const priorityActions = this.priorityActions(5);
     const risks = this.risks();
-    const recommendations = this.recommendations(priorityActions, risks, reports);
+    const resonateStatus = this.getObjectiveStatus('resonate', priorityActions);
+    const strategicObjectives = this.strategicObjectives ? this.strategicObjectives.summarize(this.memory) : [];
+    const recommendations = this.recommendations(priorityActions, risks, reports, resonateStatus);
 
     const briefing = {
       generatedAt: Date.now(),
+      executiveSummary: this._executiveSummary(status, priorityActions, risks, recommendations),
+      strategicObjectives,
       protoForgeStatus: status,
       priorityActions,
       risks,
       recommendations,
+      resonateStatus,
+      missingData: this._missingData(reports),
       agentReports: reports,
     };
 
@@ -180,6 +189,37 @@ class ExecutiveOperatingSystem extends EventEmitter {
         activeLeads: sales.activeLeads || 0,
       },
       systemHealth: this.observability ? this.observability.getHealthScore() : null,
+    };
+  }
+
+  getObjectiveStatus(objectiveId, priorityActions = []) {
+    if (!this.memory || !this.strategicObjectives) return { tracked: false };
+    const objective = this.strategicObjectives.get(objectiveId);
+    if (!objective) return { tracked: false };
+
+    const matches = this.memory.find({}).filter((e) => this.strategicObjectives.match(e)?.id === objectiveId);
+    const topMatch = priorityActions.find((a) => this.strategicObjectives.match(a)?.id === objectiveId) || null;
+    const blockers = matches.filter((e) => e.status === 'blocked' || e.tags?.includes('blocker'));
+    const milestones = matches.filter((e) => e.tags?.includes('milestone') || e.type === 'milestone');
+    const opportunities = this.memory.find({ type: 'opportunity' }).filter((o) => this.strategicObjectives.match(o)?.id === objectiveId);
+    const signals = matches.filter((e) => e.tags?.includes('signal') || e.tags?.includes('customer-signal'));
+    const completed = milestones.filter((m) => m.status === 'completed').length;
+    const total = milestones.length || matches.length || 1;
+    const progress = completed / total;
+    const releaseReady = progress >= 0.8 && blockers.length === 0;
+
+    return {
+      tracked: matches.length > 0,
+      objectiveId,
+      name: objective.name,
+      progress,
+      blockers: blockers.map((b) => ({ id: b.id, name: b.name, reason: b.payload?.reason || 'Unknown blocker' })),
+      milestones: milestones.map((m) => ({ id: m.id, name: m.name, status: m.status })),
+      opportunities: opportunities.map((o) => ({ id: o.id, name: o.name, value: o.value })),
+      decisionsNeeded: blockers.length + (releaseReady ? 0 : 1),
+      customerSignals: signals.length,
+      releaseReady,
+      topPriority: topMatch ? { id: topMatch.id, name: topMatch.name, score: topMatch.score } : null,
     };
   }
 
@@ -262,7 +302,7 @@ class ExecutiveOperatingSystem extends EventEmitter {
     return risks.sort((a, b) => (b.severity === 'high' ? 1 : 0) - (a.severity === 'high' ? 1 : 0));
   }
 
-  recommendations(priorityActions, risks, agentReports = {}) {
+  recommendations(priorityActions, risks, agentReports = {}, resonateStatus = null) {
     const recs = [];
     const finance = agentReports['Finance Analyst'] || {};
     const sales = agentReports['Sales Manager'] || {};
@@ -301,29 +341,102 @@ class ExecutiveOperatingSystem extends EventEmitter {
       });
     }
 
+    if (resonateStatus && resonateStatus.tracked) {
+      if (resonateStatus.releaseReady) {
+        recs.push({
+          action: 'Prepare Resonate release',
+          reason: 'Flagship product is release-ready.',
+          expectedImpact: 'Ecosystem growth and brand value',
+        });
+      } else {
+        const b = resonateStatus.blockers;
+        recs.push({
+          action: b.length > 0 ? `Resolve ${b.length} Resonate blocker${b.length === 1 ? '' : 's'}` : 'Advance Resonate milestone',
+          reason: `Resonate is the flagship product. Progress ${(resonateStatus.progress * 100).toFixed(0)}%, ${b.length} blocker${b.length === 1 ? '' : 's'}.`,
+          expectedImpact: 'Flagship revenue and strategic positioning',
+        });
+      }
+    }
+
     return recs;
   }
 
   toText(briefing) {
-    const s = briefing.protoForgeStatus;
+    const rs = briefing.resonateStatus || { tracked: false };
+    const reports = briefing.agentReports || {};
+    const sales = reports['Sales Manager'] || {};
+    const ops = reports['Operations Manager'] || {};
+    const manufacturing = reports['Manufacturing Manager'] || {};
+    const research = reports['Research Manager'] || {};
+    const creative = reports['Creative Director'] || {};
+    const finance = reports['Finance Analyst'] || {};
+
+    const health = briefing.risks.some((r) => r.severity === 'high') ? 'degraded' : 'stable';
     const lines = [
-      'ProtoForge status: stable.',
+      `ProtoForge status: ${health}.`,
       '',
-      `Revenue opportunities: ${s.revenueOpportunities} (${s.revenuePipelineValue || 0} value).`,
-      `Production: ${s.productionStatus.activeTasks} active tasks, ${s.productionStatus.blockedTasks} blocked.`,
-      `Active projects: ${s.activeProjects}.`,
-      `Customer activity: ${s.customerActivity.activeCustomers} active customers, ${s.customerActivity.activeLeads} leads.`,
+      '=== Executive Summary ===',
+      briefing.executiveSummary || 'No executive summary generated.',
       '',
-      'Priority actions:',
+      '=== Strategic Objectives ===',
+      ...(briefing.strategicObjectives.length ? briefing.strategicObjectives.map((o) => `- ${o.name}: ${o.activeEntities} active, ${o.completedEntities} completed, health ${o.health}`) : ['- No strategic objectives configured.']),
+      '',
+      '=== Resonate Status ===',
+      rs.tracked
+        ? `${rs.name}: progress ${(rs.progress * 100).toFixed(0)}%, ${rs.blockers.length} blocker(s), ${rs.opportunities.length} opportunity(ies), ${rs.customerSignals} customer signal(s), release ready: ${rs.releaseReady}.`
+        : 'Resonate is not tracked in memory yet.',
+      ...(rs.blockers.length ? rs.blockers.map((b) => `- Blocker: ${b.name}`) : []),
+      '',
+      '=== Operations Status ===',
+      `Active tasks: ${ops.activeTaskCount || 0}, blocked: ${ops.blockedTaskCount || 0}.`,
+      '',
+      '=== Sales Status ===',
+      `Open opportunities: ${sales.openOpportunities || 0} (${sales.pipelineValue || 0} value), active leads: ${sales.activeLeads || 0}, customers: ${sales.activeCustomers || 0}.`,
+      '',
+      '=== Manufacturing Status ===',
+      `Active equipment: ${manufacturing.activeEquipment || 0}, needs maintenance: ${(manufacturing.needsMaintenance || []).length}.`,
+      '',
+      '=== Research Status ===',
+      `Active experiments: ${research.activeExperiments || 0}, completed: ${research.completedExperiments || 0}.`,
+      '',
+      '=== Creative Status ===',
+      `Active creative projects: ${creative.activeCreativeProjects || 0}, prototypes: ${creative.prototypeCount || 0}.`,
+      '',
+      '=== Financial Overview ===',
+      `Revenue opportunity value: ${finance.revenueOpportunityValue || 0}, tracked expenses: ${finance.trackedExpenses || 0}, projected net: ${finance.projectedNet || 0}.`,
+      '',
+      '=== Critical Risks ===',
+      ...(briefing.risks.length ? briefing.risks.map((r) => `- [${r.severity}] ${r.name}: ${r.detail}`) : ['- None identified.']),
+      '',
+      '=== Top Opportunities ===',
       ...briefing.priorityActions.map((a, i) => `${i + 1}. ${a.name} (score ${a.score.toFixed(2)}): ${a.reason}`),
       '',
-      'Risks:',
-      ...(briefing.risks.length ? briefing.risks.map((r) => `- ${r.name}: ${r.detail}`) : ['- None identified.']),
-      '',
-      'Recommendations:',
+      '=== Recommended Actions ===',
       ...(briefing.recommendations.length ? briefing.recommendations.map((r) => `- ${r.action}: ${r.reason}`) : ['- No specific recommendations.']),
+      '',
+      '=== Missing Data Sources ===',
+      ...(briefing.missingData.length ? briefing.missingData.map((m) => `- ${m}`) : ['- All expected data sources available.']),
     ];
     return lines.join('\n');
+  }
+
+  _executiveSummary(status, priorityActions, risks, recommendations) {
+    const health = risks.some((r) => r.severity === 'high') ? 'degraded' : 'stable';
+    const top = priorityActions[0];
+    const topAction = recommendations[0] || (top ? { action: top.name, reason: top.reason } : null);
+    const highestObjective = this.strategicObjectives ? this.strategicObjectives.getActive()[0]?.name || 'None' : 'None';
+    return `ProtoForge is ${health}. ${priorityActions.length} priority actions, ${risks.length} risks. Highest strategic objective: ${highestObjective}. ${topAction ? `Recommended next action: ${topAction.action} (${topAction.reason})` : 'No recommendations available.'}`;
+  }
+
+  _missingData(reports) {
+    const missing = [];
+    if (!this.memory) missing.push('BusinessMemory not connected.');
+    if (!this.observability) missing.push('Observability dashboard not connected.');
+    if (!this.planner) missing.push('Project planner not connected.');
+    for (const [name, report] of Object.entries(reports)) {
+      if (report && report.error) missing.push(`${name} report failed: ${report.error}`);
+    }
+    return missing;
   }
 
   _reasonFor(entity) {

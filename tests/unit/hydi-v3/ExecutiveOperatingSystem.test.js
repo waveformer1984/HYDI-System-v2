@@ -43,8 +43,8 @@ describe('ExecutiveOperatingSystem', () => {
     expect(osInstance._destroyed).toBe(true);
   });
 
-  test('registers seven default agents', () => {
-    expect(osInstance.agents.size).toBe(7);
+  test('registers eight default agents', () => {
+    expect(osInstance.agents.size).toBe(8);
     expect(osInstance.agents.has('Sales Manager')).toBe(true);
     expect(osInstance.agents.has('Technical Architect')).toBe(true);
   });
@@ -74,9 +74,9 @@ describe('ExecutiveOperatingSystem', () => {
     const text = osInstance.toText(briefing);
     expect(text).toContain('ProtoForge status');
     expect(text).toContain('Big Deal');
-    expect(text).toContain('Priority actions');
-    expect(text).toContain('Risks');
-    expect(text).toContain('Recommendations');
+    expect(text).toContain('Top Opportunities');
+    expect(text).toContain('Critical Risks');
+    expect(text).toContain('Recommended Actions');
   });
 
   test('priority actions rank high-value opportunities', () => {
