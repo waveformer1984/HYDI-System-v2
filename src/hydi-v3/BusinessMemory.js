@@ -3,11 +3,12 @@
 const fs = require('fs').promises;
 const path = require('path');
 const { EventEmitter } = require('events');
+const { normalizeEntity, validateEntity } = require('./DataIntegrity');
 
-const PERSISTENCE_VERSION = 1;
+const PERSISTENCE_VERSION = 2;
 
 const ENTITY_TYPES = new Set([
-  'project', 'client', 'vendor', 'equipment', 'opportunity', 'task',
+  'project', 'client', 'vendor', 'equipment', 'opportunity', 'task', 'decision',
 ]);
 
 const PRIORITY = {
@@ -136,20 +137,28 @@ class BusinessMemory extends EventEmitter {
     const type = entity.type || existing?.type || 'task';
     if (!ENTITY_TYPES.has(type)) throw new Error(`Unknown entity type: ${type}`);
 
-    const normalized = {
+    const raw = {
       id,
       type,
       name: entity.name || existing?.name || 'Unnamed',
       status: entity.status || existing?.status || 'active',
       priority: entity.priority || existing?.priority || 'normal',
-      value: clamp(Number(entity.value ?? existing?.value ?? 0), 0, Number.MAX_SAFE_INTEGER),
-      effort: clamp(Number(entity.effort ?? existing?.effort ?? 1), 0, Number.MAX_SAFE_INTEGER),
-      risk: clamp(Number(entity.risk ?? existing?.risk ?? 0), 0, 1),
+      value: entity.value ?? existing?.value ?? 0,
+      effort: entity.effort ?? existing?.effort ?? 1,
+      risk: entity.risk ?? existing?.risk ?? 0,
+      probability: entity.probability ?? existing?.probability,
+      confidence: entity.confidence ?? existing?.confidence,
+      strategic: entity.strategic ?? existing?.strategic,
+      cost: entity.cost ?? existing?.cost,
+      revenue: entity.revenue ?? existing?.revenue,
       tags: Array.isArray(entity.tags) ? entity.tags : (existing?.tags || []),
       payload: entity.payload !== undefined ? entity.payload : (existing?.payload || {}),
       createdAt: existing?.createdAt || now,
       updatedAt: now,
     };
+
+    const normalized = normalizeEntity(raw);
+    validateEntity(normalized);
 
     this.entities.set(id, normalized);
     this._persist();
@@ -308,20 +317,51 @@ class BusinessMemory extends EventEmitter {
 
   _hydrateEntity(stored) {
     const type = ENTITY_TYPES.has(stored.type) ? stored.type : 'task';
-    return {
+    const migrated = this._migrateEntity({
       id: stored.id,
       type,
+      name: stored.name,
+      status: stored.status,
+      priority: stored.priority,
+      value: stored.value,
+      effort: stored.effort,
+      risk: stored.risk,
+      probability: stored.probability,
+      confidence: stored.confidence,
+      strategic: stored.strategic,
+      cost: stored.cost,
+      revenue: stored.revenue,
+      tags: stored.tags,
+      payload: stored.payload,
+      createdAt: stored.createdAt,
+      updatedAt: stored.updatedAt,
+    });
+    return migrated;
+  }
+
+  _migrateEntity(stored) {
+    const raw = {
+      id: stored.id,
+      type: stored.type || 'task',
       name: stored.name || 'Unnamed',
       status: stored.status || 'active',
       priority: stored.priority || 'normal',
-      value: clamp(Number(stored.value ?? 0), 0, Number.MAX_SAFE_INTEGER),
-      effort: clamp(Number(stored.effort ?? 1), 0, Number.MAX_SAFE_INTEGER),
-      risk: clamp(Number(stored.risk ?? 0), 0, 1),
+      value: stored.value ?? 0,
+      effort: stored.effort ?? 1,
+      risk: stored.risk ?? 0,
+      probability: stored.probability,
+      confidence: stored.confidence,
+      strategic: stored.strategic,
+      cost: stored.cost,
+      revenue: stored.revenue,
       tags: Array.isArray(stored.tags) ? stored.tags : [],
       payload: stored.payload || {},
       createdAt: stored.createdAt || Date.now(),
       updatedAt: stored.updatedAt || Date.now(),
     };
+    const normalized = normalizeEntity(raw);
+    validateEntity(normalized);
+    return normalized;
   }
 
   async _archiveCorruptStore() {

@@ -4,6 +4,7 @@ const fs = require('fs').promises;
 const path = require('path');
 const { EventEmitter } = require('events');
 const StrategicObjectives = require('./StrategicObjectives');
+const BriefingRenderer = require('./BriefingRenderer');
 const {
   OperationsManager, SalesManager, ManufacturingManager, ResearchManager,
   CreativeDirector, FinanceAnalyst, TechnicalArchitect, ProductManager,
@@ -361,67 +362,25 @@ class ExecutiveOperatingSystem extends EventEmitter {
     return recs;
   }
 
+  /**
+   * Human-readable briefing. Rendering lives in BriefingRenderer so the CLI,
+   * the local dashboard route, and this method can never diverge.
+   */
   toText(briefing) {
-    const rs = briefing.resonateStatus || { tracked: false };
-    const reports = briefing.agentReports || {};
-    const sales = reports['Sales Manager'] || {};
-    const ops = reports['Operations Manager'] || {};
-    const manufacturing = reports['Manufacturing Manager'] || {};
-    const research = reports['Research Manager'] || {};
-    const creative = reports['Creative Director'] || {};
-    const finance = reports['Finance Analyst'] || {};
+    return BriefingRenderer.toText(briefing);
+  }
 
-    const health = briefing.risks.some((r) => r.severity === 'high') ? 'degraded' : 'stable';
-    const lines = [
-      `ProtoForge status: ${health}.`,
-      '',
-      '=== Executive Summary ===',
-      briefing.executiveSummary || 'No executive summary generated.',
-      '',
-      '=== Strategic Objectives ===',
-      ...(briefing.strategicObjectives.length ? briefing.strategicObjectives.map((o) => `- ${o.name}: ${o.activeEntities} active, ${o.completedEntities} completed, health ${o.health}`) : ['- No strategic objectives configured.']),
-      '',
-      '=== Resonate Status ===',
-      rs.tracked
-        ? `${rs.name}: progress ${(rs.progress * 100).toFixed(0)}%, ${rs.blockers.length} blocker(s), ${rs.opportunities.length} opportunity(ies), ${rs.customerSignals} customer signal(s), release ready: ${rs.releaseReady}.`
-        : 'Resonate is not tracked in memory yet.',
-      ...(rs.blockers.length ? rs.blockers.map((b) => `- Blocker: ${b.name}`) : []),
-      '',
-      '=== Operations Status ===',
-      `Active tasks: ${ops.activeTaskCount || 0}, blocked: ${ops.blockedTaskCount || 0}.`,
-      '',
-      '=== Sales Status ===',
-      `Open opportunities: ${sales.openOpportunities || 0} (${sales.pipelineValue || 0} value), active leads: ${sales.activeLeads || 0}, customers: ${sales.activeCustomers || 0}.`,
-      '',
-      '=== Manufacturing Status ===',
-      `Active equipment: ${manufacturing.activeEquipment || 0}, needs maintenance: ${(manufacturing.needsMaintenance || []).length}.`,
-      '',
-      '=== Research Status ===',
-      `Active experiments: ${research.activeExperiments || 0}, completed: ${research.completedExperiments || 0}.`,
-      '',
-      '=== Creative Status ===',
-      `Active creative projects: ${creative.activeCreativeProjects || 0}, prototypes: ${creative.prototypeCount || 0}.`,
-      '',
-      '=== Financial Overview ===',
-      `Revenue opportunity value: ${finance.revenueOpportunityValue || 0}, tracked expenses: ${finance.trackedExpenses || 0}, projected net: ${finance.projectedNet || 0}.`,
-      '',
-      '=== Critical Risks ===',
-      ...(briefing.risks.length ? briefing.risks.map((r) => `- [${r.severity}] ${r.name}: ${r.detail}`) : ['- None identified.']),
-      '',
-      '=== Top Opportunities ===',
-      ...briefing.priorityActions.map((a, i) => `${i + 1}. ${a.name} (score ${a.score.toFixed(2)}): ${a.reason}`),
-      '',
-      '=== Recommended Actions ===',
-      ...(briefing.recommendations.length ? briefing.recommendations.map((r) => `- ${r.action}: ${r.reason}`) : ['- No specific recommendations.']),
-      '',
-      '=== Missing Data Sources ===',
-      ...(briefing.missingData.length ? briefing.missingData.map((m) => `- ${m}`) : ['- All expected data sources available.']),
-    ];
-    return lines.join('\n');
+  /**
+   * Format-neutral section model for alternate operator surfaces.
+   */
+  toSections(briefing) {
+    return BriefingRenderer.toSections(briefing);
   }
 
   _executiveSummary(status, priorityActions, risks, recommendations) {
-    const health = risks.some((r) => r.severity === 'high') ? 'degraded' : 'stable';
+    // Health comes from BriefingRenderer so the summary sentence and the
+    // rendered status line can never disagree.
+    const health = BriefingRenderer.healthOf({ risks });
     const top = priorityActions[0];
     const topAction = recommendations[0] || (top ? { action: top.name, reason: top.reason } : null);
     const highestObjective = this.strategicObjectives ? this.strategicObjectives.getActive()[0]?.name || 'None' : 'None';

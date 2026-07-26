@@ -4,6 +4,7 @@ const fs = require('fs').promises;
 const path = require('path');
 const { EventEmitter } = require('events');
 const StrategicObjectives = require('./StrategicObjectives');
+const StartupIntegrity = require('./StartupIntegrity');
 
 const PERSISTENCE_VERSION = 1;
 const VALID_PRIORITIES = new Set(['resonate', 'operations', 'manufacturing', 'music', 'research', 'revenue', 'creative', 'default']);
@@ -31,6 +32,15 @@ class ExecutiveCockpit extends EventEmitter {
     this.workflowEngine = config.workflowEngine || null;
     this.executionGateway = config.executionGateway || null;
     this.strategicObjectives = config.strategicObjectives || new StrategicObjectives({ ownerPriority: 'default' });
+    this.startupIntegrity = new StartupIntegrity({
+      strategicObjectives: this.strategicObjectives,
+      businessMemory: this.memory,
+      executionGateway: this.executionGateway,
+      workflowEngine: this.workflowEngine,
+      observability: config.observability || null,
+      backup: config.backup || null,
+      logger: this.config.logger,
+    });
 
     this.ownerPriority = 'default';
     this.interactions = [];
@@ -101,6 +111,7 @@ class ExecutiveCockpit extends EventEmitter {
     if (/^(pending|approvals|what needs approval)$/.test(t)) return { command: 'approvals' };
     if (/^(history|executions|recent actions|log)$/.test(t)) return { command: 'history' };
     if (/^(workflows|active workflows|what is active)$/.test(t)) return { command: 'workflows' };
+    if (/^(startup|health|startup check|system health)$/.test(t)) return { command: 'startup' };
     if (/^approve\s+(.+)$/.test(t)) return { command: 'approve', id: t.match(/^approve\s+(.+)$/)[1].trim() };
     if (/^reject\s+(.+)$/.test(t)) return { command: 'reject', id: t.match(/^reject\s+(.+)$/)[1].trim() };
     if (/^priority\s+(.+)$/.test(t)) {
@@ -144,6 +155,9 @@ class ExecutiveCockpit extends EventEmitter {
       case 'priority':
         response = this.setOwnerPriority(parsed.priority);
         break;
+      case 'startup':
+        response = await this.startupCheck();
+        break;
       case 'help':
         response = this.getHelp();
         break;
@@ -180,6 +194,11 @@ class ExecutiveCockpit extends EventEmitter {
       rec,
     ];
     return { text: lines.join('\n'), ...status, pending, recommendation: rec, highestPriorityObjective: highest };
+  }
+
+  async startupCheck() {
+    const result = await this.startupIntegrity.check();
+    return { text: this.startupIntegrity.toText(result), status: result.status, checks: result.checks };
   }
 
   howAreWeDoing() {
@@ -265,7 +284,8 @@ class ExecutiveCockpit extends EventEmitter {
 
   getHelp() {
     return {
-      text: `Available commands:\n- "Good morning" or "status"\n- "focus"\n- "approvals"\n- "history"\n- "workflows"\n- "approve <id>"\n- "reject <id>"\n- "priority <resonate|operations|manufacturing|music|research|revenue|creative|default>"\n- "help"`,
+      text: `Available commands:\n- "Good morning" or "status"\n- "focus"\n- "approvals"\n- "history"\n- "workflows"
+- "startup" or "health"\n- "approve <id>"\n- "reject <id>"\n- "priority <resonate|operations|manufacturing|music|research|revenue|creative|default>"\n- "help"`,
     };
   }
 
@@ -531,3 +551,4 @@ class ExecutiveCockpit extends EventEmitter {
 }
 
 module.exports = ExecutiveCockpit;
+module.exports.VALID_PRIORITIES = VALID_PRIORITIES;

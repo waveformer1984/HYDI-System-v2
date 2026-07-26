@@ -137,3 +137,59 @@ non-zero if any scenario fails.
 8. All required environment variables are set
 9. Supabase `system_dashboard` view is healthy
 10. `boot-agent.js` preflight passes
+
+## 12. Executive Operator Surface
+
+Two interfaces onto the same executive stack. Both boot an `OperatorSession`
+(BusinessMemory → ExecutiveOperatingSystem → TaskEngine → BusinessWorkflowEngine
+→ ExecutionGateway → ExecutiveCockpit) and render through `BriefingRenderer`,
+so they always report identical state.
+
+### Readline CLI
+
+```bash
+npm run cockpit                                   # interactive prompt
+npm run cockpit:brief                             # one briefing, then exit
+node scripts/operator-cli.js --priority resonate  # set owner priority at boot
+node scripts/operator-cli.js --once "focus" --no-colour
+node scripts/operator-cli.js --data-path ./data   # override persistence dir
+```
+
+Commands: `good morning`, `status`, `focus`, `approvals`, `history`,
+`workflows`, `approve <id>`, `reject <id>`, `priority <p>`, `help`, `exit`.
+
+Valid priorities: `resonate`, `operations`, `manufacturing`, `music`,
+`research`, `revenue`, `creative`, `default`.
+
+### Local Dashboard
+
+```bash
+npm run dev
+# open http://localhost:3000/api/cockpit
+```
+
+| Route | Method | Purpose |
+| --- | --- | --- |
+| `/api/cockpit` | GET | HTML briefing with a command console |
+| `/api/cockpit/briefing` | GET | `{ briefing, model, text }` for integrations |
+| `/api/cockpit/command` | POST | `{ text }` — one cockpit command |
+
+The routes are **loopback only**. Non-local requests, and any request carrying
+`X-Forwarded-For` / `X-Real-IP` / `Forwarded`, receive `403`. Do not put the
+cockpit behind a reverse proxy — the guard treats a proxy hop as non-local by
+design, and the surface exposes unredacted business memory and approval
+controls.
+
+Both surfaces route approvals through `ExecutionGateway` unchanged. Neither
+grants any authority the gateway would otherwise withhold.
+
+### Verifying the surface
+
+```bash
+npm run cockpit:brief        # expect a 13-section briefing
+node scripts/minitest.js tests/unit/hydi-v3/OperatorSession.test.js
+```
+
+`scripts/minitest.js` is a minimal Jest-compatible runner for environments where
+Jest cannot run (e.g. over a slow network mount). `npm test` remains
+authoritative.

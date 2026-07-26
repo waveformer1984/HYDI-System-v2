@@ -238,6 +238,36 @@ class ExecutionGateway extends EventEmitter {
     return { id: actionId, approved: false, status: 'rejected' };
   }
 
+  /**
+   * Dry-run a pending action's adapter without approving, executing, or
+   * mutating pending/log state. Used by the Approval Center's "simulate"
+   * action so an operator can preview an outcome before deciding.
+   */
+  async simulatePending(actionId) {
+    const entry = this.pending.get(actionId);
+    if (!entry) throw new Error(`No pending action ${actionId}`);
+    const adapter = this.adapters.get(entry.adapter);
+    if (!adapter) throw new Error(`No adapter registered for ${entry.adapter}`);
+    const result = await adapter.simulate({ type: entry.type, params: entry.params });
+    return { id: actionId, simulated: true, type: entry.type, adapter: entry.adapter, result };
+  }
+
+  /**
+   * Attach an operator note to a pending action without approving or
+   * rejecting it, so the requesting agent can revise before resubmitting.
+   */
+  requestModification(actionId, notes) {
+    const entry = this.pending.get(actionId);
+    if (!entry) throw new Error(`No pending action ${actionId}`);
+    entry.modificationRequested = true;
+    entry.modificationNotes = notes || '';
+    entry.modificationRequestedAt = Date.now();
+    this._record(entry);
+    this._persist();
+    this.emit('modification-requested', { id: actionId, notes: entry.modificationNotes });
+    return { id: actionId, status: 'awaiting-approval', modificationRequested: true, notes: entry.modificationNotes };
+  }
+
   async _runEntry(entry, adapter, simulate) {
     entry.approvalState = 'approved';
     entry.status = 'running';

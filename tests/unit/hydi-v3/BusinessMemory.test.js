@@ -128,6 +128,40 @@ describe('BusinessMemory', () => {
     expect(memory.find({ status: 'archived' })[0].id).toBe(archived);
   });
 
+  test('rejects invalid entity input', async () => {
+    await memory.start();
+    expect(() => memory.put({ type: 'opportunity', name: 'X', risk: 'impossible' })).toThrow();
+    expect(() => memory.put({ type: 'opportunity', name: 'X', value: -100 })).toThrow();
+    expect(() => memory.put({ type: 'bad-type', name: 'X' })).toThrow();
+  });
+
+  test('normalizes accepted risk and value formats', async () => {
+    await memory.start();
+    const id = memory.put({ type: 'opportunity', name: 'Deal', value: '$1,000', effort: 2, risk: 5, riskScale: '1-5' });
+    const entity = memory.get(id);
+    expect(entity.value).toBe(1000);
+    expect(entity.risk).toBe(1);
+    expect(entity.effort).toBe(2);
+  });
+
+  test('malformed input cannot silently corrupt ranking', async () => {
+    await memory.start();
+    const lowRisk = memory.put({ type: 'opportunity', name: 'LowRisk', value: 100, effort: 1, risk: 'low' });
+    const highRisk = memory.put({ type: 'opportunity', name: 'HighRisk', value: 100, effort: 1, risk: 'high' });
+    const ranked = memory.rankOpportunities();
+    expect(ranked[0].id).toBe(lowRisk);
+    expect(ranked[ranked.length - 1].id).toBe(highRisk);
+  });
+
+  test('migrates old snapshots with unnormalized risk values', async () => {
+    const file = path.join(dataPath, 'business-memory.json');
+    await fs.writeFile(file, JSON.stringify({ version: 1, entities: [{ id: 'old', type: 'opportunity', name: 'Old', value: 500, effort: 1, risk: 5 }] }));
+    const migrated = new BusinessMemory({ dataPath, logger: { log: () => {}, error: () => {} } });
+    await migrated.start();
+    expect(migrated.get('old').risk).toBe(1);
+    await migrated.destroy();
+  });
+
   test('benchmark: processes 1000 entities in under one second', async () => {
     await memory.start();
     const start = Date.now();

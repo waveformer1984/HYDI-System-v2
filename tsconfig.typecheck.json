@@ -1,7 +1,9 @@
 {
   "compilerOptions": {
     "target": "es2022",
-    "lib": ["es2022"],
+    "lib": [
+      "es2022"
+    ],
     "allowJs": true,
     "checkJs": false,
     "strict": false,
@@ -18,7 +20,15 @@
     "tests/unit/hydi-v3/**/*.js",
     "scripts/performance-benchmark.js",
     "scripts/security-audit.js",
-    "scripts/soak-test-v3.js"
+    "scripts/soak-test-v3.js",
+    "scripts/operator-cli.js",
+    "scripts/console-benchmark.js",
+    "pages/api/cockpit/**/*.js",
+    "pages/api/console/**/*.js"
   ],
-  "exclude": ["node_modules", ".next", "coverage"]
+  "exclude": [
+    "node_modules",
+    ".next",
+    "coverage"
+  ]
 }

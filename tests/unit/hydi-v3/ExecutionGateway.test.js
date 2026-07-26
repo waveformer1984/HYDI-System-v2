@@ -181,6 +181,37 @@ describe('ExecutionGateway', () => {
     expect(history.some((e) => e.type === 'send-email')).toBe(true);
   });
 
+  test('simulatePending dry-runs a pending action without mutating state', async () => {
+    const pending = await gateway.execute({
+      type: 'draft-email',
+      params: { to: 'client@example.com' },
+      requestingAgent: 'Sales Manager',
+    });
+    const preview = await gateway.simulatePending(pending.id);
+    expect(preview.simulated).toBe(true);
+    expect(preview.type).toBe('draft-email');
+    expect(gateway.getPendingApprovals().length).toBe(1);
+    expect(gateway.getExecutionHistory({ status: 'awaiting-approval' }).length).toBe(1);
+  });
+
+  test('simulatePending throws for unknown id', async () => {
+    await expect(gateway.simulatePending('missing')).rejects.toThrow('No pending action');
+  });
+
+  test('requestModification attaches notes without approving or rejecting', async () => {
+    const pending = await gateway.execute({
+      type: 'draft-email',
+      params: { to: 'client@example.com' },
+      requestingAgent: 'Sales Manager',
+    });
+    const result = gateway.requestModification(pending.id, 'Please tighten the pricing paragraph.');
+    expect(result.status).toBe('awaiting-approval');
+    expect(gateway.getPendingApprovals().length).toBe(1);
+    const entry = gateway.getPendingApprovals()[0];
+    expect(entry.modificationRequested).toBe(true);
+    expect(entry.modificationNotes).toContain('pricing');
+  });
+
   test('benchmark: executes 100 autonomous actions in under one second', async () => {
     const start = Date.now();
     for (let i = 0; i < 100; i += 1) {
