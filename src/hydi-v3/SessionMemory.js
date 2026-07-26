@@ -98,6 +98,15 @@ class SessionMemory {
     return { ...this.state };
   }
 
+  /**
+   * Recent commands, oldest first, capped at `limit`. The operator CLI seeds
+   * readline history from this so arrow-key recall survives a restart.
+   */
+  getRecentCommands(limit = MAX_RECENT_COMMANDS) {
+    const bounded = Math.max(0, Math.min(limit, MAX_RECENT_COMMANDS));
+    return this.state.recentCommands.slice(-bounded);
+  }
+
   // -------------------------------------------------------------------------
   // Writes
   // -------------------------------------------------------------------------

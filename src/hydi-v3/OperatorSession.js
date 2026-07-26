@@ -50,6 +50,9 @@ class OperatorSession {
     this.strategicObjectives = config.strategicObjectives
       || new StrategicObjectives({ ownerPriority: this.config.ownerPriority });
 
+    /** Optional OperatorMode enforcing --dry-run / --offline. */
+    this.mode = config.mode || null;
+
     this.memory = null;
     this.executiveOS = null;
     this.taskEngine = null;
@@ -166,6 +169,12 @@ class OperatorSession {
     });
     // -----------------------------------------------------------------------
 
+    // Phase 16: run-mode enforcement is installed last, so it wraps the fully
+    // constructed mutation authorities. Installing it here rather than in the
+    // CLI means every surface built on an OperatorSession inherits the same
+    // guarantees — a dry run cannot be bypassed by using a different frontend.
+    if (this.mode) this.mode.install(this);
+
     this._started = true;
     return this;
   }
@@ -218,15 +227,55 @@ class OperatorSession {
     return { ok: Object.values(parts).every(Boolean), checks: parts };
   }
 
-  async destroy() {
-    if (this._destroyed) return;
-    this._destroyed = true;
-    this._started = false;
-    const components = [
+  /**
+   * Components in teardown order: dependants before their dependencies, so a
+   * store is never destroyed while something upstream may still write to it.
+   */
+  _components() {
+    return [
       this.timeline, this.sessionMemory,
       this.cockpit, this.executionGateway, this.workflowEngine,
       this.taskEngine, this.executiveOS, this.memory,
     ];
+  }
+
+  /**
+   * Persist every store without tearing anything down. Called before destroy
+   * during a graceful shutdown so a failure in one component's destroy()
+   * cannot cost the operator data another component had already buffered.
+   */
+  async flushAll() {
+    const failures = [];
+    for (const component of this._components()) {
+      if (component && typeof component.flush === 'function') {
+        try {
+          await component.flush();
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          failures.push({ component: component.constructor.name, error: message });
+          this.config.logger.error('[OperatorSession] flush error', { error: message });
+        }
+      }
+    }
+    return { ok: failures.length === 0, failures };
+  }
+
+  /**
+   * Graceful shutdown: flush everything first, then destroy. Never throws —
+   * returns a result the caller can turn into an exit code.
+   */
+  async shutdown() {
+    if (this._destroyed) return { ok: true, alreadyShutDown: true, failures: [] };
+    const flushed = await this.flushAll();
+    await this.destroy();
+    return { ok: flushed.ok, failures: flushed.failures };
+  }
+
+  async destroy() {
+    if (this._destroyed) return;
+    this._destroyed = true;
+    this._started = false;
+    const components = this._components();
     for (const component of components) {
       if (component && typeof component.destroy === 'function') {
         try {

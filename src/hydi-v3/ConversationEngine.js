@@ -288,19 +288,28 @@ class ConversationEngine {
       });
     }
     const explanation = this.agentWorkspace ? this.agentWorkspace.explainRecommendation(rec) : {};
+    const confidence = explanation.confidence || (rec.confidence !== undefined ? `${Math.round(rec.confidence * 100)}%` : 'unknown');
+    const sources = (rec.provenance && rec.provenance.sources) || explanation.dataSources || [];
+    const assumptions = (rec.provenance && rec.provenance.assumptions) || explanation.assumptions || [];
     const lines = [
       `${rec.action || rec.title}:`,
       '',
-      `Why: ${explanation.why}`,
-      `Expected outcome: ${explanation.expectedOutcome}`,
-      `Business impact: ${explanation.businessImpact}`,
-      `Risk: ${explanation.risk}`,
-      `Estimated effort: ${explanation.estimatedEffort}`,
-      `Strategic objective: ${explanation.strategicObjective}`,
-      `Confidence: ${explanation.confidence}`,
-      `Requires approval: ${explanation.requiredApproval}`,
+      `Why: ${explanation.why || rec.reason || rec.provenance?.reasoning || 'No explicit reasoning recorded.'}`,
+      `Expected outcome: ${explanation.expectedOutcome || rec.expectedOutcome || rec.expectedImpact || 'Not modeled.'}`,
+      `Business impact: ${explanation.businessImpact || rec.expectedImpact || 'Not quantified.'}`,
+      `Risk: ${explanation.risk || (rec.risk !== undefined ? rec.risk.toFixed(2) : 'unknown')}`,
+      `Estimated effort: ${explanation.estimatedEffort || rec.effort || 'unknown'}`,
+      `Strategic objective: ${explanation.strategicObjective || rec.objective || rec.provenance?.objective || 'None'}`,
+      `Confidence: ${confidence}`,
+      `Requires approval: ${explanation.requiredApproval || 'Depends on action type'}`,
+      '',
+      'Data sources used:',
+      ...(sources.length ? sources.map((s) => `- ${s}`) : ['- None recorded.']),
+      '',
+      'Assumptions:',
+      ...(assumptions.length ? assumptions.map((a) => `- ${a}`) : ['- None recorded.']),
     ];
-    return this._respond('explain-recommendation', { text: lines.join('\n'), recommendation: rec, explanation });
+    return this._respond('explain-recommendation', { text: lines.join('\n'), recommendation: rec, explanation, provenance: rec.provenance });
   }
 
   _explainApproval(id) {

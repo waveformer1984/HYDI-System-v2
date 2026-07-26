@@ -28,6 +28,8 @@
     "benchmark:performance": "node scripts/performance-benchmark.js",
     "benchmark:console": "node scripts/console-benchmark.js",
     "cockpit": "node scripts/operator-cli.js",
+    "cockpit:dry-run": "node scripts/operator-cli.js --dry-run",
+    "cockpit:offline": "node scripts/operator-cli.js --offline",
     "cockpit:brief": "node scripts/operator-cli.js --once \"good morning\" --no-colour",
     "console": "node scripts/operator-cli.js",
     "console:web": "next dev --hostname 127.0.0.1 --port 3000",

@@ -4,6 +4,8 @@ const fs = require('fs').promises;
 const path = require('path');
 const { EventEmitter } = require('events');
 
+const AuditLedger = require('./AuditLedger');
+const ActionSnapshot = require('./ActionSnapshot');
 const {
   DocumentationAdapter, FileOperationsAdapter, DevelopmentAdapter, CommunicationPrepAdapter,
 } = require('./CapabilityAdapters');
@@ -56,6 +58,7 @@ class ExecutionGateway extends EventEmitter {
     this.pending = new Map();
     this.log = [];
     this._nextLogIndex = 1;
+    this.auditLedger = config.auditLedger || new AuditLedger({ dataPath: this.config.dataPath, logger: this.config.logger });
 
     this._persistTimer = null;
     this._persistPending = false;
@@ -107,11 +110,13 @@ class ExecutionGateway extends EventEmitter {
 
     await this._ensureDataDir();
     await this._load();
+    await this.auditLedger.start();
     this._started = true;
     this.config.logger.log('[ExecutionGateway] started');
   }
 
   async flush() {
+    await this.auditLedger.flush();
     return this._flush();
   }
 
@@ -120,6 +125,7 @@ class ExecutionGateway extends EventEmitter {
       clearTimeout(this._persistTimer);
       this._persistTimer = null;
     }
+    this.auditLedger.stop();
     this._started = false;
     this.config.logger.log('[ExecutionGateway] stopped');
   }
@@ -128,6 +134,7 @@ class ExecutionGateway extends EventEmitter {
     if (this._destroyed) return;
     this.stop();
     await this._flush();
+    await this.auditLedger.destroy();
     this.adapters.clear();
     this.pending.clear();
     this.log = [];
@@ -183,6 +190,7 @@ class ExecutionGateway extends EventEmitter {
       entry.status = 'rejected';
       entry.failureReason = 'Action class is forbidden';
       this._record(entry);
+      this._recordAudit('action-rejected', entry, { reason: entry.failureReason });
       this.emit('action-rejected', { id, reason: entry.failureReason });
       throw new Error(`Forbidden action: ${action.type}`);
     }
@@ -192,6 +200,7 @@ class ExecutionGateway extends EventEmitter {
       entry.status = 'failed';
       entry.failureReason = `No adapter registered for ${entry.adapter}`;
       this._record(entry);
+      this._recordAudit('action-failed', entry, { reason: entry.failureReason });
       throw new Error(entry.failureReason);
     }
 
@@ -199,20 +208,24 @@ class ExecutionGateway extends EventEmitter {
       entry.status = 'failed';
       entry.failureReason = `Adapter ${adapter.name} does not support ${action.type}`;
       this._record(entry);
+      this._recordAudit('action-failed', entry, { reason: entry.failureReason });
       throw new Error(entry.failureReason);
     }
 
+    const simulate = options.simulate || this.config.simulate;
     if (actionClass === 'review-required' && !action.approved) {
       entry.approvalState = 'awaiting';
       entry.status = 'awaiting-approval';
       this.pending.set(id, entry);
       this._record(entry);
+      this._recordAudit('action-awaiting-approval', entry, { simulate });
       this._persist();
       this.emit('approval-required', { id, type: action.type, requestingAgent: entry.requestingAgent });
       return { id, approved: false, status: 'awaiting-approval' };
     }
 
-    return this._runEntry(entry, adapter, options.simulate || this.config.simulate);
+    this._recordAudit('action-requested', entry, { simulate });
+    return this._runEntry(entry, adapter, simulate, 'action-executed');
   }
 
   async approve(actionId) {
@@ -222,7 +235,11 @@ class ExecutionGateway extends EventEmitter {
     entry.approvalState = 'approved';
     this.pending.delete(actionId);
     const adapter = this.adapters.get(entry.adapter);
-    return this._runEntry(entry, adapter, false);
+    // Honour the gateway-wide simulate flag. Previously this passed `false`
+    // unconditionally, so a gateway constructed with `simulate: true` would
+    // simulate execute() but perform real side effects on approve().
+    this._recordAudit('action-approved', entry, { simulate: this.config.simulate });
+    return this._runEntry(entry, adapter, this.config.simulate, 'action-executed');
   }
 
   reject(actionId) {
@@ -233,6 +250,7 @@ class ExecutionGateway extends EventEmitter {
     entry.failureReason = 'Rejected by operator';
     this.pending.delete(actionId);
     this._record(entry);
+    this._recordAudit('action-rejected', entry, { reason: entry.failureReason });
     this._persist();
     this.emit('action-rejected', { id: actionId, reason: entry.failureReason });
     return { id: actionId, approved: false, status: 'rejected' };
@@ -268,11 +286,12 @@ class ExecutionGateway extends EventEmitter {
     return { id: actionId, status: 'awaiting-approval', modificationRequested: true, notes: entry.modificationNotes };
   }
 
-  async _runEntry(entry, adapter, simulate) {
+  async _runEntry(entry, adapter, simulate, auditContext = 'action-executed') {
     entry.approvalState = 'approved';
     entry.status = 'running';
     this._record(entry);
 
+    const beforeState = ActionSnapshot.capture(this.memory, { tags: [entry.type] });
     try {
       const result = simulate
         ? await adapter.simulate({ type: entry.type, params: entry.params })
@@ -282,6 +301,9 @@ class ExecutionGateway extends EventEmitter {
       entry.completedAt = Date.now();
       this._record(entry);
       this._updateMemory(entry);
+      const afterState = ActionSnapshot.capture(this.memory, { tags: [entry.type] });
+      const diff = ActionSnapshot.diff(beforeState, afterState);
+      this._recordAudit(auditContext, entry, { simulate, beforeState, afterState, diff });
       this.emit('action-completed', { id: entry.id, type: entry.type, result });
       return { id: entry.id, approved: true, status: 'completed', result };
     } catch (error) {
@@ -289,6 +311,9 @@ class ExecutionGateway extends EventEmitter {
       entry.failureReason = error instanceof Error ? error.message : String(error);
       entry.completedAt = Date.now();
       this._record(entry);
+      const afterState = ActionSnapshot.capture(this.memory, { tags: [entry.type] });
+      const diff = ActionSnapshot.diff(beforeState, afterState);
+      this._recordAudit('action-failed', entry, { simulate, beforeState, afterState, diff });
       this.emit('action-failed', { id: entry.id, reason: entry.failureReason });
       throw error;
     }
@@ -315,6 +340,27 @@ class ExecutionGateway extends EventEmitter {
     this._persist();
   }
 
+  _recordAudit(category, entry, extra = {}) {
+    this.auditLedger.record({
+      category,
+      actor: entry.requestingAgent || 'system',
+      subjectId: entry.id,
+      payload: {
+        type: entry.type,
+        adapter: entry.adapter,
+        actionClass: entry.actionClass,
+        status: entry.status,
+        simulate: extra.simulate ?? null,
+        result: extra.result ?? entry.result ?? null,
+        failureReason: entry.failureReason || extra.failureReason || null,
+        beforeState: extra.beforeState || null,
+        afterState: extra.afterState || null,
+        diff: extra.diff || null,
+        ...extra,
+      },
+    });
+  }
+
   _updateMemory(entry) {
     if (!this.memory) return;
     this.memory.put({
@@ -336,6 +382,14 @@ class ExecutionGateway extends EventEmitter {
     if (query.requestingAgent) entries = entries.filter((e) => e.requestingAgent === query.requestingAgent);
     if (query.type) entries = entries.filter((e) => e.type === query.type);
     return entries.sort((a, b) => b.timestamp - a.timestamp);
+  }
+
+  getAuditTrail(query = {}) {
+    return this.auditLedger.getEvents(query);
+  }
+
+  verifyAuditChain() {
+    return this.auditLedger.verify();
   }
 
   getPendingApprovals() {

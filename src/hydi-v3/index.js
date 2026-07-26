@@ -41,3 +41,5 @@ module.exports.SessionMemory = require('./SessionMemory');
 module.exports.ConversationEngine = require('./ConversationEngine');
 module.exports.ConsoleAPI = require('./ConsoleAPI');
 module.exports.ConsoleRenderer = require('./ConsoleRenderer');
+module.exports.OperatorMode = require('./OperatorMode');
+module.exports.OperatorRuntime = require('./OperatorRuntime');

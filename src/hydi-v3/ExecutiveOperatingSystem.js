@@ -5,6 +5,7 @@ const path = require('path');
 const { EventEmitter } = require('events');
 const StrategicObjectives = require('./StrategicObjectives');
 const BriefingRenderer = require('./BriefingRenderer');
+const TrustEngine = require('./TrustEngine');
 const {
   OperationsManager, SalesManager, ManufacturingManager, ResearchManager,
   CreativeDirector, FinanceAnalyst, TechnicalArchitect, ProductManager,
@@ -36,6 +37,7 @@ class ExecutiveOperatingSystem extends EventEmitter {
     this.planner = config.projectPlanner || null;
     this.observability = config.observability || null;
     this.strategicObjectives = config.strategicObjectives || new StrategicObjectives({ ownerPriority: config.ownerPriority || 'default' });
+    this.trustEngine = new TrustEngine({ businessMemory: this.memory, strategicObjectives: this.strategicObjectives, logger: this.config.logger });
 
     this.agents = new Map();
     this.lastBriefing = null;
@@ -314,6 +316,9 @@ class ExecutiveOperatingSystem extends EventEmitter {
         action: `Complete "${top.name}"`,
         reason: `Highest score (${top.score.toFixed(2)}) among ${priorityActions.length} open actions; value ${top.value}, effort ${top.effort}.`,
         expectedImpact: 'Revenue or capability gain',
+        expectedOutcome: `Opportunity "${top.name}" is completed and its value ${top.value} is realized.`,
+        changes: `Entity "${top.name}" transitions from ${top.status || 'active'} to completed.`,
+        id: top.id,
       });
     }
 
@@ -322,6 +327,8 @@ class ExecutiveOperatingSystem extends EventEmitter {
         action: 'Review active leads with Sales Manager',
         reason: `${sales.activeLeads} lead(s) need follow-up.`,
         expectedImpact: 'Shortest path to new revenue',
+        expectedOutcome: 'Sales-qualified leads receive follow-up and progress to quotes.',
+        changes: 'Lead statuses updated; pipeline value recalculated.',
       });
     }
 
@@ -331,6 +338,8 @@ class ExecutiveOperatingSystem extends EventEmitter {
         action: `Address ${maintenanceRisk.name}`,
         reason: `Equipment status is ${maintenanceRisk.detail}.`,
         expectedImpact: 'Protect production capacity',
+        expectedOutcome: 'Equipment restored to active status and production risk reduced.',
+        changes: `Entity "${maintenanceRisk.name}" transitions from ${maintenanceRisk.entity} status to active.`,
       });
     }
 
@@ -339,6 +348,8 @@ class ExecutiveOperatingSystem extends EventEmitter {
         action: 'Review expense ledger',
         reason: `Expenses are ${((finance.trackedExpenses / (finance.revenueOpportunityValue || 1)) * 100).toFixed(0)}% of open revenue opportunities.`,
         expectedImpact: 'Financial leakage control',
+        expectedOutcome: 'Unnecessary or mis-categorized expenses are flagged.',
+        changes: 'Expense records updated; financial confidence recalculated.',
       });
     }
 
@@ -348,6 +359,8 @@ class ExecutiveOperatingSystem extends EventEmitter {
           action: 'Prepare Resonate release',
           reason: 'Flagship product is release-ready.',
           expectedImpact: 'Ecosystem growth and brand value',
+          expectedOutcome: 'Resonate is ready for public release.',
+          changes: 'Release status recorded; launch workflow can begin.',
         });
       } else {
         const b = resonateStatus.blockers;
@@ -355,11 +368,20 @@ class ExecutiveOperatingSystem extends EventEmitter {
           action: b.length > 0 ? `Resolve ${b.length} Resonate blocker${b.length === 1 ? '' : 's'}` : 'Advance Resonate milestone',
           reason: `Resonate is the flagship product. Progress ${(resonateStatus.progress * 100).toFixed(0)}%, ${b.length} blocker${b.length === 1 ? '' : 's'}.`,
           expectedImpact: 'Flagship revenue and strategic positioning',
+          expectedOutcome: 'Resonate moves closer to release readiness.',
+          changes: 'Blockers cleared or milestones advanced.',
         });
       }
     }
 
-    return recs;
+    if (recs.length === 0) {
+      recs.push(this.trustEngine.iDontKnow('No memory entities or agent reports support a recommendation.'));
+    }
+
+    return recs.map((r) => {
+      const provenance = this.trustEngine.generateProvenance(r, this.memory);
+      return { ...r, confidence: provenance.confidence, provenance };
+    });
   }
 
   /**

@@ -193,3 +193,59 @@ node scripts/minitest.js tests/unit/hydi-v3/OperatorSession.test.js
 `scripts/minitest.js` is a minimal Jest-compatible runner for environments where
 Jest cannot run (e.g. over a slow network mount). `npm test` remains
 authoritative.
+
+## 13. Operator CLI Run Modes and Shutdown
+
+### Dry run
+
+```bash
+npm run cockpit:dry-run
+node scripts/operator-cli.js --dry-run --once "approve exec_123"
+```
+
+Every mutating action is simulated or refused; nothing executes. Approvals are
+routed to `ExecutionGateway.simulatePending()` and the pending action is left in
+place, so you can preview and then really approve without re-queuing. A summary
+of everything intercepted prints at shutdown.
+
+Enforcement wraps the mutation authorities themselves — not the command parser —
+so no rewording of a command can bypass it:
+
+```
+ExecutionGateway.execute / approve / reject / requestModification
+BusinessWorkflowEngine.approveWorkflow / rejectWorkflow / startWorkflow
+ConsoleAPI.backup
+```
+
+`focus` and `priority` are deliberately NOT guarded: they change what you see,
+not what the system does.
+
+### Offline
+
+```bash
+npm run cockpit:offline
+```
+
+Refuses network-dependent action types at the call boundary and prints a
+startup preflight. Every such type is already `forbidden` in the gateway's
+classification, so the preflight normally reports "verified local-only"; it
+exists to catch an adapter registered at runtime that reintroduces a network
+path. Combine with `--dry-run`; offline refusal takes precedence.
+
+### Graceful shutdown
+
+Ctrl-C (or `exit`) drains in this order:
+
+1. stop accepting input
+2. finish the in-flight command, bounded by `--shutdown-timeout` (default 10000ms)
+3. persist command history into SessionMemory
+4. flush every store, then destroy the session
+5. exit 0 on a clean drain, 1 if the drain timed out or a flush failed
+
+A second Ctrl-C exits immediately with 130, so a wedged flush cannot trap you.
+
+### History
+
+Up/Down recalls commands from previous sessions. History is stored in
+SessionMemory (`data/session-memory.json`), capped, de-duplicated, and skips
+blank lines. Disable with `--no-history`.
