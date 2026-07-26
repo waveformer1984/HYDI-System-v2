@@ -43,3 +43,6 @@ module.exports.ConsoleAPI = require('./ConsoleAPI');
 module.exports.ConsoleRenderer = require('./ConsoleRenderer');
 module.exports.OperatorMode = require('./OperatorMode');
 module.exports.OperatorRuntime = require('./OperatorRuntime');
+module.exports.BusinessEventBus = require('./BusinessEventBus');
+module.exports.FilesystemMonitor = require('./FilesystemMonitor');
+module.exports.BusinessSignalInterpreter = require('./BusinessSignalInterpreter');
