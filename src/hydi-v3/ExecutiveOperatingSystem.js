@@ -604,6 +604,26 @@ class ExecutiveOperatingSystem extends EventEmitter {
       }
     }
 
+    if (recs.length === 0 && this.memory) {
+      const cutoff = Date.now() - 86400000;
+      const activeProjects = this.memory.find({ type: 'project', status: 'active' })
+        .filter((p) => (p.updatedAt || p.createdAt || 0) >= cutoff)
+        .sort((a, b) => (b.updatedAt || b.createdAt || 0) - (a.updatedAt || a.createdAt || 0));
+      if (activeProjects.length > 0) {
+        const project = activeProjects[0];
+        const payload = project.payload || {};
+        recs.push({
+          action: `Continue work on ${project.name}`,
+          reason: `Recent ${payload.subsystem || 'activity'} signals in ${project.name}: ${payload.lastInterpretation || 'active project detected'}.`,
+          expectedImpact: 'Maintain momentum on the active project',
+          expectedOutcome: `Project ${project.name} progresses toward its next milestone.`,
+          changes: `Project activity is tracked and confidence in ${project.name} direction is updated.`,
+          objective: payload.objective || null,
+          signals: [project.id],
+        });
+      }
+    }
+
     if (recs.length === 0) {
       recs.push(this.trustEngine.iDontKnow('No memory entities or agent reports support a recommendation.'));
     }

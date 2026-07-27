@@ -2,6 +2,7 @@
 
 const { EventEmitter } = require('events');
 const { boot } = require('./HYDIOperationalBoot');
+const { ConnectorManager } = require('./connectors');
 
 const STATES = Object.freeze({
   STARTING: 'STARTING',
@@ -18,11 +19,13 @@ class HYDIContinuousRuntime extends EventEmitter {
       dataPath: config.dataPath,
       ownerPriority: config.ownerPriority || 'default',
       healthIntervalMs: config.healthIntervalMs ?? 10000,
+      connectors: config.connectors || [],
       logger: config.logger || { log: () => {}, warn: () => {}, error: () => {} },
     };
     this.state = STATES.STOPPED;
     this.bootReport = null;
     this.session = null;
+    this.connectorManager = null;
     this.startTime = null;
     this.eventsProcessed = 0;
     this.learningUpdates = 0;
@@ -61,7 +64,18 @@ class HYDIContinuousRuntime extends EventEmitter {
       this.session.eventBus.subscribeAll(this._onBusEvent);
     }
 
-    this.state = this.bootReport.status === 'ready' ? STATES.READY : STATES.DEGRADED;
+    this.connectorManager = new ConnectorManager({
+      eventBus: this.session.eventBus,
+      dataPath: this.config.dataPath,
+      logger: this.config.logger,
+      configuration: { connectors: this.config.connectors, retry: { maxAttempts: 3, baseDelayMs: 1000 } },
+      context: { equipmentRegistry: this.session.equipmentRegistry },
+    });
+    await this.connectorManager.start();
+    const connectorHealth = this.connectorManager.healthCheck();
+    const connectorsHealthy = connectorHealth.connectors.total === 0 || connectorHealth.ok;
+
+    this.state = this.bootReport.status === 'ready' && connectorsHealthy ? STATES.READY : STATES.DEGRADED;
     this.emit('state-change', this.state);
 
     this._healthTimer = setInterval(() => this._healthLoop(), this.config.healthIntervalMs);
@@ -84,6 +98,10 @@ class HYDIContinuousRuntime extends EventEmitter {
 
     if (this.session && this.session.eventBus) {
       this.session.eventBus.unsubscribe('*', this._onBusEvent);
+    }
+
+    if (this.connectorManager) {
+      await this.connectorManager.stop();
     }
 
     if (this.session) {
@@ -158,6 +176,8 @@ class HYDIContinuousRuntime extends EventEmitter {
       if (completed.length) lastVerifiedAction = completed[0].type || completed[0].id;
     }
 
+    const connectorHealth = this.connectorManager ? this.connectorManager.healthCheck() : { ok: false, connectors: { connectors: [] } };
+
     return {
       state: this.state,
       runtime: this.state,
@@ -169,6 +189,8 @@ class HYDIContinuousRuntime extends EventEmitter {
       auditEntries,
       learningUpdates,
       lastVerifiedAction,
+      connectors: connectorHealth.connectors.connectors,
+      connectorHealth: connectorHealth.ok,
     };
   }
 
@@ -239,6 +261,15 @@ class HYDIContinuousRuntime extends EventEmitter {
       try {
         const h = sensor.healthCheck();
         if (!h.ok) result.ok = false;
+      } catch (e) {
+        result.ok = false;
+      }
+    }
+
+    if (this.connectorManager) {
+      try {
+        const connectorHealth = this.connectorManager.healthCheck();
+        if (!connectorHealth.ok) result.ok = false;
       } catch (e) {
         result.ok = false;
       }

@@ -26,6 +26,9 @@
     "scripts/hydi-operational-demo.js",
     "scripts/hydi-continuous-demo.js",
     "scripts/hydi-operator-demo.js",
+    "scripts/hydi-boot.js",
+    "scripts/hydi-dashboard.js",
+    "scripts/hydi-live-demo.js",
     "scripts/console-benchmark.js",
     "pages/api/cockpit/**/*.js",
     "pages/api/console/**/*.js"
