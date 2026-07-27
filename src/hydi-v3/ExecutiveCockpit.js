@@ -33,6 +33,7 @@ class ExecutiveCockpit extends EventEmitter {
     this.executionGateway = config.executionGateway || null;
     this.learningMetrics = config.learningMetrics || null;
     this.recommendationTracker = config.recommendationTracker || null;
+    this.businessEvidenceEngine = config.businessEvidenceEngine || null;
     this.strategicObjectives = config.strategicObjectives || new StrategicObjectives({ ownerPriority: 'default' });
     this.startupIntegrity = new StartupIntegrity({
       strategicObjectives: this.strategicObjectives,
@@ -114,6 +115,15 @@ class ExecutiveCockpit extends EventEmitter {
     if (/^(history|executions|recent actions|log)$/.test(t)) return { command: 'history' };
     if (/^(workflows|active workflows|what is active)$/.test(t)) return { command: 'workflows' };
     if (/^(learning|learn|prediction accuracy|recommendation success|lessons learned|recommendation history)$/.test(t)) return { command: 'learning' };
+    if (/^(evidence|business evidence|evidence summary)$/.test(t)) return { command: 'evidence' };
+    if (/^(outcomes|outcome review|outcome queue)$/.test(t)) return { command: 'outcomes' };
+    if (/^(kpis|business kpis|kpi dashboard)$/.test(t)) return { command: 'kpis' };
+    if (/^review\s+(.+)$/.test(t)) {
+      const parts = t.match(/^review\s+(.+)$/)[1].trim().split(/\s+/);
+      const id = parts[0];
+      const answer = parts.slice(1).join(' ');
+      return { command: 'review', id, answer };
+    }
     if (/^(startup|health|startup check|system health)$/.test(t)) return { command: 'startup' };
     if (/^(what changed|what changed today|what's new|whats new)$/.test(t)) return { command: 'what-changed' };
     if (/^approve\s+(.+)$/.test(t)) return { command: 'approve', id: t.match(/^approve\s+(.+)$/)[1].trim() };
@@ -152,6 +162,18 @@ class ExecutiveCockpit extends EventEmitter {
         break;
       case 'learning':
         response = this.getLearningDashboard();
+        break;
+      case 'evidence':
+        response = this.getEvidenceDashboard();
+        break;
+      case 'outcomes':
+        response = this.getOutcomeDashboard();
+        break;
+      case 'kpis':
+        response = this.getKPIDashboard();
+        break;
+      case 'review':
+        response = this.review(parsed.id, parsed.answer);
         break;
       case 'approve':
         response = await this.approveById(parsed.id);
@@ -329,10 +351,72 @@ class ExecutiveCockpit extends EventEmitter {
     return { text: lines.join('\n'), dashboard };
   }
 
+  getEvidenceDashboard() {
+    if (!this.businessEvidenceEngine) return { text: 'BusinessEvidenceEngine not connected.' };
+    const summary = this.businessEvidenceEngine.getEvidenceSummary();
+    const bySource = summary.bySource || {};
+    const lines = [
+      'Evidence Dashboard',
+      '',
+      `Total evidence collected: ${summary.total}`,
+      'By source:',
+      ...Object.entries(bySource).map(([s, c]) => `- ${s}: ${c}`),
+    ];
+    return { text: lines.join('\n'), summary };
+  }
+
+  getOutcomeDashboard() {
+    if (!this.businessEvidenceEngine) return { text: 'BusinessEvidenceEngine not connected.' };
+    const awaiting = this.businessEvidenceEngine.getRecommendationsAwaitingReview();
+    const confirmed = this.businessEvidenceEngine.getRecentlyConfirmedOutcomes(5);
+    const accuracy = this.businessEvidenceEngine.getPredictionAccuracy();
+    const lines = [
+      'Outcome Review Queue',
+      '',
+      `Awaiting review: ${awaiting.length}`,
+      `Prediction accuracy: ${accuracy === null ? 'building baseline' : `${(accuracy * 100).toFixed(0)}%`}`,
+      '',
+      'Recently confirmed:',
+      ...(confirmed.length ? confirmed.map((c) => `- [${c.id}] ${c.action}: ${c.outcome}`) : ['No confirmed outcomes yet.']),
+      '',
+      'Awaiting:',
+      ...(awaiting.length ? awaiting.map((r) => `- [${r.id}] ${r.action}`) : ['No recommendations awaiting review.']),
+    ];
+    return { text: lines.join('\n'), awaiting, confirmed, accuracy };
+  }
+
+  getKPIDashboard() {
+    if (!this.businessEvidenceEngine) return { text: 'BusinessEvidenceEngine not connected.' };
+    const kpis = this.businessEvidenceEngine.getBusinessKPIs();
+    const lines = [
+      'Business KPI Dashboard',
+      '',
+      ...Object.values(kpis).map((k) => `${k.name}: ${k.value === null ? 'unknown' : k.value} ${k.unit} (target ${k.target}, ${k.status})`),
+    ];
+    return { text: lines.join('\n'), kpis };
+  }
+
+  review(id, answer) {
+    if (!this.businessEvidenceEngine) return { text: 'BusinessEvidenceEngine not connected.' };
+    if (!answer) {
+      try {
+        const review = this.businessEvidenceEngine.requestManualReview(id);
+        return { text: `${review.question} Options: ${review.options.join(', ')}.`, review };
+      } catch (e) {
+        return { text: `Review request failed: ${e instanceof Error ? e.message : String(e)}` };
+      }
+    }
+    try {
+      const result = this.businessEvidenceEngine.submitManualReview(id, answer);
+      return { text: `Outcome evaluated as ${result.classification}. ${result.explanation}`, result };
+    } catch (e) {
+      return { text: `Review submission failed: ${e instanceof Error ? e.message : String(e)}` };
+    }
+  }
+
   getHelp() {
     return {
-      text: `Available commands:\n- "Good morning" or "status"\n- "focus"\n- "approvals"\n- "history"\n- "workflows"\n- "learning"
-- "startup" or "health"\n- "approve <id>"\n- "reject <id>"\n- "priority <resonate|operations|manufacturing|music|research|revenue|creative|default>"\n- "help"`,
+      text: `Available commands:\n- "Good morning" or "status"\n- "focus"\n- "approvals"\n- "history"\n- "workflows"\n- "learning"\n- "evidence"\n- "outcomes"\n- "kpis"\n- "review <id>" or "review <id> yes|partially|no|unknown"\n- "startup" or "health"\n- "approve <id>"\n- "reject <id>"\n- "priority <resonate|operations|manufacturing|music|research|revenue|creative|default>"\n- "help"`,
     };
   }
 

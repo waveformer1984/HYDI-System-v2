@@ -196,6 +196,14 @@ function toSections(briefing) {
         : ['Learning system still building historical baseline.'],
     },
     {
+      id: 'business-evidence',
+      title: 'Business Evidence',
+      tone: 'neutral',
+      lines: briefing.businessEvidence && Array.isArray(briefing.businessEvidence.lines) && briefing.businessEvidence.lines.length
+        ? briefing.businessEvidence.lines
+        : ['Business evidence baseline still forming.'],
+    },
+    {
       id: 'missing-data',
       title: 'Missing Data Sources',
       tone: 'dim',

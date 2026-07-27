@@ -179,6 +179,9 @@ class ExecutionGateway extends EventEmitter {
       params: action.params || {},
       requestingAgent: action.requestingAgent || 'unknown',
       workflowId: action.workflowId,
+      // Link back to the recommendation that proposed this action. Without it
+      // _observeOutcome() can never fire and the learning loop is inert.
+      recommendationId: action.recommendationId || null,
       actionClass,
       approvalState: 'pending',
       status: 'pending',
@@ -305,7 +308,9 @@ class ExecutionGateway extends EventEmitter {
       const afterState = ActionSnapshot.capture(this.memory, { tags: [entry.type] });
       const diff = ActionSnapshot.diff(beforeState, afterState);
       this._recordAudit(auditContext, entry, { simulate, beforeState, afterState, diff });
-      this._observeOutcome(entry);
+      // A simulated run produced no real-world effect, so it is not evidence
+      // about anything. Learning from it would let a dry run raise confidence.
+      if (!simulate) this._observeOutcome(entry);
       this.emit('action-completed', { id: entry.id, type: entry.type, result });
       return { id: entry.id, approved: true, status: 'completed', result };
     } catch (error) {
@@ -316,7 +321,7 @@ class ExecutionGateway extends EventEmitter {
       const afterState = ActionSnapshot.capture(this.memory, { tags: [entry.type] });
       const diff = ActionSnapshot.diff(beforeState, afterState);
       this._recordAudit('action-failed', entry, { simulate, beforeState, afterState, diff });
-      this._observeOutcome(entry);
+      if (!simulate) this._observeOutcome(entry);
       this.emit('action-failed', { id: entry.id, reason: entry.failureReason });
       throw error;
     }

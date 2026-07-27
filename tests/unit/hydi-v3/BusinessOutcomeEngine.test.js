@@ -69,14 +69,32 @@ describe('BusinessOutcomeEngine', () => {
     expect(result.adjustedConfidence).toBeLessThan(0.8);
   });
 
-  it('observes an action entry with recommendationId', () => {
+  it('records a completed action as execution progress, not a measured outcome', () => {
+    // An action finishing means it ran, not that it delivered the value the
+    // recommendation predicted. Treating completion as a successful outcome
+    // (with actual = expectedValue) let the system confirm its own forecast
+    // without observing anything. See LearningLoopIntegrity.test.js.
     const id = store.recordRecommendation({ action: 'Email outreach', confidence: 0.7, expectedValue: 10 });
     const result = engine.observeAction({
       recommendationId: id,
       status: 'completed',
       completedAt: Date.now(),
     });
-    expect(result.observedOutcome.type).toBe('successful');
+    expect(result.executionStatus).toBe('completed');
+    expect(result.observedOutcome).toBeNull();
+    expect(store.getRecommendation(id).confidence).toBe(0.7);
+  });
+
+  it('records an execution failure as genuine negative evidence', () => {
+    const id = store.recordRecommendation({ action: 'Email outreach', confidence: 0.7, expectedValue: 10 });
+    const result = engine.observeAction({
+      recommendationId: id,
+      status: 'failed',
+      completedAt: Date.now(),
+    });
+    expect(result.observedOutcome.type).toBe('failed');
+    expect(result.observedOutcome.measured).toBe(true);
+    expect(result.observedOutcome.provenance).toBe('execution-failure');
   });
 
   it('ignores actions without recommendationId', () => {

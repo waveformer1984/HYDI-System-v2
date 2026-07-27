@@ -27,6 +27,7 @@ const RecommendationTracker = require('./RecommendationTracker');
 const ConfidenceCalibration = require('./ConfidenceCalibration');
 const BusinessOutcomeEngine = require('./BusinessOutcomeEngine');
 const LearningMetrics = require('./LearningMetrics');
+const BusinessEvidenceEngine = require('./BusinessEvidenceEngine');
 
 const SILENT_LOGGER = { log: () => {}, error: () => {}, warn: () => {} };
 
@@ -92,6 +93,7 @@ class OperatorSession {
     this.recommendationTracker = null;
     this.confidenceCalibration = null;
     this.businessOutcomeEngine = null;
+    this.evidenceEngine = null;
     this.learningMetrics = null;
 
     this.timeline = null;
@@ -130,6 +132,15 @@ class OperatorSession {
       logger,
     });
     await this.businessOutcomeEngine.start();
+
+    this.evidenceEngine = new BusinessEvidenceEngine({
+      eventBus: this.eventBus,
+      recommendationTracker: this.recommendationTracker,
+      businessOutcomeEngine: this.businessOutcomeEngine,
+      logger,
+    });
+    await this.evidenceEngine.start();
+
     this.learningMetrics = new LearningMetrics({
       decisionOutcomeStore: this.decisionOutcomeStore,
       dataPath,
@@ -148,6 +159,7 @@ class OperatorSession {
       eventBus: this.eventBus,
       recommendationTracker: this.recommendationTracker,
       learningMetrics: this.learningMetrics,
+      businessEvidenceEngine: this.evidenceEngine,
     });
     await this.executiveOS.start();
 
@@ -178,6 +190,7 @@ class OperatorSession {
       executionGateway: this.executionGateway,
       learningMetrics: this.learningMetrics,
       recommendationTracker: this.recommendationTracker,
+      businessEvidenceEngine: this.evidenceEngine,
     });
     await this.cockpit.start();
 
@@ -364,7 +377,7 @@ class OperatorSession {
       this.timeline, this.sessionMemory,
       this.cockpit, this.executionGateway, this.workflowEngine,
       this.taskEngine, this.executiveOS, this.memory,
-      this.learningMetrics, this.businessOutcomeEngine,
+      this.evidenceEngine, this.learningMetrics, this.businessOutcomeEngine,
       this.recommendationTracker, this.decisionOutcomeStore,
     ];
   }

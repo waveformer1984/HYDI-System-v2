@@ -33,6 +33,8 @@ class ConfidenceCalibration {
       delta = -factor * conf;
     } else if (type === 'abandoned' || type === 'superseded') {
       delta = -factor * conf * 0.5;
+    } else if (type === 'neutral') {
+      delta = 0;
     }
     // cancelled or unknown leaves delta at 0
 

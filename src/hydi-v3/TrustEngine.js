@@ -17,6 +17,7 @@ class TrustEngine {
     this.strategicObjectives = config.strategicObjectives || null;
     this.memory = config.businessMemory || null;
     this.learningMetrics = config.learningMetrics || null;
+    this.businessEvidenceEngine = config.businessEvidenceEngine || null;
     this.logger = config.logger || console;
   }
 
@@ -160,6 +161,33 @@ class TrustEngine {
         ? `More evidence in the weakest area (${provenance.weakestArea}) or a sustained increase in confidence (currently ${(provenance.confidence * 100).toFixed(0)}%; drift ${confidenceDrift}).`
         : `Sustained confidence increase above the recommendation threshold or stronger supporting evidence.`,
     ];
+
+    if (this.businessEvidenceEngine) {
+      const summary = this.businessEvidenceEngine.getEvidenceSummary(recommendation.id);
+      const evidence = (summary && summary.evidence) || [];
+      const contradicting = evidence.filter((e) => e.data && Number(e.data.value) < 0);
+      const kpis = this.businessEvidenceEngine.getBusinessKPIs();
+      const improved = Object.values(kpis).filter((k) => k.value !== null && k.status === 'target-met').map((k) => k.name);
+
+      lines.push(
+        '',
+        'What evidence contradicts it?',
+        contradicting.length ? contradicting.map((e) => `- ${e.source}:${e.type}`).join('\n') : '- No contradictory evidence collected.',
+        '',
+        'What evidence is still missing?',
+        evidence.length === 0 ? '- No evidence has been collected yet.' : '- Additional confirmatory evidence would strengthen confidence.',
+        '',
+        'Why is confidence changing?',
+        `Confidence moves only when measured evidence is evaluated, not from execution status.`,
+        '',
+        'What KPIs improved?',
+        improved.length ? `- ${improved.join('\n- ')}` : '- No KPIs have met their targets yet.',
+        '',
+        'How much historical evidence exists?',
+        `${evidence.length} evidence item(s) attached to this recommendation.`,
+      );
+    }
+
     return lines.join('\n');
   }
 

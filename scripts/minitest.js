@@ -55,6 +55,16 @@ function stringify(value) {
 }
 
 function deepEqual(a, b) {
+  if (b && typeof b === 'object' && b.__arrayContaining) {
+    return Array.isArray(a) && b.__arrayContaining.every((item) => a.some((x) => deepEqual(x, item)));
+  }
+  if (b && typeof b === 'object' && b.__objectContaining) {
+    return a && typeof a === 'object'
+      && Object.entries(b.__objectContaining).every(([k, v]) => deepEqual(a[k], v));
+  }
+  if (b && typeof b === 'object' && b.__any) {
+    return a !== null && a !== undefined && (a instanceof b.__any || typeof a === typeof b.__any());
+  }
   if (Object.is(a, b)) return true;
   if (typeof a !== typeof b || a === null || b === null) return false;
   if (typeof a !== 'object') return false;
@@ -187,6 +197,10 @@ const jestShim = {
   restoreAllMocks() {},
   setTimeout() {},
 };
+
+expect.arrayContaining = (items) => ({ __arrayContaining: items });
+expect.objectContaining = (obj) => ({ __objectContaining: obj });
+expect.any = (ctor) => ({ __any: ctor });
 
 function expect(actual) {
   const api = buildMatchers(actual, false);

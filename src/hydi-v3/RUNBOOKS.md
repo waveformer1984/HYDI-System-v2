@@ -375,3 +375,104 @@ Confidence calibration uses one of four policies: `Conservative`, `Balanced`,
 `Aggressive`, `Experimental`. A policy controls learning rate, confidence
 adjustment strength, evidence threshold, recommendation threshold, and
 confidence bounds. The default is `Balanced`.
+
+## 16. Learning Loop
+
+Observed outcomes adjust the confidence of future recommendations. This is the
+one component where being wrong compounds, so it has hard rules.
+
+### What counts as evidence
+
+| Event | Effect |
+| --- | --- |
+| Action executed successfully | execution status only — **not** an outcome |
+| Action failed to execute | outcome `failed` (it cannot deliver value) |
+| Real value measured and reported | outcome, classified against `expectedValue` |
+| Anything under `--dry-run` or `simulate` | nothing at all |
+
+An action finishing means it *ran*, not that it delivered the value the
+recommendation predicted. Recording completion as success would let the system
+confirm its own forecast without observing anything — the failure mode that
+broke V1. Recommendations therefore sit in `getAwaitingOutcomes()` until a real
+measurement arrives.
+
+Outcomes carry `measured` and `provenance` so inferred and observed claims stay
+distinguishable.
+
+### Recording a real outcome
+
+```js
+session.businessOutcomeEngine.recordOutcome(recommendationId, { value: 8200 });
+```
+
+Outcomes are **terminal**. A second call is ignored — neither a new row nor a
+confidence change — so a retried execution cannot fabricate evidence. To
+correct a recorded outcome, pass `{ supersede: true }`.
+
+### Inspecting and reversing
+
+```js
+store.getConfidenceHistory(id);   // every adjustment, with its reason
+store.getLearningSummary();       // totals over a window
+store.getAwaitingOutcomes();      // recommendations with no measurement yet
+```
+
+Confidence is clamped to the active policy's min/max
+(`src/hydi-v3/LearningPolicies.js`). Deltas scale by `(1 - confidence)` on
+success and `confidence` on failure, so repeated evidence asymptotes rather than
+running away. A single outcome moves confidence by roughly 0.005 under the
+`balanced` policy.
+
+Switching policy changes only future adjustments; recorded history is unaffected.
+
+## 17. Evidence Capture
+
+Evidence is how a recommendation stops awaiting an outcome. The layer draws a
+hard line between two different claims:
+
+| Claim | Sets | Leaves null |
+| --- | --- | --- |
+| **Classification** — "yes, that worked" | `outcomeType`, confidence | `actual`, `impacts.revenue` |
+| **Measurement** — a number | `outcomeType`, confidence, `actual`, impacts | — |
+
+An owner confirmation is a real judgement but not a measurement. Recording it as
+one meant a confirmed success also booked a revenue impact of minus the entire
+expectation. Evidence with no `data.value` therefore classifies without
+quantifying, and `measured` reflects which kind of claim was made.
+
+### Supplying evidence
+
+```js
+// Measurement — carries a number.
+session.evidenceEngine.addEvidence(recId, {
+  source: 'stripe', type: 'revenue', weight: 1, confidence: 1, relevance: 1,
+  at: Date.now(), data: { value: 9500 },
+});
+session.evidenceEngine.evaluateRecommendation(recId);
+
+// Classification — owner review.
+session.evidenceEngine.submitManualReview(recId, 'Yes');  // Yes | Partially | No | Unknown | Skip
+```
+
+`Unknown` and `Skip` record nothing, by design.
+
+### What produces no outcome
+
+- no evidence at all
+- evidence below `qualityThreshold` (default 0.3)
+- evidence where nothing carries a number → `Inconclusive`
+- contradictory measurements (coefficient of variation > 0.8) → `Inconclusive`
+
+`outcomeType: null` always means nothing was written.
+
+### Re-evaluation
+
+Outcomes remain terminal (see Runbook 16). Calling `evaluateRecommendation()`
+repeatedly cannot add rows or move confidence. Correct a recorded outcome with
+`{ supersede: true }` via the outcome store.
+
+### Writing a new evidence provider
+
+If you cannot supply a number, do not claim one — omit `data.value` rather than
+passing `0`. Zero is a measurement meaning "nothing was produced", which is a
+different statement from "this was not measured".

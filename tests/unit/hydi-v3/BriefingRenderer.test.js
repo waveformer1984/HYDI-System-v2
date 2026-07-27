@@ -67,6 +67,7 @@ describe('BriefingRenderer', () => {
       'opportunities',
       'recommendations',
       'learning-summary',
+      'business-evidence',
       'missing-data',
     ]);
   });

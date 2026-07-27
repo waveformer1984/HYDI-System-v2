@@ -82,13 +82,28 @@ class BusinessOutcomeEngine {
       strategic: recommendation.expectedStrategic ?? 1,
       operational: recommendation.expectedOperational ?? 1,
     };
+
+    // A neutral outcome means observed activity matched expectation without
+    // creating or destroying business value. Treat impacts as zero so the
+    // engine does not manufacture a revenue decline from small, inconclusive
+    // evidence.
+    if (observed.type === 'neutral') {
+      return { revenue: 0, schedule: 0, strategic: 0, operational: 0 };
+    }
+
     const actual = {
       value: observed.value ?? observed.actual ?? 0,
       completion: observed.completedAt || observed.observedAt || Date.now(),
       strategic: observed.strategic ?? 1,
       operational: observed.operational ?? 1,
     };
-    const revenueImpact = Number(actual.value) - Number(expected.value);
+    // Without an observed value there is no revenue impact to report. Treating
+    // a missing measurement as zero booked a loss equal to the entire
+    // expectation every time an outcome was classified qualitatively.
+    const measuredValue = observed.value ?? observed.actual;
+    const revenueImpact = (measuredValue === undefined || measuredValue === null)
+      ? null
+      : Number(measuredValue) - Number(expected.value);
     const scheduleImpact = Number(actual.completion) - Number(expected.completion);
     const strategicImpact = clamp(Number(actual.strategic) - Number(expected.strategic), -1, 1);
     const operationalImpact = clamp(Number(actual.operational) - Number(expected.operational), -1, 1);
@@ -103,13 +118,26 @@ class BusinessOutcomeEngine {
     const rec = this.store.getRecommendation(recommendationId);
     if (!rec) throw new Error(`Recommendation ${recommendationId} not found`);
 
+    // The store refuses a duplicate outcome row, but calibration happens here.
+    // Without this guard a repeated observation would still ratchet confidence
+    // upward while recording no new evidence — manufacturing certainty from a
+    // single event.
+    if (rec.observedOutcome && !observed.supersede) {
+      return { ...rec, adjustedConfidence: rec.confidence, confidenceDelta: 0, lesson: rec.lessonsLearned, duplicate: true };
+    }
+
     const outcomeType = observed.type || this.classifyOutcome(rec.expectedValue, observed.value, observed.tolerance);
     const impacts = this.computeImpacts(rec, observed);
     const evidence = this.store.findRecommendations({
       strategicObjective: rec.strategicObjective,
     }).filter((r) => r.observedOutcome).length;
-    const calibrated = this.calibration.adjust(rec.confidence, { type: outcomeType, actual: observed.value, expected: rec.expectedValue }, evidence);
-    const lesson = this._generateLesson(rec, outcomeType, impacts, observed);
+    const measured = observed.measured !== false;
+    const calibrated = measured
+      ? this.calibration.adjust(rec.confidence, { type: outcomeType, actual: observed.value, expected: rec.expectedValue }, evidence)
+      : { confidence: rec.confidence, delta: 0 };
+    const lesson = measured
+      ? this._generateLesson(rec, outcomeType, impacts, observed)
+      : (observed.lesson || `Qualitative ${outcomeType} recorded without a measured value.`);
 
     const completedAt = observed.completedAt || observed.observedAt || Date.now();
     const result = this.store.recordOutcome(recommendationId, {
@@ -122,12 +150,17 @@ class BusinessOutcomeEngine {
       adjustedConfidence: calibrated.confidence,
       confidenceDelta: calibrated.delta,
       lesson,
+      // Carry provenance through so the store records whether this outcome was
+      // actually measured or inferred from something else.
+      measured: observed.measured !== false,
+      provenance: observed.provenance || 'reported',
+      supersede: observed.supersede,
     });
 
     this.store.addConfidenceHistory(recommendationId, calibrated.confidence, `outcome:${outcomeType}`);
-    if (this.recommendationTracker) {
-      this.recommendationTracker.recordOutcome(recommendationId, result.observedOutcome);
-    }
+    // RecommendationTracker.recordOutcome() delegates to this same store, so
+    // calling it here wrote every outcome twice — inflating outcomeCount, the
+    // learning summary, and any metric derived from store.outcomes.
     return { ...result, adjustedConfidence: calibrated.confidence, confidenceDelta: calibrated.delta, lesson };
   }
 
@@ -135,27 +168,45 @@ class BusinessOutcomeEngine {
    * Observe an action entry from the ExecutionGateway and link it to a
    * recommendation if a recommendationId is present.
    */
+  /**
+   * Observe an execution entry from the ExecutionGateway.
+   *
+   * An action finishing is evidence that it *ran*, not evidence that it
+   * achieved the business value the recommendation predicted. Previously a
+   * completion recorded a `successful` outcome with `actual = expectedValue`,
+   * so the system confirmed its own forecast without ever measuring anything
+   * and raised confidence off the back of it. That is the ground-truth
+   * inversion this architecture exists to avoid: enforcement — here, learning —
+   * running ahead of observed truth.
+   *
+   * Completion therefore advances execution status only, and the
+   * recommendation stays in `getAwaitingOutcomes()` until a real measured
+   * value arrives via `recordOutcome()`.
+   *
+   * Failure is different: an action that could not run cannot deliver value,
+   * so it is genuine negative evidence and is recorded as an outcome.
+   */
   observeAction(entry) {
     if (this._destroyed) throw new Error('BusinessOutcomeEngine has been destroyed');
     if (!entry || !entry.recommendationId) return null;
     const rec = this.store.getRecommendation(entry.recommendationId);
     if (!rec) return null;
 
-    if (entry.status === 'completed') {
-      return this.recordOutcome(entry.recommendationId, {
-        value: rec.expectedValue,
-        completedAt: entry.completedAt,
-        type: 'successful',
-      });
-    }
     if (entry.status === 'failed') {
       return this.recordOutcome(entry.recommendationId, {
         value: 0,
         completedAt: entry.completedAt,
         type: 'failed',
+        measured: true,
+        provenance: 'execution-failure',
       });
     }
-    return this.store.recordExecution(entry.recommendationId, { status: entry.status, completedAt: entry.completedAt, executedBy: entry.requestingAgent });
+
+    return this.store.recordExecution(entry.recommendationId, {
+      status: entry.status,
+      completedAt: entry.completedAt,
+      executedBy: entry.requestingAgent,
+    });
   }
 
   /**

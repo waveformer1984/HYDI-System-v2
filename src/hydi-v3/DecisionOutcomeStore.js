@@ -5,6 +5,7 @@ const path = require('path');
 const { EventEmitter } = require('events');
 
 const PERSISTENCE_VERSION = 1;
+const MAX_OUTCOMES = 5000;
 
 function generateId(prefix = 'rec') {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -151,10 +152,24 @@ class DecisionOutcomeStore extends EventEmitter {
     return rec;
   }
 
+  /**
+   * Record the observed outcome for a recommendation.
+   *
+   * An outcome is terminal by default. Without this, the same recommendation
+   * could be "observed" repeatedly — each call appending another outcome row
+   * and ratcheting confidence upward — so a retried execution or a duplicated
+   * observation would manufacture evidence that never happened. Pass
+   * `{ supersede: true }` to deliberately replace a recorded outcome.
+   */
   recordOutcome(id, outcome) {
     if (this._destroyed) throw new Error('DecisionOutcomeStore has been destroyed');
     const rec = this.recommendations.get(id);
     if (!rec) throw new Error(`Recommendation ${id} not found`);
+
+    if (rec.observedOutcome && !outcome.supersede) {
+      this.emit('duplicate-outcome-ignored', { id, existing: rec.observedOutcome.type });
+      return rec;
+    }
 
     const now = Date.now();
     const normalized = {
@@ -167,6 +182,11 @@ class DecisionOutcomeStore extends EventEmitter {
       adjustedConfidence: outcome.adjustedConfidence ?? rec.confidence,
       confidenceDelta: outcome.confidenceDelta ?? 0,
       lesson: outcome.lesson || null,
+      // Whether a real value was observed, or the outcome was inferred. Only
+      // measured outcomes are honest evidence about the world.
+      measured: outcome.measured !== false,
+      provenance: outcome.provenance || 'reported',
+      superseded: !!outcome.supersede,
     };
 
     rec.observedOutcome = normalized;
@@ -175,6 +195,9 @@ class DecisionOutcomeStore extends EventEmitter {
     rec.lessonsLearned = normalized.lesson;
     rec.updatedAt = now;
     this.outcomes.push({ recommendationId: id, ...normalized });
+    if (this.outcomes.length > MAX_OUTCOMES) {
+      this.outcomes = this.outcomes.slice(-MAX_OUTCOMES);
+    }
     this._persist();
     this.emit('outcome-recorded', { id, outcome: normalized });
     return rec;
@@ -270,10 +293,24 @@ class DecisionOutcomeStore extends EventEmitter {
         this.recommendations = new Map();
         this.outcomes = [];
       } else {
-        this.config.logger.error('[DecisionOutcomeStore] load error, starting fresh', { error: e instanceof Error ? e.message : String(e) });
+        // Every other hydi-v3 store archives a corrupt snapshot before
+        // resetting. Without it the next persist silently overwrites the whole
+        // learning history with an empty one and leaves no forensic copy.
+        this.config.logger.error('[DecisionOutcomeStore] load error, archiving corrupt store', { error: e instanceof Error ? e.message : String(e) });
+        await this._archiveCorruptStore();
         this.recommendations = new Map();
         this.outcomes = [];
       }
+    }
+  }
+
+  async _archiveCorruptStore() {
+    try {
+      await fs.rename(this.storePath, `${this.storePath}.corrupt.${Date.now()}`);
+    } catch (archiveError) {
+      this.config.logger.error('[DecisionOutcomeStore] failed to archive corrupt store', {
+        error: archiveError instanceof Error ? archiveError.message : String(archiveError),
+      });
     }
   }
 
@@ -310,3 +347,4 @@ class DecisionOutcomeStore extends EventEmitter {
 }
 
 module.exports = DecisionOutcomeStore;
+module.exports.MAX_OUTCOMES = MAX_OUTCOMES;

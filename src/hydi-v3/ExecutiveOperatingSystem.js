@@ -39,10 +39,12 @@ class ExecutiveOperatingSystem extends EventEmitter {
     this.strategicObjectives = config.strategicObjectives || new StrategicObjectives({ ownerPriority: config.ownerPriority || 'default' });
     this.recommendationTracker = config.recommendationTracker || null;
     this.learningMetrics = config.learningMetrics || null;
+    this.businessEvidenceEngine = config.businessEvidenceEngine || null;
     this.trustEngine = new TrustEngine({
       businessMemory: this.memory,
       strategicObjectives: this.strategicObjectives,
       learningMetrics: this.learningMetrics,
+      businessEvidenceEngine: this.businessEvidenceEngine,
       logger: this.config.logger,
     });
     this.eventBus = config.eventBus || null;
@@ -222,6 +224,9 @@ class ExecutiveOperatingSystem extends EventEmitter {
     const learningSummary = this.learningMetrics
       ? this.learningMetrics.getLearningSummary(30 * 24 * 60 * 60 * 1000)
       : { hasBaseline: false, lines: ['Learning system still building historical baseline.'] };
+    const businessEvidence = this.businessEvidenceEngine
+      ? this.businessEvidenceEngine.getSummary()
+      : { lines: ['Business evidence baseline still forming.'] };
 
     const briefing = {
       generatedAt: Date.now(),
@@ -233,6 +238,7 @@ class ExecutiveOperatingSystem extends EventEmitter {
       recommendations: trackedRecommendations,
       resonateStatus,
       learningSummary,
+      businessEvidence,
       missingData: this._missingData(reports),
       agentReports: reports,
     };
@@ -568,6 +574,7 @@ class ExecutiveOperatingSystem extends EventEmitter {
     if (!this.planner) missing.push('Project planner not connected.');
     if (!this.recommendationTracker) missing.push('RecommendationTracker not connected.');
     if (!this.learningMetrics) missing.push('LearningMetrics not connected.');
+    if (!this.businessEvidenceEngine) missing.push('BusinessEvidenceEngine not connected.');
     for (const [name, report] of Object.entries(reports)) {
       if (report && report.error) missing.push(`${name} report failed: ${report.error}`);
     }
