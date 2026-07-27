@@ -1,17 +1,18 @@
-# Phase 21 — Evidence Capture Audit
+# Phase 20A — Evidence Capture Audit
 
 Date: 2026-07-25
 Branch: clean-main
 Audits: the uncommitted evidence-capture layer (`BusinessEvidenceEngine`, `EvidenceCollector`, `EvidenceProviders`, `BusinessKPIRegistry`, `OutcomeEvaluator`, `OutcomeCorrelation`)
-Builds on: Phase 20 Learning Feedback Loop Audit
+Builds on: Phase 19A Learning Feedback Loop Audit
+Note: renumbered from 21 — this audits Phase 20 (`02e6f1a`).
 
 ## Why This Audit
 
-Phase 20 established that only *measured* values may move confidence, and left recommendations sitting in `getAwaitingOutcomes()` with nothing to supply a measurement. The evidence layer is what closes that gap — which makes it the component that now decides what counts as a measurement. Getting that boundary wrong reintroduces the ground-truth inversion through a new door.
+Phase 19A established that only *measured* values may move confidence, and left recommendations sitting in `getAwaitingOutcomes()` with nothing to supply a measurement. The evidence layer is what closes that gap — which makes it the component that now decides what counts as a measurement. Getting that boundary wrong reintroduces the ground-truth inversion through a new door.
 
 ## Results
 
-**The gating logic is correct.** No evidence produces no outcome; evidence below the quality threshold produces no outcome; an inconclusive or skipped manual review produces no outcome. `outcomeType: null` reliably means "nothing recorded", and re-evaluation is blocked by the Phase 20 terminal-outcome guard. None of that needed changing.
+**The gating logic is correct.** No evidence produces no outcome; evidence below the quality threshold produces no outcome; an inconclusive or skipped manual review produces no outcome. `outcomeType: null` reliably means "nothing recorded", and re-evaluation is blocked by the Phase 19A terminal-outcome guard. None of that needed changing.
 
 **The value path conflated classifying an outcome with quantifying it.** Four defects, all downstream of one root cause: evidence carrying no number was treated as a *measured zero*.
 
@@ -26,7 +27,7 @@ actual: 0                   impacts.revenue: -10000
 
 The same record simultaneously said the recommendation succeeded and destroyed £10,000 of value. Confidence rose while the financial impact said the opposite. Any revenue analytics built on `impacts.revenue` would have been poisoned by every qualitative confirmation.
 
-`measured: true` was hard-coded whenever an `outcomeType` existed — the same "assert measurement without checking" pattern as Phase 20's defect 2.
+`measured: true` was hard-coded whenever an `outcomeType` existed — the same "assert measurement without checking" pattern as Phase 19A's defect 2.
 
 ### 2. Confirming a success *lowered* the observed value
 
@@ -55,7 +56,7 @@ The same record simultaneously said the recommendation succeeded and destroyed �
 
 An owner saying "yes, that worked" is a real and useful judgement. It is not a measurement. The system now holds those separately: a qualitative confirmation sets `outcomeType` and moves confidence, but leaves `actual` and `impacts.revenue` null rather than inventing a number. A numeric measurement does both.
 
-This extends the `measured` / `provenance` distinction introduced in Phase 20 to the layer that produces the values, which is where it actually has to hold. Every future evidence provider inherits the rule: if you cannot supply a number, do not claim one.
+This extends the `measured` / `provenance` distinction introduced in Phase 19A to the layer that produces the values, which is where it actually has to hold. Every future evidence provider inherits the rule: if you cannot supply a number, do not claim one.
 
 ## Self-Audit Results
 
@@ -66,8 +67,8 @@ This extends the `measured` / `provenance` distinction introduced in Phase 20 to
 - Non-numeric evidence asserted to be inconclusive, not a failure.
 - Variance asserted bounded 0–1; consistent large values asserted not contradictory; genuinely contradictory evidence asserted still flagged.
 - Strategic impact asserted in range across 1 → 1,000,000 and asserted to order by forecast accuracy.
-- Evidence asserted to drain the awaiting-outcome queue — the Phase 20 gap is closed.
-- Re-evaluation asserted not to ratchet confidence, so the Phase 20 terminal-outcome guard holds through this new path.
+- Evidence asserted to drain the awaiting-outcome queue — the Phase 19A gap is closed.
+- Re-evaluation asserted not to ratchet confidence, so the Phase 19A terminal-outcome guard holds through this new path.
 
 ## Verification
 
@@ -93,9 +94,9 @@ The `unsubscribeAll` → `unsubscribe('*', …)` change in the working tree is c
 
 This tree contains three phases' work, committed together as agreed:
 
-- **Phase 20** — learning-loop audit fixes (dead gateway link, completion-as-success, simulation teaching, non-terminal outcomes, double-writes, unarchived corrupt store).
-- **Phase 21 (other agent)** — the evidence-capture layer itself.
-- **Phase 21 audit** — the four measurement defects above.
+- **Phase 19A** — learning-loop audit fixes (dead gateway link, completion-as-success, simulation teaching, non-terminal outcomes, double-writes, unarchived corrupt store).
+- **Phase 20 (other agent)** — the evidence-capture layer itself.
+- **Phase 20A audit** — the four measurement defects above.
 
 ## Next Recommended Milestone
 

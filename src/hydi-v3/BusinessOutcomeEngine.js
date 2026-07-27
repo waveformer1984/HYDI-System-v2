@@ -132,9 +132,8 @@ class BusinessOutcomeEngine {
       strategicObjective: rec.strategicObjective,
     }).filter((r) => r.observedOutcome).length;
     const measured = observed.measured !== false;
-    const calibrated = measured
-      ? this.calibration.adjust(rec.confidence, { type: outcomeType, actual: observed.value, expected: rec.expectedValue }, evidence)
-      : { confidence: rec.confidence, delta: 0 };
+    const measurementType = observed.measurementType || (measured ? 'quantitative' : 'qualitative');
+    const calibrated = this.calibration.adjust(rec.confidence, { type: outcomeType, actual: observed.value, expected: rec.expectedValue, measurementType }, evidence);
     const lesson = measured
       ? this._generateLesson(rec, outcomeType, impacts, observed)
       : (observed.lesson || `Qualitative ${outcomeType} recorded without a measured value.`);
@@ -198,6 +197,7 @@ class BusinessOutcomeEngine {
         completedAt: entry.completedAt,
         type: 'failed',
         measured: true,
+        measurementType: 'quantitative',
         provenance: 'execution-failure',
       });
     }
@@ -225,9 +225,9 @@ class BusinessOutcomeEngine {
         strategicObjective: workflow.type || null,
         originatingAgent: workflow.assignedAgent || 'workflow',
       });
-      return this.recordOutcome(id, { value: actual, completedAt: Date.now() });
+      return this.recordOutcome(id, { value: actual, completedAt: Date.now(), measurementType: 'quantitative' });
     }
-    return this.recordOutcome(recId, { value: actual, completedAt: Date.now() });
+    return this.recordOutcome(recId, { value: actual, completedAt: Date.now(), measurementType: 'quantitative' });
   }
 
   _findRecommendationForWorkflow(workflowId) {

@@ -74,6 +74,7 @@ class EvidenceCollector extends EventEmitter {
       ...item,
       id: item.id || `ev_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
       attachedTo: recommendationId,
+      measurementType: item.measurementType || (item.source === 'manual' ? 'qualitative' : 'activity'),
     };
     this._add(evidence);
     const list = this.attached.get(recommendationId) || [];
@@ -83,11 +84,13 @@ class EvidenceCollector extends EventEmitter {
     return evidence;
   }
 
-  getEvidence(recommendationId) {
-    if (recommendationId) {
-      const ids = this.attached.get(recommendationId) || [];
+  getEvidence(recommendationId, recommendation = null) {
+    if (recommendationId || recommendation) {
+      const id = recommendation ? recommendation.id : recommendationId;
+      const ids = this.attached.get(id) || [];
       const attached = this.evidence.filter((e) => ids.includes(e.id));
-      const related = this.findForRecommendation({ id: recommendationId, createdAt: 0 });
+      const target = recommendation || { id, createdAt: 0 };
+      const related = this.findForRecommendation(target);
       return [...attached, ...related].filter((e, i, a) => a.findIndex((x) => x.id === e.id) === i);
     }
     return this.evidence.slice();
@@ -113,7 +116,7 @@ class EvidenceCollector extends EventEmitter {
   getRecommendationsAwaitingReview(recommendations) {
     return recommendations.filter((r) => {
       if (r.observedOutcome) return false;
-      const evidence = this.getEvidence(r.id);
+      const evidence = this.getEvidence(r.id, r);
       return evidence.length > 0;
     });
   }

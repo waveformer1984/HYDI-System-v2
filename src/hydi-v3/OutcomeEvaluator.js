@@ -86,11 +86,11 @@ class OutcomeEvaluator {
   }
 
   _hasManualConfirmation(evidence) {
-    return evidence.some((e) => e.type === 'manual-confirmation' || e.source === 'manual');
+    return evidence.some((e) => e.measurementType === 'qualitative' || e.source === 'manual');
   }
 
   _manualAnswer(evidence) {
-    const item = evidence.find((e) => e.type === 'manual-confirmation' || e.source === 'manual');
+    const item = evidence.find((e) => e.measurementType === 'qualitative' || e.source === 'manual');
     if (!item) return null;
     return String(item.data && item.data.answer).toLowerCase();
   }
@@ -124,6 +124,18 @@ class OutcomeEvaluator {
     const measured = correlation.hasMeasuredValue
       ? ` measured value ${correlation.observedValue}`
       : ' no measured value attached';
+
+    // When a real measurement exists, the number is the ground truth. Manual
+    // confirmation classifies only when there is no measurement; otherwise it
+    // remains part of the audit trail but does not overrule the measured ratio.
+    if (correlation.hasMeasuredValue) {
+      const base = automatic.outcomeType ? automatic : { key: 'inconclusive', outcomeType: null, explanation: 'Automatic classification failed.' };
+      return {
+        key: base.key,
+        outcomeType: base.outcomeType,
+        explanation: `${base.explanation} Owner noted "${manual}".${measured}`,
+      };
+    }
 
     if (manual === 'yes') {
       return { key: 'confirmedSuccess', outcomeType: 'successful', explanation: `Owner confirmed success;${measured}.` };

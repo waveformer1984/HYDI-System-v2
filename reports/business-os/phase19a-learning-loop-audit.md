@@ -1,8 +1,9 @@
-# Phase 20 — Learning Feedback Loop Audit
+# Phase 19A — Learning Feedback Loop Audit
 
 Date: 2026-07-25
 Branch: clean-main
-Builds on: Phase 19 (`eb3e1ce`)
+Audits: Phase 19 (`eb3e1ce`)
+Note: renumbered from 20 — Phase 20 is the Outcome Intelligence & Business Evidence Framework (`02e6f1a`).
 
 ## Why This Audit
 

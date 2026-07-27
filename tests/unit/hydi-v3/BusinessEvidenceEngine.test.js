@@ -90,7 +90,7 @@ describe('BusinessEvidenceEngine', () => {
   it('evaluates automatic evidence to confirmed success', async () => {
     const eng = await makeEngine();
     const id = eng.tracker.track({ action: 'Hire designer', expectedValue: 100, confidence: 0.7 });
-    eng.evidenceEngine.addEvidence(id, { source: 'git', weight: 1, confidence: 1, relevance: 1, data: { value: 120 }, tags: [] });
+    eng.evidenceEngine.addEvidence(id, { source: 'git', weight: 1, confidence: 1, relevance: 1, measurementType: 'quantitative', data: { value: 120 }, tags: [] });
     const result = eng.evidenceEngine.evaluateRecommendation(id);
     expect(result.classification).toBe('Confirmed Success');
     expect(eng.tracker.getRecommendation(id).observedOutcome).not.toBeNull();

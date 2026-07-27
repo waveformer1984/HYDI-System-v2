@@ -185,6 +185,7 @@ class DecisionOutcomeStore extends EventEmitter {
       // Whether a real value was observed, or the outcome was inferred. Only
       // measured outcomes are honest evidence about the world.
       measured: outcome.measured !== false,
+      measurementType: outcome.measurementType || (outcome.measured !== false ? 'quantitative' : 'qualitative'),
       provenance: outcome.provenance || 'reported',
       superseded: !!outcome.supersede,
     };

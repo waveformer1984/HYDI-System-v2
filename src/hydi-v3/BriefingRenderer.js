@@ -203,6 +203,52 @@ function toSections(briefing) {
         ? briefing.businessEvidence.lines
         : ['Business evidence baseline still forming.'],
     },
+    ...(briefing.measuredLearning ? [{
+      id: 'measured-learning',
+      title: 'Measured Learning Dashboard',
+      tone: 'neutral',
+      lines: [
+        `Revenue: ${fixed(briefing.measuredLearning.revenue)}${briefing.measuredLearning.revenue && briefing.measuredLearning.evidenceSources && Object.keys(briefing.measuredLearning.evidenceSources).includes('financial') ? ' USD' : ''}.`,
+        `Measured ROI: ${briefing.measuredLearning.measuredROI === null ? 'No measured outcomes available.' : `${(briefing.measuredLearning.measuredROI * 100).toFixed(0)}%`}`,
+        `Estimated ROI: ${briefing.measuredLearning.estimatedROI === null ? 'No measured outcomes available.' : `${(briefing.measuredLearning.estimatedROI * 100).toFixed(0)}%`}`,
+        `Confidence trend: ${Number(briefing.measuredLearning.confidenceTrend || 0).toFixed(3)}`,
+        `Pending evidence: ${Number(briefing.measuredLearning.pendingEvidence || 0)}`,
+        `Recent measurements: ${briefing.measuredLearning.recentMeasurements ? briefing.measuredLearning.recentMeasurements.length : 0}`,
+        `Evidence sources: ${briefing.measuredLearning.evidenceSources ? Object.entries(briefing.measuredLearning.evidenceSources).map(([k, v]) => `${k}=${v}`).join(', ') : 'none'}`,
+      ],
+    }] : []),
+    ...(Array.isArray(briefing.awaitingMeasurements) ? [{
+      id: 'awaiting-measurements',
+      title: 'Awaiting Measurements',
+      tone: 'warning',
+      lines: briefing.awaitingMeasurements.length
+        ? briefing.awaitingMeasurements.map((r) => `${r.action}: awaiting evidence`)
+        : ['No recommendations awaiting measurements.'],
+    }] : []),
+    ...(Array.isArray(briefing.recentlyCalibrated) ? [{
+      id: 'recently-calibrated',
+      title: 'Recently Calibrated',
+      tone: 'success',
+      lines: briefing.recentlyCalibrated.length
+        ? briefing.recentlyCalibrated.map((r) => `${r.action}: ${r.observedOutcome ? r.observedOutcome.type : 'unknown'}`)
+        : ['No recommendations calibrated recently.'],
+    }] : []),
+    ...(Array.isArray(briefing.topImproving) ? [{
+      id: 'top-improving',
+      title: 'Top Improving Recommendations',
+      tone: 'success',
+      lines: briefing.topImproving.length
+        ? briefing.topImproving.map((r) => `${r.action}: +${(r.change * 100).toFixed(0)}% confidence`)
+        : ['No recommendations gaining confidence.'],
+    }] : []),
+    ...(Array.isArray(briefing.losingConfidence) ? [{
+      id: 'losing-confidence',
+      title: 'Recommendations Losing Confidence',
+      tone: 'warning',
+      lines: briefing.losingConfidence.length
+        ? briefing.losingConfidence.map((r) => `${r.action}: ${(r.change * 100).toFixed(0)}% confidence`)
+        : ['No recommendations losing confidence.'],
+    }] : []),
     {
       id: 'missing-data',
       title: 'Missing Data Sources',

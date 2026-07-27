@@ -40,7 +40,7 @@ describe('OutcomeEvaluator', () => {
   it('classifies confirmed success from automatic evidence that matches expectation', () => {
     const evaluator = new OutcomeEvaluator();
     const result = evaluator.evaluate({ expectedValue: 100 }, [
-      { source: 'git', type: 'CommitCreated', weight: 1, confidence: 1, relevance: 1, data: { value: 120 } },
+      { source: 'git', type: 'CommitCreated', weight: 1, confidence: 1, relevance: 1, measurementType: 'quantitative', data: { value: 120 } },
     ]);
     expect(result.classification).toBe('Confirmed Success');
   });
@@ -48,7 +48,7 @@ describe('OutcomeEvaluator', () => {
   it('classifies partial success when observed is a fraction of expected', () => {
     const evaluator = new OutcomeEvaluator();
     const result = evaluator.evaluate({ expectedValue: 100 }, [
-      { source: 'filesystem', type: 'FileCreated', weight: 1, confidence: 1, relevance: 1, data: { value: 60 } },
+      { source: 'filesystem', type: 'FileCreated', weight: 1, confidence: 1, relevance: 1, measurementType: 'quantitative', data: { value: 60 } },
     ]);
     expect(result.classification).toBe('Partial Success');
     expect(result.outcomeType).toBe('partially successful');
@@ -57,8 +57,8 @@ describe('OutcomeEvaluator', () => {
   it('returns inconclusive when evidence is contradictory', () => {
     const evaluator = new OutcomeEvaluator();
     const result = evaluator.evaluate({ expectedValue: 100 }, [
-      { source: 'git', type: 'CommitCreated', weight: 1, confidence: 1, relevance: 1, data: { value: 120 } },
-      { source: 'manufacturing', type: 'PrinterFailed', weight: 1, confidence: 1, relevance: 1, data: { value: -120 } },
+      { source: 'git', type: 'CommitCreated', weight: 1, confidence: 1, relevance: 1, measurementType: 'quantitative', data: { value: 120 } },
+      { source: 'manufacturing', type: 'PrinterFailed', weight: 1, confidence: 1, relevance: 1, measurementType: 'quantitative', data: { value: -120 } },
     ]);
     expect(result.classification).toBe('Inconclusive');
     expect(result.outcomeType).toBeNull();

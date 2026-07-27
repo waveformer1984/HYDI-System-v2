@@ -228,6 +228,12 @@ class ExecutiveOperatingSystem extends EventEmitter {
       ? this.businessEvidenceEngine.getSummary()
       : { lines: ['Business evidence baseline still forming.'] };
 
+    const measuredLearning = this.businessEvidenceEngine ? this.businessEvidenceEngine.getMeasuredLearningDashboard() : null;
+    const awaitingMeasurements = measuredLearning ? this.businessEvidenceEngine.getAwaitingEvidence() : [];
+    const recentlyCalibrated = measuredLearning ? this.businessEvidenceEngine.getCompletedLearning().slice(0, 5) : [];
+    const topImproving = measuredLearning ? this.businessEvidenceEngine.getTopImprovingRecommendations() : [];
+    const losingConfidence = measuredLearning ? this.businessEvidenceEngine.getRecommendationsLosingConfidence() : [];
+
     const briefing = {
       generatedAt: Date.now(),
       executiveSummary: this._executiveSummary(status, priorityActions, risks, recommendations),
@@ -239,6 +245,11 @@ class ExecutiveOperatingSystem extends EventEmitter {
       resonateStatus,
       learningSummary,
       businessEvidence,
+      measuredLearning,
+      awaitingMeasurements,
+      recentlyCalibrated,
+      topImproving,
+      losingConfidence,
       missingData: this._missingData(reports),
       agentReports: reports,
     };

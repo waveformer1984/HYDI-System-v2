@@ -26,6 +26,10 @@ function sumEvidenceValue(evidence) {
 
   for (const item of evidence) {
     if (!item.data || !Number.isFinite(item.data.value)) continue;
+    // Only quantitative evidence carries a measured business value. Activity
+    // and qualitative evidence still count toward evidence quality, but they
+    // cannot be averaged into a numeric outcome.
+    if (item.measurementType !== 'quantitative') continue;
     const weight = Number.isFinite(item.weight) ? item.weight : 0.5;
     const confidence = Number.isFinite(item.confidence) ? item.confidence : 0.5;
     const w = weight * confidence;

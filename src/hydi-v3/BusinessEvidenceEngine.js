@@ -18,6 +18,7 @@ class BusinessEvidenceEngine extends EventEmitter {
     this.outcomeEvaluator = config.outcomeEvaluator || new OutcomeEvaluator({ outcomeCorrelation: this.outcomeCorrelation });
     this.recommendationTracker = config.recommendationTracker || null;
     this.businessOutcomeEngine = config.businessOutcomeEngine || null;
+    this.staleMs = config.staleMs ?? 14 * 24 * 60 * 60 * 1000;
 
     this._autoEvaluate = config.autoEvaluate !== false;
     this._evidenceHandler = this._onEvidence.bind(this);
@@ -120,6 +121,10 @@ class BusinessEvidenceEngine extends EventEmitter {
       relevance: 1.0,
       weight: 1.0,
       confidence: 0.95,
+      measurementType: 'qualitative',
+      currency: null,
+      unit: null,
+      precision: null,
       data: { answer: String(answer).toLowerCase() },
       tags: ['manual'],
     });
@@ -132,7 +137,7 @@ class BusinessEvidenceEngine extends EventEmitter {
     const rec = this.recommendationTracker.getRecommendation(recommendationId);
     if (!rec) throw new Error(`Recommendation ${recommendationId} not found`);
 
-    const evidence = this.collector.getEvidence(recommendationId);
+    const evidence = this.collector.getEvidence(recommendationId, rec);
     const kpiSnapshot = this.kpiRegistry ? this.kpiRegistry.evaluateAll() : {};
     const result = this.outcomeEvaluator.evaluate(rec, evidence, kpiSnapshot);
 
@@ -189,7 +194,7 @@ class BusinessEvidenceEngine extends EventEmitter {
     return all.filter((r) => {
       if (r.observedOutcome) return false;
       if (now - r.createdAt > windowMs) return false;
-      const evidence = this.collector.getEvidence(r.id);
+      const evidence = this.collector.getEvidence(r.id, r);
       return evidence.length === 0;
     });
   }
@@ -262,6 +267,106 @@ class BusinessEvidenceEngine extends EventEmitter {
     }
 
     return { awaiting, lacking, confirmed, accuracy, top, kpis, lines };
+  }
+
+  getAwaitingEvidence() {
+    if (!this.recommendationTracker) return [];
+    const store = this.recommendationTracker.store;
+    if (!store) return [];
+    return store.getAwaitingOutcomes ? store.getAwaitingOutcomes() : [];
+  }
+
+  getCompletedLearning() {
+    if (!this.recommendationTracker) return [];
+    const all = this.recommendationTracker.store ? this.recommendationTracker.store.findRecommendations({}) : [];
+    return all.filter((r) => r.observedOutcome);
+  }
+
+  getStaleRecommendations() {
+    if (!this.recommendationTracker) return [];
+    const now = Date.now();
+    const all = this.recommendationTracker.store ? this.recommendationTracker.store.findRecommendations({}) : [];
+    return all.filter((r) => {
+      if (r.observedOutcome) return false;
+      if (r.ownerDecision !== 'approved') return false;
+      return now - (r.decisionAt || r.createdAt) > this.staleMs;
+    });
+  }
+
+  getTopImprovingRecommendations(limit = 5) {
+    if (!this.recommendationTracker) return [];
+    const all = this.recommendationTracker.store ? this.recommendationTracker.store.findRecommendations({}) : [];
+    return all
+      .filter((r) => r.confidenceHistory && r.confidenceHistory.length > 1)
+      .map((r) => {
+        const first = r.confidenceHistory[0].confidence;
+        const last = r.confidenceHistory[r.confidenceHistory.length - 1].confidence;
+        return { id: r.id, action: r.action, change: last - first, current: last };
+      })
+      .filter((r) => r.change > 0)
+      .sort((a, b) => b.change - a.change)
+      .slice(0, limit);
+  }
+
+  getRecommendationsLosingConfidence(limit = 5) {
+    if (!this.recommendationTracker) return [];
+    const all = this.recommendationTracker.store ? this.recommendationTracker.store.findRecommendations({}) : [];
+    return all
+      .filter((r) => r.confidenceHistory && r.confidenceHistory.length > 1)
+      .map((r) => {
+        const first = r.confidenceHistory[0].confidence;
+        const last = r.confidenceHistory[r.confidenceHistory.length - 1].confidence;
+        return { id: r.id, action: r.action, change: last - first, current: last };
+      })
+      .filter((r) => r.change < 0)
+      .sort((a, b) => a.change - b.change)
+      .slice(0, limit);
+  }
+
+  getMeasuredLearningDashboard() {
+    const allEvidence = this.collector ? this.collector.getEvidence() : [];
+    const quantitative = allEvidence.filter((e) => e.measurementType === 'quantitative');
+    const revenue = quantitative
+      .filter((e) => e.source === 'financial' || e.tags.includes('revenue'))
+      .reduce((sum, e) => sum + (e.data && Number.isFinite(e.data.value) ? e.data.value : 0), 0);
+
+    const completed = this.getCompletedLearning();
+    const measuredOutcomes = completed.filter((r) => r.observedOutcome && r.observedOutcome.measurementType === 'quantitative');
+    const measuredValue = measuredOutcomes.reduce((sum, r) => sum + (r.observedOutcome.actual || 0), 0);
+    const expectedValue = measuredOutcomes.reduce((sum, r) => sum + (r.expectedValue || 0), 0);
+    const measuredROI = expectedValue > 0 ? Number(((measuredValue - expectedValue) / expectedValue).toFixed(4)) : null;
+
+    const confidenceTrend = this._confidenceTrend(completed);
+
+    return {
+      revenue,
+      measuredROI,
+      estimatedROI: null, // not inferred; reserved for future forecasted projections
+      confidenceTrend,
+      pendingEvidence: this.getAwaitingEvidence().length,
+      recentMeasurements: quantitative.slice(-5),
+      evidenceSources: allEvidence.reduce((acc, e) => {
+        acc[e.source] = (acc[e.source] || 0) + 1;
+        return acc;
+      }, {}),
+      calibrationHistory: completed
+        .filter((r) => r.confidenceHistory && r.confidenceHistory.length > 1)
+        .flatMap((r) => r.confidenceHistory.map((h) => ({ recommendationId: r.id, ...h })))
+        .sort((a, b) => b.at - a.at)
+        .slice(0, 20),
+    };
+  }
+
+  _confidenceTrend(completed) {
+    const points = completed
+      .filter((r) => r.confidenceHistory && r.confidenceHistory.length > 1)
+      .map((r) => {
+        const first = r.confidenceHistory[0].confidence;
+        const last = r.confidenceHistory[r.confidenceHistory.length - 1].confidence;
+        return last - first;
+      });
+    if (points.length === 0) return 0;
+    return Number((points.reduce((a, b) => a + b, 0) / points.length).toFixed(4));
   }
 
   _health() {

@@ -28,6 +28,7 @@ const ConfidenceCalibration = require('./ConfidenceCalibration');
 const BusinessOutcomeEngine = require('./BusinessOutcomeEngine');
 const LearningMetrics = require('./LearningMetrics');
 const BusinessEvidenceEngine = require('./BusinessEvidenceEngine');
+const { RevenueSensor } = require('./RevenueSensor');
 
 const SILENT_LOGGER = { log: () => {}, error: () => {}, warn: () => {} };
 
@@ -81,6 +82,7 @@ class OperatorSession {
     this._gitConfig = config.git || null;
     this._printerConfig = config.printer || null;
     this._simulateManufacturing = config.simulateManufacturing === true;
+    this._revenueConfig = config.revenue || null;
 
     this.memory = null;
     this.executiveOS = null;
@@ -94,6 +96,7 @@ class OperatorSession {
     this.confidenceCalibration = null;
     this.businessOutcomeEngine = null;
     this.evidenceEngine = null;
+    this.revenueSensor = null;
     this.learningMetrics = null;
 
     this.timeline = null;
@@ -123,7 +126,7 @@ class OperatorSession {
       logger,
     });
     await this.recommendationTracker.start();
-    this.confidenceCalibration = new ConfidenceCalibration({ policy: 'balanced' });
+    this.confidenceCalibration = new ConfidenceCalibration({ policy: 'strict' });
     this.businessOutcomeEngine = new BusinessOutcomeEngine({
       decisionOutcomeStore: this.decisionOutcomeStore,
       confidenceCalibration: this.confidenceCalibration,
@@ -140,6 +143,17 @@ class OperatorSession {
       logger,
     });
     await this.evidenceEngine.start();
+
+    if (this._revenueConfig) {
+      this.revenueSensor = new RevenueSensor({
+        eventBus: this.eventBus,
+        adapters: this._revenueConfig.adapters || [],
+        pollMs: this._revenueConfig.pollMs || 0,
+        logger,
+      });
+      this.revenueSensor.start();
+      this.sensors.push(this.revenueSensor);
+    }
 
     this.learningMetrics = new LearningMetrics({
       decisionOutcomeStore: this.decisionOutcomeStore,

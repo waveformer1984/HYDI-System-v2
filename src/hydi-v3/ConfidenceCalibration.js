@@ -18,12 +18,24 @@ class ConfidenceCalibration {
   adjust(currentConfidence, outcome, evidenceCount = 0) {
     if (!Number.isFinite(currentConfidence)) currentConfidence = 0.5;
     const conf = clamp(currentConfidence, this.policy.minConfidence, this.policy.maxConfidence);
+
+    const type = typeof outcome === 'string' ? outcome : (outcome && outcome.type) || 'unknown';
+    const measurementType = (outcome && outcome.measurementType) || 'quantitative';
+    const isQuantitative = measurementType === 'quantitative';
+
+    let canLearn = isQuantitative;
+    if (!isQuantitative && this.policy.qualitativeLearning) {
+      canLearn = evidenceCount >= this.policy.qualitativeThreshold;
+    }
+    if (!canLearn) {
+      return { confidence: Number(conf.toFixed(4)), delta: 0 };
+    }
+
     const evidenceScale = Math.min(1, (evidenceCount + 1) / Math.max(1, this.policy.evidenceThreshold));
-    const factor = this.policy.confidenceAdjustmentFactor * this.policy.learningRate * evidenceScale;
+    const qualitativeScale = isQuantitative ? 1 : (this.policy.qualitativeWeight || 0);
+    const factor = this.policy.confidenceAdjustmentFactor * this.policy.learningRate * evidenceScale * qualitativeScale;
 
     let delta = 0;
-    const type = typeof outcome === 'string' ? outcome : (outcome && outcome.type) || 'unknown';
-
     if (type === 'successful') {
       delta = factor * (1 - conf);
     } else if (type === 'partially successful') {

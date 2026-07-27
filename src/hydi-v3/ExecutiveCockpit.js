@@ -117,6 +117,8 @@ class ExecutiveCockpit extends EventEmitter {
     if (/^(learning|learn|prediction accuracy|recommendation success|lessons learned|recommendation history)$/.test(t)) return { command: 'learning' };
     if (/^(evidence|business evidence|evidence summary)$/.test(t)) return { command: 'evidence' };
     if (/^(outcomes|outcome review|outcome queue)$/.test(t)) return { command: 'outcomes' };
+    if (/^(measured|measured learning|revenue dashboard)$/.test(t)) return { command: 'measured' });
+    if (/^(revenue|revenue sensor|ledger status)$/.test(t)) return { command: 'revenue' });
     if (/^(kpis|business kpis|kpi dashboard)$/.test(t)) return { command: 'kpis' };
     if (/^review\s+(.+)$/.test(t)) {
       const parts = t.match(/^review\s+(.+)$/)[1].trim().split(/\s+/);
@@ -168,6 +170,12 @@ class ExecutiveCockpit extends EventEmitter {
         break;
       case 'outcomes':
         response = this.getOutcomeDashboard();
+        break;
+      case 'measured':
+        response = this.getMeasuredLearningDashboard();
+        break;
+      case 'revenue':
+        response = this.getRevenueStatus();
         break;
       case 'kpis':
         response = this.getKPIDashboard();
@@ -414,9 +422,47 @@ class ExecutiveCockpit extends EventEmitter {
     }
   }
 
+  getMeasuredLearningDashboard() {
+    if (!this.businessEvidenceEngine) return { text: 'BusinessEvidenceEngine not connected.' };
+    const d = this.businessEvidenceEngine.getMeasuredLearningDashboard();
+    const lines = [
+      'Measured Learning Dashboard',
+      '',
+      `Revenue: ${Number(d.revenue || 0).toFixed(2)}`,
+      `Measured ROI: ${d.measuredROI === null ? 'No measured outcomes available.' : `${(d.measuredROI * 100).toFixed(0)}%`}`,
+      `Estimated ROI: ${d.estimatedROI === null ? 'No measured outcomes available.' : `${(d.estimatedROI * 100).toFixed(0)}%`}`,
+      `Confidence trend: ${Number(d.confidenceTrend || 0).toFixed(4)}`,
+      `Pending evidence: ${Number(d.pendingEvidence || 0)}`,
+      `Recent measurements: ${d.recentMeasurements ? d.recentMeasurements.length : 0}`,
+      `Evidence sources: ${d.evidenceSources ? Object.entries(d.evidenceSources).map(([k, v]) => `${k}: ${v}`).join(', ') : 'none'}`,
+      '',
+      'Calibration history (last 5):',
+      ...(d.calibrationHistory && d.calibrationHistory.length
+        ? d.calibrationHistory.slice(0, 5).map((h) => `- [${h.recommendationId}] ${new Date(h.at).toISOString()} ${h.reason}: ${(h.confidence * 100).toFixed(0)}%`)
+        : ['No calibrations recorded.']),
+    ];
+    return { text: lines.join('\n'), dashboard: d };
+  }
+
+  getRevenueStatus() {
+    if (!this.businessEvidenceEngine) return { text: 'BusinessEvidenceEngine not connected.' };
+    const summary = this.businessEvidenceEngine.getEvidenceSummary();
+    const quantitative = (this.businessEvidenceEngine.collector ? this.businessEvidenceEngine.collector.getEvidence() : [])
+      .filter((e) => e.measurementType === 'quantitative' && (e.source === 'financial' || (e.tags && e.tags.includes('revenue'))));
+    const total = quantitative.reduce((sum, e) => sum + (e.data && Number.isFinite(e.data.value) ? e.data.value : 0), 0);
+    const lines = [
+      'Revenue Status',
+      '',
+      `Revenue measurements: ${quantitative.length}`,
+      `Total revenue: ${total.toFixed(2)}`,
+      `Evidence sources: ${summary.bySource ? Object.entries(summary.bySource).map(([k, v]) => `${k}: ${v}`).join(', ') : 'none'}`,
+    ];
+    return { text: lines.join('\n'), revenue: total, measurements: quantitative };
+  }
+
   getHelp() {
     return {
-      text: `Available commands:\n- "Good morning" or "status"\n- "focus"\n- "approvals"\n- "history"\n- "workflows"\n- "learning"\n- "evidence"\n- "outcomes"\n- "kpis"\n- "review <id>" or "review <id> yes|partially|no|unknown"\n- "startup" or "health"\n- "approve <id>"\n- "reject <id>"\n- "priority <resonate|operations|manufacturing|music|research|revenue|creative|default>"\n- "help"`,
+      text: `Available commands:\n- "Good morning" or "status"\n- "focus"\n- "approvals"\n- "history"\n- "workflows"\n- "learning"\n- "evidence"\n- "outcomes"\n- "measured"\n- "revenue"\n- "kpis"\n- "review <id>" or "review <id> yes|partially|no|unknown"\n- "startup" or "health"\n- "approve <id>"\n- "reject <id>"\n- "priority <resonate|operations|manufacturing|music|research|revenue|creative|default>"\n- "help"`,
     };
   }
 
