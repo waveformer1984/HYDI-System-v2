@@ -19,6 +19,7 @@
 const path = require('path');
 const { boot } = require('../src/hydi-v3/HYDIOperationalBoot');
 const SignalCoverage = require('../src/hydi-v3/SignalCoverage');
+const HYDIContinuousRuntime = require('../src/hydi-v3/HYDIContinuousRuntime');
 
 function parseFlags(argv) {
   const args = argv.slice(2);
@@ -121,21 +122,25 @@ function appendIssues(lines, report) {
   return lines;
 }
 
-function renderStatus(report, session) {
-  const s = buildSummary(report, session);
+function renderOperatingState(status, session) {
   const lines = [
-    'HYDI SYSTEM STATUS',
+    'HYDI OPERATING STATE',
     '',
-    `System: ${s.system}`,
-    `Boot: ${s.boot}`,
-    `Sensors: ${s.sensors}`,
-    `Signals: ${s.signals}`,
-    `Audit: ${s.audit}`,
-    `Learning: ${s.learning}`,
-    `Last recommendation: ${s.lastRecommendation}`,
-    `Last executive decision: ${s.lastExecutiveDecision}`,
+    `Runtime: ${status.state}`,
+    `Uptime: ${status.uptime}ms`,
+    `Events processed: ${status.eventsProcessed}`,
+    `Recommendations: ${status.recommendations}`,
+    `Pending approvals: ${status.pendingApprovals}`,
+    `Awaiting measurements: ${status.awaitingMeasurements}`,
+    `Audit entries: ${status.auditEntries}`,
+    `Learning updates: ${status.learningUpdates}`,
+    `Last verified action: ${status.lastVerifiedAction || 'none'}`,
   ];
-  return appendIssues(lines, report).join('\n');
+  if (session && typeof session.certify === 'function') {
+    const report = session.certify();
+    return appendIssues(lines, report).join('\n');
+  }
+  return lines.join('\n');
 }
 
 function renderReadiness(report, session) {
@@ -172,19 +177,30 @@ async function main() {
     process.exit(1);
   }
 
-  const report = await boot({ dataPath, logger: { log: () => {}, warn: () => {}, error: () => {} } });
-  const { session } = report;
-
-  try {
-    console.log(command === 'status' ? renderStatus(report, session) : renderReadiness(report, session));
-  } finally {
-    if (session && typeof session.destroy === 'function') {
-      await session.destroy().catch(() => {});
+  if (command === 'readiness') {
+    const report = await boot({ dataPath, logger: { log: () => {}, warn: () => {}, error: () => {} } });
+    const { session } = report;
+    try {
+      console.log(renderReadiness(report, session));
+    } finally {
+      if (session && typeof session.destroy === 'function') {
+        await session.destroy().catch(() => {});
+      }
     }
+    const summary = buildSummary(report, session);
+    process.exit(summary.system === 'READY' ? 0 : 1);
   }
 
-  const summary = buildSummary(report, session);
-  process.exit(summary.system === 'READY' ? 0 : 1);
+  const runtime = new HYDIContinuousRuntime({ dataPath, logger: { log: () => {}, warn: () => {}, error: () => {} } });
+  let status;
+  try {
+    await runtime.start();
+    status = runtime.getStatus();
+    console.log(renderOperatingState(status, runtime.session));
+  } finally {
+    await runtime.stop().catch(() => {});
+  }
+  process.exit(status && status.state === 'READY' ? 0 : 1);
 }
 
 main().catch((error) => {
