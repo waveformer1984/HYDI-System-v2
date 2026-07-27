@@ -23,8 +23,34 @@ async function makeDataPath() {
 describe('HYDI live recovery', () => {
   let runtime;
   let dataPath;
+  let envSnapshot;
+
+  const CREDENTIAL_KEYS = [
+    'STRIPE_SECRET_KEY',
+    'GITHUB_TOKEN',
+    'SMTP_HOST',
+    'SMTP_USER',
+    'SMTP_PASS',
+    'GOOGLE_DRIVE_CREDENTIALS',
+    'GOOGLE_CALENDAR_CREDENTIALS',
+  ];
+
+  beforeEach(() => {
+    envSnapshot = {};
+    for (const key of CREDENTIAL_KEYS) {
+      envSnapshot[key] = process.env[key];
+      delete process.env[key];
+    }
+  });
 
   afterEach(async () => {
+    for (const key of CREDENTIAL_KEYS) {
+      if (envSnapshot[key] === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = envSnapshot[key];
+      }
+    }
     if (runtime) {
       try { await runtime.stop(); } catch (e) { /* ignore */ }
     }
@@ -32,6 +58,7 @@ describe('HYDI live recovery', () => {
       try { await fs.rm(dataPath, { recursive: true, force: true }); } catch (e) { /* ignore */ }
     }
     runtime = null;
+    dataPath = null;
   });
 
   test('missing credentials leave tier 2 connectors not_configured', async () => {
@@ -70,6 +97,7 @@ describe('HYDI live recovery', () => {
     runtime = new HYDIContinuousRuntime({
       dataPath,
       logger: silent,
+      healthIntervalMs: 100,
       connectors: [{ type: 'filesystem', name: 'fs', enabled: true, roots: { ProtoForge: root }, scanIntervalMs: 500, watch: false }],
     });
     await runtime.start();
