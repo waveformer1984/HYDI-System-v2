@@ -98,6 +98,16 @@ class ManufacturingSignalInterpreter {
           impact: 'manufacturing-warming',
           confidence: 0.94,
         });
+      case 'PrinterOffline':
+        return this._signal({
+          ...basePayload,
+          interpretation: `${name} is offline and unreachable`,
+          impact: 'risk-equipment-offline',
+          risk: 'elevated',
+          priority: 'high',
+          recommendation: 'Check power and connectivity before scheduling production on this machine.',
+          confidence: 0.97,
+        });
       case 'MaterialLow':
         return this._signal({
           ...basePayload,

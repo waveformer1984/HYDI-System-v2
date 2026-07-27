@@ -54,6 +54,7 @@ class ExecutionGateway extends EventEmitter {
     };
 
     this.memory = config.businessMemory || null;
+    this.outcomeEngine = config.outcomeEngine || null;
     this.adapters = new Map();
     this.pending = new Map();
     this.log = [];
@@ -304,6 +305,7 @@ class ExecutionGateway extends EventEmitter {
       const afterState = ActionSnapshot.capture(this.memory, { tags: [entry.type] });
       const diff = ActionSnapshot.diff(beforeState, afterState);
       this._recordAudit(auditContext, entry, { simulate, beforeState, afterState, diff });
+      this._observeOutcome(entry);
       this.emit('action-completed', { id: entry.id, type: entry.type, result });
       return { id: entry.id, approved: true, status: 'completed', result };
     } catch (error) {
@@ -314,6 +316,7 @@ class ExecutionGateway extends EventEmitter {
       const afterState = ActionSnapshot.capture(this.memory, { tags: [entry.type] });
       const diff = ActionSnapshot.diff(beforeState, afterState);
       this._recordAudit('action-failed', entry, { simulate, beforeState, afterState, diff });
+      this._observeOutcome(entry);
       this.emit('action-failed', { id: entry.id, reason: entry.failureReason });
       throw error;
     }
@@ -359,6 +362,11 @@ class ExecutionGateway extends EventEmitter {
         ...extra,
       },
     });
+  }
+
+  _observeOutcome(entry) {
+    if (!this.outcomeEngine || !entry.recommendationId) return;
+    this.outcomeEngine.observeAction(entry);
   }
 
   _updateMemory(entry) {

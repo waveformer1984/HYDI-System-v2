@@ -300,3 +300,78 @@ so commits would score as `default` rather than `operations`.
 commit messages and branch names cannot inject commands) and permits only
 `rev-parse`, `log`, `show`, `status`, `for-each-ref`, and `symbolic-ref`.
 `commit`, `push`, `reset`, `clean`, and `checkout` are refused.
+
+## 15. Signal Coverage
+
+More than one interpreter now sits on the bus (`BusinessSignalInterpreter` for
+filesystem and git, `ManufacturingSignalInterpreter` for hardware). Each
+subscribes to `*` and self-selects, so two silent failures are possible:
+
+- **Dropped** — no interpreter handles a type. The event reaches the bus,
+  nothing translates it, it never appears in a briefing, and nothing errors.
+- **Double-translated** — two interpreters handle the same type. One
+  occurrence is counted twice in the briefing, activity ledger, and audit trail.
+
+`SignalCoverage` detects both by probing the interpreters with a synthetic
+event per known sensor type.
+
+```bash
+# Enforced in CI
+npx jest tests/unit/hydi-v3/SignalCoverage.test.js
+```
+
+The audit also runs at `OperatorSession` startup; a problem is logged and
+`healthCheck().checks.signalCoverage` goes false.
+
+### Adding a sensor event type
+
+1. Emit it from the sensor.
+2. Add it to `SENSOR_EVENT_TYPES` in `src/hydi-v3/SignalCoverage.js`.
+3. Add a case to exactly one interpreter.
+
+Skipping step 3 fails the coverage test. Skipping step 2 fails the inventory
+drift test, which cross-checks the declared list against the `_emit(...)` calls
+in each sensor's source — without it, a narrowed inventory would defeat the
+coverage check itself.
+
+### Adding a whole interpreter
+
+Give it a `default: return null` branch. An interpreter that returns a signal
+for types outside its domain will be caught as `DOUBLE`, not silently
+double-count.
+
+## 16. Continuous Learning
+
+Every recommendation, execution, and outcome is recorded by the continuous
+learning layer (`DecisionOutcomeStore`, `RecommendationTracker`,
+`BusinessOutcomeEngine`, `ConfidenceCalibration`, `LearningMetrics`).
+
+```bash
+# Cockpit learning dashboard
+npm run cockpit
+# then type: learning
+```
+
+The dashboard shows prediction accuracy, recommendation success rate, confidence
+trend, top performing agents, lowest-confidence areas, recent lessons, and
+recommendation history. Morning briefings include a `learningSummary` after the
+recommendations section; `TrustEngine.formatJustification()` now answers
+"Why do you believe this?", "How often has this succeeded?", and
+"What would change your recommendation?".
+
+### Outcome lifecycle
+
+- `ExecutiveOperatingSystem` tracks every recommendation it generates.
+- `ExecutionGateway.observeAction()` records a completed/failed action outcome
+  when an executed action carries `recommendationId`.
+- `BusinessWorkflowEngine.recordOutcome()` feeds workflow outcomes back through
+  `BusinessOutcomeEngine.observeWorkflow()`.
+- `BusinessOutcomeEngine` classifies the outcome, computes impacts, calibrates
+  confidence, and stores the lesson.
+
+### Policies
+
+Confidence calibration uses one of four policies: `Conservative`, `Balanced`,
+`Aggressive`, `Experimental`. A policy controls learning rate, confidence
+adjustment strength, evidence threshold, recommendation threshold, and
+confidence bounds. The default is `Balanced`.

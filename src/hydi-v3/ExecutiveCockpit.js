@@ -31,6 +31,8 @@ class ExecutiveCockpit extends EventEmitter {
     this.executiveOS = config.executiveOS || null;
     this.workflowEngine = config.workflowEngine || null;
     this.executionGateway = config.executionGateway || null;
+    this.learningMetrics = config.learningMetrics || null;
+    this.recommendationTracker = config.recommendationTracker || null;
     this.strategicObjectives = config.strategicObjectives || new StrategicObjectives({ ownerPriority: 'default' });
     this.startupIntegrity = new StartupIntegrity({
       strategicObjectives: this.strategicObjectives,
@@ -111,6 +113,7 @@ class ExecutiveCockpit extends EventEmitter {
     if (/^(pending|approvals|what needs approval)$/.test(t)) return { command: 'approvals' };
     if (/^(history|executions|recent actions|log)$/.test(t)) return { command: 'history' };
     if (/^(workflows|active workflows|what is active)$/.test(t)) return { command: 'workflows' };
+    if (/^(learning|learn|prediction accuracy|recommendation success|lessons learned|recommendation history)$/.test(t)) return { command: 'learning' };
     if (/^(startup|health|startup check|system health)$/.test(t)) return { command: 'startup' };
     if (/^(what changed|what changed today|what's new|whats new)$/.test(t)) return { command: 'what-changed' };
     if (/^approve\s+(.+)$/.test(t)) return { command: 'approve', id: t.match(/^approve\s+(.+)$/)[1].trim() };
@@ -146,6 +149,9 @@ class ExecutiveCockpit extends EventEmitter {
         break;
       case 'workflows':
         response = this.listWorkflows();
+        break;
+      case 'learning':
+        response = this.getLearningDashboard();
         break;
       case 'approve':
         response = await this.approveById(parsed.id);
@@ -294,9 +300,38 @@ class ExecutiveCockpit extends EventEmitter {
     return { text: lines.join('\n'), active, pending };
   }
 
+  getLearningDashboard() {
+    if (!this.learningMetrics) return { text: 'LearningMetrics not connected.' };
+    const dashboard = this.learningMetrics.getDashboardData();
+    const accuracy = dashboard.predictionAccuracy !== null ? `${(dashboard.predictionAccuracy * 100).toFixed(0)}%` : 'N/A';
+    const successRate = dashboard.recommendationSuccessRate !== null ? `${(dashboard.recommendationSuccessRate * 100).toFixed(0)}%` : 'N/A';
+    const confidence = `${(dashboard.averageConfidence * 100).toFixed(0)}%`;
+    const drift = `${(dashboard.confidenceDrift * 100).toFixed(2)}%`;
+    const topAgent = dashboard.topAgents[0]?.agent || 'none';
+    const lowestArea = dashboard.lowestConfidenceAreas[0]?.area || 'none';
+
+    const lines = [
+      'Learning Dashboard',
+      '',
+      `Prediction accuracy: ${accuracy}`,
+      `Recommendation success rate: ${successRate}`,
+      `Average confidence: ${confidence} (drift ${drift})`,
+      `Recommendations awaiting outcome: ${dashboard.total - dashboard.completed}`,
+      `Top performing agent: ${topAgent}`,
+      `Lowest confidence area: ${lowestArea}`,
+      '',
+      'Recent lessons:',
+      ...(dashboard.recentLessons.length ? dashboard.recentLessons.map((l, i) => `${i + 1}. ${l.lesson}`) : ['No lessons recorded yet.']),
+      '',
+      'Recommendation history:',
+      ...(dashboard.recommendationHistory.length ? dashboard.recommendationHistory.slice(0, 10).map((r, i) => `${i + 1}. [${r.id}] ${r.action} — ${r.ownerDecision} (${r.outcome || 'pending'})`) : ['No recommendations recorded yet.']),
+    ];
+    return { text: lines.join('\n'), dashboard };
+  }
+
   getHelp() {
     return {
-      text: `Available commands:\n- "Good morning" or "status"\n- "focus"\n- "approvals"\n- "history"\n- "workflows"
+      text: `Available commands:\n- "Good morning" or "status"\n- "focus"\n- "approvals"\n- "history"\n- "workflows"\n- "learning"
 - "startup" or "health"\n- "approve <id>"\n- "reject <id>"\n- "priority <resonate|operations|manufacturing|music|research|revenue|creative|default>"\n- "help"`,
     };
   }
@@ -389,6 +424,7 @@ class ExecutiveCockpit extends EventEmitter {
     const strategic = this.strategicObjectives ? this.strategicObjectives.summarize(this.memory) : [];
     const highestObjective = strategic[0] || null;
 
+    const learning = this.learningMetrics ? this.learningMetrics.getDashboardData() : null;
     return {
       activeWorkflows,
       pendingApprovals,
@@ -402,6 +438,7 @@ class ExecutiveCockpit extends EventEmitter {
       highestPriorityObjective: highestObjective ? highestObjective.name : null,
       agentActivity: this.executionGateway ? this.executionGateway.getDashboardData().agentActivity : {},
       history: this.executionGateway ? this.executionGateway.getExecutionHistory({}).slice(0, 10) : [],
+      learning,
     };
   }
 

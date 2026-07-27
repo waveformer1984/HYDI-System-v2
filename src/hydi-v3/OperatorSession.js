@@ -20,7 +20,13 @@ const BusinessSignalInterpreter = require('./BusinessSignalInterpreter');
 const ManufacturingSignalInterpreter = require('./ManufacturingSignalInterpreter');
 const EquipmentRegistry = require('./EquipmentRegistry');
 const PrinterSensor = require('./PrinterSensor');
+const SignalCoverage = require('./SignalCoverage');
 const GitSensor = require('./GitSensor');
+const DecisionOutcomeStore = require('./DecisionOutcomeStore');
+const RecommendationTracker = require('./RecommendationTracker');
+const ConfidenceCalibration = require('./ConfidenceCalibration');
+const BusinessOutcomeEngine = require('./BusinessOutcomeEngine');
+const LearningMetrics = require('./LearningMetrics');
 
 const SILENT_LOGGER = { log: () => {}, error: () => {}, warn: () => {} };
 
@@ -82,6 +88,12 @@ class OperatorSession {
     this.executionGateway = null;
     this.cockpit = null;
 
+    this.decisionOutcomeStore = null;
+    this.recommendationTracker = null;
+    this.confidenceCalibration = null;
+    this.businessOutcomeEngine = null;
+    this.learningMetrics = null;
+
     this.timeline = null;
     this.agentWorkspace = null;
     this.approvalCenter = null;
@@ -100,6 +112,32 @@ class OperatorSession {
     const { dataPath, logger } = this.config;
     const shared = { dataPath, logger, strategicObjectives: this.strategicObjectives };
 
+    // --- Phase 19: continuous learning layer -----------------------------
+    this.decisionOutcomeStore = new DecisionOutcomeStore({ dataPath, logger });
+    await this.decisionOutcomeStore.start();
+    this.recommendationTracker = new RecommendationTracker({
+      decisionOutcomeStore: this.decisionOutcomeStore,
+      dataPath,
+      logger,
+    });
+    await this.recommendationTracker.start();
+    this.confidenceCalibration = new ConfidenceCalibration({ policy: 'balanced' });
+    this.businessOutcomeEngine = new BusinessOutcomeEngine({
+      decisionOutcomeStore: this.decisionOutcomeStore,
+      confidenceCalibration: this.confidenceCalibration,
+      recommendationTracker: this.recommendationTracker,
+      dataPath,
+      logger,
+    });
+    await this.businessOutcomeEngine.start();
+    this.learningMetrics = new LearningMetrics({
+      decisionOutcomeStore: this.decisionOutcomeStore,
+      dataPath,
+      logger,
+    });
+    await this.learningMetrics.start();
+    // -----------------------------------------------------------------------
+
     this.memory = new BusinessMemory({ ...shared });
     await this.memory.start();
 
@@ -108,6 +146,8 @@ class OperatorSession {
       businessMemory: this.memory,
       ownerPriority: this.config.ownerPriority,
       eventBus: this.eventBus,
+      recommendationTracker: this.recommendationTracker,
+      learningMetrics: this.learningMetrics,
     });
     await this.executiveOS.start();
 
@@ -119,10 +159,15 @@ class OperatorSession {
       businessMemory: this.memory,
       executiveOS: this.executiveOS,
       taskEngine: this.taskEngine,
+      outcomeEngine: this.businessOutcomeEngine,
     });
     await this.workflowEngine.start();
 
-    this.executionGateway = new ExecutionGateway({ ...shared, businessMemory: this.memory });
+    this.executionGateway = new ExecutionGateway({
+      ...shared,
+      businessMemory: this.memory,
+      outcomeEngine: this.businessOutcomeEngine,
+    });
     await this.executionGateway.start();
 
     this.cockpit = new ExecutiveCockpit({
@@ -131,6 +176,8 @@ class OperatorSession {
       executiveOS: this.executiveOS,
       workflowEngine: this.workflowEngine,
       executionGateway: this.executionGateway,
+      learningMetrics: this.learningMetrics,
+      recommendationTracker: this.recommendationTracker,
     });
     await this.cockpit.start();
 
@@ -198,6 +245,18 @@ class OperatorSession {
     // after it, so nothing is published before there is a consumer.
     this.signalInterpreter = new BusinessSignalInterpreter({ eventBus: this.eventBus });
     this.manufacturingSignalInterpreter = new ManufacturingSignalInterpreter({ eventBus: this.eventBus });
+    this.interpreters = [this.signalInterpreter, this.manufacturingSignalInterpreter];
+
+    // With more than one interpreter on the bus, an event type handled by none
+    // vanishes silently and one handled by two is counted twice. Neither shows
+    // up as an error, so the coverage is checked at startup rather than trusted.
+    this.signalCoverage = SignalCoverage.audit({ interpreters: this.interpreters });
+    if (!this.signalCoverage.ok) {
+      logger.error('[OperatorSession] signal coverage problem', {
+        dropped: this.signalCoverage.dropped,
+        double: this.signalCoverage.double,
+      });
+    }
 
     if (this._gitConfig) {
       this.gitSensor = new GitSensor({
@@ -274,6 +333,10 @@ class OperatorSession {
       cockpit: this.cockpit.healthCheck().ok,
       workflowEngine: !!this.workflowEngine,
       executionGateway: !!this.executionGateway,
+      decisionOutcomeStore: this.decisionOutcomeStore ? this.decisionOutcomeStore.healthCheck().ok : false,
+      recommendationTracker: this.recommendationTracker ? this.recommendationTracker.healthCheck().ok : false,
+      businessOutcomeEngine: !!this.businessOutcomeEngine,
+      learningMetrics: !!this.learningMetrics,
       timeline: this.timeline ? this.timeline.healthCheck().ok : false,
       agentWorkspace: this.agentWorkspace ? this.agentWorkspace.healthCheck().ok : false,
       approvalCenter: this.approvalCenter ? this.approvalCenter.healthCheck().ok : false,
@@ -281,6 +344,7 @@ class OperatorSession {
       conversationEngine: this.conversationEngine ? this.conversationEngine.healthCheck().ok : false,
       consoleAPI: this.consoleAPI ? this.consoleAPI.healthCheck().ok : false,
       eventBus: !!this.eventBus,
+      signalCoverage: !this.signalCoverage || this.signalCoverage.ok,
     };
     // Sensors are reported but never gate overall health: a repository that is
     // absent or unreadable is a missing observation, not a broken system.
@@ -300,6 +364,8 @@ class OperatorSession {
       this.timeline, this.sessionMemory,
       this.cockpit, this.executionGateway, this.workflowEngine,
       this.taskEngine, this.executiveOS, this.memory,
+      this.learningMetrics, this.businessOutcomeEngine,
+      this.recommendationTracker, this.decisionOutcomeStore,
     ];
   }
 
@@ -354,7 +420,9 @@ class OperatorSession {
 
     // The interpreters hold '*' subscriptions; detach before tearing the bus
     // down so a late event cannot reach a destroyed consumer.
-    if (this.signalInterpreter) this.signalInterpreter.detach();
+    for (const interpreter of (this.interpreters || [])) {
+      if (interpreter && typeof interpreter.detach === 'function') interpreter.detach();
+    }
     if (this.manufacturingSignalInterpreter) this.manufacturingSignalInterpreter.detach();
     if (this.eventBus) this.eventBus.destroy();
   }

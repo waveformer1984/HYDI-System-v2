@@ -188,6 +188,14 @@ function toSections(briefing) {
         : ['No specific recommendations.'],
     },
     {
+      id: 'learning-summary',
+      title: 'Learning Summary',
+      tone: 'neutral',
+      lines: briefing.learningSummary && Array.isArray(briefing.learningSummary.lines) && briefing.learningSummary.lines.length
+        ? briefing.learningSummary.lines
+        : ['Learning system still building historical baseline.'],
+    },
+    {
       id: 'missing-data',
       title: 'Missing Data Sources',
       tone: 'dim',

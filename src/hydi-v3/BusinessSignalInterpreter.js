@@ -115,6 +115,7 @@ class BusinessSignalInterpreter {
       case 'FileModified': return `Work in progress in ${base}`;
       case 'FileDeleted': return `File removed in ${base}`;
       case 'DirectoryCreated': return `New directory created in ${base}`;
+      case 'DirectoryDeleted': return `Directory removed in ${base}`;
       case 'BuildArtifactGenerated': return `Build artifact generated in ${base}`;
       case 'ProjectInactive': return `${base} has been inactive`;
       case 'ProjectActive': return `${base} is active again`;

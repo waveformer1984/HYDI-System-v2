@@ -1,8 +1,9 @@
-# Phase 18C — Git Sensor
+# Phase 18D — Git Sensor
 
 Date: 2026-07-25
 Branch: clean-main
 Builds on: Phase 18B (`ae6f038`)
+Note: renumbered from 18C — Phase 18C is the Physical Operations Sensor Framework (`6485558`).
 
 ## Implementation Summary
 

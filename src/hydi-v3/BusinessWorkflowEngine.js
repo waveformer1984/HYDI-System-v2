@@ -92,6 +92,7 @@ class BusinessWorkflowEngine extends EventEmitter {
     this.memory = config.businessMemory || null;
     this.executiveOS = config.executiveOS || null;
     this.taskEngine = config.taskEngine || null;
+    this.outcomeEngine = config.outcomeEngine || null;
     this.strategicObjectives = config.strategicObjectives || new StrategicObjectives({ ownerPriority: 'default' });
 
     this.workflows = new Map();
@@ -407,6 +408,9 @@ class BusinessWorkflowEngine extends EventEmitter {
     }
     this._persistOutcomes();
     this.emit('outcome-recorded', outcome);
+    if (this.outcomeEngine) {
+      this.outcomeEngine.observeWorkflow(wf, actual);
+    }
     return outcome;
   }
 

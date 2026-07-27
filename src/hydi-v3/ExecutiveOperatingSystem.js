@@ -37,7 +37,14 @@ class ExecutiveOperatingSystem extends EventEmitter {
     this.planner = config.projectPlanner || null;
     this.observability = config.observability || null;
     this.strategicObjectives = config.strategicObjectives || new StrategicObjectives({ ownerPriority: config.ownerPriority || 'default' });
-    this.trustEngine = new TrustEngine({ businessMemory: this.memory, strategicObjectives: this.strategicObjectives, logger: this.config.logger });
+    this.recommendationTracker = config.recommendationTracker || null;
+    this.learningMetrics = config.learningMetrics || null;
+    this.trustEngine = new TrustEngine({
+      businessMemory: this.memory,
+      strategicObjectives: this.strategicObjectives,
+      learningMetrics: this.learningMetrics,
+      logger: this.config.logger,
+    });
     this.eventBus = config.eventBus || null;
     this.executiveTimeline = config.executiveTimeline || null;
     this.auditLedger = config.auditLedger || null;
@@ -211,6 +218,10 @@ class ExecutiveOperatingSystem extends EventEmitter {
     const resonateStatus = this.getObjectiveStatus('resonate', priorityActions);
     const strategicObjectives = this.strategicObjectives ? this.strategicObjectives.summarize(this.memory) : [];
     const recommendations = this.recommendations(priorityActions, risks, reports, resonateStatus);
+    const trackedRecommendations = this._trackRecommendations(recommendations);
+    const learningSummary = this.learningMetrics
+      ? this.learningMetrics.getLearningSummary(30 * 24 * 60 * 60 * 1000)
+      : { hasBaseline: false, lines: ['Learning system still building historical baseline.'] };
 
     const briefing = {
       generatedAt: Date.now(),
@@ -219,8 +230,9 @@ class ExecutiveOperatingSystem extends EventEmitter {
       protoForgeStatus: status,
       priorityActions,
       risks,
-      recommendations,
+      recommendations: trackedRecommendations,
       resonateStatus,
+      learningSummary,
       missingData: this._missingData(reports),
       agentReports: reports,
     };
@@ -528,11 +540,34 @@ class ExecutiveOperatingSystem extends EventEmitter {
     return `ProtoForge is ${health}. ${priorityActions.length} priority actions, ${risks.length} risks. Highest strategic objective: ${highestObjective}. ${topAction ? `Recommended next action: ${topAction.action} (${topAction.reason})` : 'No recommendations available.'}`;
   }
 
+  _trackRecommendations(recommendations) {
+    if (!this.recommendationTracker) return recommendations;
+    return recommendations.map((rec) => {
+      const enriched = {
+        ...rec,
+        originatingAgent: rec.agent || 'ExecutiveOperatingSystem',
+        supportingSignals: rec.signals || [],
+        strategicObjective: rec.objective || null,
+        expectedValue: rec.value || this._extractValue(rec.expectedImpact),
+      };
+      const id = this.recommendationTracker.track(enriched);
+      return { ...rec, recommendationId: id };
+    });
+  }
+
+  _extractValue(text) {
+    if (!text) return 0;
+    const match = String(text).match(/\$?([0-9,]+(?:\.[0-9]{2})?)/);
+    return match ? Number(match[1].replace(/,/g, '')) : 0;
+  }
+
   _missingData(reports) {
     const missing = [];
     if (!this.memory) missing.push('BusinessMemory not connected.');
     if (!this.observability) missing.push('Observability dashboard not connected.');
     if (!this.planner) missing.push('Project planner not connected.');
+    if (!this.recommendationTracker) missing.push('RecommendationTracker not connected.');
+    if (!this.learningMetrics) missing.push('LearningMetrics not connected.');
     for (const [name, report] of Object.entries(reports)) {
       if (report && report.error) missing.push(`${name} report failed: ${report.error}`);
     }

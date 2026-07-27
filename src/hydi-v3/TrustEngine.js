@@ -16,6 +16,7 @@ class TrustEngine {
   constructor(config = {}) {
     this.strategicObjectives = config.strategicObjectives || null;
     this.memory = config.businessMemory || null;
+    this.learningMetrics = config.learningMetrics || null;
     this.logger = config.logger || console;
   }
 
@@ -59,12 +60,30 @@ class TrustEngine {
     if (recommendation.effort !== undefined) assumptions.push('effort measured in abstract units');
     if (objective) assumptions.push(`strategic weight from objective ${objective.id}`);
 
-    return {
+    const provenance = {
       sources,
       assumptions,
       reasoning: recommendation.reason || recommendation.explanation || 'No explicit reasoning recorded.',
       confidence: recommendation.confidence || this.computeConfidence(related || recommendation),
     };
+
+    if (this.learningMetrics) {
+      const metrics = this.learningMetrics.computeMetrics({});
+      const historicalSuccessRate = metrics.recommendationSuccessRate ?? 0;
+      const priorFailures = metrics.failed || 0;
+      const confidenceDrift = metrics.confidenceDrift || 0;
+      provenance.historicalSuccessRate = historicalSuccessRate;
+      provenance.priorFailures = priorFailures;
+      provenance.confidenceDrift = confidenceDrift;
+      if (metrics.topAgents && metrics.topAgents.length > 0) {
+        provenance.topPerformingAgent = metrics.topAgents[0].agent;
+      }
+      if (metrics.lowestConfidenceAreas && metrics.lowestConfidenceAreas.length > 0) {
+        provenance.weakestArea = metrics.lowestConfidenceAreas[0].area;
+      }
+    }
+
+    return provenance;
   }
 
   /**
@@ -85,6 +104,14 @@ class TrustEngine {
     const undoable = this.canUndo(recommendation, adapters);
     const risk = recommendation.risk ?? 1;
     const safety = risk < 0.5 ? 'low-risk' : risk < 0.8 ? 'medium-risk' : 'high-risk';
+
+    const historicalSuccessRate = provenance.historicalSuccessRate !== undefined
+      ? `${(provenance.historicalSuccessRate * 100).toFixed(0)}%`
+      : 'no historical data';
+    const priorFailures = provenance.priorFailures !== undefined ? provenance.priorFailures : 'unknown';
+    const confidenceDrift = provenance.confidenceDrift !== undefined
+      ? `${(provenance.confidenceDrift * 100).toFixed(2)}%`
+      : 'unknown';
 
     const lines = [
       'Why am I recommending this?',
@@ -107,6 +134,31 @@ class TrustEngine {
       '',
       'Can I undo it?',
       undoable ? 'Yes, the responsible adapter supports rollback.' : 'No automatic rollback is available for this action.',
+      '',
+      'Why do you believe this?',
+      `Confidence is ${(provenance.confidence * 100).toFixed(0)}%` + (provenance.historicalSuccessRate !== undefined ? `; historically similar recommendations succeeded ${historicalSuccessRate} of the time.` : ' based on available data.'),
+      '',
+      'How often has this recommendation succeeded?',
+      historicalSuccessRate === 'no historical data'
+        ? 'No comparable recommendations have completed yet.'
+        : `Comparable recommendations have a ${historicalSuccessRate} success rate (${priorFailures} failed).`,
+      '',
+      'What evidence supports it?',
+      provenance.sources.length ? provenance.sources.map((s) => `- ${s}`).join('\n') : '- No verified data sources.',
+      '',
+      'What assumptions are weakest?',
+      provenance.assumptions.length ? provenance.assumptions.map((a) => `- ${a}`).join('\n') : '- None explicitly recorded.',
+      '',
+      'Has this failed before?',
+      priorFailures === 'unknown' ? 'No failure history available.' : `${priorFailures} comparable recommendations have failed historically.`,
+      '',
+      'What changed?',
+      recommendation.changes || 'No post-execution diff available yet.',
+      '',
+      'What would change your recommendation?',
+      provenance.weakestArea
+        ? `More evidence in the weakest area (${provenance.weakestArea}) or a sustained increase in confidence (currently ${(provenance.confidence * 100).toFixed(0)}%; drift ${confidenceDrift}).`
+        : `Sustained confidence increase above the recommendation threshold or stronger supporting evidence.`,
     ];
     return lines.join('\n');
   }

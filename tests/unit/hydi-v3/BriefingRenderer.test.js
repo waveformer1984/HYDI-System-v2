@@ -66,6 +66,7 @@ describe('BriefingRenderer', () => {
       'risks',
       'opportunities',
       'recommendations',
+      'learning-summary',
       'missing-data',
     ]);
   });

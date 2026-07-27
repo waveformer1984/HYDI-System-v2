@@ -149,17 +149,30 @@ function buildMatchers(actual, negated) {
 const jestShim = {
   fn(impl) {
     const mock = { calls: [], results: [] };
+    // Queued one-shot behaviours, consumed in order before falling back to the
+    // default implementation — matching jest's mock*Once semantics.
+    const once = [];
+    let current = impl;
+
     const wrapper = (...args) => {
       mock.calls.push(args);
-      const value = impl ? impl(...args) : undefined;
+      const behaviour = once.length > 0 ? once.shift() : current;
+      const value = behaviour ? behaviour(...args) : undefined;
       mock.results.push({ type: 'return', value });
       return value;
     };
+
     wrapper.mock = mock;
     wrapper.mockClear = () => { mock.calls.length = 0; mock.results.length = 0; return wrapper; };
-    wrapper.mockReturnValue = (value) => jestShim.fn(() => value);
-    wrapper.mockResolvedValue = (value) => jestShim.fn(() => Promise.resolve(value));
-    wrapper.mockImplementation = (fn) => jestShim.fn(fn);
+    wrapper.mockReset = () => { once.length = 0; current = undefined; return wrapper.mockClear(); };
+    wrapper.mockImplementation = (fn) => { current = fn; return wrapper; };
+    wrapper.mockReturnValue = (value) => { current = () => value; return wrapper; };
+    wrapper.mockResolvedValue = (value) => { current = () => Promise.resolve(value); return wrapper; };
+    wrapper.mockRejectedValue = (error) => { current = () => Promise.reject(error); return wrapper; };
+    wrapper.mockImplementationOnce = (fn) => { once.push(fn); return wrapper; };
+    wrapper.mockReturnValueOnce = (value) => { once.push(() => value); return wrapper; };
+    wrapper.mockResolvedValueOnce = (value) => { once.push(() => Promise.resolve(value)); return wrapper; };
+    wrapper.mockRejectedValueOnce = (error) => { once.push(() => Promise.reject(error)); return wrapper; };
     return wrapper;
   },
   spyOn(object, key) {
