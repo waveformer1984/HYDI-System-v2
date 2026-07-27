@@ -79,6 +79,11 @@ class BusinessSignalInterpreter {
       for (const type of this.handledEventTypes) {
         this.eventBus.registry.declareHandled(type, 'BusinessSignalInterpreter');
       }
+      // BusinessSignal is a synthesized internal event consumed by the
+      // Executive OS. It is not a sensor event, so register it and mark it
+      // ignored so it does not register as unknown or dropped coverage.
+      this.eventBus.registry.register('BusinessSignal', 'BusinessSignalInterpreter');
+      this.eventBus.registry.declareIgnored('BusinessSignal', 'internal synthesized event consumed by ExecutiveOperatingSystem');
     }
   }
 

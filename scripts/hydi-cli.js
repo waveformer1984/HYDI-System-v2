@@ -33,29 +33,79 @@ function parseFlags(argv) {
   return { command, flags };
 }
 
-function buildSummary(report, session) {
-  const coverage = SignalCoverage.audit({ registry: session.eventBus.registry });
-  const sensorCheck = report.checks.find((c) => c.name === 'Sensors');
-  const auditCheck = report.checks.find((c) => c.name === 'Audit Ledger');
-  const dashboard = session.evidenceEngine
-    ? session.evidenceEngine.getMeasuredLearningDashboard()
-    : { pendingEvidence: 0 };
+function sensorState(session) {
+  const sensors = (session.sensors || []).map((sensor) =>
+    (typeof sensor.healthCheck === 'function' ? sensor.healthCheck() : { ok: true }));
+  if (sensors.length === 0) return 'offline';
+  const degraded = sensors.filter((h) => h.ok === false);
+  return degraded.length > 0 ? `degraded (${degraded.length} of ${sensors.length})` : 'healthy';
+}
 
-  const hasSignalIssues = coverage.dropped.length || coverage.double.length || coverage.unknown.length;
-  let lastRecommendation = 'none';
-  if (session.recommendationTracker) {
-    const recent = session.recommendationTracker.getRecentRecommendations(1);
-    if (recent.length) lastRecommendation = recent[0].action || 'unknown';
+function signalState(session) {
+  const coverage = session.signalCoverage || SignalCoverage.audit({ registry: session.eventBus.registry });
+  const issues = coverage.dropped.length || coverage.double.length || coverage.unknown.length || coverage.orphan.length;
+  return issues ? 'orphaned' : 'covered';
+}
+
+function auditState(session) {
+  if (!session.auditLedger) return 'not initialized';
+  const verify = session.auditLedger.verify();
+  return verify.ok ? 'chain verified' : `chain broken at record ${verify.failedAt}`;
+}
+
+function learningState(session) {
+  if (!session.evidenceEngine) return 'not initialized';
+  const awaiting = session.evidenceEngine.getAwaitingEvidence ? session.evidenceEngine.getAwaitingEvidence().length : 0;
+  return awaiting > 0 ? `awaiting ${awaiting} measurement${awaiting === 1 ? '' : 's'}` : 'no measured outcomes recorded';
+}
+
+function lastRecommendation(session) {
+  if (!session.recommendationTracker) return 'none';
+  const recent = session.recommendationTracker.getRecentRecommendations(1);
+  return recent.length ? (recent[0].action || 'unknown') : 'none';
+}
+
+function lastDecision(session) {
+  if (session.executiveOS && session.executiveOS.lastBriefing) {
+    return session.executiveOS.lastBriefing.executiveSummary || 'briefing generated';
+  }
+  if (session.executiveOS && Array.isArray(session.executiveOS.decisions) && session.executiveOS.decisions.length) {
+    const last = session.executiveOS.decisions[session.executiveOS.decisions.length - 1];
+    return last.summary || 'decision recorded';
+  }
+  return 'none';
+}
+
+function buildSummary(report, session) {
+  const sensors = sensorState(session);
+  const signals = signalState(session);
+  const audit = auditState(session);
+  const learning = learningState(session);
+  const lastRec = lastRecommendation(session);
+  const lastDec = lastDecision(session);
+
+  let system = 'READY';
+  if (report.status !== 'ready') {
+    system = 'FAILED';
+  } else if (sensors === 'offline') {
+    system = 'DEGRADED — no sensors active';
+  } else if (sensors.startsWith('degraded')) {
+    system = 'DEGRADED — sensor degraded';
+  } else if (signals === 'orphaned') {
+    system = 'DEGRADED — signal coverage issues';
+  } else if (!audit.startsWith('chain verified')) {
+    system = 'DEGRADED — audit chain broken';
   }
 
   return {
-    system: report.status.toUpperCase(),
+    system,
     boot: report.status === 'ready' ? 'Complete' : 'Failed',
-    sensors: sensorCheck && sensorCheck.status === 'healthy' ? 'healthy' : 'degraded',
-    signals: hasSignalIssues ? 'warning' : 'covered',
-    audit: auditCheck && auditCheck.status === 'healthy' ? 'healthy' : 'degraded',
-    learning: dashboard.pendingEvidence > 0 ? 'waiting for measured outcomes' : 'no measured outcomes recorded',
-    lastRecommendation,
+    sensors,
+    signals,
+    audit,
+    learning,
+    lastRecommendation: lastRec,
+    lastExecutiveDecision: lastDec,
   };
 }
 
@@ -83,6 +133,7 @@ function renderStatus(report, session) {
     `Audit: ${s.audit}`,
     `Learning: ${s.learning}`,
     `Last recommendation: ${s.lastRecommendation}`,
+    `Last executive decision: ${s.lastExecutiveDecision}`,
   ];
   return appendIssues(lines, report).join('\n');
 }
@@ -99,6 +150,7 @@ function renderReadiness(report, session) {
     `Audit: ${s.audit}`,
     `Learning: ${s.learning}`,
     `Last recommendation: ${s.lastRecommendation}`,
+    `Last executive decision: ${s.lastExecutiveDecision}`,
     '',
     'Checks:',
   ];
@@ -131,7 +183,8 @@ async function main() {
     }
   }
 
-  process.exit(report.status === 'ready' ? 0 : 1);
+  const summary = buildSummary(report, session);
+  process.exit(summary.system === 'READY' ? 0 : 1);
 }
 
 main().catch((error) => {
