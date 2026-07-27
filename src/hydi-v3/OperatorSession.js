@@ -114,6 +114,7 @@ class OperatorSession {
     this.sessionMemory = null;
     this.conversationEngine = null;
     this.consoleAPI = null;
+    this.certify = null;
 
     this._started = false;
     this._destroyed = false;
@@ -171,6 +172,7 @@ class OperatorSession {
 
     this.auditLedger = new AuditLedger({ dataPath, logger });
     await this.auditLedger.start();
+    this.eventBus.setAuditLedger(this.auditLedger);
     // -----------------------------------------------------------------------
 
     this.memory = new BusinessMemory({ ...shared });
@@ -251,6 +253,13 @@ class OperatorSession {
       this.sessionMemory.setOwnerPriority(this.config.ownerPriority);
     }
 
+    // Lazily required (not at module top) to avoid a circular require: this
+    // module composes an OperatorSession, and OperatorSession composes it
+    // back for `certify`. By the time `certify` is actually invoked, start()
+    // has long since completed, so the lazy require always resolves to the
+    // fully-loaded module from the cache.
+    this.certify = () => require('./HYDIStartupSequence').generateHealthReport(this);
+
     this.conversationEngine = new ConversationEngine({
       cockpit: this.cockpit,
       executiveOS: this.executiveOS,
@@ -262,6 +271,7 @@ class OperatorSession {
       approvalCenter: this.approvalCenter,
       timeline: this.timeline,
       sessionMemory: this.sessionMemory,
+      certify: this.certify,
       logger,
     });
 
@@ -405,8 +415,12 @@ class OperatorSession {
       signalCoverage: !this.signalCoverage || this.signalCoverage.ok,
     };
     // Sensors are reported but never gate overall health: a repository that is
-    // absent or unreadable is a missing observation, not a broken system.
-    const sensors = this.sensors.map((sensor) => sensor.healthCheck());
+    // absent or unreadable is a missing observation, not a broken system. Not
+    // every sensor implements healthCheck() (FilesystemMonitor currently does
+    // not), so a missing method is reported rather than left to throw.
+    const sensors = this.sensors.map((sensor) => (typeof sensor.healthCheck === 'function'
+      ? sensor.healthCheck()
+      : { ok: true, note: `${sensor.constructor.name} has no healthCheck() implemented` }));
     return { ok: Object.values(parts).every(Boolean), checks: parts, sensors };
   }
 

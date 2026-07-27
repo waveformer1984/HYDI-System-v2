@@ -48,6 +48,7 @@ class ConversationEngine {
     this.approvalCenter = config.approvalCenter || null;
     this.timeline = config.timeline || null;
     this.sessionMemory = config.sessionMemory || null;
+    this.certify = config.certify || null;
     this.logger = config.logger || console;
 
     // Transient, re-derived-each-turn caches. Not persisted: they are cheap
@@ -108,6 +109,8 @@ class ConversationEngine {
     if (/^what should (we|i) build( today)?\??$/.test(t)) return this._buildToday();
     if (/^what'?s blocking (revenue|sales)\??$/.test(t) || /^what is blocking (revenue|sales)\??$/.test(t)) return this._blockingRevenue();
     if (/^what can you do (without me|autonomously|on your own)\??$/.test(t)) return this._autonomousCapabilities();
+    if (/^review status\??$/.test(t) || /^midday review\??$/.test(t)) return this._delegate('review status');
+    if (/^daily close\??$/.test(t) || /^end of day\??$/.test(t)) return this._delegate('daily close');
 
     let m;
     if ((m = t.match(/^what about (.+?)\??$/))) return this._whatAbout(m[1]);
@@ -118,8 +121,10 @@ class ConversationEngine {
     if ((m = t.match(/^show (approvals|approval center)$/))) return this._showApprovals();
     if ((m = t.match(/^show (.+)$/))) return this._showAgent(m[1]);
     if ((m = t.match(/^focus (?:on )?(.+)$/))) return this._focus(m[1]);
-    if (/^recommend(ations)?$/.test(t)) return this._recommend();
+    if (/^recommend$/.test(t)) return this._recommend();
+    if (/^recommendations$/.test(t)) return this._delegate('recommendations');
     if (/^timeline$/.test(t)) return this._timeline();
+    if (/^hydi health$/.test(t)) return this._systemStatus();
     if (/^(business )?health$/.test(t)) return this._health();
     if (/^backup$/.test(t)) return this._backup();
 
@@ -396,6 +401,15 @@ class ConversationEngine {
     return this._respond('timeline', { text: lines.join('\n'), items });
   }
 
+  _systemStatus() {
+    if (!this.certify) return this._delegate('hydi health');
+    // Lazily required to avoid a circular require with HYDIStartupSequence,
+    // which itself constructs an OperatorSession (which constructs this).
+    const { toStatusText } = require('./HYDIStartupSequence');
+    const report = this.certify();
+    return this._respond('system-status', { text: toStatusText(report), report });
+  }
+
   _health() {
     const health = this.buildBusinessHealth();
     const lines = [
@@ -424,7 +438,7 @@ class ConversationEngine {
       '  what about <objective or agent> | focus <resonate|revenue|manufacturing|...>',
       '  show approvals | show <agent domain> | approve <id|it> | reject <id|it>',
       '  explain recommendation <n> | modify <id> <notes> | simulate [<id>]',
-      '  recommend | timeline | health | backup | help',
+      '  recommend | timeline | health | hydi health | backup | help',
     ];
     return this._respond('help', { text: lines.join('\n') });
   }

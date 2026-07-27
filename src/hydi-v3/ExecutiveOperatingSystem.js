@@ -161,6 +161,7 @@ class ExecutiveOperatingSystem extends EventEmitter {
             interpretation: p.interpretation,
           },
         });
+        this._syncBusinessMemory(p, id);
       } catch (e) {
         this.config.logger.error('[ExecutiveOS] failed to record activity', { error: e instanceof Error ? e.message : String(e) });
       }
@@ -185,6 +186,79 @@ class ExecutiveOperatingSystem extends EventEmitter {
     }
 
     this.emit('business-signal-processed', { id, project: p.project, objective: p.strategicObjective });
+  }
+
+  _syncBusinessMemory(p, eventId) {
+    const projectName = p.project || 'unknown';
+    const projectId = `project_${this._slug(projectName)}`;
+    const project = this.memory.get(projectId);
+    this.memory.put({
+      id: projectId,
+      type: 'project',
+      name: projectName,
+      status: 'active',
+      value: (project ? project.value : 1) + 1,
+      tags: [p.strategicObjective, p.subsystem, 'project', projectName.toLowerCase()].filter(Boolean),
+      payload: {
+        lastSignal: eventId,
+        lastInterpretation: p.interpretation,
+        objective: p.strategicObjective,
+      },
+    });
+
+    if (p.strategicObjective === 'revenue' && Number.isFinite(p.amount)) {
+      const financialId = `financial_${this._slug(projectName)}`;
+      const financial = this.memory.get(financialId);
+      this.memory.put({
+        id: financialId,
+        type: 'activity',
+        name: `Revenue for ${projectName}`,
+        value: (financial ? financial.value : 1) + p.amount,
+        tags: ['revenue', 'financial', p.currency || 'USD', projectName.toLowerCase()].filter(Boolean),
+        payload: { lastAmount: p.amount, currency: p.currency, lastSignal: eventId },
+      });
+    }
+
+    if (p.equipmentId) {
+      const equipmentId = `equipment_${this._slug(p.equipmentId)}`;
+      this.memory.put({
+        id: equipmentId,
+        type: 'equipment',
+        name: p.equipmentName || p.equipmentId,
+        status: this._deriveEquipmentStatus(p),
+        value: Number.isFinite(p.materialRemaining) ? p.materialRemaining : 0,
+        tags: ['manufacturing', 'equipment', (p.impact || '').toString().toLowerCase()].filter(Boolean),
+        payload: { equipmentId: p.equipmentId, lastSignal: eventId },
+      });
+    }
+
+    if (p.customer) {
+      const clientId = `client_${this._slug(p.customer)}`;
+      this.memory.put({
+        id: clientId,
+        type: 'client',
+        name: p.customer,
+        status: 'active',
+        value: 1,
+        tags: ['customer', 'revenue', projectName.toLowerCase()].filter(Boolean),
+        payload: { lastSignal: eventId },
+      });
+    }
+  }
+
+  _slug(value) {
+    return String(value).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'x';
+  }
+
+  _deriveEquipmentStatus(p) {
+    if (p.originatingEvent === 'PrinterFailed') return 'failed';
+    if (p.originatingEvent === 'PrinterOffline') return 'offline';
+    if (p.originatingEvent === 'PrinterIdle') return 'idle';
+    if (p.originatingEvent === 'PrinterCompleted') return 'completed';
+    if (p.originatingEvent === 'PrinterStarted' || p.originatingEvent === 'PrinterResumed') return 'printing';
+    if (p.originatingEvent === 'PrinterPaused') return 'paused';
+    if (p.originatingEvent === 'MaterialLow') return 'low-material';
+    return p.status || 'active';
   }
 
   healthCheck() {
@@ -429,9 +503,13 @@ class ExecutiveOperatingSystem extends EventEmitter {
       }
     }
 
-    // Equipment problems
+    // Equipment problems. Offline/failed is a stopped production line, not
+    // scheduled downtime, so it is reported at higher severity than a planned
+    // maintenance/degraded status.
     for (const e of equipment) {
-      if (e.status === 'maintenance' || e.status === 'degraded') {
+      if (e.status === 'offline' || e.status === 'failed') {
+        risks.push({ severity: 'high', category: 'equipment', entity: e.id, name: e.name, detail: `Status: ${e.status}` });
+      } else if (e.status === 'maintenance' || e.status === 'degraded') {
         risks.push({ severity: 'medium', category: 'equipment', entity: e.id, name: e.name, detail: `Status: ${e.status}` });
       }
     }

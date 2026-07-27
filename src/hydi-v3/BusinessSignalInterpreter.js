@@ -58,7 +58,8 @@ class BusinessSignalInterpreter {
       'DirectoryCreated', 'DirectoryDeleted',
       'CommitCreated', 'BranchCreated', 'BranchDeleted', 'BranchStale',
       'WorkingTreeDirty', 'WorkingTreeClean',
-      'RevenueReceived',
+      'RevenueReceived', 'RevenueRefunded', 'InvoicePaid', 'InvoiceOverdue',
+      'SubscriptionStarted', 'SubscriptionCancelled',
     ];
     if (this.eventBus) this.attach(this.eventBus);
   }
@@ -91,7 +92,7 @@ class BusinessSignalInterpreter {
     if (!this.handledEventTypes.includes(event.type)) return null;
     const p = event.payload || {};
 
-    if (event.type === 'RevenueReceived') {
+    if (event.type.startsWith('Revenue') || event.type.startsWith('Invoice') || event.type.startsWith('Subscription')) {
       return this._interpretRevenue(event, p);
     }
 
@@ -124,9 +125,12 @@ class BusinessSignalInterpreter {
   }
 
   _interpretRevenue(event, p) {
-    const amount = Number.isFinite(p.amount) ? p.amount : 0;
+    const eventType = event.type || 'RevenueReceived';
+    const rawAmount = Number.isFinite(p.amount) ? p.amount : 0;
+    const isNegative = ['RevenueRefunded', 'SubscriptionCancelled'].includes(eventType);
+    const amount = isNegative ? -Math.abs(rawAmount) : Math.abs(rawAmount);
     const currency = p.currency || 'USD';
-    const interpretation = this._interpretation('RevenueReceived', { ...p, amount, currency });
+    const interpretation = this._interpretation(eventType, { ...p, amount, currency });
     return {
       type: 'BusinessSignal',
       source: 'BusinessSignalInterpreter',
@@ -135,16 +139,17 @@ class BusinessSignalInterpreter {
         interpretation,
         strategicObjective: 'revenue',
         subsystem: 'Revenue',
-        project: 'Revenue',
+        project: p.project || p.customer || 'Revenue',
         path: p.path,
         fileCategory: 'revenue',
-        originatingEvent: event.type,
+        originatingEvent: eventType,
         confidence: p.confidence || 0.99,
-        impact: this._impact('RevenueReceived', 'revenue'),
+        impact: this._impact(eventType, 'revenue'),
         amount,
         currency,
-        recommendation: this._recommendation('RevenueReceived', p),
-        meta: p,
+        customer: p.customer,
+        recommendation: this._recommendation(eventType, p),
+        meta: { ...p, eventType, amount },
       },
     };
   }
@@ -193,6 +198,36 @@ class BusinessSignalInterpreter {
         const note = p.description ? ` (${p.description})` : '';
         return `Revenue of ${amount} ${currency} received${note}`;
       }
+      case 'RevenueRefunded': {
+        const amount = Math.abs(Number.isFinite(p.amount) ? p.amount : 0);
+        const currency = p.currency || 'USD';
+        const note = p.description ? ` (${p.description})` : '';
+        return `Refund of ${amount} ${currency} issued${note}`;
+      }
+      case 'InvoicePaid': {
+        const amount = Number.isFinite(p.amount) ? p.amount : 0;
+        const currency = p.currency || 'USD';
+        const note = p.description ? ` (${p.description})` : '';
+        return `Invoice of ${amount} ${currency} paid${note}`;
+      }
+      case 'InvoiceOverdue': {
+        const amount = Number.isFinite(p.amount) ? p.amount : 0;
+        const currency = p.currency || 'USD';
+        const note = p.description ? ` (${p.description})` : '';
+        return `Invoice of ${amount} ${currency} is overdue${note}`;
+      }
+      case 'SubscriptionStarted': {
+        const amount = Number.isFinite(p.amount) ? p.amount : 0;
+        const currency = p.currency || 'USD';
+        const note = p.description ? ` (${p.description})` : '';
+        return `Subscription started: ${amount} ${currency}${note}`;
+      }
+      case 'SubscriptionCancelled': {
+        const amount = Math.abs(Number.isFinite(p.amount) ? p.amount : 0);
+        const currency = p.currency || 'USD';
+        const note = p.description ? ` (${p.description})` : '';
+        return `Subscription cancelled, recurring revenue reduced by ${amount} ${currency}${note}`;
+      }
 
       default: return null;
     }
@@ -200,6 +235,11 @@ class BusinessSignalInterpreter {
 
   _impact(type, fileCategory) {
     if (type === 'RevenueReceived') return 'revenue-positive';
+    if (type === 'RevenueRefunded') return 'revenue-negative';
+    if (type === 'InvoicePaid') return 'revenue-positive';
+    if (type === 'InvoiceOverdue') return 'revenue-risk';
+    if (type === 'SubscriptionStarted') return 'revenue-positive';
+    if (type === 'SubscriptionCancelled') return 'revenue-negative';
     if (type === 'BuildArtifactGenerated') return 'artifact-output';
     if (type === 'ProjectInactive') return 'risk-stale';
     if (type === 'CommitCreated') return 'engineering-delivered';
@@ -215,10 +255,15 @@ class BusinessSignalInterpreter {
   }
 
   _recommendation(type, _p) {
-    if (type === 'RevenueReceived') {
-      return 'Record revenue in the ledger and notify the Finance agent.';
-    }
-    return null;
+    const map = {
+      RevenueReceived: 'Record revenue in the ledger and notify the Finance agent.',
+      RevenueRefunded: 'Process refund and update revenue recognition.',
+      InvoicePaid: 'Mark invoice as paid and reconcile accounts.',
+      InvoiceOverdue: 'Follow up on overdue invoice; cash-flow risk.',
+      SubscriptionStarted: 'Add subscription to recurring revenue tracking.',
+      SubscriptionCancelled: 'Cancel subscription and adjust churn forecast.',
+    };
+    return map[type] || null;
   }
 }
 
