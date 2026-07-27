@@ -236,6 +236,8 @@ class OperatorSession {
       executionGateway: this.executionGateway,
       workflowEngine: this.workflowEngine,
       strategicObjectives: this.strategicObjectives,
+      businessEvidenceEngine: this.evidenceEngine,
+      trustEngine: this.executiveOS ? this.executiveOS.trustEngine : null,
     });
 
     this.timeline = new ExecutiveTimeline({

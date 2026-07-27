@@ -327,15 +327,19 @@ class ConversationEngine {
     if (!explained.ok) return this._respond('explain-approval', { text: explained.message });
     this.lastMentionedApprovalId = id;
     const lines = [
+      `Recommendation: ${explained.recommendation}`,
       `Why: ${explained.why}`,
       `Expected outcome: ${explained.expectedOutcome}`,
       `Business impact: ${explained.businessImpact}`,
       `Risk: ${explained.risk}`,
+      `Undo path: ${explained.undoPath}`,
+      `Audit consequences: ${explained.auditConsequences}`,
       `Estimated effort: ${explained.estimatedEffort}`,
       `Strategic objective: ${explained.strategicObjective}`,
       `Confidence: ${explained.confidence}`,
       `Required approval: ${explained.requiredApproval}`,
       `Responsible agent: ${explained.responsibleAgent}`,
+      `Evidence: ${explained.evidence}`,
     ];
     return this._respond('explain-approval', { text: lines.join('\n'), explanation: explained });
   }

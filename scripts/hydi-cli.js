@@ -24,14 +24,21 @@ const HYDIContinuousRuntime = require('../src/hydi-v3/HYDIContinuousRuntime');
 function parseFlags(argv) {
   const args = argv.slice(2);
   const command = args[0];
-  const flags = {};
-  for (let i = 1; i < args.length; i++) {
-    if (args[i] === '--data-path' && args[i + 1]) {
-      flags.dataPath = args[i + 1];
-      i++;
-    }
+  let id = null;
+  let flagStart = 1;
+  if (args[1] && !args[1].startsWith('--')) {
+    id = args[1];
+    flagStart = 2;
   }
-  return { command, flags };
+  const flags = {};
+  for (let i = flagStart; i < args.length; i++) {
+    if (args[i] === '--data-path' && args[i + 1]) { flags.dataPath = args[i + 1]; i++; }
+    else if (args[i] === '--result' && args[i + 1]) { flags.result = args[i + 1]; i++; }
+    else if (args[i] === '--value' && args[i + 1]) { flags.value = args[i + 1]; i++; }
+    else if (args[i] === '--source' && args[i + 1]) { flags.source = args[i + 1]; i++; }
+    else if (args[i] === '--notes' && args[i + 1]) { flags.notes = args[i + 1]; i++; }
+  }
+  return { command, id, flags };
 }
 
 function sensorState(session) {
@@ -166,19 +173,118 @@ function renderReadiness(report, session) {
   return appendIssues(lines, report).join('\n');
 }
 
+function renderHealth(report, session) {
+  const lines = ['HYDI HEALTH', ''];
+  for (const check of report.checks) {
+    const state = check.status === 'healthy' ? 'OK' : 'NOT OK';
+    lines.push(`  ${check.name}: ${state}${check.detail ? ` (${check.detail})` : ''}`);
+  }
+  if (session && typeof session.certify === 'function') {
+    const certify = session.certify();
+    if (certify.warnings.length) {
+      lines.push('', 'Warnings:');
+      for (const w of certify.warnings) lines.push(`  - ${w}`);
+    }
+    if (certify.failures.length) {
+      lines.push('', 'Failures:');
+      for (const f of certify.failures) lines.push(`  - ${f.step}: ${f.error}`);
+    }
+  }
+  return lines.join('\n');
+}
+
+function formatRec(r) {
+  const conf = (r.confidence * 100).toFixed(0);
+  const observed = r.observedOutcome ? ` — ${r.observedOutcome.type}` : '';
+  return `- ${r.action || 'Unknown'} (${conf}%${observed})`;
+}
+
+function renderMemoryReview(session) {
+  const decisions = (session.executiveOS && Array.isArray(session.executiveOS.decisions)
+    ? session.executiveOS.decisions.slice(-5)
+    : []);
+  const actions = (session.executionGateway
+    ? session.executionGateway.getExecutionHistory({}).slice(0, 5)
+    : []);
+  const recs = (session.recommendationTracker
+    ? session.recommendationTracker.getRecentRecommendations(20)
+    : []);
+  const measured = recs.filter((r) => r.observedOutcome).slice(0, 5);
+  const changed = recs.filter((r) => r.confidenceHistory && r.confidenceHistory.length > 1).slice(0, 5);
+  const lessons = (session.learningMetrics
+    ? (session.learningMetrics.getDashboardData().recentLessons || [])
+    : []);
+
+  const lines = ['HYDI MEMORY REVIEW', ''];
+
+  lines.push('Recent decisions:');
+  lines.push(...(decisions.length ? decisions.map((d) => `- ${d.summary || 'decision'} @ ${new Date(d.at || Date.now()).toISOString()}`) : ['No decisions recorded.']));
+  lines.push('', 'Recent actions:');
+  lines.push(...(actions.length ? actions.map((a) => `- [${a.status}] ${a.type} (${a.adapter}) @ ${new Date(a.timestamp).toISOString()}`) : ['No actions recorded.']));
+  lines.push('', 'Measured outcomes:');
+  lines.push(...(measured.length ? measured.map(formatRec) : ['No measured outcomes yet.']));
+  lines.push('', 'Confidence changes:');
+  lines.push(...(changed.length ? changed.map((r) => {
+    const h = r.confidenceHistory;
+    const first = h[0].confidence;
+    const last = h[h.length - 1].confidence;
+    return `- ${r.action || 'Unknown'}: ${(first * 100).toFixed(0)}% → ${(last * 100).toFixed(0)}%`;
+  }) : ['No confidence changes yet.']));
+  lines.push('', 'Lessons learned:');
+  lines.push(...(lessons.length ? lessons.slice(0, 5).map((l) => `- ${l.lesson}`) : ['No lessons recorded.']));
+
+  return lines.join('\n');
+}
+
+async function runOutcome(session, recommendationId, flags) {
+  if (!recommendationId) throw new Error('Recommendation id required. Usage: hydi outcome <id> --result <successful|unsuccessful|unknown> [--value <n>] [--source <text>] [--notes <text>]');
+  const rec = session.recommendationTracker.getRecommendation(recommendationId);
+  if (!rec) throw new Error(`Recommendation ${recommendationId} not found.`);
+
+  const resultMap = { successful: 'successful', unsuccessful: 'failed', unknown: 'unknown' };
+  const result = flags.result ? String(flags.result).toLowerCase() : null;
+  if (!result || !resultMap[result]) throw new Error('Invalid --result. Use successful, unsuccessful, or unknown.');
+
+  const numericValue = flags.value !== undefined ? Number(flags.value) : NaN;
+  const hasNumeric = Number.isFinite(numericValue);
+  const hasSource = !!flags.source;
+  const measured = hasNumeric && hasSource;
+
+  const outcome = session.businessOutcomeEngine.recordOutcome(recommendationId, {
+    value: measured ? numericValue : null,
+    type: resultMap[result],
+    measured,
+    provenance: measured ? flags.source : 'operator-qualitative',
+    lesson: flags.notes || (measured ? 'Measured outcome recorded.' : 'Qualitative outcome recorded.'),
+  });
+
+  const lines = [
+    `Outcome recorded for ${recommendationId}`,
+    `Result: ${outcome.type || resultMap[result]}`,
+    `Measured: ${measured ? `yes (${numericValue}, source: ${flags.source})` : 'no'}`,
+    `Confidence: ${(outcome.confidence * 100).toFixed(0)}%`,
+    `Confidence delta: ${outcome.confidenceDelta.toFixed(4)}`,
+    `Lesson: ${outcome.lesson}`,
+  ];
+  if (!measured) lines.push('(Learning unchanged because no measured value with provenance was provided.)');
+  return lines.join('\n');
+}
+
 async function main() {
-  const { command, flags } = parseFlags(process.argv);
+  const { command, id, flags } = parseFlags(process.argv);
   const dataPath = flags.dataPath
     ? path.resolve(process.cwd(), flags.dataPath)
     : path.resolve(__dirname, '..', 'data');
+  const logger = { log: () => {}, warn: () => {}, error: () => {} };
 
-  if (!command || (command !== 'status' && command !== 'readiness')) {
-    console.error('Usage: hydi <status|readiness> [--data-path <dir>]');
+  const validCommands = ['status', 'readiness', 'health', 'outcome', 'memory-review'];
+  if (!command || !validCommands.includes(command)) {
+    console.error('Usage: hydi <status|readiness|health|outcome|memory-review> [--data-path <dir>]');
     process.exit(1);
   }
 
   if (command === 'readiness') {
-    const report = await boot({ dataPath, logger: { log: () => {}, warn: () => {}, error: () => {} } });
+    const report = await boot({ dataPath, logger });
     const { session } = report;
     try {
       console.log(renderReadiness(report, session));
@@ -191,16 +297,41 @@ async function main() {
     process.exit(summary.system === 'READY' ? 0 : 1);
   }
 
-  const runtime = new HYDIContinuousRuntime({ dataPath, logger: { log: () => {}, warn: () => {}, error: () => {} } });
-  let status;
+  if (command === 'health') {
+    const report = await boot({ dataPath, logger });
+    const { session } = report;
+    try {
+      console.log(renderHealth(report, session));
+    } finally {
+      if (session && typeof session.destroy === 'function') {
+        await session.destroy().catch(() => {});
+      }
+    }
+    process.exit(report.status === 'ready' ? 0 : 1);
+  }
+
+  const runtime = new HYDIContinuousRuntime({ dataPath, logger, healthIntervalMs: 60000 });
+  let output;
+  let exitCode = 0;
   try {
     await runtime.start();
-    status = runtime.getStatus();
-    console.log(renderOperatingState(status, runtime.session));
+    if (command === 'status') {
+      const status = runtime.getStatus();
+      output = renderOperatingState(status, runtime.session);
+      exitCode = status.state === 'READY' ? 0 : 1;
+    } else if (command === 'memory-review') {
+      output = renderMemoryReview(runtime.session);
+    } else if (command === 'outcome') {
+      output = await runOutcome(runtime.session, id, flags);
+    }
+    console.log(output);
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    exitCode = 1;
   } finally {
     await runtime.stop().catch(() => {});
   }
-  process.exit(status && status.state === 'READY' ? 0 : 1);
+  process.exit(exitCode);
 }
 
 main().catch((error) => {

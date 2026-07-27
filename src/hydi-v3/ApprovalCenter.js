@@ -13,11 +13,15 @@
  * ExecutiveCockpit's approve/reject delegation, just with richer records and
  * two extra verbs (explain, simulate, request modification).
  */
+const STALE_APPROVAL_MS = 60 * 60 * 1000;
+
 class ApprovalCenter {
   constructor(config = {}) {
     this.executionGateway = config.executionGateway || null;
     this.workflowEngine = config.workflowEngine || null;
     this.strategicObjectives = config.strategicObjectives || null;
+    this.businessEvidenceEngine = config.businessEvidenceEngine || null;
+    this.trustEngine = config.trustEngine || null;
   }
 
   healthCheck() {
@@ -51,12 +55,13 @@ class ApprovalCenter {
   async approve(id) {
     const record = this.get(id);
     if (!record) return { id, ok: false, message: `No pending approval found for "${id}".` };
+    const stale = record.requestedAt && (Date.now() - record.requestedAt) > STALE_APPROVAL_MS;
     if (record.kind === 'execution') {
       const result = await this.executionGateway.approve(id);
-      return { id, ok: true, kind: 'execution', result };
+      return { id, ok: true, kind: 'execution', result, stale, warning: stale ? 'This approval is stale; verify the situation is unchanged.' : undefined };
     }
     const approved = this.workflowEngine.approveWorkflow(id);
-    return { id, ok: approved, kind: 'workflow', message: approved ? 'Workflow approved.' : 'Workflow was already approved.' };
+    return { id, ok: approved, kind: 'workflow', message: approved ? 'Workflow approved.' : 'Workflow was already approved.', stale, warning: stale ? 'This approval is stale; verify the situation is unchanged.' : undefined };
   }
 
   reject(id) {
@@ -109,24 +114,53 @@ class ApprovalCenter {
   }
 
   /** Every recommendation/approval must answer: why, expected outcome, business
-   * impact, risk, effort, strategic objective, confidence, required approval. */
+   * impact, risk, effort, strategic objective, confidence, required approval,
+   * evidence, undo path, and audit consequences. */
   explain(id) {
     const record = this.get(id);
     if (!record) return { id, ok: false, message: `No pending approval found for "${id}".` };
+
+    const evidenceSummary = this.businessEvidenceEngine
+      ? this.businessEvidenceEngine.getEvidenceSummary(id)
+      : null;
+    const evidenceItems = evidenceSummary && evidenceSummary.evidence
+      ? evidenceSummary.evidence.map((e) => `${e.source} (${e.measurementType || 'unknown'})`)
+      : [];
+
+    let undoPath = 'No undo information available.';
+    if (record.kind === 'execution' && this.trustEngine && this.executionGateway) {
+      const action = { id: record.id, adapter: record.executionPlan[1] && record.executionPlan[1].adapter };
+      undoPath = this.trustEngine.canUndo(action, this.executionGateway.adapters)
+        ? 'A matching adapter undo is available; execution can be reversed.'
+        : 'This action does not provide an undo mechanism.';
+    } else if (record.kind === 'workflow') {
+      undoPath = 'Workflows require manual rollback if approved.';
+    }
+
+    const auditConsequences = record.kind === 'execution'
+      ? 'Approving records action-approved and action-executed entries. Rejecting records action-rejected.'
+      : 'Approving records workflow-approved. Rejecting records workflow-rejected.';
+
     return {
       id,
       ok: true,
+      recommendation: record.title,
       why: record.expectedImpact,
+      whyItExists: record.expectedImpact,
       expectedOutcome: record.executionPlan.length
         ? `Completing ${record.executionPlan.length} step(s): ${record.executionPlan.map((s) => s.name || s.step).join(', ')}`
         : 'No execution plan recorded.',
       businessImpact: `Business value ${record.businessValue}`,
+      expectedImpact: `Business value ${record.businessValue}`,
       risk: record.risk,
+      undoPath,
+      auditConsequences,
       estimatedEffort: record.requiredEffort,
       strategicObjective: record.objective || 'None matched.',
       confidence: record.confidence,
       requiredApproval: 'Yes — currently awaiting operator decision.',
       responsibleAgent: record.responsibleAgent,
+      evidence: evidenceItems.length ? evidenceItems.join(', ') : 'No evidence collected yet.',
     };
   }
 
