@@ -11,7 +11,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "lint:hydi-v3": "eslint src/hydi-v3 tests/unit/hydi-v3 tests/integration/hydi-production-failure-modes.test.js pages/api/cockpit pages/api/console scripts/performance-benchmark.js scripts/security-audit.js scripts/soak-test-v3.js scripts/operator-cli.js scripts/console-benchmark.js scripts/hydi-demo.js scripts/hydi-cli.js scripts/hydi-operational-demo.js",
+    "lint:hydi-v3": "eslint src/hydi-v3 tests/unit/hydi-v3 tests/integration/hydi-production-failure-modes.test.js tests/integration/hydi-morning-executive-simulation.test.js pages/api/cockpit pages/api/console scripts/performance-benchmark.js scripts/security-audit.js scripts/soak-test-v3.js scripts/operator-cli.js scripts/console-benchmark.js scripts/hydi-demo.js scripts/hydi-cli.js scripts/hydi-operational-demo.js",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",

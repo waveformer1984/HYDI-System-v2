@@ -54,8 +54,17 @@ class PrinterSensor extends EquipmentSensor {
       'PrinterStarted', 'PrinterPaused', 'PrinterResumed', 'PrinterCompleted',
       'PrinterFailed', 'PrinterIdle', 'PrinterHeating', 'PrinterOffline', 'MaterialLow',
     ];
+    const schema = {
+      fields: ['equipmentId', 'equipmentName', 'equipmentType', 'material', 'temperature', 'progress', 'materialRemaining'],
+    };
     for (const type of types) {
-      this.eventBus.registry.register(type, 'PrinterSensor', { domain: 'manufacturing' });
+      this.eventBus.registry.register(type, 'PrinterSensor', {
+        domain: 'manufacturing',
+        source: 'PrinterSensor',
+        measurement: 'activity',
+        strategicObjective: 'manufacturing',
+        schema,
+      });
     }
   }
 

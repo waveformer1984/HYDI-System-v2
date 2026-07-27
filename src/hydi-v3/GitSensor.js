@@ -83,8 +83,17 @@ class GitSensor extends EventEmitter {
       'CommitCreated', 'BranchCreated', 'BranchDeleted',
       'WorkingTreeDirty', 'WorkingTreeClean', 'BranchStale',
     ];
+    const schema = {
+      fields: ['project', 'sha', 'shortSha', 'author', 'subject', 'committedAt', 'branch', 'fileCount', 'files', 'relPath'],
+    };
     for (const type of types) {
-      this.eventBus.registry.register(type, 'GitSensor', { domain: 'git' });
+      this.eventBus.registry.register(type, 'GitSensor', {
+        domain: 'git',
+        source: 'GitSensor',
+        measurement: 'activity',
+        strategicObjective: 'operations',
+        schema,
+      });
     }
   }
 

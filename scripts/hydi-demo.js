@@ -21,15 +21,18 @@
 const os = require('os');
 const path = require('path');
 const fs = require('fs').promises;
-const OperatorSession = require('../src/hydi-v3/OperatorSession');
+const { boot } = require('../src/hydi-v3/HYDIOperationalBoot');
 
 const SILENT = { log: () => {}, error: () => {}, warn: () => {} };
 
 async function main() {
   const dataPath = path.join(os.tmpdir(), `hydi-demo-${Date.now()}`);
   await fs.mkdir(dataPath, { recursive: true });
-  const session = new OperatorSession({ dataPath, logger: SILENT });
-  await session.start();
+  const report = await boot({ dataPath, logger: SILENT });
+  if (report.status !== 'ready' || !report.session) {
+    throw new Error(`HYDI boot failed: ${report.failures.map((f) => `${f.step}: ${f.error}`).join('; ')}`);
+  }
+  const session = report.session;
 
   // Seed one realistic scenario: active Resonate development, plus the
   // milestone it is building toward, expressed as a scored opportunity so
@@ -97,7 +100,7 @@ async function main() {
   const evidenceSummary = top.id ? session.evidenceEngine.getEvidenceSummary(top.id) : { evidence: [] };
   const justification = session.executiveOS.trustEngine.formatJustification(top, session.executionGateway.adapters);
 
-  const report = {
+  const demoReport = {
     generatedAt: new Date().toISOString(),
     priority,
     recommendedAction: action,
@@ -108,7 +111,7 @@ async function main() {
     justification,
   };
 
-  console.log(JSON.stringify(report, null, 2));
+  console.log(JSON.stringify(demoReport, null, 2));
 
   await session.destroy();
   await fs.rm(dataPath, { recursive: true, force: true }).catch(() => {});

@@ -69,8 +69,17 @@ class FilesystemMonitor extends EventEmitter {
       'FileCreated', 'FileModified', 'FileDeleted',
       'DirectoryCreated', 'DirectoryDeleted',
     ];
+    const schema = {
+      fields: ['project', 'root', 'path', 'relPath', 'size', 'mtime', 'source'],
+    };
     for (const type of types) {
-      this.eventBus.registry.register(type, 'FilesystemMonitor', { domain: 'filesystem' });
+      this.eventBus.registry.register(type, 'FilesystemMonitor', {
+        domain: 'filesystem',
+        source: 'FilesystemMonitor',
+        measurement: 'activity',
+        strategicObjective: 'operations',
+        schema,
+      });
     }
   }
 

@@ -54,11 +54,19 @@ function manufacturingExtractor(event) {
 
 function financialExtractor(event) {
   const p = event.payload || {};
-  if (event.type === 'RevenueReceived' || event.type === 'PaymentReceived') {
-    const value = Number(p.amount);
-    if (!Number.isFinite(value)) return null;
+  const financialTypes = [
+    'RevenueReceived', 'RevenueRefunded', 'InvoicePaid', 'InvoiceOverdue',
+    'SubscriptionStarted', 'SubscriptionCancelled', 'PaymentReceived',
+  ];
+  if (financialTypes.includes(event.type)) {
+    const raw = Number(p.amount);
+    if (!Number.isFinite(raw)) return null;
+    const isNegative = ['RevenueRefunded', 'SubscriptionCancelled'].includes(event.type);
+    const value = isNegative ? -Math.abs(raw) : Math.abs(raw);
+    const isCashEvent = ['RevenueReceived', 'RevenueRefunded', 'InvoicePaid', 'SubscriptionStarted', 'SubscriptionCancelled', 'PaymentReceived'].includes(event.type);
+    const measurementType = isCashEvent ? 'quantitative' : 'qualitative';
     return makeItem(event, 'financial', {
-      measurementType: 'quantitative',
+      measurementType,
       relevance: 1.0,
       weight: 1.0,
       confidence: Number.isFinite(p.confidence) ? p.confidence : 0.95,
@@ -67,7 +75,7 @@ function financialExtractor(event) {
       precision: p.precision || 0.01,
       provenance: p.provenance || `ledger:${p.ledger || 'unknown'}`,
       data: { value, description: p.description || `${event.type}` },
-      tags: ['financial', 'revenue', p.currency].filter(Boolean),
+      tags: ['financial', isCashEvent ? 'revenue' : 'liability', p.currency].filter(Boolean),
     });
   }
   return makeItem(event, 'financial', { measurementType: 'activity' });

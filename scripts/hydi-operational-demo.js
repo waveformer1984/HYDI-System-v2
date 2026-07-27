@@ -20,7 +20,7 @@
 const os = require('os');
 const path = require('path');
 const fs = require('fs').promises;
-const OperatorSession = require('../src/hydi-v3/OperatorSession');
+const { boot } = require('../src/hydi-v3/HYDIOperationalBoot');
 
 const SILENT = { log: () => {}, warn: () => {}, error: () => {} };
 
@@ -28,12 +28,15 @@ async function main() {
   const dataPath = path.join(os.tmpdir(), `hydi-operational-demo-${Date.now()}`);
   await fs.mkdir(dataPath, { recursive: true });
 
-  const session = new OperatorSession({
+  const report = await boot({
     dataPath,
     ownerPriority: 'manufacturing',
     logger: SILENT,
   });
-  await session.start();
+  if (report.status !== 'ready' || !report.session) {
+    throw new Error(`HYDI boot failed: ${report.failures.map((f) => `${f.step}: ${f.error}`).join('; ')}`);
+  }
+  const session = report.session;
 
   // Seed a previously measured outcome so the briefing has real learning to show.
   // This is a controlled, simulated historical measurement, not a fabricated

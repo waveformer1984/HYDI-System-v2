@@ -6,8 +6,8 @@
  * `hydi status` and `hydi readiness` command-line surface.
  *
  * This script is a thin shell over `HYDIOperationalBoot`. It boots the full
- * HYDI executive stack, prints a human-readable status or readiness report, and
- * then drains the session. No logic is duplicated from the operational boot
+ * HYDI executive stack, prints an operator-friendly status or readiness report,
+ * and then drains the session. No logic is duplicated from the operational boot
  * sequence, the session, or the briefing renderer.
  *
  * Usage:
@@ -17,7 +17,7 @@
  */
 
 const path = require('path');
-const { boot, statusText } = require('../src/hydi-v3/HYDIOperationalBoot');
+const { boot } = require('../src/hydi-v3/HYDIOperationalBoot');
 const SignalCoverage = require('../src/hydi-v3/SignalCoverage');
 
 function parseFlags(argv) {
@@ -33,33 +33,33 @@ function parseFlags(argv) {
   return { command, flags };
 }
 
-function renderStatus(report, session) {
+function buildSummary(report, session) {
   const coverage = SignalCoverage.audit({ registry: session.eventBus.registry });
-  const dashboard = session.evidenceEngine ? session.evidenceEngine.getMeasuredLearningDashboard() : { pendingEvidence: 0 };
-  const audit = session.auditLedger ? session.auditLedger.verify() : { ok: false };
+  const sensorCheck = report.checks.find((c) => c.name === 'Sensors');
+  const auditCheck = report.checks.find((c) => c.name === 'Audit Ledger');
+  const dashboard = session.evidenceEngine
+    ? session.evidenceEngine.getMeasuredLearningDashboard()
+    : { pendingEvidence: 0 };
 
-  let lastAction = 'none';
-  if (session.executionGateway) {
-    const executed = session.executionGateway.getAuditTrail({ category: 'action-executed' });
-    const last = executed.sort((a, b) => (b.at || 0) - (a.at || 0))[0];
-    if (last) {
-      const payload = last.payload || {};
-      lastAction = `${payload.type || 'action'} ${payload.status || 'completed'}`;
-    }
+  const hasSignalIssues = coverage.dropped.length || coverage.double.length || coverage.unknown.length;
+  let lastRecommendation = 'none';
+  if (session.recommendationTracker) {
+    const recent = session.recommendationTracker.getRecentRecommendations(1);
+    if (recent.length) lastRecommendation = recent[0].action || 'unknown';
   }
 
-  const lines = [
-    'HYDI STATUS',
-    '',
-    `System: ${report.status.toUpperCase()}`,
-    `Sensors: ${session.sensors.length} active`,
-    `Signals: ${coverage.matrix.length} covered`,
-    `Orphaned: ${coverage.orphan.length}`,
-    `Learning: Awaiting ${dashboard.pendingEvidence} measured outcomes`,
-    `Audit: ${audit.ok ? 'Healthy' : 'Degraded'}`,
-    `Last action: ${lastAction}`,
-  ];
+  return {
+    system: report.status.toUpperCase(),
+    boot: report.status === 'ready' ? 'Complete' : 'Failed',
+    sensors: sensorCheck && sensorCheck.status === 'healthy' ? 'healthy' : 'degraded',
+    signals: hasSignalIssues ? 'warning' : 'covered',
+    audit: auditCheck && auditCheck.status === 'healthy' ? 'healthy' : 'degraded',
+    learning: dashboard.pendingEvidence > 0 ? 'waiting for measured outcomes' : 'no measured outcomes recorded',
+    lastRecommendation,
+  };
+}
 
+function appendIssues(lines, report) {
   if (report.warnings.length) {
     lines.push('', 'Warnings:');
     for (const w of report.warnings) lines.push(`  - ${w}`);
@@ -68,8 +68,45 @@ function renderStatus(report, session) {
     lines.push('', 'Failures:');
     for (const f of report.failures) lines.push(`  - ${f.step}: ${f.error}`);
   }
+  return lines;
+}
 
-  return lines.join('\n');
+function renderStatus(report, session) {
+  const s = buildSummary(report, session);
+  const lines = [
+    'HYDI SYSTEM STATUS',
+    '',
+    `System: ${s.system}`,
+    `Boot: ${s.boot}`,
+    `Sensors: ${s.sensors}`,
+    `Signals: ${s.signals}`,
+    `Audit: ${s.audit}`,
+    `Learning: ${s.learning}`,
+    `Last recommendation: ${s.lastRecommendation}`,
+  ];
+  return appendIssues(lines, report).join('\n');
+}
+
+function renderReadiness(report, session) {
+  const s = buildSummary(report, session);
+  const lines = [
+    'HYDI SYSTEM READINESS',
+    '',
+    `System: ${s.system}`,
+    `Boot: ${s.boot}`,
+    `Sensors: ${s.sensors}`,
+    `Signals: ${s.signals}`,
+    `Audit: ${s.audit}`,
+    `Learning: ${s.learning}`,
+    `Last recommendation: ${s.lastRecommendation}`,
+    '',
+    'Checks:',
+  ];
+  for (const check of report.checks) {
+    const state = check.status === 'healthy' ? 'OK' : 'NOT OK';
+    lines.push(`  ${check.name}: ${state}${check.detail ? ` (${check.detail})` : ''}`);
+  }
+  return appendIssues(lines, report).join('\n');
 }
 
 async function main() {
@@ -87,12 +124,7 @@ async function main() {
   const { session } = report;
 
   try {
-    if (command === 'status') {
-      console.log(renderStatus(report, session));
-    } else {
-      console.log('HYDI READINESS');
-      console.log(statusText(report));
-    }
+    console.log(command === 'status' ? renderStatus(report, session) : renderReadiness(report, session));
   } finally {
     if (session && typeof session.destroy === 'function') {
       await session.destroy().catch(() => {});

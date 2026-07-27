@@ -42,7 +42,7 @@
  */
 
 const path = require('path');
-const OperatorSession = require('../src/hydi-v3/OperatorSession');
+const { boot } = require('../src/hydi-v3/HYDIOperationalBoot');
 const OperatorCLI = require('../src/hydi-v3/OperatorCLI');
 const OperatorMode = require('../src/hydi-v3/OperatorMode');
 const OperatorRuntime = require('../src/hydi-v3/OperatorRuntime');
@@ -114,19 +114,27 @@ async function main() {
     offline: !!flags.offline,
   });
 
-  const session = new OperatorSession({
-    dataPath: flags['data-path']
-      ? path.resolve(process.cwd(), String(flags['data-path']))
-      : path.resolve(__dirname, '..', 'data'),
+  const dataPath = flags['data-path']
+    ? path.resolve(process.cwd(), String(flags['data-path']))
+    : path.resolve(__dirname, '..', 'data');
+
+  const report = await boot({
+    dataPath,
     ownerPriority: typeof flags.priority === 'string' ? flags.priority : 'default',
     mode,
     git: gitConfig(flags),
     filesystem: filesystemConfig(flags),
     simulateManufacturing: !!flags['simulate-manufacturing'],
     revenue: revenueConfig(flags),
+    logger: { log: () => {}, warn: console.warn, error: console.error },
   });
 
-  await session.start();
+  if (report.status !== 'ready' || !report.session) {
+    console.error('HYDI failed to boot:', report.failures.map((f) => `${f.step}: ${f.error}`).join('; '));
+    process.exit(1);
+  }
+
+  const session = report.session;
   const cli = new OperatorCLI(session, { colour });
 
   // --once is a one-shot: no readline, no history, but the same shutdown path.

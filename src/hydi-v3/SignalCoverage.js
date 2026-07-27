@@ -79,6 +79,7 @@ function audit(options = {}) {
     unknown: validation.errors
       .filter((e) => e.error === 'unknown event emitted at runtime')
       .map((e) => e.type),
+    stale: registry.getStale ? registry.getStale() : [],
     warnings,
     matrix,
   };

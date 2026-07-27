@@ -29,8 +29,13 @@ class BusinessEventBus extends EventEmitter {
       ...config,
     };
     this.registry = config.registry || null;
+    this.auditLedger = config.auditLedger || null;
     this.history = [];
     this._handlerCount = 1;
+  }
+
+  setAuditLedger(auditLedger) {
+    this.auditLedger = auditLedger || null;
   }
 
   /**
@@ -52,6 +57,14 @@ class BusinessEventBus extends EventEmitter {
       this.registry.recordEmission(type, source);
       if (type === 'BusinessSignal' && payload && payload.originatingEvent) {
         this.registry.recordInterpretation(payload.originatingEvent);
+      }
+      if (!this.registry.isRegistered(type) && this.auditLedger) {
+        this.auditLedger.record({
+          category: 'unknown-event',
+          actor: source || 'unknown',
+          subjectId: type,
+          payload: event,
+        });
       }
     }
     super.emit(type, event);

@@ -120,6 +120,9 @@ class ExecutiveCockpit extends EventEmitter {
     if (/^(measured|measured learning|revenue dashboard)$/.test(t)) return { command: 'measured' };
     if (/^(revenue|revenue sensor|ledger status)$/.test(t)) return { command: 'revenue' };
     if (/^(kpis|business kpis|kpi dashboard)$/.test(t)) return { command: 'kpis' };
+    if (/^(recommendations|recommendation lifecycle|lifecycle)$/.test(t)) return { command: 'recommendations' };
+    if (/^(review status|midday review|status review)$/.test(t)) return { command: 'review-status' };
+    if (/^(daily close|end of day|close)$/.test(t)) return { command: 'daily-close' };
     if (/^review\s+(.+)$/.test(t)) {
       const parts = t.match(/^review\s+(.+)$/)[1].trim().split(/\s+/);
       const id = parts[0];
@@ -180,8 +183,17 @@ class ExecutiveCockpit extends EventEmitter {
       case 'kpis':
         response = this.getKPIDashboard();
         break;
+      case 'recommendations':
+        response = this.getRecommendationsLifecycle();
+        break;
       case 'review':
         response = this.review(parsed.id, parsed.answer);
+        break;
+      case 'review-status':
+        response = this.reviewStatus();
+        break;
+      case 'daily-close':
+        response = this.dailyClose();
         break;
       case 'approve':
         response = await this.approveById(parsed.id);
@@ -460,9 +472,70 @@ class ExecutiveCockpit extends EventEmitter {
     return { text: lines.join('\n'), revenue: total, measurements: quantitative };
   }
 
+  getRecommendationsLifecycle() {
+    const awaitingApproval = this.executionGateway && typeof this.executionGateway.listPending === 'function'
+      ? this.executionGateway.listPending().filter((a) => !a.executedAt).length
+      : 0;
+    const awaitingExecution = this.workflowEngine && typeof this.workflowEngine.getPreparedActions === 'function'
+      ? this.workflowEngine.getPreparedActions().length
+      : 0;
+    const awaitingEvidence = this.businessEvidenceEngine
+      ? (this.businessEvidenceEngine.getRecommendationsLackingEvidence ? this.businessEvidenceEngine.getRecommendationsLackingEvidence().length : 0)
+      : 0;
+    const awaitingMeasurement = this.recommendationTracker
+      ? (this.recommendationTracker.getAwaitingOutcomes ? this.recommendationTracker.getAwaitingOutcomes().length : 0)
+      : 0;
+    const lines = [
+      'Recommendation Lifecycle',
+      '',
+      `Awaiting approval: ${awaitingApproval}`,
+      `Awaiting execution: ${awaitingExecution}`,
+      `Awaiting evidence: ${awaitingEvidence}`,
+      `Awaiting measurement: ${awaitingMeasurement}`,
+    ];
+    return { text: lines.join('\n'), awaitingApproval, awaitingExecution, awaitingEvidence, awaitingMeasurement };
+  }
+
+  reviewStatus() {
+    const completed = this.memory ? this.memory.find({ status: 'completed' }).length : 0;
+    const blocked = this.memory ? this.memory.find({ status: 'blocked' }).length : 0;
+    const newRisks = this.memory ? this.memory.find({ tags: ['risk'] }).length : 0;
+    const equipment = this.memory ? this.memory.find({ type: 'equipment' }) : [];
+    const issues = equipment.filter((e) => ['failed', 'offline', 'low-material'].includes(e.status));
+    const lines = [
+      'Review Status',
+      '',
+      `Completed work: ${completed}`,
+      `Blocked work: ${blocked}`,
+      `New risks: ${newRisks}`,
+      `Resource issues: ${issues.length}`,
+    ];
+    return { text: lines.join('\n'), completed, blocked, newRisks, resourceIssues: issues };
+  }
+
+  dailyClose() {
+    const today = Date.now() - 24 * 60 * 60 * 1000;
+    const recent = this.memory ? this.memory.find({ since: today }) : [];
+    const outcomes = this.businessEvidenceEngine ? this.businessEvidenceEngine.getRecentlyConfirmedOutcomes(10) : [];
+    const failures = this.memory ? this.memory.find({ status: 'failed' }) : [];
+    const measured = this.businessEvidenceEngine ? this.businessEvidenceEngine.getMeasuredLearningDashboard() : null;
+    const lines = [
+      'Daily Close',
+      '',
+      `Signals today: ${recent.length}`,
+      `Measured outcomes: ${outcomes.length}`,
+      `Failures: ${failures.length}`,
+      `Lessons: ${outcomes.length > 1 ? `${outcomes.length} outcomes recorded` : 'No lessons recorded yet'}`,
+    ];
+    if (measured) {
+      lines.push('', `Revenue observed: ${measured.revenue || 0}`, `Confidence: ${measured.averageRevenueConfidence ? (measured.averageRevenueConfidence * 100).toFixed(0) + '%' : 'unknown'}`);
+    }
+    return { text: lines.join('\n'), signalsToday: recent.length, outcomes, failures, measured };
+  }
+
   getHelp() {
     return {
-      text: `Available commands:\n- "Good morning" or "status"\n- "focus"\n- "approvals"\n- "history"\n- "workflows"\n- "learning"\n- "evidence"\n- "outcomes"\n- "measured"\n- "revenue"\n- "kpis"\n- "review <id>" or "review <id> yes|partially|no|unknown"\n- "startup" or "health"\n- "approve <id>"\n- "reject <id>"\n- "priority <resonate|operations|manufacturing|music|research|revenue|creative|default>"\n- "help"`,
+      text: `Available commands:\n- "Good morning" or "status"\n- "review status"\n- "daily close"\n- "focus"\n- "approvals"\n- "recommendations"\n- "history"\n- "workflows"\n- "learning"\n- "evidence"\n- "outcomes"\n- "measured"\n- "revenue"\n- "kpis"\n- "review <id>" or "review <id> yes|partially|no|unknown"\n- "startup" or "health"\n- "approve <id>"\n- "reject <id>"\n- "priority <resonate|operations|manufacturing|music|research|revenue|creative|default>"\n- "help"`,
     };
   }
 

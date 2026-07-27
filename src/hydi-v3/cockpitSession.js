@@ -1,7 +1,7 @@
 'use strict';
 
 const path = require('path');
-const OperatorSession = require('./OperatorSession');
+const { boot } = require('./HYDIOperationalBoot');
 
 /**
  * Process-wide OperatorSession for the local dashboard routes.
@@ -25,21 +25,23 @@ async function getCockpitSession() {
   if (cache && cache.session) return cache.session;
   if (cache && cache.promise) return cache.promise;
 
-  const session = new OperatorSession({
+  const reportPromise = boot({
     dataPath: dataPath(),
     ownerPriority: process.env.HYDI_OWNER_PRIORITY || 'default',
-  });
-
-  const promise = session.start().then((started) => {
-    globalThis[CACHE_KEY] = { session: started };
-    return started;
+    logger: { log: () => {}, warn: () => {}, error: () => {} },
+  }).then((report) => {
+    if (report.status !== 'ready' || !report.session) {
+      throw new Error(`HYDI boot failed: ${report.failures.map((f) => `${f.step}: ${f.error}`).join('; ')}`);
+    }
+    globalThis[CACHE_KEY] = { session: report.session };
+    return report.session;
   }).catch((error) => {
     globalThis[CACHE_KEY] = null;
     throw error;
   });
 
-  globalThis[CACHE_KEY] = { promise };
-  return promise;
+  globalThis[CACHE_KEY] = { promise: reportPromise };
+  return reportPromise;
 }
 
 async function resetCockpitSession() {

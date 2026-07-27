@@ -12,6 +12,7 @@ class BusinessEventRegistry {
   constructor() {
     this.events = new Map();
     this.interpreters = new Map();
+    this.handlerMetadata = new Map();
     this.ignored = new Map();
     this.emitted = new Map();
     this.interpreted = new Map();
@@ -22,22 +23,27 @@ class BusinessEventRegistry {
     if (!type || typeof type !== 'string') {
       throw new Error('BusinessEventRegistry.register requires a non-empty string type');
     }
-    const entry = this.events.get(type) || { sources: new Set(), metadata: {} };
+    const entry = this.events.get(type) || { sources: new Set(), metadata: {}, lastRegisteredAt: 0 };
     entry.sources.add(source || 'unknown');
     if (metadata && Object.keys(metadata).length > 0) {
       entry.metadata = { ...entry.metadata, ...metadata };
     }
+    entry.lastRegisteredAt = Date.now();
     this.events.set(type, entry);
     return this;
   }
 
-  declareHandled(type, interpreterName) {
+  declareHandled(type, interpreterName, metadata = {}) {
     if (!type || typeof type !== 'string') {
       throw new Error('BusinessEventRegistry.declareHandled requires a non-empty string type');
     }
     const handlers = this.interpreters.get(type) || new Set();
-    handlers.add(interpreterName || 'anonymous');
+    const name = interpreterName || 'anonymous';
+    handlers.add(name);
     this.interpreters.set(type, handlers);
+    if (metadata && Object.keys(metadata).length > 0) {
+      this.handlerMetadata.set(`${type}:${name}`, { ...metadata, declaredAt: Date.now() });
+    }
     return this;
   }
 
@@ -170,6 +176,53 @@ class BusinessEventRegistry {
 
   listIgnoredEventTypes() {
     return [...this.ignored.keys()].sort();
+  }
+
+  getMetadata(type) {
+    return this.events.get(type)?.metadata || null;
+  }
+
+  getSchema(type) {
+    return this.events.get(type)?.metadata?.schema || null;
+  }
+
+  getEventSources(type) {
+    const entry = this.events.get(type);
+    return entry ? [...entry.sources] : [];
+  }
+
+  getMeasurementCapability(type) {
+    return this.events.get(type)?.metadata?.measurement || null;
+  }
+
+  getStrategicObjective(type) {
+    return this.events.get(type)?.metadata?.strategicObjective || null;
+  }
+
+  getHandlerMetadata(type, interpreterName) {
+    return this.handlerMetadata.get(`${type}:${interpreterName}`) || null;
+  }
+
+  getContract(type) {
+    const entry = this.events.get(type);
+    if (!entry) return null;
+    return {
+      type,
+      sources: [...entry.sources],
+      metadata: { ...entry.metadata },
+      handlers: this.getHandlers(type),
+      ignored: this.ignored.has(type),
+      lastRegisteredAt: entry.lastRegisteredAt,
+    };
+  }
+
+  getStale(thresholdMs = 24 * 60 * 60 * 1000) {
+    const cutoff = Date.now() - thresholdMs;
+    const stale = [];
+    for (const [type, entry] of this.events) {
+      if (entry.lastRegisteredAt < cutoff) stale.push(type);
+    }
+    return stale;
   }
 }
 

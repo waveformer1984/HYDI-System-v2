@@ -20,6 +20,7 @@ class JSONLedgerAdapter {
     this.idKey = config.idKey || 'id';
     this.dateKey = config.dateKey || 'date';
     this.descriptionKey = config.descriptionKey || 'description';
+    this.typeKey = config.typeKey || 'type';
     this.precision = config.precision ?? 0.01;
     this.ledger = config.path || 'json-ledger';
   }
@@ -39,6 +40,7 @@ class JSONLedgerAdapter {
         description: r[this.descriptionKey] || 'JSON ledger entry',
         ledger: this.ledger,
         precision: this.precision,
+        type: r[this.typeKey] || undefined,
       };
     });
   }
@@ -74,6 +76,7 @@ class CSVLedgerAdapter {
         description: row.description || 'CSV ledger entry',
         ledger: this.ledger,
         precision: this.precision,
+        type: row.type || undefined,
       };
     });
   }
@@ -116,9 +119,21 @@ class RevenueSensor extends EventEmitter {
   }
 
   _registerEventTypes() {
-    if (this.eventBus && this.eventBus.registry) {
-      this.eventBus.registry.register('RevenueReceived', 'RevenueSensor', {
-        description: 'A revenue transaction has been received from a ledger or adapter',
+    if (!this.eventBus || !this.eventBus.registry) return;
+    const types = [
+      'RevenueReceived', 'RevenueRefunded', 'InvoicePaid', 'InvoiceOverdue',
+      'SubscriptionStarted', 'SubscriptionCancelled',
+    ];
+    const schema = {
+      fields: ['id', 'amount', 'currency', 'at', 'description', 'ledger', 'customer', 'project', 'type'],
+    };
+    for (const type of types) {
+      this.eventBus.registry.register(type, 'RevenueSensor', {
+        domain: 'financial',
+        source: 'RevenueSensor',
+        measurement: 'quantitative',
+        strategicObjective: 'revenue',
+        schema,
       });
     }
   }
@@ -183,10 +198,11 @@ class RevenueSensor extends EventEmitter {
     return emitted;
   }
 
-  _emit(tx) {
-    this.emit('revenue', tx);
+  _emit(tx, eventType) {
+    const type = eventType || tx.eventType || tx.type || 'RevenueReceived';
+    this.emit('revenue', tx, type);
     if (this.eventBus) {
-      this.eventBus.emit('RevenueReceived', tx, 'RevenueSensor');
+      this.eventBus.emit(type, tx, 'RevenueSensor');
     }
   }
 
@@ -197,6 +213,7 @@ class RevenueSensor extends EventEmitter {
       at: tx.at,
       description: tx.description,
       ledger: tx.ledger,
+      type: tx.type,
     });
     return crypto.createHash('sha256').update(payload).digest('hex');
   }
