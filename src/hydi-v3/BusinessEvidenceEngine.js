@@ -326,9 +326,14 @@ class BusinessEvidenceEngine extends EventEmitter {
   getMeasuredLearningDashboard() {
     const allEvidence = this.collector ? this.collector.getEvidence() : [];
     const quantitative = allEvidence.filter((e) => e.measurementType === 'quantitative');
-    const revenue = quantitative
-      .filter((e) => e.source === 'financial' || e.tags.includes('revenue'))
-      .reduce((sum, e) => sum + (e.data && Number.isFinite(e.data.value) ? e.data.value : 0), 0);
+    const financialEvidence = quantitative.filter((e) => e.source === 'financial' || e.tags.includes('revenue'));
+    const revenue = financialEvidence.reduce((sum, e) => sum + (e.data && Number.isFinite(e.data.value) ? e.data.value : 0), 0);
+    const lastRevenueAt = financialEvidence.length
+      ? financialEvidence.reduce((max, e) => Math.max(max, e.at || 0), 0)
+      : null;
+    const averageRevenueConfidence = financialEvidence.length
+      ? Number((financialEvidence.reduce((sum, e) => sum + (Number.isFinite(e.confidence) ? e.confidence : 0.5), 0) / financialEvidence.length).toFixed(3))
+      : null;
 
     const completed = this.getCompletedLearning();
     const measuredOutcomes = completed.filter((r) => r.observedOutcome && r.observedOutcome.measurementType === 'quantitative');
@@ -340,6 +345,9 @@ class BusinessEvidenceEngine extends EventEmitter {
 
     return {
       revenue,
+      lastRevenueAt,
+      averageRevenueConfidence,
+      financialEvidenceCount: financialEvidence.length,
       measuredROI,
       estimatedROI: null, // not inferred; reserved for future forecasted projections
       confidenceTrend,

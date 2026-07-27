@@ -28,6 +28,7 @@ class BusinessEventBus extends EventEmitter {
       logger: config.logger || console,
       ...config,
     };
+    this.registry = config.registry || null;
     this.history = [];
     this._handlerCount = 1;
   }
@@ -46,6 +47,12 @@ class BusinessEventBus extends EventEmitter {
     this.history.push(event);
     if (this.history.length > this.config.maxHistory) {
       this.history = this.history.slice(-this.config.maxHistory);
+    }
+    if (this.registry) {
+      this.registry.recordEmission(type, source);
+      if (type === 'BusinessSignal' && payload && payload.originatingEvent) {
+        this.registry.recordInterpretation(payload.originatingEvent);
+      }
     }
     super.emit(type, event);
     super.emit('*', event);
@@ -93,6 +100,14 @@ class BusinessEventBus extends EventEmitter {
     let events = [...this.history];
     if (type !== '*') events = events.filter((e) => e.type === type);
     events.slice(-limit).forEach((e) => handler(e));
+  }
+
+  /**
+   * Report event contract health. Requires a registry to be configured.
+   */
+  healthCheck() {
+    if (!this.registry) return { ok: true, reason: 'no event registry configured' };
+    return this.registry.healthCheck();
   }
 
   /**

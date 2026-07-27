@@ -39,6 +39,12 @@ function fixed(n, digits = 2) {
   return Number.isFinite(value) ? value.toFixed(digits) : '0.00';
 }
 
+function formatTimestamp(ts) {
+  if (!ts) return 'unknown';
+  const d = new Date(ts);
+  return Number.isNaN(d.getTime()) ? 'unknown' : d.toISOString();
+}
+
 function escapeHtml(value) {
   return String(value === undefined || value === null ? '' : value)
     .replace(/&/g, '&amp;')
@@ -86,6 +92,26 @@ function toSections(briefing) {
   const missingData = Array.isArray(briefing.missingData) ? briefing.missingData : [];
   const recentActivity = Array.isArray(briefing.recentActivity) ? briefing.recentActivity : [];
   const flagship = briefing.resonateStatus || { tracked: false };
+  const measuredLearning = briefing.measuredLearning || null;
+
+  const revenueSection = measuredLearning ? {
+    id: 'revenue',
+    title: 'Revenue',
+    tone: 'neutral',
+    lines: measuredLearning.financialEvidenceCount > 0
+      ? [
+        `Observed revenue: ${fixed(measuredLearning.revenue)} ${measuredLearning.revenue ? 'USD' : ''}`,
+        `Source: RevenueSensor (ledger: ${Object.keys(measuredLearning.evidenceSources || {}).filter((s) => ['financial', 'revenue'].includes(s)).join(', ') || 'financial'})`,
+        `Confidence: ${Number.isFinite(measuredLearning.averageRevenueConfidence) ? `${(measuredLearning.averageRevenueConfidence * 100).toFixed(0)}%` : 'unknown'}`,
+        `Last updated: ${formatTimestamp(measuredLearning.lastRevenueAt)}`,
+        `Evidence count: ${measuredLearning.financialEvidenceCount}`,
+      ]
+      : [
+        'No revenue evidence observed.',
+        'Source: RevenueSensor not active or ledger empty.',
+        `Last updated: ${formatTimestamp(briefing.generatedAt)}`,
+      ],
+  } : null;
 
   const sections = [
     {
@@ -163,6 +189,7 @@ function toSections(briefing) {
         + `tracked expenses: ${num(finance.trackedExpenses)}, projected net: ${num(finance.projectedNet)}.`,
       ],
     },
+    ...(revenueSection ? [revenueSection] : []),
     {
       id: 'risks',
       title: 'Critical Risks',

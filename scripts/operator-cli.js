@@ -33,6 +33,8 @@
  *                    instead of falling through to "default".
  *   --simulate-manufacturing  Run the printer sensor in simulation mode and
  *                    emit realistic manufacturing events.
+ *   --revenue-ledger <file>  Load revenue from a JSON or CSV ledger file
+ *   --revenue-format <json|csv>  Ledger format (default: json)
  *   --shutdown-timeout <ms>  Bound the graceful shutdown drain (default 10000)
  *
  * All actions still route through ExecutionGateway approval rules. The CLI is
@@ -44,6 +46,7 @@ const OperatorSession = require('../src/hydi-v3/OperatorSession');
 const OperatorCLI = require('../src/hydi-v3/OperatorCLI');
 const OperatorMode = require('../src/hydi-v3/OperatorMode');
 const OperatorRuntime = require('../src/hydi-v3/OperatorRuntime');
+const { JSONLedgerAdapter, CSVLedgerAdapter } = require('../src/hydi-v3/RevenueSensor');
 
 function parseFlags(argv) {
   const flags = {};
@@ -76,6 +79,31 @@ function gitConfig(flags) {
   };
 }
 
+function revenueConfig(flags) {
+  const ledger = flags['revenue-ledger'];
+  if (!ledger) return null;
+  const format = String(flags['revenue-format'] || 'json').toLowerCase();
+  const resolved = path.resolve(process.cwd(), String(ledger));
+  const Adapter = format === 'csv' ? CSVLedgerAdapter : JSONLedgerAdapter;
+  return {
+    adapters: [new Adapter({ path: resolved })],
+    pollMs: 0,
+  };
+}
+
+function filesystemConfig(flags) {
+  if (!flags.filesystem) return null;
+  const root = typeof flags.filesystem === 'string'
+    ? path.resolve(process.cwd(), flags.filesystem)
+    : process.cwd();
+  const project = typeof flags['filesystem-project'] === 'string' ? flags['filesystem-project'] : 'default';
+  return {
+    roots: { [project]: root },
+    scanIntervalMs: Number(flags['filesystem-poll']) || 30000,
+    watch: flags['filesystem-watch'] !== 'false',
+  };
+}
+
 async function main() {
   const flags = parseFlags(process.argv.slice(2));
   const colour = !(flags['no-colour'] || flags['no-color'] || process.env.NO_COLOR)
@@ -93,7 +121,9 @@ async function main() {
     ownerPriority: typeof flags.priority === 'string' ? flags.priority : 'default',
     mode,
     git: gitConfig(flags),
+    filesystem: filesystemConfig(flags),
     simulateManufacturing: !!flags['simulate-manufacturing'],
+    revenue: revenueConfig(flags),
   });
 
   await session.start();
@@ -124,6 +154,10 @@ async function main() {
     console.log(health.simulating
       ? `Printer sensor: simulation mode (${health.equipmentName})`
       : `Printer sensor: monitoring ${health.equipmentName}`);
+  }
+  if (session.filesystemMonitor) {
+    const projects = Object.keys(session.filesystemMonitor.config.roots || {});
+    console.log(`Filesystem sensor: watching ${projects.join(', ')}`);
   }
   if (mode.enabled) {
     console.log(`Mode: ${mode.describe()}`);

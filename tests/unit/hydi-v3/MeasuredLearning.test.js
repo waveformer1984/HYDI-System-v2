@@ -21,6 +21,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  await new Promise((resolve) => setTimeout(resolve, 300));
   await fs.rm(tmpRoot, { recursive: true, force: true });
 });
 
@@ -250,7 +251,7 @@ describe('Measured Learning', () => {
     await sensor.scan();
     await sensor.scan();
 
-    const evidence = evidenceEngine.collector.getEvidence(rec.id);
+    const evidence = evidenceEngine.collector.getEvidence(rec.id, rec);
     const financial = evidence.filter((e) => e.source === 'financial');
     expect(financial.length).toBe(1);
 
@@ -290,14 +291,14 @@ describe('Measured Learning', () => {
     await store1.start();
     const tracker1 = new RecommendationTracker({ decisionOutcomeStore: store1, logger });
     await tracker1.start();
-    const rec = tracker1.track({ action: 'Generate revenue', expectedValue: 1000, expectedOutcome: '1000 USD', strategicObjective: 'revenue' });
-    tracker1.recordDecision(rec.id, 'approved');
+    const recId = tracker1.track({ action: 'Generate revenue', expectedValue: 1000, expectedOutcome: '1000 USD', strategicObjective: 'revenue' });
+    tracker1.recordDecision(recId, 'approved');
     await tracker1.flush();
     await store1.destroy();
 
     const store2 = new DecisionOutcomeStore({ dataPath, logger });
     await store2.start();
-    const recovered = store2.getRecommendation(rec.id);
+    const recovered = store2.getRecommendation(recId);
     expect(recovered.action).toBe('Generate revenue');
     expect(recovered.ownerDecision).toBe('approved');
     await store2.destroy();

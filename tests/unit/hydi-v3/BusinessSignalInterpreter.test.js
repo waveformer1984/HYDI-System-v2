@@ -56,4 +56,22 @@ describe('BusinessSignalInterpreter', () => {
     expect(sig.payload.strategicObjective).toBe('research');
     expect(sig.payload.subsystem).toBe('Documentation');
   });
+
+  test(' RevenueReceived produces a revenue BusinessSignal', (done) => {
+    bus.subscribe('BusinessSignal', (e) => {
+      expect(e.payload.strategicObjective).toBe('revenue');
+      expect(e.payload.subsystem).toBe('Revenue');
+      expect(e.payload.impact).toBe('revenue-positive');
+      expect(e.payload.confidence).toBe(0.99);
+      expect(e.payload.recommendation).toContain('Finance');
+      expect(e.payload.amount).toBe(250);
+      done();
+    });
+    bus.emit('RevenueReceived', {
+      amount: 250,
+      currency: 'USD',
+      description: 'Rezonate license',
+      at: Date.now(),
+    }, 'RevenueSensor');
+  });
 });

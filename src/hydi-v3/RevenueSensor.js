@@ -112,6 +112,15 @@ class RevenueSensor extends EventEmitter {
     for (const a of config.adapters || []) {
       this.registerAdapter(a);
     }
+    this._registerEventTypes();
+  }
+
+  _registerEventTypes() {
+    if (this.eventBus && this.eventBus.registry) {
+      this.eventBus.registry.register('RevenueReceived', 'RevenueSensor', {
+        description: 'A revenue transaction has been received from a ledger or adapter',
+      });
+    }
   }
 
   registerAdapter(adapter) {

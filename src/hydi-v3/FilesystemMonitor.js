@@ -59,6 +59,19 @@ class FilesystemMonitor extends EventEmitter {
     this._started = false;
     this._destroyed = false;
     this._projectOpened = new Set();
+    this._registerEventTypes();
+  }
+
+  _registerEventTypes() {
+    if (!this.eventBus || !this.eventBus.registry) return;
+    const types = [
+      'ProjectOpened', 'ProjectActive',
+      'FileCreated', 'FileModified', 'FileDeleted',
+      'DirectoryCreated', 'DirectoryDeleted',
+    ];
+    for (const type of types) {
+      this.eventBus.registry.register(type, 'FilesystemMonitor', { domain: 'filesystem' });
+    }
   }
 
   async start() {

@@ -1,49 +1,90 @@
 'use strict';
 
+const BusinessEventRegistry = require('./BusinessEventRegistry');
+
 /**
- * SignalCoverage audits the interpreter layer.
+ * SignalCoverage audits the event contract using the BusinessEventRegistry as
+ * the single source of truth.
  *
- * With more than one interpreter on the bus, the mapping from sensor event
- * types to `BusinessSignal`s is no longer obvious by inspection. Two failure
- * modes are possible and both are silent:
+ * Every sensor registers the event types it emits.
+ * Every interpreter declares the event types it handles.
+ * This module compares the two, reporting:
+ *   DROPPED  — a registered event has no interpreter and is not ignored
+ *   DOUBLE   — a registered event has more than one interpreter
+ *   ORPHAN   — an interpreter handles an event that no sensor registered
+ *   UNKNOWN  — an unregistered event was emitted at runtime
  *
- *   DROPPED — a sensor publishes a type no interpreter handles. The event
- *             reaches the bus, nothing translates it, and it never appears in
- *             a briefing. Nothing errors. This is how `PrinterOffline` and
- *             `DirectoryDeleted` were invisible.
- *
- *   DOUBLE  — two interpreters both handle a type. The event becomes two
- *             signals, so one physical occurrence is counted twice in the
- *             briefing, the activity ledger, and the audit trail.
- *
- * Every interpreter subscribes to `*` and decides for itself whether a type is
- * its business, so neither condition can be detected by reading one file. This
- * module probes the interpreters directly with a synthetic event per type,
- * which means it measures actual behaviour rather than a declared list that
- * could itself drift from the switch statement.
+ * No regex over source code. No hand-maintained SENSOR_EVENT_TYPES inventory.
  */
 
-/** Event types each sensor family can publish. */
-const SENSOR_EVENT_TYPES = {
-  FilesystemMonitor: [
-    'ProjectOpened', 'ProjectActive', 'ProjectInactive',
-    'FileCreated', 'FileModified', 'FileDeleted',
-    'DirectoryCreated', 'DirectoryDeleted',
-    'BuildArtifactGenerated',
-  ],
-  GitSensor: [
-    'CommitCreated', 'BranchCreated', 'BranchDeleted', 'BranchStale',
-    'WorkingTreeDirty', 'WorkingTreeClean',
-  ],
-  PrinterSensor: [
-    'PrinterStarted', 'PrinterPaused', 'PrinterResumed', 'PrinterCompleted',
-    'PrinterFailed', 'PrinterIdle', 'PrinterHeating', 'PrinterOffline',
-    'MaterialLow',
-  ],
-};
+/**
+ * @param {object} options
+ * @param {BusinessEventRegistry} [options.registry] canonical event registry
+ * @returns {{ok: boolean, dropped: string[], double: object[], orphan: string[], unknown: string[], matrix: object[]}}
+ */
+function audit(options = {}) {
+  const registry = options.registry || new BusinessEventRegistry();
 
-/** A payload broad enough that no interpreter refuses purely for missing fields. */
-function probeEvent(type) {
+  if (options.interpreters) {
+    // Legacy probing path: callers that still pass interpreters can be migrated
+    // by giving them a registry. This path treats the supplied eventTypes as the
+    // sensor inventory, probes each interpreter, and validates the contract.
+    for (const type of options.eventTypes || []) {
+      registry.register(type, 'SignalCoverage');
+    }
+    for (const interpreter of options.interpreters) {
+      if (!interpreter || typeof interpreter.interpret !== 'function') continue;
+      const name = interpreter.constructor ? interpreter.constructor.name : 'anonymous';
+      for (const type of options.eventTypes || []) {
+        let signal = null;
+        try {
+          signal = interpreter.interpret(makeProbeEvent(type));
+        } catch (e) {
+          signal = null;
+        }
+        if (signal) {
+          registry.declareHandled(type, name);
+        }
+      }
+    }
+  }
+
+  const validation = registry.validate();
+  const handlers = new Map();
+  for (const [type, set] of registry.interpreters) {
+    handlers.set(type, [...set]);
+  }
+
+  const matrix = registry.listEventTypes().map((type) => ({
+    type,
+    handledBy: handlers.get(type) || [],
+    ignored: registry.isIgnored(type),
+    emitted: registry.emitted.get(type) || 0,
+    interpreted: registry.interpreted.get(type) || 0,
+  }));
+
+  const warnings = (validation.warnings || []).map((e) => e.type);
+
+  return {
+    ok: validation.ok,
+    dropped: validation.errors
+      .filter((e) => e.error === 'registered event has no interpreter and is not ignored')
+      .map((e) => e.type),
+    double: validation.errors
+      .filter((e) => e.error === 'registered event has multiple interpreters')
+      .map((e) => ({ type: e.type, handledBy: e.interpreters })),
+    orphan: (validation.warnings || [])
+      .filter((e) => e.error === 'interpreter handles an unregistered event')
+      .map((e) => e.type),
+    unknown: validation.errors
+      .filter((e) => e.error === 'unknown event emitted at runtime')
+      .map((e) => e.type),
+    warnings,
+    matrix,
+  };
+}
+
+function makeProbeEvent(type) {
   return {
     id: `probe_${type}`,
     at: Date.now(),
@@ -59,68 +100,47 @@ function probeEvent(type) {
       author: 'probe',
       subject: 'probe',
       material: 'probe-material',
+      amount: 100,
+      currency: 'USD',
     },
   };
 }
 
-/**
- * @param {object} options
- * @param {object[]} options.interpreters objects exposing `interpret(event)`
- * @param {string[]} [options.eventTypes] defaults to every known sensor type
- * @returns {{ok: boolean, dropped: string[], double: object[], matrix: object[]}}
- */
-function audit(options = {}) {
-  const interpreters = options.interpreters || [];
-  const eventTypes = options.eventTypes || allEventTypes();
-
-  const matrix = [];
-  const dropped = [];
-  const double = [];
-
-  for (const type of eventTypes) {
-    const handledBy = [];
-    for (const interpreter of interpreters) {
-      if (!interpreter || typeof interpreter.interpret !== 'function') continue;
-      let signal = null;
-      try {
-        signal = interpreter.interpret(probeEvent(type));
-      } catch (e) {
-        // An interpreter that throws on a type is not handling it, and the
-        // throw itself is worth surfacing rather than hiding.
-        signal = null;
-      }
-      if (signal) handledBy.push(interpreter.constructor ? interpreter.constructor.name : 'anonymous');
-    }
-
-    matrix.push({ type, handledBy });
-    if (handledBy.length === 0) dropped.push(type);
-    if (handledBy.length > 1) double.push({ type, handledBy });
-  }
-
-  return { ok: dropped.length === 0 && double.length === 0, dropped, double, matrix };
-}
-
-function allEventTypes() {
-  const types = new Set();
-  for (const list of Object.values(SENSOR_EVENT_TYPES)) {
-    for (const type of list) types.add(type);
-  }
-  return [...types].sort();
-}
-
 /** Human-readable summary for startup output and the operator console. */
 function toText(result) {
-  if (result.ok) {
-    return `Signal coverage: all ${result.matrix.length} sensor event type(s) routed to exactly one interpreter.`;
+  const warningLines = [];
+  if (result.orphan && result.orphan.length) {
+    warningLines.push(`  Orphan (interpreter handles unregistered event): ${result.orphan.join(', ')}`);
   }
+  if (result.warnings && result.warnings.length) {
+    for (const w of result.warnings) {
+      if (result.orphan && result.orphan.includes(w)) continue;
+      warningLines.push(`  ${w}`);
+    }
+  }
+
+  if (result.ok && warningLines.length === 0) {
+    return `Signal coverage: all ${result.matrix.length} registered event type(s) have a valid contract (exactly one interpreter or intentionally ignored).`;
+  }
+
+  if (result.ok) {
+    return `Signal coverage: valid with warnings.\n${warningLines.join('\n')}`;
+  }
+
   const lines = ['Signal coverage problems detected:'];
-  if (result.dropped.length) {
+  if (result.dropped && result.dropped.length) {
     lines.push(`  Dropped (no interpreter, silently invisible): ${result.dropped.join(', ')}`);
   }
-  for (const entry of result.double) {
-    lines.push(`  Double-translated (counted twice): ${entry.type} by ${entry.handledBy.join(' and ')}`);
+  if (result.double && result.double.length) {
+    for (const entry of result.double) {
+      lines.push(`  Double-translated (counted twice): ${entry.type} by ${entry.handledBy.join(' and ')}`);
+    }
   }
+  if (result.unknown && result.unknown.length) {
+    lines.push(`  Unknown (emitted event not registered): ${result.unknown.join(', ')}`);
+  }
+  if (warningLines.length) lines.push('', 'Warnings:', ...warningLines);
   return lines.join('\n');
 }
 
-module.exports = { audit, toText, allEventTypes, SENSOR_EVENT_TYPES, probeEvent };
+module.exports = { audit, toText };

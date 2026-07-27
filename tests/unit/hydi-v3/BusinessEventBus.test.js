@@ -55,4 +55,29 @@ describe('BusinessEventBus', () => {
     bus.replay('X', handler);
     expect(handler).toHaveBeenCalledTimes(2);
   });
+
+  test('records emissions and interpretations through a registry', () => {
+    const BusinessEventRegistry = require('../../../src/hydi-v3/BusinessEventRegistry');
+    const registry = new BusinessEventRegistry();
+    registry.register('FileCreated', 'FilesystemMonitor');
+    const busWithRegistry = new BusinessEventBus({ maxHistory: 10, registry });
+
+    busWithRegistry.emit('FileCreated', { project: 'P' }, 'FilesystemMonitor');
+    busWithRegistry.emit('BusinessSignal', { originatingEvent: 'FileCreated' }, 'BusinessSignalInterpreter');
+
+    expect(registry.emitted.get('FileCreated')).toBe(1);
+    expect(registry.interpreted.get('FileCreated')).toBe(1);
+    busWithRegistry.destroy();
+  });
+
+  test('records unknown emissions in the registry', () => {
+    const BusinessEventRegistry = require('../../../src/hydi-v3/BusinessEventRegistry');
+    const registry = new BusinessEventRegistry();
+    const busWithRegistry = new BusinessEventBus({ maxHistory: 10, registry });
+
+    busWithRegistry.emit('MysteryEvent', {}, 'RogueSensor');
+
+    expect(registry.unknownEmissions.get('MysteryEvent')).toBe(1);
+    busWithRegistry.destroy();
+  });
 });

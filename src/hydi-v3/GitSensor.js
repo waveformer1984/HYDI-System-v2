@@ -74,6 +74,18 @@ class GitSensor extends EventEmitter {
     this._polling = false;
 
     this.storePath = path.join(this.config.dataPath, `git-sensor-${this._slug(this.project)}.json`);
+    this._registerEventTypes();
+  }
+
+  _registerEventTypes() {
+    if (!this.eventBus || !this.eventBus.registry) return;
+    const types = [
+      'CommitCreated', 'BranchCreated', 'BranchDeleted',
+      'WorkingTreeDirty', 'WorkingTreeClean', 'BranchStale',
+    ];
+    for (const type of types) {
+      this.eventBus.registry.register(type, 'GitSensor', { domain: 'git' });
+    }
   }
 
   _slug(value) {

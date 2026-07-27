@@ -16,6 +16,7 @@ const SessionMemory = require('./SessionMemory');
 const ConversationEngine = require('./ConversationEngine');
 const ConsoleAPI = require('./ConsoleAPI');
 const BusinessEventBus = require('./BusinessEventBus');
+const BusinessEventRegistry = require('./BusinessEventRegistry');
 const BusinessSignalInterpreter = require('./BusinessSignalInterpreter');
 const ManufacturingSignalInterpreter = require('./ManufacturingSignalInterpreter');
 const EquipmentRegistry = require('./EquipmentRegistry');
@@ -29,6 +30,8 @@ const BusinessOutcomeEngine = require('./BusinessOutcomeEngine');
 const LearningMetrics = require('./LearningMetrics');
 const BusinessEvidenceEngine = require('./BusinessEvidenceEngine');
 const { RevenueSensor } = require('./RevenueSensor');
+const AuditLedger = require('./AuditLedger');
+const FilesystemMonitor = require('./FilesystemMonitor');
 
 const SILENT_LOGGER = { log: () => {}, error: () => {}, warn: () => {} };
 
@@ -73,7 +76,10 @@ class OperatorSession {
      * opt-in, because a sensor is an observation of the outside world and
      * should never start watching without being asked.
      */
-    this.eventBus = config.eventBus || new BusinessEventBus({ logger: this.config.logger });
+    this.eventBus = config.eventBus || new BusinessEventBus({ logger: this.config.logger, registry: new BusinessEventRegistry() });
+    if (!this.eventBus.registry) {
+      this.eventBus.registry = new BusinessEventRegistry();
+    }
     this.signalInterpreter = null;
     this.manufacturingSignalInterpreter = null;
     this.gitSensor = null;
@@ -83,6 +89,7 @@ class OperatorSession {
     this._printerConfig = config.printer || null;
     this._simulateManufacturing = config.simulateManufacturing === true;
     this._revenueConfig = config.revenue || null;
+    this._filesystemConfig = config.filesystem || null;
 
     this.memory = null;
     this.executiveOS = null;
@@ -97,7 +104,9 @@ class OperatorSession {
     this.businessOutcomeEngine = null;
     this.evidenceEngine = null;
     this.revenueSensor = null;
+    this.filesystemMonitor = null;
     this.learningMetrics = null;
+    this.auditLedger = null;
 
     this.timeline = null;
     this.agentWorkspace = null;
@@ -151,8 +160,6 @@ class OperatorSession {
         pollMs: this._revenueConfig.pollMs || 0,
         logger,
       });
-      this.revenueSensor.start();
-      this.sensors.push(this.revenueSensor);
     }
 
     this.learningMetrics = new LearningMetrics({
@@ -161,6 +168,9 @@ class OperatorSession {
       logger,
     });
     await this.learningMetrics.start();
+
+    this.auditLedger = new AuditLedger({ dataPath, logger });
+    await this.auditLedger.start();
     // -----------------------------------------------------------------------
 
     this.memory = new BusinessMemory({ ...shared });
@@ -193,6 +203,7 @@ class OperatorSession {
       ...shared,
       businessMemory: this.memory,
       outcomeEngine: this.businessOutcomeEngine,
+      auditLedger: this.auditLedger,
     });
     await this.executionGateway.start();
 
@@ -274,15 +285,9 @@ class OperatorSession {
     this.manufacturingSignalInterpreter = new ManufacturingSignalInterpreter({ eventBus: this.eventBus });
     this.interpreters = [this.signalInterpreter, this.manufacturingSignalInterpreter];
 
-    // With more than one interpreter on the bus, an event type handled by none
-    // vanishes silently and one handled by two is counted twice. Neither shows
-    // up as an error, so the coverage is checked at startup rather than trusted.
-    this.signalCoverage = SignalCoverage.audit({ interpreters: this.interpreters });
-    if (!this.signalCoverage.ok) {
-      logger.error('[OperatorSession] signal coverage problem', {
-        dropped: this.signalCoverage.dropped,
-        double: this.signalCoverage.double,
-      });
+    if (this.revenueSensor) {
+      this.revenueSensor.start();
+      this.sensors.push(this.revenueSensor);
     }
 
     if (this._gitConfig) {
@@ -310,6 +315,28 @@ class OperatorSession {
       await this.printerSensor.start();
       this.sensors.push(this.printerSensor);
     }
+
+    if (this._filesystemConfig) {
+      this.filesystemMonitor = new FilesystemMonitor({
+        ...this._filesystemConfig,
+        eventBus: this.eventBus,
+        logger,
+      });
+      await this.filesystemMonitor.start();
+      this.sensors.push(this.filesystemMonitor);
+    }
+
+    // With more than one interpreter on the bus, an event type handled by none
+    // vanishes silently and one handled by two is counted twice. Neither shows
+    // up as an error, so the coverage is checked at startup rather than trusted.
+    // Audited after all sensors have registered their event types.
+    this.signalCoverage = SignalCoverage.audit({ registry: this.eventBus.registry });
+    if (!this.signalCoverage.ok) {
+      logger.error('[OperatorSession] signal coverage problem', {
+        dropped: this.signalCoverage.dropped,
+        double: this.signalCoverage.double,
+      });
+    }
     // -----------------------------------------------------------------------
 
     // Phase 16: run-mode enforcement is installed last, so it wraps the fully
@@ -317,6 +344,10 @@ class OperatorSession {
     // CLI means every surface built on an OperatorSession inherits the same
     // guarantees — a dry run cannot be bypassed by using a different frontend.
     if (this.mode) this.mode.install(this);
+
+    this.eventBus.registry.register('SessionStarted', 'OperatorSession');
+    this.eventBus.registry.declareIgnored('SessionStarted', 'system lifecycle event');
+    this.eventBus.emit('SessionStarted', { at: Date.now(), dataPath }, 'OperatorSession');
 
     this._started = true;
     return this;
@@ -389,7 +420,7 @@ class OperatorSession {
       // so a poll in flight cannot publish into a half-destroyed stack.
       ...this.sensors,
       this.timeline, this.sessionMemory,
-      this.cockpit, this.executionGateway, this.workflowEngine,
+      this.cockpit, this.executionGateway, this.auditLedger, this.workflowEngine,
       this.taskEngine, this.executiveOS, this.memory,
       this.evidenceEngine, this.learningMetrics, this.businessOutcomeEngine,
       this.recommendationTracker, this.decisionOutcomeStore,

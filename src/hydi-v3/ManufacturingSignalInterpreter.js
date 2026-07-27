@@ -5,6 +5,11 @@ class ManufacturingSignalInterpreter {
     this.eventBus = config.eventBus || null;
     this.objective = config.objective || 'manufacturing';
     this.subsystem = config.subsystem || 'Manufacturing Floor';
+    this.handledEventTypes = [
+      'PrinterStarted', 'PrinterPaused', 'PrinterResumed', 'PrinterCompleted',
+      'PrinterFailed', 'PrinterIdle', 'PrinterHeating', 'PrinterOffline',
+      'MaterialLow',
+    ];
     if (this.eventBus) this.attach(this.eventBus);
   }
 
@@ -15,6 +20,15 @@ class ManufacturingSignalInterpreter {
       if (signal) this.publish(signal);
     };
     this.eventBus.subscribe('*', this._handler);
+    this._registerWithRegistry();
+  }
+
+  _registerWithRegistry() {
+    if (this.eventBus && this.eventBus.registry) {
+      for (const type of this.handledEventTypes) {
+        this.eventBus.registry.declareHandled(type, 'ManufacturingSignalInterpreter');
+      }
+    }
   }
 
   detach() {
@@ -31,6 +45,7 @@ class ManufacturingSignalInterpreter {
 
   interpret(event) {
     if (event.type === 'BusinessSignal') return null;
+    if (!this.handledEventTypes.includes(event.type)) return null;
     const p = event.payload || {};
     const name = p.equipmentName || p.name || 'the printer';
     const material = p.material || 'material';

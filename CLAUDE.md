@@ -2,6 +2,12 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+> **Canonical tree:** `C:\Users\Owner\HYDI_System`, branch `clean-main`, Node/JavaScript.
+> Several stale copies of `HYDI_System` exist on this machine under
+> `C:\Users\Owner\_HYDI_ARCHIVE\<date>\`. They are archives and are **not** under
+> version control. If `git rev-parse --is-inside-work-tree` fails, you are in the
+> wrong folder — stop rather than building there. See `ACTIVE_TREE.md`.
+
 ## What This System Does
 
 HYDI System v2 (also called "Heidi" / "ProtoForge → Kilo Node") is a monetizable AI orchestration platform. It turns ProtoForge into an executable revenue-generating system by:

@@ -117,8 +117,8 @@ class ExecutiveCockpit extends EventEmitter {
     if (/^(learning|learn|prediction accuracy|recommendation success|lessons learned|recommendation history)$/.test(t)) return { command: 'learning' };
     if (/^(evidence|business evidence|evidence summary)$/.test(t)) return { command: 'evidence' };
     if (/^(outcomes|outcome review|outcome queue)$/.test(t)) return { command: 'outcomes' };
-    if (/^(measured|measured learning|revenue dashboard)$/.test(t)) return { command: 'measured' });
-    if (/^(revenue|revenue sensor|ledger status)$/.test(t)) return { command: 'revenue' });
+    if (/^(measured|measured learning|revenue dashboard)$/.test(t)) return { command: 'measured' };
+    if (/^(revenue|revenue sensor|ledger status)$/.test(t)) return { command: 'revenue' };
     if (/^(kpis|business kpis|kpi dashboard)$/.test(t)) return { command: 'kpis' };
     if (/^review\s+(.+)$/.test(t)) {
       const parts = t.match(/^review\s+(.+)$/)[1].trim().split(/\s+/);

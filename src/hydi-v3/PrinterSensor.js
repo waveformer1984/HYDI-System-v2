@@ -45,6 +45,18 @@ class PrinterSensor extends EquipmentSensor {
 
     this._timer = null;
     this._materialLowReported = false;
+    this._registerEventTypes();
+  }
+
+  _registerEventTypes() {
+    if (!this.eventBus || !this.eventBus.registry) return;
+    const types = [
+      'PrinterStarted', 'PrinterPaused', 'PrinterResumed', 'PrinterCompleted',
+      'PrinterFailed', 'PrinterIdle', 'PrinterHeating', 'PrinterOffline', 'MaterialLow',
+    ];
+    for (const type of types) {
+      this.eventBus.registry.register(type, 'PrinterSensor', { domain: 'manufacturing' });
+    }
   }
 
   async start() {

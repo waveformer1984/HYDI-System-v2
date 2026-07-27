@@ -188,14 +188,18 @@ class ExecutiveOperatingSystem extends EventEmitter {
   }
 
   healthCheck() {
+    const eventContract = this.eventBus && typeof this.eventBus.healthCheck === 'function'
+      ? this.eventBus.healthCheck()
+      : { ok: true, reason: 'no event bus configured' };
     const checks = {
       initialized: !this._destroyed,
       hasMemory: !!this.memory,
       agentsLoaded: this.agents.size >= 7,
       lastBriefingFresh: this.lastBriefing ? (Date.now() - this.lastBriefing.generatedAt) < 86400000 : true,
+      eventContract: eventContract.ok,
     };
     const ok = Object.values(checks).every(Boolean);
-    return { ok, checks, agentCount: this.agents.size, briefingCount: this.decisions.length };
+    return { ok, checks, agentCount: this.agents.size, briefingCount: this.decisions.length, eventContract };
   }
 
   /**

@@ -122,7 +122,8 @@ class BusinessOutcomeEngine {
     // Without this guard a repeated observation would still ratchet confidence
     // upward while recording no new evidence — manufacturing certainty from a
     // single event.
-    if (rec.observedOutcome && !observed.supersede) {
+    const supersede = rec.observedOutcome && !rec.observedOutcome.measured && observed.measured === true;
+    if (rec.observedOutcome && !observed.supersede && !supersede) {
       return { ...rec, adjustedConfidence: rec.confidence, confidenceDelta: 0, lesson: rec.lessonsLearned, duplicate: true };
     }
 
@@ -153,7 +154,7 @@ class BusinessOutcomeEngine {
       // actually measured or inferred from something else.
       measured: observed.measured !== false,
       provenance: observed.provenance || 'reported',
-      supersede: observed.supersede,
+      supersede: observed.supersede || supersede,
     });
 
     this.store.addConfidenceHistory(recommendationId, calibrated.confidence, `outcome:${outcomeType}`);

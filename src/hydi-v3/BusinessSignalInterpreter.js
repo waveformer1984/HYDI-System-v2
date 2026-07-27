@@ -52,6 +52,14 @@ class BusinessSignalInterpreter {
     this.eventBus = config.eventBus || null;
     this.projectObjectives = config.projectObjectives || DEFAULT_PROJECT_OBJECTIVES;
     this.objective = config.objective || null;
+    this.handledEventTypes = [
+      'ProjectOpened', 'ProjectActive',
+      'FileCreated', 'FileModified', 'FileDeleted',
+      'DirectoryCreated', 'DirectoryDeleted',
+      'CommitCreated', 'BranchCreated', 'BranchDeleted', 'BranchStale',
+      'WorkingTreeDirty', 'WorkingTreeClean',
+      'RevenueReceived',
+    ];
     if (this.eventBus) this.attach(this.eventBus);
   }
 
@@ -62,6 +70,15 @@ class BusinessSignalInterpreter {
       if (signal) this.publish(signal);
     };
     this.eventBus.subscribe('*', this._handler);
+    this._registerWithRegistry();
+  }
+
+  _registerWithRegistry() {
+    if (this.eventBus && this.eventBus.registry) {
+      for (const type of this.handledEventTypes) {
+        this.eventBus.registry.declareHandled(type, 'BusinessSignalInterpreter');
+      }
+    }
   }
 
   detach() {
@@ -71,7 +88,13 @@ class BusinessSignalInterpreter {
 
   interpret(event) {
     if (event.type === 'BusinessSignal') return null;
+    if (!this.handledEventTypes.includes(event.type)) return null;
     const p = event.payload || {};
+
+    if (event.type === 'RevenueReceived') {
+      return this._interpretRevenue(event, p);
+    }
+
     const displayProject = p.project || 'a project';
     const normalizedProject = normalizeProject(displayProject);
     const objectiveKey = Object.keys(this.projectObjectives).find((k) => normalizedProject.includes(k));
@@ -100,6 +123,32 @@ class BusinessSignalInterpreter {
     };
   }
 
+  _interpretRevenue(event, p) {
+    const amount = Number.isFinite(p.amount) ? p.amount : 0;
+    const currency = p.currency || 'USD';
+    const interpretation = this._interpretation('RevenueReceived', { ...p, amount, currency });
+    return {
+      type: 'BusinessSignal',
+      source: 'BusinessSignalInterpreter',
+      at: event.at,
+      payload: {
+        interpretation,
+        strategicObjective: 'revenue',
+        subsystem: 'Revenue',
+        project: 'Revenue',
+        path: p.path,
+        fileCategory: 'revenue',
+        originatingEvent: event.type,
+        confidence: p.confidence || 0.99,
+        impact: this._impact('RevenueReceived', 'revenue'),
+        amount,
+        currency,
+        recommendation: this._recommendation('RevenueReceived', p),
+        meta: p,
+      },
+    };
+  }
+
   publish(signal) {
     if (this.eventBus) {
       this.eventBus.emit('BusinessSignal', signal.payload, signal.source);
@@ -116,8 +165,6 @@ class BusinessSignalInterpreter {
       case 'FileDeleted': return `File removed in ${base}`;
       case 'DirectoryCreated': return `New directory created in ${base}`;
       case 'DirectoryDeleted': return `Directory removed in ${base}`;
-      case 'BuildArtifactGenerated': return `Build artifact generated in ${base}`;
-      case 'ProjectInactive': return `${base} has been inactive`;
       case 'ProjectActive': return `${base} is active again`;
 
       // Git events. The sensor reports facts about a repository; the meaning
@@ -140,11 +187,19 @@ class BusinessSignalInterpreter {
       }
       case 'WorkingTreeClean': return `${base} working tree is clean; all work is committed`;
 
+      case 'RevenueReceived': {
+        const amount = Number.isFinite(p.amount) ? p.amount : 0;
+        const currency = p.currency || 'USD';
+        const note = p.description ? ` (${p.description})` : '';
+        return `Revenue of ${amount} ${currency} received${note}`;
+      }
+
       default: return null;
     }
   }
 
   _impact(type, fileCategory) {
+    if (type === 'RevenueReceived') return 'revenue-positive';
     if (type === 'BuildArtifactGenerated') return 'artifact-output';
     if (type === 'ProjectInactive') return 'risk-stale';
     if (type === 'CommitCreated') return 'engineering-delivered';
@@ -157,6 +212,13 @@ class BusinessSignalInterpreter {
     if (fileCategory === 'audio-asset') return 'creative-ready';
     if (fileCategory === 'source') return 'engineering-progress';
     return 'general';
+  }
+
+  _recommendation(type, _p) {
+    if (type === 'RevenueReceived') {
+      return 'Record revenue in the ledger and notify the Finance agent.';
+    }
+    return null;
   }
 }
 

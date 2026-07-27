@@ -74,7 +74,9 @@ class EvidenceCollector extends EventEmitter {
       ...item,
       id: item.id || `ev_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
       attachedTo: recommendationId,
-      measurementType: item.measurementType || (item.source === 'manual' ? 'qualitative' : 'activity'),
+      measurementType: item.measurementType
+        || (Number.isFinite(item.data && item.data.value) ? 'quantitative' : null)
+        || (item.source === 'manual' ? 'qualitative' : 'activity'),
     };
     this._add(evidence);
     const list = this.attached.get(recommendationId) || [];
