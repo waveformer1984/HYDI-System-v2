@@ -11,7 +11,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "lint:hydi-v3": "eslint src/hydi-v3 tests/unit/hydi-v3 pages/api/cockpit pages/api/console scripts/performance-benchmark.js scripts/security-audit.js scripts/soak-test-v3.js scripts/operator-cli.js scripts/console-benchmark.js scripts/hydi-demo.js",
+    "lint:hydi-v3": "eslint src/hydi-v3 tests/unit/hydi-v3 tests/integration/hydi-production-failure-modes.test.js pages/api/cockpit pages/api/console scripts/performance-benchmark.js scripts/security-audit.js scripts/soak-test-v3.js scripts/operator-cli.js scripts/console-benchmark.js scripts/hydi-demo.js scripts/hydi-cli.js scripts/hydi-operational-demo.js",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
@@ -28,6 +28,9 @@
     "benchmark:performance": "node scripts/performance-benchmark.js",
     "benchmark:console": "node scripts/console-benchmark.js",
     "hydi-demo": "node scripts/hydi-demo.js",
+    "hydi-operational-demo": "node scripts/hydi-operational-demo.js",
+    "hydi:status": "node scripts/hydi-cli.js status",
+    "hydi:readiness": "node scripts/hydi-cli.js readiness",
     "cockpit": "node scripts/operator-cli.js",
     "cockpit:dry-run": "node scripts/operator-cli.js --dry-run",
     "cockpit:offline": "node scripts/operator-cli.js --offline",
@@ -43,6 +46,9 @@
     "boot:plan": "node scripts/boot-agent.js --dry-run",
     "boot:prod": "node scripts/boot-agent.js --prod",
     "build:capacitor-www": "node scripts/build-capacitor-www.js"
+  },
+  "bin": {
+    "hydi": "scripts/hydi-cli.js"
   },
   "keywords": [
     "protoforge",

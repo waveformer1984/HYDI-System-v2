@@ -22,6 +22,8 @@
     "scripts/security-audit.js",
     "scripts/soak-test-v3.js",
     "scripts/operator-cli.js",
+    "scripts/hydi-cli.js",
+    "scripts/hydi-operational-demo.js",
     "scripts/console-benchmark.js",
     "pages/api/cockpit/**/*.js",
     "pages/api/console/**/*.js"
