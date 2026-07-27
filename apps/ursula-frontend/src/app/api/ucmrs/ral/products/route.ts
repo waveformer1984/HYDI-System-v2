@@ -3,7 +3,7 @@ import { ProductCandidate, CreateProductRequest, UpdateProductRequest } from '@/
 import { Component } from '@/lib/ucmrs/types';
 
 // Mock database - replace with actual DB connection
-let products: ProductCandidate[] = [];
+const products: ProductCandidate[] = [];
 let nextId = 1;
 
 // GET /api/ucmrs/ral/products - List product candidates

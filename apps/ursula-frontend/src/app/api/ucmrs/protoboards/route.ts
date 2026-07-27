@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { Protoboard, CreateProtoboardRequest } from '@/lib/ucmrs/types';
 
 // Mock database - replace with actual DB connection
-let protoboards: Protoboard[] = [];
+const protoboards: Protoboard[] = [];
 let nextId = 1;
 
 // GET /api/ucmrs/protoboards - List all protoboards

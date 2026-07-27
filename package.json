@@ -10,7 +10,7 @@
     "prebuild": "echo 'Prebuild complete'",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "eslint api pages components lib src apps/ursula-frontend/src tests/unit --ext .js,.jsx,.ts,.tsx",
     "lint:hydi-v3": "eslint src/hydi-v3 tests/unit/hydi-v3 tests/integration/hydi-production-failure-modes.test.js tests/integration/hydi-morning-executive-simulation.test.js tests/integration/hydi-live-operation-failures.test.js pages/api/cockpit pages/api/console scripts/performance-benchmark.js scripts/security-audit.js scripts/soak-test-v3.js scripts/operator-cli.js scripts/console-benchmark.js scripts/hydi-demo.js scripts/hydi-cli.js scripts/hydi-morning-demo.js scripts/hydi-operational-demo.js scripts/hydi-continuous-demo.js scripts/hydi-operator-demo.js scripts/hydi-boot.js scripts/hydi-dashboard.js scripts/hydi-live-demo.js tests/integration/hydi-trust-integrity.test.js tests/integration/hydi-recovery.test.js tests/integration/hydi-operator-approval-flow.test.js tests/integration/hydi-operator-mistakes.test.js tests/integration/hydi-live-recovery.test.js",
     "test": "jest",
     "test:watch": "jest --watch",

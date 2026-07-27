@@ -53,15 +53,15 @@ async function testIllegalTransitions() {
       }
       
       // Attempt illegal transition
-      const { error } = await supabase.functions.invoke('hydi-transition', {
-        body: {
-          run_id: run.run_id,
-          from: attempt.from,
-          to: attempt.to,
-          payload: {},
-          actor: attempt.actor,
-          idempotency_key: `test-${Date.now()}`
-        }
+      const { error } = await supabase.rpc('hydi_transition', {
+
+          p_run_id: run.run_id,
+          p_from: attempt.from,
+          p_to: attempt.to,
+          p_payload: {},
+          p_actor: attempt.actor,
+          p_idempotency_key: `test-${Date.now()}`
+        
       });
       
       if (!error) {
@@ -146,16 +146,16 @@ async function testIdempotency() {
     const idempotencyKey = `test-${Date.now()}`;
     
     // First transition
-    const { data: result1, error: error1 } = await supabase.functions.invoke('hydi-transition', {
-      body: {
-        run_id: run.run_id,
-        from: 'initialized',
-        to: 'audit',
-        payload: { test: 1 },
-        actor: 'auditor',
-        idempotency_key: idempotencyKey
-      }
-    });
+    const { data: result1, error: error1 } = await supabase.rpc('hydi_transition', {
+
+        p_run_id: run.run_id,
+        p_from: 'initialized',
+        p_to: 'audit',
+        p_payload: { test: 1 },
+        p_actor: 'auditor',
+        p_idempotency_key: idempotencyKey
+      
+      });
     
     if (error1) {
       failures.push(`❌ First transition failed: ${error1.message}`);
@@ -165,16 +165,16 @@ async function testIdempotency() {
     console.log('✅ First transition succeeded');
     
     // Duplicate with same key (should be idempotent)
-    const { data: result2, error: error2 } = await supabase.functions.invoke('hydi-transition', {
-      body: {
-        run_id: run.run_id,
-        from: 'initialized',
-        to: 'audit',
-        payload: { test: 2 }, // Different payload
-        actor: 'auditor',
-        idempotency_key: idempotencyKey
-      }
-    });
+    const { data: result2, error: error2 } = await supabase.rpc('hydi_transition', {
+
+        p_run_id: run.run_id,
+        p_from: 'initialized',
+        p_to: 'audit',
+        p_payload: { test: 2 }, // Different payload
+        p_actor: 'auditor',
+        p_idempotency_key: idempotencyKey
+      
+      });
     
     if (error2) {
       // Check if it's a duplicate key error (expected)
@@ -190,16 +190,16 @@ async function testIdempotency() {
     }
     
     // Different key should succeed
-    const { data: result3, error: error3 } = await supabase.functions.invoke('hydi-transition', {
-      body: {
-        run_id: run.run_id,
-        from: 'audit',
-        to: 'execute',
-        payload: { test: 3 },
-        actor: 'auditor',
-        idempotency_key: `${idempotencyKey}-2`
-      }
-    });
+    const { data: result3, error: error3 } = await supabase.rpc('hydi_transition', {
+
+        p_run_id: run.run_id,
+        p_from: 'audit',
+        p_to: 'execute',
+        p_payload: { test: 3 },
+        p_actor: 'auditor',
+        p_idempotency_key: `${idempotencyKey}-2`
+      
+      });
     
     if (error3) {
       failures.push(`❌ Different key transition failed: ${error3.message}`);
@@ -242,15 +242,15 @@ async function testReplayFidelity() {
     for (let i = 0; i < lifecycle.length; i++) {
       const step = lifecycle[i];
       
-      const { error } = await supabase.functions.invoke('hydi-transition', {
-        body: {
-          run_id: run.run_id,
-          from: step.from,
-          to: step.to,
-          payload: step.payload,
-          actor: step.actor,
-          idempotency_key: `fidelity-${run.run_id}-${i}`
-        }
+      const { error } = await supabase.rpc('hydi_transition', {
+
+          p_run_id: run.run_id,
+          p_from: step.from,
+          p_to: step.to,
+          p_payload: step.payload,
+          p_actor: step.actor,
+          p_idempotency_key: `fidelity-${run.run_id}-${i}`
+        
       });
       
       if (error) {
@@ -325,16 +325,16 @@ async function testPerformanceSLOs() {
     
     const start = Date.now();
     
-    const { error } = await supabase.functions.invoke('hydi-transition', {
-      body: {
-        run_id: run.run_id,
-        from: 'initialized',
-        to: 'audit',
-        payload: {},
-        actor: 'auditor',
-        idempotency_key: `perf-${i}`
-      }
-    });
+    const { error } = await supabase.rpc('hydi_transition', {
+
+        p_run_id: run.run_id,
+        p_from: 'initialized',
+        p_to: 'audit',
+        p_payload: {},
+        p_actor: 'auditor',
+        p_idempotency_key: `perf-${i}`
+      
+      });
     
     const latency = Date.now() - start;
     results.transitionLatencies.push(latency);

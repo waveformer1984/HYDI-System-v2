@@ -70,7 +70,7 @@ export class VersionedGovernance {
       }
 
       // STEP 4: Prepare updated task with incremented version
-      let updatedTask: VersionedTask = {
+      const updatedTask: VersionedTask = {
         ...currentTask,
         ...governance.sanitizedUpdates,
         state_version: currentVersion + 1,
@@ -197,7 +197,7 @@ export class VersionedGovernance {
       const currentVersion = currentTask.state_version || 0;
       
       const governance = TaskGovernance.governTaskUpdate(currentTask, request);
-      let updatedTask: VersionedTask = {
+      const updatedTask: VersionedTask = {
         ...currentTask,
         ...governance.sanitizedUpdates,
         state_version: currentVersion + 1,

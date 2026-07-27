@@ -29,6 +29,7 @@ async function verifyBearerToken(authHeader: string): Promise<string | null> {
   try {
     // jsonwebtoken is available per package.json; dynamically required so this
     // module loads in environments where it may not be installed yet.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const jwt = require('jsonwebtoken') as any;
     const payload = jwt.verify(token, secret) as Record<string, unknown>;
     const userId =

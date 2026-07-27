@@ -14,11 +14,14 @@ import { generateEmbedding } from './embeddings';
 
 /**
  * Retrieve relevant prior context via semantic search over the user message.
+ * If sessionId is provided, prefer memories from the same session and fall back
+ * to the user's other memories when the session has no relevant matches.
  */
 export async function retrieveMemory(
   supabase: SupabaseClient,
   message: string,
   userId: string,
+  sessionId?: string,
 ): Promise<string> {
   try {
     const embedding = await generateEmbedding(message);
@@ -26,13 +29,19 @@ export async function retrieveMemory(
 
     const { data } = await supabase.rpc('search_memories', {
       query_embedding: embedding,
-      match_count: 5,
+      match_count: sessionId ? 20 : 5,
       user_id: userId,
     });
 
     if (!data || data.length === 0) return '';
 
-    const context = (data as Array<{ content: string }>).map((m) => m.content).join('\n');
+    const rows = data as Array<{ content: string; session_id: string }>;
+    const sessionRows = sessionId
+      ? rows.filter((m) => m.session_id === sessionId)
+      : rows;
+    const chosen = sessionRows.length ? sessionRows : rows;
+
+    const context = chosen.slice(0, 5).map((m) => m.content).join('\n');
     return `Previous relevant context:\n${context}`;
   } catch (error) {
     console.error('[HeidiMemory] retrieval failed:', error instanceof Error ? error.message : 'Unknown error');

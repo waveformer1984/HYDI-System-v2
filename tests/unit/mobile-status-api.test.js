@@ -29,7 +29,7 @@ jest.mock('@supabase/supabase-js', () => ({
       if (table === 'system_dashboard') {
         return { select: jest.fn(() => ({ single: jest.fn(async () => ({ data: mockDashboard, error: null })) })) };
       }
-      if (table === 'ledger') {
+      if (table === 'financial_ledger') {
         return {
           select: jest.fn(() => ({
             in: jest.fn(() => ({

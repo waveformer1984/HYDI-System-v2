@@ -9,9 +9,11 @@
  * - Parse and validate responses
  * - Execute actions
  * - Maintain session state
+ * - Record per-request metrics to the MetricsService
  */
 
-import { ModelManager } from './ModelManager';
+import { randomUUID } from 'crypto';
+import { ModelManager, type ModelResponse } from './ModelManager';
 import { ActionParser, ParsedResponse } from './ActionParser';
 import { ActionExecutor } from './action-executor';
 import { retrieveMemory, storeMemory } from './heidi-memory';
@@ -27,8 +29,9 @@ import {
   updateWorkSession,
   WorkSession,
 } from './work-sessions';
-import { getDecisionStats, getMemoryRetrievalStats, getRetryStats, getTaskSuccessRates, getWorkSessionStats } from './metrics';
+import { getDecisionStats, getMemoryRetrievalStats, getRetryStats, getTaskSuccessRates, getWorkSessionStats } from './agent-metrics';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { getMetricsService, type PartialInferenceMetric } from './metrics';
 
 // Lazy client: a missing NEXT_PUBLIC_SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY
 // must surface as a normal caught error inside processChat's try/catch (which
@@ -85,32 +88,47 @@ export class HeidiOrchestrator {
    */
   async processChat(request: ChatRequest): Promise<ChatResponse> {
     const startTime = Date.now();
+    const requestId = randomUUID();
+    let memoryLookupDurationMs: number | undefined;
+    let actionExecutionDurationMs: number | undefined;
+    let modelResponse: ModelResponse | undefined;
+    let finalResponse: ParsedResponse | undefined;
+    let parseRetry = false;
     
     try {
       // 1. Retrieve memory context
-      const memoryContext = await this.retrieveMemory(request.message, request.user_id);
+      const memoryStart = Date.now();
+      const memoryContext = await this.retrieveMemory(request.message, request.user_id, request.session_id);
       await this.recordMemoryRetrieval(request.session_id, memoryContext.length > 0);
+      memoryLookupDurationMs = Date.now() - memoryStart;
 
       // 2. Build prompt with memory
       const prompt = this.buildPrompt(request.message, memoryContext);
       
-      // 3. Generate response via ModelManager
-      const modelResponse = await this.modelManager.generateResponse(prompt, request.session_id);
+      // 3. Generate response via ModelManager (metrics recorded here by orchestrator later)
+      modelResponse = await this.modelManager.generateResponse(prompt, request.session_id, {
+        requestId,
+        memoryLookupDurationMs,
+        recordMetrics: false,
+      });
       
       // 4. Parse and validate response
       const parseResult = ActionParser.parseResponse(modelResponse.content);
-      
-      let finalResponse: ParsedResponse;
       
       if (parseResult.success && parseResult.response) {
         finalResponse = parseResult.response;
       } else {
         // Self-correction loop - retry once
+        parseRetry = true;
         console.log('[Orchestrator] Invalid response, retrying with corrected prompt');
         const correctedPrompt = ActionParser.generateCorrectedPrompt(prompt, parseResult.error || 'Unknown error');
-        const retryResponse = await this.modelManager.generateResponse(correctedPrompt, request.session_id);
+        modelResponse = await this.modelManager.generateResponse(correctedPrompt, request.session_id, {
+          requestId: `${requestId}-retry`,
+          memoryLookupDurationMs,
+          recordMetrics: false,
+        });
 
-        const retryParse = ActionParser.parseResponse(retryResponse.content);
+        const retryParse = ActionParser.parseResponse(modelResponse.content);
         if (retryParse.success && retryParse.response) {
           finalResponse = retryParse.response;
         } else {
@@ -131,7 +149,9 @@ export class HeidiOrchestrator {
       }
       
       // 6. Execute actions
+      const actionStart = Date.now();
       const actionResults = await this.executeActions(finalResponse.actions, request.session_id);
+      actionExecutionDurationMs = Date.now() - actionStart;
 
       // 6b. Record an episodic experience for this turn — accumulate what
       // was attempted and what happened, not just raw conversation.
@@ -151,6 +171,19 @@ export class HeidiOrchestrator {
       const sessionState = await this.modelManager.getSessionState(request.session_id);
       
       const totalLatency = Date.now() - startTime;
+
+      // Record the comprehensive per-request metric
+      this.recordRequestMetric({
+        requestId,
+        conversationId: request.session_id,
+        modelResponse,
+        prompt,
+        finalResponse,
+        totalLatency,
+        memoryLookupDurationMs,
+        actionExecutionDurationMs,
+        parseRetry,
+      });
       
       return {
         response: finalResponse.response,
@@ -162,24 +195,75 @@ export class HeidiOrchestrator {
       
     } catch (error) {
       console.error('[Orchestrator] Chat processing failed:', error);
+      const totalLatency = Date.now() - startTime;
+
+      if (modelResponse) {
+        this.recordRequestMetric({
+          requestId,
+          conversationId: request.session_id,
+          modelResponse,
+          prompt: request.message,
+          finalResponse,
+          totalLatency,
+          memoryLookupDurationMs,
+          actionExecutionDurationMs,
+          parseRetry,
+          errors: [error instanceof Error ? error.message : 'Unknown error'],
+        });
+      }
       
       // Return safe fallback on any error
       return {
         response: "I apologize, but I'm experiencing technical difficulties. Please try again.",
         actions: [],
-        model_used: 'fallback',
-        latency: Date.now() - startTime,
+        model_used: modelResponse?.model ?? 'fallback',
+        latency: totalLatency,
         session_state: null
       };
     }
+  }
+
+  private recordRequestMetric(args: {
+    requestId: string;
+    conversationId: string;
+    modelResponse: ModelResponse;
+    prompt: string;
+    finalResponse?: ParsedResponse;
+    totalLatency: number;
+    memoryLookupDurationMs?: number;
+    actionExecutionDurationMs?: number;
+    parseRetry: boolean;
+    errors?: string[];
+  }): void {
+    const metadata = args.modelResponse.metadata;
+    const metric: PartialInferenceMetric = {
+      requestId: args.requestId,
+      conversationId: args.conversationId,
+      provider: metadata?.provider ?? args.modelResponse.model,
+      selectedModel: metadata?.selectedModel ?? 'unknown',
+      promptLength: args.prompt.length,
+      responseLength: args.finalResponse?.response?.length ?? args.modelResponse.content.length,
+      latencyMs: args.totalLatency,
+      loadDurationMs: metadata?.loadDurationMs,
+      evalDurationMs: metadata?.evalDurationMs,
+      memoryLookupDurationMs: args.memoryLookupDurationMs,
+      actionExecutionDurationMs: args.actionExecutionDurationMs,
+      promptTokens: metadata?.promptTokens,
+      completionTokens: metadata?.completionTokens,
+      totalTokens: metadata?.totalTokens,
+      errors: args.errors,
+      retryCount: args.parseRetry ? 1 : 0,
+    };
+
+    getMetricsService().record(metric);
   }
 
   /**
    * Retrieve memory context from Supabase via semantic search over the
    * user's current message. Skips retrieval when embeddings are unavailable.
    */
-  private async retrieveMemory(message: string, userId: string): Promise<string> {
-    return retrieveMemory(this.supabase, message, userId);
+  private async retrieveMemory(message: string, userId: string, sessionId: string): Promise<string> {
+    return retrieveMemory(this.supabase, message, userId, sessionId);
   }
 
   /**

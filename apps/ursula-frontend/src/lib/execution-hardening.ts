@@ -220,7 +220,7 @@ export class ExecutionHardener {
   ): Promise<ExecutionResult> {
     const startTime = Date.now();
     const actionResults: ActionResult[] = [];
-    let driftDetected = false;
+    const driftDetected = false;
     
     try {
       // Pre-execution validation

@@ -4,6 +4,8 @@ import Stripe from 'stripe';
 import { randomUUID } from 'crypto';
 import { Redis } from '@upstash/redis';
 import { ensureDeliveries, markOfferPaidFromWebhook } from '@/lib/revenue-engine/engine';
+import { getEventBus, getEventRecorder, setEventRecorder } from '@repo/lib/event-bus';
+import { publishCommercialEvent, adaptStripeConnectEvent } from '@repo/lib/commercial/ingress-adapter';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: '2026-05-27.dahlia',
@@ -19,6 +21,14 @@ try {
 
 // Memory fallback for idempotency
 const processedEvents = new Set<string>();
+
+// Ensure the Event Fabric recorder is attached in this process.
+async function ensureRecorder() {
+  if (getEventRecorder()) return;
+  const { EventRecorder } = await import('@repo/lib/event-bus/recorder');
+  const recorder = new EventRecorder(getEventBus(), { path: 'logs/event-fabric' });
+  setEventRecorder(recorder);
+}
 
 // Hard idempotency check - explicit database check
 async function isEventProcessed(eventId: string): Promise<boolean> {
@@ -198,6 +208,8 @@ async function storeDeadLetter(event: Stripe.Event, error: unknown): Promise<voi
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
+    await ensureRecorder();
+
     const body = await request.text();
     const headersList = await headers();
     const signature = headersList.get('stripe-signature');
@@ -260,6 +272,21 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           console.log('[WEBHOOK] AMOUNT:', checkoutSession.amount_total ? `$${(checkoutSession.amount_total / 100).toFixed(2)}` : 'No amount');
           console.log('[WEBHOOK] STATUS:', checkoutSession.status);
 
+          await publishCommercialEvent(
+            'payment.received',
+            {
+              stripe_event_id: event.id,
+              session_id: checkoutSession.id,
+              payment_intent_id: typeof checkoutSession.payment_intent === 'string' ? checkoutSession.payment_intent : null,
+              amount: (checkoutSession.amount_total ?? 0) / 100,
+              currency: (checkoutSession.currency ?? 'usd').toLowerCase(),
+              customer_id: typeof checkoutSession.customer === 'string' ? checkoutSession.customer : null,
+              customer_email: checkoutSession.customer_details?.email ?? null,
+              metadata: checkoutSession.metadata ?? {},
+            },
+            { source: 'stripe-webhook', correlationId: event.id }
+          );
+
           // Create task from payment with full context
           const taskId = await createTaskFromPayment(event, {
             id: checkoutSession.id,
@@ -294,6 +321,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           console.log('[WEBHOOK] CUSTOMER:', paymentIntent.customer);
           console.log('[WEBHOOK] AMOUNT:', paymentIntent.amount ? `$${(paymentIntent.amount / 100).toFixed(2)}` : 'No amount');
           console.log('[WEBHOOK] STATUS:', paymentIntent.status);
+
+          const adapted = adaptStripeConnectEvent(event);
+          await publishCommercialEvent(adapted.type, adapted.payload, {
+            source: adapted.source,
+            correlationId: adapted.correlationId,
+          });
 
           // Create task from payment with full context
           const paymentTaskId = await createTaskFromPayment(event, {

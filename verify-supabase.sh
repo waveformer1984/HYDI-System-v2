@@ -30,12 +30,16 @@ fail()    { echo -e "${RED}  ✗${NC} $1"; FAIL=$((FAIL + 1)); }
 warn()    { echo -e "${YELLOW}  ⚠${NC} $1"; WARN=$((WARN + 1)); }
 section() { echo -e "\n${CYAN}${BOLD}── $1 ──${NC}"; }
 
-# ── load .env if present ─────────────────────────────────────────────────
-if [[ -f ".env" ]]; then
-  # shellcheck source=/dev/null
-  set -a; source .env; set +a
-  echo -e "${CYAN}Loaded .env${NC}"
-fi
+ # ── load .env files if present ───────────────────────────────────────────
+# .env.local takes precedence and is sourced before .env; strip CRLF so bash
+# doesn't choke on Windows line endings.
+for env_file in .env.local .env; do
+  if [[ -f "$env_file" ]]; then
+    # shellcheck source=/dev/null
+    set -a; source <(tr -d '\r' < "$env_file"); set +a
+    echo -e "${CYAN}Loaded ${env_file}${NC}"
+  fi
+done
 
 echo ""
 echo -e "${BOLD}HYDI System v2 — Supabase Verification${NC}"
@@ -98,13 +102,15 @@ rest_get() {
     "${BASE}${1}" 2>/dev/null || echo "000"
 }
 
-# PostgREST root
+# PostgREST health check using the system_dashboard view (the root /rest/v1/ path
+# can timeout on local Supabase while OpenAPI spec is generated, so we check a real endpoint)
 status=$(curl -s -o /dev/null -w "%{http_code}" \
   -H "apikey: ${KEY}" \
   -H "Authorization: Bearer ${KEY}" \
-  "${BASE}/rest/v1/" 2>/dev/null || echo "000")
+  -H "Prefer: count=exact" \
+  "${BASE}/rest/v1/system_dashboard?limit=0" 2>/dev/null || echo "000")
 case "$status" in
-  200) ok "PostgREST API reachable (HTTP $status)" ;;
+  200|206) ok "PostgREST API reachable (HTTP $status)" ;;
   401) fail "PostgREST: auth rejected (HTTP 401) — check service role key" ;;
   *)   fail "PostgREST unreachable (HTTP $status)" ;;
 esac

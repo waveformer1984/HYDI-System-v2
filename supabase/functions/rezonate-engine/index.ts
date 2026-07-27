@@ -85,7 +85,7 @@ function handleRightsVerify(_payload: Record<string, unknown>) {
 }
 
 function handleSessionRecall(project_id: string, _payload: Record<string, unknown>) {
-  // Stub: real implementation will hydrate session state from the ledger
+  // Stub: real implementation will hydrate session state from the financial_ledger
   return { session_id: project_id, state: 'restored', tracks: [] }
 }
 

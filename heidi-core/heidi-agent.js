@@ -93,8 +93,10 @@ class HeidiAgent {
         return false;
       }
 
-      // Claim if no holder OR if lease expired
-      const isLeaseAvailable = !current.lease_holder || new Date(current.lease_expires) < now;
+      // Claim if no holder, lease expired, or we already hold it (renewal)
+      const isLeaseAvailable = !current.lease_holder ||
+        current.lease_holder === this.leaseHolder ||
+        new Date(current.lease_expires) < now;
 
       if (!isLeaseAvailable) {
         console.log(`[HEIDI-AGENT] ⚠️ Lease held by ${current.lease_holder} until ${current.lease_expires}`);
@@ -282,6 +284,11 @@ class HeidiAgent {
       if (decision.verdict !== 'AUTO-APPROVE') {
         // Log review/block decision but don't execute
         await this.logEvent(task, decision.verdict, decision.reason, decision.memory_ids);
+        // Mark the task as resolved so the poller doesn't keep reprocessing it
+        await this.supabase
+          .from('agent_bus')
+          .update({ status: decision.verdict.toLowerCase() })
+          .eq('id', task.id);
         return { success: true, executed: false, verdict: decision.verdict };
       }
 

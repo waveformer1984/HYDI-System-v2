@@ -59,9 +59,9 @@ serve(async (req) => {
   try {
     const cutoff = new Date(Date.now() - SILENCE_THRESHOLD_MS).toISOString();
 
-    // Which streams have had ledger activity in the last 24h?
+    // Which streams have had financial_ledger activity in the last 24h?
     const { data: recent, error: ledgerErr } = await supabase
-      .from('ledger')
+      .from('financial_ledger')
       .select('revenue_stream, created_at')
       .in('revenue_stream', STREAMS)
       .gte('created_at', cutoff)
@@ -94,7 +94,7 @@ serve(async (req) => {
           subject: `[HYDI] ${silentStreams.length} revenue stream(s) silent >24h`,
           html: `
             <h2 style="color:#c0392b">HYDI Revenue Stream Alert</h2>
-            <p>The following streams have had <strong>no ledger activity in the last 24 hours</strong>:</p>
+            <p>The following streams have had <strong>no financial_ledger activity in the last 24 hours</strong>:</p>
             <ul>${silentStreams.map((s) => `<li><code>${s}</code></li>`).join('')}</ul>
             <p>Check Stripe Connect dashboard and verify webhook delivery for these accounts.</p>
             <hr/>

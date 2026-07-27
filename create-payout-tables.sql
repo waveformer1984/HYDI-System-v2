@@ -29,10 +29,10 @@ CREATE TABLE IF NOT EXISTS public.payouts (
     updated_at timestamptz default now()
 );
 
--- Create ledger table if it doesn't exist
-CREATE TABLE IF NOT EXISTS public.ledger (
+-- Create financial_ledger table if it doesn't exist
+CREATE TABLE IF NOT EXISTS public.financial_ledger (
     transaction_id uuid primary key default gen_random_uuid(),
-    timestamp timestamptz default now(),
+    created_at timestamptz default now(),
     source_account text not null,
     amount_gross numeric not null,
     platform_fee_percent numeric not null,
@@ -53,15 +53,15 @@ CREATE INDEX IF NOT EXISTS idx_payouts_client_id ON public.payouts(client_id);
 CREATE INDEX IF NOT EXISTS idx_payouts_status ON public.payouts(status);
 CREATE INDEX IF NOT EXISTS idx_payouts_period ON public.payouts(period_start, period_end);
 
--- Indexes for ledger table
-CREATE INDEX IF NOT EXISTS idx_ledger_source_account ON public.ledger(source_account);
-CREATE INDEX IF NOT EXISTS idx_ledger_timestamp ON public.ledger(timestamp);
-CREATE INDEX IF NOT EXISTS idx_ledger_status ON public.ledger(status);
+-- Indexes for financial_ledger table
+CREATE INDEX IF NOT EXISTS idx_financial_ledger_source_account ON public.financial_ledger(source_account);
+CREATE INDEX IF NOT EXISTS idx_financial_ledger_created_at ON public.financial_ledger(created_at);
+CREATE INDEX IF NOT EXISTS idx_financial_ledger_status ON public.financial_ledger(status);
 
 -- Enable RLS
 ALTER TABLE public.clients ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.payouts ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.ledger ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.financial_ledger ENABLE ROW LEVEL SECURITY;
 
 -- Create policies for service role
 CREATE POLICY "service_role_all" ON public.clients
@@ -70,7 +70,7 @@ CREATE POLICY "service_role_all" ON public.clients
 CREATE POLICY "service_role_all" ON public.payouts
     FOR ALL USING (auth.role() = 'service_role');
 
-CREATE POLICY "service_role_all" ON public.ledger
+CREATE POLICY "service_role_all" ON public.financial_ledger
     FOR ALL USING (auth.role() = 'service_role');
 
 -- Verify tables were created
@@ -78,4 +78,4 @@ SELECT 'clients' as table_name, count(*) as row_count FROM public.clients
 UNION ALL
 SELECT 'payouts' as table_name, count(*) as row_count FROM public.payouts
 UNION ALL
-SELECT 'ledger' as table_name, count(*) as row_count FROM public.ledger;
+SELECT 'financial_ledger' as table_name, count(*) as row_count FROM public.financial_ledger;
