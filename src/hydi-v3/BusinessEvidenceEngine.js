@@ -101,7 +101,7 @@ class BusinessEvidenceEngine extends EventEmitter {
     if (!evidence || typeof evidence !== 'object') throw new Error('Evidence must be an object');
     if (!evidence.source || !evidence.type) throw new Error('Evidence must include source and type');
     if (evidence.data !== undefined && evidence.data !== null && typeof evidence.data !== 'object') throw new Error('Evidence data must be an object');
-    if (evidence.data && 'value' in evidence.data && !Number.isFinite(evidence.data.value)) throw new Error('Evidence data.value must be a finite number');
+    if (evidence.data && 'value' in evidence.data && evidence.data.value !== undefined && evidence.data.value !== null && !Number.isFinite(evidence.data.value)) throw new Error('Evidence data.value must be a finite number');
     if (Number.isFinite(evidence.at) && evidence.at > Date.now() + 1000) throw new Error('Evidence timestamp cannot be in the future');
     return this.collector.addEvidence(recommendationId, evidence);
   }

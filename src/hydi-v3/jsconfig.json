@@ -42,6 +42,11 @@
     "ResourceManager.js",
     "ModelSelectionPolicy.js",
     "ExecutionPolicy.js",
-    "MemoryMaintenanceService.js"
+    "MemoryMaintenanceService.js",
+    "AdaptiveModelOptimizer.js",
+    "ExecutionOutcomeTracker.js",
+    "ExecutivePerformanceDashboard.js",
+    "BenchmarkDatabase.js",
+    "OperatorFeedbackEngine.js"
   ]
 }

@@ -75,6 +75,82 @@ class ResourceManager {
     }
     return list[0] || null;
   }
+  detectCPUSaturation() {
+    const snap = this.snapshot();
+    return (snap.loadAvg[0] / Math.max(1, snap.cpus)) > 0.8;
+  }
+
+  detectRAMPressure() {
+    const snap = this.snapshot();
+    return snap.freeMem / Math.max(1, snap.totalMem) < 0.15;
+  }
+
+  async detectGPUUtilization() {
+    await this.detectGPU();
+    if (!this.gpu || !this.gpu.present) return { present: false, utilization: null };
+    return { present: true, utilization: null, note: 'GPU present; utilization sampling not implemented' };
+  }
+
+  async detectThermalThrottling() {
+    return { throttling: false, note: 'Thermal state not available on this platform' };
+  }
+
+  detectModelWarmState(modelId) {
+    return this.isModelWarm(modelId);
+  }
+
+  async hardwareReport() {
+    const [gpu, cpuSaturation, ramPressure, thermal] = await Promise.all([
+      this.detectGPUUtilization().catch(() => ({ present: false })),
+      Promise.resolve(this.detectCPUSaturation()),
+      Promise.resolve(this.detectRAMPressure()),
+      this.detectThermalThrottling().catch(() => ({ throttling: false })),
+    ]);
+    return {
+      cpuSaturation,
+      ramPressure,
+      gpu,
+      thermalThrottling: thermal.throttling,
+      modelWarmStates: Object.fromEntries(this.modelStates),
+    };
+  }
+
+  recommendForTask(task, candidates) {
+    if (!candidates || !candidates.length) return null;
+    const snap = this.snapshot();
+    const underMemoryPressure = snap.freeMem / Math.max(1, snap.totalMem) < 0.15;
+    const underLoad = (snap.loadAvg[0] / Math.max(1, snap.cpus)) > 0.8;
+
+    let list = candidates.filter((m) => this.canRun(m));
+    if (list.length === 0) list = candidates.slice();
+
+    if (task === 'embedding') {
+      const embed = list.find((m) => (m.capabilities || []).includes('embed'));
+      if (embed) return embed;
+    }
+
+    if (task === 'reasoning' || task === 'planning' || task === 'rag') {
+      const reasoning = list
+        .filter((m) => (m.capabilities || []).includes('reasoning') || (m.capabilities || []).includes('chat'))
+        .sort((a, b) => (b.contextSize || 0) - (a.contextSize || 0))[0];
+      if (reasoning) return reasoning;
+    }
+
+    if (task === 'simple' || task === 'intentExtraction' || task === 'conversation') {
+      const light = list
+        .filter((m) => !underMemoryPressure || (m.size || Infinity) < 2_000_000_000)
+        .sort((a, b) => (a.size || Infinity) - (b.size || Infinity))[0];
+      if (light) return light;
+    }
+
+    if (underMemoryPressure || underLoad) {
+      list = list.filter((m) => this.isModelWarm(m.id));
+      if (list.length === 0) list = candidates.slice();
+      list.sort((a, b) => (a.size || Infinity) - (b.size || Infinity));
+    }
+
+    return list[0] || null;
+  }
 }
 
 module.exports = ResourceManager;

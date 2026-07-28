@@ -56,6 +56,7 @@ class SemanticMemoryIndex {
     return docs
       .map((d) => this._scoreMemory(d, qv, tierOrder))
       .filter((d) => d.score > 0.05)
+      .map((d) => { this._recordRetrieval(d, d.score); return d; })
       .sort((a, b) => b.score - a.score)
       .slice(0, opts.limit || 10);
   }
@@ -125,6 +126,116 @@ class SemanticMemoryIndex {
       if (ok) added++;
     }
     return added;
+  }
+  _qualityScore(d, now = Date.now()) {
+    const ageDays = (now - (d.meta?.createdAt || d.at || now)) / 86400000;
+    const ageDecay = Math.max(0, 1 - ageDays / 90);
+    const confidence = d.meta?.confidence || 0.5;
+    const verified = d.meta?.verified === true ? 1.2 : 1;
+    const retrievalCount = d.meta?.retrievalCount || 0;
+    const successfulRetrievals = d.meta?.successfulRetrievals || 0;
+    const contradictions = d.meta?.contradictions || 0;
+    const usage = Math.min(1, retrievalCount / 10);
+    const success = retrievalCount ? successfulRetrievals / retrievalCount : 0.5;
+    return Math.max(0, (confidence * verified * ageDecay * (1 + usage) * success) - (contradictions * 0.3));
+  }
+
+  _recordRetrieval(d, score) {
+    if (!d || !d.meta) return;
+    d.meta.retrievalCount = (d.meta.retrievalCount || 0) + 1;
+    if (score > 0.5) d.meta.successfulRetrievals = (d.meta.successfulRetrievals || 0) + 1;
+    d.meta.lastRetrieved = Date.now();
+  }
+
+  getMetrics() {
+    const docs = this.embeddingManager ? this.embeddingManager.list() : [];
+    const now = Date.now();
+    let stale = 0;
+    let review = 0;
+    let archived = 0;
+    let promoted = 0;
+    let protectedCount = 0;
+    let totalQuality = 0;
+    const seen = new Set();
+    let duplicates = 0;
+    for (const d of docs) {
+      const ageDays = (now - (d.meta?.createdAt || d.at || now)) / 86400000;
+      if (ageDays > this.stalenessDays) stale++;
+      if (d.meta?.reviewRecommended) review++;
+      if (d.meta?.tier === TIERS.LONG_TERM && (d.meta?.qualityScore || 0) < 0.3) archived++;
+      if (d.meta?.tier === TIERS.EXECUTIVE) promoted++;
+      if (d.meta?.protected === true) protectedCount++;
+      const key = (d.text || '').trim().toLowerCase().slice(0, 120);
+      if (seen.has(key)) duplicates++; else seen.add(key);
+      totalQuality += this._qualityScore(d, now);
+    }
+    const contradictions = this.detectContradictions().length;
+    const avgQuality = docs.length ? totalQuality / docs.length : 0;
+    return {
+      docCount: docs.length,
+      duplicateRate: docs.length ? duplicates / docs.length : 0,
+      staleCount: stale,
+      contradictionCount: contradictions,
+      averageQuality: avgQuality,
+      reviewRecommended: review,
+      archivedCount: archived,
+      promotedCount: promoted,
+      protectedCount,
+      retrievalAccuracy: 0,
+    };
+  }
+
+  async runQualityPass() {
+    const docs = this.embeddingManager ? this.embeddingManager.list() : [];
+    const now = Date.now();
+    const result = { promoted: 0, archived: 0, review: 0, protected: 0 };
+    for (const d of docs) {
+      const score = this._qualityScore(d, now);
+      d.meta.qualityScore = score;
+      const isProtected = d.meta?.verified === true && d.meta?.tier === TIERS.EXECUTIVE;
+      if (isProtected) {
+        d.meta.protected = true;
+        result.protected++;
+      } else if (score >= 0.8 && d.meta?.tier !== TIERS.EXECUTIVE) {
+        d.meta.tier = TIERS.EXECUTIVE;
+        d.meta.reviewRecommended = false;
+        result.promoted++;
+      } else if (score < 0.25 && d.meta?.tier !== TIERS.LONG_TERM) {
+        d.meta.tier = TIERS.LONG_TERM;
+        d.meta.reviewRecommended = true;
+        result.archived++;
+        result.review++;
+      } else if (score < 0.5) {
+        d.meta.reviewRecommended = true;
+        result.review++;
+      } else {
+        d.meta.reviewRecommended = false;
+      }
+    }
+    if (this.embeddingManager && typeof this.embeddingManager.persist === 'function') {
+      await this.embeddingManager.persist();
+    }
+    return result;
+  }
+
+  recommendReview(limit = 10) {
+    const docs = this.embeddingManager ? this.embeddingManager.list() : [];
+    return docs.filter((d) => d.meta?.reviewRecommended).slice(0, limit);
+  }
+
+  protectStrategic(textFragment) {
+    const docs = this.embeddingManager ? this.embeddingManager.list() : [];
+    let count = 0;
+    const fragment = String(textFragment || '').toLowerCase();
+    for (const d of docs) {
+      const text = String(d.text || '').toLowerCase();
+      if (text.includes(fragment) || fragment.includes(text)) {
+        d.meta.protected = true;
+        d.meta.tier = TIERS.EXECUTIVE;
+        count++;
+      }
+    }
+    return count;
   }
 }
 
