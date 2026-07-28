@@ -47,6 +47,11 @@
     "ExecutionOutcomeTracker.js",
     "ExecutivePerformanceDashboard.js",
     "BenchmarkDatabase.js",
-    "OperatorFeedbackEngine.js"
+    "OperatorFeedbackEngine.js",
+    "FailureTaxonomy.js",
+    "SnapshotStore.js",
+    "RecoveryManager.js",
+    "SystemHealthSupervisor.js",
+    "FaultInjector.js"
   ]
 }
