@@ -115,7 +115,8 @@ class ModelRouter {
     const result = await this._run(selection.model, 'embed', () => this.modelManager.embed(text, { model: selection.model }));
     this._log({ task: 'embed', model: selection.model, latency: result.latency, ok: result.ok });
     if (!result.ok) return { usedModel: selection.model, ok: false, error: result.error };
-    return { usedModel: selection.model, ok: true, vector: result.result.vector };
+    const adapterResult = result.text || result;
+    return { usedModel: selection.model, ok: true, vector: adapterResult.vector };
   }
 
   recentLog(limit = 50) {

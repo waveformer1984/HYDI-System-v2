@@ -90,6 +90,11 @@ class EmbeddingManager {
   list() {
     return this.documents.slice();
   }
+
+  replaceDocuments(newDocuments) {
+    this.documents = newDocuments;
+    return this.persist();
+  }
 }
 
 module.exports = EmbeddingManager;

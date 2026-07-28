@@ -37,6 +37,11 @@
     "SpeechToTextAdapter.js",
     "TextToSpeechAdapter.js",
     "VoiceCommandRouter.js",
-    "VoiceInterface.js"
+    "VoiceInterface.js",
+    "RuntimeTelemetry.js",
+    "ResourceManager.js",
+    "ModelSelectionPolicy.js",
+    "ExecutionPolicy.js",
+    "MemoryMaintenanceService.js"
   ]
 }

@@ -310,7 +310,14 @@ class ExecutiveCockpit extends EventEmitter {
 
     const scored = recs.map((r, i) => {
       const scored = this.strategicObjectives.scoreRecommendation({ ...r, id: r.id || `rec_${i}` }, this.ownerPriority);
-      return { ...r, ...scored, explanation: `score ${scored.score.toFixed(2)} — ${scored.reason}` };
+      const confidence = Math.min(1, Math.max(0, scored.score));
+      const why = {
+        evidence: r.evidence || [r.reason || 'strategic alignment'],
+        priorityFactors: [this.ownerPriority, r.category || 'default'].filter(Boolean),
+        riskFactors: r.risks || ['unknown'],
+        confidence: +confidence.toFixed(2),
+      };
+      return { ...r, ...scored, confidence: why.confidence, why, explanation: `score ${scored.score.toFixed(2)} — ${scored.reason} (confidence ${why.confidence})` };
     }).sort((a, b) => b.score - a.score);
 
     if (scored.length === 0) {

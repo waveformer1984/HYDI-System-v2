@@ -19,21 +19,31 @@ class SemanticMemoryIndex {
     this.embeddingManager = config.embeddingManager || null;
     this.businessMemory = config.businessMemory || null;
     this.logger = config.logger || console;
-    this.decayRate = config.decayRate || 0.01; // importance per day
+    this.decayRate = config.decayRate || 0.01;
     this.duplicateThreshold = config.duplicateThreshold || 0.95;
+    this.stalenessDays = config.stalenessDays || 90;
   }
 
   async remember(text, meta = {}) {
     if (!this.embeddingManager) return null;
     const tier = TIERS[meta.tier] ? meta.tier : TIERS.WORKING;
-    const importance = meta.importance ?? 1;
     const existing = await this._findDuplicate(text);
     if (existing) {
       existing.meta.importance = Math.min((existing.meta.importance || 1) + 0.5, 5);
+      existing.meta.confidence = Math.max(existing.meta.confidence || 0.5, meta.confidence || 0.5);
       await this.embeddingManager.persist();
       return existing;
     }
-    return this.embeddingManager.addDocument(text, { ...meta, tier, importance, createdAt: Date.now() });
+    const doc = await this.embeddingManager.addDocument(text, {
+      ...meta,
+      tier,
+      importance: meta.importance ?? 1,
+      confidence: meta.confidence ?? 0.5,
+      source: meta.source || 'unknown',
+      verified: meta.verified === true,
+      createdAt: meta.createdAt || Date.now(),
+    });
+    return doc;
   }
 
   async recall(query, opts = {}) {
@@ -44,18 +54,25 @@ class SemanticMemoryIndex {
     const qv = qvResult.vector;
     const tierOrder = { SHORT_TERM: 4, WORKING: 3, LONG_TERM: 2, EXECUTIVE: 1 };
     return docs
-      .map((d) => {
-        const ageDays = (Date.now() - (d.meta?.createdAt || d.at || Date.now())) / 86400000;
-        const decay = Math.max(0, 1 - this.decayRate * ageDays);
-        const importance = d.meta?.importance || 1;
-        return {
-          ...d,
-          score: (cosineSimilarity(qv, d.vector) * importance * decay) + (tierOrder[d.meta?.tier] || 0) * 0.05,
-        };
-      })
+      .map((d) => this._scoreMemory(d, qv, tierOrder))
       .filter((d) => d.score > 0.05)
       .sort((a, b) => b.score - a.score)
       .slice(0, opts.limit || 10);
+  }
+
+  _scoreMemory(d, qv, tierOrder) {
+    const ageDays = (Date.now() - (d.meta?.createdAt || d.at || Date.now())) / 86400000;
+    const decay = Math.max(0, 1 - this.decayRate * ageDays);
+    const importance = d.meta?.importance || 1;
+    const confidence = d.meta?.confidence || 0.5;
+    const tierBoost = (tierOrder[d.meta?.tier] || 0) * 0.05;
+    const stale = ageDays > this.stalenessDays;
+    return {
+      ...d,
+      score: (cosineSimilarity(qv, d.vector) * importance * confidence * decay) + tierBoost,
+      stale,
+      ageDays,
+    };
   }
 
   async similarProjects(name, limit = 5) {
@@ -66,24 +83,31 @@ class SemanticMemoryIndex {
     return this.recall(`failure ${context}`, { limit });
   }
 
-  async workingMemories(limit = 10) {
-    return this._byTier(TIERS.WORKING, limit);
+  detectContradictions() {
+    // Simple contradiction: two memories with high similarity but opposite sentiment keywords.
+    const docs = this.embeddingManager.list();
+    const conflicts = [];
+    for (let i = 0; i < docs.length; i++) {
+      for (let j = i + 1; j < docs.length; j++) {
+        const a = docs[i].text.toLowerCase();
+        const b = docs[j].text.toLowerCase();
+        const sim = cosineSimilarity(docs[i].vector || [], docs[j].vector || []);
+        if (sim > 0.4 && this._hasOppositeSentiment(a, b)) {
+          conflicts.push({ a: docs[i], b: docs[j], similarity: sim });
+        }
+      }
+    }
+    return conflicts;
   }
 
-  async executiveMemories(limit = 10) {
-    return this._byTier(TIERS.EXECUTIVE, limit);
-  }
-
-  async _byTier(tier, limit) {
-    const docs = this.embeddingManager.list().filter((d) => d.meta?.tier === tier);
-    return docs
-      .map((d) => {
-        const ageDays = (Date.now() - (d.meta?.createdAt || d.at || Date.now())) / 86400000;
-        const decay = Math.max(0, 1 - this.decayRate * ageDays);
-        return { ...d, score: (d.meta?.importance || 1) * decay };
-      })
-      .sort((a, b) => b.score - a.score)
-      .slice(0, limit);
+  _hasOppositeSentiment(a, b) {
+    const positive = ['success', 'growth', 'up', 'increase', 'good', 'ready'];
+    const negative = ['failure', 'risk', 'down', 'decrease', 'bad', 'blocked'];
+    const aPos = positive.some((w) => a.includes(w));
+    const aNeg = negative.some((w) => a.includes(w));
+    const bPos = positive.some((w) => b.includes(w));
+    const bNeg = negative.some((w) => b.includes(w));
+    return (aPos && bNeg) || (aNeg && bPos);
   }
 
   async _findDuplicate(text) {
@@ -97,7 +121,7 @@ class SemanticMemoryIndex {
     let added = 0;
     for (const item of items) {
       const text = typeof item === 'string' ? item : JSON.stringify(item);
-      const ok = await this.remember(text, { sourceId: item.id, type: item.type || 'business-memory', tier: TIERS.LONG_TERM, importance: item.importance || 1 });
+      const ok = await this.remember(text, { sourceId: item.id, type: item.type || 'business-memory', tier: TIERS.LONG_TERM, importance: item.importance || 1, source: 'business-memory' });
       if (ok) added++;
     }
     return added;
