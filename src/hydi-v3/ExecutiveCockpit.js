@@ -108,21 +108,21 @@ class ExecutiveCockpit extends EventEmitter {
 
   parseCommand(text) {
     const t = (text || '').toLowerCase().trim().replace(/[.!?]+$/, '');
-    if (/^(good morning|morning|hello|hi|hey)$/.test(t)) return { command: 'good-morning' };
+    if (/^(good morning|morning|hello|hi|hey|hey there)$/.test(t)) return { command: 'good-morning' };
     if (/^(how are we doing|how's it going|how is it going|status|how are things)$/.test(t)) return { command: 'status' };
-    if (/^(what should i focus on|focus|priorities|what next|what should i do)$/.test(t)) return { command: 'focus' };
-    if (/^(pending|approvals|what needs approval)$/.test(t)) return { command: 'approvals' };
-    if (/^(history|executions|recent actions|log)$/.test(t)) return { command: 'history' };
+    if (/^(what should i focus on( today| first| next)?|what should i work on first|what are my priorities|focus|priorities|what next|what should i do( today| first| next)?)$/.test(t)) return { command: 'focus' };
+    if (/^(pending|approvals|approvals please|what needs approval|what is waiting for approval)$/.test(t)) return { command: 'approvals' };
+    if (/^(history|executions|recent actions|recent execution history|what happened recently|what did we do|log)$/.test(t)) return { command: 'history' };
     if (/^(workflows|active workflows|what is active)$/.test(t)) return { command: 'workflows' };
-    if (/^(learning|learn|prediction accuracy|recommendation success|lessons learned|recommendation history)$/.test(t)) return { command: 'learning' };
+    if (/^(learning|learn|lessons|what have we learned|prediction accuracy|recommendation success|lessons learned|recommendation history)$/.test(t)) return { command: 'learning' };
     if (/^(evidence|business evidence|evidence summary)$/.test(t)) return { command: 'evidence' };
     if (/^(outcomes|outcome review|outcome queue)$/.test(t)) return { command: 'outcomes' };
-    if (/^(measured|measured learning|revenue dashboard)$/.test(t)) return { command: 'measured' };
-    if (/^(revenue|revenue sensor|ledger status)$/.test(t)) return { command: 'revenue' };
-    if (/^(kpis|business kpis|kpi dashboard)$/.test(t)) return { command: 'kpis' };
+    if (/^(measured|measured learning|learning dashboard|revenue dashboard)$/.test(t)) return { command: 'measured' };
+    if (/^(revenue|revenue sensor|ledger status|show revenue|how is revenue)$/.test(t)) return { command: 'revenue' };
+    if (/^(kpis|business kpis|kpi dashboard|show kpis|how are kpis)$/.test(t)) return { command: 'kpis' };
     if (/^(recommendations|recommendation lifecycle|lifecycle)$/.test(t)) return { command: 'recommendations' };
-    if (/^(review status|midday review|status review)$/.test(t)) return { command: 'review-status' };
-    if (/^(daily close|end of day|close)$/.test(t)) return { command: 'daily-close' };
+    if (/^(review status|midday review|status review|afternoon status)$/.test(t)) return { command: 'review-status' };
+    if (/^(daily close|end of day|close|good night|goodnight|what did we do today)$/.test(t)) return { command: 'daily-close' };
     if (/^review\s+(.+)$/.test(t)) {
       const parts = t.match(/^review\s+(.+)$/)[1].trim().split(/\s+/);
       const id = parts[0];
@@ -149,7 +149,7 @@ class ExecutiveCockpit extends EventEmitter {
       const m = t.match(/^(customer|project|build)\s+(.+)$/);
       return { command: 'measure', id: m[1], outcome: m[2] };
     }
-    if (/^(help|\?)$/.test(t)) return { command: 'help' };
+    if (/^(help|\?|what can i ask|what should i say|commands|what are the commands|available commands)$/.test(t)) return { command: 'help' };
     return { command: 'unknown', text };
   }
 

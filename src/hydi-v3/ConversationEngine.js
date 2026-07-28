@@ -51,6 +51,8 @@ class ConversationEngine {
     this.certify = config.certify || null;
     this.recommendationTracker = config.recommendationTracker || null;
     this.businessEvidenceEngine = config.businessEvidenceEngine || null;
+    this.modelRouter = config.modelRouter || null;
+    this.useLLMIntent = config.useLLMIntent !== false;
     this.logger = config.logger || console;
 
     // Transient, re-derived-each-turn caches. Not persisted: they are cheap
@@ -80,20 +82,20 @@ class ConversationEngine {
    * it responds like a COO would: it says what it does not have.
    */
   async ask(rawText) {
-    const text = String(rawText === undefined || rawText === null ? '' : rawText).trim();
-    if (this.sessionMemory) this.sessionMemory.recordCommand(text);
+    const raw = String(rawText === undefined || rawText === null ? '' : rawText).trim();
+    if (this.sessionMemory) this.sessionMemory.recordCommand(raw);
 
-    const response = await this._route(text);
+    const response = await this._route(raw);
 
     // cockpit.handleCommand() already emits 'interaction' itself when the
     // engine delegates to it, so only emit here for intents this engine
     // handled directly — otherwise the timeline would double-record.
     if (this.cockpit && typeof this.cockpit.emit === 'function'
       && response.intent !== 'cockpit' && response.intent !== 'unknown' && response.intent !== 'empty') {
-      this.cockpit.emit('interaction', { at: Date.now(), command: response.intent, text, response });
+      this.cockpit.emit('interaction', { at: Date.now(), command: response.intent, text: raw, response });
     }
 
-    if (this.sessionMemory) this.sessionMemory.recordConversationTurn(text, response);
+    if (this.sessionMemory) this.sessionMemory.recordConversationTurn(raw, response);
     return response;
   }
 
@@ -101,25 +103,27 @@ class ConversationEngine {
   // Routing
   // -------------------------------------------------------------------------
 
-  async _route(text) {
-    const t = text.toLowerCase().trim().replace(/[.!?]+$/, '');
+  async _route(rawText) {
+    const t = rawText.toLowerCase().trim().replace(/[.!?]+$/, '');
     if (!t) return this._respond('empty', { text: 'Say "good morning", "help", or ask a question.' });
 
-    if (/^(good morning|morning|hello|hi|hey)$/.test(t)) return this._goodMorning();
-    if (/^what changed since (this morning|the last briefing|the morning)\??$/.test(t)) return this._whatChangedSinceBriefing();
-    if (/^what changed( overnight)?\??$/.test(t) || /^what'?s new\??$/.test(t)) return this._whatChanged();
-    if (/^what deserves my attention( today)?\??$/.test(t) || /^what needs my attention( today)?\??$/.test(t)) return this._attention();
-    if (/^what should (we|i) build( today)?\??$/.test(t)) return this._buildToday();
-    if (/^what'?s blocking( me| us| progress| work)?\??$/.test(t) || /^what is blocking( me| us| progress| work)?\??$/.test(t)) return this._blocking();
-    if (/^what'?s blocking (revenue|sales)\??$/.test(t) || /^what is blocking (revenue|sales)\??$/.test(t)) return this._blockingRevenue();
-    if (/^what did we learn( yesterday| today| recently)?\??$/.test(t)) return this._whatDidWeLearn();
-    if (/^which recommendation turned out to be wrong\??$/.test(t) || /^what recommendations failed\??$/.test(t)) return this._wrongRecommendations();
-    if (/^show me (the )?risky assumptions\??$/.test(t) || /^show me (the )?risks?\??$/.test(t)) return this._showRisks();
+    if (/^(good morning|morning|hello|hi|hey|hey there|hey there protoforge)$/.test(t)) return this._goodMorning();
+    if (/^prepare (my |today'?s )?executive briefing$/.test(t)) return this._goodMorning();
+    if (/^what changed since (this morning|the last briefing|the morning|lunch|breakfast|dinner|yesterday)\??$/.test(t)) return this._whatChangedSinceBriefing();
+    if (/^what changed( overnight| today| recently)?\??$/.test(t) || /^what'?s new\??$/.test(t) || /^what happened since (lunch|breakfast|dinner|yesterday|this morning)\??$/.test(t)) return this._whatChanged();
+    if (/^what deserves my attention( today| right now| now)?\??$/.test(t) || /^what needs my attention( today)?\??$/.test(t) || /^what'?s urgent\??$/.test(t) || /^anything urgent\??$/.test(t) || /^what should i look at\??$/.test(t) || /^what needs me\??$/.test(t)) return this._attention();
+    if (/^what should (we|i) (build|work on)( today| first| next)?\??$/.test(t) || /^what to build( today)?\??$/.test(t) || /^what needs (building|work)( today)?\??$/.test(t) || /^what are my priorities\??$/.test(t)) return this._buildToday();
+    if (/^what'?s blocking( me| us| progress| work)?\??$/.test(t) || /^what is blocking( me| us| progress| work)?\??$/.test(t) || /^where am i stuck\??$/.test(t) || /^where are we stuck\??$/.test(t) || /^what is stuck\??$/.test(t)) return this._blocking();
+    if (/^what'?s blocking (revenue|sales|money)\??$/.test(t) || /^what is blocking (revenue|sales|money)\??$/.test(t) || /^why is revenue down\??$/.test(t) || /^sales blockers\??$/.test(t)) return this._blockingRevenue();
+    if (/^what did we learn( yesterday| today| recently)?\??$/.test(t) || /^what have we learned\??$/.test(t) || /^lessons( learned)?\??$/.test(t)) return this._whatDidWeLearn();
+    if (/^which recommendation turned out to be wrong\??$/.test(t) || /^what recommendations failed\??$/.test(t) || /^which one was wrong\??$/.test(t) || /^failed recommendations\??$/.test(t) || /^recommendation mistakes\??$/.test(t) || /^which recommendation was wrong\??$/.test(t)) return this._wrongRecommendations();
+    if (/^show me (the )?risky assumptions\??$/.test(t) || /^show me (the )?risks?\??$/.test(t) || /^what are (our|the) risky assumptions\??$/.test(t) || /^what could go wrong\??$/.test(t)) return this._showRisks();
     if (/^why are you recommending this\??$/.test(t) || /^why this recommendation\??$/.test(t)) return this._explainThisRecommendation();
-    if (/^what would you do( next)? if i left for the day\??$/.test(t) || /^what would you do next\??$/.test(t) || /^what should you do next\??$/.test(t)) return this._whatWouldYouDo();
-    if (/^what can you do (without me|autonomously|on your own)\??$/.test(t)) return this._autonomousCapabilities();
-    if (/^review status\??$/.test(t) || /^midday review\??$/.test(t)) return this._delegate('review status');
-    if (/^daily close\??$/.test(t) || /^end of day\??$/.test(t)) return this._delegate('daily close');
+    if (/^what would you do( next)? if i left for the day\??$/.test(t) || /^what would you do next\??$/.test(t) || /^what should you do next\??$/.test(t) || /^what should (we|i) do next\??$/.test(t)) return this._whatWouldYouDo();
+    if (/^what can you do (without me|autonomously|on your own|alone)\??$/.test(t) || /^what do you not need me for\??$/.test(t) || /^autonomous actions\??$/.test(t) || /^what can you do without asking\??$/.test(t)) return this._autonomousCapabilities();
+    if (/^recommend$/.test(t) || /^recommendations$/.test(t) || /^what should i do\??$/.test(t) || /^what should (we|i) do next\??$/.test(t) || /^what would you recommend\??$/.test(t) || /^what do you suggest\??$/.test(t) || /^what should (we|i) work on next\??$/.test(t) || /^what are your recommendations\??$/.test(t)) return this._recommend();
+    if (/^review status\??$/.test(t) || /^midday review\??$/.test(t) || /^afternoon status\??$/.test(t)) return this._delegate('review status');
+    if (/^daily close\??$/.test(t) || /^end of day\??$/.test(t) || /^close$/.test(t) || /^what did we do today\??$/.test(t) || /^good night$/.test(t) || /^goodnight$/.test(t)) return this._delegate('daily close');
 
     let m;
     if ((m = t.match(/^what about (.+?)\??$/))) return this._whatAbout(m[1]);
@@ -128,10 +132,12 @@ class ConversationEngine {
       return this._explainApproval(m[1].trim());
     }
     if ((m = t.match(/^show (approvals|approval center)$/))) return this._showApprovals();
+    if ((m = t.match(/^show (history|learning|kpis|measured learning|measured)$/))) {
+      const cmd = m[1] === 'measured learning' ? 'measured' : m[1];
+      return this._delegate(cmd);
+    }
     if ((m = t.match(/^show (.+)$/))) return this._showAgent(m[1]);
     if ((m = t.match(/^focus (?:on )?(.+)$/))) return this._focus(m[1]);
-    if (/^recommend$/.test(t)) return this._recommend();
-    if (/^recommendations$/.test(t)) return this._delegate('recommendations');
     if (/^timeline$/.test(t)) return this._timeline();
     if (/^hydi health$/.test(t)) return this._systemStatus();
     if (/^(business )?health$/.test(t)) return this._health();
@@ -168,9 +174,39 @@ class ConversationEngine {
       return this._createAction('review', subject);
     }
 
-    if (/^help$/.test(t) || t === '?') return this._help();
+    if (/^(help|\?|what can i ask|what should i say|commands|what are the commands|available commands)$/.test(t)) return this._help();
 
-    return this._delegate(text);
+    if (this.modelRouter && this.useLLMIntent) {
+      const resolved = await this._resolveLLMIntent(rawText);
+      if (resolved) return resolved;
+    }
+
+    return this._delegate(rawText);
+  }
+
+  async _resolveLLMIntent(text) {
+    try {
+      const extracted = await this.modelRouter.extractIntent(text);
+      if (!extracted || !extracted.intent || extracted.intent === 'unknown') return null;
+      switch (extracted.intent) {
+        case 'good-morning': return this._goodMorning();
+        case 'status': return this._delegate('status');
+        case 'focus': return this._delegate('focus');
+        case 'attention': return this._attention();
+        case 'what-changed': return this._whatChanged();
+        case 'recommendations': return this._recommend();
+        case 'approvals': return this._showApprovals();
+        case 'history': return this._delegate('history');
+        case 'learning': return this._whatDidWeLearn();
+        case 'risks': return this._showRisks();
+        case 'daily-close': return this._delegate('daily close');
+        case 'help': return this._help();
+        default: return null;
+      }
+    } catch (e) {
+      this.logger.error('[ConversationEngine] LLM intent extraction failed', { error: e instanceof Error ? e.message : String(e) });
+      return null;
+    }
   }
 
   // -------------------------------------------------------------------------

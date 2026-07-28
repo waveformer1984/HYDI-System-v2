@@ -1,0 +1,42 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "commonjs",
+    "allowJs": true,
+    "checkJs": true,
+    "strict": false,
+    "noImplicitAny": false,
+    "noEmit": true,
+    "resolveJsonModule": true,
+    "moduleResolution": "node",
+    "skipLibCheck": true,
+    "baseUrl": "."
+  },
+  "include": [
+    "BaseAdapter.js",
+    "ModelCapabilities.js",
+    "ModelConfiguration.js",
+    "ModelRegistry.js",
+    "ModelHealth.js",
+    "ModelMetrics.js",
+    "ModelManager.js",
+    "ModelRouter.js",
+    "ModelRuntimeManager.js",
+    "CapabilityProfile.js",
+    "PromptLibrary.js",
+    "ConversationContext.js",
+    "EmbeddingManager.js",
+    "SemanticMemoryIndex.js",
+    "KnowledgePipeline.js",
+    "BaseAgent.js",
+    "ResearchAgent.js",
+    "EngineeringAgent.js",
+    "ProductAgent.js",
+    "FinanceAgent.js",
+    "VisionAdapter.js",
+    "SpeechToTextAdapter.js",
+    "TextToSpeechAdapter.js",
+    "VoiceCommandRouter.js",
+    "VoiceInterface.js"
+  ]
+}

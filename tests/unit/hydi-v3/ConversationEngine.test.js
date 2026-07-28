@@ -232,4 +232,41 @@ describe('ConversationEngine', () => {
     sessionMemory = new SessionMemory({ dataPath, logger: SILENT });
     await sessionMemory.start();
   });
+
+  test('Phase 34 regression: all 100 Phase 33 audit phrases are understood', async () => {
+    const phrases = [
+      'good morning', 'morning', 'hello', 'hi', 'hey there',
+      'status', "how's it going", 'how is it going', 'how are things',
+      'what should i focus on', 'what should i work on first', 'what are my priorities', 'focus', 'what next',
+      'what deserves my attention', 'what needs my attention', "what's urgent", 'anything urgent', 'what should i look at',
+      'what changed overnight', 'what changed since this morning', 'what changed today', "what's new", 'what happened since lunch',
+      'show me the risks', 'show me risky assumptions', 'what are our risky assumptions', 'do we have risky assumptions', 'what could go wrong',
+      'recommend', 'recommendations', 'what should i do next', 'what would you recommend', 'what do you suggest',
+      'what should we build today', 'what should we work on', 'what to build', 'what needs building',
+      "what's blocking progress", "what's blocking me", 'what is blocking work', 'where am i stuck', 'what is stuck',
+      "what's blocking revenue", 'what is blocking sales', 'why is revenue down', "what's blocking money", 'sales blockers',
+      'show approvals', 'what needs approval', 'pending', 'what is waiting for approval', 'approvals please',
+      'history', 'show history', 'recent execution history', 'what happened recently', 'what did we do',
+      'learning', 'show learning', 'what did we learn', 'lessons', 'what have we learned',
+      'which recommendation turned out to be wrong', 'what recommendations failed', 'which one was wrong', 'failed recommendations', 'recommendation mistakes',
+      'what can you do without me', 'what can you do autonomously', 'what can you do on your own', 'what do you not need me for', 'autonomous actions',
+      'kpis', 'business kpis', 'kpi dashboard', 'show kpis', 'how are kpis',
+      'measured', 'measured learning', 'show measured learning', 'revenue dashboard', 'learning dashboard',
+      'revenue', 'revenue sensor', 'ledger status', 'show revenue', 'how is revenue',
+      'daily close', 'end of day', 'close', 'what did we do today', 'good night',
+      'help', 'what can i ask', 'what should i say', 'commands', 'what are the commands',
+    ];
+    const failures = [];
+    for (const phrase of phrases) {
+      const res = await engine.ask(phrase);
+      const lower = res.text.toLowerCase();
+      if (lower.includes('i did not understand') || lower.includes('no agent domain matches')) {
+        failures.push({ phrase, text: res.text });
+      }
+    }
+    if (failures.length > 0) {
+      console.error('Misunderstood phrases:', failures);
+    }
+    expect(failures).toEqual([]);
+  });
 });
