@@ -5,10 +5,11 @@
 /**
  * `hydi status` and `hydi readiness` command-line surface.
  *
- * This script is a thin shell over `HYDIOperationalBoot`. It boots the full
- * HYDI executive stack, prints an operator-friendly status or readiness report,
- * and then drains the session. No logic is duplicated from the operational boot
- * sequence, the session, or the briefing renderer.
+ * `status`, `memory-review`, and `outcome` use `HYDIContinuousRuntime` with the
+ * connector-based sensor layer. `readiness` now also starts the continuous
+ * runtime so it evaluates the real connector health that `status` reports,
+ * rather than the legacy `OperatorSession.sensors` array that is no longer
+ * populated when connectors are used.
  *
  * Usage:
  *   node scripts/hydi-cli.js status
@@ -55,6 +56,25 @@ function signalState(session) {
   return issues ? 'orphaned' : 'covered';
 }
 
+function runtimeConnectorState(runtime) {
+  const status = runtime.getStatus();
+  const connectors = status.connectors || [];
+  if (connectors.length === 0) return 'offline';
+  const degraded = connectors.filter((c) => !c.ok || c.state === 'failed');
+  const states = connectors.map((c) => `${c.name} ${c.state}`).join(', ');
+  if (degraded.length > 0) {
+    return `degraded (${degraded.length} of ${connectors.length}): ${states}`;
+  }
+  return `healthy (${connectors.length}): ${states}`;
+}
+
+function connectorSignalState(session) {
+  const coverage = session.signalCoverage || SignalCoverage.audit({ registry: session.eventBus.registry });
+  const realIssues = coverage.dropped.length || coverage.double.length || coverage.unknown.length;
+  if (realIssues) return 'coverage issues (dropped/double/unknown)';
+  return 'covered';
+}
+
 function auditState(session) {
   if (!session.auditLedger) return 'not initialized';
   const verify = session.auditLedger.verify();
@@ -84,9 +104,9 @@ function lastDecision(session) {
   return 'none';
 }
 
-function buildSummary(report, session) {
-  const sensors = sensorState(session);
-  const signals = signalState(session);
+function buildSummary(report, session, runtime = null) {
+  const sensors = runtime ? runtimeConnectorState(runtime) : sensorState(session);
+  const signals = runtime ? connectorSignalState(session) : signalState(session);
   const audit = auditState(session);
   const learning = learningState(session);
   const lastRec = lastRecommendation(session);
@@ -95,11 +115,13 @@ function buildSummary(report, session) {
   let system = 'READY';
   if (report.status !== 'ready') {
     system = 'FAILED';
-  } else if (sensors === 'offline') {
+  } else if (runtime && runtime.getStatus().state !== 'READY') {
+    system = `DEGRADED — runtime state ${runtime.getStatus().state}`;
+  } else if (runtime ? !runtime.getStatus().connectorHealth : sensors === 'offline') {
     system = 'DEGRADED — no sensors active';
   } else if (sensors.startsWith('degraded')) {
     system = 'DEGRADED — sensor degraded';
-  } else if (signals === 'orphaned') {
+  } else if (signals === 'coverage issues (dropped/double/unknown)') {
     system = 'DEGRADED — signal coverage issues';
   } else if (!audit.startsWith('chain verified')) {
     system = 'DEGRADED — audit chain broken';
@@ -150,8 +172,8 @@ function renderOperatingState(status, session) {
   return lines.join('\n');
 }
 
-function renderReadiness(report, session) {
-  const s = buildSummary(report, session);
+function renderReadiness(report, session, runtime = null) {
+  const s = buildSummary(report, session, runtime);
   const lines = [
     'HYDI SYSTEM READINESS',
     '',
@@ -284,17 +306,31 @@ async function main() {
   }
 
   if (command === 'readiness') {
-    const report = await boot({ dataPath, logger });
-    const { session } = report;
+    const cwd = process.cwd();
+    const runtime = new HYDIContinuousRuntime({
+      dataPath,
+      logger,
+      healthIntervalMs: 60000,
+      connectors: [
+        { type: 'local-process', name: 'process', enabled: true },
+        { type: 'filesystem', name: 'filesystem', enabled: true, roots: { [path.basename(cwd)]: cwd } },
+        { type: 'git', name: 'git', enabled: true, cwd, project: path.basename(cwd), pollIntervalMs: 60000 },
+      ],
+    });
+    let exitCode = 1;
     try {
-      console.log(renderReadiness(report, session));
+      const report = await runtime.start();
+      const session = runtime.session;
+      const summary = buildSummary(report, session, runtime);
+      console.log(renderReadiness(report, session, runtime));
+      exitCode = summary.system === 'READY' ? 0 : 1;
+    } catch (error) {
+      console.error(error instanceof Error ? error.message : String(error));
+      exitCode = 1;
     } finally {
-      if (session && typeof session.destroy === 'function') {
-        await session.destroy().catch(() => {});
-      }
+      await runtime.stop().catch(() => {});
     }
-    const summary = buildSummary(report, session);
-    process.exit(summary.system === 'READY' ? 0 : 1);
+    process.exit(exitCode);
   }
 
   if (command === 'health') {
