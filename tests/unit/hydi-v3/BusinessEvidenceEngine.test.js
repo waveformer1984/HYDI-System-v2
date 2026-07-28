@@ -90,7 +90,7 @@ describe('BusinessEvidenceEngine', () => {
   it('evaluates automatic evidence to confirmed success', async () => {
     const eng = await makeEngine();
     const id = eng.tracker.track({ action: 'Hire designer', expectedValue: 100, confidence: 0.7 });
-    eng.evidenceEngine.addEvidence(id, { source: 'git', weight: 1, confidence: 1, relevance: 1, measurementType: 'quantitative', data: { value: 120 }, tags: [] });
+    eng.evidenceEngine.addEvidence(id, { source: 'git', type: 'commit', weight: 1, confidence: 1, relevance: 1, measurementType: 'quantitative', data: { value: 120 }, tags: [] });
     const result = eng.evidenceEngine.evaluateRecommendation(id);
     expect(result.classification).toBe('Confirmed Success');
     expect(eng.tracker.getRecommendation(id).observedOutcome).not.toBeNull();
@@ -110,7 +110,7 @@ describe('BusinessEvidenceEngine', () => {
     const eng = await makeEngine();
     const id1 = eng.tracker.track({ action: 'One', expectedValue: 100 });
     const id2 = eng.tracker.track({ action: 'Two', expectedValue: 100 });
-    eng.evidenceEngine.addEvidence(id1, { source: 'git', weight: 1, confidence: 1, relevance: 1, data: { value: 1 } });
+    eng.evidenceEngine.addEvidence(id1, { source: 'git', type: 'commit', weight: 1, confidence: 1, relevance: 1, data: { value: 1 } });
     const lacking = eng.evidenceEngine.getRecommendationsLackingEvidence(10000);
     expect(lacking.some((r) => r.id === id2)).toBe(true);
     expect(lacking.some((r) => r.id === id1)).toBe(false);

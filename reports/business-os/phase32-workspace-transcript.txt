@@ -1,0 +1,251 @@
+ProtoForge Executive Workspace — Phase 32 Workflow Demonstration
+Started: 2026-07-28T15:09:43.293Z
+
+
+=== Morning briefing (8ms) ===
+ProtoForge status: stable.
+
+=== Executive Summary ===
+ProtoForge is stable. 0 priority actions, 0 risks. Highest strategic objective: Resonate. Recommended next action: Continue work on project (Recent activity signals in project: project is active again.)
+
+=== Recent Activity ===
+8 activity signals for default.
+  General in project: 5 events.
+  Documentation in project: 3 events.
+Most recent:
+  project is active again
+  Work committed to project by Phase32 (1 file): add feature
+  project is active again
+
+=== Strategic Objectives ===
+Resonate: 0 active, 0 completed, health stable
+ProtoForge Operations: 0 active, 0 completed, health stable
+Manufacturing: 0 active, 0 completed, health stable
+Music: 0 active, 0 completed, health stable
+Research: 0 active, 0 completed, health stable
+
+=== Resonate Status ===
+Flagship product is not tracked in memory yet.
+
+=== Operations ===
+Active tasks: 0, blocked: 0.
+
+=== Sales ===
+Open opportunities: 0 (0 value), active leads: 0, customers: 0.
+
+=== Manufacturing ===
+Active equipment: 0, needs maintenance: 0.
+
+=== Research ===
+Active experiments: 0, completed: 0.
+
+=== Creative ===
+Active creative projects: 0, prototypes: 0.
+
+=== Financial Overview ===
+Revenue opportunity value: 0, tracked expenses: 0, projected net: 0.
+
+=== Revenue ===
+No revenue evidence observed.
+Source: RevenueSensor not active or ledger empty.
+Last updated: 2026-07-28T15:09:46.740Z
+
+=== Critical Risks ===
+None identified.
+
+=== Top Opportunities ===
+No scored opportunities available.
+
+=== Recommended Actions ===
+Continue work on project: Recent activity signals in project: project is active again.
+
+=== Learning Summary ===
+Learning system still building historical baseline.
+
+=== Business Evidence ===
+Evidence awaiting review: 0
+Recommendations lacking evidence: 1
+Recently confirmed outcomes: 0
+Prediction accuracy: building baseline
+Highest-confidence recommendations: Continue work on project
+Business KPIs: 0 available
+
+=== Measured Learning Dashboard ===
+Revenue: 0.00.
+Measured ROI: No measured outcomes available.
+Estimated ROI: No measured outcomes available.
+Confidence trend: 0.000
+Pending evidence: 0
+Recent measurements: 0
+Evidence sources: filesystem=7, git=1
+
+=== Awaiting Measurements ===
+No recommendations awaiting measurements.
+
+=== Recently Calibrated ===
+No recommendations calibrated recently.
+
+=== Top Improving Recommendations ===
+No recommendations gaining confidence.
+
+=== Recommendations Losing Confidence ===
+No recommendations losing confidence.
+
+=== Missing Data Sources ===
+Observability dashboard not connected.
+Project planner not connected.
+
+=== What changed (0ms) ===
+What changed since the last briefing:
+
+No recent project activity.
+
+=== Priorities (2ms) ===
+Focus for today (priority: default):
+
+1. Continue work on project: base (score 0.00 — base)
+
+=== What deserves attention (0ms) ===
+What deserves your attention:
+
+Nothing urgent. All tracked risks are clear and there are no pending approvals.
+
+=== Show risks (0ms) ===
+No risks are currently tracked.
+
+=== Recommendations (3ms) ===
+Recommendations:
+
+1. Continue work on project: Recent activity signals in project: project is active again.
+
+=== Autonomous capabilities (0ms) ===
+Without asking you, I can:
+
+  - create-report (documentation)
+  - generate-summary (documentation)
+  - maintain-log (documentation)
+  - create-directory (file-operations)
+  - run-tests (development)
+  - run-benchmarks (development)
+  - collect-diagnostics (development)
+  - create-engineering-report (development)
+
+Workflow types that auto-approve below their thresholds: research, creative, technical, plus small sales/manufacturing workflows.
+
+Everything else is prepared and queued, but waits for your approval in the Approval Center.
+
+=== Create action from real event (1ms) ===
+Created do action "review feature commit" (exec_1785251386747_9n9us3) (recommendation rec_1785251386747_16swjf). It is awaiting approval. Use "approve exec_1785251386747_9n9us3" or "approve it" to execute.
+
+=== Pending approvals (0ms) ===
+Pending approvals (1):
+
+1. [exec_1785251386747_9n9us3] do (generic-task) — value Not scored for direct actions., risk review-required, agent operator
+
+=== Approve action (2ms) ===
+Approved exec_1785251386747_9n9us3.
+
+=== Execution history (0ms) ===
+Recent execution history:
+
+1. [completed] do (generic-task) by operator — completed
+
+=== Measure outcome (3ms) ===
+Outcome for rec_1785251386747_16swjf recorded as Confirmed Success. Owner confirmed success; no measured value attached.
+
+=== Learning dashboard (0ms) ===
+Learning Dashboard
+
+Prediction accuracy: 100%
+Recommendation success rate: 100%
+Average confidence: 13% (drift 0.00%)
+Recommendations awaiting outcome: 3
+Top performing agent: operator
+Lowest confidence area: default
+
+Recent lessons:
+1. Owner confirmed success; no measured value attached.
+
+Recommendation history:
+1. [rec_1785251386747_16swjf] do review feature commit — approved (successful)
+2. [rec_1785251386746_xlu6pq] Continue work on project — pending (pending)
+3. [rec_1785251386743_l5riyn] Continue work on project — pending (pending)
+4. [rec_1785251386736_13n830] Continue work on project — pending (pending)
+
+=== What did we learn (0ms) ===
+What we learned:
+
+- [rec_1785251386747_16swjf] do review feature commit: successful — confidence 50%
+
+=== Which recommendation failed (0ms) ===
+No recommendations have been marked wrong or are losing confidence.
+
+=== Afternoon status (0ms) ===
+Review Status
+
+Completed work: 0
+Blocked work: 0
+New risks: 0
+Resource issues: 0
+
+=== Business KPIs (0ms) ===
+Business KPI Dashboard
+
+Revenue: unknown USD (target 0, unknown)
+Gross Margin: unknown percent (target 0, unknown)
+Engineering Velocity: unknown commits/day (target 0, unknown)
+Manufacturing Throughput: unknown units/day (target 0, unknown)
+Machine Utilization: unknown percent (target 0, unknown)
+Inventory Health: unknown score (target 0, unknown)
+Customer Growth: unknown count (target 0, unknown)
+Project Completion: unknown percent (target 0, unknown)
+Research Progress: unknown percent (target 0, unknown)
+Creative Output: unknown count (target 0, unknown)
+Resonate Development: unknown score (target 0, unknown)
+ProtoForge Operations: unknown score (target 0, unknown)
+
+=== Measured learning (1ms) ===
+Measured Learning Dashboard
+
+Revenue: 0.00
+Measured ROI: No measured outcomes available.
+Estimated ROI: No measured outcomes available.
+Confidence trend: 0.0000
+Pending evidence: 0
+Recent measurements: 0
+Evidence sources: filesystem: 7, git: 1, manual: 1
+
+Calibration history (last 5):
+- [rec_1785251386747_16swjf] 2026-07-28T15:09:46.752Z outcome:successful: 50%
+- [rec_1785251386747_16swjf] 2026-07-28T15:09:46.747Z created: 50%
+
+=== End of day (0ms) ===
+Daily Close
+
+Signals today: 10
+Measured outcomes: 1
+Failures: 0
+Lessons: No lessons recorded yet
+
+Revenue observed: 0
+Confidence: unknown
+
+=== Warm restart (251ms) ===
+What we learned:
+
+- [rec_1785251386747_16swjf] do review feature commit: successful — confidence 50%
+
+=== Audit verification ===
+{
+  "ok": true,
+  "count": 3
+}
+
+=== Health check ===
+{"memory":true,"executiveOS":true,"cockpit":true,"workflowEngine":true,"executionGateway":true,"decisionOutcomeStore":true,"recommendationTracker":true,"businessOutcomeEngine":true,"learningMetrics":true,"timeline":true,"agentWorkspace":true,"approvalCenter":true,"sessionMemory":true,"conversationEngine":true,"consoleAPI":true,"eventBus":true,"signalCoverage":true}
+
+=== Performance ===
+Cold boot: 326ms
+Warm restart: 251ms
+Total demo duration: 3724ms
+Memory heapUsed end: 10074952

@@ -49,6 +49,8 @@ class ConversationEngine {
     this.timeline = config.timeline || null;
     this.sessionMemory = config.sessionMemory || null;
     this.certify = config.certify || null;
+    this.recommendationTracker = config.recommendationTracker || null;
+    this.businessEvidenceEngine = config.businessEvidenceEngine || null;
     this.logger = config.logger || console;
 
     // Transient, re-derived-each-turn caches. Not persisted: they are cheap
@@ -104,10 +106,17 @@ class ConversationEngine {
     if (!t) return this._respond('empty', { text: 'Say "good morning", "help", or ask a question.' });
 
     if (/^(good morning|morning|hello|hi|hey)$/.test(t)) return this._goodMorning();
+    if (/^what changed since (this morning|the last briefing|the morning)\??$/.test(t)) return this._whatChangedSinceBriefing();
     if (/^what changed( overnight)?\??$/.test(t) || /^what'?s new\??$/.test(t)) return this._whatChanged();
-    if (/^what deserves my attention\??$/.test(t) || /^what needs my attention\??$/.test(t)) return this._attention();
+    if (/^what deserves my attention( today)?\??$/.test(t) || /^what needs my attention( today)?\??$/.test(t)) return this._attention();
     if (/^what should (we|i) build( today)?\??$/.test(t)) return this._buildToday();
+    if (/^what'?s blocking( me| us| progress| work)?\??$/.test(t) || /^what is blocking( me| us| progress| work)?\??$/.test(t)) return this._blocking();
     if (/^what'?s blocking (revenue|sales)\??$/.test(t) || /^what is blocking (revenue|sales)\??$/.test(t)) return this._blockingRevenue();
+    if (/^what did we learn( yesterday| today| recently)?\??$/.test(t)) return this._whatDidWeLearn();
+    if (/^which recommendation turned out to be wrong\??$/.test(t) || /^what recommendations failed\??$/.test(t)) return this._wrongRecommendations();
+    if (/^show me (the )?risky assumptions\??$/.test(t) || /^show me (the )?risks?\??$/.test(t)) return this._showRisks();
+    if (/^why are you recommending this\??$/.test(t) || /^why this recommendation\??$/.test(t)) return this._explainThisRecommendation();
+    if (/^what would you do( next)? if i left for the day\??$/.test(t) || /^what would you do next\??$/.test(t) || /^what should you do next\??$/.test(t)) return this._whatWouldYouDo();
     if (/^what can you do (without me|autonomously|on your own)\??$/.test(t)) return this._autonomousCapabilities();
     if (/^review status\??$/.test(t) || /^midday review\??$/.test(t)) return this._delegate('review status');
     if (/^daily close\??$/.test(t) || /^end of day\??$/.test(t)) return this._delegate('daily close');
@@ -139,6 +148,25 @@ class ConversationEngine {
     }
     if ((m = t.match(/^approve\s+(\S+)$/))) return this._approve(this._resolveApprovalToken(m[1]));
     if ((m = t.match(/^reject\s+(\S+)$/))) return this._reject(this._resolveApprovalToken(m[1]));
+
+    // Conversational action creation
+    if ((m = t.match(/^do\s+(.+)$/))) return this._createAction('do', m[1]);
+    if ((m = t.match(/^start\s+(.+)$/))) return this._createAction('start', m[1]);
+    if ((m = t.match(/^create\s+(?:a\s+)?task[:;]?\s*(.+)$/))) return this._createAction('create-task', m[1]);
+    if ((m = t.match(/^remind\s+me\s+(?:to\s+)?(.+)$/))) return this._createAction('remind', m[1]);
+    if ((m = t.match(/^investigate\s+(.+)$/))) return this._createAction('investigate', m[1]);
+    if ((m = t.match(/^analyze\s+(.+)$/))) return this._createAction('analyze', m[1]);
+    if ((m = t.match(/^print\s+(.+)$/))) return this._createAction('print', m[1]);
+    if ((m = t.match(/^generate\s+(.+)$/))) return this._createAction('generate', m[1]);
+    if ((m = t.match(/^build\s+(.+)$/))) return this._createAction('build', m[1]);
+    if ((m = t.match(/^monitor\s+(.+)$/))) return this._createAction('monitor', m[1]);
+    if ((m = t.match(/^review\s+(.+)$/))) {
+      const subject = m[1].trim();
+      if (this.workflowEngine && this.workflowEngine.getWorkflow && this.workflowEngine.getWorkflow(subject)) {
+        return this._delegate(text);
+      }
+      return this._createAction('review', subject);
+    }
 
     if (/^help$/.test(t) || t === '?') return this._help();
 
@@ -226,6 +254,106 @@ class ConversationEngine {
       salesView.priorities.forEach((p) => lines.push(`  - ${p}`));
     }
     return this._respond('blocking-revenue', { text: lines.join('\n'), risks: relevant, salesView });
+  }
+
+  _blocking() {
+    const risks = this.executiveOS ? this.executiveOS.risks() : [];
+    const blocked = this.agentWorkspace ? Object.entries(this.agentWorkspace.getAll ? this.agentWorkspace.getAll() : {})
+      .flatMap(([name, agent]) => (agent.blockedTasks || []).map((task) => ({ agent: name, task }))) : [];
+    const lines = ['What is blocking progress:', ''];
+    if (risks.length === 0 && blocked.length === 0) {
+      lines.push('No risks or blocked tasks are currently tracked.');
+    } else {
+      if (risks.length) {
+        lines.push(`Risks (${risks.length}):`);
+        risks.slice(0, 5).forEach((r) => lines.push(`  - [${r.severity}] ${r.name}: ${r.detail}`));
+      }
+      if (blocked.length) {
+        lines.push('', `Blocked work (${blocked.length}):`);
+        blocked.slice(0, 5).forEach((b) => lines.push(`  - ${b.agent}: ${b.task}`));
+      }
+    }
+    return this._respond('blocking', { text: lines.join('\n'), risks, blocked });
+  }
+
+  _whatDidWeLearn() {
+    if (!this.businessEvidenceEngine) return this._respond('what-did-we-learn', { text: 'Learning engine is not connected.' });
+    const completed = this.businessEvidenceEngine.getCompletedLearning ? this.businessEvidenceEngine.getCompletedLearning().slice(0, 10) : [];
+    if (completed.length === 0) return this._respond('what-did-we-learn', { text: 'No measured outcomes yet. Record some with "measure <id> success" or "measure revenue +X".' });
+    const lines = ['What we learned:', ''];
+    completed.forEach((r) => {
+      const outcome = r.observedOutcome || {};
+      lines.push(`- [${r.id}] ${r.action}: ${outcome.type}${outcome.actual !== null && outcome.actual !== undefined ? ` (${outcome.actual})` : ''} — confidence ${r.confidence ? (r.confidence * 100).toFixed(0) + '%' : 'unknown'}`);
+    });
+    return this._respond('what-did-we-learn', { text: lines.join('\n'), completed });
+  }
+
+  _wrongRecommendations() {
+    if (!this.businessEvidenceEngine) return this._respond('wrong-recommendations', { text: 'Learning engine is not connected.' });
+    const losing = this.businessEvidenceEngine.getRecommendationsLosingConfidence ? this.businessEvidenceEngine.getRecommendationsLosingConfidence().slice(0, 5) : [];
+    const failed = this.businessEvidenceEngine.getCompletedLearning ? this.businessEvidenceEngine.getCompletedLearning().filter((r) => r.observedOutcome && ['failed', 'unsuccessful', 'abandoned'].includes(r.observedOutcome.type)).slice(0, 5) : [];
+    if (losing.length === 0 && failed.length === 0) return this._respond('wrong-recommendations', { text: 'No recommendations have been marked wrong or are losing confidence.' });
+    const lines = ['Recommendations that turned out wrong:', ''];
+    failed.forEach((r) => lines.push(`- [${r.id}] ${r.action}: ${r.observedOutcome.type}`));
+    if (losing.length) {
+      lines.push('', 'Losing confidence:');
+      losing.forEach((r) => lines.push(`- [${r.id}] ${r.action}: ${r.change ? (r.change * 100).toFixed(0) + '%' : 'down'}`));
+    }
+    return this._respond('wrong-recommendations', { text: lines.join('\n'), failed, losing });
+  }
+
+  _showRisks() {
+    const risks = this.executiveOS ? this.executiveOS.risks() : [];
+    if (risks.length === 0) return this._respond('show-risks', { text: 'No risks are currently tracked.' });
+    const lines = ['Risks and assumptions:', ''];
+    risks.forEach((r) => lines.push(`- [${r.severity}] ${r.name}: ${r.detail}`));
+    return this._respond('show-risks', { text: lines.join('\n'), risks });
+  }
+
+  _explainThisRecommendation() {
+    if (!this.lastRecommendations || this.lastRecommendations.length === 0) {
+      return this._respond('explain-recommendation', { text: 'Ask for "recommend", "good morning", or "what should I build" first so I have a recommendation in context.' });
+    }
+    return this._explainRecommendation('1');
+  }
+
+  _whatChangedSinceBriefing() {
+    if (!this.lastBriefingAt) return this._whatChanged();
+    if (this.executiveOS && this.executiveOS.recentActivitySummary) {
+      const sinceMs = Date.now() - this.lastBriefingAt;
+      const summary = this.executiveOS.recentActivitySummary(sinceMs);
+      const lines = ['What changed since the last briefing:', '', ...summary.lines];
+      return this._respond('what-changed-since', { text: lines.join('\n'), ...summary });
+    }
+    if (!this.timeline) return this._respond('what-changed-since', { text: 'Executive timeline is not connected.' });
+    const diff = this.timeline.since(this.lastBriefingAt);
+    if (diff.count === 0) {
+      return this._respond('what-changed-since', { text: 'Nothing recorded since the last briefing.', ...diff });
+    }
+    const lines = ['Since the last briefing:', ''];
+    for (const [category, items] of Object.entries(diff.byCategory)) {
+      lines.push(`${category} (${items.length}):`);
+      items.slice(0, 5).forEach((i) => lines.push(`  - ${i.summary}`));
+    }
+    return this._respond('what-changed-since', { text: lines.join('\n'), ...diff });
+  }
+
+  _whatWouldYouDo() {
+    const recs = this._rankedRecommendations(3);
+    const caps = this.executionGateway ? this.executionGateway.getCapabilities().filter((c) => c.actionClass === 'autonomous') : [];
+    const lines = ['If you left for the day, I would:', ''];
+    if (recs.length === 0) {
+      lines.push('There are no ranked recommendations to act on.');
+    } else {
+      lines.push('Top recommendations to pursue:');
+      recs.forEach((r, i) => lines.push(`  ${i + 1}. ${r.action || r.title}${r.reason ? ` — ${r.reason}` : ''}`));
+    }
+    if (caps.length) {
+      lines.push('', 'Autonomous actions I could run without approval:');
+      caps.slice(0, 5).forEach((c) => lines.push(`  - ${c.action} (${c.adapter})`));
+    }
+    lines.push('', 'All other actions would be queued for your approval.');
+    return this._respond('what-would-you-do', { text: lines.join('\n'), recommendations: recs, capabilities: caps });
   }
 
   _autonomousCapabilities() {
@@ -433,15 +561,59 @@ class ConversationEngine {
     return this._respond('backup', { text: result.text, backup: result });
   }
 
+  async _createAction(intent, subject) {
+    if (!this.executionGateway) return this._respond('create-action', { text: 'ExecutionGateway is not connected.' });
+
+    let recommendationId = null;
+    if (this.recommendationTracker) {
+      recommendationId = this.recommendationTracker.track({
+        action: `${intent} ${subject}`,
+        reason: `operator requested ${intent} action`,
+        expectedValue: 0,
+        originatingAgent: 'operator',
+      });
+    }
+
+    const action = {
+      type: intent,
+      params: { description: subject },
+      requestingAgent: 'operator',
+      recommendationId,
+    };
+    try {
+      const result = await this.executionGateway.execute(action);
+      const id = result.id;
+      this.lastApprovalIds = [id, ...this.lastApprovalIds].slice(0, 10);
+      this.lastMentionedApprovalId = id;
+      const recText = recommendationId ? ` (recommendation ${recommendationId})` : '';
+      return this._respond('create-action', {
+        text: `Created ${intent} action "${subject}" (${id})${recText}. It is ${result.status === 'awaiting-approval' ? 'awaiting approval' : result.status}. Use "approve ${id}" or "approve it" to execute.`,
+        action: { id, intent, subject, status: result.status, recommendationId },
+      });
+    } catch (error) {
+      return this._respond('create-action', {
+        text: `Could not create ${intent} action: ${error instanceof Error ? error.message : String(error)}`,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
   async _help() {
     if (this.cockpit) await this.cockpit.handleCommand('help');
     const lines = [
       'Available commands:',
-      '  good morning | status | what changed | what deserves my attention',
+      '  good morning | status | what changed | what changed since this morning',
+      '  what deserves my attention today | what needs my attention | what\'s blocking progress',
       '  what should we build today | what\'s blocking revenue | what can you do without me',
+      '  what did we learn | which recommendation turned out to be wrong | show me the risks',
+      '  why are you recommending this | what would you do next if I left for the day',
       '  what about <objective or agent> | focus <resonate|revenue|manufacturing|...>',
       '  show approvals | show <agent domain> | approve <id|it> | reject <id|it>',
       '  explain recommendation <n> | modify <id> <notes> | simulate [<id>]',
+      '  do <x> | start <x> | create task <x> | remind me <x> | investigate <x> | analyze <x>',
+      '  print <x> | generate <x> | build <x> | review <x> | monitor <x>',
+      '  measure <id|keyword> success|failed|partial|abandoned [+/-value]',
+      '  customer satisfied | project completed | build failed | awaiting measurements',
       '  recommend | timeline | health | hydi health | backup | help',
     ];
     return this._respond('help', { text: lines.join('\n') });

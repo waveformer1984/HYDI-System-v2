@@ -185,7 +185,11 @@ describe('OperatorCLI', () => {
   });
 
   test('unknown commands are delegated to the cockpit, not invented locally', async () => {
-    const result = await cli.handle('do the thing');
+    // 'do the thing' is no longer a valid example here: ConversationEngine's
+    // conversational action-creation intent (`do <x>`) now legitimately
+    // intercepts any "do ..." phrase to create a real action. Use a phrase
+    // that matches none of ConversationEngine's routes instead.
+    const result = await cli.handle('xyzzy plugh frobnicate');
     expect(result.output).toContain('I did not understand');
   });
 

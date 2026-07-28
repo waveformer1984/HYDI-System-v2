@@ -3,8 +3,11 @@
 const BriefingRenderer = require('./BriefingRenderer');
 
 const BANNER = [
-  'ProtoForge Executive Cockpit',
-  'Type "good morning" for the full executive briefing, "help" for commands, "exit" to quit.',
+  'ProtoForge Executive Workspace',
+  'This is the canonical local-first interface for daily executive operations.',
+  'Try: "good morning" | "what should I focus on" | "what changed since this morning"',
+  '     "show me the risks" | "recommend" | "what did we learn" | "daily close"',
+  'Or type "help" for the full command palette and "exit" to quit.',
 ].join('\n');
 
 const EXIT_PATTERN = /^(exit|quit|bye|:q)$/;

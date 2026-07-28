@@ -311,6 +311,9 @@ class ExecutiveOperatingSystem extends EventEmitter {
     const recentlyCalibrated = measuredLearning ? this.businessEvidenceEngine.getCompletedLearning().slice(0, 5) : [];
     const topImproving = measuredLearning ? this.businessEvidenceEngine.getTopImprovingRecommendations() : [];
     const losingConfidence = measuredLearning ? this.businessEvidenceEngine.getRecommendationsLosingConfidence() : [];
+    const staleAbandoned = measuredLearning ? this.businessEvidenceEngine.abandonStale() : [];
+    const staleRemaining = measuredLearning ? this.businessEvidenceEngine.getStaleRecommendations() : [];
+    const staleWarnings = [...staleAbandoned.map((id) => ({ id, action: 'auto-abandoned', age: 'stale' })), ...staleRemaining.map((r) => ({ id: r.id, action: r.action, age: 'stale' }))];
 
     const briefing = {
       generatedAt: Date.now(),
@@ -328,6 +331,7 @@ class ExecutiveOperatingSystem extends EventEmitter {
       recentlyCalibrated,
       topImproving,
       losingConfidence,
+      staleWarnings,
       missingData: this._missingData(reports),
       agentReports: reports,
     };

@@ -7,7 +7,7 @@ const { EventEmitter } = require('events');
 const AuditLedger = require('./AuditLedger');
 const ActionSnapshot = require('./ActionSnapshot');
 const {
-  DocumentationAdapter, FileOperationsAdapter, DevelopmentAdapter, CommunicationPrepAdapter,
+  DocumentationAdapter, FileOperationsAdapter, DevelopmentAdapter, CommunicationPrepAdapter, GenericTaskAdapter,
 } = require('./CapabilityAdapters');
 
 const PERSISTENCE_VERSION = 1;
@@ -80,6 +80,7 @@ class ExecutionGateway extends EventEmitter {
     this.addAdapter(new FileOperationsAdapter({ basePath: this.config.dataPath }));
     this.addAdapter(new DevelopmentAdapter({ basePath: this.config.dataPath }));
     this.addAdapter(new CommunicationPrepAdapter());
+    this.addAdapter(new GenericTaskAdapter({ basePath: this.config.dataPath }));
   }
 
   addAdapter(adapter) {
@@ -298,8 +299,8 @@ class ExecutionGateway extends EventEmitter {
     const beforeState = ActionSnapshot.capture(this.memory, { tags: [entry.type] });
     try {
       const result = simulate
-        ? await adapter.simulate({ type: entry.type, params: entry.params })
-        : await adapter.execute({ type: entry.type, params: entry.params });
+        ? await adapter.simulate({ type: entry.type, params: entry.params, id: entry.id })
+        : await adapter.execute({ type: entry.type, params: entry.params, id: entry.id });
       entry.status = 'completed';
       entry.result = result;
       entry.completedAt = Date.now();

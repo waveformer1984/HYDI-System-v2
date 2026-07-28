@@ -228,6 +228,33 @@ class FutureAdapter extends CapabilityAdapter {
   }
 }
 
+class GenericTaskAdapter extends CapabilityAdapter {
+  constructor(config = {}) {
+    super('generic-task', ['do', 'start', 'create-task', 'remind', 'investigate', 'analyze', 'print', 'generate', 'build', 'review', 'monitor']);
+    this.basePath = config.basePath || process.cwd();
+  }
+
+  async execute(action) {
+    this.validate(action);
+    const { type, params = {}, id } = action;
+    const description = params.description || params.subject || 'No description';
+    const timestamp = new Date().toISOString();
+    const fileName = id ? `${id}.md` : `task-${Date.now()}.md`;
+    const file = path.join(this.basePath, 'actions', fileName);
+    await this._ensureDir(file);
+    const content = [
+      `# ${type}`,
+      '',
+      `- Description: ${description}`,
+      `- Created: ${timestamp}`,
+      `- Status: created`,
+      '',
+    ].join('\n');
+    await fs.writeFile(file, content);
+    return { file, type, description, status: 'created' };
+  }
+}
+
 module.exports = {
   CapabilityAdapter,
   DocumentationAdapter,
@@ -235,4 +262,5 @@ module.exports = {
   DevelopmentAdapter,
   CommunicationPrepAdapter,
   FutureAdapter,
+  GenericTaskAdapter,
 };

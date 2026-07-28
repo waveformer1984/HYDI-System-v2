@@ -271,6 +271,8 @@ class OperatorSession {
       strategicObjectives: this.strategicObjectives,
       agentWorkspace: this.agentWorkspace,
       approvalCenter: this.approvalCenter,
+      recommendationTracker: this.recommendationTracker,
+      businessEvidenceEngine: this.evidenceEngine,
       timeline: this.timeline,
       sessionMemory: this.sessionMemory,
       certify: this.certify,
