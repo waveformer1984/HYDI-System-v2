@@ -79,7 +79,13 @@
     "forecast-test": "npx jest tests/unit/hydi-v3/ExecutiveIntelligence.test.js --testNamePattern=\"Forecast engine\" --runInBand",
     "risk-test": "npx jest tests/unit/hydi-v3/ExecutiveIntelligence.test.js --testNamePattern=\"Risk analysis\" --runInBand",
     "progress-test": "npx jest tests/unit/hydi-v3/ExecutiveIntelligence.test.js --testNamePattern=\"Progress tracking\" --runInBand",
-    "executive-test": "npx jest tests/unit/hydi-v3/ExecutiveIntelligence.test.js --testNamePattern=\"Executive dashboard\" --runInBand"
+    "executive-test": "npx jest tests/unit/hydi-v3/ExecutiveIntelligence.test.js --testNamePattern=\"Executive dashboard\" --runInBand",
+    "reliability-test": "npx jest tests/unit/hydi-v3/ProductionReliability.test.js --testNamePattern=\"Health supervisor\" --runInBand",
+    "fault-test": "npx jest tests/unit/hydi-v3/ProductionReliability.test.js --testNamePattern=\"Fault correlation\" --runInBand",
+    "recovery-test": "npx jest tests/unit/hydi-v3/ProductionReliability.test.js --testNamePattern=\"Recovery coordinator\" --runInBand",
+    "leak-test": "npx jest tests/unit/hydi-v3/ProductionReliability.test.js --testNamePattern=\"Resource leak detector\" --runInBand",
+    "deadlock-test": "npx jest tests/unit/hydi-v3/ProductionReliability.test.js --testNamePattern=\"Deadlock detector\" --runInBand",
+    "operations-test": "npx jest tests/unit/hydi-v3/ProductionReliability.test.js --testNamePattern=\"Operations dashboard\" --runInBand"
   },
   "bin": {
     "hydi": "scripts/hydi-cli.js"
