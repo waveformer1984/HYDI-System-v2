@@ -68,7 +68,12 @@
     "node-discovery-test": "npx jest tests/unit/hydi-v3/NodeDiscovery.test.js --runInBand",
     "transport-test": "npx jest tests/unit/hydi-v3/NodeTransport.test.js --runInBand",
     "scheduler-test": "npx jest tests/unit/hydi-v3/NodeScheduler.test.js --runInBand",
-    "shared-memory-test": "npx jest tests/unit/hydi-v3/SharedMemoryStore.test.js --runInBand"
+    "shared-memory-test": "npx jest tests/unit/hydi-v3/SharedMemoryStore.test.js --runInBand",
+    "swarm-test": "npx jest tests/unit/hydi-v3/ExecutionFabric.test.js --testNamePattern=\"Swarm\" --runInBand",
+    "scheduling-test": "npx jest tests/unit/hydi-v3/ExecutionFabric.test.js --testNamePattern=\"Scheduling\" --runInBand",
+    "workload-test": "npx jest tests/unit/hydi-v3/ExecutionFabric.test.js --testNamePattern=\"Workload\" --runInBand",
+    "migration-test": "npx jest tests/unit/hydi-v3/ExecutionFabric.test.js --testNamePattern=\"Migration\" --runInBand",
+    "failure-recovery-test": "npx jest tests/unit/hydi-v3/ExecutionFabric.test.js --testNamePattern=\"Failure recovery\" --runInBand"
   },
   "bin": {
     "hydi": "scripts/hydi-cli.js"
