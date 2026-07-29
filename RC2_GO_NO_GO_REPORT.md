@@ -33,7 +33,8 @@ The `v0.9.0-rc.2` candidate is functionally and architecturally sound, but two m
 - Federation message replay protection added to `FederationGateway`.
 - `FederationReplay.test.js` added; all tests pass.
 - `scripts/op-validation.js` created for reproducible soak/baseline capture.
-- Security review low-severity item resolved.
+- Security review low-severity item (federation replay) resolved.
+- **Security review high-severity item resolved:** `SignatureVerifier` previously performed no real cryptographic verification (private key was embedded in plaintext in the "signature" output; `verify()` only checked for a non-empty signature field and a self-computable digest match). A compounding bug in `computeDigest()`'s canonicalization also meant even a real signature would not have bound to a capability's declared permissions. Both are now fixed with real Ed25519 signing/verification and a recursive canonical serializer; see `SECURITY_REVIEW.md` for full detail and verification evidence.
 
 ### Incomplete
 
@@ -46,7 +47,7 @@ The `v0.9.0-rc.2` candidate is functionally and architecturally sound, but two m
 |--------|--------|
 | `FINAL_24H_SOAK_REPORT.md` | Pending actual 24-hour run |
 | `FINAL_CLEAN_DEPLOYMENT_REPORT.md` | Pending actual clean-machine run |
-| `SECURITY_REVIEW.md` | Resolved — 0 findings |
+| `SECURITY_REVIEW.md` | 1 high-severity finding identified and resolved this cycle (capability signature verification); 1 low-severity finding (federation replay) resolved previously; 0 findings remain open |
 
 ## Mandatory Corrective Actions
 

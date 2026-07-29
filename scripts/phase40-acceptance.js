@@ -18,6 +18,11 @@ const SnapshotManager = require('../src/hydi-v3/SnapshotManager');
 const MarketplaceDashboard = require('../src/hydi-v3/MarketplaceDashboard');
 
 const silent = { log: () => {}, error: () => {}, warn: () => {} };
+
+// Real Ed25519 keypair standing in for the 'protoforge' test publisher's
+// identity. Generated once per run; only the public key is ever registered
+// with PublisherRegistry, matching how a real publisher would operate.
+const PROTOFORGE_KEYS = SignatureVerifier.generateKeyPair();
 const reportPath = path.resolve(__dirname, '../reports/business-os/phase40-marketplace-report.md');
 
 function assert(ok, message) {
@@ -31,7 +36,7 @@ async function tmpDir() {
 }
 
 function sign(cap, signer) {
-  const { digest, signature } = signer.sign(cap, 'test-private-key');
+  const { digest, signature } = signer.sign(cap, PROTOFORGE_KEYS.privateKey);
   cap.digest = digest;
   cap.signature = signature;
   return cap;
@@ -73,7 +78,7 @@ function makeMarketplace() {
 
 async function addOfficialRepo(m) {
   await m.snapshot.start();
-  m.publishers.register({ id: 'protoforge', name: 'ProtoForge', status: 'official' });
+  m.publishers.register({ id: 'protoforge', name: 'ProtoForge', status: 'official', publicKey: PROTOFORGE_KEYS.publicKey });
   m.publishers.register({ id: 'community-dev', name: 'Community', status: 'community' });
   const pkgA = sign({ id: 'audio.mastering', version: '1.0.0', type: 'Skill', publisher: 'protoforge', category: 'audio', offlineCompatible: true, requiredPermissions: { filesystem: ['read'] }, dependencies: [] }, m.verifier);
   const pkgB = sign({ id: 'vision.ocr', version: '1.0.0', type: 'Skill', publisher: 'protoforge', category: 'vision', offlineCompatible: false, requiredPermissions: { hardware: true }, dependencies: [] }, m.verifier);
@@ -109,7 +114,7 @@ async function repositoryTest() {
 async function signatureTest() {
   const m = makeMarketplace();
   await m.snapshot.start();
-  m.publishers.register({ id: 'protoforge', status: 'official' });
+  m.publishers.register({ id: 'protoforge', status: 'official', publicKey: PROTOFORGE_KEYS.publicKey });
   const signed = sign({ id: 'signed.pkg', version: '1.0.0', type: 'Skill', publisher: 'protoforge', category: 'test', requiredPermissions: {}, dependencies: [] }, m.verifier);
   const unsigned = { id: 'unsigned.pkg', version: '1.0.0', type: 'Skill', publisher: 'protoforge', category: 'test', requiredPermissions: {}, dependencies: [] };
   m.repo.addRepository({ id: 'test', type: 'test', packages: [signed, unsigned] });
