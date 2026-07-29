@@ -30,6 +30,7 @@ npm ci
 npm test
 npm test -- --runInBand
 node scripts/hydi-cli.js architecture verify
+node scripts/hydi-cli.js bootstrap
 node scripts/hydi-cli.js export-manifest
 node scripts/hydi-cli.js verify
 node scripts/hydi-cli.js snapshot
@@ -54,10 +55,11 @@ node scripts/hydi-cli.js snapshot
 - [ ] `npm ci` succeeds
 - [ ] `npm test` passes
 - [ ] `npm test -- --runInBand` passes
-- [ ] `hydi architecture verify` reports 100%
-- [ ] `hydi export-manifest` succeeds
-- [ ] `hydi verify` reports no missing/extra components
-- [ ] `hydi snapshot` succeeds
+- [ ] `node scripts/hydi-cli.js architecture verify` reports 100%
+- [ ] `node scripts/hydi-cli.js bootstrap` succeeds
+- [ ] `node scripts/hydi-cli.js export-manifest` succeeds
+- [ ] `node scripts/hydi-cli.js verify` reports no missing/extra components
+- [ ] `node scripts/hydi-cli.js snapshot` succeeds
 - [ ] Startup succeeds
 - [ ] Normal operation succeeds
 - [ ] Shutdown succeeds

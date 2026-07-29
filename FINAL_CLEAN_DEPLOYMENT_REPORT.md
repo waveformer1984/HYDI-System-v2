@@ -24,13 +24,13 @@ The following must be executed on a fresh host using only the operator documenta
 ```bash
 git clone <repo>
 cd HYDI_System
-git checkout release/v0.9.0
-git checkout v0.9.0-rc.2
+git checkout v0.9.0-rc.3
 npm ci
 npm run typecheck
 npm test
 npm test -- --runInBand
 node scripts/hydi-cli.js architecture verify
+node scripts/hydi-cli.js bootstrap
 node scripts/hydi-cli.js export-manifest
 node scripts/hydi-cli.js verify
 node scripts/hydi-cli.js snapshot
@@ -50,7 +50,7 @@ node scripts/hydi-cli.js snapshot
 - [ ] `npm run typecheck` result
 - [ ] `npm test` summary
 - [ ] `npm test -- --runInBand` summary
-- [ ] `hydi architecture verify` output
+- [ ] `node scripts/hydi-cli.js architecture verify` output
 - [ ] Initial manifest hash
 - [ ] Initial snapshot hash
 - [ ] Post-workload snapshot hash

@@ -39,7 +39,7 @@ An isolated data directory was used to verify the CLI from empty state.
 - [ ] Node / npm versions
 - [ ] `npm ci` exit code
 - [ ] `npm test` results
-- [ ] `hydi architecture verify` output
+- [ ] `node scripts/hydi-cli.js architecture verify` output
 - [ ] Initial snapshot hash
 - [ ] Post-workload snapshot hash
 - [ ] Shutdown and restart behavior

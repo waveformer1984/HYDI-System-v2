@@ -24,6 +24,27 @@ The `v0.9.0-rc.3` tag points to `de9cbc1`. The branch tip is one documentation c
 
 ```bash
 git checkout v0.9.0-rc.3
+```
+
+Windows PowerShell:
+
+```powershell
+$env:SOAK_MS = 86400000
+$env:SOAK_ITERS = 99999999
+node scripts/op-validation.js
+```
+
+Windows cmd:
+
+```cmd
+set SOAK_MS=86400000
+set SOAK_ITERS=99999999
+node scripts/op-validation.js
+```
+
+Unix:
+
+```bash
 SOAK_MS=86400000 SOAK_ITERS=99999999 node scripts/op-validation.js
 ```
 
@@ -62,7 +83,7 @@ PASS only if all of the following are true:
 - [ ] No resource leak trend
 - [ ] No degraded services
 - [ ] No manual intervention
-- [ ] Final `hydi architecture verify` succeeds at 100%
+- [ ] Final `node scripts/hydi-cli.js architecture verify` succeeds at 100%
 
 ## Result
 

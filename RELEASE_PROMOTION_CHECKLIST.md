@@ -11,17 +11,26 @@
 
 ### Command
 
-Windows:
+Windows (PowerShell):
 
 ```powershell
 $env:SOAK_MS = 86400000
+$env:SOAK_ITERS = 99999999
+node scripts/op-validation.js
+```
+
+Windows (cmd.exe):
+
+```cmd
+set SOAK_MS=86400000
+set SOAK_ITERS=99999999
 node scripts/op-validation.js
 ```
 
 Unix:
 
 ```bash
-SOAK_MS=86400000 node scripts/op-validation.js
+SOAK_MS=86400000 SOAK_ITERS=99999999 node scripts/op-validation.js
 ```
 
 ### Required Evidence
@@ -37,7 +46,7 @@ Capture from `data/op-validation.json` after the run:
 - [ ] Mean/min/max latency per scenario
 - [ ] heapUsed, heapTotal, handles, requests, listeners delta
 - [ ] Baseline operations mean/min/max
-- [ ] Final `hydi architecture verify` output
+- [ ] Final `node scripts/hydi-cli.js architecture verify` output
 - [ ] Final ArchitectureGuard score (must be 100%)
 
 ### Acceptance

@@ -17,7 +17,7 @@
 - [ ] `npm run invariant-test` passes
 - [ ] `npm run rc1-test` passes
 - [ ] `npm run rc2-test` passes
-- [ ] `hydi architecture verify` reports 100%
+- [ ] `node scripts/hydi-cli.js architecture verify` reports 100%
 
 ## Hardening
 
