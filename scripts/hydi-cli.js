@@ -25,6 +25,8 @@ const LifecycleRegistry = require('../src/hydi-v3/LifecycleRegistry');
 const DeploymentManifest = require('../src/hydi-v3/DeploymentManifest');
 const SnapshotManager = require('../src/hydi-v3/SnapshotManager');
 const MarketplaceManager = require('../src/hydi-v3/MarketplaceManager');
+const ArchitectureGuard = require('../src/hydi-v3/ArchitectureGuard');
+const ArchitectureReport = require('../src/hydi-v3/ArchitectureReport');
 
 function parseFlags(argv) {
   const args = argv.slice(2);
@@ -427,6 +429,25 @@ async function runMarketplaceCommand(command, id, flags) {
   return 1;
 }
 
+async function runArchitectureCommand(sub, flags) {
+  const projectRoot = flags.dataPath ? path.resolve(process.cwd(), flags.dataPath) : path.resolve(__dirname, '..');
+  const guard = new ArchitectureGuard({ projectRoot });
+  const report = guard.verify();
+  if (sub === 'report') {
+    console.log(JSON.stringify(ArchitectureReport.toJson(report), null, 2));
+  } else if (sub === 'audit') {
+    console.log(ArchitectureReport.render(report));
+  } else if (sub === 'verify' || !sub) {
+    console.log(ArchitectureReport.render(report));
+    return report.status === 'pass' ? 0 : 1;
+  } else {
+    console.error('Unknown architecture subcommand:', sub);
+    console.error('Usage: hydi architecture <audit|report|verify> [--data-path <dir>]');
+    return 1;
+  }
+  return report.status === 'pass' ? 0 : 1;
+}
+
 async function main() {
   const { command, id, flags } = parseFlags(process.argv);
   const dataPath = flags.dataPath
@@ -446,9 +467,15 @@ async function main() {
     process.exit(code);
   }
 
+  const architectureCommands = ['architecture'];
+  if (architectureCommands.includes(command)) {
+    const code = await runArchitectureCommand(id, flags);
+    process.exit(code);
+  }
+
   const validCommands = ['status', 'readiness', 'health', 'outcome', 'memory-review'];
   if (!command || !validCommands.includes(command)) {
-    console.error('Usage: hydi <status|readiness|health|outcome|memory-review|bootstrap|deploy|verify|export-manifest|snapshot|marketplace> [--data-path <dir>]');
+    console.error('Usage: hydi <status|readiness|health|outcome|memory-review|bootstrap|deploy|verify|export-manifest|snapshot|marketplace|architecture> [--data-path <dir>]');
     process.exit(1);
   }
 

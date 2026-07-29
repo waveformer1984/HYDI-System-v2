@@ -85,7 +85,10 @@
     "recovery-test": "npx jest tests/unit/hydi-v3/ProductionReliability.test.js --testNamePattern=\"Recovery coordinator\" --runInBand",
     "leak-test": "npx jest tests/unit/hydi-v3/ProductionReliability.test.js --testNamePattern=\"Resource leak detector\" --runInBand",
     "deadlock-test": "npx jest tests/unit/hydi-v3/ProductionReliability.test.js --testNamePattern=\"Deadlock detector\" --runInBand",
-    "operations-test": "npx jest tests/unit/hydi-v3/ProductionReliability.test.js --testNamePattern=\"Operations dashboard\" --runInBand"
+    "operations-test": "npx jest tests/unit/hydi-v3/ProductionReliability.test.js --testNamePattern=\"Operations dashboard\" --runInBand",
+    "architecture-test": "npx jest tests/unit/hydi-v3/ArchitectureGuard.test.js --runInBand",
+    "invariant-test": "npx jest tests/unit/hydi-v3/ArchitectureInvariant.test.js --runInBand",
+    "rc1-test": "npx jest tests/unit/hydi-v3/ArchitectureGuard.test.js tests/unit/hydi-v3/ArchitectureInvariant.test.js --runInBand"
   },
   "bin": {
     "hydi": "scripts/hydi-cli.js"
