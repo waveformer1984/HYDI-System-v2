@@ -21,6 +21,9 @@ const path = require('path');
 const { boot } = require('../src/hydi-v3/HYDIOperationalBoot');
 const SignalCoverage = require('../src/hydi-v3/SignalCoverage');
 const HYDIContinuousRuntime = require('../src/hydi-v3/HYDIContinuousRuntime');
+const LifecycleRegistry = require('../src/hydi-v3/LifecycleRegistry');
+const DeploymentManifest = require('../src/hydi-v3/DeploymentManifest');
+const SnapshotManager = require('../src/hydi-v3/SnapshotManager');
 
 function parseFlags(argv) {
   const args = argv.slice(2);
@@ -292,6 +295,72 @@ async function runOutcome(session, recommendationId, flags) {
   return lines.join('\n');
 }
 
+async function runLifecycleCommand(command, id, flags) {
+  const dataPath = flags.dataPath
+    ? path.resolve(process.cwd(), flags.dataPath)
+    : path.resolve(__dirname, '..', 'data');
+  await require('fs').promises.mkdir(dataPath, { recursive: true });
+  const registry = new LifecycleRegistry({ logger: { log: () => {}, warn: () => {}, error: () => {} } });
+  const snapshotManager = await new SnapshotManager({ dataPath, registry, logger: { log: () => {}, warn: () => {}, error: () => {} } }).start();
+  const manifestPath = id || path.join(dataPath, 'hydi-manifest.json');
+
+  if (command === 'bootstrap' || command === 'deploy') {
+    const manifest = await DeploymentManifest.fromFile(manifestPath).catch(() => DeploymentManifest.fromRegistry(registry, {}));
+    const bootstrapped = await manifest.bootstrap(registry);
+    console.log(JSON.stringify({ command, bootstrapped, components: registry.list().length }, null, 2));
+    return 0;
+  }
+
+  if (command === 'verify') {
+    const manifest = await DeploymentManifest.fromFile(manifestPath).catch(() => null);
+    if (!manifest) {
+      console.error('Manifest not found:', manifestPath);
+      return 1;
+    }
+    const verify = await manifest.verify(registry);
+    console.log(JSON.stringify({ command, verify }, null, 2));
+    return verify.ok ? 0 : 1;
+  }
+
+  if (command === 'export-manifest') {
+    const manifest = DeploymentManifest.fromRegistry(registry, { runtimeVersions: { node: process.version } });
+    await manifest.write(manifestPath);
+    console.log(JSON.stringify({ command, path: manifestPath, components: manifest.manifest.components.length }, null, 2));
+    return 0;
+  }
+
+  if (command === 'snapshot') {
+    const sub = id || 'create';
+    if (sub === 'create') {
+      const snap = await snapshotManager.create(flags.label || '');
+      console.log(JSON.stringify({ command, snapshot: snap.hash }, null, 2));
+      return 0;
+    }
+    if (sub === 'list') {
+      const list = await snapshotManager.list();
+      console.log(JSON.stringify({ command, snapshots: list.map((s) => s.hash) }, null, 2));
+      return 0;
+    }
+    if (sub === 'restore') {
+      const target = flags.hash || 'latest';
+      const restored = await snapshotManager.restore(target);
+      console.log(JSON.stringify({ command, restored: restored.success }, null, 2));
+      return restored.success ? 0 : 1;
+    }
+    if (sub === 'compare') {
+      const a = flags.a;
+      const b = flags.b;
+      const cmp = await snapshotManager.compare(a, b);
+      console.log(JSON.stringify({ command, compare: cmp }, null, 2));
+      return cmp.success ? 0 : 1;
+    }
+    console.error('Unknown snapshot subcommand:', sub);
+    return 1;
+  }
+
+  return 1;
+}
+
 async function main() {
   const { command, id, flags } = parseFlags(process.argv);
   const dataPath = flags.dataPath
@@ -299,9 +368,15 @@ async function main() {
     : path.resolve(__dirname, '..', 'data');
   const logger = { log: () => {}, warn: () => {}, error: () => {} };
 
+  const lifecycleCommands = ['bootstrap', 'deploy', 'verify', 'export-manifest', 'snapshot'];
+  if (lifecycleCommands.includes(command)) {
+    const code = await runLifecycleCommand(command, id, flags);
+    process.exit(code);
+  }
+
   const validCommands = ['status', 'readiness', 'health', 'outcome', 'memory-review'];
   if (!command || !validCommands.includes(command)) {
-    console.error('Usage: hydi <status|readiness|health|outcome|memory-review> [--data-path <dir>]');
+    console.error('Usage: hydi <status|readiness|health|outcome|memory-review|bootstrap|deploy|verify|export-manifest|snapshot> [--data-path <dir>]');
     process.exit(1);
   }
 

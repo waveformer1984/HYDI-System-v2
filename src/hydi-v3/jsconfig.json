@@ -52,6 +52,14 @@
     "SnapshotStore.js",
     "RecoveryManager.js",
     "SystemHealthSupervisor.js",
-    "FaultInjector.js"
+    "FaultInjector.js",
+    "LifecycleRegistry.js",
+    "CompatibilityManager.js",
+    "SnapshotManager.js",
+    "PluginRuntime.js",
+    "DeploymentManifest.js",
+    "UpgradeManager.js",
+    "EvolutionProposal.js",
+    "LifecycleDashboard.js"
   ]
 }
