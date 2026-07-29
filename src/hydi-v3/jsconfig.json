@@ -60,6 +60,15 @@
     "DeploymentManifest.js",
     "UpgradeManager.js",
     "EvolutionProposal.js",
-    "LifecycleDashboard.js"
+    "LifecycleDashboard.js",
+    "CapabilityRegistry.js",
+    "PublisherRegistry.js",
+    "SignatureVerifier.js",
+    "RepositoryManager.js",
+    "DependencyResolver.js",
+    "CapabilitySandbox.js",
+    "CapabilityInstaller.js",
+    "MarketplaceManager.js",
+    "MarketplaceDashboard.js"
   ]
 }

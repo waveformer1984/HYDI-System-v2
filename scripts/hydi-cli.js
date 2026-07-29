@@ -24,6 +24,7 @@ const HYDIContinuousRuntime = require('../src/hydi-v3/HYDIContinuousRuntime');
 const LifecycleRegistry = require('../src/hydi-v3/LifecycleRegistry');
 const DeploymentManifest = require('../src/hydi-v3/DeploymentManifest');
 const SnapshotManager = require('../src/hydi-v3/SnapshotManager');
+const MarketplaceManager = require('../src/hydi-v3/MarketplaceManager');
 
 function parseFlags(argv) {
   const args = argv.slice(2);
@@ -317,6 +318,7 @@ async function runLifecycleCommand(command, id, flags) {
       console.error('Manifest not found:', manifestPath);
       return 1;
     }
+    await manifest.bootstrap(registry);
     const verify = await manifest.verify(registry);
     console.log(JSON.stringify({ command, verify }, null, 2));
     return verify.ok ? 0 : 1;
@@ -361,6 +363,70 @@ async function runLifecycleCommand(command, id, flags) {
   return 1;
 }
 
+async function runMarketplaceCommand(command, id, flags) {
+  const sub = id;
+  const target = process.argv[4];
+  const extra = process.argv[5];
+
+  const marketplace = new MarketplaceManager({ logger: { log: () => {}, warn: () => {}, error: () => {} } });
+  const official = marketplace.repositories;
+  const officialPackages = [
+    { id: 'audio.mastering', version: '1.0.0', type: 'Skill', publisher: 'protoforge', category: 'audio', offlineCompatible: true, requiredPermissions: { filesystem: true } },
+    { id: 'vision.ocr', version: '1.0.0', type: 'Skill', publisher: 'protoforge', category: 'vision', offlineCompatible: false, requiredPermissions: { hardware: true } },
+  ];
+  for (const pkg of officialPackages) {
+    const { digest, signature } = marketplace.verifier.sign(pkg, 'test-private-key');
+    pkg.digest = digest;
+    pkg.signature = signature;
+  }
+  official.addRepository({
+    id: 'official',
+    name: 'Official HYDI Marketplace',
+    type: 'official',
+    offline: false,
+    packages: officialPackages,
+  });
+  official.addRepository({ id: 'local', name: 'Local', type: 'local', offline: true, packages: [] });
+  marketplace.publishers.register({ id: 'protoforge', name: 'ProtoForge', status: 'official' });
+
+  if (sub === 'search') {
+    const results = marketplace.search({ q: target });
+    console.log(JSON.stringify({ command: 'marketplace search', results: results.map((r) => ({ id: r.id, version: r.version, publisher: r.publisher })) }, null, 2));
+    return 0;
+  }
+  if (sub === 'install') {
+    const result = await marketplace.install(target, { allowUnsigned: flags['allow-unsigned'] });
+    console.log(JSON.stringify(result, null, 2));
+    return result.success ? 0 : 1;
+  }
+  if (sub === 'verify') {
+    const cap = official.getCapability(target);
+    if (!cap) { console.error('Capability not found:', target); return 1; }
+    const result = marketplace.verify(cap);
+    console.log(JSON.stringify(result, null, 2));
+    return result.valid ? 0 : 1;
+  }
+  if (sub === 'update') {
+    const result = await marketplace.update(target);
+    console.log(JSON.stringify(result, null, 2));
+    return result.success ? 0 : 1;
+  }
+  if (sub === 'remove') {
+    const result = await marketplace.remove(target);
+    console.log(JSON.stringify(result, null, 2));
+    return result.success ? 0 : 1;
+  }
+  if (sub === 'publish') {
+    const repoId = target || 'local';
+    const pkgId = extra || 'unknown';
+    const result = marketplace.publish(repoId, { id: pkgId, version: '1.0.0', type: 'Skill', publisher: 'protoforge', category: 'local', offlineCompatible: true, requiredPermissions: {} }, 'protoforge');
+    console.log(JSON.stringify(result, null, 2));
+    return result.success ? 0 : 1;
+  }
+  console.error('Unknown marketplace subcommand:', sub);
+  return 1;
+}
+
 async function main() {
   const { command, id, flags } = parseFlags(process.argv);
   const dataPath = flags.dataPath
@@ -374,9 +440,15 @@ async function main() {
     process.exit(code);
   }
 
+  const marketplaceCommands = ['marketplace'];
+  if (marketplaceCommands.includes(command)) {
+    const code = await runMarketplaceCommand(command, id, flags);
+    process.exit(code);
+  }
+
   const validCommands = ['status', 'readiness', 'health', 'outcome', 'memory-review'];
   if (!command || !validCommands.includes(command)) {
-    console.error('Usage: hydi <status|readiness|health|outcome|memory-review|bootstrap|deploy|verify|export-manifest|snapshot> [--data-path <dir>]');
+    console.error('Usage: hydi <status|readiness|health|outcome|memory-review|bootstrap|deploy|verify|export-manifest|snapshot|marketplace> [--data-path <dir>]');
     process.exit(1);
   }
 
