@@ -88,7 +88,12 @@
     "operations-test": "npx jest tests/unit/hydi-v3/ProductionReliability.test.js --testNamePattern=\"Operations dashboard\" --runInBand",
     "architecture-test": "npx jest tests/unit/hydi-v3/ArchitectureGuard.test.js --runInBand",
     "invariant-test": "npx jest tests/unit/hydi-v3/ArchitectureInvariant.test.js --runInBand",
-    "rc1-test": "npx jest tests/unit/hydi-v3/ArchitectureGuard.test.js tests/unit/hydi-v3/ArchitectureInvariant.test.js --runInBand"
+    "rc1-test": "npx jest tests/unit/hydi-v3/ArchitectureGuard.test.js tests/unit/hydi-v3/ArchitectureInvariant.test.js --runInBand",
+    "soak-test": "npx jest tests/unit/hydi-v3/RC2Hardening.test.js --testNamePattern=\"Soak harness\" --runInBand",
+    "leak-test": "npx jest tests/unit/hydi-v3/RC2Hardening.test.js --testNamePattern=\"Resource auditor\" --runInBand",
+    "baseline-test": "npx jest tests/unit/hydi-v3/RC2Hardening.test.js --testNamePattern=\"Performance baseline\" --runInBand",
+    "determinism-test": "npx jest tests/unit/hydi-v3/RC2Hardening.test.js --testNamePattern=\"Determinism guard\" --runInBand",
+    "rc2-test": "npx jest tests/unit/hydi-v3/RC2Hardening.test.js --runInBand"
   },
   "bin": {
     "hydi": "scripts/hydi-cli.js"
