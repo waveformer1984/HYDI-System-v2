@@ -30,8 +30,11 @@ Static review of HYDI v3 security-relevant modules and ArchitectureGuard invaria
 
 - `AuditLedger` is append-only and hashed.
 - `LifecycleRegistry.recordProposal` records every state change.
-- No cryptographic nonce for message replay detected; the current trust model relies on node authentication and audit.
-- **Severity:** low ( tracked in KNOWN_LIMITATIONS.md )
+- `FederationGateway` now enforces message `id`, `timestamp` and `expiresAt` with a configurable replay window.
+- Duplicate messages are rejected and audited.
+- Expired messages are rejected and audited.
+- Tests in `FederationReplay.test.js` cover acceptance, expiry, duplicate, pruning and audit.
+- **Status:** resolved in rc.2
 
 ### Plugin Permissions
 
@@ -64,8 +67,8 @@ Static review of HYDI v3 security-relevant modules and ArchitectureGuard invaria
 |----------|-------|
 | High | 0 |
 | Medium | 0 |
-| Low | 1 (message replay hardening) |
+| Low | 0 |
 
 ## Conclusion
 
-No high or medium severity findings. One low-severity hardening opportunity exists for federation message replay protection.
+No high, medium or low severity findings remain. The federation message replay hardening opportunity has been implemented and validated.

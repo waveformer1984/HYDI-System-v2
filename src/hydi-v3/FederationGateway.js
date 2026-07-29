@@ -1,6 +1,7 @@
 'use strict';
 
 const { EventEmitter } = require('events');
+const crypto = require('crypto');
 const ServiceContract = require('./ServiceContract');
 
 /**
@@ -34,11 +35,46 @@ class FederationGateway extends EventEmitter {
       optional: ['filters'],
     });
     this.audit = [];
+    this.replayWindowMs = config.replayWindowMs || 300000;
+    this.seenMessages = new Map();
     this._onMessage = (msg) => this._route(msg);
     if (this.mesh) this.mesh.on('message', this._onMessage);
   }
 
+  _messageId(msg) {
+    const data = `${msg.from || ''}:${msg.type || ''}:${JSON.stringify(msg.payload || {})}`;
+    return crypto.createHash('sha256').update(data).digest('hex');
+  }
+
+  _validateMessage(msg) {
+    const now = Date.now();
+    this._pruneMessages(now);
+    msg.id = msg.id || this._messageId(msg);
+    msg.timestamp = msg.timestamp || now;
+    msg.expiresAt = msg.expiresAt || (msg.timestamp + this.replayWindowMs);
+    if (msg.expiresAt < now) {
+      return { valid: false, reason: 'expired' };
+    }
+    if (this.seenMessages.has(msg.id)) {
+      return { valid: false, reason: 'duplicate' };
+    }
+    this.seenMessages.set(msg.id, msg.expiresAt);
+    return { valid: true };
+  }
+
+  _pruneMessages(now) {
+    for (const [id, expiresAt] of this.seenMessages) {
+      if (expiresAt < now) this.seenMessages.delete(id);
+    }
+  }
+
   _route(msg) {
+    const validation = this._validateMessage(msg);
+    if (!validation.valid) {
+      this._audit('message_rejected', { from: msg.from, type: msg.type, reason: validation.reason, messageId: msg.id });
+      this.emit('message_rejected', { msg, reason: validation.reason });
+      return;
+    }
     switch (msg.type) {
       case 'remote_execute':
         this._receiveRemoteExecute(msg);
