@@ -3,9 +3,14 @@
 const DEFAULTS = {
   // Discovery
   discovery: {
+    // Keys match ADAPTER_CLASSES in ModelManager.js and each adapter's own
+    // `.name` property (lowercase, e.g. LMStudioAdapter.name === 'lmstudio').
+    // A prior camelCase/lowercase mismatch here silently dropped lmStudio and
+    // llamaCpp from discovery entirely -- ADAPTER_CLASSES[providerName]
+    // resolved to undefined and the provider was skipped with no warning.
     ollama: { enabled: true, baseUrl: 'http://localhost:11434', timeoutMs: 2000 },
-    lmStudio: { enabled: true, baseUrl: 'http://localhost:1234', timeoutMs: 2000 },
-    llamaCpp: { enabled: true, baseUrl: 'http://localhost:8080', timeoutMs: 2000 },
+    lmstudio: { enabled: true, baseUrl: 'http://localhost:1234', timeoutMs: 2000 },
+    llamacpp: { enabled: true, baseUrl: 'http://localhost:8080', timeoutMs: 2000 },
     vllm: { enabled: false, baseUrl: 'http://localhost:8000', timeoutMs: 2000 },
   },
   // Router defaults

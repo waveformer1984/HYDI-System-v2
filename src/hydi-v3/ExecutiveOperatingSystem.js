@@ -265,14 +265,19 @@ class ExecutiveOperatingSystem extends EventEmitter {
     const eventContract = this.eventBus && typeof this.eventBus.healthCheck === 'function'
       ? this.eventBus.healthCheck()
       : { ok: true, reason: 'no event bus configured' };
-    const checks = {
+    // lastBriefingFresh is reported but never gates `ok`: a cached briefing
+    // older than 24h is a normal, self-correcting condition (the next
+    // morningBriefing() call regenerates it), not a structural failure --
+    // the same principle as sensors never gating OperatorSession.healthCheck().
+    const structuralChecks = {
       initialized: !this._destroyed,
       hasMemory: !!this.memory,
       agentsLoaded: this.agents.size >= 7,
-      lastBriefingFresh: this.lastBriefing ? (Date.now() - this.lastBriefing.generatedAt) < 86400000 : true,
       eventContract: eventContract.ok,
     };
-    const ok = Object.values(checks).every(Boolean);
+    const lastBriefingFresh = this.lastBriefing ? (Date.now() - this.lastBriefing.generatedAt) < 86400000 : true;
+    const checks = { ...structuralChecks, lastBriefingFresh };
+    const ok = Object.values(structuralChecks).every(Boolean);
     return { ok, checks, agentCount: this.agents.size, briefingCount: this.decisions.length, eventContract };
   }
 
