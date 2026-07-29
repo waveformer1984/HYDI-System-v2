@@ -73,7 +73,13 @@
     "scheduling-test": "npx jest tests/unit/hydi-v3/ExecutionFabric.test.js --testNamePattern=\"Scheduling\" --runInBand",
     "workload-test": "npx jest tests/unit/hydi-v3/ExecutionFabric.test.js --testNamePattern=\"Workload\" --runInBand",
     "migration-test": "npx jest tests/unit/hydi-v3/ExecutionFabric.test.js --testNamePattern=\"Migration\" --runInBand",
-    "failure-recovery-test": "npx jest tests/unit/hydi-v3/ExecutionFabric.test.js --testNamePattern=\"Failure recovery\" --runInBand"
+    "failure-recovery-test": "npx jest tests/unit/hydi-v3/ExecutionFabric.test.js --testNamePattern=\"Failure recovery\" --runInBand",
+    "strategy-test": "npx jest tests/unit/hydi-v3/ExecutiveIntelligence.test.js --testNamePattern=\"Strategic planning\" --runInBand",
+    "planning-test": "npx jest tests/unit/hydi-v3/ExecutiveIntelligence.test.js --testNamePattern=\"Mission planning\" --runInBand",
+    "forecast-test": "npx jest tests/unit/hydi-v3/ExecutiveIntelligence.test.js --testNamePattern=\"Forecast engine\" --runInBand",
+    "risk-test": "npx jest tests/unit/hydi-v3/ExecutiveIntelligence.test.js --testNamePattern=\"Risk analysis\" --runInBand",
+    "progress-test": "npx jest tests/unit/hydi-v3/ExecutiveIntelligence.test.js --testNamePattern=\"Progress tracking\" --runInBand",
+    "executive-test": "npx jest tests/unit/hydi-v3/ExecutiveIntelligence.test.js --testNamePattern=\"Executive dashboard\" --runInBand"
   },
   "bin": {
     "hydi": "scripts/hydi-cli.js"
