@@ -42,3 +42,22 @@
 
 - All new feature phases are suspended for this release line
 - Only bug fixes, security, reliability and documentation changes permitted
+
+## [0.9.0-rc.3] — Release Candidate 3
+
+### Security
+
+- `SignatureVerifier` now performs real Ed25519 signing/verification against publisher public keys
+- `computeDigest()` uses recursive canonical serialization so digests bind to nested `requiredPermissions` and `dependencies`
+- Forged signatures and altered post-signing capabilities are rejected
+
+### Changed
+
+- `scripts/phase40-acceptance.js` generates and registers a real publisher keypair
+- `SECURITY_REVIEW.md` and `RC2_GO_NO_GO_REPORT.md` corrected to document the finding and resolution
+- Package version moved to `0.9.0-rc.3`
+
+### Notes
+
+- `v0.9.0-rc.3` supersedes `v0.9.0-rc.2` because `c8aaaaa` adds a security fix not present at the `v0.9.0-rc.2` tag
+- 24-hour soak and clean-machine deployment must be re-run against this release candidate

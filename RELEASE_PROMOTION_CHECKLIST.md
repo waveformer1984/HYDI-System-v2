@@ -2,9 +2,10 @@
 
 ## Preconditions
 
-- `v0.9.0-rc.2` is tagged and green.
+- `v0.9.0-rc.3` is tagged and green.
+- `v0.9.0-rc.3` supersedes `v0.9.0-rc.2` by including the cryptographic `SignatureVerifier` fix.
 - Branch `release/v0.9.0` is frozen.
-- No feature work has been merged since `v0.9.0-rc.2`.
+- No feature work has been merged since `v0.9.0-rc.3`.
 
 ## Gate 1 — 24-Hour Wall-Clock Soak
 
@@ -61,7 +62,7 @@ Capture from `data/op-validation.json` after the run:
 
 ```bash
 git checkout release/v0.9.0
-git checkout v0.9.0-rc.2
+git checkout v0.9.0-rc.3
 npm ci
 npm run typecheck
 npm test
