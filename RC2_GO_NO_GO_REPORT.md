@@ -1,4 +1,4 @@
-# RC2 Go / No-Go Report
+# RC2 Go / No-Go Report — Final
 
 ## Recommendation
 
@@ -37,14 +37,22 @@ The `v0.9.0-rc.2` candidate is functionally and architecturally sound, but two m
 
 ### Incomplete
 
-- 24-hour wall-clock operational soak.
-- Full clean-machine deployment (fresh OS, fresh npm install, no copied state).
+- 24-hour wall-clock operational soak (`FINAL_24H_SOAK_REPORT.md` is pending).
+- Full clean-machine deployment (`FINAL_CLEAN_DEPLOYMENT_REPORT.md` is pending).
+
+## Final Reports
+
+| Report | Status |
+|--------|--------|
+| `FINAL_24H_SOAK_REPORT.md` | Pending actual 24-hour run |
+| `FINAL_CLEAN_DEPLOYMENT_REPORT.md` | Pending actual clean-machine run |
+| `SECURITY_REVIEW.md` | Resolved — 0 findings |
 
 ## Mandatory Corrective Actions
 
-1. Execute `SOAK_MS=86400000 node scripts/op-validation.js` in an unattended CI or dedicated host.
+1. Execute `SOAK_MS=86400000 SOAK_ITERS=99999999 node scripts/op-validation.js` in an unattended CI or dedicated host.
 2. Verify no resource growth, no unexpected failures, and stable throughput over 24 hours.
-3. Perform a full clean-machine installation (`npm install`, `npm test`, `hydi architecture verify`, manifest/snapshot/rollback) on a fresh host.
+3. Perform a full clean-machine installation (`npm ci`, `npm test`, `hydi architecture verify`, manifest/snapshot/rollback) on a fresh host.
 4. Re-run all release gates and re-tag the candidate.
 
 ## Architecture Score
