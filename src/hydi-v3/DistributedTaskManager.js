@@ -87,8 +87,15 @@ class DistributedTaskManager extends EventEmitter {
     const task = this.tasks.get(taskId);
     if (!task) return { success: false, error: 'task_not_found' };
     if (this.policy) {
-      const allowed = this.policy.validateAction('execute', { task, nodeId: this.localNodeId });
-      if (!allowed.allowed) return { success: false, error: allowed.reason };
+      const allowed = this.policy.validateAction('execute', { task, nodeId: task.requestedBy || this.localNodeId });
+      if (!allowed.allowed) {
+        task.status = 'failed';
+        task.error = allowed.reason;
+        task.failedAt = Date.now();
+        this._audit('execute_denied', task);
+        this.emit('failed', task);
+        return { success: false, error: allowed.reason };
+      }
     }
     task.status = 'executing';
     task.startedAt = Date.now();

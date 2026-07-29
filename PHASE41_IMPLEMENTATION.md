@@ -87,6 +87,9 @@ existing `src/hydi-v3/` modules.
 - `DistributedTaskManager` tracks status (`advertised`, `assigned`, `executing`,
   `completed`, `failed`, `cancelled`), retries transient failures, and invokes a
   registered rollback handler when exhausted.
+- `execute()` validates the `requestedBy` node against the active `NodePolicy`
+  before any handler is invoked. Requests from untrusted (or now-revoked) nodes
+  are denied, marked `failed`, and emit an `execute_denied` audit event.
 - Audit records are generated for every state change.
 
 ## Security Model
