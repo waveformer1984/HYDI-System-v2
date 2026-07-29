@@ -63,7 +63,12 @@
     "boot": "node scripts/boot-agent.js",
     "boot:plan": "node scripts/boot-agent.js --dry-run",
     "boot:prod": "node scripts/boot-agent.js --prod",
-    "build:capacitor-www": "node scripts/build-capacitor-www.js"
+    "build:capacitor-www": "node scripts/build-capacitor-www.js",
+    "federation-test": "npx jest tests/unit/hydi-v3/Federation.test.js --runInBand",
+    "node-discovery-test": "npx jest tests/unit/hydi-v3/NodeDiscovery.test.js --runInBand",
+    "transport-test": "npx jest tests/unit/hydi-v3/NodeTransport.test.js --runInBand",
+    "scheduler-test": "npx jest tests/unit/hydi-v3/NodeScheduler.test.js --runInBand",
+    "shared-memory-test": "npx jest tests/unit/hydi-v3/SharedMemoryStore.test.js --runInBand"
   },
   "bin": {
     "hydi": "scripts/hydi-cli.js"
