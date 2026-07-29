@@ -1,6 +1,7 @@
 'use strict';
 
 const ArchitectureInvariant = require('./ArchitectureInvariant');
+const CapabilitySandbox = require('./CapabilitySandbox');
 const fs = require('fs');
 const path = require('path');
 
@@ -202,14 +203,31 @@ const INVARIANTS = [
   {
     id: 'plugin-isolation',
     name: 'Capabilities do not exceed declared permissions',
-    description: 'MarketplaceManager must enforce permission declarations',
+    description: 'CapabilitySandbox must enforce declared permissions and deny escalation',
     category: 'plugins',
-    severity: 'warning',
-    check: () => ({
-      status: 'manual',
-      details: 'Permission enforcement requires runtime sandbox verification; manual review recommended',
-      affected: 'src/hydi-v3/MarketplaceManager.js',
-    }),
+    severity: 'error',
+    check: () => {
+      const sandbox = new CapabilitySandbox({
+        logger: { log: () => {}, warn: () => {}, error: () => {} },
+      });
+      sandbox.registerCapability({
+        id: 'test-cap',
+        version: '1.0.0',
+        requiredPermissions: { network: ['connect'] },
+      });
+      const allowed = sandbox.executeCapability('test-cap', 'network', 'connect');
+      const denied = sandbox.executeCapability('test-cap', 'network', 'listen');
+      const undeclared = sandbox.executeCapability('test-cap', 'filesystem', 'read');
+      const escalated = sandbox.executeCapability('test-cap', 'memory', 'read');
+      const ok = allowed.success && !denied.success && !undeclared.success && !escalated.success;
+      return {
+        status: ok ? 'pass' : 'fail',
+        details: ok
+          ? 'CapabilitySandbox permits only declared permissions and denies escalation'
+          : `Permission enforcement failed: allowed=${allowed.success}, denied=${denied.success}, undeclared=${undeclared.success}, escalated=${escalated.success}`,
+        affected: 'src/hydi-v3/CapabilitySandbox.js',
+      };
+    },
   },
 ];
 

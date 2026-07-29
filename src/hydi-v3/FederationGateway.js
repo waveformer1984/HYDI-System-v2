@@ -1,6 +1,7 @@
 'use strict';
 
 const { EventEmitter } = require('events');
+const ServiceContract = require('./ServiceContract');
 
 /**
  * FederationGateway is the single entry point for federation interactions:
@@ -19,6 +20,19 @@ class FederationGateway extends EventEmitter {
     this.lifecycle = config.lifecycle || null;
     this.observability = config.observability || null;
     this.logger = config.logger || console;
+    this.serviceContract = new ServiceContract({ logger: this.logger });
+    this.serviceContract.define('federation.remoteExecute', {
+      version: '1.0.0',
+      inputs: ['from', 'task'],
+      outputs: ['success', 'result'],
+      optional: ['requestedBy'],
+    });
+    this.serviceContract.define('federation.capabilityQuery', {
+      version: '1.0.0',
+      inputs: ['from', 'capability'],
+      outputs: ['providers'],
+      optional: ['filters'],
+    });
     this.audit = [];
     this._onMessage = (msg) => this._route(msg);
     if (this.mesh) this.mesh.on('message', this._onMessage);

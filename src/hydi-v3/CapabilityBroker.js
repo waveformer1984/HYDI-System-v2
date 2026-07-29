@@ -1,6 +1,7 @@
 'use strict';
 
 const { EventEmitter } = require('events');
+const ServiceContract = require('./ServiceContract');
 
 /**
  * CapabilityBroker answers: "Which trusted node can perform this capability
@@ -16,6 +17,13 @@ class CapabilityBroker extends EventEmitter {
     this.identity = config.identity || null;
     this.policy = config.policy || null;
     this.logger = config.logger || console;
+    this.serviceContract = new ServiceContract({ logger: this.logger });
+    this.serviceContract.define('capabilityBroker.query', {
+      version: '1.0.0',
+      inputs: ['capability'],
+      outputs: ['provider'],
+      optional: ['filters'],
+    });
     this.providers = new Map();
     this._onAdvert = (msg) => this._handleAdvert(msg);
     this._onQuery = (msg) => this._handleQuery(msg);
