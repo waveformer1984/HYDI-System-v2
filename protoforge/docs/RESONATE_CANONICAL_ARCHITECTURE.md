@@ -127,3 +127,59 @@ ProtoForge Resonate Application
           v
       HYDI (future)
 ```
+
+## Processing job lifecycle
+
+```text
+queued
+  ↓
+generating
+  ↓
+stems_processing
+  ↓
+analyzing
+  ↓
+completed
+
+or any → failed
+```
+
+Implemented in `protoforge-applications/rezonate/src/domain/processing-job.js`. Every transition emits a domain event.
+
+## Audio asset model
+
+`AudioAsset` in `protoforge-applications/rezonate/src/domain/audio-asset.js` represents production assets:
+
+- `id`, `project_id`
+- `type` — `stem`, `sample`, `vocal`, `instrument`, `mix`
+- `file_path`
+- `bpm`, `key`
+- `metadata`
+- `ownership_status` — `draft`, `registered`, `minted`, `listed`
+
+## Sample library adapter
+
+`SampleLibraryAdapter` in `protoforge-applications/rezonate/src/adapters/sample-library.js` reads `rezonate/samples-catalog.json` and provides:
+
+- `searchSamples()`
+- `getSample()`
+- `filterByInstrument()`
+- `filterByBPM()`
+- `filterByKey()`
+
+## DAW export foundation
+
+`src/export/packaging.js` packages project assets with a manifest and WAV stem bundle. No DAW-specific plugins yet.
+
+## New domain events
+
+- `processing.job.created`
+- `processing.started`
+- `stems.processing.started`
+- `analysis.started`
+- `stems.completed`
+- `analysis.completed`
+- `processing.completed`
+- `processing.failed`
+- `audio.asset.updated`
+- `ownership.status_changed`

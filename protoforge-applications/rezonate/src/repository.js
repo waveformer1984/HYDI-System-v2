@@ -4,6 +4,8 @@ const { EventBus, MemoryTransport } = require('./events/event-bus');
 const { ValidationError, NotFoundError, ConflictError } = require('./errors');
 const { createLogger } = require('./logger');
 const { validateProject, validateAsset } = require('./validation');
+const { ProcessingJob, STATES } = require('./domain/processing-job');
+const { AudioAsset } = require('./domain/audio-asset');
 
 function now() { return new Date().toISOString(); }
 function id() { return crypto.randomUUID(); }
@@ -21,6 +23,10 @@ class ResonateRepository {
   }
 
   async init() { await this.store.init(); }
+
+  _pjDeps() {
+    return { eventBus: this.eventBus, logger: this.logger };
+  }
 
   createProject(input) {
     const validated = validateProject(input);
@@ -66,21 +72,16 @@ class ResonateRepository {
 
   registerAsset(projectId, input) {
     this.getProject(projectId);
-    const validated = validateAsset(input);
-    const asset = {
-      id: id(),
-      project_id: projectId,
-      ...validated,
-      duration_seconds: input.duration_seconds || null,
-      sample_rate: input.sample_rate || null,
-      bit_depth: input.bit_depth || null,
-      file_size_bytes: input.file_size_bytes || null,
-      created_at: now()
-    };
-    this.store.create('assets', asset);
-    this.eventBus.emit('audio.asset.created', asset);
+    const asset = new AudioAsset({ project_id: projectId, ...input }, this._pjDeps());
+    this.store.create('assets', asset.toJSON());
+    this.eventBus.emit('audio.asset.created', asset.toJSON());
     this.logger.info('repository', 'audio.asset.created', `Asset ${asset.id} registered`, { assetId: asset.id });
-    return { ...asset };
+    return asset.toJSON();
+  }
+
+  getAsset(id) {
+    const raw = ensureFound(this.store.getById('assets', id), 'Asset not found');
+    return new AudioAsset(raw, this._pjDeps()).toJSON();
   }
 
   listAssets(projectId) {
@@ -88,26 +89,55 @@ class ResonateRepository {
   }
 
   createProcessingJob(input) {
-    if (!input || !input.source_path) throw new ValidationError('source_path is required');
-    const job = {
-      id: id(),
-      type: input.task_type || 'stems',
+    if (!input || !input.task_type) throw new ValidationError('task_type is required');
+    const job = new ProcessingJob({
+      type: input.task_type,
       source_path: input.source_path,
-      status: 'pending',
-      created_at: now()
-    };
-    this.store.create('processing_jobs', job);
-    this.eventBus.emit('processing.job.created', job);
+      prompt: input.prompt,
+      clip: input.clip
+    }, this._pjDeps());
+    this.store.create('processing_jobs', job.toJSON());
+    this.eventBus.emit('processing.job.created', { entityId: job.id, newState: job.state, timestamp: job.createdAt, metadata: job.metadata });
     this.logger.info('repository', 'processing.job.created', `Job ${job.id} created`, { jobId: job.id });
-    return { ...job };
+    return { ...job.toJSON() };
+  }
+
+  _wrapJob(raw) {
+    return new ProcessingJob(raw, this._pjDeps());
   }
 
   getProcessingJob(id) {
-    return ensureFound(this.store.getById('processing_jobs', id), 'Processing job not found');
+    const raw = ensureFound(this.store.getById('processing_jobs', id), 'Processing job not found');
+    return this._wrapJob(raw).toJSON();
   }
 
   listProcessingJobs() {
     return this.store.getAll('processing_jobs');
+  }
+
+  startProcessingJob(id) {
+    const raw = ensureFound(this.store.getById('processing_jobs', id), 'Processing job not found');
+    const job = this._wrapJob(raw);
+    const target = job.type === 'generate' ? STATES.GENERATING : job.type === 'stems' ? STATES.STEMS_PROCESSING : STATES.ANALYZING;
+    job.transition(target);
+    this.store.update('processing_jobs', id, job.toJSON());
+    return job.toJSON();
+  }
+
+  completeProcessingJob(id, metadata = {}) {
+    const raw = ensureFound(this.store.getById('processing_jobs', id), 'Processing job not found');
+    const job = this._wrapJob(raw);
+    job.transition(STATES.COMPLETED, metadata);
+    this.store.update('processing_jobs', id, job.toJSON());
+    return job.toJSON();
+  }
+
+  failProcessingJob(id, error) {
+    const raw = ensureFound(this.store.getById('processing_jobs', id), 'Processing job not found');
+    const job = this._wrapJob(raw);
+    job.fail(error);
+    this.store.update('processing_jobs', id, job.toJSON());
+    return job.toJSON();
   }
 }
 
@@ -122,4 +152,4 @@ function createRepository(options = {}) {
   return repo;
 }
 
-module.exports = { ResonateRepository, createRepository };
+module.exports = { ResonateRepository, createRepository, STATES };
