@@ -67,6 +67,16 @@
 - `public/availability.html`
 - `docs/AVAILABILITY_CALENDAR.md`
 
+### Phase 2F — Mobile UI Polish
+
+- `public/styles.css` mobile-first responsive stylesheet
+- `public/ui.js` shared feedback, request, and formatting helpers
+- Updated `public/index.html` with header, mobile menu, and feedback region
+- Updated `public/diagnostics.html`, `public/moderation.html`, `public/availability.html` to use shared CSS and helpers
+- `app.js` uses `SB.success` / `SB.error` instead of `alert()`
+- Form labels, touch-sized buttons, ARIA live regions
+- `docs/MOBILE_UI_GUIDE.md`
+
 ## Test Coverage
 
 ```text

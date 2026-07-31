@@ -3,38 +3,53 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="Switchboard Diagnostics" />
   <title>Switchboard Diagnostics</title>
-  <style>
-    body { font-family: system-ui, sans-serif; margin: 0; padding: 1rem; background: #f7f7f7; color: #222; }
-    .card { background: #fff; padding: 1rem; border-radius: 6px; box-shadow: 0 1px 3px #0001; margin-bottom: 1rem; }
-    pre { background: #eee; padding: 1rem; border-radius: 4px; overflow: auto; }
-    .ok { color: green; }
-    .bad { color: red; }
-  </style>
+  <link rel="stylesheet" href="styles.css" />
+  <script src="ui.js"></script>
 </head>
 <body>
-  <h1>Switchboard Diagnostics</h1>
-  <div class="card">
-    <button id="refresh">Refresh</button>
-    <div id="status"></div>
-    <pre id="output"></pre>
-  </div>
+  <header>
+    <div class="inner">
+      <h1>Switchboard</h1>
+      <a class="btn" href="index.html" style="background:#6b7280">Back</a>
+    </div>
+  </header>
+
+  <main role="main">
+    <div class="card">
+      <h2>Diagnostics</h2>
+      <p id="statusText"></p>
+      <div class="actions">
+        <button id="refresh">Refresh</button>
+      </div>
+      <pre id="output" aria-live="polite" aria-busy="false"></pre>
+    </div>
+  </main>
+
   <script>
-    const API = window.SWITCHBOARD_API || 'http://localhost:3001';
     const out = document.getElementById('output');
-    const status = document.getElementById('status');
+    const status = document.getElementById('statusText');
+
     async function load() {
+      out.setAttribute('aria-busy', 'true');
+      SB.loading(out, 'Loading diagnostics...');
+      status.textContent = '';
       try {
-        const res = await fetch(`${API}/diagnostics`);
-        const data = await res.json();
+        const data = await SB.request('/diagnostics');
         out.textContent = JSON.stringify(data, null, 2);
-        status.innerHTML = data.storage.healthy ? '<span class="ok">Healthy</span>' : '<span class="bad">Unhealthy</span>';
+        status.textContent = data.storage && data.storage.healthy ? 'Healthy' : 'Unhealthy';
+        status.className = data.storage && data.storage.healthy ? 'badge success' : 'badge error';
       } catch (e) {
-        out.textContent = 'Error: ' + e.message;
-        status.innerHTML = '<span class="bad">Offline</span>';
+        SB.error(out, 'Unable to load diagnostics: ' + e.message);
+        status.textContent = 'Error';
+        status.className = 'badge error';
+      } finally {
+        out.setAttribute('aria-busy', 'false');
       }
     }
-    document.getElementById('refresh').onclick = load;
+
+    document.getElementById('refresh').addEventListener('click', load);
     load();
   </script>
 </body>

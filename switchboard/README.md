@@ -75,6 +75,7 @@ Returns storage health, backup status, event counts, and pending items.
 - `docs/DIAGNOSTICS.md` — diagnostics reference
 - `docs/MODERATION_CONSOLE.md` — moderation console
 - `docs/AVAILABILITY_CALENDAR.md` — availability calendar
+- `docs/MOBILE_UI_GUIDE.md` — mobile UI conventions
 - `docs/weekly-report.md` — engineering status
 
 ## Testing

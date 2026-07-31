@@ -45,7 +45,7 @@ function renderLogin() {
       currentUser = found;
       localStorage.setItem('currentUser', JSON.stringify(found));
       show('dashboard');
-    } catch (e) { alert(e.message); }
+    } catch (e) { SB.error('#feedback', e.message); }
   };
 }
 
@@ -94,8 +94,8 @@ window.applyForGig = async (gigId) => {
   const note = document.getElementById('note').value;
   try {
     await api(`/gigs/${gigId}/apply`, { method: 'POST', body: JSON.stringify({ user_id: currentUser.id, note }) });
-    alert('Application submitted');
-  } catch (e) { alert(e.message); }
+    SB.success('#feedback', 'Application submitted');
+  } catch (e) { SB.error('#feedback', e.message); }
 };
 
 async function renderProfile() {
@@ -127,7 +127,7 @@ async function renderMessages() {
     try {
       await api('/messages', { method: 'POST', body: JSON.stringify({ sender_id: currentUser.id, recipient_id: recipientId, content }) });
       loadThread(recipientId);
-    } catch (e) { alert(e.message); }
+    } catch (e) { SB.error('#feedback', e.message); }
   };
   document.getElementById('recipient').onchange = (e) => loadThread(e.target.value);
 }
@@ -164,12 +164,12 @@ async function renderApplications() {
 }
 
 window.acceptApp = async (id) => {
-  try { await api(`/applications/${id}/accept`, { method: 'POST', body: JSON.stringify({}) }); alert('Accepted'); show('applications'); }
-  catch (e) { alert(e.message); }
+  try { await api(`/applications/${id}/accept`, { method: 'POST', body: JSON.stringify({}) }); SB.success('#feedback', 'Accepted'); show('applications'); }
+  catch (e) { SB.error('#feedback', e.message); }
 };
 window.declineApp = async (id) => {
-  try { await api(`/applications/${id}/decline`, { method: 'POST', body: JSON.stringify({}) }); alert('Declined'); show('applications'); }
-  catch (e) { alert(e.message); }
+  try { await api(`/applications/${id}/decline`, { method: 'POST', body: JSON.stringify({}) }); SB.success('#feedback', 'Declined'); show('applications'); }
+  catch (e) { SB.error('#feedback', e.message); }
 };
 
 async function renderTrust() {
@@ -209,16 +209,16 @@ async function renderTrust() {
 }
 
 window.signContract = async (id) => {
-  try { await api(`/contracts/${id}/sign`, { method: 'POST', body: JSON.stringify({ user_id: currentUser.id }) }); alert('Signed'); show('trust'); }
-  catch (e) { alert(e.message); }
+  try { await api(`/contracts/${id}/sign`, { method: 'POST', body: JSON.stringify({ user_id: currentUser.id }) }); SB.success('#feedback', 'Signed'); show('trust'); }
+  catch (e) { SB.error('#feedback', e.message); }
 };
 window.completeContract = async (id) => {
-  try { await api(`/contracts/${id}/complete`, { method: 'POST', body: JSON.stringify({}) }); alert('Completed'); show('trust'); }
-  catch (e) { alert(e.message); }
+  try { await api(`/contracts/${id}/complete`, { method: 'POST', body: JSON.stringify({}) }); SB.success('#feedback', 'Completed'); show('trust'); }
+  catch (e) { SB.error('#feedback', e.message); }
 };
 window.releasePayment = async (id) => {
-  try { await api(`/payments/${id}/release`, { method: 'POST', body: JSON.stringify({}) }); alert('Released'); show('trust'); }
-  catch (e) { alert(e.message); }
+  try { await api(`/payments/${id}/release`, { method: 'POST', body: JSON.stringify({}) }); SB.success('#feedback', 'Released'); show('trust'); }
+  catch (e) { SB.error('#feedback', e.message); }
 };
 window.showRate = (cid) => {
   window.rateCid = cid;
@@ -237,9 +237,9 @@ window.showRate = (cid) => {
     const comment = document.getElementById('comment').value;
     try {
       await api('/ratings', { method: 'POST', body: JSON.stringify({ contract_id: window.rateCid, rater_id: currentUser.id, ratee_id: rateeId, score, comment }) });
-      alert('Rating submitted');
+      SB.success('#feedback', 'Rating submitted');
       show('trust');
-    } catch (e) { alert(e.message); }
+    } catch (e) { SB.error('#feedback', e.message); }
   };
 };
 
@@ -262,7 +262,7 @@ async function renderParentApproval() {
       if (!child) throw new Error('Child not found');
       const res = await api(`/users/${child.id}/parent-approve`, { method: 'POST', body: JSON.stringify({ parent_email: currentUser.email }) });
       document.getElementById('approveResult').innerHTML = `<p>Approved ${res.applicationsApproved} application(s).</p>`;
-    } catch (e) { alert(e.message); }
+    } catch (e) { SB.error('#feedback', e.message); }
   };
 }
 

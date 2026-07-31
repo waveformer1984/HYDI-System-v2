@@ -3,35 +3,38 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="Switchboard — local-first gig matching" />
   <title>Switchboard</title>
-  <style>
-    body { font-family: system-ui, sans-serif; margin: 0; padding: 1rem; background: #f7f7f7; color: #222; }
-    nav { display: flex; gap: 1rem; padding: 0.5rem; background: #fff; border-bottom: 1px solid #ddd; margin: -1rem -1rem 1rem; }
-    button { border: none; padding: 0.5rem 1rem; background: #0366d6; color: #fff; border-radius: 4px; cursor: pointer; }
-    button.secondary { background: #555; }
-    input, textarea, select { width: 100%; padding: 0.5rem; margin: 0.25rem 0 0.75rem; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
-    .card { background: #fff; padding: 1rem; border-radius: 6px; box-shadow: 0 1px 3px #0001; margin-bottom: 1rem; }
-    .hidden { display: none; }
-    h2 { margin-top: 0; }
-    .score { font-weight: bold; color: #0366d6; }
-  </style>
+  <link rel="stylesheet" href="styles.css" />
+  <script src="ui.js"></script>
 </head>
 <body>
-  <nav>
-    <button onclick="show('login')">Login</button>
-    <button onclick="show('dashboard')">Dashboard</button>
-    <button onclick="show('gigs')">Gig Feed</button>
-    <button onclick="show('profile')">Profile</button>
-    <button onclick="show('messages')">Messages</button>
-    <button onclick="show('applications')">Applications</button>
-    <button onclick="show('trust')">Trust</button>
-    <button onclick="show('parent')">Parent Approval</button>
-    <a href="moderation.html"><button>Moderation</button></a>
-    <a href="availability.html"><button>Availability</button></a>
+  <header>
+    <div class="inner">
+      <h1>Switchboard</h1>
+      <button id="menuToggle" aria-label="Toggle navigation" aria-expanded="false" onclick="SB.toggleMenu(); this.setAttribute('aria-expanded', document.querySelector('nav').classList.contains('open'));">Menu</button>
+    </div>
+  </header>
+
+  <nav id="mainNav" aria-label="Main">
+    <ul role="menubar">
+      <li role="none"><button role="menuitem" onclick="show('login'); SB.toggleMenu()">Login</button></li>
+      <li role="none"><button role="menuitem" onclick="show('dashboard'); SB.toggleMenu()">Dashboard</button></li>
+      <li role="none"><button role="menuitem" onclick="show('gigs'); SB.toggleMenu()">Gig Feed</button></li>
+      <li role="none"><button role="menuitem" onclick="show('profile'); SB.toggleMenu()">Profile</button></li>
+      <li role="none"><button role="menuitem" onclick="show('messages'); SB.toggleMenu()">Messages</button></li>
+      <li role="none"><button role="menuitem" onclick="show('applications'); SB.toggleMenu()">Applications</button></li>
+      <li role="none"><button role="menuitem" onclick="show('trust'); SB.toggleMenu()">Trust</button></li>
+      <li role="none"><button role="menuitem" onclick="show('parent'); SB.toggleMenu()">Parent Approval</button></li>
+      <li role="none"><a role="menuitem" href="moderation.html" onclick="SB.toggleMenu()">Moderation</a></li>
+      <li role="none"><a role="menuitem" href="availability.html" onclick="SB.toggleMenu()">Availability</a></li>
+      <li role="none"><a role="menuitem" href="diagnostics.html" onclick="SB.toggleMenu()">Diagnostics</a></li>
+    </ul>
   </nav>
 
-  <main id="app"></main>
+  <main id="app" role="main"></main>
+  <div id="feedback" role="status" aria-live="polite"></div>
 
-  <script src="/app.js"></script>
+  <script src="app.js"></script>
 </body>
 </html>

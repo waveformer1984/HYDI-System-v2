@@ -3,117 +3,158 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Switchboard Moderation</title>
-  <style>
-    body { font-family: system-ui, sans-serif; margin: 0; padding: 1rem; background: #f7f7f7; color: #222; }
-    .card { background: #fff; padding: 1rem; border-radius: 6px; box-shadow: 0 1px 3px #0001; margin-bottom: 1rem; }
-    table { width: 100%; border-collapse: collapse; margin-top: 0.5rem; }
-    th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid #eee; }
-    button { margin: 0.2rem; padding: 0.4rem 0.8rem; border: 0; border-radius: 4px; cursor: pointer; }
-    .quarantine { background: #ffecb3; }
-    .release { background: #c8e6c9; }
-    .remove { background: #ffcdd2; }
-    .flagged { color: #f57c00; }
-    .quarantined { color: #d32f2f; }
-    .released { color: #388e3c; }
-    .removed { color: #424242; }
-  </style>
+  <meta name="description" content="Switchboard Moderation Console" />
+  <title>Moderation Console — Switchboard</title>
+  <link rel="stylesheet" href="styles.css" />
+  <script src="ui.js"></script>
 </head>
 <body>
-  <h1>Moderation Console</h1>
-  <div class="card">
-    <label>Filter: <select id="statusFilter"><option value="">All</option><option value="flagged">flagged</option><option value="quarantined">quarantined</option><option value="reviewing">reviewing</option><option value="released">released</option><option value="removed">removed</option><option value="restricted">restricted</option></select></label>
-    <button id="refresh">Refresh Queue</button>
-    <table id="queueTable">
-      <thead><tr><th>ID</th><th>Type</th><th>Target</th><th>Reason</th><th>Status</th><th>Created</th><th>Actions</th></tr></thead>
-      <tbody></tbody>
-    </table>
-  </div>
-  <div class="card" id="casePanel" style="display:none;">
-    <h2>Case Details</h2>
-    <div id="caseDetails"></div>
-    <h3>Notes</h3>
-    <ul id="notesList"></ul>
-    <input type="text" id="noteAuthor" placeholder="Author" />
-    <textarea id="noteText" placeholder="Note..."></textarea>
-    <button id="addNote">Add Note</button>
-    <div style="margin-top:1rem;">
-      <button class="quarantine" id="quarantineBtn">Quarantine</button>
-      <button class="release" id="releaseBtn">Release</button>
-      <button class="remove" id="removeBtn">Remove</button>
+  <header>
+    <div class="inner">
+      <h1>Moderation</h1>
+      <a class="btn" href="index.html" style="background:#6b7280">Back</a>
     </div>
-  </div>
+  </header>
+
+  <main role="main">
+    <div class="card">
+      <div class="actions">
+        <button id="refresh">Refresh Queue</button>
+        <label for="statusFilter">Filter:</label>
+        <select id="statusFilter" aria-label="Filter queue by status">
+          <option value="">All</option>
+          <option value="flagged">flagged</option>
+          <option value="quarantined">quarantined</option>
+          <option value="reviewing">reviewing</option>
+          <option value="released">released</option>
+          <option value="removed">removed</option>
+          <option value="restricted">restricted</option>
+        </select>
+      </div>
+      <div id="queueWrap" role="region" aria-live="polite" aria-busy="false"></div>
+    </div>
+
+    <div class="card" id="casePanel" style="display:none;" aria-live="polite">
+      <h2>Case Details</h2>
+      <div id="caseDetails"></div>
+      <h3>Notes</h3>
+      <ul id="notesList" class="stack"></ul>
+      <div class="field">
+        <label for="noteAuthor">Author</label>
+        <input type="text" id="noteAuthor" placeholder="Author" />
+      </div>
+      <div class="field">
+        <label for="noteText">Note</label>
+        <textarea id="noteText" placeholder="Add a note..."></textarea>
+      </div>
+      <div class="actions">
+        <button id="addNote" class="secondary">Add Note</button>
+        <button id="quarantineBtn" class="warning">Quarantine</button>
+        <button id="releaseBtn" class="success">Release</button>
+        <button id="removeBtn" class="danger">Remove</button>
+      </div>
+    </div>
+  </main>
+
   <script>
     const API = window.SWITCHBOARD_API || 'http://localhost:3001';
+    const queueWrap = document.getElementById('queueWrap');
+    const casePanel = document.getElementById('casePanel');
     let selectedCase = null;
 
     async function fetchQueue() {
+      queueWrap.setAttribute('aria-busy', 'true');
+      SB.loading(queueWrap, 'Loading moderation queue...');
       const status = document.getElementById('statusFilter').value;
-      const res = await fetch(`${API}/moderation/queue${status ? '?status=' + status : ''}`);
-      return res.json();
+      try {
+        const res = await fetch(`${API}/moderation/queue${status ? '?status=' + status : ''}`);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || 'Failed to load queue');
+        renderQueue(data);
+      } catch (e) {
+        SB.error(queueWrap, e.message, 'loadQueue');
+      } finally {
+        queueWrap.setAttribute('aria-busy', 'false');
+      }
     }
 
-    async function action(id, action, body = {}) {
-      const res = await fetch(`${API}/moderation/${id}/${action}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-      if (!res.ok) throw new Error((await res.json()).message);
-      return res.json();
-    }
+    window.loadQueue = fetchQueue;
 
-    async function loadQueue() {
-      const queue = await fetchQueue();
-      const tbody = document.querySelector('#queueTable tbody');
-      tbody.innerHTML = queue.map(c => `
-        <tr>
-          <td>${c.id}</td>
-          <td>${c.targetType}</td>
-          <td>${c.targetId}</td>
-          <td>${c.reason}</td>
-          <td class="${c.status}">${c.status}</td>
-          <td>${new Date(c.createdAt).toLocaleString()}</td>
-          <td><button onclick="selectCase('${c.id}')">Open</button></td>
-        </tr>
-      `).join('');
-    }
-
-    window.selectCase = async (id) => {
-      const res = await fetch(`${API}/moderation/${id}`);
-      selectedCase = await res.json();
-      document.getElementById('casePanel').style.display = 'block';
-      document.getElementById('caseDetails').innerHTML = `
-        <p><strong>ID:</strong> ${selectedCase.id}</p>
-        <p><strong>Target:</strong> ${selectedCase.targetType} / ${selectedCase.targetId}</p>
-        <p><strong>Reason:</strong> ${selectedCase.reason}</p>
-        <p><strong>Status:</strong> ${selectedCase.status}</p>
-        <p><strong>Reviewed By:</strong> ${selectedCase.reviewedBy || '—'}</p>
+    function renderQueue(queue) {
+      if (!queue.length) {
+        SB.empty(queueWrap, 'No moderation cases found.');
+        return;
+      }
+      queueWrap.innerHTML = `
+        <div class="table-wrap" style="overflow-x:auto;">
+          <table>
+            <thead><tr><th>ID</th><th>Type</th><th>Target</th><th>Reason</th><th>Status</th><th>Created</th><th>Action</th></tr></thead>
+            <tbody>
+              ${queue.map(c => `
+                <tr>
+                  <td>${c.id}</td>
+                  <td>${c.targetType}</td>
+                  <td>${c.targetId}</td>
+                  <td>${c.reason}</td>
+                  <td class="${c.status}">${c.status}</td>
+                  <td>${SB.formatDate(c.createdAt)}</td>
+                  <td><button onclick="openCase('${c.id}')">Open</button></td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
       `;
-      document.getElementById('notesList').innerHTML = selectedCase.notes.map(n => `<li><strong>${n.author}</strong> at ${new Date(n.at).toLocaleString()}: ${n.text}</li>`).join('');
+    }
+
+    window.openCase = async (id) => {
+      try {
+        const res = await fetch(`${API}/moderation/${id}`);
+        const c = await res.json();
+        if (!res.ok) throw new Error(c.message);
+        selectedCase = c;
+        casePanel.style.display = 'block';
+        document.getElementById('caseDetails').innerHTML = `
+          <p><strong>ID:</strong> ${c.id}</p>
+          <p><strong>Target:</strong> ${c.targetType} / ${c.targetId}</p>
+          <p><strong>Reason:</strong> ${c.reason}</p>
+          <p><strong>Status:</strong> ${SB.statusBadge(c.status)}</p>
+          <p><strong>Reviewed By:</strong> ${c.reviewedBy || '—'}</p>
+        `;
+        document.getElementById('notesList').innerHTML = c.notes.length
+          ? c.notes.map(n => `<li class="list-item"><strong>${n.author}</strong> at ${SB.formatDate(n.at)}: ${n.text}</li>`).join('')
+          : '<li class="list-item unavailable">No notes yet.</li>';
+      } catch (e) {
+        SB.error(document.getElementById('caseDetails'), e.message);
+      }
     };
 
-    async function doAction(action, noteText) {
+    async function action(act) {
       if (!selectedCase) return alert('Select a case first');
       const body = { reviewedBy: document.getElementById('noteAuthor').value || 'moderator' };
-      if (noteText) body.note = noteText;
-      await action(selectedCase.id, action, body);
-      await loadQueue();
-      await selectCase(selectedCase.id);
+      if (act === 'notes') body.note = document.getElementById('noteText').value;
+      try {
+        const res = await fetch(`${API}/moderation/${selectedCase.id}/${act}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message);
+        SB.success(document.getElementById('caseDetails'), 'Action saved.');
+        await fetchQueue();
+        await openCase(selectedCase.id);
+      } catch (e) { alert(e.message); }
     }
 
-    document.getElementById('refresh').onclick = loadQueue;
-    document.getElementById('statusFilter').onchange = loadQueue;
-    document.getElementById('quarantineBtn').onclick = () => doAction('quarantine');
-    document.getElementById('releaseBtn').onclick = () => doAction('release');
-    document.getElementById('removeBtn').onclick = () => doAction('remove');
-    document.getElementById('addNote').onclick = async () => {
-      if (!selectedCase) return alert('Select a case first');
-      const author = document.getElementById('noteAuthor').value || 'moderator';
-      const note = document.getElementById('noteText').value;
-      if (!note) return;
-      await fetch(`${API}/moderation/${selectedCase.id}/notes`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ author, note }) });
-      document.getElementById('noteText').value = '';
-      await selectCase(selectedCase.id);
-    };
+    document.getElementById('refresh').addEventListener('click', fetchQueue);
+    document.getElementById('statusFilter').addEventListener('change', fetchQueue);
+    document.getElementById('quarantineBtn').addEventListener('click', () => action('quarantine'));
+    document.getElementById('releaseBtn').addEventListener('click', () => action('release'));
+    document.getElementById('removeBtn').addEventListener('click', () => action('remove'));
+    document.getElementById('addNote').addEventListener('click', () => action('notes'));
 
-    loadQueue();
+    fetchQueue();
   </script>
 </body>
 </html>
