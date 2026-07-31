@@ -5,10 +5,11 @@
 /**
  * `hydi status` and `hydi readiness` command-line surface.
  *
- * This script is a thin shell over `HYDIOperationalBoot`. It boots the full
- * HYDI executive stack, prints an operator-friendly status or readiness report,
- * and then drains the session. No logic is duplicated from the operational boot
- * sequence, the session, or the briefing renderer.
+ * `status`, `memory-review`, and `outcome` use `HYDIContinuousRuntime` with the
+ * connector-based sensor layer. `readiness` now also starts the continuous
+ * runtime so it evaluates the real connector health that `status` reports,
+ * rather than the legacy `OperatorSession.sensors` array that is no longer
+ * populated when connectors are used.
  *
  * Usage:
  *   node scripts/hydi-cli.js status
@@ -20,6 +21,12 @@ const path = require('path');
 const { boot } = require('../src/hydi-v3/HYDIOperationalBoot');
 const SignalCoverage = require('../src/hydi-v3/SignalCoverage');
 const HYDIContinuousRuntime = require('../src/hydi-v3/HYDIContinuousRuntime');
+const LifecycleRegistry = require('../src/hydi-v3/LifecycleRegistry');
+const DeploymentManifest = require('../src/hydi-v3/DeploymentManifest');
+const SnapshotManager = require('../src/hydi-v3/SnapshotManager');
+const MarketplaceManager = require('../src/hydi-v3/MarketplaceManager');
+const ArchitectureGuard = require('../src/hydi-v3/ArchitectureGuard');
+const ArchitectureReport = require('../src/hydi-v3/ArchitectureReport');
 
 function parseFlags(argv) {
   const args = argv.slice(2);
@@ -55,6 +62,25 @@ function signalState(session) {
   return issues ? 'orphaned' : 'covered';
 }
 
+function runtimeConnectorState(runtime) {
+  const status = runtime.getStatus();
+  const connectors = status.connectors || [];
+  if (connectors.length === 0) return 'offline';
+  const degraded = connectors.filter((c) => !c.ok || c.state === 'failed');
+  const states = connectors.map((c) => `${c.name} ${c.state}`).join(', ');
+  if (degraded.length > 0) {
+    return `degraded (${degraded.length} of ${connectors.length}): ${states}`;
+  }
+  return `healthy (${connectors.length}): ${states}`;
+}
+
+function connectorSignalState(session) {
+  const coverage = session.signalCoverage || SignalCoverage.audit({ registry: session.eventBus.registry });
+  const realIssues = coverage.dropped.length || coverage.double.length || coverage.unknown.length;
+  if (realIssues) return 'coverage issues (dropped/double/unknown)';
+  return 'covered';
+}
+
 function auditState(session) {
   if (!session.auditLedger) return 'not initialized';
   const verify = session.auditLedger.verify();
@@ -84,9 +110,9 @@ function lastDecision(session) {
   return 'none';
 }
 
-function buildSummary(report, session) {
-  const sensors = sensorState(session);
-  const signals = signalState(session);
+function buildSummary(report, session, runtime = null) {
+  const sensors = runtime ? runtimeConnectorState(runtime) : sensorState(session);
+  const signals = runtime ? connectorSignalState(session) : signalState(session);
   const audit = auditState(session);
   const learning = learningState(session);
   const lastRec = lastRecommendation(session);
@@ -95,11 +121,13 @@ function buildSummary(report, session) {
   let system = 'READY';
   if (report.status !== 'ready') {
     system = 'FAILED';
-  } else if (sensors === 'offline') {
+  } else if (runtime && runtime.getStatus().state !== 'READY') {
+    system = `DEGRADED — runtime state ${runtime.getStatus().state}`;
+  } else if (runtime ? !runtime.getStatus().connectorHealth : sensors === 'offline') {
     system = 'DEGRADED — no sensors active';
   } else if (sensors.startsWith('degraded')) {
     system = 'DEGRADED — sensor degraded';
-  } else if (signals === 'orphaned') {
+  } else if (signals === 'coverage issues (dropped/double/unknown)') {
     system = 'DEGRADED — signal coverage issues';
   } else if (!audit.startsWith('chain verified')) {
     system = 'DEGRADED — audit chain broken';
@@ -150,8 +178,8 @@ function renderOperatingState(status, session) {
   return lines.join('\n');
 }
 
-function renderReadiness(report, session) {
-  const s = buildSummary(report, session);
+function renderReadiness(report, session, runtime = null) {
+  const s = buildSummary(report, session, runtime);
   const lines = [
     'HYDI SYSTEM READINESS',
     '',
@@ -270,6 +298,156 @@ async function runOutcome(session, recommendationId, flags) {
   return lines.join('\n');
 }
 
+async function runLifecycleCommand(command, id, flags) {
+  const dataPath = flags.dataPath
+    ? path.resolve(process.cwd(), flags.dataPath)
+    : path.resolve(__dirname, '..', 'data');
+  await require('fs').promises.mkdir(dataPath, { recursive: true });
+  const registry = new LifecycleRegistry({ logger: { log: () => {}, warn: () => {}, error: () => {} } });
+  const snapshotManager = await new SnapshotManager({ dataPath, registry, logger: { log: () => {}, warn: () => {}, error: () => {} } }).start();
+  const manifestPath = id || path.join(dataPath, 'hydi-manifest.json');
+
+  if (command === 'bootstrap' || command === 'deploy') {
+    const manifest = await DeploymentManifest.fromFile(manifestPath).catch(() => DeploymentManifest.fromRegistry(registry, {}));
+    const bootstrapped = await manifest.bootstrap(registry);
+    console.log(JSON.stringify({ command, bootstrapped, components: registry.list().length }, null, 2));
+    return 0;
+  }
+
+  if (command === 'verify') {
+    const manifest = await DeploymentManifest.fromFile(manifestPath).catch(() => null);
+    if (!manifest) {
+      console.error('Manifest not found:', manifestPath);
+      return 1;
+    }
+    await manifest.bootstrap(registry);
+    const verify = await manifest.verify(registry);
+    console.log(JSON.stringify({ command, verify }, null, 2));
+    return verify.ok ? 0 : 1;
+  }
+
+  if (command === 'export-manifest') {
+    const manifest = DeploymentManifest.fromRegistry(registry, { runtimeVersions: { node: process.version } });
+    await manifest.write(manifestPath);
+    console.log(JSON.stringify({ command, path: manifestPath, components: manifest.manifest.components.length }, null, 2));
+    return 0;
+  }
+
+  if (command === 'snapshot') {
+    const sub = id || 'create';
+    if (sub === 'create') {
+      const snap = await snapshotManager.create(flags.label || '');
+      console.log(JSON.stringify({ command, snapshot: snap.hash }, null, 2));
+      return 0;
+    }
+    if (sub === 'list') {
+      const list = await snapshotManager.list();
+      console.log(JSON.stringify({ command, snapshots: list.map((s) => s.hash) }, null, 2));
+      return 0;
+    }
+    if (sub === 'restore') {
+      const target = flags.hash || 'latest';
+      const restored = await snapshotManager.restore(target);
+      console.log(JSON.stringify({ command, restored: restored.success }, null, 2));
+      return restored.success ? 0 : 1;
+    }
+    if (sub === 'compare') {
+      const a = flags.a;
+      const b = flags.b;
+      const cmp = await snapshotManager.compare(a, b);
+      console.log(JSON.stringify({ command, compare: cmp }, null, 2));
+      return cmp.success ? 0 : 1;
+    }
+    console.error('Unknown snapshot subcommand:', sub);
+    return 1;
+  }
+
+  return 1;
+}
+
+async function runMarketplaceCommand(command, id, flags) {
+  const sub = id;
+  const target = process.argv[4];
+  const extra = process.argv[5];
+
+  const marketplace = new MarketplaceManager({ logger: { log: () => {}, warn: () => {}, error: () => {} } });
+  const official = marketplace.repositories;
+  const officialPackages = [
+    { id: 'audio.mastering', version: '1.0.0', type: 'Skill', publisher: 'protoforge', category: 'audio', offlineCompatible: true, requiredPermissions: { filesystem: true } },
+    { id: 'vision.ocr', version: '1.0.0', type: 'Skill', publisher: 'protoforge', category: 'vision', offlineCompatible: false, requiredPermissions: { hardware: true } },
+  ];
+  for (const pkg of officialPackages) {
+    const { digest, signature } = marketplace.verifier.sign(pkg, 'test-private-key');
+    pkg.digest = digest;
+    pkg.signature = signature;
+  }
+  official.addRepository({
+    id: 'official',
+    name: 'Official HYDI Marketplace',
+    type: 'official',
+    offline: false,
+    packages: officialPackages,
+  });
+  official.addRepository({ id: 'local', name: 'Local', type: 'local', offline: true, packages: [] });
+  marketplace.publishers.register({ id: 'protoforge', name: 'ProtoForge', status: 'official' });
+
+  if (sub === 'search') {
+    const results = marketplace.search({ q: target });
+    console.log(JSON.stringify({ command: 'marketplace search', results: results.map((r) => ({ id: r.id, version: r.version, publisher: r.publisher })) }, null, 2));
+    return 0;
+  }
+  if (sub === 'install') {
+    const result = await marketplace.install(target, { allowUnsigned: flags['allow-unsigned'] });
+    console.log(JSON.stringify(result, null, 2));
+    return result.success ? 0 : 1;
+  }
+  if (sub === 'verify') {
+    const cap = official.getCapability(target);
+    if (!cap) { console.error('Capability not found:', target); return 1; }
+    const result = marketplace.verify(cap);
+    console.log(JSON.stringify(result, null, 2));
+    return result.valid ? 0 : 1;
+  }
+  if (sub === 'update') {
+    const result = await marketplace.update(target);
+    console.log(JSON.stringify(result, null, 2));
+    return result.success ? 0 : 1;
+  }
+  if (sub === 'remove') {
+    const result = await marketplace.remove(target);
+    console.log(JSON.stringify(result, null, 2));
+    return result.success ? 0 : 1;
+  }
+  if (sub === 'publish') {
+    const repoId = target || 'local';
+    const pkgId = extra || 'unknown';
+    const result = marketplace.publish(repoId, { id: pkgId, version: '1.0.0', type: 'Skill', publisher: 'protoforge', category: 'local', offlineCompatible: true, requiredPermissions: {} }, 'protoforge');
+    console.log(JSON.stringify(result, null, 2));
+    return result.success ? 0 : 1;
+  }
+  console.error('Unknown marketplace subcommand:', sub);
+  return 1;
+}
+
+async function runArchitectureCommand(sub, flags) {
+  const projectRoot = flags.dataPath ? path.resolve(process.cwd(), flags.dataPath) : path.resolve(__dirname, '..');
+  const guard = new ArchitectureGuard({ projectRoot });
+  const report = guard.verify();
+  if (sub === 'report') {
+    console.log(JSON.stringify(ArchitectureReport.toJson(report), null, 2));
+  } else if (sub === 'audit') {
+    console.log(ArchitectureReport.render(report));
+  } else if (sub === 'verify' || !sub) {
+    console.log(ArchitectureReport.render(report));
+    return report.status === 'pass' ? 0 : 1;
+  } else {
+    console.error('Unknown architecture subcommand:', sub);
+    console.error('Usage: hydi architecture <audit|report|verify> [--data-path <dir>]');
+    return 1;
+  }
+  return report.status === 'pass' ? 0 : 1;
+}
+
 async function main() {
   const { command, id, flags } = parseFlags(process.argv);
   const dataPath = flags.dataPath
@@ -277,24 +455,56 @@ async function main() {
     : path.resolve(__dirname, '..', 'data');
   const logger = { log: () => {}, warn: () => {}, error: () => {} };
 
+  const lifecycleCommands = ['bootstrap', 'deploy', 'verify', 'export-manifest', 'snapshot'];
+  if (lifecycleCommands.includes(command)) {
+    const code = await runLifecycleCommand(command, id, flags);
+    process.exit(code);
+  }
+
+  const marketplaceCommands = ['marketplace'];
+  if (marketplaceCommands.includes(command)) {
+    const code = await runMarketplaceCommand(command, id, flags);
+    process.exit(code);
+  }
+
+  const architectureCommands = ['architecture'];
+  if (architectureCommands.includes(command)) {
+    const code = await runArchitectureCommand(id, flags);
+    process.exit(code);
+  }
+
   const validCommands = ['status', 'readiness', 'health', 'outcome', 'memory-review'];
   if (!command || !validCommands.includes(command)) {
-    console.error('Usage: hydi <status|readiness|health|outcome|memory-review> [--data-path <dir>]');
+    console.error('Usage: hydi <status|readiness|health|outcome|memory-review|bootstrap|deploy|verify|export-manifest|snapshot|marketplace|architecture> [--data-path <dir>]');
     process.exit(1);
   }
 
   if (command === 'readiness') {
-    const report = await boot({ dataPath, logger });
-    const { session } = report;
+    const cwd = process.cwd();
+    const runtime = new HYDIContinuousRuntime({
+      dataPath,
+      logger,
+      healthIntervalMs: 60000,
+      connectors: [
+        { type: 'local-process', name: 'process', enabled: true },
+        { type: 'filesystem', name: 'filesystem', enabled: true, roots: { [path.basename(cwd)]: cwd } },
+        { type: 'git', name: 'git', enabled: true, cwd, project: path.basename(cwd), pollIntervalMs: 60000 },
+      ],
+    });
+    let exitCode = 1;
     try {
-      console.log(renderReadiness(report, session));
+      const report = await runtime.start();
+      const session = runtime.session;
+      const summary = buildSummary(report, session, runtime);
+      console.log(renderReadiness(report, session, runtime));
+      exitCode = summary.system === 'READY' ? 0 : 1;
+    } catch (error) {
+      console.error(error instanceof Error ? error.message : String(error));
+      exitCode = 1;
     } finally {
-      if (session && typeof session.destroy === 'function') {
-        await session.destroy().catch(() => {});
-      }
+      await runtime.stop().catch(() => {});
     }
-    const summary = buildSummary(report, session);
-    process.exit(summary.system === 'READY' ? 0 : 1);
+    process.exit(exitCode);
   }
 
   if (command === 'health') {

@@ -23,6 +23,8 @@ class MissionPlanner extends EventEmitter {
       ...config,
     };
 
+    this.dependencyPlanner = config.dependencyPlanner || null;
+    this.goalManager = config.goalManager || null;
     this.missions = new Map();
     this.activeTasks = new Map();
     this.maxConcurrent = this.config.maxConcurrent;
@@ -538,6 +540,75 @@ class MissionPlanner extends EventEmitter {
         this.missions.clear();
       }
     }
+  }
+
+  // Phase 43 strategic mission planning extensions
+
+  defineMission(goalId, options = {}) {
+    const goal = this.goalManager ? this.goalManager.get(goalId) : null;
+    const missionId = `mission_${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const mission = {
+      id: missionId,
+      goalId,
+      title: options.title || (goal ? goal.title : goalId),
+      kind: 'strategic_mission',
+      phases: [],
+      milestones: [],
+      phaseDependencies: new Map(),
+      createdAt: new Date().toISOString(),
+    };
+    this.missions.set(missionId, mission);
+    this.emit('strategic_mission_defined', mission);
+    return { success: true, mission };
+  }
+
+  addPhase(missionId, phase) {
+    const mission = this.missions.get(missionId);
+    if (!mission || mission.kind !== 'strategic_mission') return { success: false, error: 'mission_not_found' };
+    const record = {
+      id: phase.id || `p-${Date.now()}-${mission.phases.length}`,
+      title: phase.title,
+      kind: phase.kind || 'phase',
+      dependencies: phase.dependencies || [],
+      estimatedEffort: phase.estimatedEffort || 0,
+      state: 'proposed',
+    };
+    mission.phases.push(record);
+    mission.phaseDependencies.set(record.id, record.dependencies);
+    this.emit('phase_added', { missionId, phase: record });
+    return { success: true, mission, phase: record };
+  }
+
+  generateMilestones(missionId) {
+    const mission = this.missions.get(missionId);
+    if (!mission || mission.kind !== 'strategic_mission') return { success: false, error: 'mission_not_found' };
+    if (!this.dependencyPlanner) return { success: false, error: 'no_dependency_planner' };
+
+    const order = this.dependencyPlanner.order(mission.phases);
+    if (!order.success) return order;
+
+    mission.milestones = order.ordered.map((p, index) => ({
+      id: `ms-${mission.id}-${index}`,
+      phaseId: p.id,
+      title: p.title,
+      state: 'pending',
+      sequence: index + 1,
+    }));
+
+    this.emit('milestones_generated', mission);
+    return { success: true, mission };
+  }
+
+  getMilestones(missionId) {
+    const mission = this.missions.get(missionId);
+    if (!mission || mission.kind !== 'strategic_mission') return null;
+    return mission.milestones;
+  }
+
+  identifyBlockers(missionId) {
+    const mission = this.missions.get(missionId);
+    if (!mission || mission.kind !== 'strategic_mission') return [];
+    return mission.phases.filter((p) => p.state === 'blocked' || p.state === 'failed');
   }
 }
 

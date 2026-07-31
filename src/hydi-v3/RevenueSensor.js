@@ -1,7 +1,6 @@
 'use strict';
 
 const fs = require('fs').promises;
-const path = require('path');
 const crypto = require('crypto');
 const { EventEmitter } = require('events');
 

@@ -86,7 +86,9 @@ describe('CudaPoolManager', () => {
     expect(pool.allocations.has(alloc.allocationId)).toBe(false);
   });
 
-  test('scheduleInference completes a job through the Ollama runtime', async () => {
+  const ollamaIntegrationTest = process.env.RUN_OLLAMA_TESTS === 'true' ? test : test.skip;
+
+  ollamaIntegrationTest('scheduleInference completes a job through the Ollama runtime', async () => {
     execFileMock.mockImplementation((cmd, args, opts, cb) => {
       const callback = typeof opts === 'function' ? opts : cb;
       callback(new Error('nvidia-smi not found'), { stdout: '' }, { stderr: '' });

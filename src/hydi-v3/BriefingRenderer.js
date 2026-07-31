@@ -276,6 +276,12 @@ function toSections(briefing) {
         ? briefing.losingConfidence.map((r) => `${r.action}: ${(r.change * 100).toFixed(0)}% confidence`)
         : ['No recommendations losing confidence.'],
     }] : []),
+    ...(Array.isArray(briefing.staleWarnings) && briefing.staleWarnings.length ? [{
+      id: 'stale-warnings',
+      title: 'Stale or Abandoned Recommendations',
+      tone: 'warning',
+      lines: briefing.staleWarnings.map((w) => `[${w.age}] ${w.id}: ${w.action}`),
+    }] : []),
     {
       id: 'missing-data',
       title: 'Missing Data Sources',

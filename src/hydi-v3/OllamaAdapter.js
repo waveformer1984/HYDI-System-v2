@@ -1,151 +1,68 @@
 'use strict';
 
-const { Ollama } = require('ollama');
+const BaseAdapter = require('./BaseAdapter');
 
-/**
- * OllamaAdapter integrates the local Ollama runtime into the HYDI compute pool.
- *
- * It provides availability checks, model discovery, memory estimation, and
- * inference execution. It is the first concrete LocalComputeRuntime adapter.
- */
-class OllamaAdapter {
+class OllamaAdapter extends BaseAdapter {
   constructor(config = {}) {
-    this.config = {
-      host: config.host || process.env.OLLAMA_HOST || 'http://127.0.0.1:11434',
-      timeoutMs: config.timeoutMs || 30000,
-      ...config,
-    };
+    super(config);
     this.name = 'ollama';
-    this.client = new Ollama({ host: this.config.host });
-    this.lastError = null;
+    this.defaultModel = config.defaultModel || 'llama3';
   }
 
-  /**
-   * Check whether the Ollama daemon is reachable and has at least one model.
-   */
-  async isAvailable() {
-    try {
-      const result = await this.withTimeout(this.client.list());
-      const models = result?.models || [];
-      return models.length > 0;
-    } catch (err) {
-      this.lastError = err.message;
-      return false;
-    }
-  }
-
-  /**
-   * List installed models with metadata.
-   */
-  async getModels() {
-    try {
-      const result = await this.withTimeout(this.client.list());
-      const models = result?.models || [];
-      return models.map((m) => ({
-        name: m.name || m.model,
-        sizeBytes: m.size || 0,
-        parameterCount: m.details?.parameter_size || this.inferParameterCount(m.name),
-        family: m.details?.family,
-        format: m.details?.format,
-        quantization: m.details?.quantization_level,
-        vramEstimateBytes: this.estimateMemory(m.name, m.details?.quantization_level, m.size),
-      }));
-    } catch (err) {
-      this.lastError = err.message;
-      return [];
-    }
-  }
-
-  /**
-   * Estimate VRAM bytes for a model name + quantization.
-   *
-   * This is a heuristic used until Ollama exposes exact per-model memory data.
-   * It is intentionally conservative (adds 25% activation overhead).
-   */
-  estimateMemory(modelName, quantization, knownSizeBytes = 0) {
-    if (knownSizeBytes > 0) {
-      return Math.round(knownSizeBytes * 1.25);
-    }
-    const params = this.inferParameterCount(modelName);
-    const q = String(quantization || '').toLowerCase();
-    const bitsPerWeight = q.includes('q8') ? 8 : q.includes('q6') ? 6 : q.includes('q5') ? 5 : q.includes('q4') ? 4 : q.includes('q3') ? 3 : q.includes('q2') ? 2 : 4;
-    const contextOverheadBytes = 512 * 1024 * 1024; // reserve 512MB for KV cache
-    const bytes = params * bitsPerWeight / 8;
-    return Math.max(1, Math.round(bytes * 1.25 + contextOverheadBytes));
-  }
-
-  /**
-   * Run a single inference against Ollama.
-   *
-   * Supports either a raw `prompt` (generate) or a `messages` array (chat).
-   * Returns the full text response unless `stream` is true, in which case
-   * it yields chunks.
-   */
-  async runInference({ model, prompt, messages, options = {}, stream = false }) {
-    if (!model) throw new Error('model is required');
-    if (messages && messages.length > 0) {
-      const response = await this.withTimeout(
-        this.client.chat({
-          model,
-          messages,
-          stream,
-          options: this.cleanOptions(options),
-        })
-      );
-      return stream ? response : response.message?.content || '';
-    }
-
-    const response = await this.withTimeout(
-      this.client.generate({
-        model,
-        prompt: prompt || '',
-        stream,
-        options: this.cleanOptions(options),
-      })
-    );
-    return stream ? response : response.response || '';
-  }
-
-  /**
-   * Adapter health status.
-   */
   async health() {
-    const available = await this.isAvailable();
-    return {
-      name: this.name,
-      available,
-      lastError: this.lastError,
-      host: this.config.host,
-    };
-  }
-
-  /**
-   * Extract a parameter count from a model name.
-   */
-  inferParameterCount(name) {
-    const match = (name || '').match(/(\d+(?:\.\d+)?)\s*[bB]/);
-    if (!match) return 3;
-    return Number(match[1]);
-  }
-
-  cleanOptions(options) {
-    const cleaned = { ...options };
-    ['temperature', 'top_p', 'top_k', 'num_predict', 'num_ctx'].forEach((key) => {
-      if (cleaned[key] !== undefined) cleaned[key] = Number(cleaned[key]);
-    });
-    return cleaned;
-  }
-
-  async withTimeout(promise) {
-    let timer;
-    const timeout = new Promise((_, reject) => {
-      timer = setTimeout(() => reject(new Error('Ollama request timed out')), this.config.timeoutMs);
-    });
-    try {
-      return await Promise.race([promise, timeout]);
-    } finally {
-      clearTimeout(timer);
+    const res = await this.get('/api/tags');
+    if (res.ok && Array.isArray(res.body.models)) {
+      return { ok: true, status: 'ok', models: res.body.models.map((m) => m.name || m.model) };
     }
+    return { ok: false, status: 'unreachable', error: res.error || 'invalid response' };
+  }
+
+  async listModels() {
+    const res = await this.get('/api/tags');
+    if (!res.ok) return [];
+    return (res.body.models || []).map((m) => ({
+      id: m.name || m.model,
+      name: m.name || m.model,
+      provider: 'ollama',
+      size: m.size,
+      details: m.details || {},
+    }));
+  }
+
+  async chat(messages, options = {}) {
+    const model = options.model || this.defaultModel;
+    const res = await this.post('/api/chat', {
+      model,
+      messages,
+      stream: false,
+      options: { temperature: options.temperature ?? 0.3, num_predict: options.maxTokens ?? 1024 },
+    });
+    if (!res.ok) return { ok: false, error: res.error || res.body?.error, text: null };
+    return { ok: true, text: res.body.message?.content || '' };
+  }
+
+  async complete(prompt, options = {}) {
+    const model = options.model || this.defaultModel;
+    const res = await this.post('/api/generate', {
+      model,
+      prompt,
+      stream: false,
+      options: { temperature: options.temperature ?? 0.3, num_predict: options.maxTokens ?? 1024 },
+    });
+    if (!res.ok) return { ok: false, error: res.error || res.body?.error, text: null };
+    return { ok: true, text: res.body.response || '' };
+  }
+
+  async embed(text, options = {}) {
+    const model = options.model || this.defaultModel;
+    const res = await this.post('/api/embeddings', { model, prompt: text });
+    if (!res.ok) return { ok: false, error: res.error || res.body?.error, vector: null };
+    return { ok: true, vector: res.body.embedding || [] };
+  }
+
+  async vision(imageInput, prompt = '') { // eslint-disable-line no-unused-vars
+    // Ollama vision is supported via /api/chat with image content; placeholder.
+    return { ok: false, error: 'Vision not configured for this adapter' };
   }
 }
 

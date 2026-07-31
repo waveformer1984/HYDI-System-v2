@@ -106,6 +106,7 @@ class DecisionOutcomeStore extends EventEmitter {
       lessonsLearned: recommendation.lessonsLearned || null,
       confidenceHistory: Array.isArray(recommendation.confidenceHistory) ? recommendation.confidenceHistory : [{ at: now, confidence: recommendation.confidence || 0.5, reason: 'created' }],
       impacts: recommendation.impacts || { revenue: 0, schedule: 0, strategic: 0, operational: 0 },
+      status: recommendation.status || 'proposed',
       createdAt: existing?.createdAt || recommendation.createdAt || now,
       updatedAt: now,
       sourceId: recommendation.sourceId || recommendation.id || null,
@@ -147,6 +148,13 @@ class DecisionOutcomeStore extends EventEmitter {
     rec.executionStatus = execution.status || rec.executionStatus;
     rec.completionTime = execution.completedAt || null;
     if (execution.executedBy) rec.executedBy = execution.executedBy;
+    if (execution.status === 'running') rec.status = 'executing';
+    else if (execution.status === 'completed') {
+      rec.status = 'executed';
+      // An executed recommendation is implicitly approved, because the action
+      // already ran through the approval gate.
+      if (rec.ownerDecision === 'pending') rec.ownerDecision = 'approved';
+    } else if (execution.status === 'failed') rec.status = 'failed';
     rec.updatedAt = Date.now();
     this._persist();
     return rec;
@@ -192,6 +200,12 @@ class DecisionOutcomeStore extends EventEmitter {
 
     rec.observedOutcome = normalized;
     rec.executionStatus = outcome.type === 'successful' || outcome.type === 'partially successful' ? 'completed' : (outcome.type || rec.executionStatus);
+    if (outcome.type === 'successful') rec.status = 'confirmed';
+    else if (outcome.type === 'partially successful') rec.status = 'partially-confirmed';
+    else if (outcome.type === 'failed') rec.status = 'failed';
+    else if (outcome.type === 'abandoned') rec.status = 'abandoned';
+    else if (outcome.type === 'cancelled') rec.status = 'cancelled';
+    else if (outcome.type === 'superseded') rec.status = 'superseded';
     rec.completionTime = normalized.completedAt;
     rec.lessonsLearned = normalized.lesson;
     rec.updatedAt = now;
@@ -246,6 +260,17 @@ class DecisionOutcomeStore extends EventEmitter {
   getAwaitingOutcomes() {
     return this.findRecommendations({ ownerDecision: 'approved' })
       .filter((r) => !r.observedOutcome && r.executionStatus !== 'failed');
+  }
+
+  abandon(id, reason = 'abandoned due to age') {
+    if (this._destroyed) throw new Error('DecisionOutcomeStore has been destroyed');
+    return this.recordOutcome(id, {
+      type: 'abandoned',
+      measured: false,
+      lesson: reason,
+      observedAt: Date.now(),
+      completedAt: Date.now(),
+    });
   }
 
   getConfidenceHistory(id) {

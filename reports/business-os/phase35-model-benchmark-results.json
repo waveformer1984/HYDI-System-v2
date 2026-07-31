@@ -1,0 +1,294 @@
+{
+  "timestamp": "2026-07-28T18:49:49.319Z",
+  "environment": {
+    "node": "v24.11.1",
+    "platform": "win32",
+    "arch": "x64",
+    "cpus": 12,
+    "totalMem": 16856473600
+  },
+  "results": [
+    {
+      "name": "model discovery",
+      "ok": true,
+      "ms": 62.12,
+      "result": {
+        "providers": [
+          {
+            "provider": "mock",
+            "healthy": true,
+            "ok": true,
+            "status": "ok"
+          },
+          {
+            "provider": "ollama",
+            "healthy": true,
+            "ok": true,
+            "status": "ok",
+            "models": [
+              "qwen2.5:7b",
+              "llama3.2:3b",
+              "llama3:latest",
+              "nomic-embed-text:latest",
+              "llama3.2:latest",
+              "tinyllama:latest",
+              "qwen2.5-coder:1.5b"
+            ]
+          }
+        ],
+        "models": [
+          {
+            "id": "mock/fast",
+            "name": "mock/fast",
+            "provider": "mock",
+            "capabilities": [
+              "chat",
+              "embed"
+            ]
+          },
+          {
+            "id": "qwen2.5:7b",
+            "name": "qwen2.5:7b",
+            "provider": "ollama",
+            "size": 4683087332,
+            "details": {
+              "parent_model": "",
+              "format": "gguf",
+              "family": "qwen2",
+              "families": [
+                "qwen2"
+              ],
+              "parameter_size": "7.6B",
+              "quantization_level": "Q4_K_M"
+            },
+            "baseUrl": "http://localhost:11434",
+            "capabilities": [
+              "chat"
+            ],
+            "healthy": true
+          },
+          {
+            "id": "llama3.2:3b",
+            "name": "llama3.2:3b",
+            "provider": "ollama",
+            "size": 2019393189,
+            "details": {
+              "parent_model": "",
+              "format": "gguf",
+              "family": "llama",
+              "families": [
+                "llama"
+              ],
+              "parameter_size": "3.2B",
+              "quantization_level": "Q4_K_M"
+            },
+            "baseUrl": "http://localhost:11434",
+            "capabilities": [
+              "chat"
+            ],
+            "healthy": true
+          },
+          {
+            "id": "llama3:latest",
+            "name": "llama3:latest",
+            "provider": "ollama",
+            "size": 4661224676,
+            "details": {
+              "parent_model": "",
+              "format": "gguf",
+              "family": "llama",
+              "families": [
+                "llama"
+              ],
+              "parameter_size": "8.0B",
+              "quantization_level": "Q4_0"
+            },
+            "baseUrl": "http://localhost:11434",
+            "capabilities": [
+              "chat"
+            ],
+            "healthy": true
+          },
+          {
+            "id": "nomic-embed-text:latest",
+            "name": "nomic-embed-text:latest",
+            "provider": "ollama",
+            "size": 274302450,
+            "details": {
+              "parent_model": "",
+              "format": "gguf",
+              "family": "nomic-bert",
+              "families": [
+                "nomic-bert"
+              ],
+              "parameter_size": "137M",
+              "quantization_level": "F16"
+            },
+            "baseUrl": "http://localhost:11434",
+            "capabilities": [
+              "chat",
+              "embed"
+            ],
+            "healthy": true
+          },
+          {
+            "id": "llama3.2:latest",
+            "name": "llama3.2:latest",
+            "provider": "ollama",
+            "size": 2019393189,
+            "details": {
+              "parent_model": "",
+              "format": "gguf",
+              "family": "llama",
+              "families": [
+                "llama"
+              ],
+              "parameter_size": "3.2B",
+              "quantization_level": "Q4_K_M"
+            },
+            "baseUrl": "http://localhost:11434",
+            "capabilities": [
+              "chat"
+            ],
+            "healthy": true
+          },
+          {
+            "id": "tinyllama:latest",
+            "name": "tinyllama:latest",
+            "provider": "ollama",
+            "size": 637700138,
+            "details": {
+              "parent_model": "",
+              "format": "gguf",
+              "family": "llama",
+              "families": [
+                "llama"
+              ],
+              "parameter_size": "1B",
+              "quantization_level": "Q4_0"
+            },
+            "baseUrl": "http://localhost:11434",
+            "capabilities": [
+              "chat"
+            ],
+            "healthy": true
+          },
+          {
+            "id": "qwen2.5-coder:1.5b",
+            "name": "qwen2.5-coder:1.5b",
+            "provider": "ollama",
+            "size": 986062089,
+            "details": {
+              "parent_model": "",
+              "format": "gguf",
+              "family": "qwen2",
+              "families": [
+                "qwen2"
+              ],
+              "parameter_size": "1.5B",
+              "quantization_level": "Q4_K_M"
+            },
+            "baseUrl": "http://localhost:11434",
+            "capabilities": [
+              "chat",
+              "code"
+            ],
+            "healthy": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "cold start inference",
+      "ok": true,
+      "ms": 0.44,
+      "result": {
+        "ok": true,
+        "text": "{\"intent\":\"status\",\"args\":{}}"
+      }
+    },
+    {
+      "name": "warm inference",
+      "ok": true,
+      "ms": 1.66,
+      "result": {
+        "intent": "status",
+        "usedModel": "mock/fast"
+      }
+    },
+    {
+      "name": "memory retrieval",
+      "ok": true,
+      "ms": 8.75,
+      "result": {
+        "recall": 1
+      }
+    },
+    {
+      "name": "context assembly",
+      "ok": true,
+      "ms": 5.76,
+      "result": {
+        "docs": 2
+      }
+    },
+    {
+      "name": "agent routing",
+      "ok": true,
+      "ms": 3.29,
+      "result": {
+        "agents": [
+          "ResearchAgent",
+          "ProductAgent"
+        ]
+      }
+    },
+    {
+      "name": "capability scoring",
+      "ok": true,
+      "ms": 0.11,
+      "result": {
+        "conversation": 200,
+        "embedding": 200
+      }
+    }
+  ],
+  "resourceUsage": {
+    "rss": 45731840,
+    "heapTotal": 12017664,
+    "heapUsed": 7303480,
+    "external": 2279698,
+    "arrayBuffers": 70731
+  },
+  "modelStates": {
+    "mock/fast": {
+      "state": "READY",
+      "since": 1785264589407,
+      "warm": true,
+      "failures": 0
+    }
+  },
+  "routerLog": [
+    {
+      "at": 1785264589385,
+      "task": "intentExtraction",
+      "model": "mock/fast",
+      "latency": 0,
+      "ok": true
+    },
+    {
+      "at": 1785264589406,
+      "task": "summarize",
+      "model": "mock/fast",
+      "latency": 0,
+      "ok": true
+    },
+    {
+      "at": 1785264589407,
+      "task": "summarize",
+      "model": "mock/fast",
+      "latency": 0,
+      "ok": true
+    }
+  ]
+}

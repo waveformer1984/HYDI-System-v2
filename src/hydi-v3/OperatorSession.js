@@ -32,6 +32,10 @@ const BusinessEvidenceEngine = require('./BusinessEvidenceEngine');
 const { RevenueSensor } = require('./RevenueSensor');
 const AuditLedger = require('./AuditLedger');
 const FilesystemMonitor = require('./FilesystemMonitor');
+const ModelManager = require('./ModelManager');
+const ModelRouter = require('./ModelRouter');
+const ModelRuntimeManager = require('./ModelRuntimeManager');
+const EmbeddingManager = require('./EmbeddingManager');
 
 const SILENT_LOGGER = { log: () => {}, error: () => {}, warn: () => {} };
 
@@ -62,6 +66,8 @@ class OperatorSession {
       ownerPriority: config.ownerPriority || 'default',
       logger: config.logger || SILENT_LOGGER,
       taskIntervalMs: config.taskIntervalMs ?? 1000,
+      localAI: config.localAI || false,
+      useLLMIntent: config.useLLMIntent,
     };
 
     this.strategicObjectives = config.strategicObjectives
@@ -262,6 +268,18 @@ class OperatorSession {
     // fully-loaded module from the cache.
     this.certify = () => require('./HYDIStartupSequence').generateHealthReport(this);
 
+    this.modelManager = null;
+    this.modelRouter = null;
+    this.embeddingManager = null;
+    if (this.config.localAI) {
+      const localAIConfig = typeof this.config.localAI === 'object' ? this.config.localAI : {};
+      this.modelManager = new ModelManager({ ...localAIConfig, logger });
+      this.modelRuntimeManager = new ModelRuntimeManager({ ...localAIConfig, logger });
+      this.modelRuntimeManager.start();
+      this.modelRouter = new ModelRouter(this.modelManager, this.modelRuntimeManager, { logger });
+      this.embeddingManager = new EmbeddingManager({ modelManager: this.modelManager, dataPath, ...localAIConfig });
+    }
+
     this.conversationEngine = new ConversationEngine({
       cockpit: this.cockpit,
       executiveOS: this.executiveOS,
@@ -271,9 +289,13 @@ class OperatorSession {
       strategicObjectives: this.strategicObjectives,
       agentWorkspace: this.agentWorkspace,
       approvalCenter: this.approvalCenter,
+      recommendationTracker: this.recommendationTracker,
+      businessEvidenceEngine: this.evidenceEngine,
       timeline: this.timeline,
       sessionMemory: this.sessionMemory,
       certify: this.certify,
+      modelRouter: this.modelRouter,
+      useLLMIntent: this.config.useLLMIntent !== false,
       logger,
     });
 
@@ -351,6 +373,13 @@ class OperatorSession {
     }
     // -----------------------------------------------------------------------
 
+    // --- Phase 34: local AI orchestration layer ----------------------------
+    if (this.modelManager) {
+      this.modelStartupReport = await this.modelManager.start();
+      await this.embeddingManager.start();
+    }
+    // -----------------------------------------------------------------------
+
     // Phase 16: run-mode enforcement is installed last, so it wraps the fully
     // constructed mutation authorities. Installing it here rather than in the
     // CLI means every surface built on an OperatorSession inherits the same
@@ -413,6 +442,7 @@ class OperatorSession {
       sessionMemory: this.sessionMemory ? this.sessionMemory.healthCheck().ok : false,
       conversationEngine: this.conversationEngine ? this.conversationEngine.healthCheck().ok : false,
       consoleAPI: this.consoleAPI ? this.consoleAPI.healthCheck().ok : false,
+      modelManager: this.modelManager ? this.modelManager.healthCheck().ok : true,
       eventBus: !!this.eventBus,
       signalCoverage: !this.signalCoverage || this.signalCoverage.ok,
     };

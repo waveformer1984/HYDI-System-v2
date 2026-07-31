@@ -95,6 +95,14 @@ class BusinessEvidenceEngine extends EventEmitter {
 
   addEvidence(recommendationId, evidence) {
     if (this._destroyed) throw new Error('BusinessEvidenceEngine has been destroyed');
+    if (!this.recommendationTracker) throw new Error('RecommendationTracker not connected');
+    const rec = this.recommendationTracker.getRecommendation(recommendationId);
+    if (!rec) throw new Error(`Recommendation ${recommendationId} not found`);
+    if (!evidence || typeof evidence !== 'object') throw new Error('Evidence must be an object');
+    if (!evidence.source || !evidence.type) throw new Error('Evidence must include source and type');
+    if (evidence.data !== undefined && evidence.data !== null && typeof evidence.data !== 'object') throw new Error('Evidence data must be an object');
+    if (evidence.data && 'value' in evidence.data && evidence.data.value !== undefined && evidence.data.value !== null && !Number.isFinite(evidence.data.value)) throw new Error('Evidence data.value must be a finite number');
+    if (Number.isFinite(evidence.at) && evidence.at > Date.now() + 1000) throw new Error('Evidence timestamp cannot be in the future');
     return this.collector.addEvidence(recommendationId, evidence);
   }
 
@@ -158,6 +166,18 @@ class BusinessEvidenceEngine extends EventEmitter {
         measured,
         provenance: `evidence-evaluation:${evidence.map((e) => e.source).join(',')}`,
         lesson: result.explanation,
+      });
+    }
+
+    // Ensure the outcome is persisted even if BusinessOutcomeEngine is not wired.
+    if (result.outcomeType && this.recommendationTracker) {
+      this.recommendationTracker.recordOutcome(recommendationId, {
+        type: result.outcomeType,
+        actual: result.hasMeasuredValue ? result.observedValue : null,
+        measured: result.hasMeasuredValue === true,
+        lesson: result.explanation,
+        observedAt: Date.now(),
+        completedAt: Date.now(),
       });
     }
 
@@ -291,6 +311,24 @@ class BusinessEvidenceEngine extends EventEmitter {
       if (r.ownerDecision !== 'approved') return false;
       return now - (r.decisionAt || r.createdAt) > this.staleMs;
     });
+  }
+
+  abandonStale(reason = 'abandoned due to age') {
+    const stale = this.getStaleRecommendations();
+    const abandoned = [];
+    for (const rec of stale) {
+      if (this.recommendationTracker) {
+        this.recommendationTracker.recordOutcome(rec.id, {
+          type: 'abandoned',
+          measured: false,
+          lesson: reason,
+          observedAt: Date.now(),
+          completedAt: Date.now(),
+        });
+        abandoned.push(rec.id);
+      }
+    }
+    return abandoned;
   }
 
   getTopImprovingRecommendations(limit = 5) {

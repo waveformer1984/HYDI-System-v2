@@ -22,7 +22,7 @@ class SecurityAuditor {
       { name: 'password_literal', regex: /password\s*[:=]\s*["'][^"']{8,}["']/i, severity: 'high' },
       { name: 'private_key', regex: /-----BEGIN (RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----/, severity: 'critical' },
       { name: 'bearer_token', regex: /Bearer\s+[a-zA-Z0-9_-]{20,}/i, severity: 'high' },
-      { name: 'basic_auth', regex: /https?:\/\/[^:]+:[^@]+@[a-z0-9.]+/i, severity: 'high' },
+      { name: 'basic_auth', regex: /https?:\/\/[^:\r\n]+:[^@\r\n]+@[a-z0-9.]+/i, severity: 'high' },
       { name: 'hardcoded_secret', regex: /secret\s*[:=]\s*["'][a-zA-Z0-9_-]{16,}["']/i, severity: 'high' },
       { name: 'env_in_code', regex: /process\.env\.[A-Z_]+\s*[:=]\s*["'][^"']+["']/i, severity: 'medium' },
       { name: 'sql_injection', regex: /(?:execute|query|exec)\s*\(\s*[`"'][^`"']*\$\{[^}]*\}/i, severity: 'critical' },

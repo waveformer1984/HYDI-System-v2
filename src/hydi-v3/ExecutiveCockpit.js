@@ -108,21 +108,21 @@ class ExecutiveCockpit extends EventEmitter {
 
   parseCommand(text) {
     const t = (text || '').toLowerCase().trim().replace(/[.!?]+$/, '');
-    if (/^(good morning|morning|hello|hi|hey)$/.test(t)) return { command: 'good-morning' };
+    if (/^(good morning|morning|hello|hi|hey|hey there)$/.test(t)) return { command: 'good-morning' };
     if (/^(how are we doing|how's it going|how is it going|status|how are things)$/.test(t)) return { command: 'status' };
-    if (/^(what should i focus on|focus|priorities|what next|what should i do)$/.test(t)) return { command: 'focus' };
-    if (/^(pending|approvals|what needs approval)$/.test(t)) return { command: 'approvals' };
-    if (/^(history|executions|recent actions|log)$/.test(t)) return { command: 'history' };
+    if (/^(what should i focus on( today| first| next)?|what should i work on first|what are my priorities|focus|priorities|what next|what should i do( today| first| next)?)$/.test(t)) return { command: 'focus' };
+    if (/^(pending|approvals|approvals please|what needs approval|what is waiting for approval)$/.test(t)) return { command: 'approvals' };
+    if (/^(history|executions|recent actions|recent execution history|what happened recently|what did we do|log)$/.test(t)) return { command: 'history' };
     if (/^(workflows|active workflows|what is active)$/.test(t)) return { command: 'workflows' };
-    if (/^(learning|learn|prediction accuracy|recommendation success|lessons learned|recommendation history)$/.test(t)) return { command: 'learning' };
+    if (/^(learning|learn|lessons|what have we learned|prediction accuracy|recommendation success|lessons learned|recommendation history)$/.test(t)) return { command: 'learning' };
     if (/^(evidence|business evidence|evidence summary)$/.test(t)) return { command: 'evidence' };
     if (/^(outcomes|outcome review|outcome queue)$/.test(t)) return { command: 'outcomes' };
-    if (/^(measured|measured learning|revenue dashboard)$/.test(t)) return { command: 'measured' };
-    if (/^(revenue|revenue sensor|ledger status)$/.test(t)) return { command: 'revenue' };
-    if (/^(kpis|business kpis|kpi dashboard)$/.test(t)) return { command: 'kpis' };
+    if (/^(measured|measured learning|learning dashboard|revenue dashboard)$/.test(t)) return { command: 'measured' };
+    if (/^(revenue|revenue sensor|ledger status|show revenue|how is revenue)$/.test(t)) return { command: 'revenue' };
+    if (/^(kpis|business kpis|kpi dashboard|show kpis|how are kpis)$/.test(t)) return { command: 'kpis' };
     if (/^(recommendations|recommendation lifecycle|lifecycle)$/.test(t)) return { command: 'recommendations' };
-    if (/^(review status|midday review|status review)$/.test(t)) return { command: 'review-status' };
-    if (/^(daily close|end of day|close)$/.test(t)) return { command: 'daily-close' };
+    if (/^(review status|midday review|status review|afternoon status)$/.test(t)) return { command: 'review-status' };
+    if (/^(daily close|end of day|close|good night|goodnight|what did we do today)$/.test(t)) return { command: 'daily-close' };
     if (/^review\s+(.+)$/.test(t)) {
       const parts = t.match(/^review\s+(.+)$/)[1].trim().split(/\s+/);
       const id = parts[0];
@@ -133,11 +133,23 @@ class ExecutiveCockpit extends EventEmitter {
     if (/^(what changed|what changed today|what's new|whats new)$/.test(t)) return { command: 'what-changed' };
     if (/^approve\s+(.+)$/.test(t)) return { command: 'approve', id: t.match(/^approve\s+(.+)$/)[1].trim() };
     if (/^reject\s+(.+)$/.test(t)) return { command: 'reject', id: t.match(/^reject\s+(.+)$/)[1].trim() };
+    if (/^(abandon|drop|close)\s+(.+)$/.test(t)) return { command: 'abandon', id: t.match(/^(?:abandon|drop|close)\s+(.+)$/)[1].trim() };
     if (/^priority\s+(.+)$/.test(t)) {
       const p = t.match(/^priority\s+(.+)$/)[1].trim();
       return { command: 'priority', priority: p };
     }
-    if (/^(help|\?)$/.test(t)) return { command: 'help' };
+    if (/^(awaiting measurements|awaiting outcomes|what needs measuring|what is awaiting measurement)$/.test(t)) return { command: 'awaiting-measurements' };
+    if (/^(learning summary|prediction accuracy|show outcomes|recent lessons|recommendation history)$/.test(t)) return { command: 'learning' };
+    if (/^measure\s+(.+)$/i.test(t)) {
+      const rest = t.match(/^measure\s+(.+)$/i)[1].trim();
+      const parsed = this._parseMeasureCommand(rest);
+      return { command: 'measure', ...parsed };
+    }
+    if (/^(customer|project|build)\s+(satisfied|unhappy|completed|failed|done|succeeded|cancelled|successful|partial|partially)$/.test(t)) {
+      const m = t.match(/^(customer|project|build)\s+(.+)$/);
+      return { command: 'measure', id: m[1], outcome: m[2] };
+    }
+    if (/^(help|\?|what can i ask|what should i say|commands|what are the commands|available commands)$/.test(t)) return { command: 'help' };
     return { command: 'unknown', text };
   }
 
@@ -200,6 +212,15 @@ class ExecutiveCockpit extends EventEmitter {
         break;
       case 'reject':
         response = await this.rejectById(parsed.id);
+        break;
+      case 'abandon':
+        response = this.abandonById(parsed.id);
+        break;
+      case 'measure':
+        response = await this.measureOutcome(parsed.id, parsed.outcome, parsed.value);
+        break;
+      case 'awaiting-measurements':
+        response = this.listAwaitingMeasurements();
         break;
       case 'priority':
         response = this.setOwnerPriority(parsed.priority);
@@ -289,7 +310,14 @@ class ExecutiveCockpit extends EventEmitter {
 
     const scored = recs.map((r, i) => {
       const scored = this.strategicObjectives.scoreRecommendation({ ...r, id: r.id || `rec_${i}` }, this.ownerPriority);
-      return { ...r, ...scored, explanation: `score ${scored.score.toFixed(2)} — ${scored.reason}` };
+      const confidence = Math.min(1, Math.max(0, scored.score));
+      const why = {
+        evidence: r.evidence || [r.reason || 'strategic alignment'],
+        priorityFactors: [this.ownerPriority, r.category || 'default'].filter(Boolean),
+        riskFactors: r.risks || ['unknown'],
+        confidence: +confidence.toFixed(2),
+      };
+      return { ...r, ...scored, confidence: why.confidence, why, explanation: `score ${scored.score.toFixed(2)} — ${scored.reason} (confidence ${why.confidence})` };
     }).sort((a, b) => b.score - a.score);
 
     if (scored.length === 0) {
@@ -533,9 +561,133 @@ class ExecutiveCockpit extends EventEmitter {
     return { text: lines.join('\n'), signalsToday: recent.length, outcomes, failures, measured };
   }
 
+  _parseMeasureCommand(rest) {
+    const parts = rest.split(/\s+/);
+    const id = parts[0];
+    // Look for an explicit number token that is not embedded in an id like exec_178....
+    const numberMatch = rest.match(/(?:\s|^)([+-]?\d[\d,]*(?:\.\d+)?)\b/);
+    const value = numberMatch ? Number(numberMatch[1].replace(/,/g, '')) : null;
+    const nonNumberToken = parts.find((p, i) => i !== 0 && !/^[+-]?\d/.test(p));
+    const outcome = nonNumberToken || (value !== null ? 'success' : null);
+    return { id, outcome, value };
+  }
+
+  _resolveTarget(token) {
+    if (!token) return null;
+    const id = token.trim().toLowerCase();
+
+    // Direct recommendation or execution id.
+    if (this.recommendationTracker && this.recommendationTracker.getRecommendation(id)) {
+      return id;
+    }
+    if (this.executionGateway) {
+      const entry = this.executionGateway.getExecutionHistory().find((e) => e.id === id);
+      if (entry && entry.recommendationId) return entry.recommendationId;
+    }
+
+    // Find by action keyword.
+    if (this.recommendationTracker && this.recommendationTracker.store) {
+      const all = this.recommendationTracker.store.findRecommendations({}).slice().sort((a, b) => b.createdAt - a.createdAt);
+      const keyword = id;
+
+      if (keyword === 'revenue') {
+        let rec = all.find((r) => r.action.toLowerCase().includes('revenue') && !r.observedOutcome);
+        if (!rec) {
+          rec = this.recommendationTracker.track({ action: 'revenue measurement', reason: 'revenue outcome', expectedValue: 0 });
+        }
+        return typeof rec === 'string' ? rec : rec.id;
+      }
+
+      const byKeyword = all.find((r) =>
+        (r.action.toLowerCase().includes(keyword) || (r.sourceId && r.sourceId.toLowerCase().includes(keyword)))
+        && r.ownerDecision === 'approved'
+        && !r.observedOutcome,
+      );
+      if (byKeyword) return byKeyword.id;
+
+      // Fall back to the single awaiting-outcome recommendation if unambiguous.
+      const awaiting = all.filter((r) => r.ownerDecision === 'approved' && !r.observedOutcome);
+      if (awaiting.length === 1) return awaiting[0].id;
+    }
+    return null;
+  }
+
+  async measureOutcome(target, outcome, value) {
+    if (!this.recommendationTracker) return { text: 'RecommendationTracker not connected.' };
+    if (!this.businessEvidenceEngine) return { text: 'BusinessEvidenceEngine not connected.' };
+    const recId = this._resolveTarget(target);
+    if (!recId) return { text: `Could not find a recommendation matching "${target}".` };
+
+    if (value !== null && Number.isFinite(value)) {
+      this.businessEvidenceEngine.addEvidence(recId, {
+        source: 'operator',
+        type: 'manual-measurement',
+        at: Date.now(),
+        relevance: 1.0,
+        weight: 1.0,
+        confidence: 0.95,
+        measurementType: 'quantitative',
+        data: { value },
+        tags: ['operator-measurement'],
+      });
+      const result = this.businessEvidenceEngine.evaluateRecommendation(recId);
+      return { text: `Measured ${value} for ${recId}. Outcome: ${result.classification}. ${result.explanation}`, result, recId };
+    }
+
+    if (outcome === 'abandoned' || outcome === 'abandon' || outcome === 'cancelled' || outcome === 'canceled') {
+      this.recommendationTracker.recordOutcome(recId, {
+        type: 'abandoned',
+        measured: false,
+        lesson: 'operator abandoned',
+        observedAt: Date.now(),
+        completedAt: Date.now(),
+      });
+      return { text: `${recId} abandoned.`, recId };
+    }
+
+    const answer = ['success', 'successful', 'succeeded', 'yes'].includes(outcome) ? 'Yes'
+      : ['fail', 'failed', 'failure', 'no', 'negative'].includes(outcome) ? 'No'
+        : ['partial', 'partially'].includes(outcome) ? 'Partially'
+          : ['unknown', 'skip', 'unsure'].includes(outcome) ? 'Unknown'
+            : outcome;
+    try {
+      const result = this.businessEvidenceEngine.submitManualReview(recId, answer);
+      return { text: `Outcome for ${recId} recorded as ${result.classification}. ${result.explanation}`, result, recId };
+    } catch (e) {
+      return { text: `Measurement failed: ${e instanceof Error ? e.message : String(e)}`, recId };
+    }
+  }
+
+  abandonById(id) {
+    if (!this.recommendationTracker) return { text: 'RecommendationTracker not connected.' };
+    const recId = this._resolveTarget(id);
+    if (!recId) return { text: `Could not find a recommendation matching "${id}".` };
+    this.recommendationTracker.recordOutcome(recId, {
+      type: 'abandoned',
+      measured: false,
+      lesson: 'operator abandoned',
+      observedAt: Date.now(),
+      completedAt: Date.now(),
+    });
+    return { text: `${recId} abandoned.`, recId };
+  }
+
+  listAwaitingMeasurements() {
+    if (!this.businessEvidenceEngine) return { text: 'BusinessEvidenceEngine not connected.' };
+    const awaiting = this.businessEvidenceEngine.getAwaitingEvidence();
+    if (awaiting.length === 0) return { text: 'No recommendations awaiting measurements.', awaiting };
+    const now = Date.now();
+    const lines = [`Awaiting measurements (${awaiting.length}):`, ''];
+    awaiting.forEach((r, i) => {
+      const ageDays = ((now - (r.decisionAt || r.createdAt)) / 86400000).toFixed(1);
+      lines.push(`${i + 1}. [${r.id}] ${r.action} — ${ageDays} day(s) since approval`);
+    });
+    return { text: lines.join('\n'), awaiting };
+  }
+
   getHelp() {
     return {
-      text: `Available commands:\n- "Good morning" or "status"\n- "review status"\n- "daily close"\n- "focus"\n- "approvals"\n- "recommendations"\n- "history"\n- "workflows"\n- "learning"\n- "evidence"\n- "outcomes"\n- "measured"\n- "revenue"\n- "kpis"\n- "review <id>" or "review <id> yes|partially|no|unknown"\n- "startup" or "health"\n- "approve <id>"\n- "reject <id>"\n- "priority <resonate|operations|manufacturing|music|research|revenue|creative|default>"\n- "help"`,
+      text: `Available commands:\n- "Good morning" or "status"\n- "review status"\n- "daily close"\n- "focus"\n- "approvals"\n- "recommendations"\n- "history"\n- "workflows"\n- "learning"\n- "evidence"\n- "outcomes"\n- "measured"\n- "revenue"\n- "kpis"\n- "awaiting measurements"\n- "measure <id|keyword> success|failed|partial|abandoned [+/-value]"\n- "measure revenue +9500"\n- "customer satisfied" | "project completed" | "build failed"\n- "abandon <id>"\n- "review <id>" or "review <id> yes|partially|no|unknown"\n- "startup" or "health"\n- "approve <id>"\n- "reject <id>"\n- "priority <resonate|operations|manufacturing|music|research|revenue|creative|default>"\n- "help"`,
     };
   }
 
