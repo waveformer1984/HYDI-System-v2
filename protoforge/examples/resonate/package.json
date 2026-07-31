@@ -1,0 +1,20 @@
+{
+  "name": "resonate",
+  "version": "0.1.0",
+  "description": "Resonate — ProtoForge generated application",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "test": "node --test tests/**/*.test.js"
+  },
+  "keywords": ["protoforge", "resonate"],
+  "author": "",
+  "license": "UNLICENSED",
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "express": "^4.19.2"
+  },
+  "devDependencies": {}
+}
