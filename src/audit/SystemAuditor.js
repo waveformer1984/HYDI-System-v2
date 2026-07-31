@@ -118,7 +118,7 @@ class SystemAuditor {
     
     // Use find to get all matching files
     try {
-      const output = execSync(`find "${this.config.repoRoot}" -type f \\( ${this.config.scanPatterns.map(pattern => `-name "${pattern}"`).join(' -o ')} \\)`, { encoding: 'utf8' });
+      const output = execSync(`find "${this.config.repoRoot}" -type f \\( ${this.config.scanPatterns.map(pattern => `-name "${pattern}"`).join(' -o ')} \\)`, { encoding: 'utf8', timeout: 30000 });
       const filePaths = output.trim().split('\n').filter(f => f.length > 0);
       
       for (const filePath of filePaths) {

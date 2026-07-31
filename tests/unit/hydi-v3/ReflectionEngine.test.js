@@ -1,15 +1,21 @@
 const ReflectionEngine = require('../../../src/hydi-v3/ReflectionEngine');
+const fs = require('fs').promises;
+const path = require('path');
+const os = require('os');
 
 describe('ReflectionEngine', () => {
   let engine;
+  let storagePath;
 
   beforeEach(async () => {
-    engine = new ReflectionEngine({ storagePath: '/tmp/hydi-test-reflections' });
+    storagePath = path.join(os.tmpdir(), `hydi-test-reflections-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    engine = new ReflectionEngine({ storagePath });
     await engine.initialize();
   });
 
-  afterEach(() => {
-    engine.destroy();
+  afterEach(async () => {
+    await engine.destroy();
+    await fs.rm(storagePath, { recursive: true, force: true }).catch(() => {});
   });
 
   test('reflects on completed mission', async () => {

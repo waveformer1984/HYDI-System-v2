@@ -1,0 +1,36 @@
+name: Integration Tests
+
+on:
+  push:
+    branches: [clean-main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  integration-tests:
+    name: HYDI V3 Operational Integration Suite
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck HYDI V3
+        run: npm run typecheck:hydi-v3
+
+      - name: Lint HYDI V3
+        run: npm run lint:hydi-v3
+
+      - name: Run operational integration suite
+        run: npm run test:integration:jest

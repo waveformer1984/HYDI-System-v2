@@ -509,6 +509,21 @@ class WorkflowOrchestrator extends EventEmitter {
   sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
+
+  /**
+   * Clear all workflow state, release event listeners, and reset activity.
+   */
+  destroy() {
+    this.workflows.clear();
+    this.definitions.clear();
+    this.history = [];
+    this.activeCount = 0;
+    this.registry = null;
+    this.eventSystem = null;
+    this.heidi = null;
+    this.stateManager = null;
+    this.removeAllListeners();
+  }
 }
 
 module.exports = WorkflowOrchestrator;

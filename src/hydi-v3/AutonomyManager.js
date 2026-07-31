@@ -163,7 +163,10 @@ class HYDIAutonomyManager extends EventEmitter {
       if (this._dashboardInterval.unref) this._dashboardInterval.unref();
     }
 
-    this.emit('started', { startTime: this.startTime });
+    const recoveryDuration = Date.now() - this.startTime;
+    this.observability.recordStartupLatency(recoveryDuration);
+    this.observability.recordRecovery(recoveryDuration);
+    this.emit('started', { startTime: this.startTime, recoveryDuration });
   }
 
   async stop() {
@@ -171,6 +174,7 @@ class HYDIAutonomyManager extends EventEmitter {
     this._stopped = true;
 
     this.emit('stopping');
+    const shutdownStart = Date.now();
 
     if (this._heartbeatInterval) clearInterval(this._heartbeatInterval);
     if (this._dashboardInterval) clearInterval(this._dashboardInterval);
@@ -200,16 +204,28 @@ class HYDIAutonomyManager extends EventEmitter {
 
     await this.persistAll();
 
-    this.emit('stopped', { uptime: this.getUptime() });
+    const shutdownDuration = Date.now() - shutdownStart;
+    this.observability.recordShutdown(shutdownDuration);
+    this.observability.recordShutdownLatency(shutdownDuration);
+
+    this.emit('stopped', { uptime: this.getUptime(), shutdownDuration });
+    this._started = false;
   }
 
   async persistAll() {
+    const pendingWrites =
+      (this.missionPlanner._persistTimer ? 1 : 0) +
+      (this.decisionIntelligence._persistTimer ? 1 : 0) +
+      (this.reflectionEngine._persistTimer ? 1 : 0);
+    const flushStart = Date.now();
     try {
-      await this.missionPlanner.persist();
-      await this.decisionIntelligence.persist();
-      await this.reflectionEngine.persist();
+      await this.missionPlanner.flush();
+      await this.decisionIntelligence.flush();
+      await this.reflectionEngine.flush();
+      this.observability.recordFlush(Date.now() - flushStart, pendingWrites, false);
     } catch (err) {
       this.emit('persist_error', err);
+      this.observability.recordFlush(Date.now() - flushStart, pendingWrites, true);
     }
   }
 
@@ -417,17 +433,28 @@ class HYDIAutonomyManager extends EventEmitter {
     });
   }
 
-  destroy() {
-    this.stop().catch(() => {});
-    this.watchdog.destroy();
-    this.heartbeat.destroy();
-    this.gracefulShutdown.destroy();
-    this.decisionIntelligence.destroy();
-    this.missionPlanner.destroy();
-    this.reflectionEngine.destroy();
-    this.selfHealing.destroy();
-    this.distributedCompute.destroy();
-    this.memoryIntegrity.destroy();
+  async destroy() {
+    if (!this._stopped) {
+      await this.stop();
+    }
+    await Promise.allSettled([
+      this.watchdog.destroy?.(),
+      this.heartbeat.destroy?.(),
+      this.gracefulShutdown.destroy?.(),
+      this.decisionIntelligence.destroy?.(),
+      this.missionPlanner.destroy?.(),
+      this.reflectionEngine.destroy?.(),
+      this.selfHealing.destroy?.(),
+      this.distributedCompute.destroy?.(),
+      this.memoryIntegrity.destroy?.(),
+      this.cudaPoolManager?.destroy?.(),
+      this.actionLayer?.destroy?.(),
+      this.observability?.destroy?.(),
+      this.memorySystem?.destroy?.(),
+      this.modelStack?.destroy?.(),
+      this.coreLoop?.destroy?.(),
+      this.securityAuditor?.destroy?.(),
+    ]);
     this.removeAllListeners();
   }
 }

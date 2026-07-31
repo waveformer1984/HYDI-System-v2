@@ -1,0 +1,340 @@
+#!/usr/bin/env node
+'use strict';
+/* eslint-disable no-console */
+
+/**
+ * `hydi status` and `hydi readiness` command-line surface.
+ *
+ * This script is a thin shell over `HYDIOperationalBoot`. It boots the full
+ * HYDI executive stack, prints an operator-friendly status or readiness report,
+ * and then drains the session. No logic is duplicated from the operational boot
+ * sequence, the session, or the briefing renderer.
+ *
+ * Usage:
+ *   node scripts/hydi-cli.js status
+ *   node scripts/hydi-cli.js readiness
+ *   node scripts/hydi-cli.js status --data-path ./data
+ */
+
+const path = require('path');
+const { boot } = require('../src/hydi-v3/HYDIOperationalBoot');
+const SignalCoverage = require('../src/hydi-v3/SignalCoverage');
+const HYDIContinuousRuntime = require('../src/hydi-v3/HYDIContinuousRuntime');
+
+function parseFlags(argv) {
+  const args = argv.slice(2);
+  const command = args[0];
+  let id = null;
+  let flagStart = 1;
+  if (args[1] && !args[1].startsWith('--')) {
+    id = args[1];
+    flagStart = 2;
+  }
+  const flags = {};
+  for (let i = flagStart; i < args.length; i++) {
+    if (args[i] === '--data-path' && args[i + 1]) { flags.dataPath = args[i + 1]; i++; }
+    else if (args[i] === '--result' && args[i + 1]) { flags.result = args[i + 1]; i++; }
+    else if (args[i] === '--value' && args[i + 1]) { flags.value = args[i + 1]; i++; }
+    else if (args[i] === '--source' && args[i + 1]) { flags.source = args[i + 1]; i++; }
+    else if (args[i] === '--notes' && args[i + 1]) { flags.notes = args[i + 1]; i++; }
+  }
+  return { command, id, flags };
+}
+
+function sensorState(session) {
+  const sensors = (session.sensors || []).map((sensor) =>
+    (typeof sensor.healthCheck === 'function' ? sensor.healthCheck() : { ok: true }));
+  if (sensors.length === 0) return 'offline';
+  const degraded = sensors.filter((h) => h.ok === false);
+  return degraded.length > 0 ? `degraded (${degraded.length} of ${sensors.length})` : 'healthy';
+}
+
+function signalState(session) {
+  const coverage = session.signalCoverage || SignalCoverage.audit({ registry: session.eventBus.registry });
+  const issues = coverage.dropped.length || coverage.double.length || coverage.unknown.length || coverage.orphan.length;
+  return issues ? 'orphaned' : 'covered';
+}
+
+function auditState(session) {
+  if (!session.auditLedger) return 'not initialized';
+  const verify = session.auditLedger.verify();
+  return verify.ok ? 'chain verified' : `chain broken at record ${verify.failedAt}`;
+}
+
+function learningState(session) {
+  if (!session.evidenceEngine) return 'not initialized';
+  const awaiting = session.evidenceEngine.getAwaitingEvidence ? session.evidenceEngine.getAwaitingEvidence().length : 0;
+  return awaiting > 0 ? `awaiting ${awaiting} measurement${awaiting === 1 ? '' : 's'}` : 'no measured outcomes recorded';
+}
+
+function lastRecommendation(session) {
+  if (!session.recommendationTracker) return 'none';
+  const recent = session.recommendationTracker.getRecentRecommendations(1);
+  return recent.length ? (recent[0].action || 'unknown') : 'none';
+}
+
+function lastDecision(session) {
+  if (session.executiveOS && session.executiveOS.lastBriefing) {
+    return session.executiveOS.lastBriefing.executiveSummary || 'briefing generated';
+  }
+  if (session.executiveOS && Array.isArray(session.executiveOS.decisions) && session.executiveOS.decisions.length) {
+    const last = session.executiveOS.decisions[session.executiveOS.decisions.length - 1];
+    return last.summary || 'decision recorded';
+  }
+  return 'none';
+}
+
+function buildSummary(report, session) {
+  const sensors = sensorState(session);
+  const signals = signalState(session);
+  const audit = auditState(session);
+  const learning = learningState(session);
+  const lastRec = lastRecommendation(session);
+  const lastDec = lastDecision(session);
+
+  let system = 'READY';
+  if (report.status !== 'ready') {
+    system = 'FAILED';
+  } else if (sensors === 'offline') {
+    system = 'DEGRADED — no sensors active';
+  } else if (sensors.startsWith('degraded')) {
+    system = 'DEGRADED — sensor degraded';
+  } else if (signals === 'orphaned') {
+    system = 'DEGRADED — signal coverage issues';
+  } else if (!audit.startsWith('chain verified')) {
+    system = 'DEGRADED — audit chain broken';
+  }
+
+  return {
+    system,
+    boot: report.status === 'ready' ? 'Complete' : 'Failed',
+    sensors,
+    signals,
+    audit,
+    learning,
+    lastRecommendation: lastRec,
+    lastExecutiveDecision: lastDec,
+  };
+}
+
+function appendIssues(lines, report) {
+  if (report.warnings.length) {
+    lines.push('', 'Warnings:');
+    for (const w of report.warnings) lines.push(`  - ${w}`);
+  }
+  if (report.failures.length) {
+    lines.push('', 'Failures:');
+    for (const f of report.failures) lines.push(`  - ${f.step}: ${f.error}`);
+  }
+  return lines;
+}
+
+function renderOperatingState(status, session) {
+  const lines = [
+    'HYDI OPERATING STATE',
+    '',
+    `Runtime: ${status.state}`,
+    `Uptime: ${status.uptime}ms`,
+    `Events processed: ${status.eventsProcessed}`,
+    `Recommendations: ${status.recommendations}`,
+    `Pending approvals: ${status.pendingApprovals}`,
+    `Awaiting measurements: ${status.awaitingMeasurements}`,
+    `Audit entries: ${status.auditEntries}`,
+    `Learning updates: ${status.learningUpdates}`,
+    `Last verified action: ${status.lastVerifiedAction || 'none'}`,
+  ];
+  if (session && typeof session.certify === 'function') {
+    const report = session.certify();
+    return appendIssues(lines, report).join('\n');
+  }
+  return lines.join('\n');
+}
+
+function renderReadiness(report, session) {
+  const s = buildSummary(report, session);
+  const lines = [
+    'HYDI SYSTEM READINESS',
+    '',
+    `System: ${s.system}`,
+    `Boot: ${s.boot}`,
+    `Sensors: ${s.sensors}`,
+    `Signals: ${s.signals}`,
+    `Audit: ${s.audit}`,
+    `Learning: ${s.learning}`,
+    `Last recommendation: ${s.lastRecommendation}`,
+    `Last executive decision: ${s.lastExecutiveDecision}`,
+    '',
+    'Checks:',
+  ];
+  for (const check of report.checks) {
+    const state = check.status === 'healthy' ? 'OK' : 'NOT OK';
+    lines.push(`  ${check.name}: ${state}${check.detail ? ` (${check.detail})` : ''}`);
+  }
+  return appendIssues(lines, report).join('\n');
+}
+
+function renderHealth(report, session) {
+  const lines = ['HYDI HEALTH', ''];
+  for (const check of report.checks) {
+    const state = check.status === 'healthy' ? 'OK' : 'NOT OK';
+    lines.push(`  ${check.name}: ${state}${check.detail ? ` (${check.detail})` : ''}`);
+  }
+  if (session && typeof session.certify === 'function') {
+    const certify = session.certify();
+    if (certify.warnings.length) {
+      lines.push('', 'Warnings:');
+      for (const w of certify.warnings) lines.push(`  - ${w}`);
+    }
+    if (certify.failures.length) {
+      lines.push('', 'Failures:');
+      for (const f of certify.failures) lines.push(`  - ${f.step}: ${f.error}`);
+    }
+  }
+  return lines.join('\n');
+}
+
+function formatRec(r) {
+  const conf = (r.confidence * 100).toFixed(0);
+  const observed = r.observedOutcome ? ` — ${r.observedOutcome.type}` : '';
+  return `- ${r.action || 'Unknown'} (${conf}%${observed})`;
+}
+
+function renderMemoryReview(session) {
+  const decisions = (session.executiveOS && Array.isArray(session.executiveOS.decisions)
+    ? session.executiveOS.decisions.slice(-5)
+    : []);
+  const actions = (session.executionGateway
+    ? session.executionGateway.getExecutionHistory({}).slice(0, 5)
+    : []);
+  const recs = (session.recommendationTracker
+    ? session.recommendationTracker.getRecentRecommendations(20)
+    : []);
+  const measured = recs.filter((r) => r.observedOutcome).slice(0, 5);
+  const changed = recs.filter((r) => r.confidenceHistory && r.confidenceHistory.length > 1).slice(0, 5);
+  const lessons = (session.learningMetrics
+    ? (session.learningMetrics.getDashboardData().recentLessons || [])
+    : []);
+
+  const lines = ['HYDI MEMORY REVIEW', ''];
+
+  lines.push('Recent decisions:');
+  lines.push(...(decisions.length ? decisions.map((d) => `- ${d.summary || 'decision'} @ ${new Date(d.at || Date.now()).toISOString()}`) : ['No decisions recorded.']));
+  lines.push('', 'Recent actions:');
+  lines.push(...(actions.length ? actions.map((a) => `- [${a.status}] ${a.type} (${a.adapter}) @ ${new Date(a.timestamp).toISOString()}`) : ['No actions recorded.']));
+  lines.push('', 'Measured outcomes:');
+  lines.push(...(measured.length ? measured.map(formatRec) : ['No measured outcomes yet.']));
+  lines.push('', 'Confidence changes:');
+  lines.push(...(changed.length ? changed.map((r) => {
+    const h = r.confidenceHistory;
+    const first = h[0].confidence;
+    const last = h[h.length - 1].confidence;
+    return `- ${r.action || 'Unknown'}: ${(first * 100).toFixed(0)}% → ${(last * 100).toFixed(0)}%`;
+  }) : ['No confidence changes yet.']));
+  lines.push('', 'Lessons learned:');
+  lines.push(...(lessons.length ? lessons.slice(0, 5).map((l) => `- ${l.lesson}`) : ['No lessons recorded.']));
+
+  return lines.join('\n');
+}
+
+async function runOutcome(session, recommendationId, flags) {
+  if (!recommendationId) throw new Error('Recommendation id required. Usage: hydi outcome <id> --result <successful|unsuccessful|unknown> [--value <n>] [--source <text>] [--notes <text>]');
+  const rec = session.recommendationTracker.getRecommendation(recommendationId);
+  if (!rec) throw new Error(`Recommendation ${recommendationId} not found.`);
+
+  const resultMap = { successful: 'successful', unsuccessful: 'failed', unknown: 'unknown' };
+  const result = flags.result ? String(flags.result).toLowerCase() : null;
+  if (!result || !resultMap[result]) throw new Error('Invalid --result. Use successful, unsuccessful, or unknown.');
+
+  const numericValue = flags.value !== undefined ? Number(flags.value) : NaN;
+  const hasNumeric = Number.isFinite(numericValue);
+  const hasSource = !!flags.source;
+  const measured = hasNumeric && hasSource;
+
+  const outcome = session.businessOutcomeEngine.recordOutcome(recommendationId, {
+    value: measured ? numericValue : null,
+    type: resultMap[result],
+    measured,
+    provenance: measured ? flags.source : 'operator-qualitative',
+    lesson: flags.notes || (measured ? 'Measured outcome recorded.' : 'Qualitative outcome recorded.'),
+  });
+
+  const lines = [
+    `Outcome recorded for ${recommendationId}`,
+    `Result: ${outcome.type || resultMap[result]}`,
+    `Measured: ${measured ? `yes (${numericValue}, source: ${flags.source})` : 'no'}`,
+    `Confidence: ${(outcome.confidence * 100).toFixed(0)}%`,
+    `Confidence delta: ${outcome.confidenceDelta.toFixed(4)}`,
+    `Lesson: ${outcome.lesson}`,
+  ];
+  if (!measured) lines.push('(Learning unchanged because no measured value with provenance was provided.)');
+  return lines.join('\n');
+}
+
+async function main() {
+  const { command, id, flags } = parseFlags(process.argv);
+  const dataPath = flags.dataPath
+    ? path.resolve(process.cwd(), flags.dataPath)
+    : path.resolve(__dirname, '..', 'data');
+  const logger = { log: () => {}, warn: () => {}, error: () => {} };
+
+  const validCommands = ['status', 'readiness', 'health', 'outcome', 'memory-review'];
+  if (!command || !validCommands.includes(command)) {
+    console.error('Usage: hydi <status|readiness|health|outcome|memory-review> [--data-path <dir>]');
+    process.exit(1);
+  }
+
+  if (command === 'readiness') {
+    const report = await boot({ dataPath, logger });
+    const { session } = report;
+    try {
+      console.log(renderReadiness(report, session));
+    } finally {
+      if (session && typeof session.destroy === 'function') {
+        await session.destroy().catch(() => {});
+      }
+    }
+    const summary = buildSummary(report, session);
+    process.exit(summary.system === 'READY' ? 0 : 1);
+  }
+
+  if (command === 'health') {
+    const report = await boot({ dataPath, logger });
+    const { session } = report;
+    try {
+      console.log(renderHealth(report, session));
+    } finally {
+      if (session && typeof session.destroy === 'function') {
+        await session.destroy().catch(() => {});
+      }
+    }
+    process.exit(report.status === 'ready' ? 0 : 1);
+  }
+
+  const runtime = new HYDIContinuousRuntime({ dataPath, logger, healthIntervalMs: 60000 });
+  let output;
+  let exitCode = 0;
+  try {
+    await runtime.start();
+    if (command === 'status') {
+      const status = runtime.getStatus();
+      output = renderOperatingState(status, runtime.session);
+      exitCode = status.state === 'READY' ? 0 : 1;
+    } else if (command === 'memory-review') {
+      output = renderMemoryReview(runtime.session);
+    } else if (command === 'outcome') {
+      output = await runOutcome(runtime.session, id, flags);
+    }
+    console.log(output);
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    exitCode = 1;
+  } finally {
+    await runtime.stop().catch(() => {});
+  }
+  process.exit(exitCode);
+}
+
+main().catch((error) => {
+  console.error(error instanceof Error ? error.stack : String(error));
+  process.exit(1);
+});

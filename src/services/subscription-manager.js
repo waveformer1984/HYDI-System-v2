@@ -15,6 +15,7 @@ class SubscriptionManager {
     }
     this.stripe = stripeKey ? new Stripe(stripeKey) : null;
     this.serviceBundle = new UrsulaServiceBundle();
+    this._onboardingTimers = [];
     this.setupEventHandlers();
   }
 
@@ -33,6 +34,16 @@ class SubscriptionManager {
     this.serviceBundle.on('marketing_content_generated', async (data) => {
       await this.publishMarketingContent(data);
     });
+  }
+
+  async destroy() {
+    for (const id of this._onboardingTimers) {
+      clearTimeout(id);
+    }
+    this._onboardingTimers = [];
+    if (this.serviceBundle && typeof this.serviceBundle.destroy === 'function') {
+      await this.serviceBundle.destroy();
+    }
   }
 
   /**
@@ -274,13 +285,14 @@ class SubscriptionManager {
     ];
 
     for (const step of onboardingSteps) {
-      setTimeout(async () => {
+      const id = setTimeout(async () => {
         await this.triggerHeidiWorkflow('send_email', {
           customerId: subscriptionData.customerId,
           template: step.template,
           tier: subscriptionData.tier
         });
       }, step.delay);
+      this._onboardingTimers.push(id);
     }
   }
 

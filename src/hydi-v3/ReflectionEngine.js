@@ -17,6 +17,7 @@ class ReflectionEngine extends EventEmitter {
       storagePath: config.storagePath || path.resolve(__dirname, '../../data/reflections'),
       decayFactor: config.decayFactor || 0.95,
       minSamples: config.minSamples || 3,
+      persistDebounceMs: config.persistDebounceMs ?? 50,
       ...config,
     };
 
@@ -32,6 +33,10 @@ class ReflectionEngine extends EventEmitter {
 
     this._loaded = false;
     this._destroyed = false;
+    this._persistTimer = null;
+    this._persistPromise = null;
+    this._persistResolve = null;
+    this._persistInFlight = false;
   }
 
   async initialize() {
@@ -46,8 +51,25 @@ class ReflectionEngine extends EventEmitter {
     this._loaded = true;
   }
 
-  destroy() {
+  async destroy() {
+    const hadPendingTimer = Boolean(this._persistTimer);
+    if (this._persistTimer) {
+      clearTimeout(this._persistTimer);
+      this._persistTimer = null;
+    }
     this._destroyed = true;
+    if (this._persistInFlight && this._persistPromise) {
+      await this._persistPromise;
+    }
+    if (hadPendingTimer) {
+      await this._doPersist();
+    }
+    if (this._persistResolve) {
+      this._persistResolve();
+      this._persistResolve = null;
+      this._persistPromise = null;
+    }
+    this._persistInFlight = false;
     this.reflections = [];
     for (const cat of Object.keys(this.strategyRankings)) {
       this.strategyRankings[cat].clear();
@@ -254,6 +276,56 @@ class ReflectionEngine extends EventEmitter {
 
   async persist() {
     if (this._destroyed) return;
+    if (this._persistTimer) {
+      clearTimeout(this._persistTimer);
+      this._persistTimer = null;
+    }
+    const previousResolve = this._persistResolve;
+    this._persistPromise = new Promise((resolve) => {
+      this._persistResolve = resolve;
+    });
+    if (previousResolve) previousResolve();
+    this._persistTimer = setTimeout(() => {
+      this._persistTimer = null;
+      this._persistInFlight = true;
+      this._doPersist().finally(() => {
+        this._persistInFlight = false;
+        if (this._persistResolve) {
+          this._persistResolve();
+          this._persistResolve = null;
+          this._persistPromise = null;
+        }
+      });
+    }, this.config.persistDebounceMs).unref();
+    return this._persistPromise;
+  }
+
+  async flush() {
+    if (this._destroyed) return;
+    if (this._persistTimer) {
+      clearTimeout(this._persistTimer);
+      this._persistTimer = null;
+    }
+    if (this._persistInFlight && this._persistPromise) {
+      await this._persistPromise;
+    }
+    this._persistInFlight = true;
+    this._persistPromise = new Promise((resolve) => {
+      this._persistResolve = resolve;
+    });
+    try {
+      await this._doPersist();
+    } finally {
+      this._persistInFlight = false;
+      if (this._persistResolve) {
+        this._persistResolve();
+        this._persistResolve = null;
+        this._persistPromise = null;
+      }
+    }
+  }
+
+  async _doPersist() {
     try {
       await fs.mkdir(this.config.storagePath, { recursive: true });
       const rankings = {};
@@ -263,7 +335,9 @@ class ReflectionEngine extends EventEmitter {
       const file = path.join(this.config.storagePath, 'reflections.json');
       await fs.writeFile(file, JSON.stringify({ reflections: this.reflections, rankings }, null, 2));
     } catch (err) {
-      console.error('[REFLECTION ENGINE] Persist failed:', err.message);
+      if (!this._destroyed) {
+        console.error('[REFLECTION ENGINE] Persist failed:', err.message);
+      }
     }
   }
 

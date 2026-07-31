@@ -4,7 +4,7 @@
  * Designed to close the "Silent Failure" gap in Ursula's local model execution
  */
 
-const { LocalModelAdapter } = require('./local-model-adapter');
+const LocalModelAdapter = require('./local-model-adapter');
 const { supabase } = require('../database');
 const EventEmitter = require('events');
 
@@ -16,6 +16,11 @@ class UrsulaModelHeartbeat extends EventEmitter {
     this.isChecking = false;
     this.failedModels = new Map();
     this.lastCheckTime = null;
+    this._starting = false;
+    this._destroyed = false;
+    this._startupTimeout = null;
+    this._startupResolve = null;
+    this._startupReject = null;
     
     // Configuration
     this.config = {
@@ -37,17 +42,33 @@ class UrsulaModelHeartbeat extends EventEmitter {
    * Start the heartbeat monitoring
    */
   async start() {
-    if (this.heartbeatInterval) {
-      console.log('[HEARTBEAT] Already running');
+    if (this.heartbeatInterval || this._starting) {
+      console.log('[HEARTBEAT] Already running or starting');
       return;
     }
+    this._starting = true;
+    this._destroyed = false;
 
     try {
       console.log('[HEARTBEAT] Initializing Local Model Adapter...');
       this.adapter = new LocalModelAdapter();
       
       // Wait a bit for models to initialize
-      await new Promise(resolve => setTimeout(resolve, 5000));
+      await new Promise((resolve, reject) => {
+        this._startupResolve = resolve;
+        this._startupReject = reject;
+        this._startupTimeout = setTimeout(() => {
+          this._startupTimeout = null;
+          this._startupResolve = null;
+          this._startupReject = null;
+          resolve();
+        }, 5000);
+      });
+      
+      // stop() may have been called while we were waiting
+      if (!this._starting) {
+        return;
+      }
       
       console.log('[HEARTBEAT] Starting heartbeat monitoring...');
       this.heartbeatInterval = setInterval(() => {
@@ -62,34 +83,58 @@ class UrsulaModelHeartbeat extends EventEmitter {
     } catch (error) {
       console.error('[HEARTBEAT] ❌ Failed to start heartbeat:', error.message);
       this.emit('heartbeat_error', { error: error.message });
+    } finally {
+      this._starting = false;
+      this._startupTimeout = null;
+      this._startupResolve = null;
+      this._startupReject = null;
     }
   }
 
   /**
    * Stop the heartbeat monitoring
    */
-  stop() {
+  async stop() {
+    this._destroyed = true;
+    if (this._startupTimeout) {
+      clearTimeout(this._startupTimeout);
+      if (this._startupResolve) {
+        this._startupResolve();
+        this._startupResolve = null;
+        this._startupReject = null;
+      }
+      this._startupTimeout = null;
+    }
     if (this.heartbeatInterval) {
       clearInterval(this.heartbeatInterval);
       this.heartbeatInterval = null;
-      console.log('[HEARTBEAT] Heartbeat monitoring stopped');
-      this.emit('heartbeat_stopped');
     }
+    if (this.adapter) {
+      await this.adapter.destroy();
+      this.adapter = null;
+    }
+    this.isChecking = false;
+    this.failedModels.clear();
+    this._starting = false;
+    console.log('[HEARTBEAT] Heartbeat monitoring stopped');
+    this.emit('heartbeat_stopped');
   }
 
   /**
    * Check the health of all monitored models
    */
   async checkModelHealth() {
-    if (this.isChecking || !this.adapter) return;
+    if (this.isChecking || !this.adapter || this._destroyed) return;
     
     this.isChecking = true;
     this.lastCheckTime = new Date();
     
     try {
       console.log(`[HEARTBEAT] 🔍 Checking model health at ${this.lastCheckTime.toISOString()}`);
+      if (this._destroyed) return;
       
       const results = await this.checkAllModels();
+      if (this._destroyed) return;
       const failedModels = results.filter(r => !r.healthy);
       
       // Update failed models tracking
@@ -117,9 +162,11 @@ class UrsulaModelHeartbeat extends EventEmitter {
       });
       
       if (criticallyFailed.length > 0) {
+        if (this._destroyed) return;
         console.log(`[HEARTBEAT] ⚠️  ${criticallyFailed.length} models have failed ${this.config.maxConsecutiveFailures}+ consecutive checks`);
         await this.recoverFailedModels(criticallyFailed);
       }
+      if (this._destroyed) return;
       
       // Log summary
       const healthyCount = results.filter(r => r.healthy).length;
@@ -135,6 +182,7 @@ class UrsulaModelHeartbeat extends EventEmitter {
         criticallyFailed: criticallyFailed
       });
       
+      if (this._destroyed) return;
       // Store metrics in database for dashboard
       await this.storeHeartbeatMetrics({
         healthyCount,
@@ -158,22 +206,24 @@ class UrsulaModelHeartbeat extends EventEmitter {
    */
   async checkSingleModelHealth(modelId) {
     const startTime = Date.now();
-    
+    let timeoutId;
+
     try {
       // Try to execute a simple inference to test responsiveness
       const testInput = this.getTestInputForModel(modelId);
-      
+      if (this._destroyed) throw new Error('Heartbeat stopped');
+
       // Execute with a short timeout
       const resultPromise = this.adapter.execute(modelId, testInput, {
         tier: 'starter', // Use lowest tier for health check
         timeout: 5000 // 5 second timeout for health check
       });
-      
+
       // Set up timeout
       const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Model health check timeout')), this.config.timeoutThreshold);
+        timeoutId = setTimeout(() => reject(new Error('Model health check timeout')), this.config.timeoutThreshold);
       });
-      
+
       // Race between execution and timeout
       await Promise.race([resultPromise, timeoutPromise]);
       
@@ -204,6 +254,8 @@ class UrsulaModelHeartbeat extends EventEmitter {
           errorType: error.name || 'UnknownError'
         }
       };
+    } finally {
+      if (timeoutId) clearTimeout(timeoutId);
     }
   }
 
@@ -280,20 +332,24 @@ class UrsulaModelHeartbeat extends EventEmitter {
    * @param {Array<string>} modelIds - Array of model IDs to recover
    */
   async recoverFailedModels(modelIds) {
+    if (this._destroyed) return;
     console.log(`[HEARTBEAT] 🔧 Attempting to recover ${modelIds.length} failed models...`);
     
     for (const modelId of modelIds) {
+      if (this._destroyed) return;
       try {
         console.log(`[HEARTBEAT] 🔄 Recovering model: ${modelId}`);
         
         // Try to unload and reload the model
         if (this.adapter.models.has(modelId)) {
           await this.adapter.unloadModel(modelId);
+          if (this._destroyed) return;
           
           // Small delay to ensure cleanup
           await new Promise(resolve => setTimeout(resolve, 1000));
         }
         
+        if (this._destroyed) return;
         // Reload the model
         const modelConfig = this.adapter.modelConfigs[modelId];
         if (modelConfig) {
@@ -328,6 +384,7 @@ class UrsulaModelHeartbeat extends EventEmitter {
    * @param {Object} metrics - The metrics to store
    */
   async storeHeartbeatMetrics(metrics) {
+    if (this._destroyed) return;
     try {
       await supabase
         .from('ursula_model_heartbeat')

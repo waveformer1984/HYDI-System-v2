@@ -147,7 +147,7 @@ class SubscriptionCache {
    * Cleanup expired entries
    */
   startCleanup() {
-    setInterval(() => {
+    this.cleanupInterval = setInterval(() => {
       const now = Date.now();
       let l1Cleaned = 0;
       let l2Cleaned = 0;
@@ -172,6 +172,19 @@ class SubscriptionCache {
         console.log(`[CACHE] Cleanup: L1=${l1Cleaned}, L2=${l2Cleaned}`);
       }
     }, 60 * 1000); // Every minute
+  }
+  
+  stop() {
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
+      this.cleanupInterval = null;
+    }
+  }
+  
+  destroy() {
+    this.stop();
+    this.l1Cache.clear();
+    this.l2Cache.clear();
   }
 }
 

@@ -66,6 +66,7 @@ class HeidiCoreLoop extends EventEmitter {
     this.isRunning = false;
     this.activeLoops = new Map();
     this.loopHistory = [];
+    this._timeoutIds = new Set();
     this.lastObservation = 0;
     this.lastReflection = 0;
     
@@ -167,10 +168,24 @@ class HeidiCoreLoop extends EventEmitter {
     console.log('[CORE LOOP] Stopping Heidi Core Loop...');
     this.isRunning = false;
     
+    // Cancel any pending scheduled timeouts so workers exit cleanly
+    for (const id of this._timeoutIds) {
+      clearTimeout(id);
+    }
+    this._timeoutIds.clear();
+    
     // Wait for active loops to complete
     while (this.activeLoops.size > 0) {
       console.log(`[CORE LOOP] Waiting for ${this.activeLoops.size} active loops to complete...`);
       await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+    
+    // Tear down subsystem resources so workers exit cleanly
+    if (this.memorySystem && typeof this.memorySystem.destroy === 'function') {
+      this.memorySystem.destroy();
+    }
+    if (this.modelStack && typeof this.modelStack.destroy === 'function') {
+      await this.modelStack.destroy();
     }
     
     // Emit stop event
@@ -179,6 +194,15 @@ class HeidiCoreLoop extends EventEmitter {
     console.log('[CORE LOOP] Heidi Core Loop stopped');
   }
   
+  /**
+   * Schedule a timeout that can be cancelled on stop()
+   */
+  _scheduleTimeout(fn, delay) {
+    const id = setTimeout(fn, delay);
+    this._timeoutIds.add(id);
+    return id;
+  }
+
   /**
    * MAIN LOOP - Continuous execution
    */
@@ -190,7 +214,7 @@ class HeidiCoreLoop extends EventEmitter {
         // Check concurrent loop limit
         if (this.activeLoops.size >= this.config.maxConcurrentLoops) {
           console.log(`[CORE LOOP] Max concurrent loops reached (${this.activeLoops.size})`);
-          setTimeout(mainLoop, this.config.loopInterval);
+          this._scheduleTimeout(mainLoop, this.config.loopInterval);
           return;
         }
         
@@ -208,7 +232,7 @@ class HeidiCoreLoop extends EventEmitter {
       }
       
       // Schedule next iteration
-      setTimeout(mainLoop, this.config.loopInterval);
+      this._scheduleTimeout(mainLoop, this.config.loopInterval);
     };
     
     // Start the loop
@@ -246,7 +270,7 @@ class HeidiCoreLoop extends EventEmitter {
       }
       
       // Schedule next observation
-      setTimeout(observationCycle, this.config.observationInterval);
+      this._scheduleTimeout(observationCycle, this.config.observationInterval);
     };
     
     // Start observation cycle
@@ -277,7 +301,7 @@ class HeidiCoreLoop extends EventEmitter {
       }
       
       // Schedule next reflection
-      setTimeout(reflectionCycle, this.config.reflectionInterval);
+      this._scheduleTimeout(reflectionCycle, this.config.reflectionInterval);
     };
     
     // Start reflection cycle
@@ -351,12 +375,14 @@ class HeidiCoreLoop extends EventEmitter {
       }).catch(() => {});
       
       // Self-healing: ask Claude for a corrective retry task
-      selfHealing.healFromCrash(task, error.message, loopId).then(heal => {
-        if (heal?.should_retry && heal.corrected_task) {
-          console.log(`[SELF-HEAL] Scheduling corrective retry for ${loopId}`);
-          setTimeout(() => this.executeLoop(heal.corrected_task).catch(() => {}), 5000);
-        }
-      }).catch(() => {});
+      if (process.env.NODE_ENV !== 'test') {
+        selfHealing.healFromCrash(task, error.message, loopId).then(heal => {
+          if (heal?.should_retry && heal.corrected_task) {
+            console.log(`[SELF-HEAL] Scheduling corrective retry for ${loopId}`);
+            this._scheduleTimeout(() => this.executeLoop(heal.corrected_task).catch(() => {}), 5000);
+          }
+        }).catch(() => {});
+      }
       
       // Emit failure
       this.emit('loop_failed', {

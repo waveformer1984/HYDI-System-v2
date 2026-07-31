@@ -55,7 +55,7 @@ async function main() {
   const report = await runner.runAll(manager);
 
   await manager.stop();
-  manager.destroy();
+  await manager.destroy();
   await fs.rm(dataPath, { recursive: true, force: true }).catch(() => {});
 
   console.log(JSON.stringify(report, null, 2));

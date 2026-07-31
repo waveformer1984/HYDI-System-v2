@@ -183,7 +183,8 @@ class ModelRateLimiter extends EventEmitter {
    * Start queue processor for rate-limited requests
    */
   startQueueProcessor() {
-    setInterval(() => {
+    if (this.queueProcessorInterval) return;
+    this.queueProcessorInterval = setInterval(() => {
       this.processQueue();
     }, 1000);
   }
@@ -204,6 +205,7 @@ class ModelRateLimiter extends EventEmitter {
         
         if (result.allowed) {
           // Execute the queued request
+          if (queued.timeoutId) clearTimeout(queued.timeoutId);
           queued.resolve({ allowed: true, queued: true, waitTime: now - queued.timestamp });
           processed.push(i);
         }
@@ -234,7 +236,8 @@ class ModelRateLimiter extends EventEmitter {
       this.requestQueue.push(queued);
       
       // Auto-reject after max wait
-      setTimeout(() => {
+      queued.timeoutId = setTimeout(() => {
+        queued.timeoutId = null;
         const index = this.requestQueue.indexOf(queued);
         if (index >= 0) {
           this.requestQueue.splice(index, 1);
@@ -288,6 +291,29 @@ class ModelRateLimiter extends EventEmitter {
       activeModels: Array.from(stats.activeModels),
       queuedRequests: stats.queuedRequests
     };
+  }
+  
+  /**
+   * Stop background processing and drain queued request timeouts
+   */
+  stop() {
+    if (this.queueProcessorInterval) {
+      clearInterval(this.queueProcessorInterval);
+      this.queueProcessorInterval = null;
+    }
+    for (const queued of this.requestQueue) {
+      if (queued.timeoutId) clearTimeout(queued.timeoutId);
+    }
+    this.requestQueue = [];
+  }
+  
+  /**
+   * Full teardown
+   */
+  destroy() {
+    this.stop();
+    this.removeAllListeners();
+    this.requestLog.clear();
   }
 }
 

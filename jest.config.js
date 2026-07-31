@@ -35,9 +35,14 @@ module.exports = {
     '^(\\.{1,2}/.*)\\.js$': '$1',
   },
 
-  forceExit: true,
-  detectOpenHandles: false,
+  forceExit: false,
+  detectOpenHandles: true,
   testTimeout: 15000,
   clearMocks: true,
   verbose: true,
+
+  // Watchman is not installed in most CI/sandbox environments; when jest can't
+  // find it, resolving that absence can stall startup on very large trees.
+  // The node-based crawler is slower per-run but starts reliably everywhere.
+  watchman: false,
 };

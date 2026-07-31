@@ -84,11 +84,18 @@ class EventBusWorker extends EventEmitter {
         
         if (this.pollTimer) {
             clearTimeout(this.pollTimer);
+            this.pollTimer = null;
         }
         
         if (this.metricsInterval) {
             clearInterval(this.metricsInterval);
+            this.metricsInterval = null;
         }
+        
+        this.subscriptions.clear();
+        this.eventHistory.clear();
+        this.patternSubscriptions.clear();
+        this.removeAllListeners();
         
         await this.queue.shutdown();
         logger.info('Event Bus stopped');

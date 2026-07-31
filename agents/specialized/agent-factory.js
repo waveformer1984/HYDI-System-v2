@@ -169,6 +169,18 @@ class SpecializedAgent extends EventEmitter {
       resources: Object.fromEntries(this.resources)
     };
   }
+
+  /**
+   * Release agent state and event listeners.
+   */
+  destroy() {
+    this.status = 'destroyed';
+    this.currentTask = null;
+    this.taskHistory = [];
+    this.messageQueue = [];
+    this.resources.clear();
+    this.removeAllListeners();
+  }
 }
 
 // LAYER A: STRATEGIC AGENTS

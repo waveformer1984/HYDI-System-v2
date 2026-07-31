@@ -2,6 +2,12 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+> **Canonical tree:** `C:\Users\Owner\HYDI_System`, branch `clean-main`, Node/JavaScript.
+> Several stale copies of `HYDI_System` exist on this machine under
+> `C:\Users\Owner\_HYDI_ARCHIVE\<date>\`. They are archives and are **not** under
+> version control. If `git rev-parse --is-inside-work-tree` fails, you are in the
+> wrong folder — stop rather than building there. See `ACTIVE_TREE.md`.
+
 ## What This System Does
 
 HYDI System v2 (also called "Heidi" / "ProtoForge → Kilo Node") is a monetizable AI orchestration platform. It turns ProtoForge into an executable revenue-generating system by:
@@ -33,7 +39,8 @@ HYDI V3 (`src/hydi-v3/`) commands — scoped separately so they don't shadow the
 ```bash
 npm run typecheck:hydi-v3         # TypeScript/JSDoc typecheck of V3 code only (tsconfig.typecheck.json)
 npm run lint:hydi-v3              # Lint V3 modules and scripts only
-npm run test:integration:hydi-v3  # HYDI V3 integration tests (tests/integration/hydi-v3-integration.test.js)
+npm run test:integration:hydi-v3  # A single HYDI V3 integration file (tests/integration/hydi-v3-integration.test.js)
+npm run test:integration:jest     # The full hermetic operational integration suite (all of tests/integration/**/*.test.js)
 npm run test:soak:hydi-v3         # Long-running V3 stability simulation (scripts/soak-test-v3.js)
 npm run benchmark:performance     # V3 performance benchmarks
 npm run security-audit            # V3 static security audit
@@ -295,18 +302,23 @@ Use `SUPABASE_SERVICE_ROLE_KEY` server-side only. Never expose it to the client.
 
 | Workflow | Trigger | What it does |
 |----------|---------|---------------|
-| `unit-tests.yml` | push to `clean-main`, all PRs | `npm test -- --coverage --forceExit`, uploads to Codecov |
+| `unit-tests.yml` | push to `clean-main`, all PRs | `npm run lint`, `npm test -- --coverage --forceExit`, uploads to Codecov |
+| `integration-tests.yml` | push to `clean-main`, all PRs | `npm run typecheck:hydi-v3`, `npm run lint:hydi-v3`, `npm run test:integration:jest` — the full hermetic operational integration suite (12 suites / 62 tests, ~25s), no credentials or local environment state required |
 | `hdi-governance-gate.yml` | PRs touching `supabase/migrations/**` | 7-gate schema review: change detection, transformer tests, state machine approval, adversarial tests, replay fidelity, performance regression, blueprint sync |
 | `health-monitor.yml` | Scheduled | Pings health endpoint |
 | `codeql.yml` | Scheduled | Static security analysis |
 
 **Governance gate rule**: every new `.sql` migration must have a corresponding test in `tests/migrations/<version>.test.js`. State machine changes (enums, allowed transitions) require `STATE_MACHINE_APPROVED` in the PR description.
 
+**Why unit and integration tests run as two separate CI workflows, not one**: `jest.config.js`'s `testMatch` intentionally excludes `tests/integration/**` from the default `npm test` run (see Testing Layout below) so the fast unit gate stays fast and every developer's default `npm test` runtime doesn't silently grow. `integration-tests.yml` exists specifically so that exclusion doesn't become a verification blind spot — a green `unit-tests.yml` run was never evidence that the operational integration suite passed, only that it wasn't broken by whatever change last touched it. Do not fold integration discovery into `jest.config.js`'s default `testMatch` to "simplify" this — that reintroduces the blind spot for local development, just less visibly.
+
 ## Testing Layout
+
+There are two distinct kinds of Jest test in this repository, discovered and run differently on purpose — know which one you're touching before assuming `npm test` covers it.
 
 ```
 tests/
-  unit/                          # Jest unit tests (run via npm test)
+  unit/                          # Jest unit tests — discovered by jest.config.js, run via `npm test`
     heidi-core-loop.test.js
     heidi-action-layer.test.js
     heidi-memory-system.test.js
@@ -314,14 +326,35 @@ tests/
     hybrid-model-stack.test.js
     stripe-webhook.test.js
     subscription-manager.test.js
-  hdi-adversarial.test.js        # Adversarial / chaos integration tests
-  hdi-everything-wrong.test.js   # Edge-case / failure-mode integration tests
-  integration/
-    hydi-v3-integration.test.js  # HYDI V3 integration tests (npm run test:integration:hydi-v3)
-  unit/hydi-v3/                  # HYDI V3 unit tests (npm run typecheck:hydi-v3 / lint:hydi-v3)
+    hydi-v3/                     # HYDI V3 unit tests (still under `npm test`; also linted/typechecked via *:hydi-v3 scripts)
+  migrations/                    # SQL migration tests — discovered by jest.config.js, run via `npm test`
+  integration/                   # NOT discovered by jest.config.js's default testMatch — run via `npm run test:integration:jest`
+    hydi-live-recovery.test.js
+    hydi-live-operation-failures.test.js
+    hydi-morning-executive-simulation.test.js
+    hydi-operational-demo.test.js
+    hydi-operational-failure-modes.test.js
+    hydi-operator-approval-flow.test.js
+    hydi-operator-mistakes.test.js
+    hydi-production-failure-modes.test.js
+    hydi-recovery.test.js
+    hydi-trust-integrity.test.js
+    hydi-v3-console-integration.test.js
+    hydi-v3-integration.test.js  # also independently runnable via npm run test:integration:hydi-v3
+  hdi-adversarial.test.js        # NOT a Jest test — a Node script (npm run test:integration), requires live SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY
+  hdi-everything-wrong.test.js   # Same as above: Node script, not Jest-discovered
 ```
 
-The integration tests (`test:integration`) require live environment variables (`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`).
+**Unit tests** (`tests/unit/**`, `tests/migrations/**`, `__tests__/**`): fast, hermetic, run automatically by `npm test` locally and by `unit-tests.yml` in CI on every push/PR to `clean-main`.
+
+**Integration tests** (`tests/integration/**`, 12 suites / 62 tests as of Phase 27A): real `OperatorSession`/`HYDIContinuousRuntime` instances exercising the full executive stack end-to-end (temp data directories, no mocked internals). Deliberately excluded from `jest.config.js`'s `testMatch` so they never silently inflate `npm test`'s runtime — run them explicitly:
+```bash
+npm run test:integration:jest      # the full suite (what CI runs)
+npx jest tests/integration/<file>  --testMatch="**/*.test.js" --runInBand --forceExit  # a single file
+```
+They are hermetic (temp `dataPath` per test, no real network calls, and `hydi-live-recovery.test.js` snapshots/restores any ambient tier-2 connector credential env vars so a developer's real `STRIPE_SECRET_KEY` etc. can never change the result) and run automatically in CI via `integration-tests.yml` on every push/PR to `clean-main`, alongside `npm run typecheck:hydi-v3` and `npm run lint:hydi-v3`.
+
+**Adversarial tests** (`tests/hdi-adversarial.test.js`, `tests/hdi-everything-wrong.test.js`): plain Node scripts, not Jest suites — run via `npm run test:integration`. Unlike the Jest integration suite above, these genuinely require live `SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY` and are not run in either CI workflow.
 
 ### HYDI V3 Upgrade
 

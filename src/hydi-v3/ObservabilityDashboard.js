@@ -41,6 +41,38 @@ class ObservabilityDashboard extends EventEmitter {
     this._lastSnapshot = null;
     this._lastSources = null;
     this._watched = new WeakSet();
+    this.persistence = {
+      flushDurations: [],
+      shutdownDurations: [],
+      recoveryDurations: [],
+      failedPersists: 0,
+      pendingWrites: 0,
+    };
+
+    this.manufacturing = {
+      runningJobs: 0,
+      idleMachines: 0,
+      offlineMachines: 0,
+      failedJobs: 0,
+      materialAlerts: 0,
+      recentActivity: [],
+    };
+    this._running = new Set();
+    this._idle = new Set();
+    this._offline = new Set();
+    this._businessBusHandler = null;
+    this._businessBus = null;
+
+    this.lifecycle = {
+      activeTimers: 0,
+      pendingPromises: 0,
+      queuedPersistence: 0,
+      shutdownLatencies: [],
+      startupLatencies: [],
+      restartLatencies: [],
+      cleanupFailures: 0,
+      recoverySuccesses: 0,
+    };
   }
 
   recordSnapshot(sources = {}) {
@@ -191,6 +223,157 @@ class ObservabilityDashboard extends EventEmitter {
     }
   }
 
+  attachBusinessEventBus(bus) {
+    if (!bus || this._businessBus) return;
+    this._businessBus = bus;
+    this._businessBusHandler = (event) => {
+      if (event.type === 'BusinessSignal' && event.payload) {
+        this.recordBusinessSignal(event.payload);
+      }
+    };
+    bus.subscribe('BusinessSignal', this._businessBusHandler);
+  }
+
+  detachBusinessEventBus() {
+    if (this._businessBus && this._businessBusHandler) {
+      this._businessBus.unsubscribe('BusinessSignal', this._businessBusHandler);
+    }
+    this._businessBus = null;
+    this._businessBusHandler = null;
+  }
+
+  recordBusinessSignal(payload) {
+    if (payload.strategicObjective !== 'manufacturing' && payload.subsystem !== 'Manufacturing Floor') {
+      return;
+    }
+    const equipmentId = payload.equipmentId || payload.project;
+    const interpretation = payload.interpretation || payload.originatingEvent;
+    if (interpretation) {
+      this.manufacturing.recentActivity.unshift({
+        at: Date.now(),
+        interpretation,
+        impact: payload.impact,
+      });
+      if (this.manufacturing.recentActivity.length > 20) {
+        this.manufacturing.recentActivity = this.manufacturing.recentActivity.slice(0, 20);
+      }
+    }
+
+    const event = payload.originatingEvent;
+    if (event === 'PrinterStarted' || event === 'PrinterResumed') {
+      this._running.add(equipmentId);
+      this._idle.delete(equipmentId);
+      this._offline.delete(equipmentId);
+    } else if (event === 'PrinterCompleted') {
+      this._running.delete(equipmentId);
+    } else if (event === 'PrinterFailed') {
+      this._running.delete(equipmentId);
+      this.manufacturing.failedJobs += 1;
+    } else if (event === 'PrinterPaused') {
+      this._running.delete(equipmentId);
+    } else if (event === 'PrinterIdle') {
+      this._running.delete(equipmentId);
+      this._idle.add(equipmentId);
+      this._offline.delete(equipmentId);
+    } else if (event === 'PrinterOffline') {
+      this._running.delete(equipmentId);
+      this._idle.delete(equipmentId);
+      this._offline.add(equipmentId);
+    } else if (event === 'MaterialLow') {
+      this.manufacturing.materialAlerts += 1;
+    }
+
+    this.manufacturing.runningJobs = this._running.size;
+    this.manufacturing.idleMachines = this._idle.size;
+    this.manufacturing.offlineMachines = this._offline.size;
+  }
+
+  getManufacturingStatus() {
+    return { ...this.manufacturing };
+  }
+
+  recordFlush(durationMs, pendingWrites = 0, failed = false) {
+    this.persistence.flushDurations.push(durationMs);
+    this.persistence.pendingWrites = pendingWrites;
+    if (failed) this.persistence.failedPersists += 1;
+    if (this.persistence.flushDurations.length > this.config.historyLimit) {
+      this.persistence.flushDurations.shift();
+    }
+  }
+
+  recordShutdown(durationMs) {
+    this.persistence.shutdownDurations.push(durationMs);
+    if (this.persistence.shutdownDurations.length > this.config.historyLimit) {
+      this.persistence.shutdownDurations.shift();
+    }
+  }
+
+  recordRecovery(durationMs) {
+    this.persistence.recoveryDurations.push(durationMs);
+    if (this.persistence.recoveryDurations.length > this.config.historyLimit) {
+      this.persistence.recoveryDurations.shift();
+    }
+  }
+
+  getPersistenceMetrics() {
+    const summarize = (arr) => {
+      if (!arr.length) return { count: 0, average: 0, max: 0, last: 0 };
+      const sum = arr.reduce((a, b) => a + b, 0);
+      return {
+        count: arr.length,
+        average: Math.round(sum / arr.length),
+        max: Math.max(...arr),
+        last: arr[arr.length - 1],
+      };
+    };
+    return {
+      pendingWrites: this.persistence.pendingWrites,
+      failedPersists: this.persistence.failedPersists,
+      flush: summarize(this.persistence.flushDurations),
+      shutdown: summarize(this.persistence.shutdownDurations),
+      recovery: summarize(this.persistence.recoveryDurations),
+    };
+  }
+
+  recordActiveTimers(count) { this.lifecycle.activeTimers = count; }
+
+  recordPendingPromises(count) { this.lifecycle.pendingPromises = count; }
+
+  recordQueuedPersistence(count) { this.lifecycle.queuedPersistence = count; }
+
+  recordShutdownLatency(ms) { this._pushLifecycle('shutdownLatencies', ms); }
+
+  recordStartupLatency(ms) { this._pushLifecycle('startupLatencies', ms); }
+
+  recordRestartLatency(ms) { this._pushLifecycle('restartLatencies', ms); }
+
+  recordCleanupFailure() { this.lifecycle.cleanupFailures += 1; }
+
+  recordRecoverySuccess() { this.lifecycle.recoverySuccesses += 1; }
+
+  _pushLifecycle(field, value) {
+    this.lifecycle[field].push(value);
+    if (this.lifecycle[field].length > this.config.historyLimit) this.lifecycle[field].shift();
+  }
+
+  getLifecycleMetrics() {
+    const summarize = (arr) => {
+      if (!arr.length) return { count: 0, average: 0, max: 0, last: 0 };
+      const sum = arr.reduce((a, b) => a + b, 0);
+      return { count: arr.length, average: Math.round(sum / arr.length), max: Math.max(...arr), last: arr[arr.length - 1] };
+    };
+    return {
+      activeTimers: this.lifecycle.activeTimers,
+      pendingPromises: this.lifecycle.pendingPromises,
+      queuedPersistence: this.lifecycle.queuedPersistence,
+      shutdownLatency: summarize(this.lifecycle.shutdownLatencies),
+      startupLatency: summarize(this.lifecycle.startupLatencies),
+      restartLatency: summarize(this.lifecycle.restartLatencies),
+      cleanupFailures: this.lifecycle.cleanupFailures,
+      recoverySuccesses: this.lifecycle.recoverySuccesses,
+    };
+  }
+
   getRecoveryEventCount(sources) {
     this.attachRecoveryListeners(sources);
     return this.recoveryEvents.length;
@@ -219,6 +402,8 @@ class ObservabilityDashboard extends EventEmitter {
       missionReplay: this.getMissionReplay(null, sources),
       historicalAnalytics: this.getHistoricalAnalytics(),
       healthScore: snapshot.healthScore,
+      persistence: this.getPersistenceMetrics(),
+      manufacturingStatus: this.getManufacturingStatus(),
     };
   }
 
@@ -493,7 +678,18 @@ class ObservabilityDashboard extends EventEmitter {
     return {
       snapshots: this.history.timestamps.length,
       lastSnapshot: this.history.timestamps[this.history.timestamps.length - 1] || null,
+      persistence: this.getPersistenceMetrics(),
+      lifecycle: this.getLifecycleMetrics(),
     };
+  }
+
+  destroy() {
+    for (const key of Object.keys(this.history)) {
+      this.history[key] = [];
+    }
+    this.recoveryEvents = [];
+    this._watched = new WeakSet();
+    this.removeAllListeners();
   }
 }
 

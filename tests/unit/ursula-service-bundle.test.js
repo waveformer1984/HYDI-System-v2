@@ -23,9 +23,16 @@ describe('UrsulaServiceBundle', () => {
 
     test('wires this.heartbeat to the shared singleton and starts it', () => {
       const heartbeat = require('../../src/models/heartbeat');
-      const bundle = new UrsulaServiceBundle();
+      const bundle = new UrsulaServiceBundle({ autoStartHeartbeat: true });
       expect(bundle.heartbeat).toBe(heartbeat);
       expect(heartbeat.start).toHaveBeenCalled();
+    });
+
+    test('destroy stops the shared heartbeat', async () => {
+      const heartbeat = require('../../src/models/heartbeat');
+      const bundle = new UrsulaServiceBundle({ autoStartHeartbeat: true });
+      await bundle.destroy();
+      expect(heartbeat.stop).toHaveBeenCalled();
     });
   });
 

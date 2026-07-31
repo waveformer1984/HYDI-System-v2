@@ -1,7 +1,9 @@
 {
   "compilerOptions": {
     "target": "es2022",
-    "lib": ["es2022"],
+    "lib": [
+      "es2022"
+    ],
     "allowJs": true,
     "checkJs": false,
     "strict": false,
@@ -18,7 +20,22 @@
     "tests/unit/hydi-v3/**/*.js",
     "scripts/performance-benchmark.js",
     "scripts/security-audit.js",
-    "scripts/soak-test-v3.js"
+    "scripts/soak-test-v3.js",
+    "scripts/operator-cli.js",
+    "scripts/hydi-cli.js",
+    "scripts/hydi-operational-demo.js",
+    "scripts/hydi-continuous-demo.js",
+    "scripts/hydi-operator-demo.js",
+    "scripts/hydi-boot.js",
+    "scripts/hydi-dashboard.js",
+    "scripts/hydi-live-demo.js",
+    "scripts/console-benchmark.js",
+    "pages/api/cockpit/**/*.js",
+    "pages/api/console/**/*.js"
   ],
-  "exclude": ["node_modules", ".next", "coverage"]
+  "exclude": [
+    "node_modules",
+    ".next",
+    "coverage"
+  ]
 }

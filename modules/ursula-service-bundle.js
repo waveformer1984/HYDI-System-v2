@@ -9,12 +9,15 @@ const EventEmitter = require('events');
 const UrsulaModelHeartbeat = require('../src/models/heartbeat');
 
 class UrsulaServiceBundle extends EventEmitter {
-  constructor() {
+  constructor(options = {}) {
     super();
     this.services = new Map();
     this.subscriptions = new Map();
     this.usageMetrics = new Map();
     this.heartbeat = null;
+    this.autoStartHeartbeat = options.autoStartHeartbeat !== undefined
+      ? options.autoStartHeartbeat
+      : process.env.NODE_ENV !== 'test';
     this.initializeServices();
     this.initializeHeartbeat();
   }
@@ -639,9 +642,17 @@ class UrsulaServiceBundle extends EventEmitter {
    */
   initializeHeartbeat() {
     this.heartbeat = UrsulaModelHeartbeat;
-    this.heartbeat.start().catch((error) => {
-      console.error('[URSULA] Heartbeat failed to start:', error.message);
-    });
+    if (this.autoStartHeartbeat) {
+      this.heartbeat.start().catch((error) => {
+        console.error('[URSULA] Heartbeat failed to start:', error.message);
+      });
+    }
+  }
+
+  async destroy() {
+    if (this.heartbeat && typeof this.heartbeat.stop === 'function') {
+      await this.heartbeat.stop();
+    }
   }
 
   /**
@@ -718,7 +729,7 @@ class UrsulaServiceBundle extends EventEmitter {
 
     try {
       // Get local model adapter instance
-      const { LocalModelAdapter } = require('../src/models/local-model-adapter');
+      const LocalModelAdapter = require('../src/models/local-model-adapter');
       const modelAdapter = new LocalModelAdapter();
       
       // Execute with local model and tier-based priority
