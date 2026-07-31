@@ -5,8 +5,9 @@
 | Field | Value |
 |-------|-------|
 | Version | v1.0.0 |
-| Commit | `2f552d77503e823747a15fc44bf682211a193d6c` |
+| Tag | `switchboard-v1.0.0` |
 | Branch | `switchboard-moderation` |
+| Commit | `switchboard-v1.0.0^{commit}` — resolved by the git tag |
 | Tests | 38/38 passing |
 | Release Date | 2026-07-31 |
 
