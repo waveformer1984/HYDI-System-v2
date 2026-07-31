@@ -3,6 +3,7 @@ const bcrypt = require('bcryptjs');
 const { createStore } = require('./persistence');
 const { EventBus, MemoryTransport, FileTransport } = require('./events/event-bus');
 const validation = require('./validation');
+const availability = require('./availability');
 const { NotFoundError, ValidationError, ConflictError } = require('./errors');
 
 const saltRounds = 10;
@@ -458,6 +459,104 @@ class Repository {
     }
   }
 
+  createAvailabilityProfile(input) {
+    const userId = validation.requireString(input, 'user_id');
+    const timezone = input.timezone != null ? validation.requireString({ timezone: input.timezone }, 'timezone', { max: 64 }) : 'UTC';
+    if (input.weekly != null && !availability.isValidWeekly(input.weekly)) throw new ValidationError('Invalid weekly schedule', 'weekly');
+    const existing = this.store.getAll('availability_profiles').find(p => p.user_id === userId);
+    if (existing) return this.updateAvailabilityProfile(existing.id, { timezone, weekly: input.weekly });
+
+    const profile = { id: id(), user_id: userId, timezone, weekly: input.weekly || null, created_at: now() };
+    this.store.create('availability_profiles', profile);
+    this.audit('availability_profiles', profile.id, 'created', userId, null, profile);
+    this.eventBus.emit('availability.created', { ...profile });
+    this.logger.info('repository', 'availability.created', `Availability profile ${profile.id} created`);
+    return { ...profile };
+  }
+
+  getAvailabilityProfile(userId) {
+    return this.store.getAll('availability_profiles').find(p => p.user_id === userId) || null;
+  }
+
+  updateAvailabilityProfile(pid, updates) {
+    const old = ensureFound(this.store.getById('availability_profiles', pid), 'Availability profile not found');
+    const updated = { ...old };
+    if (updates.timezone != null) updated.timezone = validation.requireString({ timezone: updates.timezone }, 'timezone', { max: 64 });
+    if (updates.weekly != null) {
+      if (!availability.isValidWeekly(updates.weekly)) throw new ValidationError('Invalid weekly schedule', 'weekly');
+      updated.weekly = updates.weekly;
+    }
+    this.store.update('availability_profiles', pid, updated);
+    this.audit('availability_profiles', pid, 'updated', updated.user_id, old, updated);
+    this.eventBus.emit('availability.updated', { ...updated });
+    this.logger.info('repository', 'availability.updated', `Availability profile ${pid} updated`);
+    return { ...updated };
+  }
+
+  deleteAvailabilityProfile(pid) {
+    const old = ensureFound(this.store.getById('availability_profiles', pid), 'Availability profile not found');
+    this.store.delete('availability_profiles', pid);
+    this.audit('availability_profiles', pid, 'deleted', old.user_id, old, null);
+    this.eventBus.emit('availability.deleted', { profileId: pid, user_id: old.user_id });
+    this.logger.info('repository', 'availability.deleted', `Availability profile ${pid} deleted`);
+    return { ok: true };
+  }
+
+  createAvailabilityException(input) {
+    const userId = validation.requireString(input, 'user_id');
+    const start = validation.requireDate(input, 'start_time');
+    const end = validation.requireDate(input, 'end_time');
+    if (new Date(end) <= new Date(start)) throw new ValidationError('End time must be after start time', 'end_time');
+    const reason = input.reason != null ? validation.requireString({ reason: input.reason }, 'reason', { max: 500 }) : null;
+    const exception = { id: id(), user_id: userId, start_time: start, end_time: end, reason, created_at: now() };
+    this.store.create('availability_exceptions', exception);
+    this.audit('availability_exceptions', exception.id, 'created', userId, null, exception);
+    this.eventBus.emit('availability.exception_added', { ...exception });
+    this.logger.info('repository', 'availability.exception_added', `Availability exception ${exception.id} created`);
+    return { ...exception };
+  }
+
+  getAvailabilityExceptions(userId) {
+    return this.store.getAll('availability_exceptions').filter(e => e.user_id === userId);
+  }
+
+  updateAvailabilityException(eid, updates) {
+    const old = ensureFound(this.store.getById('availability_exceptions', eid), 'Availability exception not found');
+    const updated = { ...old };
+    if (updates.start_time != null) updated.start_time = validation.requireDate({ start_time: updates.start_time }, 'start_time');
+    if (updates.end_time != null) {
+      updated.end_time = validation.requireDate({ end_time: updates.end_time }, 'end_time');
+      if (new Date(updated.end_time) <= new Date(updated.start_time)) throw new ValidationError('End time must be after start time', 'end_time');
+    }
+    if (updates.reason != null) updated.reason = validation.requireString({ reason: updates.reason }, 'reason', { max: 500 });
+    this.store.update('availability_exceptions', eid, updated);
+    this.audit('availability_exceptions', eid, 'updated', updated.user_id, old, updated);
+    this.eventBus.emit('availability.updated', { ...updated });
+    this.logger.info('repository', 'availability.updated', `Availability exception ${eid} updated`);
+    return { ...updated };
+  }
+
+  deleteAvailabilityException(eid) {
+    const old = ensureFound(this.store.getById('availability_exceptions', eid), 'Availability exception not found');
+    this.store.delete('availability_exceptions', eid);
+    this.audit('availability_exceptions', eid, 'deleted', old.user_id, old, null);
+    this.eventBus.emit('availability.deleted', { exceptionId: eid, user_id: old.user_id });
+    this.logger.info('repository', 'availability.deleted', `Availability exception ${eid} deleted`);
+    return { ok: true };
+  }
+
+  getAvailabilityForDate(userId, dateInput) {
+    const profile = this.getAvailabilityProfile(userId);
+    const exceptions = this.getAvailabilityExceptions(userId);
+    return availability.getSlotsForDate(profile, exceptions, dateInput);
+  }
+
+  getNextAvailableSlot(userId, fromDate) {
+    const profile = this.getAvailabilityProfile(userId);
+    const exceptions = this.getAvailabilityExceptions(userId);
+    return availability.getNextSlot(profile, exceptions, fromDate, 30);
+  }
+
   export() {
     const state = this.store.load();
     const clone = JSON.parse(JSON.stringify(state));
@@ -470,10 +569,10 @@ class Repository {
     if (typeof newState !== 'object' || newState == null || !Array.isArray(newState.users)) {
       throw new ValidationError('Invalid import payload', 'newState');
     }
-    if (newState.schemaVersion && newState.schemaVersion !== 1) {
+    if (newState.schemaVersion && newState.schemaVersion > 3) {
       throw new ValidationError(`Unsupported schema version: ${newState.schemaVersion}`, 'schemaVersion');
     }
-    const allowed = ['users', 'venues', 'gigs', 'availability', 'applications', 'messages', 'contracts', 'payments', 'ratings', 'audit_log'];
+    const allowed = ['users', 'venues', 'gigs', 'availability', 'applications', 'messages', 'contracts', 'payments', 'ratings', 'moderation', 'availability_profiles', 'availability_exceptions', 'audit_log'];
     if (options.dryRun) return { tables: allowed, records: allowed.reduce((acc, k) => { acc[k] = (newState[k] || []).length; return acc; }, {}) };
 
     const oldState = this.store.load();

@@ -175,6 +175,30 @@ Switchboard emits domain events for every state-changing operation. These events
 - **When:** A user is restricted by a moderator.
 - **Payload:** `{ userId }`
 
+### `availability.created`
+
+- **Producer:** `repository.createAvailabilityProfile()`
+- **When:** A user creates or replaces their weekly availability profile.
+- **Payload:** The availability profile record.
+
+### `availability.updated`
+
+- **Producer:** `repository.updateAvailabilityProfile()`
+- **When:** A user's availability profile is updated.
+- **Payload:** The updated availability profile.
+
+### `availability.deleted`
+
+- **Producer:** `repository.deleteAvailabilityProfile()` / `repository.deleteAvailabilityException()`
+- **When:** A profile or exception is removed.
+- **Payload:** `{ profileId or exceptionId, user_id }`.
+
+### `availability.exception_added`
+
+- **Producer:** `repository.createAvailabilityException()`
+- **When:** A user adds an unavailability exception.
+- **Payload:** The exception record.
+
 ## Reserved events
 
 Future events not yet wired:

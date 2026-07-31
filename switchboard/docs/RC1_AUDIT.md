@@ -144,7 +144,7 @@ The following are known and intentional post-RC work:
 
 ## Post-RC1 Update: Phase 2D Moderation Console
 
-After the `switchboard-v1.0.0-rc1` tag, the moderation layer was implemented on the `switchboard-moderation` branch. See `docs/MODERATION_CONSOLE.md` for details.
+After the `switchboard-v1.0.0-rc1` tag, the moderation and availability calendar layers were implemented on the `switchboard-moderation` branch. See `docs/MODERATION_CONSOLE.md` and `docs/AVAILABILITY_CALENDAR.md` for details.
 
 | Criterion | Status |
 |-----------|--------|

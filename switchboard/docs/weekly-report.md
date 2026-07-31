@@ -14,7 +14,7 @@
 ### Phase 1.5 — Foundation Hardening
 
 - `Store` interface with `JsonStore` and `MemoryStore`
-- Schema versioning and automatic migrations
+- Schema versioning and automatic migrations (now v3)
 - Atomic JSON writes with `fsync` + `rename`
 - Backup rotation and corruption recovery
 - `EventBus` with `MemoryTransport`, `FileTransport`, `HydiAdapter`
@@ -47,22 +47,31 @@
 - Corruption detection and backup restore
 - `README.md`, `PRODUCTION_READINESS_REPORT.md`, `VALIDATION_REPORT.md`, `DIAGNOSTICS.md`
 
-### Phase 2D — Moderation Console (in progress / complete)
+### Phase 2D — Moderation Console
 
 - `moderation` table and schema v2 migration
 - `Repository` moderation methods
 - `moderation.*` and `user.restricted` domain events
-- API endpoints: `/moderation/queue`, `/moderation/:id`, action endpoints, `/moderation/timeline`
-- `public/moderation.html` operator console
-- Safety filter now creates moderation cases for flagged content
-- `docs/MODERATION_CONSOLE.md` and updated `docs/domain-events.md`
+- API endpoints and `public/moderation.html`
+- Safety filter auto-creates moderation cases
+- `docs/MODERATION_CONSOLE.md`
+
+### Phase 2E — Availability Calendar
+
+- `availability_profiles` and `availability_exceptions` tables
+- Schema v3 migration
+- `src/availability.js` slot computation engine
+- `Repository` profile, exception, and next-slot methods
+- `availability.created`, `availability.updated`, `availability.deleted`, `availability.exception_added` events
+- `GET /availability/:userId/date/:date` and `/next` endpoints
+- `public/availability.html`
+- `docs/AVAILABILITY_CALENDAR.md`
 
 ## Test Coverage
 
-Current target after moderation tests:
-
 ```text
-24/24 passing (target)
+31/31 passing
+0 failing
 ```
 
 Suites:
@@ -72,6 +81,7 @@ Suites:
 - `tests/trust.test.js`
 - `tests/hardening.test.js`
 - `tests/moderation.test.js`
+- `tests/availability.test.js`
 
 ## Architecture Status
 
@@ -88,18 +98,21 @@ Switchboard
 │   └── HydiAdapter (optional)
 │
 ├── Repository (validated, logged, one event per change)
+│   ├── Trust & Commerce
+│   ├── Moderation
+│   └── Availability Calendar
 │
-├── API (request IDs, rate limits, moderation, diagnostics)
+├── API (request IDs, rate limits, diagnostics, moderation, availability)
 │
-└── Frontend (login, gigs, trust, parent, messages, diagnostics, moderation)
+└── Frontend (login, gigs, trust, parent, messages, diagnostics, moderation, availability)
 ```
 
 ## Remaining Work
 
-1. **Availability Calendar** — weekly schedule, blackout dates, timezone display
-2. **Mobile UI polish** — responsive layout, loading states
-3. **HYDI Adapter activation** — wire `HydiAdapter` when HYDI ingestion contract is stable
+1. **Mobile UI polish** — responsive layout, loading states
+2. **HYDI Adapter activation** — wire `HydiAdapter` when HYDI ingestion contract is stable
+3. **Final release tag** (`switchboard-v1.0.0`) after mobile polish
 
 ## Estimated MVP Completion Percentage
 
-**~98%** — the application now has trust, commerce, and moderation layers. Remaining work is product polish and optional ecosystem integration.
+**~99%** — trust, commerce, moderation, and availability layers are complete. Remaining is mobile polish and optional HYDI integration.

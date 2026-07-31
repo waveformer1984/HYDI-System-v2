@@ -11,6 +11,8 @@ const defaultTables = {
   payments: [],
   ratings: [],
   moderation: [],
+  availability_profiles: [],
+  availability_exceptions: [],
   audit_log: []
 };
 
@@ -19,7 +21,7 @@ class MemoryStore extends Store {
     super();
     this.state = {};
     Object.keys(defaultTables).forEach(k => { this.state[k] = initial[k] ? [...initial[k]] : []; });
-    this.state.schemaVersion = initial.schemaVersion || 2;
+    this.state.schemaVersion = initial.schemaVersion || 3;
     this.state.updatedAt = new Date().toISOString();
   }
 
@@ -53,7 +55,7 @@ class MemoryStore extends Store {
 
   reset() {
     Object.keys(defaultTables).forEach(k => { this.state[k] = []; });
-    this.state.schemaVersion = 2;
+    this.state.schemaVersion = 3;
     this.state.updatedAt = new Date().toISOString();
   }
 }

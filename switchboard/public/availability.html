@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Switchboard Availability</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 0; padding: 1rem; background: #f7f7f7; color: #222; }
+    .card { background: #fff; padding: 1rem; border-radius: 6px; box-shadow: 0 1px 3px #0001; margin-bottom: 1rem; }
+    .day { margin-bottom: 1rem; }
+    .slot { display: inline-block; background: #e0f7fa; padding: 0.3rem 0.6rem; border-radius: 4px; margin: 0.2rem; }
+    .unavailable { color: #999; }
+    button { margin: 0.2rem; padding: 0.4rem 0.8rem; border: 0; border-radius: 4px; cursor: pointer; }
+    input, select { padding: 0.4rem; margin: 0.2rem; }
+  </style>
+</head>
+<body>
+  <h1>Availability Calendar</h1>
+  <div class="card">
+    <h2>Set Weekly Schedule</h2>
+    <label>User ID: <input type="text" id="userId" /></label>
+    <label>Timezone: <input type="text" id="timezone" value="UTC" /></label>
+    <div id="days"></div>
+    <button id="saveProfile">Save Profile</button>
+  </div>
+  <div class="card">
+    <h2>Add Exception</h2>
+    <label>Start: <input type="datetime-local" id="exStart" /></label>
+    <label>End: <input type="datetime-local" id="exEnd" /></label>
+    <label>Reason: <input type="text" id="exReason" /></label>
+    <button id="addException">Add Exception</button>
+  </div>
+  <div class="card">
+    <h2>Current Availability</h2>
+    <button id="loadProfile">Load</button>
+    <div id="profileView"></div>
+    <h3>Next Available Slot</h3>
+    <div id="nextSlot"></div>
+    <h3>Check a Date</h3>
+    <input type="date" id="checkDate" />
+    <button id="checkDateBtn">Check</button>
+    <div id="dateSlots"></div>
+  </div>
+  <script>
+    const API = window.SWITCHBOARD_API || 'http://localhost:3001';
+    const DAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+
+    function renderDayInputs() {
+      const container = document.getElementById('days');
+      container.innerHTML = DAYS.map(day => `
+        <div class="day">
+          <strong>${day}</strong>
+          <div id="slots-${day}"></div>
+          <button onclick="addSlot('${day}')">+ Slot</button>
+        </div>
+      `).join('');
+      DAYS.forEach(day => addSlot(day));
+    }
+
+    window.addSlot = (day) => {
+      const div = document.getElementById(`slots-${day}`);
+      const row = document.createElement('div');
+      row.innerHTML = `<input type="time" class="start-${day}" value="09:00" /> - <input type="time" class="end-${day}" value="17:00" />`;
+      div.appendChild(row);
+    };
+
+    function buildWeekly() {
+      const weekly = {};
+      DAYS.forEach(day => {
+        const starts = [...document.querySelectorAll(`.start-${day}`)].map(i => i.value).filter(v => v);
+        const ends = [...document.querySelectorAll(`.end-${day}`)].map(i => i.value).filter(v => v);
+        if (starts.length) {
+          weekly[day] = starts.map((s, i) => ({ start: s, end: ends[i] }));
+        }
+      });
+      return weekly;
+    }
+
+    document.getElementById('saveProfile').onclick = async () => {
+      const userId = document.getElementById('userId').value;
+      const timezone = document.getElementById('timezone').value;
+      const weekly = buildWeekly();
+      const res = await fetch(`${API}/availability/${userId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ timezone, weekly })
+      });
+      if (!res.ok) return alert('Save failed');
+      alert('Profile saved');
+      await load();
+    };
+
+    document.getElementById('addException').onclick = async () => {
+      const userId = document.getElementById('userId').value;
+      const start = new Date(document.getElementById('exStart').value).toISOString();
+      const end = new Date(document.getElementById('exEnd').value).toISOString();
+      const reason = document.getElementById('exReason').value;
+      const res = await fetch(`${API}/availability/${userId}/exceptions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ start_time: start, end_time: end, reason })
+      });
+      if (!res.ok) return alert('Add exception failed');
+      alert('Exception added');
+      await load();
+    };
+
+    async function load() {
+      const userId = document.getElementById('userId').value;
+      if (!userId) return;
+      const res = await fetch(`${API}/availability/${userId}`);
+      const data = await res.json();
+      const view = document.getElementById('profileView');
+      view.innerHTML = '';
+      if (data.profile) {
+        document.getElementById('timezone').value = data.profile.timezone || 'UTC';
+        view.innerHTML += `<p><strong>Timezone:</strong> ${data.profile.timezone}</p>`;
+        for (const [day, slots] of Object.entries(data.profile.weekly || {})) {
+          if (slots && slots.length) {
+            view.innerHTML += `<p><strong>${day}:</strong> ${slots.map(s => `<span class="slot">${s.start} - ${s.end}</span>`).join('')}</p>`;
+          } else {
+            view.innerHTML += `<p><strong>${day}:</strong> <span class="unavailable">Unavailable</span></p>`;
+          }
+        }
+        document.getElementById('nextSlot').innerHTML = data.nextSlot ? `<span class="slot">${data.nextSlot.date} ${new Date(data.nextSlot.slot.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${new Date(data.nextSlot.slot.end_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>` : 'No upcoming slots';
+      } else {
+        view.innerHTML = '<p>No profile set.</p>';
+      }
+    }
+
+    document.getElementById('loadProfile').onclick = load;
+
+    document.getElementById('checkDateBtn').onclick = async () => {
+      const userId = document.getElementById('userId').value;
+      const date = document.getElementById('checkDate').value;
+      if (!userId || !date) return;
+      const res = await fetch(`${API}/availability/${userId}/date/${date}`);
+      const slots = await res.json();
+      document.getElementById('dateSlots').innerHTML = slots.length
+        ? slots.map(s => `<p class="slot">${new Date(s.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${new Date(s.end_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>`).join('')
+        : '<p class="unavailable">Unavailable</p>';
+    };
+
+    renderDayInputs();
+  </script>
+</body>
+</html>

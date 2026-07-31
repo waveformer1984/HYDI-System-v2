@@ -10,6 +10,7 @@ A local-first, offline-first gig-matching MVP for performers and venues. Built t
 - Applications, contracts, payments, ratings
 - Parent approval workflow for protected accounts
 - Moderation console for flagged content and users
+- Availability calendar with weekly schedule and exceptions
 - Offline-first JSON storage with atomic writes
 - Synchronization via `/sync/export` and `/sync/import`
 - Structured logging and diagnostics
@@ -73,6 +74,7 @@ Returns storage health, backup status, event counts, and pending items.
 - `docs/VALIDATION_REPORT.md` — test results
 - `docs/DIAGNOSTICS.md` — diagnostics reference
 - `docs/MODERATION_CONSOLE.md` — moderation console
+- `docs/AVAILABILITY_CALENDAR.md` — availability calendar
 - `docs/weekly-report.md` — engineering status
 
 ## Testing
@@ -81,4 +83,4 @@ Returns storage health, backup status, event counts, and pending items.
 npm test
 ```
 
-24/24 tests passing.
+31/31 tests passing.

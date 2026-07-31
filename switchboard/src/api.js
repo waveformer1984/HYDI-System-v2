@@ -203,6 +203,38 @@ function createApp(repository, config, logger) {
     send(res, user);
   }));
 
+  app.get('/availability/:userId', h((req, res) => {
+    send(res, {
+      profile: repository.getAvailabilityProfile(req.params.userId),
+      exceptions: repository.getAvailabilityExceptions(req.params.userId),
+      nextSlot: repository.getNextAvailableSlot(req.params.userId)
+    });
+  }));
+
+  app.post('/availability/:userId', h((req, res) => {
+    send(res, repository.createAvailabilityProfile({ user_id: req.params.userId, ...req.body }));
+  }));
+
+  app.post('/availability/:userId/exceptions', h((req, res) => {
+    send(res, repository.createAvailabilityException({ user_id: req.params.userId, ...req.body }));
+  }));
+
+  app.put('/availability/:id', h((req, res) => {
+    send(res, repository.updateAvailabilityException(req.params.id, req.body));
+  }));
+
+  app.delete('/availability/:id', h((req, res) => {
+    send(res, repository.deleteAvailabilityException(req.params.id));
+  }));
+
+  app.get('/availability/:userId/date/:date', h((req, res) => {
+    send(res, repository.getAvailabilityForDate(req.params.userId, req.params.date));
+  }));
+
+  app.get('/availability/:userId/next', h((req, res) => {
+    send(res, repository.getNextAvailableSlot(req.params.userId, req.query.from));
+  }));
+
   if (!config || (config.featureFlags && config.featureFlags.export !== false)) {
     app.get('/sync/export', h((req, res) => send(res, repository.export())));
   }

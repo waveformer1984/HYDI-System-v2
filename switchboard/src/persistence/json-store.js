@@ -2,7 +2,7 @@ const { Store } = require('./store');
 const path = require('path');
 const fs = require('fs');
 
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 const MAX_BACKUPS = 5;
 
 const defaultTables = {
@@ -16,6 +16,8 @@ const defaultTables = {
   payments: [],
   ratings: [],
   moderation: [],
+  availability_profiles: [],
+  availability_exceptions: [],
   audit_log: []
 };
 
@@ -146,6 +148,12 @@ class JsonStore extends Store {
     if (s.schemaVersion < 2) {
       if (!Array.isArray(s.moderation)) s.moderation = [];
       s.schemaVersion = 2;
+    }
+
+    if (s.schemaVersion < 3) {
+      if (!Array.isArray(s.availability_profiles)) s.availability_profiles = [];
+      if (!Array.isArray(s.availability_exceptions)) s.availability_exceptions = [];
+      s.schemaVersion = 3;
     }
 
     s.schemaVersion = SCHEMA_VERSION;
