@@ -369,6 +369,95 @@ class Repository {
   getAllApplications() { return this.store.getAll('applications').map(a => ({ ...a })); }
   getAllGigs() { return this.getGigs(); }
 
+  createModerationCase(input) {
+    const targetType = validation.requireOneOf(input, 'targetType', ['message', 'application', 'user', 'contract']);
+    const targetId = validation.requireString(input, 'targetId');
+    const reason = validation.requireString(input, 'reason', { min: 1, max: 500 });
+    const createdBy = input.createdBy != null ? validation.requireString({ createdBy: input.createdBy }, 'createdBy', { max: 128 }) : 'system';
+    const caseId = id();
+    const modCase = {
+      id: caseId,
+      targetType,
+      targetId,
+      reason,
+      status: 'flagged',
+      createdBy,
+      createdAt: now(),
+      reviewedBy: null,
+      reviewedAt: null,
+      notes: []
+    };
+    this.store.create('moderation', modCase);
+    this.audit('moderation', modCase.id, 'created', createdBy, null, modCase);
+    this.eventBus.emit('moderation.created', { ...modCase });
+    this.logger.info('repository', 'moderation.created', `Moderation case ${modCase.id} created`);
+    return { ...modCase };
+  }
+
+  getModerationQueue(status) {
+    const all = this.store.getAll('moderation');
+    return status ? all.filter(c => c.status === status) : all;
+  }
+
+  getModerationCase(cid) { return this.store.getById('moderation', cid); }
+
+  updateModerationStatus(cid, { status, reviewedBy, note }) {
+    const validStatuses = ['flagged', 'quarantined', 'reviewing', 'released', 'removed', 'restricted'];
+    status = validation.requireOneOf({ status }, 'status', validStatuses);
+    reviewedBy = reviewedBy != null ? validation.requireString({ reviewedBy }, 'reviewedBy', { max: 128 }) : null;
+    const modCase = ensureFound(this.store.getById('moderation', cid), 'Moderation case not found');
+    const updated = { ...modCase, status, reviewedBy, reviewedAt: now() };
+    if (note) updated.notes = [...modCase.notes, { author: reviewedBy || 'moderator', text: note, at: now() }];
+    this.store.update('moderation', cid, updated);
+    this.applyModerationAction(updated);
+    this.audit('moderation', cid, 'status_change', reviewedBy, modCase, updated);
+    this.eventBus.emit('moderation.' + status, { caseId: cid, status, reviewedBy });
+    this.logger.info('repository', `moderation.${status}`, `Moderation case ${cid} -> ${status}`);
+    return { ...updated };
+  }
+
+  addModeratorNote(cid, { author, note }) {
+    author = validation.requireString({ author }, 'author', { max: 128 });
+    note = validation.requireString({ note }, 'note', { min: 1, max: 2000 });
+    const modCase = ensureFound(this.store.getById('moderation', cid), 'Moderation case not found');
+    const updated = { ...modCase };
+    updated.notes = [...modCase.notes, { author, text: note, at: now() }];
+    this.store.update('moderation', cid, updated);
+    this.audit('moderation', cid, 'note_added', author, modCase, updated);
+    this.eventBus.emit('moderation.note_added', { caseId: cid, author });
+    this.logger.info('repository', 'moderation.note_added', `Note added to ${cid}`);
+    return { ...updated };
+  }
+
+  getModerationTimeline() {
+    return this.store.getAll('moderation').sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  }
+
+  applyModerationAction(modCase) {
+    if (modCase.status === 'quarantined' && modCase.targetType === 'message') {
+      const msg = this.store.getById('messages', modCase.targetId);
+      if (msg) this.store.update('messages', msg.id, { ...msg, quarantined: 1 });
+    }
+    if (modCase.status === 'quarantined' && modCase.targetType === 'application') {
+      const app = this.store.getById('applications', modCase.targetId);
+      if (app) this.store.update('applications', app.id, { ...app, quarantined: 1 });
+    }
+    if (modCase.status === 'released' && (modCase.targetType === 'message' || modCase.targetType === 'application')) {
+      const t = this.store.getById(modCase.targetType + 's', modCase.targetId);
+      if (t) this.store.update(modCase.targetType + 's', t.id, { ...t, quarantined: 0 });
+    }
+    if (modCase.status === 'restricted' && modCase.targetType === 'user') {
+      const user = this.store.getById('users', modCase.targetId);
+      if (user) this.store.update('users', user.id, { ...user, restricted: 1 });
+      this.eventBus.emit('user.restricted', { userId: modCase.targetId });
+    }
+    if (modCase.status === 'removed') {
+      // Mark target as quarantined; permanent removal is manual or follow-up
+      const t = this.store.getById(modCase.targetType + 's', modCase.targetId);
+      if (t) this.store.update(modCase.targetType + 's', t.id, { ...t, quarantined: 1 });
+    }
+  }
+
   export() {
     const state = this.store.load();
     const clone = JSON.parse(JSON.stringify(state));

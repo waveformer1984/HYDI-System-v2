@@ -9,6 +9,7 @@ A local-first, offline-first gig-matching MVP for performers and venues. Built t
 - Deterministic match scoring (no AI)
 - Applications, contracts, payments, ratings
 - Parent approval workflow for protected accounts
+- Moderation console for flagged content and users
 - Offline-first JSON storage with atomic writes
 - Synchronization via `/sync/export` and `/sync/import`
 - Structured logging and diagnostics
@@ -71,6 +72,7 @@ Returns storage health, backup status, event counts, and pending items.
 - `docs/PRODUCTION_READINESS_REPORT.md` — readiness checklist
 - `docs/VALIDATION_REPORT.md` — test results
 - `docs/DIAGNOSTICS.md` — diagnostics reference
+- `docs/MODERATION_CONSOLE.md` — moderation console
 - `docs/weekly-report.md` — engineering status
 
 ## Testing
@@ -79,4 +81,4 @@ Returns storage health, backup status, event counts, and pending items.
 npm test
 ```
 
-18/18 tests passing.
+24/24 tests passing.

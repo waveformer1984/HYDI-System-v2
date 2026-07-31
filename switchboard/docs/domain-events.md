@@ -133,13 +133,50 @@ Switchboard emits domain events for every state-changing operation. These events
 - **When:** A full database import is performed via sync.
 - **Payload:** `{ tables: [...] }`
 
-## Not-yet-emitting events (reserved)
+### `moderation.created`
 
-The following events are reserved for Phase 2B/2C:
+- **Producer:** `repository.createModerationCase()`
+- **When:** A message or application is flagged by the safety filter.
+- **Payload:** The moderation case record.
 
-- `moderation.quarantined`
-- `moderation.released`
-- `moderation.reviewed`
-- `application.flagged`
-- `message.flagged`
+### `moderation.quarantined`
+
+- **Producer:** `repository.updateModerationStatus()`
+- **When:** A moderator quarantines a flagged case.
+- **Payload:** `{ caseId, status: 'quarantined', reviewedBy }`
+
+### `moderation.reviewing`
+
+- **Producer:** `repository.updateModerationStatus()`
+- **When:** A moderator begins review.
+- **Payload:** `{ caseId, status: 'reviewing', reviewedBy }`
+
+### `moderation.released`
+
+- **Producer:** `repository.updateModerationStatus()`
+- **When:** A moderator releases content from quarantine.
+- **Payload:** `{ caseId, status: 'released', reviewedBy }`
+
+### `moderation.removed`
+
+- **Producer:** `repository.updateModerationStatus()`
+- **When:** A moderator removes flagged content.
+- **Payload:** `{ caseId, status: 'removed', reviewedBy }`
+
+### `moderation.note_added`
+
+- **Producer:** `repository.addModeratorNote()`
+- **When:** A moderator adds a note to a case.
+- **Payload:** `{ caseId, author }`
+
+### `user.restricted`
+
+- **Producer:** `repository.applyModerationAction()`
+- **When:** A user is restricted by a moderator.
+- **Payload:** `{ userId }`
+
+## Reserved events
+
+Future events not yet wired:
+
 - `user.banned`

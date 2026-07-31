@@ -95,6 +95,10 @@ function createApp(repository, config, logger) {
       quarantined: moderation.flagged ? 1 : 0
     });
 
+    if (moderation.flagged) {
+      repository.createModerationCase({ targetType: 'application', targetId: app.id, reason: moderation.reason });
+    }
+
     safety.logAndDecideApplication(user, gig, app);
     send(res, { application: app, statusReason: check.reason });
   }));
@@ -149,6 +153,9 @@ function createApp(repository, config, logger) {
   app.post('/messages', h((req, res) => {
     const moderation = safety.moderateContent(req.body.content || '');
     const msg = repository.createMessage({ ...req.body, quarantined: moderation.flagged ? 1 : 0 });
+    if (moderation.flagged) {
+      repository.createModerationCase({ targetType: 'message', targetId: msg.id, reason: moderation.reason });
+    }
     const moderated = safety.logMessage(msg);
     send(res, moderated);
   }));
@@ -206,6 +213,36 @@ function createApp(repository, config, logger) {
       send(res, repository.import(req.body, { dryRun: dry }));
     }));
   }
+
+  app.get('/moderation/queue', h((req, res) => {
+    send(res, repository.getModerationQueue(req.query.status));
+  }));
+
+  app.get('/moderation/:id', h((req, res) => {
+    const c = repository.getModerationCase(req.params.id);
+    if (!c) throw new (require('./errors').NotFoundError)('Moderation case not found');
+    send(res, c);
+  }));
+
+  app.post('/moderation/:id/quarantine', h((req, res) => {
+    send(res, repository.updateModerationStatus(req.params.id, { ...req.body, status: 'quarantined' }));
+  }));
+
+  app.post('/moderation/:id/release', h((req, res) => {
+    send(res, repository.updateModerationStatus(req.params.id, { ...req.body, status: 'released' }));
+  }));
+
+  app.post('/moderation/:id/remove', h((req, res) => {
+    send(res, repository.updateModerationStatus(req.params.id, { ...req.body, status: 'removed' }));
+  }));
+
+  app.post('/moderation/:id/notes', h((req, res) => {
+    send(res, repository.addModeratorNote(req.params.id, req.body));
+  }));
+
+  app.get('/moderation/timeline', h((req, res) => {
+    send(res, repository.getModerationTimeline());
+  }));
 
   app.use(errorHandler(logger || { error: () => {} }));
 

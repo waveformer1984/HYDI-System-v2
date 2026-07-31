@@ -2,7 +2,7 @@ const { Store } = require('./store');
 const path = require('path');
 const fs = require('fs');
 
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 const MAX_BACKUPS = 5;
 
 const defaultTables = {
@@ -15,6 +15,7 @@ const defaultTables = {
   contracts: [],
   payments: [],
   ratings: [],
+  moderation: [],
   audit_log: []
 };
 
@@ -140,6 +141,11 @@ class JsonStore extends Store {
       const next = { schemaVersion: 1, updatedAt: s.updatedAt || new Date().toISOString() };
       Object.keys(defaultTables).forEach(k => { next[k] = Array.isArray(s[k]) ? s[k] : defaultTables[k]; });
       s = next;
+    }
+
+    if (s.schemaVersion < 2) {
+      if (!Array.isArray(s.moderation)) s.moderation = [];
+      s.schemaVersion = 2;
     }
 
     s.schemaVersion = SCHEMA_VERSION;

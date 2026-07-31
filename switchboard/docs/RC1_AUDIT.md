@@ -142,7 +142,9 @@ The following are known and intentional post-RC work:
 3. **Mobile UI polish** — responsive layout, loading states
 4. **HYDI Adapter activation** — wire `HydiAdapter` when HYDI ingestion contract is stable
 
-## Go / No-Go
+## Post-RC1 Update: Phase 2D Moderation Console
+
+After the `switchboard-v1.0.0-rc1` tag, the moderation layer was implemented on the `switchboard-moderation` branch. See `docs/MODERATION_CONSOLE.md` for details.
 
 | Criterion | Status |
 |-----------|--------|
@@ -154,4 +156,4 @@ The following are known and intentional post-RC work:
 | Diagnostics operational | Go |
 | Documentation complete | Go |
 
-**Recommendation: Go for RC1. Continue with Moderation Console.**
+**Recommendation: Go for RC1. Moderation Console complete; next: Availability Calendar.**

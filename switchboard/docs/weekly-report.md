@@ -36,24 +36,33 @@
 
 ### Phase 2C — Production Hardening & Operational Readiness
 
-- Centralized validation (`src/validation.js`)
+- Centralized validation
 - Domain error hierarchy and centralized error handler
 - Configuration module with env overrides
 - Request ID middleware
 - Structured JSON logging
 - Per-route rate limiting
 - Diagnostics API and frontend page
-- Export/import hardening with schema checks and dry-run
+- Export/import hardening
 - Corruption detection and backup restore
-- Dead code removal (`src/db.js`, `src/store.js`)
 - `README.md`, `PRODUCTION_READINESS_REPORT.md`, `VALIDATION_REPORT.md`, `DIAGNOSTICS.md`
+
+### Phase 2D — Moderation Console (in progress / complete)
+
+- `moderation` table and schema v2 migration
+- `Repository` moderation methods
+- `moderation.*` and `user.restricted` domain events
+- API endpoints: `/moderation/queue`, `/moderation/:id`, action endpoints, `/moderation/timeline`
+- `public/moderation.html` operator console
+- Safety filter now creates moderation cases for flagged content
+- `docs/MODERATION_CONSOLE.md` and updated `docs/domain-events.md`
 
 ## Test Coverage
 
+Current target after moderation tests:
+
 ```text
-18/18 passing
-0 failing
-0 skipped
+24/24 passing (target)
 ```
 
 Suites:
@@ -62,6 +71,7 @@ Suites:
 - `tests/scoring.test.js`
 - `tests/trust.test.js`
 - `tests/hardening.test.js`
+- `tests/moderation.test.js`
 
 ## Architecture Status
 
@@ -79,18 +89,17 @@ Switchboard
 │
 ├── Repository (validated, logged, one event per change)
 │
-├── API (request IDs, rate limits, diagnostics)
+├── API (request IDs, rate limits, moderation, diagnostics)
 │
-└── Frontend (login, gigs, trust, parent, messages, diagnostics)
+└── Frontend (login, gigs, trust, parent, messages, diagnostics, moderation)
 ```
 
 ## Remaining Work
 
-1. **Moderation Console** (Phase 2B/3) — quarantine queue, release, audit timeline
-2. **Availability Calendar** — weekly availability, blackout dates
-3. **HYDI Adapter Wiring** — enable when HYDI is ready
-4. **UI polish** — loading states, mobile layout
+1. **Availability Calendar** — weekly schedule, blackout dates, timezone display
+2. **Mobile UI polish** — responsive layout, loading states
+3. **HYDI Adapter activation** — wire `HydiAdapter` when HYDI ingestion contract is stable
 
 ## Estimated MVP Completion Percentage
 
-**~95%** — the application is now a production-hardened, standalone, offline-first MVP. Remaining work is feature polish, moderation tooling, and optional ecosystem integration.
+**~98%** — the application now has trust, commerce, and moderation layers. Remaining work is product polish and optional ecosystem integration.
