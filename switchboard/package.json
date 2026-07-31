@@ -1,6 +1,6 @@
 {
   "name": "switchboard",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Local-first gig-matching MVP for performers and venues",
   "main": "src/index.js",
   "scripts": {

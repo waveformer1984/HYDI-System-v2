@@ -141,3 +141,28 @@ Reserved for future inbound HYDI-to-Switchboard messaging.
 - No Switchboard business logic imports `HydiAdapter`.
 - The adapter is only wired in `createRepository` based on configuration.
 - The adapter never throws from `handle`.
+
+## HYDI Boundary
+
+```text
+Switchboard
+      |
+      v
+HydiAdapter
+      |
+      v
+POST /events
+      |
+      v
+HYDI Event Gateway (not implemented yet)
+      |
+      v
+RAW LEDGER  →  CASCADE  →  KILO  →  ProtoForge
+```
+
+The HYDI side is out of scope for Switchboard v1.0.0. The adapter only expects:
+
+- `POST /events` — accepts a HYDI capability envelope
+- `GET /health` — returns a healthy status
+
+When the future HYDI Event Gateway is available, Switchboard will forward events to it without any code changes.

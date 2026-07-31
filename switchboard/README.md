@@ -1,6 +1,13 @@
-# Switchboard
+# Switchboard v1.0.0
 
 A local-first, offline-first gig-matching MVP for performers and venues. Built to be extracted into a standalone project later while operating inside `HYDI-System-v2/switchboard` for now.
+
+```text
+Switchboard v1.0.0
+Standalone:          READY
+ProtoForge Reference: READY
+HYDI Connected:      PENDING HYDI Event Gateway
+```
 
 ## Features
 
@@ -77,6 +84,9 @@ Returns storage health, backup status, event counts, and pending items.
 - `docs/AVAILABILITY_CALENDAR.md` — availability calendar
 - `docs/MOBILE_UI_GUIDE.md` — mobile UI conventions
 - `docs/HYDI_INTEGRATION.md` — optional HYDI bridge
+- `docs/V1_RELEASE_AUDIT.md` — v1.0.0 release verification
+- `docs/SWITCHBOARD_REFERENCE_ARCHITECTURE.md` — reference architecture
+- `docs/BLUEPRINT_EXTRACTION_PLAN.md` — ProtoForge blueprint plan
 - `docs/weekly-report.md` — engineering status
 
 ## Testing

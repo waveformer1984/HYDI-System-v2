@@ -129,11 +129,59 @@ Switchboard
 └── Frontend (login, gigs, trust, parent, messages, diagnostics, moderation, availability)
 ```
 
+### Phase 4 — v1.0.0 Final Freeze
+
+- `docs/V1_RELEASE_AUDIT.md` — release verification and status
+- `docs/SWITCHBOARD_REFERENCE_ARCHITECTURE.md` — reusable architecture patterns
+- `docs/BLUEPRINT_EXTRACTION_PLAN.md` — ProtoForge blueprint extraction plan
+- `docs/HYDI_INTEGRATION.md` updated with boundary diagram and gateway note
+- `README.md` updated with v1.0.0 status
+- `switchboard-v1.0.0` git tag created on release commit
+
+## Test Coverage
+
+```text
+38/38 passing
+0 failing
+```
+
+## Architecture Status
+
+```text
+Switchboard
+│
+├── Store Layer
+│   ├── JsonStore (atomic, versioned, backed up)
+│   └── MemoryStore (test / embedded)
+│
+├── EventBus
+│   ├── MemoryTransport (default)
+│   ├── FileTransport (local replay)
+│   └── HydiAdapter (optional)
+│
+├── Repository (validated, logged, one event per change)
+│   ├── Trust & Commerce
+│   ├── Moderation
+│   └── Availability Calendar
+│
+├── API (request IDs, rate limits, diagnostics, moderation, availability)
+│
+└── Frontend (login, gigs, trust, parent, messages, diagnostics, moderation, availability)
+```
+
+## Release Status
+
+```text
+Switchboard v1.0.0
+Standalone:          READY
+ProtoForge Reference: READY
+HYDI Connected:      PENDING HYDI Event Gateway
+```
+
 ## Remaining Work
 
-1. **Mobile UI polish** — responsive layout, loading states
-2. **HYDI Adapter activation** — wire `HydiAdapter` when HYDI ingestion contract is stable
-3. **Final release tag** (`switchboard-v1.0.0`) after mobile polish
+1. HYDI Event Gateway implementation (separate HYDI project work)
+2. Blueprint extraction when a second app is ready to use it
 
 ## Estimated MVP Completion Percentage
 
