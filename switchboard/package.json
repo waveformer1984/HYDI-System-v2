@@ -1,0 +1,21 @@
+{
+  "name": "switchboard",
+  "version": "0.1.0",
+  "description": "Local-first gig-matching MVP for performers and venues",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "test": "node --test tests/**/*.test.js",
+    "test:only": "node --test"
+  },
+  "keywords": ["gig", "matching", "offline-first", "local"],
+  "author": "",
+  "license": "UNLICENSED",
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "express": "^4.19.2"
+  },
+  "devDependencies": {}
+}
