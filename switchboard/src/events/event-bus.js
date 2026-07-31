@@ -57,13 +57,85 @@ class FileTransport {
 }
 
 class HydiAdapter {
-  constructor(options) { this.options = options; }
-  handle(event) {
-    // Translate Switchboard domain events into whatever envelope HYDI consumes.
-    // This adapter does not mutate state and does not throw.
-    if (this.options && typeof this.options.onEvent === 'function') {
-      this.options.onEvent(event);
+  constructor(options = {}) {
+    this.endpoint = (options.endpoint || '').replace(/\/$/, '');
+    this.capability = options.capability || 'switchboard.marketplace';
+    this.version = options.version || '1.0';
+    this.logger = options.logger || { warn: () => {}, error: () => {}, info: () => {} };
+    this.outbox = [];
+    this.healthy = null;
+    this.enabled = Boolean(options.endpoint) && options.enabled !== false;
+  }
+
+  isEnabled() { return this.enabled; }
+
+  translate(event) {
+    return {
+      system: 'switchboard',
+      capability: this.capability,
+      event: event.type,
+      schemaVersion: this.version,
+      id: event.id,
+      createdAt: event.createdAt,
+      data: { ...event.payload, _meta: { ...event.meta } }
+    };
+  }
+
+  async publish(event) {
+    if (!this.enabled) return { ok: true, skipped: true };
+    const body = this.translate(event);
+    const outboxEntry = { id: event.id || crypto.randomUUID(), event, at: new Date().toISOString() };
+    this.outbox.push(outboxEntry);
+    try {
+      if (!this.endpoint) throw new Error('HYDI endpoint not configured');
+      const res = await fetch(`${this.endpoint}/events`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      if (!res.ok) throw new Error(`HYDI returned ${res.status}`);
+      this.healthy = true;
+      const idx = this.outbox.findIndex(e => e.id === outboxEntry.id);
+      if (idx >= 0) this.outbox.splice(idx, 1);
+      return { ok: true };
+    } catch (err) {
+      this.healthy = false;
+      this.logger.warn('hydi', 'publish.failed', `HYDI publish failed: ${err.message}`, { eventType: event.type });
+      return { ok: false, error: err.message };
     }
+  }
+
+  async health() {
+    if (!this.enabled) return { ok: true, status: 'disabled' };
+    try {
+      const res = await fetch(`${this.endpoint}/health`, { method: 'GET' });
+      this.healthy = res.ok;
+      return { ok: res.ok, status: res.ok ? 'healthy' : 'unhealthy', outbox: this.outbox.length };
+    } catch (err) {
+      this.healthy = false;
+      return { ok: false, status: 'unreachable', outbox: this.outbox.length, error: err.message };
+    }
+  }
+
+  async flush() {
+    const original = this.outbox.slice();
+    this.outbox = [];
+    const results = [];
+    for (const { event } of original) {
+      const r = await this.publish(event);
+      results.push(r);
+    }
+    return { sent: results.filter(r => r.ok).length, failed: results.filter(r => !r.ok).length };
+  }
+
+  handle(event) {
+    if (!this.enabled) return;
+    this.publish(event).catch(() => {});
+  }
+
+  subscribe(handler) {
+    // Inbound HYDI-to-Switchboard messaging. Reserved for future use.
+    this.onEvent = handler;
   }
 }
 

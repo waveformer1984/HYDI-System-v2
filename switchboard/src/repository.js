@@ -599,9 +599,15 @@ function createRepository(options = {}) {
   if (config.eventLogPath) {
     transports.push(new FileTransport(config.eventLogPath));
   }
-  if (config.enableHydiAdapter && config.hydeEndpoint) {
+  if ((config.eventTransport === 'hydi' || config.enableHydiAdapter) && config.hydiEndpoint) {
     const { HydiAdapter } = require('./events/event-bus');
-    transports.push(new HydiAdapter({ endpoint: config.hydeEndpoint }));
+    transports.push(new HydiAdapter({
+      enabled: config.eventTransport !== 'disabled',
+      endpoint: config.hydiEndpoint,
+      capability: config.hydiCapability,
+      version: config.hydiVersion,
+      logger
+    }));
   }
   const store = options.store || createStore({
     ...options.storeOptions,

@@ -204,3 +204,7 @@ Switchboard emits domain events for every state-changing operation. These events
 Future events not yet wired:
 
 - `user.banned`
+
+## HYDI Forwarding
+
+All domain events are candidates for optional HYDI forwarding. When `EVENT_TRANSPORT=hydi` and `HYDI_ENDPOINT` are configured, `HydiAdapter` translates each emitted event into a HYDI capability envelope and POSTs it to HYDI. Events are queued locally if HYDI is unreachable. See `docs/HYDI_INTEGRATION.md` for the capability contract.

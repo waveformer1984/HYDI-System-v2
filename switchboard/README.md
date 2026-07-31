@@ -76,6 +76,7 @@ Returns storage health, backup status, event counts, and pending items.
 - `docs/MODERATION_CONSOLE.md` — moderation console
 - `docs/AVAILABILITY_CALENDAR.md` — availability calendar
 - `docs/MOBILE_UI_GUIDE.md` — mobile UI conventions
+- `docs/HYDI_INTEGRATION.md` — optional HYDI bridge
 - `docs/weekly-report.md` — engineering status
 
 ## Testing
@@ -84,4 +85,4 @@ Returns storage health, backup status, event counts, and pending items.
 npm test
 ```
 
-31/31 tests passing.
+38/38 tests passing.

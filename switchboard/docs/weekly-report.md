@@ -77,10 +77,22 @@
 - Form labels, touch-sized buttons, ARIA live regions
 - `docs/MOBILE_UI_GUIDE.md`
 
+### Phase 3A — HYDI Adapter Activation
+
+- `src/events/event-bus.js` `HydiAdapter` fully implemented
+  - `publish`, `health`, `flush`, `handle`, `subscribe`
+  - event envelope translation from Switchboard to HYDI
+  - local outbox for failed sends
+- `src/config.js` `EVENT_TRANSPORT`, `HYDI_ENDPOINT`, `HYDI_CAPABILITY`, `HYDI_VERSION`
+- `src/repository.js` wires `HydiAdapter` when `EVENT_TRANSPORT=hydi`
+- `tests/hydi-adapter.test.js` covering disabled, publish, failure queueing, health, flush
+- `docs/HYDI_INTEGRATION.md` capability contract
+- `docs/domain-events.md` updated with HYDI forwarding note
+
 ## Test Coverage
 
 ```text
-31/31 passing
+38/38 passing
 0 failing
 ```
 
