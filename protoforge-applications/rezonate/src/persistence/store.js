@@ -5,6 +5,8 @@ const defaultTables = {
   tracks: [],
   assets: [],
   processing_jobs: [],
+  ownership_records: [],
+  rights: [],
   audit_log: []
 };
 

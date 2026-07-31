@@ -1,11 +1,13 @@
 const crypto = require('crypto');
 const { createStore } = require('./persistence');
 const { EventBus, MemoryTransport } = require('./events/event-bus');
-const { ValidationError, NotFoundError, ConflictError } = require('./errors');
+const { ValidationError, NotFoundError } = require('./errors');
 const { createLogger } = require('./logger');
-const { validateProject, validateAsset } = require('./validation');
+const { validateProject } = require('./validation');
 const { ProcessingJob, STATES } = require('./domain/processing-job');
 const { AudioAsset } = require('./domain/audio-asset');
+const { OwnershipRecord } = require('./domain/ownership-record');
+const { Rights } = require('./domain/rights');
 
 function now() { return new Date().toISOString(); }
 function id() { return crypto.randomUUID(); }
@@ -138,6 +140,76 @@ class ResonateRepository {
     job.fail(error);
     this.store.update('processing_jobs', id, job.toJSON());
     return job.toJSON();
+  }
+
+  createOwnershipRecord(assetId, input) {
+    this.getAsset(assetId);
+    const record = new OwnershipRecord({
+      asset_id: assetId,
+      creator_id: input.creator_id,
+      ownership_type: input.ownership_type,
+      percentage: input.percentage,
+      metadata: input.metadata
+    }, this._pjDeps());
+    this.store.create('ownership_records', record.toJSON());
+    this.eventBus.emit('ownership.created', { entityId: record.id, assetId, status: record.status, timestamp: record.createdAt });
+    this.logger.info('repository', 'ownership.created', `Ownership ${record.id} created`, { recordId: record.id });
+    return record.toJSON();
+  }
+
+  _wrapOwnership(raw) {
+    return new OwnershipRecord(raw, this._pjDeps());
+  }
+
+  listOwnershipRecords(assetId) {
+    return this.store.getAll('ownership_records').filter(r => r.asset_id === assetId);
+  }
+
+  getOwnershipRecord(id) {
+    const raw = ensureFound(this.store.getById('ownership_records', id), 'Ownership record not found');
+    return this._wrapOwnership(raw).toJSON();
+  }
+
+  verifyOwnershipRecord(id) {
+    const raw = ensureFound(this.store.getById('ownership_records', id), 'Ownership record not found');
+    const record = this._wrapOwnership(raw);
+    record.transition('verified');
+    this.store.update('ownership_records', id, record.toJSON());
+    this.eventBus.emit('ownership.verified', { entityId: record.id, assetId: record.assetId, status: record.status, timestamp: record.updatedAt });
+    return record.toJSON();
+  }
+
+  registerRights(assetId, input) {
+    this.getAsset(assetId);
+    const rights = new Rights({
+      asset_id: assetId,
+      rights: input.rights || [],
+      collaborators: input.collaborators || []
+    }, this._pjDeps());
+    this.store.create('rights', rights.toJSON());
+    this.eventBus.emit('rights.registered', { entityId: rights.id, assetId, timestamp: rights.createdAt });
+    this.logger.info('repository', 'rights.registered', `Rights ${rights.id} created`, { rightsId: rights.id });
+    return rights.toJSON();
+  }
+
+  getRights(assetId) {
+    const all = this.store.getAll('rights').filter(r => r.asset_id === assetId);
+    if (all.length === 0) throw new NotFoundError('Rights not found for asset');
+    return all[0];
+  }
+
+  addCollaborator(assetId, input) {
+    const raw = this.getRights(assetId);
+    const rights = new Rights(raw, this._pjDeps());
+    rights.addCollaborator(input);
+    this.store.update('rights', raw.id, rights.toJSON());
+    return rights.toJSON();
+  }
+
+  validateSplits(assetId) {
+    const records = this.listOwnershipRecords(assetId);
+    OwnershipRecord.validateSplit(records);
+    return records;
   }
 }
 

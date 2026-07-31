@@ -122,6 +122,33 @@ function createApi(repository, config = {}) {
     send(res, { key: req.params.key, count: results.length, samples: results.slice(0, 100) });
   }));
 
+  app.post('/ownership/assets/:id', h(async (req, res) => {
+    const record = repository.createOwnershipRecord(req.params.id, req.body);
+    send(res, { record }, 201);
+  }));
+
+  app.get('/ownership/assets/:id', h(async (req, res) => {
+    const records = repository.listOwnershipRecords(req.params.id);
+    repository.validateSplits(req.params.id);
+    send(res, { records });
+  }));
+
+  app.post('/ownership/assets/:id/verify', h(async (req, res) => {
+    const records = repository.listOwnershipRecords(req.params.id);
+    if (records.length === 0) throw new Error('No ownership records found');
+    const verified = repository.verifyOwnershipRecord(records[0].id);
+    send(res, { record: verified });
+  }));
+
+  app.post('/ownership/assets/:id/collaborators', h(async (req, res) => {
+    const rights = repository.registerRights(req.params.id, { collaborators: [req.body] });
+    send(res, { rights }, 201);
+  }));
+
+  app.get('/ownership/records/:id', h(async (req, res) => {
+    send(res, { record: repository.getOwnershipRecord(req.params.id) });
+  }));
+
   app.get('/engine/status', h(async (req, res) => {
     const { ResonateEngineAdapter } = require('../adapters/resonate-engine');
     const engine = new ResonateEngineAdapter({});
