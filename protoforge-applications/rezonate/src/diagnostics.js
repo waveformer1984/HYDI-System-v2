@@ -1,8 +1,8 @@
-const { ResonateEngineAdapter } = require('./adapters/resonate-engine');
+const { ResonateEngineAdapter, createDefaultRunner } = require('./adapters/resonate-engine');
 
 async function collectDiagnostics(repository) {
-  const adapter = new ResonateEngineAdapter();
-  const engineAvailable = await adapter.isAvailable();
+  const engine = new ResonateEngineAdapter({ runner: createDefaultRunner() });
+  const engineAvailable = await engine.isAvailable();
   const store = repository ? repository.store.load() : {};
 
   return {
@@ -10,13 +10,15 @@ async function collectDiagnostics(repository) {
     status: 'ok',
     engine: {
       available: engineAvailable,
-      path: adapter.enginePath
+      path: engine.enginePath
     },
     store: {
       projects: (store.projects || []).length,
       tracks: (store.tracks || []).length,
       assets: (store.assets || []).length,
-      processing_jobs: (store.processing_jobs || []).length
+      processing_jobs: (store.processing_jobs || []).length,
+      ownership_records: (store.ownership_records || []).length,
+      rights: (store.rights || []).length
     },
     adapters: {
       resonate_engine: 'loaded'

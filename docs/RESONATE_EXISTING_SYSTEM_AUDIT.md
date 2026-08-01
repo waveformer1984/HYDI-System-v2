@@ -208,7 +208,7 @@ Components:
 
 | Field | Value |
 |-------|-------|
-| Path | `protoforge/examples/resonate/` |
+| Path | `protoforge/examples/sample-app/` |
 | Project Name | Resonate (ProtoForge example) |
 | Technology | Node.js, Express (generic application blueprint) |
 | Status | Empty organism generated from `protoforge/blueprints/application/` |
@@ -320,7 +320,7 @@ RLS enabled. Service-role and authenticated policies in place. This is the **onl
 
 | Name | Meaning | Location |
 |------|---------|----------|
-| Resonate | Original ProtoForge example app | `protoforge/examples/resonate/` |
+| Resonate | Original ProtoForge example app | `protoforge/examples/sample-app/` |
 | Resonate | Algorithmic music generator in Ursula | `apps/ursula-frontend/src/lib/resonate/` |
 | RESONATE | Aspirational music system spec | `RESONATE_MUSIC_SYSTEM_README.md` |
 | Rezonate | Python generation + stems | `rezonate/` |
@@ -336,7 +336,7 @@ RLS enabled. Service-role and authenticated policies in place. This is the **onl
 
 ### 5.3 Conclusion
 
-There are at least **four distinct Resonate/Rezonate code identities**. Adding a new `protoforge/examples/resonate` music app would create a fifth unless it replaces or consolidates one of the existing systems.
+There are at least **four distinct Resonate/Rezonate code identities**. Adding a new `protoforge/examples/sample-app` music app would create a fifth unless it replaces or consolidates one of the existing systems.
 
 ---
 
@@ -375,12 +375,12 @@ ProtoForge Ecosystem (HYDI events, billing)
 
 ### Steps
 
-1. **Rename or remove** the ProtoForge `protoforge/examples/resonate/` if it is intended for music; if it is a generic application factory example, rename it to a neutral name to avoid collision.
+1. **Rename or remove** the ProtoForge `protoforge/examples/sample-app/` if it is intended for music; if it is a generic application factory example, rename it to a neutral name to avoid collision.
 2. **Promote** `rezonate/` as the canonical `rezonate-core`.
 3. **Move** the Supabase-backed DAW API (`api/rezonate/`, `supabase/migrations/..._rezonate_schema.sql`) to a new repository or package: `rezonate-core` or `protoforge-applications/rezonate`.
 4. **Merge** Ursula DAW modules (`RezonateDAWModule`, `RezonetteModule`) into a single frontend package.
 5. **Replace stub Edge Function** (`supabase/functions/rezonate-engine/index.ts`) with real task handlers that call the Python pipeline.
-6. **Do not create a new `protoforge/examples/resonate` music app** until the above consolidation is complete.
+6. **Do not create a new `protoforge/examples/sample-app` music app** until the above consolidation is complete.
 
 ---
 
@@ -416,8 +416,8 @@ No new Resonate application should be scaffolded until this consolidation is dec
 ## 8. Action Items
 
 - [ ] Resolve naming: keep `Resonate`, `Rezonate`, or `Rezonette`?
-- [ ] Remove or rename `protoforge/examples/resonate/` to avoid collision.
+- [ ] Remove or rename `protoforge/examples/sample-app/` to avoid collision.
 - [ ] Decide whether the ProtoForge music app becomes the new canonical `rezonate` or a migration of `rezonate/`.
 - [ ] Fix `InventoryModule.tsx` paths (`rezonate_core/`, `daw_build/`) to match actual directories.
 - [ ] Implement real `supabase/functions/rezonate-engine/index.ts` handlers.
-- [ ] Do not create `protoforge/examples/resonate` music product until this audit is accepted.
+- [ ] Do not create `protoforge/examples/sample-app` music product until this audit is accepted.

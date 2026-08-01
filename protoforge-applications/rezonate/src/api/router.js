@@ -1,11 +1,16 @@
 const express = require('express');
 const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
 const { collectDiagnostics } = require('../diagnostics');
 const { SampleLibraryAdapter } = require('../adapters/sample-library');
 const { packageStems } = require('../export/packaging');
+const { ResonateEngineAdapter, createDefaultRunner } = require('../adapters/resonate-engine');
+const cors = require('cors');
 
 function createApi(repository, config = {}) {
   const app = express();
+  app.use(cors());
   app.use(express.json());
 
   app.use((req, res, next) => {
@@ -20,6 +25,12 @@ function createApi(repository, config = {}) {
   function send(res, data, code = 200) {
     res.status(code).json({ ok: true, ...data });
   }
+
+  const engine = config.engine || new ResonateEngineAdapter({
+    eventBus: repository ? repository.eventBus : undefined,
+    logger: repository ? repository.logger : undefined,
+    runner: config.runner || createDefaultRunner()
+  });
 
   const sampleLibrary = new SampleLibraryAdapter({ logger: repository ? repository.logger : undefined });
 
@@ -57,6 +68,15 @@ function createApi(repository, config = {}) {
     send(res, { asset: repository.getAsset(req.params.id) });
   }));
 
+  app.get('/assets/:id/file', h(async (req, res) => {
+    const asset = repository.getAsset(req.params.id);
+    const file = asset.file_path;
+    if (!file || !fs.existsSync(file)) {
+      return res.status(404).json({ ok: false, error: 'Audio file not found', requestId: req.requestId });
+    }
+    res.sendFile(path.resolve(file));
+  }));
+
   app.get('/projects/:id/assets', h(async (req, res) => {
     send(res, { assets: repository.listAssets(req.params.id) });
   }));
@@ -77,7 +97,17 @@ function createApi(repository, config = {}) {
   }));
 
   app.post('/processing/jobs', h(async (req, res) => {
-    const job = repository.createProcessingJob(req.body);
+    if (!req.body || !req.body.task_type) {
+      return res.status(400).json({ ok: false, error: 'task_type is required' });
+    }
+    const projectId = req.body.project_id;
+    const job = repository.createProcessingJob({
+      task_type: req.body.task_type,
+      project_id: projectId,
+      source_path: req.body.source_path,
+      prompt: req.body.prompt,
+      clip: req.body.clip
+    });
     send(res, { job }, 201);
   }));
 
@@ -86,7 +116,73 @@ function createApi(repository, config = {}) {
   }));
 
   app.post('/processing/jobs/:id/start', h(async (req, res) => {
-    send(res, { job: repository.startProcessingJob(req.params.id) });
+    const raw = repository.getProcessingJob(req.params.id);
+    const projectId = raw.project_id || repository.createProject({ name: 'Ursula Generated' }).id;
+
+    if (raw.type === 'generate') {
+      if (!raw.prompt) {
+        repository.failProcessingJob(req.params.id, 'prompt is required for generate');
+        return res.status(400).json({ ok: false, error: 'prompt is required for generate' });
+      }
+      repository.startProcessingJob(req.params.id);
+      const result = await engine.generateSong({ prompt: raw.prompt, clip: raw.clip, projectId });
+      if (!result.ok) {
+        repository.failProcessingJob(req.params.id, result.error);
+        return res.status(502).json({ ok: false, error: result.error, job: repository.getProcessingJob(req.params.id) });
+      }
+      const asset = repository.registerAsset(projectId, {
+        type: 'generated_song',
+        file_path: result.audioPath,
+        metadata: {
+          source: 'ai-generation',
+          engine: 'rezonate',
+          prompt: raw.prompt,
+          clip: raw.clip,
+          audioPath: result.audioPath
+        }
+      });
+      repository.completeProcessingJob(req.params.id, { audioPath: result.audioPath, assetId: asset.id });
+      return send(res, { job: repository.getProcessingJob(req.params.id), asset }, 200);
+    }
+
+    if (raw.type === 'stems') {
+      if (!raw.source_path) {
+        repository.failProcessingJob(req.params.id, 'source_path is required for stems');
+        return res.status(400).json({ ok: false, error: 'source_path is required for stems' });
+      }
+      repository.startProcessingJob(req.params.id);
+      const result = await engine.createStems({ sourcePath: raw.source_path, projectId });
+      if (!result.ok) {
+        repository.failProcessingJob(req.params.id, result.error);
+        return res.status(502).json({ ok: false, error: result.error, job: repository.getProcessingJob(req.params.id) });
+      }
+      repository.completeProcessingJob(req.params.id, { folder: result.folder });
+      return send(res, { job: repository.getProcessingJob(req.params.id) });
+    }
+
+    if (raw.type === 'analyze') {
+      if (!raw.source_path) {
+        repository.failProcessingJob(req.params.id, 'source_path is required for analyze');
+        return res.status(400).json({ ok: false, error: 'source_path is required for analyze' });
+      }
+      repository.startProcessingJob(req.params.id);
+      const result = await engine.analyzeAudio({ sourcePath: raw.source_path, projectId });
+      if (!result.ok) {
+        repository.failProcessingJob(req.params.id, result.error);
+        return res.status(502).json({ ok: false, error: result.error, job: repository.getProcessingJob(req.params.id) });
+      }
+      const asset = repository.registerAsset(projectId, {
+        type: 'stem',
+        file_path: raw.source_path,
+        bpm: result.bpm,
+        key: result.key,
+        metadata: { folder: result.folder }
+      });
+      repository.completeProcessingJob(req.params.id, { assetId: asset.id, bpm: result.bpm, key: result.key });
+      return send(res, { job: repository.getProcessingJob(req.params.id), asset });
+    }
+
+    return res.status(400).json({ ok: false, error: 'unknown task_type' });
   }));
 
   app.post('/processing/jobs/:id/complete', h(async (req, res) => {
@@ -150,8 +246,6 @@ function createApi(repository, config = {}) {
   }));
 
   app.get('/engine/status', h(async (req, res) => {
-    const { ResonateEngineAdapter } = require('../adapters/resonate-engine');
-    const engine = new ResonateEngineAdapter({});
     const available = await engine.isAvailable();
     send(res, { available, path: engine.enginePath });
   }));

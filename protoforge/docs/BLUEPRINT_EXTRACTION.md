@@ -131,7 +131,7 @@ It contains:
 The first generated application lives in:
 
 ```text
-protoforge/examples/resonate/
+protoforge/examples/sample-app/
 ```
 
 It must be produced from the blueprint without editing Switchboard files. Its first scope is the empty organism: structure, config, persistence, repository, events, API skeleton, tests, docs.
@@ -139,6 +139,6 @@ It must be produced from the blueprint without editing Switchboard files. Its fi
 ## Verification Checklist
 
 - [ ] `protoforge/blueprints/application/` has no Switchboard domain terms
-- [ ] `protoforge/examples/resonate/` was generated from the blueprint
-- [ ] `npm test` runs in `protoforge/examples/resonate/`
+- [ ] `protoforge/examples/sample-app/` was generated from the blueprint
+- [ ] `npm test` runs in `protoforge/examples/sample-app/`
 - [ ] Switchboard remains at `v1.0.0` and untouched

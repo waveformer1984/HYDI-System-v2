@@ -25,13 +25,15 @@ describe('ResonateEngineAdapter', () => {
   });
 
   it('handles successful song generation', async () => {
-    const runner = async (cmd, args) => ({ stdout: '', stderr: '', exitCode: 0 });
+    const runner = async (cmd, args) => ({ stdout: 'Saved: C:\\\\audio\\\\warm-lo-fi-beat.mp3', stderr: '', exitCode: 0 });
     const adapter = new ResonateEngineAdapter({ eventBus: bus, runner });
     const result = await adapter.generateSong({ prompt: 'warm lo-fi beat' });
 
     assert.strictEqual(result.ok, true);
     assert.ok(result.jobId);
     assert.strictEqual(result.prompt, 'warm lo-fi beat');
+    assert.strictEqual(result.audioPath, 'C:\\\\audio\\\\warm-lo-fi-beat.mp3');
+    assert.strictEqual(result.engine, 'rezonate');
     assert.strictEqual(events.length, 1);
     assert.strictEqual(events[0].type, 'song.generated');
     assert.strictEqual(events[0].payload.prompt, 'warm lo-fi beat');
@@ -80,7 +82,7 @@ describe('ResonateEngineAdapter', () => {
   });
 
   it('reports processing status for a started job', async () => {
-    const runner = async () => ({ stdout: '', stderr: '', exitCode: 0 });
+    const runner = async () => ({ stdout: 'Saved: C:\\\\audio\\\\techno-loop.mp3', stderr: '', exitCode: 0 });
     const adapter = new ResonateEngineAdapter({ eventBus: bus, runner });
     const job = await adapter.generateSong({ prompt: 'techno loop' });
     const status = adapter.getProcessingStatus(job.jobId);
@@ -88,6 +90,7 @@ describe('ResonateEngineAdapter', () => {
     assert.strictEqual(status.id, job.jobId);
     assert.strictEqual(status.status, 'completed');
     assert.strictEqual(status.type, 'generate');
+    assert.strictEqual(status.audioPath, 'C:\\\\audio\\\\techno-loop.mp3');
   });
 
   it('surfaces runner failures as failed results', async () => {

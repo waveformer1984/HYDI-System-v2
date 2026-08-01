@@ -63,7 +63,7 @@ class ExternalAdapter {
   constructor(options = {}) {
     this.endpoint = (options.endpoint || '').replace(/\/$/, '');
     this.enabled = Boolean(options.endpoint) && options.enabled !== false;
-    this.system = options.system || 'resonate';
+    this.system = options.system || 'sample-app';
     this.version = options.version || '1.0';
     this.logger = options.logger || { warn: () => {} };
     this.outbox = [];

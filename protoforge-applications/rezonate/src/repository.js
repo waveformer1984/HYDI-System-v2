@@ -73,10 +73,15 @@ class ResonateRepository {
   }
 
   registerAsset(projectId, input) {
-    this.getProject(projectId);
-    const asset = new AudioAsset({ project_id: projectId, ...input }, this._pjDeps());
+    if (projectId) this.getProject(projectId);
+    const asset = new AudioAsset({ project_id: projectId || null, ...input }, this._pjDeps());
     this.store.create('assets', asset.toJSON());
-    this.eventBus.emit('audio.asset.created', asset.toJSON());
+    this.eventBus.emit('audio.asset.created', {
+      assetId: asset.id,
+      projectId: asset.projectId,
+      source: asset.metadata.source || 'unknown',
+      type: asset.type
+    });
     this.logger.info('repository', 'audio.asset.created', `Asset ${asset.id} registered`, { assetId: asset.id });
     return asset.toJSON();
   }
@@ -94,6 +99,7 @@ class ResonateRepository {
     if (!input || !input.task_type) throw new ValidationError('task_type is required');
     const job = new ProcessingJob({
       type: input.task_type,
+      project_id: input.project_id,
       source_path: input.source_path,
       prompt: input.prompt,
       clip: input.clip

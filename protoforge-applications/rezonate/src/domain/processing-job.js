@@ -31,6 +31,7 @@ class ProcessingJob {
   constructor(input = {}, deps = {}) {
     this.id = input.id || crypto.randomUUID();
     this.type = input.type || 'stems';
+    this.projectId = input.project_id || input.projectId || null;
     this.sourcePath = input.source_path || input.sourcePath || null;
     this.prompt = input.prompt || null;
     this.clip = input.clip || false;
@@ -51,6 +52,7 @@ class ProcessingJob {
     return {
       id: this.id,
       type: this.type,
+      project_id: this.projectId,
       source_path: this.sourcePath,
       prompt: this.prompt,
       clip: this.clip,

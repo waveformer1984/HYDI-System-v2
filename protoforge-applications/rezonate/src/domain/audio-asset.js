@@ -1,7 +1,7 @@
 const crypto = require('crypto');
 const { ValidationError } = require('../errors');
 
-const ASSET_TYPES = ['stem', 'sample', 'vocal', 'instrument', 'mix'];
+const ASSET_TYPES = ['stem', 'sample', 'vocal', 'instrument', 'mix', 'generated_song'];
 const OWNERSHIP_STATUSES = ['draft', 'registered', 'minted', 'listed'];
 
 class AudioAsset {

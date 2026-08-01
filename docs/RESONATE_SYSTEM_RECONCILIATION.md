@@ -10,7 +10,7 @@ Prevent a fifth Resonate implementation by inventorying the four existing Resona
 1. rezonate/                       — Python audio engine
 2. protoforge-applications/rezonate/ — ProtoForge canonical application
 3. apps/ursula-frontend/           — Ursula Resonate UI and DAW modules
-4. protoforge/examples/resonate/   — Blueprint example
+4. protoforge/examples/sample-app/   — Blueprint example
 ```
 
 Additional referenced systems:
@@ -214,7 +214,7 @@ It **overlaps conceptually** with the Python engine (music generation) but does 
 
 ## 4. Blueprint Example
 
-**Path:** `protoforge/examples/resonate/`
+**Path:** `protoforge/examples/sample-app/`
 
 ### Status
 
@@ -320,7 +320,7 @@ UNKNOWN / UNWIRED:
 | `api/rezonate/route.js` | HYDI main app | Legacy Supabase DAW API | Replace with ProtoForge API or deprecate |
 | `supabase/functions/rezonate-engine/index.ts` | HYDI Edge | Async task stubs | Move logic to ProtoForge adapter + real engine calls |
 | `agents/rezonate_node/config.json` | Agent config | Capability manifest | Update to reflect real capabilities |
-| `protoforge/examples/resonate/` | ProtoForge | Blueprint example | Rename to `sample-app` |
+| `protoforge/examples/sample-app/` | ProtoForge | Blueprint example | Rename to `sample-app` |
 
 ---
 
@@ -347,7 +347,7 @@ UNKNOWN / UNWIRED:
 
 ### Naming cleanup
 
-- Rename `protoforge/examples/resonate/` → `protoforge/examples/sample-app/`.
+- Rename `protoforge/examples/sample-app/` → `protoforge/examples/sample-app/`.
 - Reserve `resonate` / `rezonate` namespace for:
   - `rezonate/` (Python engine)
   - `protoforge-applications/rezonate/` (canonical ProtoForge app)
@@ -381,3 +381,41 @@ UNKNOWN / UNWIRED:
 5. Whether `apps/ursula-frontend` is deployed and serving users today.
 
 These unknowns should be resolved before any rename or deletion.
+
+---
+
+## 11. Phase 4 — Vertical Slice Integration (Update)
+
+Implemented:
+
+```text
+Ursula Resonate Studio
+        |
+        v
+ProtoForge Resonate API (http://localhost:3001)
+        |
+        v
+Rezonate Python Engine
+        |
+        v
+Generated Audio Asset
+        |
+        v
+Playback + audio.asset.created
+```
+
+### What changed
+
+- `protoforge/examples/resonate/` renamed to `protoforge/examples/sample-app/`.
+- `protoforge-applications/rezonate/src/adapters/resonate-engine.js` now parses `Saved: <path>` from `generate.py` and returns `audioPath`.
+- `POST /processing/jobs` + `POST /processing/jobs/:id/start` run the full generation lifecycle and create an `AudioAsset`.
+- `GET /assets/:id/file` streams the generated audio.
+- `apps/ursula-frontend/src/app/resonate/page.tsx` now calls ProtoForge Resonate instead of the local TypeScript `ResonateModule`.
+- CORS enabled on the ProtoForge API for Ursula integration.
+- 72/72 tests passing in `protoforge-applications/rezonate/`.
+
+### What is still not connected
+
+- Real `GEMINI_API_KEY` required for actual audio generation.
+- HYDI Event Gateway not yet consuming `audio.asset.created`.
+- `pages/song-composer.tsx` not yet migrated to ProtoForge.

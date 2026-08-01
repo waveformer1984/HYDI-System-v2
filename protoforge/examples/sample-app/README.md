@@ -1,6 +1,6 @@
-# Resonate
+# Sample App
 
-A ProtoForge-generated application. Resonate is the first proof that the blueprint can produce an independent organism.
+A ProtoForge-generated application. This is a healthy empty organism generated from `protoforge/blueprints/application/`.
 
 ## Quick Start
 
@@ -25,4 +25,4 @@ Then open `http://localhost:3000`.
 
 ## Notes
 
-Resonate is currently a healthy empty organism generated from `protoforge/blueprints/application/`. Domain behavior will be added in a later phase.
+This sample app was renamed from `protoforge/examples/resonate/` to avoid collision with the canonical Resonate product.

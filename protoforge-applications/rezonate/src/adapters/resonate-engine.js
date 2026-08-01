@@ -1,7 +1,17 @@
 const path = require('path');
 const crypto = require('crypto');
+const { execFile } = require('child_process');
 
 const defaultEnginePath = path.join(__dirname, '..', '..', '..', 'rezonate');
+
+function createDefaultRunner() {
+  return (command, args) => new Promise((resolve, reject) => {
+    execFile(command, args, { shell: false }, (err, stdout, stderr) => {
+      if (err) return reject(err);
+      resolve({ stdout, stderr, exitCode: 0 });
+    });
+  });
+}
 
 class ResonateEngineAdapter {
   constructor(options = {}) {
@@ -46,7 +56,17 @@ class ResonateEngineAdapter {
     }
   }
 
-  async generateSong({ prompt, clip = false } = {}) {
+  _parseSavedPath(stdout) {
+    const m = (stdout || '').match(/Saved:\s*(.+?)(?:\r?\n|$)/);
+    return m ? m[1].trim() : null;
+  }
+
+  _parseStemsFolder(stdout) {
+    const m = (stdout || '').match(/folder:\s*(.+?)(?:\r?\n|$)/i);
+    return m ? m[1].trim() : null;
+  }
+
+  async generateSong({ prompt, clip = false, projectId = null } = {}) {
     if (!prompt || typeof prompt !== 'string' || !prompt.trim()) {
       return { ok: false, error: 'prompt is required' };
     }
@@ -58,16 +78,32 @@ class ResonateEngineAdapter {
       status: 'started',
       prompt,
       clip,
+      projectId,
       created_at: new Date().toISOString()
     });
 
     try {
-      await this._exec('python', args);
+      const result = await this._exec('python', args);
+      const audioPath = this._parseSavedPath(result.stdout);
+      if (!audioPath) {
+        job.status = 'failed';
+        job.error = 'No audio returned by engine';
+        return { ok: false, error: 'No audio returned by engine', jobId: id };
+      }
       job.status = 'completed';
+      job.audioPath = audioPath;
       job.completed_at = new Date().toISOString();
-      this._emit('song.generated', { jobId: id, prompt });
-      this.logger.info('adapter', 'song.generated', `Song job ${id} generated`, { jobId: id });
-      return { ok: true, jobId: id, prompt, clip };
+      this._emit('song.generated', { jobId: id, prompt, audioPath, projectId });
+      this.logger.info('adapter', 'song.generated', `Song job ${id} generated at ${audioPath}`, { jobId: id });
+      return {
+        ok: true,
+        jobId: id,
+        prompt,
+        clip,
+        audioPath,
+        engine: 'rezonate',
+        metadata: { projectId, generatedAt: job.completed_at }
+      };
     } catch (err) {
       job.status = 'failed';
       job.error = err.message;
@@ -76,7 +112,7 @@ class ResonateEngineAdapter {
     }
   }
 
-  async createStems({ sourcePath } = {}) {
+  async createStems({ sourcePath, projectId = null } = {}) {
     if (!sourcePath || typeof sourcePath !== 'string') {
       return { ok: false, error: 'sourcePath is required' };
     }
@@ -86,18 +122,21 @@ class ResonateEngineAdapter {
       type: 'stems',
       status: 'started',
       sourcePath,
+      projectId,
       created_at: new Date().toISOString()
     });
 
-    this._emit('stem.processing.started', { jobId: id, sourcePath });
+    this._emit('stem.processing.started', { jobId: id, sourcePath, projectId });
 
     try {
-      await this._exec('python', ['make-stems.py', sourcePath]);
+      const result = await this._exec('python', ['make-stems.py', sourcePath]);
+      const folder = this._parseStemsFolder(result.stdout);
       job.status = 'completed';
+      job.folder = folder;
       job.completed_at = new Date().toISOString();
-      this._emit('stem.processing.completed', { jobId: id, sourcePath });
+      this._emit('stem.processing.completed', { jobId: id, sourcePath, folder, projectId });
       this.logger.info('adapter', 'stem.processing.completed', `Stems job ${id} completed`, { jobId: id });
-      return { ok: true, jobId: id, sourcePath };
+      return { ok: true, jobId: id, sourcePath, folder };
     } catch (err) {
       job.status = 'failed';
       job.error = err.message;
@@ -106,7 +145,7 @@ class ResonateEngineAdapter {
     }
   }
 
-  async analyzeAudio({ sourcePath } = {}) {
+  async analyzeAudio({ sourcePath, projectId = null } = {}) {
     if (!sourcePath || typeof sourcePath !== 'string') {
       return { ok: false, error: 'sourcePath is required' };
     }
@@ -116,18 +155,21 @@ class ResonateEngineAdapter {
       type: 'analyze',
       status: 'started',
       sourcePath,
+      projectId,
       created_at: new Date().toISOString()
     });
 
     try {
       const result = await this._exec('python', ['make-stems.py', sourcePath]);
       const meta = this._parseAnalysis(result.stdout || '');
+      const folder = this._parseStemsFolder(result.stdout);
       job.status = 'completed';
       job.result = meta;
+      job.folder = folder;
       job.completed_at = new Date().toISOString();
-      this._emit('audio.asset.created', { jobId: id, sourcePath, ...meta });
+      this._emit('audio.asset.created', { jobId: id, sourcePath, folder, ...meta });
       this.logger.info('adapter', 'audio.analyzed', `Analysis job ${id} completed`, { jobId: id });
-      return { ok: true, jobId: id, sourcePath, ...meta };
+      return { ok: true, jobId: id, sourcePath, folder, ...meta };
     } catch (err) {
       job.status = 'failed';
       job.error = err.message;
@@ -147,4 +189,4 @@ class ResonateEngineAdapter {
   }
 }
 
-module.exports = { ResonateEngineAdapter };
+module.exports = { ResonateEngineAdapter, createDefaultRunner };

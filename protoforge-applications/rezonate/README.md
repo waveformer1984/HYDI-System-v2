@@ -16,6 +16,24 @@ Resonate is the first ProtoForge application that organizes an existing, working
 - diagnostics
 - health endpoints
 
+## End-to-end flow
+
+```text
+User
+ |
+Ursula Studio
+ |
+ProtoForge Resonate (http://localhost:3001)
+ |
+Rezonate Engine
+ |
+Audio Asset
+ |
+Ownership Layer
+ |
+Future HYDI Ledger
+```
+
 ## Architecture
 
 ```text
@@ -27,22 +45,22 @@ Existing Resonate Engine
           v
 ProtoForge Resonate
           |
-    +-----+------+
+    +-----+------+-------+
+    |            |       |
+ Processing   Assets   Ownership
     |            |
- Processing   Assets
-    |
-    v
- DAW Export
-
-Ownership Layer:
-NEXT PHASE
+    v            |
+ DAW Export     Rights
+    |            |
+    v            v
+ Ownership Layer (future)
 ```
 
 ## Relationship to existing systems
 
 - `rezonate/` — owned by the audio engine; the adapter calls it.
 - `supabase/migrations/20260522000001_rezonate_schema.sql` — schema baseline; the local repository mirrors it.
-- `apps/ursula-frontend/...` and `pages/song-composer.tsx` — legacy/experimental frontends; not merged.
+- `apps/ursula-frontend/...` and `pages/song-composer.tsx` — legacy/experimental frontends; now Ursula Resonate Studio connects to this API.
 
 ## Processing lifecycle
 
@@ -57,26 +75,27 @@ analyzing
   ↓
 completed
 
-failure path: failed
+or any → failed
 ```
 
 Every transition emits a domain event.
 
+## Generation workflow
+
+```bash
+POST /processing/jobs
+{ "task_type": "generate", "prompt": "...", "clip": false }
+
+POST /processing/jobs/:id/start
+# invokes rezonate/generate.py, creates AudioAsset, emits audio.asset.created
+
+GET /assets/:id/file
+# streams the generated MP3
+```
+
 ## Domain events
 
-- `processing.job.created`
-- `processing.started`
-- `stems.processing.started`
-- `analysis.started`
-- `stems.completed`
-- `analysis.completed`
-- `processing.completed`
-- `processing.failed`
-- `audio.asset.created`
-- `audio.asset.updated`
-- `ownership.status_changed`
-- `project.created`
-- `track.created`
+See `docs/domain-events.md`.
 
 ## Sample library
 
@@ -94,6 +113,8 @@ npm test
 npm start
 ```
 
+The server runs on `http://localhost:3001` by default.
+
 ## Status
 
-Canonical ProtoForge Resonate foundation with production pipeline layer.
+First end-to-end ProtoForge application organism. 72/72 tests passing.

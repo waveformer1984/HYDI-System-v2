@@ -1,30 +1,29 @@
 # Resonate Production Pipeline
 
 ```text
-AI Generation
-      |
-      v
-Stem Processing
-      |
-      v
-Audio Analysis
-      |
-      v
-Asset Library
-      |
-      v
-DAW Export
-      |
-      v
-Ownership Layer (future)
+User
+ |
+Ursula Studio
+ |
+ProtoForge Resonate
+ |
+Rezonate Engine
+ |
+Audio Asset
+ |
+Ownership Layer
+ |
+Future HYDI Ledger
 ```
 
 ## Phase 1 — AI Generation
 
 - Entry point: `POST /processing/jobs` with `task_type: 'generate'`
+- Start: `POST /processing/jobs/:id/start`
 - Adapter: `src/adapters/resonate-engine.js` delegates to `rezonate/generate.py`
-- Event: `processing.started` → `song.generated`
+- Events: `processing.started` → `song.generated` → `audio.asset.created` → `processing.completed`
 - Output: MP3 file in `rezonate/generated/`
+- Playback: `GET /assets/:id/file`
 
 ## Phase 2 — Stem Processing
 
