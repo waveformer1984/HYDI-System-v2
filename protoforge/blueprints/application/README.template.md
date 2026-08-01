@@ -1,4 +1,4 @@
-# {{APP_NAME}}
+# {{APP_TITLE}}
 
 A ProtoForge-generated application.
 
