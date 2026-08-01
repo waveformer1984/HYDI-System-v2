@@ -15,12 +15,16 @@ function createNamedMigration(dir, version, name, body) {
   return file;
 }
 
+function safePath(stateFile) {
+  return stateFile.replace(/\\/g, '/');
+}
+
 function stateWrite(stateFile, value) {
-  return `require('fs').writeFileSync(${JSON.stringify(stateFile)}, ${JSON.stringify(value)});`;
+  return `require('fs').writeFileSync(${JSON.stringify(safePath(stateFile))}, ${JSON.stringify(value)});`;
 }
 
 function stateAppend(stateFile, value) {
-  return `require('fs').appendFileSync(${JSON.stringify(stateFile)}, ${JSON.stringify(value)});`;
+  return `require('fs').appendFileSync(${JSON.stringify(safePath(stateFile))}, ${JSON.stringify(value)});`;
 }
 
 describe('migrations', () => {
@@ -121,11 +125,11 @@ describe('migrations', () => {
     fs.writeFileSync(stateFile, 'init');
     fs.writeFileSync(
       path.join(dir, '0001-init.js'),
-      `module.exports = { description: 'init', up: async () => { require('fs').appendFileSync(${JSON.stringify(stateFile)}, 'up1'); }, down: async () => { require('fs').appendFileSync(${JSON.stringify(stateFile)}, 'down1'); } };`
+      `module.exports = { description: 'init', up: async () => { require('fs').appendFileSync(${JSON.stringify(safePath(stateFile))}, 'up1'); }, down: async () => { require('fs').appendFileSync(${JSON.stringify(safePath(stateFile))}, 'down1'); } };`
     );
     fs.writeFileSync(
       path.join(dir, '0002-users.js'),
-      `module.exports = { description: 'users', up: async () => { require('fs').appendFileSync(${JSON.stringify(stateFile)}, 'up2'); }, down: async () => { require('fs').appendFileSync(${JSON.stringify(stateFile)}, 'down2'); } };`
+      `module.exports = { description: 'users', up: async () => { require('fs').appendFileSync(${JSON.stringify(safePath(stateFile))}, 'up2'); }, down: async () => { require('fs').appendFileSync(${JSON.stringify(safePath(stateFile))}, 'down2'); } };`
     );
     const runner = new MigrationRunner({ migrationsDir: dir });
     await runner.run();
