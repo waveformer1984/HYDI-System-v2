@@ -21,7 +21,6 @@
     "task.completed",
     "timeline.created",
     "milestone.scheduled",
-    "milestone.reached",
     "proto.yi.blueprint.created"
   ],
   "eventsConsumed": [
@@ -31,7 +30,8 @@
   ],
   "providers": [
     "json-store",
-    "memory-store"
+    "memory-store",
+    "protoiy-engine"
   ],
   "dependencies": {
     "services": [
@@ -44,7 +44,7 @@
     ]
   },
   "healthRequirements": [
-    "supabase",
+    "protoiy-engine",
     "hydi-gateway"
   ],
   "deprecated": false

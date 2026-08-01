@@ -125,6 +125,11 @@ describe('ApplicationRegistry', () => {
     const names = list.map(a => a.name);
     assert.ok(names.includes('Resonate'));
     assert.ok(names.includes('Switchboard'));
+    assert.ok(names.includes('Proto YI'));
+    const protoYi = reg.get('Proto YI');
+    assert.strictEqual(protoYi.status, 'active');
+    assert.ok(protoYi.capabilities.length > 0);
+    assert.ok(protoYi.eventsProduced.includes('milestone.scheduled'));
   });
 
   it('deletes an application', () => {

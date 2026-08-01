@@ -58,4 +58,27 @@ describe('Platform diagnostics', () => {
     expect(legacyReplay.loaded).toBe(true);
     expect(legacyReplay.reachable).toBe(false);
   });
+
+  it('discovers Proto YI as a registered application', async () => {
+    const inventory = await getRuntimeInventory();
+    const protoYi = inventory.applications.find(a => a.name === 'Proto YI');
+    const health = inventory.governance.applicationHealth.find(a => a.name === 'Proto YI');
+    expect(protoYi).toBeDefined();
+    expect(protoYi.status).toBe('active');
+    expect(health).toBeDefined();
+    expect(health.loaded).toBe(true);
+    expect(health.policyValid).toBe(true);
+    expect(health.healthRequirements).toContain('protoiy-engine');
+    expect(health.healthRequirements).toContain('hydi-gateway');
+  });
+
+  it('reports Proto YI lifecycle through the application registry', async () => {
+    const inventory = await getRuntimeInventory();
+    expect(inventory.governance.registry.total).toBeGreaterThan(0);
+    expect(inventory.governance.registry.byStatus.active).toBeGreaterThanOrEqual(1);
+    const protoYi = inventory.governance.applicationHealth.find(a => a.name === 'Proto YI');
+    expect(protoYi).toBeDefined();
+    expect(protoYi.reachable).toBe(true);
+    expect(protoYi.policyValid).toBe(true);
+  });
 });

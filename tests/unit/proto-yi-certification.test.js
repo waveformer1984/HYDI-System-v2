@@ -41,6 +41,26 @@ describe('Proto YI Certification', () => {
     expect(manifest.eventsConsumed.length).toBeGreaterThan(0);
   });
 
+  test('manifest produced events include canonical Proto YI events', () => {
+    const loaded = require('fs').readFileSync(path.join(PROTO_YI_DIR, 'manifest.json'), 'utf-8');
+    const manifest = JSON.parse(loaded);
+    expect(manifest.eventsProduced).toContain('project.created');
+    expect(manifest.eventsProduced).toContain('timeline.created');
+    expect(manifest.eventsProduced).toContain('milestone.scheduled');
+  });
+
+  test('manifest does not declare stale milestone.reached', () => {
+    const loaded = require('fs').readFileSync(path.join(PROTO_YI_DIR, 'manifest.json'), 'utf-8');
+    const manifest = JSON.parse(loaded);
+    expect(manifest.eventsProduced).not.toContain('milestone.reached');
+  });
+
+  test('manifest consumed events match implementation', () => {
+    const loaded = require('fs').readFileSync(path.join(PROTO_YI_DIR, 'manifest.json'), 'utf-8');
+    const manifest = JSON.parse(loaded);
+    expect(manifest.eventsConsumed).toEqual(['protoforge.decision', 'protoforge.policy.approved', 'protoforge.policy.rejected']);
+  });
+
   test('manifest declares dependencies', () => {
     const loaded = require('fs').readFileSync(path.join(PROTO_YI_DIR, 'manifest.json'), 'utf-8');
     const manifest = JSON.parse(loaded);
@@ -54,6 +74,16 @@ describe('Proto YI Certification', () => {
     const manifest = JSON.parse(loaded);
     expect(manifest.governance).toBeDefined();
     expect(manifest.governance.domain).toBe('project-management');
+  });
+
+  test('manifest declares required services', () => {
+    const loaded = require('fs').readFileSync(path.join(PROTO_YI_DIR, 'manifest.json'), 'utf-8');
+    const manifest = JSON.parse(loaded);
+    expect(manifest.providers).toContain('protoiy-engine');
+    expect(manifest.dependencies.services).toContain('supabase');
+    expect(manifest.dependencies.services).toContain('hydi-gateway');
+    expect(manifest.healthRequirements).toContain('protoiy-engine');
+    expect(manifest.healthRequirements).toContain('hydi-gateway');
   });
 
   test('Proto YI is in the application registry', () => {

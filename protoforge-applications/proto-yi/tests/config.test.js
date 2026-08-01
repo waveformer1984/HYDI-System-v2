@@ -33,7 +33,7 @@ describe('Config and HYDI enablement', () => {
     assert.ok(adapter);
     assert.strictEqual(adapter.endpoint, 'http://gateway.test');
     assert.strictEqual(adapter.serviceKey, 'test-service-key');
-    assert.deepStrictEqual(adapter.eventTypes, ['project.created', 'project.updated', 'project.deleted', 'task.created', 'task.completed', 'timeline.created', 'milestone.scheduled', 'milestone.reached', 'proto.yi.blueprint.created']);
+    assert.deepStrictEqual(adapter.eventTypes, ['project.created', 'project.updated', 'project.deleted', 'task.created', 'task.completed', 'timeline.created', 'milestone.scheduled', 'proto.yi.blueprint.created']);
     assert.strictEqual(adapter.enabled, true);
   });
 

@@ -150,6 +150,44 @@ describe('CapabilityPolicy', () => {
     assert.ok(results.every(r => r.ok));
   });
 
+  const protoYIManifest = {
+    name: 'Proto YI',
+    version: '0.1.0',
+    capabilities: ['builder', 'planner', 'project-management', 'timeline-management'],
+    eventsProduced: ['project.created', 'project.updated', 'project.deleted', 'task.created', 'task.completed', 'timeline.created', 'milestone.scheduled', 'proto.yi.blueprint.created'],
+    eventsConsumed: ['protoforge.decision', 'protoforge.policy.approved', 'protoforge.policy.rejected'],
+    providers: ['json-store', 'memory-store', 'protoiy-engine'],
+    dependencies: { services: ['supabase', 'hydi-gateway'], packages: [] },
+    deprecated: false
+  };
+
+  it('validates the Proto YI manifest against its capability policy', () => {
+    const policy = new CapabilityPolicy({
+      'proto yi': {
+        allowedEventsProduced: ['project.created', 'project.updated', 'project.deleted', 'task.created', 'task.completed', 'timeline.created', 'milestone.scheduled', 'proto.yi.blueprint.created'],
+        allowedEventsConsumed: ['protoforge.decision', 'protoforge.policy.approved', 'protoforge.policy.rejected'],
+        requiredServices: ['supabase', 'hydi-gateway', 'protoiy-engine'],
+        requiredCapabilities: ['builder']
+      }
+    });
+    const result = policy.validate(protoYIManifest);
+    assert.strictEqual(result.ok, true);
+    assert.deepStrictEqual(result.errors, []);
+  });
+
+  it('rejects stale milestone.reached for Proto YI', () => {
+    const policy = new CapabilityPolicy({
+      'proto yi': {
+        allowedEventsProduced: ['project.created', 'timeline.created', 'milestone.scheduled'],
+        allowedEventsConsumed: ['protoforge.decision']
+      }
+    });
+    const bad = { ...protoYIManifest, eventsProduced: ['project.created', 'timeline.created', 'milestone.reached'] };
+    const result = policy.validate(bad);
+    assert.strictEqual(result.ok, false);
+    assert.ok(result.errors.some(e => e.includes('milestone.reached')));
+  });
+
   it('identifies non-namespaced event types', () => {
     assert.strictEqual(isNamespaced('audio.asset.created'), true);
     assert.strictEqual(isNamespaced('created'), false);
