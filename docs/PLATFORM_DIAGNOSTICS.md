@@ -75,6 +75,7 @@ GET /api/platform/diagnostics
 | **CASCADE Replay Engine** | Requires `protoforge/cascade/src/replay.js` and verifies `ReplayEngine` export. |
 | **KILO** | Requires `kilo/index.js` and verifies `KiloEngine` export. |
 | **ProtoForge PolicyEngine** | Requires `lib/protoforge/policy-engine.js` and verifies `PolicyEngine` export. |
+| **Proto YI** | Loads `protoforge-applications/proto-yi/src/adapters/protoiy-engine.js`, confirms `ProtoIYEngineAdapter` is exportable, then calls `adapter.health()` against `PROTOIY_ENDPOINT` (default `http://localhost:5000`). Uses a 2 second timeout. `reachable` is `true` only when the Flask Proto.I.Y engine responds successfully; otherwise `reason` is `"ProtoIY engine unavailable"` (or `": <error>"` if a lower-level error is returned). |
 | **ProtoForge Action Gate** | TypeScript / ESM file; currently not requireable. `loaded` is reported, `reachable` is `false`. |
 | **Emission (EventBus)** | TypeScript source; `loaded` reported, `reachable` `false` until compiled or imported. |
 | **Legacy modules** | `modules/cascade-*.js` and `keeper/policy-engine.js` are required. `.ts` legacy files are `loaded` but `reachable: false`. `modules/raw-event-ledger.js` is not required because it has side effects. |
@@ -92,6 +93,17 @@ const { getRuntimeInventory } = require('./lib/platform-diagnostics');
 const inventory = await getRuntimeInventory();
 console.log(inventory.summary);
 ```
+
+## Proto YI runtime probe
+
+Proto YI is registered both as a ProtoForge application (via `ApplicationRegistry`) and as a canonical runtime component (via `CapabilityRegistry`). The diagnostics probe:
+
+1. Confirms the `ProtoIYEngineAdapter` module can be `require()`d.
+2. Instantiates a short-lived `ProtoIYEngineAdapter` pointed at `PROTOIY_ENDPOINT`.
+3. Calls `adapter.health()` through the same HTTP client used by the application.
+4. Reports `reachable: true` only if the Flask engine returns a successful `/health` response.
+
+No fake `healthy` response is generated. When the engine is missing, the probe reports `reachable: false` with `reason: "ProtoIY engine unavailable"`. This keeps the ProtoForge platform from treating an idle Flask service as healthy.
 
 ## Interpretation rules
 
