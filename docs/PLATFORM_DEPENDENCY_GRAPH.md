@@ -4,14 +4,14 @@
 
 ```mermaid
 flowchart TB
-    subgraph Applications
+    subgraph Producers
         RES[Resonate]
         SW[Switchboard]
         URS[Ursula / Chat UI]
     end
 
-    RES -->|ExternalAdapter| G[HYDI Event Gateway]
-    SW -->|HydiAdapter| G
+    RES -->|@protoforge/event-contracts| G[HYDI Event Gateway]
+    SW -->|@protoforge/event-contracts| G
     URS -->|api/chat/route.js| G
 
     G -->|POST /events| R[RAW Ledger Adapter]
@@ -26,7 +26,14 @@ flowchart TB
     P -->|decision| AG[Action Gate]
     AG --> E[Emission Layer]
 
-    C --> API[GET /events/:id, GET /lineage/:fingerprint]
+    CAP[@protoforge/capability-registry] -.metadata.-> RES
+    CAP -.metadata.-> SW
+    CAP -.metadata.-> G
+    CAP -.metadata.-> C
+    CAP -.metadata.-> K
+    CAP -.metadata.-> P
+
+    C --> API[GET /events/:id, GET /lineage/:fingerprint, GET /api/platform/diagnostics]
     API --> Consumers
 
     subgraph Future Consumers
@@ -39,49 +46,45 @@ flowchart TB
     E --> Consumers
 ```
 
+## New packages
+
+| Package | Consumers | Purpose |
+|---|---|---|
+| `@protoforge/event-contracts` | Resonate, Switchboard, all future producers | Shared envelope, fingerprint, hash, metadata |
+| `@protoforge/capability-registry` | Diagnostics, all future producers | Capability, producer/consumer, requirement registry |
+
 ## Dependency table
 
 | Consumer | Depends on | Direct import / call | Status |
 |---|---|---|---|
-| Resonate | HYDI Event Gateway | `ExternalAdapter` → `POST /events` | Active |
-| Switchboard | HYDI Event Gateway | `HydiAdapter` → `POST /events` | Active |
+| Resonate | `@protoforge/event-contracts` | (planned) | Active |
+| Resonate | `@protoforge/capability-registry` | (planned) | Active |
+| Switchboard | `@protoforge/event-contracts` | (planned) | Active |
+| Switchboard | `@protoforge/capability-registry` | (planned) | Active |
 | HYDI Event Gateway | RAW Ledger Adapter | `src/adapters/raw-ledger.js` → Supabase | Active |
 | CASCADE | RAW Ledger Adapter | `src/adapters/ledger-adapter.js` → Supabase `raw_event_ledger` | Active |
-| CASCADE | Derived Store | `src/derived-store.js` (local JSON) | Active |
+| CASCADE | Derived Store | `src/derived-store.js` | Active |
 | CASCADE | Lineage Graph | `src/derived-store.js` `LineageGraph` | Active |
 | KILO | CASCADE | (planned) consumes derived events | Reserved |
 | ProtoForge | KILO output | `lib/protoforge/policy-engine.js` | Active |
 | Action Gate | KILO + PolicyEngine | `lib/protoforge/action-gate.ts` | Active |
 | Emission | Action Gate | `lib/event-bus/`, `api/events/stream.js` | Active |
-| Chat UI | Chat Router | `api/chat/route.js` | Active (legacy stubs) |
+| Diagnostics | Capability Registry | `lib/platform-diagnostics.js` | Active |
 
-## Legacy dependency graph
+## Platform test dependencies
 
 ```mermaid
 flowchart LR
-    subgraph Legacy
-        L1[modules/cascade-event-intake.js]
-        L2[modules/cascade-core.js]
-        L3[modules/cascade-health-snapshot.js]
-        L4[modules/raw-event-ledger.js]
-        L5[keeper/policy-engine.js]
-        L6[lib/protoforge/replay-engine.ts]
-        L7[lib/replay-engine.ts]
+    subgraph Validation
+        EC[@protoforge/event-contracts]
+        CR[@protoforge/capability-registry]
+        PT[protoforge/tests/platform/]
     end
 
-    L1 --> C1[compatibility/cascade-legacy.js]
-    C1 --> C[protoforge/cascade/]
-
-    L4 --> C2[compatibility/raw-ledger-legacy.js]
-    C2 --> R[RAW Ledger Adapter]
-
-    L5 --> C3[compatibility/policy-legacy.js]
-    C3 --> P[lib/protoforge/policy-engine.js]
+    EC --> PT
+    CR --> PT
+    PT -->|uses| C[CASCADE]
+    PT -->|uses| G[HYDI Gateway]
+    PT -->|uses| K[KILO]
+    PT -->|uses| PE[PolicyEngine]
 ```
-
-## Direction of travel
-
-1. All new consumers must read from `protoforge/cascade/` derived events, not the RAW LEDGER directly.
-2. All new producers must write through `protoforge/hydi-gateway/`, not `modules/raw-event-ledger.js`.
-3. All policy decisions must use `lib/protoforge/policy-engine.js`.
-4. All replay must use `protoforge/cascade/src/replay.js`.

@@ -1,0 +1,12 @@
+{
+  "name": "@protoforge/event-contracts",
+  "version": "0.1.0",
+  "description": "Canonical HYDI event contracts shared by ProtoForge producers",
+  "main": "src/index.js",
+  "type": "commonjs",
+  "scripts": {
+    "test": "node --test tests/**/*.test.js"
+  },
+  "keywords": ["protoforge", "hydi", "events"],
+  "license": "MIT"
+}
