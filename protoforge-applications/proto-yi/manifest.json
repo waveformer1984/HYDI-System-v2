@@ -1,14 +1,49 @@
 {
   "name": "Proto YI",
   "version": "0.1.0",
-  "capabilities": [],
-  "eventsProduced": [],
-  "eventsConsumed": [],
-  "providers": [],
-  "dependencies": {
-    "services": [],
-    "packages": []
+  "owner": "protoforge-factory",
+  "governance": {
+    "domain": "project-management",
+    "tier": "generated",
+    "approvedAt": "2026-08-01T00:00:00.000Z"
   },
-  "healthRequirements": [],
+  "capabilities": [
+    "builder",
+    "planner",
+    "project-management",
+    "timeline-management"
+  ],
+  "eventsProduced": [
+    "project.created",
+    "project.updated",
+    "project.deleted",
+    "task.created",
+    "task.completed",
+    "milestone.reached",
+    "proto.yi.blueprint.created"
+  ],
+  "eventsConsumed": [
+    "protoforge.decision",
+    "protoforge.policy.approved",
+    "protoforge.policy.rejected"
+  ],
+  "providers": [
+    "json-store",
+    "memory-store"
+  ],
+  "dependencies": {
+    "services": [
+      "supabase",
+      "hydi-gateway"
+    ],
+    "packages": [
+      "@protoforge/event-contracts",
+      "@protoforge/application-manifest"
+    ]
+  },
+  "healthRequirements": [
+    "supabase",
+    "hydi-gateway"
+  ],
   "deprecated": false
 }

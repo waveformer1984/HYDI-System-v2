@@ -5,7 +5,11 @@ const LIFECYCLE_TYPES = {
   registered: 'application.registered',
   started: 'application.started',
   health: 'application.health.changed',
-  deprecated: 'application.deprecated'
+  deprecated: 'application.deprecated',
+  upgradeRequested: 'application.upgrade.requested',
+  upgradeApproved: 'application.upgrade.approved',
+  upgradeCompleted: 'application.upgrade.completed',
+  upgradeFailed: 'application.upgrade.failed'
 };
 
 function createApplicationEvent(type, manifest, payload = {}) {
@@ -72,6 +76,22 @@ class LifecycleEmitter {
 
   async deprecated(manifest, payload) {
     return this.emit(LIFECYCLE_TYPES.deprecated, manifest, payload);
+  }
+
+  async upgradeRequested(manifest, payload) {
+    return this.emit(LIFECYCLE_TYPES.upgradeRequested, manifest, { upgrade: payload });
+  }
+
+  async upgradeApproved(manifest, payload) {
+    return this.emit(LIFECYCLE_TYPES.upgradeApproved, manifest, { upgrade: payload });
+  }
+
+  async upgradeCompleted(manifest, payload) {
+    return this.emit(LIFECYCLE_TYPES.upgradeCompleted, manifest, { upgrade: payload });
+  }
+
+  async upgradeFailed(manifest, payload) {
+    return this.emit(LIFECYCLE_TYPES.upgradeFailed, manifest, { upgrade: payload });
   }
 }
 

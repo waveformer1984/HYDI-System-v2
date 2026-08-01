@@ -20,6 +20,10 @@ describe('application lifecycle events', () => {
     assert.strictEqual(LIFECYCLE_TYPES.started, 'application.started');
     assert.strictEqual(LIFECYCLE_TYPES.health, 'application.health.changed');
     assert.strictEqual(LIFECYCLE_TYPES.deprecated, 'application.deprecated');
+    assert.strictEqual(LIFECYCLE_TYPES.upgradeRequested, 'application.upgrade.requested');
+    assert.strictEqual(LIFECYCLE_TYPES.upgradeApproved, 'application.upgrade.approved');
+    assert.strictEqual(LIFECYCLE_TYPES.upgradeCompleted, 'application.upgrade.completed');
+    assert.strictEqual(LIFECYCLE_TYPES.upgradeFailed, 'application.upgrade.failed');
   });
 
   it('creates an application.created envelope', () => {
@@ -94,5 +98,44 @@ describe('application lifecycle events', () => {
     const result = await emitter.healthChanged(manifest);
     assert.strictEqual(result.ok, false);
     assert.strictEqual(result.error, 'No adapter configured');
+  });
+
+  it('creates an application.upgrade.requested envelope', () => {
+    const env = createApplicationEvent('application.upgrade.requested', manifest, { upgrade: { from: '0.1.0', to: '0.2.0' } });
+    assert.strictEqual(env.eventType, 'application.upgrade.requested');
+    assert.strictEqual(env.payload.upgrade.from, '0.1.0');
+    assert.strictEqual(env.payload.upgrade.to, '0.2.0');
+  });
+
+  it('creates an application.upgrade.approved envelope', () => {
+    const env = createApplicationEvent('application.upgrade.approved', manifest);
+    assert.strictEqual(env.eventType, 'application.upgrade.approved');
+  });
+
+  it('creates an application.upgrade.completed envelope', () => {
+    const env = createApplicationEvent('application.upgrade.completed', manifest);
+    assert.strictEqual(env.eventType, 'application.upgrade.completed');
+  });
+
+  it('creates an application.upgrade.failed envelope', () => {
+    const env = createApplicationEvent('application.upgrade.failed', manifest, { upgrade: { reason: 'migration error' } });
+    assert.strictEqual(env.eventType, 'application.upgrade.failed');
+    assert.strictEqual(env.payload.upgrade.reason, 'migration error');
+  });
+
+  it('emits upgrade requested through adapter', async () => {
+    const mock = { append: async (envelope) => ({ ok: true, record: envelope }) };
+    const emitter = new LifecycleEmitter(mock);
+    const result = await emitter.upgradeRequested(manifest, { from: '0.1.0', to: '0.2.0' });
+    assert.strictEqual(result.ok, true);
+    assert.strictEqual(result.event.eventType, 'application.upgrade.requested');
+  });
+
+  it('emits upgrade completed through adapter', async () => {
+    const mock = { append: async (envelope) => ({ ok: true, record: envelope }) };
+    const emitter = new LifecycleEmitter(mock);
+    const result = await emitter.upgradeCompleted(manifest, { to: '0.2.0' });
+    assert.strictEqual(result.ok, true);
+    assert.strictEqual(result.event.payload.upgrade.to, '0.2.0');
   });
 });
