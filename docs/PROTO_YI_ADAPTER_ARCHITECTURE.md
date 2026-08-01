@@ -102,6 +102,57 @@ The `ExternalAdapter` only forwards event types listed in `manifest.json` `event
 }
 ```
 
+## Milestone lifecycle semantics
+
+A milestone has three logical states in Proto YI:
+
+1. **scheduled** — emitted immediately when a timeline is created. The Flask engine has assigned start/end dates, but no completion has occurred. The payload includes `status: 'scheduled'` and `scheduled_at`.
+2. **reached** — reserved for the actual completion signal. The adapter will emit `milestone.reached` only when the Proto.I.Y engine (or a future completion endpoint) confirms that a milestone has been achieved. No `reached` event is fabricated during timeline creation.
+3. **missed** — reserved for future over-due / deadline-breach handling.
+
+The manifest declares `milestone.scheduled`, `milestone.reached`, and `milestone.missed` (when added) so the capability policy allows the full lifecycle.
+
+## HYDI event flow
+
+When `HYDI_GATEWAY_ENDPOINT` is configured:
+
+```text
+Adapter emits project.created / timeline.created / milestone.scheduled
+        |
+        v
+   ProtoForge EventBus
+        |
+        v
+   MemoryTransport (keeps a local copy)
+        |
+        v
+   FileTransport (optional, for local replay/debug)
+        |
+        v
+   ExternalAdapter
+        |
+        v
+   POST http://gateway/events   (Authorization: Bearer <HYDI_SERVICE_KEY>)
+        |
+        v
+   HYDI Event Gateway (protoforge/hydi-gateway/)
+        |
+        v
+   RAW EVENT LEDGER
+```
+
+If the gateway is unreachable, the `ExternalAdapter` logs a warning, keeps the event in its outbox, and does not crash the application. Events are retried on the next `flush()` call.
+
+## Relationship to Switchboard and Resonate event patterns
+
+Proto YI uses the same transport pattern as Switchboard and Resonate:
+
+- **Switchboard** (`switchboard/src/events/event-bus.js` `HydiAdapter`) — sends `{ eventId, eventType, source, version, timestamp, payload }` to `POST /events` with a `Bearer` service key.
+- **Resonate** (`protoforge-applications/rezonate/src/events/event-bus.js` `ExternalAdapter`) — uses the identical envelope and `Authorization` header semantics.
+- **Proto YI** (`protoforge-applications/proto-yi/src/events/event-bus.js` `ExternalAdapter`) — reuses the same envelope, header, outbox, and `eventTypes` filter. The only difference is the `source` value (`proto-yi`) and the list of allowed events, which are loaded from `manifest.json`.
+
+This keeps the HYDI ingestion contract uniform across all ProtoForge applications.
+
 ## Repository orchestration
 
 `src/repository.js` keeps persistence separate from the engine:

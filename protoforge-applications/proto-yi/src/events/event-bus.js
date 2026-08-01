@@ -66,6 +66,7 @@ class ExternalAdapter {
     this.system = options.system || 'proto-yi';
     this.version = options.version || '1.0';
     this.serviceKey = options.serviceKey || options.hydiServiceKey || process.env.HYDI_SERVICE_KEY;
+    this._fetch = options.fetch || (typeof fetch !== 'undefined' ? fetch : null);
     this.logger = options.logger || { warn: () => {} };
     this.outbox = [];
     this.healthy = null;
@@ -90,7 +91,7 @@ class ExternalAdapter {
     try {
       const headers = { 'Content-Type': 'application/json' };
       if (this.serviceKey) headers['Authorization'] = `Bearer ${this.serviceKey}`;
-      const res = await fetch(`${this.endpoint}/events`, {
+      const res = await this._fetch(`${this.endpoint}/events`, {
         method: 'POST',
         headers,
         body: JSON.stringify(this.translate(event))
@@ -110,7 +111,7 @@ class ExternalAdapter {
   async health() {
     if (!this.enabled) return { ok: true, status: 'disabled' };
     try {
-      const res = await fetch(`${this.endpoint}/health`, { method: 'GET' });
+      const res = await this._fetch(`${this.endpoint}/health`, { method: 'GET' });
       this.healthy = res.ok;
       return { ok: res.ok, status: res.ok ? 'healthy' : 'unhealthy', outbox: this.outbox.length };
     } catch (err) {
