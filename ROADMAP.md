@@ -67,6 +67,18 @@ drop-everything, P1 is next up, P2 is scheduled but not urgent.
     check out clean, this may warrant a GitHub support ticket — instant
     failure with zero billable time and no runner assignment isn't a normal
     "ran out of minutes" pattern.
+2c. **2026-08-01 re-check: still unresolved, 2+ weeks later.** Every
+    `clean-main` run since the v0.9.0-rc.3 merge (`b25b218`,
+    2026-07-31T22:12) fails within 3-5 seconds with the identical
+    `runner_id: 0` signature, and the scheduled `Health Monitor` workflow
+    has failed identically every hour through 2026-08-01T22:38. Confirmed
+    the underlying code is not the problem: `npm run lint`,
+    `npm run typecheck`, `npm run typecheck:hydi-v3`, `npm run lint:hydi-v3`,
+    `npm test` (244/244 suites, 2322/2322 tests), and
+    `npm run test:integration:jest` (12/12 suites, 62/62 tests) all pass
+    clean locally against that same commit. Still needs the operator
+    dashboard checks above — no sandbox session has gained access to
+    diagnose this further since it was first found.
 
 **P1 — high impact/risk, not yet started:**
 3. Cryptographic identity verification to replace the `x-user-id`

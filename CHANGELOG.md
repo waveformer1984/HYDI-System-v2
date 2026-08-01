@@ -1,5 +1,22 @@
 # HYDI Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- `tests/unit/hydi-v3/HardwareDiscovery.test.js`'s OS-enumeration fallback
+  test hardcoded a Windows-only mock (`powershell`/`AdapterRAM`) but
+  `HardwareDiscovery.detectOsGpus()` dispatches by the *host* OS at runtime
+  — on Linux (every `ubuntu-latest` CI runner, and any Linux/container
+  deployment) it silently exercised the "unexpected command" branch and
+  asserted a GPU count the mock never actually produced. The suite was
+  failing on this branch's CI (`Unit Tests` red as of 2026-07-31/08-01,
+  masked by an unrelated GitHub Actions runner outage — see `ROADMAP.md`).
+  Pinned `os.platform()` to `win32` for the existing test and added
+  dedicated coverage for the previously-untested `detectLinuxGpus()`
+  (`lspci`) parsing path, which had zero coverage despite being the one
+  actually exercised by CI's own Linux runners.
+
 ## [0.9.0-rc.1] — Release Candidate
 
 ### Added

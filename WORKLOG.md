@@ -4,6 +4,111 @@ Running log of autonomous production-readiness work. Newest entries first.
 
 ---
 
+## 2026-08-01 — Discovery audit, CI health check, Linux-platform test bug
+
+Branch: `claude/protoforge-ecosystem-audit-ld0u9l`
+
+Scope: repository-wide discovery pass per the standing ProtoForge-ecosystem
+mission (production bugs > security > reliability > dev productivity >
+automation > performance > new capabilities > documentation). This repo has
+already been through many prior audit sessions (see the rest of this file
+and `ISSUES_FOUND.md`/`ROADMAP.md`) — `npm run lint`, `npm run typecheck`,
+and `npm test` were all clean going in, so this pass focused on verifying
+current CI health and looking for anything the prior passes hadn't caught.
+
+### Found: `Unit Tests`/`Integration Tests`/`CodeQL`/`Deploy Mobile Chat` CI all red on `clean-main`, plus `Health Monitor` failing hourly
+
+Checked GitHub Actions directly (`actions_list`/`actions_get`) rather than
+assuming green from the last merge. Every run on `clean-main` since
+2026-07-31T22:12 (`b25b218`, the v0.9.0-rc.3 merge) fails within 3-5
+seconds with `runner_id: 0`, `runner_name: ""` — the job's `started_at`
+and `completed_at` are seconds apart with no real execution in between.
+`Health Monitor`'s scheduled runs show the identical signature every hour
+through 2026-08-01T22:38 (the latest at the time of this session).
+
+**This is the same repo-wide GitHub-hosted-runner infrastructure block
+already diagnosed in `ROADMAP.md`'s P0 item 2b (first observed
+2026-07-16/17)** — re-confirmed today, unchanged, 2+ weeks later. It is
+not a code regression: `npm run lint`, `npm run typecheck`,
+`npm run typecheck:hydi-v3`, `npm run lint:hydi-v3`, `npm test` (244/244
+suites, 2322/2322 tests), and `npm run test:integration:jest` (12/12
+suites, 62/62 tests) all pass clean locally against the exact same commit.
+No sandbox tool available to this session exposes the
+`actions/permissions` or account-billing APIs needed to actually diagnose
+or fix a GitHub-hosted-runner dispatch failure — this remains an operator
+action item (check
+`github.com/waveformer1984/HYDI-System-v2/settings/actions` and
+`github.com/settings/billing/summary`/`.../budgets`), not something fixable
+from source. See `ROADMAP.md` for the standing item; not re-litigated here
+beyond reconfirming it's still live.
+
+### Fixed: `HardwareDiscovery.test.js`'s OS-fallback test was platform-dependent, not actually broken logic
+
+While running the full suite locally to double check test health
+independent of the CI outage above, `tests/unit/hydi-v3/HardwareDiscovery.test.js`
+→ `falls back to OS enumeration when nvidia-smi is missing` failed on this
+sandbox (Linux): `expect(inventory.gpus.length).toBe(1)` got `0`.
+
+Root cause: `src/hydi-v3/HardwareDiscovery.js`'s `detectOsGpus()` is
+intentionally platform-agnostic — it calls `os.platform()` at *test-run
+time* and dispatches to `detectWindowsGpus()` (runs `powershell`),
+`detectLinuxGpus()` (runs `lspci`), or `detectMacGpus()` accordingly. But
+the test's mock only ever implemented a response for `cmd === 'powershell'`;
+on Linux, `detectOsGpus()` calls `lspci` instead, which the mock's
+catch-all branch answers with `cb(new Error('unexpected'), ...)` — caught
+by `detectLinuxGpus()`'s own try/catch, silently returning `[]`. The test
+was only ever passing by accident of being run on a Windows machine; on
+any Linux CI runner (which is what `unit-tests.yml`'s `ubuntu-latest`
+actually is, once the runner-dispatch outage above clears) it would fail
+every time. Separately, `detectLinuxGpus()` had **zero** test coverage at
+all — the one branch this suite's actual CI host would exercise was
+completely unverified.
+
+Fixed in two parts:
+1. Pinned `os.platform()` to `'win32'` for the existing test via
+   `jest.doMock('os', ...)` (placed before the `HardwareDiscovery` require,
+   matching the existing `child_process` mock pattern in the same file) so
+   it deterministically exercises the Windows/`powershell` branch its mock
+   data was already written for, regardless of the host OS actually running
+   the suite.
+2. Added a new `detectLinuxGpus parses VGA controllers from lspci output`
+   test exercising the real `lspci`-parsing regex directly (no `os` mocking
+   needed — `detectLinuxGpus()` doesn't check the platform itself, only
+   `detectOsGpus()`'s dispatcher does). First attempt used
+   `jest.isolateModules()` to re-require the module under a `linux` `os`
+   mock, matching the dispatch-through-`detect()` pattern of the sibling
+   test — this proved order-dependent/flaky (passed as the only test in the
+   file, hung when run after the other three) and was abandoned in favor of
+   calling `detectLinuxGpus()` directly, which is simpler and avoids the
+   module-registry interaction entirely.
+
+### Verification
+
+- `npx jest tests/unit/hydi-v3/HardwareDiscovery.test.js` — 4/4 passing
+  (was 2/3, 1 failing).
+- `npm test -- --forceExit` — 244/244 suites, 2322/2322 tests passing (was
+  243/244 suites, 2320/2321 tests before the fix — same suite count, +1
+  test from the new Linux coverage).
+- `npm run lint` / `npm run typecheck` / `npm run typecheck:hydi-v3` /
+  `npm run lint:hydi-v3` — all clean, 0 errors (pre-existing warning counts
+  unchanged).
+- `npm run test:integration:jest` — 12/12 suites, 62/62 tests passing.
+
+### Not done in this pass
+
+- The GitHub Actions runner-dispatch outage (see above) remains open,
+  needs operator dashboard access.
+- Did not attempt the 24-hour soak / clean-machine deployment gates
+  blocking `v0.9.0` promotion (`v0.9.0-rc.3_STATUS.md`) — both require
+  wall-clock durations and/or host access outside this sandbox's scope for
+  a single session; unchanged from the existing documented status.
+- Did not re-open any of the larger P1 product-decision items already
+  tracked in `ROADMAP.md` (cryptographic identity verification, Local-First
+  Phase 1 migration) — these need a maintainer decision or host access, not
+  more audit passes.
+
+---
+
 ## 2026-07-15 (later same day) — Security incident response + route reachability gap
 
 Branch: `claude/protoforge-production-readiness-t4wdn4` (continuation of the

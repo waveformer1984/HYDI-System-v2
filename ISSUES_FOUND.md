@@ -5,6 +5,15 @@ the narrative of what was fixed and why; this file is the flat list.
 
 ---
 
+## Fixed this session (2026-08-01, CI health check + platform-dependent test)
+
+| # | Issue | File(s) | Status |
+|---|-------|---------|--------|
+| 75 | `tests/unit/hydi-v3/HardwareDiscovery.test.js`'s OS-enumeration fallback test hardcoded a Windows-only mock response (`cmd === 'powershell'`), but `HardwareDiscovery.detectOsGpus()` dispatches on the real host `os.platform()` at test-run time — on Linux (every `ubuntu-latest` CI runner, this sandbox) it calls `lspci` instead, which the mock's catch-all answered with an "unexpected command" error, so `detectLinuxGpus()` caught it and silently returned `[]` instead of the expected 1 GPU. The test only ever passed by accident of running on Windows. Separately, `detectLinuxGpus()` (the `lspci`-parsing branch every Linux CI run and container deployment actually exercises) had zero test coverage at all. | `tests/unit/hydi-v3/HardwareDiscovery.test.js` | **Fixed** — pinned `os.platform()` to `win32` via `jest.doMock('os', ...)` so the existing test deterministically exercises the branch its mock data was written for regardless of host OS, and added a new direct test for `detectLinuxGpus()`'s `lspci` parsing (calls the method directly rather than mocking `os.platform`, since an earlier `jest.isolateModules`-based attempt at forcing the `linux` branch through `detect()` proved order-dependent/flaky — passed standalone, hung when run after the other tests in the same file). `npm test` now 244/244 suites, 2322/2322 tests (was 1 failing). |
+| — | Re-confirmed the P0 GitHub Actions runner-dispatch outage (`ROADMAP.md` item 2b, first found 2026-07-16/17) is still live as of 2026-08-01: `Unit Tests`, `Integration Tests`, `CodeQL Security Scan`, and `Deploy Mobile Chat to GitHub Pages` all fail within 3-5 seconds on every `clean-main` run since the v0.9.0-rc.3 merge (`b25b218`), and the scheduled `Health Monitor` workflow fails identically every hour through the time of this session. Same `runner_id: 0` / near-zero-duration signature as originally diagnosed — a runner was never dispatched, not a code failure. Confirmed the actual code is healthy: `npm run lint`, `npm run typecheck`, `npm run typecheck:hydi-v3`, `npm run lint:hydi-v3`, `npm test`, and `npm run test:integration:jest` all pass clean locally against the same commit. | N/A (GitHub Actions infrastructure, not repo code) | **Not fixed — confirms open item, unchanged.** Needs operator dashboard access (`settings/actions`, `settings/billing`); no sandbox tool exposes those APIs. |
+
+---
+
 ## Fixed this session (2026-07-18, structured logging migration + lint-scope gap)
 
 Resolves `ROADMAP.md` near-term item 11. Started as "migrate console.log to
