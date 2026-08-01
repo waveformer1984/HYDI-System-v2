@@ -2,6 +2,7 @@ const { createConfig } = require('./config');
 const { createLogger } = require('./logger');
 const { createRepository } = require('./repository');
 const { createApi } = require('./api/router');
+const { ProtoIYEngineAdapter } = require('./adapters/protoiy-engine');
 
 async function main() {
   const config = createConfig();
@@ -9,7 +10,13 @@ async function main() {
   const repository = createRepository({ config, logger });
   await repository.init();
 
-  const app = createApi(repository, config);
+  const adapter = new ProtoIYEngineAdapter({
+    endpoint: config.protoiyEndpoint,
+    eventBus: repository.eventBus,
+    logger
+  });
+
+  const app = createApi(repository, adapter, config);
   app.listen(config.port, () => {
     logger.info('api', 'server.started', `Listening on port ${config.port}`);
   });

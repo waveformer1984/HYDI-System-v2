@@ -19,6 +19,7 @@ function createConfig(env = process.env) {
     dataDir,
     dbPath,
     eventLogPath,
+    protoiyEndpoint: (env.PROTOIY_ENDPOINT || 'http://localhost:5000').replace(/\/$/, ''),
     logLevel: (env.LOG_LEVEL || defaults.logLevel).toLowerCase(),
     featureFlags: {
       diagnostics: boolOr(env.ENABLE_DIAGNOSTICS, true),

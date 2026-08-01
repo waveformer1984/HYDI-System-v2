@@ -19,6 +19,7 @@
     "project.deleted",
     "task.created",
     "task.completed",
+    "milestone.created",
     "milestone.reached",
     "proto.yi.blueprint.created"
   ],
