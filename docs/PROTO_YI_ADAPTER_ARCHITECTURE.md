@@ -35,7 +35,7 @@ The adapter does not hard-code `fetch`. It accepts an object with `post(path, bo
 |--------|-------------|----------------------------|
 | `createProject()` | `POST /proto_iy/project` | `project.created` |
 | `getProject(id)` | `GET /proto_iy/project/:id` | none |
-| `createTimeline()` | `POST /proto_iy/timeline` | `timeline.created`, `milestone.reached` (per milestone) |
+| `createTimeline()` | `POST /proto_iy/timeline` | `timeline.created`, `milestone.scheduled` (per milestone) |
 | `getTimeline(projectId)` | `GET /proto_iy/timeline/:projectId` | none |
 | `health()` | `GET /health` | none |
 
@@ -79,7 +79,28 @@ RAW EVENT LEDGER
 CASCADE → KILO → Policy Engine
 ```
 
-The adapter never writes to the RAW EVENT LEDGER directly. Events are emitted through the shared `EventBus`, which the `ExternalAdapter` forwards to the HYDI Event Gateway when `EXTERNAL_ENDPOINT` is configured.
+The adapter never writes to the RAW EVENT LEDGER directly. Events are emitted through the shared `EventBus`, which the `ExternalAdapter` forwards to the HYDI Event Gateway when `HYDI_GATEWAY_ENDPOINT` is configured.
+
+### HYDI Gateway configuration
+
+The following environment variables control event transport:
+
+- `HYDI_GATEWAY_ENDPOINT` — URL of the HYDI Event Gateway (e.g., `http://localhost:4000`). When set, an `ExternalAdapter` is added to the event bus.
+- `HYDI_SERVICE_KEY` — optional bearer token sent in the `Authorization` header.
+- `EVENT_TRANSPORT` — optional override; defaults to `external` when `HYDI_GATEWAY_ENDPOINT` is set, otherwise `memory`.
+
+The `ExternalAdapter` only forwards event types listed in `manifest.json` `eventsProduced`. It translates events into the same envelope used by Switchboard and Resonate:
+
+```json
+{
+  "eventId": "...",
+  "eventType": "milestone.scheduled",
+  "source": "proto-yi",
+  "version": "0.1.0",
+  "timestamp": "...",
+  "payload": { ... }
+}
+```
 
 ## Repository orchestration
 
@@ -123,7 +144,8 @@ The `GET /diagnostics` route in `src/api/router.js` exposes this for platform he
 ## Relationship to HYDI
 
 - Proto YI is a ProtoForge application with a manifest, capabilities, and event contracts.
-- It emits `project.created`, `timeline.created`, and `milestone.reached` through the ProtoForge `EventBus`.
-- The `ExternalAdapter` forwards these to the HYDI Event Gateway when configured.
+- It emits `project.created`, `timeline.created`, and `milestone.scheduled` through the ProtoForge `EventBus`.
+- `milestone.reached` is reserved for future completion events and is not emitted when a timeline is first created; no completion timestamp is fabricated.
+- The `ExternalAdapter` forwards canonical `manifest.eventsProduced` events to the HYDI Event Gateway when `HYDI_GATEWAY_ENDPOINT` is configured.
 - Policy decisions (`protoforge.policy.approved`, `protoforge.policy.rejected`) are listed as consumed events for future integration.
 - The RAW EVENT LEDGER remains the single source of truth for all event history.

@@ -1,9 +1,10 @@
 const crypto = require('crypto');
 const { createStore } = require('./persistence');
-const { EventBus, MemoryTransport } = require('./events/event-bus');
+const { EventBus, MemoryTransport, ExternalAdapter } = require('./events/event-bus');
 const { ValidationError, NotFoundError, ConflictError } = require('./errors');
 const { requireString } = require('./validation');
 const { ProtoIYEngineAdapter } = require('./adapters/protoiy-engine');
+const manifest = require('../manifest.json');
 
 function now() { return new Date().toISOString(); }
 function id() { return crypto.randomUUID(); }
@@ -103,6 +104,18 @@ function createRepository(options = {}) {
   const logger = options.logger || require('./logger').createLogger(config);
   const transports = [new MemoryTransport()];
   if (config.eventLogPath) transports.push(new (require('./events/event-bus').FileTransport)(config.eventLogPath));
+
+  if (config.hydiGatewayEndpoint) {
+    transports.push(new ExternalAdapter({
+      endpoint: config.hydiGatewayEndpoint,
+      serviceKey: config.hydiServiceKey,
+      eventTypes: manifest.eventsProduced,
+      system: 'proto-yi',
+      version: manifest.version,
+      logger
+    }));
+  }
+
   const store = options.store || createStore({ type: 'memory' });
   const eventBus = options.eventBus || new EventBus(transports);
   const adapter = options.adapter || new ProtoIYEngineAdapter({

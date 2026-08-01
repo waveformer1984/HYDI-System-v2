@@ -64,29 +64,29 @@ class ProtoIYEngineAdapter {
     this.logger.debug('adapter', 'timeline.create.request', { project_id, milestones, start_date, duration_days });
     await this.client.post('/proto_iy/timeline', { project_id, milestones, start_date, duration_days });
 
-    const created = milestones.map(milestone => ({
+    const scheduled = milestones.map(milestone => ({
       project_id,
       milestone,
       start_date,
       duration_days,
-      status: 'reached',
-      reached_at: new Date().toISOString()
+      status: 'scheduled',
+      scheduled_at: new Date().toISOString()
     }));
 
     this._emit('timeline.created', {
       project_id,
-      milestones: created,
+      milestones: scheduled,
       start_date,
       duration_days,
       created_at: new Date().toISOString()
     });
 
-    for (const item of created) {
-      this._emit('milestone.reached', item);
+    for (const item of scheduled) {
+      this._emit('milestone.scheduled', item);
     }
 
     this.logger.info('adapter', 'timeline.created', `Timeline for project ${project_id} created with ${milestones.length} milestones`);
-    return { ok: true, project_id, milestones: created };
+    return { ok: true, project_id, milestones: scheduled };
   }
 
   async getTimeline(projectId) {

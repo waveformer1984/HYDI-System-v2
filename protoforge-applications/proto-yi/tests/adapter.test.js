@@ -77,7 +77,7 @@ describe('ProtoIYEngineAdapter', () => {
     assert.strictEqual(client.calls[0].path, '/proto_iy/project/7');
   });
 
-  it('creates a timeline and emits timeline.created and milestone.reached', async () => {
+  it('creates a timeline and emits timeline.created and milestone.scheduled', async () => {
     const transport = new MemoryTransport();
     const eventBus = new EventBus([transport]);
     const client = createFakeClient();
@@ -99,10 +99,15 @@ describe('ProtoIYEngineAdapter', () => {
     assert.strictEqual(timelineEvents.length, 1);
     assert.strictEqual(timelineEvents[0].payload.project_id, 42);
 
-    const milestoneEvents = transport.ofType('milestone.reached');
-    assert.strictEqual(milestoneEvents.length, 3);
-    assert.strictEqual(milestoneEvents[0].payload.milestone, 'Design');
-    assert.strictEqual(milestoneEvents[2].payload.milestone, 'Ship');
+    const scheduled = transport.ofType('milestone.scheduled');
+    assert.strictEqual(scheduled.length, 3);
+    assert.strictEqual(scheduled[0].payload.milestone, 'Design');
+    assert.strictEqual(scheduled[0].payload.status, 'scheduled');
+    assert.ok(scheduled[0].payload.scheduled_at);
+    assert.strictEqual(scheduled[2].payload.milestone, 'Ship');
+
+    const reached = transport.ofType('milestone.reached');
+    assert.strictEqual(reached.length, 0);
   });
 
   it('translates timeline GET response', async () => {

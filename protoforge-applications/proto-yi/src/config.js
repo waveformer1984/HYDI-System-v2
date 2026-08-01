@@ -13,6 +13,8 @@ function createConfig(env = process.env) {
   const dataDir = env.DATA_DIR || defaults.dataDir;
   const dbPath = env.DB_PATH || path.join(dataDir, env.DB_FILE || defaults.dbFile);
   const eventLogPath = env.EVENT_LOG_PATH || path.join(dataDir, env.EVENT_LOG_FILE || defaults.eventLogFile);
+  const hydiGatewayEndpoint = (env.HYDI_GATEWAY_ENDPOINT || '').replace(/\/$/, '');
+  const eventTransport = env.EVENT_TRANSPORT || (hydiGatewayEndpoint ? 'external' : 'memory');
 
   return {
     port: intOr(env.PORT, defaults.port),
@@ -20,6 +22,9 @@ function createConfig(env = process.env) {
     dbPath,
     eventLogPath,
     protoiyEndpoint: (env.PROTOIY_ENDPOINT || 'http://localhost:5000').replace(/\/$/, ''),
+    hydiGatewayEndpoint,
+    hydiServiceKey: env.HYDI_SERVICE_KEY,
+    eventTransport,
     logLevel: (env.LOG_LEVEL || defaults.logLevel).toLowerCase(),
     featureFlags: {
       diagnostics: boolOr(env.ENABLE_DIAGNOSTICS, true),
