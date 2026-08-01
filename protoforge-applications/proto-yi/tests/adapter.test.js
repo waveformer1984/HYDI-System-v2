@@ -1,73 +1,33 @@
-const { describe, it, before, after } = require('node:test');
+const { describe, it } = require('node:test');
 const assert = require('node:assert');
-const http = require('http');
 const { ProtoIYEngineAdapter } = require('../src/adapters/protoiy-engine');
 const { EventBus, MemoryTransport } = require('../src/events/event-bus');
 
-function createMockFlaskServer() {
-  const server = http.createServer((req, res) => {
-    let body = '';
-    req.on('data', chunk => { body += chunk; });
-    req.on('end', () => {
-      res.setHeader('Content-Type', 'application/json');
-      if (req.method === 'GET' && req.url === '/health') {
-        res.writeHead(200);
-        res.end(JSON.stringify({ status: 'ursula-epm-online', apps: ['proto_iy'] }));
-        return;
-      }
-      if (req.method === 'POST' && req.url === '/proto_iy/project') {
-        const data = body ? JSON.parse(body) : {};
-        res.writeHead(201);
-        res.end(JSON.stringify({ project_id: 42, status: 'created', name: data.name }));
-        return;
-      }
-      if (req.method === 'POST' && req.url === '/proto_iy/timeline') {
-        const data = body ? JSON.parse(body) : {};
-        res.writeHead(201);
-        res.end(JSON.stringify({ status: 'timeline_created', project_id: data.project_id }));
-        return;
-      }
-      res.writeHead(404);
-      res.end(JSON.stringify({ error: 'not found' }));
-    });
-  });
-
-  return new Promise((resolve, reject) => {
-    server.listen(0, (err) => {
-      if (err) return reject(err);
-      resolve({ server, port: server.address().port });
-    });
-  });
+function createFakeClient(overrides = {}) {
+  const calls = [];
+  return {
+    calls,
+    endpoint: 'http://test-engine',
+    async post(path, body) {
+      calls.push({ method: 'post', path, body });
+      if (overrides.post) return overrides.post(path, body);
+      return { project_id: 42, status: 'created' };
+    },
+    async get(path) {
+      calls.push({ method: 'get', path });
+      if (overrides.get) return overrides.get(path);
+      return { status: 'test' };
+    }
+  };
 }
 
 describe('ProtoIYEngineAdapter', () => {
-  let server;
-  let port;
-  let eventBus;
-  let transport;
-
-  before(async () => {
-    const mock = await createMockFlaskServer();
-    server = mock.server;
-    port = mock.port;
-  });
-
-  after(() => {
-    if (server) server.close();
-  });
-
-  before(() => {
-    transport = new MemoryTransport();
-    eventBus = new EventBus([transport]);
-  });
-
-  it('creates a project through the Flask engine and emits project.created', async () => {
+  it('creates a project through the injected client and emits project.created', async () => {
+    const transport = new MemoryTransport();
+    const eventBus = new EventBus([transport]);
+    const client = createFakeClient();
     const logger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
-    const adapter = new ProtoIYEngineAdapter({
-      endpoint: `http://localhost:${port}`,
-      eventBus,
-      logger
-    });
+    const adapter = new ProtoIYEngineAdapter({ client, eventBus, logger });
 
     const result = await adapter.createProject({
       name: 'HYDI Consolidation',
@@ -77,27 +37,55 @@ describe('ProtoIYEngineAdapter', () => {
 
     assert.strictEqual(result.ok, true);
     assert.strictEqual(result.project.project_id, 42);
-    assert.strictEqual(result.project.name, 'HYDI Consolidation');
-    assert.strictEqual(result.project.category, 'software');
-    assert.strictEqual(result.project.owner_id, 101);
+    assert.strictEqual(client.calls.length, 1);
+    assert.strictEqual(client.calls[0].method, 'post');
+    assert.strictEqual(client.calls[0].path, '/proto_iy/project');
+    assert.strictEqual(client.calls[0].body.name, 'HYDI Consolidation');
 
     const emitted = transport.ofType('project.created');
     assert.strictEqual(emitted.length, 1);
-    assert.strictEqual(emitted[0].type, 'project.created');
     assert.strictEqual(emitted[0].payload.project_id, 42);
+    assert.strictEqual(emitted[0].payload.name, 'HYDI Consolidation');
   });
 
-  it('creates a timeline and emits milestone.created for each milestone', async () => {
-    const logger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
-    const adapter = new ProtoIYEngineAdapter({
-      endpoint: `http://localhost:${port}`,
-      eventBus,
-      logger
+  it('fails when the engine returns a non-OK response', async () => {
+    const client = createFakeClient({
+      post: () => { const err = new Error('bad request'); err.status = 400; throw err; }
     });
+    const logger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
+    const adapter = new ProtoIYEngineAdapter({ client, logger });
 
-    transport.reset();
+    await assert.rejects(
+      adapter.createProject({ name: 'Bad', category: 'test', owner_id: 1 }),
+      /bad request/
+    );
+  });
+
+  it('translates project GET response', async () => {
+    const client = createFakeClient({
+      get: (path) => {
+        if (path === '/proto_iy/project/7') return { project_id: 7, name: 'Fetched', category: 'test' };
+        return {};
+      }
+    });
+    const logger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
+    const adapter = new ProtoIYEngineAdapter({ client, logger });
+
+    const result = await adapter.getProject(7);
+    assert.strictEqual(result.ok, true);
+    assert.strictEqual(result.project.project_id, 7);
+    assert.strictEqual(client.calls[0].path, '/proto_iy/project/7');
+  });
+
+  it('creates a timeline and emits timeline.created and milestone.reached', async () => {
+    const transport = new MemoryTransport();
+    const eventBus = new EventBus([transport]);
+    const client = createFakeClient();
+    const logger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
+    const adapter = new ProtoIYEngineAdapter({ client, eventBus, logger });
+
     const result = await adapter.createTimeline({
-      project_id: '42',
+      project_id: 42,
       milestones: ['Design', 'Build', 'Ship'],
       start_date: '2026-08-01',
       duration_days: 30
@@ -105,46 +93,86 @@ describe('ProtoIYEngineAdapter', () => {
 
     assert.strictEqual(result.ok, true);
     assert.strictEqual(result.milestones.length, 3);
-    assert.strictEqual(result.milestones[0].milestone, 'Design');
+    assert.strictEqual(client.calls[0].path, '/proto_iy/timeline');
 
-    const emitted = transport.ofType('milestone.created');
-    assert.strictEqual(emitted.length, 3);
-    assert.strictEqual(emitted[0].payload.project_id, '42');
-    assert.strictEqual(emitted[1].payload.milestone, 'Build');
+    const timelineEvents = transport.ofType('timeline.created');
+    assert.strictEqual(timelineEvents.length, 1);
+    assert.strictEqual(timelineEvents[0].payload.project_id, 42);
+
+    const milestoneEvents = transport.ofType('milestone.reached');
+    assert.strictEqual(milestoneEvents.length, 3);
+    assert.strictEqual(milestoneEvents[0].payload.milestone, 'Design');
+    assert.strictEqual(milestoneEvents[2].payload.milestone, 'Ship');
   });
 
-  it('checks engine health', async () => {
-    const logger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
-    const adapter = new ProtoIYEngineAdapter({
-      endpoint: `http://localhost:${port}`,
-      logger
+  it('translates timeline GET response', async () => {
+    const client = createFakeClient({
+      get: (path) => {
+        if (path === '/proto_iy/timeline/42') return [{ milestone: 'M1' }];
+        return [];
+      }
     });
+    const logger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
+    const adapter = new ProtoIYEngineAdapter({ client, logger });
+
+    const result = await adapter.getTimeline(42);
+    assert.strictEqual(result.ok, true);
+    assert.deepStrictEqual(result.timeline, [{ milestone: 'M1' }]);
+  });
+
+  it('reports engine health through the injected client', async () => {
+    const client = createFakeClient({
+      get: (path) => {
+        if (path === '/health') return { status: 'ursula-epm-online' };
+        return {};
+      }
+    });
+    const logger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
+    const adapter = new ProtoIYEngineAdapter({ client, logger });
 
     const result = await adapter.health();
     assert.strictEqual(result.ok, true);
     assert.strictEqual(result.status, 'ursula-epm-online');
+    assert.strictEqual(client.calls[0].path, '/health');
   });
 
-  it('returns unreachable when the engine is down', async () => {
-    const logger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
-    const adapter = new ProtoIYEngineAdapter({
-      endpoint: 'http://localhost:59999',
-      logger,
-      timeout: 200
+  it('reports unreachable when the client throws', async () => {
+    const client = createFakeClient({
+      get: () => { throw new Error('connection refused'); }
     });
+    const logger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
+    const adapter = new ProtoIYEngineAdapter({ client, logger });
 
     const result = await adapter.health();
     assert.strictEqual(result.ok, false);
     assert.strictEqual(result.status, 'unreachable');
+    assert.strictEqual(result.error, 'connection refused');
   });
 
   it('validates required project fields', async () => {
-    const adapter = new ProtoIYEngineAdapter({ endpoint: `http://localhost:${port}` });
+    const client = createFakeClient();
+    const logger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
+    const adapter = new ProtoIYEngineAdapter({ client, logger });
     await assert.rejects(adapter.createProject({ name: 'Only name' }), /Missing required field/);
   });
 
   it('validates timeline fields', async () => {
-    const adapter = new ProtoIYEngineAdapter({ endpoint: `http://localhost:${port}` });
-    await assert.rejects(adapter.createTimeline({ project_id: '1', milestones: [], start_date: '2026-08-01', duration_days: 10 }), /non-empty array/);
+    const client = createFakeClient();
+    const logger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
+    const adapter = new ProtoIYEngineAdapter({ client, logger });
+    await assert.rejects(
+      adapter.createTimeline({ project_id: '1', milestones: [], start_date: '2026-08-01', duration_days: 10 }),
+      /non-empty array/
+    );
+  });
+
+  it('throws on missing required timeline fields', async () => {
+    const client = createFakeClient();
+    const logger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
+    const adapter = new ProtoIYEngineAdapter({ client, logger });
+    await assert.rejects(
+      adapter.createTimeline({ project_id: '1', start_date: '2026-08-01', duration_days: 10 }),
+      /Missing required field: milestones/
+    );
   });
 });

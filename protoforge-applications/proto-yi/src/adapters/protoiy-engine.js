@@ -1,11 +1,11 @@
 const { ValidationError } = require('../errors');
+const { createFetchClient } = require('./http-client');
 
 class ProtoIYEngineAdapter {
   constructor(options = {}) {
-    this.endpoint = (options.endpoint || 'http://localhost:5000').replace(/\/$/, '');
+    this.client = options.client || createFetchClient(options.endpoint, { timeout: options.timeout, logger: options.logger });
     this.eventBus = options.eventBus || null;
     this.logger = options.logger || { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
-    this.timeout = options.timeout || 5000;
   }
 
   _require(input, field) {
@@ -13,24 +13,6 @@ class ProtoIYEngineAdapter {
       throw new ValidationError(`Missing required field: ${field}`);
     }
     return input[field];
-  }
-
-  async _post(path, payload) {
-    const url = `${this.endpoint}${path}`;
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), this.timeout);
-    try {
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-        signal: controller.signal
-      });
-      if (!res.ok) throw new Error(`Proto.I.Y engine returned ${res.status} for ${path}`);
-      return await res.json();
-    } finally {
-      clearTimeout(timer);
-    }
   }
 
   _emit(type, payload) {
@@ -47,7 +29,7 @@ class ProtoIYEngineAdapter {
     const owner_id = this._require(input, 'owner_id');
 
     this.logger.debug('adapter', 'project.create.request', { name, category, owner_id });
-    const result = await this._post('/proto_iy/project', { name, category, owner_id });
+    const result = await this.client.post('/proto_iy/project', { name, category, owner_id });
 
     const project = {
       project_id: result.project_id,
@@ -63,6 +45,12 @@ class ProtoIYEngineAdapter {
     return { ok: true, project };
   }
 
+  async getProject(id) {
+    this.logger.debug('adapter', 'project.get', { project_id: id });
+    const result = await this.client.get(`/proto_iy/project/${id}`);
+    return { ok: true, project: result };
+  }
+
   async createTimeline(input) {
     const project_id = this._require(input, 'project_id');
     const milestones = this._require(input, 'milestones');
@@ -74,38 +62,47 @@ class ProtoIYEngineAdapter {
     }
 
     this.logger.debug('adapter', 'timeline.create.request', { project_id, milestones, start_date, duration_days });
-    await this._post('/proto_iy/timeline', { project_id, milestones, start_date, duration_days });
+    await this.client.post('/proto_iy/timeline', { project_id, milestones, start_date, duration_days });
 
     const created = milestones.map(milestone => ({
       project_id,
       milestone,
       start_date,
       duration_days,
-      status: 'created',
-      created_at: new Date().toISOString()
+      status: 'reached',
+      reached_at: new Date().toISOString()
     }));
 
+    this._emit('timeline.created', {
+      project_id,
+      milestones: created,
+      start_date,
+      duration_days,
+      created_at: new Date().toISOString()
+    });
+
     for (const item of created) {
-      this._emit('milestone.created', item);
+      this._emit('milestone.reached', item);
     }
 
     this.logger.info('adapter', 'timeline.created', `Timeline for project ${project_id} created with ${milestones.length} milestones`);
     return { ok: true, project_id, milestones: created };
   }
 
+  async getTimeline(projectId) {
+    this.logger.debug('adapter', 'timeline.get', { project_id: projectId });
+    const result = await this.client.get(`/proto_iy/timeline/${projectId}`);
+    return { ok: true, project_id: projectId, timeline: result };
+  }
+
   async health() {
-    const url = `${this.endpoint}/health`;
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), this.timeout);
+    const url = this.client.endpoint;
+    this.logger.debug('adapter', 'health.check', url);
     try {
-      const res = await fetch(url, { method: 'GET', signal: controller.signal });
-      if (!res.ok) return { ok: false, status: 'unhealthy', endpoint: this.endpoint };
-      const data = await res.json();
-      return { ok: true, status: data.status || 'unknown', endpoint: this.endpoint, data };
+      const data = await this.client.get('/health');
+      return { ok: true, status: data.status || 'unknown', endpoint: url, data };
     } catch (err) {
-      return { ok: false, status: 'unreachable', endpoint: this.endpoint, error: err instanceof Error ? err.message : 'Unknown error' };
-    } finally {
-      clearTimeout(timer);
+      return { ok: false, status: 'unreachable', endpoint: url, error: err instanceof Error ? err.message : 'Unknown error' };
     }
   }
 }

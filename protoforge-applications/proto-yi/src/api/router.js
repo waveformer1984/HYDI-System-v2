@@ -1,7 +1,7 @@
 const express = require('express');
 const crypto = require('crypto');
 
-function createApi(repository, adapter, config = {}) {
+function createApi(repository, config = {}) {
   const app = express();
   app.use(express.json());
 
@@ -23,7 +23,7 @@ function createApi(repository, adapter, config = {}) {
   }
 
   function requireAdapter(req, res) {
-    if (!adapter) {
+    if (!repository || !repository.adapter) {
       sendError(res, 503, 'Proto.I.Y engine adapter not configured', req.requestId);
       return false;
     }
@@ -32,23 +32,41 @@ function createApi(repository, adapter, config = {}) {
 
   app.get('/health', h((req, res) => send(res, { status: 'ok', requestId: req.requestId })));
 
+  app.get('/diagnostics', h(async (req, res) => {
+    const { collectDiagnostics } = require('./diagnostics');
+    const diag = await collectDiagnostics(repository);
+    send(res, diag);
+  }));
+
   app.get('/engine/health', h(async (req, res) => {
     if (!requireAdapter(req, res)) return;
-    const result = await adapter.health();
+    const result = await repository.engineHealth();
     send(res, result);
   }));
 
   app.post('/projects', h(async (req, res) => {
     if (!requireAdapter(req, res)) return;
-    const result = await adapter.createProject(req.body);
-    send(res, result, 201);
+    const project = await repository.createProject(req.body);
+    send(res, { project }, 201);
+  }));
+
+  app.get('/projects/:id', h(async (req, res) => {
+    if (!requireAdapter(req, res)) return;
+    const project = await repository.getProject(req.params.id);
+    send(res, { project });
   }));
 
   app.post('/projects/:id/timelines', h(async (req, res) => {
     if (!requireAdapter(req, res)) return;
     const payload = { ...req.body, project_id: req.params.id };
-    const result = await adapter.createTimeline(payload);
-    send(res, result, 201);
+    const timeline = await repository.createTimeline(payload);
+    send(res, { timeline }, 201);
+  }));
+
+  app.get('/projects/:id/timeline', h(async (req, res) => {
+    if (!requireAdapter(req, res)) return;
+    const timeline = await repository.getTimeline(req.params.id);
+    send(res, { timeline });
   }));
 
   app.post('/records', h((req, res) => {
