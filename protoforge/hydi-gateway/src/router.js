@@ -6,14 +6,19 @@ function send(res, status, data) {
   res.end(JSON.stringify(data));
 }
 
-function createRouter(config, store) {
-  return function handle(req, res, body) {
+function createRouter(config, rawLedger) {
+  return async function handle(req, res, body) {
     const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
     const pathname = url.pathname;
     const method = req.method;
 
     if (method === 'GET' && pathname === '/health') {
-      return send(res, 200, { ok: true, status: 'ok', events: store.count() });
+      try {
+        const health = await rawLedger.health();
+        return send(res, 200, { ok: true, status: 'ok', ...health });
+      } catch (err) {
+        return send(res, 503, { ok: false, status: 'degraded', error: err.message });
+      }
     }
 
     if (method === 'GET' && pathname === '/events') {
@@ -26,15 +31,20 @@ function createRouter(config, store) {
         offset: url.searchParams.get('offset'),
         limit: url.searchParams.get('limit')
       };
-      return send(res, 200, { ok: true, ...store.list(options) });
+      const result = await rawLedger.list(options);
+      if (!result.ok) return send(res, 502, { ok: false, error: result.error });
+      return send(res, 200, { ok: true, ...result });
     }
 
     if (method === 'GET' && pathname.startsWith('/events/')) {
       if (!requireAuth(req, res, config.serviceKey)) return;
       const id = pathname.slice(8);
-      const record = store.get(id);
-      if (!record) return send(res, 404, { ok: false, error: 'Event not found' });
-      return send(res, 200, { ok: true, event: record });
+      const result = await rawLedger.get(id);
+      if (!result.ok) {
+        const status = result.code === '404' ? 404 : 502;
+        return send(res, status, { ok: false, error: result.error });
+      }
+      return send(res, 200, { ok: true, event: result.event });
     }
 
     if (method === 'POST' && pathname === '/events') {
@@ -44,8 +54,13 @@ function createRouter(config, store) {
       }
       const valid = validateEvent(body);
       if (!valid.ok) return send(res, 400, { ok: false, error: valid.error });
-      const record = store.append(body);
-      return send(res, 201, { ok: true, event: record });
+
+      const result = await rawLedger.append(body);
+      if (!result.ok) {
+        const status = result.code === '409' ? 409 : 502;
+        return send(res, status, { ok: false, error: result.error, record: result.record });
+      }
+      return send(res, 201, { ok: true, event: result.record });
     }
 
     return send(res, 404, { ok: false, error: 'Not found' });

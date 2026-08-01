@@ -11,6 +11,8 @@
   "keywords": ["protoforge", "hydi", "event-gateway"],
   "author": "",
   "license": "UNLICENSED",
-  "dependencies": {},
+  "dependencies": {
+    "@supabase/supabase-js": "^2.108.2"
+  },
   "devDependencies": {}
 }

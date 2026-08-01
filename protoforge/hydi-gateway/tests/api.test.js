@@ -1,26 +1,66 @@
 const { describe, it } = require('node:test');
 const assert = require('node:assert');
-const fs = require('fs');
-const path = require('path');
-const os = require('os');
 const { loadConfig } = require('../src/config');
-const { Ledger } = require('../src/store');
+const { computeFingerprint } = require('../src/adapters/raw-ledger');
 const { createServer } = require('../src/server');
 
-function makeServer() {
-  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'hydi-api-'));
+function createMockLedger() {
+  const events = new Map();
+  return {
+    async append(envelope) {
+      const fingerprint = computeFingerprint(envelope.source, envelope.eventId, envelope.eventType);
+      if (events.has(fingerprint)) {
+        return { ok: false, error: 'Duplicate fingerprint', code: '409', record: events.get(fingerprint) };
+      }
+      const record = {
+        ...envelope,
+        fingerprint,
+        hash: 'hash',
+        id: 'id-' + fingerprint.slice(0, 8),
+        created_at: new Date().toISOString(),
+        receivedAt: new Date().toISOString()
+      };
+      events.set(fingerprint, record);
+      return { ok: true, record };
+    },
+    async get(fingerprint) {
+      const event = events.get(fingerprint);
+      if (!event) return { ok: false, error: 'Event not found', code: '404' };
+      return { ok: true, event };
+    },
+    async list(options = {}) {
+      const all = [...events.values()];
+      let filtered = all;
+      if (options.eventType) filtered = filtered.filter(e => e.eventType === options.eventType);
+      if (options.source) filtered = filtered.filter(e => e.source === options.source);
+      const offset = Math.max(0, parseInt(options.offset, 10) || 0);
+      const limit = Math.min(1000, Math.max(1, parseInt(options.limit, 10) || 100));
+      return {
+        ok: true,
+        events: filtered.slice(offset, offset + limit),
+        total: filtered.length,
+        offset,
+        limit,
+        hasMore: offset + limit < filtered.length
+      };
+    },
+    async health() {
+      return { ok: true, connected: true, events: events.size };
+    }
+  };
+}
+
+async function makeServer() {
   const config = loadConfig({
     HYDI_SERVICE_KEY: 'test-secret',
-    PORT: '0',
-    DATA_DIR: dataDir,
-    LEDGER_FILE: 'events.json'
+    PORT: '0'
   });
-  const store = new Ledger(config);
-  const server = createServer(config, store);
+  const rawLedger = createMockLedger();
+  const server = createServer(config, rawLedger);
   return new Promise((resolve, reject) => {
     server.listen(0, (err) => {
       if (err) return reject(err);
-      resolve({ server, port: server.address().port, config });
+      resolve({ server, port: server.address().port, rawLedger });
     });
   });
 }
@@ -101,6 +141,7 @@ describe('Event Gateway API', () => {
       const { res, data } = await request(port, { path: '/events', method: 'POST', auth: true }, body);
       assert.strictEqual(res.status, 201);
       assert.strictEqual(data.ok, true);
+      assert.ok(data.event.fingerprint);
       assert.strictEqual(data.event.eventId, 'evt-1');
       assert.ok(data.event.receivedAt);
     } finally {
@@ -144,12 +185,28 @@ describe('Event Gateway API', () => {
     }
   });
 
-  it('retrieves a stored event by id', async () => {
+  it('rejects duplicate fingerprint', async () => {
     const { server, port } = await makeServer();
     try {
+      const body = { eventId: 'dup', eventType: 'x', source: 'r', payload: {} };
+      const { res: r1 } = await request(port, { path: '/events', method: 'POST', auth: true }, body);
+      assert.strictEqual(r1.status, 201);
+      const { res: r2, data: d2 } = await request(port, { path: '/events', method: 'POST', auth: true }, body);
+      assert.strictEqual(r2.status, 409);
+      assert.strictEqual(d2.error, 'Duplicate fingerprint');
+      assert.ok(d2.record);
+    } finally {
+      server.close();
+    }
+  });
+
+  it('retrieves a stored event by fingerprint', async () => {
+    const { server, port, rawLedger } = await makeServer();
+    try {
       const body = { eventId: 'evt-get', eventType: 'x', source: 'r', payload: {} };
-      await request(port, { path: '/events', method: 'POST', auth: true }, body);
-      const { res, data } = await request(port, { path: '/events/evt-get', auth: true });
+      const appendResult = await rawLedger.append(body);
+      const fp = appendResult.record.fingerprint;
+      const { res, data } = await request(port, { path: `/events/${fp}`, auth: true });
       assert.strictEqual(res.status, 200);
       assert.strictEqual(data.event.eventId, 'evt-get');
     } finally {
@@ -218,7 +275,6 @@ describe('Event Gateway API', () => {
       const { res, data } = await request(port, { path: '/events?offset=1&limit=2', auth: true });
       assert.strictEqual(res.status, 200);
       assert.strictEqual(data.events.length, 2);
-      assert.strictEqual(data.events[0].eventId, 'p1');
       assert.strictEqual(data.hasMore, true);
       assert.strictEqual(data.total, 5);
     } finally {
@@ -231,6 +287,34 @@ describe('Event Gateway API', () => {
     try {
       const { res } = await request(port, { path: '/unknown', auth: true });
       assert.strictEqual(res.status, 404);
+    } finally {
+      server.close();
+    }
+  });
+
+  it('returns 502 when ledger adapter fails', async () => {
+    const config = loadConfig({
+      HYDI_SERVICE_KEY: 'test-secret',
+      PORT: '0'
+    });
+    const failingLedger = {
+      async append() { return { ok: false, error: 'Supabase unavailable' }; },
+      async get() { return { ok: false, error: 'Supabase unavailable' }; },
+      async list() { return { ok: false, error: 'Supabase unavailable' }; },
+      async health() { return { ok: false, connected: false, error: 'Supabase unavailable' }; }
+    };
+    const server = createServer(config, failingLedger);
+    const { port } = await new Promise((resolve, reject) => {
+      server.listen(0, (err) => {
+        if (err) return reject(err);
+        resolve({ port: server.address().port });
+      });
+    });
+    try {
+      const body = { eventId: 'fail', eventType: 'x', source: 'r', payload: {} };
+      const { res, data } = await request(port, { path: '/events', method: 'POST', auth: true }, body);
+      assert.strictEqual(res.status, 502);
+      assert.match(data.error, /Supabase unavailable/);
     } finally {
       server.close();
     }

@@ -2,11 +2,9 @@
 
 ## Purpose
 
-The HYDI Event Gateway is the first shared ProtoForge infrastructure service. It receives domain events from ProtoForge applications and stores them in the RAW EVENT LEDGER without controlling application behavior.
+The HYDI Event Gateway is the shared ProtoForge infrastructure service that receives domain events from ProtoForge applications and commits them to the canonical RAW EVENT LEDGER.
 
-Applications decide what to do. HYDI observes, coordinates, and reasons.
-
-## Architecture
+Applications never write directly to the RAW EVENT LEDGER. They send events to the gateway. The gateway validates, fingerprints, and delegates persistence to the existing HYDI ledger implementation.
 
 ```text
 Applications
@@ -15,7 +13,7 @@ Applications
 HYDI Event Gateway
      |
      v
-RAW EVENT LEDGER  (data/events.json)
+Canonical RAW EVENT LEDGER
      |
      v
 Future:
@@ -23,6 +21,18 @@ CASCADE
 KILO
 ProtoForge Intelligence
 ```
+
+## Canonical ledger
+
+There is one and only one RAW EVENT LEDGER. It lives in:
+
+- Implementation: `lib/protoforge/raw-ledger.ts`
+- Table: `raw_event_ledger` (see `supabase/migrations/`)
+- Columns: `id`, `fingerprint`, `event_type`, `payload`, `hash`, `created_at`
+
+The gateway writes to this table through `src/adapters/raw-ledger.js` using `@supabase/supabase-js`.
+
+The gateway does not maintain a second ledger, a JSON file, or any other shadow store.
 
 ## Event envelope
 
@@ -46,7 +56,23 @@ Validation rules:
 - `version` optional, string
 - `timestamp` optional, ISO 8601 string
 
-The gateway adds `receivedAt` on storage.
+The gateway adds `receivedAt` and computes a SHA-256 `fingerprint` and `hash`.
+
+## Fingerprint and hashing
+
+The gateway generates a deterministic `fingerprint` from the event:
+
+```text
+sha256({ source, eventId, eventType })
+```
+
+The canonical ledger `hash` is computed exactly as `lib/protoforge/raw-ledger.ts` computes it:
+
+```text
+sha256({ fingerprint, event_type, payload })
+```
+
+This guarantees that the gateway and the canonical ledger produce identical hashes for the same event.
 
 ## Authentication
 
@@ -62,49 +88,64 @@ Authorization: Bearer <HYDI_SERVICE_KEY>
 
 ```env
 HYDI_SERVICE_KEY=long-random-secret
+SUPABASE_URL=https://...
+SUPABASE_SERVICE_ROLE_KEY=...
 PORT=4000
-DATA_DIR=./data
-LEDGER_FILE=events.json
 ```
+
+`SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are required because the gateway commits to the canonical `raw_event_ledger` table.
 
 ## Endpoints
 
 ### `GET /health`
 
-Public. Returns basic gateway status and event count.
+Public. Returns gateway status and ledger connectivity.
 
 ```json
-{ "ok": true, "status": "ok", "events": 0 }
+{
+  "ok": true,
+  "status": "ok",
+  "connected": true,
+  "events": 0
+}
 ```
+
+If the ledger is unreachable, it returns 503 with `ok: false`.
 
 ### `POST /events`
 
-Ingest an event. Returns 201 with the stored record.
+Ingest an event. The gateway:
+
+1. Validates the envelope.
+2. Generates a fingerprint.
+3. Checks the canonical ledger for an existing fingerprint.
+4. Inserts the event with `fingerprint`, `event_type`, `payload`, and `hash`.
+5. Returns 201 with the stored record, or 409 for duplicate fingerprints.
 
 ### `GET /events`
 
-Query the ledger.
+Query the canonical ledger.
 
 Query parameters:
 
-- `eventType` — filter by event type
-- `source` — filter by source application
-- `since` — lower bound timestamp
-- `until` — upper bound timestamp
+- `eventType` — filter by `event_type`
+- `source` — filter by embedded `payload._meta.source`
+- `since` — lower bound `created_at`
+- `until` — upper bound `created_at`
 - `offset` — pagination offset
 - `limit` — max events (default 100, max 1000)
 
-### `GET /events/:id`
+### `GET /events/:fingerprint`
 
-Retrieve a single event by `eventId`.
+Retrieve a single event by its canonical `fingerprint`.
 
-## Storage
+## Replay
 
-The RAW EVENT LEDGER is a single JSON file (`data/events.json`) that is appended to atomically. Writes use a temporary file and `fs.rename` to avoid corruption. This is a starting point; a real deployment can replace it with a database-backed store without changing the API.
+`GET /events?offset=0&limit=100` returns events in append order. Future consumers can replay from the beginning by iterating `offset`.
 
 ## Supported event types
 
-The gateway is schema-agnostic by design. These are the first expected events:
+The gateway is schema-agnostic. Expected first-class events:
 
 - `audio.asset.created`
 - `processing.completed`
@@ -113,14 +154,9 @@ The gateway is schema-agnostic by design. These are the first expected events:
 - `contract.created`
 - `payment.completed`
 
-## Replay
-
-`GET /events?offset=0&limit=100` returns events in append order. Future consumers can replay from the beginning by iterating `offset`.
-
 ## Future expansion
 
-- Replace file ledger with immutable database
-- Add `CASCADE` classification endpoint
-- Add `KILO` hypothesis generation consumption
-- Add SSE stream for real-time subscribers
-- Add event deduplication by `eventId`
+- SSE stream for real-time subscribers
+- CASCADE classification endpoint
+- KILO hypothesis consumption
+- Event deduplication beyond fingerprint (e.g., content hash)

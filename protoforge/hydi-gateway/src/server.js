@@ -1,8 +1,8 @@
 const http = require('http');
 const { createRouter } = require('./router');
 
-function createServer(config, store) {
-  const handle = createRouter(config, store);
+function createServer(config, rawLedger) {
+  const handle = createRouter(config, rawLedger);
 
   const server = http.createServer(async (req, res) => {
     const chunks = [];
