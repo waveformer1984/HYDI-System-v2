@@ -1,0 +1,14 @@
+{
+  "name": "Proto YI",
+  "version": "0.1.0",
+  "capabilities": [],
+  "eventsProduced": [],
+  "eventsConsumed": [],
+  "providers": [],
+  "dependencies": {
+    "services": [],
+    "packages": []
+  },
+  "healthRequirements": [],
+  "deprecated": false
+}

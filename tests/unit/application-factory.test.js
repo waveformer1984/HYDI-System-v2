@@ -1,3 +1,4 @@
+const fs = require('fs');
 const path = require('path');
 const { getRuntimeInventory } = require('../../lib/platform-diagnostics');
 const { validateManifest, createManifest, loadManifest, discover } = require('../../protoforge/packages/application-manifest/src/index');
@@ -131,5 +132,68 @@ describe('ProtoForge Application Factory', () => {
     const inventory = await getRuntimeInventory();
     expect(inventory.canonical.length).toBeGreaterThan(0);
     expect(inventory.legacy.length).toBeGreaterThan(0);
+  });
+
+  test('diagnostics governance includes registry and policy status', async () => {
+    const inventory = await getRuntimeInventory();
+    expect(inventory.governance).toBeDefined();
+    expect(inventory.governance.registry.total).toBeGreaterThanOrEqual(2);
+    expect(typeof inventory.governance.policy.ok).toBe('boolean');
+    expect(Array.isArray(inventory.governance.applicationHealth)).toBe(true);
+    expect(inventory.governance.applicationHealth.every(a => a.policyValid)).toBe(true);
+    expect(inventory.summary.applicationsHealthy).toBeGreaterThanOrEqual(2);
+  });
+
+  test('ApplicationRegistry enforces lifecycle transitions', () => {
+    const { ApplicationRegistry, canTransition } = require('../../protoforge/packages/application-registry/src/index');
+    const reg = new ApplicationRegistry({ autoLoad: false });
+    reg.register({ name: 'New' });
+    expect(canTransition('created', 'registered')).toBe(true);
+    expect(canTransition('created', 'active')).toBe(false);
+    const res = reg.transition('New', 'active');
+    expect(res.ok).toBe(false);
+  });
+
+  test('CapabilityPolicy rejects forbidden safety events', () => {
+    const { CapabilityPolicy } = require('../../protoforge/packages/capability-policy/src/index');
+    const policy = new CapabilityPolicy({
+      bad: { allowedEventsProduced: ['system.delete.everything'], allowedEventsConsumed: [] }
+    });
+    const result = policy.validate({
+      name: 'bad',
+      eventsProduced: ['system.delete.everything']
+    });
+    expect(result.ok).toBe(false);
+    expect(result.errors.some(e => e.includes('forbidden'))).toBe(true);
+  });
+
+  test('validate-app rejects generated app with missing tests', () => {
+    const { validate } = require('../../protoforge/tools/validate-app/src/validator');
+    const os = require('os');
+    const targetDir = path.join(os.tmpdir(), `pf-bad-${Date.now()}`);
+    fs.mkdirSync(targetDir, { recursive: true });
+    fs.writeFileSync(path.join(targetDir, 'manifest.json'), JSON.stringify({
+      name: 'Bad',
+      version: '0.1.0',
+      capabilities: [],
+      eventsProduced: [],
+      eventsConsumed: [],
+      providers: []
+    }));
+    const result = validate(targetDir);
+    expect(result.ok).toBe(false);
+    expect(result.errors.some(e => e.includes('tests'))).toBe(true);
+  });
+
+  test('generated app can be activated and deprecated', () => {
+    const { ApplicationRegistry } = require('../../protoforge/packages/application-registry/src/index');
+    const reg = new ApplicationRegistry({ autoLoad: false });
+    const generated = reg.register({ name: 'proto-yi', version: '0.1.0', status: 'registered' });
+    const active = reg.activate('proto-yi');
+    expect(active.ok).toBe(true);
+    expect(active.application.status).toBe('active');
+    const deprecated = reg.deprecate('proto-yi');
+    expect(deprecated.ok).toBe(true);
+    expect(deprecated.application.status).toBe('deprecated');
   });
 });

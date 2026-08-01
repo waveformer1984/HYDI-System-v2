@@ -12,7 +12,7 @@ if (!name) {
 }
 
 const result = generate(name, {
-  cwd: path.resolve(__dirname, '..', '..', '..'),
+  cwd: path.resolve(__dirname, '..', '..', '..', '..'),
   force
 });
 
