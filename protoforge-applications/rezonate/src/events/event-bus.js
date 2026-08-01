@@ -65,35 +65,48 @@ class ExternalAdapter {
     this.enabled = Boolean(options.endpoint) && options.enabled !== false;
     this.system = options.system || 'resonate';
     this.version = options.version || '1.0';
+    this.serviceKey = options.serviceKey || options.hydiServiceKey || process.env.HYDI_SERVICE_KEY;
     this.logger = options.logger || { warn: () => {} };
     this.outbox = [];
+    this.healthy = null;
+    this.eventTypes = options.eventTypes || [
+      'audio.asset.created',
+      'processing.completed',
+      'ownership.created',
+      'rights.registered'
+    ];
   }
 
   translate(event) {
     return {
-      system: this.system,
-      event: event.type,
+      eventId: event.id,
+      eventType: event.type,
+      source: this.system,
       version: this.version,
-      id: event.id,
-      createdAt: event.createdAt,
-      data: { ...event.payload, _meta: { ...event.meta } }
+      timestamp: event.createdAt,
+      payload: event.payload
     };
   }
 
   async publish(event) {
     if (!this.enabled) return { ok: true, skipped: true };
+    if (!this.eventTypes.includes(event.type)) return { ok: true, skipped: true };
     this.outbox.push({ id: event.id, event, at: new Date().toISOString() });
     try {
+      const headers = { 'Content-Type': 'application/json' };
+      if (this.serviceKey) headers['Authorization'] = `Bearer ${this.serviceKey}`;
       const res = await fetch(`${this.endpoint}/events`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify(this.translate(event))
       });
       if (!res.ok) throw new Error(`External adapter returned ${res.status}`);
+      this.healthy = true;
       const idx = this.outbox.findIndex(e => e.id === event.id);
       if (idx >= 0) this.outbox.splice(idx, 1);
       return { ok: true };
     } catch (err) {
+      this.healthy = false;
       this.logger.warn('external', 'publish.failed', err.message, { eventType: event.type });
       return { ok: false, error: err.message };
     }
@@ -103,8 +116,10 @@ class ExternalAdapter {
     if (!this.enabled) return { ok: true, status: 'disabled' };
     try {
       const res = await fetch(`${this.endpoint}/health`, { method: 'GET' });
+      this.healthy = res.ok;
       return { ok: res.ok, status: res.ok ? 'healthy' : 'unhealthy', outbox: this.outbox.length };
     } catch (err) {
+      this.healthy = false;
       return { ok: false, status: 'unreachable', outbox: this.outbox.length, error: err.message };
     }
   }

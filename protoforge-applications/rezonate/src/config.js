@@ -20,6 +20,8 @@ function createConfig(env = process.env) {
     dbPath,
     eventLogPath,
     logLevel: (env.LOG_LEVEL || defaults.logLevel).toLowerCase(),
+    hydiGatewayEndpoint: env.HYDI_GATEWAY_ENDPOINT || null,
+    hydiServiceKey: env.HYDI_SERVICE_KEY || null,
     featureFlags: {
       diagnostics: boolOr(env.ENABLE_DIAGNOSTICS, true),
       export: boolOr(env.ENABLE_EXPORT, true)

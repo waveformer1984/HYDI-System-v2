@@ -95,6 +95,51 @@ PORT=4000
 
 `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are required because the gateway commits to the canonical `raw_event_ledger` table.
 
+## Transactional outbox
+
+The gateway includes a durable outbox for resilience. If the Supabase ledger is temporarily unreachable, the event is not dropped. It is written to `data/outbox/pending.json` and retried with exponential backoff.
+
+The outbox:
+
+- is temporary delivery storage only
+- is never an event history
+- removes events on successful ledger commit
+- de-duplicates by `fingerprint`
+- applies exponential backoff per attempt
+
+A background `RetryWorker` polls the outbox and calls `RawLedgerAdapter.commit()` for each due event.
+
+```text
+Application
+      |
+      v
+HYDI Gateway
+      |
+      +---- Transactional Outbox (temporary)
+      |
+      v
+Canonical RAW EVENT LEDGER
+```
+
+## Diagnostics
+
+`GET /health` — public, returns bridge status:
+
+```json
+{
+  "ok": true,
+  "status": "ok",
+  "ledgerReachable": true,
+  "outboxPending": 0,
+  "lastSuccessfulAppend": "2026-08-01T00:00:00.000Z",
+  "lastRetryAttempt": "2026-08-01T00:00:00.000Z",
+  "bridgeHealthy": true,
+  "events": 0
+}
+```
+
+`GET /diagnostics` — authenticated, returns the same plus outbox statistics, oldest pending event, append latency, and ledger connectivity.
+
 ## Endpoints
 
 ### `GET /health`

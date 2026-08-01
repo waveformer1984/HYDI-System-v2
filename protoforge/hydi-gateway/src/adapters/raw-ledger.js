@@ -44,12 +44,29 @@ function toGatewayRecord(row) {
   };
 }
 
+function toRawEvent(envelope) {
+  const fingerprint = computeFingerprint(envelope.source, envelope.eventId, envelope.eventType);
+  const payload = normalizePayload(envelope);
+  const hash = computeHash(fingerprint, envelope.eventType, payload);
+  return { fingerprint, event_type: envelope.eventType, payload, hash };
+}
+
 class RawLedgerAdapter {
   constructor(options = {}) {
     this.client = options.client || this._createClient(options);
     this.table = options.table || 'raw_event_ledger';
+    this.outbox = options.outbox || null;
     this._computeFingerprint = options.computeFingerprint || computeFingerprint;
     this._computeHash = options.computeHash || computeHash;
+    this._lastSuccessfulAppend = null;
+    this._lastRetryAttempt = null;
+    this._lastError = null;
+    this._appendLatencyMs = null;
+    this.worker = null;
+  }
+
+  setRetryWorker(worker) {
+    this.worker = worker;
   }
 
   _createClient(options) {
@@ -71,38 +88,6 @@ class RawLedgerAdapter {
     return this._computeHash(fingerprint, envelope.eventType, payload);
   }
 
-  async append(envelope) {
-    const fingerprint = this._fingerprint(envelope);
-    const existing = await this._getByFingerprint(fingerprint);
-    if (existing) {
-      return { ok: false, error: 'Duplicate fingerprint', code: '409', record: toGatewayRecord(existing) };
-    }
-
-    const payload = normalizePayload(envelope);
-    const hash = this._hash(envelope, fingerprint);
-
-    const { data, error } = await this.client
-      .from(this.table)
-      .insert({
-        fingerprint,
-        event_type: envelope.eventType,
-        payload,
-        hash
-      })
-      .select()
-      .single();
-
-    if (error) {
-      if (error.code === '23505') {
-        const conflict = await this._getByFingerprint(fingerprint);
-        return { ok: false, error: 'Duplicate fingerprint', code: '409', record: conflict ? toGatewayRecord(conflict) : null };
-      }
-      return { ok: false, error: error.message, code: error.code };
-    }
-
-    return { ok: true, record: toGatewayRecord(data) };
-  }
-
   async _getByFingerprint(fingerprint) {
     const { data } = await this.client
       .from(this.table)
@@ -110,6 +95,59 @@ class RawLedgerAdapter {
       .eq('fingerprint', fingerprint)
       .maybeSingle();
     return data || null;
+  }
+
+  async commit(rawEvent) {
+    const existing = await this._getByFingerprint(rawEvent.fingerprint);
+    if (existing) {
+      return { ok: true, record: toGatewayRecord(existing), alreadyExists: true };
+    }
+
+    const { data, error } = await this.client
+      .from(this.table)
+      .insert(rawEvent)
+      .select()
+      .single();
+
+    if (error) {
+      this._lastError = error.message;
+      if (error.code === '23505') {
+        return { ok: true, alreadyExists: true };
+      }
+      return { ok: false, error: error.message, code: error.code || 'UNKNOWN' };
+    }
+
+    this._lastError = null;
+    return { ok: true, record: toGatewayRecord(data) };
+  }
+
+  async append(envelope) {
+    const rawEvent = toRawEvent(envelope);
+    const start = Date.now();
+    const result = await this.commit(rawEvent);
+    this._appendLatencyMs = Date.now() - start;
+
+    if (result.ok) {
+      if (this.outbox) {
+        this.outbox.remove(rawEvent.fingerprint);
+      }
+      if (result.alreadyExists) {
+        return { ok: false, error: 'Duplicate fingerprint', code: '409', record: result.record };
+      }
+      this._lastSuccessfulAppend = new Date().toISOString();
+      this._lastError = null;
+      return { ok: true, record: result.record };
+    }
+
+    if (this.outbox) {
+      const queued = this.outbox.enqueue(rawEvent);
+      if (queued.ok) {
+        return { ok: true, queued: true, error: result.error, fingerprint: rawEvent.fingerprint };
+      }
+      return { ok: false, error: result.error, code: result.code };
+    }
+
+    return { ok: false, error: result.error, code: result.code };
   }
 
   async get(fingerprint) {
@@ -159,15 +197,31 @@ class RawLedgerAdapter {
 
   async health() {
     try {
+      const start = Date.now();
       const { count, error } = await this.client
         .from(this.table)
         .select('*', { count: 'exact', head: true });
+      const latencyMs = Date.now() - start;
       if (error) return { ok: false, connected: false, error: error.message };
-      return { ok: true, connected: true, events: count || 0 };
+      return { ok: true, connected: true, events: count || 0, latencyMs };
     } catch (err) {
       return { ok: false, connected: false, error: err.message };
     }
   }
+
+  diagnostics() {
+    const outboxStats = this.outbox ? this.outbox.stats() : null;
+    return {
+      ledgerReachable: this._lastSuccessfulAppend !== null,
+      outboxPending: outboxStats ? outboxStats.total : 0,
+      lastSuccessfulAppend: this._lastSuccessfulAppend,
+      lastRetryAttempt: this.worker?.stats?.lastRun || null,
+      bridgeHealthy: this._lastError === null,
+      appendLatencyMs: this._appendLatencyMs,
+      lastError: this._lastError,
+      outbox: outboxStats
+    };
+  }
 }
 
-module.exports = { RawLedgerAdapter, computeFingerprint, computeHash };
+module.exports = { RawLedgerAdapter, toRawEvent, toGatewayRecord, computeFingerprint, computeHash };

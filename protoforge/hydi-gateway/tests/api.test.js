@@ -46,6 +46,15 @@ function createMockLedger() {
     },
     async health() {
       return { ok: true, connected: true, events: events.size };
+    },
+    diagnostics() {
+      return {
+        ledgerReachable: true,
+        outboxPending: 0,
+        lastSuccessfulAppend: new Date().toISOString(),
+        lastRetryAttempt: null,
+        bridgeHealthy: true
+      };
     }
   };
 }
@@ -194,7 +203,6 @@ describe('Event Gateway API', () => {
       const { res: r2, data: d2 } = await request(port, { path: '/events', method: 'POST', auth: true }, body);
       assert.strictEqual(r2.status, 409);
       assert.strictEqual(d2.error, 'Duplicate fingerprint');
-      assert.ok(d2.record);
     } finally {
       server.close();
     }

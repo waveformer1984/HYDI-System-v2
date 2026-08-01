@@ -604,6 +604,7 @@ function createRepository(options = {}) {
     transports.push(new HydiAdapter({
       enabled: config.eventTransport !== 'disabled',
       endpoint: config.hydiEndpoint,
+      serviceKey: config.hydiServiceKey,
       capability: config.hydiCapability,
       version: config.hydiVersion,
       logger

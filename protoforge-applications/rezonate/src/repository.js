@@ -224,6 +224,15 @@ function createRepository(options = {}) {
   const logger = options.logger || createLogger(config);
   const transports = [new MemoryTransport()];
   if (config.eventLogPath) transports.push(new (require('./events/event-bus').FileTransport)(config.eventLogPath));
+  if (config.hydiGatewayEndpoint) {
+    const { ExternalAdapter } = require('./events/event-bus');
+    transports.push(new ExternalAdapter({
+      enabled: true,
+      endpoint: config.hydiGatewayEndpoint,
+      serviceKey: config.hydiServiceKey,
+      logger
+    }));
+  }
   const store = options.store || createStore({ type: 'memory' });
   const eventBus = options.eventBus || new EventBus(transports);
   const repo = new ResonateRepository(store, eventBus, logger);

@@ -61,36 +61,49 @@ class HydiAdapter {
     this.endpoint = (options.endpoint || '').replace(/\/$/, '');
     this.capability = options.capability || 'switchboard.marketplace';
     this.version = options.version || '1.0';
+    this.serviceKey = options.serviceKey || options.hydiServiceKey || process.env.HYDI_SERVICE_KEY;
     this.logger = options.logger || { warn: () => {}, error: () => {}, info: () => {} };
     this.outbox = [];
     this.healthy = null;
     this.enabled = Boolean(options.endpoint) && options.enabled !== false;
+    this.eventTypes = options.eventTypes || [
+      'contract.created',
+      'contract.completed',
+      'payment.completed',
+      'rating.created',
+      'moderation.created',
+      'moderation.released',
+      'moderation.removed',
+      'user.restricted'
+    ];
   }
 
   isEnabled() { return this.enabled; }
 
   translate(event) {
     return {
-      system: 'switchboard',
-      capability: this.capability,
-      event: event.type,
-      schemaVersion: this.version,
-      id: event.id,
-      createdAt: event.createdAt,
-      data: { ...event.payload, _meta: { ...event.meta } }
+      eventId: event.id,
+      eventType: event.type,
+      source: 'switchboard',
+      version: this.version,
+      timestamp: event.createdAt,
+      payload: event.payload
     };
   }
 
   async publish(event) {
     if (!this.enabled) return { ok: true, skipped: true };
+    if (!this.eventTypes.includes(event.type)) return { ok: true, skipped: true };
     const body = this.translate(event);
     const outboxEntry = { id: event.id || crypto.randomUUID(), event, at: new Date().toISOString() };
     this.outbox.push(outboxEntry);
     try {
       if (!this.endpoint) throw new Error('HYDI endpoint not configured');
+      const headers = { 'Content-Type': 'application/json' };
+      if (this.serviceKey) headers['Authorization'] = `Bearer ${this.serviceKey}`;
       const res = await fetch(`${this.endpoint}/events`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify(body)
       });
       if (!res.ok) throw new Error(`HYDI returned ${res.status}`);

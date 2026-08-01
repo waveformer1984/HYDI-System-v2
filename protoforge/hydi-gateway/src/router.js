@@ -15,10 +15,32 @@ function createRouter(config, rawLedger) {
     if (method === 'GET' && pathname === '/health') {
       try {
         const health = await rawLedger.health();
-        return send(res, 200, { ok: true, status: 'ok', ...health });
+        const diag = rawLedger.diagnostics();
+        return send(res, 200, {
+          ok: true,
+          status: health.ok ? 'ok' : 'degraded',
+          ledgerReachable: health.connected,
+          outboxPending: diag.outboxPending,
+          lastSuccessfulAppend: diag.lastSuccessfulAppend,
+          lastRetryAttempt: diag.lastRetryAttempt,
+          bridgeHealthy: diag.bridgeHealthy,
+          appendLatencyMs: health.latencyMs,
+          events: health.events
+        });
       } catch (err) {
         return send(res, 503, { ok: false, status: 'degraded', error: err.message });
       }
+    }
+
+    if (method === 'GET' && pathname === '/diagnostics') {
+      if (!requireAuth(req, res, config.serviceKey)) return;
+      const diag = rawLedger.diagnostics();
+      const health = await rawLedger.health();
+      return send(res, 200, {
+        ok: true,
+        connected: health.connected,
+        ...diag
+      });
     }
 
     if (method === 'GET' && pathname === '/events') {
@@ -56,11 +78,15 @@ function createRouter(config, rawLedger) {
       if (!valid.ok) return send(res, 400, { ok: false, error: valid.error });
 
       const result = await rawLedger.append(body);
-      if (!result.ok) {
-        const status = result.code === '409' ? 409 : 502;
-        return send(res, status, { ok: false, error: result.error, record: result.record });
+      if (result.ok) {
+        if (result.queued) {
+          return send(res, 202, { ok: true, queued: true, fingerprint: result.fingerprint, error: result.error });
+        }
+        return send(res, 201, { ok: true, event: result.record });
       }
-      return send(res, 201, { ok: true, event: result.record });
+
+      const status = result.code === '409' ? 409 : 502;
+      return send(res, status, { ok: false, error: result.error });
     }
 
     return send(res, 404, { ok: false, error: 'Not found' });

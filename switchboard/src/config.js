@@ -48,6 +48,7 @@ function createConfig(env = process.env) {
     eventTransport: (env.EVENT_TRANSPORT || env.SWITCHBOARD_EVENT_TRANSPORT || defaults.eventTransport).toLowerCase(),
     enableHydiAdapter: boolOr(env.HYDI_ENABLED || env.SWITCHBOARD_ENABLE_HYDI, defaults.enableHydiAdapter),
     hydiEndpoint: (env.HYDI_ENDPOINT || env.SWITCHBOARD_HYDI_ENDPOINT || defaults.hydiEndpoint) || null,
+    hydiServiceKey: env.HYDI_SERVICE_KEY || env.SWITCHBOARD_HYDI_SERVICE_KEY || null,
     hydiCapability: env.HYDI_CAPABILITY || env.SWITCHBOARD_HYDI_CAPABILITY || defaults.hydiCapability,
     hydiVersion: env.HYDI_VERSION || env.SWITCHBOARD_HYDI_VERSION || defaults.hydiVersion,
     rateLimit: {
