@@ -4,11 +4,12 @@ A ProtoForge-native wrapper around the existing `rezonate/` audio engine.
 
 ## Purpose
 
-Resonate is the first ProtoForge application that organizes an existing, working system instead of rebuilding it. The existing Python audio pipeline remains the source of truth for generation, stem separation, and analysis. This application provides:
+Resonate is the first ProtoForge application that organizes an existing, working system instead of rebuilding it. The existing Python audio pipeline remains the source of truth for stem separation and analysis. Audio generation now runs through a local-first provider model. This application provides:
 
 - project, track, and asset orchestration
 - processing job lifecycle
 - audio asset intelligence
+- local-first audio generation provider
 - sample library adapter
 - DAW export foundation
 - validation and error boundaries
@@ -25,7 +26,9 @@ Ursula Studio
  |
 ProtoForge Resonate (http://localhost:3001)
  |
-Rezonate Engine
+Local Audio Provider
+ |
+Local Model Runtime
  |
 Audio Asset
  |
@@ -37,7 +40,7 @@ Future HYDI Ledger
 ## Architecture
 
 ```text
-Existing Resonate Engine
+       Local Audio Provider
           |
           v
    Resonate Engine Adapter
@@ -56,9 +59,31 @@ ProtoForge Resonate
  Ownership Layer (future)
 ```
 
+## Local-first audio
+
+Resonate no longer depends on Gemini/Lyria. The default `AudioProvider` is `LocalAudioProvider` backed by `LocalModelRuntime`.
+
+Configure a local model via environment variables:
+
+```env
+AUDIO_MODEL_RUNTIME=python
+AUDIO_MODEL_PATH=C:\\models\\musicgen\\generate.py
+AUDIO_DEVICE=cpu
+```
+
+The runtime invokes:
+
+```text
+[command] [modelPath] [prompt] [duration] [clip] [outputPath]
+```
+
+and expects a `Saved: <audioPath>` line in stdout.
+
+See `docs/LOCAL_AUDIO_ARCHITECTURE.md` for full details.
+
 ## Relationship to existing systems
 
-- `rezonate/` — owned by the audio engine; the adapter calls it.
+- `rezonate/` — owned by the audio engine; the adapter calls `make-stems.py` and sample analysis.
 - `supabase/migrations/20260522000001_rezonate_schema.sql` — schema baseline; the local repository mirrors it.
 - `apps/ursula-frontend/...` and `pages/song-composer.tsx` — legacy/experimental frontends; now Ursula Resonate Studio connects to this API.
 
@@ -84,14 +109,22 @@ Every transition emits a domain event.
 
 ```bash
 POST /processing/jobs
-{ "task_type": "generate", "prompt": "...", "clip": false }
+{ "task_type": "generate", "prompt": "...", "duration": 120, "clip": false }
 
 POST /processing/jobs/:id/start
-# invokes rezonate/generate.py, creates AudioAsset, emits audio.asset.created
+# invokes Local Audio Provider, creates AudioAsset, emits audio.asset.created
 
 GET /assets/:id/file
 # streams the generated MP3
 ```
+
+## Diagnostics
+
+```bash
+GET /health
+```
+
+Returns local provider status, model availability, and cloud-dependency flag.
 
 ## Domain events
 
@@ -117,4 +150,4 @@ The server runs on `http://localhost:3001` by default.
 
 ## Status
 
-First end-to-end ProtoForge application organism. 72/72 tests passing.
+Local-first end-to-end ProtoForge application organism. 91/91 tests passing.

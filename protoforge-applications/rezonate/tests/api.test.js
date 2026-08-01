@@ -14,16 +14,42 @@ describe('Resonate API', () => {
     });
   }
 
+  function mockAudioProvider(overrides = {}) {
+    return {
+      name: 'local',
+      async generate(request) {
+        if (overrides.error) return { ok: false, error: overrides.error };
+        return {
+          ok: true,
+          audioPath: `C:\\\\audio\\\\${request.prompt.replace(/\s+/g, '-')}.mp3`,
+          provider: 'local',
+          model: 'mock-model',
+          duration: request.duration || 120,
+          metadata: { prompt: request.prompt }
+        };
+      },
+      async health() {
+        return { ok: true, available: true, modelAvailable: true, cloudDependency: false, provider: 'local' };
+      },
+      capabilities() {
+        return { generate: true, stems: false, analyze: false };
+      }
+    };
+  }
+
+  function mockStemRunner() {
+    return async (cmd, args) => {
+      if (args[0] === 'make-stems.py') {
+        return { stdout: `Done.\n  bpm: 120 | key: C major\n  folder: C:\\\\audio\\\\stems`, stderr: '', exitCode: 0 };
+      }
+      return { stdout: '', stderr: '', exitCode: 0 };
+    };
+  }
+
   function mockEngine(overrides = {}) {
     return new ResonateEngineAdapter({
-      runner: async (cmd, args) => {
-        const prompt = args.find(a => a && a.includes && a.includes('lofi')) ? 'Saved: C:\\\\audio\\\\lofi.mp3' : '';
-        const source = args.find(a => a && a.includes && a.includes('.mp3')) ? args.find(a => a.includes('.mp3')) : 'C:\\\\audio\\\\track.mp3';
-        if (overrides.error) throw new Error(overrides.error);
-        if (args[0] === 'generate.py') return { stdout: prompt || 'Saved: C:\\\\audio\\\\generated.mp3', stderr: '', exitCode: 0 };
-        if (args[0] === 'make-stems.py') return { stdout: `Done.\n  bpm: 120 | key: C major\n  folder: C:\\\\audio\\\\stems`, stderr: '', exitCode: 0 };
-        return { stdout: '', stderr: '', exitCode: 0 };
-      },
+      audioProvider: mockAudioProvider(overrides),
+      runner: mockStemRunner(),
       logger: { info: () => {}, warn: () => {} }
     });
   }
@@ -133,7 +159,8 @@ describe('Resonate API', () => {
     await repo.init();
     const project = repo.createProject({ name: 'Fail Test' });
     const engine = new ResonateEngineAdapter({
-      runner: async () => ({ stdout: 'No audio returned.', stderr: '', exitCode: 0 }),
+      audioProvider: { async generate() { return { ok: false, error: 'No audio returned' }; }, async health() { return { available: true }; } },
+      runner: mockStemRunner(),
       logger: { info: () => {}, warn: () => {} }
     });
     const app = createApi(repo, { engine });

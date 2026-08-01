@@ -2,6 +2,8 @@ const { describe, it } = require('node:test');
 const assert = require('node:assert');
 const { createRepository } = require('../src/repository');
 const { ResonateEngineAdapter } = require('../src/adapters/resonate-engine');
+const { LocalAudioProvider } = require('../src/providers/local-audio-provider');
+const { LocalModelRuntime } = require('../src/adapters/local-model-runtime');
 const { EventBus, MemoryTransport } = require('../src/events/event-bus');
 
 describe('Resonate Generation Workflow', () => {
@@ -11,14 +13,14 @@ describe('Resonate Generation Workflow', () => {
     return repo;
   }
 
-  function mockEngine(opts = {}) {
-    return new ResonateEngineAdapter({
-      runner: async (cmd, args) => {
-        if (opts.fail) throw new Error(opts.fail);
-        const prompt = args.find(a => typeof a === 'string' && a.includes('lofi')) ? 'lofi' : 'generated';
-        const out = `Saved: C:\\\\audio\\\\${prompt}.mp3`;
-        return { stdout: out, stderr: '', exitCode: 0 };
-      }
+  function makeAudioProvider(opts = {}) {
+    return new LocalAudioProvider({
+      runtime: new LocalModelRuntime({
+        runner: opts.runner || (async (cmd, args) => {
+          const slug = (args[1] || 'generated').toLowerCase().replace(/\s+/g, '-');
+          return { stdout: `Saved: C:\\\\audio\\\\${slug}.mp3`, stderr: '', exitCode: 0 };
+        })
+      })
     });
   }
 
@@ -48,54 +50,25 @@ describe('Resonate Generation Workflow', () => {
     assert.strictEqual(job.prompt, null);
   });
 
-  it('adapter invokes runner with generate.py and prompt', async () => {
-    const calls = [];
+  it('adapter generates through local provider', async () => {
     const engine = new ResonateEngineAdapter({
-      runner: async (cmd, args) => {
-        calls.push({ cmd, args });
-        return { stdout: 'Saved: C:\\\\audio\\\\result.mp3', stderr: '', exitCode: 0 };
-      }
+      audioProvider: makeAudioProvider()
     });
     const result = await engine.generateSong({ prompt: 'techno loop' });
 
     assert.strictEqual(result.ok, true);
-    assert.strictEqual(result.audioPath, 'C:\\\\audio\\\\result.mp3');
+    assert.ok(result.audioPath);
+    assert.strictEqual(result.provider, 'local');
     assert.strictEqual(result.engine, 'rezonate');
-    assert.strictEqual(calls[0].cmd, 'python');
-    assert.strictEqual(calls[0].args[0], 'generate.py');
-    assert.ok(calls[0].args.includes('techno loop'));
   });
 
-  it('adapter uses clip preview for short duration', async () => {
-    const calls = [];
+  it('engine surfaces provider failures', async () => {
     const engine = new ResonateEngineAdapter({
-      runner: async (cmd, args) => {
-        calls.push({ args });
-        return { stdout: 'Saved: C:\\\\audio\\\\clip.mp3', stderr: '', exitCode: 0 };
-      }
-    });
-    await engine.generateSong({ prompt: 'short', clip: true });
-    assert.ok(calls[0].args.includes('--clip'));
-  });
-
-  it('engine failure returns structured error', async () => {
-    const engine = new ResonateEngineAdapter({
-      runner: async () => { throw new Error('python not found'); }
+      audioProvider: { async generate() { return { ok: false, error: 'model crashed' }; } }
     });
     const result = await engine.generateSong({ prompt: 'test' });
-
     assert.strictEqual(result.ok, false);
-    assert.strictEqual(result.error, 'python not found');
-  });
-
-  it('missing audio in stdout fails gracefully', async () => {
-    const engine = new ResonateEngineAdapter({
-      runner: async () => ({ stdout: 'No audio returned.', stderr: '', exitCode: 0 })
-    });
-    const result = await engine.generateSong({ prompt: 'blocked prompt' });
-
-    assert.strictEqual(result.ok, false);
-    assert.match(result.error, /No audio/);
+    assert.match(result.error, /model crashed/);
   });
 
   it('audio asset is created from generated result', () => {
@@ -104,7 +77,7 @@ describe('Resonate Generation Workflow', () => {
     const asset = repo.registerAsset(project.id, {
       type: 'generated_song',
       file_path: 'C:\\\\audio\\\\song.mp3',
-      metadata: { source: 'ai-generation', engine: 'rezonate', prompt: 'piano' }
+      metadata: { source: 'ai-generation', engine: 'local', prompt: 'piano' }
     });
 
     assert.strictEqual(asset.type, 'generated_song');
@@ -122,7 +95,7 @@ describe('Resonate Generation Workflow', () => {
     repo.registerAsset(project.id, {
       type: 'generated_song',
       file_path: 'song.mp3',
-      metadata: { source: 'ai-generation', engine: 'rezonate' }
+      metadata: { source: 'ai-generation', engine: 'local' }
     });
 
     const events = transport.ofType('audio.asset.created');
@@ -166,7 +139,9 @@ describe('Resonate Generation Workflow', () => {
     const repo = createRepository({ eventBus: bus });
     repo.init();
     const project = repo.createProject({ name: 'End-to-End' });
-    const engine = mockEngine();
+    const engine = new ResonateEngineAdapter({
+      audioProvider: makeAudioProvider()
+    });
 
     const job = repo.createProcessingJob({ task_type: 'generate', project_id: project.id, prompt: 'lofi' });
     repo.startProcessingJob(job.id);
@@ -176,7 +151,7 @@ describe('Resonate Generation Workflow', () => {
     const asset = repo.registerAsset(project.id, {
       type: 'generated_song',
       file_path: result.audioPath,
-      metadata: { source: 'ai-generation', engine: 'rezonate', prompt: 'lofi' }
+      metadata: { source: 'ai-generation', engine: 'local', prompt: 'lofi' }
     });
     repo.completeProcessingJob(job.id, { assetId: asset.id });
 

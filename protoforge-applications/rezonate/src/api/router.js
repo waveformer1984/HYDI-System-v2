@@ -5,7 +5,7 @@ const path = require('path');
 const { collectDiagnostics } = require('../diagnostics');
 const { SampleLibraryAdapter } = require('../adapters/sample-library');
 const { packageStems } = require('../export/packaging');
-const { ResonateEngineAdapter, createDefaultRunner } = require('../adapters/resonate-engine');
+const { ResonateEngineAdapter, createDefaultStemRunner } = require('../adapters/resonate-engine');
 const cors = require('cors');
 
 function createApi(repository, config = {}) {
@@ -29,7 +29,7 @@ function createApi(repository, config = {}) {
   const engine = config.engine || new ResonateEngineAdapter({
     eventBus: repository ? repository.eventBus : undefined,
     logger: repository ? repository.logger : undefined,
-    runner: config.runner || createDefaultRunner()
+    stemRunner: config.stemRunner || createDefaultStemRunner()
   });
 
   const sampleLibrary = new SampleLibraryAdapter({ logger: repository ? repository.logger : undefined });

@@ -1,10 +1,12 @@
 const path = require('path');
 const crypto = require('crypto');
 const { execFile } = require('child_process');
+const { LocalAudioProvider } = require('../providers/local-audio-provider');
+const { LocalModelRuntime } = require('./local-model-runtime');
 
 const defaultEnginePath = path.join(__dirname, '..', '..', '..', 'rezonate');
 
-function createDefaultRunner() {
+function createDefaultStemRunner() {
   return (command, args) => new Promise((resolve, reject) => {
     execFile(command, args, { shell: false }, (err, stdout, stderr) => {
       if (err) return reject(err);
@@ -13,13 +15,22 @@ function createDefaultRunner() {
   });
 }
 
+function createDefaultAudioProvider(runner) {
+  const runtime = new LocalModelRuntime({
+    outputDir: path.join(defaultEnginePath, 'generated'),
+    runner
+  });
+  return new LocalAudioProvider({ runtime, logger: { info: () => {}, warn: () => {} } });
+}
+
 class ResonateEngineAdapter {
   constructor(options = {}) {
     this.enginePath = options.enginePath || defaultEnginePath;
-    this.runner = options.runner || null;
+    this.stemRunner = options.stemRunner || options.runner || null;
     this.eventBus = options.eventBus || null;
     this.logger = options.logger || { warn: () => {}, info: () => {}, debug: () => {} };
     this.jobs = new Map();
+    this.audioProvider = options.audioProvider || createDefaultAudioProvider(this.stemRunner);
   }
 
   _jobId() {
@@ -35,11 +46,9 @@ class ResonateEngineAdapter {
     return this.jobs.get(id) || { id, status: 'unknown' };
   }
 
-  async _exec(command, args) {
-    if (!this.runner) {
-      throw new Error('Engine runner not configured');
-    }
-    return this.runner(command, args);
+  async _execStems(command, args) {
+    if (!this.stemRunner) throw new Error('Engine runner not configured');
+    return this.stemRunner(command, args);
   }
 
   _emit(type, payload) {
@@ -47,31 +56,15 @@ class ResonateEngineAdapter {
   }
 
   async isAvailable() {
-    if (!this.runner) return false;
-    try {
-      await this._exec('python', ['--version']);
-      return true;
-    } catch {
-      return false;
-    }
+    const health = await this.audioProvider.health();
+    return health.available === true;
   }
 
-  _parseSavedPath(stdout) {
-    const m = (stdout || '').match(/Saved:\s*(.+?)(?:\r?\n|$)/);
-    return m ? m[1].trim() : null;
-  }
-
-  _parseStemsFolder(stdout) {
-    const m = (stdout || '').match(/folder:\s*(.+?)(?:\r?\n|$)/i);
-    return m ? m[1].trim() : null;
-  }
-
-  async generateSong({ prompt, clip = false, projectId = null } = {}) {
+  async generateSong({ prompt, duration, clip = false, projectId = null } = {}) {
     if (!prompt || typeof prompt !== 'string' || !prompt.trim()) {
       return { ok: false, error: 'prompt is required' };
     }
     const id = this._jobId();
-    const args = clip ? ['generate.py', '--clip', prompt] : ['generate.py', prompt];
     const job = this._register({
       id,
       type: 'generate',
@@ -83,26 +76,29 @@ class ResonateEngineAdapter {
     });
 
     try {
-      const result = await this._exec('python', args);
-      const audioPath = this._parseSavedPath(result.stdout);
-      if (!audioPath) {
+      const result = await this.audioProvider.generate({ prompt, duration, clip });
+      if (!result.ok) {
         job.status = 'failed';
-        job.error = 'No audio returned by engine';
-        return { ok: false, error: 'No audio returned by engine', jobId: id };
+        job.error = result.error;
+        this.logger.warn('adapter', 'song.generate.failed', result.error, { jobId: id });
+        return { ok: false, error: result.error, jobId: id };
       }
       job.status = 'completed';
-      job.audioPath = audioPath;
+      job.audioPath = result.audioPath;
       job.completed_at = new Date().toISOString();
-      this._emit('song.generated', { jobId: id, prompt, audioPath, projectId });
-      this.logger.info('adapter', 'song.generated', `Song job ${id} generated at ${audioPath}`, { jobId: id });
+      this._emit('song.generated', { jobId: id, prompt, audioPath: result.audioPath, projectId });
+      this.logger.info('adapter', 'song.generated', `Song job ${id} generated at ${result.audioPath}`, { jobId: id });
       return {
         ok: true,
         jobId: id,
         prompt,
         clip,
-        audioPath,
+        duration: result.duration,
+        audioPath: result.audioPath,
+        provider: result.provider,
+        model: result.model,
         engine: 'rezonate',
-        metadata: { projectId, generatedAt: job.completed_at }
+        metadata: result.metadata
       };
     } catch (err) {
       job.status = 'failed';
@@ -129,7 +125,7 @@ class ResonateEngineAdapter {
     this._emit('stem.processing.started', { jobId: id, sourcePath, projectId });
 
     try {
-      const result = await this._exec('python', ['make-stems.py', sourcePath]);
+      const result = await this._execStems('python', ['make-stems.py', sourcePath]);
       const folder = this._parseStemsFolder(result.stdout);
       job.status = 'completed';
       job.folder = folder;
@@ -160,7 +156,7 @@ class ResonateEngineAdapter {
     });
 
     try {
-      const result = await this._exec('python', ['make-stems.py', sourcePath]);
+      const result = await this._execStems('python', ['make-stems.py', sourcePath]);
       const meta = this._parseAnalysis(result.stdout || '');
       const folder = this._parseStemsFolder(result.stdout);
       job.status = 'completed';
@@ -178,6 +174,16 @@ class ResonateEngineAdapter {
     }
   }
 
+  _parseSavedPath(stdout) {
+    const m = (stdout || '').match(/Saved:\s*(.+?)(?:\r?\n|$)/);
+    return m ? m[1].trim() : null;
+  }
+
+  _parseStemsFolder(stdout) {
+    const m = (stdout || '').match(/folder:\s*(.+?)(?:\r?\n|$)/i);
+    return m ? m[1].trim() : null;
+  }
+
   _parseAnalysis(stdout) {
     const bpm = (stdout.match(/bpm:\s*([\d.]+)/i) || [])[1];
     const key = (stdout.match(/key:\s*([^\n\r]+)/i) || [])[1];
@@ -189,4 +195,4 @@ class ResonateEngineAdapter {
   }
 }
 
-module.exports = { ResonateEngineAdapter, createDefaultRunner };
+module.exports = { ResonateEngineAdapter, createDefaultStemRunner };
