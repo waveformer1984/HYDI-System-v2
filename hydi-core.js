@@ -84,7 +84,7 @@ class HYDICore {
 
     const checks = [
       { name: 'Memory Engine', url: 'http://localhost:9998/health' },
-      { name: 'Supervisor', url: 'http://localhost:9999/health' },
+      { name: 'Supervisor', url: 'http://localhost:9999/status' },
     ];
 
     for (const check of checks) {

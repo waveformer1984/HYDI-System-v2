@@ -223,20 +223,30 @@ function computeStartupOrder(serviceNames) {
 // ============================================================================
 
 async function checkServiceHealth(serviceName, healthCheckUrl) {
+  if (!healthCheckUrl) return true;
   return new Promise((resolve) => {
-    const timeout = setTimeout(() => resolve(false), 5000);
-    http.get(healthCheckUrl, { timeout: 5000 }, (res) => {
+    let done = false;
+    const timeout = setTimeout(() => {
+      if (!done) { done = true; resolve(false); }
+    }, 5000);
+    const req = http.get(healthCheckUrl, (res) => {
       clearTimeout(timeout);
-      resolve(res.statusCode === 200);
-    }).on('error', () => {
+      if (!done) { done = true; resolve(res.statusCode === 200); }
+    });
+    req.on('error', () => {
       clearTimeout(timeout);
-      resolve(false);
+      if (!done) { done = true; resolve(false); }
     });
   });
 }
 
 async function waitForServiceReady(serviceName, maxWait = STARTUP_TIMEOUT) {
   const svc = services[serviceName];
+  if (!svc.healthCheck) {
+    supervisor.health[serviceName] = { status: 'UP', checkedAt: new Date().toISOString() };
+    log('SUCCESS', serviceName, 'No health check configured; assuming up');
+    return true;
+  }
   const startTime = Date.now();
 
   while (Date.now() - startTime < maxWait) {
@@ -288,15 +298,18 @@ async function startService(serviceName) {
     }
   }
 
-  // Reserve port
-  const portOk = await reservePort(serviceName, svc.port);
-  if (!portOk) {
-    log('ERROR', serviceName, `Could not reserve port ${svc.port}`);
-    return false;
+  // Reserve port (skip for services without a port like forge-loop)
+  if (svc.port) {
+    const portOk = await reservePort(serviceName, svc.port);
+    if (!portOk) {
+      log('ERROR', serviceName, `Could not reserve port ${svc.port}`);
+      return false;
+    }
   }
 
   // Prepare environment
-  const env = { ...process.env, PORT: svc.port.toString() };
+  const env = { ...process.env };
+  if (svc.port) env.PORT = svc.port.toString();
   if (svc.env) Object.assign(env, svc.env);
 
   // Launch process (Windows-aware)
@@ -340,7 +353,7 @@ async function startService(serviceName) {
   supervisor.health[serviceName] = { status: 'STARTING', startedAt: new Date().toISOString() };
 
   // Wait for health check
-  const healthy = await waitForServiceReady(serviceName);
+  const healthy = await waitForServiceReady(serviceName, svc.timeout || STARTUP_TIMEOUT);
   if (!healthy) {
     log('ERROR', serviceName, 'Health check failed');
     proc.kill('SIGTERM');
@@ -360,7 +373,9 @@ function scheduleRestart(serviceName) {
   log('INFO', serviceName, `Scheduling restart in ${backoff / 1000}s`);
   setTimeout(() => {
     log('INFO', serviceName, 'Attempting restart...');
-    startService(serviceName);
+    startService(serviceName).catch((e) => {
+      log('ERROR', serviceName, `Restart attempt failed: ${e.message}`);
+    });
   }, backoff);
 }
 
@@ -405,20 +420,24 @@ async function startup(serviceNames) {
 
 function startHealthCheckLoop() {
   setInterval(async () => {
-    for (const [serviceName, health] of Object.entries(supervisor.health)) {
-      const svc = services[serviceName];
-      if (!svc) continue;
+    try {
+      for (const [serviceName, health] of Object.entries(supervisor.health)) {
+        const svc = services[serviceName];
+        if (!svc) continue;
 
-      const wasUp = health.status === 'UP';
-      const isUp = await checkServiceHealth(serviceName, svc.healthCheck);
+        const wasUp = health.status === 'UP';
+        const isUp = await checkServiceHealth(serviceName, svc.healthCheck);
 
-      if (wasUp && !isUp) {
-        log('WARN', serviceName, 'Health check failed (was UP)');
-        supervisor.health[serviceName].status = 'DEGRADED';
-      } else if (!wasUp && isUp) {
-        log('SUCCESS', serviceName, 'Health check recovered');
-        supervisor.health[serviceName].status = 'UP';
+        if (wasUp && !isUp) {
+          log('WARN', serviceName, 'Health check failed (was UP)');
+          supervisor.health[serviceName].status = 'DEGRADED';
+        } else if (!wasUp && isUp) {
+          log('SUCCESS', serviceName, 'Health check recovered');
+          supervisor.health[serviceName].status = 'UP';
+        }
       }
+    } catch (e) {
+      log('ERROR', 'supervisor', `Health check loop error: ${e.message}`);
     }
   }, HEALTH_CHECK_INTERVAL);
 }
@@ -486,6 +505,14 @@ if (serviceFilter) {
 // Handle signals
 process.on('SIGTERM', gracefulShutdown);
 process.on('SIGINT', gracefulShutdown);
+
+process.on('unhandledRejection', (reason) => {
+  log('ERROR', 'supervisor', `Unhandled rejection: ${reason}`);
+});
+
+process.on('uncaughtException', (err) => {
+  log('ERROR', 'supervisor', `Uncaught exception: ${err.message}; continuing`);
+});
 
 // Start
 if (dryRun) {
