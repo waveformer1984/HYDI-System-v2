@@ -161,7 +161,13 @@
     "undici": "^6.27.0",
     "js-yaml": "^4.2.0",
     "minimatch@10.2.5": {
-      "brace-expansion": "5.0.7"
+      "brace-expansion": "5.0.9"
+    },
+    "minimatch@3.1.5": {
+      "brace-expansion": "1.1.18"
+    },
+    "minimatch@9.0.9": {
+      "brace-expansion": "2.1.4"
     },
     "sharp": "^0.35.0"
   }

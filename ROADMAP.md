@@ -335,6 +335,22 @@ something executable.
 - Multi-condition rule grouping (`all`, `any`)
 - Rule version history in the `policies` table
 
+### ESLint 8 → 9 migration
+`eslint@8.57.1` (pinned via `package.json`'s `"eslint": "^8.0.0"`) hit
+end-of-life upstream (`npm install` prints
+`eslint@8.57.1: This version is no longer supported` on every run). This
+is also the root cause of a recurring class of dependency-audit noise:
+`ISSUES_FOUND.md` #76 (2026-08-01) had to fix 7 high-severity
+`brace-expansion` findings surfacing through nested `minimatch@3.1.5`
+copies pulled in by `eslint` and its plugin ecosystem — a symptom of the
+whole ESLint 8 toolchain depending on long-superseded transitive
+versions. Migrating to ESLint 9's flat config format (`eslint.config.js`,
+replacing `.eslintrc.json`) would eliminate this dependency lineage
+entirely, but is a real migration (new config format, `next/core-web-vitals`
+flat-config compatibility, plugin version bumps for
+`eslint-plugin-{import,jsx-a11y,react}`) — not attempted as a side effect
+of a security-audit pass. Scheduled here as a dedicated follow-up.
+
 ---
 
 ## Medium-term (Q4 2026)

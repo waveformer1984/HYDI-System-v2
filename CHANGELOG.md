@@ -2,6 +2,21 @@
 
 ## [Unreleased]
 
+### Security
+
+- Fixed 7 high-severity `brace-expansion` DoS advisories (GHSA-mh99-v99m-4gvg)
+  across nested `eslint`/`glob`/`@typescript-eslint` toolchain dependencies
+  (devDependencies only — `npm audit --omit=dev` was already 0 findings).
+  Scoped each fix to the specific vulnerable parent version
+  (`minimatch@3.1.5`, `minimatch@9.0.9`, `minimatch@10.2.5`) with a
+  same-major patch bump (1.1.16→1.1.18, 2.1.2→2.1.4, 5.0.7→5.0.9) via
+  targeted `package.json` `overrides`, rather than a blanket version pin —
+  the latter is exactly what caused a real breakage documented in
+  `ISSUES_FOUND.md` #2 (forcing every `brace-expansion` consumer onto an
+  incompatible major version crashed `next lint`). Verified with a full
+  `npm audit` (0 vulnerabilities), lint, typecheck, unit + integration
+  test suites, and a real `npm run build`, all clean.
+
 ### Fixed
 
 - `tests/unit/hydi-v3/HardwareDiscovery.test.js`'s OS-enumeration fallback

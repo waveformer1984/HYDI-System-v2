@@ -94,6 +94,76 @@ Fixed in two parts:
   unchanged).
 - `npm run test:integration:jest` — 12/12 suites, 62/62 tests passing.
 
+### Fixed: 7 high-severity `brace-expansion` DoS findings (devDependency-only)
+
+GitHub's push output flagged "3 high" Dependabot vulnerabilities on
+`clean-main` after the push above, prompting a closer look. `npm audit`
+(full dependency tree) actually showed **7** high-severity findings, all
+the same advisory (GHSA-mh99-v99m-4gvg, `brace-expansion` DoS via
+unbounded expansion length) surfacing through three different nested
+`minimatch` versions in the ESLint/`@typescript-eslint` toolchain.
+`npm audit --omit=dev` was 0 findings throughout — this is exclusively a
+lint-tooling (devDependency) exposure, never shipped or reachable in
+production, but still worth fixing cleanly.
+
+First attempted the obvious `npm audit fix` — this made things **worse**
+(1 reported finding → 7), apparently by re-resolving `@typescript-eslint`
+packages onto a version pulling in a differently-vulnerable transitive
+`minimatch`. Reverted (`git checkout -- package-lock.json`, confirmed a
+clean `rm -rf node_modules && npm ci` reproduces the exact 7-finding
+baseline — the earlier "1 finding" first-glance number was just an
+artifact of `| tail -80` truncating the real report, not an actual
+before/after difference).
+
+Root-caused each of the 3 vulnerable copies:
+- `minimatch@3.1.5` (shared by `eslint`, `@eslint/eslintrc`,
+  `@humanwhocodes/config-array`, `eslint-plugin-import`,
+  `eslint-plugin-jsx-a11y`, `eslint-plugin-react`, `test-exclude`) →
+  `brace-expansion@1.1.16` (vulnerable range `<=1.1.16`).
+- `minimatch@9.0.9` (nested under `glob@10.5.0`) →
+  `brace-expansion@2.1.2` (vulnerable range `2.0.0-2.1.2`).
+- `minimatch@10.2.5` (root, used by `@typescript-eslint/typescript-estree`)
+  → `brace-expansion@5.0.7`. This one was already covered by an existing
+  `package.json` `overrides` entry (`"minimatch@10.2.5": {"brace-expansion":
+  "5.0.7"}`) from some prior session — it just happened to pin the exact
+  vulnerable patch version (range is `4.0.0-5.0.7`), one release short of
+  the fix.
+
+Fixed by adding/correcting three **version-scoped** overrides (parent
+key `name@exact-version`, matching the pattern the pre-existing entry
+already used), each a same-major patch bump: `1.1.16→1.1.18`,
+`2.1.2→2.1.4`, `5.0.7→5.0.9`. Deliberately did *not* use a blanket
+top-level `"brace-expansion": ">=X"` override — that's precisely the
+mistake `ISSUES_FOUND.md` #2 already documents as having broken
+`next lint` outright, by forcing every consumer (regardless of which
+major-version API it actually expects) onto one version. A first attempt
+at a top-level `"brace-expansion@1.1.16": "1.1.18"` override key (name@version
+as the *override target*, not a nested parent scope) silently did
+nothing — npm's override syntax requires the version-scoped key to be the
+*parent* package being scoped (`"minimatch@3.1.5": {...}`), not the
+override target itself.
+
+Applying the fix required a full `rm -rf node_modules package-lock.json &&
+npm install` (not just `npm ci` or an in-place `npm install`) — a plain
+`npm install` after editing `overrides` left the already-installed
+`minimatch@10.2.5`'s nested `brace-expansion` unchanged at the old
+version despite the corrected override value, even though the two *new*
+override entries took effect immediately. Full re-resolution shifted the
+lockfile more broadly (883 → 851 total packages, a large diff) as npm
+re-hoisted the whole tree from scratch, so this was verified extra
+carefully rather than assumed safe.
+
+### Verification (dependency fix)
+
+- `npm audit` — 0 vulnerabilities (was 7 high).
+- `npm run lint` — 0 errors, 749 warnings (unchanged from before the
+  dependency change).
+- `npm run typecheck` — clean.
+- `npm test -- --forceExit` — 244/244 suites, 2322/2322 tests.
+- `npm run test:integration:jest` — 12/12 suites, 62/62 tests.
+- `npm run build` — real `next build` completes successfully, full route
+  table unchanged.
+
 ### Not done in this pass
 
 - The GitHub Actions runner-dispatch outage (see above) remains open,
@@ -106,6 +176,13 @@ Fixed in two parts:
   tracked in `ROADMAP.md` (cryptographic identity verification, Local-First
   Phase 1 migration) — these need a maintainer decision or host access, not
   more audit passes.
+- Did not attempt the larger `eslint@8`→`9` flat-config migration that
+  would eliminate this whole class of nested-toolchain-dependency
+  vulnerability at the root (the deprecation warning
+  `eslint@8.57.1: This version is no longer supported` fires on every
+  install) — that's a real, non-trivial migration (new config format,
+  plugin compatibility) out of scope for this pass; flagged as a
+  dev-productivity/security follow-up in `ROADMAP.md`.
 
 ---
 
