@@ -10,7 +10,7 @@ A single, unambiguous vocabulary for the HYDI platform. Every component has one 
 |---|---|---|---|---|
 | **CASCADE** | `cascade` in `modules/`, `api/chat` | `protoforge/cascade/` | Active | `modules/cascade-*.js` (legacy) |
 | **KILO** | `kilo` chat handler in `api/chat/route.js` | `kilo/index.js` | Active | `api/chat` stub |
-| **Proto YI** | `ProtoYI`, `ProtoForgePanel` references | Not implemented | Reserved | UI component `ProtoForgePanel.tsx` |
+| **Proto YI** | `ProtoYI`, `Proto.I.Y`, `protoi`, `proto_iy` | `protoforge-applications/proto-yi/` | Active | `C:\ProtoForge_Ecosystem\Ursula_Suite\apps\proto_iy\` (legacy Flask engine), `apps/ursula-frontend/src/lib/protoi/` (legacy Next.js UI) |
 | **ProtoForge** | `protoforge` CLI, `lib/protoforge/`, `protoforge-applications/` | `lib/protoforge/` + `protoforge/` | Active | None (shared brand) |
 | **RAW EVENT LEDGER** | `raw_event_ledger`, `raw-event-ledger`, `ledger` | `supabase/migrations/20260714120000_raw_event_ledger_table.sql`, `lib/protoforge/raw-ledger.ts` | Active | `modules/raw-event-ledger.js` |
 | **HYDI Event Gateway** | `hydi-gateway`, `Event Gateway` | `protoforge/hydi-gateway/` | Active | None |

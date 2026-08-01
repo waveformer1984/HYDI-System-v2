@@ -34,6 +34,7 @@ No layer may perform another layer's job.
 |---|---|---|---|
 | Resonate | `ExternalAdapter` in `protoforge-applications/rezonate/src/events/event-bus.js` | HYDI Event Gateway `POST /events` | Production |
 | Switchboard | `HydiAdapter` in `switchboard/src/events/event-bus.js` | HYDI Event Gateway `POST /events` | Production |
+| Proto YI | `ExternalAdapter` in `protoforge-applications/proto-yi/src/events/event-bus.js` | HYDI Event Gateway `POST /events` | Active (ProtoForge canonical application; see Phase 7.5b reconciliation) |
 
 ## Non-canonical but allowed components
 
@@ -67,7 +68,7 @@ These names are reserved for the next platform services. Do not reuse them for u
 | Reserved name | Purpose | Planned path |
 |---|---|---|
 | **KILO** | Hypothesis generator, already canonical | `kilo/` |
-| **Proto YI** | Builder / integrator assistant | `protoforge/proto-yi/` (do not create yet) |
+| **Proto YI** | ProtoForge project-management application | `protoforge-applications/proto-yi/` (active; legacy engine wrapped, not duplicated) |
 | **Build a Mind** | Cognitive agent construction | `protoforge/build-a-mind/` (do not create yet) |
 | **Forge Finder** | Opportunity / blueprint discovery | `protoforge/forge-finder/` (do not create yet) |
 | **Hyve** | Swarm / opportunity collective | `hyve_service/` (existing, keep) |
