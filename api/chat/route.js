@@ -37,9 +37,9 @@ const supabase = new Proxy({}, { get: (_, prop) => getSupabase()[prop] });
 const systemHandlers = {
   ursula: handleUrsulaMessage,
   heidi: handleHeidiMessage,
-  cascade: handleCascadeMessage,
-  kilo: handleKiloMessage,
-  protoforge: handleProtoForgeMessage,
+  cascade: legacyHandleCascadeMessage,
+  kilo: legacyHandleKiloMessage,
+  protoforge: legacyHandleProtoForgeMessage,
   hyve: handleHyveMessage,
   infrastructure: handleInfrastructureMessage,
   rezonate: handleRezonateMessage
@@ -164,7 +164,8 @@ async function handleHeidiMessage(message, request) {
   };
 }
 
-async function handleCascadeMessage(message, request) {
+/** @deprecated Chat stub. Replace with call to protoforge/cascade/ or compatibility/cascade-legacy.js. */
+async function legacyHandleCascadeMessage(message, request) {
   const lowerMessage = message.toLowerCase();
   
   if (lowerMessage.includes('process')) {
@@ -186,7 +187,8 @@ async function handleCascadeMessage(message, request) {
   return `⚡ CASCADE: Event processing system. Try 'process <event>', 'status', or 'quarantine'.`;
 }
 
-async function handleKiloMessage(message, request) {
+/** @deprecated Chat stub. Replace with call to kilo/index.js. */
+async function legacyHandleKiloMessage(message, request) {
   const lowerMessage = message.toLowerCase();
   
   if (lowerMessage.includes('hypothesis') || lowerMessage.includes('repair')) {
@@ -204,7 +206,8 @@ async function handleKiloMessage(message, request) {
   return `🔧 KILO: Repair hypothesis engine. Ask about 'hypothesis', 'validate', or 'manifest'.`;
 }
 
-async function handleProtoForgeMessage(message, request) {
+/** @deprecated Chat stub. Replace with lib/protoforge/policy-engine.js. */
+async function legacyHandleProtoForgeMessage(message, request) {
   const lowerMessage = message.toLowerCase();
   
   if (lowerMessage.includes('status')) {

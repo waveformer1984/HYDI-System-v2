@@ -1,4 +1,8 @@
 /**
+ * @deprecated Contextual Policy Engine is superseded by lib/protoforge/policy-engine.js.
+ * Replacement: lib/protoforge/policy-engine.js
+ * Migration: Use the canonical DSL rule engine with Supabase policies table. Removal target: Phase 5.
+ *
  * Contextual Policy Engine v2
  * Because static policies are for amateurs
  */
