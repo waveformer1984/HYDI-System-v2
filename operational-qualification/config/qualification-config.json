@@ -1,0 +1,75 @@
+{
+  "qualification": {
+    "quick": {
+      "duration": 1800000,
+      "interval": 10000,
+      "phases": ["stack-lifecycle", "workload-execution", "metrics-collection"]
+    },
+    "full": {
+      "duration": 86400000,
+      "interval": 30000,
+      "phases": ["stack-lifecycle", "workload-execution", "metrics-collection", "failure-injection"]
+    }
+  },
+  "stack": {
+    "startupTimeout": 120000,
+    "shutdownTimeout": 60000,
+    "healthCheckInterval": 2000,
+    "healthCheckMaxAttempts": 30
+  },
+  "workloads": {
+    "interval": 5000,
+    "conversation": {
+      "enabled": true,
+      "endpoint": "http://localhost:3000/api/chat"
+    },
+    "memory-storage": {
+      "enabled": true,
+      "endpoint": "http://localhost:3000/api/memory"
+    },
+    "memory-retrieval": {
+      "enabled": true,
+      "endpoint": "http://localhost:3000/api/memory/search"
+    },
+    "supervisor-status": {
+      "enabled": true,
+      "endpoint": "http://localhost:9999/status"
+    },
+    "bridge-request": {
+      "enabled": true,
+      "endpoint": "http://localhost:5050/health"
+    },
+    "database-operation": {
+      "enabled": true,
+      "endpoint": "http://localhost:3000/api/health"
+    }
+  },
+  "metrics": {
+    "interval": 30000,
+    "leakThreshold": 5
+  },
+  "failures": {
+    "database": {
+      "enabled": true,
+      "recoveryTimeout": 300000
+    },
+    "redis": {
+      "enabled": true,
+      "recoveryTimeout": 300000
+    },
+    "process-crash": {
+      "enabled": true,
+      "recoveryTimeout": 300000
+    },
+    "network-interruption": {
+      "enabled": true,
+      "recoveryTimeout": 300000
+    }
+  },
+  "acceptanceCriteria": {
+    "workloadSuccessRate": 0.99,
+    "recoveryTimeMax": 300000,
+    "resourceLeakThreshold": 5,
+    "dataIntegrityRate": 1.0
+  }
+}
