@@ -1,40 +1,60 @@
 /**
  * Metrics Collector
- * Collects system metrics during qualification
+ * =================
+ *
+ * Collects system metrics during qualification.
+ *
+ * This is a thin adapter over scripts/lib/soak-metrics.js so that the
+ * qualification harness and the soak harness report identical, comparable
+ * numbers from one implementation.
+ *
+ * Defects in the previous standalone implementation, corrected by delegating:
+ *   - CPU usage was computed from cumulative since-boot os.cpus() totals, so
+ *     every sample was nearly identical and the derived "trend" was noise.
+ *     It is now an interval delta.
+ *   - Process count returned os.cpus().length (a CPU core count) labelled as a
+ *     process count. It now reads the real OS process table, or null.
+ *   - Handle count was a hardcoded 0 placeholder presented as a measurement.
+ *     It now reports the harness's libuv handle count, or null.
+ *   - Disk metrics recursively walked process.cwd() (including node_modules)
+ *     on every sample, which is slow and measures repo size rather than disk
+ *     utilisation. It now reports filesystem utilisation via statfs.
  */
 
-const os = require('os');
-const fs = require('fs');
-const path = require('path');
+const { OperationalMetrics } = require('../../scripts/lib/soak-metrics');
 
 class MetricsCollector {
+  /** @param {object} config the `metrics` section of qualification-config.json */
   constructor(config) {
-    this.config = config;
-    this.metrics = [];
+    this.config = config || {};
     this.intervalId = null;
     this.startTime = null;
+    this.metrics = [];
+    this.operational = new OperationalMetrics({
+      probes: {
+        postgres: { host: process.env.PGHOST || '127.0.0.1', port: Number(process.env.PGPORT || 5432) },
+        redis: { host: process.env.REDIS_HOST || '127.0.0.1', port: Number(process.env.REDIS_PORT || 6379) },
+      },
+    });
   }
 
-  /**
-   * Start metrics collection
-   */
   start() {
     console.log('[MetricsCollector] Starting metrics collection...');
     this.startTime = Date.now();
 
-    const interval = this.config.interval || 30000; // Default 30 seconds
+    const interval = this.config.interval || 30000;
 
     this.intervalId = setInterval(() => {
-      this.collectMetrics();
+      this.collectMetrics().catch((err) => {
+        console.error('[MetricsCollector] Sample failed:', err.message);
+      });
     }, interval);
+    // Do not hold the event loop open purely for sampling.
+    if (typeof this.intervalId.unref === 'function') this.intervalId.unref();
 
-    // Collect initial metrics
-    this.collectMetrics();
+    this.collectMetrics().catch(() => {});
   }
 
-  /**
-   * Stop metrics collection
-   */
   stop() {
     console.log('[MetricsCollector] Stopping metrics collection...');
 
@@ -46,235 +66,63 @@ class MetricsCollector {
     return this.metrics;
   }
 
-  /**
-   * Collect current system metrics
-   */
-  collectMetrics() {
-    const timestamp = Date.now();
-    const uptime = this.startTime ? timestamp - this.startTime : 0;
+  async collectMetrics() {
+    const sample = await this.operational.sample();
+    this.metrics.push(sample);
 
-    const metrics = {
-      timestamp,
-      uptimeMs: uptime,
-      cpu: this.getCpuMetrics(),
-      memory: this.getMemoryMetrics(),
-      disk: this.getDiskMetrics(),
-      processes: this.getProcessMetrics(),
-      handles: this.getHandleMetrics()
-    };
+    const cpu = sample.cpu.systemPercent;
+    const mem = sample.memory.systemUsedPercent;
+    console.log(
+      `[MetricsCollector] CPU ${cpu === null ? 'n/a' : `${cpu.toFixed(1)}%`}, ` +
+      `Memory ${mem === null ? 'n/a' : `${mem.toFixed(1)}%`}, ` +
+      `Processes ${sample.processCount ?? 'n/a'}`
+    );
 
-    this.metrics.push(metrics);
-    console.log(`[MetricsCollector] Metrics collected: CPU ${metrics.cpu.usage.toFixed(1)}%, Memory ${metrics.memory.usage.toFixed(1)}%`);
-
-    return metrics;
+    return sample;
   }
 
-  /**
-   * Get CPU metrics
-   */
-  getCpuMetrics() {
-    const cpus = os.cpus();
-    const cpuInfo = os.cpus()[0];
-
-    return {
-      count: cpus.length,
-      model: cpuInfo.model,
-      speed: cpuInfo.speed,
-      usage: this.getCpuUsage()
-    };
-  }
-
-  /**
-   * Get CPU usage percentage
-   */
-  getCpuUsage() {
-    const cpus = os.cpus();
-    let totalIdle = 0;
-    let totalTick = 0;
-
-    cpus.forEach(cpu => {
-      for (const type in cpu.times) {
-        totalTick += cpu.times[type];
-      }
-      totalIdle += cpu.times.idle;
-    });
-
-    const idle = totalIdle / cpus.length;
-    const total = totalTick / cpus.length;
-    const usage = 100 - (100 * idle / total);
-
-    return usage;
-  }
-
-  /**
-   * Get memory metrics
-   */
-  getMemoryMetrics() {
-    const total = os.totalmem();
-    const free = os.freemem();
-    const used = total - free;
-
-    return {
-      totalBytes: total,
-      usedBytes: used,
-      freeBytes: free,
-      usage: (used / total) * 100
-    };
-  }
-
-  /**
-   * Get disk metrics
-   */
-  getDiskMetrics() {
-    const stats = fs.statSync(process.cwd());
-    const size = this.getDirectorySize(process.cwd());
-
-    return {
-      path: process.cwd(),
-      sizeBytes: size
-    };
-  }
-
-  /**
-   * Get directory size
-   */
-  getDirectorySize(dirPath) {
-    let size = 0;
-
-    try {
-      const files = fs.readdirSync(dirPath);
-
-      files.forEach(file => {
-        const filePath = path.join(dirPath, file);
-        const stats = fs.statSync(filePath);
-
-        if (stats.isDirectory()) {
-          size += this.getDirectorySize(filePath);
-        } else {
-          size += stats.size;
-        }
-      });
-    } catch (error) {
-      console.error('[MetricsCollector] Error getting directory size:', error);
-    }
-
-    return size;
-  }
-
-  /**
-   * Get process metrics
-   */
-  getProcessMetrics() {
-    return {
-      count: this.getProcessCount(),
-      pid: process.pid,
-      uptime: process.uptime()
-    };
-  }
-
-  /**
-   * Get process count
-   */
-  getProcessCount() {
-    // Note: This is a simplified implementation
-    // In a real implementation, you'd use a proper process monitoring library
-    return os.cpus().length; // Approximation
-  }
-
-  /**
-   * Get handle metrics
-   */
-  getHandleMetrics() {
-    // Note: This is a simplified implementation
-    // In a real implementation, you'd use a proper handle monitoring library
-    return {
-      count: 0 // Placeholder
-    };
-  }
-
-  /**
-   * Get all collected metrics
-   */
   getMetrics() {
     return this.metrics;
   }
 
-  /**
-   * Get metrics summary statistics
-   */
   getSummary() {
-    if (this.metrics.length === 0) {
-      return null;
-    }
-
-    const cpuUsages = this.metrics.map(m => m.cpu.usage);
-    const memoryUsages = this.metrics.map(m => m.memory.usage);
-
-    return {
-      totalSamples: this.metrics.length,
-      durationMs: this.metrics[this.metrics.length - 1].timestamp - this.metrics[0].timestamp,
-      cpu: {
-        min: Math.min(...cpuUsages),
-        max: Math.max(...cpuUsages),
-        avg: cpuUsages.reduce((a, b) => a + b, 0) / cpuUsages.length,
-        trend: this.calculateTrend(cpuUsages)
-      },
-      memory: {
-        min: Math.min(...memoryUsages),
-        max: Math.max(...memoryUsages),
-        avg: memoryUsages.reduce((a, b) => a + b, 0) / memoryUsages.length,
-        trend: this.calculateTrend(memoryUsages)
-      }
-    };
+    return this.operational.summarise();
   }
 
   /**
-   * Calculate trend (positive = increasing, negative = decreasing)
-   */
-  calculateTrend(values) {
-    if (values.length < 2) return 0;
-
-    const firstHalf = values.slice(0, Math.floor(values.length / 2));
-    const secondHalf = values.slice(Math.floor(values.length / 2));
-
-    const firstAvg = firstHalf.reduce((a, b) => a + b, 0) / firstHalf.length;
-    const secondAvg = secondHalf.reduce((a, b) => a + b, 0) / secondHalf.length;
-
-    return secondAvg - firstAvg;
-  }
-
-  /**
-   * Check for resource leaks
+   * Resource leak check based on the memory trend of the harness process.
+   *
+   * Returns `hasLeaks: null` when the sample window is too short to support a
+   * trend, so an inconclusive run is never reported as "no leaks detected".
    */
   checkForResourceLeaks() {
     const summary = this.getSummary();
+    if (!summary) return { hasLeaks: null, reason: 'no samples collected', details: null };
 
-    if (!summary) {
-      return { hasLeaks: false, details: null };
+    if (!summary.trendWindowSufficient) {
+      return {
+        hasLeaks: null,
+        reason: `sample window ${(summary.windowMs / 60000).toFixed(1)}m is below the ` +
+          `${(summary.minTrendWindowMs / 60000).toFixed(0)}m minimum required for a trend`,
+        details: null,
+      };
     }
 
-    const cpuTrend = summary.cpu.trend;
-    const memoryTrend = summary.memory.trend;
+    // Threshold in bytes/hour of harness heap growth.
+    const threshold = this.config.leakThresholdBytesPerHour || 5 * 1024 * 1024;
+    const heapTrend = summary.memory.harnessHeapTrendBytesPerHour;
+    const rssTrend = summary.memory.harnessRssTrendBytesPerHour;
 
-    const threshold = this.config.leakThreshold || 5; // 5% increase trend
-
-    const cpuLeak = cpuTrend > threshold;
-    const memoryLeak = memoryTrend > threshold;
+    const heapLeak = typeof heapTrend === 'number' && heapTrend > threshold;
+    const rssLeak = typeof rssTrend === 'number' && rssTrend > threshold;
 
     return {
-      hasLeaks: cpuLeak || memoryLeak,
+      hasLeaks: heapLeak || rssLeak,
+      scope: 'harness process only — service processes are not instrumented',
       details: {
-        cpu: {
-          hasLeak: cpuLeak,
-          trend: cpuTrend,
-          threshold
-        },
-        memory: {
-          hasLeak: memoryLeak,
-          trend: memoryTrend,
-          threshold
-        }
-      }
+        heap: { trendBytesPerHour: heapTrend, hasLeak: heapLeak, threshold },
+        rss: { trendBytesPerHour: rssTrend, hasLeak: rssLeak, threshold },
+      },
     };
   }
 }

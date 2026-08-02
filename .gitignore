@@ -86,3 +86,7 @@ hydi.db
 
 # Cloud-bootstrap state describes THIS machine's view of cloud infra — never commit
 .cloud-bootstrap-state.json
+
+# Validation harness run artifacts - regenerated per run, never source
+reports/soak/
+reports/qualification/

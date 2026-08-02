@@ -44,6 +44,21 @@ npm run test:integration:jest     # The full hermetic operational integration su
 npm run test:soak:hydi-v3         # Long-running V3 stability simulation (scripts/soak-test-v3.js)
 npm run benchmark:performance     # V3 performance benchmarks
 npm run security-audit            # V3 static security audit
+npm run runtime-validation        # Runtime op-validation harness (scripts/op-validation.js)
+```
+
+Operational validation — these commands measure a running stack, not source code:
+```bash
+npm run soak-test-24h             # 24h endurance: availability, latency, metrics. NO failure injection.
+npm run soak-test-1h              # Same, 1 hour
+npm run soak-test-24h:chaos       # Endurance + REAL failure injection (destructive)
+npm run soak-harness-test         # Unit test of soak-harness logic (seconds, not a soak)
+npm run resource-leak-test        # Unit test of the resource leak detector
+npm run resource-auditor-test     # Unit test of the RC2 resource auditor
+npm run operational-qualification # Quick operational qualification run
+npm run production-certification  # Full operational qualification run
+npm run validation-audit          # Verifies the validation tooling itself is accurate
+npm run release-validation        # typecheck + lint + unit tests + validation-audit
 ```
 
 Operational scripts at the repo root:

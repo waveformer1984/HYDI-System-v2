@@ -138,7 +138,7 @@ and can be checked in CI:
 npm run reliability-test
 npm run fault-test
 npm run recovery-test
-npm run leak-test
+npm run resource-leak-test
 npm run deadlock-test
 npm run operations-test
 npm run federation-test

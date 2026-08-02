@@ -21,10 +21,24 @@
 
 ## Hardening
 
-- [ ] `npm run soak-test` passes
-- [ ] `npm run leak-test` passes
+- [ ] `npm run soak-harness-test` passes — unit test of soak-harness logic (seconds)
+- [ ] `npm run resource-auditor-test` passes — unit test of the RC2 resource auditor
+- [ ] `npm run resource-leak-test` passes — unit test of the resource leak detector
 - [ ] `npm run determinism-test` passes
 - [ ] `npm run baseline-test` passes
+- [ ] `npm run validation-audit` passes — verifies the validation tooling itself is accurate
+
+## Operational Evidence
+
+These are long-running and are **not** covered by the unit tests above. Record the
+generated report path against each.
+
+- [ ] `npm run soak-test-24h` — 24-hour endurance run. Evidences availability,
+      latency and resource trends. Does **not** evidence recovery.
+- [ ] `npm run soak-test-24h:chaos` — endurance plus real failure injection.
+      Required before claiming any resilience or recovery property.
+- [ ] `npm run production-certification` — full operational qualification.
+      Note: resilience criteria report `NOT TESTED` unless `--chaos` is passed.
 
 ## Full Test Suite
 

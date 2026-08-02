@@ -84,7 +84,7 @@ class WorkloadDriver {
   getStatistics() {
     const stats = {};
 
-    for (const [name, workload] of this.workloads) {
+    for (const name of this.workloads.keys()) {
       const workloadMetrics = this.metrics.filter(m => m.workload === name);
       const successful = workloadMetrics.filter(m => m.success);
       const failed = workloadMetrics.filter(m => !m.success);
@@ -115,13 +115,20 @@ class WorkloadDriver {
  * Representative workloads
  */
 
+/**
+ * Each workload receives the FULL endpoint URL from qualification-config.json
+ * and uses it verbatim. Earlier revisions appended their own path on top of the
+ * configured endpoint, producing URLs such as
+ * "http://localhost:3000/api/chat/api/chat", so every workload 404'd.
+ */
+
 class ConversationWorkload {
-  constructor(apiUrl) {
-    this.apiUrl = apiUrl;
+  constructor(endpoint) {
+    this.endpoint = endpoint;
   }
 
   async execute() {
-    const response = await fetch(`${this.apiUrl}/api/chat`, {
+    const response = await fetch(this.endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -139,12 +146,12 @@ class ConversationWorkload {
 }
 
 class MemoryStorageWorkload {
-  constructor(apiUrl) {
-    this.apiUrl = apiUrl;
+  constructor(endpoint) {
+    this.endpoint = endpoint;
   }
 
   async execute() {
-    const response = await fetch(`${this.apiUrl}/api/memory`, {
+    const response = await fetch(this.endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -162,12 +169,12 @@ class MemoryStorageWorkload {
 }
 
 class MemoryRetrievalWorkload {
-  constructor(apiUrl) {
-    this.apiUrl = apiUrl;
+  constructor(endpoint) {
+    this.endpoint = endpoint;
   }
 
   async execute() {
-    const response = await fetch(`${this.apiUrl}/api/memory/search`, {
+    const response = await fetch(this.endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -185,12 +192,12 @@ class MemoryRetrievalWorkload {
 }
 
 class SupervisorStatusWorkload {
-  constructor(supervisorUrl) {
-    this.supervisorUrl = supervisorUrl;
+  constructor(endpoint) {
+    this.endpoint = endpoint;
   }
 
   async execute() {
-    const response = await fetch(`${this.supervisorUrl}/status`);
+    const response = await fetch(this.endpoint);
 
     if (!response.ok) {
       throw new Error(`Supervisor status request failed: ${response.status}`);
@@ -201,12 +208,12 @@ class SupervisorStatusWorkload {
 }
 
 class BridgeRequestWorkload {
-  constructor(bridgeUrl) {
-    this.bridgeUrl = bridgeUrl;
+  constructor(endpoint) {
+    this.endpoint = endpoint;
   }
 
   async execute() {
-    const response = await fetch(`${this.bridgeUrl}/health`);
+    const response = await fetch(this.endpoint);
 
     if (!response.ok) {
       throw new Error(`Bridge request failed: ${response.status}`);
@@ -216,16 +223,22 @@ class BridgeRequestWorkload {
   }
 }
 
+/**
+ * NOTE ON SCOPE: this workload polls an HTTP health endpoint that happens to
+ * touch the database. It does not execute a database operation directly, so it
+ * is evidence of endpoint availability, not of query correctness or write
+ * durability. Reports must not classify it as database validation.
+ */
 class DatabaseOperationWorkload {
-  constructor(apiUrl) {
-    this.apiUrl = apiUrl;
+  constructor(endpoint) {
+    this.endpoint = endpoint;
   }
 
   async execute() {
-    const response = await fetch(`${this.apiUrl}/api/health`);
+    const response = await fetch(this.endpoint);
 
     if (!response.ok) {
-      throw new Error(`Database operation request failed: ${response.status}`);
+      throw new Error(`Database health endpoint request failed: ${response.status}`);
     }
 
     return await response.json();

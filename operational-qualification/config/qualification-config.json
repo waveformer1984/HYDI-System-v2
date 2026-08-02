@@ -46,8 +46,9 @@
   },
   "metrics": {
     "interval": 30000,
-    "leakThreshold": 5
+    "leakThresholdBytesPerHour": 5242880
   },
+  "_failuresNote": "These entries select WHICH scenarios run when chaos is requested. They do NOT enable chaos. Injection is destructive and only happens when the harness is invoked with --chaos.",
   "failures": {
     "database": {
       "enabled": true,
@@ -69,7 +70,6 @@
   "acceptanceCriteria": {
     "workloadSuccessRate": 0.99,
     "recoveryTimeMax": 300000,
-    "resourceLeakThreshold": 5,
-    "dataIntegrityRate": 1.0
+    "_dataIntegrityNote": "No data integrity threshold is configured because the harness does not snapshot or diff durable state. That criterion is always reported NOT TESTED rather than graded."
   }
 }

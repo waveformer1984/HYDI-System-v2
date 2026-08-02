@@ -1,117 +1,186 @@
 /**
  * Failure Injector
- * Injects controlled failures to validate system resilience
+ * ================
+ *
+ * Injects REAL, controlled failures to validate system resilience.
+ *
+ * HISTORY / WHY THIS IS WRITTEN THIS WAY:
+ * The original implementation of this module defined four "failure scenarios"
+ * (database, Redis, process crash, network interruption) whose `inject()` was
+ * a `setTimeout`, whose `waitForRecovery()` was a `setTimeout` returning
+ * `true`, and whose `validateDataIntegrity()` was `return true`. Nothing was
+ * ever terminated, restarted, or checked. Because report-generator.js grades
+ * "All failure scenarios recover" and "Data integrity maintained" directly
+ * from those return values, the harness would have certified resilience it
+ * never exercised. Simulated logging is not failure injection and must never
+ * be reported as such.
+ *
+ * The scenarios are now delegated to scripts/lib/soak-chaos.js, which
+ * terminates real processes and restarts real containers, and which reports
+ * `skipped` (never `passed`) when a fault could not be applied.
+ *
+ * SAFETY: injection is destructive. It is gated by an explicit `--chaos` flag
+ * on the harness CLI; the `failures.*.enabled` config keys alone do not enable
+ * it.
  */
 
+const { buildScenarios } = require('../../scripts/lib/soak-chaos');
+
+/** Maps qualification-config failure keys to chaos scenario names. */
+const SCENARIO_MAP = {
+  'database': 'restart-postgres',
+  'redis': 'restart-redis',
+  'process-crash': 'restart-next',
+  'network-interruption': 'delayed-postgres-startup',
+  'bridge': 'kill-bridge',
+  'protohub': 'restart-protohub',
+  'supervisor': 'restart-core',
+};
+
 class FailureInjector {
-  constructor(config) {
-    this.config = config;
+  /**
+   * @param {object} config  the `failures` section of qualification-config.json
+   * @param {object} options `{ enabled, dryRun, supervised }` — `enabled`
+   *   must be true (set only by the --chaos CLI flag) or nothing is injected.
+   */
+  constructor(config, options = {}) {
+    this.config = config || {};
+    this.enabled = options.enabled === true;
+    this.dryRun = options.dryRun === true;
+    this.supervised = options.supervised === true;
     this.failures = new Map();
     this.results = [];
+    this.scenarioIndex = new Map(buildScenarios().map((s) => [s.name, s]));
   }
 
   /**
-   * Register a failure scenario
+   * Register a failure scenario by its qualification-config key.
+   * Unknown keys are recorded as unsupported rather than silently ignored.
    */
-  registerFailure(name, failure) {
-    this.failures.set(name, failure);
+  registerFailure(name) {
+    const scenarioName = SCENARIO_MAP[name];
+    const scenario = scenarioName ? this.scenarioIndex.get(scenarioName) : null;
+    this.failures.set(name, { scenarioName, scenario });
   }
 
   /**
-   * Execute all registered failure scenarios
+   * Execute all registered failure scenarios.
+   * Returns one fully attributed result per scenario.
    */
   async executeAll() {
-    console.log('[FailureInjector] Executing all failure scenarios...');
+    if (!this.enabled) {
+      console.log('[FailureInjector] Chaos disabled — no failures injected (this is the default).');
+      return this.failures.size === 0 ? [] : [...this.failures.keys()].map((name) => ({
+        failure: name,
+        timestamp: Date.now(),
+        status: 'skipped',
+        executed: false,
+        reason: 'chaos mode not enabled; run the harness with --chaos to inject this fault',
+        recoveryTime: null,
+        dataIntegrity: null,
+      }));
+    }
 
-    for (const [name, failure] of this.failures) {
-      try {
-        const result = await this.executeFailure(name, failure);
-        this.results.push({
-          failure: name,
-          timestamp: Date.now(),
-          success: true,
-          recoveryTime: result.recoveryTime,
-          dataIntegrity: result.dataIntegrity,
-          details: result.details
-        });
-      } catch (error) {
-        this.results.push({
-          failure: name,
-          timestamp: Date.now(),
-          success: false,
-          error: error.message
-        });
-      }
+    console.log('[FailureInjector] Executing failure scenarios (REAL injection)...');
+
+    for (const [name, entry] of this.failures) {
+      this.results.push(await this.executeFailure(name, entry));
     }
 
     console.log('[FailureInjector] Failure scenarios completed');
     return this.results;
   }
 
-  /**
-   * Execute a single failure scenario
-   */
-  async executeFailure(name, failure) {
-    console.log(`[FailureInjector] Executing failure scenario: ${name}`);
+  async executeFailure(name, entry) {
+    const base = { failure: name, timestamp: Date.now() };
 
-    const beforeState = await failure.captureBeforeState();
-    const injectTime = Date.now();
+    if (!entry.scenario) {
+      return {
+        ...base,
+        status: 'skipped',
+        executed: false,
+        reason: `no real implementation is available for failure "${name}"`,
+        recoveryTime: null,
+        dataIntegrity: null,
+      };
+    }
 
-    // Inject failure
-    await failure.inject();
+    if (this.dryRun) {
+      return {
+        ...base,
+        status: 'skipped',
+        executed: false,
+        reason: `dry run: would have run scenario "${entry.scenarioName}"`,
+        recoveryTime: null,
+        dataIntegrity: null,
+      };
+    }
 
-    // Wait for recovery
-    const recovered = await failure.waitForRecovery();
-    const recoveryTime = Date.now() - injectTime;
+    console.log(`[FailureInjector] Executing failure scenario: ${name} -> ${entry.scenarioName}`);
 
-    // Capture after state
-    const afterState = await failure.captureAfterState();
-
-    // Validate data integrity
-    const dataIntegrity = failure.validateDataIntegrity(beforeState, afterState);
-
-    console.log(`[FailureInjector] Failure scenario completed: ${name} (recovery time: ${recoveryTime}ms)`);
+    let outcome;
+    try {
+      outcome = await entry.scenario.run({ supervised: this.supervised });
+    } catch (error) {
+      outcome = {
+        status: 'failed',
+        injectedFault: entry.scenario.description,
+        observedBehaviour: `scenario threw: ${error.message}`,
+        recoveryMs: null,
+      };
+    }
 
     return {
-      recoveryTime,
-      dataIntegrity,
-      details: {
-        beforeState,
-        afterState,
-        recovered
-      }
+      ...base,
+      scenario: entry.scenarioName,
+      status: outcome.status,
+      executed: outcome.status !== 'skipped',
+      reason: outcome.reason || null,
+      injectedAt: outcome.injectedAt || null,
+      injectedFault: outcome.injectedFault || null,
+      observedBehaviour: outcome.observedBehaviour || null,
+      recoveryTime: outcome.recoveryMs ?? null,
+      recoveredBy: outcome.recoveredBy || null,
+      // Data integrity is NOT asserted here. Verifying it requires comparing
+      // durable state before and after the fault, which this harness does not
+      // do. Reporting `null` keeps it out of the pass tally rather than
+      // fabricating a `true`.
+      dataIntegrity: null,
+      dataIntegrityNote: 'not verified: harness does not snapshot or diff durable state',
     };
   }
 
-  /**
-   * Get failure results
-   */
   getResults() {
     return this.results;
   }
 
   /**
-   * Get failure statistics
+   * Statistics over executed scenarios only. Skipped scenarios are counted
+   * separately and never contribute to a success rate, so a run in which
+   * nothing could be injected does not read as 100% success.
    */
   getStatistics() {
     const stats = {};
 
-    for (const [name, failure] of this.failures) {
-      const failureResults = this.results.filter(r => r.failure === name);
-      const successful = failureResults.filter(r => r.success);
-      const failed = failureResults.filter(r => !r.success);
+    for (const name of this.failures.keys()) {
+      const all = this.results.filter((r) => r.failure === name);
+      const executed = all.filter((r) => r.executed);
+      const passed = executed.filter((r) => r.status === 'passed');
+      const recoveries = passed
+        .map((r) => r.recoveryTime)
+        .filter((v) => typeof v === 'number');
 
       stats[name] = {
-        total: failureResults.length,
-        successful: successful.length,
-        failed: failed.length,
-        successRate: failureResults.length > 0 ? successful.length / failureResults.length : 0,
-        avgRecoveryTime: successful.length > 0
-          ? successful.reduce((sum, r) => sum + r.recoveryTime, 0) / successful.length
-          : 0,
-        dataIntegrityRate: successful.length > 0
-          ? successful.filter(r => r.dataIntegrity).length / successful.length
-          : 0
+        total: all.length,
+        executed: executed.length,
+        skipped: all.length - executed.length,
+        passed: passed.length,
+        failed: executed.length - passed.length,
+        successRate: executed.length > 0 ? passed.length / executed.length : null,
+        avgRecoveryTime: recoveries.length > 0
+          ? recoveries.reduce((s, v) => s + v, 0) / recoveries.length
+          : null,
+        dataIntegrityRate: null,
       };
     }
 
@@ -119,153 +188,4 @@ class FailureInjector {
   }
 }
 
-/**
- * Failure scenarios
- */
-
-class DatabaseFailureScenario {
-  constructor(dbConfig) {
-    this.dbConfig = dbConfig;
-  }
-
-  async captureBeforeState() {
-    // Capture database state before failure
-    return { timestamp: Date.now(), state: 'normal' };
-  }
-
-  async inject() {
-    // Simulate database unavailability
-    console.log('[FailureInjector] Injecting database failure...');
-    // In a real implementation, this would stop the database or block connections
-    await this.sleep(5000); // Simulate 5 second outage
-  }
-
-  async waitForRecovery() {
-    // Wait for system to recover
-    console.log('[FailureInjector] Waiting for recovery...');
-    await this.sleep(10000); // Simulate 10 second recovery
-    return true;
-  }
-
-  async captureAfterState() {
-    // Capture database state after recovery
-    return { timestamp: Date.now(), state: 'recovered' };
-  }
-
-  validateDataIntegrity(before, after) {
-    // Validate no data loss occurred
-    return true;
-  }
-
-  sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
-  }
-}
-
-class RedisFailureScenario {
-  constructor(redisConfig) {
-    this.redisConfig = redisConfig;
-  }
-
-  async captureBeforeState() {
-    return { timestamp: Date.now(), state: 'normal' };
-  }
-
-  async inject() {
-    console.log('[FailureInjector] Injecting Redis failure...');
-    await this.sleep(3000); // Simulate 3 second outage
-  }
-
-  async waitForRecovery() {
-    console.log('[FailureInjector] Waiting for recovery...');
-    await this.sleep(5000); // Simulate 5 second recovery
-    return true;
-  }
-
-  async captureAfterState() {
-    return { timestamp: Date.now(), state: 'recovered' };
-  }
-
-  validateDataIntegrity(before, after) {
-    return true;
-  }
-
-  sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
-  }
-}
-
-class ProcessCrashScenario {
-  constructor(processName) {
-    this.processName = processName;
-  }
-
-  async captureBeforeState() {
-    return { timestamp: Date.now(), state: 'running' };
-  }
-
-  async inject() {
-    console.log('[FailureInjector] Injecting process crash...');
-    // In a real implementation, this would crash the process
-    await this.sleep(2000); // Simulate crash
-  }
-
-  async waitForRecovery() {
-    console.log('[FailureInjector] Waiting for recovery...');
-    await this.sleep(8000); // Simulate 8 second recovery
-    return true;
-  }
-
-  async captureAfterState() {
-    return { timestamp: Date.now(), state: 'recovered' };
-  }
-
-  validateDataIntegrity(before, after) {
-    return true;
-  }
-
-  sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
-  }
-}
-
-class NetworkInterruptionScenario {
-  constructor(networkConfig) {
-    this.networkConfig = networkConfig;
-  }
-
-  async captureBeforeState() {
-    return { timestamp: Date.now(), state: 'normal' };
-  }
-
-  async inject() {
-    console.log('[FailureInjector] Injecting network interruption...');
-    await this.sleep(4000); // Simulate 4 second outage
-  }
-
-  async waitForRecovery() {
-    console.log('[FailureInjector] Waiting for recovery...');
-    await this.sleep(6000); // Simulate 6 second recovery
-    return true;
-  }
-
-  async captureAfterState() {
-    return { timestamp: Date.now(), state: 'recovered' };
-  }
-
-  validateDataIntegrity(before, after) {
-    return true;
-  }
-
-  sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
-  }
-}
-
-module.exports = {
-  FailureInjector,
-  DatabaseFailureScenario,
-  RedisFailureScenario,
-  ProcessCrashScenario,
-  NetworkInterruptionScenario
-};
+module.exports = { FailureInjector, SCENARIO_MAP };

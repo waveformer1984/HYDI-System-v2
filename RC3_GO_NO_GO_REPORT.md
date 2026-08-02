@@ -1,5 +1,20 @@
 # RC3 Go / No-Go Report
 
+> ## ERRATUM — 2026-08-02 (Validation Tooling Audit)
+>
+> **Two gate entries in this report are inaccurate. They are corrected here; the original text below is preserved unaltered for audit purposes.**
+>
+> When this report was produced, `package.json` defined the script keys `soak-test` and `leak-test` **twice each**. JSON parsing keeps only the last occurrence, so the commands recorded below did not run the tools their names imply:
+>
+> | Entry in this report | What actually executed |
+> |---|---|
+> | `npm run soak-test` — PASS | `jest tests/unit/hydi-v3/RC2Hardening.test.js -t "Soak harness"` — a ~280 ms unit test of soak-harness *logic*. The endurance script `scripts/soak-test.js` did **not** run. |
+> | `npm run leak-test` — PASS | `jest tests/unit/hydi-v3/RC2Hardening.test.js -t "Resource auditor"` — **not** the `ProductionReliability` "Resource leak detector" test the name implies. |
+>
+> **Corrected classification for both entries: VERIFIED (unit test only).** Neither is operational soak or leak evidence. Sustained endurance and resource-leak behaviour were **NOT TESTED** as of this report.
+>
+> The duplicate keys were removed on 2026-08-02. Each command now has exactly one implementation: `soak-test-24h` (endurance script) vs `soak-harness-test` (unit test), and `resource-leak-test` vs `resource-auditor-test`. See `docs/audit/VALIDATION_TOOL_AUDIT_REPORT.md`.
+
 ## Recommendation
 
 **Option C — Block release of `v0.9.0`.**

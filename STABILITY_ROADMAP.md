@@ -166,10 +166,18 @@ app.get('/health', (req, res) => {
 
 **Commands:**
 ```bash
-npm run soak-test       # Full 24-hour test
-npm run soak-test:1h    # Quick 1-hour test
-SOAK_DURATION=3600000 npm run soak-test  # Custom duration
+npm run soak-test-24h        # 24-hour endurance run (chaos disabled)
+npm run soak-test-1h         # 1-hour endurance run (chaos disabled)
+npm run soak-test-24h:chaos  # 24-hour run WITH real failure injection
+node scripts/soak-test.js --duration 3600000   # custom duration
+node scripts/soak-test.js --list-scenarios     # show chaos scenarios
 ```
+
+> **Scope.** The default run is endurance only: it verifies health-endpoint
+> availability, latency, polling reliability and operational metrics. It does
+> **not** exercise recovery, restart, failover or any other resilience
+> behaviour — those are `NOT TESTED` unless `--chaos` is passed. See the header
+> of `scripts/soak-test.js` for the full verified / not-verified breakdown.
 
 **Example output:**
 ```
@@ -225,10 +233,10 @@ Final memory: 312MB
 | Graceful shutdown | ✅ | SIGTERM → drain → exit |
 | Structured logging | ✅ | `LOG_LEVEL=DEBUG npm run dev` |
 | Health monitoring | ✅ | `curl localhost:3000/health` |
-| Auto-recovery | ✅ | `npm run soak-test:1h` |
-| Memory leak detection | ✅ | Monitored in soak test |
+| Auto-recovery | Not tested by endurance runs | `npm run soak-test-24h:chaos` (real failure injection) |
+| Memory leak detection | Harness process only | Trend reported by `npm run soak-test-1h` once the window exceeds 10 min |
 | Latency tracking | ✅ | `/health` endpoint + logs |
-| **24-hour stability** | ✅ | `npm run soak-test` |
+| **24-hour endurance** | ✅ | `npm run soak-test-24h` |
 
 ---
 
@@ -339,7 +347,7 @@ tail -f app.log | jq 'select(.message | contains("error") or contains("failed"))
 
 Before deploying to production:
 
-- [ ] Run `npm run soak-test:1h` and confirm > 99% success rate
+- [ ] Run `npm run soak-test-1h` and confirm > 99% success rate
 - [ ] Monitor memory during soak test (should grow < 50MB over 1h)
 - [ ] Run `npm run check:ports` to verify no conflicts
 - [ ] Set `LOG_LEVEL=WARN` (reduce noise in prod)
@@ -371,7 +379,7 @@ tail -100 app.log | jq 'select(.memory) | .memory' | tail -1
 
 ```bash
 # Run 1-hour soak test
-npm run soak-test:1h
+npm run soak-test-1h
 
 # Analyze log trends
 cat app.log | jq -r '.timestamp' | while read ts; do
@@ -382,8 +390,8 @@ done | sort | uniq -c
 ### Monthly
 
 ```bash
-# Full 24-hour soak test
-npm run soak-test
+# Full 24-hour endurance soak (add :chaos for failure injection)
+npm run soak-test-24h
 
 # Review memory usage patterns
 cat app.log | jq 'select(.memory) | {timestamp, memory}' > memory-trends.json
@@ -415,7 +423,7 @@ To start using these systems:
 
 ```bash
 npm run start:hydi    # Orchestrated startup with all checks
-npm run soak-test:1h  # Quick 1-hour validation
+npm run soak-test-1h  # Quick 1-hour validation
 ```
 
 Ship with confidence. 🚀

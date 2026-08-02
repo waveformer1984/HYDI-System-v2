@@ -8,18 +8,32 @@
 const StackOrchestrator = require('./orchestrator/stack-orchestrator');
 const { WorkloadDriver, ConversationWorkload, MemoryStorageWorkload, MemoryRetrievalWorkload, SupervisorStatusWorkload, BridgeRequestWorkload, DatabaseOperationWorkload } = require('./workloads/workload-driver');
 const MetricsCollector = require('./metrics/metrics-collector');
-const { FailureInjector, DatabaseFailureScenario, RedisFailureScenario, ProcessCrashScenario, NetworkInterruptionScenario } = require('./failures/failure-injector');
+const { FailureInjector } = require('./failures/failure-injector');
 const ReportGenerator = require('./reports/report-generator');
 const fs = require('fs');
 const path = require('path');
 
 class OperationalQualificationHarness {
-  constructor(config) {
+  /**
+   * @param {object} config  parsed qualification-config.json
+   * @param {object} options `{ chaos, dryRun, supervised }`. `chaos` defaults
+   *   to false: failure injection is destructive and must be requested
+   *   explicitly via the --chaos CLI flag.
+   */
+  constructor(config, options = {}) {
     this.config = config;
+    this.options = { chaos: false, dryRun: false, supervised: false, ...options };
     this.orchestrator = new StackOrchestrator(config);
-    this.workloadDriver = new WorkloadDriver(config);
-    this.metricsCollector = new MetricsCollector(config);
-    this.failureInjector = new FailureInjector(config);
+    // Each collaborator receives its own config section. Passing the root
+    // config made every `this.config.<key>` lookup undefined, so tuned
+    // intervals and thresholds were silently replaced by hardcoded defaults.
+    this.workloadDriver = new WorkloadDriver(config.workloads);
+    this.metricsCollector = new MetricsCollector(config.metrics);
+    this.failureInjector = new FailureInjector(config.failures, {
+      enabled: this.options.chaos,
+      dryRun: this.options.dryRun,
+      supervised: this.options.supervised,
+    });
     this.reportGenerator = new ReportGenerator(config);
     this.results = {};
   }
@@ -36,20 +50,23 @@ class OperationalQualificationHarness {
       console.log('[Harness] Phase 1: Stack Lifecycle');
       await this.runStackLifecycle();
 
-      // Phase 2: Workload Execution
-      console.log('[Harness] Phase 2: Workload Execution');
-      await this.runWorkloadExecution(this.config.qualification.full.duration);
+      // Phases 2 and 3 run CONCURRENTLY. Running them in sequence (as an
+      // earlier revision did) sampled metrics only after the load had stopped,
+      // so the metrics described an idle system, and a "24 hour" run actually
+      // took 48 hours.
+      console.log('[Harness] Phases 2+3: Workload Execution with concurrent Metrics Collection');
+      await this.runLoadedWindow(this.config.qualification.full.duration);
 
-      // Phase 3: Metrics Collection
-      console.log('[Harness] Phase 3: Metrics Collection');
-      await this.runMetricsCollection(this.config.qualification.full.duration);
-
-      // Phase 4: Failure Injection
+      // Phase 4: Failure Injection (no-op unless --chaos was passed)
       console.log('[Harness] Phase 4: Failure Injection');
       await this.runFailureInjection();
 
-      // Phase 5: Report Generation
-      console.log('[Harness] Phase 5: Report Generation');
+      // Phase 5: Stack shutdown — required to evidence graceful shutdown
+      console.log('[Harness] Phase 5: Stack Shutdown');
+      await this.runStackShutdown();
+
+      // Phase 6: Report Generation
+      console.log('[Harness] Phase 6: Report Generation');
       await this.generateReport('full');
 
       const duration = Date.now() - startTime;
@@ -75,16 +92,16 @@ class OperationalQualificationHarness {
       console.log('[Harness] Phase 1: Stack Lifecycle');
       await this.runStackLifecycle();
 
-      // Phase 2: Workload Execution
-      console.log('[Harness] Phase 2: Workload Execution');
-      await this.runWorkloadExecution(this.config.qualification.quick.duration);
+      // Phases 2 and 3 run concurrently — see runFull for rationale.
+      console.log('[Harness] Phases 2+3: Workload Execution with concurrent Metrics Collection');
+      await this.runLoadedWindow(this.config.qualification.quick.duration);
 
-      // Phase 3: Metrics Collection
-      console.log('[Harness] Phase 3: Metrics Collection');
-      await this.runMetricsCollection(this.config.qualification.quick.duration);
+      // Phase 4: Stack shutdown
+      console.log('[Harness] Phase 4: Stack Shutdown');
+      await this.runStackShutdown();
 
-      // Phase 4: Report Generation
-      console.log('[Harness] Phase 4: Report Generation');
+      // Phase 5: Report Generation
+      console.log('[Harness] Phase 5: Report Generation');
       await this.generateReport('quick');
 
       const duration = Date.now() - startTime;
@@ -114,6 +131,12 @@ class OperationalQualificationHarness {
       case 'metrics-collection':
         await this.runMetricsCollection(600000); // 10 minutes default
         break;
+      case 'loaded-window':
+        await this.runLoadedWindow(600000); // 10 minutes default
+        break;
+      case 'stack-shutdown':
+        await this.runStackShutdown();
+        break;
       case 'failure-injection':
         await this.runFailureInjection();
         break;
@@ -138,29 +161,59 @@ class OperationalQualificationHarness {
   }
 
   /**
+   * Stop the stack and record the shutdown outcome separately from startup.
+   * The two must be distinct records: a single object cannot simultaneously
+   * have status 'started' and 'stopped', so grading both from one value
+   * guaranteed one criterion always failed.
+   */
+  async runStackShutdown() {
+    try {
+      const result = await this.orchestrator.stop();
+      this.results.stackShutdown = result;
+      return result;
+    } catch (error) {
+      this.results.stackShutdown = { status: 'failed', error: error.message };
+      return this.results.stackShutdown;
+    }
+  }
+
+  /** Drive workload and sample metrics over the same window. */
+  async runLoadedWindow(duration) {
+    this.metricsCollector.start();
+    try {
+      await this.runWorkloadExecution(duration);
+    } finally {
+      this.results.metrics = this.metricsCollector.stop();
+    }
+    return { workload: this.results.workloadExecution, metrics: this.results.metrics };
+  }
+
+  /**
    * Run workload execution phase
    */
   async runWorkloadExecution(duration) {
-    // Register workloads
+    // Workload keys are kebab-case in qualification-config.json and are used
+    // verbatim as the registered workload name. Earlier revisions read
+    // camelCase keys (config.memoryStorage), which are absent from the config
+    // and threw a TypeError before any workload could run.
     const config = this.config.workloads;
-    
-    if (config.conversation.enabled) {
-      this.workloadDriver.registerWorkload('conversation', new ConversationWorkload(config.conversation.endpoint));
-    }
-    if (config.memoryStorage.enabled) {
-      this.workloadDriver.registerWorkload('memory-storage', new MemoryStorageWorkload(config.memoryStorage.endpoint));
-    }
-    if (config.memoryRetrieval.enabled) {
-      this.workloadDriver.registerWorkload('memory-retrieval', new MemoryRetrievalWorkload(config.memoryRetrieval.endpoint));
-    }
-    if (config.supervisorStatus.enabled) {
-      this.workloadDriver.registerWorkload('supervisor-status', new SupervisorStatusWorkload(config.supervisorStatus.endpoint));
-    }
-    if (config.bridgeRequest.enabled) {
-      this.workloadDriver.registerWorkload('bridge-request', new BridgeRequestWorkload(config.bridgeRequest.endpoint));
-    }
-    if (config.databaseOperation.enabled) {
-      this.workloadDriver.registerWorkload('database-operation', new DatabaseOperationWorkload(config.databaseOperation.endpoint));
+    const registry = {
+      'conversation': ConversationWorkload,
+      'memory-storage': MemoryStorageWorkload,
+      'memory-retrieval': MemoryRetrievalWorkload,
+      'supervisor-status': SupervisorStatusWorkload,
+      'bridge-request': BridgeRequestWorkload,
+      'database-operation': DatabaseOperationWorkload,
+    };
+
+    for (const [name, Workload] of Object.entries(registry)) {
+      const entry = config[name];
+      if (!entry) {
+        console.warn(`[Harness] Workload "${name}" has no config entry; skipping`);
+        continue;
+      }
+      if (!entry.enabled) continue;
+      this.workloadDriver.registerWorkload(name, new Workload(entry.endpoint));
     }
 
     const result = await this.workloadDriver.executeAll(duration);
@@ -186,20 +239,17 @@ class OperationalQualificationHarness {
    * Run failure injection phase
    */
   async runFailureInjection() {
-    // Register failure scenarios
-    const config = this.config.failures;
-    
-    if (config.database.enabled) {
-      this.failureInjector.registerFailure('database', new DatabaseFailureScenario({}));
+    // Failure keys are kebab-case in qualification-config.json. Earlier
+    // revisions read config.processCrash / config.networkInterruption, which
+    // do not exist in the config and threw before injection could start.
+    const config = this.config.failures || {};
+
+    for (const [name, entry] of Object.entries(config)) {
+      if (entry && entry.enabled) this.failureInjector.registerFailure(name);
     }
-    if (config.redis.enabled) {
-      this.failureInjector.registerFailure('redis', new RedisFailureScenario({}));
-    }
-    if (config.processCrash.enabled) {
-      this.failureInjector.registerFailure('process-crash', new ProcessCrashScenario('hydi-core'));
-    }
-    if (config.networkInterruption.enabled) {
-      this.failureInjector.registerFailure('network-interruption', new NetworkInterruptionScenario({}));
+
+    if (!this.options.chaos) {
+      console.log('[Harness] Failure injection requested but chaos is disabled; scenarios will be recorded as NOT TESTED.');
     }
 
     const result = await this.failureInjector.executeAll();
@@ -214,7 +264,10 @@ class OperationalQualificationHarness {
     const reportData = {
       qualificationType: type,
       duration: this.calculateTotalDuration(),
+      chaosEnabled: this.options.chaos,
+      chaosDryRun: this.options.dryRun,
       stackLifecycle: this.results.stackLifecycle,
+      stackShutdown: this.results.stackShutdown,
       workloadExecution: this.results.workloadExecution,
       metrics: this.results.metrics,
       failureInjection: this.results.failureInjection
@@ -223,7 +276,7 @@ class OperationalQualificationHarness {
     const report = this.reportGenerator.generateReport(reportData);
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
     const filename = `${timestamp}-qual-${type}.json`;
-    const reportPath = this.reportGenerator.saveReport(report, filename);
+    this.results.reportPath = this.reportGenerator.saveReport(report, filename);
 
     this.results.report = report;
     return report;
@@ -233,8 +286,13 @@ class OperationalQualificationHarness {
    * Calculate total duration
    */
   calculateTotalDuration() {
-    if (this.results.stackLifecycle && this.results.stackLifecycle.uptimeMs) {
-      return this.results.stackLifecycle.uptimeMs;
+    // Uptime is only known once the stack has been stopped; the startup result
+    // never carries it, which is why this previously always returned 0.
+    if (this.results.stackShutdown && this.results.stackShutdown.uptimeMs) {
+      return this.results.stackShutdown.uptimeMs;
+    }
+    if (this.results.stackLifecycle && this.results.stackLifecycle.startTime) {
+      return Date.now() - this.results.stackLifecycle.startTime;
     }
     return 0;
   }
@@ -256,14 +314,29 @@ class OperationalQualificationHarness {
 // CLI interface
 async function main() {
   const args = process.argv.slice(2);
-  const command = args[0];
-  const phase = args[1];
+  const positional = args.filter((a) => !a.startsWith('--'));
+  const command = positional[0];
+  const phase = positional[1];
+
+  // Chaos is opt-in. Neither `full` nor the failures.*.enabled config keys
+  // enable destructive injection on their own.
+  const options = {
+    chaos: args.includes('--chaos'),
+    dryRun: args.includes('--dry-run'),
+    supervised: args.includes('--supervised'),
+  };
 
   // Load configuration
   const configPath = path.join(__dirname, 'config', 'qualification-config.json');
   const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
 
-  const harness = new OperationalQualificationHarness(config);
+  if (options.chaos) {
+    console.warn('[Harness] --chaos supplied: this run performs REAL failure injection against live services.');
+  } else {
+    console.log('[Harness] Chaos disabled (default). Resilience scenarios will be reported as NOT TESTED.');
+  }
+
+  const harness = new OperationalQualificationHarness(config, options);
 
   try {
     switch (command) {
@@ -281,7 +354,17 @@ async function main() {
         await harness.runPhase(phase);
         break;
       default:
-        console.error('Usage: node operational-qualification.js [full|quick|phase <phase-name>]');
+        console.error([
+          'Usage: node operational-qualification.js <full|quick|phase <phase-name>> [options]',
+          '',
+          'Options:',
+          '  --chaos       Enable REAL destructive failure injection (disabled by default)',
+          '  --dry-run     With --chaos, report what would be injected without injecting',
+          '  --supervised  Let the supervisor perform recovery instead of the harness',
+          '',
+          'Phases: stack-lifecycle, workload-execution, metrics-collection,',
+          '        loaded-window, failure-injection, stack-shutdown, report-generation',
+        ].join('\n'));
         process.exit(1);
     }
 

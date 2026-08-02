@@ -79,11 +79,11 @@ class StackOrchestrator {
    */
   getStatus() {
     const services = {};
-    this.services.forEach((process, name) => {
+    this.services.forEach((child, name) => {
       services[name] = {
-        pid: process.pid,
-        running: !process.killed,
-        startTime: process.startTime
+        pid: child.pid,
+        running: !child.killed,
+        startTime: child.startTime
       };
     });
 
@@ -149,33 +149,38 @@ class StackOrchestrator {
       throw new Error(`Service not found in manifest: ${serviceName}`);
     }
 
-    const process = spawn(service.cmd, {
+    // NOTE: this local must not be named `process`. Doing so shadows the
+    // global `process` for the whole function scope, and the `process.cwd()` /
+    // `process.env` references in this very initialiser then hit the temporal
+    // dead zone, throwing "Cannot access 'process' before initialization" on
+    // every call. That defect made the entire harness unrunnable.
+    const child = spawn(service.cmd, {
       cwd: service.cwd || process.cwd(),
       env: { ...process.env, ...service.env },
       shell: true
     });
 
-    process.startTime = Date.now();
+    child.startTime = Date.now();
 
-    process.stdout.on('data', (data) => {
+    child.stdout.on('data', (data) => {
       console.log(`[${serviceName}] ${data.toString().trim()}`);
     });
 
-    process.stderr.on('data', (data) => {
+    child.stderr.on('data', (data) => {
       console.error(`[${serviceName}] ${data.toString().trim()}`);
     });
 
-    process.on('error', (error) => {
+    child.on('error', (error) => {
       console.error(`[Orchestrator] Service error: ${serviceName}`, error);
     });
 
-    process.on('exit', (code, signal) => {
+    child.on('exit', (code, signal) => {
       console.log(`[Orchestrator] Service exited: ${serviceName} (code: ${code}, signal: ${signal})`);
       this.services.delete(serviceName);
     });
 
-    this.services.set(serviceName, process);
-    console.log(`[Orchestrator] Service started: ${serviceName} (PID: ${process.pid})`);
+    this.services.set(serviceName, child);
+    console.log(`[Orchestrator] Service started: ${serviceName} (PID: ${child.pid})`);
   }
 
   /**
@@ -184,26 +189,26 @@ class StackOrchestrator {
   async stopService(serviceName) {
     console.log(`[Orchestrator] Stopping service: ${serviceName}`);
 
-    const process = this.services.get(serviceName);
+    const child = this.services.get(serviceName);
 
-    if (!process) {
+    if (!child) {
       console.log(`[Orchestrator] Service not running: ${serviceName}`);
       return;
     }
 
-    process.kill('SIGTERM');
+    child.kill('SIGTERM');
 
     // Wait for graceful shutdown
     await new Promise((resolve) => {
       const timeout = setTimeout(() => {
-        if (!process.killed) {
+        if (!child.killed) {
           console.log(`[Orchestrator] Force killing service: ${serviceName}`);
-          process.kill('SIGKILL');
+          child.kill('SIGKILL');
         }
         resolve();
-      }, 30000); // 30 second timeout
+      }, this.config?.stack?.shutdownTimeout || 30000);
 
-      process.on('exit', () => {
+      child.on('exit', () => {
         clearTimeout(timeout);
         resolve();
       });
@@ -228,8 +233,8 @@ class StackOrchestrator {
       return;
     }
 
-    const maxAttempts = 30; // 30 attempts * 2 seconds = 60 seconds max
-    const attemptInterval = 2000; // 2 seconds
+    const maxAttempts = this.config?.stack?.healthCheckMaxAttempts || 30;
+    const attemptInterval = this.config?.stack?.healthCheckInterval || 2000;
 
     for (let i = 0; i < maxAttempts; i++) {
       try {
@@ -261,9 +266,12 @@ class StackOrchestrator {
    * Load services manifest
    */
   loadManifest() {
-    const manifestPath = path.join(process.cwd(), 'services-manifest.json');
-    const manifestContent = fs.readFileSync(manifestPath, 'utf8');
-    return JSON.parse(manifestContent);
+    // Resolved relative to the repo root, not process.cwd(), so the harness
+    // behaves identically regardless of where it is invoked from.
+    if (this._manifest) return this._manifest;
+    const manifestPath = path.join(__dirname, '..', '..', 'services-manifest.json');
+    this._manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+    return this._manifest;
   }
 }
 

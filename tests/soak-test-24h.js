@@ -9,9 +9,19 @@
  *  - Memory leaks
  *  - Service crashes
  *
+ * SCOPE: this script polls service health endpoints on an interval and records
+ * failures. It does not inject faults, so it cannot evidence recovery.
+ *
+ * NOTE: this is a separate, older implementation from the maintained endurance
+ * harness at `scripts/soak-test.js` (npm run soak-test-24h), which additionally
+ * collects operational metrics and supports opt-in chaos. Prefer that one.
+ *
  * Usage:
- *   node tests/soak-test-24h.js [--duration-hours 1]
- *   (defaults to 24 hours)
+ *   TEST_DURATION=1 node tests/soak-test-24h.js
+ *   (duration is in HOURS via the TEST_DURATION env var; defaults to 24)
+ *
+ * The `--duration-hours` flag documented in earlier revisions was never
+ * implemented — the script only reads TEST_DURATION.
  *
  * Output:
  *   - Live console updates every 30s
