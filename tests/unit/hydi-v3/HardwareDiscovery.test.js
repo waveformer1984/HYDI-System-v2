@@ -48,6 +48,9 @@ describe('HardwareDiscovery', () => {
   });
 
   test('falls back to OS enumeration when nvidia-smi is missing', async () => {
+    // detectOsGpus() branches on the host OS (powershell on win32, lspci on
+    // linux, system_profiler on darwin) — mock all three so this test's
+    // result doesn't depend on which platform it actually runs on.
     execFileMock.mockImplementation(function () {
       const cmd = arguments[0];
       const cb = callbackFromArgs(arguments);
@@ -58,6 +61,14 @@ describe('HardwareDiscovery', () => {
       }
       if (cmd === 'powershell') {
         cb(null, { stdout: JSON.stringify({ Name: 'Intel Iris Xe Graphics', AdapterRAM: 2147479552, DriverVersion: '32.0.101.6874', Status: 'OK' }) }, { stderr: '' });
+        return;
+      }
+      if (cmd === 'lspci') {
+        cb(null, { stdout: '00:02.0 VGA compatible controller [0300]: Intel Corporation Iris Xe Graphics [8086:9a49] (rev 01)\n' }, { stderr: '' });
+        return;
+      }
+      if (cmd === 'system_profiler') {
+        cb(null, { stdout: JSON.stringify({ SPDisplaysDataType: [{ _name: 'Intel Iris Xe Graphics' }] }) }, { stderr: '' });
         return;
       }
       cb(new Error('unexpected'), { stdout: '' }, { stderr: '' });

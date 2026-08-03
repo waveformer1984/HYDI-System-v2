@@ -18,10 +18,22 @@ describe('HeartbeatSystem', () => {
 
   test('detects missing heartbeat', async () => {
     let missing = null;
-    heartbeat.on('heartbeat_missing', (m) => { missing = m; });
+    const missingEvent = new Promise((resolve) => {
+      heartbeat.on('heartbeat_missing', (m) => {
+        missing = m;
+        resolve(m);
+      });
+    });
     heartbeat.registerPublisher('service-1', () => ({ timestamp: Date.now() - 1000 }));
     heartbeat.start();
-    await new Promise((r) => setTimeout(r, 250));
+    // Wait for the actual event instead of racing a fixed sleep against the
+    // engine's own interval tick — under parallel-worker CPU contention a
+    // fixed 250ms sleep can lose that race even though the check interval
+    // (100ms) and missing threshold (200ms) both fired correctly.
+    await Promise.race([
+      missingEvent,
+      new Promise((resolve) => setTimeout(resolve, 5000)),
+    ]);
     expect(missing).not.toBeNull();
     expect(missing[0].serviceId).toBe('service-1');
   });
