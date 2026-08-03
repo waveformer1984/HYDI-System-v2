@@ -6,6 +6,14 @@ jest.doMock('child_process', () => ({
   execFile: execFileMock,
 }));
 
+// HardwareDiscovery's OS-level fallback branches on the real host platform
+// (win32/linux/darwin). Force it to 'win32' here so the Windows-fallback
+// test below is deterministic on every CI runner, not just Windows ones.
+jest.doMock('os', () => ({
+  ...jest.requireActual('os'),
+  platform: () => 'win32',
+}));
+
 const HardwareDiscovery = require('../../../src/hydi-v3/HardwareDiscovery');
 
 describe('HardwareDiscovery', () => {

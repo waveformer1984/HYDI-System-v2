@@ -5,6 +5,15 @@ the narrative of what was fixed and why; this file is the flat list.
 
 ---
 
+## Fixed this session (2026-08-03, CI-breaking test + dependency audit)
+
+| # | Issue | File(s) | Status |
+|---|-------|---------|--------|
+| 75 | `tests/unit/hydi-v3/HardwareDiscovery.test.js`'s `falls back to OS enumeration when nvidia-smi is missing` test mocked `execFile` to only answer `nvidia-smi` and the literal command `'powershell'`, implicitly assuming `os.platform() === 'win32'`. `HardwareDiscovery.detectOsGpus()` actually branches on the real host platform (`win32`→`detectWindowsGpus`, `linux`→`detectLinuxGpus`/`lspci`, `darwin`→`detectMacGpus`). On any Linux CI runner — `unit-tests.yml` runs on `ubuntu-latest` — the mock's catch-all `cb(new Error('unexpected'), ...)` fired for the real `lspci` call, so `inventory.gpus` stayed empty and the assertion `expect(inventory.gpus.length).toBe(1)` failed every time. Confirmed pre-existing since the test was added in `c0b8032` (before this branch's history), i.e. this was silently failing `npm test` in CI on every push/PR to `clean-main` that touched this suite. | `tests/unit/hydi-v3/HardwareDiscovery.test.js` | **Fixed** — added `jest.doMock('os', ...)` forcing `platform()` to `'win32'` for the duration of the test file, so the Windows-fallback path is exercised deterministically regardless of the actual CI host OS. `HardwareDiscovery.js` itself needed no change; the bug was entirely in the test's missing platform mock. Verified: full suite (244/244 suites, 2320/2321 tests, 1 pre-existing unrelated skip) now passes; also reconfirmed `npm run lint`, `npm run typecheck`, `npm run lint:hydi-v3`, `npm run typecheck:hydi-v3`, `npm run test:integration:jest` (62/62), and `npm run build` all still pass clean. |
+| 76 | `npm audit` reported `ip-address` (SSRF / trust-boundary-bypass advisories — a transitive dependency of the production `express-rate-limit` package, which every rate-limited route added across the prior security-audit sessions depends on) and `undici` (moderate, transitive via `node-gyp`/`sqlite3`, build-tooling only) at vulnerable resolved versions. | `package-lock.json` | **Fixed** — `npm audit fix` (non-force). `ip-address` moved to `10.4.0`, `undici` to `6.28.0`; no `package.json` version-range changes, only lockfile resolutions. Verified with a full re-run of lint/typecheck/tests/build (see #75) after the bump — all clean. **Not fixed**: a `brace-expansion` advisory transitive via `@typescript-eslint/typescript-estree`/`parser`/`eslint-plugin` (dev-only, ESLint's TypeScript tooling, never shipped to production) has no non-`--force` resolution path today. Deliberately not forced — the same class of fix (`package.json` `overrides` pinning a breaking major version of `brace-expansion`) was already tried and reverted once (`ISSUES_FOUND.md` #2, crashed `next lint` with `TypeError: expand is not a function`). Left for whenever `@typescript-eslint` itself ships a fixed transitive range. |
+
+---
+
 ## Fixed this session (2026-07-18, structured logging migration + lint-scope gap)
 
 Resolves `ROADMAP.md` near-term item 11. Started as "migrate console.log to
