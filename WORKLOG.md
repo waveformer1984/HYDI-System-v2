@@ -4,6 +4,120 @@ Running log of autonomous production-readiness work. Newest entries first.
 
 ---
 
+## 2026-08-03 — Dependency vulnerabilities, two real test bugs, CI outage reconfirmed
+
+Branch: `claude/protoforge-ecosystem-audit-i6w9tp`
+
+Scope note: this session's mandate was a full-platform audit ("increase
+long-term value, stability, security, and intelligence"). Given how much
+prior audit work already exists (`WORKLOG.md`'s earlier entries,
+`ISSUES_FOUND.md`, and — not previously cross-referenced here — an
+extensive independent line of "Phase 11" through "Phase 44" + RC1/RC2/RC3
+release-hardening commits that landed between 2026-07-19 and 2026-07-31),
+this pass focused on **fresh discovery** rather than re-walking already-
+audited ground: current `npm audit` status, current local test/lint/
+typecheck health (since CI could not be trusted — see below), and any
+security regressions in the phases added since the last audit entry.
+
+### Found: GitHub Actions has not actually run on this repo for 2+ weeks
+
+Reconfirmed the exact `runner_id: 0` symptom `ROADMAP.md`'s P0 item 2b
+first flagged on 2026-07-17: checked the most recent runs of `Health
+Monitor`, `CodeQL Security Scan`, and `Integration Tests` (the latter
+triggered by the `clean-main` merges for PR #244/#243/#245 on
+2026-07-31) — every one completes in 3-9 seconds with `runner_id: 0`,
+`runner_name: ""`, and (per `get_workflow_run_usage` on prior checks)
+zero billable UBUNTU runner time. No runner is ever dispatched; this is
+not a code failure. **This is unchanged and unresolved since first
+reported 17 days ago** — every push to `clean-main` since, including
+three merged PRs, has landed with zero real CI signal. It also means the
+9 currently-open PRs (7 Dependabot dependency/Action bumps + 1 archive
+PR, oldest from 2026-07-24) cannot get a real check to go green and are
+stuck regardless of how safe their diffs are. Still requires GitHub
+dashboard access (`Settings → Actions → General`,
+`Settings → Billing`) this sandbox does not have — flagged to the user
+directly, not just filed here.
+
+### Fixed: `npm audit` — 6 vulnerabilities (3 moderate, 3 high) → 0
+
+- `express-rate-limit` / `undici` / `ip-address` (all within existing
+  `package.json` semver ranges) resolved via `npm audit fix` — non-
+  breaking, `ip-address`'s three SSRF/trust-boundary-bypass advisories
+  (GHSA-mwp4-54f8-5fhr, GHSA-4xrf-jv44-h6hh, GHSA-22jq-vg5j-6vgg) came in
+  through `express-rate-limit`, a real production dependency (this
+  repo's rate-limiting middleware), not a dev-only chain.
+- `brace-expansion` (GHSA-rgw5-rvv9-x895, a bypass of the
+  GHSA-mh99-v99m-4gvg/CVE-2026-14257 mitigation the 2026-07-15 session
+  already patched) needed a manual bump: `package.json`'s existing
+  *scoped* override (`"minimatch@10.2.5": {"brace-expansion": "5.0.7"}`
+  — deliberately scoped, not global, precisely to avoid repeating the
+  2026-07-15 incident where a blanket override broke every
+  `minimatch@3.x` consumer in the ESLint toolchain) bumped `5.0.7` →
+  `5.0.9`. Confirmed post-fix with `npm ls brace-expansion` that the
+  `minimatch@3.x` chain (eslint, eslint-plugin-*, test-exclude) still
+  resolves its own unaffected `1.1.18`, untouched by the scoped override.
+- `postcss` (moderate, GHSA-fxqj-rqcc-2cmp) is the one remaining audit
+  finding — fixing it requires `npm audit fix --force`, which would pull
+  in `next@16.3.0`, a breaking major-version jump. Deliberately not done
+  in this pass; flagged in `ROADMAP.md` as a scoped follow-up requiring
+  its own verification (build, all pages, SSR behavior), not a drive-by
+  fix.
+
+### Fixed: two real test bugs surfaced by running the full suite locally
+
+Since CI can't be trusted right now, this session ran `npm test`,
+`npm run typecheck`, `npm run lint`, `npm run typecheck:hydi-v3`,
+`npm run lint:hydi-v3`, and `npm run test:integration:jest` locally and
+by hand, multiple times, to get a real signal on code health. That
+surfaced two genuine bugs, not flukes:
+
+- `tests/unit/hydi-v3/HardwareDiscovery.test.js`'s "falls back to OS
+  enumeration when nvidia-smi is missing" mocked only a `powershell`
+  response, but `HardwareDiscovery.detectOsGpus()` branches on the host
+  platform (`lspci` on Linux, `system_profiler` on macOS, `powershell`
+  only on Windows). The test has been unconditionally failing on every
+  non-Windows host — including this repo's own `ubuntu-latest` CI
+  runners, had CI actually been running — asserting 1 detected GPU while
+  actually getting 0. Fixed by mocking all three OS paths so the test's
+  result no longer depends on which platform runs it.
+- `tests/unit/hydi-v3/HeartbeatSystem.test.js`'s "detects missing
+  heartbeat" raced a fixed `setTimeout(r, 250)` against the engine's own
+  100ms check interval / 200ms missing threshold — passes every time run
+  in isolation (5/5), but flakes under `npm test`'s full parallel-worker
+  run (reproduced directly). Same root shape as the `DistributedCompute`/
+  `WatchdogSupervisor` flaky tests the 2026-07-15 session already fixed
+  with the same technique, applied here too: replaced the fixed sleep
+  with `Promise.race` against the actual `heartbeat_missing` event (5s
+  ceiling).
+
+### Verification
+
+- `npm audit` — 0 vulnerabilities (postcss/next.js major-bump item
+  excepted, see above).
+- `npm run typecheck` / `npm run typecheck:hydi-v3` — clean.
+- `npm run lint` — 0 errors, 749 pre-existing warnings (unused vars,
+  `any` types — unchanged, out of scope for this pass).
+- `npm run lint:hydi-v3` — 0 errors, 11 pre-existing warnings.
+- `npm test` — 244/244 suites, 2320/2321 tests (1 pre-existing skip),
+  stable across 2 consecutive full runs (was 243/244, 2319/2321 before
+  the two test fixes above).
+- `npm run test:integration:jest` — 12/12 suites, 62/62 tests.
+- `.githooks/pre-push` (typecheck + lint + full test suite) ran and
+  passed on push, independent confirmation of all of the above.
+
+### Not done in this pass
+
+- `postcss`'s remaining moderate advisory (needs a scoped `next.js`
+  major-version upgrade project, not a drive-by fix).
+- The 9 stuck PRs (Dependabot + 1 archive) — not this session's
+  branch/PRs to merge, and blocked on the CI outage regardless.
+- The ~938 remaining unmigrated `console.*` → `logger.*` calls
+  (`ROADMAP.md` item 11) — large, mechanical-but-not-safely-mechanical
+  (per the prior session's own finding that some are genuine CLI output,
+  not service logs), left as a scoped follow-up.
+
+---
+
 ## 2026-07-15 (later same day) — Security incident response + route reachability gap
 
 Branch: `claude/protoforge-production-readiness-t4wdn4` (continuation of the

@@ -1,5 +1,25 @@
 # HYDI Changelog
 
+## [Unreleased]
+
+### Security
+
+- Resolved 6 `npm audit` findings (3 moderate, 3 high) down to 0: `ip-address`
+  (SSRF/trust-boundary bypass, via `express-rate-limit`), `undici`, and
+  `brace-expansion` (a bypass of an earlier-patched DoS mitigation — bumped
+  the existing scoped `minimatch@10.2.5` override to `5.0.9`). One moderate
+  `postcss` finding remains, deferred pending a scoped `next.js` major-version
+  upgrade (see `ROADMAP.md`).
+
+### Fixed
+
+- `tests/unit/hydi-v3/HardwareDiscovery.test.js`'s OS-enumeration-fallback
+  test was platform-coupled to Windows (`powershell`) and failed
+  deterministically on Linux, including this repo's own CI runners.
+- `tests/unit/hydi-v3/HeartbeatSystem.test.js`'s missing-heartbeat test was
+  flaky under parallel test-worker load (fixed-sleep race against the
+  engine's own interval).
+
 ## [0.9.0-rc.1] — Release Candidate
 
 ### Added

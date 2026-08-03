@@ -67,6 +67,25 @@ drop-everything, P1 is next up, P2 is scheduled but not urgent.
     check out clean, this may warrant a GitHub support ticket — instant
     failure with zero billable time and no runner assignment isn't a normal
     "ran out of minutes" pattern.
+2c. **2026-08-03: reconfirmed, still unresolved 17 days later, and now
+    confirmed to have silently no-op'd CI on real merges.** Checked
+    `Health Monitor`, `CodeQL Security Scan`, and — new this check —
+    `Integration Tests` on the actual push events for the three PRs
+    merged into `clean-main` on 2026-07-31 (#243, #244, #245, i.e.
+    `v0.9.0-rc.3` and the Phase 27A/switchboard work). All three still
+    show `runner_id: 0`, complete in 3-9 seconds, zero billable runner
+    time. This means the RC3 release and the two phase merges around it
+    landed with **no real `unit-tests.yml`/`integration-tests.yml` signal
+    at all** — every green/red on those PRs, if any showed, was not a
+    genuine test run. It also means all 9 currently-open PRs (7
+    Dependabot dependency/Action bumps, oldest opened 2026-07-24, plus 1
+    archive PR) are stuck regardless of diff safety, since their required
+    checks can never complete. This still needs the same dashboard access
+    as 2b — no new diagnostic surface was available this session either.
+    Recommend prioritizing this over new feature work: every commit landed
+    since 2026-07-17 has effectively been unverified by CI, relying
+    entirely on `.githooks/pre-push` (which only runs on the machine that
+    pushes, not on PR review) as the sole automated gate.
 
 **P1 — high impact/risk, not yet started:**
 3. Cryptographic identity verification to replace the `x-user-id`
@@ -312,6 +331,23 @@ something executable.
   GitHub itself (self-hosting already explicitly declined per the
   2026-07-10 decision) — see `LOCAL_FIRST_EXECUTION_PLAN.md` for the full
   reasoning.
+
+### Dependency: postcss moderate advisory needs a scoped next.js upgrade
+`npm audit` (2026-08-03) resolves clean except for one moderate finding,
+GHSA-fxqj-rqcc-2cmp (`postcss` <=8.5.22, incomplete fix of an earlier
+sourceMappingURL advisory). The only available fix pulls in `next@16.3.0`
+via `npm audit fix --force` — a breaking major-version jump from the
+currently pinned `next` range. Needs its own scoped upgrade pass (full
+build, SSR/page-by-page smoke test, `pages/api` route table diff) rather
+than a drive-by `--force`; not attempted in the 2026-08-03 vulnerability
+pass for that reason.
+
+### Observability: console.* → structured logger migration (remaining ~938 calls)
+Prior session (2026-07-18, `ISSUES_FOUND.md` #72) migrated `workers/`
+(302/302) and made a start on `agents/`/`revenue-engine/`; ~938 calls
+remain, concentrated in `src/` (690). Same file-by-file treatment needed
+(some calls are genuine CLI/demo-script output, not service logs — a
+mechanical sweep would be wrong, per the prior session's own finding).
 
 ### Pipeline observability
 - Structured trace IDs flowing through all six layers end-to-end
