@@ -59,13 +59,37 @@ surface rather than re-auditing already-covered ground.
    file, and it doesn't exercise the platform-dependent branch — no
    equivalent bug found.
 
+4. **The repo's own `.githooks/pre-push` hook then caught a second, live
+   flaky-test failure** while pushing item 1's fix:
+   `tests/unit/hydi-v3/HeartbeatSystem.test.js`'s `detects missing
+   heartbeat` failed under the full parallel `npm test` run (passed in 5/5
+   isolated re-runs — confirming it's a timing race, not a real
+   regression). Investigated and found `HeartbeatSystem.test.js` and
+   `tests/unit/hydi-v3/DistributedCompute.test.js` both race a fixed
+   `setTimeout` sleep against the engine's own ~100ms internal interval
+   timer landing at close to the same wall-clock time — reliable alone,
+   flaky under CPU contention from 243 other suites running concurrently.
+   This is the exact bug class this file's own 2026-07-15 entry describes
+   fixing in these exact two files (`Promise.race` against the real
+   event) — but that fix is not present at the current `clean-main` tip,
+   so either it was lost in a merge or that entry describes work from a
+   branch that was never actually merged. Also found the identical
+   pattern, not yet observed to flake but same root cause, in
+   `tests/unit/hydi-v3/WatchdogSupervisor.test.js`'s two timer-driven
+   tests. Fixed all three files: each now awaits the real `EventEmitter`
+   event via `.once()` (with a 2s timeout as a genuine failure backstop,
+   not a race), instead of sleeping a fixed duration and hoping the
+   internal timer already fired. See `ISSUES_FOUND.md` #77.
+
 ### Verification
 
 - `npm install` — clean (no lockfile conflicts against the tracked
   `package-lock.json`; confirmed separately that `npm ci`, what CI actually
   runs, also succeeds against the pre-existing lockfile).
 - `npm test` — 244/244 suites, 2320/2321 tests passing (1 pre-existing,
-  unrelated skip), both before item 2 and reconfirmed after.
+  unrelated skip), both before item 2 and reconfirmed after; reconfirmed a
+  further 3 consecutive full runs after item 4's flaky-test fixes with no
+  failures.
 - `npm run lint` / `npm run lint:hydi-v3` — 0 errors (749 / 11
   pre-existing warnings, unchanged, out of scope for this pass).
 - `npm run typecheck` / `npm run typecheck:hydi-v3` — clean.

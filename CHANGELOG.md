@@ -10,6 +10,10 @@
   exercised the Linux `lspci` fallback path instead and always failed. Latent
   since the test was added; now mocks `os.platform()` so the assertion is
   deterministic on every host.
+- `tests/unit/hydi-v3/{HeartbeatSystem,DistributedCompute,WatchdogSupervisor}.test.js`'s
+  timer-driven tests raced a fixed sleep against each engine's own internal
+  interval timer, flaking under full-suite parallel load. Now await the real
+  `EventEmitter` event instead.
 
 ### Security
 
