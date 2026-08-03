@@ -184,6 +184,7 @@ class OperationalMetrics {
     const sample = {
       timestamp: new Date(now).toISOString(),
       epochMs: now,
+      uptimeSeconds: process.uptime(),
       cpu: {
         systemPercent: this.sampleSystemCpu(),
         harnessPercent: this.sampleProcessCpu(elapsedMs),

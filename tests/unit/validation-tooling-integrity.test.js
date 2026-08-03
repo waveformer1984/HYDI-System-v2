@@ -82,7 +82,7 @@ describe('validation commands invoke the script their name implies', () => {
   const expectations = {
     // Long-running endurance harness — must be the script, not a unit test.
     'soak-test-24h': 'node scripts/soak-test.js',
-    'soak-test-1h': 'node scripts/soak-test.js --duration 3600000',
+    'soak-test-1h': 'node scripts/soak-test.js --duration 1h',
     'soak-test-24h:chaos': 'node scripts/soak-test.js --chaos',
     // Unit test that validates the soak harness logic — must be the jest test.
     'soak-harness-test': 'RC2Hardening.test.js',

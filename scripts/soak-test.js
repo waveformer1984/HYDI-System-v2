@@ -21,6 +21,7 @@
  *   - disk utilisation of the working filesystem (where the platform reports it)
  *   - TCP connect reachability and latency for PostgreSQL and Redis
  *   - uncaught exception and unhandled rejection counts within the harness
+ *   - process uptime, restart count, and exception/unhandled-rejection counts
  *
  * NOT VERIFIED by the default run:
  *   - supervisor recovery          - process restart behaviour
@@ -39,7 +40,8 @@
  *
  * Usage:
  *   node scripts/soak-test.js                      # endurance only (24h default)
- *   node scripts/soak-test.js --duration 3600000   # endurance, 1 hour
+ *   node scripts/soak-test.js --duration 1h        # endurance, 1 hour
+ *   node scripts/soak-test.js --duration=30m       # endurance, 30 minutes
  *   node scripts/soak-test.js --chaos              # endurance + real failure injection
  *   node scripts/soak-test.js --chaos --chaos-scenarios restart-next,kill-bridge
  *   node scripts/soak-test.js --chaos --dry-run    # list what chaos would do, inject nothing
@@ -55,6 +57,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 const http = require('http');
 const https = require('https');
 const logger = require('../lib/structured-logger');
@@ -66,12 +69,60 @@ const DEFAULT_PROBE_INTERVAL_MS = 30000;
 const DEFAULT_METRICS_INTERVAL_MS = 60000;
 const SUCCESS_RATE_THRESHOLD = 99.5;
 
+const DURATION_UNITS = {
+  ms: 1,
+  s: 1000,
+  m: 60 * 1000,
+  h: 60 * 60 * 1000,
+  d: 24 * 60 * 60 * 1000,
+};
+
 // ---------------------------------------------------------------------------
-// Argument parsing
+// Argument / duration parsing
 // ---------------------------------------------------------------------------
 
+function parseDuration(raw) {
+  if (raw === undefined || raw === null) return DEFAULT_DURATION_MS;
+  const s = String(raw).trim();
+
+  // Plain integer milliseconds still accepted for backwards compatibility.
+  const asNumber = Number(s);
+  if (Number.isFinite(asNumber) && asNumber > 0) return Math.floor(asNumber);
+
+  // Reject strings that do not begin with a digit/decimal, e.g. "-1h" or "banana".
+  if (!/^\s*\d/.test(s)) return DEFAULT_DURATION_MS;
+
+  let total = 0;
+  let found = false;
+  const re = /(\d+\.?\d*)\s*(ms|m|s|h|d)/gi;
+  let match;
+  while ((match = re.exec(s)) !== null) {
+    found = true;
+    const v = parseFloat(match[1]);
+    const mult = DURATION_UNITS[match[2].toLowerCase()];
+    total += v * mult;
+  }
+  if (found) return Math.floor(total);
+
+  logger.warn('Unrecognised duration value; using default 24h', { value: s });
+  return DEFAULT_DURATION_MS;
+}
+
+function normaliseArgs(argv) {
+  const out = [];
+  for (const arg of argv.slice(2)) {
+    const eq = arg.match(/^--([a-zA-Z0-9_-]+)=(.*)$/);
+    if (eq) {
+      out.push(`--${eq[1]}`, eq[2]);
+    } else {
+      out.push(arg);
+    }
+  }
+  return out;
+}
+
 function parseArgs(argv) {
-  const args = argv.slice(2);
+  const args = normaliseArgs(argv);
   const flag = (name) => args.includes(`--${name}`);
   const value = (name, fallback) => {
     const i = args.indexOf(`--${name}`);
@@ -80,23 +131,23 @@ function parseArgs(argv) {
   };
 
   const durationRaw = value('duration', process.env.SOAK_DURATION || String(DEFAULT_DURATION_MS));
-  const duration = parseInt(durationRaw, 10);
+  const durationMs = parseDuration(durationRaw);
 
   const scenariosRaw = value('chaos-scenarios', '');
 
   return {
-    durationMs: Number.isFinite(duration) && duration > 0 ? duration : DEFAULT_DURATION_MS,
+    durationMs,
+    durationText: `${(durationMs / 3600000).toFixed(2)}h`,
     probeIntervalMs: parseInt(value('interval', String(DEFAULT_PROBE_INTERVAL_MS)), 10) || DEFAULT_PROBE_INTERVAL_MS,
     metricsIntervalMs: parseInt(value('metrics-interval', String(DEFAULT_METRICS_INTERVAL_MS)), 10) || DEFAULT_METRICS_INTERVAL_MS,
     target: value('target', process.env.SOAK_TARGET || 'http://localhost:3000/api/health'),
-    // Chaos is opt-in and only ever enabled by this explicit flag.
     chaos: flag('chaos'),
     chaosScenarios: scenariosRaw ? scenariosRaw.split(',').map((s) => s.trim()).filter(Boolean) : [],
     chaosIntervalMs: parseInt(value('chaos-interval', String(3600000)), 10) || 3600000,
     dryRun: flag('dry-run'),
     supervised: flag('supervised'),
     listScenarios: flag('list-scenarios'),
-    reportPath: value('report', path.join(REPO_ROOT, 'reports', 'soak')),
+    reportPath: value('report', path.join(REPO_ROOT, 'artifacts', 'soak')),
   };
 }
 
@@ -129,6 +180,99 @@ function request(url, timeoutMs = 10000) {
   });
 }
 
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+// ---------------------------------------------------------------------------
+// Durable artifact writer
+// ---------------------------------------------------------------------------
+
+class SoakArtifactSet {
+  constructor(runDir) {
+    this.runDir = runDir;
+    fs.mkdirSync(runDir, { recursive: true });
+
+    this.paths = {
+      log: path.join(runDir, 'soak.log'),
+      metrics: path.join(runDir, 'metrics.json'),
+      metricsJsonl: path.join(runDir, 'metrics.jsonl'),
+      summary: path.join(runDir, 'summary.json'),
+      report: path.join(runDir, 'report.md'),
+      systemInfo: path.join(runDir, 'system-info.json'),
+      configuration: path.join(runDir, 'configuration.json'),
+    };
+
+    this.metricsList = [];
+
+    // Open the live log once and keep it open so we can fsync after every entry.
+    this.logFd = fs.openSync(this.paths.log, 'a');
+    fs.writeSync(this.logFd, ''); // touch
+    fs.fsyncSync(this.logFd);
+
+    fs.writeFileSync(this.paths.metricsJsonl, ''); // touch
+    this._writeJson(this.paths.metrics, []);
+  }
+
+  _throwIfMissing(filePath) {
+    if (!fs.existsSync(filePath)) {
+      throw new Error(`required artifact could not be written: ${filePath}`);
+    }
+  }
+
+  _writeJson(filePath, content) {
+    fs.writeFileSync(filePath, JSON.stringify(content, null, 2));
+    this._throwIfMissing(filePath);
+  }
+
+  appendLog(level, message, metadata = {}) {
+    const line = JSON.stringify({
+      timestamp: new Date().toISOString(),
+      level,
+      message,
+      ...metadata,
+    }) + '\n';
+    try {
+      fs.writeSync(this.logFd, line);
+      fs.fsyncSync(this.logFd);
+    } catch (err) {
+      throw new Error(`soak.log write failed: ${err.message}`);
+    }
+  }
+
+  appendMetricsSample(sample) {
+    fs.appendFileSync(this.paths.metricsJsonl, JSON.stringify(sample) + '\n');
+    this.metricsList.push(sample);
+    this._writeJson(this.paths.metrics, this.metricsList);
+  }
+
+  writeInitial(systemInfo, configuration) {
+    this._writeJson(this.paths.systemInfo, systemInfo);
+    this._writeJson(this.paths.configuration, configuration);
+  }
+
+  finalise(systemInfo, configuration, summary, markdown) {
+    this._writeJson(this.paths.systemInfo, systemInfo);
+    this._writeJson(this.paths.configuration, configuration);
+    this._writeJson(this.paths.summary, summary);
+    fs.writeFileSync(this.paths.report, markdown);
+    this._throwIfMissing(this.paths.report);
+
+    fs.fsyncSync(this.logFd);
+    fs.closeSync(this.logFd);
+    this.logFd = null;
+
+    this.verifyArtifacts();
+  }
+
+  verifyArtifacts() {
+    const required = ['log', 'metrics', 'summary', 'report', 'systemInfo', 'configuration'];
+    for (const k of required) {
+      this._throwIfMissing(this.paths[k]);
+    }
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Harness
 // ---------------------------------------------------------------------------
@@ -155,33 +299,69 @@ class SoakTest {
     });
 
     this.chaos = null;
-    this.runDir = path.join(options.reportPath, new Date(this.startTime).toISOString().replace(/[:.]/g, '-'));
-    fs.mkdirSync(this.runDir, { recursive: true });
-    this.eventLogPath = path.join(this.runDir, 'events.jsonl');
-    this.metricsLogPath = path.join(this.runDir, 'metrics.jsonl');
+
+    const ts = new Date(this.startTime).toISOString().replace(/[:.]/g, '-');
+    this.runDir = path.join(options.reportPath, ts);
+
+    this.artifacts = new SoakArtifactSet(this.runDir);
+    this.artifacts.writeInitial(this.systemInfo(), this.sanitisedConfig());
+    this.artifacts.appendLog('INFO', 'Soak harness initialised', this.sanitisedConfig());
 
     this.installProcessHooks();
+  }
+
+  systemInfo() {
+    let pkgVersion = 'unknown';
+    try {
+      pkgVersion = require(path.join(REPO_ROOT, 'package.json')).version;
+    } catch {}
+    return {
+      harness: 'scripts/soak-test.js',
+      nodeVersion: process.version,
+      platform: process.platform,
+      arch: process.arch,
+      cpuCount: os.cpus().length,
+      totalMemoryBytes: os.totalmem(),
+      packageVersion: pkgVersion,
+      cwd: process.cwd(),
+      startTimestamp: new Date(this.startTime).toISOString(),
+    };
+  }
+
+  sanitisedConfig() {
+    return {
+      durationMs: this.options.durationMs,
+      durationText: this.options.durationText,
+      probeIntervalMs: this.options.probeIntervalMs,
+      metricsIntervalMs: this.options.metricsIntervalMs,
+      target: this.options.target,
+      chaos: this.options.chaos,
+      chaosScenarios: this.options.chaosScenarios,
+      chaosIntervalMs: this.options.chaosIntervalMs,
+      dryRun: this.options.dryRun,
+      supervised: this.options.supervised,
+      reportPath: this.options.reportPath,
+    };
   }
 
   installProcessHooks() {
     process.on('uncaughtException', (err) => {
       this.metrics.increment('exceptions');
-      this.appendEvent('uncaughtException', { message: err.message, stack: err.stack });
+      this.artifacts.appendLog('ERROR', 'uncaughtException', { error: err.message });
       logger.error('Soak harness uncaught exception', { error: err.message });
     });
     process.on('unhandledRejection', (reason) => {
       this.metrics.increment('unhandledRejections');
-      this.appendEvent('unhandledRejection', { reason: reason instanceof Error ? reason.message : String(reason) });
+      const msg = reason instanceof Error ? reason.message : String(reason);
+      this.artifacts.appendLog('ERROR', 'unhandledRejection', { reason: msg });
     });
   }
 
-  appendEvent(type, payload) {
-    const line = JSON.stringify({ timestamp: new Date().toISOString(), type, ...payload });
-    fs.appendFileSync(this.eventLogPath, `${line}\n`);
-  }
-
-  appendMetricsSample(sample) {
-    fs.appendFileSync(this.metricsLogPath, `${JSON.stringify(sample)}\n`);
+  stop(reason) {
+    this.isRunning = false;
+    this.stopReason = reason;
+    this.artifacts.appendLog('WARN', 'Soak harness stopping early', { reason });
+    logger.warn('Soak harness stopping early', { reason });
   }
 
   async runProbeCycle() {
@@ -196,13 +376,13 @@ class SoakTest {
       if (this.failureSamples.length < 200) this.failureSamples.push(result);
     }
     this.latencies.push(result.latencyMs);
-    this.appendEvent('probe', result);
+    this.artifacts.appendLog('INFO', 'probe', result);
     return result;
   }
 
   async collectMetrics() {
     const sample = await this.metrics.sample();
-    this.appendMetricsSample(sample);
+    this.artifacts.appendMetricsSample(sample);
     return sample;
   }
 
@@ -230,7 +410,10 @@ class SoakTest {
         scenarios: this.chaos.selected.map((s) => s.name),
         dryRun: this.options.dryRun,
       });
-      this.appendEvent('chaosEnabled', { scenarios: this.chaos.selected.map((s) => s.name), dryRun: this.options.dryRun });
+      this.artifacts.appendLog('WARN', 'Chaos mode enabled', {
+        scenarios: this.chaos.selected.map((s) => s.name),
+        dryRun: this.options.dryRun,
+      });
     }
 
     await this.collectMetrics();
@@ -245,6 +428,7 @@ class SoakTest {
       if (Date.now() - lastMetricsAt >= metricsIntervalMs) {
         const sample = await this.collectMetrics();
         lastMetricsAt = Date.now();
+        this.artifacts.appendLog('INFO', 'metrics sample collected', { timestamp: sample.timestamp });
         this.logProgress(sample);
       }
 
@@ -254,7 +438,7 @@ class SoakTest {
           chaosIndex += 1;
           this.metrics.increment('chaosInjections');
           const result = await this.chaos.runScenario(scenario);
-          this.appendEvent('chaosScenario', result);
+          this.artifacts.appendLog('INFO', 'chaos scenario', result);
           if (result.status === 'passed' && typeof result.recoveryMs === 'number') {
             this.metrics.increment('restarts');
           }
@@ -264,11 +448,11 @@ class SoakTest {
 
       const remaining = durationMs - (Date.now() - this.startTime);
       if (remaining <= 0) break;
-      await new Promise((r) => setTimeout(r, Math.min(probeIntervalMs, remaining)));
+      await sleep(Math.min(probeIntervalMs, remaining));
     }
 
     await this.collectMetrics();
-    return this.buildReport();
+    return this.finalise();
   }
 
   logProgress(sample) {
@@ -412,94 +596,167 @@ class SoakTest {
         latencyMs: latency,
         failureSamples: this.failureSamples.slice(0, 20),
       },
-      operationalMetrics: metricsSummary,
-      chaos: chaosSummary || {
-        enabled: false,
-        note: 'Chaos mode disabled (default). No failure was injected and no recovery behaviour was exercised.',
+      operational: {
+        uptimeSeconds: process.uptime(),
+        restartCount: this.metrics.counters.restarts,
+        exceptionCount: this.metrics.counters.exceptions,
+        unhandledRejectionCount: this.metrics.counters.unhandledRejections,
+        metricsSummary,
       },
       findings,
       result: {
         passed,
         basis: passed
-          ? `success rate ${successRate.toFixed(2)}% >= ${SUCCESS_RATE_THRESHOLD}%${chaosSummary ? ` and ${chaosSummary.failed} chaos failures` : ''}`
-          : `success rate ${successRate.toFixed(2)}% vs threshold ${SUCCESS_RATE_THRESHOLD}%${chaosFailed ? `; ${chaosSummary.failed} chaos scenario(s) failed` : ''}`,
-        scopeCaveat: this.options.chaos
-          ? 'Resilience conclusions apply only to the scenarios listed as VERIFIED above. Skipped scenarios were not tested.'
-          : 'This result covers endurance only. It is not evidence of recovery, resilience, or failover behaviour.',
+          ? `success rate ${successRate.toFixed(2)}% met the ${SUCCESS_RATE_THRESHOLD}% threshold over ${(elapsedMs / 3600000).toFixed(2)}h with no unrecovered chaos failures`
+          : `success rate ${successRate.toFixed(2)}% did not meet the ${SUCCESS_RATE_THRESHOLD}% threshold, or a chaos scenario failed, or no probes were delivered`,
+        scopeCaveat: 'This is an endurance harness. Resilience/recovery is only measured when --chaos is explicitly enabled.',
       },
     };
   }
-}
 
-function formatBytesPerHour(v) {
-  if (v === null || v === undefined) return 'not reported (insufficient sample window)';
-  const mb = v / 1048576;
-  return `${mb >= 0 ? '+' : ''}${mb.toFixed(3)} MB/h`;
+  finalise() {
+    this.artifacts.appendLog('INFO', 'Soak harness finalising', {
+      elapsedMs: Date.now() - this.startTime,
+    });
+    this.report = this.buildReport();
+    const markdown = generateMarkdownReport(this.report);
+    this.artifacts.finalise(
+      this.systemInfo(),
+      this.sanitisedConfig(),
+      this.report,
+      markdown
+    );
+    return this.report;
+  }
 }
 
 // ---------------------------------------------------------------------------
 // Reporting
 // ---------------------------------------------------------------------------
 
-function printReport(report) {
-  const line = '='.repeat(72);
-  console.log(`\n${line}`);
-  console.log('SOAK HARNESS REPORT');
-  console.log(line);
-  console.log(`Mode:              ${report.metadata.mode}${report.metadata.chaosEnabled ? '' : '  (chaos disabled — default)'}`);
-  console.log(`Target:            ${report.metadata.target}`);
-  console.log(`Duration:          ${(report.metadata.actualDurationMs / 3600000).toFixed(2)}h of ${(report.metadata.requestedDurationMs / 3600000).toFixed(2)}h requested`);
-  console.log(`Completed in full: ${report.metadata.completedFullDuration}`);
-  console.log(`Report directory:  ${report.metadata.reportDir}`);
+function formatBytesPerHour(v) {
+  if (v === null || v === undefined) return 'n/a';
+  const abs = Math.abs(v);
+  if (abs > 1024 * 1024 * 1024) return `${(v / (1024 * 1024 * 1024)).toFixed(2)}GB/h`;
+  if (abs > 1024 * 1024) return `${(v / (1024 * 1024)).toFixed(2)}MB/h`;
+  if (abs > 1024) return `${(v / 1024).toFixed(2)}KB/h`;
+  return `${v.toFixed(2)}B/h`;
+}
 
-  console.log(`\n-- Endurance ------------------------------------------------------`);
-  const e = report.endurance;
-  console.log(`Requests: ${e.requests}   Success: ${e.successes} (${e.successRatePercent}%)   Failures: ${e.failures}`);
-  console.log(`Latency:  avg ${e.latencyMs.avg}ms   p95 ${e.latencyMs.p95}ms   max ${e.latencyMs.max}ms`);
+function fmt(v) { return v === null || v === undefined ? 'n/a' : v; }
+function fmtMB(v) { return v === null || v === undefined ? 'n/a' : `${(v / 1048576).toFixed(1)}MB`; }
 
-  const m = report.operationalMetrics;
-  if (m) {
-    console.log(`\n-- Operational metrics (${m.totalSamples} samples) -------------------------`);
-    console.log(`CPU (system):    avg ${fmt(m.cpu.systemPercent.avg)}%   max ${fmt(m.cpu.systemPercent.max)}%`);
-    console.log(`Memory (system): avg ${fmt(m.memory.systemUsedPercent.avg)}%   max ${fmt(m.memory.systemUsedPercent.max)}%`);
-    console.log(`Harness heap:    avg ${fmtMB(m.memory.harnessHeapUsedBytes.avg)}   trend ${formatBytesPerHour(m.memory.harnessHeapTrendBytesPerHour)}`);
-    console.log(`Process count:   avg ${fmt(m.processCount.avg)}   max ${fmt(m.processCount.max)}`);
-    console.log(`Harness handles: avg ${fmt(m.harnessHandles.avg)}   max ${fmt(m.harnessHandles.max)}`);
-    console.log(`Disk used:       avg ${fmt(m.disk.avg)}%`);
-    console.log(`Postgres TCP:    avg ${fmt(m.dependencies.postgresTcpConnectMs.avg)}ms (${m.dependencies.postgresTcpConnectMs.samples} reachable samples)`);
-    console.log(`Redis TCP:       avg ${fmt(m.dependencies.redisTcpConnectMs.avg)}ms (${m.dependencies.redisTcpConnectMs.samples} reachable samples)`);
-    console.log(`Restarts: ${m.counters.restarts}   Exceptions: ${m.counters.exceptions}   Unhandled rejections: ${m.counters.unhandledRejections}   Chaos injections: ${m.counters.chaosInjections}`);
-  }
+function generateMarkdownReport(report) {
+  const md = [];
+  const { metadata, endurance, operational, findings, result } = report;
 
-  if (report.chaos && report.chaos.enabled !== false) {
-    console.log(`\n-- Chaos (real failure injection) ---------------------------------`);
-    console.log(`Injected: ${report.chaos.totalInjected}   Passed: ${report.chaos.passed}   Failed: ${report.chaos.failed}   Skipped: ${report.chaos.skipped}`);
-    for (const r of report.chaos.results) {
-      console.log(`  [${r.status.toUpperCase()}] ${r.scenario}`);
-      console.log(`      injected: ${r.injectedFault || r.reason || 'n/a'}`);
-      if (r.observedBehaviour) console.log(`      observed: ${r.observedBehaviour}`);
-      if (r.recoveryMs != null) console.log(`      recovery: ${r.recoveryMs}ms`);
+  md.push('# HYDI Soak Qualification Report');
+  md.push('');
+  md.push(`- **Harness:** ${metadata.harness}`);
+  md.push(`- **Mode:** ${metadata.mode}`);
+  md.push(`- **Target:** ${metadata.target}`);
+  md.push(`- **Started:** ${metadata.startedAt}`);
+  md.push(`- **Generated:** ${metadata.generatedAt}`);
+  md.push(`- **Requested duration:** ${(metadata.requestedDurationMs / 3600000).toFixed(2)}h`);
+  md.push(`- **Actual duration:** ${(metadata.actualDurationMs / 3600000).toFixed(2)}h`);
+  md.push(`- **Completed full duration:** ${metadata.completedFullDuration ? 'yes' : 'no'}`);
+  if (metadata.stopReason) md.push(`- **Stop reason:** ${metadata.stopReason}`);
+  md.push('');
+
+  md.push('## Result');
+  md.push('');
+  md.push(`**${result.passed ? 'PASS' : 'FAIL'}**`);
+  md.push('');
+  md.push(`**Basis:** ${result.basis}`);
+  md.push('');
+  md.push(`*Scope caveat:* ${result.scopeCaveat}`);
+  md.push('');
+
+  md.push('## Endurance');
+  md.push('');
+  md.push(`| Metric | Value |`);
+  md.push(`| --- | --- |`);
+  md.push(`| Requests | ${endurance.requests} |`);
+  md.push(`| Successes | ${endurance.successes} |`);
+  md.push(`| Failures | ${endurance.failures} |`);
+  md.push(`| Success rate | ${endurance.successRatePercent}% (threshold ${endurance.thresholdPercent}%) |`);
+  md.push(`| Latency avg | ${fmt(endurance.latencyMs.avg)} ms |`);
+  md.push(`| Latency min | ${fmt(endurance.latencyMs.min)} ms |`);
+  md.push(`| Latency max | ${fmt(endurance.latencyMs.max)} ms |`);
+  md.push(`| Latency p95 | ${fmt(endurance.latencyMs.p95)} ms |`);
+  md.push('');
+
+  if (endurance.failureSamples.length > 0) {
+    md.push('### First failure samples');
+    md.push('');
+    for (const f of endurance.failureSamples) {
+      md.push(`- ${f.timestamp}: ${f.error || `HTTP ${f.statusCode}`} (${f.latencyMs}ms)`);
     }
-  } else {
-    console.log(`\n-- Chaos ----------------------------------------------------------`);
-    console.log(`DISABLED (default). ${report.chaos.note}`);
+    md.push('');
   }
 
-  console.log(`\n-- Findings -------------------------------------------------------`);
-  for (const f of report.findings) {
-    console.log(`  ${f.classification.padEnd(10)} ${f.finding}`);
-    console.log(`             ${f.evidence}`);
-  }
+  md.push('## Operational Metrics');
+  md.push('');
+  md.push(`| Metric | Value |`);
+  md.push(`| --- | --- |`);
+  md.push(`| Uptime | ${fmt(operational.uptimeSeconds)} s |`);
+  md.push(`| Restart count | ${fmt(operational.restartCount)} |`);
+  md.push(`| Exception count | ${fmt(operational.exceptionCount)} |`);
+  md.push(`| Unhandled rejection count | ${fmt(operational.unhandledRejectionCount)} |`);
 
-  console.log(`\n${line}`);
+  const m = operational.metricsSummary;
+  if (m) {
+    md.push(`| Metric samples | ${m.totalSamples} |`);
+    md.push(`| Sample window | ${(m.windowMs / 60000).toFixed(1)} m |`);
+    md.push(`| Avg system CPU | ${fmt(m.cpu.systemPercent.avg)}% |`);
+    md.push(`| Avg harness CPU | ${fmt(m.cpu.harnessPercent.avg)}% |`);
+    md.push(`| Avg heap used | ${fmtMB(m.memory.harnessHeapUsedBytes.avg)} |`);
+    md.push(`| Avg RSS | ${fmtMB(m.memory.harnessRssBytes.avg)} |`);
+    md.push(`| Heap trend | ${formatBytesPerHour(m.memory.harnessHeapTrendBytesPerHour)} |`);
+    md.push(`| RSS trend | ${formatBytesPerHour(m.memory.harnessRssTrendBytesPerHour)} |`);
+    md.push(`| Avg process count | ${fmt(m.processCount.avg)} |`);
+    md.push(`| Avg disk used | ${fmt(m.disk.avg)}% |`);
+    md.push(`| PostgreSQL TCP connect | ${fmt(m.dependencies.postgresTcpConnectMs.avg)} ms |`);
+    md.push(`| Redis TCP connect | ${fmt(m.dependencies.redisTcpConnectMs.avg)} ms |`);
+  }
+  md.push('');
+
+  md.push('## Findings');
+  md.push('');
+  md.push(`| Classification | Finding | Evidence |`);
+  md.push(`| --- | --- | --- |`);
+  for (const f of findings) {
+    md.push(`| ${f.classification} | ${f.finding} | ${f.evidence} |`);
+  }
+  md.push('');
+
+  md.push('---');
+  md.push(`*Report generated by ${metadata.harness} from ${metadata.reportDir}*\n`);
+
+  return md.join('\n');
+}
+
+function printSummary(report) {
+  const line = '─'.repeat(70);
+  console.log(line);
+  console.log('HYDI Soak Qualification Summary');
+  console.log(line);
+  console.log(`Mode:    ${report.metadata.mode}`);
+  console.log(`Target:  ${report.metadata.target}`);
+  console.log(`Duration: ${(report.metadata.actualDurationMs / 3600000).toFixed(2)}h of ${(report.metadata.requestedDurationMs / 3600000).toFixed(2)}h`);
+  console.log(`Requests: ${report.endurance.requests} (${report.endurance.successes} ok / ${report.endurance.failures} fail)`);
+  console.log(`Success:  ${report.endurance.successRatePercent}% (threshold ${report.endurance.thresholdPercent}%)`);
+  console.log(`Latency:  avg ${fmt(report.endurance.latencyMs.avg)}ms / max ${fmt(report.endurance.latencyMs.max)}ms`);
+  console.log(`CPU:      ${fmt(report.operational.metricsSummary?.cpu.systemPercent.avg)}% avg`);
+  console.log(`Heap:     ${fmtMB(report.operational.metricsSummary?.memory.harnessHeapUsedBytes.avg)} avg`);
+  console.log(`Uptime:   ${fmt(report.operational.uptimeSeconds)}s`);
+  console.log(line);
   console.log(report.result.passed ? 'RESULT: PASS' : 'RESULT: FAIL');
   console.log(`Basis:  ${report.result.basis}`);
   console.log(`Scope:  ${report.result.scopeCaveat}`);
+  console.log(`Artifacts: ${report.metadata.reportDir}`);
   console.log(line);
 }
-
-const fmt = (v) => (v === null || v === undefined ? 'n/a' : v);
-const fmtMB = (v) => (v === null || v === undefined ? 'n/a' : `${(v / 1048576).toFixed(1)}MB`);
 
 // ---------------------------------------------------------------------------
 // Entry point
@@ -521,24 +778,28 @@ async function main() {
 
   const test = new SoakTest(options);
 
-  const shutdown = (signal) => {
-    test.isRunning = false;
-    test.stopReason = `received ${signal} before the requested duration elapsed`;
-    logger.warn('Soak harness stopping early', { signal });
-  };
-  process.on('SIGINT', () => shutdown('SIGINT'));
-  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => test.stop('SIGINT'));
+  process.on('SIGTERM', () => test.stop('SIGTERM'));
 
-  const report = await test.run();
+  try {
+    const report = await test.run();
+    printSummary(report);
 
-  const reportPath = path.join(test.runDir, 'report.json');
-  fs.writeFileSync(reportPath, JSON.stringify(report, null, 2));
-  printReport(report);
-  console.log(`\nMachine-readable report: ${reportPath}`);
-  console.log(`Per-probe event log:     ${test.eventLogPath}`);
-  console.log(`Metric samples:          ${test.metricsLogPath}\n`);
-
-  return report.result.passed ? 0 : 1;
+    if (report.result.passed && report.metadata.completedFullDuration) {
+      console.log(`\nAll artifacts written to: ${report.metadata.reportDir}`);
+      return 0;
+    }
+    if (!report.metadata.completedFullDuration) {
+      console.error('\nSoak qualification stopped before the requested duration.');
+    }
+    console.error(`\nSoak qualification failed: ${report.result.basis}`);
+    return 1;
+  } catch (err) {
+    test.artifacts.appendLog('FATAL', 'Soak harness fatal error', { error: err.message });
+    logger.error('Soak harness fatal error', { error: err.message });
+    console.error(`\nFATAL: ${err.message}`);
+    return 1;
+  }
 }
 
 if (require.main === module) {
@@ -550,4 +811,4 @@ if (require.main === module) {
     });
 }
 
-module.exports = { SoakTest, parseArgs, DEFAULT_DURATION_MS, SUCCESS_RATE_THRESHOLD };
+module.exports = { SoakTest, SoakArtifactSet, parseArgs, parseDuration, DEFAULT_DURATION_MS, SUCCESS_RATE_THRESHOLD };
