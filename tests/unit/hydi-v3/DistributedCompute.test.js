@@ -31,11 +31,18 @@ describe('DistributedCompute', () => {
   });
 
   test('detects node timeout', async () => {
-    let failed = null;
-    compute.on('node_failed', (event) => { failed = event; });
     compute.registerNode({ cpu: 1, ram: 1, id: 'node-1' });
     compute.start();
-    await new Promise((r) => setTimeout(r, 300));
+    // Wait for the real event rather than racing a fixed sleep against the
+    // engine's own internal timer tick, which flakes under CI load when the
+    // two land at approximately the same wall-clock time.
+    const failed = await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('timed out waiting for node_failed')), 2000);
+      compute.once('node_failed', (event) => {
+        clearTimeout(timer);
+        resolve(event);
+      });
+    });
     expect(failed).not.toBeNull();
   });
 

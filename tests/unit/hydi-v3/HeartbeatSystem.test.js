@@ -17,11 +17,18 @@ describe('HeartbeatSystem', () => {
   });
 
   test('detects missing heartbeat', async () => {
-    let missing = null;
-    heartbeat.on('heartbeat_missing', (m) => { missing = m; });
     heartbeat.registerPublisher('service-1', () => ({ timestamp: Date.now() - 1000 }));
     heartbeat.start();
-    await new Promise((r) => setTimeout(r, 250));
+    // Wait for the real event rather than racing a fixed sleep against the
+    // engine's own internal timer tick, which flakes under CI load when the
+    // two land at approximately the same wall-clock time.
+    const missing = await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('timed out waiting for heartbeat_missing')), 2000);
+      heartbeat.once('heartbeat_missing', (event) => {
+        clearTimeout(timer);
+        resolve(event);
+      });
+    });
     expect(missing).not.toBeNull();
     expect(missing[0].serviceId).toBe('service-1');
   });

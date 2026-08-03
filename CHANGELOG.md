@@ -1,5 +1,31 @@
 # HYDI Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- `tests/unit/hydi-v3/HardwareDiscovery.test.js`'s Windows-fallback test asserted
+  behavior specific to `os.platform() === 'win32'` without mocking `platform()`,
+  so on any non-Windows CI runner (`unit-tests.yml` runs on `ubuntu-latest`) it
+  exercised the Linux `lspci` fallback path instead and always failed. Latent
+  since the test was added; now mocks `os.platform()` so the assertion is
+  deterministic on every host.
+- `tests/unit/hydi-v3/{HeartbeatSystem,DistributedCompute,WatchdogSupervisor}.test.js`'s
+  timer-driven tests raced a fixed sleep against each engine's own internal
+  interval timer, flaking under full-suite parallel load. Now await the real
+  `EventEmitter` event instead.
+
+### Security
+
+- Patched `ip-address` (SSRF/trust-boundary bypass advisories, a transitive
+  dependency of the production `express-rate-limit` package used across every
+  rate-limited route) and `undici` via `npm audit fix`. `package.json` version
+  ranges unchanged; only lockfile resolutions moved. The remaining
+  `brace-expansion` advisory (transitive via `@typescript-eslint/*`, dev
+  tooling only) is left unresolved — forcing it via an `overrides` pin
+  previously broke `next lint` (`ISSUES_FOUND.md` #2) and npm has no
+  non-breaking resolution path for it yet.
+
 ## [0.9.0-rc.1] — Release Candidate
 
 ### Added
