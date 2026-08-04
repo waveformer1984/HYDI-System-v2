@@ -4,6 +4,136 @@ Running log of autonomous production-readiness work. Newest entries first.
 
 ---
 
+## 2026-08-04 — Mobile boot baseline check + closed the last open npm audit finding
+
+Branch: `claude/hydi-mobile-boot-qpc9oc`
+
+Ran the full autonomous discovery pass per `CLAUDE.md`'s mission protocol
+(`npm install`, `npm run typecheck`, `npm run typecheck:hydi-v3`, `npm run
+lint`, `npm run lint:hydi-v3`, `npm test`, `npm run test:integration:jest`,
+`npm run build`, `npm audit`) to establish a real baseline before doing any
+work, rather than trust the prior session's closing state. Also swept
+`api/`, `lib/`, `pages/`, `src/hydi-v3/`, and `workers/` for `TODO`/`FIXME`/
+`HACK`/`XXX` markers — none found, consistent with how thoroughly this
+codebase has already been worked through by prior sessions (75+ tracked
+issues in `ISSUES_FOUND.md`).
+
+Baseline came back green across the board: typecheck clean, lint 0 errors
+(749 / 11 pre-existing warnings, unchanged from 2026-08-03), 244/244 unit
+suites (2320/2321 tests, 1 pre-existing unrelated skip), 12/12 integration
+suites (62/62 tests), and `npm run build` succeeds with the full route table
+generated. The one gap: `npm audit` still reported the `brace-expansion`
+finding that `ISSUES_FOUND.md` #2/#76 had left open, because the only
+previously-known fix path was forcing a breaking major-version bump through
+`@typescript-eslint`'s toolchain, which had already been tried once and
+reverted (crashed `next lint`).
+
+1. **Closed the previously-open `brace-expansion` DoS advisory
+   (`ISSUES_FOUND.md` #2/#76) without the breaking change that blocked it
+   before.** `package.json`'s `overrides` had a narrowly-scoped
+   `"minimatch@10.2.5": { "brace-expansion": "5.0.7" }` entry pinning the
+   transitive dependency to a version still inside the vulnerable range
+   (4.0.0–5.0.8) — a leftover from the earlier, reverted attempt. `npm view
+   brace-expansion versions` showed `5.0.9` now published (same major line,
+   not the breaking major bump that failed before). Replaced the override
+   with a top-level `"brace-expansion": "5.0.9"` pin. `npm audit` now
+   reports 0 vulnerabilities (was 1 high). Verified this doesn't repeat the
+   prior breakage: `npm run lint` and `npm run lint:hydi-v3` both still exit
+   0 errors with the same warning counts as before the bump.
+
+2. **Found and fixed the same class of gap in two sibling npm projects
+   the root `npm audit` never covers**, since they carry their own
+   `package.json`/`package-lock.json` and aren't npm workspaces:
+   `heidi-core/` (the mission-worker service, part of the documented PM2
+   fleet) and `apps/ursula-frontend/` (the Ursula EPM frontend, also in the
+   PM2 fleet). Neither had been audited by any prior session going by
+   `ISSUES_FOUND.md`. `heidi-core` had 1 high (`brace-expansion`);
+   `ursula-frontend` had 4 (1 moderate `postcss`, 3 high `undici`). Both
+   resolved cleanly via non-force `npm audit fix` — no `package.json`
+   version-range changes, lockfile resolutions only. Both now report 0
+   vulnerabilities.
+
+3. **While verifying `ursula-frontend`'s fix with its actual test suite
+   (`vitest run`, not previously run this session — the root `npm test`
+   doesn't reach it), found 5 pre-existing test failures across 2 files,
+   confirmed unrelated to the dependency bump** (reproduced identically
+   against the pre-fix lockfile via `git stash`, then restored the fix):
+   - `src/lib/healing/claude-healing.test.ts` (4 failures) — the test
+     mocked `global.fetch` assuming `ClaudeHealingService` calls the
+     Anthropic API directly, but `claude-healing.ts` was refactored at
+     some point to route through `@/lib/inference-router`'s 3-tier
+     Ollama → OpenVINO → Claude `infer()` (confirmed by reading both
+     files). The stale mock let `infer()`'s *internal* fetch calls
+     (Ollama/OpenVINO health checks) silently consume the test's queued
+     mock responses meant for a single direct Claude call, producing wrong
+     call counts and wrongly-null results. **Fixed** — rewrote the test to
+     `vi.mock('@/lib/inference-router')` and assert against `infer()`'s
+     actual contract instead of raw `fetch`, keeping `fetch` mocked only
+     for the still-real `fetchRecentTraces()` call. All 5 tests pass
+     (renamed the `ANTHROPIC_API_KEY`-specific test to reflect that
+     `infer()`, not a raw env check, now gates provider availability).
+   - `src/components/starfield/Starfield.test.tsx`'s `requests animation
+     frame` / `attaches event listeners` (1-2 failures, order-dependent —
+     failed together in a full `vitest run`, only the RAF one failed in
+     file-isolation) — **found, not fixed.** The whole file calls bare
+     `React.createElement(Starfield)` instead of `@testing-library/react`'s
+     `render()` (already a devDependency, unused by this file), so the
+     component is never actually mounted — no effects run, so the
+     assertions about `addEventListener`/`requestAnimationFrame` being
+     called are meaningless and pass or fail based on incidental
+     cross-file mock-state leakage under Vitest's parallel runner, not real
+     behavior. Also, even a correct `render()` wouldn't be enough by
+     itself: `Starfield.tsx`'s animation effect early-returns while
+     `dimensions.width/height` are 0, which is what jsdom's
+     `clientWidth`/`clientHeight` always report, and jsdom has no `canvas`
+     2D context implementation at all — a real fix needs both `render()`
+     and a `getContext('2d')` stub (e.g. `vitest-canvas-mock`) plus
+     stubbing the parent element's `clientWidth`/`clientHeight`. Left
+     as a scoped follow-up rather than rushed in this pass — not wired
+     into any CI workflow (confirmed via
+     `grep -r ursula-frontend .github/workflows/`), so it isn't gating
+     anything today, but it is giving a false read on this component's
+     actual test coverage.
+
+### Verification
+
+- `npm install` — clean, 0 vulnerabilities before *and* after the override
+  change (the "before" 0 was `npm audit --omit=dev`; the full-tree `npm
+  audit` including dev deps is what surfaced the 1 high-severity finding
+  this pass fixed).
+- `npm run typecheck` / `npm run typecheck:hydi-v3` — clean.
+- `npm run lint` — 0 errors, 749 warnings (unchanged).
+- `npm run lint:hydi-v3` — 0 errors, 11 warnings (unchanged).
+- `npm test` — 244/244 suites, 2320/2321 tests (1 pre-existing skip),
+  reconfirmed after the override change.
+- `npm run test:integration:jest` — 12/12 suites, 62/62 tests.
+- `npm run build` — succeeds, full route table generated, unchanged.
+- `npm audit` (root) — 0 vulnerabilities (was 1 high).
+- `npm audit` (`heidi-core/`) — 0 vulnerabilities (was 1 high).
+- `npm audit` (`apps/ursula-frontend/`) — 0 vulnerabilities (was 4: 1
+  moderate, 3 high).
+- `apps/ursula-frontend`: `npx vitest run` — 11/11 files, 112/112 tests
+  passing after the `claude-healing.test.ts` fix (was 9/11 files, 107/112,
+  both failures confirmed pre-existing and unrelated to the dependency
+  bump via a `git stash`/re-run comparison against the pre-fix lockfile).
+  1 file (`Starfield.test.tsx`, 1-2 tests) still fails — see item 3, found
+  and documented, not fixed this pass.
+
+### Not done in this pass
+
+- `Starfield.test.tsx`'s broken render/mocking (see item 3 above) — scoped
+  follow-up, needs `@testing-library/react`'s `render()` plus a canvas 2D
+  context stub and `clientWidth`/`clientHeight` mocking, not a quick patch.
+- No other new functional work found worth doing: TODO/FIXME sweep across
+  `api/`, `lib/`, `pages/`, `src/hydi-v3/`, `workers/` was empty, and
+  `ROADMAP.md`'s remaining open items (credential rotation, Local-First
+  Phase 1 Supabase migration, cryptographic identity verification) all
+  require either dashboard/host access this sandbox doesn't have, or a
+  maintainer product decision — see `ROADMAP.md`'s Near-term section for
+  the current state of each.
+
+---
+
 ## 2026-08-03 — CI-breaking test fix + dependency security patch
 
 Branch: `claude/protoforge-ecosystem-audit-4idowa`
