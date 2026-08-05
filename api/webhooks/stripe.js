@@ -8,6 +8,11 @@ const HeidiRevenueOutreach = require('../../modules/heidi-revenue-outreach');
 const UniversalAgentBus = require('../../modules/universal-agent-bus');
 const WebhookQueueAdapter = require('../../workers/WebhookQueueAdapter');
 const { getRawBody } = require('../../lib/get-raw-body');
+const {
+  claimWebhookEvent,
+  completeWebhookEvent,
+  releaseWebhookEvent,
+} = require('../../lib/webhook-idempotency');
 
 require('dotenv').config();
 
@@ -146,24 +151,35 @@ async function handleStripeWebhook(req, res) {
   }
 
   // TRUE IDEMPOTENCY WITH RPC FUNCTION
-  const { data: eventId } = await supabase.rpc('claim_webhook_event', {
-    p_event_id: event.id,
-    p_type: event.type
-  });
-  
+  // The claim is a lease that must be settled below -- see lib/webhook-idempotency.js.
+  let claim;
+  try {
+    claim = await claimWebhookEvent(supabase, { eventId: event.id, type: event.type });
+  } catch (err) {
+    // Distinct from a duplicate: the dedupe store is down. A 200 here would
+    // convince Stripe the event landed and cancel every retry.
+    console.error(`[⚡ IDEMPOTENCY FAIL] ${err.message}`);
+    return res.status(500).send('Idempotency store unavailable');
+  }
+
   // Already processed
-  if (!eventId) {
+  if (claim.duplicate) {
     console.log(`[🔄 IDEMPOTENCY] Event ${event.id} already processed`);
     return res.status(200).send('duplicate');
   }
+
+  const eventId = claim.claimId;
 
   // GATE 2: CASCADE (Confidence & Integrity Validation)
   const gateStatus = cascadeGate(event);
   
   if (!gateStatus.authorized) {
-    // Return 200 to Stripe to stop retries, but drop the data from the pipeline
+    // Return 200 to Stripe to stop retries, but drop the data from the pipeline.
+    // A drop is a final verdict, not a failure, so the claim is settled rather
+    // than released -- re-delivering it would only be dropped again.
     console.log(`[🛡️ CASCADE ACTION] Event ${event.id} dropped: ${gateStatus.reason}`);
-    return res.status(200).json({ 
+    await completeWebhookEvent(supabase, eventId);
+    return res.status(200).json({
       status: 'dropped', 
       reason: gateStatus.reason,
       cascade_action: 'REJECT_LOW_CONFIDENCE' 
@@ -195,20 +211,13 @@ async function handleStripeWebhook(req, res) {
     });
   } catch (err) {
     console.error(`[⚡ QUEUE FAIL] Failed to queue event: ${err.message}`);
-    
-    // MARK EVENT AS FAILED
-    try {
-      await supabase
-        .from('webhook_events')
-        .update({ 
-          status: 'queue_failed',
-          error: err.message
-        })
-        .eq('id', eventId);
-    } catch (recordErr) {
-      console.error('Failed to update event status:', recordErr.message);
-    }
-    
+
+    // The event never reached the queue, so nothing downstream will ever act on
+    // it. Release the claim rather than parking the row at `queue_failed`: any
+    // surviving row makes Stripe's retry look like a duplicate, which would
+    // strand this event permanently.
+    await releaseWebhookEvent(supabase, eventId, `queue failure: ${err.message}`);
+
     res.status(500).send('Queue Error');
   }
 }

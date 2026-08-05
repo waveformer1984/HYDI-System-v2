@@ -64,6 +64,13 @@ Deno.serve(async (req: Request) => {
 
   console.log(`[WEBHOOK] Event: ${event.type} (${event.id})`);
 
+  // The keymaker_events row below is a claim, not a receipt. Hoisted so the
+  // catch can drop it if processing fails: the 500 we return makes Stripe
+  // retry, and the retry's insert would otherwise hit the unique violation on
+  // this abandoned row and be answered `200 duplicate` -- silently discarding
+  // the event. Same lease discipline as lib/webhook-idempotency.js.
+  let claimedRowId: string | null = null;
+
   try {
     // Idempotent insert using keymaker_events table
     const { data: inserted, error: insertErr } = await supabase
@@ -92,6 +99,7 @@ Deno.serve(async (req: Request) => {
     }
 
     const eventId = inserted.id;
+    claimedRowId = eventId;
 
     // Process the event
     await processEvent(event, supabase, eventId);
@@ -101,6 +109,10 @@ Deno.serve(async (req: Request) => {
       .from("keymaker_events")
       .update({ processed: true })
       .eq("id", eventId);
+
+    // Past the point of no return -- the claim must survive from here on so it
+    // keeps suppressing genuine duplicate deliveries.
+    claimedRowId = null;
 
     console.log(`[WEBHOOK] Completed: ${event.type}`);
 
@@ -115,6 +127,25 @@ Deno.serve(async (req: Request) => {
     );
   } catch (err: any) {
     console.error("[WEBHOOK] Processing error:", err);
+
+    // Hand the claim back so Stripe's retry re-inserts and actually reprocesses.
+    if (claimedRowId) {
+      const { error: releaseError } = await supabase
+        .from("keymaker_events")
+        .delete()
+        .eq("id", claimedRowId);
+
+      if (releaseError) {
+        console.error(
+          `[WEBHOOK] STUCK CLAIM ${claimedRowId}: release failed:`,
+          releaseError,
+          "-- Stripe retries of this event will be answered as duplicates until the row is removed."
+        );
+      } else {
+        console.warn(`[WEBHOOK] Released claim ${claimedRowId} -- Stripe retry will reprocess.`);
+      }
+    }
+
     return new Response(
       JSON.stringify({ error: err.message, status: "failed" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }

@@ -1,7 +1,8 @@
 #!/bin/sh
-# Local pre-push gate -- runs the same checks GitHub Actions' typecheck and
-# Jest Unit Tests steps run, so day-to-day development has a source of
-# truth that doesn't depend on GitHub's CI being up. (Direct motivation:
+# Local pre-push gate -- runs the same checks GitHub Actions' Unit Tests
+# workflow runs (typecheck, lint, Jest), so day-to-day development has a
+# source of truth that doesn't depend on GitHub's CI being up. (Direct
+# motivation:
 # GitHub Actions sat stuck queued, repo-wide, for 24+ hours starting
 # 2026-07-08 -- see project-hydi-actions-outage memory.)
 #

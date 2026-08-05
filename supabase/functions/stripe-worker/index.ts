@@ -21,11 +21,21 @@ serve(async (req) => {
   const limited = rateLimit(req, { name: 'stripe-worker', windowMs: 60_000, max: 120 })
   if (limited) return limited
 
+  // Hoisted out of the try so the catch below can hand the idempotency lease
+  // back if processing fails after the event was claimed. Without that release,
+  // the 500 we return makes Stripe retry, the retry re-claims, gets NULL because
+  // this run's row is still there, and is answered `duplicate` -- so a transient
+  // failure silently discards the event. Mirrors lib/webhook-idempotency.js on
+  // the Node side (not importable here: different runtime).
+  let claimedEventId: string | null = null
+  let supabaseForCleanup: ReturnType<typeof createClient> | null = null
+
   try {
     // Initialize Supabase
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
+    supabaseForCleanup = supabase
 
     // Initialize Stripe
     const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY')!)
@@ -123,7 +133,8 @@ serve(async (req) => {
     }
 
     console.log("=== EVENT CLAIMED, PROCESSING ===")
-    
+    claimedEventId = eventId
+
     // Process the event
     await processEvent(event, supabase, eventId)
 
@@ -138,6 +149,10 @@ serve(async (req) => {
       console.error('=== FAILED TO MARK EVENT COMPLETED ===', updateError)
     }
 
+    // Past the point of no return: the event is handled, so the catch below
+    // must not release the claim even if something further down throws.
+    claimedEventId = null
+
     console.log(`=== SUCCESSFULLY PROCESSED EVENT: ${event.type} ===`)
 
     return new Response(JSON.stringify({ 
@@ -151,11 +166,29 @@ serve(async (req) => {
 
   } catch (error) {
     console.error('=== PROCESSING ERROR ===', error)
-    
-    return new Response(JSON.stringify({ 
+
+    // Hand the lease back so Stripe's retry re-claims and actually reprocesses.
+    if (claimedEventId && supabaseForCleanup) {
+      const { error: releaseError } = await supabaseForCleanup
+        .from('webhook_events')
+        .delete()
+        .eq('id', claimedEventId)
+
+      if (releaseError) {
+        console.error(
+          `=== STUCK CLAIM ${claimedEventId}: release failed ===`,
+          releaseError,
+          '-- Stripe retries of this event will be answered as duplicates until the row is removed.'
+        )
+      } else {
+        console.warn(`=== RELEASED CLAIM ${claimedEventId} -- Stripe retry will reprocess ===`)
+      }
+    }
+
+    return new Response(JSON.stringify({
       error: error.message,
       status: 'failed'
-    }), { 
+    }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     })

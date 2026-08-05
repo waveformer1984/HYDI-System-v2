@@ -18,25 +18,70 @@ jest.mock('stripe', () =>
 );
 
 const mockRpc = jest.fn().mockResolvedValue({ data: 'claim_test', error: null });
+const mockLedgerInsert = jest.fn();
+// Result of the pre-insert "has this payment intent already been ledgered?"
+// lookup. Default: no existing row, so the insert proceeds.
+let mockExistingLedgerRow = { data: null, error: null };
+// Records every table operation so the tests can assert on the idempotency
+// claim lifecycle (settled on success, released on failure) as well as the
+// ledger write itself.
+const tableOps = [];
 
 jest.mock('@supabase/supabase-js', () => ({
   createClient: jest.fn(() => ({
-    from: jest.fn().mockReturnValue({
-      insert: jest.fn().mockReturnThis(),
-      update: jest.fn().mockReturnThis(),
-      eq: jest.fn().mockReturnThis(),
-      in: jest.fn().mockReturnThis(),
-      select: jest.fn().mockReturnThis(),
-      single: jest
-        .fn()
-        .mockResolvedValue({
+    from: jest.fn(table => {
+      const op = { table, action: null, payload: null, filters: [] };
+      tableOps.push(op);
+      const chain = {
+        insert(payload) {
+          op.action = 'insert';
+          op.payload = payload;
+          mockLedgerInsert(payload);
+          return chain;
+        },
+        update(payload) {
+          op.action = 'update';
+          op.payload = payload;
+          return chain;
+        },
+        delete() {
+          op.action = 'delete';
+          return chain;
+        },
+        eq(column, value) {
+          op.filters.push([column, value]);
+          return chain;
+        },
+        in(column, values) {
+          op.filters.push([column, values]);
+          return chain;
+        },
+        select() {
+          op.action = op.action || 'select';
+          return chain;
+        },
+        single: jest.fn().mockResolvedValue({
           data: { transaction_id: 'txn_test', amount_gross: 100, net_amount: 81.8 },
           error: null,
         }),
+        // Only the duplicate-ledger-entry lookup uses maybeSingle().
+        maybeSingle: jest.fn(async () => mockExistingLedgerRow),
+        // Awaiting the chain (update/delete without .single()) resolves like
+        // PostgREST does: an object carrying `error`.
+        then(resolve) {
+          return Promise.resolve({ data: null, error: null }).then(resolve);
+        },
+      };
+      return chain;
     }),
     rpc: (...args) => mockRpc(...args),
   })),
 }));
+
+/** Table operations recorded for `webhook_events` since the last reset. */
+function claimOps() {
+  return tableOps.filter(op => op.table === 'webhook_events');
+}
 
 let handler, determineRevenueStream, FEE_STRUCTURE, REVENUE_STREAM_ACCOUNTS;
 
@@ -76,6 +121,9 @@ function fakeRes() {
 describe('webhook idempotency', () => {
   beforeEach(() => {
     mockRpc.mockClear();
+    mockLedgerInsert.mockClear();
+    mockExistingLedgerRow = { data: null, error: null };
+    tableOps.length = 0;
     mockConstructEvent.mockReset();
     mockConstructEvent.mockReturnValue({
       id: 'evt_dup_test',
@@ -84,10 +132,15 @@ describe('webhook idempotency', () => {
     });
   });
 
+  const postReq = () => ({
+    method: 'POST',
+    headers: { 'stripe-signature': 'sig' },
+    body: Buffer.from('{}'),
+  });
+
   it('claims the event via claim_webhook_event before processing', async () => {
     mockRpc.mockResolvedValueOnce({ data: 'claim_1', error: null });
-    const req = { method: 'POST', headers: { 'stripe-signature': 'sig' }, body: Buffer.from('{}') };
-    await handler(req, fakeRes());
+    await handler(postReq(), fakeRes());
 
     expect(mockRpc).toHaveBeenCalledWith('claim_webhook_event', {
       p_event_id: 'evt_dup_test',
@@ -97,12 +150,101 @@ describe('webhook idempotency', () => {
 
   it('short-circuits with 200 and does not reprocess when the RPC reports a duplicate', async () => {
     mockRpc.mockResolvedValueOnce({ data: null, error: null });
-    const req = { method: 'POST', headers: { 'stripe-signature': 'sig' }, body: Buffer.from('{}') };
     const res = fakeRes();
-    await handler(req, res);
+    await handler(postReq(), res);
 
     expect(res.statusCode).toBe(200);
     expect(res.body).toEqual({ received: true, duplicate: true });
+    expect(mockLedgerInsert).not.toHaveBeenCalled();
+  });
+
+  it('settles the claim once the ledger entry is written', async () => {
+    mockRpc.mockResolvedValueOnce({ data: 'claim_1', error: null });
+    const res = fakeRes();
+    await handler(postReq(), res);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toEqual({ received: true });
+
+    const settle = claimOps().find(op => op.action === 'update');
+    expect(settle).toBeDefined();
+    expect(settle.payload).toEqual({ status: 'completed' });
+    expect(settle.filters).toContainEqual(['id', 'claim_1']);
+  });
+
+  it('releases the claim when processing fails, so the Stripe retry reprocesses', async () => {
+    // Regression: the claim used to survive a failed delivery, so Stripe's
+    // retry was answered `200 duplicate` and the payment never reached
+    // financial_ledger while every dashboard reported success.
+    mockRpc.mockResolvedValueOnce({ data: 'claim_1', error: null });
+    // An unroutable revenue stream makes handlePaymentIntentSucceeded throw.
+    mockConstructEvent.mockReturnValue({
+      id: 'evt_fail_test',
+      type: 'payment_intent.succeeded',
+      data: {
+        object: {
+          id: 'pi_fail',
+          amount: 1000,
+          currency: 'usd',
+          metadata: { revenue_stream: 'not_a_real_stream' },
+        },
+      },
+    });
+
+    const res = fakeRes();
+    await handler(postReq(), res);
+
+    expect(res.statusCode).toBe(500);
+
+    const release = claimOps().find(op => op.action === 'delete');
+    expect(release).toBeDefined();
+    expect(release.filters).toContainEqual(['id', 'claim_1']);
+    expect(claimOps().some(op => op.action === 'update')).toBe(false);
+  });
+
+  it('does not post a second ledger entry when the payment intent is already ledgered', async () => {
+    // Releasing the claim means Stripe retries genuinely re-enter the handler.
+    // If the first attempt failed after its insert landed, the retry must not
+    // double-post -- financial_ledger.stripe_payment_intent_id has only a plain
+    // index, so nothing in the schema would catch it.
+    mockRpc.mockResolvedValueOnce({ data: 'claim_1', error: null });
+    mockExistingLedgerRow = { data: { transaction_id: 'txn_existing' }, error: null };
+
+    const res = fakeRes();
+    await handler(postReq(), res);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toEqual({ received: true });
+    expect(mockLedgerInsert).not.toHaveBeenCalled();
+
+    // Still a success, so the claim is settled rather than released.
+    expect(claimOps().some(op => op.action === 'update')).toBe(true);
+    expect(claimOps().some(op => op.action === 'delete')).toBe(false);
+  });
+
+  it('writes the ledger entry when the payment intent has not been seen before', async () => {
+    mockRpc.mockResolvedValueOnce({ data: 'claim_1', error: null });
+
+    await handler(postReq(), fakeRes());
+
+    expect(mockLedgerInsert).toHaveBeenCalledTimes(1);
+    expect(mockLedgerInsert.mock.calls[0][0]).toMatchObject({
+      stripe_payment_intent_id: 'pi_test',
+      amount_gross: 10,
+      revenue_stream: 'galactic_bytes',
+    });
+  });
+
+  it('returns 500 rather than 200 when the idempotency store itself is unreachable', async () => {
+    // A failed RPC is not a duplicate: answering 200 would cancel every Stripe
+    // retry for a live payment during a transient Supabase outage.
+    mockRpc.mockResolvedValueOnce({ data: null, error: { message: 'connection refused' } });
+
+    const res = fakeRes();
+    await handler(postReq(), res);
+
+    expect(res.statusCode).toBe(500);
+    expect(mockLedgerInsert).not.toHaveBeenCalled();
   });
 });
 

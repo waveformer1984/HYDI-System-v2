@@ -6,6 +6,11 @@
 const Stripe = require('stripe');
 const { createClient } = require('@supabase/supabase-js');
 const { getRawBody } = require('../lib/get-raw-body');
+const {
+  claimWebhookEvent,
+  completeWebhookEvent,
+  releaseWebhookEvent,
+} = require('../lib/webhook-idempotency');
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 const supabase = createClient(
@@ -60,15 +65,28 @@ async function handler(req, res) {
 
   // Idempotency guard -- Stripe retries on timeout/non-2xx, which would otherwise
   // double-insert ledger rows. Shares the same webhook_events table/RPC as api/webhooks/stripe.js.
-  const { data: claimedId } = await supabase.rpc('claim_webhook_event', {
-    p_event_id: event.id,
-    p_type: `connect:${event.type}`,
-  });
+  // The claim is a lease: it is settled below (completed on success, released on
+  // failure) so a retry of a failed delivery is reprocessed instead of being
+  // answered "duplicate" and losing the payment. See lib/webhook-idempotency.js.
+  let claim;
+  try {
+    claim = await claimWebhookEvent(supabase, {
+      eventId: event.id,
+      type: `connect:${event.type}`,
+    });
+  } catch (err) {
+    // The dedupe store is unreachable. Answering 200 here would tell Stripe the
+    // event was handled and stop the retries; 5xx keeps the delivery alive.
+    console.error(`[Connect Webhook] Idempotency claim failed: ${err.message}`);
+    return res.status(500).json({ error: 'Idempotency store unavailable' });
+  }
 
-  if (!claimedId) {
+  if (claim.duplicate) {
     console.log(`[Connect Webhook] Event ${event.id} already processed`);
     return res.status(200).json({ received: true, duplicate: true });
   }
+
+  const claimedId = claim.claimId;
 
   try {
     const ingress = await import('../lib/commercial/ingress-adapter');
@@ -105,9 +123,13 @@ async function handler(req, res) {
         break;
     }
 
+    await completeWebhookEvent(supabase, claimedId);
     return res.status(200).json({ received: true });
   } catch (error) {
     console.error('[Connect Webhook] Processing error:', error);
+    // Give the lease back before asking Stripe to retry -- otherwise the retry
+    // re-claims, is told "duplicate", and this delivery is lost for good.
+    await releaseWebhookEvent(supabase, claimedId, `${event.type} processing error`);
     return res.status(500).json({ error: 'Internal server error' });
   }
 }
@@ -136,6 +158,28 @@ async function handlePaymentIntentSucceeded(paymentIntent) {
   console.log(
     `[Connect Webhook] ${revenueStream} -- gross $${gross.toFixed(2)}, net $${net.toFixed(2)}`
   );
+
+  // Second line of defense behind the webhook_events claim. That claim is now
+  // released when a delivery fails, so Stripe retries genuinely re-enter this
+  // function -- and if the original attempt failed *after* its insert landed
+  // (e.g. the .select() round-trip broke), the retry would post the same
+  // payment to the ledger twice. financial_ledger.stripe_payment_intent_id
+  // carries only a plain index, not a unique constraint, so nothing at the
+  // schema level would stop it.
+  const { data: existing, error: existingError } = await supabase
+    .from('financial_ledger')
+    .select('transaction_id')
+    .eq('stripe_payment_intent_id', paymentIntent.id)
+    .maybeSingle();
+
+  if (existingError) throw existingError;
+
+  if (existing) {
+    console.log(
+      `[Connect Webhook] Ledger entry already exists for ${paymentIntent.id} (${existing.transaction_id}) -- skipping duplicate insert`
+    );
+    return existing;
+  }
 
   const { data: ledgerEntry, error } = await supabase
     .from('financial_ledger')
