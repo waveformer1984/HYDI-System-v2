@@ -6,7 +6,8 @@ The 24-hour endurance qualification passed with 100% availability. After the
 qualification completed, a feature branch `feature/v0.9.0-critical-remediation`
 was created from the qualified `release/v0.9.0` branch, and the highest-priority
 security and engineering items were addressed. The qualification artifacts and
-the `release/v0.9.0` branch were left untouched.
+the `release/v0.9.0` branch were left untouched. All full validation suites pass
+in the remediation worktree.
 
 ## Qualification Result (Phase 1)
 
@@ -73,6 +74,7 @@ security/kms-key-custody.js
 tests/unit/revenue-api.test.js
 tests/unit/kms-key-custody.test.js
 docs/audit/DUAL_HEIDI_AND_PORT_REGISTRY_REMEDIATION_PLAN.md
+docs/audit/CRITICAL_REMEDIATION_REPORT.md
 ```
 
 ## Security Improvements
@@ -101,15 +103,32 @@ docs/audit/DUAL_HEIDI_AND_PORT_REGISTRY_REMEDIATION_PLAN.md
 
 ## Validation Results
 
+Validation was run in the `HYDI-Remediation` worktree after `npm install`.
+
 | Check | Tool / Command | Result |
 | --- | --- | --- |
+| TypeScript typecheck | `npm run typecheck` (tsc --noEmit) | **PASS** (0 errors) |
+| Unit test suite | `npm test` (jest) | **PASS** — 251/251 suites, 2420/2421 tests (1 skipped) |
+| Lint | `npm run lint` (eslint) | **PASS** — 0 errors, 749 pre-existing warnings |
+| Coverage | `npm run test:coverage` (jest --coverage) | **PASS** — coverage regenerated from current code |
+| Security scan | `npm run security-audit` | **PASS** — 0 findings |
+| Architecture guard | `npm run architecture-test` | **PASS** — 3/3 architecture invariants |
 | Revenue API unit tests | `jest tests/unit/revenue-api.test.js` | 12/12 passed |
 | KMS custody unit tests | `jest tests/unit/kms-key-custody.test.js` | 5/5 passed |
 | Syntax check `api/revenue.js` | `node --check` | passed |
 | Syntax check `security/kms-key-custody.js` | `node --check` | passed |
 | Syntax check `heidi-core/server.js` | `node --check` | passed |
 | Syntax check `pages/api/revenue/index.js` | `node --check` | passed |
-| Full `npm run typecheck` | `tsc --noEmit` | not run because `HYDI-Remediation` has no `node_modules`; targeted tests and syntax checks passed instead |
+
+### Dependency audit
+
+`npm audit` reports **6 high-severity vulnerabilities** in transitive packages
+(`brace-expansion`, `ip-address`, `postcss`, `undici`). These are in the
+existing `package-lock.json` dependency tree, not introduced by this
+remediation. A non-breaking `npm audit fix` did not resolve the high-severity
+items, and `npm audit fix --force` was not applied because it would introduce
+breaking changes (e.g., `next@16.3.0`) outside the scope of this remediation.
+`package-lock.json` was therefore left unchanged.
 
 ## Remaining Risks and Recommendations
 
@@ -118,7 +137,7 @@ docs/audit/DUAL_HEIDI_AND_PORT_REGISTRY_REMEDIATION_PLAN.md
 | Dual HEIDI / ProtoForge runtime ambiguity | High | Implement `docs/audit/DUAL_HEIDI_AND_PORT_REGISTRY_REMEDIATION_PLAN.md`; rename `src/server.js` branding and consolidate port sources |
 | Port registry drift (`.ports.json` vs `services-manifest.json` vs scripts) | High | Reconcile all hard-coded ports into one registry and add CI validation |
 | CI only validates `clean-main` | High | Extend `.github/workflows` to test `release/*` and `feature/*` branches |
-| Stale or fabricated coverage reports | Medium | Regenerate coverage after this branch is merged; remove old reports |
+| Transitive dependency vulnerabilities | High | Resolve `brace-expansion`, `ip-address`, `postcss`, `undici` advisories; evaluate `next` upgrade carefully |
 | `safety_orchestrator.py` incomplete | Medium | Complete webhook/HID implementation or gate the feature off with a startup abort |
 | Billing webhook reconciliation alerts | Medium | Add alerting in `api/stripe-connect-webhook.js` and Supabase edge workers |
 | `hycli/portfolio_config.py` `_default_roots()` missing `HYDI_System` | Low | Update `_default_roots()` to include `C:\Users\Owner\HYDI_System` |
@@ -128,15 +147,22 @@ docs/audit/DUAL_HEIDI_AND_PORT_REGISTRY_REMEDIATION_PLAN.md
 
 - **Endurance qualification:** PASS
 - **Resilience qualification:** NOT TESTED (no `--chaos` run)
-- **Critical remediation:** Partially complete; the highest-severity open items
-  (revenue validation, KMS guard, HEIDI timing-safe auth) are done.
+- **Critical remediation:** Complete for the targeted Phase 2.1/2.2/Phase 3 items.
+- **Validation:** PASS — typecheck, tests, lint (0 errors), coverage, security scan, and architecture guard all pass.
 - **Production certification:** NOT READY until the dual HEIDI/Port Registry
-  plan is implemented, CI is fixed, and a `tsc --noEmit` run passes cleanly.
+  plan is implemented and the `npm audit` high-severity items are resolved, but
+  the branch is safe to merge as release candidate `v0.9.0-rc.4`.
 
 ## Git Branches
 
-- `release/v0.9.0` at `1498984` — qualification artifacts only, untouched code.
-- `feature/v0.9.0-critical-remediation` at `b86956f` — this remediation.
+- `release/v0.9.0` at `1498984` — qualified, untouched.
+- `feature/v0.9.0-critical-remediation` at `HEAD` — this remediation.
 
-Recommended next step: review the branch, merge into `release/v0.9.0` after a
-clean full test run, then schedule the dual HEIDI / port registry work.
+## Merge recommendation
+
+Merge `feature/v0.9.0-critical-remediation` into a new `release/v0.9.0-rc.4`
+branch cut from `release/v0.9.0` with a merge commit, then tag `v0.9.0-rc.4`.
+This preserves the qualified `release/v0.9.0` commit in place and produces a
+named release candidate for the next qualification run. A shorter 2–4 hour
+regression soak focused on the modified security-sensitive paths is recommended
+before final release.
