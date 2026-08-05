@@ -1,4 +1,7 @@
 # Runtime / generated artifacts — never ship in the npm package
+node_modules/
+*.bundle
+release-v0.9.0-fixes.bundle
 coverage/
 reports/
 logs/
@@ -14,6 +17,15 @@ artifacts/
 .netlify/
 *.tsbuildinfo
 tsconfig.tsbuildinfo
+
+# Build output / bundled apps (sources, not artifacts)
+.next/
+out/
+dist/
+*.tgz
+apps/
+heidi-core/
+hydi-monitor-deploy/
 
 # Audio assets (Rezonate masters/stems live in the repo, not the package)
 rezonate/stems/

@@ -1,5 +1,16 @@
 # HYDI Changelog
 
+## [0.9.0-rc.5] — Release Candidate 5
+
+### Fixed
+
+- `.npmignore` now excludes `node_modules/`, `.next/`, `apps/`, `heidi-core/`, `*.bundle`, and runtime artifacts, reducing the npm tarball from ~170 MB to ~2.7 MB.
+- `database.js` no longer logs the `SUPABASE_SERVICE_ROLE_KEY` prefix at boot.
+
+### Changed
+
+- Package version bumped to `0.9.0-rc.5`.
+
 ## [Unreleased]
 
 ### Fixed
