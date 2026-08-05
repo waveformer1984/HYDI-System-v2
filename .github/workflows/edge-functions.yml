@@ -1,0 +1,46 @@
+name: Edge Function Tests
+
+# The 45 Supabase Edge Functions run on Deno, so they sit outside the Jest/tsc
+# pipeline entirely (tsconfig.json excludes them, and jest.config.js never
+# discovers them). That left `supabase/functions/_shared/security.ts` -- the
+# module enforcing service-role auth and rate limiting for ~30 functions --
+# with a test file that no workflow ever executed.
+#
+# Scope note: this runs the hermetic `_shared/` suite only. The other functions
+# import from esm.sh / deno.land at module load, so type-checking them requires
+# network egress and would make this gate fail closed on an upstream CDN
+# hiccup rather than on a real defect. Widening this to `deno check` across all
+# functions is tracked in ROADMAP.md.
+
+on:
+  push:
+    branches: [clean-main]
+    paths:
+      - 'supabase/functions/**'
+      - '.github/workflows/edge-functions.yml'
+  pull_request:
+    paths:
+      - 'supabase/functions/**'
+      - '.github/workflows/edge-functions.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  edge-function-tests:
+    name: Deno Shared-Module Suite
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      # `deno test` type-checks by default, so this covers both the assertions
+      # and the types for the shared security module.
+      - name: Run shared Edge Function tests
+        run: npm run test:edge
