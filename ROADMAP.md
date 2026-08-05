@@ -245,6 +245,34 @@ drop-everything, P1 is next up, P2 is scheduled but not urgent.
 
 ## Near-term (Q3 2026)
 
+### Widen Edge Function CI beyond the `_shared/` module
+`edge-functions.yml` (added 2026-08-05) is the first CI coverage the 45 Deno
+Edge Functions have ever had, but it deliberately runs only the hermetic
+`supabase/functions/_shared/` suite. The other 44 functions import from
+esm.sh and deno.land at module load, so a `deno check` across them needs
+network egress and would fail the gate on an upstream CDN hiccup rather than
+on a real defect.
+
+Two viable paths, both needing a maintainer call:
+- **Vendor the dependencies** (`deno vendor` / a lockfile + `--cached-only`),
+  making the whole function tree type-checkable hermetically. Costs a
+  vendored tree in the repo and periodic refreshes.
+- **Accept network in this one workflow** and add `continue-on-error` or a
+  retry so CDN flakiness doesn't block merges. Cheaper, weaker signal.
+
+Worth doing either way: type-checking all 45 would have caught the defects
+tracked as `ISSUES_FOUND.md` #79-#80 years earlier than a hand audit did.
+
+### Decide whether the material-reservation flow should exist
+`InventoryMaterialsWorker.reserveMaterialsInDatabase()` has no callers
+anywhere in the repository (`ISSUES_FOUND.md` #88). It writes to
+`material_reservations` and deducts inventory, so it reads as an unfinished
+feature rather than an abandoned one — but nothing invokes it, and the
+`ReferenceError` fixed in #74(a) was therefore a fix to dead code. Either
+wire it into the job-acceptance path or delete it; leaving an
+inventory-mutating method dangling invites someone to call it without the
+surrounding flow it assumes.
+
 ### URGENT: rotate the credentials leaked 2026-07-15
 A live Supabase `service_role` key and live Stripe secret/webhook keys were
 found hardcoded across 21+ tracked files (see `ISSUES_FOUND.md` #20-#21).

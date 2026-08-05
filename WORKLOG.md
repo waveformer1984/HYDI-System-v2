@@ -4,6 +4,130 @@ Running log of autonomous production-readiness work. Newest entries first.
 
 ---
 
+## 2026-08-05 — Edge Function hardening, CI for Deno, inventory alerting restored
+
+Branch: `claude/protoforge-ecosystem-audit-vkz7kd`
+
+Opened with a full baseline rather than trusting the prior session's closing
+state: fresh `npm install`, then `npm test`, `npm run lint`, `npm run
+typecheck`, `npm run lint:hydi-v3`, `npm run test:integration:jest`, and
+`npm audit`. Everything was green — 244/244 suites, 62/62 integration, 0
+lint errors, clean typecheck — so this pass had to find new ground rather
+than re-audit the 77 issues already tracked. It went looking in the two
+places the existing gates structurally cannot see: the Deno Edge Functions,
+and the files with no test file at all.
+
+1. **Reopened a security advisory that had been written off as unfixable.**
+   `npm audit` showed two high-severity `brace-expansion` DoS advisories.
+   `ISSUES_FOUND.md` #76 had concluded there was no non-`--force` path.
+   That was true of a *global* override — it crashes `next lint`, because
+   `minimatch@3` needs the v1 API — but `package.json` already carried a
+   correctly *scoped* override for exactly this, pinning `brace-expansion`
+   to `5.0.7` under `minimatch@10.2.5`. `5.0.7` is itself inside the
+   vulnerable range: the pin had gone stale as the advisory widened. Bumped
+   to `^5.0.9` and widened the selector to `minimatch@^10`, so a future
+   minimatch patch bump can't silently drop the override — the exact way it
+   went stale. `npm audit` now reports 0 vulnerabilities. See #78.
+
+2. **Found the Edge Function tests had never run.** `_shared/security.ts`
+   gates ~30 of the 45 functions with `requireServiceRole()` and
+   `rateLimit()`, and it has a test file — but nothing in CI runs Deno, and
+   the file's first statement imported assertions from a `deno.land` URL, so
+   it failed at import time in any sandboxed environment before a single
+   test executed. Two real defects had accumulated behind that gap:
+
+   - **Unbounded rate-limiter memory** (#79). Bucket keys derive from the
+     caller-influenced `x-forwarded-for` header and nothing ever evicted, so
+     a caller could mint unlimited buckets — the module meant to absorb
+     floods was itself a memory-exhaustion vector. The Node twin
+     `lib/rate-limit.js`, which this module's comment claims to mirror,
+     explicitly guards the same hazard with a background sweep that was
+     never carried across. A background timer is wrong for an edge isolate,
+     so eviction now runs on the request path, under a hard ceiling.
+
+     Worth recording: my first implementation gated the sweep purely on
+     elapsed time, and the test I wrote for it failed — correctly. A
+     time-only sweep lets a burst accumulate a full interval of garbage
+     before reclaiming any. Added a size watermark so reclamation tracks
+     load as well as the clock. The test caught a real weakness in the fix,
+     which is the point of writing the test first.
+
+   - **Non-constant-time service-role key comparison** (#80). `!==`
+     short-circuits at the first differing byte, leaking guessed-prefix
+     length through timing. Defense-in-depth rather than a known-exploitable
+     hole, but it guards every privileged function. Kept synchronous, so no
+     call site changed.
+
+   Then closed the gap itself (#81): assertions moved to `node:assert` (a
+   Deno built-in, hermetic), and a new `edge-functions.yml` workflow plus
+   `npm run test:edge` actually execute the suite. Deliberately scoped to
+   `_shared/` — the other functions import from esm.sh/deno.land at load, so
+   type-checking them needs network egress and would fail the gate on a CDN
+   hiccup instead of a real defect.
+
+3. **Archived two unhardened copies of a refund-issuing handler** (#82).
+   `chat-operator/` held three handlers; Supabase only deploys `index.ts`.
+   The live one was hardened in the 2026-07-17 audit with a session-ownership
+   check (without it, a client-supplied `user_id` lets a caller act as
+   another user) and rate limiting. Neither sibling had either — a rename
+   away from reintroducing a fixed privilege-escalation bug. Moved to
+   `archive/`, with a README recording what to port back first.
+
+   The blueprint doc made this worse than dead code: it named `index-new.ts`
+   as *the* implementation and credited it with "Conversation ownership
+   verification" it does not implement, actively pointing implementers at
+   the unhardened file. Corrected.
+
+   Archiving these then broke `npm run typecheck` with 14 errors (#83) —
+   `tsconfig.json` excluded `supabase/functions` but not `archive`, and
+   these were the first `.ts` files ever archived. `.eslintrc.json` already
+   ignored `archive/`, so the omission was clearly an oversight; added.
+
+4. **Wrote the tests #74 asked for, and they found three live bugs.** #74
+   fixed real `ReferenceError` crashes in `InventoryMaterialsWorker` and
+   `revenue-engine-v2` — found by lint, not by tests — and flagged that
+   neither file had any test file. Writing them surfaced (#84-#86):
+
+   - **No low-stock alert was ever sent, for any item, ever.** The severity
+     split in `triggerLowStockAlerts()` read `item.quantity`, but
+     `inventory_items` rows store quantity in
+     `quantity_count`/`quantity_grams`/`quantity_ml` and have no such
+     column. Both filters compared `undefined`, both were always empty, and
+     every low-stock item landed in neither group — so the method enqueued
+     nothing and returned silently, including for stock at zero. This worker
+     is registered and polls every 30s, so inventory alerting has been dead
+     in production the whole time.
+   - The same bug meant out-of-stock items were procured at `high` rather
+     than `critical` urgency — 72h expected delivery instead of 24h.
+   - **Fasteners were never monitored.** One of the five families in the
+     canonical taxonomy matched no branch in the threshold chain. The chain
+     also existed as two drifted copies, only one honouring caller-supplied
+     overrides, so a taxonomy gap had to be fixed twice to take effect.
+     Consolidated to one predicate; that also fixed a `||` fallback that
+     discarded a legitimate threshold of `0`.
+
+   Kept the unreachable `component` branch deliberately, with a comment:
+   deleting it would recreate exactly the silent fall-through that hid the
+   fastener gap.
+
+   Both new suites were verified against the pre-fix code — 10 inventory
+   tests and 6 revenue tests fail without the fixes (the latter reproducing
+   `ReferenceError: filterScore is not defined`), so they are real
+   regression tests rather than tests written to match the implementation.
+
+5. **Investigated, not fixed** (#88): `reserveMaterialsInDatabase()` — the
+   method whose `customer_email` `ReferenceError` was #74(a) — has no
+   callers anywhere in the repository, so that fix landed in dead code. It
+   writes reservations and deducts inventory, so it reads as an unfinished
+   feature rather than an abandoned one. Left for a maintainer call rather
+   than guessing: wire it into the job-acceptance path, or delete it.
+
+Closing state: 246/246 unit suites (2362 tests, up from 244/2320), 62/62
+integration, 13/13 Deno edge tests (previously 0 runnable), `npm audit` 0
+vulnerabilities (from 2 high), lint 0 errors, typecheck clean.
+
+---
+
 ## 2026-08-03 — CI-breaking test fix + dependency security patch
 
 Branch: `claude/protoforge-ecosystem-audit-4idowa`

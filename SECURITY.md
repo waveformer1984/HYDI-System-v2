@@ -107,6 +107,21 @@ operator's real host. See `ISSUES_FOUND.md` #44.
 
 A full audit of all 42 Supabase Edge Functions against `supabase/config.toml`'s `verify_jwt` table (`ROADMAP.md` P2 #7) found that Supabase's `verify_jwt = true` platform gate only proves *a* validly-signed JWT was presented — the public anon key satisfies that too. 15 functions had no explicit config entry (silently relying on that implicit default) and no code-level check of their own, meaning any caller holding nothing more than the public anon key could invoke functions that retry billing jobs, generate real client payouts, execute whitelisted tools (including `create_invoice`/`pause_subscription`), advance HYDI's state machine, or launch chaos-test runs. Fixed 2026-07-17 — all 15 now check for a service-role Bearer token in code (`supabase/functions/_shared/security.ts`'s `requireServiceRole()`), matching the pattern already established for `stripe-transfer-payout`/`stripe-connect-admin`. `stream-health-watchdog` additionally had a fail-*open* bug (skipped its own auth check entirely if `HYDI_WATCHDOG_KEY` was unset) — fixed to fail closed. None of the 14 functions documented as intentionally public (`verify_jwt = false`, e.g. the marketing-suite stubs) had any rate limiting; all now do, with `notification-service` (real Twilio/SendGrid calls) rate-limited far more tightly given its real cost/spam-relay exposure. Full per-function findings in `ISSUES_FOUND.md`.
 
+### The shared Edge Function auth/rate-limit module had never been tested — two defects found 2026-08-05
+
+`supabase/functions/_shared/security.ts` is the module the 2026-07-17 audit above introduced, and it now gates ~30 of the 45 Edge Functions via `requireServiceRole()` and `rateLimit()`. It shipped with a test file, but that file had **never executed anywhere**: nothing in CI runs Deno, and its first statement imported assertions from a `https://deno.land/std@.../` URL, so it failed at import time — before a single test ran — in any sandboxed or network-restricted environment. Two defects accumulated behind that gap, both fixed 2026-08-05:
+
+- **Unbounded rate-limiter memory growth.** Bucket keys are `name:x-forwarded-for`, and that header is caller-influenced, so a caller can mint a fresh bucket per request. Nothing ever evicted, making the module whose job is absorbing floods a memory-exhaustion vector against the edge isolate. Its Node counterpart `lib/rate-limit.js` explicitly guards the same hazard with a background sweep; that sweep was never carried across. Fixed with request-path eviction (time- **and** size-triggered, since a time-only sweep lets a burst accumulate a full interval of garbage first) under a hard bucket ceiling. Ceiling eviction can return some budget to a key-flooding caller — a documented trade, preferable to OOMing the isolate and taking every route with it.
+- **Non-constant-time comparison of the service-role key.** `!==` on strings short-circuits at the first differing byte, leaking guessed-prefix length through response timing. Defense-in-depth rather than a known-exploitable hole — remote timing attacks are noisy — but this comparison guards the service-role key for every privileged Edge Function. Now a constant-time compare (content constant-time; length not hidden, which is fine for a JWT-shaped secret).
+
+The gap itself is closed: assertions moved to `node:assert` (hermetic, a Deno built-in) and `.github/workflows/edge-functions.yml` plus `npm run test:edge` now execute the suite on every change under `supabase/functions/**`. It is scoped to `_shared/` — the other functions import from esm.sh/deno.land at load, so type-checking them needs network egress and would fail the gate on a CDN hiccup rather than a real defect. Widening it is tracked in `ROADMAP.md`. See `ISSUES_FOUND.md` #79-#81.
+
+### Two unhardened duplicates of the `chat-operator` refund handler sat in the deployable tree — archived 2026-08-05
+
+`supabase/functions/chat-operator/` contained three handlers. Supabase deploys a function from its directory's `index.ts`, so `index-new.ts` and `index-deno.ts` were dead code — but dead code carrying a known-fixed vulnerability. The live `index.ts` received both the client-supplied-`user_id` session-ownership check described above and rate limiting; **neither sibling had either control**, leaving a rename or copy-paste between the fixed privilege-escalation bug and production. Both moved to `archive/dead-chat-operator-prototypes/`, with a README recording what must be ported back if either is revived.
+
+Compounding it, `chat-operator-blueprint-summary.md` named `index-new.ts` as *the* chat-operator implementation and credited it with "Conversation ownership verification" — a control that file does not implement — so the blueprint was actively directing implementers at the unhardened variant. Corrected to point at `index.ts`. See `ISSUES_FOUND.md` #82.
+
 ### Several parallel, unreachable Stripe implementations exist
 
 Beyond the two webhook handlers and one checkout handler documented as "in
@@ -168,6 +183,9 @@ vercel env ls | grep SECRET_NAME
 | PolicyEngine fail-closed (default `'reject'`) | `lib/protoforge/policy-engine.js` |
 | No hardcoded fallback secrets for HMAC/JWT signing (fail closed if unconfigured) | `supabase/functions/keeper-break-glass{,-simple}`, `workers/SecurityIdentityWorker.js`, `apps/ursula-frontend/runtime/enforcement-boundary/index.js`, `generate-break-glass-jwt.js` |
 | Automated secret-pattern scan of every git-tracked file | `tests/unit/no-hardcoded-secrets.test.js` (runs in `npm test`) |
+| Service-role Bearer check on privileged Edge Functions, using a constant-time comparison | `supabase/functions/_shared/security.ts` — `requireServiceRole()` |
+| Bounded, self-evicting rate limiting on public Edge Functions | `supabase/functions/_shared/security.ts` — `rateLimit()` |
+| Deno test + type-check gate for the shared Edge Function security module | `.github/workflows/edge-functions.yml` (`npm run test:edge`) |
 | CodeQL static analysis | `.github/workflows/codeql.yml` (scheduled) |
 | Governance gate for DB migrations | `.github/workflows/hdi-governance-gate.yml` |
 
