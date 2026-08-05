@@ -1,4 +1,4 @@
-const RevenueAPI = require('../../../api/revenue');
+const { RevenueAPI } = require('../../../api/revenue');
 const { requireAuth } = require('../../../lib/auth/requireAuth.js');
 
 const revenueAPI = new RevenueAPI();
