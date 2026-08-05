@@ -16,7 +16,16 @@ class InventoryMaterialsWorker {
             components_count: 20,
             material_ml: 100,
             pcb_boards: 5,
-            electronic_components: 10
+            electronic_components: 10,
+            // `fastener_*` (screw/nut/bolt) is one of the five item-type
+            // families in the canonical taxonomy (see
+            // OpportunityDetectionWorker.getOptimalLevel) but had no
+            // threshold and no matching branch, so fasteners were never
+            // evaluated for low stock at all. Their optimal levels are
+            // 100-200 count; this threshold keeps roughly the same
+            // optimal-to-reorder ratio as the other count-based families.
+            // Tune against real consumption once there is history.
+            fasteners_count: 25
         };
         this.materialConsumption = {
             '3d_print': { filament_pla: 100, isopropyl_alcohol_ml: 10 },
@@ -127,37 +136,67 @@ class InventoryMaterialsWorker {
         return data || [];
     }
 
+    /**
+     * Collapse an `inventory_items` row's per-unit quantity columns to a
+     * single number.
+     *
+     * Rows carry exactly one of `quantity_count` / `quantity_grams` /
+     * `quantity_ml` depending on the item family -- there is no plain
+     * `quantity` column. Five places in this file already open-coded this
+     * same `||` chain; the two that instead read `item.quantity` directly
+     * were silently comparing `undefined` (see triggerLowStockAlerts).
+     *
+     * @param {object} item an inventory_items row
+     * @returns {number} the item's quantity in its own unit, 0 if unknown
+     */
+    normalizeQuantity(item) {
+        return item.quantity_count || item.quantity_grams || item.quantity_ml || 0;
+    }
+
+    /**
+     * Whether a single inventory row is below its family's reorder threshold.
+     *
+     * Extracted because `identifyLowStock` and `getLowStockItems` each had
+     * their own copy of this branch chain. They had already drifted apart
+     * (only one honoured caller-supplied overrides), and any gap in the
+     * taxonomy -- as with fasteners -- had to be fixed twice to take effect.
+     *
+     * @param {object} item an inventory_items row
+     * @param {object} [threshold] per-call overrides of this.lowStockThresholds
+     * @returns {boolean}
+     */
+    isLowStock(item, threshold = {}) {
+        const limit = (key) => (threshold[key] !== undefined ? threshold[key] : this.lowStockThresholds[key]);
+        const type = item.item_type || '';
+
+        if (type.includes('filament')) return item.quantity_grams < limit('filament_grams');
+        // No item type in the canonical taxonomy contains 'component' today,
+        // so this branch is currently unreachable -- kept because a
+        // `component_*` family would otherwise fall through unmonitored, the
+        // exact failure mode fixed for fasteners below.
+        if (type.includes('component')) return item.quantity_count < limit('components_count');
+        if (type.includes('material')) return item.quantity_ml < limit('material_ml');
+        if (type.includes('pcb')) return item.quantity_count < limit('pcb_boards');
+        if (type.includes('electronic')) return item.quantity_count < limit('electronic_components');
+        if (type.includes('fastener')) return item.quantity_count < limit('fasteners_count');
+
+        return false;
+    }
+
     identifyLowStock(inventoryData, customThreshold) {
         const threshold = customThreshold || {};
-        const lowStockItems = [];
-        
-        for (const item of inventoryData) {
-            let isLow = false;
-            
-            if (item.item_type.includes('filament') && item.quantity_grams < (threshold.filament_grams || this.lowStockThresholds.filament_grams)) {
-                isLow = true;
-            } else if (item.item_type.includes('component') && item.quantity_count < (threshold.components_count || this.lowStockThresholds.components_count)) {
-                isLow = true;
-            } else if (item.item_type.includes('material') && item.quantity_ml < (threshold.material_ml || this.lowStockThresholds.material_ml)) {
-                isLow = true;
-            } else if (item.item_type.includes('pcb') && item.quantity_count < (threshold.pcb_boards || this.lowStockThresholds.pcb_boards)) {
-                isLow = true;
-            } else if (item.item_type.includes('electronic') && item.quantity_count < (threshold.electronic_components || this.lowStockThresholds.electronic_components)) {
-                isLow = true;
-            }
-            
-            if (isLow) {
-                lowStockItems.push(item);
-            }
-        }
-        
-        return lowStockItems;
+        return inventoryData.filter((item) => this.isLowStock(item, threshold));
     }
 
     async triggerLowStockAlerts(lowStockItems) {
-        // Group by severity
-        const criticalItems = lowStockItems.filter(item => item.quantity <= 0);
-        const warningItems = lowStockItems.filter(item => item.quantity > 0);
+        // Group by severity. These read the normalized quantity: the items
+        // arrive as raw `inventory_items` rows, which have no `quantity`
+        // column, so comparing `item.quantity` made both filters `undefined
+        // <= 0` / `undefined > 0` -- both false. Every low-stock item landed
+        // in neither group, so this method enqueued nothing and no inventory
+        // alert was ever sent, including for items sitting at zero.
+        const criticalItems = lowStockItems.filter(item => this.normalizeQuantity(item) <= 0);
+        const warningItems = lowStockItems.filter(item => this.normalizeQuantity(item) > 0);
         
         if (criticalItems.length > 0) {
             await this.queue.enqueue('notification', {
@@ -194,7 +233,12 @@ class InventoryMaterialsWorker {
                 data: {
                     trigger_type: 'low_stock',
                     item_types: [item.item_type],
-                    urgency: item.quantity <= 0 ? 'critical' : 'high'
+                    // Same missing-column bug as triggerLowStockAlerts: with
+                    // `item.quantity` always undefined this compared false
+                    // every time, so an out-of-stock item was procured at
+                    // 'high' rather than 'critical' urgency -- a 72-hour
+                    // expected delivery instead of 24.
+                    urgency: this.normalizeQuantity(item) <= 0 ? 'critical' : 'high'
                 }
             });
         }
@@ -297,31 +341,10 @@ class InventoryMaterialsWorker {
 
     async getLowStockItems(itemTypes) {
         const inventory = await this.getAllInventory();
-        const lowStock = [];
-        
-        for (const item of inventory) {
-            if (!itemTypes || itemTypes.includes(item.item_type)) {
-                let isLow = false;
-                
-                if (item.item_type.includes('filament') && item.quantity_grams < this.lowStockThresholds.filament_grams) {
-                    isLow = true;
-                } else if (item.item_type.includes('component') && item.quantity_count < this.lowStockThresholds.components_count) {
-                    isLow = true;
-                } else if (item.item_type.includes('material') && item.quantity_ml < this.lowStockThresholds.material_ml) {
-                    isLow = true;
-                } else if (item.item_type.includes('pcb') && item.quantity_count < this.lowStockThresholds.pcb_boards) {
-                    isLow = true;
-                } else if (item.item_type.includes('electronic') && item.quantity_count < this.lowStockThresholds.electronic_components) {
-                    isLow = true;
-                }
-                
-                if (isLow) {
-                    lowStock.push(item);
-                }
-            }
-        }
-        
-        return lowStock;
+
+        return inventory.filter(
+            (item) => (!itemTypes || itemTypes.includes(item.item_type)) && this.isLowStock(item),
+        );
     }
 
     async getScheduledProcurement(itemTypes) {
