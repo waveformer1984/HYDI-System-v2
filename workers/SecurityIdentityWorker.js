@@ -67,7 +67,7 @@ class SecurityIdentityWorker {
                     case 'rate_limit.check': await this.checkRateLimit(task.payload); break;
                     case 'session.refresh': await this.refreshSession(task.payload); break;
                     case 'security.audit': await this.performSecurityAudit(task.payload); break;
-                    default: logger.info('Unhandled security event type', { eventType: task.payload.event_type });
+                    default: throw new Error(`Unhandled event type: ${task.payload.event_type}`);
                 }
                 await this.queue.completeTask(taskId, true);
             } catch (err) {

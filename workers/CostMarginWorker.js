@@ -56,7 +56,7 @@ class CostMarginWorker {
                 if (!task) return;
                 switch (task.payload.event_type) {
                     case 'analytics.generate': await this.generateCostAnalytics(task.payload); break;
-                    default: logger.info('Unhandled event type', { eventType: task.payload.event_type });
+                    default: throw new Error(`Unhandled event type: ${task.payload.event_type}`);
                 }
                 await this.queue.completeTask(taskId, true);
             } catch (err) {

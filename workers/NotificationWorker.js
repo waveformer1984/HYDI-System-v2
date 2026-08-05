@@ -60,7 +60,7 @@ class NotificationWorker {
                 switch (task.payload.event_type) {
                     case 'notification.send': await this.sendNotification(task.payload); break;
                     case 'notification.summary': await this.generateSummary(task.payload); break;
-                    default: logger.info('Unhandled event type', { eventType: task.payload.event_type });
+                    default: throw new Error(`Unhandled event type: ${task.payload.event_type}`);
                 }
                 await this.queue.completeTask(taskId, true);
             } catch (err) {

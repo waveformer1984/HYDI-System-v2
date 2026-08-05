@@ -52,7 +52,7 @@ class BehaviorPatternWorker {
                 switch (task.payload.event_type) {
                     case 'behavior.analyze': await this.analyzeJobPerformance(task.payload); break;
                     case 'usage.analyze': await this.analyzeServiceUsagePatterns(task.payload); break;
-                    default: logger.info('Unhandled event type', { eventType: task.payload.event_type });
+                    default: throw new Error(`Unhandled event type: ${task.payload.event_type}`);
                 }
                 await this.queue.completeTask(taskId, true);
             } catch (err) {

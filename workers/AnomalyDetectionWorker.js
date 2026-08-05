@@ -64,7 +64,7 @@ class AnomalyDetectionWorker {
                     case 'system.metrics': await this.checkSystemAnomalies(task.payload); break;
                     case 'api.response': await this.checkResponseTimeAnomalies(task.payload); break;
                     case 'behavior.update': await this.checkBehaviorAnomalies(task.payload); break;
-                    default: logger.info('Unhandled anomaly event type', { eventType: task.payload.event_type });
+                    default: throw new Error(`Unhandled event type: ${task.payload.event_type}`);
                 }
                 await this.queue.completeTask(taskId, true);
             } catch (err) {

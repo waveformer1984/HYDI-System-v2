@@ -63,7 +63,7 @@ class OpportunityDetectionWorker {
                     case 'cart.abandoned': await this.analyzeAbandonedCart(task.payload); break;
                     case 'service.completed': await this.analyzeServiceCompletion(task.payload); break;
                     case 'behavior.updated': await this.analyzeUserBehavior(task.payload); break;
-                    default: logger.info('Unhandled event type', { eventType: task.payload.event_type });
+                    default: throw new Error(`Unhandled event type: ${task.payload.event_type}`);
                 }
                 await this.queue.completeTask(taskId, true);
             } catch (err) {

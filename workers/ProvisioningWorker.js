@@ -146,7 +146,7 @@ class ProvisioningWorker {
                     break;
                     
                 default:
-                    logger.info('Unhandled event type', { eventType: task.payload.event_type });
+                    throw new Error(`Unhandled event type: ${task.payload.event_type}`);
             }
 
             // Mark task as completed
