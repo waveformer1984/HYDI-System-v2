@@ -48,7 +48,13 @@
 ### **✅ EDGE FUNCTIONS (3 CORE FUNCTIONS)**
 
 #### **1. chat-operator** - Main Handler
-**File:** `supabase/functions/chat-operator/index-new.ts`
+**File:** `supabase/functions/chat-operator/index.ts`
+
+> Corrected 2026-08-05. This previously pointed at `index-new.ts`, a
+> prototype that was never deployed (Supabase serves a function from its
+> directory's `index.ts`) and that implements neither the session-ownership
+> check nor rate limiting listed under **Security** below. It has been moved
+> to `archive/dead-chat-operator-prototypes/`.
 
 **Capabilities:**
 - **Intent detection** - Natural language processing
