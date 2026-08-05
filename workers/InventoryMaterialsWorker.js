@@ -2,6 +2,7 @@ const { createClient } = require('@supabase/supabase-js');
 const QueueManager = require('./QueueManager');
 require('dotenv').config();
 const logger = require('../lib/structured-logger').child({ component: 'InventoryMaterialsWorker' });
+const { ITEM_TYPE_FAMILIES, getOptimalLevel, normalizeQuantity } = require('./inventory-taxonomy');
 
 class InventoryMaterialsWorker {
     constructor(workerId) {
@@ -17,14 +18,16 @@ class InventoryMaterialsWorker {
             material_ml: 100,
             pcb_boards: 5,
             electronic_components: 10,
-            // `fastener_*` (screw/nut/bolt) is one of the five item-type
-            // families in the canonical taxonomy (see
-            // OpportunityDetectionWorker.getOptimalLevel) but had no
-            // threshold and no matching branch, so fasteners were never
+            // `fastener_*` (screw/nut/bolt) is one of the item-type families
+            // in the canonical taxonomy (see ./inventory-taxonomy.js) but had
+            // no threshold and no matching branch, so fasteners were never
             // evaluated for low stock at all. Their optimal levels are
             // 100-200 count; this threshold keeps roughly the same
             // optimal-to-reorder ratio as the other count-based families.
             // Tune against real consumption once there is history.
+            //
+            // Every key here must correspond to a `thresholdKey` in
+            // ITEM_TYPE_FAMILIES, or its family silently goes unmonitored.
             fasteners_count: 25
         };
         this.materialConsumption = {
@@ -138,19 +141,20 @@ class InventoryMaterialsWorker {
 
     /**
      * Collapse an `inventory_items` row's per-unit quantity columns to a
-     * single number.
+     * single number. Delegates to the shared taxonomy helper; kept as an
+     * instance method because call sites throughout this class use it.
      *
      * Rows carry exactly one of `quantity_count` / `quantity_grams` /
      * `quantity_ml` depending on the item family -- there is no plain
-     * `quantity` column. Five places in this file already open-coded this
-     * same `||` chain; the two that instead read `item.quantity` directly
-     * were silently comparing `undefined` (see triggerLowStockAlerts).
+     * `quantity` column. Six places open-coded this same `||` chain; the two
+     * that instead read `item.quantity` directly were silently comparing
+     * `undefined` (see triggerLowStockAlerts).
      *
      * @param {object} item an inventory_items row
      * @returns {number} the item's quantity in its own unit, 0 if unknown
      */
     normalizeQuantity(item) {
-        return item.quantity_count || item.quantity_grams || item.quantity_ml || 0;
+        return normalizeQuantity(item);
     }
 
     /**
@@ -160,27 +164,23 @@ class InventoryMaterialsWorker {
      * their own copy of this branch chain. They had already drifted apart
      * (only one honoured caller-supplied overrides), and any gap in the
      * taxonomy -- as with fasteners -- had to be fixed twice to take effect.
+     * The families themselves now live in ./inventory-taxonomy.js, so adding
+     * one is a single-site change rather than an invitation to drift.
      *
      * @param {object} item an inventory_items row
      * @param {object} [threshold] per-call overrides of this.lowStockThresholds
      * @returns {boolean}
      */
     isLowStock(item, threshold = {}) {
-        const limit = (key) => (threshold[key] !== undefined ? threshold[key] : this.lowStockThresholds[key]);
         const type = item.item_type || '';
+        const family = ITEM_TYPE_FAMILIES.find((f) => type.includes(f.match));
+        if (!family) return false;
 
-        if (type.includes('filament')) return item.quantity_grams < limit('filament_grams');
-        // No item type in the canonical taxonomy contains 'component' today,
-        // so this branch is currently unreachable -- kept because a
-        // `component_*` family would otherwise fall through unmonitored, the
-        // exact failure mode fixed for fasteners below.
-        if (type.includes('component')) return item.quantity_count < limit('components_count');
-        if (type.includes('material')) return item.quantity_ml < limit('material_ml');
-        if (type.includes('pcb')) return item.quantity_count < limit('pcb_boards');
-        if (type.includes('electronic')) return item.quantity_count < limit('electronic_components');
-        if (type.includes('fastener')) return item.quantity_count < limit('fasteners_count');
+        const limit = threshold[family.thresholdKey] !== undefined
+            ? threshold[family.thresholdKey]
+            : this.lowStockThresholds[family.thresholdKey];
 
-        return false;
+        return item[family.column] < limit;
     }
 
     identifyLowStock(inventoryData, customThreshold) {
@@ -275,7 +275,7 @@ class InventoryMaterialsWorker {
         
         for (const item of inventory) {
             available[item.item_type] = {
-                quantity: item.quantity_count || item.quantity_grams || item.quantity_ml || 0,
+                quantity: this.normalizeQuantity(item),
                 unit: item.quantity_count ? 'count' : item.quantity_grams ? 'grams' : 'ml',
                 location: item.location,
                 lot_number: item.lot_number
@@ -361,7 +361,7 @@ class InventoryMaterialsWorker {
             if (itemTypes.includes(item.item_type)) {
                 // Calculate how much to order to reach optimal levels
                 const optimalLevel = this.getOptimalLevel(item.item_type);
-                const currentLevel = item.quantity_count || item.quantity_grams || item.quantity_ml || 0;
+                const currentLevel = this.normalizeQuantity(item);
                 
                 if (currentLevel < optimalLevel) {
                     procurementList.push({
@@ -382,7 +382,7 @@ class InventoryMaterialsWorker {
         
         for (const item of inventory) {
             const optimalLevel = this.getOptimalLevel(item.item_type);
-            const currentLevel = item.quantity_count || item.quantity_grams || item.quantity_ml || 0;
+            const currentLevel = this.normalizeQuantity(item);
             
             if (currentLevel < optimalLevel) {
                 procurementList.push({
@@ -397,25 +397,7 @@ class InventoryMaterialsWorker {
     }
 
     getOptimalLevel(itemType) {
-        // Define optimal stock levels for different item types
-        const optimalLevels = {
-            'filament_pla': 1000, // grams
-            'filament_abs': 1000, // grams
-            'filament_petg': 1000, // grams
-            'electronic_resistor': 100, // count
-            'electronic_capacitor': 100, // count
-            'electronic_ic': 50, // count
-            'pcb_prototype': 20, // count
-            'pcb_production': 50, // count
-            'material_solder_paste': 200, // ml
-            'material_isopropyl_alcohol': 500, // ml
-            'material_thermal_paste': 100, // ml
-            'fastener_screw': 200, // count
-            'fastener_nut': 200, // count
-            'fastener_bolt': 100, // count
-        };
-        
-        return optimalLevels[itemType] || 50; // Default optimal level
+        return getOptimalLevel(itemType);
     }
 
     async createProcurementOrder(item, urgency) {
@@ -485,7 +467,7 @@ class InventoryMaterialsWorker {
         const totalItems = inventory.length;
         const lowStockCount = this.identifyLowStock(inventory).length;
         const outOfStockCount = inventory.filter(item => 
-            (item.quantity_count || item.quantity_grams || item.quantity_ml || 0) <= 0
+            this.normalizeQuantity(item) <= 0
         ).length;
         
         const metrics = {
@@ -513,7 +495,7 @@ class InventoryMaterialsWorker {
         let totalValue = 0;
         
         for (const item of inventory) {
-            const quantity = item.quantity_count || item.quantity_grams || item.quantity_ml || 0;
+            const quantity = this.normalizeQuantity(item);
             // Assume average unit cost - would be stored in item record in real system
             const estimatedUnitCost = 1.0; // $1 per unit as placeholder
             totalValue += quantity * estimatedUnitCost;

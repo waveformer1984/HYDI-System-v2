@@ -2,6 +2,7 @@ const { createClient } = require('@supabase/supabase-js');
 const QueueManager = require('./QueueManager');
 require('dotenv').config();
 const logger = require('../lib/structured-logger').child({ component: 'OpportunityDetectionWorker' });
+const { getOptimalLevel } = require('./inventory-taxonomy');
 
 class OpportunityDetectionWorker {
     constructor(workerId) {
@@ -299,26 +300,11 @@ class OpportunityDetectionWorker {
         };
 
         // helper-methods-for-patterns
+        // Delegates to the shared taxonomy: this table was previously a
+        // byte-identical private copy of InventoryMaterialsWorker's, and
+        // nothing forced the two to agree (see inventory-taxonomy.js).
         this.getOptimalLevel = function(itemType) {
-            // Define optimal stock levels for different item types
-            const optimalLevels = {
-                'filament_pla': 1000, // grams
-                'filament_abs': 1000, // grams
-                'filament_petg': 1000, // grams
-                'electronic_resistor': 100, // count
-                'electronic_capacitor': 100, // count
-                'electronic_ic': 50, // count
-                'pcb_prototype': 20, // count
-                'pcb_production': 50, // count
-                'material_solder_paste': 200, // ml
-                'material_isopropyl_alcohol': 500, // ml
-                'material_thermal_paste': 100, // ml
-                'fastener_screw': 200, // count
-                'fastener_nut': 200, // count
-                'fastener_bolt': 100, // count
-            };
-            
-            return optimalLevels[itemType] || 50; // Default optimal level
+            return getOptimalLevel(itemType);
         };
     }
 }
