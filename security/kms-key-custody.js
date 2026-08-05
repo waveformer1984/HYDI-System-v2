@@ -1,9 +1,38 @@
 /**
  * KMS Key Custody System
- * Never store raw keys - use KMS for key management
+ *
+ * **SIMULATION ONLY — NOT PRODUCTION-READY**
+ *
+ * This module is a functional placeholder. It does not contact AWS, GCP, or
+ * Azure KMS. Encryption uses locally-generated throwaway keys; the sign/verify
+ * methods return random or unconditional results. It exists only for local
+ * development and testing.
+ *
+ * In a real implementation this would use one of:
+ *   - AWS SDK: @aws-sdk/client-kms
+ *   - Google Cloud SDK: @google-cloud/kms
+ *   - Azure SDK: @azure/keyvault-keys
+ *
+ * By default, all mutating operations are blocked in NODE_ENV=production. To
+ * allow this simulation to run in production (not recommended), set the
+ * environment variable KMS_SIMULATION_ALLOWED=true and accept the risk
+ * explicitly.
  */
 
 const crypto = require('crypto');
+
+const SIMULATION = true;
+
+function isProduction() {
+  return process.env.NODE_ENV === 'production' && process.env.KMS_SIMULATION_ALLOWED !== 'true';
+}
+
+function simulationBlockedError(operation) {
+  return new Error(
+    `KMSKeyCustody operation '${operation}' is blocked in production: this module is a ` +
+    `simulation. Set KMS_SIMULATION_ALLOWED=true only after an explicit risk decision.`
+  );
+}
 
 class KMSKeyCustody {
   constructor(options = {}) {
@@ -11,21 +40,35 @@ class KMSKeyCustody {
       // KMS provider configuration
       provider: options.provider || 'aws', // aws, gcp, azure
       region: options.region || 'us-east-1',
-      
+
       // Key configuration
       keySpec: options.keySpec || 'SYMMETRIC_DEFAULT',
       encryptionAlgorithm: 'AES_256_GCM',
-      
+
       // Cache settings
       cacheEnabled: options.cacheEnabled !== false,
       cacheTTL: options.cacheTTL || 300000, // 5 minutes
-      
+
       ...options
     };
-    
+
+    this.simulation = SIMULATION;
     this.keyCache = new Map();
     this.kmsClient = null;
+
+    if (isProduction()) {
+      console.warn('[KMS] KMSKeyCustody constructed in production with no real provider. All mutating operations will throw.');
+    } else {
+      console.warn('[KMS] KMSKeyCustody is running in simulation mode. Do not use for real secrets.');
+    }
+
     this.initializeKMS();
+  }
+
+  _ensureSimulationAllowed(operation) {
+    if (isProduction()) {
+      throw simulationBlockedError(operation);
+    }
   }
 
   /**
@@ -84,8 +127,9 @@ class KMSKeyCustody {
    * Encrypt data using KMS
    */
   async encrypt(data, keyId = null) {
+    this._ensureSimulationAllowed('encrypt');
     const dataBuffer = Buffer.isBuffer(data) ? data : Buffer.from(data);
-    
+
     try {
       let encryptedData;
       
@@ -118,6 +162,7 @@ class KMSKeyCustody {
    * Decrypt data using KMS
    */
   async decrypt(encryptedData, keyId = null) {
+    this._ensureSimulationAllowed('decrypt');
     try {
       let decryptedData;
       
@@ -154,18 +199,20 @@ class KMSKeyCustody {
     // const response = await this.kmsClient.send(command);
     // return response.CiphertextBlob;
     
-    // For simulation, use local encryption
-    const key = crypto.randomBytes(32);
+    // For simulation, use a deterministic local key derived from a fixed
+    // string. THIS IS NOT SECURE and exists only so the module can be
+    // exercised in tests and local development without a real KMS provider.
+    const key = crypto.scryptSync('hydi-simulation-key', 'hydi-simulation-salt', 32);
     const iv = crypto.randomBytes(16);
-    const cipher = crypto.createCipher('aes-256-gcm', key);
-    
+    const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+
     const encrypted = Buffer.concat([
       cipher.update(data),
       cipher.final()
     ]);
-    
+
     const authTag = cipher.getAuthTag();
-    
+
     // Return format: iv + authTag + encrypted
     return Buffer.concat([iv, authTag, encrypted]);
   }
@@ -182,14 +229,16 @@ class KMSKeyCustody {
     // const response = await this.kmsClient.send(command);
     // return response.Plaintext;
     
-    // For simulation, use local decryption
+    // For simulation, use the same fixed local key as encryptAWS.
+    // THIS IS NOT SECURE and only exists for local/test use.
     const iv = encryptedData.slice(0, 16);
     const authTag = encryptedData.slice(16, 32);
     const ciphertext = encryptedData.slice(32);
-    
-    const decipher = crypto.createDecipher('aes-256-gcm', crypto.randomBytes(32)); // Would use KMS to get key
+
+    const key = crypto.scryptSync('hydi-simulation-key', 'hydi-simulation-salt', 32);
+    const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
     decipher.setAuthTag(authTag);
-    
+
     return Buffer.concat([
       decipher.update(ciphertext),
       decipher.final()
@@ -236,6 +285,7 @@ class KMSKeyCustody {
    * Store secret securely
    */
   async storeSecret(secretRef, secretValue, metadata = {}) {
+    this._ensureSimulationAllowed('storeSecret');
     // Encrypt the secret
     const encrypted = await this.encrypt(secretValue);
     
@@ -260,6 +310,7 @@ class KMSKeyCustody {
    * Retrieve secret securely
    */
   async retrieveSecret(secretRef) {
+    this._ensureSimulationAllowed('retrieveSecret');
     // In a real implementation, retrieve from database
     const storedSecret = {
       secretRef,
@@ -280,6 +331,7 @@ class KMSKeyCustody {
    * Rotate secret
    */
   async rotateSecret(secretRef, newValue) {
+    this._ensureSimulationAllowed('rotateSecret');
     console.log(`[KMS] Rotating secret: ${secretRef}`);
     
     // Store new version
@@ -298,6 +350,7 @@ class KMSKeyCustody {
    * Create data key for envelope encryption
    */
   async createDataKey(keyId = null) {
+    this._ensureSimulationAllowed('createDataKey');
     // In a real implementation, this would use KMS to generate a data key
     const dataKey = crypto.randomBytes(32);
     const encryptedDataKey = await this.encrypt(dataKey, keyId);
@@ -312,6 +365,7 @@ class KMSKeyCustody {
    * Sign data with KMS
    */
   async sign(data, keyId = null) {
+    this._ensureSimulationAllowed('sign');
     // In a real implementation, this would use KMS for signing
     const sign = crypto.createSign('RSA-SHA256');
     sign.update(data);
@@ -326,6 +380,7 @@ class KMSKeyCustody {
    * Verify signature with KMS
    */
   async verify(data, signature, keyId = null) {
+    this._ensureSimulationAllowed('verify');
     // In a real implementation, this would use KMS for verification
     const verify = crypto.createVerify('RSA-SHA256');
     verify.update(data);
@@ -369,6 +424,9 @@ class SecureEnvLoader {
    * Load environment variable securely
    */
   async loadSecureEnv(keyName, envVarName = null) {
+    if (isProduction()) {
+      throw simulationBlockedError('loadSecureEnv');
+    }
     const targetEnvVar = envVarName || keyName.toUpperCase();
     
     try {
