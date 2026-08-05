@@ -61,3 +61,26 @@
 
 - `v0.9.0-rc.3` supersedes `v0.9.0-rc.2` because `c8aaaaa` adds a security fix not present at the `v0.9.0-rc.2` tag
 - 24-hour soak and clean-machine deployment must be re-run against this release candidate
+
+## [0.9.0-rc.4] — Release Candidate 4
+
+### Security
+
+- Merged the `v0.9.0-rc.4` critical security remediation line (`dac88cd`) into `release/v0.9.0`: hardened revenue API, guarded simulated KMS key custody, fixed HEIDI auth (`b86956f`), with new unit tests `kms-key-custody.test.js` and `revenue-api.test.js`
+- `src/database.js` no longer logs a partial `SUPABASE_SERVICE_ROLE_KEY` prefix at boot
+
+### Fixed
+
+- `src/database.js` now loads `.env.local` and `.env` via `path.resolve`, so `npm run server` boots from file config without shell-exported variables
+- Dependency vulnerabilities resolved via `npm audit fix` (postcss, undici)
+
+### Changed
+
+- Added `.npmignore`: release package reduced from 171 MB to under 5 MB by excluding runtime state (`data/`, `artifacts/`, `coverage/`, `_diag/`), Rezonate audio masters/stems, audit paperwork, and tool config directories
+- `README.md` points environment setup at `CLAUDE.md` and clarifies `setup.sh` as Termux-only
+- Package version moved to `0.9.0-rc.4` (`package.json`, `VERSION`)
+
+### Notes
+
+- The pre-existing `v0.9.0-rc.4` tag (`dac88cd`) predates this merge and version bump; the release tag must be re-cut (or superseded by `v0.9.0-rc.5`) after validation re-runs
+- Phase 1–12 release audit deliverables recorded in `docs/audit/` and the report set accompanying `Executive_Summary.md`

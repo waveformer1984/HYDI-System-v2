@@ -156,7 +156,10 @@ class StackOrchestrator {
     // every call. That defect made the entire harness unrunnable.
     const child = spawn(service.cmd, {
       cwd: service.cwd || process.cwd(),
-      env: { ...process.env, ...service.env },
+      // HYDI_REQUIRE_SUPERVISOR=false: this harness orchestrates services
+      // itself — there is no supervisor.js in the loop, so services must not
+      // hard-block on its /status endpoint (see hydi-core.waitForDependencies).
+      env: { ...process.env, HYDI_REQUIRE_SUPERVISOR: 'false', ...service.env },
       shell: true
     });
 

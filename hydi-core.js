@@ -82,9 +82,14 @@ class HYDICore {
   async waitForDependencies() {
     this.logger.info('Waiting for dependencies...');
 
+    // The Supervisor is a hard dependency only when this process is managed
+    // by supervisor.js (production topology). Harnesses that orchestrate
+    // services directly (operational-qualification) set
+    // HYDI_REQUIRE_SUPERVISOR=false so the check degrades to a warning.
+    const requireSupervisor = process.env.HYDI_REQUIRE_SUPERVISOR !== 'false';
     const checks = [
-      { name: 'Memory Engine', url: 'http://localhost:9998/health' },
-      { name: 'Supervisor', url: 'http://localhost:9999/status' },
+      { name: 'Memory Engine', url: 'http://localhost:9998/health', required: true },
+      { name: 'Supervisor', url: 'http://localhost:9999/status', required: requireSupervisor },
     ];
 
     for (const check of checks) {
@@ -102,7 +107,10 @@ class HYDICore {
       }
 
       if (!ready) {
-        throw new Error(`${check.name} failed to start`);
+        if (check.required) {
+          throw new Error(`${check.name} failed to start`);
+        }
+        this.logger.warn(`${check.name} not available — continuing without it (HYDI_REQUIRE_SUPERVISOR=false)`);
       }
     }
   }

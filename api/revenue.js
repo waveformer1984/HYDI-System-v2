@@ -286,16 +286,20 @@ class RevenueAPI {
 
   // Stripe checkout
   async createCheckout(req, res) {
+    // Validate input before checking configuration: a malformed request is a
+    // 400 regardless of whether Stripe is wired up (also keeps unit tests
+    // independent of Stripe config).
+    const body = req.body || {};
+    const errors = validateCheckoutBody(body);
+    if (errors.length > 0) {
+      return this._badRequest(res, errors);
+    }
+
     if (!this.stripe) {
       return res.status(503).json({ success: false, error: 'Stripe not configured' });
     }
 
     try {
-      const body = req.body || {};
-      const errors = validateCheckoutBody(body);
-      if (errors.length > 0) {
-        return this._badRequest(res, errors);
-      }
 
       const quoteId = body.quoteId.trim();
       const customerEmail = body.customerEmail.trim().toLowerCase().slice(0, 255);
