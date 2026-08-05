@@ -298,6 +298,29 @@ Two viable paths, both needing a maintainer call:
 Worth doing either way: type-checking all 45 would have caught the defects
 tracked as `ISSUES_FOUND.md` #79-#80 years earlier than a hand audit did.
 
+### Resolve the `cost.calculate` / `analytics.generate` contract mismatch
+`TaskRouterWorker` routes `cost.calculate` to the `cost_margin` queue, but
+`CostMarginWorker` implements only `analytics.generate` (`ISSUES_FOUND.md`
+#90). As of 2026-08-05 such a task fails loudly rather than being silently
+marked done, but the mismatch itself is unresolved.
+
+The two names describe genuinely different operations — per-job cost
+calculation versus aggregate reporting — so this needs a decision rather than
+a rename. `CostMarginWorker`'s `estimateMaterialsForJob()`,
+`getAverageLaborRate()`, `getAverageMachineRate()` and `getMaterialCost()`
+are currently unreferenced and look like the building blocks of the per-job
+handler that was never written, which suggests `cost.calculate` was the
+intended contract and the handler is simply missing.
+
+Note that **nothing in the repository emits either event**, so
+`CostMarginWorker` is unreachable in practice today. Whoever wires up an
+emitter should settle this first. If per-job costing is wanted, note that
+`estimateMaterialsForJob()` returns keys (`filament_grams`, `screw`, `nut`,
+`electronic_component`) that do not match the canonical inventory taxonomy in
+`workers/inventory-taxonomy.js` (`filament_pla`, `fastener_screw`,
+`electronic_resistor`, …), and `getMaterialCost()` is keyed by the canonical
+names — so costs would silently resolve to 0 until those are reconciled.
+
 ### Decide whether the material-reservation flow should exist
 `InventoryMaterialsWorker.reserveMaterialsInDatabase()` has no callers
 anywhere in the repository (`ISSUES_FOUND.md` #88). It writes to

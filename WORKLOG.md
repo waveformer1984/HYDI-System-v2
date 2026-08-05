@@ -115,14 +115,75 @@ and the files with no test file at all.
    `ReferenceError: filterScore is not defined`), so they are real
    regression tests rather than tests written to match the implementation.
 
-5. **Investigated, not fixed** (#88): `reserveMaterialsInDatabase()` — the
+5. **Followed the same thread into the rest of `workers/`, and it kept
+   paying.** The inventory bugs were a field-name mismatch found by writing
+   a test; the pattern generalized:
+
+   - **Every worker reported unhandled events as successfully completed**
+     (#89). All ten dispatching workers logged an unrecognised `event_type`
+     at info level and then called `completeTask(taskId, true)`. Since
+     `dequeue()` is per-queue, a worker only ever sees events routed to it,
+     so an unrecognised type is always a misroute or an unimplemented
+     handler -- never routine. Those events vanished with a success signal.
+     They now throw into each worker's existing catch, which already fails
+     the task properly; per the `complete_task` RPC that requeues to
+     `max_attempts` then lands in `failed`, so it is bounded and visible.
+   - That immediately surfaced a live contract mismatch (#90):
+     `TaskRouterWorker` routes `cost.calculate` to the `cost_margin` queue,
+     but `CostMarginWorker` implements only `analytics.generate`. Every such
+     task would have been discarded and marked done. I deliberately did
+     **not** pick a side -- per-job costing and aggregate reporting are
+     different operations, and nothing currently emits either event -- but
+     it now fails loudly instead of silently, which it needed either way.
+   - **Cost analytics ignored the period it was asked for** (#91).
+     `generateCostAnalytics()` stored `time_period` on the row it inserts
+     and then queried a hardcoded 30 days, so a week request returned a
+     month of data labelled 'week'. Any consumer comparing periods was
+     comparing the same numbers under different labels.
+   - The `time_period` vocabulary turned out to be duplicated and already
+     drifted (#92): `NotificationWorker` and `BehaviorPatternWorker` each
+     had their own copy of the chain, and only one understood `yesterday`.
+     Extracted to `workers/time-period.js` with `fallbackHours` as a
+     *required* argument -- the three callers genuinely differ, and silently
+     defaulting the window is exactly how #91 read as working.
+
+6. **Removed the duplication that caused the fastener gap** (#93).
+   `getOptimalLevel`'s 14-entry table was a byte-identical private copy in
+   two workers. Both listed `fastener_*`; neither was connected to the
+   threshold chain that omitted it. Extracted to
+   `workers/inventory-taxonomy.js`, and `isLowStock()` is now a lookup over
+   the family table rather than a hand-written branch chain -- a missing
+   family is no longer expressible. The consistency test is the real
+   deliverable: every item type with an optimal level must resolve to a
+   monitored family, so a repeat fails CI rather than silently not alerting.
+
+7. **CI: ruled out the billing hypothesis for the repo-wide Actions block.**
+   Health Monitor has failed every scheduled run through 2026-08-05T01:00Z
+   with `runner_id: 0` and job logs 404ing -- jobs never dispatched. The
+   useful finding is negative: **the repository is public**, and
+   GitHub-hosted standard runners are unmetered for public repos, so a
+   spending limit cannot be the cause. That retires the "incomplete
+   spending-limit fix" branch of ROADMAP P0 2a, and also retires the
+   `total_ms: 0` billable-time observation 2b treated as evidence -- that
+   value is always 0 for a public repo, so it never distinguished anything.
+   Corroborated by no `health-alert` issue existing despite the workflow
+   opening one on every failure, confirming the job fails before any step
+   runs. Still needs dashboard access, but the diagnosis is narrower and now
+   warrants a support ticket. Recorded in ROADMAP as item 2c.
+
+   Consequence worth stating plainly: the `edge-functions.yml` gate added
+   this session will not go green until that is resolved. It was verified
+   locally instead (13/13), and `.githooks/pre-push` remains the trustworthy
+   signal.
+
+8. **Investigated, not fixed** (#88): `reserveMaterialsInDatabase()` — the
    method whose `customer_email` `ReferenceError` was #74(a) — has no
    callers anywhere in the repository, so that fix landed in dead code. It
    writes reservations and deducts inventory, so it reads as an unfinished
    feature rather than an abandoned one. Left for a maintainer call rather
    than guessing: wire it into the job-acceptance path, or delete it.
 
-Closing state: 246/246 unit suites (2362 tests, up from 244/2320), 62/62
+Closing state: 249/249 unit suites (2431 tests, up from 244/2320), 62/62
 integration, 13/13 Deno edge tests (previously 0 runnable), `npm audit` 0
 vulnerabilities (from 2 high), lint 0 errors, typecheck clean.
 

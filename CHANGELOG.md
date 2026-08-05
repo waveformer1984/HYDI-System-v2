@@ -4,6 +4,23 @@
 
 ### Fixed
 
+- **Workers reported unhandled events as successfully completed tasks.** All
+  ten dispatching workers logged an unrecognised `event_type` at info level
+  and then called `completeTask(taskId, true)`, so misrouted or unimplemented
+  events vanished with a success signal and no failure record — most
+  consequentially in `RevenueIngestionWorker`, where that means revenue data
+  disappearing without trace. Unhandled events now throw into each worker's
+  existing failure path, which requeues to `max_attempts` and then marks the
+  task `failed` — bounded and visible.
+- **Cost analytics ignored the requested `time_period`.**
+  `CostMarginWorker.generateCostAnalytics()` stored the requested period on
+  the `cost_analytics` row it inserts while always querying a hardcoded 30
+  days, so a request for a week returned a month of revenue and cost filed
+  under `'week'`. Now resolves the real window.
+- Unified the `time_period` vocabulary (`today | yesterday | week | month`)
+  into `workers/time-period.js`. It previously existed as two drifted copies,
+  only one of which understood `yesterday` — so a behaviour-analysis request
+  for yesterday silently returned 30 days.
 - **Inventory low-stock alerting never fired.** `InventoryMaterialsWorker`
   (registered in `WorkerOrchestrator`, polling every 30s) split low-stock items
   into critical/warning by reading `item.quantity`, but `inventory_items` rows
@@ -47,6 +64,16 @@
   `revenue-engine-v2`'s `executeTask()` (14 tests, covering all four exits).
   Both files previously had none — the gap flagged in `ISSUES_FOUND.md` #74.
   Both suites were verified to fail against the pre-fix code.
+- `workers/inventory-taxonomy.js` and `workers/time-period.js` — single
+  definitions for two vocabularies that were previously duplicated across
+  workers. The inventory duplication is what let the fastener monitoring gap
+  survive: both copies of the optimal-levels table listed `fastener_*` while
+  the threshold chain had no branch for it. Their tests assert cross-worker
+  consistency, so that class of gap now fails CI rather than silently not
+  alerting.
+- 32-test contract suite asserting no worker can report an unhandled event as
+  a completed task, and 20 tests for period resolution against a frozen
+  clock.
 
 ### Security
 
