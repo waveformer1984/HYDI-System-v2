@@ -2,6 +2,7 @@ const { createClient } = require('@supabase/supabase-js');
 const QueueManager = require('./QueueManager');
 require('dotenv').config();
 const logger = require('../lib/structured-logger').child({ component: 'NotificationWorker' });
+const { resolvePeriodStart } = require('./time-period');
 
 class NotificationWorker {
     constructor(workerId) {
@@ -380,25 +381,8 @@ This is an automated message from ProtoForge.
         this.generateNotificationSummary = async function(summary_type, time_period) {
             logger.info('Generating summary', { summaryType: summary_type, timePeriod: time_period });
             
-            let startDate;
-            if (time_period === 'today') {
-                startDate = new Date();
-                startDate.setHours(0, 0, 0, 0);
-            } else if (time_period === 'yesterday') {
-                startDate = new Date();
-                startDate.setDate(startDate.getDate() - 1);
-                startDate.setHours(0, 0, 0, 0);
-            } else if (time_period === 'week') {
-                startDate = new Date();
-                startDate.setDate(startDate.getDate() - 7);
-            } else if (time_period === 'month') {
-                startDate = new Date();
-                startDate.setMonth(startDate.getMonth() - 1);
-            } else {
-                // Default to last 24 hours
-                startDate = new Date();
-                startDate.setHours(startDate.getHours() - 24);
-            }
+            // Vocabulary shared with the other workers; see ./time-period.js.
+            const startDate = resolvePeriodStart(time_period, { fallbackHours: 24 });
             
             switch (summary_type) {
                 case 'activity':

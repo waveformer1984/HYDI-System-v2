@@ -2,6 +2,7 @@ const { createClient } = require('@supabase/supabase-js');
 const QueueManager = require('./QueueManager');
 require('dotenv').config();
 const logger = require('../lib/structured-logger').child({ component: 'BehaviorPatternWorker' });
+const { resolvePeriodStart, HOURS_PER_DAY } = require('./time-period');
 
 class BehaviorPatternWorker {
     constructor(workerId) {
@@ -104,21 +105,9 @@ class BehaviorPatternWorker {
 
         this.analyzeServiceUsagePatterns = async function(time_period, filters) {
             // Analyze service usage patterns
-            let startDate;
-            if (time_period === 'today') {
-                startDate = new Date();
-                startDate.setHours(0, 0, 0, 0);
-            } else if (time_period === 'week') {
-                startDate = new Date();
-                startDate.setDate(startDate.getDate() - 7);
-            } else if (time_period === 'month') {
-                startDate = new Date();
-                startDate.setMonth(startDate.getMonth() - 1);
-            } else {
-                // Default to last 30 days
-                startDate = new Date();
-                startDate.setDate(startDate.getDate() - 30);
-            }
+            // Vocabulary shared with the other workers; see ./time-period.js.
+            // Gains 'yesterday' support, which this copy of the chain lacked.
+            const startDate = resolvePeriodStart(time_period, { fallbackHours: 30 * HOURS_PER_DAY });
             
             const { data: serviceUsage } = await this.supabase
                 .from('service_usage_logs')

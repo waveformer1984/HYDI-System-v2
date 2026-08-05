@@ -2,6 +2,7 @@ const { createClient } = require('@supabase/supabase-js');
 const QueueManager = require('./QueueManager');
 require('dotenv').config();
 const logger = require('../lib/structured-logger').child({ component: 'CostMarginWorker' });
+const { resolvePeriodStart, HOURS_PER_DAY } = require('./time-period');
 
 class CostMarginWorker {
     constructor(workerId) {
@@ -67,7 +68,12 @@ class CostMarginWorker {
         this.generateCostAnalytics = async function(payload) {
             const { time_period, include_details } = payload.data || {};
             logger.info('Generating cost analytics', { timePeriod: time_period });
-            const since = new Date(Date.now() - 30*24*60*60*1000).toISOString();
+            // Honour the requested period. This previously always queried a
+            // fixed 30 days while still labelling the stored `cost_analytics`
+            // row with `time_period`, so a request for a week returned a
+            // month of revenue and cost filed under 'week'. Unrecognised or
+            // absent values keep the original 30-day behaviour.
+            const since = resolvePeriodStart(time_period, { fallbackHours: 30 * HOURS_PER_DAY }).toISOString();
             const { data: jobCosts } = await this.supabase.from('job_costs').select('*').gte('created_at', since);
             const { data: revenueTransactions } = await this.supabase.from('transactions').select('*').gte('created_at', since);
             const totalRevenue = (revenueTransactions || []).reduce((s,t) => s + (parseFloat(t.amount)||0), 0);
