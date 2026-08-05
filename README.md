@@ -28,7 +28,8 @@ The six active revenue streams routed through Stripe Connect: `galactic_bytes`, 
 ```bash
 # Requires Node >= 20
 npm install
-cp .env.example .env   # fill in SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, STRIPE_SECRET_KEY
+# Create .env and .env.local from the table in CLAUDE.md (Environment Variables section).
+# Required minimum: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, STRIPE_SECRET_KEY.
 
 npm run dev            # Next.js dev server on 0.0.0.0:3000
 ```
@@ -51,7 +52,7 @@ npm run test:coverage     # Jest with coverage
 npm run test:integration  # Adversarial integration tests (requires live Supabase)
 ./verify-supabase.sh      # Health check: Supabase connectivity + key tables
 ./deploy-production-safe.sh  # Pre-flight checked production deploy
-./setup.sh                # First-time environment setup
+./setup.sh                # Termux mobile setup (not the Node/Next.js dev setup)
 ```
 
 Run a single test file:

@@ -9,6 +9,8 @@ const path = require('path');
 if (!globalThis.WebSocket) {
   globalThis.WebSocket = WebSocket;
 }
+// Load .env.local first so it takes precedence, then .env as fallback.
+require('dotenv').config({ path: path.join(__dirname, '../.env.local') });
 require('dotenv').config({ path: path.join(__dirname, '../.env') });
 
 // Validate environment at startup
@@ -24,7 +26,7 @@ if (supabaseKey && supabaseKey.startsWith('"')) {
 }
 
 console.log('[DATABASE] SUPABASE_URL:', supabaseUrl ? supabaseUrl.substring(0, 20) + '...' : 'MISSING');
-console.log('[DATABASE] SUPABASE_KEY:', supabaseKey ? supabaseKey.substring(0, 20) + '...' : 'MISSING');
+console.log('[DATABASE] SUPABASE_KEY:', supabaseKey ? 'PRESENT' : 'MISSING');
 
 if (!supabaseUrl || !supabaseKey) {
   throw new Error('CRITICAL: Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY in .env file');
