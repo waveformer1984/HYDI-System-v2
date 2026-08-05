@@ -4,6 +4,121 @@ Running log of autonomous production-readiness work. Newest entries first.
 
 ---
 
+## 2026-08-03 — CI-breaking test fix + dependency security patch
+
+Branch: `claude/protoforge-ecosystem-audit-4idowa`
+
+Started with a full discovery pass per `CLAUDE.md`'s autonomous mission
+protocol: fresh `npm install`, then `npm test`, `npm run lint`, `npm run
+typecheck`, `npm run lint:hydi-v3`, `npm run typecheck:hydi-v3`, `npm run
+test:integration:jest`, and `npm audit` to establish a real baseline rather
+than trust the prior session's closing state. Given the depth of the audit
+trail already in this file and `ISSUES_FOUND.md` (75 previously-tracked
+issues across security, auth, dead code, and reliability), this pass
+focused on what a fresh, credential-free baseline run could actually
+surface rather than re-auditing already-covered ground.
+
+1. **Found and fixed a genuine, pre-existing CI-breaking bug**:
+   `tests/unit/hydi-v3/HardwareDiscovery.test.js`'s `falls back to OS
+   enumeration when nvidia-smi is missing` test hardcoded an expectation
+   that `HardwareDiscovery`'s OS-level GPU fallback calls `powershell` —
+   true only when `os.platform() === 'win32'`. The test never mocked
+   `os.platform()`, so on the actual CI host (`unit-tests.yml` runs on
+   `ubuntu-latest`) the code correctly took the Linux `lspci` branch
+   instead, which the test's mock didn't recognize and answered with a
+   generic error — leaving `inventory.gpus` empty against an assertion
+   expecting exactly one entry. Confirmed via `git log` that this test
+   predates this branch (added in `c0b8032`) and is byte-identical to the
+   version on `clean-main`, meaning it has been silently failing `npm
+   test` in CI on every push/PR to `clean-main` since it was added — a
+   real, live gap between "CI is green" and "CI is actually running this
+   suite's real assertions." Root-caused by reading `HardwareDiscovery.js`
+   directly (its platform-dispatch logic is correct) rather than assuming
+   the failure meant a production bug. See `ISSUES_FOUND.md` #75.
+
+2. **Patched two `npm audit`-flagged dependencies**: `ip-address`
+   (SSRF/trust-boundary-bypass advisories — reachable via the production
+   `express-rate-limit` package, which backs every rate-limited route added
+   across the 2026-07-17 Edge Function + API security-audit session) and
+   `undici` (moderate, build-tooling-only via `node-gyp`). Used `npm audit
+   fix` (non-force) — no `package.json` range changes, just lockfile
+   resolution bumps (`ip-address` → `10.4.0`, `undici` → `6.28.0`).
+   Deliberately did **not** force-fix the remaining `brace-expansion`
+   advisory (transitive via `@typescript-eslint/*`, dev-only ESLint
+   tooling) — the same fix shape (an `overrides` pin forcing a breaking
+   major version) was already tried and reverted once, per this file's own
+   2026-07-15 entry / `ISSUES_FOUND.md` #2, because it crashed `next lint`.
+   No non-breaking resolution exists yet for that one. See `ISSUES_FOUND.md`
+   #76.
+
+3. **Investigated, no action needed**: checked the other 5 files matching
+   `platform()`/`process.platform` in `src/` (`local-model-adapter.js`,
+   `ResourceManager.js`, `HYDIStartupSequence.js`,
+   `CapabilityInstaller.js`, `DeepLifeArchitect.js`) for the same
+   test-mocking gap as item 1. Only `local-model-adapter.js` has a test
+   file, and it doesn't exercise the platform-dependent branch — no
+   equivalent bug found.
+
+4. **The repo's own `.githooks/pre-push` hook then caught a second, live
+   flaky-test failure** while pushing item 1's fix:
+   `tests/unit/hydi-v3/HeartbeatSystem.test.js`'s `detects missing
+   heartbeat` failed under the full parallel `npm test` run (passed in 5/5
+   isolated re-runs — confirming it's a timing race, not a real
+   regression). Investigated and found `HeartbeatSystem.test.js` and
+   `tests/unit/hydi-v3/DistributedCompute.test.js` both race a fixed
+   `setTimeout` sleep against the engine's own ~100ms internal interval
+   timer landing at close to the same wall-clock time — reliable alone,
+   flaky under CPU contention from 243 other suites running concurrently.
+   This is the exact bug class this file's own 2026-07-15 entry describes
+   fixing in these exact two files (`Promise.race` against the real
+   event) — but that fix is not present at the current `clean-main` tip,
+   so either it was lost in a merge or that entry describes work from a
+   branch that was never actually merged. Also found the identical
+   pattern, not yet observed to flake but same root cause, in
+   `tests/unit/hydi-v3/WatchdogSupervisor.test.js`'s two timer-driven
+   tests. Fixed all three files: each now awaits the real `EventEmitter`
+   event via `.once()` (with a 2s timeout as a genuine failure backstop,
+   not a race), instead of sleeping a fixed duration and hoping the
+   internal timer already fired. See `ISSUES_FOUND.md` #77.
+
+### Verification
+
+- `npm install` — clean (no lockfile conflicts against the tracked
+  `package-lock.json`; confirmed separately that `npm ci`, what CI actually
+  runs, also succeeds against the pre-existing lockfile).
+- `npm test` — 244/244 suites, 2320/2321 tests passing (1 pre-existing,
+  unrelated skip), both before item 2 and reconfirmed after; reconfirmed a
+  further 3 consecutive full runs after item 4's flaky-test fixes with no
+  failures.
+- `npm run lint` / `npm run lint:hydi-v3` — 0 errors (749 / 11
+  pre-existing warnings, unchanged, out of scope for this pass).
+- `npm run typecheck` / `npm run typecheck:hydi-v3` — clean.
+- `npm run test:integration:jest` — 12/12 suites, 62/62 tests.
+- `npm run build` — succeeds, full route table generated.
+- `npm audit` — down from 4 vulnerabilities (3 moderate + 1 high in the
+  default report; `ip-address`'s 3 advisories collapse into that count via
+  the deduped tree) to 1 remaining (the documented `brace-expansion`
+  dev-only item).
+
+### Not done in this pass
+
+- Did not re-run the full prior audit surface (auth, dead code,
+  duplicated logic) given how recently and thoroughly it was already
+  covered (see the rest of this file and `ISSUES_FOUND.md`); this pass
+  was scoped to what a fresh baseline run could surface that the prior
+  sessions' closing state wouldn't have shown (a CI-only-reproducible test
+  failure, and a fresh `npm audit` diff).
+- `brace-expansion` (dev-tooling-only advisory) — see item 2 above; no
+  safe fix path exists yet.
+- Per `CLAUDE.md`'s mission protocol item 9: no further meaningful
+  improvement was found in this pass that didn't require external
+  credentials or dashboard access (the remaining `ROADMAP.md` near-term
+  items — credential rotation, Local-First Phase 1 migration, PM2 fleet
+  confirmation — all explicitly require operator/host access this sandbox
+  doesn't have).
+
+---
+
 ## 2026-07-15 (later same day) — Security incident response + route reachability gap
 
 Branch: `claude/protoforge-production-readiness-t4wdn4` (continuation of the
