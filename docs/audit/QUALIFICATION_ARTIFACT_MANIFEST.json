@@ -1,0 +1,67 @@
+{
+  "qualification": {
+    "name": "HYDI 24-Hour Endurance Qualification",
+    "harness": "scripts/soak-test.js",
+    "mode": "endurance",
+    "target": "http://localhost:3000/api/health",
+    "branch": "release/v0.9.0",
+    "commit": "99ff58f",
+    "startedAt": "2026-08-03T17:22:06.162Z",
+    "completedAt": "2026-08-04T17:22:06.810Z",
+    "actualDurationMs": 86400638,
+    "requestedDurationMs": 86400000,
+    "result": "PASS",
+    "artifactDirectory": "C:\\Users\\Owner\\HYDI_System\\artifacts\\soak\\2026-08-03T17-22-06-162Z"
+  },
+  "verificationChecks": {
+    "allFilesPresent": true,
+    "allFilesReadable": true,
+    "allFilesNonEmpty": true,
+    "summaryJsonValid": true,
+    "metricsJsonValid": true,
+    "metricsJsonlLines": 1421,
+    "metricsJsonlValidJsonPerLine": true,
+    "configurationJsonValid": true,
+    "systemInfoJsonValid": true,
+    "reportMdNonEmpty": true,
+    "soakLogNonEmpty": true,
+    "metricsJsonLengthMatchesSummary": true
+  },
+  "artifacts": [
+    {
+      "filename": "configuration.json",
+      "sizeBytes": 342,
+      "sha256": "D629DBB1FAE30516ACCC97903C2288B00A0088AB3348F1A2827AFDCE711CAC49"
+    },
+    {
+      "filename": "metrics.json",
+      "sizeBytes": 1524392,
+      "sha256": "E1974624DB7D5919C3B1474E7FC17E080CB0BAE8D8F65A70FAEF05FC6067E0B8"
+    },
+    {
+      "filename": "metrics.jsonl",
+      "sizeBytes": 1071091,
+      "sha256": "1BBD876233E96CEFCBA58889163D431135EDAFB053DF1AA70A087978D0D2D576"
+    },
+    {
+      "filename": "report.md",
+      "sizeBytes": 3135,
+      "sha256": "4BAB36B21DC09409A2859839D2975F34841552A433A6CA7DABEDB06758B0BDFD"
+    },
+    {
+      "filename": "soak.log",
+      "sizeBytes": 473292,
+      "sha256": "3F4938771D5408CDE680F2CB130C08B54C36802D024CF306576A0AF0A92EF3D6"
+    },
+    {
+      "filename": "summary.json",
+      "sizeBytes": 5999,
+      "sha256": "3B5B0FD74CFA169D22B776DFCB96BF9BC9E2B3F577AF97F0A6C282F803D4D857"
+    },
+    {
+      "filename": "system-info.json",
+      "sizeBytes": 285,
+      "sha256": "C878E8B91E06D4539C4892262541E774AE9D2118768BF686E2A7B37C307DDBE9"
+    }
+  ]
+}
