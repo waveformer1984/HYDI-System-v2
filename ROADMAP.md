@@ -67,6 +67,41 @@ drop-everything, P1 is next up, P2 is scheduled but not urgent.
     check out clean, this may warrant a GitHub support ticket — instant
     failure with zero billable time and no runner assignment isn't a normal
     "ran out of minutes" pattern.
+2c. **2026-08-05 follow-up: still live, and the billing hypothesis is now
+    ruled out.** Health Monitor has failed on every scheduled run on
+    `clean-main` through at least 2026-08-05T01:00Z (16 consecutive
+    failures in the current listing window), with the same `runner_id: 0`,
+    empty `runner_name`, and job logs returning HTTP 404 — the jobs are
+    never dispatched to a runner, so no log stream is ever created.
+
+    **The repository is public** (`visibility: "public"`). GitHub-hosted
+    standard runners are free and unmetered for public repositories, so a
+    spending limit or exhausted minute balance **cannot** be the cause, and
+    the "incomplete spending-limit fix" branch of 2a can be dropped. This
+    also retires the `total_ms: 0` observation in 2b as evidence: billable
+    time is *always* 0 for a public repo on standard runners, so that value
+    was never informative either way.
+
+    That leaves an account- or repo-level block on GitHub-hosted runners as
+    the remaining explanation — still needing a human at
+    `github.com/waveformer1984/HYDI-System-v2/settings/actions`, and worth a
+    GitHub support ticket given the billing explanation is now excluded.
+
+    Two corroborating observations:
+    - No `health-alert` issue exists in the repository, even though
+      `health-monitor.yml`'s `Alert on failure` step opens one on every
+      failed run. Independent confirmation that the steps never execute —
+      the job is failing *before* any step runs, not failing a health check.
+    - Every `Unit Tests`/`Integration Tests`/`CodeQL` failure in the current
+      window is on a `dependabot/**` branch, not `clean-main`, with the same
+      3-9 second `runner_id: 0` signature. So the block is not specific to
+      Dependabot's restricted permissions either.
+
+    **Implication for `edge-functions.yml`** (added 2026-08-05): the new
+    Deno gate will not produce a green check until this is resolved, same as
+    every other workflow. It was verified locally instead (13/13,
+    `npm run test:edge`), and `.githooks/pre-push` remains the trustworthy
+    signal until GitHub-hosted runners work again.
 
 **P1 — high impact/risk, not yet started:**
 3. Cryptographic identity verification to replace the `x-user-id`
