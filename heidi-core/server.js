@@ -24,6 +24,7 @@ const express = require('express');
 const OllamaClient = require('./brain/ollama-client');
 const { createClient } = require('@supabase/supabase-js');
 const https = require('https');
+const crypto = require('crypto');
 
 // Supabase is OPTIONAL — in local-only mode (no SUPABASE_URL/key set) it is
 // skipped entirely: procedural memory degrades to local SQLite, cloud fact
@@ -95,20 +96,28 @@ class HeidiCore {
     this.app.use(corsMiddleware);
     this.app.use(express.json({ limit: '10mb' }));
     
-    // Simple auth check - no JWT drama
+    // Secret token auth — uses constant-time comparison for the configured
+    // HEIDI_SECRET. The localhost bypass remains for local-only development
+    // and must be removed or gated before any production deployment.
     this.app.use((req, res, next) => {
       if (req.path === '/health') return next();
-      
+
       const secret = req.headers['x-heidi-secret'];
-      if (secret && secret === process.env.HEIDI_SECRET) {
-        return next();
+      const expected = process.env.HEIDI_SECRET;
+
+      if (secret && expected) {
+        const a = Buffer.from(secret);
+        const b = Buffer.from(expected);
+        if (a.length === b.length && crypto.timingSafeEqual(a, b)) {
+          return next();
+        }
       }
-      
+
       // Allow local requests without secret
       if (req.ip === '127.0.0.1' || req.ip === '::1' || req.ip === '::ffff:127.0.0.1') {
         return next();
       }
-      
+
       res.status(403).json({ error: 'Forbidden - Invalid or missing x-heidi-secret' });
     });
   }
