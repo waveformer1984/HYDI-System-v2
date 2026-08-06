@@ -3,7 +3,7 @@
  * Manages HYDI stack lifecycle (startup, shutdown, restart)
  */
 
-const { spawn } = require('child_process');
+const { spawn, execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
@@ -137,6 +137,21 @@ class StackOrchestrator {
   }
 
   /**
+   * Kill any process listening on the given port, ignoring errors.
+   * This prevents EADDRINUSE from a stale service from a previous run.
+   */
+  killPortListeners(port) {
+    if (!port) return;
+    try {
+      const script = `try { $conns = Get-NetTCPConnection -LocalPort ${port} -State Listen -ErrorAction Stop; foreach ($c in $conns) { Stop-Process -Id $c.OwningProcess -Force -ErrorAction SilentlyContinue } } catch { } ; exit 0`;
+      execSync(`pwsh -NoProfile -Command "${script}"`, { stdio: 'ignore', timeout: 10000 });
+      console.log(`[Orchestrator] Cleared listeners on port ${port}`);
+    } catch (error) {
+      console.warn(`[Orchestrator] Could not clear listeners on port ${port}:`, error.message);
+    }
+  }
+
+  /**
    * Start a single service
    */
   async startService(serviceName) {
@@ -147,6 +162,34 @@ class StackOrchestrator {
 
     if (!service) {
       throw new Error(`Service not found in manifest: ${serviceName}`);
+    }
+
+    // Pre-empt any stale listener on the configured port before we check health
+    // or attempt to bind. Without this, a leftover process (e.g. a previous
+    // `next dev`) keeps the port and the newly spawned service exits with
+    // EADDRINUSE, while the health check passes against the stale instance.
+    this.killPortListeners(service.port);
+
+    // Stale-instance guard: if the service's health endpoint already answers
+    // BEFORE we spawn it, a leftover instance (e.g. a `next dev` from an
+    // earlier session) is squatting on the port. The spawn below will fail or
+    // idle with EADDRINUSE, waitForServiceHealth will then "pass" against the
+    // stale process, and every workload runs against code/env we did not
+    // launch — the harness-generated HYDI_SERVICE_SECRET in particular will
+    // not match, producing blanket 401s on authenticated routes. Warn loudly;
+    // qualification results in this state are not evidence about HEAD.
+    if (service.healthCheck) {
+      try {
+        const alreadyUp = await this.checkHealth(service.healthCheck);
+        if (alreadyUp) {
+          console.warn(
+            `[Orchestrator] WARNING: ${serviceName} already answers at ` +
+            `${service.healthCheck} before spawn. A stale instance is likely ` +
+            `running with a different environment (secrets, code version). ` +
+            `Kill it and re-run, or this qualification is not valid evidence.`
+          );
+        }
+      } catch (_) { /* not answering — expected */ }
     }
 
     // NOTE: this local must not be named `process`. Doing so shadows the
