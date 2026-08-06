@@ -353,18 +353,34 @@ function startServer(port = 9998) {
       res.writeHead(200);
       res.end(JSON.stringify(workflows));
     } else if (path === '/search' && req.method === 'GET') {
-      const query = url.searchParams.get('q');
-      const results = await semanticSearch(query, 10);
-      res.writeHead(200);
-      res.end(JSON.stringify(results));
+      // try/catch is load-bearing: an uncaught error here (e.g. Supabase or
+      // Ollama unavailable) previously left the response hanging until client
+      // timeout, which the operational-qualification harness records as a
+      // workload failure with no status code.
+      try {
+        const query = url.searchParams.get('q');
+        const results = await semanticSearch(query, 10);
+        res.writeHead(200);
+        res.end(JSON.stringify(results));
+      } catch (e) {
+        log('ERROR', 'search failed', { error: e.message });
+        res.writeHead(500);
+        res.end(JSON.stringify({ error: e.message }));
+      }
     } else if (path === '/store-workflow' && req.method === 'POST') {
       let body = '';
       req.on('data', chunk => body += chunk);
       req.on('end', async () => {
-        const workflow = JSON.parse(body);
-        await storeWorkflow(workflow);
-        res.writeHead(200);
-        res.end(JSON.stringify({ success: true }));
+        try {
+          const workflow = JSON.parse(body);
+          await storeWorkflow(workflow);
+          res.writeHead(200);
+          res.end(JSON.stringify({ success: true }));
+        } catch (e) {
+          log('ERROR', 'store-workflow failed', { error: e.message });
+          res.writeHead(500);
+          res.end(JSON.stringify({ error: e.message }));
+        }
       });
     } else {
       res.writeHead(404);

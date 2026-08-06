@@ -2,6 +2,7 @@
   "qualification": {
     "quick": {
       "duration": 1800000,
+      "_note": "30-minute loaded window — matches the methodology of Operational_Qualification_Report.md so re-runs are comparable. Temporarily lower to 120000 for smoke iterations only; do not certify on a shortened window.",
       "interval": 10000,
       "phases": ["stack-lifecycle", "workload-execution", "metrics-collection"]
     },
@@ -21,19 +22,22 @@
     "interval": 5000,
     "conversation": {
       "enabled": true,
-      "endpoint": "http://localhost:3000/api/chat"
+      "endpoint": "http://localhost:3000/api/chat/route"
     },
     "memory-storage": {
       "enabled": true,
-      "endpoint": "http://localhost:3000/api/memory"
+      "endpoint": "http://localhost:9998/store-workflow",
+      "_note": "memory-engine POST /store-workflow (idempotent upsert). The old target http://localhost:3000/api/memory does not exist — only /api/memory/search is routed in Next, so every execution 500/404'd."
     },
     "memory-retrieval": {
       "enabled": true,
-      "endpoint": "http://localhost:3000/api/memory/search"
+      "endpoint": "http://localhost:9998/search?q=qualification",
+      "_note": "memory-engine GET /search. The old target /api/memory/search is GET-only + auth-gated; the driver POSTed JSON to it, hence the 405s."
     },
     "supervisor-status": {
       "enabled": true,
-      "endpoint": "http://localhost:9999/status"
+      "endpoint": "http://localhost:9997/status",
+      "_note": "hydi-core /status. The harness orchestrates services itself — no supervisor.js runs, so :9999 can never answer during qualification (HYDI_REQUIRE_SUPERVISOR=false)."
     },
     "bridge-request": {
       "enabled": true,

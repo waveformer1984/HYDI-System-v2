@@ -4,6 +4,23 @@
  */
 
 const fetch = require('node-fetch');
+const { createHmac, randomBytes } = require('crypto');
+
+function makeServiceToken() {
+  const secret = process.env.HYDI_SERVICE_SECRET;
+  if (!secret) return undefined;
+  const requestId = randomBytes(8).toString('hex');
+  const service = 'qualification';
+  const ts = String(Date.now());
+  const sig = createHmac('sha256', secret).update(`${ts}:${requestId}:${service}`).digest('hex');
+  return `${ts}.${requestId}.${service}.${sig}`;
+}
+
+function withToken(headers) {
+  const token = makeServiceToken();
+  if (token) headers['x-hydi-service-token'] = token;
+  return headers;
+}
 
 class WorkloadDriver {
   constructor(config) {
@@ -35,8 +52,7 @@ class WorkloadDriver {
             workload: name,
             timestamp: Date.now(),
             success: true,
-            duration: result.duration,
-            result: result.data
+            duration: result.duration
           });
         } catch (error) {
           this.metrics.push({
@@ -94,8 +110,8 @@ class WorkloadDriver {
         successful: successful.length,
         failed: failed.length,
         successRate: workloadMetrics.length > 0 ? successful.length / workloadMetrics.length : 0,
-        avgDuration: successful.length > 0 
-          ? successful.reduce((sum, m) => sum + m.duration, 0) / successful.length 
+        avgDuration: successful.length > 0
+          ? successful.reduce((sum, m) => sum + m.duration, 0) / successful.length
           : 0
       };
     }
@@ -113,9 +129,7 @@ class WorkloadDriver {
 
 /**
  * Representative workloads
- */
-
-/**
+ *
  * Each workload receives the FULL endpoint URL from qualification-config.json
  * and uses it verbatim. Earlier revisions appended their own path on top of the
  * configured endpoint, producing URLs such as
@@ -130,7 +144,7 @@ class ConversationWorkload {
   async execute() {
     const response = await fetch(this.endpoint, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: withToken({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({
         message: 'Test conversation message',
         system: 'heidi'
@@ -155,8 +169,20 @@ class MemoryStorageWorkload {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        content: 'Test memory content',
-        metadata: { source: 'qualification-harness' }
+        id: require('crypto').randomUUID(),
+        name: 'qualification-workflow',
+        description: 'Synthetic workflow created by the operational qualification harness',
+        task_type: 'qualification',
+        inputs: [],
+        outputs: [],
+        success_count: 1,
+        failure_count: 0,
+        avg_duration_ms: 0,
+        confidence: 0.5,
+        last_success: new Date().toISOString(),
+        optimizations: [],
+        dependencies: [],
+        source_agent: 'qualification'
       })
     });
 
@@ -174,14 +200,7 @@ class MemoryRetrievalWorkload {
   }
 
   async execute() {
-    const response = await fetch(this.endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        query: 'test query',
-        limit: 10
-      })
-    });
+    const response = await fetch(this.endpoint);
 
     if (!response.ok) {
       throw new Error(`Memory retrieval request failed: ${response.status}`);

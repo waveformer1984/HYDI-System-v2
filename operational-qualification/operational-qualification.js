@@ -12,6 +12,15 @@ const { FailureInjector } = require('./failures/failure-injector');
 const ReportGenerator = require('./reports/report-generator');
 const fs = require('fs');
 const path = require('path');
+const { randomBytes } = require('crypto');
+
+// A deterministic secret is needed so the harness can sign x-hydi-service-token
+// headers for authenticated routes (e.g. /api/chat/route). The generated value
+// is exported to child processes (next-app) via process.env inheritance.
+if (!process.env.HYDI_SERVICE_SECRET) {
+  process.env.HYDI_SERVICE_SECRET = randomBytes(32).toString('hex');
+  console.log('[Harness] Generated HYDI_SERVICE_SECRET for qualification');
+}
 
 class OperationalQualificationHarness {
   /**
