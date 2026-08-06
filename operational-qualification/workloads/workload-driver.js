@@ -22,6 +22,22 @@ function withToken(headers) {
   return headers;
 }
 
+/**
+ * Build a workload failure Error that includes the response body (truncated).
+ * Without this, a 401 from /api/chat/route is indistinguishable between
+ * "driver did not sign the request" and "server could not verify the token"
+ * (e.g. secret not configured / secret mismatch with a stale server instance)
+ * — which is exactly the ambiguity that stalled the 2026-08-06 qualification
+ * triage. The body's `reason` field disambiguates in one run.
+ */
+async function workloadError(label, response) {
+  let detail = '';
+  try {
+    detail = (await response.text()).slice(0, 300);
+  } catch (_) { /* body unavailable */ }
+  return new Error(`${label} failed: ${response.status}${detail ? ` — ${detail}` : ''}`);
+}
+
 class WorkloadDriver {
   constructor(config) {
     this.config = config;
@@ -152,7 +168,7 @@ class ConversationWorkload {
     });
 
     if (!response.ok) {
-      throw new Error(`Conversation request failed: ${response.status}`);
+      throw await workloadError('Conversation request', response);
     }
 
     return await response.json();
@@ -187,7 +203,7 @@ class MemoryStorageWorkload {
     });
 
     if (!response.ok) {
-      throw new Error(`Memory storage request failed: ${response.status}`);
+      throw await workloadError('Memory storage request', response);
     }
 
     return await response.json();
@@ -203,7 +219,7 @@ class MemoryRetrievalWorkload {
     const response = await fetch(this.endpoint);
 
     if (!response.ok) {
-      throw new Error(`Memory retrieval request failed: ${response.status}`);
+      throw await workloadError('Memory retrieval request', response);
     }
 
     return await response.json();
@@ -219,7 +235,7 @@ class SupervisorStatusWorkload {
     const response = await fetch(this.endpoint);
 
     if (!response.ok) {
-      throw new Error(`Supervisor status request failed: ${response.status}`);
+      throw await workloadError('Supervisor status request', response);
     }
 
     return await response.json();
@@ -235,7 +251,7 @@ class BridgeRequestWorkload {
     const response = await fetch(this.endpoint);
 
     if (!response.ok) {
-      throw new Error(`Bridge request failed: ${response.status}`);
+      throw await workloadError('Bridge request', response);
     }
 
     return await response.json();
@@ -257,7 +273,7 @@ class DatabaseOperationWorkload {
     const response = await fetch(this.endpoint);
 
     if (!response.ok) {
-      throw new Error(`Database health endpoint request failed: ${response.status}`);
+      throw await workloadError('Database health endpoint request', response);
     }
 
     return await response.json();

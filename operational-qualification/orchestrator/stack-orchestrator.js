@@ -296,6 +296,10 @@ class StackOrchestrator {
       await new Promise(resolve => setTimeout(resolve, attemptInterval));
     }
 
+    if (service && service.required === false) {
+      console.warn(`[Orchestrator] Optional service not healthy, continuing: ${serviceName}`);
+      return;
+    }
     throw new Error(`Service failed to become healthy: ${serviceName}`);
   }
 

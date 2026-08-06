@@ -175,6 +175,18 @@ class OperationalMetrics {
     const elapsedMs = now - this.prevSampleAt;
     this.prevSampleAt = now;
 
+    // Force a full GC before reading heap figures when the process was started
+    // with --expose-gc. Without this, harnessHeapUsedBytes measures V8's GC
+    // *laziness*, not retention: a small-heap process under no memory pressure
+    // lets heapUsed drift upward for the whole sample window, and the
+    // least-squares slope then reports a "leak" (e.g. the 9.7 MB/hr FAIL on a
+    // process whose heap never exceeded 18 MB). Post-GC sampling makes the
+    // trend measure actual retained memory. When --expose-gc is absent the raw
+    // (noisier) figure is used, as before.
+    if (typeof global.gc === 'function') {
+      try { global.gc(); } catch (_) { /* non-fatal */ }
+    }
+
     const mem = process.memoryUsage();
     const [processCount, dependencies] = await Promise.all([
       this.sampleProcessCount(),

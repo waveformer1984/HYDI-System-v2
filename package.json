@@ -98,8 +98,8 @@
     "runtime-validation": "node scripts/op-validation.js",
     "validation-audit": "npx jest tests/unit/validation-tooling-integrity.test.js --runInBand",
     "release-validation": "npm run typecheck && npm run lint && npm test && npm run validation-audit",
-    "operational-qualification": "node operational-qualification/operational-qualification.js quick",
-    "production-certification": "node operational-qualification/operational-qualification.js full"
+    "operational-qualification": "node --expose-gc operational-qualification/operational-qualification.js quick",
+    "production-certification": "node --expose-gc operational-qualification/operational-qualification.js full"
   },
   "bin": {
     "hydi": "scripts/hydi-cli.js"
