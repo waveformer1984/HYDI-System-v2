@@ -71,4 +71,4 @@ npm run build
 
 ## Conclusion
 
-**READY FOR RC.** The `v0.9.0-rc.5` release candidate is prepared and validated at the static/build level. The only pre-release housekeeping item is the missing `LICENSE` file. Operational qualification and 1-hour/24-hour soak tests are in progress or pending.
+**NOT READY.** The `v0.9.0-rc.5` release candidate is correctly tagged, licensed, and packaged, but the operational qualification failed (33.3% workload success, harness resource leak). Do not release until the qualification passes and 1-hour/24-hour soaks are green.

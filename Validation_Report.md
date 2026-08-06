@@ -8,9 +8,9 @@
 - **Console benchmark:** PASS — all targets met.
 - **V3 performance benchmark:** PASS — 7/7 checks met (latest `data/perf-benchmark/history.json`).
 - **Next.js build:** PASS — `BUILD_EXIT: 0`.
-- **Operational qualification:** In progress (background).
-- **1-hour soak:** Not started.
-- **24-hour soak:** Not started.
+- **Operational qualification:** **FAIL** — harness completed, but 33.3% workload success and a resource leak.
+- **1-hour soak:** Not started (blocked by op-qual failure).
+- **24-hour soak:** Not started (blocked by op-qual failure).
 
 ## Phase 8 Results
 
@@ -22,7 +22,7 @@
 | Console | `npm run benchmark:console` | PASS | `meetsAllTargets: true` |
 | Performance | `npm run benchmark:performance` | PASS | 7/7 checks in `history.json` |
 | Build | `npm run build` | PASS | `BUILD_EXIT: 0` |
-| Operational qualification | `npm run operational-qualification` | RUNNING | Background shell `8c8e5c` |
+| Operational qualification | `npm run operational-qualification` | FAIL | 486/1458 workloads (33.3%), resource leak |
 | 1-hour soak | `npm run soak-test-1h` | NOT RUN | Time-prohibited |
 | 24-hour soak | `npm run soak-test-24h` | NOT RUN | Time-prohibited |
 

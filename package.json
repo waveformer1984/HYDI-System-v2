@@ -111,7 +111,7 @@
     "ursula"
   ],
   "author": "ProtoForge Team",
-  "license": "MIT",
+  "license": "UNLICENSED",
   "engines": {
     "node": ">=20.x"
   },

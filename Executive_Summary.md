@@ -2,68 +2,74 @@
 
 ## Final Decision
 
-**READY FOR RC.**
+**NOT READY** for production release.
 
-The `v0.9.0-rc.5` release candidate has completed all 12 audit phases, all short-running validation gates are green, the database is migrated and backed up, the package is correctly sized, and the runtime is functional. Full production certification is pending completion of the operational qualification and 1-hour/24-hour soaks.
+The `v0.9.0-rc.5` candidate has all audit reports generated and passes static validation, build, packaging, and security. However, the operational qualification failed and the 1-hour/24-hour soak tests were not run. Production certification is not supported by the evidence.
 
 ## Confidence
 
-**85%** — strong evidence across build, test, security, packaging, migration, schema, and runtime; only the long-duration operational qualification and soak tests are incomplete.
+**55%** — strong evidence in static/build/security, but the runtime qualification and soak evidence are missing or failing.
 
 ## Phases Completed
 
-1. `Repository_Verification_Report.md`
-2. `Database_Assessment_Report.md`
-3. `Backup_Report.md`
-4. `Migration_Report.md`
-5. `Schema_Verification_Report.md`
-6. `Infrastructure_Report.md`
-7. `Runtime_Report.md`
-8. `Validation_Report.md`
-9. `Security_Report.md`
-10. `Packaging_Report.md`
-11. `Release_Readiness_Report.md`
-12. `Production_Certification_Report.md`
+1. `Current_State_Report.md`
+2. `Database_Report.md`
+3. `Ursula_Report.md`
+4. `Infrastructure_Report.md`
+5. `Operational_Qualification_Report.md`
+6. `Soak_Report.md`
+7. `Packaging_Report.md`
+8. `Security_Report.md`
+9. `Release_Preparation_Report.md`
+10. `Production_Certification_Report.md`
+11. `Executive_Summary.md`
 
 ## Evidence at a Glance
 
 | Gate | Result | Evidence |
 |------|--------|----------|
-| Repository state | PASS | On `release/v0.9.0`, tag `v0.9.0-rc.5` exists, 31 commits ahead of origin |
-| Database assessment | PASS | 68 `public` tables, 232 `actions`, 4 `memories`, 2 `sessions` |
-| Backup | PASS | 0.38 MB dump, SHA-256, restorable |
-| Migrations | PASS | 73 active migrations applied, `database.testConnection()` OK |
-| Schema | PASS | 227 indexes, 170 constraints, 107 RLS policies, 8 views |
+| Repository state | PASS | On `release/v0.9.0`, tag `v0.9.0-rc.5`, version 0.9.0-rc.5 |
+| Database safety | PASS | 68 tables, 73 migrations applied, 0.38 MB verified backup |
+| Ursula DB | PASS | `ursula` DB created; import error remains in `ursula-flask` |
 | Infrastructure | PASS | Docker, Supabase, Ollama, Node/Next.js, HEIDI runtime green |
-| Runtime | PASS | `/api/health` 200, fail-closed 401/400, DB OK |
+| Operational qualification | FAIL | 33.3% workload success, 9.23 MB/hr harness leak |
+| 1-hour soak | NOT RUN | Blocked by op-qual failure |
+| 24-hour soak | NOT RUN | Blocked by op-qual failure |
 | TypeScript | PASS | `tsc --noEmit` exit 0 |
-| Jest | PASS | 251/251 suites, 2420/2421 tests passed, 1 skipped |
+| Jest | PASS | 251/251 suites, 2420/2421 tests passed |
 | Security audit | PASS | 0 findings |
 | Build | PASS | `BUILD_EXIT: 0` |
 | Package size | PASS | 2.68 MB tarball |
-| Version consistency | PASS | `package.json` = `VERSION` = `0.9.0-rc.5` = tag |
+| License | PASS | `LICENSE` + `UNLICENSED` in `package.json` |
 
 ## Top Findings
 
 | # | Finding | Severity | Report |
 |---|---------|----------|--------|
-| 1 | `v0.9.0-rc.5` package is 2.68 MB, down from 170 MB | **Positive** | `Packaging_Report.md` |
-| 2 | 73 Supabase migrations applied, DB connection OK | **Positive** | `Migration_Report.md` / `Schema_Verification_Report.md` |
-| 3 | Static security audit 0 findings | **Positive** | `Security_Report.md` |
-| 4 | `ursula-flask` restart loop (`ImportError: cannot import name 'BlameGames'`) | Low | `Infrastructure_Report.md` |
-| 5 | No `LICENSE` file in repo root | Low | `Release_Readiness_Report.md` |
-| 6 | Operational qualification still running | Medium | `Validation_Report.md` |
-| 7 | 1-hour and 24-hour soaks not run | High | `Validation_Report.md` |
+| 1 | Operational qualification failed | **Critical** | `Operational_Qualification_Report.md` |
+| 2 | Workload success rate 33.3% | **High** | `Operational_Qualification_Report.md` |
+| 3 | Harness process resource leak | **High** | `Operational_Qualification_Report.md` |
+| 4 | `memory-storage` endpoint 500 | **High** | `Operational_Qualification_Report.md` / `Infrastructure_Report.md` |
+| 5 | `memory-retrieval` endpoint 405 | **Medium** | `Operational_Qualification_Report.md` |
+| 6 | `supervisor-status` target `localhost:9999` refused | **Medium** | `Operational_Qualification_Report.md` |
+| 7 | `ursula-flask` `BlameGames` import error | **Low** | `Ursula_Report.md` |
+| 8 | Package correctly sized at 2.68 MB | Positive | `Packaging_Report.md` |
+| 9 | Static security audit 0 findings | Positive | `Security_Report.md` |
 
 ## Recommended Action Plan
 
-1. Allow `npm run operational-qualification` to finish; verify green.
-2. Run `npm run soak-test-1h` and pass.
-3. Run `npm run soak-test-24h` and pass.
-4. Add a `LICENSE` file.
-5. Push `release/v0.9.0` + `v0.9.0-rc.5` tag to `origin`.
-6. Promote to `v0.9.0` if all soaks pass.
+1. Fix the qualification workload failures:
+   - `conversation` 400 — validate request body.
+   - `memory-storage` 500 — fix internal error.
+   - `memory-retrieval` 405 — allow correct HTTP method.
+   - `supervisor-status` — point to the correct URL/port.
+2. Investigate and fix the harness heap growth (9.23 MB/hr).
+3. Re-run `npm run operational-qualification` until it passes.
+4. Run `npm run soak-test-1h` and verify stability.
+5. Run `npm run soak-test-24h` and verify stability.
+6. Commit `LICENSE` and `package.json` license changes.
+7. Re-certify with `PRODUCTION CERTIFIED` only after the above pass.
 
 ## Conclusion
 
-**READY FOR RC.** The `v0.9.0-rc.5` candidate is a stable, secure, and well-packaged release. It is not yet **PRODUCTION CERTIFIED** because the long-running operational qualification and soak tests have not completed. Once those pass and a license file is added, the project is ready for `v0.9.0`.
+**NOT READY.** The `v0.9.0-rc.5` release candidate is not ready for production. The operational qualification must pass and the 1-hour/24-hour soaks must complete before the project can be promoted to `PRODUCTION CERTIFIED`.
