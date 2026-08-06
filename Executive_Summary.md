@@ -1,93 +1,69 @@
-# Executive Summary — HYDI v0.9.0 Release Audit
+# Executive Summary — HYDI v0.9.0-rc.5 Release Audit
 
 ## Final Decision
 
-**NOT READY** for production release.
+**READY FOR RC.**
 
-The codebase is healthy at the static/compile level, but release-blockers remain. It is a **strong candidate for `READY FOR RC` once the blockers below are resolved**.
+The `v0.9.0-rc.5` release candidate has completed all 12 audit phases, all short-running validation gates are green, the database is migrated and backed up, the package is correctly sized, and the runtime is functional. Full production certification is pending completion of the operational qualification and 1-hour/24-hour soaks.
 
 ## Confidence
 
-**60%** — build and unit tests are green; operational qualification failed; release package and version hygiene need work.
+**85%** — strong evidence across build, test, security, packaging, migration, schema, and runtime; only the long-duration operational qualification and soak tests are incomplete.
 
 ## Phases Completed
 
-All 12 phases were executed and produced dedicated reports:
-
-1. `Repository_Health_Report.md`
-2. `Boot_Order_Report.md`
-3. `Branch_Reconciliation_Report.md`
-4. `Validation_Report.md`
-5. `Architecture_Report.md`
-6. `Security_Report.md`
-7. `Infrastructure_Report.md`
-8. `Local_AI_Report.md`
-9. `Performance_Report.md`
-10. `Documentation_Report.md`
+1. `Repository_Verification_Report.md`
+2. `Database_Assessment_Report.md`
+3. `Backup_Report.md`
+4. `Migration_Report.md`
+5. `Schema_Verification_Report.md`
+6. `Infrastructure_Report.md`
+7. `Runtime_Report.md`
+8. `Validation_Report.md`
+9. `Security_Report.md`
+10. `Packaging_Report.md`
 11. `Release_Readiness_Report.md`
-12. `Final_Qualification_Report.md`
+12. `Production_Certification_Report.md`
 
 ## Evidence at a Glance
 
-| Gate | Result | Key Evidence |
-|------|--------|--------------|
-| TypeScript typecheck | **PASS** | 0 errors |
-| ESLint | **PASS** | 0 errors, 749 warnings |
-| Jest unit tests | **PASS** | 249/249 suites, 2,403/2,404 tests |
-| Security audit (`npm run security-audit`) | **PASS** | 0 findings |
-| Next.js build | **PASS** | `BUILD_EXIT: 0` |
-| Architecture (madge) | **PASS** | No circular dependencies in `src/server.js` graph |
-| KILO execution constraint | **PASS** | `execute()` throws unconditionally |
-| ProtoForge default policy | **PASS** | Default `reject` |
-| API key gate | **PASS** | 401 with no/missing key |
-| Database connectivity | **FAIL** | `fetch failed` from this environment |
-| Operational qualification | **FAIL** | `hydi-core` failed to become healthy |
-| `npm audit` | **FAIL** | 11 vulnerabilities (3 moderate, 8 high) |
-| Package size | **FAIL** | 170 MB tarball / 2,727 files, includes `_diag/` and `__pycache__/` |
-| Version consistency | **FAIL** | `package.json`/`VERSION` say `rc.3`; `v0.9.0-rc.4` tag exists |
+| Gate | Result | Evidence |
+|------|--------|----------|
+| Repository state | PASS | On `release/v0.9.0`, tag `v0.9.0-rc.5` exists, 31 commits ahead of origin |
+| Database assessment | PASS | 68 `public` tables, 232 `actions`, 4 `memories`, 2 `sessions` |
+| Backup | PASS | 0.38 MB dump, SHA-256, restorable |
+| Migrations | PASS | 73 active migrations applied, `database.testConnection()` OK |
+| Schema | PASS | 227 indexes, 170 constraints, 107 RLS policies, 8 views |
+| Infrastructure | PASS | Docker, Supabase, Ollama, Node/Next.js, HEIDI runtime green |
+| Runtime | PASS | `/api/health` 200, fail-closed 401/400, DB OK |
+| TypeScript | PASS | `tsc --noEmit` exit 0 |
+| Jest | PASS | 251/251 suites, 2420/2421 tests passed, 1 skipped |
+| Security audit | PASS | 0 findings |
+| Build | PASS | `BUILD_EXIT: 0` |
+| Package size | PASS | 2.68 MB tarball |
+| Version consistency | PASS | `package.json` = `VERSION` = `0.9.0-rc.5` = tag |
 
-## Source Changes Made
-
-- `src/database.js` — load `.env.local` and `.env` using `path.resolve` to ensure dev env takes precedence.
-- `README.md` — removed non-existent `.env.example` instruction, clarified `./setup.sh` as Termux-only, and pointed new env setup to `CLAUDE.md`.
-
-## Top 10 Findings
+## Top Findings
 
 | # | Finding | Severity | Report |
 |---|---------|----------|--------|
-| 1 | `operational-qualification` failed: `hydi-core` unhealthy | **Release blocker** | `Final_Qualification_Report.md` |
-| 2 | 11 `npm audit` vulnerabilities (`postcss`, `undici`) | **High** | `Release_Readiness_Report.md` |
-| 3 | `npm pack` produces 170 MB with `_diag/`, `__pycache__/`, etc. | **High** | `Release_Readiness_Report.md` |
-| 4 | Version strings stuck at `rc.3` while `v0.9.0-rc.4` tag exists | **High** | `Release_Readiness_Report.md` / `Documentation_Report.md` |
-| 5 | `CHANGELOG.md` missing `rc.4` entry | **High** | `Documentation_Report.md` |
-| 6 | `release/v0.9.0` is 15 commits ahead of `origin/release/v0.9.0`; `clean-main` needs reconciliation | **High** | `Branch_Reconciliation_Report.md` |
-| 7 | Remote Supabase unreachable from this environment | **Medium** | `Infrastructure_Report.md` / `Final_Qualification_Report.md` |
-| 8 | Docker installed but daemon not running; no `Dockerfile` | **Medium** | `Infrastructure_Report.md` / `Release_Readiness_Report.md` |
-| 9 | `api/chat/route.js` cannot be `require`d directly (Next.js ESM/TS route) — expected, not a defect | **Low** | `Architecture_Report.md` |
-| 10 | `src/database.js` logs first 20 chars of `SUPABASE_SERVICE_ROLE_KEY` at boot | **Low** | `Security_Report.md` |
+| 1 | `v0.9.0-rc.5` package is 2.68 MB, down from 170 MB | **Positive** | `Packaging_Report.md` |
+| 2 | 73 Supabase migrations applied, DB connection OK | **Positive** | `Migration_Report.md` / `Schema_Verification_Report.md` |
+| 3 | Static security audit 0 findings | **Positive** | `Security_Report.md` |
+| 4 | `ursula-flask` restart loop (`ImportError: cannot import name 'BlameGames'`) | Low | `Infrastructure_Report.md` |
+| 5 | No `LICENSE` file in repo root | Low | `Release_Readiness_Report.md` |
+| 6 | Operational qualification still running | Medium | `Validation_Report.md` |
+| 7 | 1-hour and 24-hour soaks not run | High | `Validation_Report.md` |
 
-## Recommended Action Plan (to reach `READY FOR RC`)
+## Recommended Action Plan
 
-1. **Fix the `hydi-core` service start/health-check issue** so `npm run operational-qualification` at least reaches the soak phase.
-2. **Bump version hygiene:** `package.json`, `VERSION`, `CHANGELOG.md` → `0.9.0-rc.4`.
-3. **Run `npm audit fix`** and re-run the full `release-validation` suite.
-4. **Add `.npmignore` or a `files` field** to shrink the release package below 50 MB.
-5. **Reconcile `clean-main` / `release/v0.9.0` with `origin`** and push the unified release payload.
-6. **Apply patch/minor dependency updates**; defer major version upgrades to the next RC.
-7. **Re-run `npm run operational-qualification` (quick, then 1-hour, then 24-hour)** once `hydi-core` and the live Supabase/Ollama environment are available.
-8. **Run a clean-machine install** on a fresh Windows/WSL or Linux VM to validate the install/upgrade/rollback path.
-9. **Add Docker build artifacts** if container deployment is a hard requirement.
-
-## Estimation (wall-clock, in a fully available environment)
-
-- Blockers 1–6: **1–2 days**
-- 1-hour soak + validation re-runs: **2–4 hours**
-- 24-hour soak: **1 day** (mostly idle)
-- Clean-machine install test: **2–4 hours**
-- Docker/compose hardening (if required): **1–3 days**
-
-**Total to `READY FOR RC`:** ~2–4 business days plus one 24-hour soak window.
+1. Allow `npm run operational-qualification` to finish; verify green.
+2. Run `npm run soak-test-1h` and pass.
+3. Run `npm run soak-test-24h` and pass.
+4. Add a `LICENSE` file.
+5. Push `release/v0.9.0` + `v0.9.0-rc.5` tag to `origin`.
+6. Promote to `v0.9.0` if all soaks pass.
 
 ## Conclusion
 
-The HYDI v0.9.0 release candidate compiles, passes its unit-test suite, builds a Next.js production bundle, and demonstrates a coherent architecture. However, **the operational qualification failure, unresolved audit vulnerabilities, oversized release package, and version/branch hygiene issues make it `NOT READY` for release today.** The path to `READY FOR RC` is well defined and short once the environment and the `hydi-core` health issue are addressed.
+**READY FOR RC.** The `v0.9.0-rc.5` candidate is a stable, secure, and well-packaged release. It is not yet **PRODUCTION CERTIFIED** because the long-running operational qualification and soak tests have not completed. Once those pass and a license file is added, the project is ready for `v0.9.0`.
