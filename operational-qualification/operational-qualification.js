@@ -13,6 +13,7 @@ const ReportGenerator = require('./reports/report-generator');
 const fs = require('fs');
 const path = require('path');
 const { randomBytes } = require('crypto');
+const v8 = require('v8');
 
 // A deterministic secret is needed so the harness can sign x-hydi-service-token
 // headers for authenticated routes (e.g. /api/chat/route). The generated value
@@ -100,10 +101,15 @@ class OperationalQualificationHarness {
       // Phase 1: Stack Lifecycle
       console.log('[Harness] Phase 1: Stack Lifecycle');
       await this.runStackLifecycle();
+      this.takeHeapSnapshot('startup');
 
       // Phases 2 and 3 run concurrently — see runFull for rationale.
       console.log('[Harness] Phases 2+3: Workload Execution with concurrent Metrics Collection');
-      await this.runLoadedWindow(this.config.qualification.quick.duration);
+      const quickDuration = this.config.qualification.quick.duration;
+      const midpointTimer = setTimeout(() => this.takeHeapSnapshot('midpoint'), quickDuration / 2);
+      await this.runLoadedWindow(quickDuration);
+      clearTimeout(midpointTimer);
+      this.takeHeapSnapshot('completion');
 
       // Phase 4: Stack shutdown
       console.log('[Harness] Phase 4: Stack Shutdown');
@@ -121,6 +127,23 @@ class OperationalQualificationHarness {
       console.error('[Harness] Quick qualification failed:', error);
       await this.cleanup();
       throw error;
+    }
+  }
+
+  /**
+   * Capture a V8 heap snapshot for post-run retention analysis.
+   */
+  takeHeapSnapshot(label) {
+    try {
+      const dir = path.join(__dirname, '..', 'reports', 'qualification', 'snapshots');
+      fs.mkdirSync(dir, { recursive: true });
+      const filename = `${label}-${Date.now()}.heapsnapshot`;
+      const filePath = path.join(dir, filename);
+      const snapshotPath = v8.writeHeapSnapshot(filePath);
+      console.log(`[HeapSnapshot] Captured ${label} snapshot: ${snapshotPath}`);
+      return snapshotPath;
+    } catch (error) {
+      console.warn(`[HeapSnapshot] Failed to capture ${label}:`, error.message);
     }
   }
 

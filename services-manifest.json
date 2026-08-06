@@ -69,7 +69,7 @@
     },
     "next-app": {
       "name": "Next.js Frontend + API",
-      "cmd": "npm run dev",
+      "cmd": "pwsh -NoProfile -Command \"try { $conns = Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction Stop; foreach ($c in $conns) { Stop-Process -Id $c.OwningProcess -Force -ErrorAction SilentlyContinue } } catch { } ; exit 0\" && npm run dev",
       "cwd": "C:\\Users\\Owner\\HYDI_System",
       "port": 3000,
       "required": true,
