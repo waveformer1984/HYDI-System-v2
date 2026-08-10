@@ -139,15 +139,15 @@
     "@babel/preset-env": "^7.24.0",
     "@babel/preset-typescript": "^7.29.7",
     "@types/jest": "^29.5.14",
-    "@types/pg": "^8.20.0",
+    "@types/pg": "^8.20.4",
     "autoprefixer": "^10.5.4",
     "babel-jest": "^29.7.0",
     "cross-env": "^10.1.0",
     "eslint": "^8.0.0",
-    "eslint-config-next": "^15.5.20",
+    "eslint-config-next": "^15.5.23",
     "jest": "^29.7.0",
     "jest-environment-node": "^29.7.0",
-    "postcss": "^8.5.20",
+    "postcss": "^8.5.26",
     "tailwindcss": "^3.4.19"
   },
   "overrides": {
