@@ -89,7 +89,42 @@ Required from the operator:
 
 Do not deploy production. Do not migrate the 259 direct Supabase consumers. Do not begin broad refactoring.
 
-## 7. Next required action
+## 7. P0 closure matrix
+
+| Item | Status |
+|---|---|
+| Stripe account | **UNVERIFIED / INVALIDATED** (MCP removed to prevent live-key exposure) |
+| Live secret in repository | **ABSENT** (no live values in tracked files) |
+| Live secret in build | **ABSENT** |
+| Live secret in browser | **ABSENT** |
+| Live secret in MCP | **ABSENT** (live key removed) — **REQUIRES HUMAN ACTION** to add a test key if MCP is ever re-enabled |
+| Test secret configured | **UNVERIFIED** — no `sk_test_...` in `.env` or `.env.local` |
+| Webhook verification | **UNVERIFIED** — no test `STRIPE_WEBHOOK_SECRET` |
+| Checkout test | **UNVERIFIED** — no test price IDs or test key |
+| Connect test | **UNVERIFIED** — not production-scoped, no test key |
+| Security scan | **PASS** (no live values in code/build; `.env` still contains a live key) |
+| Typecheck | **PASS** |
+| Tests | **PASS** |
+| Build | **PASS** |
+| Readiness | **READY** |
+
+## 8. P0 decision
+
+| Criterion | Result |
+|---|---|
+| Rotated credentials no longer used | **PARTIAL** — live key removed from MCP; but `.env` still relies on a live `STRIPE_SECRET_KEY` |
+| New credentials installed in approved locations | **UNVERIFIED** — no test-mode keys installed |
+| Live credentials absent from repository/build/browser | **PASS** for tracked source and build artifacts |
+| MCP does not contain a live production credential | **PASS** |
+| Stripe test-mode integration passes its verification | **FAIL** — blocked by missing test keys |
+| Security scan passes | **PASS** (code) |
+| Regression passes | **PASS** |
+
+**P0 = BLOCKED**
+
+Do not deploy production. Do not migrate the 259 direct Supabase consumers. Do not begin broad refactoring.
+
+## 9. Next required action
 
 Provide a Stripe **test-mode** `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` (and test `STRIPE_HYDI_*_PRICE_ID` values) in `.env.local`, then re-run:
 
