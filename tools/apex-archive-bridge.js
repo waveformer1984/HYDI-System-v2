@@ -19,8 +19,11 @@ const APEX_DIR = process.env.APEX_ARCHIVE_DIR
   || 'C:\\Users\\Owner\\OneDrive\\Documents\\Claude\\Scheduled\\apex-archive-weekly-episode';
 const OUTBOX_DIR = path.join(APEX_DIR, 'hydi_outbox');
 const PROCESSED_DIR = path.join(OUTBOX_DIR, '.processed');
+const FAILED_DIR = path.join(OUTBOX_DIR, '.failed');
 
 const { HeidiController } = require('../pao-system/core/heidi.controller');
+
+const REQUIRED_FIELDS = ['event_id', 'timestamp', 'event_type', 'source', 'schema_version', 'project_id'];
 
 function ensureDir(dir) {
   if (!fs.existsSync(dir)) {
@@ -28,8 +31,17 @@ function ensureDir(dir) {
   }
 }
 
+function validateEvent(event, file) {
+  const missing = REQUIRED_FIELDS.filter((f) => !event[f]);
+  if (missing.length > 0) {
+    return { ok: false, reason: `missing required fields: ${missing.join(', ')}` };
+  }
+  return { ok: true };
+}
+
 function classifyApexEvent(eventType) {
   const map = {
+    project_created: 'APEX_PROJECT_CREATED',
     project_status: 'APEX_EVENT_RECORDED',
     orchestration_ping: 'APEX_EVENT_RECORDED',
     episode_generated: 'APEX_EPISODE_CREATED',
@@ -42,6 +54,28 @@ function classifyApexEvent(eventType) {
   return map[eventType] || 'APEX_EVENT_RECORDED';
 }
 
+function buildInput(event) {
+  const base = {
+    apex_venture_id: event.project_id,
+    event,
+  };
+
+  switch (classifyApexEvent(event.event_type)) {
+    case 'APEX_PROJECT_CREATED':
+      return {
+        ...base,
+        project_name: event.payload?.project_name || event.project_id,
+      };
+    case 'APEX_EPISODE_CREATED':
+      return {
+        ...base,
+        episode: event.payload,
+      };
+    default:
+      return base;
+  }
+}
+
 async function main() {
   if (!fs.existsSync(OUTBOX_DIR)) {
     console.log(`[apex-bridge] outbox not found: ${OUTBOX_DIR}`);
@@ -49,6 +83,7 @@ async function main() {
   }
 
   ensureDir(PROCESSED_DIR);
+  ensureDir(FAILED_DIR);
 
   const files = fs.readdirSync(OUTBOX_DIR)
     .filter((f) => f.endsWith('.json'))
@@ -71,26 +106,34 @@ async function main() {
     try {
       event = JSON.parse(raw);
     } catch (e) {
+      fs.renameSync(full, path.join(FAILED_DIR, f));
       results.push({ file: f, ok: false, reason: 'invalid_json' });
       continue;
     }
 
+    const validation = validateEvent(event, f);
+    if (!validation.ok) {
+      fs.renameSync(full, path.join(FAILED_DIR, f));
+      results.push({ file: f, ok: false, reason: validation.reason });
+      continue;
+    }
+
     const taskType = classifyApexEvent(event.event_type);
-    const input = {
-      venture_id: event.project_id || 'apex-archive',
-      rezonate_project_id: 'unmapped', // set externally if known
-      event,
-    };
+    const input = buildInput(event);
 
     try {
       const result = await controller.processUserEvent(taskType, input, 'owner');
-      results.push({ file: f, ok: result.ok, reason: result.reason });
       if (result.ok) {
-        const processed = path.join(PROCESSED_DIR, f);
-        fs.renameSync(full, processed);
+        fs.renameSync(full, path.join(PROCESSED_DIR, f));
+        results.push({ file: f, ok: true, event_id: event.event_id });
+      } else {
+        fs.renameSync(full, path.join(FAILED_DIR, f));
+        results.push({ file: f, ok: false, reason: result.reason });
       }
     } catch (e) {
-      results.push({ file: f, ok: false, reason: e.message });
+      const reason = e instanceof Error ? e.message : 'unknown';
+      fs.renameSync(full, path.join(FAILED_DIR, f));
+      results.push({ file: f, ok: false, reason });
     }
   }
 

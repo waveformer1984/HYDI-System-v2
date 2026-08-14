@@ -142,8 +142,11 @@ export class HeidiController {
       ['REZONATE_GET_PROJECT', ['rezonate.agent']],
       ['REZONATE_LIST_TRACKS', ['rezonate.agent']],
       ['REZONATE_CREATE_TRACK', ['rezonate.agent']],
-      ['APEX_EVENT_RECORDED', ['apex.agent']],
+      ['APEX_PROJECT_CREATED', ['apex.agent']],
       ['APEX_EPISODE_CREATED', ['apex.agent']],
+      ['GET_APEX_PROJECT_STATUS', ['apex.agent']],
+      ['GET_APEX_HEALTH', ['apex.agent']],
+      ['APEX_EVENT_RECORDED', ['apex.agent']],
       ['APEX_EPISODE_APPROVED', ['apex.agent']],
       ['APEX_EPISODE_PUBLISHED', ['apex.agent']],
       ['APEX_EPISODE_FAILED', ['apex.agent']],
@@ -343,10 +346,17 @@ export class HeidiController {
   }
 
   private isMutation(type: string): boolean {
-    return type.startsWith('REZONATE_') &&
-      !type.startsWith('REZONATE_LIST_') &&
-      !type.startsWith('REZONATE_GET_') &&
-      !type.endsWith('_HEALTH');
+    if (type.startsWith('REZONATE_')) {
+      return !type.startsWith('REZONATE_LIST_') &&
+        !type.startsWith('REZONATE_GET_') &&
+        !type.endsWith('_HEALTH');
+    }
+    if (type.startsWith('APEX_')) {
+      return !type.startsWith('GET_APEX_') &&
+        !type.endsWith('_HEALTH') &&
+        !type.startsWith('APEX_LIST_');
+    }
+    return false;
   }
 
   private dedupKey(type: string, input: any): string {
