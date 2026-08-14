@@ -7,6 +7,8 @@ import { AuditLog } from './audit.log';
 import { RezonateAgent } from '../agents/execution/rezonate.agent';
 import { hasPermission } from '../../lib/auth/rbac';
 import * as capabilityGuard from '../../lib/rezonate/capability-guard';
+import * as apexCapabilityGuard from '../../lib/apex/apex-capability-guard';
+import { ApexAgent } from '../agents/execution/apex.agent';
 
 export interface HeidiDirective {
   task_id: string;
@@ -69,6 +71,7 @@ export class HeidiController {
     
     this.initializeRoutingMatrix();
     this.agentRegistry.registerAgent(new RezonateAgent());
+    this.agentRegistry.registerAgent(new ApexAgent());
     this.setupEventHandlers();
   }
 
@@ -139,6 +142,12 @@ export class HeidiController {
       ['REZONATE_GET_PROJECT', ['rezonate.agent']],
       ['REZONATE_LIST_TRACKS', ['rezonate.agent']],
       ['REZONATE_CREATE_TRACK', ['rezonate.agent']],
+      ['APEX_EVENT_RECORDED', ['apex.agent']],
+      ['APEX_EPISODE_CREATED', ['apex.agent']],
+      ['APEX_EPISODE_APPROVED', ['apex.agent']],
+      ['APEX_EPISODE_PUBLISHED', ['apex.agent']],
+      ['APEX_EPISODE_FAILED', ['apex.agent']],
+      ['APEX_EPISODE_ARCHIVED', ['apex.agent']],
       ['REZONATE_GET_JOB', ['rezonate.agent']],
       ['REZONATE_CREATE_JOB', ['rezonate.agent']],
       ['REZONATE_START_JOB', ['rezonate.agent']],
@@ -198,9 +207,44 @@ export class HeidiController {
       return { ok: false, reason };
     }
 
+    if (type.startsWith('APEX_') && !hasPermission(role, 'apex:manage')) {
+      const reason = `role '${role}' lacks permission 'apex:manage'`;
+      await this.auditLog.record({
+        event_type: 'HEIDI_PERMISSION_DENIED',
+        task_id: taskId,
+        task_type: type,
+        source_agent: 'heidi_controller',
+        target_agent: 'heidi_controller',
+        payload: input,
+        result: null,
+        success: false,
+        failure_reason: reason,
+      });
+      return { ok: false, reason };
+    }
+
     // Capability awareness: never route a task that is not verified through Heidi.
     if (type.startsWith('REZONATE_')) {
       const capability = (capabilityGuard as any).getTaskCapabilityState(type);
+      if (capability.heidiState !== 'VERIFIED') {
+        const reason = capability.reason || `${type} is not a verified Heidi capability (state: ${capability.heidiState})`;
+        await this.auditLog.record({
+          event_type: 'HEIDI_CAPABILITY_UNSUPPORTED',
+          task_id: taskId,
+          task_type: type,
+          source_agent: 'heidi_controller',
+          target_agent: 'heidi_controller',
+          payload: input,
+          result: null,
+          success: false,
+          failure_reason: reason,
+        });
+        return { ok: false, reason, state: capability.heidiState };
+      }
+    }
+
+    if (type.startsWith('APEX_')) {
+      const capability = (apexCapabilityGuard as any).getTaskCapabilityState(type);
       if (capability.heidiState !== 'VERIFIED') {
         const reason = capability.reason || `${type} is not a verified Heidi capability (state: ${capability.heidiState})`;
         await this.auditLog.record({
