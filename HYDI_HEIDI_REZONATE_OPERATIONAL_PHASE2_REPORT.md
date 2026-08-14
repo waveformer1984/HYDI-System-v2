@@ -118,7 +118,7 @@ Each layer reports `available: true/false`. The top-level `ok` is `true` only wh
 | `npm run typecheck` | **PASS** |
 | `npm run build` | **PASS** (warnings only) |
 | `npm run validate:rezonate-contract` | **PASS** |
-| `node --test protoforge-applications/rezonate/tests/*.test.js` | **128/128 PASS** |
+| `node --test protoforge-applications/rezonate/tests/*.test.js` | **128/128 PASS in this environment** — a prior environment reports 127/128 with one pre-existing EPERM in `tests/api.test.js` "registers an asset and serves it" (temp-file unlink timing); not a regression from this work |
 | `npx jest tests/unit/persistence-guard.test.js` | **8/8 PASS** |
 | `npx jest tests/unit/chat-route-rezonate.test.js tests/unit/heidi-rezonate-acceptance.test.js --verbose` | **17/17 PASS** |
 | `npm test -- --testPathPattern=tests/unit` | **1089 PASS, 4 FAIL, 1 suite fail to run** |
