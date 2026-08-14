@@ -3,6 +3,7 @@ import { TaskRouter } from './task.router';
 import { ApprovalEngine } from './approval.engine';
 import { RiskEngine } from './risk.engine';
 import { AgentRegistry } from './agent.registry';
+import { RezonateAgent } from '../agents/execution/rezonate.agent';
 
 export interface HeidiDirective {
   task_id: string;
@@ -60,6 +61,7 @@ export class HeidiController {
     };
     
     this.initializeRoutingMatrix();
+    this.agentRegistry.registerAgent(new RezonateAgent());
     this.setupEventHandlers();
   }
 
@@ -124,7 +126,16 @@ export class HeidiController {
       ['WORKFLOW_OPTIMIZE', ['workflow_agent']],
       ['RESOURCE_ALLOCATION', ['workflow_agent']],
       ['PRODUCTIVITY_TRACK', ['workflow_agent']],
-      ['SPACE_MANAGEMENT', ['workflow_agent']]
+      ['SPACE_MANAGEMENT', ['workflow_agent']],
+      ['REZONATE_LIST_PROJECTS', ['rezonate.agent']],
+      ['REZONATE_CREATE_PROJECT', ['rezonate.agent']],
+      ['REZONATE_LIST_TRACKS', ['rezonate.agent']],
+      ['REZONATE_CREATE_TRACK', ['rezonate.agent']],
+      ['REZONATE_GET_JOB', ['rezonate.agent']],
+      ['REZONATE_CREATE_JOB', ['rezonate.agent']],
+      ['REZONATE_START_JOB', ['rezonate.agent']],
+      ['REZONATE_EXPORT_PROJECT', ['rezonate.agent']],
+      ['REZONATE_HEALTH', ['rezonate.agent']]
     ]);
   }
 
