@@ -165,4 +165,72 @@ describe('Heidi → Rezonate canonical JSON persistence', () => {
     delete process.env.REZONATE_DB_FILE;
     delete process.env.REZONATE_EVENT_LOG_FILE;
   });
+
+  test('CREATE_TRACK persists and is recoverable by a fresh client', async () => {
+    const { dataDir, dbFile, eventLogFile } = makeTempPaths();
+
+    const client1 = await clientMod.createClient({ dataDir, dbFile, eventLogFile });
+    const project = await client1.createProject({ name: 'Restart Track Project' });
+    const track = await client1.createTrack(project.id, { name: 'Restart Track' });
+
+    // Discard client1 and create an entirely independent client2 against the same file.
+    const client2 = await clientMod.createClient({ dataDir, dbFile, eventLogFile });
+    const tracks = await client2.listTracks(project.id);
+    const found = tracks.find((t) => t.id === track.id);
+
+    expect(found).toBeTruthy();
+    expect(found.name).toBe('Restart Track');
+    expect(found.project_id).toBe(project.id);
+  });
+
+  test('GET_PROJECT recovers a project created by an earlier process', async () => {
+    const { dataDir, dbFile, eventLogFile } = makeTempPaths();
+
+    const client1 = await clientMod.createClient({ dataDir, dbFile, eventLogFile });
+    const project = await client1.createProject({ name: 'Find Me' });
+
+    const client2 = await clientMod.createClient({ dataDir, dbFile, eventLogFile });
+    const recovered = await client2.getProject(project.id);
+
+    expect(recovered.id).toBe(project.id);
+    expect(recovered.name).toBe('Find Me');
+  });
+
+  test('REZONATE_CREATE_TRACK through Heidi persists and is recoverable', async () => {
+    const { HeidiController } = require('../../pao-system/core/heidi.controller');
+    const { dataDir, dbFile, eventLogFile } = makeTempPaths();
+
+    process.env.REZONATE_DATA_DIR = dataDir;
+    process.env.REZONATE_DB_FILE = dbFile;
+    process.env.REZONATE_EVENT_LOG_FILE = eventLogFile;
+
+    const controller = new HeidiController();
+    controller.getAuditLog().clear();
+
+    const projectResult = await controller.processUserEvent(
+      'REZONATE_CREATE_PROJECT',
+      { name: 'Track Parent' },
+      'owner'
+    );
+    expect(projectResult.ok).toBe(true);
+
+    const trackResult = await controller.processUserEvent(
+      'REZONATE_CREATE_TRACK',
+      { projectId: projectResult.project.id, name: 'Heidi Track' },
+      'owner'
+    );
+    expect(trackResult.ok).toBe(true);
+    expect(trackResult.track.name).toBe('Heidi Track');
+
+    // Fresh client, no shared in-memory state.
+    const client = await clientMod.createClient({ dataDir, dbFile, eventLogFile });
+    const tracks = await client.listTracks(projectResult.project.id);
+    const found = tracks.find((t) => t.id === trackResult.track.id);
+    expect(found).toBeTruthy();
+    expect(found.name).toBe('Heidi Track');
+
+    delete process.env.REZONATE_DATA_DIR;
+    delete process.env.REZONATE_DB_FILE;
+    delete process.env.REZONATE_EVENT_LOG_FILE;
+  });
 });

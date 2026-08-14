@@ -39,6 +39,23 @@ The following remain in the routing matrix but are **not** implemented because t
 - `REZONATE_CREATE_JOB` / `REZONATE_START_JOB` (only `createProcessingJob` and `getProcessingJob` exist)
 - `REZONATE_EXPORT_PROJECT`
 
+## 2.5 Operational Vocabulary Expansion
+
+The requested operational vocabulary is:
+
+| Task | Canonical Repository Method | Status | Evidence |
+|---|---|---|---|
+| `CREATE_PROJECT` | `ResonateRepository.createProject(input)` | **VERIFIED** | `heidi-rezonate-acceptance.test.js`, `persistence-guard.test.js` |
+| `LIST_PROJECTS` | `ResonateRepository.listProjects()` | **VERIFIED** | `heidi-rezonate-acceptance.test.js` |
+| `GET_PROJECT` | `ResonateRepository.getProject(id)` | **VERIFIED** | `persistence-guard.test.js` (fresh client recovery) |
+| `CREATE_TRACK` | `ResonateRepository.createTrack(projectId, input)` | **VERIFIED** | `persistence-guard.test.js` (restart durability) |
+| `LIST_TRACKS` | `ResonateRepository.listTracks(projectId)` | **VERIFIED** | `heidi-rezonate-acceptance.test.js` |
+| `GET_TRACK` | *not implemented in canonical repository* | **MISSING** | No `getTrack()` method found in `protoforge-applications/rezonate/src/repository.js` or tests |
+| `UPDATE_PROJECT` | *not implemented in canonical repository* | **MISSING** | No `updateProject()` method found |
+| `UPDATE_TRACK` | *not implemented in canonical repository* | **MISSING** | No `updateTrack()` method found |
+
+`GET_TRACK`, `UPDATE_PROJECT`, and `UPDATE_TRACK` were **not added** because the canonical Rezonate repository does not expose those operations and the instruction is to expand only where the operations already exist and are tested. Adding them without a canonical implementation would require either extending the canonical repository (out of scope) or inventing a second persistence path (not allowed).
+
 ## 3. Exact Authorization Behavior
 
 - All `REZONATE_*` operations routed through `HeidiController.processUserEvent()` require the `rezonate:manage` permission.
@@ -102,7 +119,7 @@ Each layer reports `available: true/false`. The top-level `ok` is `true` only wh
 | `npm run build` | **PASS** (warnings only) |
 | `npm run validate:rezonate-contract` | **PASS** |
 | `node --test protoforge-applications/rezonate/tests/*.test.js` | **128/128 PASS** |
-| `npx jest tests/unit/persistence-guard.test.js` | **5/5 PASS** |
+| `npx jest tests/unit/persistence-guard.test.js` | **8/8 PASS** |
 | `npx jest tests/unit/chat-route-rezonate.test.js tests/unit/heidi-rezonate-acceptance.test.js --verbose` | **17/17 PASS** |
 | `npm test -- --testPathPattern=tests/unit` | **1089 PASS, 4 FAIL, 1 suite fail to run** |
 
@@ -152,4 +169,4 @@ Rationale: the existing contract captures Rezonate audio/studio capabilities. Th
 
 ## 13. Summary
 
-The first vertical slice has been hardened into a controlled, auditable, locally operating orchestrator. Heidi can now create, list, get, and track projects through an explicit, permission-gated, failure-safe control plane with durable audit events and a local health surface. No cloud dependency was added, no second persistence path was created, no false-success path exists, and no unrestricted autonomous authority was granted.
+The first vertical slice has been hardened into a controlled, auditable, locally operating orchestrator. Heidi can now create, list, and retrieve projects; create and list tracks; and survive a process restart with all data recovered from the canonical local JSON store. `GET_TRACK`, `UPDATE_PROJECT`, and `UPDATE_TRACK` remain unavailable until the canonical Rezonate repository exposes those methods. No cloud dependency was added, no second persistence path was created, no false-success path exists, and no unrestricted autonomous authority was granted.
