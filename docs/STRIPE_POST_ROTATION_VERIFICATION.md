@@ -22,7 +22,21 @@ Date: 2026-08-14
 | Vercel env | UNVERIFIED | UNVERIFIED | no access |
 | Supabase Edge Function env | UNVERIFIED | UNVERIFIED | no access |
 
-## 2. Code safety
+## 2. Step 1 — Configuration validation
+
+| Variable | Status | Notes |
+|---|---|---|
+| `STRIPE_SECRET_KEY` | **MISSING** | not present in `.env.local` |
+| `STRIPE_WEBHOOK_SECRET` | **MISSING** | not present in `.env.local` |
+| `STRIPE_HYDI_STARTER_PRICE_ID` | **MISSING** | not present in `.env.local` |
+| `STRIPE_HYDI_PRO_PRICE_ID` | **MISSING** | not present in `.env.local` |
+| `STRIPE_HYDI_ENTERPRISE_PRICE_ID` | **MISSING** | not present in `.env.local` |
+
+Result: **BLOCKED — HUMAN SECRET CONFIGURATION REQUIRED**
+
+The `.env.local` file does not contain the required Stripe test-mode variables. No test-mode verification can proceed until the human operator adds them.
+
+## 3. Code safety
 
 No actual Stripe live secret values are present in tracked source, build artifacts, public assets, or documentation.
 
