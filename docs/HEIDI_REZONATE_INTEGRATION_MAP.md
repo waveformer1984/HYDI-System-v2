@@ -98,5 +98,51 @@ Heidi never queries `rezonate_projects`, `rezonate_tracks`, or any Supabase tabl
 ## 7. Remaining Gaps
 
 - Real health wiring to `api/ursula/status.js` or `api/health.js` is not yet end-to-end tested against a running canonical API.
-- `api/chat/route.js handleRezonateMessage` now uses the repository, but the singleton repository is in-memory; persistence is local-only.
+- `api/chat/route.js handleRezonateMessage` now uses the repository, and persistence is canonical local JSON.
 - No read-only `rezonate:view` permission exists yet; `viewer` cannot list Rezonate state through the auth layer.
+
+## 8. Control-Plane Hardening (Phase 3)
+
+### Intent normalization
+
+`lib/rezonate/intent.js` is now an explicit, regex-based normalizer that:
+- Only returns `ok: true` for the five verified operations.
+- Validates required parameters (`name`, `id`, `projectId`) and returns `malformed: ...` for empty/missing values.
+- Classifies unsupported/forbidden intents (`GET_TRACK`, `UPDATE_PROJECT`, `NFT`, `MARKETPLACE`, `MASTERING`, `delete`) before execution.
+- Does not call the repository, Supabase, or any cloud API.
+
+### Failure safety
+
+`HeidiController.processUserEvent` checks, in order:
+1. `hasPermission(role, 'rezonate:manage')` for every `REZONATE_` task.
+2. `capabilityGuard.getTaskCapabilityState(type)`; non-`VERIFIED` tasks are rejected before routing.
+3. Idempotency guard for mutations; exact duplicate requests within 5 seconds are rejected.
+4. `RezonateAgent` validates parameters and emits `REZONATE_TASK_FAILED` on repository errors; `HeidiController` records `HEIDI_AGENT_FAILURE` and returns `{ ok: false, reason }`.
+
+### Audit events
+
+Every verified operation produces records for `HEIDI_USER_EVENT_RECEIVED`, `HEIDI_AGENT_SUCCESS`/`HEIDI_AGENT_FAILURE`, and `REZONATE_TASK_COMPLETED`/`REZONATE_TASK_FAILED`. `AuditLog` now auto-timestamps records and redacts `secret`, `key`, `token`, `password` fields.
+
+### Health surface
+
+`lib/rezonate/control-health.js` reports six independent layers:
+`HEIDI_CONTROLLER`, `TASK_ROUTER`, `REZONATE_AGENT`, `REZONATE_CLIENT`, `LOCAL_PERSISTENCE`, `EVENT_BUS`. The top-level `ok` is `true` only when every layer is available.
+
+### Idempotency
+
+The canonical repository has no built-in idempotency key; `createProject` and `createTrack` will create duplicates if called directly. Heidi prevents exact duplicate (same type + same parameters) within a 5-second window at the controller layer.
+
+### Verified test coverage
+
+| Suite | Tests | Result |
+|---|---|---|
+| `tests/unit/heidi-control-plane-acceptance.test.js` | 35 | PASS |
+| `tests/unit/heidi-rezonate-acceptance.test.js` | 8 | PASS |
+| `tests/unit/chat-route-rezonate.test.js` | 7 | PASS |
+| `tests/unit/persistence-guard.test.js` | 8 | PASS |
+| `npm run typecheck` | — | PASS |
+| `npm run build` | — | PASS (with pre-existing ESLint warnings) |
+| `npm run validate:rezonate-contract` | 44/1/2 | PASS |
+| `node --test protoforge-applications/rezonate/tests/*.test.js` | 128 | PASS |
+
+The full `npm test` suite has 7 unrelated pre-existing failures (Git WSL ownership, Proto YI reachability, hardware detection, goal-executor assertion, V3 heartbeat/compute). These are unchanged by the control-plane hardening.

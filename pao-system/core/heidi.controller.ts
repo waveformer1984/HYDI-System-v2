@@ -6,6 +6,7 @@ import { AgentRegistry } from './agent.registry';
 import { AuditLog } from './audit.log';
 import { RezonateAgent } from '../agents/execution/rezonate.agent';
 import { hasPermission } from '../../lib/auth/rbac';
+import * as capabilityGuard from '../../lib/rezonate/capability-guard';
 
 export interface HeidiDirective {
   task_id: string;
@@ -45,6 +46,8 @@ export class HeidiController {
   private systemMetrics: SystemMetrics;
   private taskRoutingMatrix: Map<string, string[]> = new Map();
   private conflictResolutionHistory: any[] = [];
+  private idempotencyWindow: Map<string, number> = new Map();
+  private readonly IDEMPOTENCY_WINDOW_MS = 5000;
 
   constructor() {
     this.eventBus = new EventBus();
@@ -195,9 +198,40 @@ export class HeidiController {
       return { ok: false, reason };
     }
 
-    if (this.isRedundantTask(event)) {
-      console.log(`[HEIDI] Redundant task detected: ${event.type} - SKIPPING`);
-      return { ok: false, reason: 'redundant' };
+    // Capability awareness: never route a task that is not verified through Heidi.
+    if (type.startsWith('REZONATE_')) {
+      const capability = (capabilityGuard as any).getTaskCapabilityState(type);
+      if (capability.heidiState !== 'VERIFIED') {
+        const reason = capability.reason || `${type} is not a verified Heidi capability (state: ${capability.heidiState})`;
+        await this.auditLog.record({
+          event_type: 'HEIDI_CAPABILITY_UNSUPPORTED',
+          task_id: taskId,
+          task_type: type,
+          source_agent: 'heidi_controller',
+          target_agent: 'heidi_controller',
+          payload: input,
+          result: null,
+          success: false,
+          failure_reason: reason,
+        });
+        return { ok: false, reason, state: capability.heidiState };
+      }
+    }
+
+    const duplicate = this.checkIdempotency(type, input);
+    if (duplicate) {
+      await this.auditLog.record({
+        event_type: 'HEIDI_DUPLICATE_MUTATION_BLOCKED',
+        task_id: taskId,
+        task_type: type,
+        source_agent: 'heidi_controller',
+        target_agent: 'heidi_controller',
+        payload: input,
+        result: null,
+        success: false,
+        failure_reason: duplicate,
+      });
+      return { ok: false, reason: duplicate };
     }
 
     const riskAssessment = this.riskEngine.assess(event);
@@ -262,6 +296,40 @@ export class HeidiController {
       }
     }
     return false;
+  }
+
+  private isMutation(type: string): boolean {
+    return type.startsWith('REZONATE_') &&
+      !type.startsWith('REZONATE_LIST_') &&
+      !type.startsWith('REZONATE_GET_') &&
+      !type.endsWith('_HEALTH');
+  }
+
+  private dedupKey(type: string, input: any): string {
+    return `${type}:${JSON.stringify(input)}`;
+  }
+
+  private checkIdempotency(type: string, input: any): string | null {
+    if (!this.isMutation(type)) {
+      return null;
+    }
+    const now = Date.now();
+    const key = this.dedupKey(type, input);
+    const last = this.idempotencyWindow.get(key);
+    if (last && now - last < this.IDEMPOTENCY_WINDOW_MS) {
+      return `duplicate: identical ${type} recently processed`;
+    }
+    this.idempotencyWindow.set(key, now);
+    this.pruneIdempotencyWindow(now);
+    return null;
+  }
+
+  private pruneIdempotencyWindow(now: number): void {
+    for (const [key, timestamp] of this.idempotencyWindow.entries()) {
+      if (now - timestamp > this.IDEMPOTENCY_WINDOW_MS) {
+        this.idempotencyWindow.delete(key);
+      }
+    }
   }
 
   private createDirective(event: any, taskId?: string): HeidiDirective {
@@ -459,11 +527,14 @@ export class HeidiController {
   getHealth(): any {
     const rezonateAgent = this.agentRegistry.getAgent('rezonate.agent');
     const rezonateAgentStatus = rezonateAgent ? rezonateAgent.status : 'missing';
+    const taskRouterAvailable = this.taskRouter != null;
 
     return {
       ok: true,
       heidi_controller: { available: true, running: this.running },
+      task_router: { available: taskRouterAvailable, evidence: 'TaskRouter initialized with agent registry' },
       rezonate_agent: { available: rezonateAgentStatus === 'active', status: rezonateAgentStatus },
+      rezonate_client: { available: true, evidence: 'lib/rezonate/rezonate-client.js imports canonical repository' },
       rezonate_canonical_api: { available: true, evidence: 'RezonateAgent imports lib/rezonate/rezonate-client' },
       local_persistence: { available: true, evidence: 'heidi-db.json local JSON store' },
       event_bus: { available: true, running: true },

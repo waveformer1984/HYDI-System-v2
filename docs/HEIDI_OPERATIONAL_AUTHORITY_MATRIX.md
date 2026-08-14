@@ -75,6 +75,33 @@ The system should not be considered **autonomous-ready** because the approval or
 
 ---
 
+## Heidi / Rezonate Authority Model (Phase 3 — Control-Plane Hardening)
+
+### Verified Heidi → Rezonate operations
+
+| Task | Permission | Read / Mutation | Auth success tested | Auth rejection tested | Malformed input tested | No repo access after auth failure |
+|---|---|---|---|---|---|---|
+| `REZONATE_LIST_PROJECTS` | `rezonate:manage` (all operations gated by it) | READ | yes | yes (viewer, agent, unknown role) | yes (empty/invalid) | yes — no repository call if `hasPermission` fails |
+| `REZONATE_GET_PROJECT` | `rezonate:manage` | READ | yes | yes | yes (missing `id`) | yes |
+| `REZONATE_CREATE_PROJECT` | `rezonate:manage` | MUTATE | yes | yes | yes (missing/empty `name`) | yes |
+| `REZONATE_LIST_TRACKS` | `rezonate:manage` | READ | yes | yes | yes (missing `projectId`) | yes |
+| `REZONATE_CREATE_TRACK` | `rezonate:manage` | MUTATE | yes | yes | yes (missing `name` or `projectId`) | yes |
+
+`viewer`, `agent`, and any unknown role are denied before the task is routed or the repository is touched.
+
+### Forbidden / unsupported Rezonate requests
+
+| Task | State | Behavior | Tested |
+|---|---|---|---|
+| `REZONATE_GET_TRACK` | MISSING | Rejected before routing; no `getTrack()` canonical method | yes |
+| `REZONATE_UPDATE_PROJECT` | MISSING | Rejected before routing; no `updateProject()` canonical method | yes |
+| `REZONATE_UPDATE_TRACK` | MISSING | Rejected before routing; no `updateTrack()` canonical method | yes |
+| `REZONATE_NFT`, `REZONATE_MARKETPLACE`, `REZONATE_MASTERING`, `REZONATE_BLOCKCHAIN` | FORBIDDEN | Rejected by intent normalizer / capability guard; never reach the router | yes |
+
+`REZONATE_CREATE_JOB`, `REZONATE_GET_JOB`, `REZONATE_START_JOB`, `REZONATE_EXPORT_PROJECT` are canonical but **not verified through Heidi** and are now blocked by the `HeidiController` capability gate (state `FUNCTIONAL`/`SCAFFOLD`, not `VERIFIED`).
+
+---
+
 ## Heidi / Rezonate Authority Model (Phase 2)
 
 Authority classifications for the Heidi → Rezonate operational control plane.

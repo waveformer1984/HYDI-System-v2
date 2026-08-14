@@ -29,6 +29,7 @@ export class AuditLog {
   async record(record: Omit<AuditRecord, 'id'>): Promise<AuditRecord> {
     const full: AuditRecord = {
       ...record,
+      timestamp: record.timestamp || new Date().toISOString(),
       id: this.generateId(),
     };
 

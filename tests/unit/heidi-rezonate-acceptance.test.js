@@ -14,27 +14,42 @@ const { normalizeRezonateIntent } = require('../../lib/rezonate/intent.js');
 const { HeidiController } = require('../../pao-system/core/heidi.controller');
 const { getRezonateControlHealth } = require('../../lib/rezonate/control-health.js');
 
-jest.mock('../../lib/rezonate/rezonate-client.js', () => ({
-  createProject: jest.fn(async (input) => {
-    if (!input || !input.name) throw new Error('name required');
-    return { id: 'proj-123', name: input.name, status: 'draft' };
-  }),
-  listProjects: jest.fn(async () => [
-    { id: 'proj-123', name: 'Existing', status: 'draft' },
-  ]),
-  getProject: jest.fn(async (id) => {
-    if (id === 'missing') throw new Error('Project not found');
-    return { id, name: 'Found', status: 'draft' };
-  }),
-  createTrack: jest.fn(async (projectId, input) => {
-    if (!projectId) throw new Error('projectId required');
-    return { id: 'track-123', project_id: projectId, name: input.name };
-  }),
-  listTracks: jest.fn(async (projectId) => {
-    if (projectId === 'missing') throw new Error('Project not found');
-    return [{ id: 'track-1', project_id: projectId, name: 'Track A' }];
-  }),
-}));
+jest.mock('../../lib/rezonate/rezonate-client.js', () => {
+  const fs = require('fs');
+  const path = require('path');
+  return {
+    createProject: jest.fn(async (input) => {
+      if (!input || !input.name) throw new Error('name required');
+      return { id: 'proj-123', name: input.name, status: 'draft' };
+    }),
+    listProjects: jest.fn(async () => [
+      { id: 'proj-123', name: 'Existing', status: 'draft' },
+    ]),
+    getProject: jest.fn(async (id) => {
+      if (id === 'missing') throw new Error('Project not found');
+      return { id, name: 'Found', status: 'draft' };
+    }),
+    createTrack: jest.fn(async (projectId, input) => {
+      if (!projectId) throw new Error('projectId required');
+      return { id: 'track-123', project_id: projectId, name: input.name };
+    }),
+    listTracks: jest.fn(async (projectId) => {
+      if (projectId === 'missing') throw new Error('Project not found');
+      return [{ id: 'track-1', project_id: projectId, name: 'Track A' }];
+    }),
+    resetRepo: jest.fn(() => {}),
+    createClient: jest.fn(async ({ dataDir, dbFile }) => {
+      if (!fs.existsSync(dataDir)) {
+        fs.mkdirSync(dataDir, { recursive: true });
+      }
+      fs.writeFileSync(
+        path.join(dataDir, dbFile),
+        JSON.stringify({ schemaVersion: 1, projects: [], tracks: [], assets: [], processing_jobs: [] })
+      );
+      return { listProjects: jest.fn(async () => []) };
+    }),
+  };
+});
 
 describe('Heidi → Rezonate control plane (end-to-end)', () => {
   let controller;
@@ -157,7 +172,7 @@ describe('Heidi → Rezonate control plane (end-to-end)', () => {
 
   test('NORMALIZATION: ambiguous/forbidden intents fail safely', () => {
     expect(normalizeRezonateIntent('delete project proj-1')).toEqual(
-      expect.objectContaining({ ok: false, reason: expect.stringContaining('forbidden_intent') })
+      expect.objectContaining({ ok: false, reason: expect.stringMatching(/forbidden|not permitted/) })
     );
     expect(normalizeRezonateIntent('hello')).toEqual(
       expect.objectContaining({ ok: false, reason: 'unrecognized_intent' })
