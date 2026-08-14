@@ -29,32 +29,108 @@ export class RezonateAgent extends BaseAgent {
     console.log(`[Rezonate Agent] Handling event: ${event.type}`);
 
     const input = event?.payload?.input;
+    const taskId = event?.task_id || 'unknown';
+
+    const audit = (result: any, success: boolean, reason?: string) => {
+      const payload = {
+        task_type: event.type,
+        task_id: taskId,
+        input,
+        result,
+        success,
+        failure_reason: reason || null,
+        routed_by: this.id,
+        timestamp: new Date().toISOString(),
+      };
+      this.emit_event(
+        success ? 'REZONATE_TASK_COMPLETED' : 'REZONATE_TASK_FAILED',
+        payload,
+        'heidi_controller',
+        success ? 'medium' : 'high'
+      );
+    };
 
     switch (event.type) {
       case 'REZONATE_CREATE_PROJECT':
         if (!input || typeof input.name !== 'string') {
-          throw new Error('REZONATE_CREATE_PROJECT requires { name: string }');
+          const reason = 'REZONATE_CREATE_PROJECT requires { name: string }';
+          audit(null, false, reason);
+          throw new Error(reason);
         }
-        const project = await rezonateClient.createProject(input);
-        this.emit_event('REZONATE_PROJECT_CREATED', {
-          task_type: event.type,
-          project,
-          routed_by: this.id,
-          timestamp: new Date().toISOString(),
-        }, 'heidi_controller', 'medium');
-        return { ok: true, project };
+        try {
+          const project = await rezonateClient.createProject(input);
+          const result = { ok: true, project };
+          audit(result, true);
+          return result;
+        } catch (e) {
+          const reason = e instanceof Error ? e.message : 'Unknown error';
+          audit(null, false, reason);
+          throw e;
+        }
 
       case 'REZONATE_LIST_PROJECTS':
-        const projects = await rezonateClient.listProjects();
-        this.emit_event('REZONATE_PROJECTS_LISTED', {
-          task_type: event.type,
-          count: projects.length,
-          routed_by: this.id,
-          timestamp: new Date().toISOString(),
-        }, 'heidi_controller', 'medium');
-        return { ok: true, count: projects.length, projects };
+        try {
+          const projects = await rezonateClient.listProjects();
+          const result = { ok: true, count: projects.length, projects };
+          audit(result, true);
+          return result;
+        } catch (e) {
+          const reason = e instanceof Error ? e.message : 'Unknown error';
+          audit(null, false, reason);
+          throw e;
+        }
+
+      case 'REZONATE_GET_PROJECT':
+        if (!input || typeof input.id !== 'string') {
+          const reason = 'REZONATE_GET_PROJECT requires { id: string }';
+          audit(null, false, reason);
+          throw new Error(reason);
+        }
+        try {
+          const project = await rezonateClient.getProject(input.id);
+          const result = { ok: true, project };
+          audit(result, true);
+          return result;
+        } catch (e) {
+          const reason = e instanceof Error ? e.message : 'Unknown error';
+          audit(null, false, reason);
+          throw e;
+        }
 
       case 'REZONATE_CREATE_TRACK':
+        if (!input || typeof input.projectId !== 'string' || typeof input.name !== 'string') {
+          const reason = 'REZONATE_CREATE_TRACK requires { projectId: string, name: string }';
+          audit(null, false, reason);
+          throw new Error(reason);
+        }
+        try {
+          const track = await rezonateClient.createTrack(input.projectId, { name: input.name });
+          const result = { ok: true, track };
+          audit(result, true);
+          return result;
+        } catch (e) {
+          const reason = e instanceof Error ? e.message : 'Unknown error';
+          audit(null, false, reason);
+          throw e;
+        }
+
+      case 'REZONATE_LIST_TRACKS':
+        if (!input || typeof input.projectId !== 'string') {
+          const reason = 'REZONATE_LIST_TRACKS requires { projectId: string }';
+          audit(null, false, reason);
+          throw new Error(reason);
+        }
+        try {
+          const tracks = await rezonateClient.listTracks(input.projectId);
+          const result = { ok: true, count: tracks.length, tracks };
+          audit(result, true);
+          return result;
+        } catch (e) {
+          const reason = e instanceof Error ? e.message : 'Unknown error';
+          audit(null, false, reason);
+          throw e;
+        }
+
       case 'REZONATE_GET_JOB':
       case 'REZONATE_CREATE_JOB':
       case 'REZONATE_START_JOB':
@@ -62,6 +138,7 @@ export class RezonateAgent extends BaseAgent {
       case 'REZONATE_HEALTH':
         this.emit_event('REZONATE_TASK_ROUTED', {
           task_type: event.type,
+          task_id: taskId,
           payload: event.payload,
           routed_by: this.id,
           timestamp: new Date().toISOString(),
@@ -71,6 +148,7 @@ export class RezonateAgent extends BaseAgent {
       default:
         this.emit_event('REZONATE_TASK_UNHANDLED', {
           task_type: event.type,
+          task_id: taskId,
           reason: 'unknown_task_type',
           timestamp: new Date().toISOString(),
         }, 'heidi_controller', 'low');

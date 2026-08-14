@@ -72,3 +72,53 @@ Heidi's actual authority today is:
 - **FORBIDDEN**: credential rotation, external account creation, KILO execution, anything not implemented.
 
 The system should not be considered **autonomous-ready** because the approval orchestration is not active and the enforcement of `HUMAN APPROVAL` is not machine-gated.
+
+---
+
+## Heidi / Rezonate Authority Model (Phase 2)
+
+Authority classifications for the Heidi → Rezonate operational control plane.
+
+| Class | Meaning |
+|---|---|
+| **READ** | Heidi may query and report a value. No mutation. |
+| **PLAN** | Heidi may assemble parameters and recommend an action. No execution. |
+| **EXECUTE** | Heidi may perform a verified, non-mutating operation within an explicitly granted permission. |
+| **MUTATE** | Heidi may change persistent state. Requires `rezonate:manage` and, for some operations, explicit user confirmation. |
+| **ADMIN** | Heidi must not perform this; only a human admin with direct access may do it. |
+
+## Rezonate Operation Authority
+
+| Operation | Heidi Authority | What Heidi May Do | User / Role Requirement | What Heidi Must Refuse | What Heidi May Report But Not Execute | Confirmation Required? |
+|---|---|---|---|---|---|---|
+| **List projects** | **READ** | Return the list or count of projects | `viewer`+ read permission or `operator`/`owner` | Cannot modify | The existence or count of projects | No |
+| **Get project** | **READ** | Return one project by id | `viewer`+ or `operator`/`owner` | Cannot modify | Project metadata | No |
+| **List tracks** | **READ** | Return tracks for a project | `viewer`+ or `operator`/`owner` | Cannot create/modify tracks | Track count and names | No |
+| **Get track** | **READ** | Return one track by id | `viewer`+ or `operator`/`owner` | Cannot modify | Track metadata | No |
+| **Create project** | **MUTATE** | Call `createProject()` after `rezonate:manage` is granted | `operator`/`owner` with `rezonate:manage` | Must refuse if `viewer`, `agent`, or missing permission | That the parameters are valid and the capability exists | No for default project; Yes if cost threshold or external side effects are attached |
+| **Create track** | **MUTATE** | Call `createTrack()` after `rezonate:manage` is granted | `operator`/`owner` with `rezonate:manage` | Must refuse without `rezonate:manage` | That the target project exists and the track name is available | No for local track creation |
+| **Update project** | **MUTATE** | Call `updateProject()` (if/when canonical repo supports it) | `operator`/`owner` with `rezonate:manage` | Must refuse without permission; should refuse to change ownership/rights automatically | The requested change and current state | Yes — any update is destructive to prior state |
+| **Update track** | **MUTATE** | Call `updateTrack()` (if/when canonical repo supports it) | `operator`/`owner` with `rezonate:manage` | Same as update project | The requested change and current state | Yes |
+| **Retrieve processing job** | **READ** | Return job status | `viewer`+ or `operator`/`owner` | Cannot start/alter the job | Job state and progress | No |
+| **Create / start job** | **MUTATE** | Call `createProcessingJob()` / `startProcessingJob()` | `operator`/`owner` with `rezonate:manage` | Must refuse if job would call remote/Cloud AI without approval | The job specification and resource cost | Yes if job invokes remote AI or incurs real cost |
+| **Export project** | **MUTATE** | Call `exportProject()` to produce files | `operator`/`owner` with `rezonate:manage` | Must refuse without permission | Export format and destination | No for local export |
+| **Create ownership record** | **PLAN / HUMAN APPROVAL** | Prepare the record; do not submit without human approval | `operator`/`owner` with `rezonate:manage` plus human sign-off | Must never submit autonomously | The prepared ownership payload and risk summary | Yes — always |
+| **Register rights / collaborators** | **PLAN / HUMAN APPROVAL** | Prepare rights record; do not apply without approval | `operator`/`owner` with `rezonate:manage` plus human sign-off | Must never apply autonomously | The prepared rights payload | Yes — always |
+| **Delete project or track** | **ADMIN** | Report that a deletion was requested; do not execute | None through Heidi | Must refuse to delete | The request for a human operator | N/A |
+| **Mint / publish / NFT** | **ADMIN / FORBIDDEN** | Report that the capability does not exist or is PLANNED | N/A | Must refuse | The current state (`PLANNED`) | N/A |
+
+## What Heidi Must Refuse (Rezonate)
+
+1. Any mutating operation (`create`, `update`, `start`, `export`, ownership/rights) when the caller does not hold `rezonate:manage`.
+2. Any operation on a `PLANNED`, `SCAFFOLD`, or `PARTIAL` capability.
+3. Any delete, publish, or blockchain operation.
+4. Any request whose intent is ambiguous or whose parameters are malformed.
+5. Any operation that would bypass the canonical repository or use a second persistence path.
+
+## What Heidi May Report But Not Execute
+
+1. Project/track counts and health status.
+2. Capability contract state (`VERIFIED`, `FUNCTIONAL`, etc.).
+3. Prepared-but-not-executed plans for ownership/rights changes.
+4. Failure reasons and repository errors.
+5. The current authority level of the caller.

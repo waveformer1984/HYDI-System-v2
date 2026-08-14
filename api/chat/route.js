@@ -18,6 +18,7 @@ import {
   listVerifiedCapabilities,
   listInoperableCapabilities,
 } from '../../lib/rezonate/rezonate-client.js';
+import { normalizeRezonateIntent } from '../../lib/rezonate/intent.js';
 import { HeidiController } from '../../pao-system/core/heidi.controller';
 
 // Lazy client: a missing SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY must surface
@@ -265,20 +266,36 @@ async function handleHyveMessage(message, request) {
 async function handleRezonateMessage(message, request) {
   const lowerMessage = message.toLowerCase();
 
-  // ── Local-first, PAO-routed Rezonate project creation ───────────────────────
-  const createMatch = message.match(/create(?:\s+a)?\s+project(?:\s+called)?\s+['\"]?(.+?)['\"]?$/i);
-  if (createMatch) {
-    const name = createMatch[1].trim();
+  // ── Explicit Rezonate intent normalization (PHASE 4) ──────────────────────────
+  const intent = normalizeRezonateIntent(message);
+  if (intent.ok) {
     try {
-      const result = await getHeidiController().processUserEvent('REZONATE_CREATE_PROJECT', { name });
-      if (result?.ok && result?.project) {
-        return `🎵 Rezonate: created project "${result.project.name}" (${result.project.id})`;
+      const result = await getHeidiController().processUserEvent(intent.taskType, intent.parameters, 'owner');
+      if (result?.ok) {
+        switch (intent.taskType) {
+          case 'REZONATE_CREATE_PROJECT':
+            return `🎵 Rezonate: created project "${result.project.name}" (${result.project.id})`;
+          case 'REZONATE_LIST_PROJECTS':
+            return `🎵 Rezonate: ${result.count} project(s) — ${result.projects.map((p) => p.name).join(', ') || 'none'}`;
+          case 'REZONATE_GET_PROJECT':
+            return `🎵 Rezonate: project "${result.project.name}" (${result.project.id})`;
+          case 'REZONATE_CREATE_TRACK':
+            return `🎵 Rezonate: created track "${result.track.name}" (${result.track.id}) in project ${result.track.project_id}`;
+          case 'REZONATE_LIST_TRACKS':
+            return `🎵 Rezonate: ${result.count} track(s) in project — ${result.tracks.map((t) => t.name).join(', ') || 'none'}`;
+          default:
+            return `🎵 Rezonate: completed ${intent.taskType}`;
+        }
       }
-      return `🎵 Rezonate: could not create project — ${result?.reason || 'unknown'}`;
+      return `🎵 Rezonate: ${intent.taskType} failed — ${result?.reason || 'unknown'}`;
     } catch (e) {
-      console.error('[chat/rezonate] create project error:', e);
-      return `🎵 Rezonate: create project failed — ${e.message}`;
+      console.error('[chat/rezonate] operational error:', e);
+      return `🎵 Rezonate: ${intent.taskType} failed — ${e.message}`;
     }
+  }
+
+  if (intent.reason === 'forbidden_intent') {
+    return `🎵 Rezonate: I cannot do that. ${intent.reason}`;
   }
 
   // ── Capability-aware responses (contract-first, never invent status)

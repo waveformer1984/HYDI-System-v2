@@ -56,6 +56,19 @@ jest.mock('../../lib/rezonate/rezonate-client.js', () => ({
     { id: 'studio_mixing', name: 'Mixing & Mastering', state: 'PLANNED', category: 'Studio' },
   ]),
   createProject: jest.fn(async (input) => ({ id: 'proj-test-1', name: input.name, status: 'draft' })),
+  getProject: jest.fn(async (id) => {
+    if (id === 'missing') throw new Error('Project not found');
+    return { id, name: 'Test Project', status: 'draft' };
+  }),
+  createTrack: jest.fn(async (projectId, input) => ({
+    id: 'track-test-1',
+    project_id: projectId,
+    name: input.name,
+    type: 'audio',
+  })),
+  listTracks: jest.fn(async (projectId) => [
+    { id: 'track-1', project_id: projectId, name: 'Intro' },
+  ]),
 }));
 
 const SERVICE_SECRET = 'test-service-secret';
