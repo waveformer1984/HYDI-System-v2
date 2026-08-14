@@ -80,7 +80,7 @@ No cloud Supabase, no direct table queries, no second repository.
 - `heidi_controller` — `HeidiController` constructed and `running` state.
 - `rezonate_agent` — `RezonateAgent` registered and `active`.
 - `rezonate_canonical_api` — canonical client import verified.
-- `local_persistence` — local JSON store path configured.
+- `local_persistence` — canonical JsonStore with `heidi-db.json` file. A fresh repository instance recovers the same projects.
 - `event_bus` — `EventBus` exists.
 
 Each layer reports `available: true/false`. The top-level `ok` is `true` only when every layer is available.
@@ -102,6 +102,7 @@ Each layer reports `available: true/false`. The top-level `ok` is `true` only wh
 | `npm run build` | **PASS** (warnings only) |
 | `npm run validate:rezonate-contract` | **PASS** |
 | `node --test protoforge-applications/rezonate/tests/*.test.js` | **128/128 PASS** |
+| `npx jest tests/unit/persistence-guard.test.js` | **5/5 PASS** |
 | `npx jest tests/unit/chat-route-rezonate.test.js tests/unit/heidi-rezonate-acceptance.test.js --verbose` | **17/17 PASS** |
 | `npm test -- --testPathPattern=tests/unit` | **1089 PASS, 4 FAIL, 1 suite fail to run** |
 
