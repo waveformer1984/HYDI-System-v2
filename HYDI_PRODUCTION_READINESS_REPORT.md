@@ -7,7 +7,7 @@ Branch: `release/v0.9.0`
 
 Local-first certification is **GO**. The corrected 1-hour soak passed with 870/870 successful operations, 0 failures, database and HYDI restart recovery, and proven cloud isolation.
 
-**Production readiness is NOT READY.** The P0 blocker is confirmed historical exposure of live credentials in Git history (Stripe live key, Stripe webhook secret, Supabase service-role key). These must be rotated before any production deployment. P1 gaps include missing CI build/typecheck/persistence-guard/readiness gates, 259 direct Supabase client files (99 runtime paths need factory migration), no `.env.example`, unverified deployment path, and missing rate-limit/CSRF/rollback evidence.
+**Production readiness is NOT READY.** The P0 blocker is confirmed historical exposure of live credentials in Git history (Stripe live key, Stripe webhook secret, Supabase service-role key). Credential remediation is now **READY FOR ROTATION**; provider-side rotation is the only remaining step. P1 gaps include missing CI build/typecheck/persistence-guard/readiness gates, 259 direct Supabase client files (99 runtime paths need factory migration), unverified deployment path, and missing rate-limit/CSRF/rollback evidence.
 
 ## 2. Current Architecture
 
@@ -52,6 +52,18 @@ Next.js 15.5.22 + Vercel serverless target. Supabase Edge Functions for async wo
 | 6 | 259 files construct direct Supabase clients; many in `api/`, `lib/`, `workers/` | **P1** |
 | 7 | Build artifact scan found no secret values embedded in `.next/` | **GOOD** |
 | 8 | Only `NEXT_PUBLIC_SUPABASE_*` (publishable) in client bundles | **GOOD** |
+
+## 4.5 P0 Credential Remediation Status
+
+The P0 credential exposure has been remediated to the point of **rotation readiness**.
+
+- **Impact audit**: complete — `docs/PRODUCTION_CREDENTIAL_REMEDIATION.md` maps every credential class to provider, purpose, consumers, env vars, and rotation steps.
+- **Working tree**: clean — no live `sk_live_*`, `whsec_*`, or `sb_secret_*` values in any tracked file.
+- **`.env.example`**: already present with safe placeholders.
+- **Git history**: exposed commits identified; `docs/GIT_HISTORY_SECRET_REMEDIATION.md` explains why provider rotation is the primary control and why history rewrite is optional and requires explicit authorization.
+- **P0 status**: `READY FOR ROTATION`.
+
+Do not proceed to the 259-file Supabase migration or any deployment until the provider-side rotations have been performed and the post-rotation verification gate has passed.
 
 ## 5. Secrets Findings
 
@@ -206,7 +218,8 @@ See `docs/DIRECT_SUPABASE_CLIENT_REMEDIATION_PLAN.md`.
 | **DASHBOARD/BRIDGE** | **GO** |
 | **AUTO MODE** | **VERIFIED (CONTROLLED TEST)** |
 | **CLOUD SUPABASE** | **OPTIONAL / INACTIVE** |
+| **P0 CREDENTIALS** | **READY FOR ROTATION** |
 | **PRODUCTION READINESS** | **NOT READY** |
 | **FULL ECOSYSTEM** | **NOT READY** |
 
-HYDI is local-first certified and functionally capable. It is **not production-ready** because live credentials have been exposed in Git history and several production gates (CI build, deployment verification, direct-client migration, rate limiting, rollback) remain unproven.
+HYDI is local-first certified and functionally capable. The P0 credential remediation is complete up to the provider rotation step; actual rotation is required before any production deployment. Other production gates (CI build, deployment verification, direct-client migration, rate limiting, rollback) remain unproven.
