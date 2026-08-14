@@ -17,6 +17,7 @@ export class ApexAgent extends BaseAgent {
       'APEX_EPISODE_CREATED',
       'GET_APEX_PROJECT_STATUS',
       'GET_APEX_HEALTH',
+      'GET_APEX_REZONATE_STATUS',
       'APEX_EVENT_RECORDED',
       'APEX_EPISODE_APPROVED',
       'APEX_EPISODE_PUBLISHED',
@@ -66,6 +67,8 @@ export class ApexAgent extends BaseAgent {
           return await this._getProjectStatus(ventureId, input, taskId);
         case 'GET_APEX_HEALTH':
           return this._success('GET_APEX_HEALTH', taskId, input, apexClient.getHealth());
+        case 'GET_APEX_REZONATE_STATUS':
+          return await this._getApexRezonateStatus(input, taskId);
         case 'APEX_EPISODE_CREATED':
           return await this._recordEpisode(ventureId, input, taskId);
         default:
@@ -125,6 +128,21 @@ export class ApexAgent extends BaseAgent {
       const msg = e instanceof Error ? e.message : 'Unknown error';
       return { ok: false, reason: `Rezonate project missing: ${msg}` };
     }
+  }
+
+  private async _getApexRezonateStatus(input: any, taskId: string): Promise<any> {
+    const projects = await (rezonateClient as any).listProjects();
+    const apex = apexClient.getHealth();
+    const controller = { available: true, evidence: 'HeidiController routing GET_APEX_REZONATE_STATUS' };
+    const local = { ok: true, apex_data_dir: apex.data_dir, persistence: 'local JSON' };
+    const cloud = { supabase_url: process.env.SUPABASE_URL || null, supabase_key_set: !!process.env.SUPABASE_SERVICE_ROLE_KEY };
+    return this._success('GET_APEX_REZONATE_STATUS', taskId, input, {
+      controller,
+      apex,
+      rezonate: { count: projects.length, available: true },
+      local,
+      cloud,
+    });
   }
 
   private async _recordEpisode(ventureId: string, input: any, taskId: string): Promise<any> {

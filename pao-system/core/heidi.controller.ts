@@ -146,6 +146,7 @@ export class HeidiController {
       ['APEX_EPISODE_CREATED', ['apex.agent']],
       ['GET_APEX_PROJECT_STATUS', ['apex.agent']],
       ['GET_APEX_HEALTH', ['apex.agent']],
+      ['GET_APEX_REZONATE_STATUS', ['apex.agent']],
       ['APEX_EVENT_RECORDED', ['apex.agent']],
       ['APEX_EPISODE_APPROVED', ['apex.agent']],
       ['APEX_EPISODE_PUBLISHED', ['apex.agent']],
