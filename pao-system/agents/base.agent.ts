@@ -20,7 +20,7 @@ export class BaseAgent {
     this.activeTaskCount = 0;
   }
 
-  async handle_event(event: any): Promise<void> {
+  async handle_event(event: any): Promise<any> {
     throw new Error('handle_event method must be implemented by subclass');
   }
 
@@ -50,11 +50,11 @@ export class BaseAgent {
     this.refreshAvailability();
   }
 
-  async execute(event: any): Promise<void> {
+  async execute(event: any): Promise<any> {
     this.activeTaskCount++;
     this.refreshAvailability();
     try {
-      await this.handle_event(event);
+      return await this.handle_event(event);
     } catch (error) {
       console.error(`[${this.id}] Error handling event:`, error);
       this.emit_event('AGENT_ERROR', {
@@ -62,6 +62,7 @@ export class BaseAgent {
         original_event: event,
         error: error instanceof Error ? error.message : 'Unknown error'
       }, 'broadcast', 'high');
+      throw error;
     } finally {
       this.activeTaskCount--;
       this.refreshAvailability();

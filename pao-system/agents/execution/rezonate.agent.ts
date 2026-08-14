@@ -1,4 +1,5 @@
 import { BaseAgent } from '../base.agent';
+import * as rezonateClient from '../../../lib/rezonate/rezonate-client';
 
 /**
  * Rezonate agent for the PAO task router.
@@ -24,13 +25,35 @@ export class RezonateAgent extends BaseAgent {
     ]);
   }
 
-  async handle_event(event: any): Promise<void> {
+  async handle_event(event: any): Promise<any> {
     console.log(`[Rezonate Agent] Handling event: ${event.type}`);
 
+    const input = event?.payload?.input;
+
     switch (event.type) {
-      case 'REZONATE_LIST_PROJECTS':
       case 'REZONATE_CREATE_PROJECT':
-      case 'REZONATE_LIST_TRACKS':
+        if (!input || typeof input.name !== 'string') {
+          throw new Error('REZONATE_CREATE_PROJECT requires { name: string }');
+        }
+        const project = await rezonateClient.createProject(input);
+        this.emit_event('REZONATE_PROJECT_CREATED', {
+          task_type: event.type,
+          project,
+          routed_by: this.id,
+          timestamp: new Date().toISOString(),
+        }, 'heidi_controller', 'medium');
+        return { ok: true, project };
+
+      case 'REZONATE_LIST_PROJECTS':
+        const projects = await rezonateClient.listProjects();
+        this.emit_event('REZONATE_PROJECTS_LISTED', {
+          task_type: event.type,
+          count: projects.length,
+          routed_by: this.id,
+          timestamp: new Date().toISOString(),
+        }, 'heidi_controller', 'medium');
+        return { ok: true, count: projects.length, projects };
+
       case 'REZONATE_CREATE_TRACK':
       case 'REZONATE_GET_JOB':
       case 'REZONATE_CREATE_JOB':
@@ -43,13 +66,15 @@ export class RezonateAgent extends BaseAgent {
           routed_by: this.id,
           timestamp: new Date().toISOString(),
         }, 'heidi_controller', 'medium');
-        break;
+        return { ok: true, routed: event.type };
+
       default:
         this.emit_event('REZONATE_TASK_UNHANDLED', {
           task_type: event.type,
           reason: 'unknown_task_type',
           timestamp: new Date().toISOString(),
         }, 'heidi_controller', 'low');
+        return { ok: false, reason: 'unknown_task_type' };
     }
   }
 }

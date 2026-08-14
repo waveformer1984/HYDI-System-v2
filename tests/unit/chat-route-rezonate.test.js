@@ -55,6 +55,7 @@ jest.mock('../../lib/rezonate/rezonate-client.js', () => ({
   listInoperableCapabilities: jest.fn(() => [
     { id: 'studio_mixing', name: 'Mixing & Mastering', state: 'PLANNED', category: 'Studio' },
   ]),
+  createProject: jest.fn(async (input) => ({ id: 'proj-test-1', name: input.name, status: 'draft' })),
 }));
 
 const SERVICE_SECRET = 'test-service-secret';
@@ -120,6 +121,16 @@ describe('chat router - Rezonate handler', () => {
     const response = res.json.mock.calls[0][0].response;
     expect(response).toContain('Stem Separation');
     expect(response).toContain('VERIFIED');
+  });
+
+  test('routes a PAO create-project request through HeidiController to the canonical repository', async () => {
+    const res = makeRes();
+    await handler(makeReq({ message: 'create a project called Demo', system: 'rezonate' }), res);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    const response = res.json.mock.calls[0][0].response;
+    expect(response).toContain('created project "Demo"');
+    expect(response).toContain('proj-test-1');
   });
 });
 

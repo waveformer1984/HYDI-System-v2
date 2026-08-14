@@ -149,29 +149,66 @@ export class HeidiController {
     });
   }
 
+  public async processUserEvent(type: string, input: any): Promise<any> {
+    this.systemMetrics.tasks_processed++;
+    const event = {
+      type,
+      payload: input,
+      source_agent: 'user',
+      target_agent: 'heidi_controller',
+      priority: 'medium',
+      timestamp: new Date().toISOString()
+    };
+    console.log(`[HEIDI] Processing: ${event.type} from ${event.source_agent}`);
+
+    if (this.isRedundantTask(event)) {
+      console.log(`[HEIDI] Redundant task detected: ${event.type} - SKIPPING`);
+      return { ok: false, reason: 'redundant' };
+    }
+
+    const riskAssessment = this.riskEngine.assess(event);
+
+    if (riskAssessment.requires_approval) {
+      await this.escalateForApproval(event, riskAssessment);
+      return { ok: false, reason: 'requires_approval', risk: riskAssessment };
+    }
+
+    const directive = this.createDirective(event);
+    const assignedAgents = this.assignAgents(directive);
+
+    const results = [];
+    for (const agentId of assignedAgents) {
+      const result = await this.routeToAgent(agentId, directive, input);
+      results.push(result);
+    }
+
+    this.updateMetrics();
+    return results[0];
+  }
+
   private async processEvent(event: any): Promise<void> {
     this.systemMetrics.tasks_processed++;
     console.log(`[HEIDI] Processing: ${event.type} from ${event.source_agent}`);
-    
+
     if (this.isRedundantTask(event)) {
       console.log(`[HEIDI] Redundant task detected: ${event.type} - SKIPPING`);
       return;
     }
-    
+
     const riskAssessment = this.riskEngine.assess(event);
-    
+
     if (riskAssessment.requires_approval) {
       await this.escalateForApproval(event, riskAssessment);
       return;
     }
-    
+
     const directive = this.createDirective(event);
     const assignedAgents = this.assignAgents(directive);
-    
+
     for (const agentId of assignedAgents) {
-      await this.routeToAgent(agentId, directive);
+      await this.routeToAgent(agentId, directive, event.payload);
     }
-    
+
     this.updateMetrics();
   }
 
@@ -225,28 +262,34 @@ export class HeidiController {
     return availableAgents;
   }
 
-  private async routeToAgent(agentId: string, directive: HeidiDirective): Promise<void> {
+  private async routeToAgent(agentId: string, directive: HeidiDirective, userPayload?: any): Promise<any> {
     const agent = this.agentRegistry.getAgent(agentId);
     if (!agent) {
       console.error(`[HEIDI] Agent not found: ${agentId}`);
       this.handleTaskFailure(directive, 'Agent not found');
-      return;
+      return { ok: false, reason: 'agent_not_found' };
     }
     try {
       this.activeTasks.set(directive.task_id, directive);
-      await agent.execute({
+      const result = await agent.execute({
         task_id: directive.task_id,
         type: directive.task_type,
-        payload: directive,
+        payload: { directive, input: userPayload },
         source_agent: 'heidi_controller',
         target_agent: agentId,
         priority: directive.priority,
         timestamp: new Date().toISOString()
       });
+      this.activeTasks.delete(directive.task_id);
+      this.completedTasks.push(directive);
+      this.systemMetrics.tasks_completed++;
       console.log(`[HEIDI] Routed ${directive.task_type} to ${agentId} (Priority: ${directive.priority})`);
+      return result;
     } catch (error) {
+      this.activeTasks.delete(directive.task_id);
       console.error(`[HEIDI] Task execution failed: ${directive.task_id}`, error);
       this.handleTaskFailure(directive, error instanceof Error ? error.message : 'Unknown error');
+      return { ok: false, reason: error instanceof Error ? error.message : 'Unknown error' };
     }
   }
 

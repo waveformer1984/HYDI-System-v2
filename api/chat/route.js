@@ -18,6 +18,7 @@ import {
   listVerifiedCapabilities,
   listInoperableCapabilities,
 } from '../../lib/rezonate/rezonate-client.js';
+import { HeidiController } from '../../pao-system/core/heidi.controller';
 
 // Lazy client: a missing SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY must surface
 // as a clean JSON error from the handler, not a cold-start crash (which returns
@@ -33,6 +34,16 @@ function getSupabase() {
   return _supabase;
 }
 const supabase = new Proxy({}, { get: (_, prop) => getSupabase()[prop] });
+
+// Local PAO / Heidi control plane. Lazy-initialized so the module can be loaded
+// in serverless contexts without spinning up the event bus until needed.
+let _heidiController = null;
+function getHeidiController() {
+  if (!_heidiController) {
+    _heidiController = new HeidiController();
+  }
+  return _heidiController;
+}
 
 // ── Service token guard ───────────────────────────────────────────────────────
 // Replaces bare x-user-id header trust. Callers must present an HMAC-SHA256
@@ -253,6 +264,22 @@ async function handleHyveMessage(message, request) {
 
 async function handleRezonateMessage(message, request) {
   const lowerMessage = message.toLowerCase();
+
+  // ── Local-first, PAO-routed Rezonate project creation ───────────────────────
+  const createMatch = message.match(/create(?:\s+a)?\s+project(?:\s+called)?\s+['\"]?(.+?)['\"]?$/i);
+  if (createMatch) {
+    const name = createMatch[1].trim();
+    try {
+      const result = await getHeidiController().processUserEvent('REZONATE_CREATE_PROJECT', { name });
+      if (result?.ok && result?.project) {
+        return `🎵 Rezonate: created project "${result.project.name}" (${result.project.id})`;
+      }
+      return `🎵 Rezonate: could not create project — ${result?.reason || 'unknown'}`;
+    } catch (e) {
+      console.error('[chat/rezonate] create project error:', e);
+      return `🎵 Rezonate: create project failed — ${e.message}`;
+    }
+  }
 
   // ── Capability-aware responses (contract-first, never invent status)
   if (lowerMessage.includes('capabilit') || lowerMessage.includes('feature') || lowerMessage.includes('can you ')) {
