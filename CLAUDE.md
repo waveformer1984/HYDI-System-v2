@@ -292,24 +292,26 @@ Key DB features: RLS enabled on all tables, `system_dashboard` view drives healt
 
 ## Environment Variables
 
-| Variable | Purpose |
-|----------|---------|
-| `SUPABASE_URL` | Supabase project URL |
-| `SUPABASE_SERVICE_ROLE_KEY` | Service role key (server-side only) |
-| `SUPABASE_PUBLISHABLE_KEY` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Public anon key |
-| `NEXT_PUBLIC_SUPABASE_URL` | Supabase URL exposed to client |
-| `STRIPE_SECRET_KEY` | Stripe secret key |
-| `STRIPE_WEBHOOK_SECRET_01` | Stripe webhook signing secret |
-| `STRIPE_CONNECT_WEBHOOK_SECRET` | Stripe Connect webhook signing secret |
-| `STRIPE_ACCOUNT_GALACTIC_BYTES` et al. | Connect sub-account IDs per revenue stream |
-| `NODE_ENV` | `production` / `development` |
-| `ANTHROPIC_API_KEY` | Enables the native streaming/tool-calling agent (`lib/heidi-agent.ts`); when unset Heidi uses the fallback orchestrator |
-| `ANTHROPIC_BASE_URL` | Optional override of the Anthropic SDK base URL (e.g. a compatible proxy) |
-| `OPENAI_API_KEY` | Hosted memory embeddings (1536-dim) |
-| `EMBEDDING_PROVIDER` | `openai` \| `ollama` — forces the embeddings backend; auto-selected otherwise (OpenAI if its key is set, else Ollama when a local model is enabled) |
-| `OLLAMA_EMBEDDING_MODEL` | Local embeddings model (default `nomic-embed-text`); vectors are zero-padded to 1536 dims |
-| `ENABLE_LOCAL_MODEL` / `LOCAL_MODEL_URL` / `LOCAL_MODEL_NAME` | Enable + locate the local Ollama model for inference |
-| `LOCAL_MODEL_TIMEOUT_MS` | Local inference budget in ms (default `5000`); governs both the abort timeout and the success-routing latency gate in `lib/ModelManager.ts` |
+| Variable | Purpose | Local-First Required |
+|----------|---------|---------------------|
+| `SUPABASE_URL` | Supabase project URL | **yes** — defaults to `http://127.0.0.1:54321` for local stack |
+| `SUPABASE_SERVICE_ROLE_KEY` | Service role key (server-side only) | **yes** for local-first operation |
+| `SUPABASE_PUBLISHABLE_KEY` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Public anon key | yes (client-side, safe) |
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase URL exposed to client | yes (defaults to local) |
+| `NODE_ENV` | `production` / `development` | **yes** |
+| `STRIPE_SECRET_KEY` | Stripe secret key | no — only when `STRIPE_MODE=live` |
+| `STRIPE_WEBHOOK_SECRET_01` | Stripe webhook signing secret | no |
+| `STRIPE_CONNECT_WEBHOOK_SECRET` | Stripe Connect webhook signing secret | no |
+| `STRIPE_ACCOUNT_GALACTIC_BYTES` et al. | Connect sub-account IDs per revenue stream | no — only for live Connect |
+| `STRIPE_MODE` | `mock` (default) \| `live` — no Stripe calls in `mock` mode | no |
+| `ANTHROPIC_API_KEY` | Enables the native streaming/tool-calling agent (`lib/heidi-agent.ts`); when unset Heidi uses the fallback orchestrator | no |
+| `ANTHROPIC_BASE_URL` | Optional override of the Anthropic SDK base URL (e.g. a compatible proxy) | no |
+| `OPENAI_API_KEY` | Hosted memory embeddings (1536-dim) | no — `EMBEDDING_PROVIDER=ollama` works locally |
+| `EMBEDDING_PROVIDER` | `openai` \| `ollama` — forces the embeddings backend; auto-selected otherwise (OpenAI if its key is set, else Ollama when a local model is enabled) | no |
+| `OLLAMA_EMBEDDING_MODEL` | Local embeddings model (default `nomic-embed-text`); vectors are zero-padded to 1536 dims | no |
+| `ENABLE_LOCAL_MODEL` / `LOCAL_MODEL_URL` / `LOCAL_MODEL_NAME` | Enable + locate the local Ollama model for inference | no |
+| `LOCAL_MODEL_TIMEOUT_MS` | Local inference budget in ms (default `5000`); governs both the abort timeout and the success-routing latency gate in `lib/ModelManager.ts` | no |
+| `RESEND_API_KEY` / `SENDGRID_API_KEY` | Email provider API keys | no — email actions return `not_configured` when absent |
 
 Use `SUPABASE_SERVICE_ROLE_KEY` server-side only. Never expose it to the client.
 

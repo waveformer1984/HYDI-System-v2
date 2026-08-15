@@ -23,18 +23,24 @@ A Replay Engine validates determinism outside the pipeline: the same RAW LEDGER 
 
 The six active revenue streams routed through Stripe Connect: `galactic_bytes`, `detailer_bot`, `lipi_v2`, `protogrance_aromatics`, `rezonate`, `waveformer_studio`.
 
-## Quick Start
+## Quick Start (Local-First)
 
 ```bash
 # Requires Node >= 20
 npm install
-# Create .env and .env.local from the table in CLAUDE.md (Environment Variables section).
-# Required minimum: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, STRIPE_SECRET_KEY.
 
-npm run dev            # Next.js dev server on 0.0.0.0:3000
+# Copy the local-first .env.example (see CLAUDE.md "Environment Variables" section).
+# Core startup only needs a local Supabase URL and service role key.
+# Optional integrations (Stripe, OpenAI, Anthropic, Resend, etc.) are disabled when their keys are absent.
+
+# 1. Start local Supabase (requires Docker Desktop)
+supabase start
+
+# 2. Start the Next.js dev server
+npm run dev            # 0.0.0.0:3000
 ```
 
-Verify Supabase connectivity:
+Verify local Supabase connectivity:
 
 ```bash
 ./verify-supabase.sh
