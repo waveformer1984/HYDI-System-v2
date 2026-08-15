@@ -242,11 +242,7 @@ class HeidiActionLayer extends EventEmitter {
       throw new Error('Revenue actions are disabled');
     }
     
-    if (!this.config.stripeSecretKey) {
-      throw new Error('Stripe secret key not configured');
-    }
-    
-    const stripe = require('stripe')(this.config.stripeSecretKey);
+    const stripe = require('../../lib/stripe/client');
     
     try {
       console.log(`[STRIPE] Processing payment: $${params.amount}`);
@@ -289,7 +285,7 @@ class HeidiActionLayer extends EventEmitter {
       throw new Error('Revenue actions are disabled');
     }
     
-    const stripe = require('stripe')(this.config.stripeSecretKey);
+    const stripe = require('../../lib/stripe/client');
     
     try {
       console.log(`[STRIPE] Creating checkout session for: ${params.productName}`);
@@ -337,7 +333,7 @@ class HeidiActionLayer extends EventEmitter {
   
   // Refund payment
   async refundPayment(params, _context) {
-    const stripe = require('stripe')(this.config.stripeSecretKey);
+    const stripe = require('../../lib/stripe/client');
     
     try {
       console.log(`[STRIPE] Processing refund: $${params.amount}`);
@@ -372,7 +368,7 @@ class HeidiActionLayer extends EventEmitter {
   
   // Update subscription
   async updateSubscription(params, _context) {
-    const stripe = require('stripe')(this.config.stripeSecretKey);
+    const stripe = require('../../lib/stripe/client');
     
     try {
       console.log(`[STRIPE] Updating subscription: ${params.subscriptionId}`);
@@ -410,7 +406,14 @@ class HeidiActionLayer extends EventEmitter {
   // Send email
   async sendEmail(params, _context) {
     if (!this.config.emailApiKey) {
-      throw new Error('Email API key not configured');
+      console.log('[EMAIL] No email API key configured — recording as not-configured');
+      return {
+        status: 'not_configured',
+        provider: this.config.emailProvider,
+        to: params.to,
+        subject: params.subject,
+        message: 'Email provider not configured'
+      };
     }
     
     try {

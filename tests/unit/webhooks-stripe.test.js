@@ -29,11 +29,8 @@ jest.mock('../../workers/WebhookQueueAdapter', () =>
 );
 
 const mockConstructEvent = jest.fn();
-jest.mock('stripe', () =>
-  jest.fn().mockImplementation(() => ({
-    webhooks: { constructEvent: (...args) => mockConstructEvent(...args) },
-  }))
-);
+const client = require('../../lib/stripe/client');
+client.webhooks.constructEvent = mockConstructEvent;
 
 function fakeRes() {
   return {

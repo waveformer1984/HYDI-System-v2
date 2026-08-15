@@ -9,16 +9,14 @@
  */
 
 const { createClient } = require('@supabase/supabase-js');
-const Stripe = require('stripe');
+const stripe = require('../lib/stripe/client');
 
 const defaultSupabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY
 );
 
-const defaultStripe = process.env.STRIPE_SECRET_KEY
-  ? new Stripe(process.env.STRIPE_SECRET_KEY)
-  : null;
+const defaultStripe = stripe;
 
 const ALLOWED_STATUSES = new Set(['new', 'contacted', 'qualified', 'converted', 'lost']);
 const ALLOWED_PERIODS = new Set(['today', 'week', 'month']);

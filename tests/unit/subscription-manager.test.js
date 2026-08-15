@@ -1,31 +1,5 @@
 'use strict';
 
-// Mock stripe before SubscriptionManager is loaded
-jest.mock('stripe', () => {
-  return jest.fn().mockImplementation(() => ({
-    checkout: {
-      sessions: {
-        create: jest.fn().mockResolvedValue({ id: 'cs_test', url: 'https://checkout.stripe.com/test' }),
-      },
-    },
-    billingPortal: {
-      sessions: {
-        create: jest.fn().mockResolvedValue({ url: 'https://billing.stripe.com/test' }),
-      },
-    },
-    subscriptions: {
-      retrieve: jest.fn().mockResolvedValue({
-        id: 'sub_test',
-        items: { data: [{ id: 'si_test', amount: 9900 }] },
-      }),
-      update: jest.fn().mockResolvedValue({ id: 'sub_test', cancel_at_period_end: true }),
-    },
-    webhooks: {
-      constructEvent: jest.fn().mockReturnValue({ type: 'test.event', data: { object: {} } }),
-    },
-  }));
-});
-
 // Prevent real Supabase calls
 jest.mock('../../src/database', () => ({
   supabase: {
@@ -78,7 +52,8 @@ describe('SubscriptionManager', () => {
         'cus_test', tier,
         'https://test.hydi.ai/success', 'https://test.hydi.ai/cancel'
       );
-      expect(session.id).toBe('cs_test');
+      expect(session.id).toMatch(/^cs_mock_/);
+      expect(session.url).toBeDefined();
     });
   });
 

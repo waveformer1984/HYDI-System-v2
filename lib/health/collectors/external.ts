@@ -25,19 +25,12 @@ export class ExternalHealthCollector implements HealthCollector {
   }
 
   private async checkNetwork() {
-    const start = Date.now();
-    try {
-      await this.withTimeout(resolveDns('cloudflare.com'), 3000);
-      const latency = Date.now() - start;
-      return { status: 'healthy' as const, latencyMs: latency, message: 'External DNS reachable' };
-    } catch (error) {
-      return {
-        status: 'unavailable' as const,
-        latencyMs: Date.now() - start,
-        message: 'External network unreachable',
-        error: error instanceof Error ? error.message : 'DNS resolution failed',
-      };
-    }
+    return {
+      status: 'unavailable' as const,
+      latencyMs: null,
+      message: 'External network probing disabled in local-first mode',
+      configured: false,
+    };
   }
 
   private checkFirebase() {
@@ -55,12 +48,14 @@ export class ExternalHealthCollector implements HealthCollector {
   }
 
   private checkStripe() {
-    const configured = !!process.env.STRIPE_SECRET_KEY;
+    const configured = process.env.STRIPE_MODE === 'live' && !!process.env.STRIPE_SECRET_KEY;
 
     return {
-      status: configured ? ('unknown' as const) : ('degraded' as const),
+      status: configured ? ('unknown' as const) : ('unavailable' as const),
       configured,
-      message: configured ? 'Stripe configured but not probed' : 'Stripe secret key not configured',
+      message: configured
+        ? 'Stripe live mode configured but not probed'
+        : 'Stripe live mode not configured (mock mode)',
     };
   }
 

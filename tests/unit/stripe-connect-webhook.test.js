@@ -4,18 +4,14 @@
  */
 
 const mockConstructEvent = jest.fn();
-
-jest.mock('stripe', () =>
-  jest.fn().mockImplementation(() => ({
-    webhooks: { constructEvent: (...args) => mockConstructEvent(...args) },
-    charges: {
-      retrieve: jest.fn().mockResolvedValue({
-        id: 'ch_test',
-        billing_details: { email: 'test@example.com', name: 'Test User' },
-      }),
-    },
-  }))
-);
+const client = require('../../lib/stripe/client');
+client.webhooks.constructEvent = mockConstructEvent;
+client.charges = {
+  retrieve: jest.fn().mockResolvedValue({
+    id: 'ch_test',
+    billing_details: { email: 'test@example.com', name: 'Test User' },
+  }),
+};
 
 const mockRpc = jest.fn().mockResolvedValue({ data: 'claim_test', error: null });
 
