@@ -1,0 +1,4137 @@
+
+Active Connections
+
+  Proto  Local Address          Foreign Address        State
+  TCP    0.0.0.0:22             0.0.0.0:0              LISTENING
+  TCP    0.0.0.0:135            0.0.0.0:0              LISTENING
+  TCP    0.0.0.0:445            0.0.0.0:0              LISTENING
+  TCP    0.0.0.0:3000           0.0.0.0:0              LISTENING
+  TCP    0.0.0.0:3005           0.0.0.0:0              LISTENING
+  TCP    0.0.0.0:3006           0.0.0.0:0              LISTENING
+  TCP    0.0.0.0:3459           0.0.0.0:0              LISTENING
+  TCP    0.0.0.0:4000           0.0.0.0:0              LISTENING
+  TCP    0.0.0.0:5000           0.0.0.0:0              LISTENING
+  TCP    0.0.0.0:5040           0.0.0.0:0              LISTENING
+  TCP    0.0.0.0:5050           0.0.0.0:0              LISTENING
+  TCP    0.0.0.0:5357           0.0.0.0:0              LISTENING
+  TCP    0.0.0.0:5432           0.0.0.0:0              LISTENING
+  TCP    0.0.0.0:6379           0.0.0.0:0              LISTENING
+  TCP    0.0.0.0:7260           0.0.0.0:0              LISTENING
+  TCP    0.0.0.0:7680           0.0.0.0:0              LISTENING
+  TCP    0.0.0.0:9877           0.0.0.0:0              LISTENING
+  TCP    0.0.0.0:11434          0.0.0.0:0              LISTENING
+  TCP    0.0.0.0:49664          0.0.0.0:0              LISTENING
+  TCP    0.0.0.0:49665          0.0.0.0:0              LISTENING
+  TCP    0.0.0.0:49666          0.0.0.0:0              LISTENING
+  TCP    0.0.0.0:49667          0.0.0.0:0              LISTENING
+  TCP    0.0.0.0:49668          0.0.0.0:0              LISTENING
+  TCP    0.0.0.0:49672          0.0.0.0:0              LISTENING
+  TCP    0.0.0.0:50080          0.0.0.0:0              LISTENING
+  TCP    0.0.0.0:50443          0.0.0.0:0              LISTENING
+  TCP    0.0.0.0:54321          0.0.0.0:0              LISTENING
+  TCP    0.0.0.0:54322          0.0.0.0:0              LISTENING
+  TCP    0.0.0.0:54323          0.0.0.0:0              LISTENING
+  TCP    0.0.0.0:54324          0.0.0.0:0              LISTENING
+  TCP    0.0.0.0:54327          0.0.0.0:0              LISTENING
+  TCP    100.118.182.126:443    0.0.0.0:0              LISTENING
+  TCP    100.118.182.126:39157  0.0.0.0:0              LISTENING
+  TCP    127.0.0.1:5354         0.0.0.0:0              LISTENING
+  TCP    127.0.0.1:9998         0.0.0.0:0              LISTENING
+  TCP    127.0.0.1:11434        0.0.0.0:0              LISTENING
+  TCP    127.0.0.1:45823        0.0.0.0:0              LISTENING
+  TCP    127.0.0.1:49670        127.0.0.1:55018        ESTABLISHED
+  TCP    127.0.0.1:50736        127.0.0.1:55018        ESTABLISHED
+  TCP    127.0.0.1:50791        127.0.0.1:55023        ESTABLISHED
+  TCP    127.0.0.1:50848        0.0.0.0:0              LISTENING
+  TCP    127.0.0.1:52606        127.0.0.1:55018        ESTABLISHED
+  TCP    127.0.0.1:52681        127.0.0.1:55018        ESTABLISHED
+  TCP    127.0.0.1:54217        127.0.0.1:55018        ESTABLISHED
+  TCP    127.0.0.1:54305        127.0.0.1:55018        ESTABLISHED
+  TCP    127.0.0.1:54317        127.0.0.1:54321        TIME_WAIT
+  TCP    127.0.0.1:54319        127.0.0.1:3005         TIME_WAIT
+  TCP    127.0.0.1:54320        127.0.0.1:3000         TIME_WAIT
+  TCP    127.0.0.1:54321        127.0.0.1:54310        TIME_WAIT
+  TCP    127.0.0.1:54321        127.0.0.1:58374        TIME_WAIT
+  TCP    127.0.0.1:54321        127.0.0.1:59916        TIME_WAIT
+  TCP    127.0.0.1:54321        127.0.0.1:64128        TIME_WAIT
+  TCP    127.0.0.1:54321        127.0.0.1:64143        TIME_WAIT
+  TCP    127.0.0.1:54325        127.0.0.1:3006         TIME_WAIT
+  TCP    127.0.0.1:54328        127.0.0.1:54321        TIME_WAIT
+  TCP    127.0.0.1:55008        0.0.0.0:0              LISTENING
+  TCP    127.0.0.1:55008        127.0.0.1:55022        ESTABLISHED
+  TCP    127.0.0.1:55018        0.0.0.0:0              LISTENING
+  TCP    127.0.0.1:55018        127.0.0.1:49670        ESTABLISHED
+  TCP    127.0.0.1:55018        127.0.0.1:50736        ESTABLISHED
+  TCP    127.0.0.1:55018        127.0.0.1:52606        ESTABLISHED
+  TCP    127.0.0.1:55018        127.0.0.1:52681        ESTABLISHED
+  TCP    127.0.0.1:55018        127.0.0.1:52687        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:52688        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:52691        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:52692        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:52693        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:52694        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:54217        ESTABLISHED
+  TCP    127.0.0.1:55018        127.0.0.1:54305        ESTABLISHED
+  TCP    127.0.0.1:55018        127.0.0.1:54306        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:54308        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:54309        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:54314        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:54316        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:54318        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:54332        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:54334        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:54336        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:54337        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:54339        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:54341        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:54342        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:54344        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:54345        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:54346        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:54347        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:54348        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:57302        ESTABLISHED
+  TCP    127.0.0.1:55018        127.0.0.1:57540        ESTABLISHED
+  TCP    127.0.0.1:55018        127.0.0.1:58356        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:58357        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:58358        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:58360        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:58362        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:58363        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:58365        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:58367        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:58368        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:58370        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:58372        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:58373        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:58375        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:58376        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:58385        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:58386        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:58393        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:58397        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:58398        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:58400        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:58402        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:58403        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:58406        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:58407        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:58409        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:58410        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:58415        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:58416        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:58421        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:58422        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:58427        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:58428        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:58429        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:58430        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:58434        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:58435        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:58436        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:58523        ESTABLISHED
+  TCP    127.0.0.1:55018        127.0.0.1:59900        ESTABLISHED
+  TCP    127.0.0.1:55018        127.0.0.1:59901        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:59905        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:59907        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:59908        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:59911        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:59912        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:59923        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:59926        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:59959        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:59961        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:59962        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:59964        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:59965        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:59967        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:59968        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:59970        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:59971        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:59972        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:59973        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:59974        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:59986        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:60778        ESTABLISHED
+  TCP    127.0.0.1:55018        127.0.0.1:62639        ESTABLISHED
+  TCP    127.0.0.1:55018        127.0.0.1:62645        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:64101        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:64102        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:64104        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:64105        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:64110        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:64113        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:64119        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:64120        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:64126        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:64127        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:64129        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:64131        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:64136        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:64144        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:64145        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:64146        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:64147        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:64148        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:64149        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:64151        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:64152        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:64155        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:64156        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:64157        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:64158        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:64159        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:64160        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:64161        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:64162        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:64168        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:64171        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:64176        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:64178        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:64181        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:64183        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:64797        ESTABLISHED
+  TCP    127.0.0.1:55022        127.0.0.1:55008        ESTABLISHED
+  TCP    127.0.0.1:55023        0.0.0.0:0              LISTENING
+  TCP    127.0.0.1:55023        127.0.0.1:50791        ESTABLISHED
+  TCP    127.0.0.1:57302        127.0.0.1:55018        ESTABLISHED
+  TCP    127.0.0.1:57540        127.0.0.1:55018        ESTABLISHED
+  TCP    127.0.0.1:58377        127.0.0.1:3005         TIME_WAIT
+  TCP    127.0.0.1:58378        127.0.0.1:3000         TIME_WAIT
+  TCP    127.0.0.1:58379        127.0.0.1:3006         TIME_WAIT
+  TCP    127.0.0.1:58381        127.0.0.1:54321        TIME_WAIT
+  TCP    127.0.0.1:58396        127.0.0.1:55018        TIME_WAIT
+  TCP    127.0.0.1:58523        127.0.0.1:55018        ESTABLISHED
+  TCP    127.0.0.1:59900        127.0.0.1:55018        ESTABLISHED
+  TCP    127.0.0.1:59909        127.0.0.1:54321        TIME_WAIT
+  TCP    127.0.0.1:59910        127.0.0.1:54321        TIME_WAIT
+  TCP    127.0.0.1:59913        127.0.0.1:3005         TIME_WAIT
+  TCP    127.0.0.1:59914        127.0.0.1:3000         TIME_WAIT
+  TCP    127.0.0.1:59915        127.0.0.1:3006         TIME_WAIT
+  TCP    127.0.0.1:59919        127.0.0.1:54321        TIME_WAIT
+  TCP    127.0.0.1:60778        127.0.0.1:55018        ESTABLISHED
+  TCP    127.0.0.1:61581        127.0.0.1:55018        TIME_WAIT
+  TCP    127.0.0.1:62636        127.0.0.1:55018        TIME_WAIT
+  TCP    127.0.0.1:62639        127.0.0.1:55018        ESTABLISHED
+  TCP    127.0.0.1:62641        127.0.0.1:55018        TIME_WAIT
+  TCP    127.0.0.1:64132        127.0.0.1:3005         TIME_WAIT
+  TCP    127.0.0.1:64133        127.0.0.1:3000         TIME_WAIT
+  TCP    127.0.0.1:64134        127.0.0.1:3006         TIME_WAIT
+  TCP    127.0.0.1:64138        127.0.0.1:54321        TIME_WAIT
+  TCP    127.0.0.1:64141        127.0.0.1:54321        TIME_WAIT
+  TCP    127.0.0.1:64142        127.0.0.1:54321        TIME_WAIT
+  TCP    127.0.0.1:64154        127.0.0.1:55018        TIME_WAIT
+  TCP    127.0.0.1:64797        127.0.0.1:55018        ESTABLISHED
+  TCP    192.168.48.1:139       0.0.0.0:0              LISTENING
+  TCP    192.168.86.82:139      0.0.0.0:0              LISTENING
+  TCP    192.168.86.82:49416    104.208.203.89:443     ESTABLISHED
+  TCP    192.168.86.82:50906    34.160.81.0:443        ESTABLISHED
+  TCP    192.168.86.82:50991    23.60.33.234:80        TIME_WAIT
+  TCP    192.168.86.82:51096    35.223.238.178:443     ESTABLISHED
+  TCP    192.168.86.82:51140    35.223.238.178:443     ESTABLISHED
+  TCP    192.168.86.82:51188    35.223.238.178:443     ESTABLISHED
+  TCP    192.168.86.82:52198    104.18.39.21:443       ESTABLISHED
+  TCP    192.168.86.82:52475    209.177.156.94:443     ESTABLISHED
+  TCP    192.168.86.82:52617    140.82.112.22:443      ESTABLISHED
+  TCP    192.168.86.82:52621    98.91.39.95:443        ESTABLISHED
+  TCP    192.168.86.82:52690    52.87.135.177:443      TIME_WAIT
+  TCP    192.168.86.82:53339    35.223.238.178:443     ESTABLISHED
+  TCP    192.168.86.82:54313    192.168.86.1:5000      TIME_WAIT
+  TCP    192.168.86.82:55914    3.219.52.251:443       ESTABLISHED
+  TCP    192.168.86.82:55915    3.219.52.251:443       ESTABLISHED
+  TCP    192.168.86.82:58355    160.79.104.10:443      ESTABLISHED
+  TCP    192.168.86.82:58391    192.168.86.1:5000      TIME_WAIT
+  TCP    192.168.86.82:58399    104.18.43.187:443      TIME_WAIT
+  TCP    192.168.86.82:58431    23.60.33.234:80        ESTABLISHED
+  TCP    192.168.86.82:58432    23.60.33.234:80        ESTABLISHED
+  TCP    192.168.86.82:58433    23.60.33.234:443       ESTABLISHED
+  TCP    192.168.86.82:58512    35.223.238.178:443     SYN_SENT
+  TCP    192.168.86.82:58751    35.190.88.7:443        ESTABLISHED
+  TCP    192.168.86.82:59796    192.200.0.115:443      ESTABLISHED
+  TCP    192.168.86.82:59902    54.225.97.128:443      TIME_WAIT
+  TCP    192.168.86.82:59903    104.18.43.178:443      TIME_WAIT
+  TCP    192.168.86.82:59922    54.225.97.128:443      TIME_WAIT
+  TCP    192.168.86.82:59924    104.18.43.178:443      TIME_WAIT
+  TCP    192.168.86.82:59925    54.225.97.128:443      TIME_WAIT
+  TCP    192.168.86.82:59927    52.84.217.97:443       TIME_WAIT
+  TCP    192.168.86.82:59928    54.225.97.128:443      TIME_WAIT
+  TCP    192.168.86.82:59958    192.168.86.1:53        TIME_WAIT
+  TCP    192.168.86.82:61140    35.223.238.178:443     ESTABLISHED
+  TCP    192.168.86.82:61335    18.161.156.112:443     ESTABLISHED
+  TCP    192.168.86.82:62635    160.79.104.10:443      ESTABLISHED
+  TCP    192.168.86.82:62637    104.18.43.178:443      TIME_WAIT
+  TCP    192.168.86.82:62638    199.165.136.100:443    ESTABLISHED
+  TCP    192.168.86.82:62640    54.225.97.128:443      TIME_WAIT
+  TCP    192.168.86.82:62643    54.225.97.128:443      TIME_WAIT
+  TCP    192.168.86.82:62644    52.84.217.97:443       TIME_WAIT
+  TCP    192.168.86.82:62646    52.84.217.97:443       TIME_WAIT
+  TCP    192.168.86.82:62768    185.199.111.133:443    ESTABLISHED
+  TCP    192.168.86.82:62995    185.199.111.133:443    ESTABLISHED
+  TCP    192.168.86.82:63997    34.149.66.163:443      ESTABLISHED
+  TCP    192.168.86.82:64106    54.90.53.108:443       TIME_WAIT
+  TCP    192.168.86.82:64107    104.18.43.178:443      TIME_WAIT
+  TCP    192.168.86.82:64109    44.199.64.47:443       TIME_WAIT
+  TCP    192.168.86.82:64111    104.18.43.178:443      TIME_WAIT
+  TCP    192.168.86.82:64112    44.199.64.47:443       TIME_WAIT
+  TCP    192.168.86.82:64115    52.84.217.97:443       TIME_WAIT
+  TCP    192.168.86.82:64116    44.199.64.47:443       TIME_WAIT
+  TCP    192.168.86.82:64117    52.84.217.97:443       TIME_WAIT
+  TCP    192.168.86.82:64118    52.84.217.97:443       TIME_WAIT
+  TCP    192.168.86.82:64163    54.225.97.128:443      TIME_WAIT
+  TCP    192.168.86.82:64164    104.18.43.178:443      TIME_WAIT
+  TCP    192.168.86.82:64165    54.225.97.128:443      TIME_WAIT
+  TCP    192.168.86.82:64166    104.18.43.178:443      TIME_WAIT
+  TCP    192.168.86.82:64167    54.225.97.128:443      TIME_WAIT
+  TCP    192.168.86.82:64169    54.225.97.128:443      TIME_WAIT
+  TCP    192.168.86.82:64170    52.84.217.97:443       TIME_WAIT
+  TCP    192.168.86.82:64172    54.225.97.128:443      TIME_WAIT
+  TCP    192.168.86.82:64173    104.18.43.178:443      TIME_WAIT
+  TCP    192.168.86.82:64174    54.225.97.128:443      TIME_WAIT
+  TCP    192.168.86.82:64177    52.84.217.97:443       TIME_WAIT
+  TCP    192.168.86.82:64180    104.18.24.232:443      ESTABLISHED
+  TCP    [::]:22                [::]:0                 LISTENING
+  TCP    [::]:135               [::]:0                 LISTENING
+  TCP    [::]:445               [::]:0                 LISTENING
+  TCP    [::]:3005              [::]:0                 LISTENING
+  TCP    [::]:3459              [::]:0                 LISTENING
+  TCP    [::]:4000              [::]:0                 LISTENING
+  TCP    [::]:5000              [::]:0                 LISTENING
+  TCP    [::]:5357              [::]:0                 LISTENING
+  TCP    [::]:5432              [::]:0                 LISTENING
+  TCP    [::]:6379              [::]:0                 LISTENING
+  TCP    [::]:7260              [::]:0                 LISTENING
+  TCP    [::]:7680              [::]:0                 LISTENING
+  TCP    [::]:9877              [::]:0                 LISTENING
+  TCP    [::]:11434             [::]:0                 LISTENING
+  TCP    [::]:49664             [::]:0                 LISTENING
+  TCP    [::]:49665             [::]:0                 LISTENING
+  TCP    [::]:49666             [::]:0                 LISTENING
+  TCP    [::]:49667             [::]:0                 LISTENING
+  TCP    [::]:49668             [::]:0                 LISTENING
+  TCP    [::]:49672             [::]:0                 LISTENING
+  TCP    [::]:50080             [::]:0                 LISTENING
+  TCP    [::]:50443             [::]:0                 LISTENING
+  TCP    [::]:54321             [::]:0                 LISTENING
+  TCP    [::]:54322             [::]:0                 LISTENING
+  TCP    [::]:54323             [::]:0                 LISTENING
+  TCP    [::]:54324             [::]:0                 LISTENING
+  TCP    [::]:54327             [::]:0                 LISTENING
+  TCP    [::1]:49669            [::]:0                 LISTENING
+  TCP    [::1]:54307            [::1]:11434            TIME_WAIT
+  TCP    [::1]:54326            [::1]:3459             TIME_WAIT
+  TCP    [::1]:54329            [::1]:11434            TIME_WAIT
+  TCP    [::1]:58369            [::1]:11434            TIME_WAIT
+  TCP    [::1]:58380            [::1]:3459             TIME_WAIT
+  TCP    [::1]:58382            [::1]:11434            TIME_WAIT
+  TCP    [::1]:59906            [::1]:11434            TIME_WAIT
+  TCP    [::1]:59917            [::1]:3459             TIME_WAIT
+  TCP    [::1]:59918            [::1]:11434            TIME_WAIT
+  TCP    [::1]:64124            [::1]:11434            TIME_WAIT
+  TCP    [::1]:64135            [::1]:3459             TIME_WAIT
+  TCP    [::1]:64137            [::1]:11434            TIME_WAIT
+  TCP    [2001:0:14c9:cd04:3c4f:34c3:5251:bcf]:58413  [2001:0:14c9:dc04:419:2798:9332:6772]:7680  TIME_WAIT
+  TCP    [2001:0:14c9:cd04:3c4f:34c3:5251:bcf]:58419  [2001:0:14c9:cc02:200d:11da:6903:afd]:7680  TIME_WAIT
+  TCP    [fd7a:115c:a1e0::e235:b67f]:443  [::]:0                 LISTENING
+  TCP    [fd7a:115c:a1e0::e235:b67f]:39930  [::]:0                 LISTENING
+  UDP    0.0.0.0:53             *:*                    
+  UDP    0.0.0.0:500            *:*                    
+  UDP    0.0.0.0:3544           *:*                    
+  UDP    0.0.0.0:3702           *:*                    
+  UDP    0.0.0.0:3702           *:*                    
+  UDP    0.0.0.0:4500           *:*                    
+  UDP    0.0.0.0:5050           *:*                    
+  UDP    0.0.0.0:5353           *:*                    
+  UDP    0.0.0.0:5353           *:*                    
+  UDP    0.0.0.0:5353           *:*                    
+  UDP    0.0.0.0:5353           *:*                    
+  UDP    0.0.0.0:5353           *:*                    
+  UDP    0.0.0.0:5353           *:*                    
+  UDP    0.0.0.0:5353           *:*                    
+  UDP    0.0.0.0:5353           *:*                    
+  UDP    0.0.0.0:5353           *:*                    
+  UDP    0.0.0.0:5353           *:*                    
+  UDP    0.0.0.0:5353           *:*                    
+  UDP    0.0.0.0:5353           *:*                    
+  UDP    0.0.0.0:5353           *:*                    
+  UDP    0.0.0.0:5353           *:*                    
+  UDP    0.0.0.0:5353           *:*                    
+  UDP    0.0.0.0:5353           *:*                    
+  UDP    0.0.0.0:5353           *:*                    
+  UDP    0.0.0.0:5353           *:*                    
+  UDP    0.0.0.0:5353           *:*                    
+  UDP    0.0.0.0:5353           *:*                    
+  UDP    0.0.0.0:5353           *:*                    
+  UDP    0.0.0.0:5355           *:*                    
+  UDP    0.0.0.0:41641          *:*                    
+  UDP    0.0.0.0:49664          *:*                    
+  UDP    0.0.0.0:50061          *:*                    
+  UDP    0.0.0.0:50123          *:*                    
+  UDP    0.0.0.0:50428          *:*                    
+  UDP    0.0.0.0:51146          *:*                    
+  UDP    0.0.0.0:51147          *:*                    
+  UDP    0.0.0.0:51150          *:*                    
+  UDP    0.0.0.0:51587          *:*                    
+  UDP    0.0.0.0:52669          *:*                    
+  UDP    0.0.0.0:53250          *:*                    
+  UDP    0.0.0.0:53787          *:*                    
+  UDP    0.0.0.0:53974          *:*                    
+  UDP    0.0.0.0:53978          *:*                    
+  UDP    0.0.0.0:54363          *:*                    
+  UDP    0.0.0.0:54418          *:*                    
+  UDP    0.0.0.0:54519          *:*                    
+  UDP    0.0.0.0:54762          *:*                    
+  UDP    0.0.0.0:54995          *:*                    
+  UDP    0.0.0.0:55122          *:*                    
+  UDP    0.0.0.0:55124          *:*                    
+  UDP    0.0.0.0:56548          *:*                    
+  UDP    0.0.0.0:56958          *:*                    
+  UDP    0.0.0.0:57556          *:*                    
+  UDP    0.0.0.0:57719          *:*                    
+  UDP    0.0.0.0:57955          *:*                    
+  UDP    0.0.0.0:58278          *:*                    
+  UDP    0.0.0.0:58892          *:*                    
+  UDP    0.0.0.0:59484          *:*                    
+  UDP    0.0.0.0:59485          *:*                    
+  UDP    0.0.0.0:59630          160.79.104.10:443      
+  UDP    0.0.0.0:59997          *:*                    
+  UDP    0.0.0.0:60322          *:*                    
+  UDP    0.0.0.0:60405          *:*                    
+  UDP    0.0.0.0:60460          *:*                    
+  UDP    0.0.0.0:60461          *:*                    
+  UDP    0.0.0.0:60586          *:*                    
+  UDP    0.0.0.0:60956          *:*                    
+  UDP    0.0.0.0:61024          *:*                    
+  UDP    0.0.0.0:61419          *:*                    
+  UDP    0.0.0.0:61480          *:*                    
+  UDP    0.0.0.0:61748          *:*                    
+  UDP    0.0.0.0:61767          *:*                    
+  UDP    0.0.0.0:61796          *:*                    
+  UDP    0.0.0.0:62012          *:*                    
+  UDP    0.0.0.0:62255          *:*                    
+  UDP    0.0.0.0:62282          *:*                    
+  UDP    0.0.0.0:62479          *:*                    
+  UDP    0.0.0.0:62988          *:*                    
+  UDP    0.0.0.0:63145          *:*                    
+  UDP    0.0.0.0:63347          *:*                    
+  UDP    0.0.0.0:63582          *:*                    
+  UDP    0.0.0.0:63735          *:*                    
+  UDP    0.0.0.0:64170          *:*                    
+  UDP    0.0.0.0:64188          *:*                    
+  UDP    0.0.0.0:64375          *:*                    
+  UDP    0.0.0.0:64534          *:*                    
+  UDP    0.0.0.0:64900          *:*                    
+  UDP    100.118.182.126:1900   *:*                    
+  UDP    100.118.182.126:5353   *:*                    
+  UDP    100.118.182.126:50421  *:*                    
+  UDP    127.0.0.1:1900         *:*                    
+  UDP    127.0.0.1:49666        127.0.0.1:49666        
+  UDP    127.0.0.1:50423        *:*                    
+  UDP    192.168.48.1:137       *:*                    
+  UDP    192.168.48.1:138       *:*                    
+  UDP    192.168.48.1:1900      *:*                    
+  UDP    192.168.48.1:5353      *:*                    
+  UDP    192.168.48.1:50424     *:*                    
+  UDP    192.168.86.82:137      *:*                    
+  UDP    192.168.86.82:138      *:*                    
+  UDP    192.168.86.82:1900     *:*                    
+  UDP    192.168.86.82:5353     *:*                    
+  UDP    192.168.86.82:50422    *:*                    
+  UDP    192.168.86.82:52028    *:*                    
+  UDP    192.168.86.82:62934    *:*                    
+  UDP    [::]:500               *:*                    
+  UDP    [::]:3702              *:*                    
+  UDP    [::]:3702              *:*                    
+  UDP    [::]:4500              *:*                    
+  UDP    [::]:5353              *:*                    
+  UDP    [::]:5353              *:*                    
+  UDP    [::]:5353              *:*                    
+  UDP    [::]:5353              *:*                    
+  UDP    [::]:5353              *:*                    
+  UDP    [::]:5353              *:*                    
+  UDP    [::]:5353              *:*                    
+  UDP    [::]:5353              *:*                    
+  UDP    [::]:5353              *:*                    
+  UDP    [::]:5353              *:*                    
+  UDP    [::]:5353              *:*                    
+  UDP    [::]:5353              *:*                    
+  UDP    [::]:5355              *:*                    
+  UDP    [::]:41641             *:*                    
+  UDP    [::]:49665             *:*                    
+  UDP    [::]:50124             *:*                    
+  UDP    [::]:51148             *:*                    
+  UDP    [::]:59484             *:*                    
+  UDP    [::]:60461             *:*                    
+  UDP    [::]:62282             *:*                    
+  UDP    [::]:62479             *:*                    
+  UDP    [::]:63145             *:*                    
+  UDP    [::1]:1900             *:*                    
+  UDP    [::1]:5353             *:*                    
+  UDP    [::1]:50419            *:*                    
+  UDP    [fe80::3c4f:34c3:5251:bcf%19]:546  *:*                    
+  UDP    [fe80::5d4e:6a7c:c068:58b%17]:1900  *:*                    
+  UDP    [fe80::5d4e:6a7c:c068:58b%17]:50418  *:*                    
+  UDP    [fe80::6db0:7ef4:f442:ac11%7]:1900  *:*                    
+  UDP    [fe80::6db0:7ef4:f442:ac11%7]:50417  *:*                    
+  UDP    [fe80::9bd7:3c1d:dc44:efaa%35]:1900  *:*                    
+  UDP    [fe80::9bd7:3c1d:dc44:efaa%35]:50420  *:*                    
+---
+
+--- Established/Listening after boot + API calls ---
+
+LocalAddress  : ::
+LocalPort     : 60468
+RemoteAddress : ::
+RemotePort    : 0
+State         : Bound
+OwningProcess : 24028
+ProcessName   : svchost
+
+LocalAddress  : ::
+LocalPort     : 60467
+RemoteAddress : ::
+RemotePort    : 0
+State         : Bound
+OwningProcess : 24028
+ProcessName   : svchost
+
+LocalAddress  : ::
+LocalPort     : 60466
+RemoteAddress : ::
+RemotePort    : 0
+State         : Bound
+OwningProcess : 24028
+ProcessName   : svchost
+
+LocalAddress  : ::
+LocalPort     : 59031
+RemoteAddress : ::
+RemotePort    : 0
+State         : Bound
+OwningProcess : 6164
+ProcessName   : SamsungMultiControl
+
+LocalAddress  : 2001:0:14c9:cd04:3c4f:34c3:5251:bcf
+LocalPort     : 60467
+RemoteAddress : 2001:0:14c9:d502:1c49:35bb:88fb:f211
+RemotePort    : 7680
+State         : SynSent
+OwningProcess : 24028
+ProcessName   : svchost
+
+LocalAddress  : 2001:0:14c9:cd04:3c4f:34c3:5251:bcf
+LocalPort     : 60466
+RemoteAddress : 2001:0:d8dc:d202:1831:33dc:52b6:691c
+RemotePort    : 7680
+State         : SynSent
+OwningProcess : 24028
+ProcessName   : svchost
+
+LocalAddress  : ::1
+LocalPort     : 60452
+RemoteAddress : ::1
+RemotePort    : 11434
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : ::1
+LocalPort     : 60434
+RemoteAddress : ::1
+RemotePort    : 3459
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : ::1
+LocalPort     : 60405
+RemoteAddress : ::1
+RemotePort    : 11434
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : ::1
+LocalPort     : 60398
+RemoteAddress : ::1
+RemotePort    : 11434
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : ::1
+LocalPort     : 59031
+RemoteAddress : ::1
+RemotePort    : 45823
+State         : SynSent
+OwningProcess : 6164
+ProcessName   : SamsungMultiControl
+
+LocalAddress  : ::1
+LocalPort     : 59021
+RemoteAddress : ::1
+RemotePort    : 11434
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : ::1
+LocalPort     : 59020
+RemoteAddress : ::1
+RemotePort    : 3459
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : ::1
+LocalPort     : 58888
+RemoteAddress : ::1
+RemotePort    : 11434
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : ::1
+LocalPort     : 58887
+RemoteAddress : ::1
+RemotePort    : 3459
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : ::1
+LocalPort     : 58876
+RemoteAddress : ::1
+RemotePort    : 11434
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : ::1
+LocalPort     : 58406
+RemoteAddress : ::1
+RemotePort    : 11434
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : ::1
+LocalPort     : 58405
+RemoteAddress : ::1
+RemotePort    : 3459
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : ::1
+LocalPort     : 58372
+RemoteAddress : ::1
+RemotePort    : 11434
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : ::
+LocalPort     : 54327
+RemoteAddress : ::
+RemotePort    : 0
+State         : Listen
+OwningProcess : 21804
+ProcessName   : com.docker.backend
+
+LocalAddress  : ::
+LocalPort     : 54324
+RemoteAddress : ::
+RemotePort    : 0
+State         : Listen
+OwningProcess : 21804
+ProcessName   : com.docker.backend
+
+LocalAddress  : ::
+LocalPort     : 54323
+RemoteAddress : ::
+RemotePort    : 0
+State         : Listen
+OwningProcess : 21804
+ProcessName   : com.docker.backend
+
+LocalAddress  : ::
+LocalPort     : 54322
+RemoteAddress : ::
+RemotePort    : 0
+State         : Listen
+OwningProcess : 21804
+ProcessName   : com.docker.backend
+
+LocalAddress  : ::
+LocalPort     : 54321
+RemoteAddress : ::
+RemotePort    : 0
+State         : Listen
+OwningProcess : 21804
+ProcessName   : com.docker.backend
+
+LocalAddress  : ::1
+LocalPort     : 53038
+RemoteAddress : ::1
+RemotePort    : 11434
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : ::
+LocalPort     : 50443
+RemoteAddress : ::
+RemotePort    : 0
+State         : Listen
+OwningProcess : 4
+ProcessName   : System
+
+LocalAddress  : ::
+LocalPort     : 50080
+RemoteAddress : ::
+RemotePort    : 0
+State         : Listen
+OwningProcess : 4
+ProcessName   : System
+
+LocalAddress  : ::
+LocalPort     : 49672
+RemoteAddress : ::
+RemotePort    : 0
+State         : Listen
+OwningProcess : 1432
+ProcessName   : services
+
+LocalAddress  : ::1
+LocalPort     : 49669
+RemoteAddress : ::
+RemotePort    : 0
+State         : Listen
+OwningProcess : 6424
+ProcessName   : jhi_service
+
+LocalAddress  : ::
+LocalPort     : 49668
+RemoteAddress : ::
+RemotePort    : 0
+State         : Listen
+OwningProcess : 4888
+ProcessName   : spoolsv
+
+LocalAddress  : ::
+LocalPort     : 49667
+RemoteAddress : ::
+RemotePort    : 0
+State         : Listen
+OwningProcess : 3964
+ProcessName   : svchost
+
+LocalAddress  : ::
+LocalPort     : 49666
+RemoteAddress : ::
+RemotePort    : 0
+State         : Listen
+OwningProcess : 2416
+ProcessName   : svchost
+
+LocalAddress  : ::
+LocalPort     : 49665
+RemoteAddress : ::
+RemotePort    : 0
+State         : Listen
+OwningProcess : 1296
+ProcessName   : wininit
+
+LocalAddress  : ::
+LocalPort     : 49664
+RemoteAddress : ::
+RemotePort    : 0
+State         : Listen
+OwningProcess : 1464
+ProcessName   : lsass
+
+LocalAddress  : fd7a:115c:a1e0::e235:b67f
+LocalPort     : 39930
+RemoteAddress : ::
+RemotePort    : 0
+State         : Listen
+OwningProcess : 23788
+ProcessName   : tailscaled
+
+LocalAddress  : ::
+LocalPort     : 11434
+RemoteAddress : ::
+RemotePort    : 0
+State         : Listen
+OwningProcess : 6412
+ProcessName   : ollama
+
+LocalAddress  : ::
+LocalPort     : 9877
+RemoteAddress : ::
+RemotePort    : 0
+State         : Listen
+OwningProcess : 4160
+ProcessName   : aakore
+
+LocalAddress  : ::
+LocalPort     : 7680
+RemoteAddress : ::
+RemotePort    : 0
+State         : Listen
+OwningProcess : 24028
+ProcessName   : svchost
+
+LocalAddress  : ::
+LocalPort     : 7260
+RemoteAddress : ::
+RemotePort    : 0
+State         : Listen
+OwningProcess : 7296
+ProcessName   : SecondScreenDesktop
+
+LocalAddress  : ::
+LocalPort     : 6379
+RemoteAddress : ::
+RemotePort    : 0
+State         : Listen
+OwningProcess : 21804
+ProcessName   : com.docker.backend
+
+LocalAddress  : ::
+LocalPort     : 5432
+RemoteAddress : ::
+RemotePort    : 0
+State         : Listen
+OwningProcess : 21804
+ProcessName   : com.docker.backend
+
+LocalAddress  : ::
+LocalPort     : 5357
+RemoteAddress : ::
+RemotePort    : 0
+State         : Listen
+OwningProcess : 4
+ProcessName   : System
+
+LocalAddress  : ::
+LocalPort     : 5000
+RemoteAddress : ::
+RemotePort    : 0
+State         : Listen
+OwningProcess : 21804
+ProcessName   : com.docker.backend
+
+LocalAddress  : ::
+LocalPort     : 4000
+RemoteAddress : ::
+RemotePort    : 0
+State         : Listen
+OwningProcess : 21804
+ProcessName   : com.docker.backend
+
+LocalAddress  : ::
+LocalPort     : 3459
+RemoteAddress : ::
+RemotePort    : 0
+State         : Listen
+OwningProcess : 20556
+ProcessName   : node
+
+LocalAddress  : ::
+LocalPort     : 3005
+RemoteAddress : ::
+RemotePort    : 0
+State         : Listen
+OwningProcess : 1516
+ProcessName   : node
+
+LocalAddress  : ::
+LocalPort     : 445
+RemoteAddress : ::
+RemotePort    : 0
+State         : Listen
+OwningProcess : 4
+ProcessName   : System
+
+LocalAddress  : fd7a:115c:a1e0::e235:b67f
+LocalPort     : 443
+RemoteAddress : ::
+RemotePort    : 0
+State         : Listen
+OwningProcess : 23788
+ProcessName   : tailscaled
+
+LocalAddress  : ::
+LocalPort     : 135
+RemoteAddress : ::
+RemotePort    : 0
+State         : Listen
+OwningProcess : 1784
+ProcessName   : svchost
+
+LocalAddress  : ::
+LocalPort     : 22
+RemoteAddress : ::
+RemotePort    : 0
+State         : Listen
+OwningProcess : 6052
+ProcessName   : sshd
+
+LocalAddress  : 0.0.0.0
+LocalPort     : 64797
+RemoteAddress : 0.0.0.0
+RemotePort    : 0
+State         : Bound
+OwningProcess : 27932
+ProcessName   : Devin
+
+LocalAddress  : 0.0.0.0
+LocalPort     : 62995
+RemoteAddress : 0.0.0.0
+RemotePort    : 0
+State         : Bound
+OwningProcess : 13600
+ProcessName   : Docker Desktop
+
+LocalAddress  : 0.0.0.0
+LocalPort     : 62768
+RemoteAddress : 0.0.0.0
+RemotePort    : 0
+State         : Bound
+OwningProcess : 13600
+ProcessName   : Docker Desktop
+
+LocalAddress  : 0.0.0.0
+LocalPort     : 62638
+RemoteAddress : 0.0.0.0
+RemotePort    : 0
+State         : Bound
+OwningProcess : 18204
+ProcessName   : tailscaled
+
+LocalAddress  : 0.0.0.0
+LocalPort     : 62635
+RemoteAddress : 0.0.0.0
+RemotePort    : 0
+State         : Bound
+OwningProcess : 19112
+ProcessName   : claude
+
+LocalAddress  : 0.0.0.0
+LocalPort     : 61335
+RemoteAddress : 0.0.0.0
+RemotePort    : 0
+State         : Bound
+OwningProcess : 24320
+ProcessName   : Devin
+
+LocalAddress  : 0.0.0.0
+LocalPort     : 60778
+RemoteAddress : 0.0.0.0
+RemotePort    : 0
+State         : Bound
+OwningProcess : 27932
+ProcessName   : Devin
+
+LocalAddress  : 0.0.0.0
+LocalPort     : 60471
+RemoteAddress : 0.0.0.0
+RemotePort    : 0
+State         : Bound
+OwningProcess : 28056
+ProcessName   : msedge
+
+LocalAddress  : 0.0.0.0
+LocalPort     : 60440
+RemoteAddress : 0.0.0.0
+RemotePort    : 0
+State         : Bound
+OwningProcess : 11420
+ProcessName   : language_server_windows_x64
+
+LocalAddress  : 0.0.0.0
+LocalPort     : 60439
+RemoteAddress : 0.0.0.0
+RemotePort    : 0
+State         : Bound
+OwningProcess : 11420
+ProcessName   : language_server_windows_x64
+
+LocalAddress  : 0.0.0.0
+LocalPort     : 60436
+RemoteAddress : 0.0.0.0
+RemotePort    : 0
+State         : Bound
+OwningProcess : 11420
+ProcessName   : language_server_windows_x64
+
+LocalAddress  : 0.0.0.0
+LocalPort     : 60433
+RemoteAddress : 0.0.0.0
+RemotePort    : 0
+State         : Bound
+OwningProcess : 1516
+ProcessName   : node
+
+LocalAddress  : 0.0.0.0
+LocalPort     : 60432
+RemoteAddress : 0.0.0.0
+RemotePort    : 0
+State         : Bound
+OwningProcess : 1516
+ProcessName   : node
+
+LocalAddress  : 0.0.0.0
+LocalPort     : 60431
+RemoteAddress : 0.0.0.0
+RemotePort    : 0
+State         : Bound
+OwningProcess : 1516
+ProcessName   : node
+
+LocalAddress  : 0.0.0.0
+LocalPort     : 60430
+RemoteAddress : 0.0.0.0
+RemotePort    : 0
+State         : Bound
+OwningProcess : 1516
+ProcessName   : node
+
+LocalAddress  : 0.0.0.0
+LocalPort     : 60429
+RemoteAddress : 0.0.0.0
+RemotePort    : 0
+State         : Bound
+OwningProcess : 1516
+ProcessName   : node
+
+LocalAddress  : 0.0.0.0
+LocalPort     : 60428
+RemoteAddress : 0.0.0.0
+RemotePort    : 0
+State         : Bound
+OwningProcess : 1516
+ProcessName   : node
+
+LocalAddress  : 0.0.0.0
+LocalPort     : 60427
+RemoteAddress : 0.0.0.0
+RemotePort    : 0
+State         : Bound
+OwningProcess : 1516
+ProcessName   : node
+
+LocalAddress  : 0.0.0.0
+LocalPort     : 60426
+RemoteAddress : 0.0.0.0
+RemotePort    : 0
+State         : Bound
+OwningProcess : 1516
+ProcessName   : node
+
+LocalAddress  : 0.0.0.0
+LocalPort     : 60425
+RemoteAddress : 0.0.0.0
+RemotePort    : 0
+State         : Bound
+OwningProcess : 1516
+ProcessName   : node
+
+LocalAddress  : 0.0.0.0
+LocalPort     : 60424
+RemoteAddress : 0.0.0.0
+RemotePort    : 0
+State         : Bound
+OwningProcess : 1516
+ProcessName   : node
+
+LocalAddress  : 0.0.0.0
+LocalPort     : 60423
+RemoteAddress : 0.0.0.0
+RemotePort    : 0
+State         : Bound
+OwningProcess : 1516
+ProcessName   : node
+
+LocalAddress  : 0.0.0.0
+LocalPort     : 60422
+RemoteAddress : 0.0.0.0
+RemotePort    : 0
+State         : Bound
+OwningProcess : 1516
+ProcessName   : node
+
+LocalAddress  : 0.0.0.0
+LocalPort     : 60421
+RemoteAddress : 0.0.0.0
+RemotePort    : 0
+State         : Bound
+OwningProcess : 1516
+ProcessName   : node
+
+LocalAddress  : 0.0.0.0
+LocalPort     : 60420
+RemoteAddress : 0.0.0.0
+RemotePort    : 0
+State         : Bound
+OwningProcess : 1516
+ProcessName   : node
+
+LocalAddress  : 0.0.0.0
+LocalPort     : 60419
+RemoteAddress : 0.0.0.0
+RemotePort    : 0
+State         : Bound
+OwningProcess : 1516
+ProcessName   : node
+
+LocalAddress  : 0.0.0.0
+LocalPort     : 60410
+RemoteAddress : 0.0.0.0
+RemotePort    : 0
+State         : Bound
+OwningProcess : 1516
+ProcessName   : node
+
+LocalAddress  : 0.0.0.0
+LocalPort     : 60395
+RemoteAddress : 0.0.0.0
+RemotePort    : 0
+State         : Bound
+OwningProcess : 27932
+ProcessName   : Devin
+
+LocalAddress  : 0.0.0.0
+LocalPort     : 59900
+RemoteAddress : 0.0.0.0
+RemotePort    : 0
+State         : Bound
+OwningProcess : 27932
+ProcessName   : Devin
+
+LocalAddress  : 0.0.0.0
+LocalPort     : 59796
+RemoteAddress : 0.0.0.0
+RemotePort    : 0
+State         : Bound
+OwningProcess : 23788
+ProcessName   : tailscaled
+
+LocalAddress  : 0.0.0.0
+LocalPort     : 59033
+RemoteAddress : 0.0.0.0
+RemotePort    : 0
+State         : Bound
+OwningProcess : 21784
+ProcessName   : devin
+
+LocalAddress  : 0.0.0.0
+LocalPort     : 59029
+RemoteAddress : 0.0.0.0
+RemotePort    : 0
+State         : Bound
+OwningProcess : 10336
+ProcessName   : node
+
+LocalAddress  : 0.0.0.0
+LocalPort     : 59025
+RemoteAddress : 0.0.0.0
+RemotePort    : 0
+State         : Bound
+OwningProcess : 21804
+ProcessName   : com.docker.backend
+
+LocalAddress  : 0.0.0.0
+LocalPort     : 59011
+RemoteAddress : 0.0.0.0
+RemotePort    : 0
+State         : Bound
+OwningProcess : 24556
+ProcessName   : msedge
+
+LocalAddress  : 0.0.0.0
+LocalPort     : 58879
+RemoteAddress : 0.0.0.0
+RemotePort    : 0
+State         : Bound
+OwningProcess : 1516
+ProcessName   : node
+
+LocalAddress  : 0.0.0.0
+LocalPort     : 58826
+RemoteAddress : 0.0.0.0
+RemotePort    : 0
+State         : Bound
+OwningProcess : 24556
+ProcessName   : msedge
+
+LocalAddress  : 0.0.0.0
+LocalPort     : 58751
+RemoteAddress : 0.0.0.0
+RemotePort    : 0
+State         : Bound
+OwningProcess : 13600
+ProcessName   : Docker Desktop
+
+LocalAddress  : 0.0.0.0
+LocalPort     : 58672
+RemoteAddress : 0.0.0.0
+RemotePort    : 0
+State         : Bound
+OwningProcess : 27932
+ProcessName   : Devin
+
+LocalAddress  : 0.0.0.0
+LocalPort     : 58523
+RemoteAddress : 0.0.0.0
+RemotePort    : 0
+State         : Bound
+OwningProcess : 27932
+ProcessName   : Devin
+
+LocalAddress  : 0.0.0.0
+LocalPort     : 58368
+RemoteAddress : 0.0.0.0
+RemotePort    : 0
+State         : Bound
+OwningProcess : 27932
+ProcessName   : Devin
+
+LocalAddress  : 0.0.0.0
+LocalPort     : 57540
+RemoteAddress : 0.0.0.0
+RemotePort    : 0
+State         : Bound
+OwningProcess : 27932
+ProcessName   : Devin
+
+LocalAddress  : 0.0.0.0
+LocalPort     : 57302
+RemoteAddress : 0.0.0.0
+RemotePort    : 0
+State         : Bound
+OwningProcess : 27932
+ProcessName   : Devin
+
+LocalAddress  : 0.0.0.0
+LocalPort     : 56940
+RemoteAddress : 0.0.0.0
+RemotePort    : 0
+State         : Bound
+OwningProcess : 19112
+ProcessName   : claude
+
+LocalAddress  : 0.0.0.0
+LocalPort     : 55915
+RemoteAddress : 0.0.0.0
+RemotePort    : 0
+State         : Bound
+OwningProcess : 28108
+ProcessName   : com.docker.build
+
+LocalAddress  : 0.0.0.0
+LocalPort     : 55914
+RemoteAddress : 0.0.0.0
+RemotePort    : 0
+State         : Bound
+OwningProcess : 28108
+ProcessName   : com.docker.build
+
+LocalAddress  : 0.0.0.0
+LocalPort     : 54305
+RemoteAddress : 0.0.0.0
+RemotePort    : 0
+State         : Bound
+OwningProcess : 27932
+ProcessName   : Devin
+
+LocalAddress  : 0.0.0.0
+LocalPort     : 53033
+RemoteAddress : 0.0.0.0
+RemotePort    : 0
+State         : Bound
+OwningProcess : 15752
+ProcessName   : Widgets
+
+LocalAddress  : 0.0.0.0
+LocalPort     : 53030
+RemoteAddress : 0.0.0.0
+RemotePort    : 0
+State         : Bound
+OwningProcess : 20844
+ProcessName   : NortonBridge
+
+LocalAddress  : 0.0.0.0
+LocalPort     : 53029
+RemoteAddress : 0.0.0.0
+RemotePort    : 0
+State         : Bound
+OwningProcess : 20844
+ProcessName   : NortonBridge
+
+LocalAddress  : 0.0.0.0
+LocalPort     : 52681
+RemoteAddress : 0.0.0.0
+RemotePort    : 0
+State         : Bound
+OwningProcess : 27932
+ProcessName   : Devin
+
+LocalAddress  : 0.0.0.0
+LocalPort     : 52621
+RemoteAddress : 0.0.0.0
+RemotePort    : 0
+State         : Bound
+OwningProcess : 21784
+ProcessName   : devin
+
+LocalAddress  : 0.0.0.0
+LocalPort     : 52617
+RemoteAddress : 0.0.0.0
+RemotePort    : 0
+State         : Bound
+OwningProcess : 21784
+ProcessName   : devin
+
+LocalAddress  : 0.0.0.0
+LocalPort     : 52606
+RemoteAddress : 0.0.0.0
+RemotePort    : 0
+State         : Bound
+OwningProcess : 27932
+ProcessName   : Devin
+
+LocalAddress  : 0.0.0.0
+LocalPort     : 52475
+RemoteAddress : 0.0.0.0
+RemotePort    : 0
+State         : Bound
+OwningProcess : 23788
+ProcessName   : tailscaled
+
+LocalAddress  : 0.0.0.0
+LocalPort     : 52198
+RemoteAddress : 0.0.0.0
+RemotePort    : 0
+State         : Bound
+OwningProcess : 12796
+ProcessName   : ChatGPT Classic
+
+LocalAddress  : 0.0.0.0
+LocalPort     : 50906
+RemoteAddress : 0.0.0.0
+RemotePort    : 0
+State         : Bound
+OwningProcess : 21784
+ProcessName   : devin
+
+LocalAddress  : 0.0.0.0
+LocalPort     : 50791
+RemoteAddress : 0.0.0.0
+RemotePort    : 0
+State         : Bound
+OwningProcess : 24320
+ProcessName   : Devin
+
+LocalAddress  : 0.0.0.0
+LocalPort     : 50448
+RemoteAddress : 0.0.0.0
+RemotePort    : 0
+State         : Bound
+OwningProcess : 24556
+ProcessName   : msedge
+
+LocalAddress  : 0.0.0.0
+LocalPort     : 50060
+RemoteAddress : 0.0.0.0
+RemotePort    : 0
+State         : Bound
+OwningProcess : 27932
+ProcessName   : Devin
+
+LocalAddress  : 0.0.0.0
+LocalPort     : 49670
+RemoteAddress : 0.0.0.0
+RemotePort    : 0
+State         : Bound
+OwningProcess : 27932
+ProcessName   : Devin
+
+LocalAddress  : 0.0.0.0
+LocalPort     : 49416
+RemoteAddress : 0.0.0.0
+RemotePort    : 0
+State         : Bound
+OwningProcess : 6324
+ProcessName   : svchost
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 64797
+RemoteAddress : 127.0.0.1
+RemotePort    : 55018
+State         : Established
+OwningProcess : 27932
+ProcessName   : Devin
+
+LocalAddress  : 192.168.86.82
+LocalPort     : 62995
+RemoteAddress : 185.199.111.133
+RemotePort    : 443
+State         : Established
+OwningProcess : 13600
+ProcessName   : Docker Desktop
+
+LocalAddress  : 192.168.86.82
+LocalPort     : 62768
+RemoteAddress : 185.199.111.133
+RemotePort    : 443
+State         : Established
+OwningProcess : 13600
+ProcessName   : Docker Desktop
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 62639
+RemoteAddress : 127.0.0.1
+RemotePort    : 55018
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 192.168.86.82
+LocalPort     : 62638
+RemoteAddress : 199.165.136.100
+RemotePort    : 443
+State         : Established
+OwningProcess : 18204
+ProcessName   : tailscaled
+
+LocalAddress  : 192.168.86.82
+LocalPort     : 62635
+RemoteAddress : 160.79.104.10
+RemotePort    : 443
+State         : Established
+OwningProcess : 19112
+ProcessName   : claude
+
+LocalAddress  : 192.168.86.82
+LocalPort     : 61335
+RemoteAddress : 18.161.156.112
+RemotePort    : 443
+State         : Established
+OwningProcess : 24320
+ProcessName   : Devin
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 60778
+RemoteAddress : 127.0.0.1
+RemotePort    : 55018
+State         : Established
+OwningProcess : 27932
+ProcessName   : Devin
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 60472
+RemoteAddress : 127.0.0.1
+RemotePort    : 3005
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 192.168.86.82
+LocalPort     : 60471
+RemoteAddress : 172.178.240.161
+RemotePort    : 443
+State         : Established
+OwningProcess : 28056
+ProcessName   : msedge
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 60469
+RemoteAddress : 127.0.0.1
+RemotePort    : 55018
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 192.168.86.82
+LocalPort     : 60468
+RemoteAddress : 35.149.208.137
+RemotePort    : 7680
+State         : SynSent
+OwningProcess : 24028
+ProcessName   : svchost
+
+LocalAddress  : 192.168.86.82
+LocalPort     : 60440
+RemoteAddress : 35.223.238.178
+RemotePort    : 443
+State         : Established
+OwningProcess : 11420
+ProcessName   : language_server_windows_x64
+
+LocalAddress  : 192.168.86.82
+LocalPort     : 60439
+RemoteAddress : 35.223.238.178
+RemotePort    : 443
+State         : Established
+OwningProcess : 11420
+ProcessName   : language_server_windows_x64
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 60436
+RemoteAddress : 127.0.0.1
+RemotePort    : 55008
+State         : Established
+OwningProcess : 11420
+ProcessName   : language_server_windows_x64
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 60433
+RemoteAddress : 127.0.0.1
+RemotePort    : 54321
+State         : Established
+OwningProcess : 1516
+ProcessName   : node
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 60432
+RemoteAddress : 127.0.0.1
+RemotePort    : 54321
+State         : Established
+OwningProcess : 1516
+ProcessName   : node
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 60431
+RemoteAddress : 127.0.0.1
+RemotePort    : 54321
+State         : Established
+OwningProcess : 1516
+ProcessName   : node
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 60430
+RemoteAddress : 127.0.0.1
+RemotePort    : 54321
+State         : Established
+OwningProcess : 1516
+ProcessName   : node
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 60429
+RemoteAddress : 127.0.0.1
+RemotePort    : 54321
+State         : Established
+OwningProcess : 1516
+ProcessName   : node
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 60428
+RemoteAddress : 127.0.0.1
+RemotePort    : 54321
+State         : Established
+OwningProcess : 1516
+ProcessName   : node
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 60427
+RemoteAddress : 127.0.0.1
+RemotePort    : 54321
+State         : Established
+OwningProcess : 1516
+ProcessName   : node
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 60426
+RemoteAddress : 127.0.0.1
+RemotePort    : 54321
+State         : Established
+OwningProcess : 1516
+ProcessName   : node
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 60425
+RemoteAddress : 127.0.0.1
+RemotePort    : 54321
+State         : Established
+OwningProcess : 1516
+ProcessName   : node
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 60424
+RemoteAddress : 127.0.0.1
+RemotePort    : 54321
+State         : Established
+OwningProcess : 1516
+ProcessName   : node
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 60423
+RemoteAddress : 127.0.0.1
+RemotePort    : 54321
+State         : Established
+OwningProcess : 1516
+ProcessName   : node
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 60422
+RemoteAddress : 127.0.0.1
+RemotePort    : 54321
+State         : Established
+OwningProcess : 1516
+ProcessName   : node
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 60421
+RemoteAddress : 127.0.0.1
+RemotePort    : 54321
+State         : Established
+OwningProcess : 1516
+ProcessName   : node
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 60420
+RemoteAddress : 127.0.0.1
+RemotePort    : 54321
+State         : Established
+OwningProcess : 1516
+ProcessName   : node
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 60419
+RemoteAddress : 127.0.0.1
+RemotePort    : 54321
+State         : Established
+OwningProcess : 1516
+ProcessName   : node
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 60418
+RemoteAddress : 127.0.0.1
+RemotePort    : 50848
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 60415
+RemoteAddress : 127.0.0.1
+RemotePort    : 3006
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 60414
+RemoteAddress : 127.0.0.1
+RemotePort    : 3000
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 60413
+RemoteAddress : 127.0.0.1
+RemotePort    : 3005
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 60410
+RemoteAddress : 127.0.0.1
+RemotePort    : 54321
+State         : Established
+OwningProcess : 1516
+ProcessName   : node
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 60409
+RemoteAddress : 127.0.0.1
+RemotePort    : 55018
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 60402
+RemoteAddress : 127.0.0.1
+RemotePort    : 55018
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 60396
+RemoteAddress : 127.0.0.1
+RemotePort    : 55018
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 192.168.86.82
+LocalPort     : 60395
+RemoteAddress : 35.223.238.178
+RemotePort    : 443
+State         : Established
+OwningProcess : 27932
+ProcessName   : Devin
+
+LocalAddress  : 192.168.86.82
+LocalPort     : 60195
+RemoteAddress : 192.168.86.1
+RemotePort    : 53
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 59900
+RemoteAddress : 127.0.0.1
+RemotePort    : 55018
+State         : Established
+OwningProcess : 27932
+ProcessName   : Devin
+
+LocalAddress  : 192.168.86.82
+LocalPort     : 59796
+RemoteAddress : 192.200.0.115
+RemotePort    : 443
+State         : Established
+OwningProcess : 23788
+ProcessName   : tailscaled
+
+LocalAddress  : 192.168.86.82
+LocalPort     : 59033
+RemoteAddress : 35.223.238.178
+RemotePort    : 443
+State         : Established
+OwningProcess : 21784
+ProcessName   : devin
+
+LocalAddress  : 192.168.86.82
+LocalPort     : 59029
+RemoteAddress : 104.16.3.34
+RemotePort    : 443
+State         : Established
+OwningProcess : 10336
+ProcessName   : node
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 59026
+RemoteAddress : 127.0.0.1
+RemotePort    : 3000
+State         : FinWait2
+OwningProcess : 13216
+ProcessName   : node
+
+LocalAddress  : 192.168.86.82
+LocalPort     : 59025
+RemoteAddress : 52.87.135.177
+RemotePort    : 443
+State         : Established
+OwningProcess : 21804
+ProcessName   : com.docker.backend
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 59019
+RemoteAddress : 127.0.0.1
+RemotePort    : 3006
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 59017
+RemoteAddress : 127.0.0.1
+RemotePort    : 3005
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 192.168.86.82
+LocalPort     : 59011
+RemoteAddress : 20.190.157.13
+RemotePort    : 443
+State         : Established
+OwningProcess : 24556
+ProcessName   : msedge
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 58884
+RemoteAddress : 127.0.0.1
+RemotePort    : 3006
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 58883
+RemoteAddress : 127.0.0.1
+RemotePort    : 3000
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 58882
+RemoteAddress : 127.0.0.1
+RemotePort    : 3005
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 58879
+RemoteAddress : 127.0.0.1
+RemotePort    : 54321
+State         : Established
+OwningProcess : 1516
+ProcessName   : node
+
+LocalAddress  : 192.168.86.82
+LocalPort     : 58826
+RemoteAddress : 40.126.28.19
+RemotePort    : 443
+State         : Established
+OwningProcess : 24556
+ProcessName   : msedge
+
+LocalAddress  : 192.168.86.82
+LocalPort     : 58751
+RemoteAddress : 35.190.88.7
+RemotePort    : 443
+State         : Established
+OwningProcess : 13600
+ProcessName   : Docker Desktop
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 58687
+RemoteAddress : 127.0.0.1
+RemotePort    : 55018
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 58672
+RemoteAddress : 127.0.0.1
+RemotePort    : 55018
+State         : Established
+OwningProcess : 27932
+ProcessName   : Devin
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 58656
+RemoteAddress : 127.0.0.1
+RemotePort    : 54321
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 192.168.86.82
+LocalPort     : 58654
+RemoteAddress : 23.60.33.234
+RemotePort    : 80
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 192.168.86.82
+LocalPort     : 58652
+RemoteAddress : 23.60.33.234
+RemotePort    : 80
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 192.168.86.82
+LocalPort     : 58639
+RemoteAddress : 23.215.55.137
+RemotePort    : 80
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 58523
+RemoteAddress : 127.0.0.1
+RemotePort    : 55018
+State         : Established
+OwningProcess : 27932
+ProcessName   : Devin
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 58437
+RemoteAddress : 127.0.0.1
+RemotePort    : 55018
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 58409
+RemoteAddress : 127.0.0.1
+RemotePort    : 54321
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 58403
+RemoteAddress : 127.0.0.1
+RemotePort    : 3006
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 58402
+RemoteAddress : 127.0.0.1
+RemotePort    : 3000
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 58401
+RemoteAddress : 127.0.0.1
+RemotePort    : 3005
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 58397
+RemoteAddress : 127.0.0.1
+RemotePort    : 54321
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 58395
+RemoteAddress : 127.0.0.1
+RemotePort    : 54321
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 58394
+RemoteAddress : 127.0.0.1
+RemotePort    : 54321
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 58393
+RemoteAddress : 127.0.0.1
+RemotePort    : 54321
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 58392
+RemoteAddress : 127.0.0.1
+RemotePort    : 54321
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 58390
+RemoteAddress : 127.0.0.1
+RemotePort    : 54321
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 58389
+RemoteAddress : 127.0.0.1
+RemotePort    : 54321
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 58388
+RemoteAddress : 127.0.0.1
+RemotePort    : 54321
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 58387
+RemoteAddress : 127.0.0.1
+RemotePort    : 54321
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 58386
+RemoteAddress : 127.0.0.1
+RemotePort    : 54321
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 58385
+RemoteAddress : 127.0.0.1
+RemotePort    : 54321
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 58384
+RemoteAddress : 127.0.0.1
+RemotePort    : 54321
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 58383
+RemoteAddress : 127.0.0.1
+RemotePort    : 54321
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 58376
+RemoteAddress : 127.0.0.1
+RemotePort    : 54321
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 58368
+RemoteAddress : 127.0.0.1
+RemotePort    : 55018
+State         : Established
+OwningProcess : 27932
+ProcessName   : Devin
+
+LocalAddress  : 192.168.86.82
+LocalPort     : 58355
+RemoteAddress : 160.79.104.10
+RemotePort    : 443
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 57540
+RemoteAddress : 127.0.0.1
+RemotePort    : 55018
+State         : Established
+OwningProcess : 27932
+ProcessName   : Devin
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 57302
+RemoteAddress : 127.0.0.1
+RemotePort    : 55018
+State         : Established
+OwningProcess : 27932
+ProcessName   : Devin
+
+LocalAddress  : 192.168.86.82
+LocalPort     : 56940
+RemoteAddress : 34.149.66.163
+RemotePort    : 443
+State         : Established
+OwningProcess : 19112
+ProcessName   : claude
+
+LocalAddress  : 192.168.86.82
+LocalPort     : 55915
+RemoteAddress : 3.219.52.251
+RemotePort    : 443
+State         : Established
+OwningProcess : 28108
+ProcessName   : com.docker.build
+
+LocalAddress  : 192.168.86.82
+LocalPort     : 55914
+RemoteAddress : 3.219.52.251
+RemotePort    : 443
+State         : Established
+OwningProcess : 28108
+ProcessName   : com.docker.build
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55023
+RemoteAddress : 127.0.0.1
+RemotePort    : 50791
+State         : Established
+OwningProcess : 11420
+ProcessName   : language_server_windows_x64
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55023
+RemoteAddress : 0.0.0.0
+RemotePort    : 0
+State         : Listen
+OwningProcess : 11420
+ProcessName   : language_server_windows_x64
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 58898
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 60196
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 64797
+State         : Established
+OwningProcess : 11420
+ProcessName   : language_server_windows_x64
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 58910
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 58907
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 52606
+State         : Established
+OwningProcess : 11420
+ProcessName   : language_server_windows_x64
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 58398
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 59024
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 58903
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 60406
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 53035
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 58415
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 60441
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 60778
+State         : Established
+OwningProcess : 11420
+ProcessName   : language_server_windows_x64
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 58434
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 58420
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 58523
+State         : Established
+OwningProcess : 11420
+ProcessName   : language_server_windows_x64
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 59028
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 58901
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 60202
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 50063
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 58423
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 58693
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 59027
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 58400
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 58404
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 58426
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 58433
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 58648
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 58638
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 60442
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 58672
+State         : Established
+OwningProcess : 11420
+ProcessName   : language_server_windows_x64
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 58897
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 60459
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 58427
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 58414
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 60448
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 58881
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 58417
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 58416
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 60417
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 57302
+State         : Established
+OwningProcess : 11420
+ProcessName   : language_server_windows_x64
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 58368
+State         : Established
+OwningProcess : 11420
+ProcessName   : language_server_windows_x64
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 57540
+State         : Established
+OwningProcess : 11420
+ProcessName   : language_server_windows_x64
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 60411
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 58411
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 58902
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 58430
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 58622
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 58412
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 58418
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 58371
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 60198
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 58906
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 60463
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 53037
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 58896
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 59015
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 58655
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 58435
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 58659
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 58438
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 59016
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 60401
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 50449
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 58374
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 58900
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 60455
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 53031
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 53025
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 59012
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 59032
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 0.0.0.0
+RemotePort    : 0
+State         : Listen
+OwningProcess : 11420
+ProcessName   : language_server_windows_x64
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 58650
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 60475
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 52681
+State         : Established
+OwningProcess : 11420
+ProcessName   : language_server_windows_x64
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 58636
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 60203
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 58645
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 58651
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 58641
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 60444
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 58686
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 58892
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 58904
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 58909
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 58410
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 50061
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 58873
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 60400
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 60443
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 60461
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 60447
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 60438
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 60437
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 60403
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 60201
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 59900
+State         : Established
+OwningProcess : 11420
+ProcessName   : language_server_windows_x64
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 58911
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 58908
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 58899
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 58878
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 58874
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 58649
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 58425
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 58424
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 58422
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 58373
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 54305
+State         : Established
+OwningProcess : 11420
+ProcessName   : language_server_windows_x64
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55018
+RemoteAddress : 127.0.0.1
+RemotePort    : 49670
+State         : Established
+OwningProcess : 11420
+ProcessName   : language_server_windows_x64
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55008
+RemoteAddress : 0.0.0.0
+RemotePort    : 0
+State         : Listen
+OwningProcess : 24320
+ProcessName   : Devin
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55008
+RemoteAddress : 127.0.0.1
+RemotePort    : 58673
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 55008
+RemoteAddress : 127.0.0.1
+RemotePort    : 60436
+State         : Established
+OwningProcess : 24320
+ProcessName   : Devin
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 54321
+RemoteAddress : 127.0.0.1
+RemotePort    : 58885
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 54321
+RemoteAddress : 127.0.0.1
+RemotePort    : 58375
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 54321
+RemoteAddress : 127.0.0.1
+RemotePort    : 60419
+State         : Established
+OwningProcess : 21804
+ProcessName   : com.docker.backend
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 54321
+RemoteAddress : 127.0.0.1
+RemotePort    : 60410
+State         : Established
+OwningProcess : 21804
+ProcessName   : com.docker.backend
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 54321
+RemoteAddress : 127.0.0.1
+RemotePort    : 58879
+State         : Established
+OwningProcess : 21804
+ProcessName   : com.docker.backend
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 54321
+RemoteAddress : 127.0.0.1
+RemotePort    : 60433
+State         : Established
+OwningProcess : 21804
+ProcessName   : com.docker.backend
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 54321
+RemoteAddress : 127.0.0.1
+RemotePort    : 60429
+State         : Established
+OwningProcess : 21804
+ProcessName   : com.docker.backend
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 54321
+RemoteAddress : 127.0.0.1
+RemotePort    : 60422
+State         : Established
+OwningProcess : 21804
+ProcessName   : com.docker.backend
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 54321
+RemoteAddress : 127.0.0.1
+RemotePort    : 60425
+State         : Established
+OwningProcess : 21804
+ProcessName   : com.docker.backend
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 54321
+RemoteAddress : 127.0.0.1
+RemotePort    : 60421
+State         : Established
+OwningProcess : 21804
+ProcessName   : com.docker.backend
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 54321
+RemoteAddress : 127.0.0.1
+RemotePort    : 60424
+State         : Established
+OwningProcess : 21804
+ProcessName   : com.docker.backend
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 54321
+RemoteAddress : 127.0.0.1
+RemotePort    : 60427
+State         : Established
+OwningProcess : 21804
+ProcessName   : com.docker.backend
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 54321
+RemoteAddress : 127.0.0.1
+RemotePort    : 60432
+State         : Established
+OwningProcess : 21804
+ProcessName   : com.docker.backend
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 54321
+RemoteAddress : 127.0.0.1
+RemotePort    : 60430
+State         : Established
+OwningProcess : 21804
+ProcessName   : com.docker.backend
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 54321
+RemoteAddress : 127.0.0.1
+RemotePort    : 60426
+State         : Established
+OwningProcess : 21804
+ProcessName   : com.docker.backend
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 54321
+RemoteAddress : 127.0.0.1
+RemotePort    : 60428
+State         : Established
+OwningProcess : 21804
+ProcessName   : com.docker.backend
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 54321
+RemoteAddress : 127.0.0.1
+RemotePort    : 60431
+State         : Established
+OwningProcess : 21804
+ProcessName   : com.docker.backend
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 54321
+RemoteAddress : 127.0.0.1
+RemotePort    : 60420
+State         : Established
+OwningProcess : 21804
+ProcessName   : com.docker.backend
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 54321
+RemoteAddress : 127.0.0.1
+RemotePort    : 60423
+State         : Established
+OwningProcess : 21804
+ProcessName   : com.docker.backend
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 54305
+RemoteAddress : 127.0.0.1
+RemotePort    : 55018
+State         : Established
+OwningProcess : 27932
+ProcessName   : Devin
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 54217
+RemoteAddress : 127.0.0.1
+RemotePort    : 55018
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 192.168.86.82
+LocalPort     : 53033
+RemoteAddress : 23.219.160.41
+RemotePort    : 443
+State         : Established
+OwningProcess : 15752
+ProcessName   : Widgets
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 53032
+RemoteAddress : 127.0.0.1
+RemotePort    : 55018
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 192.168.86.82
+LocalPort     : 53030
+RemoteAddress : 23.60.33.234
+RemotePort    : 443
+State         : Established
+OwningProcess : 20844
+ProcessName   : NortonBridge
+
+LocalAddress  : 192.168.86.82
+LocalPort     : 53029
+RemoteAddress : 23.60.33.234
+RemotePort    : 80
+State         : Established
+OwningProcess : 20844
+ProcessName   : NortonBridge
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 53026
+RemoteAddress : 127.0.0.1
+RemotePort    : 55018
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 192.168.86.82
+LocalPort     : 53024
+RemoteAddress : 192.168.86.1
+RemotePort    : 53
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 52681
+RemoteAddress : 127.0.0.1
+RemotePort    : 55018
+State         : Established
+OwningProcess : 27932
+ProcessName   : Devin
+
+LocalAddress  : 192.168.86.82
+LocalPort     : 52621
+RemoteAddress : 98.91.39.95
+RemotePort    : 443
+State         : Established
+OwningProcess : 21784
+ProcessName   : devin
+
+LocalAddress  : 192.168.86.82
+LocalPort     : 52617
+RemoteAddress : 140.82.112.22
+RemotePort    : 443
+State         : Established
+OwningProcess : 21784
+ProcessName   : devin
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 52606
+RemoteAddress : 127.0.0.1
+RemotePort    : 55018
+State         : Established
+OwningProcess : 27932
+ProcessName   : Devin
+
+LocalAddress  : 192.168.86.82
+LocalPort     : 52475
+RemoteAddress : 209.177.156.94
+RemotePort    : 443
+State         : Established
+OwningProcess : 23788
+ProcessName   : tailscaled
+
+LocalAddress  : 192.168.86.82
+LocalPort     : 52198
+RemoteAddress : 104.18.39.21
+RemotePort    : 443
+State         : Established
+OwningProcess : 12796
+ProcessName   : ChatGPT Classic
+
+LocalAddress  : 192.168.86.82
+LocalPort     : 50906
+RemoteAddress : 34.160.81.0
+RemotePort    : 443
+State         : Established
+OwningProcess : 21784
+ProcessName   : devin
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 50848
+RemoteAddress : 0.0.0.0
+RemotePort    : 0
+State         : Listen
+OwningProcess : 24320
+ProcessName   : Devin
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 50848
+RemoteAddress : 127.0.0.1
+RemotePort    : 60446
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 50791
+RemoteAddress : 127.0.0.1
+RemotePort    : 55023
+State         : Established
+OwningProcess : 24320
+ProcessName   : Devin
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 50736
+RemoteAddress : 127.0.0.1
+RemotePort    : 55018
+State         : TimeWait
+OwningProcess : 0
+ProcessName   : Idle
+
+LocalAddress  : 192.168.86.82
+LocalPort     : 50448
+RemoteAddress : 150.171.29.10
+RemotePort    : 443
+State         : Established
+OwningProcess : 24556
+ProcessName   : msedge
+
+LocalAddress  : 192.168.86.82
+LocalPort     : 50060
+RemoteAddress : 35.223.238.178
+RemotePort    : 443
+State         : Established
+OwningProcess : 27932
+ProcessName   : Devin
+
+LocalAddress  : 0.0.0.0
+LocalPort     : 49672
+RemoteAddress : 0.0.0.0
+RemotePort    : 0
+State         : Listen
+OwningProcess : 1432
+ProcessName   : services
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 49670
+RemoteAddress : 127.0.0.1
+RemotePort    : 55018
+State         : Established
+OwningProcess : 27932
+ProcessName   : Devin
+
+LocalAddress  : 0.0.0.0
+LocalPort     : 49668
+RemoteAddress : 0.0.0.0
+RemotePort    : 0
+State         : Listen
+OwningProcess : 4888
+ProcessName   : spoolsv
+
+LocalAddress  : 0.0.0.0
+LocalPort     : 49667
+RemoteAddress : 0.0.0.0
+RemotePort    : 0
+State         : Listen
+OwningProcess : 3964
+ProcessName   : svchost
+
+LocalAddress  : 0.0.0.0
+LocalPort     : 49666
+RemoteAddress : 0.0.0.0
+RemotePort    : 0
+State         : Listen
+OwningProcess : 2416
+ProcessName   : svchost
+
+LocalAddress  : 0.0.0.0
+LocalPort     : 49665
+RemoteAddress : 0.0.0.0
+RemotePort    : 0
+State         : Listen
+OwningProcess : 1296
+ProcessName   : wininit
+
+LocalAddress  : 0.0.0.0
+LocalPort     : 49664
+RemoteAddress : 0.0.0.0
+RemotePort    : 0
+State         : Listen
+OwningProcess : 1464
+ProcessName   : lsass
+
+LocalAddress  : 192.168.86.82
+LocalPort     : 49416
+RemoteAddress : 104.208.203.89
+RemotePort    : 443
+State         : Established
+OwningProcess : 6324
+ProcessName   : svchost
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 45823
+RemoteAddress : 0.0.0.0
+RemotePort    : 0
+State         : Listen
+OwningProcess : 3132
+ProcessName   : WindowsMCFCore
+
+LocalAddress  : 100.118.182.126
+LocalPort     : 39157
+RemoteAddress : 0.0.0.0
+RemotePort    : 0
+State         : Listen
+OwningProcess : 23788
+ProcessName   : tailscaled
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 11434
+RemoteAddress : 0.0.0.0
+RemotePort    : 0
+State         : Listen
+OwningProcess : 25788
+ProcessName   : ollama
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 9998
+RemoteAddress : 0.0.0.0
+RemotePort    : 0
+State         : Listen
+OwningProcess : 22184
+ProcessName   : node
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 5354
+RemoteAddress : 0.0.0.0
+RemotePort    : 0
+State         : Listen
+OwningProcess : 4316
+ProcessName   : mDNSResponder
+
+LocalAddress  : 0.0.0.0
+LocalPort     : 5050
+RemoteAddress : 0.0.0.0
+RemotePort    : 0
+State         : Listen
+OwningProcess : 12672
+ProcessName   : python
+
+LocalAddress  : 0.0.0.0
+LocalPort     : 5040
+RemoteAddress : 0.0.0.0
+RemotePort    : 0
+State         : Listen
+OwningProcess : 13184
+ProcessName   : svchost
+
+LocalAddress  : 0.0.0.0
+LocalPort     : 3006
+RemoteAddress : 0.0.0.0
+RemotePort    : 0
+State         : Listen
+OwningProcess : 18440
+ProcessName   : node
+
+LocalAddress  : 127.0.0.1
+LocalPort     : 3000
+RemoteAddress : 127.0.0.1
+RemotePort    : 59026
+State         : CloseWait
+OwningProcess : 10336
+ProcessName   : node
+
+LocalAddress  : 0.0.0.0
+LocalPort     : 3000
+RemoteAddress : 0.0.0.0
+RemotePort    : 0
+State         : Listen
+OwningProcess : 10336
+ProcessName   : node
+
+LocalAddress  : 100.118.182.126
+LocalPort     : 443
+RemoteAddress : 0.0.0.0
+RemotePort    : 0
+State         : Listen
+OwningProcess : 23788
+ProcessName   : tailscaled
+
+LocalAddress  : 192.168.86.82
+LocalPort     : 139
+RemoteAddress : 0.0.0.0
+RemotePort    : 0
+State         : Listen
+OwningProcess : 4
+ProcessName   : System
+
+LocalAddress  : 192.168.48.1
+LocalPort     : 139
+RemoteAddress : 0.0.0.0
+RemotePort    : 0
+State         : Listen
+OwningProcess : 4
+ProcessName   : System
+
+LocalAddress  : 0.0.0.0
+LocalPort     : 135
+RemoteAddress : 0.0.0.0
+RemotePort    : 0
+State         : Listen
+OwningProcess : 1784
+ProcessName   : svchost
+
+LocalAddress  : 0.0.0.0
+LocalPort     : 22
+RemoteAddress : 0.0.0.0
+RemotePort    : 0
+State         : Listen
+OwningProcess : 6052
+ProcessName   : sshd
+
+
+--- UDP endpoints ---
+
+LocalAddress                 LocalPort OwningProcess ProcessName
+------------                 --------- ------------- -----------
+::                               65100          2332 svchost
+::                               60461         12796 ChatGPT Classic
+::                               58160          2332 svchost
+::                               54703          2332 svchost
+::                               52096          2332 svchost
+::                               51148          4332 svchost
+fe80::9bd7:3c1d:dc44:efaa%35     50420          6892 svchost
+::1                              50419          6892 svchost
+fe80::5d4e:6a7c:c068:58b%17      50418          6892 svchost
+fe80::6db0:7ef4:f442:ac11%7      50417          6892 svchost
+::                               50124         10704 svchost
+::                               49665          4316 mDNSResponder
+::                               49238          2332 svchost
+::                               41641         23788 tailscaled
+::                                5355          2332 svchost
+::1                               5353          4316 mDNSResponder
+::                                5353         24556 msedge
+::                                4500          5164 svchost
+::                                3702         10704 svchost
+fe80::9bd7:3c1d:dc44:efaa%35      1900          6892 svchost
+fe80::6db0:7ef4:f442:ac11%7       1900          6892 svchost
+fe80::5d4e:6a7c:c068:58b%17       1900          6892 svchost
+::1                               1900          6892 svchost
+fe80::3c4f:34c3:5251:bcf%19        546          2504 svchost
+::                                 500          5164 svchost
+0.0.0.0                          65202         24556 msedge
+0.0.0.0                          64900          6164 SamsungMultiControl
+0.0.0.0                          64375          6164 SamsungMultiControl
+0.0.0.0                          64188          6164 SamsungMultiControl
+0.0.0.0                          64170          6164 SamsungMultiControl
+192.168.86.82                    62934         23052 syncagentsrv
+0.0.0.0                          62756         24556 msedge
+0.0.0.0                          61796          6164 SamsungMultiControl
+0.0.0.0                          61767          6164 SamsungMultiControl
+0.0.0.0                          61419          6164 SamsungMultiControl
+0.0.0.0                          60460         12796 ChatGPT Classic
+0.0.0.0                          60405          6164 SamsungMultiControl
+0.0.0.0                          60322          6164 SamsungMultiControl
+0.0.0.0                          59777         24556 msedge
+0.0.0.0                          59630         19112 claude
+0.0.0.0                          59485          6164 SamsungMultiControl
+0.0.0.0                          58892          6164 SamsungMultiControl
+0.0.0.0                          58278          6164 SamsungMultiControl
+0.0.0.0                          57965         24556 msedge
+0.0.0.0                          57955          6164 SamsungMultiControl
+0.0.0.0                          57556          6164 SamsungMultiControl
+0.0.0.0                          56958          6164 SamsungMultiControl
+0.0.0.0                          56548          6164 SamsungMultiControl
+0.0.0.0                          55124          6164 SamsungMultiControl
+0.0.0.0                          55122          6164 SamsungMultiControl
+0.0.0.0                          54995          6164 SamsungMultiControl
+0.0.0.0                          54762          6164 SamsungMultiControl
+0.0.0.0                          54724          6164 SamsungMultiControl
+0.0.0.0                          54418          6164 SamsungMultiControl
+0.0.0.0                          54363          6164 SamsungMultiControl
+0.0.0.0                          54240          6164 SamsungMultiControl
+0.0.0.0                          53321          6164 SamsungMultiControl
+0.0.0.0                          53250          6164 SamsungMultiControl
+0.0.0.0                          52404          6164 SamsungMultiControl
+192.168.86.82                    52028          5500 svchost
+0.0.0.0                          51691          6164 SamsungMultiControl
+0.0.0.0                          51587          7296 SecondScreenDesktop
+0.0.0.0                          51147          4332 svchost
+0.0.0.0                          51146          4332 svchost
+0.0.0.0                          50788          6164 SamsungMultiControl
+192.168.48.1                     50424          6892 svchost
+127.0.0.1                        50423          6892 svchost
+192.168.86.82                    50422          6892 svchost
+100.118.182.126                  50421          6892 svchost
+0.0.0.0                          50123         10704 svchost
+0.0.0.0                          50061          6164 SamsungMultiControl
+127.0.0.1                        49666          5500 svchost
+0.0.0.0                          49664          4316 mDNSResponder
+0.0.0.0                          41641         23788 tailscaled
+0.0.0.0                           5355          2332 svchost
+192.168.86.82                     5353          4316 mDNSResponder
+192.168.48.1                      5353          4316 mDNSResponder
+100.118.182.126                   5353          4316 mDNSResponder
+0.0.0.0                           5353          2332 svchost
+0.0.0.0                           5050         13184 svchost
+0.0.0.0                           4500          5164 svchost
+0.0.0.0                           3702         10704 svchost
+0.0.0.0                           3544          5500 svchost
+192.168.86.82                     1900          6892 svchost
+192.168.48.1                      1900          6892 svchost
+127.0.0.1                         1900          6892 svchost
+100.118.182.126                   1900          6892 svchost
+0.0.0.0                            500          5164 svchost
+192.168.86.82                      138             4 System
+192.168.48.1                       138             4 System
+192.168.86.82                      137             4 System
+192.168.48.1                       137             4 System
+0.0.0.0                             53          4332 svchost
+
+
+--- DNS client cache ---
+
+Entry                                 RecordName RecordType Data
+-----                                 ---------- ---------- ----
+unleash.codeium.com                                         35.223.238.178
+kubernetes.docker.internal                                  
+kubernetes.docker.internal                                  127.0.0.1
+browser-intake-us5-datadoghq.com                            34.149.66.163
+c.bing.com                                                  c-bing-com.ax-0001.ax-msedge.net
+c.bing.com                                                  ax-0001.ax-dc-msedge.net
+c.bing.com                                                  150.171.29.10
+c.bing.com                                                  150.171.30.10
+1.48.168.192.in-addr.arpa                                   DESKTOP-I719OIN.mshome.net
+desktop-i719oin.mshome.net                                  
+desktop-i719oin.mshome.net                                  192.168.48.1
+www.facebook.com                                            star-mini.c10r.facebook.com
+www.facebook.com                                            31.13.93.35
+82.86.168.192.in-addr.arpa                                  host.docker.internal
+82.86.168.192.in-addr.arpa                                  gateway.docker.internal
+copilot.microsoft.com                                       copilot-copilot-msft-com.trafficmanager.net
+copilot.microsoft.com                                       copilot.microsoft.com.cdn.cloudflare.net
+copilot.microsoft.com                                       104.18.22.222
+copilot.microsoft.com                                       104.18.23.222
+server.codeium.com                                          35.223.238.178
+www.bing.com                                                www-www.bing.com.trafficmanager.net
+www.bing.com                                                www.bing.com.edgekey.net
+www.bing.com                                                e86303.dscx.akamaiedge.net
+www.bing.com                                                23.219.160.19
+www.bing.com                                                23.219.160.10
+www.bing.com                                                23.219.160.13
+www.bing.com                                                23.219.160.17
+host.docker.internal                                        
+host.docker.internal                                        192.168.86.82
+1.0.0.127.in-addr.arpa                                      kubernetes.docker.internal
+gateway.docker.internal                                     
+gateway.docker.internal                                     192.168.86.82
+notify-bugsnag.docker.com                                   52.87.135.177
+notify-bugsnag.docker.com                                   54.164.218.169
+notify-bugsnag.docker.com                                   54.243.197.166
+windsurf-telemetry.codeium.com                              35.223.238.178
+registry.npmjs.org                                          104.16.3.34
+registry.npmjs.org                                          104.16.5.34
+registry.npmjs.org                                          104.16.6.34
+registry.npmjs.org                                          104.16.9.34
+registry.npmjs.org                                          104.16.0.34
+registry.npmjs.org                                          104.16.7.34
+registry.npmjs.org                                          104.16.10.34
+registry.npmjs.org                                          104.16.4.34
+registry.npmjs.org                                          104.16.1.34
+registry.npmjs.org                                          104.16.2.34
+registry.npmjs.org                                          104.16.8.34
+registry.npmjs.org                                          104.16.11.34
+login.live.com                                              login.msa.msidentity.com
+login.live.com                                              www.tm.lg.prod.aadmsa.trafficmanager.net
+login.live.com                                              prdv4a.aadg.msidentity.com
+login.live.com                                              www.tm.v4.a.prd.aadg.akadns.net
+login.live.com                                              20.190.157.13
+login.live.com                                              20.190.157.15
+login.live.com                                              40.126.29.8
+login.live.com                                              20.190.157.3
+login.live.com                                              40.126.29.7
+login.live.com                                              20.190.157.1
+login.live.com                                              40.126.29.12
+login.live.com                                              40.126.29.10
+o4508134825000960.ingest.us.sentry.io                       34.160.81.0
+login.microsoftonline.com                                   login.mso.msidentity.com
+login.microsoftonline.com                                   ak.privatelink.msidentity.com
+login.microsoftonline.com                                   www.tm.a.prd.aadg.akadns.net
+login.microsoftonline.com                                   40.126.28.19
+login.microsoftonline.com                                   40.126.28.23
+login.microsoftonline.com                                   20.190.135.3
+login.microsoftonline.com                                   20.190.135.6
+login.microsoftonline.com                                   40.126.28.18
+login.microsoftonline.com                                   40.126.28.13
+login.microsoftonline.com                                   40.126.28.20
+login.microsoftonline.com                                   20.190.135.4
+
+
+--- Post-call netstat ---
+
+Active Connections
+
+  Proto  Local Address          Foreign Address        State
+  TCP    0.0.0.0:22             0.0.0.0:0              LISTENING
+  TCP    0.0.0.0:135            0.0.0.0:0              LISTENING
+  TCP    0.0.0.0:445            0.0.0.0:0              LISTENING
+  TCP    0.0.0.0:3000           0.0.0.0:0              LISTENING
+  TCP    0.0.0.0:3005           0.0.0.0:0              LISTENING
+  TCP    0.0.0.0:3006           0.0.0.0:0              LISTENING
+  TCP    0.0.0.0:3459           0.0.0.0:0              LISTENING
+  TCP    0.0.0.0:4000           0.0.0.0:0              LISTENING
+  TCP    0.0.0.0:5000           0.0.0.0:0              LISTENING
+  TCP    0.0.0.0:5040           0.0.0.0:0              LISTENING
+  TCP    0.0.0.0:5050           0.0.0.0:0              LISTENING
+  TCP    0.0.0.0:5357           0.0.0.0:0              LISTENING
+  TCP    0.0.0.0:5432           0.0.0.0:0              LISTENING
+  TCP    0.0.0.0:6379           0.0.0.0:0              LISTENING
+  TCP    0.0.0.0:7260           0.0.0.0:0              LISTENING
+  TCP    0.0.0.0:7680           0.0.0.0:0              LISTENING
+  TCP    0.0.0.0:9877           0.0.0.0:0              LISTENING
+  TCP    0.0.0.0:11434          0.0.0.0:0              LISTENING
+  TCP    0.0.0.0:49664          0.0.0.0:0              LISTENING
+  TCP    0.0.0.0:49665          0.0.0.0:0              LISTENING
+  TCP    0.0.0.0:49666          0.0.0.0:0              LISTENING
+  TCP    0.0.0.0:49667          0.0.0.0:0              LISTENING
+  TCP    0.0.0.0:49668          0.0.0.0:0              LISTENING
+  TCP    0.0.0.0:49672          0.0.0.0:0              LISTENING
+  TCP    0.0.0.0:50080          0.0.0.0:0              LISTENING
+  TCP    0.0.0.0:50443          0.0.0.0:0              LISTENING
+  TCP    0.0.0.0:54321          0.0.0.0:0              LISTENING
+  TCP    0.0.0.0:54322          0.0.0.0:0              LISTENING
+  TCP    0.0.0.0:54323          0.0.0.0:0              LISTENING
+  TCP    0.0.0.0:54324          0.0.0.0:0              LISTENING
+  TCP    0.0.0.0:54327          0.0.0.0:0              LISTENING
+  TCP    100.118.182.126:443    0.0.0.0:0              LISTENING
+  TCP    100.118.182.126:39157  0.0.0.0:0              LISTENING
+  TCP    127.0.0.1:5354         0.0.0.0:0              LISTENING
+  TCP    127.0.0.1:9998         0.0.0.0:0              LISTENING
+  TCP    127.0.0.1:11434        0.0.0.0:0              LISTENING
+  TCP    127.0.0.1:45823        0.0.0.0:0              LISTENING
+  TCP    127.0.0.1:49670        127.0.0.1:55018        ESTABLISHED
+  TCP    127.0.0.1:50092        127.0.0.1:55018        TIME_WAIT
+  TCP    127.0.0.1:50791        127.0.0.1:55023        ESTABLISHED
+  TCP    127.0.0.1:50848        0.0.0.0:0              LISTENING
+  TCP    127.0.0.1:50848        127.0.0.1:60446        TIME_WAIT
+  TCP    127.0.0.1:52606        127.0.0.1:55018        ESTABLISHED
+  TCP    127.0.0.1:52681        127.0.0.1:55018        TIME_WAIT
+  TCP    127.0.0.1:53026        127.0.0.1:55018        TIME_WAIT
+  TCP    127.0.0.1:53032        127.0.0.1:55018        TIME_WAIT
+  TCP    127.0.0.1:54305        127.0.0.1:55018        ESTABLISHED
+  TCP    127.0.0.1:54321        127.0.0.1:57523        TIME_WAIT
+  TCP    127.0.0.1:54321        127.0.0.1:58879        TIME_WAIT
+  TCP    127.0.0.1:54321        127.0.0.1:58885        TIME_WAIT
+  TCP    127.0.0.1:55008        0.0.0.0:0              LISTENING
+  TCP    127.0.0.1:55008        127.0.0.1:60436        ESTABLISHED
+  TCP    127.0.0.1:55018        0.0.0.0:0              LISTENING
+  TCP    127.0.0.1:55018        127.0.0.1:49670        ESTABLISHED
+  TCP    127.0.0.1:55018        127.0.0.1:50061        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:50063        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:50091        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:50093        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:50094        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:50096        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:50097        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:50098        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:50099        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:50100        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:50449        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:50452        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:52606        ESTABLISHED
+  TCP    127.0.0.1:55018        127.0.0.1:53025        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:53031        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:53035        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:53037        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:54305        ESTABLISHED
+  TCP    127.0.0.1:55018        127.0.0.1:56906        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:56907        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:56908        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:56910        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:56912        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:56915        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:56916        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:56918        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:56920        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:57302        ESTABLISHED
+  TCP    127.0.0.1:55018        127.0.0.1:57511        ESTABLISHED
+  TCP    127.0.0.1:55018        127.0.0.1:57512        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:57515        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:57517        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:57518        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:57536        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:57537        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:57539        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:57548        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:57549        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:57555        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:57559        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:57561        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:57563        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:57568        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:57570        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:58368        ESTABLISHED
+  TCP    127.0.0.1:55018        127.0.0.1:58523        ESTABLISHED
+  TCP    127.0.0.1:55018        127.0.0.1:58551        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:58672        ESTABLISHED
+  TCP    127.0.0.1:55018        127.0.0.1:58878        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:58881        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:58892        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:58896        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:58897        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:58898        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:58899        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:58900        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:58901        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:58902        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:58903        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:58904        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:58906        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:58907        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:58908        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:58909        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:58910        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:58911        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:59012        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:59015        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:59016        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:59024        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:59027        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:59028        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:59032        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:59900        ESTABLISHED
+  TCP    127.0.0.1:55018        127.0.0.1:59905        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:59907        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:59909        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:59912        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:59913        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:59915        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:59917        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:59918        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:59919        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:59922        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:59923        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:59925        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:59926        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:59929        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:59930        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:59932        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:59934        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:60400        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:60401        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:60403        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:60406        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:60411        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:60417        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:60437        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:60438        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:60441        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:60442        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:60443        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:60444        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:60447        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:60448        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:60455        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:60459        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:60461        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:60463        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:60475        TIME_WAIT
+  TCP    127.0.0.1:55018        127.0.0.1:60778        ESTABLISHED
+  TCP    127.0.0.1:55023        0.0.0.0:0              LISTENING
+  TCP    127.0.0.1:55023        127.0.0.1:50791        ESTABLISHED
+  TCP    127.0.0.1:56911        127.0.0.1:3000         TIME_WAIT
+  TCP    127.0.0.1:56913        127.0.0.1:54321        TIME_WAIT
+  TCP    127.0.0.1:57302        127.0.0.1:55018        ESTABLISHED
+  TCP    127.0.0.1:57511        127.0.0.1:55018        ESTABLISHED
+  TCP    127.0.0.1:57524        127.0.0.1:54321        TIME_WAIT
+  TCP    127.0.0.1:57525        127.0.0.1:54321        TIME_WAIT
+  TCP    127.0.0.1:57526        127.0.0.1:54321        TIME_WAIT
+  TCP    127.0.0.1:57527        127.0.0.1:54321        TIME_WAIT
+  TCP    127.0.0.1:57528        127.0.0.1:54321        TIME_WAIT
+  TCP    127.0.0.1:57529        127.0.0.1:54321        TIME_WAIT
+  TCP    127.0.0.1:57530        127.0.0.1:54321        TIME_WAIT
+  TCP    127.0.0.1:57531        127.0.0.1:54321        TIME_WAIT
+  TCP    127.0.0.1:57532        127.0.0.1:54321        TIME_WAIT
+  TCP    127.0.0.1:57533        127.0.0.1:54321        TIME_WAIT
+  TCP    127.0.0.1:57534        127.0.0.1:54321        TIME_WAIT
+  TCP    127.0.0.1:57535        127.0.0.1:54321        TIME_WAIT
+  TCP    127.0.0.1:57538        127.0.0.1:3005         TIME_WAIT
+  TCP    127.0.0.1:57540        127.0.0.1:55018        TIME_WAIT
+  TCP    127.0.0.1:57541        127.0.0.1:3000         TIME_WAIT
+  TCP    127.0.0.1:57542        127.0.0.1:3006         TIME_WAIT
+  TCP    127.0.0.1:57547        127.0.0.1:54321        TIME_WAIT
+  TCP    127.0.0.1:58368        127.0.0.1:55018        ESTABLISHED
+  TCP    127.0.0.1:58523        127.0.0.1:55018        ESTABLISHED
+  TCP    127.0.0.1:58672        127.0.0.1:55018        ESTABLISHED
+  TCP    127.0.0.1:58882        127.0.0.1:3005         TIME_WAIT
+  TCP    127.0.0.1:58883        127.0.0.1:3000         TIME_WAIT
+  TCP    127.0.0.1:58884        127.0.0.1:3006         TIME_WAIT
+  TCP    127.0.0.1:59017        127.0.0.1:3005         TIME_WAIT
+  TCP    127.0.0.1:59019        127.0.0.1:3006         TIME_WAIT
+  TCP    127.0.0.1:59026        127.0.0.1:3000         TIME_WAIT
+  TCP    127.0.0.1:59900        127.0.0.1:55018        ESTABLISHED
+  TCP    127.0.0.1:59906        127.0.0.1:3000         TIME_WAIT
+  TCP    127.0.0.1:59911        127.0.0.1:54321        TIME_WAIT
+  TCP    127.0.0.1:59928        127.0.0.1:3000         TIME_WAIT
+  TCP    127.0.0.1:60396        127.0.0.1:55018        TIME_WAIT
+  TCP    127.0.0.1:60402        127.0.0.1:55018        TIME_WAIT
+  TCP    127.0.0.1:60409        127.0.0.1:55018        TIME_WAIT
+  TCP    127.0.0.1:60410        127.0.0.1:54321        TIME_WAIT
+  TCP    127.0.0.1:60413        127.0.0.1:3005         TIME_WAIT
+  TCP    127.0.0.1:60414        127.0.0.1:3000         TIME_WAIT
+  TCP    127.0.0.1:60415        127.0.0.1:3006         TIME_WAIT
+  TCP    127.0.0.1:60418        127.0.0.1:50848        TIME_WAIT
+  TCP    127.0.0.1:60419        127.0.0.1:54321        TIME_WAIT
+  TCP    127.0.0.1:60420        127.0.0.1:54321        TIME_WAIT
+  TCP    127.0.0.1:60421        127.0.0.1:54321        TIME_WAIT
+  TCP    127.0.0.1:60422        127.0.0.1:54321        TIME_WAIT
+  TCP    127.0.0.1:60423        127.0.0.1:54321        TIME_WAIT
+  TCP    127.0.0.1:60424        127.0.0.1:54321        TIME_WAIT
+  TCP    127.0.0.1:60425        127.0.0.1:54321        TIME_WAIT
+  TCP    127.0.0.1:60426        127.0.0.1:54321        TIME_WAIT
+  TCP    127.0.0.1:60427        127.0.0.1:54321        TIME_WAIT
+  TCP    127.0.0.1:60428        127.0.0.1:54321        TIME_WAIT
+  TCP    127.0.0.1:60429        127.0.0.1:54321        TIME_WAIT
+  TCP    127.0.0.1:60430        127.0.0.1:54321        TIME_WAIT
+  TCP    127.0.0.1:60431        127.0.0.1:54321        TIME_WAIT
+  TCP    127.0.0.1:60432        127.0.0.1:54321        TIME_WAIT
+  TCP    127.0.0.1:60433        127.0.0.1:54321        TIME_WAIT
+  TCP    127.0.0.1:60436        127.0.0.1:55008        ESTABLISHED
+  TCP    127.0.0.1:60469        127.0.0.1:55018        TIME_WAIT
+  TCP    127.0.0.1:60472        127.0.0.1:3005         TIME_WAIT
+  TCP    127.0.0.1:60778        127.0.0.1:55018        ESTABLISHED
+  TCP    127.0.0.1:62639        127.0.0.1:55018        TIME_WAIT
+  TCP    127.0.0.1:64797        127.0.0.1:55018        TIME_WAIT
+  TCP    192.168.48.1:139       0.0.0.0:0              LISTENING
+  TCP    192.168.86.82:139      0.0.0.0:0              LISTENING
+  TCP    192.168.86.82:49416    104.208.203.89:443     ESTABLISHED
+  TCP    192.168.86.82:50060    35.223.238.178:443     ESTABLISHED
+  TCP    192.168.86.82:50090    35.223.238.178:443     ESTABLISHED
+  TCP    192.168.86.82:50448    150.171.29.10:443      ESTABLISHED
+  TCP    192.168.86.82:50906    34.160.81.0:443        ESTABLISHED
+  TCP    192.168.86.82:52198    104.18.39.21:443       ESTABLISHED
+  TCP    192.168.86.82:52475    209.177.156.94:443     ESTABLISHED
+  TCP    192.168.86.82:52617    140.82.112.22:443      ESTABLISHED
+  TCP    192.168.86.82:52621    98.91.39.95:443        ESTABLISHED
+  TCP    192.168.86.82:53024    192.168.86.1:53        TIME_WAIT
+  TCP    192.168.86.82:53029    23.60.33.234:80        ESTABLISHED
+  TCP    192.168.86.82:53030    23.60.33.234:443       ESTABLISHED
+  TCP    192.168.86.82:53033    23.219.160.41:443      ESTABLISHED
+  TCP    192.168.86.82:55914    3.219.52.251:443       ESTABLISHED
+  TCP    192.168.86.82:55915    3.219.52.251:443       ESTABLISHED
+  TCP    192.168.86.82:56904    35.223.238.178:443     ESTABLISHED
+  TCP    192.168.86.82:56917    35.223.238.178:443     ESTABLISHED
+  TCP    192.168.86.82:56940    34.149.66.163:443      ESTABLISHED
+  TCP    192.168.86.82:57514    52.123.246.7:443       TIME_WAIT
+  TCP    192.168.86.82:57520    69.1.199.241:7680      SYN_SENT
+  TCP    192.168.86.82:57550    20.165.94.46:443       TIME_WAIT
+  TCP    192.168.86.82:57551    72.153.5.129:443       ESTABLISHED
+  TCP    192.168.86.82:57552    184.29.91.212:443      ESTABLISHED
+  TCP    192.168.86.82:57553    23.219.160.69:80       ESTABLISHED
+  TCP    192.168.86.82:57554    184.29.91.212:443      ESTABLISHED
+  TCP    192.168.86.82:57556    92.223.96.6:80         ESTABLISHED
+  TCP    192.168.86.82:57557    92.223.96.6:80         ESTABLISHED
+  TCP    192.168.86.82:57558    35.223.238.178:443     ESTABLISHED
+  TCP    192.168.86.82:57569    150.171.22.17:443      TIME_WAIT
+  TCP    192.168.86.82:58549    23.219.160.230:443     ESTABLISHED
+  TCP    192.168.86.82:58552    35.223.238.178:443     ESTABLISHED
+  TCP    192.168.86.82:58751    35.190.88.7:443        ESTABLISHED
+  TCP    192.168.86.82:58826    40.126.28.19:443       ESTABLISHED
+  TCP    192.168.86.82:59011    20.190.157.13:443      ESTABLISHED
+  TCP    192.168.86.82:59025    52.87.135.177:443      ESTABLISHED
+  TCP    192.168.86.82:59029    104.16.3.34:443        TIME_WAIT
+  TCP    192.168.86.82:59796    192.200.0.115:443      ESTABLISHED
+  TCP    192.168.86.82:59904    13.89.179.15:443       ESTABLISHED
+  TCP    192.168.86.82:59910    35.223.238.178:443     ESTABLISHED
+  TCP    192.168.86.82:60395    35.223.238.178:443     ESTABLISHED
+  TCP    192.168.86.82:60439    35.223.238.178:443     ESTABLISHED
+  TCP    192.168.86.82:60440    35.223.238.178:443     ESTABLISHED
+  TCP    192.168.86.82:60471    172.178.240.161:443    TIME_WAIT
+  TCP    192.168.86.82:61335    18.161.156.112:443     ESTABLISHED
+  TCP    192.168.86.82:62635    160.79.104.10:443      ESTABLISHED
+  TCP    192.168.86.82:62638    199.165.136.100:443    ESTABLISHED
+  TCP    192.168.86.82:62768    185.199.111.133:443    ESTABLISHED
+  TCP    192.168.86.82:62995    185.199.111.133:443    ESTABLISHED
+  TCP    [::]:22                [::]:0                 LISTENING
+  TCP    [::]:135               [::]:0                 LISTENING
+  TCP    [::]:445               [::]:0                 LISTENING
+  TCP    [::]:3005              [::]:0                 LISTENING
+  TCP    [::]:3459              [::]:0                 LISTENING
+  TCP    [::]:4000              [::]:0                 LISTENING
+  TCP    [::]:5000              [::]:0                 LISTENING
+  TCP    [::]:5357              [::]:0                 LISTENING
+  TCP    [::]:5432              [::]:0                 LISTENING
+  TCP    [::]:6379              [::]:0                 LISTENING
+  TCP    [::]:7260              [::]:0                 LISTENING
+  TCP    [::]:7680              [::]:0                 LISTENING
+  TCP    [::]:9877              [::]:0                 LISTENING
+  TCP    [::]:11434             [::]:0                 LISTENING
+  TCP    [::]:49664             [::]:0                 LISTENING
+  TCP    [::]:49665             [::]:0                 LISTENING
+  TCP    [::]:49666             [::]:0                 LISTENING
+  TCP    [::]:49667             [::]:0                 LISTENING
+  TCP    [::]:49668             [::]:0                 LISTENING
+  TCP    [::]:49672             [::]:0                 LISTENING
+  TCP    [::]:50080             [::]:0                 LISTENING
+  TCP    [::]:50443             [::]:0                 LISTENING
+  TCP    [::]:54321             [::]:0                 LISTENING
+  TCP    [::]:54322             [::]:0                 LISTENING
+  TCP    [::]:54323             [::]:0                 LISTENING
+  TCP    [::]:54324             [::]:0                 LISTENING
+  TCP    [::]:54327             [::]:0                 LISTENING
+  TCP    [::1]:11434            [::1]:56919            ESTABLISHED
+  TCP    [::1]:49669            [::]:0                 LISTENING
+  TCP    [::1]:53038            [::1]:11434            TIME_WAIT
+  TCP    [::1]:56919            [::1]:11434            ESTABLISHED
+  TCP    [::1]:57516            [::1]:11434            TIME_WAIT
+  TCP    [::1]:57543            [::1]:3459             TIME_WAIT
+  TCP    [::1]:57544            [::1]:11434            TIME_WAIT
+  TCP    [::1]:58876            [::1]:11434            TIME_WAIT
+  TCP    [::1]:58887            [::1]:3459             TIME_WAIT
+  TCP    [::1]:58888            [::1]:11434            TIME_WAIT
+  TCP    [::1]:59020            [::1]:3459             TIME_WAIT
+  TCP    [::1]:59021            [::1]:11434            TIME_WAIT
+  TCP    [::1]:60398            [::1]:11434            TIME_WAIT
+  TCP    [::1]:60405            [::1]:11434            TIME_WAIT
+  TCP    [::1]:60434            [::1]:3459             TIME_WAIT
+  TCP    [::1]:60452            [::1]:11434            TIME_WAIT
+  TCP    [fd7a:115c:a1e0::e235:b67f]:443  [::]:0                 LISTENING
+  TCP    [fd7a:115c:a1e0::e235:b67f]:39930  [::]:0                 LISTENING
+  UDP    0.0.0.0:53             *:*                    
+  UDP    0.0.0.0:500            *:*                    
+  UDP    0.0.0.0:3544           *:*                    
+  UDP    0.0.0.0:3702           *:*                    
+  UDP    0.0.0.0:3702           *:*                    
+  UDP    0.0.0.0:4500           *:*                    
+  UDP    0.0.0.0:5050           *:*                    
+  UDP    0.0.0.0:5353           *:*                    
+  UDP    0.0.0.0:5353           *:*                    
+  UDP    0.0.0.0:5353           *:*                    
+  UDP    0.0.0.0:5353           *:*                    
+  UDP    0.0.0.0:5353           *:*                    
+  UDP    0.0.0.0:5353           *:*                    
+  UDP    0.0.0.0:5353           *:*                    
+  UDP    0.0.0.0:5353           *:*                    
+  UDP    0.0.0.0:5353           *:*                    
+  UDP    0.0.0.0:5353           *:*                    
+  UDP    0.0.0.0:5353           *:*                    
+  UDP    0.0.0.0:5353           *:*                    
+  UDP    0.0.0.0:5353           *:*                    
+  UDP    0.0.0.0:5353           *:*                    
+  UDP    0.0.0.0:5353           *:*                    
+  UDP    0.0.0.0:5353           *:*                    
+  UDP    0.0.0.0:5353           *:*                    
+  UDP    0.0.0.0:5353           *:*                    
+  UDP    0.0.0.0:5353           *:*                    
+  UDP    0.0.0.0:5353           *:*                    
+  UDP    0.0.0.0:5353           *:*                    
+  UDP    0.0.0.0:5355           *:*                    
+  UDP    0.0.0.0:41641          *:*                    
+  UDP    0.0.0.0:49238          *:*                    
+  UDP    0.0.0.0:49664          *:*                    
+  UDP    0.0.0.0:50061          *:*                    
+  UDP    0.0.0.0:50123          *:*                    
+  UDP    0.0.0.0:50788          *:*                    
+  UDP    0.0.0.0:51146          *:*                    
+  UDP    0.0.0.0:51147          *:*                    
+  UDP    0.0.0.0:51587          *:*                    
+  UDP    0.0.0.0:51691          *:*                    
+  UDP    0.0.0.0:52096          *:*                    
+  UDP    0.0.0.0:52221          *:*                    
+  UDP    0.0.0.0:52404          *:*                    
+  UDP    0.0.0.0:53250          *:*                    
+  UDP    0.0.0.0:53321          *:*                    
+  UDP    0.0.0.0:54240          *:*                    
+  UDP    0.0.0.0:54363          *:*                    
+  UDP    0.0.0.0:54418          *:*                    
+  UDP    0.0.0.0:54724          *:*                    
+  UDP    0.0.0.0:54762          *:*                    
+  UDP    0.0.0.0:54995          *:*                    
+  UDP    0.0.0.0:55122          *:*                    
+  UDP    0.0.0.0:55124          *:*                    
+  UDP    0.0.0.0:56397          23.219.160.230:443     
+  UDP    0.0.0.0:56548          *:*                    
+  UDP    0.0.0.0:56958          *:*                    
+  UDP    0.0.0.0:57556          *:*                    
+  UDP    0.0.0.0:57955          *:*                    
+  UDP    0.0.0.0:58160          *:*                    
+  UDP    0.0.0.0:58278          *:*                    
+  UDP    0.0.0.0:58757          *:*                    
+  UDP    0.0.0.0:58760          *:*                    
+  UDP    0.0.0.0:58892          *:*                    
+  UDP    0.0.0.0:59485          *:*                    
+  UDP    0.0.0.0:59630          160.79.104.10:443      
+  UDP    0.0.0.0:60322          *:*                    
+  UDP    0.0.0.0:60405          *:*                    
+  UDP    0.0.0.0:60460          *:*                    
+  UDP    0.0.0.0:60461          *:*                    
+  UDP    0.0.0.0:61419          *:*                    
+  UDP    0.0.0.0:61767          *:*                    
+  UDP    0.0.0.0:61796          *:*                    
+  UDP    0.0.0.0:63628          23.219.160.230:443     
+  UDP    0.0.0.0:63913          *:*                    
+  UDP    0.0.0.0:64084          *:*                    
+  UDP    0.0.0.0:64170          *:*                    
+  UDP    0.0.0.0:64188          *:*                    
+  UDP    0.0.0.0:64375          *:*                    
+  UDP    0.0.0.0:64900          *:*                    
+  UDP    100.118.182.126:1900   *:*                    
+  UDP    100.118.182.126:5353   *:*                    
+  UDP    100.118.182.126:50421  *:*                    
+  UDP    127.0.0.1:1900         *:*                    
+  UDP    127.0.0.1:49666        127.0.0.1:49666        
+  UDP    127.0.0.1:50423        *:*                    
+  UDP    192.168.48.1:137       *:*                    
+  UDP    192.168.48.1:138       *:*                    
+  UDP    192.168.48.1:1900      *:*                    
+  UDP    192.168.48.1:5353      *:*                    
+  UDP    192.168.48.1:50424     *:*                    
+  UDP    192.168.86.82:137      *:*                    
+  UDP    192.168.86.82:138      *:*                    
+  UDP    192.168.86.82:1900     *:*                    
+  UDP    192.168.86.82:5353     *:*                    
+  UDP    192.168.86.82:50422    *:*                    
+  UDP    192.168.86.82:52028    *:*                    
+  UDP    192.168.86.82:62934    *:*                    
+  UDP    [::]:500               *:*                    
+  UDP    [::]:3702              *:*                    
+  UDP    [::]:3702              *:*                    
+  UDP    [::]:4500              *:*                    
+  UDP    [::]:5353              *:*                    
+  UDP    [::]:5353              *:*                    
+  UDP    [::]:5353              *:*                    
+  UDP    [::]:5353              *:*                    
+  UDP    [::]:5353              *:*                    
+  UDP    [::]:5353              *:*                    
+  UDP    [::]:5353              *:*                    
+  UDP    [::]:5353              *:*                    
+  UDP    [::]:5353              *:*                    
+  UDP    [::]:5353              *:*                    
+  UDP    [::]:5353              *:*                    
+  UDP    [::]:5353              *:*                    
+  UDP    [::]:5355              *:*                    
+  UDP    [::]:41641             *:*                    
+  UDP    [::]:49238             *:*                    
+  UDP    [::]:49665             *:*                    
+  UDP    [::]:50124             *:*                    
+  UDP    [::]:51148             *:*                    
+  UDP    [::]:52096             *:*                    
+  UDP    [::]:58160             *:*                    
+  UDP    [::]:58757             *:*                    
+  UDP    [::]:60461             *:*                    
+  UDP    [::]:64084             *:*                    
+  UDP    [::1]:1900             *:*                    
+  UDP    [::1]:5353             *:*                    
+  UDP    [::1]:50419            *:*                    
+  UDP    [fe80::3c4f:34c3:5251:bcf%19]:546  *:*                    
+  UDP    [fe80::5d4e:6a7c:c068:58b%17]:1900  *:*                    
+  UDP    [fe80::5d4e:6a7c:c068:58b%17]:50418  *:*                    
+  UDP    [fe80::6db0:7ef4:f442:ac11%7]:1900  *:*                    
+  UDP    [fe80::6db0:7ef4:f442:ac11%7]:50417  *:*                    
+  UDP    [fe80::9bd7:3c1d:dc44:efaa%35]:1900  *:*                    
+  UDP    [fe80::9bd7:3c1d:dc44:efaa%35]:50420  *:*                    
