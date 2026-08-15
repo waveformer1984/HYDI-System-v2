@@ -23,13 +23,14 @@ No other P0 blockers were identified. The local core (persistence, health, Ursul
 |---|---|---|---|
 | Packet-level network isolation proof | `netsh trace` requires Administrator; only `netstat`/`Get-NetTCPConnection` and acceptance-script evidence exist | Production release needs packet-level certainty before external trust | Re-run Phase 10 with an elevated PowerShell session and convert `.etl` to text |
 | 42 Supabase Edge Functions not runtime-verified | Imports are vendored (`vendor/`, `deno.json`) but `supabase functions serve` was not exercised | Production may depend on these for billing/auth async paths | Start `supabase functions serve` and invoke each function offline |
-| `/api/chat` conversational pipeline incomplete | `POST /api/chat` returned schema errors in the runtime session; `/api/heidi/route` returned a 500 render error | The full six-agent chat pipeline is not proven end-to-end | Debug request schema and local Ollama integration |
+| `/api/chat` conversational pipeline incomplete | `POST /api/chat` returned schema errors in the runtime session; `/api/heidi/route` returned a 500 render error; Phase 14 did not verify the full pipeline | The full six-agent chat pipeline is not proven end-to-end | Debug request schema and local Ollama integration |
 | Generic `make_operational` acceptance | The original `MissionPlanner.plan('make_operational')` is too broad; a bounded `HEALTHY_INBUCKET` recovery mission is now verified | Autonomous recovery of an arbitrary set of services is not safe until narrowed | Define a set of safe, disposable, bounded recovery missions equivalent to `HEALTHY_INBUCKET` |
 
 ## P2 — Missing Capability
 
 | Blocker | Evidence | Why it is P2 | Path to resolve |
 |---|---|---|---|
+| Apex local subsystem | No `api/apex/` routes, no `Apex` tests, no local tables | Phase 14 cannot verify an end-to-end Apex lifecycle | Implement or locate local Apex persistence and routes |
 | Worker queue live probe | `LocalHealthProbes.workers()` is a placeholder | Real-time worker queue depth is not monitored | Implement worker queue depth probe against the local `actions` table |
 | Live dashboard polling | `dashboard/heidi-control-plane.html` has no live API polling | Executive dashboard is static | Add WebSocket or polling to `/api/heidi/executive` |
 
