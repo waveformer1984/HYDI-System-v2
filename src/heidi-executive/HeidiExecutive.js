@@ -15,13 +15,14 @@ const { RecoveryEngine } = require('./RecoveryEngine');
 const { DryRunExecutor } = require('./DryRunExecutor');
 
 class HeidiExecutive {
-  constructor() {
+  constructor(options = {}) {
+    this.dataDir = options.dataDir || null;
     this.registry = new CapabilityRegistry();
     this.stateMachine = new TaskStateMachine();
     this.policy = new PolicyEngine(this.registry);
-    this.approvals = new ApprovalManager();
+    this.approvals = new ApprovalManager({ dataDir: this.dataDir });
     this.secrets = new SecretBroker();
-    this.audit = new AuditLog({ redactor: this.secrets });
+    this.audit = new AuditLog({ redactor: this.secrets, dataDir: this.dataDir });
     this.executor = new ControlledExecutor(this.registry);
     this.health = new HealthAggregator();
     this.planner = new MissionPlanner(this.registry);

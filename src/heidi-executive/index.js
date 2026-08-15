@@ -14,6 +14,8 @@ const { MissionPlanner } = require('./MissionPlanner');
 const { RecoveryEngine } = require('./RecoveryEngine');
 const { DryRunExecutor } = require('./DryRunExecutor');
 const { HeidiExecutive } = require('./HeidiExecutive');
+const { LocalHealthProbes, registerWith } = require('./LocalHealthProbes');
+const { LocalRecoveryWorkflow } = require('./LocalRecoveryWorkflow');
 
 module.exports = {
   CapabilityRegistry,
@@ -28,4 +30,7 @@ module.exports = {
   RecoveryEngine,
   DryRunExecutor,
   HeidiExecutive,
+  LocalHealthProbes,
+  registerWith,
+  LocalRecoveryWorkflow,
 };

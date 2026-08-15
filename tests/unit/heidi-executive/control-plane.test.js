@@ -144,8 +144,21 @@ describe('HEIDI Operational Control Plane v1', () => {
       expect(result.success).toBe(false);
     });
 
-    it('blocks forbidden shell commands', async () => {
-      await expect(exec.runShell('rm -rf /')).rejects.toThrow('safety check');
+    it('denies unknown target', async () => {
+      const result = await exec.execute({ capabilityId: 'shell.local', parameters: { operation: 'exec', resource: 'any' } });
+      expect(result.success).toBe(false);
+    });
+
+    it('denies unknown operation on docker.local', async () => {
+      const result = await exec.execute({ capabilityId: 'docker.local', parameters: { operation: 'exec', resource: 'supabase_inbucket' } });
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('DENIED');
+    });
+
+    it('denies unknown resource on docker.local', async () => {
+      const result = await exec.execute({ capabilityId: 'docker.local', parameters: { operation: 'restart_service', resource: 'malicious_container' } });
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('DENIED');
     });
   });
 

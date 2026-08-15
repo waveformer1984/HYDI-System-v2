@@ -1,10 +1,42 @@
 /**
  * HEIDI Operational Control Plane — Approval Manager
+ *
+ * In-memory by default. When a dataDir is provided, approvals are written to
+ * dataDir/approvals.json as a compact JSON object so approval state survives
+ * process restarts.
  */
 
+const fs = require('fs');
+const path = require('path');
+
 class ApprovalManager {
-  constructor() {
+  constructor(options = {}) {
     this.approvals = new Map();
+    this.dataDir = options.dataDir || null;
+    this.filePath = this.dataDir ? path.join(this.dataDir, 'approvals.json') : null;
+
+    if (this.filePath) {
+      fs.mkdirSync(this.dataDir, { recursive: true });
+      if (fs.existsSync(this.filePath)) {
+        try {
+          const raw = fs.readFileSync(this.filePath, 'utf8');
+          const data = JSON.parse(raw);
+          if (data && Array.isArray(data)) {
+            for (const a of data) {
+              if (a && a.taskId) this.approvals.set(a.taskId, a);
+            }
+          }
+        } catch {
+          // corrupt or empty — start fresh
+        }
+      }
+    }
+  }
+
+  _save() {
+    if (this.filePath) {
+      fs.writeFileSync(this.filePath, JSON.stringify(Array.from(this.approvals.values()), null, 2));
+    }
   }
 
   request(task, requester = 'heidi') {
@@ -25,6 +57,7 @@ class ApprovalManager {
       expiration: task.approvalExpiration || Date.now() + 3600000,
     };
     this.approvals.set(task.id, approval);
+    this._save();
     return approval;
   }
 
@@ -36,11 +69,13 @@ class ApprovalManager {
     }
     if (Date.now() > approval.expiration) {
       approval.decision = 'EXPIRED';
+      this._save();
       throw new Error('Approval request expired');
     }
     approval.approver = approver;
     approval.decision = 'APPROVED';
     approval.decidedAt = Date.now();
+    this._save();
     return approval;
   }
 
@@ -50,6 +85,7 @@ class ApprovalManager {
     approval.approver = approver;
     approval.decision = 'REJECTED';
     approval.decidedAt = Date.now();
+    this._save();
     return approval;
   }
 
