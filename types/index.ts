@@ -1,7 +1,7 @@
 export interface SessionState {
   session_id: string;
   tone: 'neutral' | 'focused' | 'degraded' | 'recovery';
-  active_model: 'local' | 'api';
+  active_model: 'local' | 'api' | 'mock';
   last_action_status: 'success' | 'failure' | 'pending';
 }
 

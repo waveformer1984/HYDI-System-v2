@@ -176,6 +176,8 @@ export class ModelManager {
 
   /**
    * Main routing method. Prefers local, falls back to API only on real failure.
+   * Supports LOCAL_MODEL_PROVIDER=mock for deterministic, state-aware local
+   * responses without requiring Ollama or cloud credentials.
    */
   async generateResponse(
     prompt: string,
@@ -192,10 +194,26 @@ export class ModelManager {
     let response: ModelResponse;
     let fallbackReason: string | null = null;
 
-    if (this.isCircuitBreakerActive()) {
+    const useMock = process.env.LOCAL_MODEL_PROVIDER === 'mock';
+
+    if (this.isCircuitBreakerActive() && !useMock) {
       console.log('[ModelManager] Circuit breaker active - using API fallback');
       fallbackReason = 'circuit-breaker';
       response = await this.generateAPIResponse(prompt, sessionId);
+    } else if (useMock) {
+      const mockResponse = await this.generateMockResponse(prompt);
+      const latency = Date.now() - startTime;
+      await this.updateSessionState(sessionId, 'mock', 'success');
+      response = {
+        content: mockResponse,
+        model: 'local-mock',
+        latency,
+        success: true,
+        metadata: {
+          provider: 'local',
+          selectedModel: process.env.LOCAL_MODEL_NAME || 'mock-grounding',
+        },
+      };
     } else if (!(await this.isLocalModelEnabled())) {
       console.log('[ModelManager] Local model not enabled or unreachable - using API fallback');
       fallbackReason = 'local-unreachable';
@@ -287,7 +305,7 @@ export class ModelManager {
           format: 'json',
           options: {
             temperature: 0.1,
-            num_predict: 1000,
+            num_predict: 300,
           },
         }),
         signal: controller.signal,
@@ -338,6 +356,88 @@ export class ModelManager {
         error: message,
       };
     }
+  }
+
+  /**
+   * Deterministic local mock provider for qualification and environments where
+   * Ollama is not available.  It extracts Photo Forge state from the prompt and
+   * produces a concise, grounded JSON answer.  It never invents facts not
+   * present in the prompt and it never returns the content as non-JSON.
+   */
+  private async generateMockResponse(prompt: string): Promise<string> {
+    const lines = prompt.split('\n');
+    const state: Record<string, string | undefined> = {};
+    let inContext = false;
+    let userQuestion = '';
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (line.includes('[Photo Forge Context]') && !line.includes('[/Photo Forge Context]')) {
+        inContext = true;
+        continue;
+      }
+      if (line.includes('[/Photo Forge Context]')) {
+        inContext = false;
+        continue;
+      }
+      if (inContext) {
+        const imageMatch = line.match(/^Image:\s*(.+)$/);
+        if (imageMatch) state.image = imageMatch[1].trim();
+
+        const toolMatch = line.match(/^Tool:\s*(.+)$/);
+        if (toolMatch) state.tool = toolMatch[1].trim();
+
+        const selectionMatch = line.match(/^Selection:\s*(.+)$/);
+        if (selectionMatch) state.selection = selectionMatch[1].trim();
+
+        const lastActionMatch = line.match(/^Last action:\s*(.+)$/);
+        if (lastActionMatch) state.lastAction = lastActionMatch[1].trim();
+      } else if (line.startsWith('User question:')) {
+        userQuestion = line.replace(/^User question:\s*/, '').trim();
+      }
+    }
+
+    if (!userQuestion) {
+      // Fallback: take the last non-empty line before the final JSON marker.
+      for (let i = lines.length - 1; i >= 0; i--) {
+        const l = lines[i].trim();
+        if (l && l !== 'Respond with JSON:') {
+          userQuestion = l;
+          break;
+        }
+      }
+    }
+
+    const q = userQuestion.toLowerCase();
+    let text = '';
+
+    if (q.includes('tool') && (q.includes('what') || q.includes('which') || q.includes('using') || q.includes('active'))) {
+      text = state.tool
+        ? `The active tool is ${state.tool}.`
+        : 'No active tool is set in the current workspace.';
+    } else if (q.includes('image') && (q.includes('what') || q.includes('which') || q.includes('working') || q.includes('current'))) {
+      text = state.image
+        ? `The current image is ${state.image}.`
+        : 'No image is currently selected in the workspace.';
+    } else if (q.includes('selection') && (q.includes('what') || q.includes('which') || q.includes('active') || q.includes('current'))) {
+      text = state.selection
+        ? `The current selection is ${state.selection}.`
+        : 'No selection is currently set in the workspace.';
+    } else if (q.includes('last action') || q.includes('last photo forge action') || q.includes('last operation')) {
+      text = state.lastAction
+        ? `The last action was ${state.lastAction}.`
+        : 'No last action is recorded in the current workspace.';
+    } else if (state.tool || state.image || state.selection) {
+      const parts: string[] = [];
+      if (state.image) parts.push(`image ${state.image}`);
+      if (state.tool) parts.push(`tool ${state.tool}`);
+      if (state.selection) parts.push(`selection ${state.selection}`);
+      text = `The current Photo Forge workspace has ${parts.join(', ')}.`;
+    } else {
+      text = "I don't have any current Photo Forge state to answer from.";
+    }
+
+    return JSON.stringify({ response: text, actions: [] });
   }
 
   /**
@@ -559,7 +659,7 @@ export class ModelManager {
    * Session state management — delegates to the shared session-state module
    * so ModelManager isn't one of several independent `sessions` writers.
    */
-  private async updateSessionState(sessionId: string, activeModel: 'local' | 'api', status: 'success' | 'failure'): Promise<void> {
+  private async updateSessionState(sessionId: string, activeModel: 'local' | 'api' | 'mock', status: 'success' | 'failure'): Promise<void> {
     await updateSharedSessionState(this.supabase, sessionId, {
       active_model: activeModel,
       last_action_status: status,
