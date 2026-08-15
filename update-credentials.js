@@ -95,10 +95,10 @@ class CredentialUpdater {
       fs.writeFileSync(this.envPath, updatedContent);
       console.log('\n✅ .env file updated successfully!');
       
-      console.log('\n📋 Updated credentials:');
-      console.log(`   URL: ${supabaseUrl}`);
-      console.log(`   Service Role: ${serviceRoleKey.substring(0, 20)}...`);
-      console.log(`   Anon Key: ${anonKey.substring(0, 20)}...`);
+      console.log('\n📋 Updated credentials (values intentionally not logged):');
+      console.log('   SUPABASE_URL: updated');
+      console.log('   SUPABASE_SERVICE_ROLE_KEY: updated');
+      console.log('   SUPABASE_ANON_KEY: updated');
       
       return true;
       
@@ -157,11 +157,11 @@ async function main() {
 
 // Show manual instructions if they prefer
 console.log('\n📖 Manual Option:');
-console.log('If you prefer to update manually, edit your .env file and replace:');
-console.log('   SUPABASE_URL="https://your-project.supabase.co"');
-console.log('   SUPABASE_SERVICE_ROLE_KEY="your-service-role-key"');
-console.log('   SUPABASE_ANON_KEY="your-anon-key"');
-console.log('\nWith your actual Supabase project credentials.\n');
+console.log('If you prefer to update manually, edit your .env file and set:');
+console.log('   SUPABASE_URL=<your Supabase URL>');
+console.log('   SUPABASE_SERVICE_ROLE_KEY=<your service role key>');
+console.log('   SUPABASE_ANON_KEY=<your anon key>');
+console.log('\nNever commit actual credential values to version control.\n');
 
 // Ask if they want to use interactive updater
 rl.question('Use interactive credential updater? (y/n): ', (answer) => {
