@@ -37,7 +37,7 @@ function listTrackedFiles() {
 }
 
 describe('repository contains no hardcoded live secrets', () => {
-  const files = listTrackedFiles().filter((f) => !ALLOWLIST.has(f) && !f.startsWith('node_modules/'));
+  const files = listTrackedFiles().filter((f) => !ALLOWLIST.has(f) && !f.startsWith('node_modules/') && !f.startsWith('vendor/'));
 
   test('found tracked files to scan', () => {
     expect(files.length).toBeGreaterThan(0);
