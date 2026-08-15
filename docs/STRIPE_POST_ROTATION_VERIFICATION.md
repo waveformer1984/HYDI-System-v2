@@ -17,7 +17,7 @@ Date: 2026-08-14
 | `public/` | ABSENT | ABSENT | scanned |
 | `dashboard/` | ABSENT | ABSENT | scanned |
 | `docs/` | ABSENT | ABSENT | scanned |
-| `tests/` | **dummy redaction examples only** | **dummy redaction examples only** | `tests/unit/structured-logger.test.js` uses fake `sk_live_abcdefghijklmnop` and `whsec_1234567890abcdef` for redaction tests |
+| `tests/` | **dummy redaction examples only** | **dummy redaction examples only** | `tests/unit/structured-logger.test.js` uses fake `sk_test_FAKE_1234567890abcdef` and `whsec_FAKE_1234567890abcdef` for redaction tests |
 | `%APPDATA%/devin/mcp_config.json` | **REMOVED** | N/A | live key removed from MCP server config |
 | Vercel env | UNVERIFIED | UNVERIFIED | no access |
 | Supabase Edge Function env | UNVERIFIED | UNVERIFIED | no access |

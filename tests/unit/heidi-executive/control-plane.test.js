@@ -99,14 +99,14 @@ describe('HEIDI Operational Control Plane v1', () => {
     const broker = new SecretBroker();
 
     it('rejects raw secrets as references', () => {
-      expect(() => broker.resolve('sk_test_1234567890')).toThrow();
-      expect(() => broker.resolve('whsec_1234567890')).toThrow();
+      expect(() => broker.resolve('sk_test_FAKE_1234567890')).toThrow();
+      expect(() => broker.resolve('whsec_FAKE_1234567890')).toThrow();
     });
 
     it('redacts secret-shaped strings', () => {
-      const redacted = broker.redact('Stripe call failed with sk_live_1234567890abcdef');
+      const redacted = broker.redact('Stripe call failed with sk_test_FAKE_1234567890abcdef');
       expect(redacted).toContain('[REDACTED]');
-      expect(redacted).not.toContain('sk_live_1234567890abcdef');
+      expect(redacted).not.toContain('sk_test_FAKE_1234567890abcdef');
     });
 
     it('redacts objects with sensitive keys', () => {
