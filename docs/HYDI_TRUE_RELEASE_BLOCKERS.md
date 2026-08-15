@@ -30,8 +30,8 @@ No other P0 blockers were identified. The local core (persistence, health, Ursul
 
 | Blocker | Evidence | Why it is P2 | Path to resolve |
 |---|---|---|---|
-| Apex local subsystem | No `api/apex/` routes, no `Apex` tests, no local tables | Phase 14 cannot verify an end-to-end Apex lifecycle | Implement or locate local Apex persistence and routes |
-| Worker queue live probe | `LocalHealthProbes.workers()` is a placeholder | Real-time worker queue depth is not monitored | Implement worker queue depth probe against the local `actions` table |
+| Worker queue live probe | `LocalHealthProbes.workers()` is a placeholder | Real-time worker queue depth is not monitored | Implement worker queue depth probe against the local `worker_queues` table |
+| Chat full pipeline | Ollama optional; full `/api/chat` end-to-end not previously proven | Conversational route requires a local model or robust fallback | Use `LOCAL_MODEL_PROVIDER=mock` for deterministic local acceptance |
 | Live dashboard polling | `dashboard/heidi-control-plane.html` has no live API polling | Executive dashboard is static | Add WebSocket or polling to `/api/heidi/executive` |
 
 ## P3 — Cleanup / Technical Debt

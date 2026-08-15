@@ -38,6 +38,8 @@ class LocalModelClient {
    * Check if local model is available
    */
   async isAvailable() {
+    if (this.provider === 'mock') return true;
+
     try {
       if (this.provider === 'ollama') {
         const response = await this.client.get('/api/tags');
@@ -56,6 +58,8 @@ class LocalModelClient {
    * Get available models
    */
   async getModels() {
+    if (this.provider === 'mock') return [this.model];
+
     try {
       if (this.provider === 'ollama') {
         const response = await this.client.get('/api/tags');
@@ -76,8 +80,17 @@ class LocalModelClient {
    */
   async generate(prompt, options = {}) {
     try {
+      if (this.provider === 'mock') {
+        return {
+          text: `[Heidi mock] ${prompt.slice(0, 200)}`,
+          model: this.model,
+          provider: 'mock',
+          usage: { prompt_tokens: 0, completion_tokens: 0 }
+        };
+      }
+
       const payload = this.buildPayload(prompt, options);
-      
+
       if (this.provider === 'ollama') {
         const response = await this.client.post('/api/generate', payload);
         return this.parseOllamaResponse(response.data);

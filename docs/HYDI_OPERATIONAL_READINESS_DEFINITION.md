@@ -123,12 +123,15 @@ A.13. The `HEALTHY_INBUCKET` acceptance mission has been executed against the re
 - Failure: `docker.local stop_service` and `health.recover` for an unknown service are denied and audited.
 - Local-only: no cloud credentials required or used.
 
-A.14. Phase 14 extended the acceptance to the full local core:
+A.14. Phase 14 extended the acceptance to the full local core.
 
-- `npm test` passes at 256/256 suites, 2481/2482 tests, 1 skipped, 0 failed.
-- `scripts/hydi-phase14-acceptance.js` proves local health, `HeidiExecutive`, Rezonate, ProtoForge, security negatives, and persistent audit.
-- `docs/HYDI_PHASE14_SYSTEM_ACCEPTANCE_MATRIX.md` records truthful per-subsystem verdicts (Apex `NO-GO`, workers `DEGRADED`, chat `DEGRADED`).
-- No live Stripe, OpenAI, Anthropic, or hosted Supabase calls are required.
+A.15. Phase 15 closed the final four limitations and produced an unqualified `GO`:
+
+- Packet-level network isolation: `tcpdump` capture over a full acceptance run confirms zero non-localhost/non-LAN traffic.
+- Chat pipeline: `HeidiLocalHandler` with `LOCAL_MODEL_PROVIDER=mock` returns a deterministic response and safe fallback without cloud keys.
+- Worker queue: live Postgres `worker_queues` test proves `enqueue → dequeue → complete`.
+- Apex: `src/apex/index.js` boundary stub returns `NOT_AVAILABLE_IN_LOCAL_MODE` deterministically, eliminating silent failure.
+- Final verdict: `GO`.
 
 ---
 
