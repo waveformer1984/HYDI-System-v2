@@ -90,6 +90,22 @@ class LocalHealthProbes {
     return { status: 'HEALTHY', detail: 'Heidi control plane is active' };
   }
 
+  async inbucket() {
+    return this.service('inbucket');
+  }
+
+  async service(name) {
+    const containerName = `supabase_${name}_${this.projectRef}`;
+    try {
+      const out = await this._execFile('docker', ['ps', '--filter', `name=${containerName}`, '--format', '{{.Names}}:{{.Status}}']);
+      if (out.includes('Up')) return { status: 'HEALTHY', detail: out };
+      if (out.includes('Exited') || out.includes('Restarting')) return { status: 'UNAVAILABLE', detail: out };
+      return { status: 'UNAVAILABLE', detail: out };
+    } catch (err) {
+      return { status: 'UNAVAILABLE', detail: err.message };
+    }
+  }
+
   all() {
     return {
       persistence: () => this.persistence(),
@@ -98,6 +114,7 @@ class LocalHealthProbes {
       docker: () => this.docker(),
       workers: () => this.workers(),
       controlPlane: () => this.controlPlane(),
+      inbucket: () => this.inbucket(),
     };
   }
 }

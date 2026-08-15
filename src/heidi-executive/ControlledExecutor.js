@@ -111,8 +111,8 @@ class ControlledExecutor {
   }
 
   containerName(resource) {
-    if (resource.startsWith('supabase_')) return resource;
-    return `supabase_${resource}_HYDI-System-v2`;
+    const base = resource.startsWith('supabase_') ? resource : `supabase_${resource}`;
+    return `${base}_HYDI-System-v2`;
   }
 
   register(capabilityId, fn) {

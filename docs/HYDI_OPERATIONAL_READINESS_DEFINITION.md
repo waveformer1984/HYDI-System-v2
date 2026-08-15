@@ -109,6 +109,22 @@ Production ready means the system can be safely deployed to a live environment s
 
 ---
 
+## Phase 13 Update — Bounded Autonomous Recovery Verified
+
+A.13. The `HEALTHY_INBUCKET` acceptance mission has been executed against the real local `supabase_inbucket_HYDI-System-v2` container with the following evidence:
+
+- Observation: `LocalHealthProbes.inbucket()` reports `HEALTHY` before and after, `UNAVAILABLE` after `docker stop`.
+- Authorization: `HeidiExecutive` + `PolicyEngine` + `CapabilityRegistry` gate the `health.recover` task.
+- Approval: `health.recover` is `LOW` risk, auto-authorized.
+- Execution: `ControlledExecutor` performs the allowlisted `docker restart supabase_inbucket_HYDI-System-v2`.
+- Verification: health re-probe returns `HEALTHY`.
+- Audit: `data/phase13/audit.jsonl` records the full event and survives a new `HeidiExecutive` process.
+- Idempotency: duplicate recovery within 5s dedup window is a no-op.
+- Failure: `docker.local stop_service` and `health.recover` for an unknown service are denied and audited.
+- Local-only: no cloud credentials required or used.
+
+---
+
 ## C. FULL ECOSYSTEM READY
 
 Full ecosystem ready means all optional cloud and third-party integrations are qualified and can be used together.

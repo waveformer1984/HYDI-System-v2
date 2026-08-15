@@ -10,16 +10,29 @@
  */
 
 class LocalRecoveryWorkflow {
-  constructor(heidi, health, service = 'supabase_inbucket') {
+  constructor(heidi, health, service = 'supabase_inbucket', dedupWindowMs = 5000) {
     this.heidi = heidi;
     this.health = health;
     this.service = service;
     this.healthName = `docker:${service}`;
+    this.dedupWindowMs = dedupWindowMs;
   }
 
   setHealthName(name) {
     this.healthName = name;
     return this;
+  }
+
+  recentCompletedRecovery() {
+    const now = Date.now();
+    const events = this.heidi.audit.query({ capabilityId: 'health.recover' });
+    return events.reverse().find(e => {
+      const inputs = e.inputs || {};
+      const recent = (now - e.timestamp) <= this.dedupWindowMs;
+      const sameService = inputs.service === this.service;
+      const completed = e.resultingState === 'COMPLETED' || e.resultingState === 'AWAITING_APPROVAL';
+      return recent && sameService && completed;
+    });
   }
 
   async probe() {
@@ -34,6 +47,12 @@ class LocalRecoveryWorkflow {
     const before = await this.probe();
     if (!before || (before.status !== 'DEGRADED' && before.status !== 'UNAVAILABLE' && before.status !== 'NOT_CONFIGURED')) {
       return { status: 'SKIPPED', reason: 'service already healthy or not tracked', before };
+    }
+
+    const recent = this.recentCompletedRecovery();
+    if (recent) {
+      const after = await this.probe();
+      return { status: 'IDEMPOTENT', reason: 'recovery already requested in dedup window', before, after, priorTaskId: recent.taskId };
     }
 
     const task = {
