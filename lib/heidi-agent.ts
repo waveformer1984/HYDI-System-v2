@@ -16,6 +16,7 @@ import { getAnthropicClient, getAgentSystemPrompt } from './claude';
 import { ActionExecutor, ExecutorAction, ActionResult } from './action-executor';
 import { HEIDI_TOOLS } from './heidi-tools';
 import { retrieveMemory, storeMemory } from './heidi-memory';
+import { checkPrompt } from './prompt-guard';
 
 const MODEL = process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-6';
 const MAX_TOKENS = 2048;
@@ -47,6 +48,12 @@ export interface RunHeidiAgentResult {
  */
 export async function runHeidiAgentStream(params: RunHeidiAgentParams): Promise<RunHeidiAgentResult> {
   const { message, sessionId, userId, onText, onTool } = params;
+
+  const guard = checkPrompt(message);
+  if (!guard.safe) {
+    console.warn('[HeidiAgent] Prompt rejected by guard:', guard.reason);
+    return { text: 'I cannot process this request because it contains instructions that may alter my behavior. Please rephrase your question.', actions: [], model: 'guard' };
+  }
 
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,

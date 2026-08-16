@@ -1,7 +1,6 @@
-const Stripe = require('stripe');
+const stripe = require('../lib/stripe/client');
 const { rateLimit } = require('../lib/rate-limit');
-
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+const { handleCors } = require('../lib/cors');
 
 const PRICE_MAP = {
   starter:    process.env.STRIPE_HYDI_STARTER_PRICE_ID,
@@ -10,13 +9,13 @@ const PRICE_MAP = {
 };
 
 module.exports = async (req, res) => {
-  // Enable CORS
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
+  // Enforce configurable CORS for the checkout endpoint
+  const corsOk = handleCors(req, res, {
+    allowedMethods: 'POST, OPTIONS',
+    allowedHeaders: 'Content-Type',
+  });
+  if (!corsOk) {
+    return;
   }
 
   if (req.method !== 'POST') {

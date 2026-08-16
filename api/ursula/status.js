@@ -5,6 +5,8 @@
  */
 
 import { createClient } from '@supabase/supabase-js';
+import cors from '../../lib/cors.js';
+const { handleCors } = cors;
 
 // Lazy client: a missing SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY must surface
 // as a clean JSON error from the handler, not a cold-start crash at module
@@ -35,15 +37,14 @@ const EMOJI = {
 };
 
 export default async function handler(req, res) {
-  // CORS headers
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
+  const corsOk = handleCors(req, res, {
+    allowedMethods: 'GET, OPTIONS',
+    allowedHeaders: 'Content-Type',
+  });
+  if (!corsOk) {
+    return;
   }
-  
+
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' });
   }

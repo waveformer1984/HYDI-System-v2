@@ -24,6 +24,7 @@ import { randomUUID } from 'crypto';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { getSessionState as getSharedSessionState, updateSessionState as updateSharedSessionState, SessionState } from './session-state';
 import { getMetricsService, type PartialInferenceMetric } from './metrics';
+import { checkPrompt, createSafeResponse } from './prompt-guard';
 
 export interface InferenceMetadata {
   provider: string;
@@ -189,6 +190,18 @@ export class ModelManager {
       recordMetrics?: boolean;
     }
   ): Promise<ModelResponse> {
+    const guard = checkPrompt(prompt);
+    if (!guard.safe) {
+      console.warn('[ModelManager] Prompt rejected by guard:', guard.reason);
+      return {
+        content: createSafeResponse(),
+        model: 'guard',
+        latency: 0,
+        success: true,
+        metadata: { provider: 'local', selectedModel: 'prompt-guard' },
+      };
+    }
+
     const startTime = Date.now();
     const requestId = context?.requestId || randomUUID();
     let response: ModelResponse;
