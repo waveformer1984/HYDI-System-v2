@@ -16,9 +16,32 @@ The six active revenue streams routed through Stripe Connect are: `galactic_byte
 
 ## Commands
 
+### Launching the full system
+
+```bash
+npm run boot          # Boot ALL modules in dependency order (protoforge-core → heidi-web → mobile → orchestrator)
+npm run boot:prod     # Production boot (run `npm run build` first)
+npm run boot:plan     # Print the resolved boot plan and exit (starts nothing)
+```
+
+`npm run boot` (`scripts/boot-agent.js` + `boot.config.json`) is the **single
+authoritative way to start the full system**. It starts `protoforge-core`
+(port 3005) first, waits for `/health` to return ok, then starts `heidi-web`
+(port 3000), `heidi-mobile-chat` (port 3006), and the in-process
+`hydi-orchestrator`. See [`BOOT_AGENT.md`](./BOOT_AGENT.md) for full details.
+
+```bash
+npm run dev           # Next.js dev server ONLY (port 3000) — frontend alone, no backend
+```
+
+`npm run dev` starts **only the Next.js frontend**. It does NOT start
+`protoforge-core`, so features that depend on the CASCADE/KILO/ProtoForge
+pipeline or the agent bus will not work. Use `npm run boot` for the full system.
+
+### Build / test / lint
+
 ```bash
 npm install          # Install dependencies (Node >= 20 required)
-npm run dev          # Next.js dev server on 0.0.0.0:3000
 npm run build        # Production build
 npm start            # Start production server
 npm run typecheck    # TypeScript type-check (tsc --noEmit, no emit)
