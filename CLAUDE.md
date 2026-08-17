@@ -44,6 +44,27 @@ npm run dev           # Next.js dev server ONLY (port 3000) — frontend alone, 
 `protoforge-core`, so features that depend on the CASCADE/KILO/ProtoForge
 pipeline or the agent bus will not work. Use `npm run boot` for the full system.
 
+#### Keeping the system running across reboots (PM2)
+
+`npm run boot` runs in the foreground. To make it survive crashes and reboots,
+wrap it with PM2:
+
+```bash
+npm install -g pm2
+pm2 start ecosystem.config.js          # starts hydi-boot (wraps npm run boot)
+pm2 save                               # snapshot the process list
+pm2 startup                            # follow the printed instructions to install the boot service
+```
+
+After a reboot, PM2 will automatically restart `hydi-boot`, which runs
+preflight and then boots all modules in dependency order. For production mode
+(requires `npm run build` first):
+
+```bash
+pm2 start ecosystem.config.js --env production -- --prod
+pm2 save
+```
+
 ### Build / test / lint
 
 ```bash
