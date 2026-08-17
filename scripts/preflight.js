@@ -40,17 +40,32 @@ try {
 // Config
 // ---------------------------------------------------------------------------
 
-// Ports the boot config uses, mapped to their health endpoint.
-// If a port is occupied but the health endpoint doesn't answer, the occupying
-// process is killed.
-const PORT_CHECKS = [
-  { port: 3000, healthUrl: 'http://127.0.0.1:3000/api/health', label: 'heidi-web' },
-  { port: 3005, healthUrl: 'http://127.0.0.1:3005/health',      label: 'protoforge-core' },
-  { port: 3006, healthUrl: 'http://127.0.0.1:3006/api/health',  label: 'heidi-mobile-chat' },
-  { port: 3459, healthUrl: null,                                 label: 'reserved-3459' },
-  { port: 3461, healthUrl: null,                                 label: 'reserved-3461' },
-  { port: 5050, healthUrl: null,                                 label: 'reserved-5050' },
-];
+// Ports and health endpoints are derived from boot.config.json — not
+// hard-coded. This ensures the preflight always matches the authoritative
+// module configuration. If a port is occupied but the health endpoint
+// doesn't answer, the occupying process is killed.
+function loadPortChecksFromBootConfig() {
+  const configPath = path.resolve(ROOT, 'boot.config.json');
+  if (!fs.existsSync(configPath)) {
+    fail('boot.config.json not found — cannot derive port checks');
+    process.exit(1);
+  }
+  const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+  const checks = [];
+  for (const mod of config.modules || []) {
+    if (!mod.enabled) continue;
+    if (mod.type === 'process' && mod.port) {
+      checks.push({
+        port: mod.port,
+        healthUrl: mod.health && mod.health.url ? mod.health.url : null,
+        label: mod.id,
+        required: mod.required !== false,
+      });
+    }
+  }
+  return checks;
+}
+const PORT_CHECKS = loadPortChecksFromBootConfig();
 
 // The Supabase CLI version the repo's migrations are currently validated
 // against.  Preflight verifies `npx supabase --version` matches exactly.

@@ -31,11 +31,30 @@ const ROOT = path.resolve(__dirname, '..');
 const LOG_DIR = path.resolve(ROOT, 'logs');
 const LOG_FILE = path.resolve(LOG_DIR, 'watchdog.log');
 
-const ENDPOINTS = [
-  { name: 'protoforge-core',    url: 'http://127.0.0.1:3005/health' },
-  { name: 'heidi-web',          url: 'http://127.0.0.1:3000/api/health' },
-  { name: 'heidi-mobile-chat',  url: 'http://127.0.0.1:3006/api/health' },
-];
+// Health endpoints are derived from boot.config.json — not hard-coded.
+// This ensures the watchdog always monitors the same modules that
+// boot-agent starts.
+function loadEndpointsFromBootConfig() {
+  const configPath = path.resolve(ROOT, 'boot.config.json');
+  if (!fs.existsSync(configPath)) {
+    console.error('watchdog: boot.config.json not found');
+    process.exit(1);
+  }
+  const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+  const endpoints = [];
+  for (const mod of config.modules || []) {
+    if (!mod.enabled) continue;
+    if (mod.type === 'process' && mod.health && mod.health.url) {
+      endpoints.push({
+        name: mod.id,
+        url: mod.health.url,
+        required: mod.required !== false,
+      });
+    }
+  }
+  return endpoints;
+}
+const ENDPOINTS = loadEndpointsFromBootConfig();
 
 const INTERVAL_MS = parseInt(process.env.WATCHDOG_INTERVAL_MS || '120000', 10);
 const WEBHOOK_URL = process.env.WATCHDOG_WEBHOOK_URL || '';
@@ -119,7 +138,7 @@ async function runCheck() {
 
   if (allOk) {
     const names = results.map((r) => `${r.name}:${r.statusCode}`).join('  ');
-    log(`OK    all 3 endpoints healthy  ${names}`);
+    log(`OK    all ${results.length} endpoints healthy  ${names}`);
   } else {
     for (const f of failures) {
       log(`FAIL  ${f.name}  ${f.url}  status=${f.statusCode}  error=${f.body}`);
