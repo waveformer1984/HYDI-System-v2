@@ -95,8 +95,8 @@
       "evidence": "scan-live-secrets.js: no live secrets in 3811 tracked files. STRIPE_SECRET_KEY not in .env.local, .env, or Windows user env. Preflight guardrail blocks sk_live_ keys. C:\\HYDI_System PAT exposure documented.",
       "command": "node scripts/scan-live-secrets.js",
       "result": "exit 0 — no live secrets found",
-      "failures": ["C:\\HYDI_System has GitHub PAT in remote URL (requires user action)", "Process env contamination can recur in stale PowerShell sessions"],
-      "remediation": "User should remove PAT from C:\\HYDI_System remote and revoke at GitHub. Always use fresh terminal."
+      "failures": ["Process env contamination can recur in stale PowerShell sessions"],
+      "remediation": "C:\\HYDI_System deleted (PAT was already revoked, URL scrubbed, directory removed). Always use fresh terminal for Stripe key contamination."
     },
     "G9_RELEASE_READINESS": {
       "status": "GO_WITH_LIMITATIONS",
@@ -105,8 +105,8 @@
       "evidence": "G0-G6, G8 PASS. G7 PARTIAL. Documentation: CANONICAL.md, HYDI_CURRENT_OPERATIONAL_STATUS.md, HYDI_RUNTIME_RECOVERY_REPORT.md, HYDI_NEXT_GATE_OPERATIONAL_REPORT.md, HYDI_LOCAL_FIRST_PERSISTENCE_REPORT.md.",
       "command": "npm run typecheck && node scripts/scan-live-secrets.js && node scripts/health-check.js",
       "result": "typecheck: PASS, secrets: PASS, health: PASS",
-      "failures": ["G7 partial — branch cleanup incomplete", "C:\\HYDI_System PAT not removed", "Local model ./bin/main missing"],
-      "remediation": "See HYDI_NEXT_GATE_OPERATIONAL_REPORT.md for remaining actions"
+      "failures": ["G7 partial — branch cleanup incomplete", "Local model ./bin/main missing"],
+      "remediation": "C:\\HYDI_System deleted. See HYDI_NEXT_GATE_OPERATIONAL_REPORT.md for remaining actions"
     }
   },
   "current_action": "Mission complete — GO WITH DOCUMENTED LIMITATIONS",

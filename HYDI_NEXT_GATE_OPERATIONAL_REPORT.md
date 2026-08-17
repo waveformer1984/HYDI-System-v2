@@ -17,7 +17,7 @@
 | G5_END_TO_END | **PASS** | All 6 chat agents return HTTP 200, SSE streaming works |
 | G6_FAILURE_RECOVERY | **PASS** | 5 failure modes injected and detected, boot-agent shutdown verified |
 | G7_REPOSITORY_HYGIENE | **PARTIAL** | 76 branches inventoried, 14 merged (safe to delete), 57 diverged with disposition. Branch deletion not performed (requires user confirmation for destructive operation). |
-| G8_SECURITY | **PASS** (with caveats) | No live secrets in tracked files, guardrail works. C:\HYDI_System PAT exposure documented but not remediated (requires user action on non-canonical repo). |
+| G8_SECURITY | **PASS** | No live secrets in tracked files, guardrail works. C:\HYDI_System PAT was already revoked, directory deleted. |
 | G9_RELEASE_READINESS | **GO WITH DOCUMENTED LIMITATIONS** | See final decision below. |
 
 ## Branch Disposition Inventory
@@ -125,7 +125,7 @@ The July 24 audit identified duplication across:
 6. Process environment contamination with live Stripe keys can recur — always use a fresh terminal.
 
 **Before production release:**
-- Resolve the `C:\HYDI_System` PAT exposure.
+- ~~Resolve the `C:\HYDI_System` PAT exposure.~~ DONE — PAT revoked, directory deleted.
 - Delete merged branches.
 - Archive or delete stale `claude/*` branches.
 - Address the missing `./bin/main` local model executable.
