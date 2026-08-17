@@ -37,6 +37,7 @@
     "boot:prod": "node scripts/boot-agent.js --prod",
     "preflight": "node scripts/preflight.js",
     "verify:canonical": "node scripts/verify-canonical.js",
+    "health": "node scripts/health-check.js",
     "lint:migrations": "node scripts/lint-migration-idempotency.js",
     "scan:secrets": "node scripts/scan-live-secrets.js",
     "build:capacitor-www": "node scripts/build-capacitor-www.js"
