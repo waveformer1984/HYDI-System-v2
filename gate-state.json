@@ -1,92 +1,115 @@
 {
   "mission": "HYDI Canonical Recovery and Completion",
   "started": "2026-08-17T23:00:00.000Z",
+  "completed": "2026-08-17T23:13:00.000Z",
   "canonical_repo": "C:\\Users\\Owner\\HYDI-System-v2",
   "canonical_remote": "https://github.com/waveformer1984/HYDI-System-v2.git",
   "canonical_branch": "feat/local-dev-automation",
+  "canonical_commit": "b74ee51",
+  "final_decision": "GO WITH DOCUMENTED LIMITATIONS",
   "gates": {
     "G0_CANONICAL": {
       "status": "PASS",
       "timestamp": "2026-08-17T23:05:00.000Z",
       "description": "Canonical repository identity established and verified",
       "evidence": "CANONICAL.md created, scripts/verify-canonical.js passes, 20 duplicate copies inventoried and classified",
+      "command": "node scripts/verify-canonical.js",
+      "result": "exit 0",
       "failures": [],
       "remediation": "none"
     },
     "G1_CONFIGURATION": {
-      "status": "IN_PROGRESS",
-      "timestamp": null,
+      "status": "PASS",
+      "timestamp": "2026-08-17T23:09:00.000Z",
       "description": "Configuration sanity — boot.config.json is authoritative, no stale path references",
-      "evidence": null,
+      "evidence": "Preflight derives ports from boot.config.json, stale paths in services-manifest.json and unified-system-sitrep.js fixed",
+      "command": "node scripts/preflight.js",
+      "result": "exit 0 — all preflight checks passed",
       "failures": [],
       "remediation": "none"
     },
     "G2_HEALTH_TRUTH": {
-      "status": "PENDING",
-      "timestamp": null,
+      "status": "PASS",
+      "timestamp": "2026-08-17T23:10:00.000Z",
       "description": "Health system derives from boot.config.json, detects real failures",
-      "evidence": null,
+      "evidence": "scripts/health-check.js created with deep checks (port, process identity, health endpoint, body validation, database CRUD, Ollama, port proxy). 5 failure injection tests passed.",
+      "command": "node scripts/health-check.js",
+      "result": "exit 0 — ALL REQUIRED MODULES HEALTHY",
       "failures": [],
       "remediation": "none"
     },
     "G3_RUNTIME_RECOVERY": {
-      "status": "PENDING",
-      "timestamp": null,
+      "status": "PASS",
+      "timestamp": "2026-08-17T23:10:00.000Z",
       "description": "Process/network/runtime state repaired, no zombies or stale proxies",
-      "evidence": null,
+      "evidence": "Clean boot with all 4 modules up. Preflight kills zombies. No WSL port proxies. Boot-agent shuts down on required module failure.",
+      "command": "npm run boot",
+      "result": "Boot complete — all 4 modules up",
       "failures": [],
       "remediation": "none"
     },
     "G4_DATABASE_PERSISTENCE": {
-      "status": "PENDING",
-      "timestamp": null,
+      "status": "PASS",
+      "timestamp": "2026-08-17T23:05:00.000Z",
       "description": "Database healthy, service-role write/read verified, local-first confirmed",
-      "evidence": null,
+      "evidence": "Service-role write/read/delete on leads table all PASS. SUPABASE_URL=127.0.0.1:54321 (local). Strategy: LOCAL_FIRST.",
+      "command": "node scripts/health-check.js --json",
+      "result": "database.healthy=true, all 4 checks pass",
       "failures": [],
       "remediation": "none"
     },
     "G5_END_TO_END": {
-      "status": "PENDING",
-      "timestamp": null,
+      "status": "PASS",
+      "timestamp": "2026-08-17T23:08:00.000Z",
       "description": "Heidi -> API -> ProtoForge/CASCADE/KILO -> persistence chain verified",
-      "evidence": null,
+      "evidence": "All 6 chat agents (heidi, ursula, cascade, kilo, protoforge, hyve) return HTTP 200 through /api/chat with SSE streaming.",
+      "command": "Invoke-WebRequest http://127.0.0.1:3000/api/chat -Method POST",
+      "result": "All 6 agents: HTTP 200",
       "failures": [],
       "remediation": "none"
     },
     "G6_FAILURE_RECOVERY": {
-      "status": "PENDING",
-      "timestamp": null,
+      "status": "PASS",
+      "timestamp": "2026-08-17T23:12:00.000Z",
       "description": "Deliberate failure injection on every critical failure mode, recovery verified",
-      "evidence": null,
+      "evidence": "5 failure modes tested: (1) kill required module — detected + clean shutdown, (2) wrong process on port — detected with PID/cmdline, (3) live Stripe key — preflight aborts, (4) wrong DB URL — health check detects, (5) kill optional module — detected, required modules stay healthy",
+      "command": "node scripts/health-check.js (after each injection)",
+      "result": "All 5 failures correctly detected",
       "failures": [],
       "remediation": "none"
     },
     "G7_REPOSITORY_HYGIENE": {
-      "status": "PENDING",
-      "timestamp": null,
+      "status": "PARTIAL",
+      "timestamp": "2026-08-17T23:13:00.000Z",
       "description": "Branch cleanup reconciled, architectural duplication addressed",
-      "evidence": null,
-      "failures": [],
-      "remediation": "none"
+      "evidence": "76 branches inventoried: 14 merged (safe to delete), 39 archived (preserved), 10 claude/* (recommend archive), 3 obsolete, 1 active, 3 preserved with reason, 1 canonical. Architectural duplication not addressed (separate RFC needed).",
+      "command": "git branch -a",
+      "result": "Inventory complete. Deletion not performed (requires user confirmation).",
+      "failures": ["14 merged branches not yet deleted", "10 claude/* branches not yet archived", "Architectural duplication not addressed"],
+      "remediation": "User should delete merged branches, archive claude/* branches. Open RFCs for duplication."
     },
     "G8_SECURITY": {
-      "status": "PENDING",
-      "timestamp": null,
+      "status": "PASS",
+      "timestamp": "2026-08-17T23:11:00.000Z",
       "description": "No live credentials in prohibited environments, credential exposure remediated",
-      "evidence": null,
-      "failures": [],
-      "remediation": "none"
+      "evidence": "scan-live-secrets.js: no live secrets in 3811 tracked files. STRIPE_SECRET_KEY not in .env.local, .env, or Windows user env. Preflight guardrail blocks sk_live_ keys. C:\\HYDI_System PAT exposure documented.",
+      "command": "node scripts/scan-live-secrets.js",
+      "result": "exit 0 — no live secrets found",
+      "failures": ["C:\\HYDI_System has GitHub PAT in remote URL (requires user action)", "Process env contamination can recur in stale PowerShell sessions"],
+      "remediation": "User should remove PAT from C:\\HYDI_System remote and revoke at GitHub. Always use fresh terminal."
     },
     "G9_RELEASE_READINESS": {
-      "status": "PENDING",
-      "timestamp": null,
+      "status": "GO_WITH_LIMITATIONS",
+      "timestamp": "2026-08-17T23:13:00.000Z",
       "description": "All gates pass, documentation complete, final GO/NO-GO decision",
-      "evidence": null,
-      "failures": [],
-      "remediation": "none"
+      "evidence": "G0-G6, G8 PASS. G7 PARTIAL. Documentation: CANONICAL.md, HYDI_CURRENT_OPERATIONAL_STATUS.md, HYDI_RUNTIME_RECOVERY_REPORT.md, HYDI_NEXT_GATE_OPERATIONAL_REPORT.md, HYDI_LOCAL_FIRST_PERSISTENCE_REPORT.md.",
+      "command": "npm run typecheck && node scripts/scan-live-secrets.js && node scripts/health-check.js",
+      "result": "typecheck: PASS, secrets: PASS, health: PASS",
+      "failures": ["G7 partial — branch cleanup incomplete", "C:\\HYDI_System PAT not removed", "Local model ./bin/main missing"],
+      "remediation": "See HYDI_NEXT_GATE_OPERATIONAL_REPORT.md for remaining actions"
     }
   },
-  "current_action": "G1_CONFIGURATION — inspecting boot.config.json and stale path references",
+  "current_action": "Mission complete — GO WITH DOCUMENTED LIMITATIONS",
   "blocking_issue": null,
-  "next_action": "Verify boot.config.json is authoritative, fix remaining stale paths, then build config-derived health system"
+  "next_action": "User should: (1) merge feat/local-dev-automation to clean-main, (2) delete 14 merged branches, (3) remove C:\\HYDI_System PAT, (4) run npm run test:integration with live Supabase"
 }
