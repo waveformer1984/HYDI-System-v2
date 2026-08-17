@@ -7,6 +7,7 @@ const { createClient } = require('@supabase/supabase-js');
 const HeidiRevenueOutreach = require('../../modules/heidi-revenue-outreach');
 const UniversalAgentBus = require('../../modules/universal-agent-bus');
 const WebhookQueueAdapter = require('../../workers/WebhookQueueAdapter');
+const { getRawBody } = require('../../lib/get-raw-body');
 
 require('dotenv').config();
 
@@ -133,9 +134,12 @@ async function handleStripeWebhook(req, res) {
   let event;
 
   try {
-    // Verify webhook signature
+    // Verify webhook signature -- needs the exact raw bytes Stripe signed.
+    // See config export below (bodyParser: false) for why this can't just
+    // read req.body directly.
+    const rawBody = await getRawBody(req);
     const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
-    event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
+    event = stripe.webhooks.constructEvent(rawBody, sig, webhookSecret);
   } catch (err) {
     console.log('Webhook signature verification failed:', err.message);
     return res.status(400).send(`Webhook Error: ${err.message}`);
@@ -483,17 +487,19 @@ async function deactivateServices(customerId) {
   }
 }
 
-// Vercel API handler
-module.exports.handler = async function(req, res) {
+// Next.js/Vercel API route handler -- adds CORS + method gating on top of
+// handleStripeWebhook, which is also called directly by the standalone
+// Express server (stripe-webhook-server.js) via the named export below.
+async function handler(req, res) {
   // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Stripe-Signature');
-  
+
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
-  
+
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
@@ -501,8 +507,15 @@ module.exports.handler = async function(req, res) {
   return handleStripeWebhook(req, res);
 }
 
-// Export for use in Express server
-module.exports = {
-  handleStripeWebhook,
-  SERVICE_TIERS
-};
+// module.exports must itself be the callable handler for Next.js's
+// `export { default } from ...` bridge (see pages/api/webhooks/stripe.js)
+// and for direct `require(...)` consumers expecting a function. Named
+// properties are still attached for existing consumers that destructure
+// them (e.g. stripe-webhook-server.js's `{ handleStripeWebhook }`, this
+// file's own unit tests).
+module.exports = handler;
+module.exports.handleStripeWebhook = handleStripeWebhook;
+module.exports.SERVICE_TIERS = SERVICE_TIERS;
+// Raw body is required for Stripe signature verification -- see
+// handleStripeWebhook's getRawBody() call above.
+module.exports.config = { api: { bodyParser: false } };

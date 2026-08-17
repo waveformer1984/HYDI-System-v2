@@ -1,12 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2.49.8";
-function json(body, status = 200) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: {
-      "Content-Type": "application/json"
-    }
-  });
-}
+import { json, requireServiceRole } from "../_shared/security.ts";
 function backoffMinutes(retryCount) {
   const mins = Math.min(5 * 2 ** Math.max(0, retryCount), 24 * 60);
   return mins;
@@ -22,6 +15,13 @@ async function emitEvent(supabase, payload) {
 }
 Deno.serve(async (req)=>{
   try {
+    // Internal-only: retries failed billing_jobs and forwards them to
+    // stripe-worker using the service-role key. verify_jwt=true alone only
+    // proves *a* JWT (the public anon key qualifies) was presented, not
+    // that the caller is privileged -- see ISSUES_FOUND.md.
+    const authError = requireServiceRole(req);
+    if (authError) return authError;
+
     if (req.method !== "POST" && req.method !== "GET") {
       return json({
         error: "Method not allowed"

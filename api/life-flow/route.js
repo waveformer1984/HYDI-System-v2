@@ -6,6 +6,20 @@
  */
 
 const HYDISystem = require('../../src/HYDISystem');
+const { createClient } = require('@supabase/supabase-js');
+const { requireAuth } = require('../../lib/auth/requireAuth');
+
+let _supabase = null;
+function getSupabase() {
+  if (!_supabase) {
+    if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      throw new Error('Supabase env vars not configured (SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY)');
+    }
+    _supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+  }
+  return _supabase;
+}
+const supabase = new Proxy({}, { get: (_, prop) => getSupabase()[prop] });
 
 // Initialize HYDI system with Deep Life Architect enabled
 const hydiSystem = new HYDISystem({
@@ -30,7 +44,10 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
-  
+
+  const auth = await requireAuth(req, res, supabase, { permission: 'life_flow:manage', routeName: 'life-flow-route' });
+  if (!auth.ok) return;
+
   try {
     const { type, subtype, params } = req.body || {};
     

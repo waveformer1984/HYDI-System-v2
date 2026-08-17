@@ -10,31 +10,6 @@
  *   hydi:edge-results   — results returned from edge nodes
  */
 
-async function redisCommand(...args) {
-  const UPSTASH_URL = process.env.UPSTASH_REDIS_REST_URL;
-  const UPSTASH_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
-  if (!UPSTASH_URL || !UPSTASH_TOKEN) {
-    // Silent no-op when Redis is not configured — avoids crashing the loop
-    return null;
-  }
-  try {
-    const res = await fetch(`${UPSTASH_URL}/${args.map(encodeURIComponent).join('/')}`, {
-      method: 'GET',
-      headers: { Authorization: `Bearer ${UPSTASH_TOKEN}` },
-      signal: AbortSignal.timeout(4000),
-    });
-    if (!res.ok) {
-      console.warn(`[REDIS] Command failed: ${res.status}`);
-      return null;
-    }
-    const data = await res.json();
-    return data.result ?? null;
-  } catch (e) {
-    console.warn(`[REDIS] Command error: ${e.message}`);
-    return null;
-  }
-}
-
 async function redisPost(command) {
   const UPSTASH_URL = process.env.UPSTASH_REDIS_REST_URL;
   const UPSTASH_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;

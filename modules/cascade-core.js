@@ -1,3 +1,7 @@
+// @deprecated Legacy CASCADE Core. Use protoforge/cascade/src/processor.js or compatibility/cascade-legacy.js.
+// Replacement: protoforge/cascade/src/EventProcessor
+// Migration: Call EventProcessor.process() on canonical events. Removal target: Phase 5.
+//
 // CASCADE Core - Strict Event Processing System
 // Only does three things: Detect, Classify, Emit structured events
 

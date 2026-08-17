@@ -16,6 +16,12 @@ node_modules/
 .vapid-keys.json
 **/.vapid-keys.json
 
+# TLS certs/keys (e.g. `tailscale cert` output for HEIDI_TLS_CERT/HEIDI_TLS_KEY)
+*.crt
+*.key
+*.pem
+certs/
+
 # Secret env files — never track, rotate keys if already in history
 .env.backup
 .env.production
@@ -58,6 +64,11 @@ logs/
 
 # Heidi local env
 heidi-core.env.local
+
+# Generated runtime data & build info
+data/
+*.tsbuildinfo
+tests/soak-test-report.json
 
 # TypeScript incremental build info
 tsconfig.tsbuildinfo

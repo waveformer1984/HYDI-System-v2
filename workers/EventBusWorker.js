@@ -8,6 +8,7 @@ const QueueManager = require('./QueueManager');
 const { createClient } = require('@supabase/supabase-js');
 require('dotenv').config();
 const EventEmitter = require('events');
+const logger = require('../lib/structured-logger').child({ component: 'EventBusWorker' });
 
 class EventBusWorker extends EventEmitter {
     constructor(workerId = null) {
@@ -55,21 +56,21 @@ class EventBusWorker extends EventEmitter {
         // Load existing subscriptions
         await this.loadSubscriptions();
         
-        console.log(`[📡 Event Bus] Initialized: ${this.workerId}`);
+        logger.info('Event Bus initialized', { workerId: this.workerId });
     }
 
     async start() {
         if (this.running) {
-            console.log('[📡 Event Bus] Already running');
+            logger.info('Event Bus already running');
             return;
         }
-        
+
         await this.initialize();
         this.running = true;
         this.metrics.startTime = new Date();
         this.queue.startHeartbeat();
-        
-        console.log('[📡 Event Bus] Starting to process events...');
+
+        logger.info('Starting to process events');
         
         // Start polling
         this.poll();
@@ -90,7 +91,7 @@ class EventBusWorker extends EventEmitter {
         }
         
         await this.queue.shutdown();
-        console.log('[📡 Event Bus] Stopped');
+        logger.info('Event Bus stopped');
     }
 
     poll() {
@@ -98,7 +99,7 @@ class EventBusWorker extends EventEmitter {
         
         this.processNextEvent()
             .catch(err => {
-                console.error('[📡 Event Bus] Error in poll:', err);
+                logger.error('Event Bus error in poll', { error: err });
                 this.metrics.eventsFailed++;
             })
             .finally(() => {
@@ -117,12 +118,12 @@ class EventBusWorker extends EventEmitter {
         try {
             const task = await this.queue.getTask(taskId);
             if (!task) {
-                console.error(`[📡 Event Bus] Event not found: ${taskId}`);
+                logger.error('Event not found', { taskId });
                 return;
             }
-            
+
             const event = task.payload;
-            console.log(`[📡 Event Bus] Processing event: ${event.type}`);
+            logger.info('Processing event', { eventType: event.type });
             
             // Store event in history
             this.storeEvent(event);
@@ -140,7 +141,7 @@ class EventBusWorker extends EventEmitter {
             this.metrics.eventsDelivered += this.getSubscriberCount(event.type);
             
         } catch (err) {
-            console.error(`[📡 Event Bus] Event failed: ${taskId}`, err);
+            logger.error('Event failed', { taskId, error: err });
             await this.queue.completeTask(taskId, false, err.message);
             this.metrics.eventsFailed++;
         }
@@ -176,7 +177,7 @@ class EventBusWorker extends EventEmitter {
         // Store subscription in database
         await this.storeSubscription(eventType, subscriber);
         
-        console.log(`[📡 Event Bus] New subscription: ${subscriber} -> ${eventType}`);
+        logger.info('New subscription', { subscriber, eventType });
     }
 
     /**
@@ -190,7 +191,7 @@ class EventBusWorker extends EventEmitter {
         this.patternSubscriptions.get(pattern).add(subscriber);
         this.metrics.subscribersCount++;
         
-        console.log(`[📡 Event Bus] New pattern subscription: ${subscriber} -> ${pattern}`);
+        logger.info('New pattern subscription', { subscriber, pattern });
     }
 
     /**
@@ -221,7 +222,7 @@ class EventBusWorker extends EventEmitter {
                     await this.deliverToSubscriber(subscriber, event);
                     delivered.push(subscriber);
                 } catch (err) {
-                    console.error(`[📡 Event Bus] Delivery failed to ${subscriber}:`, err);
+                    logger.error('Delivery failed', { subscriber, error: err });
                     failed.push({ subscriber, error: err.message });
                 }
             }
@@ -235,7 +236,7 @@ class EventBusWorker extends EventEmitter {
                         await this.deliverToSubscriber(subscriber, event);
                         delivered.push(subscriber);
                     } catch (err) {
-                        console.error(`[📡 Event Bus] Delivery failed to ${subscriber}:`, err);
+                        logger.error('Delivery failed', { subscriber, error: err });
                         failed.push({ subscriber, error: err.message });
                     }
                 }
@@ -389,7 +390,7 @@ class EventBusWorker extends EventEmitter {
             this.subscriptions.get(sub.event_type).add(sub.subscriber);
         }
         
-        console.log(`[📡 Event Bus] Loaded ${data?.length || 0} subscriptions`);
+        logger.info('Loaded subscriptions', { count: data?.length || 0 });
     }
 
     /**
@@ -416,7 +417,7 @@ class EventBusWorker extends EventEmitter {
             const uptime = Date.now() - this.metrics.startTime.getTime();
             const rate = this.metrics.eventsPublished / (uptime / 1000);
             
-            console.log(`[📡 Event Bus] Metrics: ${this.metrics.eventsPublished} published, ${rate.toFixed(2)}/sec, ${this.metrics.subscribersCount} subscribers`);
+            logger.info('Event Bus metrics', { eventsPublished: this.metrics.eventsPublished, eventsPerSecond: Number(rate.toFixed(2)), subscribersCount: this.metrics.subscribersCount });
             
             // Store metrics in database
             await this.supabase
@@ -468,20 +469,20 @@ if (require.main === module) {
     
     // Handle graceful shutdown
     process.on('SIGINT', async () => {
-        console.log('\n[📡 Event Bus] Shutting down...');
+        logger.info('Event Bus shutting down');
         await worker.stop();
         process.exit(0);
     });
-    
+
     process.on('SIGTERM', async () => {
-        console.log('\n[📡 Event Bus] Shutting down...');
+        logger.info('Event Bus shutting down');
         await worker.stop();
         process.exit(0);
     });
-    
+
     // Start worker
     worker.start().catch(err => {
-        console.error('[📡 Event Bus] Failed to start:', err);
+        logger.error('Event Bus failed to start', { error: err });
         process.exit(1);
     });
 }

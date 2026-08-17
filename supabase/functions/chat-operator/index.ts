@@ -1,5 +1,6 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { rateLimit } from '../_shared/security.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -132,31 +133,50 @@ serve(async (req) => {
     }
     
     if (method === 'POST') {
+      const limited = rateLimit(req, { name: 'chat-operator', windowMs: 60_000, max: 20 })
+      if (limited) return limited
+
       const body = await req.json()
       const { message, session_id, user_id } = body
-      
+
       if (!message || !session_id || !user_id) {
         return new Response(
           JSON.stringify({ error: 'Missing required fields: message, session_id, user_id' }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
         )
       }
-      
+
       const supabaseClient = createClient(
         Deno.env.get('SUPABASE_URL')!,
         Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
         { auth: { persistSession: false, autoRefreshToken: false } }
       )
-      
+
       const { data: session } = await supabaseClient.rpc('get_session_details', { p_session_id: session_id })
-      
+
       if (!session || session.length === 0) {
         return new Response(
           JSON.stringify({ error: 'Invalid session' }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 404 }
         )
       }
-      
+
+      // `user_id` is client-supplied and otherwise never verified against
+      // anything -- without this check, any caller could claim an
+      // arbitrary user_id and, if that user happened to hold refund
+      // permission, issue real refunds via handleRefund()/issue_refund()
+      // in their name. Cross-checking it against the session record
+      // get_session_details() already returns closes the impersonation
+      // gap without requiring the larger cryptographic-identity redesign
+      // tracked in ROADMAP.md -- see ISSUES_FOUND.md for the full writeup.
+      const sessionOwner = session[0]?.user_id
+      if (sessionOwner && sessionOwner !== user_id) {
+        return new Response(
+          JSON.stringify({ error: 'user_id does not match the session owner' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 403 }
+        )
+      }
+
       const intent = await getIntent(message, { session, user_id })
       const result = await executeTool(intent, { session, user_id, message }, supabaseClient)
       

@@ -126,31 +126,31 @@ async function executeAction(type: string, payload: Record<string, any>, session
 /**
  * Action implementations (simplified for demo)
  */
-async function sendEmail(payload: any, sessionId: string): Promise<any> {
+async function sendEmail(payload: any, _sessionId: string): Promise<any> {
   // In production, integrate with actual email service
   console.log(`[ACTION] Sending email:`, payload);
   return { sent: true, message_id: `msg_${Date.now()}` };
 }
 
-async function createTask(payload: any, sessionId: string): Promise<any> {
+async function createTask(payload: any, _sessionId: string): Promise<any> {
   // In production, integrate with task management system
   console.log(`[ACTION] Creating task:`, payload);
   return { task_id: `task_${Date.now()}`, created: true };
 }
 
-async function updateDatabase(payload: any, sessionId: string): Promise<any> {
+async function updateDatabase(payload: any, _sessionId: string): Promise<any> {
   // In production, integrate with database service
   console.log(`[ACTION] Updating database:`, payload);
   return { updated: true, affected_rows: 1 };
 }
 
-async function fetchData(payload: any, sessionId: string): Promise<any> {
+async function fetchData(payload: any, _sessionId: string): Promise<any> {
   // In production, integrate with data service
   console.log(`[ACTION] Fetching data:`, payload);
   return { data: `sample_data_${Date.now()}`, count: 42 };
 }
 
-async function scheduleEvent(payload: any, sessionId: string): Promise<any> {
+async function scheduleEvent(payload: any, _sessionId: string): Promise<any> {
   // In production, integrate with scheduling service
   console.log(`[ACTION] Scheduling event:`, payload);
   return { scheduled: true, event_id: `event_${Date.now()}` };

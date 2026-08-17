@@ -139,7 +139,6 @@ class RealityFilter {
    */
   checkPersonalization(message) {
     let score = 0;
-    const required = this.rules.outreachPersonalization.requiredElements;
 
     // Check for blocked patterns
     const hasBlockedPattern = this.rules.outreachPersonalization.blockedPatterns.some(pattern =>

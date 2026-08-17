@@ -36,7 +36,7 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 // Test connection immediately
 async function testConnection() {
   try {
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from('heidi_events')
       .select('id')
       .limit(1);

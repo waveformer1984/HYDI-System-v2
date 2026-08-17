@@ -1,6 +1,7 @@
 const { createClient } = require('@supabase/supabase-js');
 const QueueManager = require('./QueueManager');
 require('dotenv').config();
+const logger = require('../lib/structured-logger').child({ component: 'DecisionAssistWorker' });
 
 class DecisionAssistWorker {
     constructor(workerId) {
@@ -37,20 +38,20 @@ class DecisionAssistWorker {
             this.queue.registerWorker('decision_assist', this.workerId);
             this.queue.updateHeartbeat('idle');
             
-            console.log(`[🧠 Decision Assist Worker] Initialized: ${this.workerId}`);
+            logger.info('Decision Assist Worker initialized', { workerId: this.workerId });
         };
 
         this.start = async function() {
             if (this.running) {
-                console.log('[🧠 Decision Assist Worker] Already running');
+                logger.info('Decision Assist Worker already running');
                 return;
             }
-            
+
             await this.initialize();
             this.running = true;
             this.queue.startHeartbeat();
-            
-            console.log('[🧠 Decision Assist Worker] Starting to analyze data and provide recommendations...');
+
+            logger.info('Starting to analyze data and provide recommendations');
             
             // Start polling
             this.poll();
@@ -64,7 +65,7 @@ class DecisionAssistWorker {
             }
             
             await this.queue.shutdown();
-            console.log('[🧠 Decision Assist Worker] Stopped');
+            logger.info('Decision Assist Worker stopped');
         };
 
         this.poll = function() {
@@ -72,7 +73,7 @@ class DecisionAssistWorker {
             
             this.processNextTask()
                 .catch(err => {
-                    console.error('[🧠 Decision Assist Worker] Error in poll:', err);
+                    logger.error('Decision Assist Worker error in poll', { error: err });
                 })
                 .finally(() => {
                     // Schedule next poll
@@ -90,11 +91,11 @@ class DecisionAssistWorker {
             try {
                 const task = await this.queue.getTask(taskId);
                 if (!task) {
-                    console.error(`[🧠 Decision Assist Worker] Task not found: ${taskId}`);
+                    logger.error('Decision Assist Worker task not found', { taskId });
                     return;
                 }
-                
-                console.log(`[🧠 Decision Assist Worker] Processing task: ${task.payload.event_type}`);
+
+                logger.info('Processing task', { eventType: task.payload.event_type });
                 
                 // Process based on event type
                 switch (task.payload.event_type) {
@@ -119,14 +120,14 @@ class DecisionAssistWorker {
                         break;
                         
                     default:
-                        console.log(`[🧠 Decision Assist Worker] Unhandled event type: ${task.payload.event_type}`);
+                        logger.info('Unhandled event type', { eventType: task.payload.event_type });
                 }
-                
+
                 // Mark task as completed
                 await this.queue.completeTask(taskId, true);
-                
+
             } catch (err) {
-                console.error(`[🧠 Decision Assist Worker] Task failed: ${taskId}`, err);
+                logger.error('Decision Assist Worker task failed', { taskId, error: err });
                 await this.queue.completeTask(taskId, false, err.message);
             }
         };
@@ -134,7 +135,7 @@ class DecisionAssistWorker {
         this.analyzeFinancialData = async function(payload) {
             const { revenue, costs, margins, time_period } = payload.data;
             
-            console.log(`[🧠 Decision Assist] Analyzing financial data for ${time_period}`);
+            logger.info('Analyzing financial data', { timePeriod: time_period });
             
             // analyze-financial-trends
         };
@@ -146,7 +147,7 @@ if (require.main === module) {
     const worker = new DecisionAssistWorker();
     process.on('SIGINT', async () => { await worker.stop(); process.exit(0); });
     process.on('SIGTERM', async () => { await worker.stop(); process.exit(0); });
-    worker.start().catch(err => { console.error('[🧠 Decision Assist Worker] Failed to start:', err); process.exit(1); });
+    worker.start().catch(err => { logger.error('Decision Assist Worker failed to start', { error: err }); process.exit(1); });
 }
 
 module.exports = DecisionAssistWorker;

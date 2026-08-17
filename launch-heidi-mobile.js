@@ -13,6 +13,8 @@
 
 const express = require('express');
 const http = require('http');
+const https = require('https');
+const fs = require('fs');
 const path = require('path');
 const os = require('os');
 
@@ -313,17 +315,31 @@ async function streamLMStudio(message, model, systemPrompt, send) {
     }
 }
 
-const server = http.createServer(app);
+// Optional TLS for Tailscale/HTTPS clients (e.g. the GitHub Pages mobile
+// chat, which browsers block from fetch()-ing a plain http:// API from an
+// https:// page). Generate with `tailscale cert <your-machine>.<tailnet>.ts.net`
+// and point these at the resulting files; falls back to plain HTTP for LAN use.
+const TLS_CERT = process.env.HEIDI_TLS_CERT;
+const TLS_KEY = process.env.HEIDI_TLS_KEY;
+const useTLS = Boolean(TLS_CERT && TLS_KEY && fs.existsSync(TLS_CERT) && fs.existsSync(TLS_KEY));
+const protocol = useTLS ? 'https' : 'http';
+
+const server = useTLS
+    ? https.createServer({ cert: fs.readFileSync(TLS_CERT), key: fs.readFileSync(TLS_KEY) }, app)
+    : http.createServer(app);
 const lanIP = getLANIP();
 
 server.listen(PORT, '0.0.0.0', async () => {
     const portStr = PORT.toString();
-    const ipLine = `http://${lanIP}:${portStr}`;
+    const ipLine = `${protocol}://${lanIP}:${portStr}`;
     console.log('\n╔══════════════════════════════════════════════╗');
     console.log('║       🧠  HEIDI — Local Mobile Chat          ║');
     console.log('╠══════════════════════════════════════════════╣');
-    console.log(`║  Desktop:  http://localhost:${portStr}${' '.repeat(16 - portStr.length)}║`);
-    console.log(`║  📱 Phone: ${ipLine}${' '.repeat(34 - ipLine.length)}║`);
+    console.log(`║  Desktop:  ${protocol}://localhost:${portStr}${' '.repeat(Math.max(0, 12 - portStr.length))}║`);
+    console.log(`║  📱 Phone: ${ipLine}${' '.repeat(Math.max(0, 34 - ipLine.length))}║`);
+    if (useTLS) {
+        console.log(`║  🔒 TLS active (${TLS_CERT})${' '.repeat(Math.max(0, 10 - TLS_CERT.length))}║`);
+    }
     console.log('╠══════════════════════════════════════════════╣');
     console.log('║  Open the Phone URL on your mobile device    ║');
     console.log('║  (must be on the same WiFi / LAN network)    ║');

@@ -1,6 +1,6 @@
 'use strict';
 
-const { PolicyEngine, evaluateRules, matchCondition } = require('../../lib/protoforge/policy-engine');
+const { PolicyEngine, evaluateRules, matchCondition, recordOutcome } = require('../../lib/protoforge/policy-engine');
 
 // ---------------------------------------------------------------------------
 // matchCondition — unit tests for operator DSL
@@ -216,5 +216,150 @@ describe('PolicyEngine.evaluate()', () => {
   test('activePolicy is null when no policy loaded', () => {
     const engine = new PolicyEngine('http://localhost', 'fake-key');
     expect(engine.activePolicy).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// decisionId — self-evaluation feedback loop needs a stable id up front
+// ---------------------------------------------------------------------------
+describe('PolicyEngine.evaluate() — decisionId', () => {
+  function makeEngine(policy) {
+    const engine = new PolicyEngine('http://localhost', 'fake-key');
+    engine._policy = policy;
+    return engine;
+  }
+
+  test('every decision gets a decisionId', () => {
+    const engine = makeEngine({ id: 'p', version: 1, name: 'n', rules: { default: 'reject', rules: [] } });
+    const decision = engine.evaluate({ id: 'hyp-a' });
+    expect(typeof decision.decisionId).toBe('string');
+    expect(decision.decisionId.length).toBeGreaterThan(0);
+  });
+
+  test('two decisions get distinct decisionIds', () => {
+    const engine = makeEngine({ id: 'p', version: 1, name: 'n', rules: { default: 'reject', rules: [] } });
+    const d1 = engine.evaluate({ id: 'hyp-a' });
+    const d2 = engine.evaluate({ id: 'hyp-b' });
+    expect(d1.decisionId).not.toBe(d2.decisionId);
+  });
+
+  test('rejection with no policy loaded still gets a decisionId', () => {
+    const engine = new PolicyEngine('http://localhost', 'fake-key');
+    const decision = engine.evaluate({ id: 'hyp-x' });
+    expect(typeof decision.decisionId).toBe('string');
+  });
+});
+
+describe('PolicyEngine.recordDecision() — persists with the client-generated id', () => {
+  test('inserts using decisionObj.decisionId as the row id, not a DB default', async () => {
+    const engine = new PolicyEngine('http://localhost', 'fake-key');
+    let insertedRow;
+    engine._client = {
+      from: () => ({
+        insert: (row) => {
+          insertedRow = row;
+          return { select: () => ({ single: async () => ({ data: { id: row.id }, error: null }) }) };
+        },
+      }),
+    };
+
+    const decision = engine.evaluate({ id: 'hyp-record' });
+    const returnedId = await engine.recordDecision(decision);
+
+    expect(insertedRow.id).toBe(decision.decisionId);
+    expect(returnedId).toBe(decision.decisionId);
+  });
+
+  test('returns null when the insert errors', async () => {
+    const engine = new PolicyEngine('http://localhost', 'fake-key');
+    engine._client = {
+      from: () => ({
+        insert: () => ({ select: () => ({ single: async () => ({ data: null, error: { message: 'db down' } }) }) }),
+      }),
+    };
+    const decision = engine.evaluate({ id: 'hyp-err' });
+    const result = await engine.recordDecision(decision);
+    expect(result).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// recordOutcome() — standalone self-evaluation backfill
+// ---------------------------------------------------------------------------
+describe('recordOutcome()', () => {
+  const originalUrl = process.env.SUPABASE_URL;
+  const originalKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  afterEach(() => {
+    if (originalUrl === undefined) delete process.env.SUPABASE_URL;
+    else process.env.SUPABASE_URL = originalUrl;
+    if (originalKey === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    else process.env.SUPABASE_SERVICE_ROLE_KEY = originalKey;
+    jest.restoreAllMocks();
+  });
+
+  test('warns and resolves without throwing when Supabase env vars are missing', async () => {
+    delete process.env.SUPABASE_URL;
+    delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+
+    await expect(recordOutcome('decision-1', 'success')).resolves.toBeUndefined();
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Supabase env vars missing'));
+  });
+
+  test('never throws even if the underlying client rejects (network failure)', async () => {
+    process.env.SUPABASE_URL = 'http://localhost:1';
+    process.env.SUPABASE_SERVICE_ROLE_KEY = 'fake-key';
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+
+    await expect(recordOutcome('decision-2', 'failure', { error: 'boom' })).resolves.toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The promoted action-type-tiered-v1 policy
+// (supabase/migrations/20260714150000_promote_action_type_policy.sql) —
+// regression test for the exact DSL rules that migration ships, so a future
+// edit can't silently change what auto-approves vs. escalates.
+// ---------------------------------------------------------------------------
+describe('action-type-tiered-v1 policy — real risk tiers', () => {
+  const rules = {
+    version: '1',
+    default: 'escalate',
+    rules: [
+      {
+        id: 'auto-approve-safe-actions',
+        if: { action_type: { in: ['fetch_data', 'create_task', 'schedule_event'] } },
+        then: 'approve',
+        priority: 1,
+      },
+      {
+        id: 'escalate-external-or-write-actions',
+        if: { action_type: { in: ['update_database', 'send_email'] } },
+        then: 'escalate',
+        priority: 2,
+      },
+    ],
+  };
+
+  function decisionFor(actionType) {
+    return evaluateRules(rules, { confidence: 0, risk: 1, revenue_impact: 0, action_type: actionType }).decision;
+  }
+
+  test.each(['fetch_data', 'create_task', 'schedule_event'])('%s auto-approves', (actionType) => {
+    expect(decisionFor(actionType)).toBe('approve');
+  });
+
+  test.each(['update_database', 'send_email'])('%s escalates', (actionType) => {
+    expect(decisionFor(actionType)).toBe('escalate');
+  });
+
+  test('an unknown future action type falls back to escalate, not reject', () => {
+    expect(decisionFor('some_future_action_type')).toBe('escalate');
+  });
+
+  test('nothing in this policy ever produces a reject decision', () => {
+    const allTypes = ['fetch_data', 'create_task', 'schedule_event', 'update_database', 'send_email', 'unknown_type'];
+    expect(allTypes.map(decisionFor)).not.toContain('reject');
   });
 });

@@ -1,3 +1,7 @@
+// @deprecated Legacy file-based RAW EVENT LEDGER. Use lib/protoforge/raw-ledger.ts or protoforge/hydi-gateway/src/adapters/raw-ledger.js.
+// Replacement: protoforge/hydi-gateway/ (canonical) or compatibility/raw-ledger-legacy.js
+// Migration: Write through the HYDI Event Gateway POST /events. Removal target: Phase 5.
+//
 // RAW EVENT LEDGER - Immutable source-of-truth stream
 // Stores ALL incoming events BEFORE any processing, validation, or classification
 // This is the system's truth anchor - NOTHING modifies it

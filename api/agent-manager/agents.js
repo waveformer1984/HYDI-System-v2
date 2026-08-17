@@ -1,9 +1,17 @@
 import { createClient } from '@supabase/supabase-js';
+import { requireAuth } from '../../lib/auth/requireAuth.js';
 
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
+let _supabase = null;
+function getSupabase() {
+  if (!_supabase) {
+    if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      throw new Error('Supabase env vars not configured (SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY)');
+    }
+    _supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+  }
+  return _supabase;
+}
+const supabase = new Proxy({}, { get: (_, prop) => getSupabase()[prop] });
 
 const AGENT_REGISTRY = [
   {
@@ -60,7 +68,7 @@ const AGENT_REGISTRY = [
     role: 'Audio / DAW Node',
     layer: 'CREATIVE',
     capabilities: ['stem_analysis', 'mix_analysis', 'audio_export', 'nft_mint', 'rights_verify', 'session_recall', 'hardware_map', 'beat_generate'],
-    endpoint: '/api/rezonate',
+    endpoint: '/api/rezonate/route',
   },
   {
     id: 'waveformer',
@@ -73,11 +81,14 @@ const AGENT_REGISTRY = [
 ];
 
 export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Origin', process.env.MOBILE_CHAT_ORIGIN || '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-hydi-service-token, x-hydi-device-token');
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'GET') return res.status(405).json({ ok: false, error: 'Method not allowed' });
+
+  const auth = await requireAuth(req, res, supabase, { permission: 'worker:view', routeName: 'agent-manager-agents-get' });
+  if (!auth.ok) return;
 
   try {
     // Pull task counts + last activity per agent from actions table

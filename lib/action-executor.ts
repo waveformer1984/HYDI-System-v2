@@ -13,6 +13,7 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { updateSessionState } from './session-state';
 
 export interface ExecutorAction {
   type: string;
@@ -106,6 +107,18 @@ export class ActionExecutor {
     const match = payload.match as Record<string, unknown> | undefined;
     if (!values || !match || Object.keys(match).length === 0) {
       return { status: 'failed', error: 'update_database requires non-empty "values" and "match"' };
+    }
+
+    // Route through the shared session-state module rather than writing to
+    // `sessions` directly — see lib/session-state.ts.
+    if (table === 'sessions') {
+      const sessionId = match.session_id as string | undefined;
+      if (!sessionId || Object.keys(match).length !== 1) {
+        return { status: 'failed', error: 'update_database on "sessions" requires match to be exactly { session_id }' };
+      }
+      const { error } = await updateSessionState(this.supabase, sessionId, values);
+      if (error) return { status: 'failed', error };
+      return { status: 'completed', result: { table, updated: match } };
     }
 
     let query = this.supabase.from(table).update(values);

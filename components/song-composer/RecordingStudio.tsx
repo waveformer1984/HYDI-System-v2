@@ -16,9 +16,9 @@ interface Props {
   bpm: number;
   totalBars: number;
   currentBar: number;
-  onLayersChange: (layers: Layer[]) => void;
-  onAnalyserReady: (analyser: AnalyserNode | null) => void;
-  onRecordingChange: (recording: boolean) => void;
+  onLayersChange: (_layers: Layer[]) => void;
+  onAnalyserReady: (_analyser: AnalyserNode | null) => void;
+  onRecordingChange: (_recording: boolean) => void;
 }
 
 const LAYER_COLORS = ['#6366f1', '#ec4899', '#22c55e', '#f97316', '#14b8a6', '#eab308', '#8b5cf6', '#f43f5e'];

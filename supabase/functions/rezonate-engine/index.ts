@@ -13,6 +13,7 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { requireServiceRole } from '../_shared/security.ts'
 
 // ---------------------------------------------------------------------------
 // CORS headers — mirroring the convention used across this function suite
@@ -167,6 +168,15 @@ serve(async (req: Request) => {
   if (req.method !== 'POST') {
     return new Response('Method not allowed', { headers: corsHeaders, status: 405 })
   }
+
+  // verify_jwt is intentionally false at the platform layer (see
+  // supabase/config.toml) so internal service-role callers can invoke this
+  // without a user token -- but that also means the *only* real gate is
+  // this check. Without it, any caller with a bare anon key could queue
+  // arbitrary tasks. All task handlers are stubs today, but this closes
+  // the gap before real capability lands. See ISSUES_FOUND.md.
+  const authError = requireServiceRole(req)
+  if (authError) return authError
 
   // Initialize the Supabase client with the service role key so we can write
   // to the actions table without RLS constraints from user JWTs.

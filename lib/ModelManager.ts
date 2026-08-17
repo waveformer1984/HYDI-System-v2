@@ -21,7 +21,8 @@
  */
 
 import { randomUUID } from 'crypto';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { getSessionState as getSharedSessionState, updateSessionState as updateSharedSessionState, SessionState } from './session-state';
 import { getMetricsService, type PartialInferenceMetric } from './metrics';
 
 export interface InferenceMetadata {
@@ -59,12 +60,21 @@ interface ApiResponse {
   metadata?: InferenceMetadata;
 }
 
-interface SessionState {
-  session_id: string;
-  tone: 'neutral' | 'focused' | 'degraded' | 'recovery';
-  active_model: 'local' | 'api';
-  last_action_status: 'success' | 'failure' | 'pending';
+// Lazy client: a missing NEXT_PUBLIC_SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY
+// must surface as a normal caught error inside processChat's try/catch (which
+// degrades to a friendly fallback reply), not a crash at construction time
+// that skips straight past it. Same pattern as api/chat/route.js's getSupabase().
+let _supabase: SupabaseClient | null = null;
+function getSupabase(): SupabaseClient {
+  if (!_supabase) {
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      throw new Error('Supabase env vars not configured (NEXT_PUBLIC_SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY)');
+    }
+    _supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+  }
+  return _supabase;
 }
+const supabaseProxy = new Proxy({}, { get: (_, prop) => (getSupabase() as any)[prop] }) as SupabaseClient;
 
 export class ModelManager {
   // Static state survives across per-request ModelManager instances.
@@ -74,13 +84,10 @@ export class ModelManager {
   private static localReachableCheckedAt = 0;
   private static readonly LOCAL_REACHABILITY_TTL_MS = 30000;
 
-  private supabase: any;
+  private supabase: SupabaseClient;
 
   constructor() {
-    this.supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    );
+    this.supabase = supabaseProxy;
   }
 
   /**
@@ -337,7 +344,7 @@ export class ModelManager {
    * API fallback generation. Prefers Anthropic, then OpenAI, but only when a
    * non-placeholder key is actually configured.
    */
-  private async generateAPIResponse(prompt: string, sessionId: string): Promise<ApiResponse> {
+  private async generateAPIResponse(prompt: string, _sessionId: string): Promise<ApiResponse> {
     const fallbackText = this.getFallbackText();
 
     if (!this.hasAnyRealApiKey()) {
@@ -530,7 +537,7 @@ export class ModelManager {
     if (!content || typeof content !== 'string') return false;
     try {
       const parsed = JSON.parse(content);
-      return parsed.hasOwnProperty('response') && Array.isArray(parsed.actions);
+      return Object.prototype.hasOwnProperty.call(parsed, 'response') && Array.isArray(parsed.actions);
     } catch {
       return false;
     }
@@ -549,41 +556,21 @@ export class ModelManager {
   }
 
   /**
-   * Session state management
+   * Session state management — delegates to the shared session-state module
+   * so ModelManager isn't one of several independent `sessions` writers.
    */
-  private async updateSessionState(
-    sessionId: string,
-    activeModel: 'local' | 'api',
-    status: 'success' | 'failure'
-  ): Promise<void> {
-    try {
-      await this.supabase.from('sessions').upsert({
-        session_id: sessionId,
-        active_model: activeModel,
-        last_action_status: status,
-        updated_at: new Date().toISOString(),
-      });
-    } catch (error) {
-      console.error('[ModelManager] Failed to update session state:', error instanceof Error ? error.message : 'Unknown error');
-    }
+  private async updateSessionState(sessionId: string, activeModel: 'local' | 'api', status: 'success' | 'failure'): Promise<void> {
+    await updateSharedSessionState(this.supabase, sessionId, {
+      active_model: activeModel,
+      last_action_status: status,
+    });
   }
 
   /**
    * Get current session state
    */
   async getSessionState(sessionId: string): Promise<SessionState | null> {
-    try {
-      const { data } = await this.supabase
-        .from('sessions')
-        .select('*')
-        .eq('session_id', sessionId)
-        .single();
-
-      return data;
-    } catch (error) {
-      console.error('[ModelManager] Failed to get session state:', error instanceof Error ? error.message : 'Unknown error');
-      return null;
-    }
+    return getSharedSessionState(this.supabase, sessionId);
   }
 
   /**

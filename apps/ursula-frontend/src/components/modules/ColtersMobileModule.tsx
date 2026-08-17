@@ -170,7 +170,7 @@ const MobileHomeScreen = ({
 
             {/* Today's Summary */}
             <div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-3">Today's Summary</h3>
+                <h3 className="text-lg font-semibold text-gray-900 mb-3">Today&apos;s Summary</h3>
                 <div className="grid grid-cols-2 gap-3">
                     <div className="bg-blue-50 p-3 rounded-lg">
                         <div className="flex items-center gap-2 text-blue-600 mb-1">

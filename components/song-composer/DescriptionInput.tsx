@@ -13,7 +13,7 @@ const EXAMPLE_PROMPTS = [
 ];
 
 interface Props {
-  onGenerate: (description: string, style: string) => void;
+  onGenerate: (_description: string, _style: string) => void;
   loading: boolean;
 }
 

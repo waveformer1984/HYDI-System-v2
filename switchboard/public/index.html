@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="Switchboard — local-first gig matching" />
+  <title>Switchboard</title>
+  <link rel="stylesheet" href="styles.css" />
+  <script src="ui.js"></script>
+</head>
+<body>
+  <header>
+    <div class="inner">
+      <h1>Switchboard</h1>
+      <button id="menuToggle" aria-label="Toggle navigation" aria-expanded="false" onclick="SB.toggleMenu(); this.setAttribute('aria-expanded', document.querySelector('nav').classList.contains('open'));">Menu</button>
+    </div>
+  </header>
+
+  <nav id="mainNav" aria-label="Main">
+    <ul role="menubar">
+      <li role="none"><button role="menuitem" onclick="show('login'); SB.toggleMenu()">Login</button></li>
+      <li role="none"><button role="menuitem" onclick="show('dashboard'); SB.toggleMenu()">Dashboard</button></li>
+      <li role="none"><button role="menuitem" onclick="show('gigs'); SB.toggleMenu()">Gig Feed</button></li>
+      <li role="none"><button role="menuitem" onclick="show('profile'); SB.toggleMenu()">Profile</button></li>
+      <li role="none"><button role="menuitem" onclick="show('messages'); SB.toggleMenu()">Messages</button></li>
+      <li role="none"><button role="menuitem" onclick="show('applications'); SB.toggleMenu()">Applications</button></li>
+      <li role="none"><button role="menuitem" onclick="show('trust'); SB.toggleMenu()">Trust</button></li>
+      <li role="none"><button role="menuitem" onclick="show('parent'); SB.toggleMenu()">Parent Approval</button></li>
+      <li role="none"><a role="menuitem" href="moderation.html" onclick="SB.toggleMenu()">Moderation</a></li>
+      <li role="none"><a role="menuitem" href="availability.html" onclick="SB.toggleMenu()">Availability</a></li>
+      <li role="none"><a role="menuitem" href="diagnostics.html" onclick="SB.toggleMenu()">Diagnostics</a></li>
+    </ul>
+  </nav>
+
+  <main id="app" role="main"></main>
+  <div id="feedback" role="status" aria-live="polite"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

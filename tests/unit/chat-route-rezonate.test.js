@@ -2,19 +2,16 @@
 
 /**
  * Universal chat router — Rezonate handler + routing/auth guards.
- * Covers the previously-untested handleRezonateMessage path added on
- * feat/hydi-evolution-v4.
+ * Covers the canonical-API-backed handleRezonateMessage path.
  */
 
 const { createHmac } = require('crypto');
 
-// Mock every module the route pulls in at import time.
-const mockCounts = { rezonate_projects: 3, rezonate_tracks: 7 };
-
+// Mock modules that should not be reached directly.
 jest.mock('@supabase/supabase-js', () => ({
   createClient: jest.fn(() => ({
     from: jest.fn((table) => ({
-      select: jest.fn(async () => ({ count: mockCounts[table] ?? null, error: null })),
+      select: jest.fn(async () => ({ count: 0, error: null })),
     })),
   })),
 }));
@@ -33,11 +30,45 @@ jest.mock('../../lib/termux/termuxClient.js', () => ({
   isReachable: jest.fn(),
 }));
 
-// lib/claude is a .ts source imported as ./claude.js by the route (TS-ESM
-// convention); mock it extensionless so it resolves the same way.
 jest.mock('../../lib/claude', () => ({
   callAgent: jest.fn(),
   isClaudeAvailable: jest.fn(() => false),
+}));
+
+jest.mock('../../lib/rezonate/rezonate-client.js', () => ({
+  getRezonateProjectStatus: jest.fn(async () => ({ count: 3, status: 'ok' })),
+  getRezonateTrackStatus: jest.fn(async () => ({ count: 7, status: 'ok' })),
+  getRezonateHealth: jest.fn(async () => ({
+    ok: true,
+    engine: { available: true },
+    store: { projects: 3, tracks: 7, assets: 0, processing_jobs: 0 },
+  })),
+  getCapabilityState: jest.fn((id) => ({
+    id,
+    name: 'Test Capability',
+    state: 'VERIFIED',
+    category: 'Audio',
+  })),
+  listVerifiedCapabilities: jest.fn(() => [
+    { id: 'stem_separation', name: 'Stem Separation', state: 'VERIFIED', category: 'Audio' },
+  ]),
+  listInoperableCapabilities: jest.fn(() => [
+    { id: 'studio_mixing', name: 'Mixing & Mastering', state: 'PLANNED', category: 'Studio' },
+  ]),
+  createProject: jest.fn(async (input) => ({ id: 'proj-test-1', name: input.name, status: 'draft' })),
+  getProject: jest.fn(async (id) => {
+    if (id === 'missing') throw new Error('Project not found');
+    return { id, name: 'Test Project', status: 'draft' };
+  }),
+  createTrack: jest.fn(async (projectId, input) => ({
+    id: 'track-test-1',
+    project_id: projectId,
+    name: input.name,
+    type: 'audio',
+  })),
+  listTracks: jest.fn(async (projectId) => [
+    { id: 'track-1', project_id: projectId, name: 'Intro' },
+  ]),
 }));
 
 const SERVICE_SECRET = 'test-service-secret';
@@ -77,7 +108,7 @@ beforeAll(() => {
 });
 
 describe('chat router - Rezonate handler', () => {
-  test('routes "project" messages to the project count', async () => {
+  test('routes "project" messages to the canonical project count', async () => {
     const res = makeRes();
     await handler(makeReq({ message: 'how many projects do we have', system: 'rezonate' }), res);
 
@@ -87,7 +118,7 @@ describe('chat router - Rezonate handler', () => {
     expect(payload.response).toContain('3 project(s) in workspace');
   });
 
-  test('routes "track" messages to the track count', async () => {
+  test('routes "track" messages to the canonical track count', async () => {
     const res = makeRes();
     await handler(makeReq({ message: 'list track status', system: 'rezonate' }), res);
 
@@ -95,12 +126,24 @@ describe('chat router - Rezonate handler', () => {
     expect(res.json.mock.calls[0][0].response).toContain('7 track(s) recorded');
   });
 
-  test('falls back to a usage hint for other messages', async () => {
+  test('returns capability-aware response for verified capabilities', async () => {
     const res = makeRes();
-    await handler(makeReq({ message: 'hello there', system: 'rezonate' }), res);
+    await handler(makeReq({ message: 'what capabilities are verified', system: 'rezonate' }), res);
 
     expect(res.status).toHaveBeenCalledWith(200);
-    expect(res.json.mock.calls[0][0].response).toMatch(/Try 'project' or 'track'/);
+    const response = res.json.mock.calls[0][0].response;
+    expect(response).toContain('Stem Separation');
+    expect(response).toContain('VERIFIED');
+  });
+
+  test('routes a PAO create-project request through HeidiController to the canonical repository', async () => {
+    const res = makeRes();
+    await handler(makeReq({ message: 'create a project called Demo', system: 'rezonate' }), res);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    const response = res.json.mock.calls[0][0].response;
+    expect(response).toContain('created project "Demo"');
+    expect(response).toContain('proj-test-1');
   });
 });
 

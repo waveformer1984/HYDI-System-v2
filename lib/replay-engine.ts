@@ -1,4 +1,8 @@
 /**
+ * @deprecated Legacy Replay Engine V2. Use protoforge/cascade/src/replay.js.
+ * Replacement: protoforge/cascade/src/replay.js
+ * Migration: Run ReplayEngine.replay() against the RAW LEDGER. Removal target: Phase 5.
+ *
  * Replay Engine V2 — Determinism Validator
  *
  * Validates that the same RAW LEDGER input produces the same pipeline output.

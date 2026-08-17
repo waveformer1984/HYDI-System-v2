@@ -5,11 +5,23 @@
  */
 
 import { createClient } from '@supabase/supabase-js';
+import { getRezonateHealth } from '../../lib/rezonate/rezonate-client.js';
 
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
+// Lazy client: a missing SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY must surface
+// as a clean JSON error from the handler, not a cold-start crash at module
+// load (same fix already applied to api/health.js and sibling routes — see
+// ISSUES_FOUND.md #32).
+let _supabase = null;
+function getSupabase() {
+  if (!_supabase) {
+    if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      throw new Error('Supabase env vars not configured (SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY)');
+    }
+    _supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+  }
+  return _supabase;
+}
+const supabase = new Proxy({}, { get: (_, prop) => getSupabase()[prop] });
 
 const EMOJI = {
   OK: '✅',
@@ -38,6 +50,15 @@ export default async function handler(req, res) {
   }
 
   try {
+    // Rezonate canonical health (local, no cloud dependency)
+    let rezonate = { status: 'unknown', error: null };
+    try {
+      rezonate = { status: 'ok', ...(await getRezonateHealth()) };
+    } catch (e) {
+      console.error('Rezonate health fetch error:', e);
+      rezonate = { status: 'unavailable', error: e instanceof Error ? e.message : 'Unknown error' };
+    }
+
     // Run auto-heal and get trends
     const { data: heal, error: healError } = await supabase.rpc('auto_heal_from_trends');
     
@@ -98,6 +119,7 @@ export default async function handler(req, res) {
         reason: dash.escalation_reason
       },
       auto_heal: heal || { healed: 0, actions: [] },
+      rezonate,
       infrastructure: infra ? {
         overall:    infra.overall,
         efficiency: infra.efficiency,

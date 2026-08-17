@@ -9,6 +9,7 @@
 
 const QueueManager = require('./QueueManager');
 const { createClient } = require('@supabase/supabase-js');
+const logger = require('../lib/structured-logger').child({ component: 'FabricationWorker' });
 
 class FabricationWorker {
     constructor(workerId = null) {
@@ -46,20 +47,20 @@ class FabricationWorker {
         await this.queue.registerWorker('fabrication', this.workerId);
         await this.queue.updateHeartbeat('idle');
         
-        console.log(`[🧱 Fabrication Worker] Initialized: ${this.workerId}`);
+        logger.info('Initialized', { workerId: this.workerId });
     }
 
     async start() {
         if (this.running) {
-            console.log('[🧱 Fabrication Worker] Already running');
+            logger.info('Already running');
             return;
         }
-        
+
         await this.initialize();
         this.running = true;
         this.queue.startHeartbeat();
-        
-        console.log('[🧱 Fabrication Worker] Starting to process fabrication jobs...');
+
+        logger.info('Starting to process fabrication jobs');
         
         // Start polling
         this.poll();
@@ -73,15 +74,15 @@ class FabricationWorker {
         }
         
         await this.queue.shutdown();
-        console.log('[🧱 Fabrication Worker] Stopped');
+        logger.info('Stopped');
     }
 
     poll() {
         if (!this.running) return;
-        
+
         this.processNextJob()
             .catch(err => {
-                console.error('[🧱 Fabrication Worker] Error in poll:', err);
+                logger.error('Error in poll', { error: err });
             })
             .finally(() => {
                 // Schedule next poll
@@ -99,11 +100,11 @@ class FabricationWorker {
         try {
             const task = await this.queue.getTask(taskId);
             if (!task) {
-                console.error(`[🧱 Fabrication Worker] Job not found: ${taskId}`);
+                logger.error('Job not found', { taskId });
                 return;
             }
-            
-            console.log(`[🧱 Fabrication Worker] Processing job: ${task.payload.job_type}`);
+
+            logger.info('Processing job', { jobType: task.payload.job_type });
             
             // Process based on job type
             switch (task.payload.job_type) {
@@ -140,144 +141,144 @@ class FabricationWorker {
                     break;
                     
                 default:
-                    console.log(`[🧱 Fabrication Worker] Unsupported job type: ${task.payload.job_type}`);
+                    logger.info('Unsupported job type', { jobType: task.payload.job_type });
                     // Still mark as completed to avoid infinite retries
                     await this.queue.completeTask(taskId, true);
                     return;
             }
-            
+
             // Mark job as completed
             await this.queue.completeTask(taskId, true);
-            
+
         } catch (err) {
-            console.error(`[🧱 Fabrication Worker] Job failed: ${taskId}`, err);
+            logger.error('Job failed', { taskId, error: err });
             await this.queue.completeTask(taskId, false, err.message);
         }
     }
 
     async process3DPrintJob(payload) {
         const { customer_email, specifications, priority = 3 } = payload.data;
-        
-        console.log(`[🧱 Fabrication] Processing 3D print job for ${customer_email}`);
-        
+
+        logger.info('Processing 3D print job', { customerEmail: customer_email });
+
         // Simulate 3D printing process
         await this.simulateFabricationProcess('3D Print', specifications);
-        
+
         // Log completion
         await this.logJobCompletion(payload, '3d_print', 'completed');
-        
+
         // Notify customer
         await this.notifyJobCompletion(customer_email, '3D Print', 'completed');
-        
-        console.log(`[🧱 Fabrication] 3D print job completed for ${customer_email}`);
+
+        logger.info('3D print job completed', { customerEmail: customer_email });
     }
 
     async processPCBFabricationJob(payload) {
         const { customer_email, specifications, priority = 3 } = payload.data;
-        
-        console.log(`[🧱 Fabrication] Processing PCB fabrication job for ${customer_email}`);
-        
+
+        logger.info('Processing PCB fabrication job', { customerEmail: customer_email });
+
         // Simulate PCB fabrication process
         await this.simulateFabricationProcess('PCB Fabrication', specifications);
-        
+
         // Log completion
         await this.logJobCompletion(payload, 'pcb_fabrication', 'completed');
-        
+
         // Notify customer
         await this.notifyJobCompletion(customer_email, 'PCB Fabrication', 'completed');
-        
-        console.log(`[🧱 Fabrication] PCB fabrication job completed for ${customer_email}`);
+
+        logger.info('PCB fabrication job completed', { customerEmail: customer_email });
     }
 
     async processCNCMachiningJob(payload) {
         const { customer_email, specifications, priority = 3 } = payload.data;
-        
-        console.log(`[🧱 Fabrication] Processing CNC machining job for ${customer_email}`);
-        
+
+        logger.info('Processing CNC machining job', { customerEmail: customer_email });
+
         // Simulate CNC machining process
         await this.simulateFabricationProcess('CNC Machining', specifications);
-        
+
         // Log completion
         await this.logJobCompletion(payload, 'cnc_machining', 'completed');
-        
+
         // Notify customer
         await this.notifyJobCompletion(customer_email, 'CNC Machining', 'completed');
-        
-        console.log(`[🧱 Fabrication] CNC machining job completed for ${customer_email}`);
+
+        logger.info('CNC machining job completed', { customerEmail: customer_email });
     }
 
     async processLaserCuttingJob(payload) {
         const { customer_email, specifications, priority = 3 } = payload.data;
-        
-        console.log(`[🧱 Fabrication] Processing laser cutting job for ${customer_email}`);
-        
+
+        logger.info('Processing laser cutting job', { customerEmail: customer_email });
+
         // Simulate laser cutting process
         await this.simulateFabricationProcess('Laser Cutting', specifications);
-        
+
         // Log completion
         await this.logJobCompletion(payload, 'laser_cutting', 'completed');
-        
+
         // Notify customer
         await this.notifyJobCompletion(customer_email, 'Laser Cutting', 'completed');
-        
-        console.log(`[🧱 Fabrication] Laser cutting job completed for ${customer_email}`);
+
+        logger.info('Laser cutting job completed', { customerEmail: customer_email });
     }
 
     async processRoboticsAssemblyJob(payload) {
         const { customer_email, specifications, priority = 3 } = payload.data;
-        
-        console.log(`[🧱 Fabrication] Processing robotics assembly job for ${customer_email}`);
-        
+
+        logger.info('Processing robotics assembly job', { customerEmail: customer_email });
+
         // Simulate robotics assembly process
         await this.simulateFabricationProcess('Robotics Assembly', specifications);
-        
+
         // Log completion
         await this.logJobCompletion(payload, 'robotics_assembly', 'completed');
-        
+
         // Notify customer
         await this.notifyJobCompletion(customer_email, 'Robotics Assembly', 'completed');
-        
-        console.log(`[🧱 Fabrication] Robotics assembly job completed for ${customer_email}`);
+
+        logger.info('Robotics assembly job completed', { customerEmail: customer_email });
     }
 
     async processCustomHardwareBuildJob(payload) {
         const { customer_email, specifications, priority = 3 } = payload.data;
-        
-        console.log(`[🧱 Fabrication] Processing custom hardware build job for ${customer_email}`);
-        
+
+        logger.info('Processing custom hardware build job', { customerEmail: customer_email });
+
         // Simulate custom hardware build process
         await this.simulateFabricationProcess('Custom Hardware Build', specifications);
-        
+
         // Log completion
         await this.logJobCompletion(payload, 'custom_hardware_build', 'completed');
-        
+
         // Notify customer
         await this.notifyJobCompletion(customer_email, 'Custom Hardware Build', 'completed');
-        
-        console.log(`[🧱 Fabrication] Custom hardware build job completed for ${customer_email}`);
+
+        logger.info('Custom hardware build job completed', { customerEmail: customer_email });
     }
 
     async processPrototypeFabricationJob(payload) {
         const { customer_email, specifications, priority = 3 } = payload.data;
-        
-        console.log(`[🧱 Fabrication] Processing prototype fabrication job for ${customer_email}`);
-        
+
+        logger.info('Processing prototype fabrication job', { customerEmail: customer_email });
+
         // Simulate prototype fabrication process
         await this.simulateFabricationProcess('Prototype Fabrication', specifications);
-        
+
         // Log completion
         await this.logJobCompletion(payload, 'prototype_fabrication', 'completed');
-        
+
         // Notify customer
         await this.notifyJobCompletion(customer_email, 'Prototype Fabrication', 'completed');
-        
-        console.log(`[🧱 Fabrication] Prototype fabrication job completed for ${customer_email}`);
+
+        logger.info('Prototype fabrication job completed', { customerEmail: customer_email });
     }
 
     async processReadinessCheck(payload) {
         const { customer_email, customer_id, tier } = payload.data;
-        
-        console.log(`[🧱 Fabrication] Performing readiness check for ${customer_email}`);
+
+        logger.info('Performing readiness check', { customerEmail: customer_email });
         
         // Check if customer has necessary permissions/quota
         const { data: customer } = await this.supabase
@@ -295,22 +296,22 @@ class FabricationWorker {
         const isActive = customer.status === 'active';
         
         if (!allowsFabrication || !isActive) {
-            console.log(`[🧱 Fabrication] Customer ${customer_email} not ready for fabrication`);
+            logger.info('Customer not ready for fabrication', { customerEmail: customer_email });
             await this.notifyFabricationReadiness(customer_email, false, !allowsFabrication ? 'tier_restriction' : 'account_inactive');
             return;
         }
-        
+
         // Check current queue load
         const queueStats = await this.queue.getQueueStats();
         const fabricationQueueLength = queueStats.fabrication?.pending || 0;
-        
+
         if (fabricationQueueLength > 10) { // Arbitrary threshold
-            console.log(`[🧱 Fabrication] Queue busy for ${customer_email}`);
+            logger.info('Queue busy', { customerEmail: customer_email });
             await this.notifyFabricationReadiness(customer_email, false, 'queue_busy');
             return;
         }
-        
-        console.log(`[🧱 Fabrication] Customer ${customer_email} is ready for fabrication`);
+
+        logger.info('Customer is ready for fabrication', { customerEmail: customer_email });
         await this.notifyFabricationReadiness(customer_email, true);
     }
 
@@ -390,20 +391,20 @@ if (require.main === module) {
     
     // Handle graceful shutdown
     process.on('SIGINT', async () => {
-        console.log('\n[🧱 Fabrication Worker] Shutting down...');
+        logger.info('Shutting down');
         await worker.stop();
         process.exit(0);
     });
-    
+
     process.on('SIGTERM', async () => {
-        console.log('\n[🧱 Fabrication Worker] Shutting down...');
+        logger.info('Shutting down');
         await worker.stop();
         process.exit(0);
     });
-    
+
     // Start worker
     worker.start().catch(err => {
-        console.error('[🧱 Fabrication Worker] Failed to start:', err);
+        logger.error('Failed to start', { error: err });
         process.exit(1);
     });
 }

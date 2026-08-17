@@ -1,6 +1,7 @@
 const { createClient } = require('@supabase/supabase-js');
 const QueueManager = require('./QueueManager');
 require('dotenv').config();
+const logger = require('../lib/structured-logger').child({ component: 'CostMarginWorker' });
 
 class CostMarginWorker {
     constructor(workerId) {
@@ -23,7 +24,7 @@ class CostMarginWorker {
             this.supabase = createClient(supabaseUrl, supabaseKey);
             this.queue.registerWorker('cost_margin', this.workerId);
             this.queue.updateHeartbeat('idle');
-            console.log(`[💸 Cost & Margin Worker] Initialized: ${this.workerId}`);
+            logger.info('Initialized', { workerId: this.workerId });
         };
 
         this.start = async function() {
@@ -43,7 +44,7 @@ class CostMarginWorker {
         this.poll = function() {
             if (!this.running) return;
             this.processNextTask()
-                .catch(err => console.error('[💸 Cost & Margin Worker] Poll error:', err))
+                .catch(err => logger.error('Poll error', { error: err }))
                 .finally(() => { this.pollTimer = setTimeout(() => this.poll(), this.pollInterval); });
         };
 
@@ -55,7 +56,7 @@ class CostMarginWorker {
                 if (!task) return;
                 switch (task.payload.event_type) {
                     case 'analytics.generate': await this.generateCostAnalytics(task.payload); break;
-                    default: console.log(`[💸 Cost & Margin] Unhandled: ${task.payload.event_type}`);
+                    default: logger.info('Unhandled event type', { eventType: task.payload.event_type });
                 }
                 await this.queue.completeTask(taskId, true);
             } catch (err) {
@@ -65,7 +66,7 @@ class CostMarginWorker {
 
         this.generateCostAnalytics = async function(payload) {
             const { time_period, include_details } = payload.data || {};
-            console.log(`[💸 Cost & Margin] Generating cost analytics for ${time_period}`);
+            logger.info('Generating cost analytics', { timePeriod: time_period });
             const since = new Date(Date.now() - 30*24*60*60*1000).toISOString();
             const { data: jobCosts } = await this.supabase.from('job_costs').select('*').gte('created_at', since);
             const { data: revenueTransactions } = await this.supabase.from('transactions').select('*').gte('created_at', since);
@@ -79,7 +80,12 @@ class CostMarginWorker {
                 .from('cost_analytics')
                 .insert(analytics);
             
-            console.log(`[💸 Cost & Margin] Analytics generated: $${totalRevenue.toFixed(2)} revenue, $${totalCost.toFixed(2)} cost, $${totalProfit.toFixed(2)} profit (${marginPercentage.toFixed(1)}% margin)`);
+            logger.info('Analytics generated', {
+                totalRevenue: Number(totalRevenue.toFixed(2)),
+                totalCost: Number(totalCost.toFixed(2)),
+                totalProfit: Number(totalProfit.toFixed(2)),
+                marginPercentage: Number(marginPercentage.toFixed(1))
+            });
             
             if (include_details) {
                 // Return detailed breakdown
@@ -167,20 +173,20 @@ if (require.main === module) {
     
     // Handle graceful shutdown
     process.on('SIGINT', async () => {
-        console.log('\n[💸 Cost & Margin Worker] Shutting down...');
+        logger.info('Shutting down');
         await worker.stop();
         process.exit(0);
     });
-    
+
     process.on('SIGTERM', async () => {
-        console.log('\n[💸 Cost & Margin Worker] Shutting down...');
+        logger.info('Shutting down');
         await worker.stop();
         process.exit(0);
     });
-    
+
     // Start worker
     worker.start().catch(err => {
-        console.error('[💸 Cost & Margin Worker] Failed to start:', err);
+        logger.error('Failed to start', { error: err });
         process.exit(1);
     });
 }

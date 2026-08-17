@@ -12,6 +12,7 @@
  */
 
 const EventEmitter = require('events');
+const logger = require('../../lib/structured-logger').child({ component: 'SecurityAgent' });
 
 class SecurityAgent extends EventEmitter {
   constructor(config = {}) {
@@ -47,14 +48,14 @@ class SecurityAgent extends EventEmitter {
       accessViolations: 0
     };
 
-    console.log(`[SECURITY AGENT] Initialized: ${this.name}`);
+    logger.info('Security Agent initialized', { name: this.name });
   }
 
   async executeTask(task) {
     this.currentTask = task;
     this.status = 'busy';
 
-    console.log(`[SECURITY AGENT] Executing task: ${task.type}`);
+    logger.info('Security Agent executing task', { taskType: task.type });
 
     try {
       let result;

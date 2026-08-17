@@ -1,5 +1,15 @@
 # HEIDI V2 - Single Truth Architecture
 
+> **Status note (2026-07-14):** this document's design is sound and is the
+> target shape referenced by `HYDI_KERNEL_ARCHITECTURE_ROADMAP.md`, but its
+> literal reference implementation (`modules/heidi-v2-orchestrator.js` and
+> siblings) was never wired to a live entry point and has been partly moved
+> to `archive/heidi-v2-dormant-pipeline/`. The roadmap recommends building
+> the live kernel spine on `kilo/` + `lib/protoforge/` instead, which
+> implements the same CASCADE → KILO → ProtoForge shape with real tests.
+> Treat this doc as the architectural spec, not as a description of running
+> code.
+
 ## From Enforcement-Heavy to Traceable Design
 
 HEIDI v2 corrects the fundamental architectural flaw: systems trying to maintain their own truth. Instead, it provides a deterministic pipeline with externally verifiable state.

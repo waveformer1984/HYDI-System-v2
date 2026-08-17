@@ -16,16 +16,50 @@ The six active revenue streams routed through Stripe Connect are: `galactic_byte
 
 ## Commands
 
+### Launching the full system
+
+```bash
+npm run boot          # Boot ALL modules in dependency order (protoforge-core → heidi-web → mobile → orchestrator)
+npm run boot:prod     # Production boot (run `npm run build` first)
+npm run boot:plan     # Print the resolved boot plan and exit (starts nothing)
+```
+
+`npm run boot` (`scripts/boot-agent.js` + `boot.config.json`) is the **single
+authoritative way to start the full system**. It starts `protoforge-core`
+(port 3005) first, waits for `/health` to return ok, then starts `heidi-web`
+(port 3000), `heidi-mobile-chat` (port 3006), and the in-process
+`hydi-orchestrator`. See [`BOOT_AGENT.md`](./BOOT_AGENT.md) for full details.
+
+```bash
+npm run dev           # Next.js dev server ONLY (port 3000) — frontend alone, no backend
+```
+
+`npm run dev` starts **only the Next.js frontend**. It does NOT start
+`protoforge-core`, so features that depend on the CASCADE/KILO/ProtoForge
+pipeline or the agent bus will not work. Use `npm run boot` for the full system.
+
+### Build / test / lint
+
 ```bash
 npm install          # Install dependencies (Node >= 20 required)
-npm run dev          # Next.js dev server on 0.0.0.0:3000
 npm run build        # Production build
 npm start            # Start production server
 npm run typecheck    # TypeScript type-check (tsc --noEmit, no emit)
+npm run lint         # next lint
 npm test             # Run Jest unit tests
 npm run test:watch   # Jest in watch mode
 npm run test:coverage  # Jest with coverage report
 npm run test:integration  # Run adversarial integration tests (tests/hdi-adversarial.test.js)
+```
+
+HYDI V3 (`src/hydi-v3/`) commands — scoped separately so they don't shadow the repo-wide targets above:
+```bash
+npm run typecheck:hydi-v3         # TypeScript/JSDoc typecheck of V3 code only (tsconfig.typecheck.json)
+npm run lint:hydi-v3              # Lint V3 modules and scripts only
+npm run test:integration:hydi-v3  # HYDI V3 integration tests (tests/integration/hydi-v3-integration.test.js)
+npm run test:soak:hydi-v3         # Long-running V3 stability simulation (scripts/soak-test-v3.js)
+npm run benchmark:performance     # V3 performance benchmarks
+npm run security-audit            # V3 static security audit
 ```
 
 Operational scripts at the repo root:
@@ -151,7 +185,9 @@ All files under `api/` are **Vercel serverless functions** (Next.js API routes).
 
 **Observability**: `monitoring-health`, `chaos-runner`, `analytics-service`, `stream-health-watchdog`
 
-**Public services (no JWT)**: `api-gateway`, `notification-service`, `search-service`, `cache-service`, `events-stream`, `file-storage`, `user-management`
+**Public services (no JWT)**: `api-gateway`, `notification-service`, `search-service`, `cache-service`
+
+Despite their grouping above under "Task workers" / "Observability" / etc., `events-stream`, `file-storage`, and `user-management` are **JWT-required** per `supabase/config.toml`, not public.
 
 **Marketing suite (no JWT)**: `brand-awareness`, `campaign-analytics`, `content-management`, `customer-segments`, `email-marketing`, `lead-generation`, `marketing-automation`, `social-media`
 
@@ -168,13 +204,11 @@ Next.js pages under `pages/`:
 
 React components under `components/`:
 - `AgentBoard.tsx`, `AgentCard.tsx` — agent status and management
-- `Chat.tsx` — Heidi chat interface
-- `StatusPanel.tsx` — system health display
 - `TaskCreateModal.tsx`, `TaskQueue.tsx` — task pipeline UI
 - `components/funding/` — funding-specific components
 - `components/song-composer/` — song composer components
 
-Custom hooks: `hooks/useHeidi.ts` — React hook for Heidi orchestration state.
+The Heidi chat interface itself is a self-contained component directly in `pages/index.tsx` (not `components/`) — it POSTs `/api/chat` and parses the SSE response itself, with no separate hook.
 
 ### Revenue Engine (`revenue-engine/`)
 
@@ -305,9 +339,16 @@ tests/
     subscription-manager.test.js
   hdi-adversarial.test.js        # Adversarial / chaos integration tests
   hdi-everything-wrong.test.js   # Edge-case / failure-mode integration tests
+  integration/
+    hydi-v3-integration.test.js  # HYDI V3 integration tests (npm run test:integration:hydi-v3)
+  unit/hydi-v3/                  # HYDI V3 unit tests (npm run typecheck:hydi-v3 / lint:hydi-v3)
 ```
 
 The integration tests (`test:integration`) require live environment variables (`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`).
+
+### HYDI V3 Upgrade
+
+The V3 reliability/autonomy layer lives in `src/hydi-v3` and is wired into `HYDISystem.js`. See the "HYDI V3" commands in the Commands section above for its scoped typecheck/lint/test/benchmark/security-audit targets. Runbooks are in `src/hydi-v3/RUNBOOKS.md`.
 
 ## Secret Handling Protocol
 
@@ -359,19 +400,29 @@ system kept running because the data plane had already been moved local.
 **External and deliberately disabled/unused, not deleted:**
 - **Vercel deployment** — not used. No git integration is linked to the
   Vercel project (confirmed via API: `link: undefined`) — nothing
-  auto-deploys on push. `scripts/cloud-bootstrap/vercel.js` still exists
-  (dormant capability) but isn't part of the normal workflow.
+  auto-deploys on push. Its provisioning module
+  (`scripts/cloud-bootstrap/vercel.js`) and dead config
+  (`.vercelignore`, `apps/ursula-frontend/vercel.json`) were archived
+  2026-07-16 to `archive/dead-vercel-config/` as Phase 0 of
+  `LOCAL_FIRST_EXECUTION_PLAN.md`; `hydi-monitor-deploy/` (including its
+  `vercel.json`) was confirmed superseded and archived in full 2026-07-19
+  to `archive/superseded-stripe-implementations/` once the stale
+  sub-deployment consolidation decision tracked in `ROADMAP.md` resolved.
   `.github/workflows/health-monitor.yml`'s `vercel-api-check.js` step is a
   read-only diagnostic, not a deploy trigger — safe to leave.
-- **GitHub Pages** — `.github/workflows/deploy-pages.yml` used to
-  auto-publish the mobile chat PWA on every push touching `docs/**`
-  (confirmed Pages was NOT actually enabled when checked, so nothing was
-  live, but the workflow would silently re-enable and publish on the next
-  matching push). Trigger changed to `workflow_dispatch` only — manual, not
-  automatic. Mobile chat is reached via Tailscale
-  (`heidi-pc.tailc50af2.ts.net`) instead.
-
 **External and kept, but reliance reduced:**
+- **GitHub Pages** — publishes `docs/index.html`, the static mobile chat +
+  Ops (mobile command center) client. Auto-publish was disabled 2026-07-10
+  (confirmed Pages wasn't actually enabled at the time) and re-enabled
+  2026-07-15 (explicit maintainer request, once `docs/index.html` grew a
+  real reason to want it live automatically — PR #190's Ops view).
+  `.github/workflows/deploy-pages.yml` now triggers on push to
+  `docs/**` on `clean-main`, plus `workflow_dispatch` for an on-demand
+  redeploy. The published page still requires the user to enter their own
+  API URL + `HYDI_SERVICE_SECRET` in its ⚙️ settings — GitHub Pages hosts
+  the static shell only, never the backend or any secret. Mobile chat is
+  also still reachable via Tailscale (`heidi-pc.tailc50af2.ts.net`) as an
+  alternative that doesn't require typing in a secret at all.
 - **GitHub (repo host + Actions CI)** — still the remote and still what
   `clean-main` branch protection requires checks from. A local git hook
   (`.githooks/pre-push`, wired up automatically via `npm install`'s

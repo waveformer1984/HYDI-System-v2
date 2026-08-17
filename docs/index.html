@@ -83,6 +83,44 @@
             cursor: pointer; line-height: 1; flex-shrink: 0;
         }
         .icon-btn:active { background: var(--accent-dim); color: var(--accent); }
+        .icon-btn { position: relative; }
+        .ops-badge {
+            position: absolute; top: 2px; right: 2px; min-width: 15px; height: 15px;
+            border-radius: 8px; background: var(--status-critical); color: #fff;
+            font-size: 9.5px; font-weight: 700; line-height: 15px; padding: 0 3px;
+        }
+
+        /* ── Ops sheet ──────────────────────────────────── */
+        .ops-score-row { display: flex; align-items: baseline; gap: 10px; margin-bottom: 14px; }
+        .ops-score { font-size: 34px; font-weight: 700; color: var(--accent); }
+        .ops-score-label { font-size: 12px; color: var(--text-secondary); }
+        .ops-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 16px; }
+        .ops-sub {
+            background: var(--bg-elevated); border-radius: 10px; padding: 8px 10px;
+            font-size: 12px; display: flex; justify-content: space-between; align-items: center;
+        }
+        .ops-section-title {
+            font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px;
+            color: var(--text-muted); margin: 16px 0 8px;
+        }
+        .ops-card {
+            background: var(--bg-elevated); border-radius: 10px; padding: 10px 12px;
+            margin-bottom: 8px; font-size: 13px;
+        }
+        .ops-card-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+        .ops-sub2 { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+        .ops-btn-row { display: flex; gap: 6px; flex-shrink: 0; }
+        .ops-mini-btn {
+            background: var(--bg-primary); border: 1px solid rgba(255,255,255,0.08); color: var(--text-primary);
+            border-radius: 7px; padding: 5px 9px; font-size: 12px; cursor: pointer;
+        }
+        .ops-mini-btn:active { border-color: var(--accent); color: var(--accent); }
+        .ops-search-row { display: flex; gap: 6px; margin-bottom: 8px; }
+        .ops-search-row input {
+            flex: 1; background: var(--bg-elevated); color: var(--text-primary);
+            border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 10px 12px; font-size: 13px;
+        }
+        .ops-empty { color: var(--text-muted); font-size: 12.5px; padding: 10px 2px; }
 
         /* ── System picker ──────────────────────────────── */
         .systems {
@@ -219,6 +257,7 @@
                 <div class="sub"><span class="status-dot" id="statusDot"></span><span id="statusText">not configured</span></div>
             </div>
         </div>
+        <button class="icon-btn" id="opsBtn" aria-label="Operations">🛰️<span class="ops-badge" id="opsBadge" style="display:none">0</span></button>
         <button class="icon-btn" id="settingsBtn" aria-label="Settings">⚙️</button>
     </header>
 
@@ -245,14 +284,14 @@
         <div class="field">
             <label for="apiUrl">HYDI API base URL</label>
             <input id="apiUrl" type="url" inputmode="url" autocapitalize="off" autocorrect="off"
-                   placeholder="https://your-hydi.vercel.app">
-            <div class="note">Your HYDI deployment URL. Leave blank if this page is served by the HYDI deployment itself (same origin).</div>
+                   placeholder="https://heidi-pc.your-tailnet.ts.net">
+            <div class="note">Your HYDI server URL — typically a Tailscale HTTPS address for a local-first deployment (<code>tailscale cert</code> on the machine running the server). Leave blank if this page is served by the HYDI server itself (same origin).</div>
         </div>
         <div class="field">
             <label for="secret">HYDI service secret <span style="color:var(--text-muted)">(optional)</span></label>
             <input id="secret" type="password" autocapitalize="off" autocorrect="off"
                    placeholder="HYDI_SERVICE_SECRET — leave blank for local/Termux node">
-            <div class="note">Required only if the server enforces auth (production Vercel). Used on-device to sign each request (HMAC-SHA256); never leaves your phone except as a short-lived signature. Leave blank for a local Termux node.</div>
+            <div class="note">Required only if the server enforces auth. Used on-device to sign each request (HMAC-SHA256); never leaves your phone except as a short-lived signature. Leave blank for a local/Termux node that doesn't enforce auth.</div>
         </div>
         <div class="sheet-actions">
             <button class="btn ghost" id="testBtn">Test connection</button>
@@ -262,6 +301,37 @@
             <button class="btn danger" id="clearBtn">Clear chat</button>
             <button class="btn ghost" id="cancelBtn">Cancel</button>
             <button class="btn primary" id="saveBtn">Save</button>
+        </div>
+    </div>
+
+    <div class="sheet-backdrop" id="opsBackdrop"></div>
+    <div class="sheet" id="opsSheet" style="max-height: 88dvh">
+        <h2>HYDI Operations</h2>
+        <p class="hint">Uses the same API URL / service secret as chat (⚙️ settings). Nothing extra to configure.</p>
+
+        <div class="ops-score-row">
+            <div class="ops-score" id="opsScore">—</div>
+            <div class="ops-score-label" id="opsScoreLabel">not connected</div>
+        </div>
+
+        <div class="ops-grid" id="opsSubGrid"></div>
+
+        <div class="ops-section-title">Worker Fleet</div>
+        <div id="opsWorkers"><div class="ops-empty">Open with a configured API URL to see live workers.</div></div>
+
+        <div class="ops-section-title">Memory Search</div>
+        <div class="ops-search-row">
+            <input id="opsMemQ" type="text" placeholder="Search memories…">
+            <button class="ops-mini-btn" id="opsMemBtn">🔎</button>
+        </div>
+        <div id="opsMemResults"></div>
+
+        <div class="ops-section-title">Notifications</div>
+        <div id="opsNotifs"><div class="ops-empty">No notifications.</div></div>
+
+        <div class="sheet-actions">
+            <button class="btn ghost" id="opsRefreshBtn">↻ Refresh</button>
+            <button class="btn ghost" id="opsCloseBtn">Close</button>
         </div>
     </div>
 
@@ -355,7 +425,7 @@
 
     // ── Sending ───────────────────────────────────────────────────────
     // Empty API URL = same origin (when this page is served by the HYDI
-    // deployment itself, e.g. from public/hydi-chat.html on Vercel).
+    // server itself, e.g. from public/hydi-chat.html).
     const SAME_ORIGIN = location.protocol.startsWith('http');
     function baseUrl() { return apiUrl ? apiUrl.replace(/\/+$/, '') : ''; }
     // Secret is optional: local/Termux nodes don't require auth. If the server
@@ -381,7 +451,11 @@
                 }
                 headers['x-hydi-service-token'] = await mintServiceToken();
             }
-            const resp = await fetch(`${baseUrl()}/api/chat`, {
+            // Note: the multi-system HMAC-gated router lives at /api/chat/route,
+            // not /api/chat (that path is Heidi's own single-agent streaming
+            // endpoint with an incompatible session_id/user_id + SSE contract —
+            // see CLAUDE.md's Local-First Architecture / ROADMAP.md #55).
+            const resp = await fetch(`${baseUrl()}/api/chat/route`, {
                 method: 'POST',
                 headers,
                 body: JSON.stringify({ message: text, system }),
@@ -430,7 +504,7 @@
         const dot = $('statusDot'), txt = $('statusText');
         if (!apiUrl && !SAME_ORIGIN) { dot.className = 'status-dot'; txt.textContent = 'not configured'; return; }
         try {
-            const r = await fetch(`${baseUrl()}/api/mobile-status`, { signal: AbortSignal.timeout(6000) });
+            const r = await opsFetch('/api/mobile-status', { method: 'GET' });
             const d = await r.json();
             const sys = (d.system || 'unknown').toUpperCase();
             if (sys === 'OK') { dot.className = 'status-dot ok'; txt.textContent = 'online · OK'; }
@@ -502,7 +576,7 @@
                 headers['x-hydi-service-token'] = await mintServiceToken();
                 secret = saved;
             }
-            const r = await fetch(`${base}/api/chat`, {
+            const r = await fetch(`${base}/api/chat/route`, {
                 method: 'POST',
                 headers,
                 body: JSON.stringify({ message: 'ping', system: 'ursula' }),
@@ -514,15 +588,15 @@
             } else if (r.status === 401) {
                 lines.push(`✗ /api/chat auth failed: ${d.reason || 'unauthorized'}`);
                 lines.push(d.reason === 'service secret not configured'
-                    ? '→ Set HYDI_SERVICE_SECRET on the deployment (Vercel env), then redeploy.'
-                    : '→ The secret entered here does not match HYDI_SERVICE_SECRET on the deployment.');
+                    ? '→ Set HYDI_SERVICE_SECRET on the server, then restart it.'
+                    : '→ The secret entered here does not match HYDI_SERVICE_SECRET on the server.');
             } else {
                 lines.push(`✗ /api/chat HTTP ${r.status}: ${d.reason || d.error || 'server error'}`);
-                lines.push('→ The function is reachable but failing — check Vercel function logs and env vars (SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY).');
+                lines.push('→ The server is reachable but failing — check its logs and env vars (SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY).');
             }
         } catch (e) {
             lines.push(`✗ /api/chat fetch failed (${e.name === 'TimeoutError' ? 'timeout' : 'blocked or crashed'})`);
-            lines.push('→ Health works but chat does not: either the deployment predates CORS on /api/chat (redeploy latest clean-main), or the function crashes at startup (check Vercel logs).');
+            lines.push('→ Health works but chat does not: either the server predates CORS on /api/chat (pull latest clean-main), or the API route crashes at startup (check server logs).');
         }
         out.textContent = lines.join('\n');
     }
@@ -534,6 +608,127 @@
         messagesEl.innerHTML = '';
         closeSheet();
     });
+
+    // ── Ops (mobile command center) ─────────────────────────────────────
+    // Reuses this page's existing apiUrl/secret (⚙️ settings) — the same
+    // HMAC service token minted for /api/chat is accepted by every
+    // mobile-ops route (lib/auth/requireAuth.js treats a valid service
+    // token as role 'owner'), so there's no separate device-pairing step
+    // needed for this statically-hosted client.
+    async function opsFetch(path, opts = {}) {
+        const headers = Object.assign({ 'Content-Type': 'application/json' }, opts.headers || {});
+        if (secret) headers['x-hydi-service-token'] = await mintServiceToken();
+        return fetch(`${baseUrl()}${path}`, Object.assign({}, opts, { headers, signal: AbortSignal.timeout(10000) }));
+    }
+
+    function opsStatusEmoji(status) {
+        return { healthy: '🟢', degraded: '🟡', critical: '🔴', offline: '⚫', unknown: '⚪' }[status] || '⚪';
+    }
+    function opsSeverityEmoji(sev) {
+        return { critical: '🚨', operational: 'ℹ️', approval: '⚠️', info: '💬' }[sev] || '💬';
+    }
+
+    async function loadOpsHealth() {
+        try {
+            const r = await opsFetch('/api/status/system');
+            if (!r.ok) { $('opsScoreLabel').textContent = r.status === 401 ? 'auth failed — check secret' : `HTTP ${r.status}`; return; }
+            const d = await r.json();
+            $('opsScore').textContent = d.health_score;
+            $('opsScoreLabel').textContent = d.overall_status + (d.offline_subsystems.length ? ` · ${d.offline_subsystems.length} offline` : '');
+            $('opsSubGrid').innerHTML = Object.entries(d.subsystems).map(([name, s]) =>
+                `<div class="ops-sub"><span>${name}</span><span>${opsStatusEmoji(s.status)}</span></div>`
+            ).join('');
+
+            const list = $('opsWorkers');
+            if (!d.workers || d.workers.length === 0) {
+                list.innerHTML = '<div class="ops-empty">No workers running.</div>';
+            } else {
+                list.innerHTML = d.workers.map(w => `
+                    <div class="ops-card">
+                        <div class="ops-card-row">
+                            <div>
+                                <div>${w.worker_id}</div>
+                                <div class="ops-sub2">${opsStatusEmoji(w.status)} ${w.status} · ${w.processed_count||0} done · ${w.error_count||0} errors</div>
+                            </div>
+                            <div class="ops-btn-row">
+                                <button class="ops-mini-btn" data-restart="${w.worker_type}|${w.worker_id}">⟳</button>
+                                <button class="ops-mini-btn" data-stop="${w.worker_type}|${w.worker_id}">⏹</button>
+                            </div>
+                        </div>
+                    </div>`).join('');
+            }
+        } catch (err) {
+            $('opsScoreLabel').textContent = navigator.onLine ? 'unreachable' : 'offline';
+        }
+    }
+
+    $('opsWorkers').addEventListener('click', async (e) => {
+        const restart = e.target.closest('[data-restart]');
+        const stop = e.target.closest('[data-stop]');
+        const target = restart || stop;
+        if (!target) return;
+        const [workerType, workerId] = (restart ? target.dataset.restart : target.dataset.stop).split('|');
+        const command = restart ? 'restart' : 'stop';
+        try {
+            const r = await opsFetch('/api/agent-manager/control', {
+                method: 'POST', body: JSON.stringify({ worker_type: workerType, worker_id: workerId, command }),
+            });
+            if (r.status === 403) { alert('Not authorized for that action.'); return; }
+            setTimeout(loadOpsHealth, 1500);
+        } catch (_) { alert('Command not sent — offline or unreachable.'); }
+    });
+
+    async function loadOpsNotifications() {
+        try {
+            const r = await opsFetch('/api/notifications?unread=true');
+            if (!r.ok) return;
+            const d = await r.json();
+            if (d.unread_count > 0) { $('opsBadge').style.display = 'block'; $('opsBadge').textContent = d.unread_count; }
+            else { $('opsBadge').style.display = 'none'; }
+            const box = $('opsNotifs');
+            box.innerHTML = (!d.notifications || d.notifications.length === 0)
+                ? '<div class="ops-empty">No notifications.</div>'
+                : d.notifications.map(n => `
+                    <div class="ops-card">
+                        <div>${opsSeverityEmoji(n.severity)} ${n.title}</div>
+                        ${n.body ? `<div class="ops-sub2">${n.body}</div>` : ''}
+                    </div>`).join('');
+        } catch (_) { /* leave prior notifications visible */ }
+    }
+
+    async function searchOpsMemory() {
+        const q = $('opsMemQ').value.trim();
+        const results = $('opsMemResults');
+        if (!q) { results.innerHTML = ''; return; }
+        try {
+            const r = await opsFetch('/api/memory/search?q=' + encodeURIComponent(q));
+            if (!r.ok) { results.innerHTML = '<div class="ops-empty">Search failed.</div>'; return; }
+            const d = await r.json();
+            results.innerHTML = (!d.memories || d.memories.length === 0)
+                ? '<div class="ops-empty">No memories found.</div>'
+                : d.memories.map(m => `<div class="ops-card">${m.content}<div class="ops-sub2">${m.kind} · importance ${m.importance_score}</div></div>`).join('');
+        } catch (_) { results.innerHTML = '<div class="ops-empty">Offline — search unavailable.</div>'; }
+    }
+    $('opsMemBtn').addEventListener('click', searchOpsMemory);
+    $('opsMemQ').addEventListener('keydown', (e) => { if (e.key === 'Enter') searchOpsMemory(); });
+
+    function loadOps() { loadOpsHealth(); loadOpsNotifications(); }
+
+    function openOpsSheet() {
+        if (!isConfigured()) { openSheet(); return; }
+        $('opsBackdrop').classList.add('open');
+        $('opsSheet').classList.add('open');
+        loadOps();
+    }
+    function closeOpsSheet() {
+        $('opsBackdrop').classList.remove('open');
+        $('opsSheet').classList.remove('open');
+    }
+    $('opsBtn').addEventListener('click', openOpsSheet);
+    $('opsBackdrop').addEventListener('click', closeOpsSheet);
+    $('opsCloseBtn').addEventListener('click', closeOpsSheet);
+    $('opsRefreshBtn').addEventListener('click', loadOps);
+    if (isConfigured()) { loadOpsNotifications(); setInterval(loadOpsNotifications, 60000); }
 
     // ── Boot ──────────────────────────────────────────────────────────
     renderSystems();

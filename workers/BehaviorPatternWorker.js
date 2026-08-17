@@ -1,6 +1,7 @@
 const { createClient } = require('@supabase/supabase-js');
 const QueueManager = require('./QueueManager');
 require('dotenv').config();
+const logger = require('../lib/structured-logger').child({ component: 'BehaviorPatternWorker' });
 
 class BehaviorPatternWorker {
     constructor(workerId) {
@@ -18,7 +19,7 @@ class BehaviorPatternWorker {
             this.supabase = createClient(supabaseUrl, supabaseKey);
             this.queue.registerWorker('behavior_pattern', this.workerId);
             this.queue.updateHeartbeat('idle');
-            console.log(`[🧩 Behavior Pattern Worker] Initialized: ${this.workerId}`);
+            logger.info('Initialized', { workerId: this.workerId });
         };
 
         this.start = async function() {
@@ -38,7 +39,7 @@ class BehaviorPatternWorker {
         this.poll = function() {
             if (!this.running) return;
             this.processNextTask()
-                .catch(err => console.error('[🧩 Behavior Pattern Worker] Poll error:', err))
+                .catch(err => logger.error('Poll error', { error: err }))
                 .finally(() => { this.pollTimer = setTimeout(() => this.poll(), this.pollInterval); });
         };
 
@@ -51,7 +52,7 @@ class BehaviorPatternWorker {
                 switch (task.payload.event_type) {
                     case 'behavior.analyze': await this.analyzeJobPerformance(task.payload); break;
                     case 'usage.analyze': await this.analyzeServiceUsagePatterns(task.payload); break;
-                    default: console.log(`[🧩 Behavior Pattern] Unhandled: ${task.payload.event_type}`);
+                    default: logger.info('Unhandled event type', { eventType: task.payload.event_type });
                 }
                 await this.queue.completeTask(taskId, true);
             } catch (err) {
@@ -61,7 +62,7 @@ class BehaviorPatternWorker {
 
         this.analyzeJobPerformance = async function(payload) {
             const { job_type, time_period } = payload.data || {};
-            console.log(`[🧩 Behavior Pattern] Analyzing job performance: ${job_type}`);
+            logger.info('Analyzing job performance', { jobType: job_type });
             const since = new Date(Date.now() - 7*24*60*60*1000).toISOString();
             const { data: jobs } = await this.supabase.from('job_performance').select('*').gte('recorded_at', since);
             const performanceByType = {};
@@ -139,7 +140,7 @@ if (require.main === module) {
     const worker = new BehaviorPatternWorker();
     process.on('SIGINT', async () => { await worker.stop(); process.exit(0); });
     process.on('SIGTERM', async () => { await worker.stop(); process.exit(0); });
-    worker.start().catch(err => { console.error('[🧩 Behavior Pattern Worker] Failed to start:', err); process.exit(1); });
+    worker.start().catch(err => { logger.error('Failed to start', { error: err }); process.exit(1); });
 }
 
 module.exports = BehaviorPatternWorker;

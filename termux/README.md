@@ -58,3 +58,39 @@ install the Termux:Boot app to start it automatically after reboot.
   uses. For purely on-phone use (localhost), no secret is fine.
 - `.env.hydi` holds your service-role key. It stays on the phone; never
   commit it. `chmod 600 .env.hydi` if you're cautious.
+
+## Optional: full repo clone + manual Vercel deploy
+
+The quick-start above is the default, local-first path — no Vercel needed.
+If you specifically want to build/ship a Vercel deploy by hand from your
+phone (not auto-deploy-on-push, which stays disabled per CLAUDE.md's
+Local-First Architecture section), use:
+
+```bash
+bash setup-termux-vercel.sh    # clones the full repo, npm install, vercel link
+cd ~/HYDI-System-v2
+vercel --prod                  # run this whenever you actually want to deploy
+```
+
+The script is safe to re-run — it `git pull`s instead of failing on an
+already-cloned repo, and skips `vercel login`/`link` once already done.
+
+### Troubleshooting: "destination path ... already exists"
+
+If you typed the setup commands in one at a time instead of running
+`setup-termux-vercel.sh` as a script, a bare `git clone` fails with:
+
+```
+fatal: destination path 'HYDI-System-v2' already exists and is not an empty directory.
+```
+
+That just means `~/HYDI-System-v2` is already cloned from an earlier run —
+don't re-clone, pull instead:
+
+```bash
+cd ~/HYDI-System-v2
+git pull --ff-only
+```
+
+Re-running `setup-termux-vercel.sh` itself avoids this entirely — it already
+checks for an existing clone and pulls instead of cloning.

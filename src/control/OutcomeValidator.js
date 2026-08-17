@@ -232,7 +232,7 @@ class OutcomeValidator {
     if (bestSource && worstSource && bestRevenue > worstRevenue * 2) {
       return {
         type: 'lead_source',
-        description: `Source '${bestSource}' outperforms '${worSourceSource}' by ${((bestRevenue/worstRevenue - 1) * 100).toFixed(0)}%`,
+        description: `Source '${bestSource}' outperforms '${worstSource}' by ${((bestRevenue/worstRevenue - 1) * 100).toFixed(0)}%`,
         suggestion: {
           increaseReliability: bestSource,
           decreaseReliability: worstSource,

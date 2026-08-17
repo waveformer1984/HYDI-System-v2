@@ -27,6 +27,27 @@ interface ConnectAccountRequest {
   return_url?: string;
 }
 
+// This function is not listed in supabase/config.toml's per-function
+// verify_jwt table, so it falls back to the platform default of requiring
+// *some* cryptographically valid Supabase JWT -- which the public anon key
+// satisfies. That's not sufficient here: this function creates, updates,
+// retrieves, lists and deletes Stripe Connect accounts. Supabase's platform
+// layer has already verified the JWT's signature before this code runs, so
+// it's safe to just decode the payload and check the role claim rather than
+// re-verifying the signature ourselves.
+function callerIsServiceRole(req: Request): boolean {
+  const authHeader = req.headers.get('Authorization') || '';
+  const token = authHeader.replace(/^Bearer\s+/i, '');
+  const parts = token.split('.');
+  if (parts.length !== 3) return false;
+  try {
+    const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
+    return payload.role === 'service_role';
+  } catch {
+    return false;
+  }
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -35,6 +56,13 @@ Deno.serve(async (req: Request) => {
   if (req.method !== "POST") {
     return new Response(JSON.stringify({ error: "Method not allowed" }), {
       status: 405,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  if (!callerIsServiceRole(req)) {
+    return new Response(JSON.stringify({ error: "Forbidden: this function requires a service-role credential" }), {
+      status: 403,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }

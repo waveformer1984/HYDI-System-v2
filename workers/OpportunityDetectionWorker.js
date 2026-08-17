@@ -1,6 +1,7 @@
 const { createClient } = require('@supabase/supabase-js');
 const QueueManager = require('./QueueManager');
 require('dotenv').config();
+const logger = require('../lib/structured-logger').child({ component: 'OpportunityDetectionWorker' });
 
 class OpportunityDetectionWorker {
     constructor(workerId) {
@@ -25,7 +26,7 @@ class OpportunityDetectionWorker {
             this.supabase = createClient(supabaseUrl, supabaseKey);
             this.queue.registerWorker('opportunity_detection', this.workerId);
             this.queue.updateHeartbeat('idle');
-            console.log(`[🔍 Opportunity Detection Worker] Initialized: ${this.workerId}`);
+            logger.info('Initialized', { workerId: this.workerId });
         };
 
         this.start = async function() {
@@ -45,7 +46,7 @@ class OpportunityDetectionWorker {
         this.poll = function() {
             if (!this.running) return;
             this.processNextTask()
-                .catch(err => console.error('[🔍 Opportunity Detection Worker] Poll error:', err))
+                .catch(err => logger.error('Poll error', { error: err }))
                 .finally(() => { this.pollTimer = setTimeout(() => this.poll(), this.pollInterval); });
         };
 
@@ -61,7 +62,7 @@ class OpportunityDetectionWorker {
                     case 'cart.abandoned': await this.analyzeAbandonedCart(task.payload); break;
                     case 'service.completed': await this.analyzeServiceCompletion(task.payload); break;
                     case 'behavior.updated': await this.analyzeUserBehavior(task.payload); break;
-                    default: console.log(`[🔍 Opportunity] Unhandled: ${task.payload.event_type}`);
+                    default: logger.info('Unhandled event type', { eventType: task.payload.event_type });
                 }
                 await this.queue.completeTask(taskId, true);
             } catch (err) {
@@ -71,7 +72,7 @@ class OpportunityDetectionWorker {
 
         this.analyzeHighFrequencyUsage = async function(payload) {
             const { customer_email, service_name } = payload.data;
-            console.log(`[🔍 Opportunity] Analyzing high frequency usage: ${service_name} for ${customer_email}`);
+            logger.info('Analyzing high frequency usage', { serviceName: service_name, customerEmail: customer_email });
             // Analyze high frequency usage
             const { data: recentUsage } = await this.supabase
                 .from('service_usage_logs')
@@ -95,14 +96,19 @@ class OpportunityDetectionWorker {
                     }
                 });
                 
-                console.log(`[🔍 Opportunity] High frequency usage detected: ${customer_email} used ${service_name} ${usageCount} times in ${this.opportunityPatterns.high_frequency_usage.window_minutes} minutes`);
+                logger.info('High frequency usage detected', {
+                    customerEmail: customer_email,
+                    serviceName: service_name,
+                    usageCount,
+                    windowMinutes: this.opportunityPatterns.high_frequency_usage.window_minutes
+                });
             }
         };
 
         this.analyzeFeatureRequests = async function(payload) {
             const { customer_email, feature_name, timestamp } = payload.data;
             
-            console.log(`[🔍 Opportunity] Analyzing feature request: ${feature_name} from ${customer_email}`);
+            logger.info('Analyzing feature request', { featureName: feature_name, customerEmail: customer_email });
             
             // Analyze repeated feature requests
             const { data: recentRequests } = await this.supabase
@@ -126,14 +132,18 @@ class OpportunityDetectionWorker {
                     }
                 });
                 
-                console.log(`[🔍 Opportunity] Repeated feature request detected: ${feature_name} requested ${requestCount} times in ${this.opportunityPatterns.repeated_feature_request.window_hours} hours`);
+                logger.info('Repeated feature request detected', {
+                    featureName: feature_name,
+                    requestCount,
+                    windowHours: this.opportunityPatterns.repeated_feature_request.window_hours
+                });
             }
         };
 
         this.analyzeAbandonedCart = async function(payload) {
             const { customer_email, cart_value, items, timestamp } = payload.data;
             
-            console.log(`[🔍 Opportunity] Analyzing abandoned cart for ${customer_email}: $${cart_value}`);
+            logger.info('Analyzing abandoned cart', { customerEmail: customer_email, cartValue: cart_value });
             
             // Analyze abandoned cart for recovery opportunity
             const cartValue = parseFloat(cart_value) || 0;
@@ -150,14 +160,14 @@ class OpportunityDetectionWorker {
                     }
                 });
                 
-                console.log(`[🔍 Opportunity] High-value abandoned cart detected: ${customer_email} abandoned cart worth $${cartValue}`);
+                logger.info('High-value abandoned cart detected', { customerEmail: customer_email, cartValue });
             }
         };
 
         this.analyzeServiceCompletion = async function(payload) {
             const { customer_email, service_name, satisfaction_score, timestamp } = payload.data;
             
-            console.log(`[🔍 Opportunity] Analyzing service completion: ${service_name} for ${customer_email}`);
+            logger.info('Analyzing service completion', { serviceName: service_name, customerEmail: customer_email });
             
             // Analyze cross-sell opportunities based on service completion
             const satisfaction = parseFloat(satisfaction_score) || 0;
@@ -202,7 +212,12 @@ class OpportunityDetectionWorker {
                                     }
                                 });
                                 
-                                console.log(`[🔍 Opportunity] Cross-sell opportunity: ${customer_email} uses ${service} (satisfaction: ${satisfaction}/5.0) but not ${complementary}`);
+                                logger.info('Cross-sell opportunity detected', {
+                                    customerEmail: customer_email,
+                                    currentService: service,
+                                    satisfactionScore: satisfaction,
+                                    complementaryService: complementary
+                                });
                                 complementaryFound = true;
                                 break;
                             }
@@ -216,7 +231,7 @@ class OpportunityDetectionWorker {
         this.analyzeUserBehavior = async function(payload) {
             const { customer_email, behavior_type, behavior_data, timestamp } = payload.data;
             
-            console.log(`[🔍 Opportunity] Analyzing user behavior: ${behavior_type} for ${customer_email}`);
+            logger.info('Analyzing user behavior', { behaviorType: behavior_type, customerEmail: customer_email });
             
             // Analyze behavior patterns for usage spikes
             if (behavior_type === 'usage_metrics') {
@@ -242,7 +257,13 @@ class OpportunityDetectionWorker {
                             }
                         });
                         
-                        console.log(`[🔍 Opportunity] Usage spike detected: ${customer_email} usage of ${service_name} is ${usageRatio.toFixed(1)}x baseline (${currentUsage} vs ${baseline})`);
+                        logger.info('Usage spike detected', {
+                            customerEmail: customer_email,
+                            serviceName: service_name,
+                            usageRatio: Number(usageRatio.toFixed(1)),
+                            currentUsage,
+                            baseline
+                        });
                     }
                 }
             }
@@ -274,7 +295,7 @@ class OpportunityDetectionWorker {
                 data: opportunity
             }, 7); // High priority for opportunities
             
-            console.log(`[🔍 Opportunity] Emitted ${opportunityType} opportunity for ${customer_email}`);
+            logger.info('Opportunity emitted', { opportunityType, customerEmail: customer_email });
         };
 
         // helper-methods-for-patterns
@@ -308,20 +329,20 @@ if (require.main === module) {
     
     // Handle graceful shutdown
     process.on('SIGINT', async () => {
-        console.log('\n[🔍 Opportunity Detection Worker] Shutting down...');
+        logger.info('Shutting down');
         await worker.stop();
         process.exit(0);
     });
-    
+
     process.on('SIGTERM', async () => {
-        console.log('\n[🔍 Opportunity Detection Worker] Shutting down...');
+        logger.info('Shutting down');
         await worker.stop();
         process.exit(0);
     });
-    
+
     // Start worker
     worker.start().catch(err => {
-        console.error('[🔍 Opportunity Detection Worker] Failed to start:', err);
+        logger.error('Failed to start', { error: err });
         process.exit(1);
     });
 }

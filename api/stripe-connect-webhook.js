@@ -5,6 +5,7 @@
 
 const Stripe = require('stripe');
 const { createClient } = require('@supabase/supabase-js');
+const { getRawBody } = require('../lib/get-raw-body');
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 const supabase = createClient(
@@ -43,12 +44,12 @@ async function handler(req, res) {
     return res.status(500).json({ error: 'Webhook secret not configured' });
   }
 
-  // Stripe requires the raw body — Next.js bodyParser must be disabled (see config export below)
-  // req.body is a Buffer when bodyParser: false
-  const rawBody = req.body;
-
+  // Stripe requires the exact raw bytes it signed. Next.js bodyParser is
+  // disabled (see config export below), which means req.body is NOT
+  // auto-populated -- it must be read from the request stream ourselves.
   let event;
   try {
+    const rawBody = await getRawBody(req);
     event = stripe.webhooks.constructEvent(rawBody, sig, webhookSecret);
   } catch (err) {
     console.error('[Connect Webhook] Signature verification failed:', err.message);
@@ -56,6 +57,18 @@ async function handler(req, res) {
   }
 
   console.log(`[Connect Webhook] ${event.type} (${event.id})`);
+
+  // Idempotency guard -- Stripe retries on timeout/non-2xx, which would otherwise
+  // double-insert ledger rows. Shares the same webhook_events table/RPC as api/webhooks/stripe.js.
+  const { data: claimedId } = await supabase.rpc('claim_webhook_event', {
+    p_event_id: event.id,
+    p_type: `connect:${event.type}`,
+  });
+
+  if (!claimedId) {
+    console.log(`[Connect Webhook] Event ${event.id} already processed`);
+    return res.status(200).json({ received: true, duplicate: true });
+  }
 
   try {
     const ingress = await import('../lib/commercial/ingress-adapter');

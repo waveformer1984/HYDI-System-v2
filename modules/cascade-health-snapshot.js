@@ -1,3 +1,7 @@
+// @deprecated Legacy CASCADE health snapshot. Use api/platform/diagnostics.js or api/health.js.
+// Replacement: lib/platform-diagnostics.js and the canonical diagnostics endpoint
+// Migration: GET /api/platform/diagnostics for runtime inventory. Removal target: Phase 5.
+//
 // CASCADE Health Snapshot Engine
 // Real-time system state updated every 10 seconds
 

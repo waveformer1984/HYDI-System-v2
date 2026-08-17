@@ -1,6 +1,7 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { rateLimit } from '../_shared/security.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -134,6 +135,15 @@ serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
+
+  // Tighter budget than the other public-by-design functions: unlike
+  // those (all mock/stub data), this one makes real Twilio/SendGrid API
+  // calls to an attacker-controlled `recipient` when those keys are
+  // configured -- an open spam-relay / cost-abuse vector with zero
+  // request-level auth otherwise (verify_jwt = false, no caller in this
+  // codebase currently invokes it -- see ISSUES_FOUND.md).
+  const limited = rateLimit(req, { name: 'notification-service', windowMs: 60_000, max: 10 })
+  if (limited) return limited
 
   try {
     const supabase = createClient(

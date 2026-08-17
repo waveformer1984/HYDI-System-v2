@@ -1,9 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2.49.8";
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+import { corsHeaders, requireServiceRole } from "../_shared/security.ts";
 
 interface LedgerRow {
   source_account: string;
@@ -29,6 +25,13 @@ Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
+
+  // Internal-only: generates real payout records and reads client PII/
+  // financial data for every active client. verify_jwt=true alone only
+  // proves *a* JWT was presented (the public anon key qualifies), not that
+  // the caller is privileged -- see ISSUES_FOUND.md.
+  const authError = requireServiceRole(req);
+  if (authError) return authError;
 
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL")!,

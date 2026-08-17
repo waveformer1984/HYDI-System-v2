@@ -1,5 +1,6 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { rateLimit } from '../_shared/security.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -32,6 +33,11 @@ serve(async (req) => {
   }
 
   try {
+    // Break-glass overrides a safety circuit -- rate limit brute-force /
+    // flood attempts against it regardless of the auth outcome below.
+    const limited = rateLimit(req, { name: 'keeper-break-glass-simple', windowMs: 60_000, max: 10 })
+    if (limited) return limited
+
     // Verify break-glass token (Supabase handles JWT auth automatically)
     const breakGlassHeader = req.headers.get('x-break-glass-token')
     
@@ -42,8 +48,18 @@ serve(async (req) => {
       )
     }
 
-    const expectedToken = Deno.env.get('KEEPER_BREAK_GLASS_TOKEN') || 'break-glass-secret-test'
-    
+    // Fail closed: never authenticate against a fallback/default secret. If
+    // the real token isn't configured, reject every request instead of
+    // accepting one that matches a publicly-known placeholder value.
+    const expectedToken = Deno.env.get('KEEPER_BREAK_GLASS_TOKEN')
+    if (!expectedToken) {
+      console.error('KEEPER_BREAK_GLASS_TOKEN is not configured -- rejecting all break-glass requests')
+      return new Response(
+        JSON.stringify({ success: false, message: 'Break-glass is not configured' }),
+        { status: 503, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
     if (breakGlassHeader !== expectedToken) {
       return new Response(
         JSON.stringify({ success: false, message: 'Invalid break-glass token' }),

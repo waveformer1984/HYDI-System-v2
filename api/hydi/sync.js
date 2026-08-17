@@ -1,19 +1,30 @@
 import { createClient } from '@supabase/supabase-js';
+import { requireAuth } from '../../lib/auth/requireAuth.js';
 
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
+let _supabase = null;
+function getSupabase() {
+  if (!_supabase) {
+    if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      throw new Error('Supabase env vars not configured (SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY)');
+    }
+    _supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+  }
+  return _supabase;
+}
+const supabase = new Proxy({}, { get: (_, prop) => getSupabase()[prop] });
 
 export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Origin', process.env.MOBILE_CHAT_ORIGIN || '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-hydi-service-token, x-hydi-device-token');
 
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   try {
     if (req.method === 'GET') {
+      const auth = await requireAuth(req, res, supabase, { permission: 'status:view', routeName: 'hydi-sync-get' });
+      if (!auth.ok) return;
+
       // Health snapshot — used by HYDI mobile chat
       const { data: dash, error } = await supabase
         .from('system_dashboard')
@@ -37,6 +48,9 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'POST') {
+      const auth = await requireAuth(req, res, supabase, { permission: 'hydi_sync:trigger', routeName: 'hydi-sync-post' });
+      if (!auth.ok) return;
+
       const { action, payload } = req.body || {};
 
       if (action === 'heal') {
@@ -85,4 +99,4 @@ export default async function handler(req, res) {
       hint:  'Check SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY env vars in Vercel',
     });
   }
-};
+}

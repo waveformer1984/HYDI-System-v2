@@ -1,4 +1,8 @@
 /**
+ * @deprecated KEEPER Policy Engine is superseded by lib/protoforge/policy-engine.js.
+ * Replacement: lib/protoforge/policy-engine.js or compatibility/policy-legacy.js
+ * Migration: Evaluate hypotheses with the canonical DSL PolicyEngine. Removal target: Phase 5.
+ *
  * KEEPER Policy Engine
  * Defines what agents can do
  */

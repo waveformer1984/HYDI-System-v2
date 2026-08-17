@@ -6,11 +6,18 @@ on:
       - 'supabase/migrations/**'
       - '.windsurf/workflows/hdi-governance-blueprint.md'
       - 'tests/hdi-adversarial.test.js'
+  push:
+    branches:
+      - clean-main
+    paths:
+      - 'supabase/migrations/**'
+      - '.windsurf/workflows/hdi-governance-blueprint.md'
+      - 'tests/hdi-adversarial.test.js'
 
 jobs:
   governance-check:
     name: Governance Contract Validation
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     
     services:
       postgres:
@@ -28,21 +35,23 @@ jobs:
     
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
-      
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '20'
-      
+
       - name: Install dependencies
         run: npm ci
-      
+
       # Gate 1: Schema Change Detection
       - name: Detect Schema Changes
         id: schema-check
         run: |
-          CHANGED_FILES=$(git diff --name-only origin/main...HEAD | grep -E '^supabase/migrations/.*\.sql$' || true)
+          CHANGED_FILES=$(git diff --name-only origin/clean-main...HEAD | grep -E '^supabase/migrations/.*\.sql$' || true)
           if [ -n "$CHANGED_FILES" ]; then
             echo "schema_changed=true" >> $GITHUB_OUTPUT
             echo "files<<EOF" >> $GITHUB_OUTPUT
@@ -84,7 +93,7 @@ jobs:
         if: steps.schema-check.outputs.schema_changed == 'true'
         run: |
           # Check if hydi_allowed_transitions or enums were modified
-          if git diff origin/main...HEAD | grep -E "(hydi_phase|hydi_status|hydi_allowed_transitions)" > /dev/null; then
+          if git diff origin/clean-main...HEAD | grep -E "(hydi_phase|hydi_status|hydi_allowed_transitions)" > /dev/null; then
             echo "🔒 State machine contract changes detected"
             
             # Require explicit approval in PR description
@@ -107,12 +116,16 @@ jobs:
       - name: Setup Test Database
         if: steps.schema-check.outputs.schema_changed == 'true'
         run: |
-          # Apply migrations to test database
-          PGPASSWORD=postgres psql -h localhost -U postgres -d hydi_test -f supabase/migrations/00000000000000_initial_schema.sql
-          
-          # Apply new migrations
-          for file in ${{ steps.schema-check.outputs.files }}; do
-            PGPASSWORD=postgres psql -h localhost -U postgres -d hydi_test -f "$file"
+          # There is no single "initial schema" snapshot file in this repo's
+          # history -- it's never existed (verified via full git log, all
+          # branches). Applying the complete, real, ordered migration set is
+          # the honest equivalent, and stays accurate as the sequence grows,
+          # unlike a static snapshot that would silently drift out of sync.
+          # This also covers the PR's own new migrations, already included
+          # in this ordered set from the branch checkout -- no separate pass
+          # needed, which avoids re-running non-idempotent statements twice.
+          for file in $(ls supabase/migrations/*.sql | grep -v '\.sql\.skip$' | sort); do
+            PGPASSWORD=postgres psql -v ON_ERROR_STOP=1 -h localhost -U postgres -d hydi_test -f "$file"
           done
       
       - name: Run Adversarial Tests
@@ -151,7 +164,7 @@ jobs:
         if: steps.schema-check.outputs.schema_changed == 'true'
         run: |
           # Check if blueprint was updated
-          if ! git diff --name-only origin/main...HEAD | grep -q ".windsurf/workflows/hdi-governance-blueprint.md"; then
+          if ! git diff --name-only origin/clean-main...HEAD | grep -q ".windsurf/workflows/hdi-governance-blueprint.md"; then
             echo "❌ Schema changes require blueprint update"
             echo "   Update .windsurf/workflows/hdi-governance-blueprint.md to reflect:"
             echo "   - New tables/columns"
@@ -176,13 +189,13 @@ jobs:
   # Post-merge: Update frozen contracts
   update-contracts:
     name: Update Frozen Contracts
-    runs-on: self-hosted
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/clean-main'
     needs: governance-check
     
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       
       - name: Update Governance Contract
         run: |

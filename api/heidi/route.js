@@ -4,6 +4,7 @@
  */
 
 const { HeidiLocalHandler } = require('../local-model');
+const { rateLimit } = require('../../lib/rate-limit');
 
 // Initialize Heidi handler
 const heidiHandler = new HeidiLocalHandler({
@@ -36,7 +37,11 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
-  
+
+  if (!rateLimit(req, res, { name: 'heidi-chat', windowMs: 60 * 1000, max: 30 })) {
+    return;
+  }
+
   try {
     const { message, context, model, action } = req.body;
     

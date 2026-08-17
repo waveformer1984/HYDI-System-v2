@@ -7,6 +7,7 @@
 const QueueManager = require('./QueueManager');
 const { createClient } = require('@supabase/supabase-js');
 require('dotenv').config();
+const logger = require('../lib/structured-logger').child({ component: 'TaskRouterWorker' });
 
 class TaskRouterWorker {
     constructor(workerId = null) {
@@ -106,20 +107,20 @@ class TaskRouterWorker {
         await this.queue.registerWorker('task_router', this.workerId);
         await this.queue.updateHeartbeat('idle');
         
-        console.log(`[🧭 Task Router] Initialized: ${this.workerId}`);
+        logger.info('Task Router initialized', { workerId: this.workerId });
     }
 
     async start() {
         if (this.running) {
-            console.log('[🧭 Task Router] Already running');
+            logger.info('Task Router already running');
             return;
         }
-        
+
         await this.initialize();
         this.running = true;
         this.queue.startHeartbeat();
-        
-        console.log('[🧭 Task Router] Starting to route tasks...');
+
+        logger.info('Starting to route tasks');
         
         // Start polling
         this.poll();
@@ -133,7 +134,7 @@ class TaskRouterWorker {
         }
         
         await this.queue.shutdown();
-        console.log('[🧭 Task Router] Stopped');
+        logger.info('Task Router stopped');
     }
 
     poll() {
@@ -141,7 +142,7 @@ class TaskRouterWorker {
         
         this.processNextTask()
             .catch(err => {
-                console.error('[🧭 Task Router] Error in poll:', err);
+                logger.error('Task Router error in poll', { error: err });
             })
             .finally(() => {
                 // Schedule next poll
@@ -159,11 +160,11 @@ class TaskRouterWorker {
         try {
             const task = await this.queue.getTask(taskId);
             if (!task) {
-                console.error(`[🧭 Task Router] Task not found: ${taskId}`);
+                logger.error('Task Router task not found', { taskId });
                 return;
             }
-            
-            console.log(`[🧭 Task Router] Routing task: ${task.payload.type}`);
+
+            logger.info('Routing task', { taskType: task.payload.type });
             
             // Analyze and route the task
             const routingDecision = await this.analyzeTask(task.payload);
@@ -178,7 +179,7 @@ class TaskRouterWorker {
             await this.logRouting(task.payload, routingDecision);
             
         } catch (err) {
-            console.error(`[🧭 Task Router] Task failed: ${taskId}`, err);
+            logger.error('Task Router task failed', { taskId, error: err });
             await this.queue.completeTask(taskId, false, err.message);
         }
     }
@@ -273,7 +274,7 @@ class TaskRouterWorker {
             routingDecision.priority
         );
         
-        console.log(`[🧭 Task Router] Routed to ${routingDecision.queue} (priority: ${routingDecision.priority})`);
+        logger.info('Routed task', { targetQueue: routingDecision.queue, priority: routingDecision.priority });
     }
 
     async logRouting(payload, routingDecision) {
@@ -325,7 +326,7 @@ class TaskRouterWorker {
      */
     updateRoutingRule(type, config) {
         this.routingRules[type] = config;
-        console.log(`[🧭 Task Router] Updated rule for ${type}`);
+        logger.info('Updated routing rule', { type });
     }
 
     /**
@@ -372,20 +373,20 @@ if (require.main === module) {
     
     // Handle graceful shutdown
     process.on('SIGINT', async () => {
-        console.log('\n[🧭 Task Router] Shutting down...');
+        logger.info('Task Router shutting down');
         await worker.stop();
         process.exit(0);
     });
-    
+
     process.on('SIGTERM', async () => {
-        console.log('\n[🧭 Task Router] Shutting down...');
+        logger.info('Task Router shutting down');
         await worker.stop();
         process.exit(0);
     });
-    
+
     // Start worker
     worker.start().catch(err => {
-        console.error('[🧭 Task Router] Failed to start:', err);
+        logger.error('Task Router failed to start', { error: err });
         process.exit(1);
     });
 }

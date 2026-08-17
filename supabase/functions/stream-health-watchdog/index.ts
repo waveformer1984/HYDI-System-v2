@@ -4,6 +4,7 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { rateLimit } from '../_shared/security.ts';
 
 const STREAMS = [
   'galactic_bytes',
@@ -23,17 +24,28 @@ const cors = {
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
 
-  // Lightweight shared-secret guard (not crypto-grade, but keeps crawlers out)
+  // Fail closed: if HYDI_WATCHDOG_KEY isn't configured, reject every
+  // request instead of skipping the check entirely (previously fell open
+  // -- see ISSUES_FOUND.md, same class of bug already fixed for
+  // keeper-break-glass).
   const watchdogKey = Deno.env.get('HYDI_WATCHDOG_KEY');
-  if (watchdogKey) {
-    const provided = req.headers.get('x-watchdog-key');
-    if (provided !== watchdogKey) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-        status: 401,
-        headers: { ...cors, 'Content-Type': 'application/json' },
-      });
-    }
+  if (!watchdogKey) {
+    console.error('HYDI_WATCHDOG_KEY is not configured -- rejecting all watchdog requests');
+    return new Response(JSON.stringify({ error: 'Watchdog is not configured' }), {
+      status: 503,
+      headers: { ...cors, 'Content-Type': 'application/json' },
+    });
   }
+  const provided = req.headers.get('x-watchdog-key');
+  if (provided !== watchdogKey) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      status: 401,
+      headers: { ...cors, 'Content-Type': 'application/json' },
+    });
+  }
+
+  const limited = rateLimit(req, { name: 'stream-health-watchdog', windowMs: 60_000, max: 10 });
+  if (limited) return limited;
 
   const supabase = createClient(
     Deno.env.get('SUPABASE_URL')!,

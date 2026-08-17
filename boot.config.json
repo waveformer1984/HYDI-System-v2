@@ -6,7 +6,7 @@
     "defaultIntervalMs": 2000,
     "shutdownTimeoutMs": 8000,
     "requiredEnv": ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"],
-    "warnEnv": ["STRIPE_SECRET_KEY", "STRIPE_CONNECT_WEBHOOK_SECRET", "NEXT_PUBLIC_SUPABASE_URL"]
+    "warnEnv": ["STRIPE_SECRET_KEY", "STRIPE_CONNECT_WEBHOOK_SECRET", "NEXT_PUBLIC_SUPABASE_URL", "HEIDI_TLS_CERT", "HEIDI_TLS_KEY"]
   },
   "modules": [
     {
@@ -44,7 +44,11 @@
       "required": false,
       "command": "node",
       "args": ["launch-heidi-mobile.js"],
-      "env": { "HEIDI_MOBILE_PORT": "3006" },
+      "env": {
+        "HEIDI_MOBILE_PORT": "3006",
+        "HEIDI_TLS_CERT": "${HEIDI_TLS_CERT}",
+        "HEIDI_TLS_KEY": "${HEIDI_TLS_KEY}"
+      },
       "port": 3006,
       "health": { "url": "http://127.0.0.1:3006/api/health", "graceMs": 60000, "intervalMs": 2000 },
       "dependsOn": []

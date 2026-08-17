@@ -7,7 +7,6 @@
  */
 
 const crypto = require('crypto');
-const { v4: uuidv4 } = require('uuid');
 const { supabase } = require('../database');
 
 class Keymaker {
@@ -130,7 +129,7 @@ class Keymaker {
   // VALIDATION
   // ─────────────────────────────────────────────────────────────
   
-  async validateKey(keyHash, req) {
+  async validateKey(keyHash, _req) {
     // Check cache first
     const cached = this.keyCache.get(keyHash);
     if (cached && Date.now() - cached.ts < this.cacheTTL) {
@@ -254,7 +253,7 @@ class Keymaker {
   // ─────────────────────────────────────────────────────────────
   
   findServiceByPath(path) {
-    for (const [id, svc] of this.services) {
+    for (const [, svc] of this.services) {
       if (path.startsWith(svc.basePath)) return svc;
     }
     return null;

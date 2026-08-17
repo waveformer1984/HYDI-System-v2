@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="Switchboard Diagnostics" />
+  <title>Switchboard Diagnostics</title>
+  <link rel="stylesheet" href="styles.css" />
+  <script src="ui.js"></script>
+</head>
+<body>
+  <header>
+    <div class="inner">
+      <h1>Switchboard</h1>
+      <a class="btn" href="index.html" style="background:#6b7280">Back</a>
+    </div>
+  </header>
+
+  <main role="main">
+    <div class="card">
+      <h2>Diagnostics</h2>
+      <p id="statusText"></p>
+      <div class="actions">
+        <button id="refresh">Refresh</button>
+      </div>
+      <pre id="output" aria-live="polite" aria-busy="false"></pre>
+    </div>
+  </main>
+
+  <script>
+    const out = document.getElementById('output');
+    const status = document.getElementById('statusText');
+
+    async function load() {
+      out.setAttribute('aria-busy', 'true');
+      SB.loading(out, 'Loading diagnostics...');
+      status.textContent = '';
+      try {
+        const data = await SB.request('/diagnostics');
+        out.textContent = JSON.stringify(data, null, 2);
+        status.textContent = data.storage && data.storage.healthy ? 'Healthy' : 'Unhealthy';
+        status.className = data.storage && data.storage.healthy ? 'badge success' : 'badge error';
+      } catch (e) {
+        SB.error(out, 'Unable to load diagnostics: ' + e.message);
+        status.textContent = 'Error';
+        status.className = 'badge error';
+      } finally {
+        out.setAttribute('aria-busy', 'false');
+      }
+    }
+
+    document.getElementById('refresh').addEventListener('click', load);
+    load();
+  </script>
+</body>
+</html>

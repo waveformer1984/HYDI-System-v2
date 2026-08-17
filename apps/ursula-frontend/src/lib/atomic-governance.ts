@@ -57,7 +57,7 @@ export class AtomicGovernance {
       }
 
       // STEP 3: Apply sanitized updates with budget counters
-      let updatedTask = {
+      const updatedTask = {
         ...currentTask,
         ...governance.sanitizedUpdates,
         updated_at: new Date().toISOString()
@@ -149,7 +149,7 @@ export class AtomicGovernance {
       }
 
       // Prepare updated task with incremented version
-      let updatedTask = {
+      const updatedTask = {
         ...currentTask,
         ...governance.sanitizedUpdates,
         state_version: currentVersion + 1,
@@ -244,7 +244,7 @@ export class AtomicGovernance {
       const currentTask = await getCurrentTask(request.task_id);
       
       const governance = TaskGovernance.governTaskUpdate(currentTask, request);
-      let updatedTask = {
+      const updatedTask = {
         ...currentTask,
         ...governance.sanitizedUpdates,
         updated_at: new Date().toISOString()

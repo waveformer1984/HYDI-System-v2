@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import Link from 'next/link';
 import type { Campaign } from '../lib/zlabs/types';
 import {
   getAllCampaigns,
@@ -126,12 +127,12 @@ export default function FundingPage() {
           </div>
           <div className="flex items-center gap-4">
             <span className="text-sm text-gray-700 font-medium">Jordan A.</span>
-            <a
+            <Link
               href="/"
               className="text-sm text-blue-600 hover:text-blue-800 font-medium transition-colors"
             >
               Heidi →
-            </a>
+            </Link>
           </div>
         </div>
       </header>

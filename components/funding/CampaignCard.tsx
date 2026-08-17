@@ -33,7 +33,7 @@ const BORDER_COLORS: Record<Campaign['priority'], string> = {
 
 interface CampaignCardProps {
   campaign: Campaign;
-  onAskHydi: (prompt: string) => void;
+  onAskHydi: (_prompt: string) => void;
 }
 
 export default function CampaignCard({ campaign, onAskHydi }: CampaignCardProps) {

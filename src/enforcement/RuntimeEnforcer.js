@@ -446,7 +446,7 @@ class RuntimeEnforcer {
       
       has(target, prop) {
         const operationValidation = this.validateService(serviceName, 'access');
-        return operationValidation.allowed && this.getServiceInstance(serviceName).hasOwnProperty(prop);
+        return operationValidation.allowed && Object.prototype.hasOwnProperty.call(this.getServiceInstance(serviceName), prop);
       }
     });
   }

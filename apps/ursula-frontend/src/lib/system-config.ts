@@ -1,5 +1,7 @@
 // UNIFIED EXECUTION PHILOSOPHY - Single source of truth configuration
 
+import { access } from 'fs/promises';
+
 export type ExecutionMode = 'redis' | 'file';
 
 export interface SystemConfig {
@@ -27,6 +29,7 @@ export const SYSTEM_CONFIGS: Record<ExecutionMode, SystemConfig> = {
 export function getSystemConfig(): SystemConfig {
   // Auto-detect based on environment
   try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { Redis } = require('@upstash/redis');
     const redis = Redis.fromEnv();
     // If Redis initialization succeeds, use Redis mode
@@ -43,6 +46,7 @@ export function validateSystemConfig(config: SystemConfig): { valid: boolean; is
   // Check infrastructure requirements
   if (config.execution_mode === 'redis') {
     try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { Redis } = require('@upstash/redis');
       const redis = Redis.fromEnv();
       // Test connection
@@ -55,9 +59,8 @@ export function validateSystemConfig(config: SystemConfig): { valid: boolean; is
   }
   
   if (config.execution_mode === 'file') {
-    const fs = require('fs/promises');
     try {
-      fs.access('./data/tasks.json');
+      access('./data/tasks.json');
     } catch {
       issues.push('File system not accessible');
     }

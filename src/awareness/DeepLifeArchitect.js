@@ -547,7 +547,7 @@ class DeepLifeArchitect extends EventEmitter {
     return true;
   }
   
-  calculateCategoryConfidence(hardwareMetrics, softwareMetrics, category) {
+  calculateCategoryConfidence(_hardwareMetrics, _softwareMetrics, _category) {
     // Simplified confidence calculation
     return 0.8; // Would implement more sophisticated matching
   }
@@ -593,7 +593,7 @@ class DeepLifeArchitect extends EventEmitter {
     return avgTemp > 2.5 ? 'high' : avgTemp > 1.5 ? 'medium' : 'normal';
   }
   
-  assessPowerState(hardwareData) {
+  assessPowerState(_hardwareData) {
     // Simplified power assessment
     return 'stable'; // Would implement battery/power monitoring
   }
@@ -653,7 +653,7 @@ class DeepLifeArchitect extends EventEmitter {
   calculateSuccessTime() {
     return this.currentSession.analysis
       .filter(a => a.efficiency > 0.7)
-      .reduce((acc, a) => acc + (this.config.analysisInterval / 1000), 0);
+      .reduce((acc, _a) => acc + (this.config.analysisInterval / 1000), 0);
   }
   
   calculateLifePillarBreakdown() {

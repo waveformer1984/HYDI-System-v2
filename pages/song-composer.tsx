@@ -42,11 +42,10 @@ export default function SongComposer() {
   const [midiDevices, setMidiDevices]     = useState<MidiDevice[]>([]);
   const [midiLastAction, setMidiLastAction] = useState<string | null>(null);
   const [midiMapping, setMidiMapping]       = useState<Record<string, any>>({});
-  const [midiFlash, setMidiFlash]           = useState<string | null>(null); // section id to flash
+  const [, setMidiFlash]                    = useState<string | null>(null); // section id to flash
 
   const playIntervalRef  = useRef<ReturnType<typeof setInterval> | null>(null);
-  const metronomeRef     = useRef<{ ctx: AudioContext; schedule: (bar: number) => void } | null>(null);
-  const nextBeatRef      = useRef<number>(0);
+  const metronomeRef     = useRef<{ ctx: AudioContext; schedule: (_bar: number) => void } | null>(null);
   const midiActionLabelRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ── Playback ticker ─────────────────────────────────────────────────────────
@@ -69,7 +68,7 @@ export default function SongComposer() {
   }, [currentBar, song]);
 
   // ── Metronome (Web Audio API) ────────────────────────────────────────────────
-  const initMetronome = useCallback((bpm: number) => {
+  const initMetronome = useCallback((_bpm: number) => {
     const ctx = new AudioContext();
     const schedule = (bar: number) => {
       const isDownBeat = (bar - 1) % 4 === 0;
@@ -204,8 +203,6 @@ export default function SongComposer() {
     { id: 'samples', label: 'Samples' },
     { id: 'liveset', label: 'Live Set' },
   ];
-
-  const currentLyric = song?.lyrics?.find((l: any) => Math.abs(l.bar - currentBar) < 2);
 
   return (
     <div className="min-h-screen bg-black text-white">

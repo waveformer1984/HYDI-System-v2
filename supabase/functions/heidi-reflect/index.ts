@@ -1,5 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2.49.8";
 import { createClient as createRedisClient } from "npm:@redis/client@1.5.14";
+import { rateLimit } from "../_shared/security.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -64,7 +65,10 @@ Deno.serve(async (req: Request) => {
   if (!secret || secret !== HEIDI_REFLECT_SECRET) {
     return new Response("Unauthorized", { status: 401 });
   }
-  
+
+  const limited = rateLimit(req, { name: "heidi-reflect", windowMs: 60_000, max: 10 });
+  if (limited) return limited;
+
   // Prevent parallel reflection cycles
   const lockKey = `heidi-reflection-lock`;
   const lock = await getRedis();

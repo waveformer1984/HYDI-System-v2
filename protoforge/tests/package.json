@@ -1,0 +1,10 @@
+{
+  "name": "@protoforge/platform-tests",
+  "version": "0.1.0",
+  "description": "ProtoForge platform runtime validation tests",
+  "scripts": {
+    "test": "node --test platform/**/*.test.js"
+  },
+  "type": "commonjs",
+  "license": "MIT"
+}

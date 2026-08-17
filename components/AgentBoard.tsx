@@ -9,7 +9,7 @@ interface SystemInfo {
 }
 
 interface Props {
-  onDispatch: (agent: Agent) => void;
+  onDispatch: (_agent: Agent) => void;
 }
 
 export default function AgentBoard({ onDispatch }: Props) {

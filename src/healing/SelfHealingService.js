@@ -99,7 +99,7 @@ class SelfHealingService {
 
   // Static convenience methods: allow calling on the class directly
   // (e.g. `const svc = require('./SelfHealingService'); svc.healFromCrash(...)`)
-  static async healFromCrash(task, errorMessage, loopId) {
+  static async healFromCrash(task, errorMessage, _loopId) {
     const instance = new SelfHealingService();
     return instance.healFromCrash(errorMessage);
   }

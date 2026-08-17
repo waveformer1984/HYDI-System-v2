@@ -147,8 +147,7 @@ class SystemAuditor {
   async analyzeFile(file) {
     try {
       const content = await fs.readFile(file.path, 'utf8');
-      const lines = content.split('\n');
-      
+
       // Extract functions
       const functions = this.extractFunctions(content, file.relativePath);
       this.inventory.functions.push(...functions);
@@ -641,12 +640,12 @@ class SystemAuditor {
     return similar;
   }
   
-  assessCircularDependencyRisk(newComponent) {
+  assessCircularDependencyRisk(_newComponent) {
     // Simple assessment - would need more sophisticated analysis
     return null;
   }
-  
-  assessOrphanRisk(newComponent) {
+
+  assessOrphanRisk(_newComponent) {
     // Simple assessment - would need more sophisticated analysis
     return null;
   }
@@ -786,7 +785,7 @@ class SystemAuditor {
     }
     
     // Check if all manifest services exist in inventory
-    for (const [category, services] of Object.entries(this.manifest.services)) {
+    for (const [, services] of Object.entries(this.manifest.services)) {
       for (const [serviceName, serviceInfo] of Object.entries(services)) {
         const exists = this.inventory.classes.find(c => c.name === serviceName) ||
                      this.inventory.exports.find(e => e.name === serviceName);

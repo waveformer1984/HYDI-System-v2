@@ -453,7 +453,7 @@ class HeidiCoreLoop extends EventEmitter {
     return observation;
   }
   
-  async observeForTask(task, loopId) {
+  async observeForTask(task, _loopId) {
     const generalObservation = await this.observe();
     
     // Add task-specific observations
@@ -472,7 +472,7 @@ class HeidiCoreLoop extends EventEmitter {
   }
   
   // 2. EVALUATE
-  async evaluateTask(task, observation, loopId) {
+  async evaluateTask(task, observation, _loopId) {
     const evaluation = {
       confidence: this.calculateTaskConfidence(task, observation),
       risk: this.calculateTaskRisk(task, observation),
@@ -570,7 +570,7 @@ class HeidiCoreLoop extends EventEmitter {
   }
   
   // 5. MEASURE
-  async measureResults(task, action, loopId) {
+  async measureResults(task, action, _loopId) {
     const measurement = {
       success: action.success,
       latency: action.latency || 0,
@@ -618,7 +618,7 @@ class HeidiCoreLoop extends EventEmitter {
   }
   
   // 7. ADAPT
-  async adaptStrategy(task, reflection, loopId) {
+  async adaptStrategy(task, reflection, _loopId) {
     const adaptations = [];
     
     // Generate adaptations based on reflection
@@ -696,7 +696,7 @@ class HeidiCoreLoop extends EventEmitter {
     }
   }
   
-  async executeAnalysisAction(task, decision, loopId) {
+  async executeAnalysisAction(task, decision, _loopId) {
     // Use model stack for analysis
     const result = await this.modelStack.execute(task, {
       strategy: decision.strategy,
@@ -723,7 +723,7 @@ class HeidiCoreLoop extends EventEmitter {
     return { result: analysis };
   }
   
-  async executeGeneralAction(task, decision, loopId) {
+  async executeGeneralAction(task, decision, _loopId) {
     // Use model stack for general tasks
     return await this.modelStack.execute(task, {
       strategy: decision.strategy,
@@ -969,7 +969,7 @@ class HeidiCoreLoop extends EventEmitter {
     return revenue < 1 ? 0.8 : 0.4;
   }
 
-  assessUrgency(task, observation) {
+  assessUrgency(task, _observation) {
     return task?.priority === 'critical' ? 0.9 :
            task?.priority === 'high'     ? 0.7 : 0.4;
   }
@@ -1014,11 +1014,11 @@ class HeidiCoreLoop extends EventEmitter {
     return { confidence, actual, accuracy };
   }
 
-  detectPatterns(task, observation, measurement) {
+  detectPatterns(_task, _observation, _measurement) {
     return [];
   }
 
-  extractLessons(task, observation, decision, measurement) {
+  extractLessons(_task, _observation, _decision, _measurement) {
     return [];
   }
 

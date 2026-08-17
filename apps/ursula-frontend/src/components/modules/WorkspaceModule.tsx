@@ -128,7 +128,7 @@ export default function WorkspaceModule({ workspace }: WorkspaceModuleProps) {
               {activeModuleId}
             </h3>
             <p className="text-sm" style={{ color: 'var(--fg-muted)' }}>
-              Module content would be rendered here. Click "Open in Tab" to view the full module.
+              Module content would be rendered here. Click &quot;Open in Tab&quot; to view the full module.
             </p>
           </div>
 

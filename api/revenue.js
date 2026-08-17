@@ -39,9 +39,10 @@ class RevenueAPI {
 
   async createLead(req, res) {
     try {
+      const { action, ...leadFields } = req.body;
       const lead = {
         id: `lead_${Date.now()}`,
-        ...req.body,
+        ...leadFields,
         status: 'new',
         created_at: new Date().toISOString()
       };
