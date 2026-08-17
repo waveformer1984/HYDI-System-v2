@@ -11,17 +11,23 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE TRIGGER update_services_updated_at
-    BEFORE UPDATE ON public.keymaker_services
-    FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+DO $$ BEGIN
+    CREATE TRIGGER update_services_updated_at
+        BEFORE UPDATE ON public.keymaker_services
+        FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
-CREATE TRIGGER update_keys_updated_at
-    BEFORE UPDATE ON public.keymaker_keys
-    FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+DO $$ BEGIN
+    CREATE TRIGGER update_keys_updated_at
+        BEFORE UPDATE ON public.keymaker_keys
+        FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
-CREATE TRIGGER update_config_updated_at
-    BEFORE UPDATE ON public.keymaker_config
-    FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+DO $$ BEGIN
+    CREATE TRIGGER update_config_updated_at
+        BEFORE UPDATE ON public.keymaker_config
+        FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- ============================================================================
 -- KEYMAKER CORE FUNCTIONS

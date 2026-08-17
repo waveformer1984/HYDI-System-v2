@@ -50,9 +50,9 @@ CREATE TABLE IF NOT EXISTS procedural_workflows (
   indexed BOOLEAN DEFAULT TRUE
 );
 
-CREATE INDEX idx_procedural_confidence ON procedural_workflows(confidence DESC);
-CREATE INDEX idx_procedural_task_type ON procedural_workflows(task_type);
-CREATE INDEX idx_procedural_autonomous ON procedural_workflows(autonomous_ready) WHERE autonomous_ready = TRUE;
+CREATE INDEX IF NOT EXISTS idx_procedural_confidence ON procedural_workflows(confidence DESC);
+CREATE INDEX IF NOT EXISTS idx_procedural_task_type ON procedural_workflows(task_type);
+CREATE INDEX IF NOT EXISTS idx_procedural_autonomous ON procedural_workflows(autonomous_ready) WHERE autonomous_ready = TRUE;
 
 -- Knowledge Documents (docs, code, architecture)
 CREATE TABLE IF NOT EXISTS knowledge_documents (
@@ -80,9 +80,9 @@ CREATE TABLE IF NOT EXISTS knowledge_documents (
   retrieval_count INT DEFAULT 0
 );
 
-CREATE INDEX idx_knowledge_type ON knowledge_documents(content_type);
-CREATE INDEX idx_knowledge_tags ON knowledge_documents USING GIN (tags);
-CREATE INDEX idx_knowledge_embedding ON knowledge_documents USING ivfflat (embedding vector_cosine_ops);
+CREATE INDEX IF NOT EXISTS idx_knowledge_type ON knowledge_documents(content_type);
+CREATE INDEX IF NOT EXISTS idx_knowledge_tags ON knowledge_documents USING GIN (tags);
+CREATE INDEX IF NOT EXISTS idx_knowledge_embedding ON knowledge_documents USING ivfflat (embedding vector_cosine_ops);
 
 -- Semantic Search Index (chunked documents for better retrieval)
 CREATE TABLE IF NOT EXISTS semantic_chunks (
@@ -100,8 +100,8 @@ CREATE TABLE IF NOT EXISTS semantic_chunks (
   created_at TIMESTAMP DEFAULT NOW()
 );
 
-CREATE INDEX idx_chunks_document ON semantic_chunks(document_id);
-CREATE INDEX idx_chunks_embedding ON semantic_chunks USING ivfflat (embedding vector_cosine_ops);
+CREATE INDEX IF NOT EXISTS idx_chunks_document ON semantic_chunks(document_id);
+CREATE INDEX IF NOT EXISTS idx_chunks_embedding ON semantic_chunks USING ivfflat (embedding vector_cosine_ops);
 
 -- Short-term Interactions (conversations, task progress)
 CREATE TABLE IF NOT EXISTS interactions (
@@ -120,7 +120,7 @@ CREATE TABLE IF NOT EXISTS interactions (
   CHECK (expires_at > created_at)
 );
 
-CREATE INDEX idx_interactions_type ON interactions(type);
+CREATE INDEX IF NOT EXISTS idx_interactions_type ON interactions(type);
 -- NOTE: a partial index predicate cannot use NOW() (not IMMUTABLE). Index the column
 -- plainly; queries can still filter `WHERE expires_at > now()` and use this index.
 CREATE INDEX IF NOT EXISTS idx_interactions_expires ON interactions(expires_at);
@@ -157,21 +157,33 @@ ALTER TABLE knowledge_documents ENABLE ROW LEVEL SECURITY;
 ALTER TABLE interactions ENABLE ROW LEVEL SECURITY;
 
 -- Allow all authenticated users to read (system-wide, no privacy boundaries)
-CREATE POLICY "procedural_workflows_read" ON procedural_workflows
-  FOR SELECT USING (TRUE);
+DO $$ BEGIN
+  CREATE POLICY "procedural_workflows_read" ON procedural_workflows
+    FOR SELECT USING (TRUE);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
-CREATE POLICY "knowledge_documents_read" ON knowledge_documents
-  FOR SELECT USING (TRUE);
+DO $$ BEGIN
+  CREATE POLICY "knowledge_documents_read" ON knowledge_documents
+    FOR SELECT USING (TRUE);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
-CREATE POLICY "interactions_read" ON interactions
-  FOR SELECT USING (TRUE);
+DO $$ BEGIN
+  CREATE POLICY "interactions_read" ON interactions
+    FOR SELECT USING (TRUE);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- Allow service role to write (from memory-engine)
-CREATE POLICY "procedural_workflows_write" ON procedural_workflows
-  FOR ALL USING (auth.role() = 'service_role') WITH CHECK (auth.role() = 'service_role');
+DO $$ BEGIN
+  CREATE POLICY "procedural_workflows_write" ON procedural_workflows
+    FOR ALL USING (auth.role() = 'service_role') WITH CHECK (auth.role() = 'service_role');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
-CREATE POLICY "knowledge_documents_write" ON knowledge_documents
-  FOR ALL USING (auth.role() = 'service_role') WITH CHECK (auth.role() = 'service_role');
+DO $$ BEGIN
+  CREATE POLICY "knowledge_documents_write" ON knowledge_documents
+    FOR ALL USING (auth.role() = 'service_role') WITH CHECK (auth.role() = 'service_role');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
-CREATE POLICY "interactions_write" ON interactions
-  FOR ALL USING (auth.role() = 'service_role') WITH CHECK (auth.role() = 'service_role');
+DO $$ BEGIN
+  CREATE POLICY "interactions_write" ON interactions
+    FOR ALL USING (auth.role() = 'service_role') WITH CHECK (auth.role() = 'service_role');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;

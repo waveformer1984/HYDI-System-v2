@@ -11,7 +11,7 @@ CREATE EXTENSION IF NOT EXISTS "pg_cron";
 -- 1. SERVICE REGISTRY (The "Doors")
 -- ============================================================================
 
-CREATE TABLE public.keymaker_services (
+CREATE TABLE IF NOT EXISTS public.keymaker_services (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     service_id TEXT UNIQUE NOT NULL,
     name TEXT NOT NULL,
@@ -53,7 +53,7 @@ COMMENT ON TABLE public.keymaker_services IS 'Registry of all services/endpoints
 -- 2. ACCESS KEYS (Temporary tokens issued by Keymaker)
 -- ============================================================================
 
-CREATE TABLE public.keymaker_keys (
+CREATE TABLE IF NOT EXISTS public.keymaker_keys (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     
     -- Key identification
@@ -89,8 +89,8 @@ CREATE TABLE public.keymaker_keys (
     break_glass BOOLEAN DEFAULT false
 );
 
-CREATE INDEX idx_keymaker_keys_user ON public.keymaker_keys(user_id) WHERE revoked_at IS NULL;
-CREATE INDEX idx_keymaker_keys_expires ON public.keymaker_keys(expires_at) WHERE revoked_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_keymaker_keys_user ON public.keymaker_keys(user_id) WHERE revoked_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_keymaker_keys_expires ON public.keymaker_keys(expires_at) WHERE revoked_at IS NULL;
 
 COMMENT ON TABLE public.keymaker_keys IS 'Issued keys/tokens - what the Keymaker hands out';
 
@@ -98,7 +98,7 @@ COMMENT ON TABLE public.keymaker_keys IS 'Issued keys/tokens - what the Keymaker
 -- 3. ACCESS LOG (Audit trail - who accessed what door, and why)
 -- ============================================================================
 
-CREATE TABLE public.keymaker_access_log (
+CREATE TABLE IF NOT EXISTS public.keymaker_access_log (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     
     -- Request details
@@ -134,9 +134,9 @@ CREATE TABLE public.keymaker_access_log (
     request_metadata JSONB DEFAULT '{}'
 );
 
-CREATE INDEX idx_access_log_user ON public.keymaker_access_log(user_id, timestamp DESC);
-CREATE INDEX idx_access_log_service ON public.keymaker_access_log(service_id, timestamp DESC);
-CREATE INDEX idx_access_log_timestamp ON public.keymaker_access_log(timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_access_log_user ON public.keymaker_access_log(user_id, timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_access_log_service ON public.keymaker_access_log(service_id, timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_access_log_timestamp ON public.keymaker_access_log(timestamp DESC);
 
 COMMENT ON TABLE public.keymaker_access_log IS 'Complete audit trail - Neo can see everything';
 
@@ -144,7 +144,7 @@ COMMENT ON TABLE public.keymaker_access_log IS 'Complete audit trail - Neo can s
 -- 4. SYSTEM STATE (For dynamic rule evaluation)
 -- ============================================================================
 
-CREATE TABLE public.keymaker_system_state (
+CREATE TABLE IF NOT EXISTS public.keymaker_system_state (
     id INTEGER PRIMARY KEY DEFAULT 1 CHECK (id = 1),  -- Singleton table
     
     load_level TEXT DEFAULT 'normal',  -- normal, elevated, critical
@@ -176,7 +176,7 @@ COMMENT ON TABLE public.keymaker_system_state IS 'System state for dynamic rule 
 -- 5. EVENTS (The Oracle's input data)
 -- ============================================================================
 
-CREATE TABLE public.keymaker_events (
+CREATE TABLE IF NOT EXISTS public.keymaker_events (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     event_id TEXT UNIQUE NOT NULL,
     
@@ -208,8 +208,8 @@ CREATE TABLE public.keymaker_events (
     occurred_at TIMESTAMPTZ DEFAULT now()
 );
 
-CREATE INDEX idx_keymaker_events_type ON public.keymaker_events(type, created_at DESC);
-CREATE INDEX idx_keymaker_events_unprocessed ON public.keymaker_events(processed) WHERE NOT processed;
+CREATE INDEX IF NOT EXISTS idx_keymaker_events_type ON public.keymaker_events(type, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_keymaker_events_unprocessed ON public.keymaker_events(processed) WHERE NOT processed;
 
 COMMENT ON TABLE public.keymaker_events IS 'All system events - The Oracle learns from these';
 
@@ -217,7 +217,7 @@ COMMENT ON TABLE public.keymaker_events IS 'All system events - The Oracle learn
 -- 6. JOB QUEUE (Agent Smith's work queue)
 -- ============================================================================
 
-CREATE TABLE public.keymaker_jobs (
+CREATE TABLE IF NOT EXISTS public.keymaker_jobs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     job_id TEXT UNIQUE NOT NULL,
     
@@ -254,9 +254,9 @@ CREATE TABLE public.keymaker_jobs (
     idempotency_key TEXT
 );
 
-CREATE INDEX idx_keymaker_jobs_status ON public.keymaker_jobs(status, priority DESC, queued_at);
-CREATE INDEX idx_keymaker_jobs_pending ON public.keymaker_jobs(status, next_retry_at) WHERE status = 'pending';
-CREATE INDEX idx_keymaker_jobs_type ON public.keymaker_jobs(job_type, status);
+CREATE INDEX IF NOT EXISTS idx_keymaker_jobs_status ON public.keymaker_jobs(status, priority DESC, queued_at);
+CREATE INDEX IF NOT EXISTS idx_keymaker_jobs_pending ON public.keymaker_jobs(status, next_retry_at) WHERE status = 'pending';
+CREATE INDEX IF NOT EXISTS idx_keymaker_jobs_type ON public.keymaker_jobs(job_type, status);
 
 COMMENT ON TABLE public.keymaker_jobs IS 'Agent work queue - what Smith processes';
 
@@ -264,7 +264,7 @@ COMMENT ON TABLE public.keymaker_jobs IS 'Agent work queue - what Smith processe
 -- 7. CONFIG TABLE (Neo override switches)
 -- ============================================================================
 
-CREATE TABLE public.keymaker_config (
+CREATE TABLE IF NOT EXISTS public.keymaker_config (
     key TEXT PRIMARY KEY,
     value JSONB NOT NULL,
     description TEXT,
@@ -279,7 +279,8 @@ INSERT INTO public.keymaker_config (key, value, description) VALUES
     ('max_retry_attempts', '3', 'Default max retries for jobs'),
     ('rate_limit_multiplier', '1.0', 'Global rate limit multiplier'),
     ('oracle_enabled', 'true', 'Enable predictive routing'),
-    ('maintenance_message', '"System undergoing maintenance"', 'Message shown during maintenance');
+    ('maintenance_message', '"System undergoing maintenance"', 'Message shown during maintenance')
+ON CONFLICT (key) DO NOTHING;
 
 COMMENT ON TABLE public.keymaker_config IS 'System configuration - Neo can flip these switches';
 
@@ -295,82 +296,112 @@ ALTER TABLE public.keymaker_jobs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.keymaker_config ENABLE ROW LEVEL SECURITY;
 
 -- Services: Read-only for all authenticated, admin can modify
-CREATE POLICY "Services visible to authenticated"
-    ON public.keymaker_services FOR SELECT
-    TO authenticated USING (enabled = true);
+DO $$ BEGIN
+    CREATE POLICY "Services visible to authenticated"
+        ON public.keymaker_services FOR SELECT
+        TO authenticated USING (enabled = true);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
-CREATE POLICY "Services admin only"
-    ON public.keymaker_services FOR ALL
-    TO authenticated
-    USING (auth.jwt() ->> 'role' = 'admin')
-    WITH CHECK (auth.jwt() ->> 'role' = 'admin');
+DO $$ BEGIN
+    CREATE POLICY "Services admin only"
+        ON public.keymaker_services FOR ALL
+        TO authenticated
+        USING (auth.jwt() ->> 'role' = 'admin')
+        WITH CHECK (auth.jwt() ->> 'role' = 'admin');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- Keys: Users can see only their own keys
-CREATE POLICY "Users see own keys"
-    ON public.keymaker_keys FOR SELECT
-    TO authenticated USING (user_id = auth.uid());
+DO $$ BEGIN
+    CREATE POLICY "Users see own keys"
+        ON public.keymaker_keys FOR SELECT
+        TO authenticated USING (user_id = auth.uid());
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
-CREATE POLICY "Users create own keys"
-    ON public.keymaker_keys FOR INSERT
-    TO authenticated WITH CHECK (user_id = auth.uid());
+DO $$ BEGIN
+    CREATE POLICY "Users create own keys"
+        ON public.keymaker_keys FOR INSERT
+        TO authenticated WITH CHECK (user_id = auth.uid());
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
-CREATE POLICY "Admin sees all keys"
-    ON public.keymaker_keys FOR ALL
-    TO authenticated
-    USING (auth.jwt() ->> 'role' = 'admin');
+DO $$ BEGIN
+    CREATE POLICY "Admin sees all keys"
+        ON public.keymaker_keys FOR ALL
+        TO authenticated
+        USING (auth.jwt() ->> 'role' = 'admin');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- Access log: Users see their own, admin sees all
-CREATE POLICY "Users see own access log"
-    ON public.keymaker_access_log FOR SELECT
-    TO authenticated USING (user_id = auth.uid());
+DO $$ BEGIN
+    CREATE POLICY "Users see own access log"
+        ON public.keymaker_access_log FOR SELECT
+        TO authenticated USING (user_id = auth.uid());
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
-CREATE POLICY "Admin sees all access log"
-    ON public.keymaker_access_log FOR SELECT
-    TO authenticated USING (auth.jwt() ->> 'role' = 'admin');
+DO $$ BEGIN
+    CREATE POLICY "Admin sees all access log"
+        ON public.keymaker_access_log FOR SELECT
+        TO authenticated USING (auth.jwt() ->> 'role' = 'admin');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- Events: Read-only for authenticated, service role can insert
-CREATE POLICY "Events readable by authenticated"
-    ON public.keymaker_events FOR SELECT
-    TO authenticated USING (true);
+DO $$ BEGIN
+    CREATE POLICY "Events readable by authenticated"
+        ON public.keymaker_events FOR SELECT
+        TO authenticated USING (true);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
-CREATE POLICY "Events insertable by service"
-    ON public.keymaker_events FOR INSERT
-    TO authenticated WITH CHECK (true);
+DO $$ BEGIN
+    CREATE POLICY "Events insertable by service"
+        ON public.keymaker_events FOR INSERT
+        TO authenticated WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- Jobs: Users see their own jobs, workers see all pending
-CREATE POLICY "Users see own jobs"
-    ON public.keymaker_jobs FOR SELECT
-    TO authenticated USING (
-        (payload ->> 'user_id')::uuid = auth.uid() OR
-        auth.jwt() ->> 'role' IN ('admin', 'worker', 'agent')
-    );
+DO $$ BEGIN
+    CREATE POLICY "Users see own jobs"
+        ON public.keymaker_jobs FOR SELECT
+        TO authenticated USING (
+            (payload ->> 'user_id')::uuid = auth.uid() OR
+            auth.jwt() ->> 'role' IN ('admin', 'worker', 'agent')
+        );
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
-CREATE POLICY "Workers update jobs"
-    ON public.keymaker_jobs FOR UPDATE
-    TO authenticated
-    USING (auth.jwt() ->> 'role' IN ('worker', 'agent', 'admin'));
+DO $$ BEGIN
+    CREATE POLICY "Workers update jobs"
+        ON public.keymaker_jobs FOR UPDATE
+        TO authenticated
+        USING (auth.jwt() ->> 'role' IN ('worker', 'agent', 'admin'));
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
-CREATE POLICY "Users create jobs"
-    ON public.keymaker_jobs FOR INSERT
-    TO authenticated WITH CHECK (
-        (payload ->> 'user_id')::uuid = auth.uid() OR
-        auth.jwt() ->> 'role' IN ('admin', 'service')
-    );
+DO $$ BEGIN
+    CREATE POLICY "Users create jobs"
+        ON public.keymaker_jobs FOR INSERT
+        TO authenticated WITH CHECK (
+            (payload ->> 'user_id')::uuid = auth.uid() OR
+            auth.jwt() ->> 'role' IN ('admin', 'service')
+        );
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- Config: Admin only
-CREATE POLICY "Config admin only"
-    ON public.keymaker_config FOR ALL
-    TO authenticated
-    USING (auth.jwt() ->> 'role' = 'admin')
-    WITH CHECK (auth.jwt() ->> 'role' = 'admin');
+DO $$ BEGIN
+    CREATE POLICY "Config admin only"
+        ON public.keymaker_config FOR ALL
+        TO authenticated
+        USING (auth.jwt() ->> 'role' = 'admin')
+        WITH CHECK (auth.jwt() ->> 'role' = 'admin');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- System state: Admin only for write, readable by authenticated
-CREATE POLICY "System state readable"
-    ON public.keymaker_system_state FOR SELECT
-    TO authenticated USING (true);
+DO $$ BEGIN
+    CREATE POLICY "System state readable"
+        ON public.keymaker_system_state FOR SELECT
+        TO authenticated USING (true);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
-CREATE POLICY "System state admin write"
-    ON public.keymaker_system_state FOR ALL
-    TO authenticated
-    USING (auth.jwt() ->> 'role' = 'admin')
-    WITH CHECK (auth.jwt() ->> 'role' = 'admin');
+DO $$ BEGIN
+    CREATE POLICY "System state admin write"
+        ON public.keymaker_system_state FOR ALL
+        TO authenticated
+        USING (auth.jwt() ->> 'role' = 'admin')
+        WITH CHECK (auth.jwt() ->> 'role' = 'admin');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
