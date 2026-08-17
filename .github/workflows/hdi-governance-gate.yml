@@ -6,6 +6,11 @@ on:
       - 'supabase/migrations/**'
       - '.windsurf/workflows/hdi-governance-blueprint.md'
       - 'tests/hdi-adversarial.test.js'
+      - 'scripts/preflight.js'
+      - 'scripts/scan-live-secrets.js'
+      - 'scripts/lint-migration-idempotency.js'
+      - 'scripts/watchdog.js'
+      - 'ecosystem.config.js'
   push:
     branches:
       - clean-main
@@ -13,6 +18,11 @@ on:
       - 'supabase/migrations/**'
       - '.windsurf/workflows/hdi-governance-blueprint.md'
       - 'tests/hdi-adversarial.test.js'
+      - 'scripts/preflight.js'
+      - 'scripts/scan-live-secrets.js'
+      - 'scripts/lint-migration-idempotency.js'
+      - 'scripts/watchdog.js'
+      - 'ecosystem.config.js'
 
 jobs:
   governance-check:
@@ -88,6 +98,26 @@ jobs:
             echo "✅ Transformer test found: $TEST_FILE"
           done
       
+      # Gate 2b: Migration Idempotency Lint
+      - name: Migration Idempotency Lint
+        if: steps.schema-check.outputs.schema_changed == 'true'
+        run: |
+          # Lint only the changed migration files (existing ones are grandfathered)
+          MIGRATION_FILES="${{ steps.schema-check.outputs.files }}"
+          FILES_TO_LINT=""
+          for file in $MIGRATION_FILES; do
+            FILES_TO_LINT="$FILES_TO_LINT $file"
+          done
+          if [ -n "$FILES_TO_LINT" ]; then
+            node scripts/lint-migration-idempotency.js $FILES_TO_LINT
+          else
+            echo "No changed migration files to lint"
+          fi
+
+      # Gate 2c: Live Secret Scan (always runs on every PR)
+      - name: Live Secret Scan
+        run: node scripts/scan-live-secrets.js
+
       # Gate 3: Enum/Transition Contract Validation
       - name: Validate State Machine Contract
         if: steps.schema-check.outputs.schema_changed == 'true'
@@ -137,6 +167,33 @@ jobs:
           npm run test:adversarial
         env:
           NODE_ENV: test
+
+      # Gate 4b: Verify Supabase schema (table existence + RLS checks)
+      # against the Postgres service container, mirroring verify-supabase.sh
+      - name: Verify Supabase Schema
+        if: steps.schema-check.outputs.schema_changed == 'true'
+        run: |
+          # Check that all core tables exist and have RLS enabled
+          CORE_TABLES="memories actions sessions ledger clients payouts webhook_events leads quotes proposals checkout_sessions"
+          FAIL=0
+          for tbl in $CORE_TABLES; do
+            EXISTS=$(PGPASSWORD=postgres psql -tA -h localhost -U postgres -d hydi_test -c "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_schema='public' AND table_name='$tbl')" 2>/dev/null)
+            if [ "$EXISTS" != "t" ]; then
+              echo "❌ Missing table: $tbl"
+              FAIL=1
+            else
+              RLS=$(PGPASSWORD=postgres psql -tA -h localhost -U postgres -d hydi_test -c "SELECT relrowsecurity FROM pg_class WHERE relname='$tbl'" 2>/dev/null)
+              if [ "$RLS" != "t" ]; then
+                echo "❌ RLS not enabled on: $tbl"
+                FAIL=1
+              else
+                echo "✅ $tbl exists with RLS enabled"
+              fi
+            fi
+          done
+          if [ $FAIL -ne 0 ]; then
+            exit 1
+          fi
       
       # Gate 5: Replay Fidelity Check
       - name: Verify Replay Fidelity
