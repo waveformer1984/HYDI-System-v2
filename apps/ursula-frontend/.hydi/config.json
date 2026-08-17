@@ -2,7 +2,7 @@
   "project": {
     "name": "ursula",
     "type": "nodejs",
-    "path": "C:\\Users\\Owner\\HYDI_System\\ursula"
+    "path": "C:\\Users\\Owner\\HYDI-System-v2\\apps\\ursula-frontend"
   },
   "hydi": {
     "version": "1.0.0",

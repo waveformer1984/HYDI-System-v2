@@ -20,7 +20,7 @@ const JSON_MODE = process.argv.includes('--json');
 
 // ── Configuration: known system roots ──
 const ROOTS = {
-  canonical: 'C:\\Users\\Owner\\HYDI_System',
+  canonical: 'C:\\Users\\Owner\\HYDI-System-v2',
   backup:    'C:\\Users\\Owner\\HYDI_System_BACKUP',
   hydisystem:'C:\\Users\\Owner\\HYDIsystem',
   hypdi:     'C:\\Users\\Owner\\HYPDI_System',

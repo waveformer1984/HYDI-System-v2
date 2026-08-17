@@ -10,7 +10,7 @@
     "memory-engine": {
       "name": "HYDI Memory Engine",
       "cmd": "node memory-engine.js",
-      "cwd": "C:\\Users\\Owner\\HYDI_System",
+      "cwd": "C:\\Users\\Owner\\HYDI-System-v2",
       "port": 9998,
       "required": true,
       "dependencies": [],
@@ -25,7 +25,7 @@
     "hydi-core": {
       "name": "HYDI Core — Autonomous OS",
       "cmd": "node hydi-core.js",
-      "cwd": "C:\\Users\\Owner\\HYDI_System",
+      "cwd": "C:\\Users\\Owner\\HYDI-System-v2",
       "port": 9997,
       "required": true,
       "dependencies": ["memory-engine"],
@@ -70,7 +70,7 @@
     "next-app": {
       "name": "Next.js Frontend + API",
       "cmd": "npm run dev",
-      "cwd": "C:\\Users\\Owner\\HYDI_System",
+      "cwd": "C:\\Users\\Owner\\HYDI-System-v2",
       "port": 3000,
       "required": true,
       "dependencies": ["docker-stack"],
@@ -87,7 +87,7 @@
     "heidi-mobile": {
       "name": "Heidi Mobile Chat UI",
       "cmd": "node launch-heidi-mobile.js",
-      "cwd": "C:\\Users\\Owner\\HYDI_System",
+      "cwd": "C:\\Users\\Owner\\HYDI-System-v2",
       "port": 3006,
       "required": false,
       "dependencies": [],
