@@ -1,12 +1,14 @@
 @echo off
-title HEIDI Server
-cd /d "%~dp0"
-echo ============================================
-echo   Starting HEIDI server...
-echo   Desktop/Phone UI: http://localhost:3006
-echo ============================================
+REM [DEPRECATED] This launcher has been superseded by `npm run boot`.
+REM
+REM `npm run boot` starts the full HYDI system including the mobile chat
+REM server (port 3006) that this script used to launch standalone.
+REM
+REM To start the system:
+REM   npm run boot
+REM
+REM See BOOT_AGENT.md for full details.
 echo.
-node launch-heidi-mobile.js > "%~dp0heidi-server.log" 2>&1
+echo [DEPRECATED] Use: npm run boot
+echo See BOOT_AGENT.md for details.
 echo.
-echo HEIDI server stopped. Press any key to close.
-pause >nul
