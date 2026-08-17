@@ -11,8 +11,10 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY
 );
 
-const stripe = process.env.STRIPE_SECRET_KEY 
-  ? new Stripe(process.env.STRIPE_SECRET_KEY)
+const stripe = (process.env.STRIPE_SECRET_KEY)
+  ? (process.env.STRIPE_SECRET_KEY.startsWith('sk_live_') && process.env.ALLOW_LIVE_STRIPE !== 'true'
+      ? null // refuse to construct a live client in dev/test without explicit opt-in
+      : new Stripe(process.env.STRIPE_SECRET_KEY))
   : null;
 
 class RevenueAPI {
