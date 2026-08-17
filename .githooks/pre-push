@@ -33,5 +33,12 @@ if [ $? -ne 0 ]; then
   exit 1
 fi
 
+echo "[pre-push] Scanning for live secrets..."
+node scripts/scan-live-secrets.js
+if [ $? -ne 0 ]; then
+  echo "[pre-push] live secret detected -- push aborted (remove the secret before pushing)"
+  exit 1
+fi
+
 echo "[pre-push] All checks passed."
 exit 0

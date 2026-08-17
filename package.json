@@ -36,6 +36,8 @@
     "boot:plan": "node scripts/boot-agent.js --dry-run",
     "boot:prod": "node scripts/boot-agent.js --prod",
     "preflight": "node scripts/preflight.js",
+    "lint:migrations": "node scripts/lint-migration-idempotency.js",
+    "scan:secrets": "node scripts/scan-live-secrets.js",
     "build:capacitor-www": "node scripts/build-capacitor-www.js"
   },
   "keywords": [
