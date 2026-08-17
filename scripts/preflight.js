@@ -386,7 +386,17 @@ async function main() {
   console.log(`${tag} ${CLR.bold}HYDI Preflight${CLR.reset} — ${new Date().toISOString()}`);
   let blocking = false;
 
-  // 5. Stripe guardrail FIRST — never proceed if a live key is present.
+  // 0. Canonical identity gate — abort if we're in the wrong repository.
+  section('Canonical identity gate');
+  const { execSync } = require('child_process');
+  try {
+    execSync('node scripts/verify-canonical.js', { cwd: ROOT, stdio: 'inherit', timeout: 10000 });
+  } catch (_) {
+    fail('canonical identity gate failed — aborting preflight');
+    process.exit(1);
+  }
+
+  // 5. Stripe guardrail — never proceed if a live key is present.
   if (!(await checkStripeGuardrail())) blocking = true;
 
   // 1. Ports / zombies
