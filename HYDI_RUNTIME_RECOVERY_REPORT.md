@@ -84,12 +84,9 @@
 
 **Remaining action (requires user):**
 - Clear `STRIPE_SECRET_KEY` from any contaminated PowerShell sessions: open a fresh terminal.
-- Remove the GitHub PAT from `C:\HYDI_System`'s remote URL (requires user confirmation since it's a non-canonical repo):
-  ```
-  cd C:\HYDI_System
-  git remote set-url origin https://github.com/waveformer1984/ProtoForge_Dashboard.git
-  ```
-- Revoke the exposed PAT at https://github.com/settings/tokens if it is still active.
+
+**Resolved:**
+- `C:\HYDI_System` GitHub PAT: The PAT was confirmed already revoked (HTTP 401). The remote URL was scrubbed, then the entire `C:\HYDI_System` directory was deleted on 2026-08-17 per explicit user request. The token no longer exists on this machine.
 
 ### 7. Governance (G7)
 
@@ -123,7 +120,7 @@
 
 1. **Local model executable missing** — `./bin/main` ENOENT. The orchestrator tries to spawn local model binaries that don't exist. Falls back to API models. Non-fatal but affects response quality.
 2. **`failure_mitigation` adaptation type unknown** — The core loop applies an adaptation type that isn't registered. Non-fatal.
-3. **`C:\HYDI_System` PAT exposure** — GitHub PAT embedded in remote URL. Requires user action to remove.
+3. **~~`C:\HYDI_System` PAT exposure~~** — RESOLVED. PAT was already revoked (HTTP 401). Remote URL scrubbed, directory deleted 2026-08-17.
 4. **Process environment contamination** — Live Stripe key can persist in PowerShell process environment across sessions. A fresh terminal is needed after clearing.
 5. **14 merged branches** can be safely deleted to reduce branch noise.
 6. **10 `claude/*` remote branches** should be archived or deleted.

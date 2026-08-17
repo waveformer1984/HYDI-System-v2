@@ -62,18 +62,19 @@ backups only.
 | `C:\Dev\HYDI_System` | **OBSOLETE CLONE** (different remote: `HYDI_System.git`) | `HYDI_System.git` | Old Python-based system. Not the same project. |
 | `C:\Dev\HydiSuite` | **OBSOLETE CLONE** (different remote: `HydiSuite.git`) | `HydiSuite.git` | Separate project. |
 | `C:\Dev\protoforge` | **OBSOLETE CLONE** (different remote: `protoforge-workspace.git`) | `protoforge-workspace.git` | Separate project. |
-| `C:\HYDI_System` | **OBSOLETE CLONE** (different remote: `ProtoForge_Dashboard.git`) | `ProtoForge_Dashboard.git` | 4.5GB. **SECURITY: has a GitHub PAT embedded in remote URL.** |
+| `C:\HYDI_System` | **DELETED** | `ProtoForge_Dashboard.git` | Was 4.5GB. Had a GitHub PAT (ghp_) embedded in remote URL and git internals. PAT was already revoked (HTTP 401). Remote URL scrubbed, then entire directory deleted 2026-08-17 per explicit user request. |
 | `F:\ProtoForge` | **ARCHIVE** | none | Empty/minimal. |
 | `C:\ProtoForge_Ecosystem\Hydi_Core` | **ARCHIVE** | none | Empty/minimal. |
 | `C:\Users\Owner\protoforgesite` | **ACTIVE BUT NONCANONICAL** (different project) | `protoforgesite` | Separate ProtoForge website project. Not HYDI. |
 
-## Security Finding
+## Security Finding (Resolved)
 
-`C:\HYDI_System` has a GitHub Personal Access Token (PAT) embedded in
-its Git remote URL (`https://waveformer1984:ghp_...@github.com/...`).
-This is a credential exposure. The token should be removed from the
-remote URL and revoked if it is still active. This is documented in
-`HYDI_RUNTIME_RECOVERY_REPORT.md` and must be remediated.
+`C:\HYDI_System` previously had a GitHub Personal Access Token (PAT)
+embedded in its Git remote URL (`https://waveformer1984:ghp_...@github.com/...`).
+The PAT was confirmed already revoked (HTTP 401). The remote URL was
+scrubbed to remove the credential, then the entire `C:\HYDI_System`
+directory was deleted on 2026-08-17 per explicit user request. The
+token no longer exists anywhere on this machine.
 
 ## Verification Procedure for Future Agents
 
