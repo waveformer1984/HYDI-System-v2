@@ -29,6 +29,7 @@ const ALLOWLIST = new Set([
   'cleanup/focused-cleanup.ps1', // secret-scanner's own detection pattern list, not an embedded key
   'cleanup/quick-scan.ps1', // secret-scanner's own detection pattern list, not an embedded key
   'tests/unit/structured-logger.test.js', // fake secret-shaped fixtures used to test the logger's redaction feature, not real keys
+  'scripts/scan-live-secrets.js', // secret-scanner's own detection/filter patterns, not embedded keys
 ]);
 
 function listTrackedFiles() {

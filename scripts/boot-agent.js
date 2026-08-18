@@ -289,10 +289,31 @@ async function startModule(mod, settings) {
 }
 
 // ---------------------------------------------------------------------------
-// Preflight
+// External preflight — runs scripts/preflight.js which handles port zombies,
+// Docker, Supabase CLI version, env source verification, and the live Stripe
+// key guardrail.  Exits non-zero on blocking issues, which we check here.
+// ---------------------------------------------------------------------------
+function runExternalPreflight() {
+  return new Promise((resolve) => {
+    const child = spawn('node', [path.resolve(ROOT, 'scripts/preflight.js')], {
+      cwd: ROOT,
+      env: process.env,
+      shell: false,
+      stdio: 'inherit',
+    });
+    child.on('exit', (code) => resolve(code === 0));
+    child.on('error', (e) => {
+      log('preflight', c('31', `failed to run scripts/preflight.js: ${e.message}`));
+      resolve(false);
+    });
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Preflight (internal — node version + env presence)
 // ---------------------------------------------------------------------------
 function preflight(settings) {
-  banner('Preflight');
+  banner('Preflight (internal)');
   let blocking = false;
 
   const major = parseInt(process.versions.node.split('.')[0], 10);
@@ -312,8 +333,18 @@ function preflight(settings) {
   return !blocking;
 }
 
-async function portInUse(port) {
-  return httpOk(`http://127.0.0.1:${port}/`, 1200);
+// Check if a port is occupied AND healthy.  "Port in use" alone is NOT
+// enough — a zombie process holding the port without answering health
+// checks must not be treated as "already running".  This was the root cause
+// of the boot hangs in the prior session.
+async function portInUseAndHealthy(mod) {
+  if (!mod.port) return false;
+  // If the module has a health endpoint, require it to answer.
+  if (mod.health && mod.health.url) {
+    return httpOk(mod.health.url, 2000);
+  }
+  // No health endpoint — fall back to TCP connect.
+  return httpOk(`http://127.0.0.1:${mod.port}/`, 1200);
 }
 
 // ---------------------------------------------------------------------------
@@ -383,6 +414,16 @@ async function main() {
     process.exit(0);
   }
 
+  // External preflight: port zombies, Docker, Supabase CLI, env source,
+  // Stripe live-key guardrail.  This is the heavy lifter.
+  banner('Preflight (external)');
+  const extOk = await runExternalPreflight();
+  if (!extOk) {
+    console.error(c('31', '\nExternal preflight failed. Aborting.'));
+    process.exit(1);
+  }
+
+  // Internal preflight: node version + env presence (fast, redundant safety).
   if (!preflight(settings)) {
     console.error(c('31', '\nPreflight failed (missing required env or node version). Aborting.'));
     process.exit(1);
@@ -390,8 +431,8 @@ async function main() {
 
   banner('Booting');
   for (const mod of order) {
-    if (mod.type === 'process' && mod.port && await portInUse(mod.port)) {
-      log(mod.id, c('33', `port ${mod.port} already in use -- assuming already running, skipping spawn`));
+    if (mod.type === 'process' && mod.port && await portInUseAndHealthy(mod)) {
+      log(mod.id, c('33', `port ${mod.port} occupied by a healthy process -- assuming already running, skipping spawn`));
       running.push({ mod, child: null, type: 'process', external: true });
       continue;
     }
