@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { HealthCollector, HealthSnapshot, WorkerHealth } from '../types';
 
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const LocalWorkerStatus = require('../../../workers/lib/local-worker-status');
 
 export class WorkerHealthCollector implements HealthCollector {
