@@ -1,9 +1,18 @@
 @echo off
-REM Auto-start local AI + HEIDI server at login (minimized; logs to heidi-server.log)
-REM 1) Ensure Ollama's API server is running (harmless if it's already up)
-start "" /min cmd /c "ollama serve"
-REM 2) Give Ollama a few seconds to bind port 11434
-timeout /t 4 >nul
-REM 3) Launch HEIDI
-cd /d "C:\Users\Owner\HYDI-System-v2"
-start "HEIDI Server" /min cmd /c "node launch-heidi-mobile.js > heidi-server.log 2>&1"
+REM [DEPRECATED] This launcher has been superseded by `npm run boot`.
+REM
+REM `npm run boot` (scripts/boot-agent.js + boot.config.json) is now the single
+REM authoritative way to start the full HYDI system. It handles dependency
+REM ordering, health gating, and graceful shutdown.
+REM
+REM To start the system:
+REM   npm run boot
+REM
+REM To start Ollama separately (if not already running):
+REM   ollama serve
+REM
+REM See BOOT_AGENT.md for full details.
+echo.
+echo [DEPRECATED] Use: npm run boot
+echo See BOOT_AGENT.md for details.
+echo.

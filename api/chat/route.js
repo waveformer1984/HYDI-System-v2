@@ -10,6 +10,16 @@ import { getSystemStatus, isReachable } from '../../lib/termux/termuxClient.js';
 import { callAgent, isClaudeAvailable } from '../../lib/claude';
 import { rateLimit } from '../../lib/rate-limit.js';
 import { verifyServiceToken } from '../../lib/auth/verifyServiceToken.js';
+import {
+  getRezonateProjectStatus,
+  getRezonateTrackStatus,
+  getRezonateHealth,
+  getCapabilityState,
+  listVerifiedCapabilities,
+  listInoperableCapabilities,
+} from '../../lib/rezonate/rezonate-client.js';
+import { normalizeRezonateIntent } from '../../lib/rezonate/intent.js';
+import { HeidiController } from '../../pao-system/core/heidi.controller';
 
 // Lazy client: a missing SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY must surface
 // as a clean JSON error from the handler, not a cold-start crash (which returns
@@ -26,6 +36,16 @@ function getSupabase() {
 }
 const supabase = new Proxy({}, { get: (_, prop) => getSupabase()[prop] });
 
+// Local PAO / Heidi control plane. Lazy-initialized so the module can be loaded
+// in serverless contexts without spinning up the event bus until needed.
+let _heidiController = null;
+function getHeidiController() {
+  if (!_heidiController) {
+    _heidiController = new HeidiController();
+  }
+  return _heidiController;
+}
+
 // ── Service token guard ───────────────────────────────────────────────────────
 // Replaces bare x-user-id header trust. Callers must present an HMAC-SHA256
 // token in x-hydi-service-token signed with the shared HYDI_SERVICE_SECRET.
@@ -37,9 +57,9 @@ const supabase = new Proxy({}, { get: (_, prop) => getSupabase()[prop] });
 const systemHandlers = {
   ursula: handleUrsulaMessage,
   heidi: handleHeidiMessage,
-  cascade: handleCascadeMessage,
-  kilo: handleKiloMessage,
-  protoforge: handleProtoForgeMessage,
+  cascade: legacyHandleCascadeMessage,
+  kilo: legacyHandleKiloMessage,
+  protoforge: legacyHandleProtoForgeMessage,
   hyve: handleHyveMessage,
   infrastructure: handleInfrastructureMessage,
   rezonate: handleRezonateMessage
@@ -164,7 +184,8 @@ async function handleHeidiMessage(message, request) {
   };
 }
 
-async function handleCascadeMessage(message, request) {
+/** @deprecated Chat stub. Replace with call to protoforge/cascade/ or compatibility/cascade-legacy.js. */
+async function legacyHandleCascadeMessage(message, request) {
   const lowerMessage = message.toLowerCase();
   
   if (lowerMessage.includes('process')) {
@@ -186,7 +207,8 @@ async function handleCascadeMessage(message, request) {
   return `⚡ CASCADE: Event processing system. Try 'process <event>', 'status', or 'quarantine'.`;
 }
 
-async function handleKiloMessage(message, request) {
+/** @deprecated Chat stub. Replace with call to kilo/index.js. */
+async function legacyHandleKiloMessage(message, request) {
   const lowerMessage = message.toLowerCase();
   
   if (lowerMessage.includes('hypothesis') || lowerMessage.includes('repair')) {
@@ -204,7 +226,8 @@ async function handleKiloMessage(message, request) {
   return `🔧 KILO: Repair hypothesis engine. Ask about 'hypothesis', 'validate', or 'manifest'.`;
 }
 
-async function handleProtoForgeMessage(message, request) {
+/** @deprecated Chat stub. Replace with lib/protoforge/policy-engine.js. */
+async function legacyHandleProtoForgeMessage(message, request) {
   const lowerMessage = message.toLowerCase();
   
   if (lowerMessage.includes('status')) {
@@ -243,37 +266,95 @@ async function handleHyveMessage(message, request) {
 async function handleRezonateMessage(message, request) {
   const lowerMessage = message.toLowerCase();
 
+  // ── Explicit Rezonate intent normalization (PHASE 4) ──────────────────────────
+  const intent = normalizeRezonateIntent(message);
+  if (intent.ok) {
+    try {
+      const result = await getHeidiController().processUserEvent(intent.taskType, intent.parameters, 'owner');
+      if (result?.ok) {
+        switch (intent.taskType) {
+          case 'REZONATE_CREATE_PROJECT':
+            return `🎵 Rezonate: created project "${result.project.name}" (${result.project.id})`;
+          case 'REZONATE_LIST_PROJECTS':
+            return `🎵 Rezonate: ${result.count} project(s) — ${result.projects.map((p) => p.name).join(', ') || 'none'}`;
+          case 'REZONATE_GET_PROJECT':
+            return `🎵 Rezonate: project "${result.project.name}" (${result.project.id})`;
+          case 'REZONATE_CREATE_TRACK':
+            return `🎵 Rezonate: created track "${result.track.name}" (${result.track.id}) in project ${result.track.project_id}`;
+          case 'REZONATE_LIST_TRACKS':
+            return `🎵 Rezonate: ${result.count} track(s) in project — ${result.tracks.map((t) => t.name).join(', ') || 'none'}`;
+          default:
+            return `🎵 Rezonate: completed ${intent.taskType}`;
+        }
+      }
+      return `🎵 Rezonate: ${intent.taskType} failed — ${result?.reason || 'unknown'}`;
+    } catch (e) {
+      console.error('[chat/rezonate] operational error:', e);
+      return `🎵 Rezonate: ${intent.taskType} failed — ${e.message}`;
+    }
+  }
+
+  if (intent.reason === 'forbidden_intent') {
+    return `🎵 Rezonate: I cannot do that. ${intent.reason}`;
+  }
+
+  // ── Capability-aware responses (contract-first, never invent status)
+  if (lowerMessage.includes('capabilit') || lowerMessage.includes('feature') || lowerMessage.includes('can you ')) {
+    const idMatch = message.match(/(?:capability|feature)\s+([a-z_]+)/i);
+    if (idMatch) {
+      const { id, name, state, category } = getCapabilityState(idMatch[1]);
+      if (state === 'UNKNOWN') {
+        return `🎵 Rezonate: I don't recognize capability '${id}'. Ask for 'verified capabilities' or 'planned capabilities'.`;
+      }
+      const operational = ['FUNCTIONAL', 'VERIFIED', 'PRODUCTION'].includes(state);
+      return `🎵 Rezonate: ${name || id} (${category || 'uncategorized'}) is **${state}**. ${operational ? 'It can be used today.' : 'It is not yet operational.'}`;
+    }
+
+    if (lowerMessage.includes('verified') || lowerMessage.includes('working')) {
+      const list = listVerifiedCapabilities();
+      const names = list.map((c) => `${c.name} [${c.state}]`).join(', ');
+      return `🎵 Rezonate: working capabilities — ${names || 'none confirmed'}.`;
+    }
+
+    if (lowerMessage.includes('planned') || lowerMessage.includes('not working') || lowerMessage.includes('unavailable')) {
+      const list = listInoperableCapabilities();
+      const names = list.map((c) => `${c.name} [${c.state}]`).join(', ');
+      return `🎵 Rezonate: not yet operational — ${names || 'none'}.`;
+    }
+
+    return `🎵 Rezonate: ask about a specific capability (e.g. 'can you stem_separation?') or say 'verified capabilities' / 'planned capabilities'.`;
+  }
+
   if (lowerMessage.includes('project')) {
-    return `🎵 Rezonate: ${await getRezonateProjectStatus()}`;
+    const { count } = await getRezonateProjectStatus();
+    return `🎵 Rezonate: ${count} project(s) in workspace`;
   }
 
   if (lowerMessage.includes('track')) {
-    return `🎵 Rezonate: ${await getRezonateTrackStatus()}`;
+    const { count } = await getRezonateTrackStatus();
+    return `🎵 Rezonate: ${count} track(s) recorded`;
   }
 
   if (lowerMessage.includes('revenue') || lowerMessage.includes('sales')) {
-    const cutoff = new Date(Date.now() - 86_400_000).toISOString();
-    const { data } = await supabase
-      .from('ledger')
-      .select('net, created_at')
-      .eq('revenue_stream', 'rezonate')
-      .gte('created_at', cutoff);
-    const net = (data || []).reduce((sum, r) => sum + (r.net || 0), 0);
-    return `🎵 Rezonate: ${data?.length ?? 0} ledger entrie(s) in the last 24h — net $${net.toFixed(2)}`;
+    // Revenue is owned by the revenue engine, not the canonical Rezonate app.
+    // Direct Supabase ledger queries from the chat router are intentionally removed
+    // to prevent Heidi from querying tables outside the canonical API.
+    return `🎵 Rezonate: revenue is handled by the revenue engine. Try the 'revenue' system or ask about 'project', 'track', or 'status'.`;
   }
 
-  if (lowerMessage.includes('status')) {
-    const { data } = await supabase
-      .from('system_health')
-      .select('component, status')
-      .ilike('component', '%rezonate%');
-    if (data && data.length) {
-      return `🎵 Rezonate: ${data.map(r => `${r.component}: ${r.status}`).join(', ')}`;
+  if (lowerMessage.includes('status') || lowerMessage.includes('health')) {
+    try {
+      const diag = await getRezonateHealth();
+      const { engine, store } = diag;
+      const engineOk = engine?.available ? '✅' : '❓';
+      return `🎵 Rezonate: ${engineOk} engine ${engine?.available ? 'available' : 'unavailable'} | ${store?.projects ?? 0} projects, ${store?.tracks ?? 0} tracks, ${store?.assets ?? 0} assets, ${store?.processing_jobs ?? 0} jobs.`;
+    } catch (e) {
+      console.error('Rezonate health error:', e);
+      return `🎵 Rezonate: health check unavailable — ${e.message}`;
     }
-    return `🎵 Rezonate: music system online. Try 'revenue' or ask about the song composer.`;
   }
 
-  return `🎵 Rezonate: Audio production suite. Try 'project' or 'track', or ask about 'revenue' or 'status'.`;
+  return `🎵 Rezonate: Audio production suite. Try 'project', 'track', 'status', 'verified capabilities', or 'planned capabilities'.`;
 }
 
 async function handleInfrastructureMessage(message, request) {
@@ -457,20 +538,6 @@ async function handleInfrastructureMessage(message, request) {
     '  device                              — TermuxBridge battery/storage/uptime',
     '  health / resources / alerts / queue — HYDI system monitoring',
   ].join('\n')
-}
-
-async function getRezonateProjectStatus() {
-  const { count } = await supabase
-    .from('rezonate_projects')
-    .select('*', { count: 'exact', head: true });
-  return `${count ?? 0} project(s) in workspace`;
-}
-
-async function getRezonateTrackStatus() {
-  const { count } = await supabase
-    .from('rezonate_tracks')
-    .select('*', { count: 'exact', head: true });
-  return `${count ?? 0} track(s) recorded`;
 }
 
 // ── Helper utilities ──────────────────────────────────────────────────────────

@@ -1,0 +1,38 @@
+{
+  "name": "Resonate",
+  "version": "1.0.0",
+  "capabilities": [
+    "audio-generation",
+    "asset-management",
+    "ownership",
+    "rights-management",
+    "sample-library"
+  ],
+  "eventsProduced": [
+    "audio.asset.created",
+    "processing.completed",
+    "ownership.created",
+    "rights.registered",
+    "sample.library.loaded"
+  ],
+  "eventsConsumed": [
+    "ownership.updated",
+    "sample.library.loaded"
+  ],
+  "providers": [
+    "local-audio-provider"
+  ],
+  "dependencies": {
+    "services": [
+      "supabase"
+    ],
+    "packages": [
+      "@protoforge/event-contracts"
+    ]
+  },
+  "healthRequirements": [
+    "supabase",
+    "local-model-runtime"
+  ],
+  "deprecated": false
+}

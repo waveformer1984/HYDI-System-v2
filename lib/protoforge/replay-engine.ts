@@ -1,6 +1,10 @@
 /**
+ * @deprecated Legacy V2 Replay Engine. Use protoforge/cascade/src/replay.js.
+ * Replacement: protoforge/cascade/src/replay.js
+ * Migration: Run ReplayEngine.replay() against the RAW LEDGER. Removal target: Phase 5.
+ *
  * REPLAY ENGINE — pipeline layer [7], truth validator (see
- * HEIDI_V2_ARCHITECTURE.md)
+ * HEEDI_V2_ARCHITECTURE.md)
  *
  * Re-runs a stored raw-ledger event through CASCADE -> KILO -> ProtoForge
  * and diffs the result against a previously stored execution trace. Same

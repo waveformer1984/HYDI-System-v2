@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="Switchboard Moderation Console" />
+  <title>Moderation Console — Switchboard</title>
+  <link rel="stylesheet" href="styles.css" />
+  <script src="ui.js"></script>
+</head>
+<body>
+  <header>
+    <div class="inner">
+      <h1>Moderation</h1>
+      <a class="btn" href="index.html" style="background:#6b7280">Back</a>
+    </div>
+  </header>
+
+  <main role="main">
+    <div class="card">
+      <div class="actions">
+        <button id="refresh">Refresh Queue</button>
+        <label for="statusFilter">Filter:</label>
+        <select id="statusFilter" aria-label="Filter queue by status">
+          <option value="">All</option>
+          <option value="flagged">flagged</option>
+          <option value="quarantined">quarantined</option>
+          <option value="reviewing">reviewing</option>
+          <option value="released">released</option>
+          <option value="removed">removed</option>
+          <option value="restricted">restricted</option>
+        </select>
+      </div>
+      <div id="queueWrap" role="region" aria-live="polite" aria-busy="false"></div>
+    </div>
+
+    <div class="card" id="casePanel" style="display:none;" aria-live="polite">
+      <h2>Case Details</h2>
+      <div id="caseDetails"></div>
+      <h3>Notes</h3>
+      <ul id="notesList" class="stack"></ul>
+      <div class="field">
+        <label for="noteAuthor">Author</label>
+        <input type="text" id="noteAuthor" placeholder="Author" />
+      </div>
+      <div class="field">
+        <label for="noteText">Note</label>
+        <textarea id="noteText" placeholder="Add a note..."></textarea>
+      </div>
+      <div class="actions">
+        <button id="addNote" class="secondary">Add Note</button>
+        <button id="quarantineBtn" class="warning">Quarantine</button>
+        <button id="releaseBtn" class="success">Release</button>
+        <button id="removeBtn" class="danger">Remove</button>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    const API = window.SWITCHBOARD_API || 'http://localhost:3001';
+    const queueWrap = document.getElementById('queueWrap');
+    const casePanel = document.getElementById('casePanel');
+    let selectedCase = null;
+
+    async function fetchQueue() {
+      queueWrap.setAttribute('aria-busy', 'true');
+      SB.loading(queueWrap, 'Loading moderation queue...');
+      const status = document.getElementById('statusFilter').value;
+      try {
+        const res = await fetch(`${API}/moderation/queue${status ? '?status=' + status : ''}`);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || 'Failed to load queue');
+        renderQueue(data);
+      } catch (e) {
+        SB.error(queueWrap, e.message, 'loadQueue');
+      } finally {
+        queueWrap.setAttribute('aria-busy', 'false');
+      }
+    }
+
+    window.loadQueue = fetchQueue;
+
+    function renderQueue(queue) {
+      if (!queue.length) {
+        SB.empty(queueWrap, 'No moderation cases found.');
+        return;
+      }
+      queueWrap.innerHTML = `
+        <div class="table-wrap" style="overflow-x:auto;">
+          <table>
+            <thead><tr><th>ID</th><th>Type</th><th>Target</th><th>Reason</th><th>Status</th><th>Created</th><th>Action</th></tr></thead>
+            <tbody>
+              ${queue.map(c => `
+                <tr>
+                  <td>${c.id}</td>
+                  <td>${c.targetType}</td>
+                  <td>${c.targetId}</td>
+                  <td>${c.reason}</td>
+                  <td class="${c.status}">${c.status}</td>
+                  <td>${SB.formatDate(c.createdAt)}</td>
+                  <td><button onclick="openCase('${c.id}')">Open</button></td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
+
+    window.openCase = async (id) => {
+      try {
+        const res = await fetch(`${API}/moderation/${id}`);
+        const c = await res.json();
+        if (!res.ok) throw new Error(c.message);
+        selectedCase = c;
+        casePanel.style.display = 'block';
+        document.getElementById('caseDetails').innerHTML = `
+          <p><strong>ID:</strong> ${c.id}</p>
+          <p><strong>Target:</strong> ${c.targetType} / ${c.targetId}</p>
+          <p><strong>Reason:</strong> ${c.reason}</p>
+          <p><strong>Status:</strong> ${SB.statusBadge(c.status)}</p>
+          <p><strong>Reviewed By:</strong> ${c.reviewedBy || '—'}</p>
+        `;
+        document.getElementById('notesList').innerHTML = c.notes.length
+          ? c.notes.map(n => `<li class="list-item"><strong>${n.author}</strong> at ${SB.formatDate(n.at)}: ${n.text}</li>`).join('')
+          : '<li class="list-item unavailable">No notes yet.</li>';
+      } catch (e) {
+        SB.error(document.getElementById('caseDetails'), e.message);
+      }
+    };
+
+    async function action(act) {
+      if (!selectedCase) return alert('Select a case first');
+      const body = { reviewedBy: document.getElementById('noteAuthor').value || 'moderator' };
+      if (act === 'notes') body.note = document.getElementById('noteText').value;
+      try {
+        const res = await fetch(`${API}/moderation/${selectedCase.id}/${act}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message);
+        SB.success(document.getElementById('caseDetails'), 'Action saved.');
+        await fetchQueue();
+        await openCase(selectedCase.id);
+      } catch (e) { alert(e.message); }
+    }
+
+    document.getElementById('refresh').addEventListener('click', fetchQueue);
+    document.getElementById('statusFilter').addEventListener('change', fetchQueue);
+    document.getElementById('quarantineBtn').addEventListener('click', () => action('quarantine'));
+    document.getElementById('releaseBtn').addEventListener('click', () => action('release'));
+    document.getElementById('removeBtn').addEventListener('click', () => action('remove'));
+    document.getElementById('addNote').addEventListener('click', () => action('notes'));
+
+    fetchQueue();
+  </script>
+</body>
+</html>
