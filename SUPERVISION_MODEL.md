@@ -253,8 +253,26 @@ In DELEGATE_MODE, there is no overlap: boot-agent delegates to RecoveryEngine (d
 
 The implementation adds the `HYDI_DELEGATE_RECOVERY` flag to boot-agent.js and watchdog.js. The flag defaults to OFF (current behavior). It must be explicitly set to `true` to enable RecoveryEngine delegation.
 
-This means:
-- **Today (no flag):** Zero overlap. Safe. RecoveryEngine is manual-only.
-- **Future (flag set + RecoveryEngine running):** One decision-maker per failure type. No overlap.
+### Decision: CONTINUOUS SELF-RECOVERY ENABLED
 
-The flag is NOT set by default. Turning it on is a decision for the user after reviewing this document.
+**Date:** 2026-08-18  
+**Decision:** `HYDI_DELEGATE_RECOVERY=true` — continuous governed self-recovery is enabled.
+
+The flag is set in `ecosystem.config.js` for both `hydi-boot` and `hydi-watchdog` PM2 processes. The watchdog is configured as a second PM2 process (`hydi-watchdog`) that runs continuously and polls health endpoints every 2 minutes.
+
+This means:
+- **boot-agent** delegates to RecoveryEngine on required child exit (does NOT shut down)
+- **watchdog** calls RecoveryEngine on unhealthy endpoints (every 2 minutes)
+- **RecoveryEngine** restarts within policy bounds (R1, max 2 attempts, 30s cooldown, circuit breaker at 3 failures)
+- **PM2** watches boot-agent and watchdog (restarts them if they crash)
+
+To disable continuous self-recovery, set `HYDI_DELEGATE_RECOVERY=false` (or remove it) in `ecosystem.config.js` and restart PM2. The system reverts to the DEFAULT mode: boot-agent does full shutdown on required child exit, watchdog is observe-only.
+
+### Safety Guarantees (verified by supervision-model.test.js)
+
+1. **One decision-maker per failure type** — no two actors can act on the same failure simultaneously
+2. **RecoveryEngine never self-schedules** — it is always called by watchdog or manual CLI
+3. **RecoveryLock prevents concurrent recovery** — two recovery requests for the same component result in one execution
+4. **Circuit breaker stops infinite loops** — 3 consecutive failures → ESCALATION_REQUIRED
+5. **Policy governs every action** — R5 prohibited, R3/R4 human-required, R1 autonomous within bounds
+6. **Confidence ≠ authorization** — high confidence does not authorize prohibited actions
