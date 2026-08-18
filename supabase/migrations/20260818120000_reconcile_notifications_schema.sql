@@ -51,10 +51,16 @@ DROP POLICY IF EXISTS "notifications_select_service_role" ON public.notification
 DROP POLICY IF EXISTS "notifications_insert_service_role" ON public.notifications;
 DROP POLICY IF EXISTS "notifications_update_service_role" ON public.notifications;
 DROP POLICY IF EXISTS "notifications_service_all" ON public.notifications;
-CREATE POLICY "notifications_service_all" ON public.notifications
-  FOR ALL TO service_role
-  USING (true)
-  WITH CHECK (true);
+DO $$
+BEGIN
+  CREATE POLICY "notifications_service_all" ON public.notifications
+    FOR ALL TO service_role
+    USING (true)
+    WITH CHECK (true);
+EXCEPTION WHEN DUPLICATE_OBJECT THEN
+  -- Policy already exists (idempotent)
+  NULL;
+END $$;
 
 -- Ensure RLS is enabled (idempotent)
 ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;

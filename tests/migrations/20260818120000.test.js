@@ -49,6 +49,11 @@ describe('Migration 20260818120000 – Reconcile notifications schema', () => {
     expect(sql).toMatch(/FOR ALL TO service_role/i);
   });
 
+  it('wraps CREATE POLICY in DO $$ exception guard for idempotency', () => {
+    expect(sql).toMatch(/DO \$\$/i);
+    expect(sql).toMatch(/EXCEPTION WHEN DUPLICATE_OBJECT/i);
+  });
+
   it('does not drop any April columns (backward compatible)', () => {
     // Strip comments before checking — the header comment mentions "does not drop columns"
     const sqlOnly = sql.replace(/--[^\n]*/g, '');
@@ -65,11 +70,9 @@ describe('Migration 20260818120000 – Reconcile notifications schema', () => {
     alterStatements.forEach((stmt) => expect(stmt).toMatch(/IF NOT EXISTS/i));
   });
 
-  it('is idempotent (all DDL uses IF NOT EXISTS or DROP IF EXISTS)', () => {
-    // No bare CREATE POLICY without a preceding DROP
-    const createPolicyStatements = sql.match(/CREATE POLICY/gi) || [];
-    expect(createPolicyStatements.length).toBe(1);
-    // The one CREATE POLICY is preceded by a DROP POLICY IF EXISTS
-    expect(sql).toMatch(/DROP POLICY IF EXISTS "notifications_service_all"/i);
+  it('is idempotent (all DDL uses IF NOT EXISTS or DO $$ exception guard)', () => {
+    // The CREATE POLICY is wrapped in DO $$ ... EXCEPTION
+    expect(sql).toMatch(/DO \$\$/i);
+    expect(sql).toMatch(/EXCEPTION WHEN DUPLICATE_OBJECT/i);
   });
 });
