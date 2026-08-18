@@ -12,33 +12,64 @@
 #
 # Skip once (e.g. a deliberate WIP push) with: git push --no-verify
 #
-# Delete-only pushes (branch deletions) push zero code -- there is no diff
-# to typecheck, lint, or test. Git passes lines on stdin in the format:
+# Two classes of push carry no new commit content and are skipped:
+#
+# 1. Delete-only pushes (branch deletions): <local-sha> is all zeros.
+#    There is no diff to typecheck, lint, or test.
+#
+# 2. Ref-copy pushes (e.g. archiving a branch by copying its SHA to a new
+#    ref name): the SHA being pushed is already the tip of an existing
+#    remote tracking ref. No new commit content reaches the remote.
+#    Furthermore, the hook's test suite runs against the local checkout --
+#    not against the ref being pushed -- so for a ref-copy push the suite
+#    tests unrelated code by construction, not by coincidence.
+#
+# In both cases we still run the secret scan, which is cheap and relevant.
+#
+# Git passes lines on stdin in the format:
 #   "<local-ref> <local-sha> <remote-ref> <remote-sha>"
-# For a deletion, <local-ref> is "(delete)" and <local-sha> is all zeros
-# (0000000...) -- we're not pushing any new content, just removing a remote
-# ref. In that case we skip typecheck/lint/tests but still run the secret
-# scan, which is cheap and harmless to keep.
+# For a deletion, <local-ref> is "(delete)" and <local-sha> is all zeros.
 
-# Read stdin: each line is "<local-ref> <local-sha> <remote-ref> <remote-sha>"
-# A deletion has <local-sha> as all zeros (no new content being pushed).
-IS_DELETE_ONLY=true
+ZERO="0000000000000000000000000000000000000000"
+
+SKIP_TESTS=true
+SAW_DELETE=false
+SAW_REFCOPY=false
+
 while read -r local_ref local_sha remote_ref remote_sha; do
-  # If any ref being pushed has a non-zero local SHA, it's pushing content
-  if [ "$local_sha" != "0000000000000000000000000000000000000000" ]; then
-    IS_DELETE_ONLY=false
+  if [ "$local_sha" = "$ZERO" ]; then
+    # Deletion -- no new content
+    SAW_DELETE=true
+  else
+    # Non-deletion: check if the SHA is already the tip of an existing
+    # remote tracking ref. If so, this is a ref-copy push (e.g. archiving
+    # a branch by copying its SHA to a new ref name) -- no new commit
+    # content reaches the remote. Using --points-at avoids grep/CRLF
+    # issues on Windows.
+    if [ -n "$(git for-each-ref --points-at="$local_sha" --format='x' refs/remotes/origin/)" ]; then
+      SAW_REFCOPY=true
+    else
+      SKIP_TESTS=false
+    fi
   fi
 done
 
-if [ "$IS_DELETE_ONLY" = "true" ]; then
-  echo "[pre-push] Delete-only push detected -- skipping typecheck/lint/tests."
+if [ "$SKIP_TESTS" = "true" ]; then
+  if [ "$SAW_DELETE" = "true" ] && [ "$SAW_REFCOPY" = "false" ]; then
+    REASON="delete-only"
+  elif [ "$SAW_DELETE" = "false" ] && [ "$SAW_REFCOPY" = "true" ]; then
+    REASON="ref-copy (SHA already exists on remote)"
+  else
+    REASON="delete-only + ref-copy (no new content)"
+  fi
+  echo "[pre-push] $REASON push detected -- skipping typecheck/lint/tests."
   echo "[pre-push] Scanning for live secrets..."
   node scripts/scan-live-secrets.js
   if [ $? -ne 0 ]; then
     echo "[pre-push] live secret detected -- push aborted (remove the secret before pushing)"
     exit 1
   fi
-  echo "[pre-push] All checks passed (delete-only)."
+  echo "[pre-push] All checks passed ($REASON)."
   exit 0
 fi
 
