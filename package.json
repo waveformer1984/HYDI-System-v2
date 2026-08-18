@@ -57,7 +57,7 @@
     "@anthropic-ai/sdk": "^0.102.0",
     "@supabase/ssr": "^0.12.3",
     "@supabase/supabase-js": "^2.108.2",
-    "@types/node": "^20.19.41",
+    "@types/node": "^20.19.43",
     "@types/react": "^18.0.0",
     "@types/react-dom": "^18.0.0",
     "axios": "^1.18.1",
