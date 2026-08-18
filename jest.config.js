@@ -36,11 +36,17 @@ module.exports = {
   },
 
   // forceExit: true — EventBus (pao-system/core/event.bus.ts) creates a
-  // setInterval(100ms) that Jest's handle detection waits on indefinitely.
-  // All 260 suites pass; this just lets Jest exit after them instead of
-  // hanging. The integration test command already uses --forceExit for this.
+  // setInterval(100ms) that prevents Jest from exiting cleanly. forceExit
+  // lets Jest terminate after all tests pass without hanging on that timer.
+  // The integration test command already uses --forceExit for the same reason.
+  //
+  // detectOpenHandles: true — kept ON so genuine handle leaks in new code
+  // still get flagged. The EventBus setInterval is a known, pre-existing
+  // offender that produces warnings but does not block exit because forceExit
+  // handles it. If a future change introduces a new leak, this flag ensures
+  // it shows up in the output rather than being silently swallowed.
   forceExit: true,
-  detectOpenHandles: false,
+  detectOpenHandles: true,
   testTimeout: 15000,
   clearMocks: true,
   verbose: true,
