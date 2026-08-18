@@ -86,3 +86,6 @@ hydi.db
 
 # Cloud-bootstrap state describes THIS machine's view of cloud infra — never commit
 .cloud-bootstrap-state.json
+
+# HYDI operational runtime data — durable event logs and decision records (local-only)
+.hydi-operational/
