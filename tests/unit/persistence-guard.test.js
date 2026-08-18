@@ -141,7 +141,13 @@ describe('Heidi → Rezonate canonical JSON persistence', () => {
   test('failed persistence cannot produce a successful Heidi response', async () => {
     const { HeidiController } = require('../../pao-system/core/heidi.controller');
 
-    process.env.REZONATE_DATA_DIR = '/nonexistent-rezonate-test-' + Date.now();
+    // Use a path where a FILE exists where a directory is expected.
+    // The rezonate client auto-creates missing directories with mkdirSync(recursive: true),
+    // so a merely nonexistent path won't induce failure. But mkdirSync will fail if
+    // a path component is a file, not a directory.
+    const tmpFile = path.join(os.tmpdir(), `hydi-persistence-blocker-${Date.now()}.txt`);
+    fs.writeFileSync(tmpFile, 'blocker');
+    process.env.REZONATE_DATA_DIR = path.join(tmpFile, 'subdir');
     process.env.REZONATE_DB_FILE = 'heidi-bad.json';
     process.env.REZONATE_EVENT_LOG_FILE = 'heidi-bad-events.json';
 
@@ -164,6 +170,7 @@ describe('Heidi → Rezonate canonical JSON persistence', () => {
     delete process.env.REZONATE_DATA_DIR;
     delete process.env.REZONATE_DB_FILE;
     delete process.env.REZONATE_EVENT_LOG_FILE;
+    try { fs.unlinkSync(tmpFile); } catch (_) {}
   });
 
   test('CREATE_TRACK persists and is recoverable by a fresh client', async () => {

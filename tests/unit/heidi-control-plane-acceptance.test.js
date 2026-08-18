@@ -197,7 +197,13 @@ describe('Heidi → Rezonate control plane', () => {
   describe('failure safety', () => {
     test('repository failure cannot produce success', async () => {
       const { HeidiController } = require('../../pao-system/core/heidi.controller');
-      process.env.REZONATE_DATA_DIR = '/nonexistent-rezonate-test-' + Date.now();
+      // Use a path where a FILE exists where a directory is expected.
+      // The rezonate client auto-creates missing dirs with mkdirSync(recursive: true),
+      // so a merely nonexistent path won't fail. But mkdirSync fails if a path
+      // component is a file, not a directory.
+      const tmpBlocker = path.join(os.tmpdir(), `hydi-cp-blocker-${Date.now()}.txt`);
+      fs.writeFileSync(tmpBlocker, 'blocker');
+      process.env.REZONATE_DATA_DIR = path.join(tmpBlocker, 'subdir');
       process.env.REZONATE_DB_FILE = 'bad.json';
       process.env.REZONATE_EVENT_LOG_FILE = 'bad-events.json';
       const controller = new HeidiController();
@@ -211,6 +217,7 @@ describe('Heidi → Rezonate control plane', () => {
       delete process.env.REZONATE_DATA_DIR;
       delete process.env.REZONATE_DB_FILE;
       delete process.env.REZONATE_EVENT_LOG_FILE;
+      try { fs.unlinkSync(tmpBlocker); } catch (_) {}
     });
 
     test('malformed payload is rejected before repository', async () => {
@@ -330,8 +337,15 @@ describe('Heidi → Rezonate control plane', () => {
     });
 
     test('local persistence failure is reported accurately', async () => {
-      const health = await getRezonateControlHealth({ dataDir: '/nonexistent-root-' + Date.now() });
+      // Use a path where a FILE exists where a directory is expected.
+      // The rezonate client auto-creates missing dirs, so a nonexistent path
+      // won't actually fail. But mkdirSync fails if a path component is a file.
+      const tmpBlocker = path.join(os.tmpdir(), `hydi-health-blocker-${Date.now()}.txt`);
+      fs.writeFileSync(tmpBlocker, 'blocker');
+      const badDataDir = path.join(tmpBlocker, 'subdir');
+      const health = await getRezonateControlHealth({ dataDir: badDataDir });
       expect(health.local_persistence.available || health.rezonate_client.available).toBe(false);
+      try { fs.unlinkSync(tmpBlocker); } catch (_) {}
     });
   });
 

@@ -39,6 +39,8 @@
     "verify:canonical": "node scripts/verify-canonical.js",
     "health": "node scripts/health-check.js",
     "lint:migrations": "node scripts/lint-migration-idempotency.js",
+    "lint:migrations:ratchet": "node scripts/lint-migration-idempotency.js --ratchet",
+    "lint:migrations:baseline": "node scripts/lint-migration-idempotency.js --generate-baseline",
     "scan:secrets": "node scripts/scan-live-secrets.js",
     "build:capacitor-www": "node scripts/build-capacitor-www.js"
   },

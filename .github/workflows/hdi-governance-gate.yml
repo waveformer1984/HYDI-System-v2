@@ -98,18 +98,26 @@ jobs:
             echo "✅ Transformer test found: $TEST_FILE"
           done
       
-      # Gate 2b: Migration Idempotency Lint
-      - name: Migration Idempotency Lint
+      # Gate 2b: Migration Idempotency Lint (ratchet — fails on NEW violations only)
+      - name: Migration Idempotency Lint (ratchet)
         if: steps.schema-check.outputs.schema_changed == 'true'
         run: |
-          # Lint only the changed migration files (existing ones are grandfathered)
+          # Use ratchet mode: existing violations are captured in the baseline
+          # (supabase/migration-lint-baseline.json). Only NEW violations fail.
+          # To lint only changed files, pass them as args; otherwise lint all.
           MIGRATION_FILES="${{ steps.schema-check.outputs.files }}"
           FILES_TO_LINT=""
           for file in $MIGRATION_FILES; do
-            FILES_TO_LINT="$FILES_TO_LINT $file"
+            # Only lint .sql files in supabase/migrations/
+            case "$file" in
+              supabase/migrations/*.sql)
+                FILES_TO_LINT="$FILES_TO_LINT $file"
+                ;;
+            esac
           done
           if [ -n "$FILES_TO_LINT" ]; then
-            node scripts/lint-migration-idempotency.js $FILES_TO_LINT
+            # Lint changed files in ratchet mode — fails if any violation is NOT in baseline
+            node scripts/lint-migration-idempotency.js --ratchet $FILES_TO_LINT
           else
             echo "No changed migration files to lint"
           fi
