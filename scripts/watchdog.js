@@ -60,6 +60,12 @@ const INTERVAL_MS = parseInt(process.env.WATCHDOG_INTERVAL_MS || '120000', 10);
 const WEBHOOK_URL = process.env.WATCHDOG_WEBHOOK_URL || '';
 const ONCE = process.argv.includes('--once');
 
+// HYDI_DELEGATE_RECOVERY: when true, watchdog calls RecoveryEngine to evaluate
+// and potentially restart unhealthy components (the "alive but sick" case that
+// boot-agent can't see). When false (default), watchdog is observe-only
+// (log + webhook). See SUPERVISION_MODEL.md for the full supervision model.
+const DELEGATE_RECOVERY = process.env.HYDI_DELEGATE_RECOVERY === 'true';
+
 // ---------------------------------------------------------------------------
 // Logging
 // ---------------------------------------------------------------------------
@@ -146,6 +152,28 @@ async function runCheck() {
     const okNames = results.filter((r) => r.ok).map((r) => r.name).join(',');
     log(`ALERT ${failures.length}/${results.length} endpoints down (ok: ${okNames || 'none'})`);
     sendWebhook(failures);
+
+    // If DELEGATE_RECOVERY is enabled, call RecoveryEngine for each failure.
+    // RecoveryEngine will evaluate policy, check risk, authorize, and restart
+    // if allowed. This is the "alive but sick" path — boot-agent can't see
+    // this because it only watches process exit events.
+    if (DELEGATE_RECOVERY) {
+      for (const f of failures) {
+        log(`DELEGATE  calling RecoveryEngine for ${f.name}`);
+        try {
+          const { execSync } = require('child_process');
+          const root = path.resolve(__dirname, '..');
+          execSync(`node scripts/hydi-recover.js --governed --component=${f.name}`, {
+            cwd: root,
+            timeout: 60000,
+            stdio: 'pipe',
+          });
+          log(`DELEGATE  RecoveryEngine completed for ${f.name}`);
+        } catch (e) {
+          log(`DELEGATE  RecoveryEngine failed for ${f.name}: ${e.message}`);
+        }
+      }
+    }
   }
   return allOk;
 }
