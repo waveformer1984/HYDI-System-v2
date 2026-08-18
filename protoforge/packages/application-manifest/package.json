@@ -1,0 +1,12 @@
+{
+  "name": "@protoforge/application-manifest",
+  "version": "0.1.0",
+  "description": "ProtoForge application manifest schema, validation, and lifecycle events",
+  "main": "src/index.js",
+  "type": "commonjs",
+  "scripts": {
+    "test": "node --test tests/**/*.test.js"
+  },
+  "keywords": ["protoforge", "manifest", "applications"],
+  "license": "MIT"
+}

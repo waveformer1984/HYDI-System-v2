@@ -1,0 +1,12 @@
+{
+  "name": "@protoforge/capability-registry",
+  "version": "0.1.0",
+  "description": "Canonical HYDI capability registry",
+  "main": "src/index.js",
+  "type": "commonjs",
+  "scripts": {
+    "test": "node --test tests/**/*.test.js"
+  },
+  "keywords": ["protoforge", "hydi", "capabilities"],
+  "license": "MIT"
+}

@@ -1,9 +1,9 @@
 'use strict';
 const { readMigration } = require('./helpers');
 
-describe('002_keymaker_functions', () => {
+describe('20260101000001_keymaker_functions', () => {
   let sql;
-  beforeAll(() => { sql = readMigration('002_keymaker_functions.sql').toLowerCase(); });
+  beforeAll(() => { sql = readMigration('20260101000001_keymaker_functions.sql').toLowerCase(); });
 
   test('creates update_updated_at_column trigger function', () => {
     expect(sql).toContain('update_updated_at_column');

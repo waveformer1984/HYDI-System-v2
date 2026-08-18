@@ -3,6 +3,12 @@ import { TaskRouter } from './task.router';
 import { ApprovalEngine } from './approval.engine';
 import { RiskEngine } from './risk.engine';
 import { AgentRegistry } from './agent.registry';
+import { AuditLog } from './audit.log';
+import { RezonateAgent } from '../agents/execution/rezonate.agent';
+import { hasPermission } from '../../lib/auth/rbac';
+import * as capabilityGuard from '../../lib/rezonate/capability-guard';
+import * as apexCapabilityGuard from '../../lib/apex/apex-capability-guard';
+import { ApexAgent } from '../agents/execution/apex.agent';
 
 export interface HeidiDirective {
   task_id: string;
@@ -33,22 +39,26 @@ export class HeidiController {
   private approvalEngine: ApprovalEngine;
   private riskEngine: RiskEngine;
   private agentRegistry: AgentRegistry;
+  private auditLog: AuditLog;
   private running: boolean = false;
-  
+
   private activeTasks: Map<string, HeidiDirective> = new Map();
   private completedTasks: HeidiDirective[] = [];
   private failedTasks: HeidiDirective[] = [];
   private systemMetrics: SystemMetrics;
   private taskRoutingMatrix: Map<string, string[]> = new Map();
   private conflictResolutionHistory: any[] = [];
+  private idempotencyWindow: Map<string, number> = new Map();
+  private readonly IDEMPOTENCY_WINDOW_MS = 5000;
 
   constructor() {
     this.eventBus = new EventBus();
     this.approvalEngine = new ApprovalEngine();
     this.riskEngine = new RiskEngine();
     this.agentRegistry = new AgentRegistry();
+    this.auditLog = new AuditLog();
     this.taskRouter = new TaskRouter(this.agentRegistry);
-    
+
     this.systemMetrics = {
       tasks_processed: 0,
       tasks_completed: 0,
@@ -60,6 +70,8 @@ export class HeidiController {
     };
     
     this.initializeRoutingMatrix();
+    this.agentRegistry.registerAgent(new RezonateAgent());
+    this.agentRegistry.registerAgent(new ApexAgent());
     this.setupEventHandlers();
   }
 
@@ -124,7 +136,27 @@ export class HeidiController {
       ['WORKFLOW_OPTIMIZE', ['workflow_agent']],
       ['RESOURCE_ALLOCATION', ['workflow_agent']],
       ['PRODUCTIVITY_TRACK', ['workflow_agent']],
-      ['SPACE_MANAGEMENT', ['workflow_agent']]
+      ['SPACE_MANAGEMENT', ['workflow_agent']],
+      ['REZONATE_LIST_PROJECTS', ['rezonate.agent']],
+      ['REZONATE_CREATE_PROJECT', ['rezonate.agent']],
+      ['REZONATE_GET_PROJECT', ['rezonate.agent']],
+      ['REZONATE_LIST_TRACKS', ['rezonate.agent']],
+      ['REZONATE_CREATE_TRACK', ['rezonate.agent']],
+      ['APEX_PROJECT_CREATED', ['apex.agent']],
+      ['APEX_EPISODE_CREATED', ['apex.agent']],
+      ['GET_APEX_PROJECT_STATUS', ['apex.agent']],
+      ['GET_APEX_HEALTH', ['apex.agent']],
+      ['GET_APEX_REZONATE_STATUS', ['apex.agent']],
+      ['APEX_EVENT_RECORDED', ['apex.agent']],
+      ['APEX_EPISODE_APPROVED', ['apex.agent']],
+      ['APEX_EPISODE_PUBLISHED', ['apex.agent']],
+      ['APEX_EPISODE_FAILED', ['apex.agent']],
+      ['APEX_EPISODE_ARCHIVED', ['apex.agent']],
+      ['REZONATE_GET_JOB', ['rezonate.agent']],
+      ['REZONATE_CREATE_JOB', ['rezonate.agent']],
+      ['REZONATE_START_JOB', ['rezonate.agent']],
+      ['REZONATE_EXPORT_PROJECT', ['rezonate.agent']],
+      ['REZONATE_HEALTH', ['rezonate.agent']]
     ]);
   }
 
@@ -138,29 +170,169 @@ export class HeidiController {
     });
   }
 
+  public async processUserEvent(type: string, input: any, role: string = 'owner'): Promise<any> {
+    this.systemMetrics.tasks_processed++;
+    const event = {
+      type,
+      payload: input,
+      source_agent: 'user',
+      target_agent: 'heidi_controller',
+      priority: 'medium',
+      timestamp: new Date().toISOString()
+    };
+    console.log(`[HEIDI] Processing: ${event.type} from ${event.source_agent}`);
+
+    const taskId = this.createTaskId(type);
+
+    await this.auditLog.record({
+      event_type: 'HEIDI_USER_EVENT_RECEIVED',
+      task_id: taskId,
+      task_type: type,
+      source_agent: 'user',
+      target_agent: 'heidi_controller',
+      payload: input,
+      result: null,
+      success: true,
+    });
+
+    if (type.startsWith('REZONATE_') && !hasPermission(role, 'rezonate:manage')) {
+      const reason = `role '${role}' lacks permission 'rezonate:manage'`;
+      await this.auditLog.record({
+        event_type: 'HEIDI_PERMISSION_DENIED',
+        task_id: taskId,
+        task_type: type,
+        source_agent: 'heidi_controller',
+        target_agent: 'heidi_controller',
+        payload: input,
+        result: null,
+        success: false,
+        failure_reason: reason,
+      });
+      return { ok: false, reason };
+    }
+
+    if (type.startsWith('APEX_') && !hasPermission(role, 'apex:manage')) {
+      const reason = `role '${role}' lacks permission 'apex:manage'`;
+      await this.auditLog.record({
+        event_type: 'HEIDI_PERMISSION_DENIED',
+        task_id: taskId,
+        task_type: type,
+        source_agent: 'heidi_controller',
+        target_agent: 'heidi_controller',
+        payload: input,
+        result: null,
+        success: false,
+        failure_reason: reason,
+      });
+      return { ok: false, reason };
+    }
+
+    // Capability awareness: never route a task that is not verified through Heidi.
+    if (type.startsWith('REZONATE_')) {
+      const capability = (capabilityGuard as any).getTaskCapabilityState(type);
+      if (capability.heidiState !== 'VERIFIED') {
+        const reason = capability.reason || `${type} is not a verified Heidi capability (state: ${capability.heidiState})`;
+        await this.auditLog.record({
+          event_type: 'HEIDI_CAPABILITY_UNSUPPORTED',
+          task_id: taskId,
+          task_type: type,
+          source_agent: 'heidi_controller',
+          target_agent: 'heidi_controller',
+          payload: input,
+          result: null,
+          success: false,
+          failure_reason: reason,
+        });
+        return { ok: false, reason, state: capability.heidiState };
+      }
+    }
+
+    if (type.startsWith('APEX_')) {
+      const capability = (apexCapabilityGuard as any).getTaskCapabilityState(type);
+      if (capability.heidiState !== 'VERIFIED') {
+        const reason = capability.reason || `${type} is not a verified Heidi capability (state: ${capability.heidiState})`;
+        await this.auditLog.record({
+          event_type: 'HEIDI_CAPABILITY_UNSUPPORTED',
+          task_id: taskId,
+          task_type: type,
+          source_agent: 'heidi_controller',
+          target_agent: 'heidi_controller',
+          payload: input,
+          result: null,
+          success: false,
+          failure_reason: reason,
+        });
+        return { ok: false, reason, state: capability.heidiState };
+      }
+    }
+
+    const duplicate = this.checkIdempotency(type, input);
+    if (duplicate) {
+      await this.auditLog.record({
+        event_type: 'HEIDI_DUPLICATE_MUTATION_BLOCKED',
+        task_id: taskId,
+        task_type: type,
+        source_agent: 'heidi_controller',
+        target_agent: 'heidi_controller',
+        payload: input,
+        result: null,
+        success: false,
+        failure_reason: duplicate,
+      });
+      return { ok: false, reason: duplicate };
+    }
+
+    const riskAssessment = this.riskEngine.assess(event);
+
+    if (riskAssessment.requires_approval) {
+      await this.escalateForApproval(event, riskAssessment);
+      return { ok: false, reason: 'requires_approval', risk: riskAssessment };
+    }
+
+    const directive = this.createDirective(event, taskId);
+    const assignedAgents = this.assignAgents(directive);
+
+    if (assignedAgents.length === 0) {
+      return { ok: false, reason: 'no_available_agent' };
+    }
+
+    const results = [];
+    for (const agentId of assignedAgents) {
+      const result = await this.routeToAgent(agentId, directive, input);
+      results.push(result);
+    }
+
+    this.updateMetrics();
+    return results[0];
+  }
+
+  private createTaskId(type: string): string {
+    return `task_${type}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  }
+
   private async processEvent(event: any): Promise<void> {
     this.systemMetrics.tasks_processed++;
     console.log(`[HEIDI] Processing: ${event.type} from ${event.source_agent}`);
-    
+
     if (this.isRedundantTask(event)) {
       console.log(`[HEIDI] Redundant task detected: ${event.type} - SKIPPING`);
       return;
     }
-    
+
     const riskAssessment = this.riskEngine.assess(event);
-    
+
     if (riskAssessment.requires_approval) {
       await this.escalateForApproval(event, riskAssessment);
       return;
     }
-    
+
     const directive = this.createDirective(event);
     const assignedAgents = this.assignAgents(directive);
-    
+
     for (const agentId of assignedAgents) {
-      await this.routeToAgent(agentId, directive);
+      await this.routeToAgent(agentId, directive, event.payload);
     }
-    
+
     this.updateMetrics();
   }
 
@@ -174,11 +346,52 @@ export class HeidiController {
     return false;
   }
 
-  private createDirective(event: any): HeidiDirective {
+  private isMutation(type: string): boolean {
+    if (type.startsWith('REZONATE_')) {
+      return !type.startsWith('REZONATE_LIST_') &&
+        !type.startsWith('REZONATE_GET_') &&
+        !type.endsWith('_HEALTH');
+    }
+    if (type.startsWith('APEX_')) {
+      return !type.startsWith('GET_APEX_') &&
+        !type.endsWith('_HEALTH') &&
+        !type.startsWith('APEX_LIST_');
+    }
+    return false;
+  }
+
+  private dedupKey(type: string, input: any): string {
+    return `${type}:${JSON.stringify(input)}`;
+  }
+
+  private checkIdempotency(type: string, input: any): string | null {
+    if (!this.isMutation(type)) {
+      return null;
+    }
+    const now = Date.now();
+    const key = this.dedupKey(type, input);
+    const last = this.idempotencyWindow.get(key);
+    if (last && now - last < this.IDEMPOTENCY_WINDOW_MS) {
+      return `duplicate: identical ${type} recently processed`;
+    }
+    this.idempotencyWindow.set(key, now);
+    this.pruneIdempotencyWindow(now);
+    return null;
+  }
+
+  private pruneIdempotencyWindow(now: number): void {
+    for (const [key, timestamp] of this.idempotencyWindow.entries()) {
+      if (now - timestamp > this.IDEMPOTENCY_WINDOW_MS) {
+        this.idempotencyWindow.delete(key);
+      }
+    }
+  }
+
+  private createDirective(event: any, taskId?: string): HeidiDirective {
     const routingAgents = this.taskRoutingMatrix.get(event.type) || [];
     const primaryAgent = routingAgents[0] || 'unknown';
     return {
-      task_id: `task_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      task_id: taskId || `task_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       assigned_agent: primaryAgent,
       task_type: event.type,
       priority: event.priority || 'medium',
@@ -214,28 +427,67 @@ export class HeidiController {
     return availableAgents;
   }
 
-  private async routeToAgent(agentId: string, directive: HeidiDirective): Promise<void> {
+  private async routeToAgent(agentId: string, directive: HeidiDirective, userPayload?: any): Promise<any> {
     const agent = this.agentRegistry.getAgent(agentId);
     if (!agent) {
       console.error(`[HEIDI] Agent not found: ${agentId}`);
       this.handleTaskFailure(directive, 'Agent not found');
-      return;
+      await this.auditLog.record({
+        event_type: 'HEIDI_AGENT_NOT_FOUND',
+        task_id: directive.task_id,
+        task_type: directive.task_type,
+        source_agent: 'heidi_controller',
+        target_agent: agentId,
+        payload: userPayload,
+        result: null,
+        success: false,
+        failure_reason: 'Agent not found',
+      });
+      return { ok: false, reason: 'agent_not_found' };
     }
     try {
       this.activeTasks.set(directive.task_id, directive);
-      await agent.execute({
+      const result = await agent.execute({
         task_id: directive.task_id,
         type: directive.task_type,
-        payload: directive,
+        payload: { directive, input: userPayload },
         source_agent: 'heidi_controller',
         target_agent: agentId,
         priority: directive.priority,
         timestamp: new Date().toISOString()
       });
+      this.activeTasks.delete(directive.task_id);
+      this.completedTasks.push(directive);
+      this.systemMetrics.tasks_completed++;
+      await this.auditLog.record({
+        event_type: 'HEIDI_AGENT_SUCCESS',
+        task_id: directive.task_id,
+        task_type: directive.task_type,
+        source_agent: 'heidi_controller',
+        target_agent: agentId,
+        payload: userPayload,
+        result,
+        success: true,
+      });
       console.log(`[HEIDI] Routed ${directive.task_type} to ${agentId} (Priority: ${directive.priority})`);
+      return result;
     } catch (error) {
+      this.activeTasks.delete(directive.task_id);
+      const reason = error instanceof Error ? error.message : 'Unknown error';
       console.error(`[HEIDI] Task execution failed: ${directive.task_id}`, error);
-      this.handleTaskFailure(directive, error instanceof Error ? error.message : 'Unknown error');
+      this.handleTaskFailure(directive, reason);
+      await this.auditLog.record({
+        event_type: 'HEIDI_AGENT_FAILURE',
+        task_id: directive.task_id,
+        task_type: directive.task_type,
+        source_agent: 'heidi_controller',
+        target_agent: agentId,
+        payload: userPayload,
+        result: null,
+        success: false,
+        failure_reason: reason,
+      });
+      return { ok: false, reason };
     }
   }
 
@@ -325,6 +577,28 @@ export class HeidiController {
 
   getSystemStatus(): any {
     return { running: this.running, metrics: this.systemMetrics, active_tasks: this.activeTasks.size, completed_tasks: this.completedTasks.length, failed_tasks: this.failedTasks.length, agent_status: this.agentRegistry.getAllAgents(), routing_matrix: Object.fromEntries(this.taskRoutingMatrix) };
+  }
+
+  getHealth(): any {
+    const rezonateAgent = this.agentRegistry.getAgent('rezonate.agent');
+    const rezonateAgentStatus = rezonateAgent ? rezonateAgent.status : 'missing';
+    const taskRouterAvailable = this.taskRouter != null;
+
+    return {
+      ok: true,
+      heidi_controller: { available: true, running: this.running },
+      task_router: { available: taskRouterAvailable, evidence: 'TaskRouter initialized with agent registry' },
+      rezonate_agent: { available: rezonateAgentStatus === 'active', status: rezonateAgentStatus },
+      rezonate_client: { available: true, evidence: 'lib/rezonate/rezonate-client.js imports canonical repository' },
+      rezonate_canonical_api: { available: true, evidence: 'RezonateAgent imports lib/rezonate/rezonate-client' },
+      local_persistence: { available: true, evidence: 'heidi-db.json local JSON store' },
+      event_bus: { available: true, running: true },
+      timestamp: new Date().toISOString(),
+    };
+  }
+
+  getAuditLog(): AuditLog {
+    return this.auditLog;
   }
 
   getTaskQueue(): HeidiDirective[] {

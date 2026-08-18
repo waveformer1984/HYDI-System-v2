@@ -1,0 +1,54 @@
+{
+  "name": "Switchboard",
+  "version": "1.0.0",
+  "capabilities": [
+    "event-ingestion",
+    "user-management",
+    "gig-management",
+    "trust-layer",
+    "availability",
+    "moderation"
+  ],
+  "eventsProduced": [
+    "user.created",
+    "gig.created",
+    "contract.created",
+    "payment.completed",
+    "availability.created",
+    "availability.updated",
+    "moderation.created",
+    "moderation.quarantined",
+    "moderation.released",
+    "message.sent",
+    "application.submitted",
+    "application.accepted",
+    "gig.filled",
+    "contract.signed",
+    "payment.created",
+    "payment.released",
+    "contract.completed",
+    "rating.created",
+    "user.parent_approved"
+  ],
+  "eventsConsumed": [
+    "user.parent_approved"
+  ],
+  "providers": [
+    "json-store",
+    "memory-store",
+    "availability-calendar"
+  ],
+  "dependencies": {
+    "services": [
+      "supabase"
+    ],
+    "packages": [
+      "@protoforge/event-contracts"
+    ]
+  },
+  "healthRequirements": [
+    "supabase",
+    "json-store"
+  ],
+  "deprecated": false
+}

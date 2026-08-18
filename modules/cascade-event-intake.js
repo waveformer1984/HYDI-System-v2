@@ -1,3 +1,7 @@
+// @deprecated This legacy CASCADE intake is superseded by protoforge/cascade/.
+// Replacement: protoforge/cascade/src/processor.js and protoforge/cascade/src/replay.js
+// Migration: Use the canonical ReplayEngine or EventProcessor. Removal target: Phase 5.
+//
 // CASCADE Event Intake Layer
 // Normalizes all incoming signals into the standard CASCADE format
 

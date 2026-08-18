@@ -2,6 +2,9 @@ import { createClient } from '@supabase/supabase-js';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { HealthCollector, HealthSnapshot, WorkerHealth } from '../types';
 
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const LocalWorkerStatus = require('../../../workers/lib/local-worker-status');
+
 export class WorkerHealthCollector implements HealthCollector {
   readonly name = 'workers';
   private client: SupabaseClient | null = null;
@@ -21,6 +24,30 @@ export class WorkerHealthCollector implements HealthCollector {
     return this.client;
   }
 
+  private async buildLocalWorkerHealth(): Promise<WorkerHealth> {
+    const store = new LocalWorkerStatus();
+    const workers = await store.listWorkers(100);
+
+    const healthy = workers.filter((w: any) => w.status === 'idle' || w.status === 'running').length;
+    const busy = workers.filter((w: any) => w.status === 'busy').length;
+    const errored = workers.filter((w: any) => w.status === 'error' || w.status === 'stopped').length;
+
+    let status: WorkerHealth['status'] = 'healthy';
+    if (errored > 0) status = 'degraded';
+    if (workers.length > 0 && healthy === 0) status = 'unavailable';
+    if (workers.length === 0) status = 'unknown';
+
+    return {
+      status,
+      total: workers.length,
+      healthy,
+      busy,
+      error: errored,
+      workers,
+      message: workers.length === 0 ? 'No workers have registered yet' : 'Local worker status',
+    };
+  }
+
   async collect(): Promise<Partial<HealthSnapshot>> {
     const workers = await this.buildWorkerHealth();
     return { workers };
@@ -29,15 +56,7 @@ export class WorkerHealthCollector implements HealthCollector {
   private async buildWorkerHealth(): Promise<WorkerHealth> {
     const db = this.getSupabase();
     if (!db) {
-      return {
-        status: 'unknown',
-        total: null,
-        healthy: null,
-        busy: null,
-        error: null,
-        workers: [],
-        message: 'Supabase not configured; cannot introspect worker status',
-      };
+      return this.buildLocalWorkerHealth();
     }
 
     try {

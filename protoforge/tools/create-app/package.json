@@ -1,0 +1,14 @@
+{
+  "name": "@protoforge/create-app",
+  "version": "0.1.0",
+  "description": "ProtoForge application generator",
+  "bin": {
+    "create-protoforge-app": "bin/create-app.js"
+  },
+  "main": "src/generator.js",
+  "type": "commonjs",
+  "scripts": {
+    "test": "node --test tests/**/*.test.js"
+  },
+  "license": "MIT"
+}

@@ -1,9 +1,9 @@
 'use strict';
 const { readMigration } = require('./helpers');
 
-describe('001_keymaker_core', () => {
+describe('20260101000000_keymaker_core', () => {
   let sql;
-  beforeAll(() => { sql = readMigration('001_keymaker_core.sql').toLowerCase(); });
+  beforeAll(() => { sql = readMigration('20260101000000_keymaker_core.sql').toLowerCase(); });
 
   test('creates keymaker_services table', () => {
     expect(sql).toContain('create table');
