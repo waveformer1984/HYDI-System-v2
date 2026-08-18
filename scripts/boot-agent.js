@@ -64,6 +64,15 @@ const only = (getVal('only') || '').split(',').map((s) => s.trim()).filter(Boole
 const skip = (getVal('skip') || '').split(',').map((s) => s.trim()).filter(Boolean);
 const CONFIG_PATH = path.resolve(ROOT, getVal('config') || 'boot.config.json');
 
+// HYDI_DELEGATE_RECOVERY: when true, boot-agent does NOT shut down on required
+// child exit. Instead, it logs the exit and lets RecoveryEngine (called by
+// watchdog.js) handle individual component restarts. This prevents the overlap
+// where boot-agent shuts down everything while RecoveryEngine tries to restart
+// one component. See SUPERVISION_MODEL.md for the full design.
+// DEFAULT: false (current behavior — full shutdown on required child exit).
+// Enable ONLY when RecoveryEngine is running continuously via watchdog.
+const DELEGATE_RECOVERY = process.env.HYDI_DELEGATE_RECOVERY === 'true';
+
 if (flags.help) {
   console.log(fs.readFileSync(__filename, 'utf8').split('* Usage:')[1].split('* ---')[0].replace(/^\s*\*/gm, '   '));
   process.exit(0);
@@ -228,9 +237,16 @@ function spawnProcess(mod) {
     const how = signal ? `signal ${signal}` : `code ${code}`;
     log(mod.id, c('31', `process exited unexpectedly (${how})`));
     if (mod.required) {
-      failed = true;
-      log(mod.id, c('31', 'required module down -> initiating shutdown'));
-      shutdown(1);
+      if (DELEGATE_RECOVERY) {
+        // Delegate to RecoveryEngine — do NOT shut down. watchdog.js will
+        // detect the failure and call RecoveryEngine to restart this component.
+        // See SUPERVISION_MODEL.md for the full supervision model.
+        log(mod.id, c('33', 'required module down -> DELEGATE_RECOVERY mode: not shutting down (watchdog + RecoveryEngine will handle)'));
+      } else {
+        failed = true;
+        log(mod.id, c('31', 'required module down -> initiating shutdown'));
+        shutdown(1);
+      }
     }
   });
   return child;
