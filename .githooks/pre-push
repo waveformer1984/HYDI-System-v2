@@ -12,9 +12,9 @@
 #
 # Skip once (e.g. a deliberate WIP push) with: git push --no-verify
 #
-# Two classes of push carry no new commit content and are skipped:
+# Three classes of push carry no new commit content and are skipped:
 #
-# 1. Delete-only pushes (branch deletions): <local-sha> is all zeros.
+# 1. Delete-only pushes (branch/tag deletions): <local-sha> is all zeros.
 #    There is no diff to typecheck, lint, or test.
 #
 # 2. Ref-copy pushes (e.g. archiving a branch by copying its SHA to a new
@@ -24,7 +24,15 @@
 #    not against the ref being pushed -- so for a ref-copy push the suite
 #    tests unrelated code by construction, not by coincidence.
 #
-# In both cases we still run the secret scan, which is cheap and relevant.
+# 3. Tag pushes: a tag is a metadata pointer, not a content change. Even
+#    when the tag's SHA isn't already on a remote tracking ref (e.g. a
+#    backup tag pointing at a local-only commit), the tag itself carries
+#    no new commit content -- it just names an existing commit. The
+#    hook's test suite runs against the local checkout, not against the
+#    tagged commit, so running it tests unrelated code. Tag pushes are
+#    detected by checking if <local-ref> starts with "refs/tags/".
+#
+# In all cases we still run the secret scan, which is cheap and relevant.
 #
 # Git passes lines on stdin in the format:
 #   "<local-ref> <local-sha> <remote-ref> <remote-sha>"
@@ -35,17 +43,21 @@ ZERO="0000000000000000000000000000000000000000"
 SKIP_TESTS=true
 SAW_DELETE=false
 SAW_REFCOPY=false
+SAW_TAG=false
 
 while read -r local_ref local_sha remote_ref remote_sha; do
   if [ "$local_sha" = "$ZERO" ]; then
     # Deletion -- no new content
     SAW_DELETE=true
+  elif case "$local_ref" in refs/tags/*) true;; *) false;; esac; then
+    # Tag push -- metadata pointer, no new commit content
+    SAW_TAG=true
   else
-    # Non-deletion: check if the SHA is already the tip of an existing
-    # remote tracking ref. If so, this is a ref-copy push (e.g. archiving
-    # a branch by copying its SHA to a new ref name) -- no new commit
-    # content reaches the remote. Using --points-at avoids grep/CRLF
-    # issues on Windows.
+    # Non-deletion, non-tag: check if the SHA is already the tip of an
+    # existing remote tracking ref. If so, this is a ref-copy push (e.g.
+    # archiving a branch by copying its SHA to a new ref name) -- no new
+    # commit content reaches the remote. Using --points-at avoids
+    # grep/CRLF issues on Windows.
     if [ -n "$(git for-each-ref --points-at="$local_sha" --format='x' refs/remotes/origin/)" ]; then
       SAW_REFCOPY=true
     else
@@ -55,13 +67,17 @@ while read -r local_ref local_sha remote_ref remote_sha; do
 done
 
 if [ "$SKIP_TESTS" = "true" ]; then
-  if [ "$SAW_DELETE" = "true" ] && [ "$SAW_REFCOPY" = "false" ]; then
-    REASON="delete-only"
-  elif [ "$SAW_DELETE" = "false" ] && [ "$SAW_REFCOPY" = "true" ]; then
-    REASON="ref-copy (SHA already exists on remote)"
-  else
-    REASON="delete-only + ref-copy (no new content)"
+  REASON=""
+  if [ "$SAW_DELETE" = "true" ]; then
+    REASON="$REASON delete-only"
   fi
+  if [ "$SAW_REFCOPY" = "true" ]; then
+    REASON="$REASON ref-copy"
+  fi
+  if [ "$SAW_TAG" = "true" ]; then
+    REASON="$REASON tag"
+  fi
+  REASON=$(echo "$REASON" | sed 's/^ *//;s/ *$//')
   echo "[pre-push] $REASON push detected -- skipping typecheck/lint/tests."
   echo "[pre-push] Scanning for live secrets..."
   node scripts/scan-live-secrets.js
