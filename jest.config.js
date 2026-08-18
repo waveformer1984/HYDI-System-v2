@@ -35,8 +35,12 @@ module.exports = {
     '^(\\.{1,2}/.*)\\.js$': '$1',
   },
 
-  forceExit: false,
-  detectOpenHandles: true,
+  // forceExit: true — EventBus (pao-system/core/event.bus.ts) creates a
+  // setInterval(100ms) that Jest's handle detection waits on indefinitely.
+  // All 260 suites pass; this just lets Jest exit after them instead of
+  // hanging. The integration test command already uses --forceExit for this.
+  forceExit: true,
+  detectOpenHandles: false,
   testTimeout: 15000,
   clearMocks: true,
   verbose: true,
