@@ -38,7 +38,7 @@ export class EventBus extends EventEmitter {
   constructor() {
     super();
     this.initializePriorityQueues();
-    this.startEventProcessor();
+    // No polling — events are processed on-demand from publish()
   }
 
   private initializePriorityQueues(): void {
@@ -73,6 +73,10 @@ export class EventBus extends EventEmitter {
     this.emit('event_published', fullEvent);
 
     console.log(`[EVENT BUS] Published: ${fullEvent.type} from ${fullEvent.source_agent} to ${fullEvent.target_agent}`);
+
+    // Process on-demand via microtask (batches synchronously-published events
+    // and preserves priority ordering without setInterval polling)
+    queueMicrotask(() => { this.processEvents(); });
 
     return fullEvent.id;
   }
@@ -124,12 +128,16 @@ export class EventBus extends EventEmitter {
   }
 
   /**
-   * Start the event processor
+   * Shutdown the event bus — clear all state and listeners.
+   * No setInterval to clear (removed — events are processed on-demand).
    */
-  private startEventProcessor(): void {
-    setInterval(() => {
-      this.processEvents();
-    }, 100); // Process every 100ms
+  shutdown(): void {
+    this.subscriptions.clear();
+    this.priorityQueues.clear();
+    this.eventHistory = [];
+    this.deadLetterQueue = [];
+    this.processing = false;
+    this.removeAllListeners();
   }
 
   /**
@@ -142,10 +150,11 @@ export class EventBus extends EventEmitter {
     try {
       // Process in priority order: critical -> high -> medium -> low
       const priorities = ['critical', 'high', 'medium', 'low'];
-      
+
       for (const priority of priorities) {
-        const queue = this.priorityQueues.get(priority)!;
-        
+        const queue = this.priorityQueues.get(priority);
+        if (!queue) continue;
+
         while (queue.length > 0) {
           const event = queue.shift()!;
           await this.deliverEvent(event);
@@ -155,6 +164,12 @@ export class EventBus extends EventEmitter {
       console.error('[EVENT BUS] Processing error:', error);
     } finally {
       this.processing = false;
+    }
+
+    // Re-check if new events were published while we were processing
+    const hasMore = Array.from(this.priorityQueues.values()).some(q => q && q.length > 0);
+    if (hasMore) {
+      this.processEvents();
     }
   }
 
@@ -288,6 +303,3 @@ export class EventBus extends EventEmitter {
     console.log(`[EVENT BUS] Cleared events older than ${olderThanHours} hours`);
   }
 }
-
-// Singleton instance
-export const eventBus = new EventBus();
