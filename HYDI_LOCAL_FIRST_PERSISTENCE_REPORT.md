@@ -1,61 +1,64 @@
 # HYDI Local-First Persistence Report
 
-**Generated:** 2026-08-17T23:13:00Z
+**Generated:** 2026-08-18T03:50:00Z
 **Canonical repository:** `C:\Users\Owner\HYDI-System-v2`
+**Branch:** `clean-main`
+**Commit:** `0599500`
 
 ## Local-First Configuration
 
 | Variable | Value | Source |
 |----------|-------|--------|
 | `SUPABASE_URL` | `http://127.0.0.1:54321` | `.env.local` |
-| `NEXT_PUBLIC_SUPABASE_URL` | `http://127.0.0.1:54321` | `.env.local` |
-| `ENABLE_LOCAL_MODEL` | `true` | `.env.local` |
-| `LOCAL_MODEL_URL` | `http://localhost:11434` | `.env.local` |
-| `LOCAL_MODEL_NAME` | `llama3.2:3b` | `.env.local` |
-| `EMBEDDING_PROVIDER` | `ollama` | `.env.local` |
-| `OLLAMA_EMBEDDING_MODEL` | `nomic-embed-text` | `.env.local` |
+| `SUPABASE_SERVICE_ROLE_KEY` | present (server-side only) | `.env.local` |
+| `STRIPE_SECRET_KEY` | not set (Stripe disabled) | cleared for qualification |
+| Strategy | LOCAL_FIRST | `gate-state.json` |
 
-## Persistence Strategy
+## Persistence Verification
 
-The system boots with `[HYBRID STACK] Strategy: LOCAL_FIRST`, meaning:
-- Local models (Ollama) are tried first for inference
-- External API models (OpenAI, Gemini) are used as fallback
-- Local Supabase (`127.0.0.1:54321`) is the default database
-- Cloud Supabase is not required for local operation
-
-## Verification Results
-
-### Database (Local Supabase)
+### Supabase (local)
 
 | Check | Result |
 |-------|--------|
-| REST API reachable at `127.0.0.1:54321` | **PASS** |
-| Service-role key writes to `leads` table | **PASS** |
-| Service-role key reads written row | **PASS** |
-| Service-role key deletes test row | **PASS** |
+| REST API reachable | PASS (HTTP 200) |
+| Service-role insert | PASS (leads table, correct schema) |
+| Service-role read | PASS (read back verified) |
+| Service-role delete | PASS (cleanup succeeded) |
 
-**Conclusion:** Local Supabase is fully operational for CRUD via service-role key.
-
-### AI Runtime (Local Ollama)
+### Rezonate JSON File Persistence
 
 | Check | Result |
 |-------|--------|
-| Ollama reachable at `localhost:11434` | **PASS** |
-| Models available | **PASS** (7 models) |
+| Create project | PASS |
+| Read project back | PASS |
+| File persisted to disk | PASS |
+| File contains project | PASS (array-based structure: `projects: [...]`) |
 
-**Conclusion:** Local AI runtime is operational.
+### LocalLedgerStore (CASCADE raw ledger)
 
-### Cloud Independence
+| Test | Result |
+|------|--------|
+| Read missing event as null | PASS |
+| Append and read without Supabase | PASS |
+| Append is idempotent (duplicate fingerprint) | PASS |
+| List local events with pagination | PASS |
+| Filter by eventType | PASS |
+| Health check | PASS (ok, connected, events count) |
+| Persistence survives restart (fresh instance) | PASS |
 
-- `SUPABASE_URL` points to `127.0.0.1` (local), not a cloud URL.
-- No cloud Supabase URL is configured as a fallback.
-- If cloud Supabase is unavailable, local operation is unaffected.
-- If Ollama is unavailable, the system falls back to API models (OpenAI/Gemini).
+## Observed Facts
 
-## Known Issue
+- Local Supabase at `127.0.0.1:54321` is the database backend.
+- Rezonate uses JSON file persistence (`createStore({ type: 'json', filePath })`).
+- `LocalLedgerStore` provides local-first CASCADE raw event ledger (append-only, immutable, hashed).
+- All persistence tests pass including restart recovery.
 
-The orchestrator's local model spawning (`./bin/main`) fails with `ENOENT` because the binary doesn't exist. This is a configuration issue — the system falls back to API models. To fully achieve local-first AI operation, the `./bin/main` binary needs to be built or the model configuration needs to point at Ollama directly.
+## Inferences
 
-## Conclusion
+- The system can operate without cloud Supabase for Rezonate and ledger operations.
+- Database CRUD requires local Supabase to be running (Docker/CLI).
 
-The system is local-first for database persistence. AI inference is local-first with API fallback. Cloud services are not required for local operation.
+## Known Limitations
+
+- Integration tests (`npm run test:integration`) not run (require live adversarial Supabase setup).
+- Rezonate JSON file persistence is single-process (no concurrent writer protection beyond atomic rename).
