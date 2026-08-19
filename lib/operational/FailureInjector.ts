@@ -281,10 +281,12 @@ export class FailureInjector {
         }
 
         case 'B1-supabase-rest-restart': {
-          execSync('docker restart supabase_rest_HYDI-System-v2', { timeout: 30000, stdio: 'pipe' });
+          // Phase 5 audit fix: use 'docker stop' not 'docker restart'
+          // HEIDI must detect and recover — not Docker's restart policy
+          execSync('docker stop supabase_rest_HYDI-System-v2', { timeout: 30000, stdio: 'pipe' });
           evidence.push({
-            check: 'container-restarted', status: 'pass',
-            value: 'supabase_rest_HYDI-System-v2 restarted', checkedAt: new Date().toISOString(),
+            check: 'container-stopped', status: 'pass',
+            value: 'supabase_rest_HYDI-System-v2 stopped — HEIDI must detect and recover', checkedAt: new Date().toISOString(),
           });
           return { injected: true, evidence };
         }
@@ -307,10 +309,12 @@ export class FailureInjector {
         }
 
         case 'E1-supabase-db-restart': {
-          execSync('docker restart supabase_db_HYDI-System-v2', { timeout: 30000, stdio: 'pipe' });
+          // Phase 5 audit fix: use 'docker stop' not 'docker restart'
+          // HEIDI must detect and recover — not Docker's restart policy
+          execSync('docker stop supabase_db_HYDI-System-v2', { timeout: 30000, stdio: 'pipe' });
           evidence.push({
-            check: 'db-container-restarted', status: 'pass',
-            value: 'supabase_db_HYDI-System-v2 restarted', checkedAt: new Date().toISOString(),
+            check: 'db-container-stopped', status: 'pass',
+            value: 'supabase_db_HYDI-System-v2 stopped — HEIDI must detect and recover', checkedAt: new Date().toISOString(),
           });
           return { injected: true, evidence };
         }

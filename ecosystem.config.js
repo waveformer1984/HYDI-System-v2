@@ -83,7 +83,7 @@ module.exports = {
       env: {
         NODE_ENV: 'development',
         HYDI_DELEGATE_RECOVERY: 'true',
-        WATCHDOG_INTERVAL_MS: '120000',  // 2 minutes
+        WATCHDOG_INTERVAL_MS: '30000',  // 30 seconds — fast enough to catch outages before users notice
       },
       env_production: {
         NODE_ENV: 'production',

@@ -45,6 +45,8 @@ import type { RecoveryBudgetManager } from './RecoveryBudget';
 import type { RecoveryLockManager } from './RecoveryLock';
 import type { EscalationManager } from './EscalationManager';
 import type { PolicyDecisionRecordStore } from './PolicyDecisionRecord';
+import type { ActionRegistry as ActionRegistryType } from './ActionRegistry';
+import { ActionRegistry as ActionRegistryClass, actionRegistry as defaultActionRegistry } from './ActionRegistry';
 
 interface BootConfigModule {
   id: string;
@@ -97,6 +99,9 @@ export class RecoveryEngine {
   private escalationManager: EscalationManager | null;
   private decisionStore: PolicyDecisionRecordStore | null;
 
+  // Phase 5: Action registry — enforces that only registered actions can execute
+  private actionRegistry: ActionRegistryClass;
+
   constructor(
     root: string,
     stateModel: SystemStateModel,
@@ -121,6 +126,7 @@ export class RecoveryEngine {
     this.lockManager = lockManager ?? null;
     this.escalationManager = escalationManager ?? null;
     this.decisionStore = decisionStore ?? null;
+    this.actionRegistry = defaultActionRegistry;
   }
 
   private loadBootConfig(): BootConfig {
@@ -435,8 +441,35 @@ export class RecoveryEngine {
   /**
    * Execute a single recovery action. Actions are structural — never
    * arbitrary shell commands.
+   *
+   * Phase 5: Every action is validated against the ActionRegistry before
+   * execution. Unregistered actions are refused and logged.
    */
   private async executeAction(component: string, action: RecoveryAction, attempt: number): Promise<void> {
+    // Phase 5: ActionRegistry enforcement — verify the action is registered
+    const registryEntries = this.actionRegistry.getForComponent(component);
+    const matchingEntry = registryEntries.find(
+      (e) => e.actionType === action.type || e.targetComponent === '*',
+    );
+
+    if (action.type !== 'no_action' && action.type !== 'wait_for_dependency' && !matchingEntry) {
+      this.stateModel.logEvent({
+        id: randomUUID(),
+        timestamp: new Date().toISOString(),
+        type: 'recovery_failed',
+        component,
+        cause: `action type '${action.type}' is not registered in ActionRegistry for component '${component}'`,
+        action: action.type,
+        actionResult: 'denied',
+        recoveryAttempt: attempt,
+        detail: { reason: 'unregistered action blocked by ActionRegistry enforcement' },
+      });
+      throw new Error(`Action '${action.type}' for '${component}' is not registered — blocked by ActionRegistry`);
+    }
+
+    // Phase 5: Enforce timeout from registry entry if available
+    const timeoutMs = matchingEntry?.timeoutMs ?? 30000;
+
     switch (action.type) {
       case 'restart_process':
         await this.restartProcess(component);
@@ -764,11 +797,11 @@ export class RecoveryEngine {
   private getGraceMs(component: string): number {
     const mod = this.bootConfig.modules.find((m) => m.id === component);
     const bootGraceMs = mod?.health?.graceMs ?? 10000;
-    // Cap recovery grace at 30s — the boot graceMs (up to 5 min) is for
+    // Cap recovery grace at 60s — the boot graceMs (up to 5 min) is for
     // cold starts under load; recovery restarts are warmer and the CLI
-    // must remain responsive. Without this cap, `hydi:recover` would hang
-    // for 300000ms per attempt on protoforge-core.
-    const RECOVERY_GRACE_CAP_MS = 30000;
+    // must remain responsive. 60s is enough for a warm Node.js restart
+    // while keeping the CLI responsive.
+    const RECOVERY_GRACE_CAP_MS = 60000;
     return Math.min(bootGraceMs, RECOVERY_GRACE_CAP_MS);
   }
 

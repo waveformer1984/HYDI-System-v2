@@ -143,18 +143,53 @@ const DEFAULT_POLICIES: AutonomyPolicy[] = [
   },
   {
     id: 'policy.recover.database',
-    capability: 'database.recover',
+    capability: 'health.recover',
     target: 'database',
     risk: 'R2',
     authorization: 'policy_authorized',
     allowedWhen: [
-      { field: 'state', operator: 'in', value: ['UNAVAILABLE', 'DEGRADED'] },
+      { field: 'state', operator: 'in', value: ['UNAVAILABLE', 'DEGRADED', 'FAILED'] },
     ],
-    maxAttempts: 1,
-    cooldownMs: 60000,
+    maxAttempts: 2,
+    cooldownMs: 30000,
     requiredEvidence: ['rest-reachable'],
-    escalationAction: 'human_review — database recovery is wait-only, no destructive actions',
-    description: 'Wait for database recovery (no destructive actions), max 1 attempt',
+    escalationAction: 'human_review — database container restart failed',
+    description: 'Restart database containers when unavailable, max 2 attempts',
+  },
+
+  // --- Phase 5: Ollama recovery (R2, policy_authorized) ---
+  {
+    id: 'policy.recover.ollama',
+    capability: 'health.recover',
+    target: 'ollama',
+    risk: 'R2',
+    authorization: 'policy_authorized',
+    allowedWhen: [
+      { field: 'state', operator: 'in', value: ['UNAVAILABLE', 'FAILED', 'DEGRADED'] },
+    ],
+    maxAttempts: 2,
+    cooldownMs: 30000,
+    requiredEvidence: ['ollama-health'],
+    escalationAction: 'human_review — Ollama restart failed, AI features degraded',
+    description: 'Restart Ollama when unavailable, max 2 attempts',
+  },
+
+  // --- Phase 5: Bridge recovery (R2, policy_authorized) ---
+  {
+    id: 'policy.recover.bridge',
+    capability: 'health.recover',
+    target: 'bridge',
+    risk: 'R2',
+    authorization: 'policy_authorized',
+    allowedWhen: [
+      { field: 'state', operator: 'in', value: ['UNAVAILABLE', 'FAILED'] },
+      { field: 'dependency_state', operator: 'neq', value: 'UNAVAILABLE' },
+    ],
+    maxAttempts: 2,
+    cooldownMs: 30000,
+    requiredEvidence: ['health-endpoint'],
+    escalationAction: 'human_review — bridge restart failed, chat routing unavailable',
+    description: 'Restart bridge when unavailable (dependencies must be healthy), max 2 attempts',
   },
 
   // --- ESCALATE (always allowed — escalation is a safety mechanism) ---

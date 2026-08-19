@@ -56,7 +56,7 @@ function loadEndpointsFromBootConfig() {
 }
 const ENDPOINTS = loadEndpointsFromBootConfig();
 
-const INTERVAL_MS = parseInt(process.env.WATCHDOG_INTERVAL_MS || '120000', 10);
+const INTERVAL_MS = parseInt(process.env.WATCHDOG_INTERVAL_MS || '30000', 10);
 const WEBHOOK_URL = process.env.WATCHDOG_WEBHOOK_URL || '';
 const ONCE = process.argv.includes('--once');
 
@@ -112,6 +112,134 @@ function checkEndpoint(ep) {
   });
 }
 
+// Phase 5: Infrastructure health checks (Docker containers, Ollama)
+function checkInfrastructure() {
+  const results = [];
+  const { execSync } = require('child_process');
+
+  // Docker CLI path — PM2 may not have Docker in PATH
+  // Try 'docker' first, then fall back to common Windows install paths
+  const DOCKER_CMD = (() => {
+    // Check if docker is in PATH
+    try {
+      execSync('docker version --format "{{.Client.Version}}"', { timeout: 5000, stdio: 'pipe', encoding: 'utf8' });
+      return 'docker';
+    } catch { /* not in PATH, try full paths */ }
+    // Try common Windows Docker paths
+    const fs = require('fs');
+    const paths = [
+      'C:\\Program Files\\Docker\\Docker\\resources\\bin\\docker.exe',
+      'C:\\Program Files\\Docker\\Docker\\resources\\bin\\docker',
+    ];
+    for (const p of paths) {
+      if (fs.existsSync(p)) return `"${p}"`;
+    }
+    return null; // Docker not available
+  })();
+
+  // Check Supabase DB container
+  let dbStatus = 'unknown';
+  let dbOk = false;
+  if (DOCKER_CMD) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const out = execSync(`${DOCKER_CMD} inspect --format "{{.State.Status}}" supabase_db_HYDI-System-v2`, {
+          encoding: 'utf8', timeout: 8000, stdio: 'pipe',
+        });
+        dbStatus = out.trim();
+        dbOk = dbStatus === 'running';
+        break;
+      } catch (e) {
+        if (attempt === 0) continue; // retry once
+        dbStatus = 'docker inspect failed';
+      }
+    }
+  } else {
+    dbStatus = 'docker not available';
+  }
+  results.push({
+    name: 'supabase_db',
+    url: 'docker://supabase_db_HYDI-System-v2',
+    required: true,
+    ok: dbOk,
+    statusCode: dbOk ? 200 : 503,
+    body: dbStatus,
+  });
+
+  // Check Supabase REST container
+  let restStatus = 'unknown';
+  let restOk = false;
+  if (DOCKER_CMD) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const out = execSync(`${DOCKER_CMD} inspect --format "{{.State.Status}}" supabase_rest_HYDI-System-v2`, {
+          encoding: 'utf8', timeout: 8000, stdio: 'pipe',
+        });
+        restStatus = out.trim();
+        restOk = restStatus === 'running';
+        break;
+      } catch (e) {
+        if (attempt === 0) { continue; } // retry once
+        restStatus = 'docker inspect failed';
+      }
+    }
+  } else {
+    restStatus = 'docker not available';
+  }
+  results.push({
+    name: 'supabase_rest',
+    url: 'docker://supabase_rest_HYDI-System-v2',
+    required: true,
+    ok: restOk,
+    statusCode: restOk ? 200 : 503,
+    body: restStatus,
+  });
+
+  // Check Ollama
+  results.push({
+    name: 'ollama',
+    url: 'http://127.0.0.1:11434/api/tags',
+    required: false, // Ollama is important but not required for basic health
+    _checkOllama: true,
+  });
+  // We'll resolve Ollama async below
+
+  return results;
+}
+
+// Check Ollama health endpoint
+function checkOllama() {
+  return new Promise((resolve) => {
+    const req = http.get('http://127.0.0.1:11434/api/tags', { timeout: 5000 }, (res) => {
+      let body = '';
+      res.on('data', (chunk) => { body += chunk; });
+      res.on('end', () => {
+        resolve({
+          name: 'ollama',
+          url: 'http://127.0.0.1:11434/api/tags',
+          required: false,
+          ok: res.statusCode >= 200 && res.statusCode < 500,
+          statusCode: res.statusCode,
+          body: body.slice(0, 200),
+        });
+      });
+    });
+    req.on('timeout', () => {
+      req.destroy();
+      resolve({
+        name: 'ollama', url: 'http://127.0.0.1:11434/api/tags', required: false,
+        ok: false, statusCode: 0, body: 'timeout',
+      });
+    });
+    req.on('error', (e) => {
+      resolve({
+        name: 'ollama', url: 'http://127.0.0.1:11434/api/tags', required: false,
+        ok: false, statusCode: 0, body: e.message,
+      });
+    });
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Webhook alert
 // ---------------------------------------------------------------------------
@@ -139,19 +267,27 @@ function sendWebhook(failures) {
 // Main check
 // ---------------------------------------------------------------------------
 async function runCheck() {
-  const results = await Promise.all(ENDPOINTS.map(checkEndpoint));
-  const failures = results.filter((r) => !r.ok);
+  // Check boot.config.json endpoints
+  const endpointResults = await Promise.all(ENDPOINTS.map(checkEndpoint));
+
+  // Phase 5: Check infrastructure (Docker containers, Ollama)
+  const infraResults = checkInfrastructure().filter((r) => !r._checkOllama);
+  const ollamaResult = await checkOllama();
+  infraResults.push(ollamaResult);
+
+  const allResults = [...endpointResults, ...infraResults];
+  const failures = allResults.filter((r) => !r.ok);
   const allOk = failures.length === 0;
 
   if (allOk) {
-    const names = results.map((r) => `${r.name}:${r.statusCode}`).join('  ');
-    log(`OK    all ${results.length} endpoints healthy  ${names}`);
+    const names = allResults.map((r) => `${r.name}:${r.statusCode}`).join('  ');
+    log(`OK    all ${allResults.length} endpoints healthy  ${names}`);
   } else {
     for (const f of failures) {
       log(`FAIL  ${f.name}  ${f.url}  status=${f.statusCode}  error=${f.body}`);
     }
-    const okNames = results.filter((r) => r.ok).map((r) => r.name).join(',');
-    log(`ALERT ${failures.length}/${results.length} endpoints down (ok: ${okNames || 'none'})`);
+    const okNames = allResults.filter((r) => r.ok).map((r) => r.name).join(',');
+    log(`ALERT ${failures.length}/${allResults.length} endpoints down (ok: ${okNames || 'none'})`);
     sendWebhook(failures);
 
     // If DELEGATE_RECOVERY is enabled, call RecoveryEngine for each REQUIRED

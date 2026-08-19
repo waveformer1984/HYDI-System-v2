@@ -81,7 +81,9 @@ async function main() {
 
       const finalState = oi.stateModel.getOverallState();
       await oi.destroy();
-      process.exit(finalState === 'HEALTHY' ? 0 : 1);
+      // Exit 0 if healthy OR if recovery was attempted (even if degraded)
+      // Exit 1 only if no recovery was possible (escalation/failed)
+      process.exit(finalState === 'HEALTHY' || finalState === 'DEGRADED' ? 0 : 1);
     }
 
     // Phase 3: Standard recovery (backward compatible)
@@ -106,9 +108,16 @@ async function main() {
       }
     }
 
-    const finalState = oi.stateModel.getOverallState();
-    await oi.destroy();
-    process.exit(finalState === 'HEALTHY' ? 0 : 1);
+    // For targeted recovery, check the specific component's state, not just overall
+    if (targetComponent) {
+      const compState = oi.stateModel.getState(targetComponent).state;
+      await oi.destroy();
+      process.exit(compState === 'HEALTHY' || compState === 'DEGRADED' ? 0 : 1);
+    } else {
+      const finalState = oi.stateModel.getOverallState();
+      await oi.destroy();
+      process.exit(finalState === 'HEALTHY' || finalState === 'DEGRADED' ? 0 : 1);
+    }
   } catch (e) {
     console.error(`hydi:recover failed: ${e.message}`);
     await oi.destroy();

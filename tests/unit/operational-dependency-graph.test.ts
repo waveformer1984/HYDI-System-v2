@@ -69,7 +69,10 @@ describe('Phase 3 — DependencyGraphBuilder', () => {
 
   it('assigns recovery policy based on component type', () => {
     const dbNode = graph.nodes.get('database');
-    expect(dbNode!.recoveryPolicy).toBe('wait_for_dependency');
+    expect(dbNode!.recoveryPolicy).toBe('recover_database');
+
+    const ollamaNode = graph.nodes.get('ollama');
+    expect(ollamaNode!.recoveryPolicy).toBe('restart_ollama');
 
     const pfNode = graph.nodes.get('protoforge-core');
     expect(pfNode!.recoveryPolicy).toBe('restart_process');

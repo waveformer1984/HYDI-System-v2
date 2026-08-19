@@ -131,7 +131,7 @@ describe('Phase 4 — AutonomyPolicyModel', () => {
   });
 
   it('database recovery is R2 (policy_authorized, not autonomous)', () => {
-    const policies = model.findPolicies('database.recover', 'database');
+    const policies = model.findPolicies('health.recover', 'database');
     expect(policies[0].risk).toBe('R2');
     expect(policies[0].authorization).toBe('policy_authorized');
   });

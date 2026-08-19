@@ -174,9 +174,33 @@ async function runQualification() {
       });
       console.log(`  ${result.detected ? '[OK]   Detected: component is down' : '[WARN] Component may have auto-recovered already'}`);
     } else {
-      // For container/DB scenarios, check Docker
-      result.detected = true; // assume detected for non-process scenarios
-      console.log('  [OK]   Detection assumed for container/DB scenario');
+      // For container/DB scenarios, verify the container is actually down
+      // by checking Docker container status — do NOT assume detection
+      try {
+        const containerName = scenario.targetComponent === 'database' ? 'supabase_db_HYDI-System-v2' : scenario.targetComponent;
+        const status = execSync(
+          `docker inspect --format "{{.State.Status}}" ${containerName}`,
+          { encoding: 'utf8', timeout: 5000, stdio: 'pipe' }
+        ).trim();
+        result.detected = status !== 'running';
+        result.evidence.push({
+          check: 'post-injection-container-status',
+          status: status === 'running' ? 'pass' : 'fail',
+          value: `container status: ${status}`,
+          checkedAt: new Date().toISOString(),
+        });
+        console.log(`  ${result.detected ? '[OK]   Detected: container is down (' + status + ')' : '[WARN] Container still running (' + status + ') — may have auto-recovered'}`);
+      } catch (e) {
+        // Docker inspect failed — can't verify detection
+        result.detected = false;
+        result.evidence.push({
+          check: 'post-injection-container-status',
+          status: 'fail',
+          value: `docker inspect failed: ${e.message}`,
+          checkedAt: new Date().toISOString(),
+        });
+        console.log('  [WARN] Could not verify container status — docker inspect failed');
+      }
     }
 
     // Step 2c: Wait for recovery (watchdog + RecoveryEngine)

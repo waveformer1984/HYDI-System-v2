@@ -118,6 +118,7 @@ export class DependencyGraphBuilder {
 
   private addInfrastructureNodes(nodes: Map<string, DependencyNode>): void {
     // Database (local Supabase) — required by protoforge-core and heidi-web
+    // Phase 5: Active recovery via container restart (not just wait)
     nodes.set('database', {
       id: 'database',
       category: 'database',
@@ -125,10 +126,11 @@ export class DependencyGraphBuilder {
       dependencies: [],
       dependents: ['protoforge-core', 'heidi-web'],
       recoveryOrder: 0,
-      recoveryPolicy: 'wait_for_dependency',
+      recoveryPolicy: 'recover_database',
     });
 
     // Ollama — required for AI functionality but not for basic health
+    // Phase 5: Active recovery via Ollama service restart
     nodes.set('ollama', {
       id: 'ollama',
       category: 'ollama',
@@ -136,10 +138,11 @@ export class DependencyGraphBuilder {
       dependencies: [],
       dependents: ['heidi-web', 'protoforge-core'],
       recoveryOrder: 0,
-      recoveryPolicy: 'wait_for_dependency',
+      recoveryPolicy: 'restart_ollama',
     });
 
     // Bridge (api/chat/route.js) — the universal chat router
+    // Phase 5: Bridge recovery attempts process restart, escalates if not restartable
     nodes.set('bridge', {
       id: 'bridge',
       category: 'bridge',
@@ -147,7 +150,7 @@ export class DependencyGraphBuilder {
       dependencies: ['protoforge-core'],
       dependents: ['heidi-web'],
       recoveryOrder: 0,
-      recoveryPolicy: 'restart_process',
+      recoveryPolicy: 'restart_bridge',
     });
   }
 
@@ -180,9 +183,10 @@ export class DependencyGraphBuilder {
   private recoveryPolicyFor(
     id: string,
     criticality: string,
-  ): 'restart_process' | 'wait_for_dependency' | 'escalate' | 'no_action' {
+  ): 'restart_process' | 'wait_for_dependency' | 'escalate' | 'no_action' | 'restart_container' | 'restart_ollama' | 'recover_database' | 'restart_bridge' {
     if (criticality === 'optional') return 'no_action';
-    if (id === 'database' || id === 'ollama') return 'wait_for_dependency';
+    // Infrastructure nodes have their policies set in addInfrastructureNodes
+    // This method handles boot.config.json modules
     return 'restart_process';
   }
 
