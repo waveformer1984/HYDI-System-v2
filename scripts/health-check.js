@@ -105,7 +105,7 @@ function httpGet(url, timeoutMs = 5000) {
 function findPidsOnPort(port) {
   try {
     if (process.platform === 'win32') {
-      const out = execSync('netstat -ano', { encoding: 'utf8', timeout: 5000 });
+      const out = execSync('netstat -ano', { encoding: 'utf8', timeout: 5000, windowsHide: true });
       const pids = new Set();
       for (const line of out.split('\n')) {
         if (!line.includes(`:${port}`)) continue;
@@ -127,7 +127,7 @@ function getProcessInfo(pid) {
       // Use PowerShell instead of wmic (deprecated/removed on newer Windows)
       const out = execSync(
         `powershell -NoProfile -Command "Get-Process -Id ${pid} -ErrorAction SilentlyContinue | Select-Object ProcessName | Format-List"`,
-        { encoding: 'utf8', timeout: 5000 }
+        { encoding: 'utf8', timeout: 5000, windowsHide: true }
       );
       const nameMatch = out.match(/ProcessName\s*:\s*(.+)/);
       const name = nameMatch ? nameMatch[1].trim() : 'unknown';
@@ -136,7 +136,7 @@ function getProcessInfo(pid) {
       try {
         cmdline = execSync(
           `powershell -NoProfile -Command "(Get-CimInstance Win32_Process -Filter 'ProcessId=${pid}').CommandLine"`,
-          { encoding: 'utf8', timeout: 5000 }
+          { encoding: 'utf8', timeout: 5000, windowsHide: true }
         ).trim();
       } catch (_) { cmdline = name; }
       return { name, cmdline: cmdline || name };
@@ -361,7 +361,7 @@ async function checkStalePortProxy() {
   if (process.platform !== 'win32') return result;
 
   try {
-    const out = execSync('netsh interface portproxy show all', { encoding: 'utf8', timeout: 5000 });
+    const out = execSync('netsh interface portproxy show all', { encoding: 'utf8', timeout: 5000, windowsHide: true });
     if (out.trim().length === 0 || out.includes('No entries')) {
       result.checks.push({ check: 'portproxy', status: 'pass', message: 'no port proxies configured' });
     } else {
@@ -390,7 +390,7 @@ async function main() {
   const jsonMode = process.argv.includes('--json');
   const results = {
     timestamp: new Date().toISOString(),
-    canonical: { path: ROOT, remote: execSync('git remote get-url origin', { encoding: 'utf8', timeout: 5000 }).trim() },
+    canonical: { path: ROOT, remote: execSync('git remote get-url origin', { encoding: 'utf8', timeout: 5000, windowsHide: true }).trim() },
     modules: [],
     database: null,
     ollama: null,

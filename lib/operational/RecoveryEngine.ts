@@ -529,7 +529,7 @@ export class RecoveryEngine {
       if (!dockerCmd) {
         throw new Error('Docker CLI not available — cannot restart container');
       }
-      execSync(`${dockerCmd} restart ${container}`, { timeout: 30000, stdio: 'pipe' });
+      execSync(`${dockerCmd} restart ${container}`, { timeout: 30000, stdio: 'pipe', windowsHide: true } as any);
       this.stateModel.logEvent({
         id: randomUUID(),
         timestamp: new Date().toISOString(),
@@ -570,7 +570,7 @@ export class RecoveryEngine {
       if (process.platform === 'win32') {
         // Kill existing Ollama process, then start a new one
         try {
-          execSync('taskkill /IM ollama.exe /F', { timeout: 5000, stdio: 'pipe' });
+          execSync('taskkill /IM ollama.exe /F', { timeout: 5000, stdio: 'pipe', windowsHide: true } as any);
         } catch { /* may not be running */ }
         // Start Ollama in detached mode
         const child = spawn('ollama', ['serve'], {
@@ -583,7 +583,7 @@ export class RecoveryEngine {
         child.unref();
       } else {
         try {
-          execSync('pkill -f ollama', { timeout: 5000, stdio: 'pipe' });
+          execSync('pkill -f ollama', { timeout: 5000, stdio: 'pipe', windowsHide: true } as any);
         } catch { /* may not be running */ }
         const child = spawn('ollama', ['serve'], {
           cwd: this.root,
@@ -644,7 +644,7 @@ export class RecoveryEngine {
         throw new Error('Docker CLI not available — cannot restart DB container');
       }
       const containerName = 'supabase_db_HYDI-System-v2';
-      execSync(`${dockerCmd} restart ${containerName}`, { timeout: 30000, stdio: 'pipe' });
+      execSync(`${dockerCmd} restart ${containerName}`, { timeout: 30000, stdio: 'pipe', windowsHide: true } as any);
 
       // Wait for the DB to accept connections (max 20s)
       await this.waitForService('http://127.0.0.1:54321', 20000);
@@ -868,20 +868,20 @@ export class RecoveryEngine {
   private async killProcessOnPort(port: number): Promise<void> {
     try {
       if (process.platform === 'win32') {
-        const out = execSync('netstat -ano', { encoding: 'utf8', timeout: 5000 });
+        const out = execSync('netstat -ano', { encoding: 'utf8', timeout: 5000, windowsHide: true } as any);
         for (const line of out.split('\n')) {
           if (!line.includes(`:${port}`) || !/LISTENING/i.test(line)) continue;
           const parts = line.trim().split(/\s+/);
           const pid = parts[parts.length - 1];
           if (pid && /^\d+$/.test(pid)) {
             try {
-              execSync(`taskkill /PID ${pid} /F`, { timeout: 5000 });
+              execSync(`taskkill /PID ${pid} /F`, { timeout: 5000, windowsHide: true } as any);
             } catch { /* process may have already exited */ }
           }
         }
       } else {
         try {
-          execSync(`lsof -ti :${port} | xargs kill -9 2>/dev/null`, { timeout: 5000 });
+          execSync(`lsof -ti :${port} | xargs kill -9 2>/dev/null`, { timeout: 5000, windowsHide: true } as any);
         } catch { /* no process on port */ }
       }
     } catch { /* ignore errors — best effort cleanup */ }

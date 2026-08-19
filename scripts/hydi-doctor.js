@@ -79,7 +79,7 @@ function getHealthEndpoint(url, timeoutMs = 5000) {
 function findPidOnPort(port) {
   try {
     if (process.platform === 'win32') {
-      const out = execSync('netstat -ano', { encoding: 'utf8', timeout: 5000 });
+      const out = execSync('netstat -ano', { encoding: 'utf8', timeout: 5000, windowsHide: true });
       for (const line of out.split('\n')) {
         if (!line.includes(`:${port}`) || !/LISTENING/i.test(line)) continue;
         const parts = line.trim().split(/\s+/);
@@ -87,7 +87,7 @@ function findPidOnPort(port) {
         if (!isNaN(pid)) return pid;
       }
     } else {
-      const out = execSync(`lsof -ti :${port}`, { encoding: 'utf8', timeout: 5000 });
+      const out = execSync(`lsof -ti :${port}`, { encoding: 'utf8', timeout: 5000, windowsHide: true });
       const pid = parseInt(out.trim(), 10);
       if (!isNaN(pid)) return pid;
     }
@@ -101,7 +101,7 @@ async function runDoctor() {
   // 1. Is HEIDI alive? (check if boot-agent or PM2 is running)
   results.push(check('HEIDI process alive', () => {
     try {
-      const out = execSync('pm2 list', { encoding: 'utf8', timeout: 10000 });
+      const out = execSync('pm2 list', { encoding: 'utf8', timeout: 10000, windowsHide: true });
       if (out.includes('hydi-boot') && out.includes('online')) {
         return 'PM2 hydi-boot is online';
       }
@@ -183,7 +183,7 @@ async function runDoctor() {
     }
     try {
       const out = execSync(`${DOCKER_CMD} inspect --format "{{.State.Health.Status}}" supabase_db_HYDI-System-v2`, {
-        encoding: 'utf8', timeout: 8000,
+        encoding: 'utf8', timeout: 8000, windowsHide: true,
       });
       const status = out.trim();
       if (status !== 'healthy') {
@@ -233,11 +233,11 @@ async function runDoctor() {
 
   // 10. Git repository identity
   results.push(check('Git repository identity', () => {
-    const out = execSync('git remote -v', { cwd: ROOT, encoding: 'utf8', timeout: 5000 });
+    const out = execSync('git remote -v', { cwd: ROOT, encoding: 'utf8', timeout: 5000, windowsHide: true });
     if (!out.includes('HYDI-System-v2')) {
       throw new Error('Not in HYDI-System-v2 repository');
     }
-    const branch = execSync('git branch --show-current', { cwd: ROOT, encoding: 'utf8', timeout: 5000 }).trim();
+    const branch = execSync('git branch --show-current', { cwd: ROOT, encoding: 'utf8', timeout: 5000, windowsHide: true }).trim();
     return `branch: ${branch}`;
   }));
 
@@ -253,7 +253,7 @@ async function runDoctor() {
   results.push(await checkAsync('Recovery engine functional', async () => {
     try {
       const out = execSync('node scripts/hydi-recover.js --dry-run', {
-        cwd: ROOT, timeout: 30000, encoding: 'utf8', stdio: 'pipe',
+        cwd: ROOT, timeout: 30000, encoding: 'utf8', stdio: 'pipe', windowsHide: true,
       });
       return 'dry-run succeeded';
     } catch (e) {

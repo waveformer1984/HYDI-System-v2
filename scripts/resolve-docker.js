@@ -48,7 +48,7 @@ function resolveDocker(opts = {}) {
   let cmd = null;
   let cliPath = null;
   try {
-    execSync('docker --version', { timeout: 3000, stdio: 'pipe', encoding: 'utf8' });
+    execSync('docker --version', { timeout: 3000, stdio: 'pipe', encoding: 'utf8', windowsHide: true });
     cmd = 'docker';
     cliPath = 'docker (in PATH)';
   } catch {
@@ -75,7 +75,7 @@ function resolveDocker(opts = {}) {
   // 2. Check if daemon is responding
   try {
     execSync(`${cmd} info --format "{{.ServerVersion}}"`, {
-      timeout: timeoutMs, stdio: 'pipe', encoding: 'utf8',
+      timeout: timeoutMs, stdio: 'pipe', encoding: 'utf8', windowsHide: true,
     });
     return { cmd, status: 'available', path: cliPath };
   } catch {

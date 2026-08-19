@@ -227,6 +227,7 @@ function spawnProcess(mod) {
     cwd: ROOT,
     env: { ...process.env, ...resolvedEnv },
     shell: true, // resolves npm/python on Windows + PATH lookups everywhere
+    windowsHide: true, // prevent blank cmd windows from flashing on screen
   });
   child.exitedEarly = false;
   child.stdout.on('data', (d) => log(mod.id, d.toString()));
@@ -316,6 +317,7 @@ function runExternalPreflight() {
       env: process.env,
       shell: false,
       stdio: 'inherit',
+      windowsHide: true,
     });
     child.on('exit', (code) => resolve(code === 0));
     child.on('error', (e) => {

@@ -137,7 +137,7 @@ function checkSupabaseServiceLevel() {
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
       execSync('node scripts/check-supabase-service.js', {
-        encoding: 'utf8', timeout: 10000, stdio: 'pipe', cwd: ROOT,
+        encoding: 'utf8', timeout: 10000, stdio: 'pipe', cwd: ROOT, windowsHide: true,
       });
       return { ok: true };
     } catch (e) {
@@ -165,7 +165,7 @@ function checkInfrastructure() {
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
         const out = execSync(`${DOCKER_CMD} inspect --format "{{.State.Status}}" supabase_db_HYDI-System-v2`, {
-          encoding: 'utf8', timeout: 8000, stdio: 'pipe',
+          encoding: 'utf8', timeout: 8000, stdio: 'pipe', windowsHide: true,
         });
         dbStatus = out.trim();
         dbOk = dbStatus === 'running';
@@ -204,7 +204,7 @@ function checkInfrastructure() {
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
         const out = execSync(`${DOCKER_CMD} inspect --format "{{.State.Status}}" supabase_rest_HYDI-System-v2`, {
-          encoding: 'utf8', timeout: 8000, stdio: 'pipe',
+          encoding: 'utf8', timeout: 8000, stdio: 'pipe', windowsHide: true,
         });
         restStatus = out.trim();
         restOk = restStatus === 'running';
@@ -353,7 +353,7 @@ async function runCheck() {
         recoveryPromises.push(new Promise((resolve) => {
           const child = exec(
             `node scripts/hydi-recover.js --governed --component=${f.name}`,
-            { cwd: root, timeout: 120000, stdio: 'pipe' },
+            { cwd: root, timeout: 120000, stdio: 'pipe', windowsHide: true },
             (err) => {
               if (err) {
                 log(`DELEGATE  RecoveryEngine failed for ${f.name}: ${err.message}`);
