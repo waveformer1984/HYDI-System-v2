@@ -134,6 +134,10 @@ export interface OperationalEvent {
 
 export type RecoveryPolicyId =
   | 'restart_process'      // kill + respawn a boot.config.json module
+  | 'restart_container'    // restart a Docker container by name
+  | 'restart_ollama'       // restart the local Ollama AI service
+  | 'recover_database'     // wait for / reconnect to local database
+  | 'restart_bridge'       // restart a bridge component
   | 'wait_for_dependency'  // do nothing locally; wait for upstream recovery
   | 'escalate'             // exhausted retries; signal for human intervention
   | 'no_action';           // component is healthy or recovery not applicable
@@ -493,4 +497,155 @@ export type OperationalEventType =
   | 'circuit_breaker_tripped'   // Phase 4: circuit breaker tripped
   | 'recovery_lock_acquired'    // Phase 4: recovery lock acquired
   | 'recovery_lock_released'    // Phase 4: recovery lock released
-  | 'budget_exhausted';         // Phase 4: recovery budget exhausted
+  | 'budget_exhausted'          // Phase 4: recovery budget exhausted
+  | 'self_health_check'         // Phase 5: HEIDI self-health check
+  | 'degraded_mode_entered'     // Phase 5: entered intentional degraded mode
+  | 'degraded_mode_exited'      // Phase 5: exited degraded mode
+  | 'qualification_step'        // Phase 5: qualification suite step
+  | 'failure_injected'          // Phase 5: failure was deliberately injected
+  | 'soak_metric';              // Phase 5: soak test metric recorded
+
+// ---------------------------------------------------------------------------
+// Phase 5: Recovery Action Registry
+// ---------------------------------------------------------------------------
+
+/**
+ * One authoritative registry entry for a recoverable action.
+ * Every action HEIDI can take is registered here with full metadata.
+ */
+export interface ActionRegistryEntry {
+  actionId: string;                    // unique action ID (e.g. "restart.protoforge-core")
+  actionType: RecoveryPolicyId;        // what kind of action
+  targetComponent: string;             // which component this acts on
+  purpose: string;                     // why this action exists
+  prerequisites: string[];             // what must be true before executing
+  authorizationClass: AuthorizationMode;
+  riskLevel: RiskLevel;
+  reversibility: 'reversible' | 'irreversible' | 'partial';
+  timeoutMs: number;                   // max execution time
+  retryPolicy: {
+    maxAttempts: number;
+    cooldownMs: number;
+  };
+  cooldownMs: number;                  // minimum time between invocations
+  expectedStateTransition: {
+    from: ComponentState;
+    to: ComponentState;
+  };
+  verificationStrategy: string;        // how recovery is verified
+  escalationBehavior: string;          // what happens if this action fails
+}
+
+// ---------------------------------------------------------------------------
+// Phase 5: Self-Health Model
+// ---------------------------------------------------------------------------
+
+/**
+ * HEIDI's own operational health, separate from the components it manages.
+ */
+export interface SelfHealthState {
+  timestamp: string;
+  heidiAlive: boolean;                 // is the control plane process running?
+  loopHealthy: boolean;                // is the observation loop cycling?
+  lastObservationAge: number;          // seconds since last observation cycle
+  memoryUsageMb: number;               // process memory usage
+  memoryGrowthRate: number;            // bytes/second growth trend
+  cpuPercent: number;                  // approximate CPU usage
+  recoveryLatencyMs: number;           // last recovery duration
+  repeatedExceptions: number;          // count of repeated errors
+  persistenceWritable: boolean;        // can we write to operational event log?
+  stuckRecoveries: number;             // recoveries that have been active too long
+  capabilityFailures: number;          // recent capability authorization failures
+  ownDependenciesHealthy: boolean;     // are HEIDI's own deps available?
+  state: ComponentState;               // HEIDI's own state
+  degradedMode: boolean;               // is HEIDI in intentional degraded mode?
+  degradedReason?: string;             // why degraded mode was entered
+}
+
+// ---------------------------------------------------------------------------
+// Phase 5: Failure Injection Framework
+// ---------------------------------------------------------------------------
+
+/**
+ * A structured failure injection scenario.
+ */
+export interface FailureScenario {
+  scenarioId: string;                  // unique scenario ID
+  name: string;                        // human-readable name
+  failureClass: 'A' | 'B' | 'C' | 'D' | 'E' | 'F';  // process, container, dependency, AI, persistence, bridge
+  description: string;                 // what the scenario does
+  targetComponent: string;             // which component to inject failure into
+  setup: string[];                     // setup steps (readable)
+  expectedObservation: string;         // what HEIDI should detect
+  expectedDiagnosis: string;           // what HEIDI should conclude
+  expectedAction: RecoveryPolicyId;    // what HEIDI should do
+  expectedVerification: string;        // how recovery should be verified
+  cleanup: string[];                   // cleanup steps
+  riskLevel: RiskLevel;                // risk of injecting this failure
+  timeoutMs: number;                   // max time for the whole scenario
+}
+
+/**
+ * Result of running a failure scenario.
+ */
+export interface FailureScenarioResult {
+  scenarioId: string;
+  name: string;
+  failureClass: string;
+  injected: boolean;                   // was the failure successfully injected?
+  detected: boolean;                   // did HEIDI detect the failure?
+  diagnosed: boolean;                  // did HEIDI diagnose it correctly?
+  actionSelected: string | null;       // what action was selected
+  actionExecuted: boolean;             // was the action executed?
+  recovered: boolean;                  // did the component return to HEALTHY?
+  verified: boolean;                   // was recovery verified with evidence?
+  escalated: boolean;                  // was it escalated instead?
+  durationMs: number;                  // total scenario duration
+  evidence: HealthEvidence[];          // evidence collected
+  error?: string;                      // error if scenario failed
+}
+
+// ---------------------------------------------------------------------------
+// Phase 5: Qualification Suite
+// ---------------------------------------------------------------------------
+
+/**
+ * Result of a qualification run.
+ */
+export interface QualificationResult {
+  suiteName: string;
+  timestamp: string;
+  scenarios: FailureScenarioResult[];
+  totalScenarios: number;
+  passed: number;
+  failed: number;
+  escalated: number;                   // safe escalation counts as pass
+  durationMs: number;
+  overallVerdict: 'OPERATIONAL' | 'OPERATIONAL_WITH_LIMITATIONS' | 'NOT_OPERATIONAL';
+  evidence: {
+    baselineHealthy: boolean;
+    allScenariosCompleted: boolean;
+    recoverySuccessRate: number;       // 0-100
+    escalationRate: number;            // 0-100
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Phase 5: Soak Metrics
+// ---------------------------------------------------------------------------
+
+export interface SoakMetrics {
+  durationMs: number;
+  totalChecks: number;
+  healthSuccessRate: number;           // 0-100
+  incidentDetectionLatencyMs: number;  // average
+  recoveryLatencyMs: number;           // average
+  recoverySuccessRate: number;         // 0-100
+  failedActions: number;
+  repeatedIncidents: number;
+  memoryGrowthMb: number;              // total growth over soak
+  cpuAveragePercent: number;
+  persistenceFailures: number;
+  eventJournalIntegrity: boolean;      // did the journal survive intact?
+  verdict: 'PASS' | 'FAIL';
+}

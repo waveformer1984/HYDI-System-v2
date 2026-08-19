@@ -441,6 +441,18 @@ export class RecoveryEngine {
       case 'restart_process':
         await this.restartProcess(component);
         break;
+      case 'restart_container':
+        await this.restartContainer(component);
+        break;
+      case 'restart_ollama':
+        await this.restartOllama();
+        break;
+      case 'recover_database':
+        await this.recoverDatabase(component);
+        break;
+      case 'restart_bridge':
+        await this.restartBridge(component);
+        break;
       case 'wait_for_dependency':
         // Do nothing locally — the dependency recovery handles it
         this.stateModel.logEvent({
@@ -458,6 +470,215 @@ export class RecoveryEngine {
         // No action to take
         break;
     }
+  }
+
+  /**
+   * Restart a Docker container by name.
+   * Uses `docker restart <name>` — bounded, no arbitrary commands.
+   */
+  private async restartContainer(containerName: string): Promise<void> {
+    // Map component IDs to container names if needed
+    const containerMap: Record<string, string> = {
+      'supabase_db': 'supabase_db_HYDI-System-v2',
+      'supabase_rest': 'supabase_rest_HYDI-System-v2',
+      'supabase_auth': 'supabase_auth_HYDI-System-v2',
+      'supabase_realtime': 'supabase_realtime_HYDI-System-v2',
+      'supabase_storage': 'supabase_storage_HYDI-System-v2',
+      'supabase_kong': 'supabase_kong_HYDI-System-v2',
+      'supabase_studio': 'supabase_studio_HYDI-System-v2',
+    };
+    const container = containerMap[containerName] || containerName;
+
+    try {
+      execSync(`docker restart ${container}`, { timeout: 30000, stdio: 'pipe' });
+      this.stateModel.logEvent({
+        id: randomUUID(),
+        timestamp: new Date().toISOString(),
+        type: 'recovery_step',
+        component: containerName,
+        action: 'container_restarted',
+        actionResult: 'success',
+        detail: { container },
+      });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      this.stateModel.logEvent({
+        id: randomUUID(),
+        timestamp: new Date().toISOString(),
+        type: 'recovery_step',
+        component: containerName,
+        action: 'container_restart',
+        actionResult: 'failure',
+        detail: { error: msg, container },
+      });
+      throw new Error(`Container restart failed for ${container}: ${msg}`);
+    }
+  }
+
+  /**
+   * Restart the local Ollama AI service.
+   * On Windows, Ollama runs as a background process — we try to restart it.
+   */
+  private async restartOllama(): Promise<void> {
+    try {
+      if (process.platform === 'win32') {
+        // Kill existing Ollama process, then start a new one
+        try {
+          execSync('taskkill /IM ollama.exe /F', { timeout: 5000, stdio: 'pipe' });
+        } catch { /* may not be running */ }
+        // Start Ollama in detached mode
+        const child = spawn('ollama', ['serve'], {
+          cwd: this.root,
+          env: process.env,
+          shell: true,
+          detached: true,
+          stdio: 'ignore',
+        });
+        child.unref();
+      } else {
+        try {
+          execSync('pkill -f ollama', { timeout: 5000, stdio: 'pipe' });
+        } catch { /* may not be running */ }
+        const child = spawn('ollama', ['serve'], {
+          cwd: this.root,
+          env: process.env,
+          shell: true,
+          detached: true,
+          stdio: 'ignore',
+        });
+        child.unref();
+      }
+
+      // Wait for Ollama to come up (max 15s)
+      await this.waitForService('http://127.0.0.1:11434/api/tags', 15000);
+
+      this.stateModel.logEvent({
+        id: randomUUID(),
+        timestamp: new Date().toISOString(),
+        type: 'recovery_step',
+        component: 'ollama',
+        action: 'ollama_restarted',
+        actionResult: 'success',
+        detail: { pid: 'detached' },
+      });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      this.stateModel.logEvent({
+        id: randomUUID(),
+        timestamp: new Date().toISOString(),
+        type: 'recovery_step',
+        component: 'ollama',
+        action: 'ollama_restart',
+        actionResult: 'failure',
+        detail: { error: msg },
+      });
+      throw new Error(`Ollama restart failed: ${msg}`);
+    }
+  }
+
+  /**
+   * Recover database connectivity.
+   * For local Supabase: try to restart the DB container.
+   * For cloud: wait with bounded timeout (don't restart cloud infra).
+   */
+  private async recoverDatabase(component: string): Promise<void> {
+    this.stateModel.logEvent({
+      id: randomUUID(),
+      timestamp: new Date().toISOString(),
+      type: 'recovery_step',
+      component,
+      action: 'database_recovery_attempt',
+      detail: { strategy: 'local container restart' },
+    });
+
+    // Try restarting the local Supabase DB container
+    try {
+      const containerName = 'supabase_db_HYDI-System-v2';
+      execSync(`docker restart ${containerName}`, { timeout: 30000, stdio: 'pipe' });
+
+      // Wait for the DB to accept connections (max 20s)
+      await this.waitForService('http://127.0.0.1:54321', 20000);
+
+      this.stateModel.logEvent({
+        id: randomUUID(),
+        timestamp: new Date().toISOString(),
+        type: 'recovery_step',
+        component,
+        action: 'database_recovered',
+        actionResult: 'success',
+      });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      this.stateModel.logEvent({
+        id: randomUUID(),
+        timestamp: new Date().toISOString(),
+        type: 'recovery_step',
+        component,
+        action: 'database_recovery',
+        actionResult: 'failure',
+        detail: { error: msg },
+      });
+      // Don't throw — database recovery is best-effort for local;
+      // if it fails, the retry loop will try again or escalate.
+    }
+  }
+
+  /**
+   * Restart a bridge component.
+   * Bridges are typically processes that connect HEIDI to external systems.
+   * If the bridge is a boot.config.json process, use restartProcess.
+   * Otherwise, log and escalate.
+   */
+  private async restartBridge(component: string): Promise<void> {
+    // Check if the bridge is a registered process module
+    const mod = this.bootConfig.modules.find((m) => m.id === component);
+    if (mod && mod.type === 'process') {
+      await this.restartProcess(component);
+      return;
+    }
+
+    // If not a process module, we can't restart it autonomously
+    this.stateModel.logEvent({
+      id: randomUUID(),
+      timestamp: new Date().toISOString(),
+      type: 'recovery_step',
+      component,
+      action: 'bridge_restart',
+      actionResult: 'failure',
+      detail: { reason: 'bridge is not a restartable process module — escalation required' },
+    });
+    throw new Error(`Bridge ${component} is not a restartable process — requires manual intervention`);
+  }
+
+  /**
+   * Wait for a service to respond with a bounded timeout.
+   * Polls every 1s until the service responds or timeout is reached.
+   */
+  private async waitForService(url: string, timeoutMs: number): Promise<void> {
+    const http = require('http');
+    const https = require('https');
+    const lib = url.startsWith('https:') ? https : http;
+    const start = Date.now();
+
+    return new Promise((resolve, reject) => {
+      const check = () => {
+        if (Date.now() - start > timeoutMs) {
+          reject(new Error(`Service at ${url} did not respond within ${timeoutMs}ms`));
+          return;
+        }
+        const req = lib.get(url, { timeout: 3000 }, (res: any) => {
+          res.resume();
+          if (res.statusCode >= 200 && res.statusCode < 500) {
+            resolve();
+          } else {
+            setTimeout(check, 1000);
+          }
+        });
+        req.on('error', () => setTimeout(check, 1000));
+        req.on('timeout', () => { req.destroy(); setTimeout(check, 1000); });
+      };
+      check();
+    });
   }
 
   /**
