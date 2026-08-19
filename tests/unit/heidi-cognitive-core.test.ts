@@ -740,7 +740,7 @@ describe('CognitiveCore', () => {
     // Run a cycle — should pick up the active goal
     const state = await core.runCycle();
     expect(state.activeGoals.length).toBeGreaterThan(0);
-    expect(state.selectedAction!.actionType).toBe('advance_goal');
+    expect(state.selectedAction!.actionType).toBe('goal.advance');
     expect(state.selectedAction!.targetGoalId).toBe(mission.goalId);
     expect(state.executionResult!.executed).toBe(true);
     expect(state.executionResult!.outcome).toBe('success');
