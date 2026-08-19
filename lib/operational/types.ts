@@ -368,6 +368,14 @@ export interface PolicyDecisionRecord {
   verification?: HealthEvidence[];     // postcondition evidence
   timestamp: string;
   detail?: Record<string, unknown>;
+  // Phase 6: Observation confidence evidence
+  observationSource?: string;          // what observed the failure (e.g. "docker-inspect", "rest-probe")
+  observationState?: string;           // hysteresis state at decision time
+  observationConfidence?: string;      // HIGH | MEDIUM | LOW | NONE
+  corroboratingEvidence?: string[];    // sources that agree target is down
+  conflictingEvidence?: string[];      // sources that say target is healthy
+  failureClassification?: string;      // TARGET_FAILURE | OBSERVER_FAILURE | CONFIRMED_FAILURE | etc.
+  recoveryJustification?: string;      // why HEIDI believed this component was actually broken
 }
 
 // ---------------------------------------------------------------------------
@@ -503,7 +511,96 @@ export type OperationalEventType =
   | 'degraded_mode_exited'      // Phase 5: exited degraded mode
   | 'qualification_step'        // Phase 5: qualification suite step
   | 'failure_injected'          // Phase 5: failure was deliberately injected
-  | 'soak_metric';              // Phase 5: soak test metric recorded
+  | 'soak_metric'               // Phase 5: soak test metric recorded
+  | 'observation_uncertain'     // Phase 6: observation confidence too low to act
+  | 'false_recovery_prevented'; // Phase 6: recovery was correctly NOT triggered
+
+// ---------------------------------------------------------------------------
+// Phase 6: Observation Confidence & Corroboration
+// ---------------------------------------------------------------------------
+
+/**
+ * Classification of why an observation reported failure.
+ * This is the core distinction that prevents false-positive recovery.
+ *
+ * - TARGET_FAILURE: Evidence indicates the actual component/service is unhealthy.
+ * - OBSERVER_FAILURE: The mechanism used to inspect the component failed.
+ * - DEPENDENCY_FAILURE: Target cannot be evaluated because upstream is unavailable.
+ * - TRANSIENT_OBSERVATION: Observation failed once or temporarily.
+ * - CONFIRMED_FAILURE: Multiple independent observations agree target is unhealthy.
+ * - OBSERVATION_UNCERTAIN: Insufficient evidence to classify either way.
+ */
+export type FailureClassification =
+  | 'HEALTHY'                // All sources confirm target is healthy
+  | 'TARGET_FAILURE'         // Evidence indicates the actual component/service is unhealthy
+  | 'OBSERVER_FAILURE'       // The mechanism used to inspect the component failed
+  | 'DEPENDENCY_FAILURE'     // Target cannot be evaluated because upstream is unavailable
+  | 'TRANSIENT_OBSERVATION'  // Observation failed once or temporarily
+  | 'CONFIRMED_FAILURE'      // Multiple independent observations agree target is unhealthy
+  | 'OBSERVATION_UNCERTAIN'; // Insufficient evidence to classify either way
+
+/**
+ * The confidence level of an observation.
+ * Controls whether recovery may be authorized.
+ *
+ * - HIGH: Multiple independent sources agree → recovery may proceed
+ * - MEDIUM: Primary source failed, secondary source confirms → recovery may proceed
+ * - LOW: Primary source failed, no corroboration → recovery must NOT proceed
+ * - NONE: All observation sources failed → escalate, do not recover blindly
+ */
+export type ObservationConfidence = 'HIGH' | 'MEDIUM' | 'LOW' | 'NONE';
+
+/**
+ * A single observation from one source (e.g. docker inspect, REST probe).
+ */
+export interface ObservationSource {
+  name: string;                    // e.g. "docker-inspect", "rest-probe", "health-endpoint"
+  ok: boolean;                     // did this source report success?
+  value: string;                   // e.g. "running", "HTTP 200", "docker inspect failed"
+  latencyMs?: number;
+  checkedAt: string;               // ISO timestamp
+  isObserverFailure: boolean;      // true = the source itself failed (not the target)
+}
+
+/**
+ * The result of classifying an observation with confidence and corroboration.
+ * This is what the recovery authorization layer evaluates.
+ */
+export interface ObservationAssessment {
+  component: string;
+  classification: FailureClassification;
+  confidence: ObservationConfidence;
+  sources: ObservationSource[];
+  corroboratingEvidence: ObservationSource[];  // sources that agree target is down
+  conflictingEvidence: ObservationSource[];    // sources that say target is healthy
+  recoveryAuthorized: boolean;    // false when uncertain — the key safety gate
+  reason: string;                 // human-readable explanation
+  timestamp: string;
+}
+
+/**
+ * Anti-flap hysteresis state for a single component.
+ * Prevents a single failed observation from triggering recovery.
+ */
+export type ObservationHysteresisState =
+  | 'HEALTHY'                // all observations passing
+  | 'DEGRADED'               // some sources failing, others healthy
+  | 'OBSERVATION_UNCERTAIN'  // observer failure, target status unknown
+  | 'FAILURE_SUSPECTED'      // multiple failures but not yet confirmed
+  | 'FAILURE_CONFIRMED'      // corroborated failure — recovery authorized
+  | 'RECOVERING'             // recovery in progress
+  | 'OBSERVER_FAILED';       // observation mechanism itself is broken
+
+/**
+ * Tracked observation history entry for hysteresis.
+ */
+export interface ObservationHistoryEntry {
+  component: string;
+  timestamp: string;
+  ok: boolean;
+  classification: FailureClassification;
+  confidence: ObservationConfidence;
+}
 
 // ---------------------------------------------------------------------------
 // Phase 5: Recovery Action Registry

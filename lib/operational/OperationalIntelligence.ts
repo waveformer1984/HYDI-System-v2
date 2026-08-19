@@ -374,6 +374,13 @@ export class OperationalIntelligence {
       executor: 'governed-recovery',
       result: 'pending',
       reason: selection.reason,
+      // Phase 6: Observation confidence evidence
+      observationSource: health.evidence.map((e) => e.check).join(', '),
+      observationConfidence: health.state === 'UNAVAILABLE' || health.state === 'FAILED' ? 'HIGH' : 'MEDIUM',
+      failureClassification: health.state === 'UNAVAILABLE' || health.state === 'FAILED' ? 'CONFIRMED_FAILURE' : 'OBSERVATION_UNCERTAIN',
+      corroboratingEvidence: health.evidence.filter((e) => e.status === 'fail').map((e) => `${e.check}: ${e.value}`),
+      conflictingEvidence: health.evidence.filter((e) => e.status === 'pass').map((e) => `${e.check}: ${e.value}`),
+      recoveryJustification: `State=${health.state}, evidence=${health.evidence.length} checks, ${health.evidence.filter((e) => e.status === 'fail').length} failing, ${health.evidence.filter((e) => e.status === 'pass').length} passing`,
       // Explicitly mark fields that don't apply yet
       detail: {
         phase: 'pre-execution',

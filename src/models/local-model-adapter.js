@@ -860,7 +860,7 @@ class LocalModelAdapter extends EventEmitter {
       let timeoutHandle;
       let closed = false;
 
-      const child = spawn(command, args);
+      const child = spawn(command, args, { windowsHide: true });
       this.modelProcesses.set(child.pid, child);
 
       const cleanup = () => {

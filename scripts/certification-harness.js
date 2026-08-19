@@ -33,6 +33,9 @@ const https = require('https');
 const fs = require('fs');
 const path = require('path');
 
+// Install TypeScript loader so we can require lib/operational/*.ts
+require('./babel-register');
+
 const ROOT = path.resolve(__dirname, '..');
 const OP_DIR = path.resolve(ROOT, '.hydi-operational');
 
@@ -67,7 +70,7 @@ async function waitFor(url, timeoutMs = 120000, intervalMs = 2000) {
 
 function getPM2Process(name) {
   try {
-    const out = execSync(`pm2 jlist`, { encoding: 'utf8', timeout: 5000, stdio: 'pipe' });
+    const out = execSync(`pm2 jlist`, { encoding: 'utf8', timeout: 5000, stdio: 'pipe', windowsHide: true });
     const list = JSON.parse(out);
     return list.find((p) => p.name === name);
   } catch {
@@ -88,7 +91,7 @@ function getPidByPort(port) {
   try {
     if (process.platform === 'win32') {
       const out = execSync(`netstat -ano | findstr ":${port} "`, {
-        encoding: 'utf8', timeout: 5000, stdio: 'pipe',
+        encoding: 'utf8', timeout: 5000, stdio: 'pipe', windowsHide: true,
       });
       const lines = out.trim().split('\n');
       // Find the LISTENING line
@@ -99,7 +102,7 @@ function getPidByPort(port) {
         }
       }
     } else {
-      const out = execSync(`lsof -ti :${port}`, { encoding: 'utf8', timeout: 5000, stdio: 'pipe' });
+      const out = execSync(`lsof -ti :${port}`, { encoding: 'utf8', timeout: 5000, stdio: 'pipe', windowsHide: true });
       return parseInt(out.trim().split('\n')[0], 10);
     }
   } catch { /* not found */ }
@@ -138,7 +141,7 @@ const tests = [
 
       // 3. Kill the process
       try {
-        execSync(`taskkill /PID ${baselinePid} /F`, { stdio: 'pipe', timeout: 5000 });
+        execSync(`taskkill /PID ${baselinePid} /F`, { stdio: 'pipe', timeout: 5000, windowsHide: true });
         results.steps.push({ step: 'kill', status: 'pass', detail: { killedPid: baselinePid } });
       } catch (e) {
         results.steps.push({ step: 'kill', status: 'fail', reason: e.message });
@@ -185,7 +188,7 @@ const tests = [
       try {
         const out = execSync(
           `node scripts/hydi-recover.js --governed --component=nonexistent-test-component 2>&1`,
-          { encoding: 'utf8', timeout: 30000, cwd: ROOT },
+          { encoding: 'utf8', timeout: 30000, cwd: ROOT, windowsHide: true },
         );
         results.steps.push({ step: 'governed-recover', status: 'pass', output: out });
 
@@ -274,7 +277,7 @@ const tests = [
       // Run watchdog once and check it doesn't crash
       try {
         const out = execSync('node scripts/watchdog.js --once 2>&1', {
-          encoding: 'utf8', timeout: 30000, cwd: ROOT, stdio: 'pipe',
+          encoding: 'utf8', timeout: 30000, cwd: ROOT, stdio: 'pipe', windowsHide: true,
         });
         results.steps.push({ step: 'watchdog-run', status: 'pass', detail: 'Watchdog ran successfully' });
 
@@ -306,7 +309,7 @@ const tests = [
         // Run the operational learning analysis via a Node one-liner
         const out = execSync(
           `node -e "require('./scripts/babel-register'); const { OperationalLearning } = require('./lib/operational/OperationalLearning'); const l = new OperationalLearning('.'); const i = l.analyze(); console.log(JSON.stringify(i, null, 2))" 2>&1`,
-          { encoding: 'utf8', timeout: 15000, cwd: ROOT, stdio: 'pipe' },
+          { encoding: 'utf8', timeout: 15000, cwd: ROOT, stdio: 'pipe', windowsHide: true },
         );
 
         const insights = JSON.parse(out);
@@ -339,7 +342,7 @@ const tests = [
       try {
         const out = execSync(
           `node -e "const { resolveDocker } = require('./scripts/resolve-docker'); const r = resolveDocker(); console.log(JSON.stringify(r))" 2>&1`,
-          { encoding: 'utf8', timeout: 15000, cwd: ROOT, stdio: 'pipe' },
+          { encoding: 'utf8', timeout: 15000, cwd: ROOT, stdio: 'pipe', windowsHide: true },
         );
 
         const info = JSON.parse(out);
@@ -371,7 +374,7 @@ const tests = [
       try {
         const out = execSync(
           `node -e "const v = require('./src/core/adaptation-vocabulary'); console.log(JSON.stringify({ types: [...v.VALID_TYPES], actions: [...v.VALID_ACTIONS] }))" 2>&1`,
-          { encoding: 'utf8', timeout: 10000, cwd: ROOT, stdio: 'pipe' },
+          { encoding: 'utf8', timeout: 10000, cwd: ROOT, stdio: 'pipe', windowsHide: true },
         );
 
         const vocab = JSON.parse(out);
@@ -386,6 +389,192 @@ const tests = [
         }
       } catch (e) {
         results.steps.push({ step: 'vocabulary-check', status: 'fail', reason: e.message });
+      }
+
+      results.completedAt = new Date().toISOString();
+      return results;
+    },
+  },
+
+  // Phase 6: Observer Integrity Tests
+  {
+    id: 8,
+    name: 'observer-failure-no-recovery',
+    description: 'Phase 6: Simulate docker inspect failure while Supabase is healthy — verify NO recovery is triggered',
+    async run() {
+      const results = { startedAt: new Date().toISOString(), steps: [], passed: false };
+
+      // 1. Verify Supabase REST is actually healthy via the service check script
+      try {
+        execSync('node scripts/check-supabase-service.js', {
+          encoding: 'utf8', timeout: 10000, stdio: 'pipe', cwd: ROOT, windowsHide: true,
+        });
+        results.steps.push({ step: 'pre-check', status: 'pass', detail: 'Supabase REST is healthy' });
+      } catch {
+        results.steps.push({ step: 'pre-check', status: 'fail', reason: 'Supabase REST not healthy — cannot test observer failure' });
+        results.completedAt = new Date().toISOString();
+        return results;
+      }
+
+      // 2. Run the observation confidence classifier with simulated observer failure
+      try {
+        const { classifyObservation } = require('../lib/operational/ObservationConfidence');
+        const assessment = classifyObservation('supabase_rest', [
+          { name: 'docker-inspect', ok: false, value: 'docker inspect failed', isObserverFailure: true, checkedAt: new Date().toISOString() },
+          { name: 'rest-probe', ok: true, value: 'REST API responding', isObserverFailure: false, checkedAt: new Date().toISOString() },
+        ]);
+
+        if (assessment.classification === 'OBSERVER_FAILURE' && !assessment.recoveryAuthorized) {
+          results.steps.push({ step: 'classification', status: 'pass', detail: `${assessment.classification} (${assessment.confidence}) — recovery NOT authorized` });
+        } else {
+          results.steps.push({ step: 'classification', status: 'fail', reason: `Expected OBSERVER_FAILURE with no recovery, got ${assessment.classification} authorized=${assessment.recoveryAuthorized}` });
+        }
+
+        // 3. Verify the watchdog would NOT dispatch recovery for this
+        if (!assessment.recoveryAuthorized) {
+          results.steps.push({ step: 'no-recovery', status: 'pass', detail: 'False recovery correctly prevented' });
+          results.passed = true;
+        } else {
+          results.steps.push({ step: 'no-recovery', status: 'fail', reason: 'Recovery was authorized for observer failure — this is a false positive' });
+        }
+      } catch (e) {
+        results.steps.push({ step: 'classifier-error', status: 'fail', reason: e.message });
+      }
+
+      results.completedAt = new Date().toISOString();
+      return results;
+    },
+  },
+
+  {
+    id: 9,
+    name: 'confirmed-failure-recovery',
+    description: 'Phase 6: Verify that a confirmed failure (all sources agree) authorizes recovery',
+    async run() {
+      const results = { startedAt: new Date().toISOString(), steps: [], passed: false };
+
+      try {
+        const { classifyObservation } = require('../lib/operational/ObservationConfidence');
+        const assessment = classifyObservation('supabase_db', [
+          { name: 'docker-inspect', ok: false, value: 'stopped', isObserverFailure: false, checkedAt: new Date().toISOString() },
+          { name: 'rest-probe', ok: false, value: 'REST API unreachable', isObserverFailure: false, checkedAt: new Date().toISOString() },
+        ]);
+
+        if (assessment.classification === 'CONFIRMED_FAILURE' && assessment.recoveryAuthorized) {
+          results.steps.push({ step: 'classification', status: 'pass', detail: `${assessment.classification} (${assessment.confidence}) — recovery authorized` });
+          results.passed = true;
+        } else {
+          results.steps.push({ step: 'classification', status: 'fail', reason: `Expected CONFIRMED_FAILURE with recovery authorized, got ${assessment.classification} authorized=${assessment.recoveryAuthorized}` });
+        }
+      } catch (e) {
+        results.steps.push({ step: 'classifier-error', status: 'fail', reason: e.message });
+      }
+
+      results.completedAt = new Date().toISOString();
+      return results;
+    },
+  },
+
+  {
+    id: 10,
+    name: 'conflicting-evidence-uncertain',
+    description: 'Phase 6: Verify that conflicting evidence (one says down, one says healthy) does NOT authorize recovery',
+    async run() {
+      const results = { startedAt: new Date().toISOString(), steps: [], passed: false };
+
+      try {
+        const { classifyObservation } = require('../lib/operational/ObservationConfidence');
+        const assessment = classifyObservation('supabase_rest', [
+          { name: 'docker-inspect', ok: false, value: 'stopped', isObserverFailure: false, checkedAt: new Date().toISOString() },
+          { name: 'rest-probe', ok: true, value: 'REST API responding', isObserverFailure: false, checkedAt: new Date().toISOString() },
+        ]);
+
+        if (assessment.classification === 'OBSERVATION_UNCERTAIN' && !assessment.recoveryAuthorized) {
+          results.steps.push({ step: 'classification', status: 'pass', detail: `${assessment.classification} (${assessment.confidence}) — recovery NOT authorized` });
+          results.passed = true;
+        } else {
+          results.steps.push({ step: 'classification', status: 'fail', reason: `Expected OBSERVATION_UNCERTAIN with no recovery, got ${assessment.classification} authorized=${assessment.recoveryAuthorized}` });
+        }
+      } catch (e) {
+        results.steps.push({ step: 'classifier-error', status: 'fail', reason: e.message });
+      }
+
+      results.completedAt = new Date().toISOString();
+      return results;
+    },
+  },
+
+  {
+    id: 11,
+    name: 'hysteresis-anti-flap',
+    description: 'Phase 6: Verify that a single failure does not trigger recovery — needs 2 consecutive confirmed failures',
+    async run() {
+      const results = { startedAt: new Date().toISOString(), steps: [], passed: false };
+
+      try {
+        const { classifyObservation, ObservationHysteresis } = require('../lib/operational/ObservationConfidence');
+        const hyst = new ObservationHysteresis({ consecutiveFailuresToConfirm: 2 });
+
+        const confirmedFailure = classifyObservation('supabase_db', [
+          { name: 'docker-inspect', ok: false, value: 'stopped', isObserverFailure: false, checkedAt: new Date().toISOString() },
+          { name: 'rest-probe', ok: false, value: 'unreachable', isObserverFailure: false, checkedAt: new Date().toISOString() },
+        ]);
+
+        // First failure — should be FAILURE_SUSPECTED, not authorized
+        const state1 = hyst.record('supabase_db', confirmedFailure);
+        if (state1 === 'FAILURE_SUSPECTED' && !hyst.isRecoveryAuthorized('supabase_db')) {
+          results.steps.push({ step: 'first-failure', status: 'pass', detail: `state=${state1} — recovery not yet authorized` });
+        } else {
+          results.steps.push({ step: 'first-failure', status: 'fail', reason: `Expected FAILURE_SUSPECTED with no recovery, got ${state1} authorized=${hyst.isRecoveryAuthorized('supabase_db')}` });
+        }
+
+        // Second consecutive failure — should be FAILURE_CONFIRMED, authorized
+        const state2 = hyst.record('supabase_db', confirmedFailure);
+        if (state2 === 'FAILURE_CONFIRMED' && hyst.isRecoveryAuthorized('supabase_db')) {
+          results.steps.push({ step: 'second-failure', status: 'pass', detail: `state=${state2} — recovery authorized after corroboration` });
+          results.passed = true;
+        } else {
+          results.steps.push({ step: 'second-failure', status: 'fail', reason: `Expected FAILURE_CONFIRMED with recovery authorized, got ${state2} authorized=${hyst.isRecoveryAuthorized('supabase_db')}` });
+        }
+      } catch (e) {
+        results.steps.push({ step: 'error', status: 'fail', reason: e.message });
+      }
+
+      results.completedAt = new Date().toISOString();
+      return results;
+    },
+  },
+
+  {
+    id: 12,
+    name: 'persistent-observer-failure-escalation',
+    description: 'Phase 6: Verify that persistent observer failure leads to OBSERVER_FAILED state, not blind recovery',
+    async run() {
+      const results = { startedAt: new Date().toISOString(), steps: [], passed: false };
+
+      try {
+        const { classifyObservation, ObservationHysteresis } = require('../lib/operational/ObservationConfidence');
+        const hyst = new ObservationHysteresis({ consecutiveFailuresToConfirm: 2 });
+
+        const allObserversFailed = classifyObservation('supabase_db', [
+          { name: 'docker-inspect', ok: false, value: 'docker inspect failed', isObserverFailure: true, checkedAt: new Date().toISOString() },
+          { name: 'rest-probe', ok: false, value: 'timeout', isObserverFailure: true, checkedAt: new Date().toISOString() },
+        ]);
+
+        // Record enough uncertain observations to trigger OBSERVER_FAILED
+        let finalState = 'HEALTHY';
+        for (let i = 0; i < 5; i++) {
+          finalState = hyst.record('supabase_db', allObserversFailed);
+        }
+
+        if (finalState === 'OBSERVER_FAILED' && !hyst.isRecoveryAuthorized('supabase_db')) {
+          results.steps.push({ step: 'persistent-observer-failure', status: 'pass', detail: `state=${finalState} — no blind recovery, escalation path` });
+          results.passed = true;
+        } else {
+          results.steps.push({ step: 'persistent-observer-failure', status: 'fail', reason: `Expected OBSERVER_FAILED with no recovery, got ${finalState} authorized=${hyst.isRecoveryAuthorized('supabase_db')}` });
+        }
+      } catch (e) {
+        results.steps.push({ step: 'error', status: 'fail', reason: e.message });
       }
 
       results.completedAt = new Date().toISOString();

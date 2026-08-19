@@ -579,7 +579,8 @@ export class RecoveryEngine {
           shell: true,
           detached: true,
           stdio: 'ignore',
-        });
+          windowsHide: true,
+        } as any);
         child.unref();
       } else {
         try {
@@ -591,7 +592,8 @@ export class RecoveryEngine {
           shell: true,
           detached: true,
           stdio: 'ignore',
-        });
+          windowsHide: true,
+        } as any);
         child.unref();
       }
 
@@ -846,7 +848,8 @@ export class RecoveryEngine {
       shell: true,
       detached: true,
       stdio: 'ignore',
-    });
+      windowsHide: true,
+    } as any);
 
     // unref() so the parent CLI process can exit without waiting for the child
     child.unref();

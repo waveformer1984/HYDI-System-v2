@@ -37,7 +37,22 @@ const path = require('path');
 const { SelfHealthMonitor } = require('../lib/operational/SelfHealthMonitor');
 const { SystemStateModel } = require('../lib/operational/SystemStateModel');
 
+// Phase 6: Observation confidence — distinguishes observer failure from target failure
+const {
+  classifyObservation,
+  ObservationHysteresis,
+  ObservationMetricsCollector,
+} = require('../lib/operational/ObservationConfidence');
+
 const ROOT = path.resolve(__dirname, '..');
+
+// --- Observation confidence state (persists across watchdog cycles) ---
+const observationHysteresis = new ObservationHysteresis({
+  consecutiveFailuresToConfirm: 2,  // need 2 consecutive confirmed failures to recover
+  consecutiveSuccessesToReset: 1,
+  maxHistoryPerComponent: 10,
+});
+const observationMetrics = new ObservationMetricsCollector();
 
 // --- Self-health monitor instance ---
 // Uses a lightweight SystemStateModel that only receives self-health events.
@@ -149,7 +164,11 @@ function checkSupabaseServiceLevel() {
   return { ok: false, error: 'check failed' };
 }
 
-// Phase 5: Infrastructure health checks (Docker containers, Ollama)
+// Phase 6: Infrastructure health checks with observation confidence
+//
+// KEY CHANGE: Service-level checks now run INDEPENDENTLY of docker inspect.
+// If docker inspect fails but the REST API responds, the container is healthy
+// and the observer (docker CLI) is broken. Recovery is NOT authorized.
 function checkInfrastructure() {
   const results = [];
   const { execSync } = require('child_process');
@@ -158,92 +177,147 @@ function checkInfrastructure() {
   const { getDockerCmd } = require('./resolve-docker');
   const DOCKER_CMD = getDockerCmd();
 
-  // Check Supabase DB container + service-level connectivity
-  let dbStatus = 'unknown';
-  let dbOk = false;
+  // --- Supabase DB: gather independent observation sources ---
+  const dbSources = [];
+
+  // Source 1: Docker container state (observer — can fail independently)
+  let dbDockerStatus = 'unknown';
+  let dbDockerOk = false;
+  let dbDockerObserverFailed = false;
   if (DOCKER_CMD) {
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
         const out = execSync(`${DOCKER_CMD} inspect --format "{{.State.Status}}" supabase_db_HYDI-System-v2`, {
           encoding: 'utf8', timeout: 8000, stdio: 'pipe', windowsHide: true,
         });
-        dbStatus = out.trim();
-        dbOk = dbStatus === 'running';
+        dbDockerStatus = out.trim();
+        dbDockerOk = dbDockerStatus === 'running';
         break;
       } catch (e) {
-        if (attempt === 0) continue; // retry once
-        dbStatus = 'docker inspect failed';
+        if (attempt === 0) continue;
+        dbDockerStatus = 'docker inspect failed';
+        dbDockerObserverFailed = true; // observer failure, not target failure
       }
     }
   } else {
-    dbStatus = 'docker not available';
+    dbDockerStatus = 'docker not available';
+    dbDockerObserverFailed = true;
   }
-  // Service-level check: verify DB is accepting connections via REST API through Kong
-  if (dbOk) {
-    const svcCheck = checkSupabaseServiceLevel();
-    if (svcCheck.ok) {
-      dbStatus += ' + service-ok';
-    } else {
-      dbOk = false;
-      dbStatus += ' + service-fail: ' + svcCheck.error;
-    }
-  }
+  dbSources.push({
+    name: 'docker-inspect',
+    ok: dbDockerOk,
+    value: dbDockerStatus,
+    isObserverFailure: dbDockerObserverFailed,
+    checkedAt: new Date().toISOString(),
+  });
+
+  // Source 2: Service-level REST API probe (independent of docker inspect)
+  const dbSvcCheck = checkSupabaseServiceLevel();
+  dbSources.push({
+    name: 'rest-probe',
+    ok: dbSvcCheck.ok,
+    value: dbSvcCheck.ok ? 'REST API responding' : `REST API fail: ${dbSvcCheck.error}`,
+    isObserverFailure: false, // this is a real target check
+    checkedAt: new Date().toISOString(),
+  });
+
+  // Classify the observation
+  const dbAssessment = classifyObservation('supabase_db', dbSources);
+  observationMetrics.recordObservation(dbAssessment);
+  const dbHysteresisState = observationHysteresis.record('supabase_db', dbAssessment);
+
+  // Determine final ok state: target is healthy if ANY independent source confirms it
+  // AND the failure classification is not CONFIRMED_FAILURE
+  const dbOk = dbAssessment.classification === 'OBSERVER_FAILURE'
+    ? true // observer failed but service is healthy — do NOT report as down
+    : dbAssessment.recoveryAuthorized
+      ? false // confirmed failure
+      : dbSources.some((s) => s.ok); // at least one source says ok
+
   results.push({
     name: 'supabase_db',
     url: 'docker://supabase_db_HYDI-System-v2',
     required: true,
     ok: dbOk,
     statusCode: dbOk ? 200 : 503,
-    body: dbStatus,
+    body: `${dbDockerStatus} + ${dbSvcCheck.ok ? 'service-ok' : 'service-fail'} | ${dbAssessment.classification} (${dbAssessment.confidence}) hysteresis=${dbHysteresisState}`,
+    _assessment: dbAssessment,
+    _hysteresisState: dbHysteresisState,
   });
 
-  // Check Supabase REST container + service-level connectivity
-  let restStatus = 'unknown';
-  let restOk = false;
+  // --- Supabase REST: gather independent observation sources ---
+  const restSources = [];
+
+  // Source 1: Docker container state
+  let restDockerStatus = 'unknown';
+  let restDockerOk = false;
+  let restDockerObserverFailed = false;
   if (DOCKER_CMD) {
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
         const out = execSync(`${DOCKER_CMD} inspect --format "{{.State.Status}}" supabase_rest_HYDI-System-v2`, {
           encoding: 'utf8', timeout: 8000, stdio: 'pipe', windowsHide: true,
         });
-        restStatus = out.trim();
-        restOk = restStatus === 'running';
+        restDockerStatus = out.trim();
+        restDockerOk = restDockerStatus === 'running';
         break;
       } catch (e) {
-        if (attempt === 0) { continue; } // retry once
-        restStatus = 'docker inspect failed';
+        if (attempt === 0) { continue; }
+        restDockerStatus = 'docker inspect failed';
+        restDockerObserverFailed = true;
       }
     }
   } else {
-    restStatus = 'docker not available';
+    restDockerStatus = 'docker not available';
+    restDockerObserverFailed = true;
   }
-  // Service-level check: verify REST API responds through Kong gateway
-  if (restOk) {
-    const svcCheck = checkSupabaseServiceLevel();
-    if (svcCheck.ok) {
-      restStatus += ' + service-ok';
-    } else {
-      restOk = false;
-      restStatus += ' + service-fail: ' + svcCheck.error;
-    }
-  }
+  restSources.push({
+    name: 'docker-inspect',
+    ok: restDockerOk,
+    value: restDockerStatus,
+    isObserverFailure: restDockerObserverFailed,
+    checkedAt: new Date().toISOString(),
+  });
+
+  // Source 2: Service-level REST API probe (independent)
+  const restSvcCheck = checkSupabaseServiceLevel();
+  restSources.push({
+    name: 'rest-probe',
+    ok: restSvcCheck.ok,
+    value: restSvcCheck.ok ? 'REST API responding' : `REST API fail: ${restSvcCheck.error}`,
+    isObserverFailure: false,
+    checkedAt: new Date().toISOString(),
+  });
+
+  // Classify
+  const restAssessment = classifyObservation('supabase_rest', restSources);
+  observationMetrics.recordObservation(restAssessment);
+  const restHysteresisState = observationHysteresis.record('supabase_rest', restAssessment);
+
+  const restOk = restAssessment.classification === 'OBSERVER_FAILURE'
+    ? true
+    : restAssessment.recoveryAuthorized
+      ? false
+      : restSources.some((s) => s.ok);
+
   results.push({
     name: 'supabase_rest',
     url: 'docker://supabase_rest_HYDI-System-v2',
     required: true,
     ok: restOk,
     statusCode: restOk ? 200 : 503,
-    body: restStatus,
+    body: `${restDockerStatus} + ${restSvcCheck.ok ? 'service-ok' : 'service-fail'} | ${restAssessment.classification} (${restAssessment.confidence}) hysteresis=${restHysteresisState}`,
+    _assessment: restAssessment,
+    _hysteresisState: restHysteresisState,
   });
 
   // Check Ollama
   results.push({
     name: 'ollama',
     url: 'http://127.0.0.1:11434/api/tags',
-    required: false, // Ollama is important but not required for basic health
+    required: false,
     _checkOllama: true,
   });
-  // We'll resolve Ollama async below
 
   return results;
 }
@@ -305,6 +379,33 @@ function sendWebhook(failures) {
 }
 
 // ---------------------------------------------------------------------------
+// Phase 6: Observation event recording (durable evidence)
+// ---------------------------------------------------------------------------
+const OPS_DIR = path.resolve(ROOT, '.hydi-operational');
+function recordObservationEvent(component, assessment, hysteresisState, recoveryDispatched) {
+  try {
+    if (!fs.existsSync(OPS_DIR)) fs.mkdirSync(OPS_DIR, { recursive: true });
+    const event = {
+      timestamp: new Date().toISOString(),
+      component,
+      classification: assessment?.classification || 'UNKNOWN',
+      confidence: assessment?.confidence || 'NONE',
+      hysteresisState,
+      recoveryDispatched,
+      reason: assessment?.reason || '',
+      sources: assessment?.sources?.map((s) => ({ name: s.name, ok: s.ok, value: s.value, isObserverFailure: s.isObserverFailure })) || [],
+    };
+    const file = path.resolve(OPS_DIR, 'observation-events.jsonl');
+    fs.appendFileSync(file, JSON.stringify(event) + '\n');
+  } catch { /* best-effort — don't block watchdog */ }
+}
+
+function logObservationMetrics() {
+  const m = observationMetrics.getMetrics();
+  log(`METRICS observations=${m.totalObservations} observerFailures=${m.observerFailures} uncertain=${m.uncertainObservations} confirmed=${m.confirmedFailures} falseRecoveriesPrevented=${m.falseRecoveriesPrevented} recoveryAttempts=${m.recoveryAttempts} successful=${m.successfulRecoveries} failed=${m.failedRecoveries} escalations=${m.escalations}`);
+}
+
+// ---------------------------------------------------------------------------
 // Main check
 // ---------------------------------------------------------------------------
 async function runCheck() {
@@ -337,6 +438,12 @@ async function runCheck() {
     // 3 times doing nothing and then escalate, producing misleading logs.
     // See SUPERVISION_MODEL.md for the full supervision model.
     //
+    // Phase 6: Recovery is now gated by observation confidence and hysteresis.
+    // A single failed observation does NOT trigger recovery when:
+    //   - The failure classification is OBSERVER_FAILURE (observer broke, not target)
+    //   - The failure classification is OBSERVATION_UNCERTAIN (insufficient evidence)
+    //   - The hysteresis state is not FAILURE_CONFIRMED (need consecutive failures)
+    //
     // Recovery is dispatched in PARALLEL so a stuck/slow recovery on one
     // component does not block detection and recovery of others. Each
     // recovery has its own 120s timeout.
@@ -349,7 +456,33 @@ async function runCheck() {
           log(`OBSERVE  ${f.name} is optional — logging only, not calling RecoveryEngine`);
           continue;
         }
-        log(`DELEGATE  calling RecoveryEngine for ${f.name}`);
+
+        // Phase 6: Gate recovery on observation confidence
+        const assessment = f._assessment;
+        const hystState = f._hysteresisState || 'HEALTHY';
+
+        if (assessment && !assessment.recoveryAuthorized) {
+          // Observer failure or uncertain — do NOT recover
+          log(`OBSERVE  ${f.name} failure classified as ${assessment.classification} (${assessment.confidence}) — recovery NOT authorized. ${assessment.reason}`);
+          observationMetrics.recordEscalation();
+          // Record the prevented false recovery
+          recordObservationEvent(f.name, assessment, hystState, false);
+          continue;
+        }
+
+        if (hystState !== 'FAILURE_CONFIRMED' && hystState !== 'FAILURE_SUSPECTED') {
+          log(`OBSERVE  ${f.name} hysteresis state=${hystState} — need FAILURE_CONFIRMED before recovery. Waiting for corroboration.`);
+          continue;
+        }
+
+        if (hystState === 'FAILURE_SUSPECTED') {
+          log(`OBSERVE  ${f.name} failure suspected but not yet confirmed (hysteresis=FAILURE_SUSPECTED) — waiting for consecutive failure.`);
+          continue;
+        }
+
+        log(`DELEGATE  calling RecoveryEngine for ${f.name} (hysteresis=FAILURE_CONFIRMED, classification=${assessment?.classification || 'N/A'})`);
+        observationHysteresis.markRecovering(f.name);
+        recordObservationEvent(f.name, assessment, hystState, true);
         recoveryPromises.push(new Promise((resolve) => {
           const child = exec(
             `node scripts/hydi-recover.js --governed --component=${f.name}`,
@@ -357,8 +490,12 @@ async function runCheck() {
             (err) => {
               if (err) {
                 log(`DELEGATE  RecoveryEngine failed for ${f.name}: ${err.message}`);
+                observationHysteresis.markRecovered(f.name, false);
+                observationMetrics.recordRecoveryAttempt(false);
               } else {
                 log(`DELEGATE  RecoveryEngine completed for ${f.name}`);
+                observationHysteresis.markRecovered(f.name, true);
+                observationMetrics.recordRecoveryAttempt(true);
               }
               resolve();
             }
@@ -381,6 +518,8 @@ async function runCheck() {
     if (selfHealth.state !== 'HEALTHY') {
       log(`SELF-HEALTH ${selfHealth.state} — mem=${selfHealth.memoryUsageMb}MB, stuckRecoveries=${selfHealth.stuckRecoveries}, persistenceWritable=${selfHealth.persistenceWritable}${selfHealth.degradedReason ? ', reason=' + selfHealth.degradedReason : ''}`);
     }
+    // Phase 6: Log observation metrics every 5th cycle
+    logObservationMetrics();
   }
   selfCheckCounter++;
 
