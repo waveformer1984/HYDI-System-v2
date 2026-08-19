@@ -155,7 +155,7 @@ export interface ReplanResult {
   revisedPlan: string | null;
 }
 
-interface DBConfig {
+export interface DBConfig {
   host?: string; port?: number; database?: string; user?: string; password?: string;
 }
 
@@ -181,6 +181,22 @@ export interface ExecutionBridge {
   revenueControlLoop?: {
     run: () => Promise<unknown>;
     collectMetrics: () => Promise<unknown>;
+  } | null;
+  revenuePipeline?: {
+    identifyProspect: (input: { companyName: string; contactName?: string | null; contactEmail?: string | null; source: string; metadata?: Record<string, unknown> }) => Promise<unknown>;
+    scoreProspect: (prospectId: string) => Promise<{ score: number; factors: Record<string, number>; reason: string }>;
+    updateStatus: (prospectId: string, newStatus: string, context?: Record<string, unknown>) => Promise<unknown>;
+    createOpportunity: (input: { prospectId: string; offerId: string; estimatedValue?: number; probability?: number; expectedCloseDate?: string }) => Promise<unknown>;
+    getPipelineMetrics: () => Promise<unknown>;
+  } | null;
+  revenueLifecycle?: {
+    startOnboarding: (input: { customerId: string; offerId: string; stripeCustomerId?: string; configuration?: Record<string, unknown> }) => Promise<unknown>;
+    activateService: (serviceId: string) => Promise<unknown>;
+    verifyService: (serviceId: string) => Promise<{ verified: boolean; result: string; details: Record<string, unknown> }>;
+  } | null;
+  revenueLedger?: {
+    getVerifiedRevenue: () => Promise<unknown>;
+    getRevenueSummary: () => Promise<unknown>;
   } | null;
   memory?: {
     retrieve: (query: string, userId: string, sessionId?: string) => Promise<string>;
@@ -366,6 +382,189 @@ export class CognitiveCore {
           evidence: [{ metrics: result }],
           verified: true,
           verificationDetails: 'Metrics object returned',
+        };
+      });
+    }
+
+    // RevenuePipeline capabilities (ProspectPipeline)
+    if (this.bridge.revenuePipeline) {
+      const pipeline = this.bridge.revenuePipeline;
+      this.wireExecutor('revenue.identify_prospect', async (params) => {
+        const companyName = params.companyName as string;
+        if (!companyName) return this.failResult('revenue.identify_prospect', 'Missing required param: companyName');
+        const source = (params.source as string) || 'manual_entry';
+        const result = await pipeline.identifyProspect({
+          companyName,
+          contactName: params.contactName as string | null | undefined,
+          contactEmail: params.contactEmail as string | null | undefined,
+          source: source as never,
+          metadata: params.metadata as Record<string, unknown> | undefined,
+        });
+        return {
+          capabilityId: 'revenue.identify_prospect',
+          executed: true,
+          outcome: 'success' as const,
+          result,
+          error: null,
+          evidence: [{ prospect: result }],
+          verified: false, // verification re-reads the prospect
+          verificationDetails: 'Pending re-read of prospect',
+        };
+      });
+      this.wireExecutor('revenue.score_prospect', async (params) => {
+        const prospectId = params.prospectId as string;
+        if (!prospectId) return this.failResult('revenue.score_prospect', 'Missing required param: prospectId');
+        const result = await pipeline.scoreProspect(prospectId);
+        return {
+          capabilityId: 'revenue.score_prospect',
+          executed: true,
+          outcome: 'success' as const,
+          result,
+          error: null,
+          evidence: [{ prospectId, score: result.score, factors: result.factors }],
+          verified: typeof result.score === 'number',
+          verificationDetails: typeof result.score === 'number' ? 'Score is numeric' : 'Score is not numeric',
+        };
+      });
+      this.wireExecutor('revenue.update_prospect_status', async (params) => {
+        const prospectId = params.prospectId as string;
+        const newStatus = params.newStatus as string;
+        if (!prospectId || !newStatus) return this.failResult('revenue.update_prospect_status', 'Missing required param: prospectId or newStatus');
+        const result = await pipeline.updateStatus(prospectId, newStatus, params.context as Record<string, unknown> | undefined);
+        return {
+          capabilityId: 'revenue.update_prospect_status',
+          executed: true,
+          outcome: 'success' as const,
+          result,
+          error: null,
+          evidence: [{ prospectId, newStatus, result }],
+          verified: false, // verification re-reads the prospect
+          verificationDetails: 'Pending re-read of prospect status',
+        };
+      });
+      this.wireExecutor('revenue.create_opportunity', async (params) => {
+        const prospectId = params.prospectId as string;
+        const offerId = params.offerId as string;
+        if (!prospectId) return this.failResult('revenue.create_opportunity', 'Missing required param: prospectId');
+        if (!offerId) return this.failResult('revenue.create_opportunity', 'Missing required param: offerId');
+        const result = await pipeline.createOpportunity({
+          prospectId,
+          offerId: offerId as never,
+          estimatedValue: params.estimatedValue as number | undefined,
+          probability: params.probability as number | undefined,
+          expectedCloseDate: params.expectedCloseDate as string | undefined,
+        });
+        return {
+          capabilityId: 'revenue.create_opportunity',
+          executed: true,
+          outcome: 'success' as const,
+          result,
+          error: null,
+          evidence: [{ opportunity: result }],
+          verified: false, // verification re-reads the opportunity
+          verificationDetails: 'Pending re-read of opportunity',
+        };
+      });
+      this.wireExecutor('revenue.pipeline_metrics', async () => {
+        const result = await pipeline.getPipelineMetrics();
+        return {
+          capabilityId: 'revenue.pipeline_metrics',
+          executed: true,
+          outcome: 'success' as const,
+          result,
+          error: null,
+          evidence: [{ metrics: result }],
+          verified: true,
+          verificationDetails: 'Pipeline metrics returned',
+        };
+      });
+    }
+
+    // RevenueLifecycle capabilities (CustomerLifecycle)
+    if (this.bridge.revenueLifecycle) {
+      const lifecycle = this.bridge.revenueLifecycle;
+      this.wireExecutor('revenue.start_onboarding', async (params) => {
+        const customerId = params.customerId as string;
+        const offerId = params.offerId as string;
+        if (!customerId) return this.failResult('revenue.start_onboarding', 'Missing required param: customerId');
+        if (!offerId) return this.failResult('revenue.start_onboarding', 'Missing required param: offerId');
+        const result = await lifecycle.startOnboarding({
+          customerId,
+          offerId: offerId as never,
+          stripeCustomerId: params.stripeCustomerId as string | undefined,
+          configuration: params.configuration as Record<string, unknown> | undefined,
+        });
+        return {
+          capabilityId: 'revenue.start_onboarding',
+          executed: true,
+          outcome: 'success' as const,
+          result,
+          error: null,
+          evidence: [{ onboarding: result }],
+          verified: false, // verification re-reads the service record
+          verificationDetails: 'Pending re-read of service record',
+        };
+      });
+      this.wireExecutor('revenue.activate_service', async (params) => {
+        const serviceId = params.serviceId as string;
+        if (!serviceId) return this.failResult('revenue.activate_service', 'Missing required param: serviceId');
+        const result = await lifecycle.activateService(serviceId);
+        return {
+          capabilityId: 'revenue.activate_service',
+          executed: true,
+          outcome: 'success' as const,
+          result,
+          error: null,
+          evidence: [{ serviceId, service: result }],
+          verified: false, // verification re-reads the service
+          verificationDetails: 'Pending re-read of service status',
+        };
+      });
+      this.wireExecutor('revenue.verify_service', async (params) => {
+        const serviceId = params.serviceId as string;
+        if (!serviceId) return this.failResult('revenue.verify_service', 'Missing required param: serviceId');
+        const result = await lifecycle.verifyService(serviceId);
+        return {
+          capabilityId: 'revenue.verify_service',
+          executed: true,
+          outcome: 'success' as const,
+          result,
+          error: null,
+          evidence: [{ serviceId, verified: result.verified, details: result.details }],
+          verified: result.verified,
+          verificationDetails: result.result,
+        };
+      });
+    }
+
+    // RevenueLedger capabilities (RevenueLedger)
+    if (this.bridge.revenueLedger) {
+      const ledger = this.bridge.revenueLedger;
+      this.wireExecutor('revenue.get_verified_revenue', async () => {
+        const result = await ledger.getVerifiedRevenue();
+        const entries = Array.isArray(result) ? result : [];
+        return {
+          capabilityId: 'revenue.get_verified_revenue',
+          executed: true,
+          outcome: 'success' as const,
+          result: entries,
+          error: null,
+          evidence: [{ entryCount: entries.length }],
+          verified: Array.isArray(result),
+          verificationDetails: Array.isArray(result) ? `${entries.length} verified ledger entries returned` : 'Invalid result',
+        };
+      });
+      this.wireExecutor('revenue.get_revenue_summary', async () => {
+        const result = await ledger.getRevenueSummary();
+        return {
+          capabilityId: 'revenue.get_revenue_summary',
+          executed: true,
+          outcome: 'success' as const,
+          result,
+          error: null,
+          evidence: [{ summary: result }],
+          verified: true,
+          verificationDetails: 'Revenue summary returned',
         };
       });
     }
@@ -727,7 +926,41 @@ export class CognitiveCore {
   private async perceive(): Promise<PerceptionResult> {
     const components: Array<{ name: string; status: string; confidence: number; evidence: string }> = [];
 
-    // Check database
+    // ─── Evidence-backed perception via OperationalIntelligence ───────────
+    //
+    // When OperationalIntelligence is wired, use its HealthProvenanceChecker
+    // as the PRIMARY observation source. Every component health determination
+    // comes with evidence (port checks, process identity, health endpoints,
+    // database writes). This replaces the shallow DB/Ollama-only checks.
+    //
+    // UNKNOWN is NEVER collapsed into FAILED. If the health checker returns
+    // UNKNOWN for a component, we preserve that.
+    let oiHealthAvailable = false;
+    if (this.bridge.operationalIntelligence) {
+      try {
+        const healthResult = await this.bridge.operationalIntelligence.checkHealth();
+        // checkHealth() returns a ComponentState (overall) or a structured object
+        // with per-component states. We extract what we can.
+        const overallState = (typeof healthResult === 'string' ? healthResult : (healthResult as { state?: string })?.state) || 'UNKNOWN';
+        oiHealthAvailable = true;
+        components.push({
+          name: 'operational_intelligence',
+          status: overallState.toLowerCase(),
+          confidence: 1.0,
+          evidence: `HealthProvenanceChecker.checkAll() → overall state: ${overallState}`,
+        });
+      } catch (e) {
+        // Observer failure is recorded honestly — NOT as a component failure
+        components.push({
+          name: 'operational_intelligence',
+          status: 'unknown',
+          confidence: 0.3,
+          evidence: `Observer failure: ${e instanceof Error ? e.message : 'unknown'}`,
+        });
+      }
+    }
+
+    // Check database (always — this is CognitiveCore's own DB pool)
     try {
       await this.pool.query('SELECT 1');
       components.push({ name: 'database', status: 'healthy', confidence: 1.0, evidence: 'SELECT 1 succeeded' });
@@ -805,12 +1038,19 @@ export class CognitiveCore {
     // Capability summary
     const capSummary = this.registry.getSummary();
 
-    // Determine overall health — UNKNOWN is never collapsed into FAILED
+    // Determine overall health — UNKNOWN is never collapsed into FAILED.
+    // Observer failures are tracked separately: if the health observer itself
+    // failed, the system health is UNKNOWN regardless of other components,
+    // because we cannot trust the observation.
     const failed = components.filter((c) => c.status === 'failed').length;
     const degraded = components.filter((c) => c.status === 'degraded').length;
     const unknown = components.filter((c) => c.status === 'unknown').length;
+    const observerFailed = components.some((c) => c.name === 'operational_intelligence' && c.evidence.startsWith('Observer failure:'));
     let systemHealth: PerceptionResult['systemHealth'];
-    if (failed > 0) {
+    if (observerFailed) {
+      // Observer failure means we cannot trust the observation — UNKNOWN
+      systemHealth = 'unknown';
+    } else if (failed > 0) {
       systemHealth = 'failed';
     } else if (degraded > 0) {
       systemHealth = 'degraded';
@@ -1199,13 +1439,135 @@ export class CognitiveCore {
 
       // For revenue actions, verify the result structure
       if (action.capabilityId === 'revenue.run_cycle') {
-        const result = exec.rawResult as { selectedAction?: unknown } | null;
+        const result = exec.rawResult as { selectedAction?: unknown; metrics?: unknown } | null;
         return {
-          verified: result !== null && typeof result === 'object',
-          expectedState: 'RevenueControlLoopResult returned',
-          actualState: result !== null ? 'result object received' : 'no result',
+          verified: result !== null && typeof result === 'object' && 'metrics' in result,
+          expectedState: 'RevenueControlLoopResult with metrics returned',
+          actualState: result !== null && 'metrics' in result ? 'result with metrics received' : 'incomplete result',
           verificationStrategy,
-          evidence: [{ hasResult: result !== null }],
+          evidence: [{ hasResult: result !== null, hasMetrics: result !== null && 'metrics' in result }],
+        };
+      }
+
+      // For revenue.identify_prospect, verify by re-reading the prospect from the DB
+      if (action.capabilityId === 'revenue.identify_prospect') {
+        const result = exec.rawResult as { prospectId?: string; id?: string } | null;
+        const prospectId = result?.prospectId || result?.id;
+        if (prospectId) {
+          try {
+            const row = await this.pool.query<QueryResultRow>(
+              `SELECT id FROM revenue_prospects WHERE id = $1`,
+              [prospectId],
+            );
+            return {
+              verified: row.rows.length > 0,
+              expectedState: 'prospect exists in revenue_prospects',
+              actualState: row.rows.length > 0 ? 'prospect found' : 'prospect not found',
+              verificationStrategy,
+              evidence: [{ prospectId, found: row.rows.length > 0 }],
+            };
+          } catch (e) {
+            return {
+              verified: false,
+              expectedState: 'prospect exists in revenue_prospects',
+              actualState: `verification query failed: ${e instanceof Error ? e.message : 'unknown'}`,
+              verificationStrategy,
+              evidence: [],
+            };
+          }
+        }
+        return {
+          verified: false,
+          expectedState: 'prospect ID in result',
+          actualState: 'no prospect ID in result',
+          verificationStrategy,
+          evidence: [],
+        };
+      }
+
+      // For revenue.update_prospect_status, verify by re-reading the prospect status
+      if (action.capabilityId === 'revenue.update_prospect_status') {
+        const prospectId = action.params.prospectId as string;
+        const expectedStatus = action.params.newStatus as string;
+        if (prospectId && expectedStatus) {
+          try {
+            const row = await this.pool.query<QueryResultRow>(
+              `SELECT id, status FROM revenue_prospects WHERE id = $1`,
+              [prospectId],
+            );
+            const actualStatus = row.rows.length > 0 ? row.rows[0].status as string : 'not found';
+            return {
+              verified: row.rows.length > 0 && actualStatus === expectedStatus,
+              expectedState: `prospect status = ${expectedStatus}`,
+              actualState: actualStatus,
+              verificationStrategy,
+              evidence: [{ prospectId, expectedStatus, actualStatus }],
+            };
+          } catch (e) {
+            return {
+              verified: false,
+              expectedState: `prospect status = ${expectedStatus}`,
+              actualState: `verification query failed: ${e instanceof Error ? e.message : 'unknown'}`,
+              verificationStrategy,
+              evidence: [],
+            };
+          }
+        }
+      }
+
+      // For revenue.create_opportunity, verify by re-reading the opportunity
+      if (action.capabilityId === 'revenue.create_opportunity') {
+        const result = exec.rawResult as { opportunityId?: string; id?: string } | null;
+        const opportunityId = result?.opportunityId || result?.id;
+        if (opportunityId) {
+          try {
+            const row = await this.pool.query<QueryResultRow>(
+              `SELECT id FROM revenue_opportunities WHERE id = $1`,
+              [opportunityId],
+            );
+            return {
+              verified: row.rows.length > 0,
+              expectedState: 'opportunity exists in revenue_opportunities',
+              actualState: row.rows.length > 0 ? 'opportunity found' : 'opportunity not found',
+              verificationStrategy,
+              evidence: [{ opportunityId, found: row.rows.length > 0 }],
+            };
+          } catch (e) {
+            return {
+              verified: false,
+              expectedState: 'opportunity exists in revenue_opportunities',
+              actualState: `verification query failed: ${e instanceof Error ? e.message : 'unknown'}`,
+              verificationStrategy,
+              evidence: [],
+            };
+          }
+        }
+      }
+
+      // For revenue.activate_service, verify by re-reading the service status
+      if (action.capabilityId === 'revenue.activate_service') {
+        const serviceId = action.params.serviceId as string;
+        if (serviceId && this.bridge.revenueLifecycle) {
+          const verifyResult = await this.bridge.revenueLifecycle.verifyService(serviceId);
+          return {
+            verified: verifyResult.verified,
+            expectedState: 'service active and verified',
+            actualState: verifyResult.result,
+            verificationStrategy,
+            evidence: [{ serviceId, verified: verifyResult.verified, details: verifyResult.details }],
+          };
+        }
+      }
+
+      // For revenue.get_verified_revenue, verify the result is an array of ledger entries
+      if (action.capabilityId === 'revenue.get_verified_revenue') {
+        const result = exec.rawResult as unknown[] | null;
+        return {
+          verified: Array.isArray(result),
+          expectedState: 'array of verified ledger entries',
+          actualState: Array.isArray(result) ? `${result.length} entries` : 'not an array',
+          verificationStrategy,
+          evidence: [{ entryCount: Array.isArray(result) ? result.length : 0 }],
         };
       }
 
