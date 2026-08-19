@@ -315,6 +315,14 @@ export interface ObservationMetrics {
   successfulRecoveries: number;
   failedRecoveries: number;
   escalations: number;
+  // Phase 14: Recovery intelligence metrics
+  recoveryExhaustions: number;          // budget exhausted → escalation
+  retryCount: number;                    // total retries across all recoveries
+  verificationFailures: number;          // postcondition passed but verification failed
+  dependencyBlockedRecoveries: number;   // recovery stopped due to dependency problem
+  observerBlockedRecoveries: number;     // recovery stopped due to observer uncertainty
+  duplicateRecoveriesPrevented: number;  // recovery lock prevented duplicate dispatch
+  intelligentStops: number;              // recovery correctly stopped rather than continuing
 }
 
 export class ObservationMetricsCollector {
@@ -328,6 +336,14 @@ export class ObservationMetricsCollector {
     successfulRecoveries: 0,
     failedRecoveries: 0,
     escalations: 0,
+    // Phase 14: Recovery intelligence metrics
+    recoveryExhaustions: 0,
+    retryCount: 0,
+    verificationFailures: 0,
+    dependencyBlockedRecoveries: 0,
+    observerBlockedRecoveries: 0,
+    duplicateRecoveriesPrevented: 0,
+    intelligentStops: 0,
   };
 
   recordObservation(assessment: ObservationAssessment): void {
@@ -353,6 +369,35 @@ export class ObservationMetricsCollector {
 
   recordEscalation(): void {
     this.metrics.escalations++;
+  }
+
+  // Phase 14: Recovery intelligence metric methods
+  recordRecoveryExhaustion(): void {
+    this.metrics.recoveryExhaustions++;
+  }
+
+  recordRetry(): void {
+    this.metrics.retryCount++;
+  }
+
+  recordVerificationFailure(): void {
+    this.metrics.verificationFailures++;
+  }
+
+  recordDependencyBlockedRecovery(): void {
+    this.metrics.dependencyBlockedRecoveries++;
+  }
+
+  recordObserverBlockedRecovery(): void {
+    this.metrics.observerBlockedRecoveries++;
+  }
+
+  recordDuplicateRecoveryPrevented(): void {
+    this.metrics.duplicateRecoveriesPrevented++;
+  }
+
+  recordIntelligentStop(): void {
+    this.metrics.intelligentStops++;
   }
 
   getMetrics(): ObservationMetrics {

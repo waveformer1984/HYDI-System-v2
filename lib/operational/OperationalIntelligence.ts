@@ -454,9 +454,31 @@ export class OperationalIntelligence {
           attempts: record.attempts.length,
           startedAt: record.startedAt,
           completedAt: record.completedAt,
+          // Phase 7: Include per-attempt outcome intelligence
+          attemptDetails: record.attempts.map((a) => ({
+            attemptNumber: a.attemptNumber,
+            outcome: a.outcome,
+            failureClassification: a.failureClassification,
+            executionSucceeded: a.executionSucceeded,
+            postconditionSucceeded: a.postconditionSucceeded,
+            verificationSucceeded: a.verificationSucceeded,
+            retryDecision: a.retryDecision?.nextAction,
+            error: a.error,
+            durationMs: a.durationMs,
+          })),
         },
         outcome,
+        // Phase 7: Recovery failure intelligence
+        recoveryOutcome: record.finalOutcome,
+        failureClassification: record.failureClassification,
         escalation: record.finalState === 'HEALTHY' ? 'not_required' : 'required',
+        escalationRecord: record.escalationRecord ? {
+          escalationId: record.escalationRecord.escalationId,
+          reasonForEscalation: record.escalationRecord.reasonForEscalation,
+          recommendedNextAction: record.escalationRecord.recommendedNextAction,
+          attemptCount: record.escalationRecord.attemptCount,
+          lastFailureReason: record.escalationRecord.lastFailureReason,
+        } : undefined,
       },
     });
 
@@ -521,15 +543,28 @@ export class OperationalIntelligence {
       `  Action: ${record.action.type}`,
       `  Attempts: ${record.attempts.length}`,
       `  Final state: ${record.finalState}`,
+      `  Outcome: ${record.finalOutcome ?? 'N/A'}`,
+      `  Failure classification: ${record.failureClassification ?? 'N/A'}`,
     ];
 
     for (const attempt of record.attempts) {
       lines.push(`  Attempt ${attempt.attemptNumber}: ${attempt.result}`);
+      if (attempt.outcome) lines.push(`    outcome: ${attempt.outcome}`);
+      if (attempt.failureClassification) lines.push(`    classification: ${attempt.failureClassification}`);
+      if (attempt.executionSucceeded !== undefined) lines.push(`    execution: ${attempt.executionSucceeded ? 'succeeded' : 'failed'}`);
+      if (attempt.postconditionSucceeded !== undefined) lines.push(`    postcondition: ${attempt.postconditionSucceeded ? 'passed' : 'failed'}`);
+      if (attempt.verificationSucceeded !== undefined) lines.push(`    verification: ${attempt.verificationSucceeded ? 'passed' : 'failed'}`);
+      if (attempt.retryDecision) lines.push(`    retry decision: ${attempt.retryDecision.nextAction} (${attempt.retryDecision.reason})`);
       if (attempt.error) lines.push(`    error: ${attempt.error}`);
     }
 
     if (record.finalState === 'HEALTHY') {
       lines.push(`  ✓ RECOVERY VERIFIED — postcondition checks passed`);
+    }
+
+    if (record.escalationRecord) {
+      lines.push(`  ⚠ ESCALATION — ${record.escalationRecord.reasonForEscalation}`);
+      lines.push(`    recommended: ${record.escalationRecord.recommendedNextAction}`);
     }
 
     return lines.join('\n');

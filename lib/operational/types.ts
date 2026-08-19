@@ -122,7 +122,7 @@ export interface OperationalEvent {
   cause?: string;          // what triggered this event
   evidence?: HealthEvidence[];
   action?: string;         // what action was taken
-  actionResult?: 'success' | 'failure' | 'denied' | 'skipped';
+  actionResult?: 'success' | 'failure' | 'denied' | 'skipped' | 'stopped';
   recoveryAttempt?: number; // 1-based attempt number
   recoveryResult?: 'success' | 'failure' | 'pending';
   correlationId?: string;  // links related events into one incident
@@ -161,6 +161,16 @@ export interface RecoveryAttempt {
   result: 'success' | 'failure' | 'denied' | 'pending';
   evidence: HealthEvidence[];
   error?: string;
+  // Phase 7: Recovery Failure Intelligence — explicit outcome and classification
+  recoveryId?: string;             // unique identity for this attempt
+  incidentId?: string;             // links to the incident this attempt belongs to
+  outcome?: RecoveryOutcome;       // canonical outcome classification
+  failureClassification?: RecoveryFailureClassification;  // what kind of failure
+  executionSucceeded?: boolean;    // did the command itself complete without error?
+  postconditionSucceeded?: boolean; // did the target become healthy after execution?
+  verificationSucceeded?: boolean;  // did service-level verification pass?
+  retryDecision?: RetryDecision;    // should we retry? why or why not?
+  durationMs?: number;             // time from start to completion
 }
 
 export interface RecoveryRecord {
@@ -172,6 +182,85 @@ export interface RecoveryRecord {
   finalState: ComponentState;
   startedAt: string;
   completedAt?: string;
+  // Phase 7: Recovery Failure Intelligence
+  incidentId?: string;
+  finalOutcome?: RecoveryOutcome;
+  failureClassification?: RecoveryFailureClassification;
+  escalationRecord?: EscalationRecord;
+}
+
+// ---------------------------------------------------------------------------
+// Phase 7: Recovery Failure Intelligence — Canonical Outcome Model
+// ---------------------------------------------------------------------------
+
+/**
+ * Canonical recovery outcome. The authoritative result comes from
+ * EXECUTION + POSTCONDITION + SERVICE VERIFICATION — never from exit code alone.
+ */
+export type RecoveryOutcome =
+  | 'RECOVERY_SUCCESS'              // target is HEALTHY after recovery
+  | 'RECOVERY_EXECUTION_FAILED'     // the recovery command itself failed
+  | 'RECOVERY_POSTCONDITION_FAILED' // command succeeded but target still unhealthy
+  | 'RECOVERY_VERIFICATION_FAILED'  // target running but service-level check failed
+  | 'RECOVERY_TIMEOUT'              // recovery action timed out
+  | 'RECOVERY_DEPENDENCY_BLOCKED'   // a dependency is down — retrying target is pointless
+  | 'RECOVERY_POLICY_DENIED'        // policy does not authorize this recovery
+  | 'RECOVERY_TARGET_UNAVAILABLE'   // target cannot be reached at all
+  | 'RECOVERY_EXHAUSTED'            // all attempts failed — budget exhausted
+  | 'RECOVERY_OBSERVER_UNCERTAIN'   // observation is uncertain — cannot trust result
+  | 'RECOVERY_NOT_REQUIRED';        // target was already healthy (idempotent)
+
+/**
+ * Classification of what kind of problem caused recovery to fail.
+ * This classification must affect the next decision.
+ */
+export type RecoveryFailureClassification =
+  | 'TARGET_PROBLEM'           // the target itself remains unhealthy
+  | 'DEPENDENCY_PROBLEM'       // a dependency is blocking recovery
+  | 'RECOVERY_MECHANISM_PROBLEM' // the restart/start action itself failed
+  | 'VERIFICATION_PROBLEM'     // service may have recovered but verification failed
+  | 'OBSERVER_PROBLEM'         // recovery result cannot be trusted — observation unavailable
+  | 'POLICY_PROBLEM'           // recovery is no longer authorized
+  | 'TIMEOUT_PROBLEM'          // recovery action timed out
+  | 'UNKNOWN_PROBLEM';         // cannot classify
+
+/**
+ * Retry decision — should HEIDI try again?
+ */
+export interface RetryDecision {
+  shouldRetry: boolean;
+  reason: string;
+  retryableOutcome: boolean;    // is this outcome type retryable?
+  nextAction: 'retry' | 'stop' | 'escalate' | 'recover_dependency' | 'wait';
+  waitMs?: number;              // how long to wait before next action
+}
+
+/**
+ * Structured escalation record — not just a log message.
+ * A reviewer must be able to answer "Why did HEIDI stop trying?"
+ */
+export interface EscalationRecord {
+  escalationId: string;
+  incidentId: string;
+  target: string;
+  failureClassification: RecoveryFailureClassification;
+  attemptCount: number;
+  lastRecoveryAction: string;
+  lastFailureReason: string;
+  remainingEvidence: HealthEvidence[];
+  risk: RiskLevel;
+  reasonForEscalation: string;
+  recommendedNextAction: string;
+  timestamp: string;
+  // Full attempt history for reconstruction
+  attemptHistory: Array<{
+    attemptNumber: number;
+    action: string;
+    outcome: RecoveryOutcome;
+    failureClassification?: RecoveryFailureClassification;
+    error?: string;
+    timestamp: string;
+  }>;
 }
 
 // ---------------------------------------------------------------------------
@@ -404,6 +493,12 @@ export interface EscalationPackage {
   risk: RiskLevel;
   affectedComponents: string[];
   timestamp: string;
+  // Phase 7: Recovery Failure Intelligence — enhanced escalation fields
+  failureClassification?: RecoveryFailureClassification;
+  attemptCount?: number;
+  lastRecoveryAction?: string;
+  lastFailureReason?: string;
+  escalationRecord?: EscalationRecord;
 }
 
 // ---------------------------------------------------------------------------
@@ -514,7 +609,8 @@ export type OperationalEventType =
   | 'failure_injected'          // Phase 5: failure was deliberately injected
   | 'soak_metric'               // Phase 5: soak test metric recorded
   | 'observation_uncertain'     // Phase 6: observation confidence too low to act
-  | 'false_recovery_prevented'; // Phase 6: recovery was correctly NOT triggered
+  | 'false_recovery_prevented'  // Phase 6: recovery was correctly NOT triggered
+  | 'recovery_stopped';         // Phase 7: recovery was intelligently stopped (non-retryable)
 
 // ---------------------------------------------------------------------------
 // Phase 6: Observation Confidence & Corroboration

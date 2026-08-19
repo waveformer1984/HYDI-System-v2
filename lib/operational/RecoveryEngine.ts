@@ -33,6 +33,10 @@ import type {
   RecoveryRecord,
   ComponentState,
   HealthEvidence,
+  RecoveryOutcome,
+  RecoveryFailureClassification,
+  RetryDecision,
+  EscalationRecord,
   OperationalEvent,
   AllowedCommand,
 } from './types';
@@ -47,6 +51,7 @@ import type { EscalationManager } from './EscalationManager';
 import type { PolicyDecisionRecordStore } from './PolicyDecisionRecord';
 import type { ActionRegistry as ActionRegistryType } from './ActionRegistry';
 import { ActionRegistry as ActionRegistryClass, actionRegistry as defaultActionRegistry } from './ActionRegistry';
+import { classifyRecoveryOutcome, classifyFailure, decideRetry } from './RecoveryOutcomeClassifier';
 
 interface BootConfigModule {
   id: string;
@@ -91,6 +96,7 @@ export class RecoveryEngine {
   private activeRecoveries = new Map<string, string>(); // component -> correlationId
   private recoveryHistory: RecoveryRecord[] = [];
   private spawnedProcesses = new Map<string, ChildProcess>();
+  private lockHolderIds = new Map<string, string>(); // component -> lock holderId (Phase 7)
 
   // Phase 4 optional dependencies (null = Phase 3 behavior)
   private policyModel: AutonomyPolicyModel | null;
@@ -168,7 +174,8 @@ export class RecoveryEngine {
       if (!lease) {
         return this.createNoOpRecord(component, correlationId, cause, 'recovery lock held by another instance');
       }
-      // We'll release the lock when recovery completes
+      // Phase 7: Store the holderId so we can properly release the lock later
+      this.lockHolderIds.set(component, lease.holderId);
     }
 
     // Phase 4: Check recovery budget if available
@@ -310,12 +317,22 @@ export class RecoveryEngine {
       }
     }
 
-    // 6. Execute bounded recovery
+    // 6. Execute bounded recovery with intelligent retry decisions
     const attempts: RecoveryAttempt[] = [];
     let finalState: ComponentState = this.stateModel.getState(component).state;
+    let finalOutcome: RecoveryOutcome = 'RECOVERY_NOT_REQUIRED';
+    let finalFailureClassification: RecoveryFailureClassification | undefined;
+    const incidentId = correlationId; // use correlation ID as incident ID
+
+    // Phase 7: Pre-compute dependencies for outcome classification
+    // (node is already declared above at the strategy determination step)
+    const dependencies = node?.dependencies ?? [];
+    let depStates: Record<string, ComponentState> = {};
 
     for (let attemptNum = 1; attemptNum <= action.maxAttempts; attemptNum++) {
       const attemptStart = new Date().toISOString();
+      const attemptStartMs = Date.now();
+      const recoveryId = randomUUID();
 
       this.stateModel.logEvent({
         id: randomUUID(),
@@ -336,7 +353,20 @@ export class RecoveryEngine {
         checkedAt: attemptStart,
       }]);
 
-      const attemptResult = await this.executeAction(component, action, attemptNum);
+      // Execute the recovery action — track whether it threw
+      let executionSucceeded = true;
+      let executionError: string | undefined;
+      let timedOut = false;
+      try {
+        await this.executeAction(component, action, attemptNum);
+      } catch (e) {
+        executionSucceeded = false;
+        executionError = e instanceof Error ? e.message : String(e);
+        // Check if it was a timeout
+        if (executionError.includes('timeout') || executionError.includes('TIMEDOUT')) {
+          timedOut = true;
+        }
+      }
 
       // Wait for grace period before checking
       const graceMs = options.graceMs ?? this.getGraceMs(component);
@@ -347,14 +377,81 @@ export class RecoveryEngine {
       const postState = this.stateModel.getState(component).state;
       const postEvidence = this.stateModel.getState(component).evidence;
 
+      // Phase 7: Check if any dependency is blocking recovery
+      depStates = {};
+      let dependencyBlocked = false;
+      for (const dep of dependencies) {
+        const depState = this.stateModel.getState(dep)?.state ?? 'UNKNOWN';
+        depStates[dep] = depState;
+        if (depState === 'UNAVAILABLE' || depState === 'FAILED') {
+          dependencyBlocked = true;
+        }
+      }
+
+      // Phase 7: Service-level verification (separate from postcondition)
+      // The postcondition checks if the component state is HEALTHY.
+      // Verification checks if the service actually responds.
+      // For containers, verifySupabaseServiceLevel is already called inside
+      // restartContainer(). For processes, the health check IS the verification.
+      // So verificationSucceeded = (postState === 'HEALTHY') for now.
+      // If execution failed, verification definitely failed too.
+      const verificationSucceeded = executionSucceeded && postState === 'HEALTHY';
+
+      // Phase 7: Observer uncertainty check
+      // If all evidence is 'skip' or there's no evidence, observation is uncertain
+      const observerUncertain = postEvidence.length === 0 ||
+        postEvidence.every((e) => e.status === 'skip');
+
+      // Phase 7: Classify the recovery outcome
+      const outcome = classifyRecoveryOutcome({
+        executionSucceeded,
+        postconditionState: postState,
+        verificationSucceeded,
+        dependencyBlocked,
+        timedOut,
+        observerUncertain,
+      });
+
+      const failureClassification = outcome === 'RECOVERY_SUCCESS' || outcome === 'RECOVERY_NOT_REQUIRED'
+        ? 'UNKNOWN_PROBLEM' as RecoveryFailureClassification
+        : classifyFailure(outcome, postEvidence, dependencies, depStates);
+
+      // Phase 7: Make retry decision
+      const budgetRemaining = this.budgetManager
+        ? this.budgetManager.canRecover(component, incidentId).allowed
+        : attemptNum < action.maxAttempts;
+
+      const retryDecision = decideRetry({
+        outcome,
+        failureClassification,
+        attemptNumber: attemptNum,
+        maxAttempts: action.maxAttempts,
+        budgetRemaining,
+        dependencies,
+        depStates,
+        cooldownMs: action.cooldownMs,
+      });
+
       const attempt: RecoveryAttempt = {
         action,
         attemptNumber: attemptNum,
         startedAt: attemptStart,
         completedAt: new Date().toISOString(),
-        result: postState === 'HEALTHY' ? 'success' : 'failure',
+        result: outcome === 'RECOVERY_SUCCESS' ? 'success' : 'failure',
         evidence: postEvidence,
-        error: postState !== 'HEALTHY' ? `postcondition failed: state is ${postState}` : undefined,
+        error: outcome !== 'RECOVERY_SUCCESS'
+          ? executionError ?? `outcome: ${outcome} (${failureClassification})`
+          : undefined,
+        // Phase 7: Recovery Failure Intelligence fields
+        recoveryId,
+        incidentId,
+        outcome,
+        failureClassification,
+        executionSucceeded,
+        postconditionSucceeded: postState === 'HEALTHY',
+        verificationSucceeded,
+        retryDecision,
+        durationMs: Date.now() - attemptStartMs,
       };
       attempts.push(attempt);
 
@@ -369,28 +466,67 @@ export class RecoveryEngine {
         recoveryResult: attempt.result === 'success' ? 'success' : 'failure',
         evidence: postEvidence,
         correlationId,
-        detail: attempt.error ? { error: attempt.error } : undefined,
+        detail: {
+          error: attempt.error,
+          outcome,
+          failureClassification,
+          executionSucceeded,
+          postconditionSucceeded: postState === 'HEALTHY',
+          verificationSucceeded,
+          retryDecision: retryDecision.nextAction,
+          dependencyBlocked,
+          durationMs: attempt.durationMs,
+        },
       });
 
       finalState = postState;
+      finalOutcome = outcome;
+      finalFailureClassification = failureClassification;
 
       // Phase 4: Record attempt in budget manager
       if (this.budgetManager) {
         this.budgetManager.recordAttempt(component, correlationId, postState === 'HEALTHY');
       }
 
-      if (postState === 'HEALTHY') {
+      // Phase 7: Intelligent retry decision — stop if not retryable
+      if (outcome === 'RECOVERY_SUCCESS') {
         break; // success — no more attempts
       }
 
+      // Phase 7: If retry decision says don't retry, break immediately
+      if (!retryDecision.shouldRetry) {
+        this.stateModel.logEvent({
+          id: randomUUID(),
+          timestamp: new Date().toISOString(),
+          type: 'recovery_stopped',
+          component,
+          action: action.type,
+          actionResult: 'stopped',
+          recoveryAttempt: attemptNum,
+          correlationId,
+          detail: {
+            reason: retryDecision.reason,
+            nextAction: retryDecision.nextAction,
+            outcome,
+            failureClassification,
+          },
+        });
+        break;
+      }
+
       // Cooldown before next attempt
-      if (attemptNum < action.maxAttempts) {
-        await this.sleep(action.cooldownMs);
+      if (attemptNum < action.maxAttempts && retryDecision.waitMs) {
+        await this.sleep(retryDecision.waitMs);
       }
     }
 
-    // 7. Escalate if all attempts failed
+    // 7. Escalate if all attempts failed or recovery was stopped
     if (finalState !== 'HEALTHY') {
+      // Determine the final outcome — if we exhausted all attempts, it's RECOVERY_EXHAUSTED
+      if (attempts.length >= action.maxAttempts && finalOutcome !== 'RECOVERY_DEPENDENCY_BLOCKED') {
+        finalOutcome = 'RECOVERY_EXHAUSTED';
+      }
+
       this.stateModel.logEvent({
         id: randomUUID(),
         timestamp: new Date().toISOString(),
@@ -400,25 +536,93 @@ export class RecoveryEngine {
         action: action.type,
         actionResult: 'failure',
         correlationId,
-        detail: { escalation: action.escalationPath, attempts: attempts.length },
+        detail: {
+          escalation: action.escalationPath,
+          attempts: attempts.length,
+          finalOutcome,
+          failureClassification: finalFailureClassification,
+        },
       });
       finalState = 'FAILED';
       this.stateModel.updateState(component, 'FAILED', [{
         check: 'recovery-exhausted',
         status: 'fail',
-        value: `${attempts.length} attempt(s) failed`,
+        value: `${attempts.length} attempt(s) failed — outcome: ${finalOutcome}`,
+        detail: `failureClassification: ${finalFailureClassification ?? 'unknown'}`,
         checkedAt: new Date().toISOString(),
       }]);
+
+      // Phase 7: Create structured escalation record
+      const lastAttempt = attempts[attempts.length - 1];
+      const escalationRecord: EscalationRecord = {
+        escalationId: randomUUID(),
+        incidentId,
+        target: component,
+        failureClassification: finalFailureClassification ?? 'UNKNOWN_PROBLEM',
+        attemptCount: attempts.length,
+        lastRecoveryAction: action.type,
+        lastFailureReason: lastAttempt?.error ?? `recovery exhausted after ${attempts.length} attempts`,
+        remainingEvidence: lastAttempt?.evidence ?? [],
+        risk: 'R2',
+        reasonForEscalation: `recovery stopped: ${finalOutcome} (${finalFailureClassification})`,
+        recommendedNextAction: this.getRecommendedNextAction(finalFailureClassification, component, dependencies, depStates),
+        timestamp: new Date().toISOString(),
+        attemptHistory: attempts.map((a) => ({
+          attemptNumber: a.attemptNumber,
+          action: a.action.type,
+          outcome: a.outcome ?? 'RECOVERY_EXHAUSTED',
+          failureClassification: a.failureClassification,
+          error: a.error,
+          timestamp: a.startedAt,
+        })),
+      };
+
+      // Escalate if escalation manager is available
+      if (this.escalationManager) {
+        this.escalationManager.escalate(
+          component,
+          incidentId,
+          correlationId,
+          lastAttempt?.evidence ?? [],
+          attempts.map((a) => ({
+            action: a.action.type,
+            result: a.result,
+            timestamp: a.startedAt,
+            error: a.error,
+          })),
+          escalationRecord.reasonForEscalation,
+          escalationRecord.recommendedNextAction,
+          'R2',
+          [component, ...dependencies],
+        );
+      }
+
+      const record: RecoveryRecord = {
+        component,
+        correlationId,
+        cause,
+        action,
+        attempts,
+        finalState,
+        startedAt,
+        completedAt: new Date().toISOString(),
+        incidentId,
+        finalOutcome,
+        failureClassification: finalFailureClassification,
+        escalationRecord,
+      };
+      this.recoveryHistory.push(record);
+      this.activeRecoveries.delete(component);
+      this.releaseLock(component);
+      return record;
     }
 
     this.activeRecoveries.delete(component);
 
-    // Phase 4: Release recovery lock and reset budget on success
-    if (this.lockManager) {
-      // The lock will be released — we need the holderId but we didn't store it.
-      // In practice, the lock auto-expires. For now, we clean up by deleting.
-      // A more robust implementation would store the lease holderId.
-    }
+    // Phase 7: Release recovery lock properly
+    this.releaseLock(component);
+
+    // Phase 4: Reset budget on success
     if (this.budgetManager && finalState === 'HEALTHY') {
       this.budgetManager.resetComponentRetries(component);
     }
@@ -432,10 +636,62 @@ export class RecoveryEngine {
       finalState,
       startedAt,
       completedAt: new Date().toISOString(),
+      incidentId,
+      finalOutcome,
+      failureClassification: finalFailureClassification,
     };
     this.recoveryHistory.push(record);
 
     return record;
+  }
+
+  /**
+   * Phase 7: Release the recovery lock for a component using the stored holderId.
+   */
+  private releaseLock(component: string): void {
+    if (this.lockManager) {
+      const holderId = this.lockHolderIds.get(component);
+      if (holderId) {
+        this.lockManager.release(component, holderId);
+        this.lockHolderIds.delete(component);
+      }
+    }
+  }
+
+  /**
+   * Phase 7: Get a recommended next action based on the failure classification.
+   */
+  private getRecommendedNextAction(
+    classification: RecoveryFailureClassification | undefined,
+    component: string,
+    dependencies: string[],
+    depStates: Record<string, ComponentState>,
+  ): string {
+    if (!classification) return 'Review component state and manually intervene';
+
+    switch (classification) {
+      case 'DEPENDENCY_PROBLEM': {
+        const failedDep = dependencies.find((d) => {
+          const s = depStates[d];
+          return s === 'UNAVAILABLE' || s === 'FAILED';
+        });
+        return `Recover dependency '${failedDep ?? 'unknown'}' first, then retry recovery for ${component}`;
+      }
+      case 'TARGET_PROBLEM':
+        return `Review ${component} logs and configuration — the target itself remains unhealthy after restart`;
+      case 'RECOVERY_MECHANISM_PROBLEM':
+        return `Check if the recovery command is valid and the runtime (Docker/PM2) is operational — the restart action itself failed`;
+      case 'VERIFICATION_PROBLEM':
+        return `Container may be running but service-level verification failed — check ${component} health endpoint and logs`;
+      case 'OBSERVER_PROBLEM':
+        return `Observation is uncertain — verify monitoring is functional before attempting further recovery`;
+      case 'POLICY_PROBLEM':
+        return `Recovery is not authorized by policy — review autonomy policy for ${component}`;
+      case 'TIMEOUT_PROBLEM':
+        return `Recovery action timed out — check if ${component} is taking too long to start and increase timeout if needed`;
+      default:
+        return `Review ${component} state and manually intervene or authorize further recovery attempts`;
+    }
   }
 
   /**

@@ -402,7 +402,7 @@ function recordObservationEvent(component, assessment, hysteresisState, recovery
 
 function logObservationMetrics() {
   const m = observationMetrics.getMetrics();
-  log(`METRICS observations=${m.totalObservations} observerFailures=${m.observerFailures} uncertain=${m.uncertainObservations} confirmed=${m.confirmedFailures} falseRecoveriesPrevented=${m.falseRecoveriesPrevented} recoveryAttempts=${m.recoveryAttempts} successful=${m.successfulRecoveries} failed=${m.failedRecoveries} escalations=${m.escalations}`);
+  log(`METRICS observations=${m.totalObservations} observerFailures=${m.observerFailures} uncertain=${m.uncertainObservations} confirmed=${m.confirmedFailures} falseRecoveriesPrevented=${m.falseRecoveriesPrevented} recoveryAttempts=${m.recoveryAttempts} successful=${m.successfulRecoveries} failed=${m.failedRecoveries} escalations=${m.escalations} exhaustions=${m.recoveryExhaustions} retries=${m.retryCount} verificationFailures=${m.verificationFailures} dependencyBlocked=${m.dependencyBlockedRecoveries} observerBlocked=${m.observerBlockedRecoveries} duplicatePrevented=${m.duplicateRecoveriesPrevented} intelligentStops=${m.intelligentStops}`);
 }
 
 // ---------------------------------------------------------------------------
