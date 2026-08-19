@@ -129,6 +129,30 @@ export class DependencyGraphBuilder {
       recoveryPolicy: 'recover_database',
     });
 
+    // Phase 6: Supabase DB container — separate from 'database' for
+    // container-level governed recovery. Policies target 'supabase_db'.
+    nodes.set('supabase_db', {
+      id: 'supabase_db',
+      category: 'container',
+      criticality: 'critical',
+      dependencies: [],
+      dependents: ['supabase_rest', 'database'],
+      recoveryOrder: 0,
+      recoveryPolicy: 'restart_container',
+    });
+
+    // Phase 6: Supabase REST container — PostgREST. Stateless, depends on db.
+    // Safest container for recovery certification: no persistent data.
+    nodes.set('supabase_rest', {
+      id: 'supabase_rest',
+      category: 'container',
+      criticality: 'critical',
+      dependencies: ['supabase_db'],
+      dependents: ['database'],
+      recoveryOrder: 1,
+      recoveryPolicy: 'restart_container',
+    });
+
     // Ollama — required for AI functionality but not for basic health
     // Phase 5: Active recovery via Ollama service restart
     nodes.set('ollama', {

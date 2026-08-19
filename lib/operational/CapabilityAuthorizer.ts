@@ -38,6 +38,15 @@ const RESTARTABLE_MODULES = new Set([
   'protoforge-core',
   'heidi-web',
   'heidi-mobile-chat',
+  // Phase 6: Container targets for governed container recovery
+  'supabase_db',
+  'supabase_rest',
+  'supabase_auth',
+  'supabase_realtime',
+  'supabase_storage',
+  'supabase_kong',
+  'supabase_studio',
+  'ollama',
 ]);
 
 /**

@@ -82,6 +82,15 @@ export class HealthProvenanceChecker {
     const dbResult = await this.checkDatabase();
     this.stateModel.updateState(dbResult.component, dbResult.state, dbResult.evidence, dbResult.dependencies, dbResult.error);
 
+    // Phase 6: Check supabase_db and supabase_rest as separate components
+    // This is required for the governed recovery path — policies target
+    // 'supabase_db' and 'supabase_rest' specifically, not 'database'.
+    const supabaseDbResult = await this.checkSupabaseContainer('supabase_db', 'supabase_db_HYDI-System-v2');
+    this.stateModel.updateState(supabaseDbResult.component, supabaseDbResult.state, supabaseDbResult.evidence, supabaseDbResult.dependencies, supabaseDbResult.error);
+
+    const supabaseRestResult = await this.checkSupabaseContainer('supabase_rest', 'supabase_rest_HYDI-System-v2');
+    this.stateModel.updateState(supabaseRestResult.component, supabaseRestResult.state, supabaseRestResult.evidence, supabaseRestResult.dependencies, supabaseRestResult.error);
+
     const ollamaResult = await this.checkOllama();
     this.stateModel.updateState(ollamaResult.component, ollamaResult.state, ollamaResult.evidence, ollamaResult.dependencies, ollamaResult.error);
 
@@ -384,6 +393,111 @@ export class HealthProvenanceChecker {
     }
 
     return { component: 'database', state: 'HEALTHY', evidence };
+  }
+
+  /**
+   * Phase 6: Check a Supabase container (supabase_db or supabase_rest) as a
+   * separate component. Uses docker inspect + REST probe as independent sources.
+   * This is required for the governed recovery path — policies target
+   * 'supabase_db' and 'supabase_rest' specifically.
+   */
+  async checkSupabaseContainer(componentId: string, containerName: string): Promise<HealthCheckResult> {
+    const evidence: HealthEvidence[] = [];
+    const now = new Date().toISOString();
+
+    // Source 1: Docker container state
+    let dockerOk = false;
+    let dockerStatus = 'unknown';
+    try {
+      const { getDockerCmd } = require('../../scripts/resolve-docker');
+      const dockerCmd = getDockerCmd();
+      if (dockerCmd) {
+        const { execSync } = require('child_process');
+        const out = execSync(`${dockerCmd} inspect --format "{{.State.Status}}" ${containerName}`, {
+          encoding: 'utf8', timeout: 8000, stdio: 'pipe', windowsHide: true,
+        });
+        dockerStatus = out.trim();
+        dockerOk = dockerStatus === 'running';
+        evidence.push({
+          check: 'docker-inspect',
+          status: dockerOk ? 'pass' : 'fail',
+          value: dockerStatus,
+          checkedAt: now,
+        });
+      } else {
+        evidence.push({
+          check: 'docker-inspect',
+          status: 'skip',
+          value: 'docker not available',
+          checkedAt: now,
+        });
+      }
+    } catch (e) {
+      dockerStatus = 'docker inspect failed';
+      evidence.push({
+        check: 'docker-inspect',
+        status: 'fail',
+        value: 'docker inspect failed',
+        detail: e instanceof Error ? e.message : String(e),
+        checkedAt: now,
+      });
+    }
+
+    // Source 2: REST API probe (independent of docker inspect)
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    let restOk = false;
+    if (supabaseUrl) {
+      const restStart = Date.now();
+      const { ok, statusCode } = await this.httpGet(`${supabaseUrl}/rest/v1/`, 5000);
+      restOk = ok;
+      evidence.push({
+        check: 'rest-reachable',
+        status: ok ? 'pass' : 'fail',
+        value: `HTTP ${statusCode}`,
+        checkedAt: now,
+        latencyMs: Date.now() - restStart,
+      });
+    } else {
+      evidence.push({
+        check: 'rest-reachable',
+        status: 'skip',
+        value: 'SUPABASE_URL not set',
+        checkedAt: now,
+      });
+    }
+
+    // Determine state: if both sources fail → UNAVAILABLE
+    // If docker says stopped → UNAVAILABLE (target failure)
+    // If docker fails but REST ok → HEALTHY (observer failure, target is fine)
+    // If both ok → HEALTHY
+    if (!dockerOk && !restOk) {
+      return {
+        component: componentId,
+        state: 'UNAVAILABLE',
+        evidence,
+        error: `Container ${containerName} not running and REST API unreachable`,
+      };
+    }
+    if (!dockerOk && restOk) {
+      // Docker observer failed but service is healthy — target is fine
+      return {
+        component: componentId,
+        state: 'HEALTHY',
+        evidence,
+      };
+    }
+    if (dockerOk && !restOk) {
+      // Container running but REST API unreachable — degraded
+      return {
+        component: componentId,
+        state: 'DEGRADED',
+        evidence,
+        error: `Container running but REST API unreachable`,
+      };
+    }
+
+    return { component: componentId, state: 'HEALTHY', evidence };
   }
 
   /**

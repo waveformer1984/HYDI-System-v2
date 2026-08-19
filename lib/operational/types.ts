@@ -51,7 +51,8 @@ export type ComponentCategory =
   | 'external'
   | 'security'
   | 'health'
-  | 'recovery';
+  | 'recovery'
+  | 'container';
 
 // ---------------------------------------------------------------------------
 // Health Provenance

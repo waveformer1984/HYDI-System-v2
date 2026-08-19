@@ -80,10 +80,21 @@ async function main() {
       }
 
       const finalState = oi.stateModel.getOverallState();
+      // Phase 6: For targeted recovery, check the TARGET component's state,
+      // not just the overall state. The overall state may be DEGRADED due to
+      // cascade failures on other components, but the target may have been
+      // successfully recovered. Exit 0 if the target is healthy/degraded.
+      const targetState = targetComponent
+        ? oi.stateModel.getState(targetComponent)?.state
+        : null;
       await oi.destroy();
-      // Exit 0 if healthy OR if recovery was attempted (even if degraded)
+      // Exit 0 if:
+      //   - overall state is HEALTHY or DEGRADED, OR
+      //   - target component was specified and is HEALTHY or DEGRADED
       // Exit 1 only if no recovery was possible (escalation/failed)
-      process.exit(finalState === 'HEALTHY' || finalState === 'DEGRADED' ? 0 : 1);
+      const targetRecovered = targetState === 'HEALTHY' || targetState === 'DEGRADED';
+      const overallOk = finalState === 'HEALTHY' || finalState === 'DEGRADED';
+      process.exit(targetRecovered || overallOk ? 0 : 1);
     }
 
     // Phase 3: Standard recovery (backward compatible)
