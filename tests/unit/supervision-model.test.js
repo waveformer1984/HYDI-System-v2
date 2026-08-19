@@ -108,6 +108,17 @@ describe('Supervision Model — One Decision-Maker Per Failure Type', () => {
       expect(foundDelegateGuard).toBe(true);
       expect(foundRecoverOutsideGuard).toBe(false);
     });
+
+    it('skips RecoveryEngine for optional components (observe-only)', () => {
+      const code = fs.readFileSync(watchdogPath, 'utf8');
+      // Optional components have recoveryPolicy 'no_action' — calling
+      // RecoveryEngine for them would loop 3 times doing nothing and
+      // then escalate, producing misleading logs. Watchdog must check
+      // f.required and skip RecoveryEngine for optional components.
+      expect(code).toContain('!f.required');
+      expect(code).toContain('OBSERVE');
+      expect(code).toContain('optional');
+    });
   });
 
   describe('RecoveryEngine — never polls independently', () => {
@@ -125,6 +136,18 @@ describe('Supervision Model — One Decision-Maker Per Failure Type', () => {
       const code = fs.readFileSync(cliPath, 'utf8');
       expect(code).not.toContain('setInterval');
       // CLI is one-shot, not a daemon
+    });
+
+    it('returns early for no_action policy (optional components)', () => {
+      const rePath = path.resolve(ROOT, 'lib', 'operational', 'RecoveryEngine.ts');
+      const code = fs.readFileSync(rePath, 'utf8');
+      // When actionType is 'no_action', RecoveryEngine must return early
+      // with a 'recovery_skipped' event — not loop 3 times doing nothing
+      // and then escalate. This prevents misleading "recovery budget
+      // exhausted" escalations for optional components.
+      expect(code).toContain("actionType === 'no_action'");
+      expect(code).toContain('recovery_skipped');
+      expect(code).toContain('component is optional');
     });
   });
 

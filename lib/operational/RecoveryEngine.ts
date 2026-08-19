@@ -257,6 +257,32 @@ export class RecoveryEngine {
       escalationPath: DEFAULT_RECOVERY_ACTION.escalationPath,
     };
 
+    // If the recovery policy is 'no_action' (optional component), return early
+    // with a clear result — don't loop 3 times doing nothing and then escalate.
+    if (actionType === 'no_action') {
+      this.stateModel.logEvent({
+        id: randomUUID(),
+        timestamp: new Date().toISOString(),
+        type: 'recovery_skipped',
+        component,
+        cause,
+        action: 'no_action',
+        actionResult: 'skipped',
+        correlationId,
+        detail: { reason: 'component is optional — recovery policy is no_action' },
+      });
+      return {
+        component,
+        correlationId,
+        cause,
+        action,
+        attempts: [],
+        finalState: this.stateModel.getState(component).state,
+        startedAt,
+        completedAt: new Date().toISOString(),
+      };
+    }
+
     this.activeRecoveries.set(component, correlationId);
 
     // 5. Check dependencies first (causal recovery)

@@ -480,6 +480,7 @@ export type OperationalEventType =
   | 'recovery_step'
   | 'recovery_completed'
   | 'recovery_failed'
+  | 'recovery_skipped'          // optional component — no_action policy
   | 'incident_correlated'
   | 'capability_denied'
   | 'probe_executed'

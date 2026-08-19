@@ -95,6 +95,7 @@ function checkEndpoint(ep) {
         resolve({
           name: ep.name,
           url: ep.url,
+          required: ep.required,
           ok: res.statusCode >= 200 && res.statusCode < 500,
           statusCode: res.statusCode,
           body: body.slice(0, 200),
@@ -103,10 +104,10 @@ function checkEndpoint(ep) {
     });
     req.on('timeout', () => {
       req.destroy();
-      resolve({ name: ep.name, url: ep.url, ok: false, statusCode: 0, body: 'timeout' });
+      resolve({ name: ep.name, url: ep.url, required: ep.required, ok: false, statusCode: 0, body: 'timeout' });
     });
     req.on('error', (e) => {
-      resolve({ name: ep.name, url: ep.url, ok: false, statusCode: 0, body: e.message });
+      resolve({ name: ep.name, url: ep.url, required: ep.required, ok: false, statusCode: 0, body: e.message });
     });
   });
 }
@@ -153,19 +154,24 @@ async function runCheck() {
     log(`ALERT ${failures.length}/${results.length} endpoints down (ok: ${okNames || 'none'})`);
     sendWebhook(failures);
 
-    // If DELEGATE_RECOVERY is enabled, call RecoveryEngine for each failure.
-    // RecoveryEngine will evaluate policy, check risk, authorize, and restart
-    // if allowed. This is the "alive but sick" path — boot-agent can't see
-    // this because it only watches process exit events.
+    // If DELEGATE_RECOVERY is enabled, call RecoveryEngine for each REQUIRED
+    // failure. Optional components are observe-only — RecoveryEngine's policy
+    // for optional components is 'no_action', so calling it would just loop
+    // 3 times doing nothing and then escalate, producing misleading logs.
+    // See SUPERVISION_MODEL.md for the full supervision model.
     if (DELEGATE_RECOVERY) {
       for (const f of failures) {
+        if (!f.required) {
+          log(`OBSERVE  ${f.name} is optional — logging only, not calling RecoveryEngine`);
+          continue;
+        }
         log(`DELEGATE  calling RecoveryEngine for ${f.name}`);
         try {
           const { execSync } = require('child_process');
           const root = path.resolve(__dirname, '..');
           execSync(`node scripts/hydi-recover.js --governed --component=${f.name}`, {
             cwd: root,
-            timeout: 60000,
+            timeout: 120000,
             stdio: 'pipe',
           });
           log(`DELEGATE  RecoveryEngine completed for ${f.name}`);

@@ -227,6 +227,7 @@ The right shape is what the user suggested, confirmed by the code evidence:
 3. **watchdog.js gets an optional RecoveryEngine integration.**
    - DEFAULT: Observe-only (current behavior). Log + webhook.
    - DELEGATE_MODE: When it detects an unhealthy endpoint, it calls RecoveryEngine to evaluate and potentially restart. This is the "unhealthy-but-still-running" case that boot-agent can't see (boot-agent only watches exit events, not health).
+   - **Optional components**: In DELEGATE_MODE, watchdog checks the `required` flag from `boot.config.json`. Optional components (e.g., `heidi-mobile-chat`) are observe-only even in DELEGATE_MODE — watchdog logs `OBSERVE {component} is optional` and does NOT call RecoveryEngine. This is because RecoveryEngine's policy for optional components is `no_action` (they're not critical), so calling RecoveryEngine would just loop 3 times doing nothing and then escalate, producing misleading "recovery failed" logs. RecoveryEngine also returns early with a `recovery_skipped` event if invoked directly for an optional component.
 
 4. **RecoveryEngine never runs on its own timer.** It is always called by watchdog or by manual CLI invocation. It never polls independently. This prevents it from competing with boot-agent.
 
@@ -236,8 +237,9 @@ The right shape is what the user suggested, confirmed by the code evidence:
 
 | Failure Type | DEFAULT Mode | DELEGATE_MODE |
 |-------------|--------------|---------------|
-| Process exits (crash) | boot-agent → full restart | boot-agent logs → watchdog → RecoveryEngine |
-| Process alive but unhealthy | watchdog logs | watchdog → RecoveryEngine |
+| Required process exits (crash) | boot-agent → full restart | boot-agent logs → watchdog → RecoveryEngine |
+| Required process alive but unhealthy | watchdog logs | watchdog → RecoveryEngine |
+| Optional process exits or unhealthy | watchdog logs | watchdog logs (OBSERVE — no RecoveryEngine) |
 | Boot-agent itself crashes | PM2 restarts boot-agent | PM2 restarts boot-agent |
 | Zombie on port at boot | preflight kills | preflight kills |
 
