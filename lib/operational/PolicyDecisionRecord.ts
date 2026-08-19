@@ -56,6 +56,34 @@ export class PolicyDecisionRecordStore {
   }
 
   /**
+   * Update an existing decision record by ID.
+   * Used to update a "pending" record with final results after recovery completes.
+   * Returns the updated record, or null if the record was not found.
+   */
+  update(decisionId: string, updates: Partial<PolicyDecisionRecord>): PolicyDecisionRecord | null {
+    const idx = this.records.findIndex((r) => r.decisionId === decisionId);
+    if (idx === -1) return null;
+
+    // Merge updates into the existing record (preserve original fields)
+    const updated = { ...this.records[idx], ...updates, decisionId: this.records[idx].decisionId };
+    this.records[idx] = updated;
+
+    // Write the updated record to the queue (append — the original "pending"
+    // record stays in the journal for audit, but the update is also recorded)
+    this.writeQueue.push(updated);
+    this.scheduleFlush();
+
+    return updated;
+  }
+
+  /**
+   * Get a decision by ID.
+   */
+  getById(decisionId: string): PolicyDecisionRecord | null {
+    return this.records.find((r) => r.decisionId === decisionId) ?? null;
+  }
+
+  /**
    * Get recent decisions.
    */
   getRecent(limit = 50): PolicyDecisionRecord[] {

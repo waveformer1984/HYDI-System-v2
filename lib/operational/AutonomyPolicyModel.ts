@@ -157,6 +157,40 @@ const DEFAULT_POLICIES: AutonomyPolicy[] = [
     description: 'Restart database containers when unavailable, max 2 attempts',
   },
 
+  // --- Container recovery (R2, policy_authorized) ---
+  // Supabase containers can be restarted autonomously with policy authorization.
+  // Verification is service-level: container running + REST API responding through Kong.
+  {
+    id: 'policy.recover.supabase_db',
+    capability: 'health.recover',
+    target: 'supabase_db',
+    risk: 'R2',
+    authorization: 'policy_authorized',
+    allowedWhen: [
+      { field: 'state', operator: 'in', value: ['UNAVAILABLE', 'DEGRADED', 'FAILED'] },
+    ],
+    maxAttempts: 2,
+    cooldownMs: 30000,
+    requiredEvidence: ['rest-reachable'],
+    escalationAction: 'human_review — supabase_db container restart failed',
+    description: 'Restart supabase_db container when unavailable, max 2 attempts, service-level verification required',
+  },
+  {
+    id: 'policy.recover.supabase_rest',
+    capability: 'health.recover',
+    target: 'supabase_rest',
+    risk: 'R2',
+    authorization: 'policy_authorized',
+    allowedWhen: [
+      { field: 'state', operator: 'in', value: ['UNAVAILABLE', 'DEGRADED', 'FAILED'] },
+    ],
+    maxAttempts: 2,
+    cooldownMs: 30000,
+    requiredEvidence: ['rest-reachable'],
+    escalationAction: 'human_review — supabase_rest container restart failed',
+    description: 'Restart supabase_rest container when unavailable, max 2 attempts, service-level verification required',
+  },
+
   // --- Phase 5: Ollama recovery (R2, policy_authorized) ---
   {
     id: 'policy.recover.ollama',

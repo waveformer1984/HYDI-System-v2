@@ -927,28 +927,54 @@ class HYDISystem extends EventEmitter {
    */
   
   applyAdaptation(recommendation) {
-    console.log(`[HYDI SYSTEM] Applying adaptation: ${recommendation.action}`);
-    
-    switch (recommendation.action) {
+    const { normalize, isValidAction } = require('./core/adaptation-vocabulary');
+    const rec = normalize(recommendation);
+    console.log(`[HYDI SYSTEM] Applying adaptation: ${rec.action} (type: ${rec.type})`);
+
+    if (!isValidAction(rec.action)) {
+      console.log(`[HYDI SYSTEM] Unknown adaptation action: ${rec.action}`);
+      return;
+    }
+
+    switch (rec.action) {
       case 'reduce_confidence_threshold':
         this.config.confidenceThreshold = Math.max(0.5, this.config.confidenceThreshold - 0.1);
         break;
-        
+
       case 'increase_confidence_threshold':
         this.config.confidenceThreshold = Math.min(0.9, this.config.confidenceThreshold + 0.1);
         break;
-        
+
       case 'switch_primary_model':
         // This would update model stack preferences
-        console.log(`[HYDI SYSTEM] Switching primary model to: ${recommendation.target}`);
+        console.log(`[HYDI SYSTEM] Switching primary model to: ${rec.target}`);
         break;
-        
+
       case 'reduce_external_usage':
         this.config.costThreshold = Math.max(0.01, this.config.costThreshold * 0.8);
         break;
-        
+
+      case 'improve_roi':
+        console.log(`[HYDI SYSTEM] ROI improvement recommended: ${rec.reason}`);
+        break;
+
+      case 'reduce_drift':
+        // Lower confidence threshold to counteract drift
+        this.config.confidenceThreshold = Math.max(0.5, this.config.confidenceThreshold - 0.1);
+        console.log(`[HYDI SYSTEM] Drift reduction: lowered confidence threshold to ${this.config.confidenceThreshold}`);
+        break;
+
+      case 'avoid_strategy':
+        console.log(`[HYDI SYSTEM] Avoiding strategy: ${rec.target}`);
+        break;
+
+      case 'prefer_strategy':
+      case 'increase_strategy_preference':
+        console.log(`[HYDI SYSTEM] Preferring strategy: ${rec.target}`);
+        break;
+
       default:
-        console.log(`[HYDI SYSTEM] Unknown adaptation: ${recommendation.action}`);
+        console.log(`[HYDI SYSTEM] Unhandled adaptation action: ${rec.action}`);
     }
   }
   

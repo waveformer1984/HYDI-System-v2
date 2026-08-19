@@ -359,8 +359,8 @@ export class OperationalIntelligence {
       false, // not dry run
     );
 
-    // Record the decision
-    this.decisionStore.record({
+    // Record the initial decision (pending — will be updated with results)
+    const initialRecord = this.decisionStore.record({
       incidentId,
       correlationId: incidentId,
       component,
@@ -374,6 +374,14 @@ export class OperationalIntelligence {
       executor: 'governed-recovery',
       result: 'pending',
       reason: selection.reason,
+      // Explicitly mark fields that don't apply yet
+      detail: {
+        phase: 'pre-execution',
+        assessment: selection.reason,
+        execution: 'not_started',
+        outcome: 'pending',
+        escalation: 'not_required',
+      },
     });
 
     if (!selection.selected) {
@@ -390,30 +398,59 @@ export class OperationalIntelligence {
           selection.policy.risk,
           [component],
         );
+
+        // Update the PDR with escalation result
+        this.decisionStore.update(initialRecord.decisionId, {
+          result: 'escalated',
+          verification: this.stateModel.getState(component).evidence,
+          detail: {
+            phase: 'escalated',
+            assessment: selection.reason,
+            execution: 'not_executed',
+            outcome: 'escalated',
+            escalation: escalation.escalationId,
+            recommendedNextAction: escalation.recommendedNextAction,
+          },
+        });
+
         return this.escalationManager.formatEscalation(escalation);
       }
+
+      // No action and no escalation — update record
+      this.decisionStore.update(initialRecord.decisionId, {
+        result: 'no_action',
+        detail: {
+          phase: 'complete',
+          assessment: selection.reason,
+          execution: 'not_required',
+          outcome: 'no_action',
+          escalation: 'not_required',
+        },
+      });
       return `NO ACTION for ${component}: ${selection.reason}`;
     }
 
     // Execute recovery through the recovery engine
     const record = await this.recoveryEngine.recover(component, cause);
 
-    // Update the decision record with results
-    this.decisionStore.record({
-      incidentId,
-      correlationId: incidentId,
-      component,
-      observedState: health.state,
-      evidence: health.evidence,
-      candidateActions: [selection.selected],
-      selectedAction: selection.selected,
-      risk: selection.policy.risk,
-      policy: selection.policy.policy,
-      authorization: selection.authorization,
-      executor: 'governed-recovery',
-      result: record.finalState === 'HEALTHY' ? 'success' : 'failure',
-      reason: selection.reason,
-      verification: this.stateModel.getState(component).evidence,
+    // UPDATE the existing decision record with results (not create a new one)
+    const finalState = this.stateModel.getState(component);
+    const outcome = record.finalState === 'HEALTHY' ? 'success' : 'failure';
+    this.decisionStore.update(initialRecord.decisionId, {
+      result: outcome,
+      verification: finalState.evidence,
+      detail: {
+        phase: 'complete',
+        assessment: selection.reason,
+        execution: {
+          action: record.action.type,
+          attempts: record.attempts.length,
+          startedAt: record.startedAt,
+          completedAt: record.completedAt,
+        },
+        outcome,
+        escalation: record.finalState === 'HEALTHY' ? 'not_required' : 'required',
+      },
     });
 
     // Record action in incident correlator
@@ -446,6 +483,25 @@ export class OperationalIntelligence {
         selection.policy.risk,
         [component],
       );
+
+      // Update the PDR with escalation details
+      this.decisionStore.update(initialRecord.decisionId, {
+        result: 'escalated',
+        detail: {
+          phase: 'escalated',
+          assessment: selection.reason,
+          execution: {
+            action: record.action.type,
+            attempts: record.attempts.length,
+            startedAt: record.startedAt,
+            completedAt: record.completedAt,
+          },
+          outcome: 'failure',
+          escalation: escalation.escalationId,
+          recommendedNextAction: escalation.recommendedNextAction,
+        },
+      });
+
       return this.escalationManager.formatEscalation(escalation);
     }
 

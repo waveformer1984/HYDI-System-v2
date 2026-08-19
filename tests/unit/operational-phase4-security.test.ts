@@ -67,7 +67,7 @@ describe('Phase 4 — Security: No Arbitrary Shell Execution', () => {
     const model = new AutonomyPolicyModel();
     // Policies target specific components or '*'
     for (const p of model.getAllPolicies()) {
-      expect(p.target).toMatch(/^[a-z0-9-]+$|^\*$/);
+      expect(p.target).toMatch(/^[a-z0-9_-]+$|^\*$/);
     }
   });
 });

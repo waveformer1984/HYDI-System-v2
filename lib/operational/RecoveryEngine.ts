@@ -522,8 +522,14 @@ export class RecoveryEngine {
     };
     const container = containerMap[containerName] || containerName;
 
+    // Resolve Docker CLI path deterministically (shared resolver)
+    const dockerCmd = this.resolveDockerCmd();
+
     try {
-      execSync(`docker restart ${container}`, { timeout: 30000, stdio: 'pipe' });
+      if (!dockerCmd) {
+        throw new Error('Docker CLI not available — cannot restart container');
+      }
+      execSync(`${dockerCmd} restart ${container}`, { timeout: 30000, stdio: 'pipe' });
       this.stateModel.logEvent({
         id: randomUUID(),
         timestamp: new Date().toISOString(),
@@ -533,6 +539,13 @@ export class RecoveryEngine {
         actionResult: 'success',
         detail: { container },
       });
+
+      // Service-level verification: container running ≠ service healthy.
+      // For Supabase containers, verify REST API responds through Kong gateway.
+      // This is the Phase 6 requirement: verification must be stronger than execution.
+      if (containerName.startsWith('supabase_')) {
+        await this.verifySupabaseServiceLevel(containerName);
+      }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       this.stateModel.logEvent({
@@ -626,8 +639,12 @@ export class RecoveryEngine {
 
     // Try restarting the local Supabase DB container
     try {
+      const dockerCmd = this.resolveDockerCmd();
+      if (!dockerCmd) {
+        throw new Error('Docker CLI not available — cannot restart DB container');
+      }
       const containerName = 'supabase_db_HYDI-System-v2';
-      execSync(`docker restart ${containerName}`, { timeout: 30000, stdio: 'pipe' });
+      execSync(`${dockerCmd} restart ${containerName}`, { timeout: 30000, stdio: 'pipe' });
 
       // Wait for the DB to accept connections (max 20s)
       await this.waitForService('http://127.0.0.1:54321', 20000);
@@ -681,6 +698,82 @@ export class RecoveryEngine {
       detail: { reason: 'bridge is not a restartable process module — escalation required' },
     });
     throw new Error(`Bridge ${component} is not a restartable process — requires manual intervention`);
+  }
+
+  /**
+   * Verify Supabase service-level health after container restart.
+   * Container running ≠ service healthy. This probes the REST API
+   * through the Kong gateway to prove both DB connectivity and REST
+   * functionality.
+   *
+   * Phase 6: Verification must be stronger than execution.
+   */
+  private async verifySupabaseServiceLevel(containerName: string): Promise<void> {
+    const kongUrl = 'http://127.0.0.1:54321';
+    const maxWaitMs = 20000;
+    const started = Date.now();
+
+    try {
+      // Wait for Kong gateway to respond (it proxies to REST API)
+      await this.waitForService(kongUrl, maxWaitMs);
+
+      // Additional check: REST API root endpoint returns OpenAPI doc
+      const restUrl = `${kongUrl}/rest/v1/`;
+      const restStart = Date.now();
+      const { ok, statusCode } = await this.httpGet(restUrl, 5000);
+
+      this.stateModel.logEvent({
+        id: randomUUID(),
+        timestamp: new Date().toISOString(),
+        type: 'recovery_step',
+        component: containerName,
+        action: 'service_level_verification',
+        actionResult: ok ? 'success' : 'failure',
+        detail: {
+          kongUrl,
+          restUrl,
+          statusCode,
+          latencyMs: Date.now() - restStart,
+          totalWaitMs: Date.now() - started,
+          verified: ok,
+        },
+      });
+
+      if (!ok) {
+        throw new Error(`Service-level verification failed for ${containerName}: REST API returned ${statusCode}`);
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      this.stateModel.logEvent({
+        id: randomUUID(),
+        timestamp: new Date().toISOString(),
+        type: 'recovery_step',
+        component: containerName,
+        action: 'service_level_verification',
+        actionResult: 'failure',
+        detail: { error: msg, elapsedMs: Date.now() - started },
+      });
+      // Don't throw — the recovery loop's healthChecker.checkAll() will
+      // catch this as a failed postcondition. But we log the evidence.
+    }
+  }
+
+  /**
+   * Simple HTTP GET helper with timeout.
+   */
+  private async httpGet(url: string, timeoutMs: number): Promise<{ ok: boolean; statusCode: number }> {
+    const http = require('http');
+    const https = require('https');
+    const lib = url.startsWith('https:') ? https : http;
+
+    return new Promise((resolve) => {
+      const req = lib.get(url, { timeout: timeoutMs }, (res: any) => {
+        res.resume();
+        resolve({ ok: res.statusCode >= 200 && res.statusCode < 400, statusCode: res.statusCode });
+      });
+      req.on('timeout', () => { req.destroy(); resolve({ ok: false, statusCode: 0 }); });
+      req.on('error', () => resolve({ ok: false, statusCode: 0 }));
+    });
   }
 
   /**
@@ -797,16 +890,33 @@ export class RecoveryEngine {
   private getGraceMs(component: string): number {
     const mod = this.bootConfig.modules.find((m) => m.id === component);
     const bootGraceMs = mod?.health?.graceMs ?? 10000;
-    // Cap recovery grace at 60s — the boot graceMs (up to 5 min) is for
-    // cold starts under load; recovery restarts are warmer and the CLI
-    // must remain responsive. 60s is enough for a warm Node.js restart
-    // while keeping the CLI responsive.
-    const RECOVERY_GRACE_CAP_MS = 60000;
+    // Cap recovery grace at 120s — the boot graceMs (up to 5 min) is for
+    // cold starts under load; recovery restarts are warmer but Next.js dev
+    // server compilation can take ~90s on a warm restart. 120s gives enough
+    // margin while keeping the CLI responsive.
+    const RECOVERY_GRACE_CAP_MS = 120000;
     return Math.min(bootGraceMs, RECOVERY_GRACE_CAP_MS);
   }
 
   private sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  /**
+   * Resolve the Docker CLI command using the shared resolver.
+   * Caches the result to avoid repeated probes during recovery.
+   */
+  private _dockerCmdCache: string | null | undefined = undefined;
+  private resolveDockerCmd(): string | null {
+    if (this._dockerCmdCache !== undefined) return this._dockerCmdCache;
+    try {
+      const { resolveDocker } = require('../../scripts/resolve-docker.js');
+      const info = resolveDocker({ skipDaemonCheck: true });
+      this._dockerCmdCache = info.cmd;
+    } catch {
+      this._dockerCmdCache = null;
+    }
+    return this._dockerCmdCache ?? null;
   }
 
   private createNoOpRecord(component: string, correlationId: string, cause: string, reason: string): RecoveryRecord {

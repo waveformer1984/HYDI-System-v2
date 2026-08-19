@@ -155,16 +155,35 @@ async function runDoctor() {
     return `${modelCount} models available (e.g. ${parsed.models[0]?.name})`;
   }));
 
-  // 6. Docker containers
+  // 6. Docker containers — use shared resolver for deterministic discovery
+  const { resolveDocker } = require('./resolve-docker');
+  const dockerInfo = resolveDocker({ timeoutMs: 8000 });
+
   results.push(check('Docker daemon', () => {
-    execSync('docker info', { timeout: 5000, stdio: 'pipe' });
-    return 'Docker daemon responding';
+    if (dockerInfo.status === 'unavailable') {
+      const e = new Error('Docker CLI not found in PATH or common install locations');
+      e.actionable = 'Install Docker Desktop or add docker.exe to PATH';
+      throw e;
+    }
+    if (dockerInfo.status === 'cli_only') {
+      const e = new Error(`Docker CLI found at ${dockerInfo.path} but daemon not responding`);
+      e.actionable = 'Start Docker Desktop';
+      throw e;
+    }
+    return `Docker daemon responding (via ${dockerInfo.path})`;
   }));
 
+  const DOCKER_CMD = dockerInfo.cmd;
+
   results.push(check('Supabase DB container', () => {
+    if (!DOCKER_CMD) {
+      const e = new Error('Docker not available');
+      e.actionable = 'Start Docker Desktop';
+      throw e;
+    }
     try {
-      const out = execSync('docker inspect --format "{{.State.Health.Status}}" supabase_db_HYDI-System-v2', {
-        encoding: 'utf8', timeout: 5000,
+      const out = execSync(`${DOCKER_CMD} inspect --format "{{.State.Health.Status}}" supabase_db_HYDI-System-v2`, {
+        encoding: 'utf8', timeout: 8000,
       });
       const status = out.trim();
       if (status !== 'healthy') {

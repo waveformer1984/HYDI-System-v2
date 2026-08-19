@@ -319,6 +319,9 @@ export class HealthProvenanceChecker {
     }
 
     // 2. Service-role write/read test
+    // All fetch calls use AbortSignal.timeout to prevent indefinite hangs when
+    // Docker/Kong is in a degraded state (accepting connections but not responding).
+    const FETCH_TIMEOUT_MS = 10000;
     try {
       const testId = `health_check_${Date.now()}`;
       const insertStart = Date.now();
@@ -331,6 +334,7 @@ export class HealthProvenanceChecker {
           Prefer: 'return=representation',
         },
         body: JSON.stringify({ id: testId, company: 'Health Check Probe', status: 'new' }),
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
       });
       evidence.push({
         check: 'service-role-write',
@@ -347,6 +351,7 @@ export class HealthProvenanceChecker {
       // Read back
       const readRes = await fetch(`${supabaseUrl}/rest/v1/leads?id=eq.${testId}`, {
         headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` },
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
       });
       const rows = await readRes.json();
       evidence.push({
@@ -360,6 +365,7 @@ export class HealthProvenanceChecker {
       await fetch(`${supabaseUrl}/rest/v1/leads?id=eq.${testId}`, {
         method: 'DELETE',
         headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` },
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
       });
       evidence.push({
         check: 'service-role-delete',

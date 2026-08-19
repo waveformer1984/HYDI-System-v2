@@ -22,12 +22,28 @@
  * ---------------------------------------------------------------------------
  */
 
+// Install TypeScript loader so we can import lib/operational/*.ts
+// (same pattern as the recover CLI script)
+require('./babel-register');
+
 const http = require('http');
 const https = require('https');
 const fs = require('fs');
 const path = require('path');
 
+// SelfHealthMonitor — HEIDI's own operational health (memory growth,
+// stuck recoveries, stale observation cycles, persistence failures).
+// Wired into the watchdog so HEIDI monitors itself alongside components.
+const { SelfHealthMonitor } = require('../lib/operational/SelfHealthMonitor');
+const { SystemStateModel } = require('../lib/operational/SystemStateModel');
+
 const ROOT = path.resolve(__dirname, '..');
+
+// --- Self-health monitor instance ---
+// Uses a lightweight SystemStateModel that only receives self-health events.
+const selfStateModel = new SystemStateModel();
+selfStateModel.registerComponent('heidi-self', 'system');
+const selfHealthMonitor = new SelfHealthMonitor(ROOT, selfStateModel);
 const LOG_DIR = path.resolve(ROOT, 'logs');
 const LOG_FILE = path.resolve(LOG_DIR, 'watchdog.log');
 
@@ -112,32 +128,37 @@ function checkEndpoint(ep) {
   });
 }
 
+// Service-level Supabase check: verify REST API responds through Kong gateway.
+// This proves both DB connectivity (REST needs DB) and REST API functionality.
+// Uses a helper script to avoid inline script escaping issues on Windows.
+// Retries once to handle transient failures during container warm-up.
+function checkSupabaseServiceLevel() {
+  const { execSync } = require('child_process');
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      execSync('node scripts/check-supabase-service.js', {
+        encoding: 'utf8', timeout: 10000, stdio: 'pipe', cwd: ROOT,
+      });
+      return { ok: true };
+    } catch (e) {
+      if (attempt === 0) continue; // retry once
+      const msg = e.message ? e.message.substring(0, 80) : 'check failed';
+      return { ok: false, error: msg };
+    }
+  }
+  return { ok: false, error: 'check failed' };
+}
+
 // Phase 5: Infrastructure health checks (Docker containers, Ollama)
 function checkInfrastructure() {
   const results = [];
   const { execSync } = require('child_process');
 
-  // Docker CLI path — PM2 may not have Docker in PATH
-  // Try 'docker' first, then fall back to common Windows install paths
-  const DOCKER_CMD = (() => {
-    // Check if docker is in PATH
-    try {
-      execSync('docker version --format "{{.Client.Version}}"', { timeout: 5000, stdio: 'pipe', encoding: 'utf8' });
-      return 'docker';
-    } catch { /* not in PATH, try full paths */ }
-    // Try common Windows Docker paths
-    const fs = require('fs');
-    const paths = [
-      'C:\\Program Files\\Docker\\Docker\\resources\\bin\\docker.exe',
-      'C:\\Program Files\\Docker\\Docker\\resources\\bin\\docker',
-    ];
-    for (const p of paths) {
-      if (fs.existsSync(p)) return `"${p}"`;
-    }
-    return null; // Docker not available
-  })();
+  // Docker CLI — use shared resolver for deterministic discovery
+  const { getDockerCmd } = require('./resolve-docker');
+  const DOCKER_CMD = getDockerCmd();
 
-  // Check Supabase DB container
+  // Check Supabase DB container + service-level connectivity
   let dbStatus = 'unknown';
   let dbOk = false;
   if (DOCKER_CMD) {
@@ -157,6 +178,16 @@ function checkInfrastructure() {
   } else {
     dbStatus = 'docker not available';
   }
+  // Service-level check: verify DB is accepting connections via REST API through Kong
+  if (dbOk) {
+    const svcCheck = checkSupabaseServiceLevel();
+    if (svcCheck.ok) {
+      dbStatus += ' + service-ok';
+    } else {
+      dbOk = false;
+      dbStatus += ' + service-fail: ' + svcCheck.error;
+    }
+  }
   results.push({
     name: 'supabase_db',
     url: 'docker://supabase_db_HYDI-System-v2',
@@ -166,7 +197,7 @@ function checkInfrastructure() {
     body: dbStatus,
   });
 
-  // Check Supabase REST container
+  // Check Supabase REST container + service-level connectivity
   let restStatus = 'unknown';
   let restOk = false;
   if (DOCKER_CMD) {
@@ -185,6 +216,16 @@ function checkInfrastructure() {
     }
   } else {
     restStatus = 'docker not available';
+  }
+  // Service-level check: verify REST API responds through Kong gateway
+  if (restOk) {
+    const svcCheck = checkSupabaseServiceLevel();
+    if (svcCheck.ok) {
+      restStatus += ' + service-ok';
+    } else {
+      restOk = false;
+      restStatus += ' + service-fail: ' + svcCheck.error;
+    }
   }
   results.push({
     name: 'supabase_rest',
@@ -295,30 +336,58 @@ async function runCheck() {
     // for optional components is 'no_action', so calling it would just loop
     // 3 times doing nothing and then escalate, producing misleading logs.
     // See SUPERVISION_MODEL.md for the full supervision model.
+    //
+    // Recovery is dispatched in PARALLEL so a stuck/slow recovery on one
+    // component does not block detection and recovery of others. Each
+    // recovery has its own 120s timeout.
     if (DELEGATE_RECOVERY) {
+      const { exec } = require('child_process');
+      const root = path.resolve(__dirname, '..');
+      const recoveryPromises = [];
       for (const f of failures) {
         if (!f.required) {
           log(`OBSERVE  ${f.name} is optional — logging only, not calling RecoveryEngine`);
           continue;
         }
         log(`DELEGATE  calling RecoveryEngine for ${f.name}`);
-        try {
-          const { execSync } = require('child_process');
-          const root = path.resolve(__dirname, '..');
-          execSync(`node scripts/hydi-recover.js --governed --component=${f.name}`, {
-            cwd: root,
-            timeout: 120000,
-            stdio: 'pipe',
-          });
-          log(`DELEGATE  RecoveryEngine completed for ${f.name}`);
-        } catch (e) {
-          log(`DELEGATE  RecoveryEngine failed for ${f.name}: ${e.message}`);
-        }
+        recoveryPromises.push(new Promise((resolve) => {
+          const child = exec(
+            `node scripts/hydi-recover.js --governed --component=${f.name}`,
+            { cwd: root, timeout: 120000, stdio: 'pipe' },
+            (err) => {
+              if (err) {
+                log(`DELEGATE  RecoveryEngine failed for ${f.name}: ${err.message}`);
+              } else {
+                log(`DELEGATE  RecoveryEngine completed for ${f.name}`);
+              }
+              resolve();
+            }
+          );
+          // Don't let the child keep the watchdog alive
+          child.unref();
+        }));
       }
+      await Promise.all(recoveryPromises);
     }
   }
+
+  // Record that this observation cycle completed (feeds SelfHealthMonitor)
+  selfHealthMonitor.recordObservationCycle();
+
+  // Run self-health check every 5th cycle (every ~2.5 min at 30s interval)
+  // to detect memory growth, stuck recoveries, or persistence failures.
+  if (selfCheckCounter % 5 === 0) {
+    const selfHealth = selfHealthMonitor.check();
+    if (selfHealth.state !== 'HEALTHY') {
+      log(`SELF-HEALTH ${selfHealth.state} — mem=${selfHealth.memoryUsageMb}MB, stuckRecoveries=${selfHealth.stuckRecoveries}, persistenceWritable=${selfHealth.persistenceWritable}${selfHealth.degradedReason ? ', reason=' + selfHealth.degradedReason : ''}`);
+    }
+  }
+  selfCheckCounter++;
+
   return allOk;
 }
+
+let selfCheckCounter = 0;
 
 async function main() {
   log(`watchdog started (mode=${ONCE ? 'once' : 'continuous'}, interval=${INTERVAL_MS}ms, webhook=${WEBHOOK_URL ? 'on' : 'off'})`);

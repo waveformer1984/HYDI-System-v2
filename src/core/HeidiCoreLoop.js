@@ -814,34 +814,79 @@ class HeidiCoreLoop extends EventEmitter {
   }
   
   async applyAdaptations(recommendations) {
+    const { normalize, isValidType } = require('./adaptation-vocabulary');
     for (const rec of recommendations) {
-      await this.applyAdaptation(rec);
+      const normalized = normalize(rec);
+      if (!isValidType(normalized.type)) {
+        console.log(`[CORE LOOP] Unknown adaptation type: ${normalized.type}`);
+        continue;
+      }
+      await this.applyAdaptation(normalized);
     }
   }
-  
+
   async applyAdaptation(adaptation) {
     console.log(`[CORE LOOP] Applying adaptation: ${adaptation.type}`);
-    
+
     switch (adaptation.type) {
       case 'strategy_avoidance':
         // Update orchestrator preferences
         this.orchestrator.config.avoidStrategies = this.orchestrator.config.avoidStrategies || [];
         this.orchestrator.config.avoidStrategies.push(adaptation.target);
         break;
-        
+
       case 'strategy_preference':
         // Update orchestrator preferences
         this.orchestrator.config.preferStrategies = this.orchestrator.config.preferStrategies || [];
         this.orchestrator.config.preferStrategies.push(adaptation.target);
         break;
-        
+
       case 'confidence_calibration':
         // Adjust confidence threshold
-        if (adaptation.adjustment === 'lower_threshold') {
+        if (adaptation.adjustment === 'lower_threshold' || adaptation.action === 'reduce_confidence_threshold') {
           this.config.actionConfidenceThreshold = Math.max(0.5, this.config.actionConfidenceThreshold - 0.1);
+        } else if (adaptation.action === 'increase_confidence_threshold') {
+          this.config.actionConfidenceThreshold = Math.min(0.9, this.config.actionConfidenceThreshold + 0.1);
         }
         break;
-        
+
+      case 'drift_mitigation':
+        // Reduce confidence threshold to counteract drift
+        this.config.actionConfidenceThreshold = Math.max(0.5, this.config.actionConfidenceThreshold - 0.1);
+        console.log(`[CORE LOOP] Drift mitigation: lowered confidence threshold to ${this.config.actionConfidenceThreshold}`);
+        break;
+
+      case 'failure_mitigation':
+        // Avoid the failing strategy
+        if (adaptation.target) {
+          this.orchestrator.config.avoidStrategies = this.orchestrator.config.avoidStrategies || [];
+          this.orchestrator.config.avoidStrategies.push(adaptation.target);
+          console.log(`[CORE LOOP] Failure mitigation: avoiding strategy ${adaptation.target}`);
+        }
+        break;
+
+      case 'success_amplification':
+        // Prefer the successful strategy
+        if (adaptation.target) {
+          this.orchestrator.config.preferStrategies = this.orchestrator.config.preferStrategies || [];
+          this.orchestrator.config.preferStrategies.push(adaptation.target);
+          console.log(`[CORE LOOP] Success amplification: preferring strategy ${adaptation.target}`);
+        }
+        break;
+
+      case 'cost_optimization':
+        // Reduce external usage / improve ROI
+        if (adaptation.action === 'reduce_external_usage') {
+          this.config.costThreshold = Math.max(0.01, (this.config.costThreshold || 0.1) * 0.8);
+        }
+        console.log(`[CORE LOOP] Cost optimization: ${adaptation.action}`);
+        break;
+
+      case 'model_switch':
+        // Switch primary model
+        console.log(`[CORE LOOP] Model switch recommended: ${adaptation.target || adaptation.action}`);
+        break;
+
       default:
         console.log(`[CORE LOOP] Unknown adaptation type: ${adaptation.type}`);
     }

@@ -302,19 +302,19 @@ class HeidiSelfAwareness extends EventEmitter {
     // Determine trend
     const trend = this.determineDriftTrend(overallDrift);
     
-    // Update drift metrics
-    this.metrics.drift = {
-      score: overallDrift,
-      trend,
-      confidence: this.calculateDriftConfidence(recentActions.length),
-      lastCheck: Date.now(),
-      components: {
+    // Update drift metrics — update fields in-place to preserve history array.
+    // Replacing the entire object drops `history`, causing the next
+    // determineDriftTrend() call to crash on undefined.length.
+    this.metrics.drift.score = overallDrift;
+    this.metrics.drift.trend = trend;
+    this.metrics.drift.confidence = this.calculateDriftConfidence(recentActions.length);
+    this.metrics.drift.lastCheck = Date.now();
+    this.metrics.drift.components = {
         confidence: confidenceDrift,
         performance: performanceDrift,
         cost: costDrift
-      }
     };
-    
+
     // Add to history
     this.metrics.drift.history.push({
       timestamp: Date.now(),
