@@ -46,6 +46,7 @@
     "hydi:doctor": "node scripts/hydi-doctor.js",
     "hydi:qualify": "node scripts/hydi-qualify.js",
     "hydi:qualify:json": "node scripts/hydi-qualify.js --json",
+    "hydi:qualify:local": "node scripts/hydi-qualify-local.js",
     "lint:migrations": "node scripts/lint-migration-idempotency.js",
     "lint:migrations:ratchet": "node scripts/lint-migration-idempotency.js --ratchet",
     "lint:migrations:baseline": "node scripts/lint-migration-idempotency.js --generate-baseline",

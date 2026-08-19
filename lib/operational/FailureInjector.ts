@@ -375,18 +375,33 @@ export class FailureInjector {
 
       case 'B1-supabase-rest-restart': {
         try {
-          const out = execSync('docker inspect --format "{{.State.Health.Status}}" supabase_rest_HYDI-System-v2', {
+          // Use State.Status (running) instead of State.Health.Status (not all containers have health checks)
+          const out = execSync('docker inspect --format "{{.State.Status}}" supabase_rest_HYDI-System-v2', {
             encoding: 'utf8', timeout: 5000,
           });
           const status = out.trim();
+          // Also try a functional check via the Kong gateway
+          let functionalOk = false;
+          try {
+            const restOut = execSync('curl -s -o /dev/null -w "%{http_code}" --max-time 5 http://127.0.0.1:54321/rest/v1/', {
+              encoding: 'utf8', timeout: 10000,
+            });
+            functionalOk = parseInt(restOut.trim(), 10) < 500;
+          } catch { /* may not be ready yet */ }
           evidence.push({
-            check: 'container-health', status: status === 'healthy' ? 'pass' : 'fail',
+            check: 'container-status', status: status === 'running' ? 'pass' : 'fail',
             value: status, checkedAt: now,
           });
-          return { recovered: status === 'healthy', evidence };
+          if (functionalOk) {
+            evidence.push({
+              check: 'rest-api-functional', status: 'pass',
+              value: 'REST API responding', checkedAt: now,
+            });
+          }
+          return { recovered: status === 'running', evidence };
         } catch (e) {
           evidence.push({
-            check: 'container-health', status: 'fail',
+            check: 'container-status', status: 'fail',
             value: 'docker inspect failed', checkedAt: now,
           });
           return { recovered: false, evidence };
@@ -404,6 +419,7 @@ export class FailureInjector {
 
       case 'E1-supabase-db-restart': {
         try {
+          // DB container has health checks, use Health.Status
           const out = execSync('docker inspect --format "{{.State.Health.Status}}" supabase_db_HYDI-System-v2', {
             encoding: 'utf8', timeout: 5000,
           });
@@ -414,11 +430,24 @@ export class FailureInjector {
           });
           return { recovered: status === 'healthy', evidence };
         } catch {
-          evidence.push({
-            check: 'db-container-health', status: 'fail',
-            value: 'docker inspect failed', checkedAt: now,
-          });
-          return { recovered: false, evidence };
+          // Fallback: check if container is at least running
+          try {
+            const out = execSync('docker inspect --format "{{.State.Status}}" supabase_db_HYDI-System-v2', {
+              encoding: 'utf8', timeout: 5000,
+            });
+            const status = out.trim();
+            evidence.push({
+              check: 'db-container-status', status: status === 'running' ? 'pass' : 'fail',
+              value: status, checkedAt: now,
+            });
+            return { recovered: status === 'running', evidence };
+          } catch {
+            evidence.push({
+              check: 'db-container-health', status: 'fail',
+              value: 'docker inspect failed', checkedAt: now,
+            });
+            return { recovered: false, evidence };
+          }
         }
       }
 
