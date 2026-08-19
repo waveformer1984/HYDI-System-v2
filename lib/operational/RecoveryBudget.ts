@@ -17,6 +17,7 @@
 import { randomUUID } from 'crypto';
 import type { RecoveryBudget as BudgetConfig, CircuitBreakerState } from './types';
 import type { SystemStateModel } from './SystemStateModel';
+import type { DurableBudgetStore } from './DurableBudgetStore';
 
 const DEFAULT_BUDGET: BudgetConfig = {
   maxRecoveryActionsPerIncident: 5,
@@ -33,10 +34,36 @@ export class RecoveryBudgetManager {
   private breakers = new Map<string, CircuitBreakerState>();
   private incidentActionCounts = new Map<string, number>(); // incidentId → count
   private componentRetryCounts = new Map<string, number>(); // component → count (per incident)
+  private durableStore: DurableBudgetStore | null;
 
-  constructor(stateModel: SystemStateModel, config?: Partial<BudgetConfig>) {
+  constructor(stateModel: SystemStateModel, config?: Partial<BudgetConfig>, durableStore?: DurableBudgetStore) {
     this.stateModel = stateModel;
     this.config = { ...DEFAULT_BUDGET, ...config };
+    this.durableStore = durableStore ?? null;
+
+    // Phase 7 Fix: Restore circuit breaker state from durable storage on construction.
+    // This prevents a watchdog restart from silently resetting the budget.
+    if (this.durableStore) {
+      const allStates = this.durableStore.getAllStates();
+      for (const durable of allStates) {
+        // Restore circuit breaker state
+        if (durable.circuitBreakerTripped) {
+          this.breakers.set(durable.component, {
+            component: durable.component,
+            consecutiveFailures: durable.consecutiveFailures,
+            tripped: true,
+            trippedAt: durable.circuitBreakerTrippedAt,
+            lastFailureAt: durable.lastFailureAt,
+            totalAttempts: durable.totalAttempts,
+            totalSuccesses: durable.totalSuccesses,
+          });
+        }
+        // Restore retry counts
+        if (durable.retryCount > 0) {
+          this.componentRetryCounts.set(durable.component, durable.retryCount);
+        }
+      }
+    }
   }
 
   /**
@@ -50,6 +77,16 @@ export class RecoveryBudgetManager {
    * Check if a recovery action is within budget.
    */
   canRecover(component: string, incidentId: string): { allowed: boolean; reason: string } {
+    // Phase 7 Fix: Check durable store for exhausted incidents first.
+    // This prevents a watchdog restart from giving a fresh budget to an
+    // incident that was already escalated.
+    if (this.durableStore && this.durableStore.isIncidentExhausted(component, incidentId)) {
+      return {
+        allowed: false,
+        reason: `incident ${incidentId} was previously exhausted for ${component} — durable budget prevents re-entry`,
+      };
+    }
+
     // Check circuit breaker
     const breaker = this.breakers.get(component);
     if (breaker?.tripped) {
@@ -144,6 +181,30 @@ export class RecoveryBudgetManager {
         });
       }
     }
+
+    // Phase 7 Fix: Persist to durable store so budget survives watchdog restarts
+    if (this.durableStore) {
+      this.durableStore.updateState(component, {
+        retryCount: this.componentRetryCounts.get(component) ?? 0,
+        totalAttempts: breaker.totalAttempts,
+        totalSuccesses: breaker.totalSuccesses,
+        consecutiveFailures: breaker.consecutiveFailures,
+        circuitBreakerTripped: breaker.tripped,
+        circuitBreakerTrippedAt: breaker.trippedAt,
+        lastFailureAt: breaker.lastFailureAt,
+      });
+    }
+  }
+
+  /**
+   * Phase 7 Fix: Mark an incident as exhausted (budget used up).
+   * This persists to durable storage so a watchdog restart doesn't
+   * give a fresh budget to an exhausted incident.
+   */
+  markIncidentExhausted(component: string, incidentId: string): void {
+    if (this.durableStore) {
+      this.durableStore.markIncidentExhausted(component, incidentId);
+    }
   }
 
   /**
@@ -185,6 +246,10 @@ export class RecoveryBudgetManager {
     const breaker = this.breakers.get(component);
     if (breaker) {
       breaker.consecutiveFailures = 0;
+    }
+    // Phase 7 Fix: Persist the reset to durable storage
+    if (this.durableStore) {
+      this.durableStore.resetRetries(component);
     }
   }
 

@@ -610,7 +610,8 @@ export type OperationalEventType =
   | 'soak_metric'               // Phase 5: soak test metric recorded
   | 'observation_uncertain'     // Phase 6: observation confidence too low to act
   | 'false_recovery_prevented'  // Phase 6: recovery was correctly NOT triggered
-  | 'recovery_stopped';         // Phase 7: recovery was intelligently stopped (non-retryable)
+  | 'recovery_stopped'          // Phase 7: recovery was intelligently stopped (non-retryable)
+  | 'incident_resolved';        // Phase 7 Fix: incident was resolved (recovery succeeded)
 
 // ---------------------------------------------------------------------------
 // Phase 6: Observation Confidence & Corroboration

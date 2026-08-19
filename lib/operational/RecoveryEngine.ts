@@ -298,6 +298,17 @@ export class RecoveryEngine {
 
     this.activeRecoveries.set(component, correlationId);
 
+    // Phase 7: Pre-compute dependencies for outcome classification
+    // (node is already declared above at the strategy determination step)
+    const dependencies = node?.dependencies ?? [];
+    let depStates: Record<string, ComponentState> = {};
+    const incidentId = correlationId; // use correlation ID as incident ID
+
+    // Declare outcome tracking variables early (used in dependency-blocked path)
+    let finalState: ComponentState = this.stateModel.getState(component).state;
+    let finalOutcome: RecoveryOutcome = 'RECOVERY_NOT_REQUIRED';
+    let finalFailureClassification: RecoveryFailureClassification | undefined;
+
     // 5. Check dependencies first (causal recovery)
     if (node) {
       for (const dep of node.dependencies) {
@@ -317,22 +328,149 @@ export class RecoveryEngine {
       }
     }
 
+    // Phase 7 Fix: After dependency recovery, RE-CHECK dependencies.
+    // If any dependency is STILL down (its recovery failed), do NOT proceed
+    // to recover the target. Burning attempts on a target whose dependency
+    // is down is pointless — the target cannot become healthy.
+    // Classify as RECOVERY_DEPENDENCY_BLOCKED and escalate immediately.
+    await this.healthChecker.checkAll();
+    depStates = {};
+    let dependencyStillDown = false;
+    let blockedByDependency: string | undefined;
+    for (const dep of dependencies) {
+      const depState = this.stateModel.getState(dep)?.state ?? 'UNKNOWN';
+      depStates[dep] = depState;
+      if (depState === 'UNAVAILABLE' || depState === 'FAILED') {
+        dependencyStillDown = true;
+        blockedByDependency = dep;
+      }
+    }
+
+    if (dependencyStillDown) {
+      this.stateModel.logEvent({
+        id: randomUUID(),
+        timestamp: new Date().toISOString(),
+        type: 'recovery_stopped',
+        component,
+        action: action.type,
+        actionResult: 'stopped',
+        correlationId,
+        detail: {
+          reason: `dependency '${blockedByDependency}' is still down after its recovery — target recovery blocked`,
+          nextAction: 'escalate',
+          blockedByDependency,
+        },
+      });
+
+      finalState = this.stateModel.getState(component).state;
+      finalOutcome = 'RECOVERY_DEPENDENCY_BLOCKED';
+      finalFailureClassification = 'DEPENDENCY_PROBLEM';
+
+      this.stateModel.updateState(component, 'BLOCKED', [{
+        check: 'dependency-blocked',
+        status: 'fail',
+        value: `dependency '${blockedByDependency}' is down — target recovery blocked`,
+        detail: `blockedBy: ${blockedByDependency}`,
+        checkedAt: new Date().toISOString(),
+      }]);
+
+      // Create structured escalation record
+      const escalationRecord: EscalationRecord = {
+        escalationId: randomUUID(),
+        incidentId,
+        target: component,
+        failureClassification: 'DEPENDENCY_PROBLEM',
+        attemptCount: 0,
+        lastRecoveryAction: 'none — blocked before attempt',
+        lastFailureReason: `dependency '${blockedByDependency}' is down — target recovery blocked before any attempt`,
+        remainingEvidence: this.stateModel.getState(component).evidence,
+        risk: 'R2',
+        reasonForEscalation: `recovery blocked: dependency '${blockedByDependency}' is still down after its own recovery failed`,
+        recommendedNextAction: `Recover dependency '${blockedByDependency}' manually first, then retry recovery for ${component}`,
+        timestamp: new Date().toISOString(),
+        attemptHistory: [],
+      };
+
+      if (this.escalationManager) {
+        this.escalationManager.escalate(
+          component,
+          incidentId,
+          correlationId,
+          this.stateModel.getState(component).evidence,
+          [],
+          escalationRecord.reasonForEscalation,
+          escalationRecord.recommendedNextAction,
+          'R2',
+          [component, ...(blockedByDependency ? [blockedByDependency] : [])],
+        );
+      }
+
+      const record: RecoveryRecord = {
+        component,
+        correlationId,
+        cause,
+        action,
+        attempts: [],
+        finalState: 'BLOCKED',
+        startedAt,
+        completedAt: new Date().toISOString(),
+        incidentId,
+        finalOutcome,
+        failureClassification: finalFailureClassification,
+        escalationRecord,
+      };
+      this.recoveryHistory.push(record);
+      this.activeRecoveries.delete(component);
+      this.releaseLock(component);
+      return record;
+    }
+
     // 6. Execute bounded recovery with intelligent retry decisions
     const attempts: RecoveryAttempt[] = [];
-    let finalState: ComponentState = this.stateModel.getState(component).state;
-    let finalOutcome: RecoveryOutcome = 'RECOVERY_NOT_REQUIRED';
-    let finalFailureClassification: RecoveryFailureClassification | undefined;
-    const incidentId = correlationId; // use correlation ID as incident ID
-
-    // Phase 7: Pre-compute dependencies for outcome classification
-    // (node is already declared above at the strategy determination step)
-    const dependencies = node?.dependencies ?? [];
-    let depStates: Record<string, ComponentState> = {};
+    // (finalState, finalOutcome, finalFailureClassification declared above
+    //  before the dependency-blocked early-return path)
 
     for (let attemptNum = 1; attemptNum <= action.maxAttempts; attemptNum++) {
       const attemptStart = new Date().toISOString();
       const attemptStartMs = Date.now();
       const recoveryId = randomUUID();
+
+      // Phase 7 Fix: Pre-attempt dependency check.
+      // Before each attempt, re-check if any dependency went down during
+      // recovery. If so, don't waste this attempt — stop and escalate.
+      depStates = {};
+      let dependencyBlockedNow = false;
+      let blockedByDepNow: string | undefined;
+      for (const dep of dependencies) {
+        const depState = this.stateModel.getState(dep)?.state ?? 'UNKNOWN';
+        depStates[dep] = depState;
+        if (depState === 'UNAVAILABLE' || depState === 'FAILED') {
+          dependencyBlockedNow = true;
+          blockedByDepNow = dep;
+        }
+      }
+
+      if (dependencyBlockedNow) {
+        this.stateModel.logEvent({
+          id: randomUUID(),
+          timestamp: attemptStart,
+          type: 'recovery_stopped',
+          component,
+          action: action.type,
+          actionResult: 'stopped',
+          recoveryAttempt: attemptNum,
+          correlationId,
+          detail: {
+            reason: `dependency '${blockedByDepNow}' went down during recovery — stopping before attempt ${attemptNum}`,
+            nextAction: 'escalate',
+            blockedByDependency: blockedByDepNow,
+          },
+        });
+
+        finalOutcome = 'RECOVERY_DEPENDENCY_BLOCKED';
+        finalFailureClassification = 'DEPENDENCY_PROBLEM';
+        break;
+      }
 
       this.stateModel.logEvent({
         id: randomUUID(),
@@ -527,6 +665,12 @@ export class RecoveryEngine {
         finalOutcome = 'RECOVERY_EXHAUSTED';
       }
 
+      // Phase 7 Fix: Mark the incident as exhausted in the durable budget store
+      // so a watchdog restart doesn't give this incident a fresh budget.
+      if (this.budgetManager && (finalOutcome === 'RECOVERY_EXHAUSTED' || finalOutcome === 'RECOVERY_DEPENDENCY_BLOCKED')) {
+        this.budgetManager.markIncidentExhausted(component, incidentId);
+      }
+
       this.stateModel.logEvent({
         id: randomUUID(),
         timestamp: new Date().toISOString(),
@@ -625,6 +769,19 @@ export class RecoveryEngine {
     // Phase 4: Reset budget on success
     if (this.budgetManager && finalState === 'HEALTHY') {
       this.budgetManager.resetComponentRetries(component);
+      // Phase 7 Fix: Log incident_resolved so the doctor doesn't count
+      // this incident as unresolved after a successful recovery
+      this.stateModel.logEvent({
+        id: randomUUID(),
+        timestamp: new Date().toISOString(),
+        type: 'incident_resolved',
+        component,
+        cause: `recovery succeeded after ${attempts.length} attempt(s)`,
+        action: 'recover',
+        actionResult: 'success',
+        correlationId,
+        detail: { outcome: finalOutcome, attempts: attempts.length },
+      });
     }
 
     const record: RecoveryRecord = {

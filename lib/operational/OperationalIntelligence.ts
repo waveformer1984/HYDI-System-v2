@@ -39,6 +39,7 @@ import { RiskClassifier, riskClassifier } from './RiskClassifier';
 import { AutonomyPolicyModel, autonomyPolicyModel } from './AutonomyPolicyModel';
 import { ActionSelector } from './ActionSelector';
 import { RecoveryBudgetManager } from './RecoveryBudget';
+import { DurableBudgetStore } from './DurableBudgetStore';
 import { RecoveryLockManager } from './RecoveryLock';
 import { PolicyDecisionRecordStore } from './PolicyDecisionRecord';
 import { EscalationManager } from './EscalationManager';
@@ -94,7 +95,9 @@ export class OperationalIntelligence {
     this.policyModel = autonomyPolicyModel;
 
     // Phase 4: Initialize recovery budget and lock managers
-    this.budgetManager = new RecoveryBudgetManager(this.stateModel);
+    // Phase 7 Fix: Use durable budget store so budget survives watchdog restarts
+    const durableBudgetStore = new DurableBudgetStore(this.root);
+    this.budgetManager = new RecoveryBudgetManager(this.stateModel, undefined, durableBudgetStore);
     this.lockManager = new RecoveryLockManager(this.stateModel);
 
     // Phase 4: Initialize decision record store and escalation manager

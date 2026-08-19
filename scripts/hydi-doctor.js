@@ -269,26 +269,53 @@ async function runDoctor() {
   }));
 
   // 13. Unresolved incidents (only count recent — last 24h)
+  // Phase 7 Fix: Check for incident_resolved events that cancel out
+  // recovery_failed/escalation_triggered events. An incident that was
+  // resolved (manually or by a subsequent successful recovery) should
+  // NOT be counted as unresolved.
   results.push(check('Unresolved incidents', () => {
     const eventsFile = path.resolve(ROOT, '.hydi-operational', 'operational-events.jsonl');
     if (!fs.existsSync(eventsFile)) return 'no event log yet (clean)';
     const events = fs.readFileSync(eventsFile, 'utf8').trim().split('\n').filter(Boolean);
     const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
-    let unresolved = 0;
+
+    // Track resolved incidents by correlationId
+    const resolvedCorrelationIds = new Set();
+    const unresolvedEvents = [];
+
+    // First pass: collect all resolved correlation IDs
     for (const line of events) {
       try {
         const evt = JSON.parse(line);
-        if (evt.type === 'recovery_failed' || evt.type === 'escalation_triggered') {
-          // Only count events from the last 24 hours
-          const evtTime = new Date(evt.timestamp).getTime();
-          if (evtTime > oneDayAgo) {
-            unresolved++;
+        if (evt.type === 'incident_resolved' || evt.type === 'recovery_completed') {
+          if (evt.actionResult === 'success' && evt.correlationId) {
+            resolvedCorrelationIds.add(evt.correlationId);
           }
         }
       } catch { /* skip malformed */ }
     }
-    if (unresolved > 0) {
-      const e = new Error(`${unresolved} unresolved failure/escalation events (last 24h)`);
+
+    // Second pass: count unresolved failure/escalation events
+    // that have NOT been resolved
+    for (const line of events) {
+      try {
+        const evt = JSON.parse(line);
+        if (evt.type === 'recovery_failed' || evt.type === 'escalation_triggered') {
+          const evtTime = new Date(evt.timestamp).getTime();
+          if (evtTime > oneDayAgo) {
+            // Check if this incident was resolved
+            const correlationId = evt.correlationId;
+            if (correlationId && resolvedCorrelationIds.has(correlationId)) {
+              continue; // resolved — don't count
+            }
+            unresolvedEvents.push(evt);
+          }
+        }
+      } catch { /* skip malformed */ }
+    }
+
+    if (unresolvedEvents.length > 0) {
+      const e = new Error(`${unresolvedEvents.length} unresolved failure/escalation events (last 24h)`);
       e.actionable = 'Run: node scripts/hydi-recover.js --governed  to attempt recovery';
       throw e;
     }
