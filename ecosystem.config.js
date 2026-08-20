@@ -140,7 +140,13 @@ module.exports = {
       error_file: './logs/pm2-hydi-daemon.err.log',
       out_file: './logs/pm2-hydi-daemon.out.log',
       merge_logs: true,
-      kill_timeout: 15000,     // 15s for graceful shutdown (finish current cycle)
+      kill_timeout: 45000,     // 45s for graceful shutdown — must account for:
+                               //   - IPC message delivery delay (event loop busy with
+                               //     cognitive cycle can delay reception by 10-20s)
+                               //   - Cognitive cycle timeout (30s worst case)
+                               //   - Audit record + lock release cleanup (1-2s)
+                               // Total worst case: ~50s, but SHUTDOWN_WAIT_TIMEOUT_MS
+                               // in the daemon (12s) caps the wait well under this.
     },
   ],
 };

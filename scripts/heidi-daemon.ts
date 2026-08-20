@@ -365,8 +365,15 @@ async function main(): Promise<void> {
   // it mid-execution.
   let ssfInFlight = false;
   // Bounded wait for in-flight work during shutdown. Must be less than
-  // PM2's kill_timeout (15s) so PM2 doesn't force-kill before we finish.
-  const SHUTDOWN_WAIT_TIMEOUT_MS = 12000;
+  // PM2's kill_timeout (45s) so PM2 doesn't force-kill before we finish.
+  // The cognitive cycle has a 30s timeout, so we need to wait at least
+  // that long for it to complete. 35s gives 5s buffer beyond the cycle
+  // timeout, and leaves 10s under the 45s kill_timeout for audit/lock
+  // cleanup. The IPC message delivery delay (event loop busy with the
+  // cognitive cycle) is accounted for by the 45s kill_timeout, not by
+  // this value — this timer starts when the daemon receives the shutdown
+  // message, not when PM2 sends it.
+  const SHUTDOWN_WAIT_TIMEOUT_MS = 35000;
 
   async function gracefulShutdown(signal: string): Promise<void> {
     if (shuttingDown) return;
