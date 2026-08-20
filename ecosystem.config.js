@@ -108,7 +108,11 @@ module.exports = {
       // blocker classification, governed self-repair). Single-instance locked.
       // Autonomy Level 2 — R0/R1 autonomous, R2+ human-required, R5 prohibited.
       name: 'hydi-daemon',
-      script: 'scripts/heidi-daemon.js',
+      // Use a JS wrapper that loads tsx and imports the TypeScript daemon.
+      // PM2 on Windows can't directly run the .bin/tsx shim.
+      // In production, run `npm run build` first and switch to the compiled JS.
+      script: 'scripts/heidi-daemon-launcher.js',
+      args: '--no-stabilization',
       cwd: __dirname,
       instances: 1,
       exec_mode: 'fork',

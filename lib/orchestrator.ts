@@ -322,8 +322,12 @@ export class HeidiOrchestrator {
     try {
       const fs = require('fs') as typeof import('fs');
       const path = require('path') as typeof import('path');
-      const lockPath = path.resolve(__dirname, '..', '.heidi-daemon.lock');
-      const auditPath = path.resolve(__dirname, '..', '.heidi-daemon-audit.jsonl');
+      // Use process.cwd() instead of __dirname — in the Next.js dev server,
+      // __dirname may resolve to a compiled cache directory rather than the
+      // source lib/ directory. The daemon writes the lock file relative to
+      // the repo root, which is process.cwd() when running under PM2.
+      const lockPath = path.resolve(process.cwd(), '.heidi-daemon.lock');
+      const auditPath = path.resolve(process.cwd(), '.heidi-daemon-audit.jsonl');
 
       // Check lock file
       let pid: number | null = null;
@@ -335,13 +339,28 @@ export class HeidiOrchestrator {
           const lockData = JSON.parse(fs.readFileSync(lockPath, 'utf-8'));
           pid = lockData.pid || null;
           startedAt = lockData.startedAt || null;
-          // Check if process is alive
+          // Check if process is alive. On Windows, process.kill(pid, 0)
+          // may fail for child processes of other processes even when
+          // they're running. Fall back to checking if the audit file was
+          // recently modified (within the last 5 minutes), which indicates
+          // the daemon is actively cycling.
           if (pid) {
             try {
               process.kill(pid, 0);
               running = true;
             } catch {
-              running = false;
+              // process.kill failed — check audit file recency as fallback
+              try {
+                if (fs.existsSync(auditPath)) {
+                  const stats = fs.statSync(auditPath);
+                  const ageMs = Date.now() - stats.mtimeMs;
+                  if (ageMs < 5 * 60 * 1000) { // 5 minutes
+                    running = true; // Audit file is recent — daemon is alive
+                  }
+                }
+              } catch {
+                // Can't check audit file — assume not running
+              }
             }
           }
         } catch {
