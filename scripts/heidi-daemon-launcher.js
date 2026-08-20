@@ -16,7 +16,7 @@
  *
  *   With `shutdown_with_message: true` in ecosystem.config.js, PM2 calls
  *   proc.send('shutdown') on this launcher process instead of force-killing.
- *   PM2 then waits up to kill_timeout (15s) for the process to exit on its
+ *   PM2 then waits up to kill_timeout (35s) for the process to exit on its
  *   own before falling back to SIGKILL. This launcher relays the shutdown
  *   message to the daemon child via IPC, giving the daemon a chance to run
  *   its graceful shutdown handler (wait for in-flight work, record audit,
@@ -52,10 +52,13 @@ child.on('exit', (code) => {
 // PM2 sends 'shutdown' (a string) when shutdown_with_message is true.
 process.on('message', (msg) => {
   if (msg === 'shutdown' || (msg && msg.type === 'shutdown')) {
+    const receivedAt = Date.now();
+    console.log(`[launcher] Shutdown message received from PM2 at ${new Date().toISOString()} (epoch ms: ${receivedAt})`);
     // Send a structured message that the daemon's process.on('message')
     // handler will recognize.
     try {
       child.send({ type: 'shutdown' });
+      console.log(`[launcher] Shutdown message sent to daemon child at ${new Date().toISOString()} (epoch ms: ${Date.now()})`);
     } catch (e) {
       // Child may have already exited — fall through to exit
       console.error('[launcher] Failed to send shutdown to child:', e instanceof Error ? e.message : 'unknown');

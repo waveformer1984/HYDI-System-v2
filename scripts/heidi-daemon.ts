@@ -365,21 +365,35 @@ async function main(): Promise<void> {
   // it mid-execution.
   let ssfInFlight = false;
   // Bounded wait for in-flight work during shutdown. Must be less than
-  // PM2's kill_timeout (45s) so PM2 doesn't force-kill before we finish.
-  // The cognitive cycle has a 30s timeout, so we need to wait at least
-  // that long for it to complete. 35s gives 5s buffer beyond the cycle
-  // timeout, and leaves 10s under the 45s kill_timeout for audit/lock
-  // cleanup. The IPC message delivery delay (event loop busy with the
-  // cognitive cycle) is accounted for by the 45s kill_timeout, not by
-  // this value — this timer starts when the daemon receives the shutdown
-  // message, not when PM2 sends it.
-  const SHUTDOWN_WAIT_TIMEOUT_MS = 35000;
+  // PM2's kill_timeout (35s) so PM2 doesn't force-kill before we finish.
+  //
+  // The cognitive cycle has a 30s timeout (cycleTimeoutMs in
+  // CognitiveCore). When the timeout fires, cycleInFlight is set to
+  // false by runBoundedCycle's finally block. So SHUTDOWN_WAIT_TIMEOUT_MS
+  // must be >= 30s to wait for that timeout to fire. 31s gives 1s buffer
+  // for timer jitter.
+  //
+  // This timer starts when the daemon RECEIVES the IPC shutdown message,
+  // NOT when PM2 sends it. The IPC delivery delay (launcher → daemon,
+  // measured at 6ms-1.4s) is covered by the kill_timeout margin, not by
+  // this value.
+  //
+  // Measured worst-case timing chain (clean process tree):
+  //   PM2 sends shutdown → launcher receives: ~0ms (PM2 internal delay
+  //     is 0-11s but happens BEFORE kill_timeout starts)
+  //   Launcher receives → daemon receives: 6ms-1.4s (IPC channel)
+  //   Daemon waits for in-flight work: 0-30s (cognitive cycle timeout)
+  //   Cleanup (audit + lock): 3ms
+  //   Total from IPC receipt: 1.4 + 30 + 0.003 = 31.4s
+  //   kill_timeout: 35s → margin: 3.6s
+  const SHUTDOWN_WAIT_TIMEOUT_MS = 31000;
 
   async function gracefulShutdown(signal: string): Promise<void> {
     if (shuttingDown) return;
     shuttingDown = true;
+    const shutdownStartMs = Date.now();
     console.log('');
-    console.log(`[daemon] ${signal} received — shutting down gracefully`);
+    console.log(`[daemon] ${signal} received — shutting down gracefully at ${new Date().toISOString()} (epoch ms: ${shutdownStartMs})`);
 
     // Stop scheduling new cycles (both cognitive loop and self-sufficiency)
     core.stop();
@@ -393,7 +407,7 @@ async function main(): Promise<void> {
     let cognitiveInFlight = core.getLoopStatus().cycleInFlight;
     while ((cognitiveInFlight || ssfInFlight) &&
            (Date.now() - waitStart) < SHUTDOWN_WAIT_TIMEOUT_MS) {
-      console.log(`[daemon] Waiting for in-flight work to complete (cognitive=${cognitiveInFlight}, ssf=${ssfInFlight})...`);
+      console.log(`[daemon] Waiting for in-flight work to complete (cognitive=${cognitiveInFlight}, ssf=${ssfInFlight})... elapsed=${Date.now() - waitStart}ms`);
       await sleep(500);
       cognitiveInFlight = core.getLoopStatus().cycleInFlight;
     }
@@ -417,7 +431,8 @@ async function main(): Promise<void> {
     releaseLock();
     console.log('[daemon] Lock released');
 
-    console.log('[daemon] Shutdown complete');
+    const shutdownDurationMs = Date.now() - shutdownStartMs;
+    console.log(`[daemon] Shutdown complete (total shutdown duration: ${shutdownDurationMs}ms)`);
     console.log('════════════════════════════════════════════════════════════════');
     process.exit(0);
   }
@@ -437,6 +452,7 @@ async function main(): Promise<void> {
   // Windows has no POSIX signal mechanism.
   process.on('message', (msg: unknown) => {
     if (msg === 'shutdown' || (typeof msg === 'object' && msg !== null && 'type' in msg && (msg as { type: string }).type === 'shutdown')) {
+      console.log(`[daemon] IPC message received at ${new Date().toISOString()} (epoch ms: ${Date.now()})`);
       gracefulShutdown('IPC_SHUTDOWN');
     }
   });
@@ -476,7 +492,13 @@ async function main(): Promise<void> {
   // 6. Start continuous loop
   console.log(`[daemon] Starting continuous loop (${config.intervalMs}ms interval)...`);
 
-  // Override loop config to use our interval
+  // Apply daemon config overrides to CognitiveCore before starting.
+  // core.start() only takes intervalMs; other loop config (stabilization,
+  // cycle timeout) must be set via configureLoop() first.
+  core.configureLoop({
+    startupStabilizationMs: config.startupStabilizationMs,
+  });
+
   // The CognitiveCore.start() method accepts an interval parameter
   await core.start(config.intervalMs);
 

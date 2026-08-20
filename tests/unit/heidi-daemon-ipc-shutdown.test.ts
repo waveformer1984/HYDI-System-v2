@@ -152,7 +152,9 @@ describe('REAL graceful shutdown via IPC (not source-text check)', () => {
     child.send({ type: 'shutdown' });
 
     // Wait for the child to exit
-    const exitCode = await waitForExit(child, 20000);
+    // Timeout must exceed SHUTDOWN_WAIT_TIMEOUT_MS (31s) in case a
+    // cognitive cycle is in flight when shutdown is sent.
+    const exitCode = await waitForExit(child, 40000);
 
     // ─── ASSERTIONS ON OBSERVABLE BEHAVIOR ───────────────────────────
 
@@ -184,7 +186,7 @@ describe('REAL graceful shutdown via IPC (not source-text check)', () => {
     console.log(`Stdout contains "shutting down gracefully": ${stdoutContent.includes('shutting down gracefully')}`);
     console.log(`Stdout contains "Shutdown complete":       ${stdoutContent.includes('Shutdown complete')}`);
     console.log('════════════════════════════════════════════════════════════════');
-  }, 60000);
+  }, 90000); // 90s overall test timeout (40s exit wait + startup + buffer)
 
   test('launcher uses fork() not spawn() (IPC channel required for shutdown_with_message)', () => {
     const launcherPath = path.resolve(REPO_ROOT, 'scripts', 'heidi-daemon-launcher.js');
