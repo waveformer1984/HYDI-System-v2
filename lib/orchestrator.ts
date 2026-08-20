@@ -301,6 +301,111 @@ export class HeidiOrchestrator {
   }
 
   /**
+   * Get the daemon status for health reporting.
+   * Reads the daemon lock file and audit log to report whether the
+   * continuous cognitive-loop daemon is running and how many
+   * self-sufficiency cycles it has completed.
+   *
+   * Does NOT throw — returns degraded status if daemon is not running
+   * or files are not accessible.
+   */
+  getDaemonStatus(): {
+    running: boolean;
+    pid: number | null;
+    startedAt: string | null;
+    selfSufficiencyCycles: number;
+    lastSelfSufficiencyCycle: string | null;
+    lastCapabilityHealth: { total: number; ready: number; blocked: number; unavailable: number } | null;
+    lastSelfRepairResult: { totalIssues: number; repaired: number; escalated: number; workedAround: number; refused: number } | null;
+    error: string | null;
+  } {
+    try {
+      const fs = require('fs') as typeof import('fs');
+      const path = require('path') as typeof import('path');
+      const lockPath = path.resolve(__dirname, '..', '.heidi-daemon.lock');
+      const auditPath = path.resolve(__dirname, '..', '.heidi-daemon-audit.jsonl');
+
+      // Check lock file
+      let pid: number | null = null;
+      let startedAt: string | null = null;
+      let running = false;
+
+      if (fs.existsSync(lockPath)) {
+        try {
+          const lockData = JSON.parse(fs.readFileSync(lockPath, 'utf-8'));
+          pid = lockData.pid || null;
+          startedAt = lockData.startedAt || null;
+          // Check if process is alive
+          if (pid) {
+            try {
+              process.kill(pid, 0);
+              running = true;
+            } catch {
+              running = false;
+            }
+          }
+        } catch {
+          // Corrupt lock file
+        }
+      }
+
+      // Read last few audit records
+      let selfSufficiencyCycles = 0;
+      let lastSelfSufficiencyCycle: string | null = null;
+      let lastCapabilityHealth: { total: number; ready: number; blocked: number; unavailable: number } | null = null;
+      let lastSelfRepairResult: { totalIssues: number; repaired: number; escalated: number; workedAround: number; refused: number } | null = null;
+
+      if (fs.existsSync(auditPath)) {
+        try {
+          const content = fs.readFileSync(auditPath, 'utf-8');
+          const lines = content.trim().split('\n').filter(Boolean);
+          for (const line of lines) {
+            try {
+              const record = JSON.parse(line);
+              if (record.phase === 'self_sufficiency') {
+                selfSufficiencyCycles++;
+                lastSelfSufficiencyCycle = record.timestamp;
+                if (record.capabilityHealth) {
+                  lastCapabilityHealth = record.capabilityHealth;
+                }
+                if (record.selfRepairResult) {
+                  lastSelfRepairResult = record.selfRepairResult;
+                }
+              }
+            } catch {
+              // Skip corrupt lines
+            }
+          }
+        } catch {
+          // Audit file not readable
+        }
+      }
+
+      return {
+        running,
+        pid,
+        startedAt,
+        selfSufficiencyCycles,
+        lastSelfSufficiencyCycle,
+        lastCapabilityHealth,
+        lastSelfRepairResult,
+        error: null,
+      };
+    } catch (error) {
+      return {
+        running: false,
+        pid: null,
+        startedAt: null,
+        selfSufficiencyCycles: 0,
+        lastSelfSufficiencyCycle: null,
+        lastCapabilityHealth: null,
+        lastSelfRepairResult: null,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
+  }
+
+  /**
    * Get the revenue dashboard for health reporting.
    * Queries the real pipeline tables and RevenueLedger.
    * Does NOT throw — returns degraded status if DB is unavailable.
