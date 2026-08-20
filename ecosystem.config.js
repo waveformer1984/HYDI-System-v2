@@ -102,5 +102,34 @@ module.exports = {
       merge_logs: true,
       kill_timeout: 5000,
     },
+    {
+      // HEIDI Cognitive-Loop Daemon: continuously runs the governed cognitive
+      // loop with self-sufficiency integration (capability health observation,
+      // blocker classification, governed self-repair). Single-instance locked.
+      // Autonomy Level 2 — R0/R1 autonomous, R2+ human-required, R5 prohibited.
+      name: 'hydi-daemon',
+      script: 'scripts/heidi-daemon.js',
+      cwd: __dirname,
+      instances: 1,
+      exec_mode: 'fork',
+      args: '',
+      env: {
+        NODE_ENV: 'development',
+      },
+      env_production: {
+        NODE_ENV: 'production',
+      },
+      autorestart: true,
+      watch: false,
+      max_memory_restart: '500M',
+      min_uptime: '30s',
+      max_restarts: 10,
+      restart_delay: 5000,
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+      error_file: './logs/pm2-hydi-daemon.err.log',
+      out_file: './logs/pm2-hydi-daemon.out.log',
+      merge_logs: true,
+      kill_timeout: 15000,     // 15s for graceful shutdown (finish current cycle)
+    },
   ],
 };
