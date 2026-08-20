@@ -38,6 +38,15 @@ import {
   createRevenueLifecycleBridge,
   createRevenueLedgerBridge,
 } from './ExecutionBridgeAdapters';
+import {
+  CapabilityHealthManager,
+  createDatabaseProbe,
+  createOllamaProbe,
+  createCredentialProbe,
+  createCommercialProbe,
+} from '../operational/CapabilityHealthManager';
+import { BlockerResolutionEngine } from '../operational/BlockerResolutionEngine';
+import { SelfRepairEngine, createDatabaseRepairHandler } from '../operational/SelfRepairEngine';
 
 export interface CognitiveCoreBuilderOptions {
   /** Database config for CognitiveCore's internal pool (identity, goals, world, etc.) */
@@ -68,6 +77,14 @@ export interface CognitiveCoreBuilderOptions {
   enableDecisionResolver?: boolean;
   /** Override individual bridge components for testing */
   bridgeOverrides?: Partial<ExecutionBridge>;
+  /** Pre-built CapabilityHealthManager instance. If absent, one is created with real probes. */
+  capabilityHealthManager?: CapabilityHealthManager;
+  /** Pre-built BlockerResolutionEngine instance. If absent, one is created. */
+  blockerResolutionEngine?: BlockerResolutionEngine;
+  /** Pre-built SelfRepairEngine instance. If absent, one is created. */
+  selfRepairEngine?: SelfRepairEngine;
+  /** Enable self-sufficiency wiring (default: true). Set false to skip. */
+  enableSelfSufficiency?: boolean;
 }
 
 export class CognitiveCoreBuilder {
@@ -258,6 +275,121 @@ export class CognitiveCoreBuilder {
       } catch {
         // decision-resolver.js not loadable — skip
       }
+    }
+
+    // 8. Self-Sufficiency: CapabilityHealthManager, BlockerResolutionEngine, SelfRepairEngine
+    //
+    // These are wired with REAL probes against the actual runtime — no mocks.
+    // Probes:
+    //   - system.database       → real Postgres connection
+    //   - system.local_model    → real Ollama HTTP probe
+    //   - system.supabase       → SUPABASE_URL presence check
+    //   - commercial.stripe     → STRIPE_SECRET_KEY + STRIPE_WEBHOOK_SECRET presence
+    //   - commercial.email      → SENDGRID_API_KEY or SMTP config presence
+    //   - commercial.discovery_external → GOOGLE_PLACES_API_KEY or CLEARBIT_API_KEY presence
+    //   - commercial.workflow   → CommercialWorkflow state (if wired)
+    //
+    // READY is never reported without actual verification.
+    if (this.opts.enableSelfSufficiency !== false && notOverridden('capabilityHealthManager')) {
+      const chm = this.opts.capabilityHealthManager || new CapabilityHealthManager();
+
+      // Database probe — uses CognitiveCore's dbConfig if available
+      const dbCfg = this.opts.dbConfig;
+      if (dbCfg && dbCfg.host && dbCfg.database && dbCfg.user && dbCfg.password) {
+        chm.registerProbe(createDatabaseProbe({
+          host: dbCfg.host,
+          port: dbCfg.port || 54322,
+          database: dbCfg.database,
+          user: dbCfg.user,
+          password: dbCfg.password,
+        }));
+      }
+
+      // Ollama probe — uses LOCAL_MODEL_URL / LOCAL_MODEL_NAME env vars
+      const ollamaUrl = process.env.LOCAL_MODEL_URL || 'http://localhost:11434';
+      const ollamaModel = process.env.LOCAL_MODEL_NAME || 'llama3.2:3b';
+      chm.registerProbe(createOllamaProbe(ollamaUrl, ollamaModel));
+
+      // Supabase presence probe
+      chm.registerProbe(createCredentialProbe({
+        capabilityId: 'system.supabase',
+        description: 'Supabase connection',
+        provider: 'supabase',
+        credentialEnvVars: ['SUPABASE_URL'],
+      }));
+
+      // Stripe credential probe
+      chm.registerProbe(createCredentialProbe({
+        capabilityId: 'commercial.stripe',
+        description: 'Stripe payment processing',
+        provider: 'stripe',
+        credentialEnvVars: ['STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET'],
+      }));
+
+      // Email credential probe
+      chm.registerProbe(createCredentialProbe({
+        capabilityId: 'commercial.email',
+        description: 'Email delivery (SendGrid or SMTP)',
+        provider: 'sendgrid',
+        credentialEnvVars: ['SENDGRID_API_KEY'],
+      }));
+
+      // External discovery credential probe
+      chm.registerProbe(createCredentialProbe({
+        capabilityId: 'commercial.discovery_external',
+        description: 'External prospect discovery (Google Places or Clearbit)',
+        provider: 'google_places',
+        credentialEnvVars: ['GOOGLE_PLACES_API_KEY'],
+      }));
+
+      // SMS credential probe
+      chm.registerProbe(createCredentialProbe({
+        capabilityId: 'commercial.sms',
+        description: 'SMS delivery (Twilio)',
+        provider: 'twilio',
+        credentialEnvVars: ['TWILIO_ACCOUNT_SID', 'TWILIO_AUTH_TOKEN', 'TWILIO_PHONE_NUMBER'],
+      }));
+
+      bridge.capabilityHealthManager = {
+        checkAll: () => chm.checkAll(),
+        checkCapability: (capabilityId: string) => chm.checkCapability(capabilityId),
+        getReadyCapabilities: () => chm.getReadyCapabilities(),
+        getBlockedCapabilities: () => chm.getBlockedCapabilities(),
+        getLastSummary: () => chm.getLastSummary(),
+        formatSummary: (summary: unknown) => chm.formatSummary(summary as any),
+      };
+    }
+
+    if (this.opts.enableSelfSufficiency !== false && notOverridden('blockerResolutionEngine')) {
+      const bre = this.opts.blockerResolutionEngine || new BlockerResolutionEngine();
+      bridge.blockerResolutionEngine = {
+        resolveBlockers: (reports: unknown[], options?: unknown) => bre.resolveBlockers(reports as any, options as any),
+        resolveBlocker: (report: unknown) => bre.resolveBlocker(report as any),
+        getHistory: () => bre.getHistory(),
+      };
+    }
+
+    if (this.opts.enableSelfSufficiency !== false && notOverridden('selfRepairEngine')) {
+      const sre = this.opts.selfRepairEngine || new SelfRepairEngine();
+
+      // Register real repair handler for database connectivity (R0)
+      const dbCfg = this.opts.dbConfig;
+      if (dbCfg && dbCfg.host && dbCfg.database && dbCfg.user && dbCfg.password) {
+        sre.registerRepairHandler('system.database', createDatabaseRepairHandler({
+          host: dbCfg.host,
+          port: dbCfg.port || 54322,
+          database: dbCfg.database,
+          user: dbCfg.user,
+          password: dbCfg.password,
+        }));
+      }
+
+      bridge.selfRepairEngine = {
+        runSelfRepair: (healthSummary: unknown, options?: unknown) => sre.runSelfRepair(healthSummary as any, options as any),
+        getHistory: () => sre.getHistory(),
+        registerRepairHandler: (capabilityId: string, handler: (capabilityId: string, procedure: string) => Promise<{ success: boolean; evidence: string }>) =>
+          sre.registerRepairHandler(capabilityId, handler),
+      };
     }
 
     return new CognitiveCore(this.opts.dbConfig, bridge);

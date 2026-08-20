@@ -421,8 +421,7 @@ export class HeidiOrchestrator {
     autonomyLevel: number;
     available: boolean;
     error: string | null;
-  }> {
-    try {
+  }> {    try {
       const stripeKey = process.env.STRIPE_SECRET_KEY;
       const emailKey = process.env.SENDGRID_API_KEY || process.env.SMTP_HOST;
       const smsKey = process.env.TWILIO_ACCOUNT_SID;
@@ -467,6 +466,154 @@ export class HeidiOrchestrator {
         autonomyLevel: 2,
         available: false,
         error: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
+  }
+
+  /**
+   * Get the capability health summary from the production CognitiveCore's
+   * CapabilityHealthManager. This is the authoritative "What can I do right now?"
+   * answer — every READY capability has evidence and lastSuccessfulVerification.
+   *
+   * Does NOT throw — returns degraded status if CognitiveCore or
+   * CapabilityHealthManager is unavailable. Never exposes secrets.
+   */
+  async getCapabilityHealth(): Promise<{
+    available: boolean;
+    error: string | null;
+    summary: {
+      total: number;
+      ready: number;
+      degraded: number;
+      blocked: number;
+      unavailable: number;
+      repairable: number;
+      humanRequired: number;
+      prohibited: number;
+      unknown: number;
+    } | null;
+    readyCapabilities: Array<{
+      capabilityId: string;
+      description: string;
+      provider: string;
+      state: string;
+      evidence: string;
+      lastSuccessfulVerification: string | null;
+    }>;
+    blockedCapabilities: Array<{
+      capabilityId: string;
+      description: string;
+      provider: string;
+      state: string;
+      evidence: string;
+      failureClassification: string;
+      repairability: string;
+      requiredCredentials: string[];
+      lastFailure: string | null;
+    }>;
+    repairHistory: Array<{
+      repairId: string;
+      capabilityId: string;
+      classification: string;
+      riskLevel: string;
+      plannedAction: string;
+      authorized: boolean;
+      executed: boolean;
+      verified: boolean;
+      verificationEvidence: string | null;
+      timestamp: string;
+    }>;
+  }> {
+    try {
+      if (!_cognitiveCore) {
+        return {
+          available: false,
+          error: 'CognitiveCore not initialized',
+          summary: null,
+          readyCapabilities: [],
+          blockedCapabilities: [],
+          repairHistory: [],
+        };
+      }
+
+      // Access the bridge's CapabilityHealthManager
+      const bridge = _cognitiveCore.getBridge();
+      if (!bridge?.capabilityHealthManager) {
+        return {
+          available: false,
+          error: 'CapabilityHealthManager not wired',
+          summary: null,
+          readyCapabilities: [],
+          blockedCapabilities: [],
+          repairHistory: [],
+        };
+      }
+
+      const chm = bridge.capabilityHealthManager;
+      const summary = await chm.checkAll() as any;
+      const ready = chm.getReadyCapabilities() as any[];
+      const blocked = chm.getBlockedCapabilities() as any[];
+
+      // Get repair history if SelfRepairEngine is wired
+      let repairHistory: any[] = [];
+      if (bridge.selfRepairEngine) {
+        repairHistory = bridge.selfRepairEngine.getHistory();
+      }
+
+      return {
+        available: true,
+        error: null,
+        summary: {
+          total: summary.total,
+          ready: summary.ready,
+          degraded: summary.degraded,
+          blocked: summary.blocked,
+          unavailable: summary.unavailable,
+          repairable: summary.repairable,
+          humanRequired: summary.humanRequired,
+          prohibited: summary.prohibited,
+          unknown: summary.unknown,
+        },
+        readyCapabilities: ready.map((r: any) => ({
+          capabilityId: r.capabilityId,
+          description: r.description,
+          provider: r.provider,
+          state: r.state,
+          evidence: r.evidence,
+          lastSuccessfulVerification: r.lastSuccessfulVerification,
+        })),
+        blockedCapabilities: blocked.map((r: any) => ({
+          capabilityId: r.capabilityId,
+          description: r.description,
+          provider: r.provider,
+          state: r.state,
+          evidence: r.evidence,
+          failureClassification: r.failureClassification,
+          repairability: r.repairability,
+          requiredCredentials: r.requiredCredentials || [],
+          lastFailure: r.lastFailure,
+        })),
+        repairHistory: repairHistory.map((r: any) => ({
+          repairId: r.repairId,
+          capabilityId: r.capabilityId,
+          classification: r.classification,
+          riskLevel: r.riskLevel,
+          plannedAction: r.plannedAction,
+          authorized: r.authorized,
+          executed: r.executed,
+          verified: r.verified,
+          verificationEvidence: r.verificationEvidence,
+          timestamp: r.timestamp,
+        })),
+      };
+    } catch (error) {
+      return {
+        available: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        summary: null,
+        readyCapabilities: [],
+        blockedCapabilities: [],
+        repairHistory: [],
       };
     }
   }

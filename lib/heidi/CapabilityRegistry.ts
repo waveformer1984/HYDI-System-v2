@@ -38,7 +38,10 @@ export type CapabilityProvider =
   | 'commercial_workflow'
   | 'goal_system'
   | 'world_model'
-  | 'cognitive_core';
+  | 'cognitive_core'
+  | 'capability_health_manager'
+  | 'blocker_resolution_engine'
+  | 'self_repair_engine';
 
 export type CapabilityStatus =
   | 'available'
@@ -766,6 +769,85 @@ export const DEFAULT_CAPABILITIES: Array<Omit<CapabilityDescriptor, 'status' | '
     reversible: true,
     timeoutMs: 10000,
     metadata: { actionType: 'commercial_verify_revenue' },
+  },
+  // ─── Self-Sufficiency capabilities ────────────────────────────────────
+  {
+    capabilityId: 'self_sufficiency.check_all_capabilities',
+    capabilityName: 'Check All Capabilities',
+    description: 'Probe all registered capabilities and return evidence-backed health summary',
+    provider: 'capability_health_manager',
+    riskLevel: 'R0',
+    autonomyRequirement: 0,
+    dependencies: [],
+    verificationStrategy: 'Health summary returned with evidence for each capability',
+    reversible: true,
+    timeoutMs: 30000,
+    metadata: { actionType: 'self_sufficiency_check_all' },
+  },
+  {
+    capabilityId: 'self_sufficiency.check_capability',
+    capabilityName: 'Check Single Capability',
+    description: 'Probe a single capability by ID and return evidence-backed health report',
+    provider: 'capability_health_manager',
+    riskLevel: 'R0',
+    autonomyRequirement: 0,
+    dependencies: [],
+    verificationStrategy: 'Health report returned with evidence',
+    reversible: true,
+    timeoutMs: 15000,
+    metadata: { actionType: 'self_sufficiency_check_capability' },
+  },
+  {
+    capabilityId: 'self_sufficiency.get_ready_capabilities',
+    capabilityName: 'Get Ready Capabilities',
+    description: 'Return all capabilities currently in READY state with evidence',
+    provider: 'capability_health_manager',
+    riskLevel: 'R0',
+    autonomyRequirement: 0,
+    dependencies: [],
+    verificationStrategy: 'READY capabilities have evidence and lastSuccessfulVerification',
+    reversible: true,
+    timeoutMs: 5000,
+    metadata: { actionType: 'self_sufficiency_get_ready' },
+  },
+  {
+    capabilityId: 'self_sufficiency.resolve_blockers',
+    capabilityName: 'Resolve Blockers',
+    description: 'Classify and resolve blockers for a set of capability health reports',
+    provider: 'blocker_resolution_engine',
+    riskLevel: 'R0',
+    autonomyRequirement: 0,
+    dependencies: [],
+    verificationStrategy: 'Blocker resolution result returned with classifications',
+    reversible: true,
+    timeoutMs: 15000,
+    metadata: { actionType: 'self_sufficiency_resolve_blockers' },
+  },
+  {
+    capabilityId: 'self_sufficiency.run_self_repair',
+    capabilityName: 'Run Self-Repair',
+    description: 'Run governed self-repair loop on a health summary (R0/R1 autonomous, R2+ human)',
+    provider: 'self_repair_engine',
+    riskLevel: 'R1',
+    autonomyRequirement: 1,
+    dependencies: [],
+    verificationStrategy: 'Self-repair result includes verification evidence for each repair',
+    reversible: true,
+    timeoutMs: 30000,
+    metadata: { actionType: 'self_sufficiency_run_self_repair' },
+  },
+  {
+    capabilityId: 'self_sufficiency.get_repair_history',
+    capabilityName: 'Get Repair History',
+    description: 'Return the history of all self-repair actions with rollback info',
+    provider: 'self_repair_engine',
+    riskLevel: 'R0',
+    autonomyRequirement: 0,
+    dependencies: [],
+    verificationStrategy: 'Repair history returned with audit trail',
+    reversible: true,
+    timeoutMs: 5000,
+    metadata: { actionType: 'self_sufficiency_get_repair_history' },
   },
 ];
 

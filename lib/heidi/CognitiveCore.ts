@@ -269,6 +269,25 @@ export interface ExecutionBridge {
   decisionResolver?: {
     resolve: (cascadeOutput: unknown, memorySignal: unknown, policyConstraints: unknown) => Promise<{ final_action: string; winning_authority: string; reasoning: string; confidence: number; conflict_resolution: string }>;
   } | null;
+  // Self-sufficiency: capability health, blocker resolution, self-repair
+  capabilityHealthManager?: {
+    checkAll: () => Promise<unknown>;
+    checkCapability: (capabilityId: string) => Promise<unknown>;
+    getReadyCapabilities: () => unknown[];
+    getBlockedCapabilities: () => unknown[];
+    getLastSummary: () => unknown;
+    formatSummary: (summary: unknown) => string;
+  } | null;
+  blockerResolutionEngine?: {
+    resolveBlockers: (reports: unknown[], options?: unknown) => Promise<unknown>;
+    resolveBlocker: (report: unknown) => Promise<unknown>;
+    getHistory: () => unknown[];
+  } | null;
+  selfRepairEngine?: {
+    runSelfRepair: (healthSummary: unknown, options?: unknown) => Promise<unknown>;
+    getHistory: () => unknown[];
+    registerRepairHandler: (capabilityId: string, handler: (capabilityId: string, procedure: string) => Promise<{ success: boolean; evidence: string }>) => void;
+  } | null;
 }
 
 export class CognitiveCore {
@@ -753,6 +772,106 @@ export class CognitiveCore {
           evidence: [{ verifiedRevenueCents: (result as any)?.verifiedRevenueCents }],
           verified: true,
           verificationDetails: 'Revenue verified from RevenueLedger',
+        };
+      });
+    }
+
+    // ─── Self-Sufficiency capabilities ────────────────────────────────
+    // CapabilityHealthManager: "What can I do right now?"
+    if (this.bridge.capabilityHealthManager) {
+      const chm = this.bridge.capabilityHealthManager;
+      this.wireExecutor('self_sufficiency.check_all_capabilities', async () => {
+        const summary = await chm.checkAll();
+        return {
+          capabilityId: 'self_sufficiency.check_all_capabilities',
+          executed: true,
+          outcome: 'success' as const,
+          result: summary,
+          error: null,
+          evidence: [{ summary }],
+          verified: true,
+          verificationDetails: 'Capability health summary returned with evidence',
+        };
+      });
+      this.wireExecutor('self_sufficiency.check_capability', async (params) => {
+        const capabilityId = params.capabilityId as string;
+        if (!capabilityId) return this.failResult('self_sufficiency.check_capability', 'Missing required param: capabilityId');
+        const report = await chm.checkCapability(capabilityId);
+        return {
+          capabilityId: 'self_sufficiency.check_capability',
+          executed: true,
+          outcome: 'success' as const,
+          result: report,
+          error: null,
+          evidence: [{ report }],
+          verified: !!report,
+          verificationDetails: report ? `Capability ${capabilityId} state: ${(report as any)?.state}` : 'Capability not found',
+        };
+      });
+      this.wireExecutor('self_sufficiency.get_ready_capabilities', async () => {
+        const ready = chm.getReadyCapabilities();
+        return {
+          capabilityId: 'self_sufficiency.get_ready_capabilities',
+          executed: true,
+          outcome: 'success' as const,
+          result: ready,
+          error: null,
+          evidence: [{ count: Array.isArray(ready) ? ready.length : 0 }],
+          verified: true,
+          verificationDetails: `${Array.isArray(ready) ? ready.length : 0} READY capabilities`,
+        };
+      });
+    }
+
+    // BlockerResolutionEngine: classify and resolve blockers
+    if (this.bridge.blockerResolutionEngine) {
+      const bre = this.bridge.blockerResolutionEngine;
+      this.wireExecutor('self_sufficiency.resolve_blockers', async (params) => {
+        const reports = params.reports as unknown[];
+        if (!Array.isArray(reports)) return this.failResult('self_sufficiency.resolve_blockers', 'Missing required param: reports');
+        const result = await bre.resolveBlockers(reports as any, params.options as any);
+        return {
+          capabilityId: 'self_sufficiency.resolve_blockers',
+          executed: true,
+          outcome: 'success' as const,
+          result,
+          error: null,
+          evidence: [{ result }],
+          verified: true,
+          verificationDetails: 'Blocker resolution result returned',
+        };
+      });
+    }
+
+    // SelfRepairEngine: governed autonomous self-repair
+    if (this.bridge.selfRepairEngine) {
+      const sre = this.bridge.selfRepairEngine;
+      this.wireExecutor('self_sufficiency.run_self_repair', async (params) => {
+        const healthSummary = params.healthSummary;
+        if (!healthSummary) return this.failResult('self_sufficiency.run_self_repair', 'Missing required param: healthSummary');
+        const result = await sre.runSelfRepair(healthSummary as any, params.options as any);
+        return {
+          capabilityId: 'self_sufficiency.run_self_repair',
+          executed: true,
+          outcome: 'success' as const,
+          result,
+          error: null,
+          evidence: [{ result }],
+          verified: true,
+          verificationDetails: 'Self-repair cycle completed',
+        };
+      });
+      this.wireExecutor('self_sufficiency.get_repair_history', async () => {
+        const history = sre.getHistory();
+        return {
+          capabilityId: 'self_sufficiency.get_repair_history',
+          executed: true,
+          outcome: 'success' as const,
+          result: history,
+          error: null,
+          evidence: [{ count: Array.isArray(history) ? history.length : 0 }],
+          verified: true,
+          verificationDetails: `${Array.isArray(history) ? history.length : 0} repair records`,
         };
       });
     }
@@ -2317,6 +2436,15 @@ export class CognitiveCore {
 
   getRegistry(): CapabilityRegistry {
     return this.registry;
+  }
+
+  /**
+   * Get the ExecutionBridge. Used by the orchestrator to access
+   * self-sufficiency components (CapabilityHealthManager, BlockerResolutionEngine,
+   * SelfRepairEngine) without exposing internal CognitiveCore state.
+   */
+  getBridge(): ExecutionBridge {
+    return this.bridge;
   }
 
   async close(): Promise<void> {
