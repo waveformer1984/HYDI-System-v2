@@ -419,6 +419,21 @@ async function main(): Promise<void> {
   process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
   process.on('SIGQUIT', () => gracefulShutdown('SIGQUIT'));
 
+  // IPC message handler — used when the daemon is launched through
+  // heidi-daemon-launcher.js under PM2 with shutdown_with_message: true.
+  // On Windows, PM2's default stop behavior uses `taskkill /T /F` (force
+  // kill the process tree), which gives no chance for graceful shutdown.
+  // With shutdown_with_message: true, PM2 sends proc.send('shutdown') to
+  // the launcher, which relays it here via child.send({ type: 'shutdown' }).
+  // This is the ONLY reliable way to trigger graceful shutdown on Windows
+  // under PM2 — signal relay via child.kill(signal) does not work because
+  // Windows has no POSIX signal mechanism.
+  process.on('message', (msg: unknown) => {
+    if (msg === 'shutdown' || (typeof msg === 'object' && msg !== null && 'type' in msg && (msg as { type: string }).type === 'shutdown')) {
+      gracefulShutdown('IPC_SHUTDOWN');
+    }
+  });
+
   // 4. Run initial self-sufficiency observation
   console.log('[daemon] Running initial capability health check...');
   const initialResult = await runSelfSufficiencyCycle(core);

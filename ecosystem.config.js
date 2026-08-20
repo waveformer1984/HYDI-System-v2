@@ -116,13 +116,20 @@ module.exports = {
       cwd: __dirname,
       instances: 1,
       exec_mode: 'fork',
-      args: '',
       env: {
         NODE_ENV: 'development',
       },
       env_production: {
         NODE_ENV: 'production',
       },
+      // CRITICAL: On Windows, PM2's default stop behavior uses
+      // `taskkill /pid <pid> /T /F` (force kill the entire process tree),
+      // which gives no chance for graceful shutdown. With
+      // shutdown_with_message: true, PM2 calls proc.send('shutdown')
+      // instead, which the launcher relays to the daemon via IPC.
+      // PM2 then waits up to kill_timeout (15s) for the process to exit
+      // on its own before falling back to SIGKILL.
+      shutdown_with_message: true,
       autorestart: true,
       watch: false,
       max_memory_restart: '500M',

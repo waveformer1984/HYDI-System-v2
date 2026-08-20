@@ -73,7 +73,7 @@ describe('HEIDI Continuous Cognitive-Loop Qualification', () => {
     expect(fs.existsSync(ecoPath)).toBe(true);
     const content = fs.readFileSync(ecoPath, 'utf-8');
     expect(content).toContain('hydi-daemon');
-    expect(content).toContain('heidi-daemon.js');
+    expect(content).toContain('heidi-daemon-launcher.js');
     expect(content).toContain('autorestart: true');
     expect(content).toContain('max_memory_restart');
   });
