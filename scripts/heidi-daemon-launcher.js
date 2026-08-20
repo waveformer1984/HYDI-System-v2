@@ -16,7 +16,7 @@
  *
  *   With `shutdown_with_message: true` in ecosystem.config.js, PM2 calls
  *   proc.send('shutdown') on this launcher process instead of force-killing.
- *   PM2 then waits up to kill_timeout (35s) for the process to exit on its
+ *   PM2 then waits up to kill_timeout (50s) for the process to exit on its
  *   own before falling back to SIGKILL. This launcher relays the shutdown
  *   message to the daemon child via IPC, giving the daemon a chance to run
  *   its graceful shutdown handler (wait for in-flight work, record audit,

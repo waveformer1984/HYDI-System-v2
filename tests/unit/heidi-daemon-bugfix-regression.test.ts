@@ -303,14 +303,14 @@ describe('Bug 1: Graceful shutdown waits for in-flight work', () => {
 
     // Must have a bounded timeout (not wait forever)
     expect(content).toContain('SHUTDOWN_WAIT_TIMEOUT_MS');
-    // Must be less than PM2's kill_timeout (35000ms) so PM2 doesn't
+    // Must be less than PM2's kill_timeout (50000ms) so PM2 doesn't
     // force-kill before the daemon finishes waiting + cleanup.
     // Must be >= 30000 (cognitive cycle timeout) so the daemon waits
     // for the cycle timeout to fire and set cycleInFlight=false.
     const match = content.match(/SHUTDOWN_WAIT_TIMEOUT_MS\s*=\s*(\d+)/);
     expect(match).not.toBeNull();
     const timeout = parseInt(match![1], 10);
-    expect(timeout).toBeLessThan(35000);
+    expect(timeout).toBeLessThan(50000);
     expect(timeout).toBeGreaterThanOrEqual(30000);
   });
 

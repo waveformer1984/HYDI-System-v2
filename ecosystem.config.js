@@ -141,27 +141,35 @@ module.exports = {
       out_file: './logs/pm2-hydi-daemon.out.log',
       merge_logs: true,
       // kill_timeout starts when PM2 sends the 'shutdown' IPC message
-      // (NOT when `pm2 stop` is called — PM2 has its own 0-11s internal
-      // processing delay before sending the message, but that happens
-      // before the kill_timeout timer starts).
+      // to the process (verified from PM2 7.0.1 source: lib/God/Methods.js
+      // — God.processIsDead() is called synchronously after proc.send(),
+      // and the setTimeout(kill_timeout) is in God.processIsDead()).
+      // The PM2 CLI → God RPC delay (0-11s observed) happens BEFORE the
+      // kill_timeout timer starts, so it is NOT part of the budget.
       //
-      // Measured timing chain (clean process tree, no stale processes):
-      //   PM2 sends shutdown → launcher receives: ~0ms
-      //   Launcher receives → daemon receives: 6ms-1.4s (IPC channel)
-      //   Daemon waits for in-flight work: 0-30s (cognitive cycle timeout)
-      //   Cleanup (audit record + lock release): 3ms
-      //   Total from IPC receipt: 1.4 + 30 + 0.003 = 31.4s
+      // Measured IPC delivery delay (20-sample distribution test, 5s
+      // interval stress test):
+      //   idle:   p50=3839ms, p95=5466ms, max=5466ms
+      //   loaded: p50=4784ms, p95=5423ms, max=6024ms
       //
-      // kill_timeout = 35s gives 3.6s margin over the 31.4s worst case.
-      // This means `pm2 stop`/`restart` blocks for at most 35s (plus
-      // PM2's own 0-11s internal delay) in the worst case where a
+      // Budget (from PM2 message send to process exit):
+      //   IPC delivery (max measured):       6024ms
+      //   Shutdown wait (SHUTDOWN_WAIT):    31000ms
+      //   Polling overshoot (100ms polls):    ~100ms
+      //   Cleanup (audit record + lock):      ~100ms
+      //   Total worst case:                ~37224ms
+      //
+      // kill_timeout = 50000ms gives 12776ms margin (34.3% over worst
+      // case). This means `pm2 stop`/`restart` blocks for at most 50s
+      // (plus PM2's own 0-11s internal delay) in the worst case where a
       // cognitive cycle is in flight. In normal operation (no in-flight
       // work), the daemon exits in <100ms.
       //
       // SHUTDOWN_WAIT_TIMEOUT_MS in heidi-daemon.ts is 31s (30s cycle
-      // timeout + 1s buffer). The 3.6s kill_timeout margin covers the
-      // 1.4s IPC delivery delay + 3ms cleanup + 2.2s timer jitter.
-      kill_timeout: 35000,
+      // timeout + 1s buffer). The 12.8s kill_timeout margin covers the
+      // 6s IPC delivery delay + 100ms polling overshoot + 100ms cleanup
+      // + 6.6s additional safety for event-loop jitter under load.
+      kill_timeout: 50000,
     },
   ],
 };

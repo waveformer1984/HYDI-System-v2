@@ -365,7 +365,7 @@ async function main(): Promise<void> {
   // it mid-execution.
   let ssfInFlight = false;
   // Bounded wait for in-flight work during shutdown. Must be less than
-  // PM2's kill_timeout (35s) so PM2 doesn't force-kill before we finish.
+  // PM2's kill_timeout (50s) so PM2 doesn't force-kill before we finish.
   //
   // The cognitive cycle has a 30s timeout (cycleTimeoutMs in
   // CognitiveCore). When the timeout fires, cycleInFlight is set to
@@ -374,18 +374,32 @@ async function main(): Promise<void> {
   // for timer jitter.
   //
   // This timer starts when the daemon RECEIVES the IPC shutdown message,
-  // NOT when PM2 sends it. The IPC delivery delay (launcher → daemon,
-  // measured at 6ms-1.4s) is covered by the kill_timeout margin, not by
-  // this value.
+  // NOT when PM2 sends it. The IPC delivery delay (launcher → daemon)
+  // is covered by the kill_timeout margin, not by this value.
   //
-  // Measured worst-case timing chain (clean process tree):
-  //   PM2 sends shutdown → launcher receives: ~0ms (PM2 internal delay
-  //     is 0-11s but happens BEFORE kill_timeout starts)
-  //   Launcher receives → daemon receives: 6ms-1.4s (IPC channel)
-  //   Daemon waits for in-flight work: 0-30s (cognitive cycle timeout)
-  //   Cleanup (audit + lock): 3ms
-  //   Total from IPC receipt: 1.4 + 30 + 0.003 = 31.4s
-  //   kill_timeout: 35s → margin: 3.6s
+  // Measured worst-case timing (20-sample distribution test, 5s interval
+  // stress test, idle + CPU-loaded conditions):
+  //   IPC delivery (launcher → daemon):
+  //     idle:  p50=3839ms, p95=5466ms, max=5466ms
+  //     loaded: p50=4784ms, p95=5423ms, max=6024ms
+  //   Total shutdown duration (IPC receipt → exit):
+  //     idle:  p50=28130ms, p95=34858ms, max=34858ms
+  //     loaded: p50=27926ms, p95=31092ms, max=33366ms
+  //
+  // Budget (from PM2 message send to process exit):
+  //   IPC delivery (max measured):       6024ms
+  //   Shutdown wait (SHUTDOWN_WAIT):    31000ms
+  //   Polling overshoot (100ms polls):    ~100ms
+  //   Cleanup (audit + lock):             ~100ms
+  //   Total worst case:                ~37224ms
+  //   kill_timeout: 50000ms
+  //   Margin: 12776ms (34.3% over worst case)
+  //
+  // PM2 source verification (pm2@7.0.1 lib/God/Methods.js):
+  //   kill_timeout starts in God.processIsDead(), called synchronously
+  //   after proc.send('shutdown') in God.killProcess(). The PM2 CLI →
+  //   God RPC delay (0-11s observed) happens BEFORE the kill_timeout
+  //   timer starts, so it is NOT part of the budget.
   const SHUTDOWN_WAIT_TIMEOUT_MS = 31000;
 
   async function gracefulShutdown(signal: string): Promise<void> {
@@ -403,12 +417,19 @@ async function main(): Promise<void> {
     //   - core.getLoopStatus().cycleInFlight (cognitive loop)
     //   - ssfInFlight (self-sufficiency interval)
     // Both must be false before we release the lock and exit.
+    //
+    // Polling interval is 100ms (not 500ms) to reduce timeout overshoot
+    // under event-loop congestion. With 500ms polling, the last sleep
+    // could take seconds under load, causing the total shutdown duration
+    // to exceed SHUTDOWN_WAIT_TIMEOUT_MS by 3-4s. With 100ms polling,
+    // the overshoot is bounded to ~100ms.
+    const POLL_INTERVAL_MS = 100;
     const waitStart = Date.now();
     let cognitiveInFlight = core.getLoopStatus().cycleInFlight;
     while ((cognitiveInFlight || ssfInFlight) &&
            (Date.now() - waitStart) < SHUTDOWN_WAIT_TIMEOUT_MS) {
       console.log(`[daemon] Waiting for in-flight work to complete (cognitive=${cognitiveInFlight}, ssf=${ssfInFlight})... elapsed=${Date.now() - waitStart}ms`);
-      await sleep(500);
+      await sleep(POLL_INTERVAL_MS);
       cognitiveInFlight = core.getLoopStatus().cycleInFlight;
     }
 
