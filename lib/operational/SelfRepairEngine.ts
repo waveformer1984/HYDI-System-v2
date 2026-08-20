@@ -89,15 +89,24 @@ export class SelfRepairEngine {
   private blockerEngine: BlockerResolutionEngine;
   private repairHistory: RepairAction[] = [];
   private maxAutoRepairsPerCycle: number = 5;
+  private maxHistoryEntries: number = 500;
   private repairHandlers: Map<string, (capabilityId: string, procedure: string) => Promise<{ success: boolean; evidence: string }>>;
+  // Track the last recorded repair per capability+action to dedup consecutive
+  // identical workarounds/escalations for still-blocked capabilities. Without
+  // this, a capability that stays blocked indefinitely (e.g. missing Stripe
+  // credentials) gets a fresh history entry every cycle — ~1,440/day at 60s
+  // intervals — causing unbounded memory growth in the daemon.
+  private lastRecordedByKey: Map<string, RepairAction> = new Map();
 
   constructor(options?: {
     maxAutoRepairsPerCycle?: number;
     onRepair?: Map<string, (capabilityId: string, procedure: string) => Promise<{ success: boolean; evidence: string }>>;
+    maxHistoryEntries?: number;
   }) {
     this.blockerEngine = new BlockerResolutionEngine();
     this.maxAutoRepairsPerCycle = options?.maxAutoRepairsPerCycle || 5;
     this.repairHandlers = options?.onRepair || new Map();
+    this.maxHistoryEntries = options?.maxHistoryEntries || 500;
   }
 
   /**
@@ -226,8 +235,76 @@ export class SelfRepairEngine {
       summary: this.formatSummary(blockedReports.length, repaired, escalated, refused, workedAround, lessons),
     };
 
-    this.repairHistory.push(...repairs);
+    // Record to history with dedup + cap:
+    // - For non-repair actions (WORK_AROUND, ESCALATE, REFUSE) that repeat
+    //   identically for the same still-blocked capability, only record the
+    //   first occurrence and update its timestamp. This prevents unbounded
+    //   growth from capabilities that stay blocked indefinitely (e.g. missing
+    //   Stripe/SendGrid credentials at 60s intervals = ~1,440 entries/day).
+    // - For actual repairs (where a repair handler was invoked), always
+    //   record — they represent real attempted work.
+    // - Cap total history to maxHistoryEntries (rolling window).
+    for (const repair of repairs) {
+      const isNonRepairAction = this.isNonRepairAction(repair);
+      const dedupKey = this.dedupKey(repair);
+
+      if (!isNonRepairAction) {
+        // Actual repair — always record
+        this.repairHistory.push(repair);
+        this.lastRecordedByKey.set(dedupKey, repair);
+      } else {
+        // Non-repair action (workaround/escalation/refusal)
+        const last = this.lastRecordedByKey.get(dedupKey);
+        if (last && this.isSameAction(last, repair)) {
+          // Consecutive identical non-repair action for the same still-blocked
+          // capability — update timestamp on the existing entry instead of
+          // appending a duplicate.
+          last.timestamp = repair.timestamp;
+        } else {
+          this.repairHistory.push(repair);
+          this.lastRecordedByKey.set(dedupKey, repair);
+        }
+      }
+    }
+
+    // Enforce rolling window cap
+    if (this.repairHistory.length > this.maxHistoryEntries) {
+      const excess = this.repairHistory.length - this.maxHistoryEntries;
+      this.repairHistory.splice(0, excess);
+    }
+
     return result;
+  }
+
+  /**
+   * Build a dedup key for a repair action. Two actions with the same key
+   * represent the same response to the same blocker on the same capability.
+   */
+  private dedupKey(repair: RepairAction): string {
+    return `${repair.capabilityId}::${repair.plannedAction}`;
+  }
+
+  /**
+   * Check if a repair action is a non-repair action (workaround, escalation,
+   * or refusal) rather than an actual repair where a handler was invoked.
+   * Non-repair actions are eligible for dedup; actual repairs are always
+   * recorded because they represent real attempted work.
+   */
+  private isNonRepairAction(repair: RepairAction): boolean {
+    return repair.plannedAction.startsWith('WORK_AROUND') ||
+           repair.plannedAction.startsWith('ESCALATE') ||
+           repair.plannedAction === 'REFUSE';
+  }
+
+  /**
+   * Check if two repair actions are semantically identical (same capability,
+   * same planned action, same classification). Used to dedup consecutive
+   * non-repair actions for still-blocked capabilities.
+   */
+  private isSameAction(a: RepairAction, b: RepairAction): boolean {
+    return a.capabilityId === b.capabilityId &&
+           a.plannedAction === b.plannedAction &&
+           a.classification === b.classification;
   }
 
   /**
@@ -514,10 +591,18 @@ export function createDatabaseRepairHandler(config: {
 /**
  * Create a repair handler for stale campaign state.
  * This is R0 — safe, reversible, local.
+ *
+ * WARNING: This is currently a FABRICATED-SUCCESS STUB. It unconditionally
+ * returns { success: true } without doing any real work. It is NOT wired
+ * to any capability in CognitiveCoreBuilder.ts. Do NOT register it as a
+ * repair handler for a real capability until it actually performs a real
+ * state-clearing operation with postcondition verification.
  */
 export function createStaleStateRepairHandler(): (capabilityId: string, procedure: string) => Promise<{ success: boolean; evidence: string }> {
   return async (capabilityId: string, _procedure: string) => {
-    // Clear stale state for the capability
+    // FABRICATED-SUCCESS STUB — does not perform any real repair.
+    // See warning above. Do not wire this to a real capability without
+    // implementing actual state-clearing + verification first.
     return {
       success: true,
       evidence: `Stale state cleared for ${capabilityId}`,

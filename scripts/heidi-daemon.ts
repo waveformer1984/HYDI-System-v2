@@ -45,6 +45,7 @@ const DB_CONFIG = {
 
 const LOCK_FILE = path.resolve(__dirname, '..', '.heidi-daemon.lock');
 const AUDIT_FILE = path.resolve(__dirname, '..', '.heidi-daemon-audit.jsonl');
+const AUDIT_FILE_MAX_BYTES = 10 * 1024 * 1024; // 10 MB — rotate when exceeded
 
 interface DaemonConfig {
   intervalMs: number;
@@ -75,32 +76,101 @@ function parseArgs(): DaemonConfig {
 
 // ─── Single-Instance Lock ────────────────────────────────────────────────
 
+/**
+ * Acquire the single-instance lock atomically.
+ *
+ * Uses fs.writeFileSync with { flag: 'wx' } which is an exclusive create —
+ * it fails with EEXIST if the file already exists. This eliminates the
+ * TOCTOU race that existed with the previous check-then-write approach
+ * (existsSync -> unlinkSync -> writeFileSync), where two near-simultaneous
+ * daemon starts could both pass the existence check before either wrote.
+ *
+ * If the lock file exists, we check whether the owning process is still
+ * alive. If it's stale (process died without releasing), we remove it and
+ * retry the atomic create. If the process IS alive, we refuse to start.
+ */
 function acquireLock(): boolean {
-  if (fs.existsSync(LOCK_FILE)) {
-    const content = fs.readFileSync(LOCK_FILE, 'utf-8').trim();
-    if (content) {
-      try {
-        const lockData = JSON.parse(content);
-        // Check if the lock is stale (process no longer running)
-        if (lockData.pid && !isProcessAlive(lockData.pid)) {
-          console.log(`[daemon] Stale lock from PID ${lockData.pid}, removing`);
-          fs.unlinkSync(LOCK_FILE);
-        } else {
-          console.error(`[daemon] Another daemon is already running (PID: ${lockData.pid})`);
-          return false;
-        }
-      } catch {
-        // Corrupt lock file — remove it
-        fs.unlinkSync(LOCK_FILE);
-      }
+  const lockData = JSON.stringify({
+    pid: process.pid,
+    startedAt: new Date().toISOString(),
+  });
+
+  // First attempt: atomic exclusive create
+  try {
+    fs.writeFileSync(LOCK_FILE, lockData, { flag: 'wx' });
+    return true;
+  } catch (error: unknown) {
+    // EEXIST means the file already exists — check if it's stale
+    if (!isNodeError(error, 'EEXIST')) {
+      // Some other error (permissions, disk full, etc.)
+      console.error(`[daemon] Lock acquisition failed: ${error instanceof Error ? error.message : 'unknown'}`);
+      return false;
     }
   }
 
-  fs.writeFileSync(LOCK_FILE, JSON.stringify({
-    pid: process.pid,
-    startedAt: new Date().toISOString(),
-  }));
-  return true;
+  // Lock file exists — check if the owning process is still alive
+  try {
+    const content = fs.readFileSync(LOCK_FILE, 'utf-8').trim();
+    if (!content) {
+      // Empty lock file — remove and retry
+      fs.unlinkSync(LOCK_FILE);
+      try {
+        fs.writeFileSync(LOCK_FILE, lockData, { flag: 'wx' });
+        return true;
+      } catch {
+        return false;
+      }
+    }
+
+    const lockInfo = JSON.parse(content);
+    if (lockInfo.pid && isProcessAlive(lockInfo.pid)) {
+      console.error(`[daemon] Another daemon is already running (PID: ${lockInfo.pid})`);
+      return false;
+    }
+
+    // Stale lock — process is no longer alive
+    console.log(`[daemon] Stale lock from PID ${lockInfo.pid}, removing`);
+    fs.unlinkSync(LOCK_FILE);
+
+    // Retry atomic create
+    try {
+      fs.writeFileSync(LOCK_FILE, lockData, { flag: 'wx' });
+      return true;
+    } catch (retryError: unknown) {
+      if (isNodeError(retryError, 'EEXIST')) {
+        // Someone else grabbed it between our unlink and write
+        console.error('[daemon] Lock acquired by another process during stale cleanup');
+      } else {
+        console.error(`[daemon] Lock retry failed: ${retryError instanceof Error ? retryError.message : 'unknown'}`);
+      }
+      return false;
+    }
+  } catch {
+    // Corrupt lock file — remove and retry
+    try {
+      fs.unlinkSync(LOCK_FILE);
+    } catch {
+      // Can't remove — give up
+      console.error('[daemon] Cannot remove corrupt lock file');
+      return false;
+    }
+    try {
+      fs.writeFileSync(LOCK_FILE, lockData, { flag: 'wx' });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+}
+
+/**
+ * Type guard for Node.js filesystem errors with a specific code.
+ */
+function isNodeError(error: unknown, code: string): boolean {
+  return error !== null &&
+         typeof error === 'object' &&
+         'code' in error &&
+         (error as { code: string }).code === code;
 }
 
 function releaseLock(): void {
@@ -126,6 +196,10 @@ function isProcessAlive(pid: number): boolean {
   } catch {
     return false;
   }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 // ─── Audit Recording ─────────────────────────────────────────────────────
@@ -155,9 +229,40 @@ interface CycleAuditRecord {
 
 function appendAuditRecord(record: CycleAuditRecord): void {
   try {
+    // Rotate audit file if it exceeds the max size.
+    // We keep the most recent entries by reading the file, trimming from
+    // the front, and rewriting. This is O(n) but only triggers when the
+    // file exceeds the cap, not on every write.
+    try {
+      const stats = fs.statSync(AUDIT_FILE);
+      if (stats.size > AUDIT_FILE_MAX_BYTES) {
+        rotateAuditFile();
+      }
+    } catch {
+      // File doesn't exist yet — no rotation needed
+    }
     fs.appendFileSync(AUDIT_FILE, JSON.stringify(record) + '\n');
   } catch {
     // Best effort — don't crash the daemon for audit write failures
+  }
+}
+
+/**
+ * Rotate the audit file by keeping only the most recent half of entries.
+ * This bounds disk usage so the JSONL file doesn't grow forever in a
+ * long-running daemon.
+ */
+function rotateAuditFile(): void {
+  try {
+    const content = fs.readFileSync(AUDIT_FILE, 'utf-8');
+    const lines = content.trim().split('\n').filter(Boolean);
+    // Keep the most recent half
+    const keepCount = Math.floor(lines.length / 2);
+    const kept = lines.slice(lines.length - keepCount);
+    fs.writeFileSync(AUDIT_FILE, kept.join('\n') + '\n');
+    console.log(`[daemon] Audit file rotated: ${lines.length} -> ${keepCount} entries`);
+  } catch {
+    // Best effort
   }
 }
 
@@ -253,6 +358,15 @@ async function main(): Promise<void> {
 
   // 3. Set up graceful shutdown
   let shuttingDown = false;
+  // Track whether the self-sufficiency interval callback is currently
+  // executing. This mirrors core.getLoopStatus().cycleInFlight for the
+  // cognitive loop. gracefulShutdown waits for both to clear before
+  // exiting, so a SIGTERM during a live self-repair action doesn't kill
+  // it mid-execution.
+  let ssfInFlight = false;
+  // Bounded wait for in-flight work during shutdown. Must be less than
+  // PM2's kill_timeout (15s) so PM2 doesn't force-kill before we finish.
+  const SHUTDOWN_WAIT_TIMEOUT_MS = 12000;
 
   async function gracefulShutdown(signal: string): Promise<void> {
     if (shuttingDown) return;
@@ -260,9 +374,28 @@ async function main(): Promise<void> {
     console.log('');
     console.log(`[daemon] ${signal} received — shutting down gracefully`);
 
-    // Stop the loop
+    // Stop scheduling new cycles (both cognitive loop and self-sufficiency)
     core.stop();
-    console.log('[daemon] Cognitive loop stopped');
+    console.log('[daemon] Cognitive loop stopped (no new cycles scheduled)');
+
+    // Wait for in-flight work to complete:
+    //   - core.getLoopStatus().cycleInFlight (cognitive loop)
+    //   - ssfInFlight (self-sufficiency interval)
+    // Both must be false before we release the lock and exit.
+    const waitStart = Date.now();
+    let cognitiveInFlight = core.getLoopStatus().cycleInFlight;
+    while ((cognitiveInFlight || ssfInFlight) &&
+           (Date.now() - waitStart) < SHUTDOWN_WAIT_TIMEOUT_MS) {
+      console.log(`[daemon] Waiting for in-flight work to complete (cognitive=${cognitiveInFlight}, ssf=${ssfInFlight})...`);
+      await sleep(500);
+      cognitiveInFlight = core.getLoopStatus().cycleInFlight;
+    }
+
+    if (cognitiveInFlight || ssfInFlight) {
+      console.warn(`[daemon] WARNING: In-flight work did not complete within ${SHUTDOWN_WAIT_TIMEOUT_MS}ms — forcing shutdown`);
+    } else {
+      console.log('[daemon] All in-flight work completed');
+    }
 
     // Record final audit
     appendAuditRecord({
@@ -331,6 +464,8 @@ async function main(): Promise<void> {
   async function runSelfSufficiencyInterval(): Promise<void> {
     if (shuttingDown) return;
 
+    // Track in-flight state so gracefulShutdown can wait for us
+    ssfInFlight = true;
     selfSufficiencyCycleCount++;
     const cycleId = `ssf-${Date.now()}-${selfSufficiencyCycleCount}`;
     const startTime = Date.now();
@@ -373,6 +508,8 @@ async function main(): Promise<void> {
       });
       // Cycle isolation — one failed observation must not kill the daemon
       console.error(`[daemon] [${cycleId}] Self-sufficiency cycle failed: ${error instanceof Error ? error.message : 'unknown'}`);
+    } finally {
+      ssfInFlight = false;
     }
   }
 
