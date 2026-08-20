@@ -287,6 +287,128 @@ export class HeidiOrchestrator {
   }
 
   /**
+   * Get the revenue dashboard for health reporting.
+   * Queries the real pipeline tables and RevenueLedger.
+   * Does NOT throw — returns degraded status if DB is unavailable.
+   * NEVER confuses pipeline activity with verified revenue.
+   */
+  async getRevenueDashboard(): Promise<{
+    prospects: number;
+    qualifiedProspects: number;
+    opportunities: number;
+    openOffers: number;
+    pendingAuthorizations: number;
+    customers: number;
+    payments: number;
+    verifiedRevenueCents: number;
+    pipelineValueCents: number;
+    averageOpportunityValueCents: number;
+    conversionRate: number | null;
+    revenuePerCampaign: Array<{ campaign: string; verifiedRevenueCents: number; prospects: number }>;
+    available: boolean;
+    error: string | null;
+  }> {
+    try {
+      const { Pool } = require('pg');
+      const pool = new Pool({
+        host: process.env.PG_HOST || '127.0.0.1',
+        port: parseInt(process.env.PG_PORT || '54322', 10),
+        database: process.env.PG_DATABASE || 'postgres',
+        user: process.env.PG_USER || 'postgres',
+        password: process.env.PG_PASSWORD || 'postgres',
+        max: 2,
+        idleTimeoutMillis: 5000,
+      });
+
+      try {
+        const [prospectsRes, qualifiedRes, oppsRes, customersRes, verifiedRes] = await Promise.all([
+          pool.query('SELECT count(*) as cnt FROM revenue_prospects WHERE opted_out = false'),
+          pool.query("SELECT count(*) as cnt FROM revenue_prospects WHERE status IN ('qualified', 'appointment', 'proposal_sent', 'won')"),
+          pool.query("SELECT count(*) as cnt, COALESCE(sum(proposed_price), 0) as total_value FROM revenue_opportunities WHERE status = 'open'"),
+          pool.query('SELECT count(*) as cnt FROM customer_services WHERE status IN ("active", "provisioning")'),
+          pool.query('SELECT count(*) as cnt, COALESCE(sum(amount), 0) as total FROM revenue_ledger WHERE verified = true'),
+        ]);
+
+        const prospects = parseInt(prospectsRes.rows[0].cnt, 10);
+        const qualifiedProspects = parseInt(qualifiedRes.rows[0].cnt, 10);
+        const opportunities = parseInt(oppsRes.rows[0].cnt, 10);
+        const pipelineValueCents = parseInt(oppsRes.rows[0].total_value, 10);
+        const customers = parseInt(customersRes.rows[0].cnt, 10);
+        const verifiedRevenueCents = parseInt(verifiedRes.rows[0].total, 10);
+        const payments = parseInt(verifiedRes.rows[0].cnt, 10);
+
+        const averageOpportunityValueCents = opportunities > 0
+          ? Math.round(pipelineValueCents / opportunities)
+          : 0;
+
+        // Conversion rate: won opportunities / total opportunities
+        const wonRes = await pool.query("SELECT count(*) as cnt FROM revenue_opportunities WHERE status = 'accepted'");
+        const totalOppsRes = await pool.query('SELECT count(*) as cnt FROM revenue_opportunities');
+        const wonCount = parseInt(wonRes.rows[0].cnt, 10);
+        const totalOpps = parseInt(totalOppsRes.rows[0].cnt, 10);
+        const conversionRate = totalOpps > 0 ? wonCount / totalOpps : null;
+
+        // Revenue per campaign (from metadata)
+        let revenuePerCampaign: Array<{ campaign: string; verifiedRevenueCents: number; prospects: number }> = [];
+        try {
+          const campaignRes = await pool.query(`
+            SELECT
+              COALESCE(metadata->>'campaign', 'unknown') as campaign,
+              count(*) as prospects
+            FROM revenue_prospects
+            WHERE metadata->>'campaign' IS NOT NULL
+            GROUP BY metadata->>'campaign'
+            LIMIT 10
+          `);
+          revenuePerCampaign = campaignRes.rows.map((r: any) => ({
+            campaign: r.campaign,
+            verifiedRevenueCents: 0, // Verified revenue is tracked in revenue_ledger, not prospects
+            prospects: parseInt(r.prospects, 10),
+          }));
+        } catch {
+          // Non-fatal
+        }
+
+        return {
+          prospects,
+          qualifiedProspects,
+          opportunities,
+          openOffers: opportunities, // open offers = open opportunities
+          pendingAuthorizations: 0, // Would come from escalation_records if table exists
+          customers,
+          payments,
+          verifiedRevenueCents,
+          pipelineValueCents,
+          averageOpportunityValueCents,
+          conversionRate,
+          revenuePerCampaign,
+          available: true,
+          error: null,
+        };
+      } finally {
+        await pool.end();
+      }
+    } catch (error) {
+      return {
+        prospects: 0,
+        qualifiedProspects: 0,
+        opportunities: 0,
+        openOffers: 0,
+        pendingAuthorizations: 0,
+        customers: 0,
+        payments: 0,
+        verifiedRevenueCents: 0,
+        pipelineValueCents: 0,
+        averageOpportunityValueCents: 0,
+        conversionRate: null,
+        revenuePerCampaign: [],
+        available: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
+  }
+
+  /**
    * Main chat processing method
    */
   async processChat(request: ChatRequest): Promise<ChatResponse> {
