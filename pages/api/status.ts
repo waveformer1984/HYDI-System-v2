@@ -8,7 +8,7 @@ const DEGRADED_STATUS: SystemStatus = {
   allowed_actions: [],
 };
 
-export default async function handler(_req: NextApiRequest, res: NextApiResponse<SystemStatus & { cognitiveCore?: unknown; cognitiveLoop?: unknown; revenueDashboard?: unknown }>) {
+export default async function handler(_req: NextApiRequest, res: NextApiResponse<SystemStatus & { cognitiveCore?: unknown; cognitiveLoop?: unknown; revenueDashboard?: unknown; commercialState?: unknown }>) {
   try {
     const orchestrator = new HeidiOrchestrator();
     const status = await orchestrator.getSystemStatus();
@@ -17,11 +17,14 @@ export default async function handler(_req: NextApiRequest, res: NextApiResponse
     const loopStatus = orchestrator.getCognitiveLoopStatus();
     // Include revenue dashboard — does NOT throw
     const revenueDashboard = await orchestrator.getRevenueDashboard();
+    // Include commercial capability state — does NOT throw
+    const commercialState = await orchestrator.getCommercialState();
     res.status(200).json({
       ...status,
       cognitiveCore: cognitiveStatus,
       cognitiveLoop: loopStatus,
       revenueDashboard,
+      commercialState,
     });
   } catch (error) {
     console.error('[api/status] Failed to get system status:', error instanceof Error ? error.message : 'Unknown error');

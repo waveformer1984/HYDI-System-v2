@@ -409,6 +409,69 @@ export class HeidiOrchestrator {
   }
 
   /**
+   * Get the commercial capability state for health reporting.
+   * Reports READY/BLOCKED/DEGRADED for each external dependency.
+   * Does NOT throw — returns degraded status if unavailable.
+   */
+  async getCommercialState(): Promise<{
+    discovery: { state: string; blocker: string | null };
+    email: { state: string; blocker: string | null };
+    stripe: { state: string; blocker: string | null };
+    sms: { state: string; blocker: string | null };
+    autonomyLevel: number;
+    available: boolean;
+    error: string | null;
+  }> {
+    try {
+      const stripeKey = process.env.STRIPE_SECRET_KEY;
+      const emailKey = process.env.SENDGRID_API_KEY || process.env.SMTP_HOST;
+      const smsKey = process.env.TWILIO_ACCOUNT_SID;
+      const googlePlacesKey = process.env.GOOGLE_PLACES_API_KEY;
+      const clearbitKey = process.env.CLEARBIT_API_KEY;
+
+      return {
+        discovery: {
+          state: googlePlacesKey || clearbitKey ? 'READY' : 'BLOCKED',
+          blocker: googlePlacesKey || clearbitKey
+            ? null
+            : 'GOOGLE_PLACES_API_KEY or CLEARBIT_API_KEY required for external prospect discovery. CSV import is available as a fallback.',
+        },
+        email: {
+          state: emailKey ? 'READY' : 'BLOCKED',
+          blocker: emailKey
+            ? null
+            : 'SENDGRID_API_KEY or SMTP_HOST/SMTP_PORT/SMTP_USER/SMTP_PASS required for outbound email delivery.',
+        },
+        stripe: {
+          state: stripeKey ? 'READY' : 'BLOCKED',
+          blocker: stripeKey
+            ? null
+            : 'STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET required for payment processing and verified revenue.',
+        },
+        sms: {
+          state: smsKey ? 'READY' : 'BLOCKED',
+          blocker: smsKey
+            ? null
+            : 'TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_PHONE_NUMBER required for SMS delivery.',
+        },
+        autonomyLevel: 2,
+        available: true,
+        error: null,
+      };
+    } catch (error) {
+      return {
+        discovery: { state: 'FAILED', blocker: 'Unable to check discovery state' },
+        email: { state: 'FAILED', blocker: 'Unable to check email state' },
+        stripe: { state: 'FAILED', blocker: 'Unable to check Stripe state' },
+        sms: { state: 'FAILED', blocker: 'Unable to check SMS state' },
+        autonomyLevel: 2,
+        available: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
+  }
+
+  /**
    * Main chat processing method
    */
   async processChat(request: ChatRequest): Promise<ChatResponse> {

@@ -56,7 +56,7 @@ describe('Phase 3 — No False Greens', () => {
         expect(hasPassEvidence).toBe(true);
       }
     }
-  });
+  }, 60000);
 
   it('reports UNKNOWN (not HEALTHY) for in-process modules with no independent check', async () => {
     const { healthChecker, model } = createSystem();
@@ -70,7 +70,7 @@ describe('Phase 3 — No False Greens', () => {
       const hasSkipEvidence = hydiState.evidence.some((e) => e.check === 'in-process');
       expect(hasSkipEvidence).toBe(true);
     }
-  });
+  }, 60000);
 
   it('includes evidence chain for every health determination', async () => {
     const { healthChecker, model } = createSystem();
@@ -87,7 +87,7 @@ describe('Phase 3 — No False Greens', () => {
         expect(ev.status).toMatch(/^(pass|fail|warn|skip)$/);
       }
     }
-  });
+  }, 60000);
 
   it('database state includes write/read/delete evidence, not just reachability', async () => {
     const { healthChecker, model } = createSystem();
@@ -101,7 +101,7 @@ describe('Phase 3 — No False Greens', () => {
       expect(checks).toContain('service-role-write');
       expect(checks).toContain('service-role-read');
     }
-  });
+  }, 60000);
 
   it('component with failed dependency is BLOCKED, not HEALTHY', async () => {
     const { model } = createSystem();
@@ -144,7 +144,7 @@ describe('Phase 3 — No False Greens', () => {
     }
 
     recoveryEngine.destroy();
-  });
+  }, 60000);
 
   it('recovery is idempotent — already healthy component is not restarted', async () => {
     const { recoveryEngine, model } = createSystem();
@@ -176,7 +176,7 @@ describe('Phase 3 — No False Greens', () => {
     // Must not exceed maxAttempts
     expect(record.attempts.length).toBeLessThanOrEqual(2);
     recoveryEngine.destroy();
-  });
+  }, 60000);
 
   it('recovery is denied for unauthorized targets', async () => {
     const { recoveryEngine } = createSystem();

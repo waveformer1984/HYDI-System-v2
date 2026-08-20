@@ -245,6 +245,20 @@ export interface ExecutionBridge {
     getVerifiedRevenue: () => Promise<unknown>;
     getRevenueSummary: () => Promise<unknown>;
   } | null;
+  commercialWorkflow?: {
+    getState: () => Promise<unknown>;
+    discoverProspects: (query: { industry?: string; location?: string; maxResults?: number }) => Promise<unknown>;
+    ingestProspect: (discovered: unknown) => Promise<unknown>;
+    createOpportunityForProspect: (prospectId: string, offerId?: string) => Promise<unknown>;
+    prepareOutreachDraft: (prospect: unknown, opportunity: unknown, offerId: string, cognitiveCycleId: string, goalId: string) => unknown;
+    createAuthorizationPackage: (prospect: unknown, opportunity: unknown, draft: unknown, goalId: string, cognitiveCycleId: string) => unknown;
+    approveAuthorizationPackage: (packageId: string, approvedBy: string, reason?: string) => unknown;
+    sendApprovedMessage: (packageId: string) => Promise<unknown>;
+    processInboundResponse: (message: unknown, prospects: unknown[], opportunities: unknown[]) => Promise<unknown>;
+    verifyRevenue: () => Promise<unknown>;
+    getAuthManager: () => { getPendingPackages: () => unknown[]; isApproved: (id: string) => boolean; getAllPackages: () => unknown[] };
+    getDiscoveryAdapter: () => { isAvailable: () => boolean; getBlockerReason: () => string | null };
+  } | null;
   memory?: {
     retrieve: (query: string, userId: string, sessionId?: string) => Promise<string>;
     storeExperience: (sessionId: string, userId: string, experience: { problem: string; actionsTaken: unknown[]; outcome: string; lesson: string }) => Promise<boolean>;
@@ -624,6 +638,121 @@ export class CognitiveCore {
           evidence: [{ summary: result }],
           verified: true,
           verificationDetails: 'Revenue summary returned',
+        };
+      });
+    }
+
+    // CommercialWorkflow capabilities
+    if (this.bridge.commercialWorkflow) {
+      const cw = this.bridge.commercialWorkflow;
+      this.wireExecutor('commercial.get_state', async () => {
+        const result = await cw.getState();
+        return {
+          capabilityId: 'commercial.get_state',
+          executed: true,
+          outcome: 'success' as const,
+          result,
+          error: null,
+          evidence: [{ state: result }],
+          verified: true,
+          verificationDetails: 'Commercial workflow state returned',
+        };
+      });
+      this.wireExecutor('commercial.discover_prospects', async (params) => {
+        const result = await cw.discoverProspects({
+          industry: params.industry as string | undefined,
+          location: params.location as string | undefined,
+          maxResults: params.maxResults as number | undefined,
+        });
+        return {
+          capabilityId: 'commercial.discover_prospects',
+          executed: true,
+          outcome: 'success' as const,
+          result,
+          error: null,
+          evidence: [{ discovered: result }],
+          verified: true,
+          verificationDetails: 'Discovery result returned',
+        };
+      });
+      this.wireExecutor('commercial.ingest_prospect', async (params) => {
+        const result = await cw.ingestProspect(params.discovered as Record<string, unknown> as any);
+        return {
+          capabilityId: 'commercial.ingest_prospect',
+          executed: true,
+          outcome: 'success' as const,
+          result,
+          error: null,
+          evidence: [{ prospect: result }],
+          verified: true,
+          verificationDetails: 'Prospect ingested',
+        };
+      });
+      this.wireExecutor('commercial.create_opportunity', async (params) => {
+        const result = await cw.createOpportunityForProspect(
+          params.prospectId as string,
+          params.offerId as string | undefined,
+        );
+        return {
+          capabilityId: 'commercial.create_opportunity',
+          executed: true,
+          outcome: 'success' as const,
+          result,
+          error: null,
+          evidence: [{ opportunity: result }],
+          verified: !!result,
+          verificationDetails: result ? 'Opportunity created' : 'No opportunity created (prospect not qualified)',
+        };
+      });
+      this.wireExecutor('commercial.prepare_outreach', async (params) => {
+        const draft = cw.prepareOutreachDraft(
+          params.prospect as any,
+          params.opportunity as any,
+          params.offerId as string,
+          params.cognitiveCycleId as string,
+          params.goalId as string,
+        );
+        return {
+          capabilityId: 'commercial.prepare_outreach',
+          executed: true,
+          outcome: 'success' as const,
+          result: draft,
+          error: null,
+          evidence: [{ draftId: (draft as any)?.draftId }],
+          verified: !!draft,
+          verificationDetails: 'Outreach draft prepared',
+        };
+      });
+      this.wireExecutor('commercial.create_authorization_package', async (params) => {
+        const pkg = cw.createAuthorizationPackage(
+          params.prospect as any,
+          params.opportunity as any,
+          params.draft as any,
+          params.goalId as string,
+          params.cognitiveCycleId as string,
+        );
+        return {
+          capabilityId: 'commercial.create_authorization_package',
+          executed: true,
+          outcome: 'success' as const,
+          result: pkg,
+          error: null,
+          evidence: [{ packageId: (pkg as any)?.packageId }],
+          verified: !!pkg,
+          verificationDetails: 'Authorization package created',
+        };
+      });
+      this.wireExecutor('commercial.verify_revenue', async () => {
+        const result = await cw.verifyRevenue();
+        return {
+          capabilityId: 'commercial.verify_revenue',
+          executed: true,
+          outcome: 'success' as const,
+          result,
+          error: null,
+          evidence: [{ verifiedRevenueCents: (result as any)?.verifiedRevenueCents }],
+          verified: true,
+          verificationDetails: 'Revenue verified from RevenueLedger',
         };
       });
     }

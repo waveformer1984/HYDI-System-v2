@@ -58,6 +58,8 @@ export interface CognitiveCoreBuilderOptions {
   revenueLifecycle?: import('../revenue/CustomerLifecycle').CustomerLifecycle;
   /** Pre-built RevenueLedger instance. If absent, one is created. */
   revenueLedger?: import('../revenue/RevenueLedger').RevenueLedger;
+  /** Pre-built CommercialWorkflow instance. If absent, one is created from available components. */
+  commercialWorkflow?: import('../revenue/CommercialWorkflow').CommercialWorkflow;
   /** Pre-built ActionExecutor instance. If absent, one is created (requires supabase). */
   actionExecutor?: import('../action-executor').ActionExecutor;
   /** Enable meta-cognition integration (requires heidi-core/meta-cognition.js) */
@@ -192,6 +194,36 @@ export class CognitiveCoreBuilder {
           bridge.revenueLedger = createRevenueLedgerBridge(ledger);
         } catch {
           // RevenueLedger not loadable — skip
+        }
+      }
+    }
+
+    // 4e. CommercialWorkflow — wraps pipeline, ledger, lifecycle, discovery
+    if (notOverridden('commercialWorkflow')) {
+      if (this.opts.commercialWorkflow) {
+        bridge.commercialWorkflow = this.opts.commercialWorkflow as any;
+      } else {
+        try {
+          const { CommercialWorkflow } = await import('../revenue/CommercialWorkflow');
+          const { ProspectDiscoveryAdapter, createDiscoveryAdapterFromEnv } = await import('../revenue/ProspectDiscoveryAdapter');
+          // Build from already-wired components if available
+          const pipeline = bridge.revenuePipeline as any;
+          const ledger = bridge.revenueLedger as any;
+          const lifecycle = bridge.revenueLifecycle as any;
+          if (pipeline && ledger && lifecycle) {
+            const discovery = createDiscoveryAdapterFromEnv();
+            // CommercialWorkflow needs the actual objects, not the bridge wrappers.
+            // We pass the bridge interfaces — CommercialWorkflow uses them as thin adapters.
+            const cw = new CommercialWorkflow({
+              pipeline: pipeline._pipeline || pipeline,
+              ledger: ledger._ledger || ledger,
+              lifecycle: lifecycle._lifecycle || lifecycle,
+              discovery,
+            });
+            bridge.commercialWorkflow = cw as any;
+          }
+        } catch {
+          // CommercialWorkflow not loadable — skip
         }
       }
     }
