@@ -221,6 +221,71 @@ export class HeidiOrchestrator {
     }
   }
 
+  // ─── Bounded continuous loop control ──────────────────────────────────
+
+  /**
+   * Start the bounded continuous cognitive loop.
+   * Only R0/R1 actions execute autonomously. R2+ requires human authorization.
+   */
+  async startCognitiveLoop(intervalMs?: number): Promise<void> {
+    const core = await getCognitiveCore();
+    await core.start(intervalMs);
+  }
+
+  /**
+   * Stop the continuous cognitive loop gracefully.
+   */
+  stopCognitiveLoop(): void {
+    if (_cognitiveCore) {
+      _cognitiveCore.stop();
+    }
+  }
+
+  /**
+   * Pause the continuous cognitive loop.
+   */
+  pauseCognitiveLoop(): void {
+    if (_cognitiveCore) {
+      _cognitiveCore.pause();
+    }
+  }
+
+  /**
+   * Resume a paused cognitive loop.
+   */
+  resumeCognitiveLoop(): void {
+    if (_cognitiveCore) {
+      _cognitiveCore.resume();
+    }
+  }
+
+  /**
+   * Activate the cognitive loop kill switch.
+   * Immediately halts all new autonomous cycles.
+   */
+  activateCognitiveKillSwitch(reason: string): void {
+    if (_cognitiveCore) {
+      _cognitiveCore.activateKillSwitch(reason);
+    }
+  }
+
+  /**
+   * Deactivate the cognitive loop kill switch.
+   */
+  deactivateCognitiveKillSwitch(): void {
+    if (_cognitiveCore) {
+      _cognitiveCore.deactivateKillSwitch();
+    }
+  }
+
+  /**
+   * Get the cognitive loop status for health reporting.
+   */
+  getCognitiveLoopStatus(): import('./heidi/CognitiveCore').LoopStatus | null {
+    if (!_cognitiveCore) return null;
+    return _cognitiveCore.getLoopStatus();
+  }
+
   /**
    * Main chat processing method
    */

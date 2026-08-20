@@ -48,6 +48,53 @@ export type CognitivePhase =
   | 'select' | 'authorize' | 'act' | 'verify' | 'learn' | 'record'
   | 'replan' | 'escalate';
 
+// ─── Bounded continuous loop state machine ──────────────────────────────
+
+export type LoopState =
+  | 'stopped'      // not running
+  | 'starting'     // initialization in progress
+  | 'running'      // actively cycling
+  | 'paused'       // manually paused, can be resumed
+  | 'cooldown'     // automatic cooldown after repeated failures
+  | 'degraded'     // running but with degraded capabilities
+  | 'failed'       // loop failed, needs manual intervention
+  | 'stopping';    // graceful shutdown in progress
+
+export interface LoopStatus {
+  state: LoopState;
+  running: boolean;
+  cycleCount: number;
+  lastCycleAt: string | null;
+  lastSuccessfulCycleAt: string | null;
+  lastFailureAt: string | null;
+  consecutiveFailures: number;
+  cooldownUntil: string | null;
+  killSwitchActive: boolean;
+  currentIntervalMs: number;
+  cycleInFlight: boolean;
+  lastError: string | null;
+}
+
+export interface LoopConfig {
+  intervalMs: number;           // default: 60000 (60s)
+  startupStabilizationMs: number; // default: 120000 (2min)
+  cycleTimeoutMs: number;       // default: 30000 (30s)
+  maxConsecutiveFailures: number; // default: 3
+  cooldownMs: number;           // default: 300000 (5min)
+  backoffBaseMs: number;        // default: 2000 (2s)
+  backoffMaxMs: number;         // default: 60000 (60s)
+}
+
+const DEFAULT_LOOP_CONFIG: LoopConfig = {
+  intervalMs: 60000,
+  startupStabilizationMs: 120000,
+  cycleTimeoutMs: 30000,
+  maxConsecutiveFailures: 3,
+  cooldownMs: 300000,
+  backoffBaseMs: 2000,
+  backoffMaxMs: 60000,
+};
+
 export interface CognitiveState {
   cycleId: string;
   timestamp: string;
@@ -221,9 +268,21 @@ export class CognitiveCore {
   private bridge: ExecutionBridge;
   private currentCycle: CognitiveState | null = null;
   private cycleCount = 0;
-  private running = false;
-  private intervalHandle: NodeJS.Timeout | null = null;
   private sessionId: string;
+
+  // ─── Bounded loop state ──────────────────────────────────────────────
+  private loopState: LoopState = 'stopped';
+  private loopConfig: LoopConfig = DEFAULT_LOOP_CONFIG;
+  private intervalHandle: NodeJS.Timeout | null = null;
+  private cycleInFlight = false;
+  private killSwitchActive = false;
+  private consecutiveFailures = 0;
+  private lastCycleAt: string | null = null;
+  private lastSuccessfulCycleAt: string | null = null;
+  private lastFailureAt: string | null = null;
+  private cooldownUntil: string | null = null;
+  private lastError: string | null = null;
+  private startedAt: number | null = null;
 
   constructor(config?: DBConfig, bridge?: ExecutionBridge) {
     this.pool = new Pool({
@@ -1837,21 +1896,285 @@ export class CognitiveCore {
     return { resumedGoals: result.resumed, blockedGoals: result.blocked };
   }
 
+  // ─── Bounded continuous loop ──────────────────────────────────────────
+  //
+  // The loop runs CognitiveCore.runCycle() at a bounded interval with:
+  //   - no overlapping cycles (cycleInFlight guard)
+  //   - 30-second cycle timeout
+  //   - max 3 consecutive failures before cooldown
+  //   - exponential backoff on retry
+  //   - kill switch that immediately halts new cycles
+  //   - state machine: stopped → starting → running → (paused/cooldown/degraded/failed) → stopping → stopped
+  //   - startup stabilization (2 minutes before first cycle)
+  //   - audit of state transitions
+
+  /**
+   * Start the bounded continuous cognitive loop.
+   * Only one loop instance can run per CognitiveCore.
+   */
   async start(intervalMs: number = 60000): Promise<void> {
-    if (this.running) return;
-    this.running = true;
-    await this.resumeAfterRestart();
-    await this.runCycle();
-    this.intervalHandle = setInterval(() => {
-      this.runCycle().catch(() => {});
-    }, intervalMs);
+    if (this.loopState !== 'stopped' && this.loopState !== 'failed') {
+      return; // Already running or paused
+    }
+
+    // Preserve existing config overrides; only set intervalMs if explicitly provided
+    this.loopConfig = { ...this.loopConfig, intervalMs };
+    this.loopState = 'starting';
+    this.startedAt = Date.now();
+    this.consecutiveFailures = 0;
+    this.lastError = null;
+    this.auditLoopTransition('starting');
+
+    // Resume goals after restart
+    try {
+      await this.resumeAfterRestart();
+    } catch {
+      // Non-fatal — goals may not exist yet
+    }
+
+    // Startup stabilization: wait before first cycle
+    const stabilizationEnd = Date.now() + this.loopConfig.startupStabilizationMs;
+
+    this.loopState = 'running';
+    this.auditLoopTransition('running');
+
+    // Schedule the first cycle after stabilization
+    const delay = Math.max(0, stabilizationEnd - Date.now());
+    setTimeout(() => {
+      this.scheduleNextCycle();
+    }, delay);
   }
 
+  /**
+   * Stop the continuous loop gracefully.
+   */
   stop(): void {
-    this.running = false;
+    if (this.loopState === 'stopped') return;
+    this.loopState = 'stopping';
+    this.auditLoopTransition('stopping');
+
     if (this.intervalHandle) {
       clearInterval(this.intervalHandle);
       this.intervalHandle = null;
+    }
+
+    this.loopState = 'stopped';
+    this.auditLoopTransition('stopped');
+  }
+
+  /**
+   * Pause the loop. Cycles stop but state is preserved for resume.
+   */
+  pause(): void {
+    if (this.loopState !== 'running' && this.loopState !== 'degraded') return;
+    this.loopState = 'paused';
+    this.auditLoopTransition('paused');
+
+    if (this.intervalHandle) {
+      clearInterval(this.intervalHandle);
+      this.intervalHandle = null;
+    }
+  }
+
+  /**
+   * Resume a paused loop.
+   */
+  resume(): void {
+    if (this.loopState !== 'paused') return;
+    this.loopState = 'running';
+    this.auditLoopTransition('running');
+    this.scheduleNextCycle();
+  }
+
+  /**
+   * Activate the kill switch. Immediately halts all new cycles.
+   */
+  activateKillSwitch(reason: string): void {
+    this.killSwitchActive = true;
+    this.lastError = `Kill switch activated: ${reason}`;
+    if (this.loopState === 'running') {
+      this.loopState = 'degraded';
+      this.auditLoopTransition('degraded');
+    }
+
+    if (this.intervalHandle) {
+      clearInterval(this.intervalHandle);
+      this.intervalHandle = null;
+    }
+  }
+
+  /**
+   * Deactivate the kill switch and resume cycling.
+   */
+  deactivateKillSwitch(): void {
+    this.killSwitchActive = false;
+    this.lastError = null;
+    if (this.loopState === 'degraded') {
+      this.loopState = 'running';
+      this.auditLoopTransition('running');
+      this.scheduleNextCycle();
+    }
+  }
+
+  /**
+   * Get the current loop status.
+   */
+  getLoopStatus(): LoopStatus {
+    return {
+      state: this.loopState,
+      running: this.loopState === 'running' || this.loopState === 'degraded',
+      cycleCount: this.cycleCount,
+      lastCycleAt: this.lastCycleAt,
+      lastSuccessfulCycleAt: this.lastSuccessfulCycleAt,
+      lastFailureAt: this.lastFailureAt,
+      consecutiveFailures: this.consecutiveFailures,
+      cooldownUntil: this.cooldownUntil,
+      killSwitchActive: this.killSwitchActive,
+      currentIntervalMs: this.loopConfig.intervalMs,
+      cycleInFlight: this.cycleInFlight,
+      lastError: this.lastError,
+    };
+  }
+
+  /**
+   * Update loop configuration.
+   */
+  configureLoop(config: Partial<LoopConfig>): void {
+    this.loopConfig = { ...this.loopConfig, ...config };
+  }
+
+  // ─── Private loop mechanics ───────────────────────────────────────────
+
+  private scheduleNextCycle(): void {
+    if (this.loopState !== 'running' && this.loopState !== 'degraded') return;
+    if (this.killSwitchActive) return;
+    if (this.intervalHandle) return;
+
+    // Check cooldown
+    if (this.cooldownUntil) {
+      const cooldownEnd = new Date(this.cooldownUntil).getTime();
+      if (Date.now() < cooldownEnd) {
+        const delay = cooldownEnd - Date.now();
+        setTimeout(() => {
+          this.cooldownUntil = null;
+          this.loopState = 'running';
+          this.auditLoopTransition('running');
+          this.scheduleNextCycle();
+        }, delay);
+        return;
+      }
+      this.cooldownUntil = null;
+    }
+
+    this.intervalHandle = setInterval(() => {
+      this.runBoundedCycle().catch((e) => {
+        this.lastError = e instanceof Error ? e.message : 'unknown';
+      });
+    }, this.loopConfig.intervalMs);
+  }
+
+  private async runBoundedCycle(): Promise<void> {
+    // Guard: no overlapping cycles
+    if (this.cycleInFlight) return;
+    // Guard: kill switch
+    if (this.killSwitchActive) return;
+    // Guard: state
+    if (this.loopState !== 'running' && this.loopState !== 'degraded') return;
+
+    this.cycleInFlight = true;
+    this.lastCycleAt = new Date().toISOString();
+
+    try {
+      // Run cycle with timeout
+      await this.runCycleWithTimeout(this.loopConfig.cycleTimeoutMs);
+
+      // Success
+      this.lastSuccessfulCycleAt = new Date().toISOString();
+      this.consecutiveFailures = 0;
+
+      // If we were in degraded state, return to running
+      if (this.loopState === 'degraded') {
+        this.loopState = 'running';
+        this.auditLoopTransition('running');
+      }
+    } catch (e) {
+      this.lastFailureAt = new Date().toISOString();
+      this.lastError = e instanceof Error ? e.message : 'unknown';
+      this.consecutiveFailures++;
+
+      // Check if we need to enter cooldown
+      if (this.consecutiveFailures >= this.loopConfig.maxConsecutiveFailures) {
+        this.enterCooldown();
+      } else {
+        // Exponential backoff: delay next cycle
+        const backoff = Math.min(
+          this.loopConfig.backoffBaseMs * Math.pow(2, this.consecutiveFailures - 1),
+          this.loopConfig.backoffMaxMs,
+        );
+        if (this.intervalHandle) {
+          clearInterval(this.intervalHandle);
+          this.intervalHandle = null;
+        }
+        setTimeout(() => {
+          if (this.loopState === 'running' || this.loopState === 'degraded') {
+            this.scheduleNextCycle();
+          }
+        }, backoff);
+      }
+    } finally {
+      this.cycleInFlight = false;
+    }
+  }
+
+  private async runCycleWithTimeout(timeoutMs: number): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        reject(new Error(`Cycle timed out after ${timeoutMs}ms`));
+      }, timeoutMs);
+
+      this.runCycle()
+        .then(() => {
+          clearTimeout(timer);
+          resolve();
+        })
+        .catch((e) => {
+          clearTimeout(timer);
+          reject(e);
+        });
+    });
+  }
+
+  private enterCooldown(): void {
+    this.loopState = 'cooldown';
+    this.cooldownUntil = new Date(Date.now() + this.loopConfig.cooldownMs).toISOString();
+    this.auditLoopTransition('cooldown');
+
+    if (this.intervalHandle) {
+      clearInterval(this.intervalHandle);
+      this.intervalHandle = null;
+    }
+
+    // After cooldown, return to running
+    setTimeout(() => {
+      if (this.loopState === 'cooldown') {
+        this.cooldownUntil = null;
+        this.consecutiveFailures = 0;
+        this.loopState = 'running';
+        this.auditLoopTransition('running');
+        this.scheduleNextCycle();
+      }
+    }, this.loopConfig.cooldownMs);
+  }
+
+  private auditLoopTransition(newState: LoopState): void {
+    try {
+      this.pool.query(
+        `INSERT INTO cognitive_loop_audit (transition_to, timestamp, cycle_count, consecutive_failures, kill_switch_active, error)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [newState, new Date().toISOString(), this.cycleCount, this.consecutiveFailures, this.killSwitchActive, this.lastError],
+      ).catch(() => { /* non-fatal */ });
+    } catch {
+      // Non-fatal — audit table may not exist
     }
   }
 

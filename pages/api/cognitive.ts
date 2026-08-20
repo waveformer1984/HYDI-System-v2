@@ -3,13 +3,16 @@
  *
  * Production entry point for the governed HEIDI Cognitive Core.
  *
- * This endpoint exposes the CognitiveCore that is wired with REAL providers
- * via CognitiveCoreBuilder. It does NOT use mocks or bridgeOverrides.
- *
  * Endpoints:
- *   GET  /api/cognitive          — CognitiveCore status (initialized, providers, capabilities)
- *   POST /api/cognitive          — Run a single governed cognitive cycle
- *   POST /api/cognitive?action=resume — Resume goals after restart
+ *   GET  /api/cognitive                        — CognitiveCore + loop status
+ *   POST /api/cognitive                        — Run a single governed cognitive cycle
+ *   POST /api/cognitive?action=resume          — Resume goals after restart
+ *   POST /api/cognitive?action=loop_start      — Start bounded continuous loop
+ *   POST /api/cognitive?action=loop_stop       — Stop continuous loop
+ *   POST /api/cognitive?action=loop_pause      — Pause continuous loop
+ *   POST /api/cognitive?action=loop_resume     — Resume paused loop
+ *   POST /api/cognitive?action=kill_switch     — Activate kill switch
+ *   POST /api/cognitive?action=kill_switch_off — Deactivate kill switch
  *
  * Governance is enforced inside CognitiveCore:
  *   OBSERVE → VALIDATE → UNDERSTAND → PLAN → ASSESS → SELECT →
@@ -21,6 +24,7 @@
 
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { HeidiOrchestrator } from '../../lib/orchestrator';
+import type { LoopStatus } from '../../lib/heidi/CognitiveCore';
 
 type CognitiveStatusResponse = {
   cognitiveCore: {
@@ -32,6 +36,7 @@ type CognitiveStatusResponse = {
     currentPhase: string | null;
     autonomyLevel: number | null;
   };
+  loop: LoopStatus | null;
   timestamp: string;
 };
 
@@ -55,6 +60,14 @@ type CognitiveCycleResponse = {
   timestamp: string;
 };
 
+type LoopActionResponse = {
+  action: string;
+  success: boolean;
+  loop: LoopStatus | null;
+  message: string;
+  timestamp: string;
+};
+
 type ErrorResponse = {
   error: string;
   timestamp: string;
@@ -62,15 +75,17 @@ type ErrorResponse = {
 
 export default async function handler(
   req: NextApiRequest,
-  res: NextApiResponse<CognitiveStatusResponse | CognitiveCycleResponse | ErrorResponse>,
+  res: NextApiResponse<CognitiveStatusResponse | CognitiveCycleResponse | LoopActionResponse | ErrorResponse>,
 ) {
   if (req.method === 'GET') {
     // ─── Status ──────────────────────────────────────────────────────
     try {
       const orchestrator = new HeidiOrchestrator();
       const status = orchestrator.getCognitiveStatus();
+      const loopStatus = orchestrator.getCognitiveLoopStatus();
       res.status(200).json({
         cognitiveCore: status,
+        loop: loopStatus,
         timestamp: new Date().toISOString(),
       });
     } catch (error) {
@@ -88,26 +103,96 @@ export default async function handler(
     try {
       const orchestrator = new HeidiOrchestrator();
 
+      // ─── Loop control actions ────────────────────────────────────────
+      if (action === 'loop_start') {
+        const intervalMs = typeof req.body?.intervalMs === 'number' ? req.body.intervalMs : undefined;
+        await orchestrator.startCognitiveLoop(intervalMs);
+        const loop = orchestrator.getCognitiveLoopStatus();
+        res.status(200).json({
+          action: 'loop_start',
+          success: true,
+          loop,
+          message: 'Cognitive loop started. R0/R1 only. R2+ requires human authorization.',
+          timestamp: new Date().toISOString(),
+        });
+        return;
+      }
+
+      if (action === 'loop_stop') {
+        orchestrator.stopCognitiveLoop();
+        const loop = orchestrator.getCognitiveLoopStatus();
+        res.status(200).json({
+          action: 'loop_stop',
+          success: true,
+          loop,
+          message: 'Cognitive loop stopped.',
+          timestamp: new Date().toISOString(),
+        });
+        return;
+      }
+
+      if (action === 'loop_pause') {
+        orchestrator.pauseCognitiveLoop();
+        const loop = orchestrator.getCognitiveLoopStatus();
+        res.status(200).json({
+          action: 'loop_pause',
+          success: true,
+          loop,
+          message: 'Cognitive loop paused.',
+          timestamp: new Date().toISOString(),
+        });
+        return;
+      }
+
+      if (action === 'loop_resume') {
+        orchestrator.resumeCognitiveLoop();
+        const loop = orchestrator.getCognitiveLoopStatus();
+        res.status(200).json({
+          action: 'loop_resume',
+          success: true,
+          loop,
+          message: 'Cognitive loop resumed.',
+          timestamp: new Date().toISOString(),
+        });
+        return;
+      }
+
+      if (action === 'kill_switch') {
+        const reason = (req.body?.reason as string) || 'manual activation';
+        orchestrator.activateCognitiveKillSwitch(reason);
+        const loop = orchestrator.getCognitiveLoopStatus();
+        res.status(200).json({
+          action: 'kill_switch',
+          success: true,
+          loop,
+          message: `Kill switch activated: ${reason}`,
+          timestamp: new Date().toISOString(),
+        });
+        return;
+      }
+
+      if (action === 'kill_switch_off') {
+        orchestrator.deactivateCognitiveKillSwitch();
+        const loop = orchestrator.getCognitiveLoopStatus();
+        res.status(200).json({
+          action: 'kill_switch_off',
+          success: true,
+          loop,
+          message: 'Kill switch deactivated.',
+          timestamp: new Date().toISOString(),
+        });
+        return;
+      }
+
       if (action === 'resume') {
-        // ─── Resume goals after restart ────────────────────────────────
         const result = await orchestrator.resumeCognitiveGoals();
         res.status(200).json({
-          cycleId: 'resume',
-          phase: 'resume',
-          identity: null,
-          perception: null,
-          selectedAction: null,
-          authorization: null,
-          execution: null,
-          verification: null,
-          learning: null,
-          replan: null,
-          errors: [],
-          durationMs: 0,
+          action: 'resume',
+          success: true,
+          loop: null,
+          message: `Resumed ${result.resumedGoals} goals.`,
           timestamp: new Date().toISOString(),
-          // Include resume result in a way the type allows
-          ...(result as unknown as Record<string, unknown>),
-        } as CognitiveCycleResponse);
+        });
         return;
       }
 
@@ -177,7 +262,7 @@ export default async function handler(
       });
     } catch (error) {
       res.status(500).json({
-        error: `Cognitive cycle failed: ${error instanceof Error ? error.message : 'unknown'}`,
+        error: `Cognitive operation failed: ${error instanceof Error ? error.message : 'unknown'}`,
         timestamp: new Date().toISOString(),
       });
     }
@@ -185,7 +270,7 @@ export default async function handler(
   }
 
   res.status(405).json({
-    error: 'Method not allowed. Use GET for status or POST for cycle execution.',
+    error: 'Method not allowed. Use GET for status or POST for cycle/loop operations.',
     timestamp: new Date().toISOString(),
   });
 }
