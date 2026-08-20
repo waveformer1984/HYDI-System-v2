@@ -239,14 +239,36 @@ describe('HEIDI Self-Sufficiency PRODUCTION Qualification', () => {
     const orchestrator = new HeidiOrchestrator();
     const health = await orchestrator.getCapabilityHealth();
 
-    // If CognitiveCore is initialized, this should return real data
-    if (health.available) {
-      expect(health.summary).not.toBeNull();
-      expect(health.summary!.total).toBeGreaterThan(0);
-      expect(health.readyCapabilities).toBeDefined();
-      expect(health.blockedCapabilities).toBeDefined();
-      expect(health.repairHistory).toBeDefined();
-    }
+    // getCapabilityHealth() must lazily initialize the orchestrator's own
+    // CognitiveCore singleton (via getCognitiveCore()) rather than only
+    // reporting on one that something else already booted. This is the
+    // actual code path /api/status hits — not the DB_CONFIG-wired core
+    // built in beforeAll() above.
+    expect(health.available).toBe(true);
+    expect(health.error).toBeNull();
+    expect(health.summary).not.toBeNull();
+    expect(health.summary!.total).toBeGreaterThan(0);
+    expect(health.readyCapabilities).toBeDefined();
+    expect(health.blockedCapabilities).toBeDefined();
+    expect(health.repairHistory).toBeDefined();
+  }, 30000);
+
+  test('16b. Orchestrator real singleton includes system.database capability (regression: dbConfig must reach the production build path)', async () => {
+    // Regression test for a real production gap: CognitiveCoreBuilder only
+    // registers the system.database probe + repair handler when dbConfig is
+    // explicitly passed. lib/orchestrator.ts's getCognitiveCore() used to
+    // call buildCognitiveCore() without dbConfig at all, so /api/status
+    // never reported database health or could self-repair the database —
+    // even though the 27-test "production qualification" suite passed,
+    // because it built its own CognitiveCoreBuilder({ dbConfig: DB_CONFIG })
+    // directly and never exercised getCognitiveCore()/HeidiOrchestrator.
+    const orchestrator = new HeidiOrchestrator();
+    const health = await orchestrator.getCapabilityHealth();
+    expect(health.available).toBe(true);
+
+    const allCaps = [...health.readyCapabilities, ...health.blockedCapabilities];
+    const dbCap = allCaps.find((c) => c.capabilityId === 'system.database');
+    expect(dbCap).toBeDefined();
   }, 30000);
 
   test('17. Orchestrator.getCapabilityHealth() never exposes secrets', async () => {

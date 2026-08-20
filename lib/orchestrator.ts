@@ -89,6 +89,20 @@ async function getCognitiveCore(): Promise<CognitiveCore> {
     _cognitiveCoreInstanceId = `cc-${randomUUID()}`;
     _cognitiveCore = await buildCognitiveCore({
       supabase: getSupabase(),
+      // Without this, CognitiveCoreBuilder never registers the
+      // system.database capability probe or the database self-repair
+      // handler (both are gated on dbConfig being explicitly present),
+      // even though CognitiveCore's own internal pool connects fine via
+      // these same PG_* vars. Same host/port/database/user/password
+      // pattern already used by getRevenueDashboard() below and by
+      // CognitiveCore's own constructor default.
+      dbConfig: {
+        host: process.env.PG_HOST || '127.0.0.1',
+        port: parseInt(process.env.PG_PORT || '54322', 10),
+        database: process.env.PG_DATABASE || 'postgres',
+        user: process.env.PG_USER || 'postgres',
+        password: process.env.PG_PASSWORD || 'postgres',
+      },
       enableMetaCognition: true,
       enableDecisionResolver: true,
     });
@@ -525,10 +539,17 @@ export class HeidiOrchestrator {
     }>;
   }> {
     try {
-      if (!_cognitiveCore) {
+      // Lazily initialize CognitiveCore if this is the first call to touch
+      // it (e.g. /api/status hit before any chat request). Without this,
+      // capabilityHealth silently reports unavailable on every cold start
+      // until something else happens to call getCognitiveCore() first.
+      let core: CognitiveCore;
+      try {
+        core = await getCognitiveCore();
+      } catch (initError) {
         return {
           available: false,
-          error: 'CognitiveCore not initialized',
+          error: initError instanceof Error ? initError.message : 'CognitiveCore initialization failed',
           summary: null,
           readyCapabilities: [],
           blockedCapabilities: [],
@@ -537,7 +558,7 @@ export class HeidiOrchestrator {
       }
 
       // Access the bridge's CapabilityHealthManager
-      const bridge = _cognitiveCore.getBridge();
+      const bridge = core.getBridge();
       if (!bridge?.capabilityHealthManager) {
         return {
           available: false,
