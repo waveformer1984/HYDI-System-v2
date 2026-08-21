@@ -127,7 +127,7 @@ module.exports = {
       // which gives no chance for graceful shutdown. With
       // shutdown_with_message: true, PM2 calls proc.send('shutdown')
       // instead, which the launcher relays to the daemon via IPC.
-      // PM2 then waits up to kill_timeout (15s) for the process to exit
+      // PM2 then waits up to kill_timeout (50s) for the process to exit
       // on its own before falling back to SIGKILL.
       shutdown_with_message: true,
       autorestart: true,
@@ -148,9 +148,13 @@ module.exports = {
       // kill_timeout timer starts, so it is NOT part of the budget.
       //
       // Measured IPC delivery delay (20-sample distribution test, 5s
-      // interval stress test):
+      // interval stress test, 500ms polling):
       //   idle:   p50=3839ms, p95=5466ms, max=5466ms
       //   loaded: p50=4784ms, p95=5423ms, max=6024ms
+      // Measured total shutdown duration (10-sample re-test with 100ms
+      // polling fix):
+      //   idle:   p50=25144ms, p95=32902ms, max=32902ms
+      //   loaded: p50=24121ms, p95=31975ms, max=31975ms
       //
       // Budget (from PM2 message send to process exit):
       //   IPC delivery (max measured):       6024ms
@@ -160,8 +164,11 @@ module.exports = {
       //   Total worst case:                ~37224ms
       //
       // kill_timeout = 50000ms gives 12776ms margin (34.3% over worst
-      // case). This means `pm2 stop`/`restart` blocks for at most 50s
-      // (plus PM2's own 0-11s internal delay) in the worst case where a
+      // case). Per-condition margin with 100ms polling:
+      //   idle:   50000 - 38615 = 11385ms (29.5%)
+      //   loaded: 50000 - 37034 = 12966ms (35.0%)
+      // This means `pm2 stop`/`restart` blocks for at most 50s (plus
+      // PM2's own 0-11s internal delay) in the worst case where a
       // cognitive cycle is in flight. In normal operation (no in-flight
       // work), the daemon exits in <100ms.
       //
