@@ -290,6 +290,32 @@ async function runSelfSufficiencyCycle(core: CognitiveCore): Promise<{
     // 0. CREDENTIAL WATCH: Detect newly-resolved credentials before probing
     let credentialWatchResult: { newlyResolved: string[]; stillMissing: string[] } | null = null;
     try {
+      // 0a. DYNAMIC CREDENTIAL DETECTION: Re-read .env.local to detect
+      // credentials that the owner has added since daemon startup.
+      // This allows credential provisioning without a daemon restart.
+      // Only NEW keys are added — existing values are NOT overwritten.
+      // Secret values are never logged, printed, or stored in audit.
+      try {
+        const envPath = path.resolve(process.cwd(), '.env.local');
+        if (fs.existsSync(envPath)) {
+          const content = fs.readFileSync(envPath, 'utf8');
+          for (const line of content.split('\n')) {
+            const trimmed = line.trim();
+            if (!trimmed || trimmed.startsWith('#')) continue;
+            const eqIdx = trimmed.indexOf('=');
+            if (eqIdx < 0) continue;
+            const key = trimmed.slice(0, eqIdx).trim();
+            const value = trimmed.slice(eqIdx + 1).trim().replace(/^["']|["']$/g, '');
+            // Only set if not already in process.env (don't override runtime changes)
+            if (key && value && !process.env[key]) {
+              process.env[key] = value;
+            }
+          }
+        }
+      } catch {
+        // .env.local re-read is best effort — don't kill the daemon
+      }
+
       const { getCredentialRunbookRegistry } = await import('../lib/operational/CredentialRunbookRegistry');
       const registry = getCredentialRunbookRegistry();
       const newlyResolved = registry.getNewlyResolved();
