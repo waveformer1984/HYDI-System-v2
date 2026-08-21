@@ -98,15 +98,42 @@ export class SelfRepairEngine {
   // intervals — causing unbounded memory growth in the daemon.
   private lastRecordedByKey: Map<string, RepairAction> = new Map();
 
+  // ─── Cross-cycle flapping guardrail ───────────────────────────────
+  // Without this, two capabilities whose repair handlers perturb each
+  // other can oscillate indefinitely: each cycle does 1 repair (under
+  // the per-cycle cap), but the system never converges. The guardrail
+  // tracks repair attempts per capabilityId across cycles and stops
+  // auto-repairing after flappingThreshold repairs within
+  // flappingWindowCycles cycles, escalating instead.
+  private cycleCount: number = 0;
+  private flappingThreshold: number;
+  private flappingWindowCycles: number;
+  // Map<capabilityId, number[]> — cycle numbers when a repair was
+  // attempted for this capability. Used to detect flapping.
+  private repairCyclesByCapability: Map<string, number[]> = new Map();
+  // Set<capabilityId> — capabilities currently flagged as flapping.
+  // Cleared only by clearFlappingFlag() (e.g. after a manual reset or
+  // after the capability stays READY for flappingWindowCycles cycles).
+  private flappingCapabilities: Set<string> = new Set();
+
   constructor(options?: {
     maxAutoRepairsPerCycle?: number;
     onRepair?: Map<string, (capabilityId: string, procedure: string) => Promise<{ success: boolean; evidence: string }>>;
     maxHistoryEntries?: number;
+    /** Stop auto-repairing after this many repairs within flappingWindowCycles. Default: Infinity (disabled). */
+    flappingThreshold?: number;
+    /** Rolling window (in cycles) for flapping detection. Default: 10. */
+    flappingWindowCycles?: number;
   }) {
     this.blockerEngine = new BlockerResolutionEngine();
     this.maxAutoRepairsPerCycle = options?.maxAutoRepairsPerCycle || 5;
     this.repairHandlers = options?.onRepair || new Map();
     this.maxHistoryEntries = options?.maxHistoryEntries || 500;
+    // Default: flapping detection disabled (Infinity threshold) to
+    // preserve backward compatibility for existing callers that don't
+    // pass the new options. The daemon and tests opt in explicitly.
+    this.flappingThreshold = options?.flappingThreshold ?? Infinity;
+    this.flappingWindowCycles = options?.flappingWindowCycles ?? 10;
   }
 
   /**
@@ -140,6 +167,10 @@ export class SelfRepairEngine {
     let workedAround = 0;
     let autoRepairsThisCycle = 0;
 
+    // Increment the cross-cycle counter. This is used by the flapping
+    // guardrail to track repair frequency per capability over time.
+    this.cycleCount++;
+
     // OBSERVE: Get all blocked/unavailable/repairable capabilities
     const blockedReports = healthSummary.reports.filter(
       (r) => r.state === 'BLOCKED' || r.state === 'UNAVAILABLE' || r.state === 'REPAIRABLE',
@@ -160,6 +191,18 @@ export class SelfRepairEngine {
       if (autoRepairsThisCycle >= this.maxAutoRepairsPerCycle) {
         escalated++;
         repairs.push(this.createEscalatedRepair(report, 'Max auto-repairs per cycle reached'));
+        continue;
+      }
+
+      // Cross-cycle flapping guardrail: if this capability has already
+      // been flagged as flapping (too many repairs that didn't stick
+      // within the rolling window), stop auto-repairing and escalate.
+      // This catches the case where two capabilities perturb each
+      // other — each individual cycle stays under the per-cycle cap,
+      // but the system oscillates indefinitely across cycles.
+      if (this.flappingCapabilities.has(report.capabilityId)) {
+        escalated++;
+        repairs.push(this.createFlappingRepair(report));
         continue;
       }
 
@@ -208,6 +251,12 @@ export class SelfRepairEngine {
             repaired++;
             autoRepairsThisCycle++;
             this.blockerEngine.clearRetries(report.capabilityId);
+
+            // Record this repair cycle for flapping detection.
+            // If the capability has been repaired >= flappingThreshold
+            // times within flappingWindowCycles cycles, flag it as
+            // flapping so future cycles escalate instead of retrying.
+            this.recordRepairForFlapping(report.capabilityId);
           } else {
             escalated++;
           }
@@ -293,6 +342,7 @@ export class SelfRepairEngine {
   private isNonRepairAction(repair: RepairAction): boolean {
     return repair.plannedAction.startsWith('WORK_AROUND') ||
            repair.plannedAction.startsWith('ESCALATE') ||
+           repair.plannedAction.startsWith('FLAPPING') ||
            repair.plannedAction === 'REFUSE';
   }
 
@@ -305,6 +355,84 @@ export class SelfRepairEngine {
     return a.capabilityId === b.capabilityId &&
            a.plannedAction === b.plannedAction &&
            a.classification === b.classification;
+  }
+
+  // ─── Flapping guardrail helpers ──────────────────────────────────
+
+  /**
+   * Record a successful repair for a capability and check if it has
+   * exceeded the flapping threshold. If so, flag the capability as
+   * flapping so future cycles escalate instead of retrying.
+   *
+   * A "flapping" capability is one that has been repaired
+   * >= flappingThreshold times within the last flappingWindowCycles
+   * cycles. The fact that it needed repairing again means the previous
+   * repair didn't stick — likely because another capability's repair
+   * perturbed it, or the root cause wasn't actually fixed.
+   */
+  private recordRepairForFlapping(capabilityId: string): void {
+    if (this.flappingThreshold === Infinity) {
+      return; // Guardrail disabled
+    }
+
+    let cycles = this.repairCyclesByCapability.get(capabilityId);
+    if (!cycles) {
+      cycles = [];
+      this.repairCyclesByCapability.set(capabilityId, cycles);
+    }
+    cycles.push(this.cycleCount);
+
+    // Prune entries outside the rolling window
+    const windowStart = this.cycleCount - this.flappingWindowCycles;
+    while (cycles.length > 0 && cycles[0] < windowStart) {
+      cycles.shift();
+    }
+
+    // Check threshold
+    if (cycles.length >= this.flappingThreshold) {
+      this.flappingCapabilities.add(capabilityId);
+    }
+  }
+
+  /**
+   * Clear the flapping flag for a capability. Call this after a manual
+   * intervention or after the capability has stayed READY for
+   * flappingWindowCycles cycles.
+   */
+  clearFlappingFlag(capabilityId: string): void {
+    this.flappingCapabilities.delete(capabilityId);
+    this.repairCyclesByCapability.delete(capabilityId);
+  }
+
+  /**
+   * Get the set of capabilities currently flagged as flapping.
+   */
+  getFlappingCapabilities(): Set<string> {
+    return new Set(this.flappingCapabilities);
+  }
+
+  /**
+   * Create a repair action that records a flapping escalation — the
+   * capability was repaired too many times without sticking, so the
+   * engine is escalating instead of retrying.
+   */
+  private createFlappingRepair(report: CapabilityHealthReport): RepairAction {
+    return {
+      repairId: `repair_${Date.now()}_${Math.random().toString(36).substr(2, 8)}`,
+      capabilityId: report.capabilityId,
+      problem: report.evidence,
+      evidence: report.evidence,
+      classification: report.failureClassification,
+      riskLevel: 'R2',
+      plannedAction: `FLAPPING: Capability repaired >= ${this.flappingThreshold} times in ${this.flappingWindowCycles} cycles without converging — escalating to human`,
+      authorized: false,
+      authorizedBy: null,
+      executed: false,
+      verified: false,
+      verificationEvidence: null,
+      timestamp: new Date().toISOString(),
+      rollbackInfo: null,
+    };
   }
 
   /**

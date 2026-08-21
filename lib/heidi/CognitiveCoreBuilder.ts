@@ -370,7 +370,15 @@ export class CognitiveCoreBuilder {
     }
 
     if (this.opts.enableSelfSufficiency !== false && notOverridden('selfRepairEngine')) {
-      const sre = this.opts.selfRepairEngine || new SelfRepairEngine();
+      // Construct with flapping guardrail enabled: after 3 repairs to
+      // the same capability within 10 cycles that don't stick, stop
+      // auto-repairing and escalate. This prevents indefinite
+      // oscillation between capabilities that perturb each other.
+      // See tests/unit/heidi-self-repair-oscillation.test.ts.
+      const sre = this.opts.selfRepairEngine || new SelfRepairEngine({
+        flappingThreshold: 3,
+        flappingWindowCycles: 10,
+      });
 
       // Register real repair handler for database connectivity (R0)
       const dbCfg = this.opts.dbConfig;
