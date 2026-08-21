@@ -1876,7 +1876,7 @@ export class CognitiveCore {
         if (prospectId && expectedStatus) {
           try {
             const row = await this.pool.query<QueryResultRow>(
-              `SELECT id, status FROM revenue_prospects WHERE id = $1`,
+              `SELECT prospect_id, status FROM revenue_prospects WHERE prospect_id = $1`,
               [prospectId],
             );
             const actualStatus = row.rows.length > 0 ? row.rows[0].status as string : 'not found';
@@ -1906,7 +1906,7 @@ export class CognitiveCore {
         if (opportunityId) {
           try {
             const row = await this.pool.query<QueryResultRow>(
-              `SELECT id FROM revenue_opportunities WHERE id = $1`,
+              `SELECT opportunity_id FROM revenue_opportunities WHERE opportunity_id = $1`,
               [opportunityId],
             );
             return {

@@ -463,8 +463,8 @@ export class HeidiOrchestrator {
           pool.query('SELECT count(*) as cnt FROM revenue_prospects WHERE opted_out = false'),
           pool.query("SELECT count(*) as cnt FROM revenue_prospects WHERE status IN ('qualified', 'appointment', 'proposal_sent', 'won')"),
           pool.query("SELECT count(*) as cnt, COALESCE(sum(proposed_price), 0) as total_value FROM revenue_opportunities WHERE status = 'open'"),
-          pool.query('SELECT count(*) as cnt FROM customer_services WHERE status IN ("active", "provisioning")'),
-          pool.query('SELECT count(*) as cnt, COALESCE(sum(amount), 0) as total FROM revenue_ledger WHERE verified = true'),
+          pool.query("SELECT count(*) as cnt FROM customer_services WHERE status IN ('active', 'provisioning')"),
+          pool.query('SELECT count(*) as cnt, COALESCE(sum(amount_gross), 0) as total FROM revenue_ledger WHERE verified = true'),
         ]);
 
         const prospects = parseInt(prospectsRes.rows[0].cnt, 10);
