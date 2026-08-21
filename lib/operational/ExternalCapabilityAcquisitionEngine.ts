@@ -155,15 +155,16 @@ export class ExternalCapabilityAcquisitionEngine {
       const active = store.getActiveAuthorizations();
       // Convert to OwnerAuthorization format
       this.ownerAuthorizations = active.map((req: any) => ({
+        id: req.id,
         provider: req.provider,
-        commitmentTypes: req.requestedCommitments,
+        capabilityId: req.capabilityId,
+        authorizedCommitments: req.requestedCommitments,
         grantedAt: req.decidedAt || req.requestedAt,
         grantedBy: req.decidedBy || 'owner',
         expiresAt: req.expiresAt,
-        scope: {
-          capabilityId: req.capabilityId,
-          financialLimitCents: req.estimatedFinancialExposureCents,
-        },
+        revokedAt: null,
+        maxFinancialCommitmentCents: req.estimatedFinancialExposureCents,
+        currency: req.currency,
       }));
     } catch {
       // Store failure must not block the engine
@@ -250,7 +251,8 @@ export class ExternalCapabilityAcquisitionEngine {
         } else {
           // Authorization still incomplete.
           // Check if there's a pending request — if so, we're waiting.
-          // If not, we need to re-attempt to create one (e.g., after revocation).
+          // If not, check if the provider was DENIED (don't re-attempt).
+          // If not denied and not pending, re-attempt (e.g., after revocation cooldown).
           try {
             const { getOwnerAuthorizationStore } = await import('./OwnerAuthorizationStore');
             const store = getOwnerAuthorizationStore();
@@ -259,8 +261,17 @@ export class ExternalCapabilityAcquisitionEngine {
               // Still waiting for owner decision — reuse existing lifecycle
               return existing;
             }
-            // No pending request and no active authorization —
-            // fall through to re-attempt (will create a new pending request)
+            // Check if the provider was explicitly DENIED — don't re-attempt
+            const isDenied = store.getAllRequests().some(
+              (r) => r.provider === adapter.providerId && r.status === 'DENIED',
+            );
+            if (isDenied) {
+              // Owner explicitly denied — don't re-attempt
+              return existing;
+            }
+            // No pending request, no active authorization, not denied —
+            // fall through to re-attempt (will create a new pending request
+            // if revocation cooldown has expired)
           } catch {
             // Store failure — reuse existing lifecycle to be safe
             return existing;
@@ -683,14 +694,15 @@ export class ExternalCapabilityAcquisitionEngine {
       const memory = getOperationalMemoryStore();
       const histEventType = this.mapAuditToHistoryEvent(eventType);
 
-      // Check the last recorded event for this capability
-      const lastEvents = memory.getLastEvents(lifecycle.capabilityId, 1);
-      const lastEvent = lastEvents[0];
-      if (lastEvent &&
-          lastEvent.eventType === histEventType &&
-          lastEvent.state === lifecycle.currentState &&
-          lastEvent.reason === description) {
-        // Duplicate event — don't record again
+      // Check the last few recorded events for this capability.
+      // If the same eventType+state was already recorded recently,
+      // skip this one — it's a duplicate from the same cycle.
+      const lastEvents = memory.getLastEvents(lifecycle.capabilityId, 10);
+      const isDuplicate = lastEvents.some(
+        (e) => e.eventType === histEventType && e.state === lifecycle.currentState,
+      );
+      if (isDuplicate) {
+        // Already recorded this event type for this state — don't record again
         return;
       }
 
