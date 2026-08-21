@@ -137,18 +137,6 @@ export class DependencyAwareRestartExecutor {
     return this.healthChecks.has(target);
   }
 
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
-    try {
-      const response = await fetch(healthUrl, { signal: controller.signal });
-      return response.ok;
-    } catch {
-      return false;
-    } finally {
-      clearTimeout(timer);
-    }
-  }
-
   /**
    * Execute a governed restart of a service.
    *

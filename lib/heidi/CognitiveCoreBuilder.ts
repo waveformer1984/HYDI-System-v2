@@ -366,21 +366,24 @@ export class CognitiveCoreBuilder {
       // verification using the CapabilityHealthManager — repairs are
       // only marked verified if BOTH the handler returns success AND
       // the independent health check confirms the capability is healthy.
-      const chmForVerify = this.opts.capabilityHealthManager || chm;
+      const chmForVerify = this.opts.capabilityHealthManager
+        || (bridge.capabilityHealthManager as unknown as { checkCapability: (id: string) => Promise<any> } | undefined);
       const sre = this.opts.selfRepairEngine || new SelfRepairEngine({
         flappingThreshold: 3,
         flappingWindowCycles: 10,
-        verifyRepair: async (capabilityId: string) => {
-          try {
-            const report = await chmForVerify.checkCapability(capabilityId);
-            if (report && report.state === 'READY') {
-              return { healthy: true, evidence: report.evidence };
+        verifyRepair: chmForVerify
+          ? async (capabilityId: string) => {
+              try {
+                const report = await chmForVerify.checkCapability(capabilityId);
+                if (report && report.state === 'READY') {
+                  return { healthy: true, evidence: report.evidence };
+                }
+                return { healthy: false, evidence: report ? `State: ${report.state} — ${report.evidence}` : 'No report' };
+              } catch (error) {
+                return { healthy: false, evidence: `Verification threw: ${error instanceof Error ? error.message : 'unknown'}` };
+              }
             }
-            return { healthy: false, evidence: report ? `State: ${report.state} — ${report.evidence}` : 'No report' };
-          } catch (error) {
-            return { healthy: false, evidence: `Verification threw: ${error instanceof Error ? error.message : 'unknown'}` };
-          }
-        },
+          : undefined,
       });
 
       // Register real repair handler for database connectivity (R0)
