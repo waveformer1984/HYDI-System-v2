@@ -271,14 +271,48 @@ function rotateAuditFile(): void {
 async function runSelfSufficiencyCycle(core: CognitiveCore): Promise<{
   capabilityHealth: { total: number; ready: number; blocked: number; unavailable: number } | null;
   selfRepairResult: { totalIssues: number; repaired: number; escalated: number; workedAround: number; refused: number } | null;
+  credentialWatchResult: { newlyResolved: string[]; stillMissing: string[] } | null;
 }> {
   const bridge = core.getBridge();
 
   if (!bridge.capabilityHealthManager) {
-    return { capabilityHealth: null, selfRepairResult: null };
+    return { capabilityHealth: null, selfRepairResult: null, credentialWatchResult: null };
   }
 
   try {
+    // 0. CREDENTIAL WATCH: Detect newly-resolved credentials before probing
+    let credentialWatchResult: { newlyResolved: string[]; stillMissing: string[] } | null = null;
+    try {
+      const { getCredentialRunbookRegistry } = await import('../lib/operational/CredentialRunbookRegistry');
+      const registry = getCredentialRunbookRegistry();
+      const newlyResolved = registry.getNewlyResolved();
+      const missing = registry.getMissingCredentialRunbooks();
+
+      if (newlyResolved.length > 0) {
+        console.log(`[daemon] 📤 Credential resolution detected: ${newlyResolved.join(', ')} — triggering re-verification`);
+        // Force re-check of the resolved capabilities
+        for (const key of newlyResolved) {
+          const runbook = registry.getRunbook(key);
+          if (runbook) {
+            try {
+              await bridge.capabilityHealthManager.checkCapability(runbook.capabilityId);
+              console.log(`[daemon] ✅ Re-verified ${runbook.capabilityId} after credential resolution`);
+            } catch (e) {
+              console.error(`[daemon] Re-verification of ${runbook.capabilityId} failed: ${e instanceof Error ? e.message : 'unknown'}`);
+            }
+          }
+        }
+      }
+
+      credentialWatchResult = {
+        newlyResolved,
+        stillMissing: missing.map((m) => m.key),
+      };
+    } catch (watchError) {
+      // Credential watcher failure must not kill the daemon
+      console.error(`[daemon] Credential watcher failed: ${watchError instanceof Error ? watchError.message : 'unknown'}`);
+    }
+
     // 1. OBSERVE: Check all capabilities
     const summary = await bridge.capabilityHealthManager.checkAll() as any;
 
@@ -308,10 +342,10 @@ async function runSelfSufficiencyCycle(core: CognitiveCore): Promise<{
       }
     }
 
-    return { capabilityHealth, selfRepairResult };
+    return { capabilityHealth, selfRepairResult, credentialWatchResult };
   } catch (error) {
     console.error(`[daemon] Capability health check failed: ${error instanceof Error ? error.message : 'unknown'}`);
-    return { capabilityHealth: null, selfRepairResult: null };
+    return { capabilityHealth: null, selfRepairResult: null, credentialWatchResult: null };
   }
 }
 

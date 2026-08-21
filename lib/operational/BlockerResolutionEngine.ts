@@ -37,6 +37,7 @@ import type {
   CapabilityHealthState,
   BlockerClassification,
 } from './CapabilityHealthManager';
+import { getCredentialRunbookRegistry, type CredentialRunbook } from './CredentialRunbookRegistry';
 
 // ─── Types ───────────────────────────────────────────────────────────────
 
@@ -63,6 +64,10 @@ export interface BlockerResolution {
   nextHighestValueAction: string;
   reasoning: string;
   resolvedAt: string;
+  /** Actionable runbook for credential blockers (null for non-credential blockers) */
+  runbook: CredentialRunbook | null;
+  /** Human-readable escalation message with steps */
+  escalationMessage: string | null;
 }
 
 export interface BlockerResolutionResult {
@@ -209,8 +214,21 @@ export class BlockerResolutionEngine {
         break;
 
       case 'MISSING_EXTERNAL_CREDENTIAL':
-        resolutionAction = 'WORK_AROUND';
-        reasoning = `Missing external credential: ${report.requiredCredentials.join(', ')}. HEIDI must NOT fabricate credentials. Continuing with capabilities that do not depend on this credential.`;
+        // Check if the credential has been resolved since last cycle
+        const stillMissing = report.requiredCredentials.filter((c) => !process.env[c]);
+        if (stillMissing.length === 0) {
+          // Credential appeared! Mark for re-verification
+          resolutionAction = 'REPAIR_AUTONOMOUSLY';
+          reasoning = `Credential(s) ${report.requiredCredentials.join(', ')} now present in environment. Triggering re-verification of ${report.capabilityId}.`;
+        } else {
+          // Still missing — escalate with runbook, but continue working around
+          const runbookRegistry = getCredentialRunbookRegistry();
+          const escalationMessage = runbookRegistry.generateEscalationMessage(report.capabilityId);
+          const runbook = runbookRegistry.getRunbookForCapability(report.capabilityId);
+
+          resolutionAction = 'ESCALATE_TO_HUMAN';
+          reasoning = `Missing external credential: ${stillMissing.join(', ')}. HEIDI must NOT fabricate credentials. Escalating to human with runbook. Continuing with capabilities that do not depend on this credential.\n\n${escalationMessage || ''}`;
+        }
         break;
 
       case 'HUMAN_AUTHORIZATION_REQUIRED':
@@ -236,6 +254,15 @@ export class BlockerResolutionEngine {
     // Determine next highest-value action
     const nextAction = this.determineNextAction(report, resolutionAction, workaround);
 
+    // Generate runbook for credential blockers
+    const runbookRegistry = getCredentialRunbookRegistry();
+    const runbook = blocker === 'MISSING_EXTERNAL_CREDENTIAL'
+      ? runbookRegistry.getRunbookForCapability(report.capabilityId)
+      : null;
+    const escalationMessage = blocker === 'MISSING_EXTERNAL_CREDENTIAL'
+      ? runbookRegistry.generateEscalationMessage(report.capabilityId)
+      : null;
+
     return {
       capabilityId: report.capabilityId,
       blockerClassification: blocker,
@@ -250,6 +277,8 @@ export class BlockerResolutionEngine {
       nextHighestValueAction: nextAction,
       reasoning,
       resolvedAt: new Date().toISOString(),
+      runbook,
+      escalationMessage,
     };
   }
 

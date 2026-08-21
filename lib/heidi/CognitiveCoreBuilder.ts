@@ -45,6 +45,12 @@ import {
   createCredentialProbe,
   createCommercialProbe,
 } from '../operational/CapabilityHealthManager';
+import {
+  createStripeVerifyProbe,
+  createEmailVerifyProbe,
+  createGooglePlacesVerifyProbe,
+  createTwilioVerifyProbe,
+} from '../operational/EnhancedCredentialProbes';
 import { BlockerResolutionEngine } from '../operational/BlockerResolutionEngine';
 import { SelfRepairEngine, createDatabaseRepairHandler } from '../operational/SelfRepairEngine';
 
@@ -318,37 +324,17 @@ export class CognitiveCoreBuilder {
         credentialEnvVars: ['SUPABASE_URL'],
       }));
 
-      // Stripe credential probe
-      chm.registerProbe(createCredentialProbe({
-        capabilityId: 'commercial.stripe',
-        description: 'Stripe payment processing',
-        provider: 'stripe',
-        credentialEnvVars: ['STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET'],
-      }));
+      // Stripe credential probe (enhanced — verifies API key validity)
+      chm.registerProbe(createStripeVerifyProbe());
 
-      // Email credential probe
-      chm.registerProbe(createCredentialProbe({
-        capabilityId: 'commercial.email',
-        description: 'Email delivery (SendGrid or SMTP)',
-        provider: 'sendgrid',
-        credentialEnvVars: ['SENDGRID_API_KEY'],
-      }));
+      // Email credential probe (enhanced — verifies SendGrid or SMTP connectivity)
+      chm.registerProbe(createEmailVerifyProbe());
 
-      // External discovery credential probe
-      chm.registerProbe(createCredentialProbe({
-        capabilityId: 'commercial.discovery_external',
-        description: 'External prospect discovery (Google Places or Clearbit)',
-        provider: 'google_places',
-        credentialEnvVars: ['GOOGLE_PLACES_API_KEY'],
-      }));
+      // External discovery credential probe (enhanced — verifies Google Places API key)
+      chm.registerProbe(createGooglePlacesVerifyProbe());
 
-      // SMS credential probe
-      chm.registerProbe(createCredentialProbe({
-        capabilityId: 'commercial.sms',
-        description: 'SMS delivery (Twilio)',
-        provider: 'twilio',
-        credentialEnvVars: ['TWILIO_ACCOUNT_SID', 'TWILIO_AUTH_TOKEN', 'TWILIO_PHONE_NUMBER'],
-      }));
+      // SMS credential probe (enhanced — verifies Twilio credentials)
+      chm.registerProbe(createTwilioVerifyProbe());
 
       bridge.capabilityHealthManager = {
         checkAll: () => chm.checkAll(),

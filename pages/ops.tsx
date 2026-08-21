@@ -475,17 +475,199 @@ function AutonomyPanel({ status }: { status: StatusData | null }) {
         </div>
       </Section>
 
-      <Section title="Blocked Capabilities (require human action)">
-        {status.capabilityHealth?.blockedCapabilities.map(cap => (
-          <div key={cap.capabilityId} className="text-xs space-y-1 mb-3">
-            <div className="text-gray-300 font-mono">{cap.capabilityId}</div>
-            <div className="text-gray-500">{cap.evidence}</div>
-            {cap.requiredCredentials.length > 0 && (
-              <div className="text-gray-600">Required: {cap.requiredCredentials.join(', ')}</div>
-            )}
-          </div>
-        ))}
+      <Section title="Credential Runbooks (HEIDI needs these to unblock capabilities)">
+        <CredentialRunbooks />
       </Section>
+    </div>
+  )
+}
+
+// ─── Credential Runbooks Component ────────────────────────────────────────
+
+interface CredentialStatus {
+  key: string
+  capabilityId: string
+  service: string
+  provider: string
+  gates: string
+  priority: number
+  estimatedTime: string
+  cost: string
+  requiresCard: boolean
+  usesExistingAccount: boolean
+  signupUrl: string
+  status: 'missing' | 'partial' | 'ready'
+  missingVars: string[]
+  setVars: string[]
+  firstSeenMissing: string | null
+  resolvedAt: string | null
+  steps: { step: number; action: string; expected: string; requiresHumanInput: boolean; url?: string }[]
+  verification: { description: string; checkType: string }
+  alternatives: { description: string; envVars: string[] }[]
+}
+
+function CredentialRunbooks() {
+  const [credentials, setCredentials] = useState<CredentialStatus[]>([])
+  const [expandedKey, setExpandedKey] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let mounted = true
+    const fetchCreds = async () => {
+      try {
+        const res = await fetch('/api/credentials')
+        if (res.ok) {
+          const data = await res.json()
+          if (mounted) setCredentials(data.credentials || [])
+        }
+      } catch { /* ignore */ }
+      if (mounted) setLoading(false)
+    }
+    fetchCreds()
+    const interval = setInterval(fetchCreds, 10000)
+    return () => { mounted = false; clearInterval(interval) }
+  }, [])
+
+  if (loading) return <div className="text-xs text-gray-600">Loading credential status...</div>
+  if (credentials.length === 0) return <div className="text-xs text-gray-600">No credential runbooks available.</div>
+
+  const statusColors: Record<string, string> = {
+    ready: 'text-emerald-400',
+    partial: 'text-amber-400',
+    missing: 'text-red-400',
+  }
+
+  const statusBg: Record<string, string> = {
+    ready: 'bg-emerald-500/10 border-emerald-500/20',
+    partial: 'bg-amber-500/10 border-amber-500/20',
+    missing: 'bg-red-500/10 border-red-500/20',
+  }
+
+  const priorityLabels: Record<number, string> = {
+    1: 'HIGHEST — gates revenue',
+    2: 'high — gates outreach',
+    3: 'medium — gates auto-discovery',
+    4: 'low — email covers same job',
+  }
+
+  return (
+    <div className="space-y-3">
+      {credentials.map((cred) => (
+        <div key={cred.key} className={`border rounded-lg p-3 ${statusBg[cred.status]}`}>
+          <div
+            className="flex items-center justify-between cursor-pointer"
+            onClick={() => setExpandedKey(expandedKey === cred.key ? null : cred.key)}
+          >
+            <div className="flex items-center gap-2">
+              <span className={`text-xs font-semibold ${statusColors[cred.status]}`}>
+                {cred.status === 'ready' ? '✓' : cred.status === 'partial' ? '◐' : '✗'}
+              </span>
+              <span className="text-sm text-gray-200 font-medium">{cred.service}</span>
+              <span className="text-[10px] text-gray-600">P{cred.priority}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className={`text-[10px] ${statusColors[cred.status]}`}>{cred.status.toUpperCase()}</span>
+              <span className="text-gray-600 text-xs">{expandedKey === cred.key ? '▼' : '▶'}</span>
+            </div>
+          </div>
+
+          {cred.status !== 'ready' && (
+            <div className="mt-1.5 text-[11px] text-gray-500">
+              {cred.gates}
+            </div>
+          )}
+
+          {cred.status === 'ready' && cred.resolvedAt && (
+            <div className="mt-1.5 text-[11px] text-emerald-400/60">
+              Resolved at {new Date(cred.resolvedAt).toLocaleString()}
+            </div>
+          )}
+
+          {expandedKey === cred.key && (
+            <div className="mt-3 space-y-3 text-xs">
+              {/* Status details */}
+              <div className="space-y-1">
+                <div className="text-gray-400">
+                  <span className="text-gray-600">Priority:</span> {priorityLabels[cred.priority] || `P${cred.priority}`}
+                </div>
+                <div className="text-gray-400">
+                  <span className="text-gray-600">Time:</span> {cred.estimatedTime}
+                </div>
+                <div className="text-gray-400">
+                  <span className="text-gray-600">Cost:</span> {cred.cost}
+                </div>
+                <div className="text-gray-400">
+                  <span className="text-gray-600">Card required:</span> {cred.requiresCard ? 'Yes' : 'No'}
+                </div>
+                {cred.status !== 'ready' && (
+                  <div className="text-gray-400">
+                    <span className="text-gray-600">Missing env vars:</span>{' '}
+                    <span className="font-mono text-red-400/80">{cred.missingVars.join(', ')}</span>
+                  </div>
+                )}
+                {cred.setVars.length > 0 && (
+                  <div className="text-gray-400">
+                    <span className="text-gray-600">Set env vars:</span>{' '}
+                    <span className="font-mono text-emerald-400/80">{cred.setVars.join(', ')}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Steps */}
+              {cred.status !== 'ready' && (
+                <div>
+                  <div className="text-gray-500 font-medium mb-1.5">Steps to resolve:</div>
+                  <ol className="space-y-2">
+                    {cred.steps.map((step) => (
+                      <li key={step.step} className="text-gray-400 pl-1">
+                        <div>
+                          <span className="text-gray-600">{step.step}.</span> {step.action}
+                          {step.requiresHumanInput && (
+                            <span className="ml-1.5 text-[9px] text-amber-400/60 border border-amber-400/20 rounded px-1">HUMAN</span>
+                          )}
+                        </div>
+                        {step.url && (
+                          <a href={step.url} target="_blank" rel="noopener noreferrer" className="text-violet-400/60 hover:text-violet-400 text-[11px] ml-3">
+                            {step.url}
+                          </a>
+                        )}
+                        <div className="text-gray-600 text-[11px] ml-3">→ {step.expected}</div>
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+              )}
+
+              {/* Verification */}
+              <div className="text-gray-500 border-t border-white/[0.04] pt-2">
+                <span className="text-gray-600">Verification:</span> {cred.verification.description}
+              </div>
+
+              {/* Alternatives */}
+              {cred.alternatives.length > 0 && (
+                <div className="text-gray-500">
+                  <div className="text-gray-600 mb-1">Alternatives:</div>
+                  {cred.alternatives.map((alt, i) => (
+                    <div key={i} className="text-gray-400 text-[11px]">• {alt.description}</div>
+                  ))}
+                </div>
+              )}
+
+              {/* Signup link */}
+              {cred.status !== 'ready' && (
+                <a
+                  href={cred.signupUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-block text-xs text-violet-400 hover:text-violet-300 border border-violet-500/20 rounded-lg px-3 py-1.5"
+                >
+                  Open {cred.service} →
+                </a>
+              )}
+            </div>
+          )}
+        </div>
+      ))}
     </div>
   )
 }
