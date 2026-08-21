@@ -223,6 +223,12 @@ interface CycleAuditRecord {
     workedAround: number;
     refused: number;
   } | null;
+  acquisitionResult?: {
+    attempted: number;
+    resolved: number;
+    escalated: number;
+    states: Record<string, string>;
+  } | null;
   error?: string;
   durationMs?: number;
 }
@@ -272,11 +278,12 @@ async function runSelfSufficiencyCycle(core: CognitiveCore): Promise<{
   capabilityHealth: { total: number; ready: number; blocked: number; unavailable: number } | null;
   selfRepairResult: { totalIssues: number; repaired: number; escalated: number; workedAround: number; refused: number } | null;
   credentialWatchResult: { newlyResolved: string[]; stillMissing: string[] } | null;
+  acquisitionResult: { attempted: number; resolved: number; escalated: number; states: Record<string, string> } | null;
 }> {
   const bridge = core.getBridge();
 
   if (!bridge.capabilityHealthManager) {
-    return { capabilityHealth: null, selfRepairResult: null, credentialWatchResult: null };
+    return { capabilityHealth: null, selfRepairResult: null, credentialWatchResult: null, acquisitionResult: null };
   }
 
   try {
@@ -342,10 +349,45 @@ async function runSelfSufficiencyCycle(core: CognitiveCore): Promise<{
       }
     }
 
-    return { capabilityHealth, selfRepairResult, credentialWatchResult };
+    // 3. ACQUIRE: Run acquisition engine for blocked external capabilities
+    let acquisitionResult: { attempted: number; resolved: number; escalated: number; states: Record<string, string> } | null = null;
+    try {
+      const { getAcquisitionEngine } = await import('../lib/operational/ExternalCapabilityAcquisitionEngine');
+      const engine = getAcquisitionEngine();
+      const blockedCaps = (summary.reports || []).filter((r: any) => r.state === 'BLOCKED' && r.failureClassification === 'MISSING_EXTERNAL_CREDENTIAL');
+
+      if (blockedCaps.length > 0) {
+        const states: Record<string, string> = {};
+        let resolved = 0;
+        let escalated = 0;
+
+        for (const cap of blockedCaps) {
+          try {
+            const lifecycle = await engine.resolveCapability(cap.capabilityId);
+            states[cap.capabilityId] = lifecycle.currentState;
+            if (lifecycle.currentState === 'READY') {
+              resolved++;
+              console.log(`[daemon] 🎉 Capability acquired: ${cap.capabilityId} → READY`);
+            } else if (lifecycle.currentState === 'POLICY_BLOCKED' || lifecycle.currentState === 'BLOCKED') {
+              escalated++;
+            }
+          } catch (e) {
+            states[cap.capabilityId] = 'ACQUISITION_FAILED';
+            console.error(`[daemon] Acquisition of ${cap.capabilityId} failed: ${e instanceof Error ? e.message : 'unknown'}`);
+          }
+        }
+
+        acquisitionResult = { attempted: blockedCaps.length, resolved, escalated, states };
+      }
+    } catch (acqError) {
+      // Acquisition engine failure must not kill the daemon
+      console.error(`[daemon] Acquisition engine failed: ${acqError instanceof Error ? acqError.message : 'unknown'}`);
+    }
+
+    return { capabilityHealth, selfRepairResult, credentialWatchResult, acquisitionResult };
   } catch (error) {
     console.error(`[daemon] Capability health check failed: ${error instanceof Error ? error.message : 'unknown'}`);
-    return { capabilityHealth: null, selfRepairResult: null, credentialWatchResult: null };
+    return { capabilityHealth: null, selfRepairResult: null, credentialWatchResult: null, acquisitionResult: null };
   }
 }
 
@@ -581,6 +623,7 @@ async function main(): Promise<void> {
         cycleCount: core.getLoopStatus().cycleCount,
         capabilityHealth: result.capabilityHealth || undefined,
         selfRepairResult: result.selfRepairResult || undefined,
+        acquisitionResult: result.acquisitionResult || undefined,
         durationMs,
       });
 
@@ -590,6 +633,12 @@ async function main(): Promise<void> {
       }
       if (result.selfRepairResult && result.selfRepairResult.refused > 0) {
         console.log(`[daemon] [${cycleId}] Refused ${result.selfRepairResult.refused} protected-asset repair(s)`);
+      }
+      if (result.acquisitionResult && result.acquisitionResult.resolved > 0) {
+        console.log(`[daemon] [${cycleId}] Acquired ${result.acquisitionResult.resolved} capability(s) — now READY`);
+      }
+      if (result.acquisitionResult && result.acquisitionResult.escalated > 0) {
+        console.log(`[daemon] [${cycleId}] Escalated ${result.acquisitionResult.escalated} capability acquisition(s) — require human action`);
       }
       if (result.selfRepairResult && result.selfRepairResult.escalated > 0) {
         console.log(`[daemon] [${cycleId}] Escalated ${result.selfRepairResult.escalated} blocker(s) to human`);
