@@ -24,7 +24,10 @@ type FailureType =
   | 'provider_timeout'
   | 'provider_500'
   | 'authorization_denied'
-  | 'verification_failure';
+  | 'verification_failure'
+  | 'stale_state'
+  | 'ollama_stop'
+  | 'daemon_audit_corruption';
 
 interface FailureResult {
   failure: FailureType;
@@ -33,6 +36,13 @@ interface FailureResult {
   evidence: string;
   reversible: boolean;
   rollback: string;
+  testId?: string;
+  timestamp?: string;
+  target?: string;
+  expectedFailureClass?: string;
+  expectedRecoveryStrategy?: string;
+  authorizationRequired?: string;
+  verificationCondition?: string;
 }
 
 const FAILURES: Record<FailureType, { description: string; inject: () => Promise<FailureResult>; rollback: () => Promise<void> }> = {
@@ -221,6 +231,180 @@ const FAILURES: Record<FailureType, { description: string; inject: () => Promise
     },
     rollback: async () => {},
   },
+  stale_state: {
+    description: 'Create a stale runtime artifact that HEIDI should detect and clear',
+    inject: async () => {
+      const testId = `stale_${Date.now()}`;
+      const timestamp = new Date().toISOString();
+      const stateDir = path.resolve(process.cwd(), '.hydi-operational');
+      if (!fs.existsSync(stateDir)) {
+        fs.mkdirSync(stateDir, { recursive: true });
+      }
+      const statePath = path.join(stateDir, 'stale-runtime-state.json');
+      const staleContent = JSON.stringify({
+        testId,
+        timestamp,
+        stale: true,
+        corrupted: true,
+        createdAt: timestamp,
+      });
+      fs.writeFileSync(statePath, staleContent);
+      return {
+        failure: 'stale_state',
+        injected: true,
+        description: 'Created stale runtime artifact at .hydi-operational/stale-runtime-state.json',
+        evidence: `Stale state artifact written (${staleContent.length} bytes) with testId=${testId}`,
+        reversible: true,
+        rollback: 'Delete .hydi-operational/stale-runtime-state.json',
+        testId,
+        timestamp,
+        target: 'system.runtime_state',
+        expectedFailureClass: 'CORRUPTED_RECOVERABLE_RUNTIME_STATE',
+        expectedRecoveryStrategy: 'Clear stale state artifact and verify absence',
+        authorizationRequired: 'R0',
+        verificationCondition: 'Artifact file does not exist after repair',
+      };
+    },
+    rollback: async () => {
+      const statePath = path.resolve(process.cwd(), '.hydi-operational', 'stale-runtime-state.json');
+      if (fs.existsSync(statePath)) {
+        fs.unlinkSync(statePath);
+      }
+    },
+  },
+  ollama_stop: {
+    description: 'Stop the Ollama service to test real recovery (if running)',
+    inject: async () => {
+      const testId = `ollama_stop_${Date.now()}`;
+      const timestamp = new Date().toISOString();
+      const ollamaUrl = process.env.LOCAL_MODEL_URL || 'http://localhost:11434';
+
+      // Check if Ollama is currently running
+      let wasRunning = false;
+      try {
+        const response = await fetch(ollamaUrl, { signal: AbortSignal.timeout(3000) });
+        wasRunning = response.ok;
+      } catch {
+        wasRunning = false;
+      }
+
+      if (!wasRunning) {
+        return {
+          failure: 'ollama_stop',
+          injected: false,
+          description: 'Ollama not running — nothing to stop',
+          evidence: `Ollama not reachable at ${ollamaUrl} — no failure injected`,
+          reversible: true,
+          rollback: 'N/A — Ollama was not running',
+          testId,
+          timestamp,
+          target: 'system.local_model',
+          expectedFailureClass: 'INFRASTRUCTURE_RUNTIME_PROBLEM',
+          expectedRecoveryStrategy: 'Restart Ollama via ollama serve',
+          authorizationRequired: 'R0',
+          verificationCondition: 'Ollama responds at configured URL with HTTP 200',
+        };
+      }
+
+      // Stop Ollama — on Windows, use taskkill; on Unix, use pkill
+      const { exec } = await import('child_process');
+      const { promisify } = await import('util');
+      const execAsync = promisify(exec);
+      try {
+        if (process.platform === 'win32') {
+          await execAsync('taskkill /F /IM ollama.exe', { timeout: 5000 });
+        } else {
+          await execAsync('pkill -f "ollama serve"', { timeout: 5000 });
+        }
+      } catch {
+        // Kill might fail if process already exited
+      }
+
+      // Verify Ollama is actually stopped
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      let stopped = true;
+      try {
+        const response = await fetch(ollamaUrl, { signal: AbortSignal.timeout(3000) });
+        stopped = !response.ok;
+      } catch {
+        stopped = true;
+      }
+
+      return {
+        failure: 'ollama_stop',
+        injected: stopped,
+        description: 'Stopped the Ollama service',
+        evidence: stopped
+          ? `Ollama stopped successfully — was running at ${ollamaUrl}, now unreachable`
+          : `Ollama still running at ${ollamaUrl} — stop failed`,
+        reversible: true,
+        rollback: 'Restart Ollama with: ollama serve',
+        testId,
+        timestamp,
+        target: 'system.local_model',
+        expectedFailureClass: 'INFRASTRUCTURE_RUNTIME_PROBLEM',
+        expectedRecoveryStrategy: 'Restart Ollama via ollama serve',
+        authorizationRequired: 'R0',
+        verificationCondition: 'Ollama responds at configured URL with HTTP 200',
+      };
+    },
+    rollback: async () => {
+      // Restart Ollama
+      const { exec } = await import('child_process');
+      const { promisify } = await import('util');
+      const execAsync = promisify(exec);
+      try {
+        if (process.platform === 'win32') {
+          await execAsync('start /B ollama serve', { timeout: 5000 });
+        } else {
+          await execAsync('nohup ollama serve > /dev/null 2>&1 &', { timeout: 5000 });
+        }
+      } catch {
+        // Best effort
+      }
+    },
+  },
+  daemon_audit_corruption: {
+    description: 'Append a corrupted record to the daemon audit file',
+    inject: async () => {
+      const testId = `audit_corr_${Date.now()}`;
+      const timestamp = new Date().toISOString();
+      const auditPath = path.resolve(process.cwd(), '.heidi-daemon-audit.jsonl');
+      const corruptedLine = `{ "corrupted": true, "testId": "${testId}", "invalid": }`;
+      fs.appendFileSync(auditPath, corruptedLine + '\n');
+      return {
+        failure: 'daemon_audit_corruption',
+        injected: true,
+        description: 'Appended corrupted JSON line to .heidi-daemon-audit.jsonl',
+        evidence: `Corrupted line appended with testId=${testId} — file may need cleanup`,
+        reversible: true,
+        rollback: 'Remove the last corrupted line from .heidi-daemon-audit.jsonl',
+        testId,
+        timestamp,
+        target: 'system.audit_trail',
+        expectedFailureClass: 'CORRUPTED_RECOVERABLE_RUNTIME_STATE',
+        expectedRecoveryStrategy: 'Remove corrupted audit record',
+        authorizationRequired: 'R0',
+        verificationCondition: 'Audit file contains only valid JSON lines',
+      };
+    },
+    rollback: async () => {
+      // Remove corrupted lines (lines that fail JSON.parse)
+      const auditPath = path.resolve(process.cwd(), '.heidi-daemon-audit.jsonl');
+      if (!fs.existsSync(auditPath)) return;
+      const lines = fs.readFileSync(auditPath, 'utf8').split('\n').filter((l) => l.trim());
+      const validLines: string[] = [];
+      for (const line of lines) {
+        try {
+          JSON.parse(line);
+          validLines.push(line);
+        } catch {
+          // Skip corrupted lines
+        }
+      }
+      fs.writeFileSync(auditPath, validLines.join('\n') + '\n');
+    },
+  },
 };
 
 async function main() {
@@ -268,6 +452,12 @@ async function main() {
   console.log(`  Evidence: ${result.evidence}`);
   console.log(`  Reversible: ${result.reversible}`);
   console.log(`  Rollback: ${result.rollback}`);
+  if (result.testId) console.log(`  Test ID: ${result.testId}`);
+  if (result.target) console.log(`  Target: ${result.target}`);
+  if (result.expectedFailureClass) console.log(`  Expected failure class: ${result.expectedFailureClass}`);
+  if (result.expectedRecoveryStrategy) console.log(`  Expected recovery: ${result.expectedRecoveryStrategy}`);
+  if (result.authorizationRequired) console.log(`  Authorization: ${result.authorizationRequired}`);
+  if (result.verificationCondition) console.log(`  Verification: ${result.verificationCondition}`);
   console.log('');
 
   // Machine-readable output
