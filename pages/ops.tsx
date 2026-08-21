@@ -567,8 +567,10 @@ function ChatPanel() {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [waitTime, setWaitTime] = useState(0)
   const [sessionId] = useState(() => `ops-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const waitTimerRef = useRef<NodeJS.Timeout | null>(null)
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -595,6 +597,8 @@ function ChatPanel() {
     setMessages(prev => [...prev, userMsg, assistantMsg])
     setIsLoading(true)
     setInput('')
+    setWaitTime(0)
+    waitTimerRef.current = setInterval(() => setWaitTime(w => w + 1), 1000)
 
     try {
       const res = await fetch('/api/chat', {
@@ -654,6 +658,11 @@ function ChatPanel() {
       )
     } finally {
       setIsLoading(false)
+      setWaitTime(0)
+      if (waitTimerRef.current) {
+        clearInterval(waitTimerRef.current)
+        waitTimerRef.current = null
+      }
     }
   }, [isLoading, sessionId])
 
@@ -712,10 +721,18 @@ function ChatPanel() {
                         {msg.content}
                       </div>
                     ) : msg.isStreaming ? (
-                      <div className="flex gap-1 py-2">
-                        <span className="w-2 h-2 rounded-full bg-violet-400/60 animate-pulse" />
-                        <span className="w-2 h-2 rounded-full bg-violet-400/60 animate-pulse" style={{ animationDelay: '0.2s' }} />
-                        <span className="w-2 h-2 rounded-full bg-violet-400/60 animate-pulse" style={{ animationDelay: '0.4s' }} />
+                      <div className="py-2">
+                        <div className="flex gap-1 mb-1">
+                          <span className="w-2 h-2 rounded-full bg-violet-400/60 animate-pulse" />
+                          <span className="w-2 h-2 rounded-full bg-violet-400/60 animate-pulse" style={{ animationDelay: '0.2s' }} />
+                          <span className="w-2 h-2 rounded-full bg-violet-400/60 animate-pulse" style={{ animationDelay: '0.4s' }} />
+                        </div>
+                        {waitTime > 3 && (
+                          <div className="text-[10px] text-gray-600">
+                            HEIDI is thinking... {waitTime}s
+                            {waitTime > 15 && ' (local model is slow, falling back to deterministic response)'}
+                          </div>
+                        )}
                       </div>
                     ) : null}
                   </div>

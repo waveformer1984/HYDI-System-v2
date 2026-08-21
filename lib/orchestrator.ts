@@ -782,8 +782,9 @@ export class HeidiOrchestrator {
       await this.recordMemoryRetrieval(request.session_id, memoryContext.length > 0);
       memoryLookupDurationMs = Date.now() - memoryStart;
 
-      // 2. Build prompt with memory
-      const prompt = this.buildPrompt(request.message, memoryContext);
+      // 2. Build prompt with memory + live system context
+      const liveContext = await this.gatherLiveSystemContext();
+      const prompt = this.buildPrompt(request.message, memoryContext, liveContext);
       
       // 3. Generate response via ModelManager (metrics recorded here by orchestrator later)
       modelResponse = await this.modelManager.generateResponse(prompt, request.session_id, {
@@ -947,20 +948,100 @@ export class HeidiOrchestrator {
   }
 
   /**
-   * Build prompt with memory context
+   * Gather live system context for the chat prompt. This grounds HEIDI's
+   * responses in actual operational state rather than generic assumptions.
+   * Never throws — returns a partial context if any subsystem is unavailable.
    */
-  private buildPrompt(userMessage: string, memoryContext: string): string {
-    const systemPrompt = `You are Heidi, a production-grade conversational AI assistant.
+  private async gatherLiveSystemContext(): Promise<string> {
+    const parts: string[] = [];
+
+    try {
+      const daemon = this.getDaemonStatus();
+      if (daemon.running) {
+        parts.push(`Daemon: running, PID ${daemon.pid}, ${daemon.selfSufficiencyCycles} self-sufficiency cycles, started ${daemon.startedAt}`);
+        if (daemon.lastCapabilityHealth) {
+          const h = daemon.lastCapabilityHealth;
+          parts.push(`Capability health: ${h.ready} ready, ${h.blocked} blocked, ${h.unavailable} unavailable (of ${h.total} total)`);
+        }
+        if (daemon.lastSelfRepairResult) {
+          const r = daemon.lastSelfRepairResult;
+          parts.push(`Last self-repair: ${r.totalIssues} issues, ${r.workedAround} worked around, ${r.escalated} escalated`);
+        }
+      } else {
+        parts.push(`Daemon: not running`);
+      }
+    } catch { /* ignore */ }
+
+    try {
+      const cognitive = this.getCognitiveStatus();
+      if (cognitive.initialized) {
+        parts.push(`CognitiveCore: initialized, instance ${cognitive.instanceId}, ${cognitive.cycleCount} cycles, autonomy level ${cognitive.autonomyLevel}`);
+        if (cognitive.capabilitySummary) {
+          parts.push(`Capabilities: ${cognitive.capabilitySummary.total} total, ${cognitive.capabilitySummary.available} available, ${cognitive.capabilitySummary.unavailable} unavailable`);
+        }
+      }
+    } catch { /* ignore */ }
+
+    try {
+      const loop = this.getCognitiveLoopStatus();
+      if (loop) {
+        parts.push(`Cognitive loop: state=${loop.state}, killSwitch=${loop.killSwitchActive ? 'ACTIVE' : 'inactive'}`);
+      }
+    } catch { /* ignore */ }
+
+    try {
+      const health = await this.getCapabilityHealth();
+      if (health.available && health.blockedCapabilities.length > 0) {
+        const blocked = health.blockedCapabilities.map(c => `${c.capabilityId} (${c.evidence})`).join('; ');
+        parts.push(`Blocked capabilities: ${blocked}`);
+      }
+    } catch { /* ignore */ }
+
+    try {
+      const commercial = await this.getCommercialState();
+      const caps = [
+        `discovery=${commercial.discovery.state}`,
+        `email=${commercial.email.state}`,
+        `stripe=${commercial.stripe.state}`,
+        `sms=${commercial.sms.state}`,
+      ];
+      parts.push(`Commercial: ${caps.join(', ')}`);
+    } catch { /* ignore */ }
+
+    try {
+      const rd = await this.getRevenueDashboard();
+      if (rd.available) {
+        parts.push(`Revenue: ${rd.prospects} prospects, ${rd.opportunities} opportunities, ${rd.customers} customers, $${(rd.verifiedRevenueCents / 100).toFixed(2)} verified revenue`);
+      }
+    } catch { /* ignore */ }
+
+    // Static system context
+    parts.push(`Services: protoforge-core on port 3005, heidi-web on port 3000, heidi-mobile-chat on port 3006, Ollama on port 11434, Supabase DB on port 54322`);
+    parts.push(`ProtoForge: the policy/governance engine in the HYDI six-layer pipeline (Ingestion → RAW LEDGER → CASCADE → KILO → ProtoForge → Emission). Running as protoforge-core on port 3005. NOT related to Protocol Buffers or any external project of the same name.`);
+
+    return parts.join('\n');
+  }
+
+  /**
+   * Build prompt with memory context + live system context
+   */
+  private buildPrompt(userMessage: string, memoryContext: string, liveContext: string): string {
+    const systemPrompt = `You are HEIDI, the governed cognitive operator for the HYDI System v2. You are not a generic assistant — you are the actual operating intelligence of a running production system. You have access to live system state below. Answer questions about the system from that state, not from general knowledge.
 
 Rules:
 1. Always respond with valid JSON
 2. Use this exact structure: {"response": "your response", "actions": [{"type": "action_type", "payload": {}}]}
 3. Keep responses concise and helpful
 4. Only suggest actions that are genuinely useful
+5. When asked about system state, use the live context below — do not hallucinate
+6. ProtoForge is YOUR policy/governance engine, not an external tool
 
 Available actions: ${this.allowedActionTypes.join(', ')}
 
-${memoryContext ? `Context: ${memoryContext}` : ''}
+Live system context:
+${liveContext}
+
+${memoryContext ? `Memory context: ${memoryContext}` : ''}
 
 User message: ${userMessage}
 
