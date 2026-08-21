@@ -207,6 +207,63 @@ function makeMockBridge(): ExecutionBridge {
       async getPipelineMetrics() {
         return { total: 0, byStatus: {}, averageScore: 0, topScoring: 0, optedOut: 0 };
       },
+      async getProspect(prospectId) {
+        try {
+          const result = await dbClient.query('SELECT * FROM revenue_prospects WHERE prospect_id = $1 LIMIT 1', [prospectId]);
+          if (result.rows.length === 0) return null;
+          const row = result.rows[0];
+          return {
+            prospectId: row.prospect_id,
+            companyName: row.company_name,
+            contactName: row.contact_name || null,
+            contactEmail: row.contact_email || null,
+            contactPhone: row.contact_phone || null,
+            website: row.website || null,
+            industry: row.industry || null,
+            location: row.location || null,
+            source: row.source,
+            status: row.status,
+            icpScore: row.icp_score || 0,
+            icpFactors: typeof row.icp_factors === 'string' ? JSON.parse(row.icp_factors) : (row.icp_factors || {}),
+            suppressionList: row.suppression_list || false,
+            optedOut: row.opted_out || false,
+            lastContactedAt: row.last_contacted_at || null,
+            nextContactAt: row.next_contact_at || null,
+            contactCount: row.contact_count || 0,
+            assignedTo: row.assigned_to || null,
+            metadata: typeof row.metadata === 'string' ? JSON.parse(row.metadata) : (row.metadata || {}),
+            createdAt: row.created_at,
+            updatedAt: row.updated_at,
+          };
+        } catch {
+          return null;
+        }
+      },
+      async getOpportunity(opportunityId) {
+        try {
+          const result = await dbClient.query('SELECT * FROM revenue_opportunities WHERE opportunity_id = $1 LIMIT 1', [opportunityId]);
+          if (result.rows.length === 0) return null;
+          const row = result.rows[0];
+          return {
+            opportunityId: row.opportunity_id,
+            prospectId: row.prospect_id,
+            offerId: row.offer_id,
+            status: row.status,
+            proposedPrice: row.proposed_price || 0,
+            discountApplied: row.discount_applied || 0,
+            discountAuthorizedBy: row.discount_authorized_by || null,
+            proposalId: row.proposal_id || null,
+            customerId: row.customer_id || null,
+            estimatedValue: row.estimated_value || 0,
+            probability: row.probability || 0,
+            expectedCloseDate: row.expected_close_date || null,
+            createdAt: row.created_at,
+            updatedAt: row.updated_at,
+          };
+        } catch {
+          return null;
+        }
+      },
     },
     revenueLifecycle: {
       async startOnboarding(input) {

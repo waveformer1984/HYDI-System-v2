@@ -41,6 +41,8 @@ import {
   CapabilityExecutionContext,
   CapabilityExecutor,
 } from './CapabilityRegistry';
+import type { ProspectRecord, OpportunityRecord } from '../revenue/types';
+import { getOfferCatalog } from '../revenue/OfferCatalog';
 
 export type CognitivePhase =
   | 'perceive' | 'validate' | 'understand' | 'update_world_model'
@@ -233,8 +235,10 @@ export interface ExecutionBridge {
     identifyProspect: (input: { companyName: string; contactName?: string | null; contactEmail?: string | null; source: string; metadata?: Record<string, unknown> }) => Promise<unknown>;
     scoreProspect: (prospectId: string) => Promise<{ score: number; factors: Record<string, number>; reason: string }>;
     updateStatus: (prospectId: string, newStatus: string, context?: Record<string, unknown>) => Promise<unknown>;
-    createOpportunity: (input: { prospectId: string; offerId: string; estimatedValue?: number; probability?: number; expectedCloseDate?: string }) => Promise<unknown>;
+    createOpportunity: (input: { prospectId: string; offerId: string; proposedPrice?: number; estimatedValue?: number; probability?: number; expectedCloseDate?: string }) => Promise<unknown>;
     getPipelineMetrics: () => Promise<unknown>;
+    getProspect: (prospectId: string) => Promise<ProspectRecord | null>;
+    getOpportunity: (opportunityId: string) => Promise<OpportunityRecord | null>;
   } | null;
   revenueLifecycle?: {
     startOnboarding: (input: { customerId: string; offerId: string; stripeCustomerId?: string; configuration?: Record<string, unknown> }) => Promise<unknown>;
@@ -539,11 +543,33 @@ export class CognitiveCore {
         const offerId = params.offerId as string;
         if (!prospectId) return this.failResult('revenue.create_opportunity', 'Missing required param: prospectId');
         if (!offerId) return this.failResult('revenue.create_opportunity', 'Missing required param: offerId');
+
+        // Default proposedPrice and estimatedValue from the offer catalog
+        // when not explicitly provided by the caller.
+        let proposedPrice = params.proposedPrice as number | undefined;
+        let estimatedValue = params.estimatedValue as number | undefined;
+        let probability = params.probability as number | undefined;
+        if (proposedPrice === undefined || estimatedValue === undefined) {
+          const offer = getOfferCatalog().get(offerId as never);
+          if (offer) {
+            if (proposedPrice === undefined) proposedPrice = offer.setupPrice;
+            if (estimatedValue === undefined) estimatedValue = offer.setupPrice + offer.recurringPrice * 12;
+          }
+        }
+        // Default probability from ICP score if not provided
+        if (probability === undefined) {
+          const prospect = await pipeline.getProspect(prospectId);
+          if (prospect) {
+            probability = 0.3 + (prospect.icpScore / 100) * 0.4;
+          }
+        }
+
         const result = await pipeline.createOpportunity({
           prospectId,
           offerId: offerId as never,
-          estimatedValue: params.estimatedValue as number | undefined,
-          probability: params.probability as number | undefined,
+          proposedPrice,
+          estimatedValue,
+          probability,
           expectedCloseDate: params.expectedCloseDate as string | undefined,
         });
         return {
@@ -724,9 +750,35 @@ export class CognitiveCore {
         };
       });
       this.wireExecutor('commercial.prepare_outreach', async (params) => {
+        // Load prospect and opportunity by ID from the pipeline so they
+        // are properly typed ProspectRecord/OpportunityRecord objects
+        // (with camelCase fields), not raw snake_case DB rows.
+        const pipeline = this.bridge.revenuePipeline;
+        const prospectId = params.prospectId as string | undefined;
+        const opportunityId = params.opportunityId as string | undefined;
+
+        let prospect = params.prospect as ProspectRecord | undefined;
+        let opportunity = params.opportunity as OpportunityRecord | undefined;
+
+        if (pipeline && prospectId) {
+          const loaded = await pipeline.getProspect(prospectId);
+          if (loaded) prospect = loaded;
+        }
+        if (pipeline && opportunityId) {
+          const loaded = await pipeline.getOpportunity(opportunityId);
+          if (loaded) opportunity = loaded;
+        }
+
+        if (!prospect) {
+          return this.failResult('commercial.prepare_outreach', 'Missing required param: prospect or prospectId (could not load from pipeline)');
+        }
+        if (!opportunity) {
+          return this.failResult('commercial.prepare_outreach', 'Missing required param: opportunity or opportunityId (could not load from pipeline)');
+        }
+
         const draft = cw.prepareOutreachDraft(
-          params.prospect as any,
-          params.opportunity as any,
+          prospect,
+          opportunity,
           params.offerId as string,
           params.cognitiveCycleId as string,
           params.goalId as string,
@@ -743,9 +795,34 @@ export class CognitiveCore {
         };
       });
       this.wireExecutor('commercial.create_authorization_package', async (params) => {
+        // Load prospect and opportunity by ID from the pipeline so they
+        // are properly typed objects (with camelCase fields).
+        const pipeline = this.bridge.revenuePipeline;
+        const prospectId = params.prospectId as string | undefined;
+        const opportunityId = params.opportunityId as string | undefined;
+
+        let prospect = params.prospect as ProspectRecord | undefined;
+        let opportunity = params.opportunity as OpportunityRecord | undefined;
+
+        if (pipeline && prospectId) {
+          const loaded = await pipeline.getProspect(prospectId);
+          if (loaded) prospect = loaded;
+        }
+        if (pipeline && opportunityId) {
+          const loaded = await pipeline.getOpportunity(opportunityId);
+          if (loaded) opportunity = loaded;
+        }
+
+        if (!prospect) {
+          return this.failResult('commercial.create_authorization_package', 'Missing required param: prospect or prospectId');
+        }
+        if (!opportunity) {
+          return this.failResult('commercial.create_authorization_package', 'Missing required param: opportunity or opportunityId');
+        }
+
         const pkg = cw.createAuthorizationPackage(
-          params.prospect as any,
-          params.opportunity as any,
+          prospect,
+          opportunity,
           params.draft as any,
           params.goalId as string,
           params.cognitiveCycleId as string,

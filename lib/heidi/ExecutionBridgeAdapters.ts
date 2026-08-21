@@ -232,9 +232,14 @@ export function createRevenuePipelineBridge(
     },
     async createOpportunity(input) {
       return pipeline.createOpportunity(input as never);
-    },
-    async getPipelineMetrics() {
+    },    async getPipelineMetrics() {
       return pipeline.getPipelineMetrics();
+    },
+    async getProspect(prospectId) {
+      return pipeline.getProspect(prospectId);
+    },
+    async getOpportunity(opportunityId) {
+      return pipeline.getOpportunity(opportunityId);
     },
   };
 }

@@ -292,6 +292,14 @@ export class ProspectPipeline {
     return row ? this.rowToProspect(row) : null;
   }
 
+  async getOpportunity(opportunityId: string): Promise<OpportunityRecord | null> {
+    const row = await this.db.queryOne(
+      'SELECT * FROM revenue_opportunities WHERE opportunity_id = $1 LIMIT 1',
+      [opportunityId],
+    );
+    return row ? this.rowToOpportunity(row) : null;
+  }
+
   // -----------------------------------------------------------------------
   // Opportunity Management
   // -----------------------------------------------------------------------
