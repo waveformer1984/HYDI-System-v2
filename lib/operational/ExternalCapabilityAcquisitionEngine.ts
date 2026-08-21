@@ -44,6 +44,7 @@ import { getProviderAdapterRegistry, type ProviderAdapter, type AccountStateResu
 import { getAcquisitionGovernancePolicy } from './AcquisitionGovernancePolicy';
 import { getSecretManager } from './SecretManager';
 import { getDurableAcquisitionStore, type DurableAcquisitionStore } from './DurableAcquisitionStore';
+import { getOperationalMemoryStore } from './OperationalMemoryStore';
 
 // ─── Retry / Backoff ──────────────────────────────────────────────────────
 
@@ -139,6 +140,34 @@ export class ExternalCapabilityAcquisitionEngine {
    */
   setOwnerAuthorizations(authorizations: OwnerAuthorization[]): void {
     this.ownerAuthorizations = authorizations;
+  }
+
+  /**
+   * Refresh owner authorizations from the durable store.
+   * This is called at the start of each daemon cycle so HEIDI notices
+   * when the owner grants authorization without requiring a daemon restart.
+   */
+  refreshAuthorizationsFromStore(): void {
+    try {
+      const { getOwnerAuthorizationStore } = require('./OwnerAuthorizationStore');
+      const store = getOwnerAuthorizationStore();
+      store.cleanupExpired();
+      const active = store.getActiveAuthorizations();
+      // Convert to OwnerAuthorization format
+      this.ownerAuthorizations = active.map((req: any) => ({
+        provider: req.provider,
+        commitmentTypes: req.requestedCommitments,
+        grantedAt: req.decidedAt || req.requestedAt,
+        grantedBy: req.decidedBy || 'owner',
+        expiresAt: req.expiresAt,
+        scope: {
+          capabilityId: req.capabilityId,
+          financialLimitCents: req.estimatedFinancialExposureCents,
+        },
+      }));
+    } catch {
+      // Store failure must not block the engine
+    }
   }
 
   /**
@@ -581,6 +610,42 @@ export class ExternalCapabilityAcquisitionEngine {
     };
     lifecycle.auditRecords.push(record);
     this.onAuditEvent?.(record);
+
+    // Record to operational memory for long-term history
+    try {
+      const memory = getOperationalMemoryStore();
+      const histEventType = this.mapAuditToHistoryEvent(eventType);
+      memory.record({
+        capabilityId: lifecycle.capabilityId,
+        provider: lifecycle.provider,
+        eventType: histEventType,
+        state: lifecycle.currentState,
+        reason: description,
+        evidence: description,
+        retryCount: lifecycle.retryCount,
+        blocker: lifecycle.blocker || undefined,
+      });
+    } catch {
+      // Operational memory failure must not block the engine
+    }
+  }
+
+  private mapAuditToHistoryEvent(eventType: AcquisitionAuditEventType): 'OBSERVED' | 'ATTEMPTED' | 'BLOCKED' | 'POLICY_BLOCKED' | 'VERIFIED' | 'FAILED' | 'RECOVERED' | 'ESCALATED' | 'RESTARTED' | 'CIRCUIT_BREAKER_TRIPPED' | 'RETRY_SCHEDULED' {
+    switch (eventType) {
+      case 'CAPABILITY_DISCOVERED': return 'OBSERVED';
+      case 'BLOCKER_IDENTIFIED': return 'BLOCKED';
+      case 'ACQUISITION_STARTED': return 'ATTEMPTED';
+      case 'AUTHORIZATION_DENIED': return 'POLICY_BLOCKED';
+      case 'AUTHORIZATION_GRANTED': return 'ATTEMPTED';
+      case 'VERIFICATION_STARTED': return 'ATTEMPTED';
+      case 'CAPABILITY_QUALIFIED': return 'VERIFIED';
+      case 'CAPABILITY_READY': return 'VERIFIED';
+      case 'ACQUISITION_FAILED': return 'FAILED';
+      case 'CIRCUIT_BREAKER_TRIPPED': return 'CIRCUIT_BREAKER_TRIPPED';
+      case 'RETRY_SCHEDULED': return 'RETRY_SCHEDULED';
+      case 'SERVICE_RESTARTED': return 'RESTARTED';
+      default: return 'OBSERVED';
+    }
   }
 
   private classifyFailure(result: VerificationResult): FailureClass {

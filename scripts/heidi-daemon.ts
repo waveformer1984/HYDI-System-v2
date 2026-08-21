@@ -354,6 +354,11 @@ async function runSelfSufficiencyCycle(core: CognitiveCore): Promise<{
     try {
       const { getAcquisitionEngine } = await import('../lib/operational/ExternalCapabilityAcquisitionEngine');
       const engine = getAcquisitionEngine();
+
+      // Refresh authorizations from the durable store so HEIDI notices
+      // when the owner grants authorization without requiring a daemon restart
+      engine.refreshAuthorizationsFromStore();
+
       const blockedCaps = (summary.reports || []).filter((r: any) => r.state === 'BLOCKED' && r.failureClassification === 'MISSING_EXTERNAL_CREDENTIAL');
 
       if (blockedCaps.length > 0) {
