@@ -43,6 +43,31 @@ import { DEFAULT_SAFETY_LIMITS } from './CapabilityAcquisitionTypes';
 import { getProviderAdapterRegistry, type ProviderAdapter, type AccountStateResult, type VerificationResult } from './ProviderAdapters';
 import { getAcquisitionGovernancePolicy } from './AcquisitionGovernancePolicy';
 import { getSecretManager } from './SecretManager';
+import { getDurableAcquisitionStore, type DurableAcquisitionStore } from './DurableAcquisitionStore';
+
+// ─── Retry / Backoff ──────────────────────────────────────────────────────
+
+const DEFAULT_RETRY_POLICY: RetryPolicy = {
+  maxAttempts: 3,
+  initialDelayMs: 1000,
+  maxDelayMs: 30000,
+  backoffMultiplier: 2,
+  nonRetryableFailures: ['AUTHORIZATION_FAILURE', 'CREDENTIAL_FAILURE', 'CONFIGURATION_FAILURE'],
+};
+
+function computeBackoffDelay(attempt: number, policy: RetryPolicy): number {
+  const base = policy.initialDelayMs * Math.pow(policy.backoffMultiplier, attempt - 1);
+  const capped = Math.min(base, policy.maxDelayMs);
+  // Add jitter: ±25% of the capped delay
+  const jitter = capped * 0.25 * (Math.random() * 2 - 1);
+  return Math.max(0, Math.round(capped + jitter));
+}
+
+function shouldRetry(failureClass: FailureClass, attempt: number, policy: RetryPolicy): boolean {
+  if (attempt >= policy.maxAttempts) return false;
+  if (policy.nonRetryableFailures.includes(failureClass)) return false;
+  return true;
+}
 
 // ─── Acquisition Engine ───────────────────────────────────────────────────
 
@@ -57,6 +82,7 @@ export class ExternalCapabilityAcquisitionEngine {
   private providerRegistry = getProviderAdapterRegistry();
   private governancePolicy = getAcquisitionGovernancePolicy();
   private secretManager = getSecretManager();
+  private durableStore: DurableAcquisitionStore;
   private ownerAuthorizations: OwnerAuthorization[];
   private safetyLimits: AcquisitionSafetyLimits;
   private lifecycles: Map<string, AcquisitionLifecycle> = new Map();
@@ -65,12 +91,47 @@ export class ExternalCapabilityAcquisitionEngine {
   private activeAcquisitions: Set<string> = new Set();
   private retryCounts: Map<string, number> = new Map();
   private lastAttemptTime: Map<string, number> = new Map();
+  private circuitBreakerTripped: Set<string> = new Set();
+  private consecutiveFailures: Map<string, number> = new Map();
 
   constructor(options: AcquisitionEngineOptions = {}) {
     this.ownerAuthorizations = options.ownerAuthorizations || [];
     this.safetyLimits = options.safetyLimits || DEFAULT_SAFETY_LIMITS;
     this.onStateChange = options.onStateChange;
     this.onAuditEvent = options.onAuditEvent;
+    this.durableStore = getDurableAcquisitionStore();
+
+    // Restore in-progress acquisitions from durable storage on startup
+    this.restoreFromDurableStore();
+  }
+
+  /**
+   * Restore in-progress acquisitions from durable storage after daemon restart.
+   * This prevents HEIDI from forgetting what it was doing.
+   */
+  private restoreFromDurableStore(): void {
+    const inProgress = this.durableStore.getInProgressAcquisitions();
+    for (const record of inProgress) {
+      // Reconstruct a lifecycle from the durable record
+      const lifecycle: AcquisitionLifecycle = {
+        id: record.lifecycleId,
+        capabilityId: record.capabilityId,
+        provider: record.provider,
+        currentState: record.currentState,
+        blocker: record.blocker,
+        plan: null,
+        policyDecision: record.policyDecision,
+        startedAt: record.startedAt,
+        completedAt: record.completedAt,
+        transitions: record.transitions.slice(-20), // keep recent transitions
+        auditRecords: [],
+        retryCount: record.retryCount,
+        lastError: record.lastError,
+        credentialFingerprints: record.credentialFingerprints,
+      };
+      this.lifecycles.set(record.capabilityId, lifecycle);
+      this.retryCounts.set(record.capabilityId, record.retryCount);
+    }
   }
 
   /**
@@ -90,11 +151,22 @@ export class ExternalCapabilityAcquisitionEngine {
   /**
    * Main entry point: attempt to resolve a blocked capability.
    * Returns the final state and lifecycle record.
+   * Implements bounded retry with exponential backoff and circuit breaker.
    */
   async resolveCapability(capabilityId: string): Promise<AcquisitionLifecycle> {
     // Check kill switch
     if (this.safetyLimits.killSwitchActive) {
       return this.createBlockedLifecycle(capabilityId, 'POLICY_NOT_AUTHORIZED', 'Kill switch is active — all acquisition denied');
+    }
+
+    // Check circuit breaker
+    if (this.circuitBreakerTripped.has(capabilityId)) {
+      const lifecycle = this.lifecycles.get(capabilityId);
+      if (lifecycle) {
+        this.recordAudit(lifecycle, 'CIRCUIT_BREAKER_TRIPPED', `Circuit breaker tripped for ${capabilityId} — not retrying`);
+        return lifecycle;
+      }
+      return this.createBlockedLifecycle(capabilityId, 'UNKNOWN', 'Circuit breaker tripped');
     }
 
     // Check concurrency limit
@@ -199,6 +271,26 @@ export class ExternalCapabilityAcquisitionEngine {
       lifecycle.lastError = error instanceof Error ? error.message : 'unknown error';
       this.recordAudit(lifecycle, 'ACQUISITION_FAILED', `Acquisition failed: ${lifecycle.lastError}`);
       this.transition(lifecycle, lifecycle.currentState, 'ACQUISITION_FAILED', lifecycle.lastError);
+
+      // Circuit breaker: trip after 3 consecutive failures
+      const failures = (this.consecutiveFailures.get(capabilityId) || 0) + 1;
+      this.consecutiveFailures.set(capabilityId, failures);
+      if (failures >= DEFAULT_RETRY_POLICY.maxAttempts) {
+        this.circuitBreakerTripped.add(capabilityId);
+        this.recordAudit(lifecycle, 'CIRCUIT_BREAKER_TRIPPED', `Circuit breaker tripped after ${failures} consecutive failures`);
+      }
+
+      // Schedule retry with exponential backoff if retryable
+      const failureClass = this.classifyFailureFromError(lifecycle.lastError);
+      const attempt = this.retryCounts.get(capabilityId) || 0;
+      this.retryCounts.set(capabilityId, attempt + 1);
+      if (shouldRetry(failureClass, attempt + 1, DEFAULT_RETRY_POLICY)) {
+        const delay = computeBackoffDelay(attempt + 1, DEFAULT_RETRY_POLICY);
+        this.recordAudit(lifecycle, 'RETRY_SCHEDULED', `Retry scheduled in ${delay}ms (attempt ${attempt + 1}/${DEFAULT_RETRY_POLICY.maxAttempts})`);
+        // Note: actual retry is driven by the daemon's next cycle, not a timer here.
+        // This prevents uncontrolled parallel retries.
+      }
+
       return lifecycle;
     } finally {
       this.activeAcquisitions.delete(capabilityId);
@@ -311,8 +403,10 @@ export class ExternalCapabilityAcquisitionEngine {
         this.recordAudit(lifecycle, 'AUTHORIZATION_GRANTED', 'Owner authorization verified');
         lifecycle.policyDecision = 'ALLOW_WITH_POLICY';
       } else {
-        this.recordAudit(lifecycle, 'AUTHORIZATION_DENIED', 'Owner authorization required but not granted');
-        this.transition(lifecycle, 'AUTHORIZING', 'POLICY_BLOCKED', 'Owner authorization not granted');
+        // Create a pending authorization request for the owner
+        await this.createAuthorizationRequest(lifecycle, adapter, providerPlan);
+        this.recordAudit(lifecycle, 'AUTHORIZATION_DENIED', 'Owner authorization required but not granted — pending request created');
+        this.transition(lifecycle, 'AUTHORIZING', 'POLICY_BLOCKED', 'Owner authorization not granted — pending request created');
         lifecycle.currentState = 'POLICY_BLOCKED';
         return;
       }
@@ -375,14 +469,42 @@ export class ExternalCapabilityAcquisitionEngine {
   private async configure(lifecycle: AcquisitionLifecycle, adapter: ProviderAdapter): Promise<void> {
     this.recordAudit(lifecycle, 'CONFIGURATION_APPLIED', `Configuration applied for ${adapter.providerId}`);
 
-    // In a real implementation, this would:
-    // 1. Determine which .env file to update
-    // 2. Determine which services consume this capability
-    // 3. Determine if a restart is needed
-    // 4. Perform a dependency-aware restart
-    //
-    // For now, the credentials are already in .env.local (human-provided),
-    // and the daemon will pick them up on next restart.
+    // Execute dependency-aware restart if needed
+    // This uses the existing boot.config.json dependency graph and
+    // the CapabilityAuthorizer's RESTARTABLE_MODULES set
+    try {
+      const { getRestartExecutor } = await import('./DependencyAwareRestartExecutor');
+      const restartExecutor = getRestartExecutor();
+
+      if (restartExecutor.isRestartable('heidi-web')) {
+        const dependents = restartExecutor.getDependentServices(adapter.capabilityId);
+        if (dependents.length > 0) {
+          this.recordAudit(lifecycle, 'CONFIGURATION_APPLIED', `Dependency-aware restart for ${dependents.join(', ')} (triggered by ${adapter.capabilityId})`);
+
+          const results = await restartExecutor.executeDependencyAwareRestart(
+            adapter.capabilityId,
+            `Credential provisioning for ${adapter.providerId}`,
+          );
+
+          for (const result of results) {
+            if (result.healthy) {
+              this.recordAudit(lifecycle, 'SERVICE_RESTARTED', `${result.target}: ${result.evidence}`);
+            } else {
+              this.recordAudit(lifecycle, 'ACQUISITION_FAILED', `${result.target} restart failed: ${result.error || result.evidence}`);
+              this.transition(lifecycle, 'CONFIGURING', 'PROVISIONING_FAILED', `Restart of ${result.target} failed`);
+              lifecycle.currentState = 'PROVISIONING_FAILED';
+              lifecycle.lastError = `Service restart failed: ${result.error}`;
+              return;
+            }
+          }
+        }
+      }
+    } catch (restartError) {
+      // Restart executor failure must not block acquisition —
+      // the credentials are provisioned, we just couldn't restart services.
+      // Verification will determine if the capability is actually working.
+      this.recordAudit(lifecycle, 'CONFIGURATION_APPLIED', `Restart executor unavailable: ${restartError instanceof Error ? restartError.message : 'unknown'} — proceeding to verification`);
+    }
 
     this.transition(lifecycle, 'CONFIGURING', 'VERIFYING', 'Configuration applied');
     lifecycle.currentState = 'VERIFYING';
@@ -426,6 +548,9 @@ export class ExternalCapabilityAcquisitionEngine {
 
     // Clear retry count on success
     this.retryCounts.delete(lifecycle.capabilityId);
+    // Reset circuit breaker on success
+    this.circuitBreakerTripped.delete(lifecycle.capabilityId);
+    this.consecutiveFailures.delete(lifecycle.capabilityId);
   }
 
   // ─── Helpers ────────────────────────────────────────────────────────────
@@ -439,6 +564,8 @@ export class ExternalCapabilityAcquisitionEngine {
       evidence: reason,
     };
     lifecycle.transitions.push(transition);
+    // Persist to durable storage so state survives daemon restart
+    this.durableStore.updateFromLifecycle(lifecycle);
     this.onStateChange?.(lifecycle);
   }
 
@@ -462,6 +589,53 @@ export class ExternalCapabilityAcquisitionEngine {
     if (result.error?.includes('timed out') || result.error?.includes('unreachable')) return 'PROVIDER_OUTAGE';
     if (result.error?.includes('rate') || result.error?.includes('429')) return 'RATE_LIMITED';
     return 'UNKNOWN_FAILURE';
+  }
+
+  private classifyFailureFromError(error: string): FailureClass {
+    const lower = error.toLowerCase();
+    if (lower.includes('401') || lower.includes('unauthorized') || lower.includes('invalid credential')) return 'CREDENTIAL_FAILURE';
+    if (lower.includes('403') || lower.includes('forbidden') || lower.includes('revoked')) return 'CREDENTIAL_FAILURE';
+    if (lower.includes('timed out') || lower.includes('timeout') || lower.includes('abort')) return 'PROVIDER_OUTAGE';
+    if (lower.includes('unreachable') || lower.includes('econnrefused') || lower.includes('enetunreach')) return 'PROVIDER_OUTAGE';
+    if (lower.includes('rate') || lower.includes('429') || lower.includes('too many requests')) return 'RATE_LIMITED';
+    if (lower.includes('policy') || lower.includes('not authorized') || lower.includes('denied')) return 'AUTHORIZATION_FAILURE';
+    if (lower.includes('config') || lower.includes('configuration')) return 'CONFIGURATION_FAILURE';
+    return 'UNKNOWN_FAILURE';
+  }
+
+  /**
+   * Create a pending authorization request for the owner.
+   * This is called when HEIDI hits POLICY_BLOCKED and needs the owner
+   * to approve the acquisition.
+   */
+  private async createAuthorizationRequest(
+    lifecycle: AcquisitionLifecycle,
+    adapter: ProviderAdapter,
+    providerPlan: { commitmentTypes: import('./CapabilityAcquisitionTypes').ExternalCommitmentType[]; financialCommitment: boolean; legalAcceptance: boolean; identityVerification: boolean },
+  ): Promise<void> {
+    try {
+      const { getOwnerAuthorizationStore } = await import('./OwnerAuthorizationStore');
+      const store = getOwnerAuthorizationStore();
+
+      // Check if there's already a pending request for this provider
+      const existing = store.getPendingRequests().find((r) => r.provider === adapter.providerId);
+      if (existing) {
+        // Already pending — don't create a duplicate
+        return;
+      }
+
+      store.createRequest({
+        provider: adapter.providerId,
+        capabilityId: adapter.capabilityId,
+        requestedCommitments: providerPlan.commitmentTypes,
+        requiresLegalAcceptance: providerPlan.legalAcceptance,
+        requiresIdentityVerification: providerPlan.identityVerification,
+        reason: `Acquisition of ${adapter.displayName} requires owner authorization for: ${providerPlan.commitmentTypes.join(', ')}`,
+        expiresAt: null,
+      });
+    } catch {
+      // Authorization store failure must not block the engine
+    }
   }
 
   private createBlockedLifecycle(capabilityId: string, blocker: CapabilityBlocker, reason: string): AcquisitionLifecycle {
