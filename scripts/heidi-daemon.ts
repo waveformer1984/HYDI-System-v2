@@ -669,7 +669,7 @@ async function main(): Promise<void> {
     if (shuttingDown) return;
     const status = core.getLoopStatus();
     const memUsage = process.memoryUsage();
-    console.log(`[daemon] state=${status.state} cycles=${status.cycleCount} failures=${status.consecutiveFailures} mem=${Math.round(memUsage.rss / 1024 / 1024)}MB kill=${status.killSwitchActive}`);
+    console.log(`[daemon] state=${status.state} cycles=${status.cycleCount} failures=${status.consecutiveFailures} outcome=${status.lastCycleOutcome || 'none'} mem=${Math.round(memUsage.rss / 1024 / 1024)}MB kill=${status.killSwitchActive}${status.lastError ? ' lastError=' + status.lastError : ''}`);
   }, 30000);
 
   // 9. Wait for shutdown

@@ -75,6 +75,7 @@ export interface LoopStatus {
   currentIntervalMs: number;
   cycleInFlight: boolean;
   lastError: string | null;
+  lastCycleOutcome: CycleOutcome | null;
 }
 
 export interface LoopConfig {
@@ -119,7 +120,21 @@ export interface CognitiveState {
   replanResult: ReplanResult | null;
   errors: string[];
   durationMs: number;
+  outcome?: CycleOutcome;
 }
+
+/**
+ * Classification of a cognitive cycle's outcome.
+ *
+ * This is critical for the bounded loop: only HARD_FAILURE and RECOVERABLE_FAILURE
+ * should count toward consecutiveFailures. EXPECTED_BLOCK is normal operation —
+ * a governed refusal or missing credential is NOT a system crash.
+ */
+export type CycleOutcome =
+  | 'SUCCESS'              // cycle completed, action executed and verified
+  | 'EXPECTED_BLOCK'       // cycle completed, action blocked by governance or missing credentials
+  | 'RECOVERABLE_FAILURE'  // cycle completed but with errors (timeout, provider down)
+  | 'HARD_FAILURE';        // cycle threw an uncaught exception or timed out
 
 export interface PerceptionResult {
   observedAt: string;
@@ -2358,6 +2373,7 @@ export class CognitiveCore {
       currentIntervalMs: this.loopConfig.intervalMs,
       cycleInFlight: this.cycleInFlight,
       lastError: this.lastError,
+      lastCycleOutcome: this.currentCycle?.outcome || null,
     };
   }
 
@@ -2411,16 +2427,33 @@ export class CognitiveCore {
 
     try {
       // Run cycle with timeout
-      await this.runCycleWithTimeout(this.loopConfig.cycleTimeoutMs);
+      const cycleState = await this.runCycleWithTimeout(this.loopConfig.cycleTimeoutMs);
 
-      // Success
-      this.lastSuccessfulCycleAt = new Date().toISOString();
-      this.consecutiveFailures = 0;
+      // Classify the cycle outcome
+      const outcome = this.classifyCycleOutcome(cycleState);
+      cycleState.outcome = outcome;
 
-      // If we were in degraded state, return to running
-      if (this.loopState === 'degraded') {
-        this.loopState = 'running';
-        this.auditLoopTransition('running');
+      // Only count actual failures toward consecutiveFailures.
+      // EXPECTED_BLOCK (governed refusal, missing credential) is normal operation.
+      if (outcome === 'SUCCESS' || outcome === 'EXPECTED_BLOCK') {
+        this.lastSuccessfulCycleAt = new Date().toISOString();
+        this.consecutiveFailures = 0;
+
+        // If we were in degraded state, return to running
+        if (this.loopState === 'degraded') {
+          this.loopState = 'running';
+          this.auditLoopTransition('running');
+        }
+      } else if (outcome === 'RECOVERABLE_FAILURE') {
+        // Cycle completed but had errors — don't count as a hard failure
+        // unless the errors are severe (e.g., all phases failed)
+        this.lastSuccessfulCycleAt = new Date().toISOString();
+        // Don't reset consecutiveFailures, but don't increment either
+        // This prevents cooldown from triggering on recoverable errors
+      }
+      // HARD_FAILURE falls through to the catch block via re-throw
+      if (outcome === 'HARD_FAILURE') {
+        throw new Error(cycleState.errors[0] || 'Cycle completed with hard failure');
       }
     } catch (e) {
       this.lastFailureAt = new Date().toISOString();
@@ -2451,22 +2484,80 @@ export class CognitiveCore {
     }
   }
 
-  private async runCycleWithTimeout(timeoutMs: number): Promise<void> {
+  private async runCycleWithTimeout(timeoutMs: number): Promise<CognitiveState> {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         reject(new Error(`Cycle timed out after ${timeoutMs}ms`));
       }, timeoutMs);
 
       this.runCycle()
-        .then(() => {
+        .then((state) => {
           clearTimeout(timer);
-          resolve();
+          resolve(state);
         })
         .catch((e) => {
           clearTimeout(timer);
           reject(e);
         });
     });
+  }
+
+  /**
+   * Classify the outcome of a cognitive cycle.
+   *
+   * This is the key to preventing governed refusals from being treated as
+   * system crashes. A cycle where the action was blocked by policy or
+   * missing credentials is EXPECTED_BLOCK, not a failure.
+   */
+  private classifyCycleOutcome(state: CognitiveState): CycleOutcome {
+    // If the cycle had no errors and the action was executed or skipped normally
+    if (state.errors.length === 0) {
+      // Check if the action was blocked by governance or missing credentials
+      const auth = state.authorizationResult;
+      const exec = state.executionResult;
+
+      if (auth && !auth.authorized) {
+        // Governed refusal — this is normal operation
+        return 'EXPECTED_BLOCK';
+      }
+
+      if (exec && !exec.executed && exec.outcome === 'skipped') {
+        // Action was skipped (not authorized or no action selected)
+        return 'EXPECTED_BLOCK';
+      }
+
+      if (exec && exec.executed && state.verificationResult?.verified) {
+        // Action executed and verified
+        return 'SUCCESS';
+      }
+
+      if (exec && exec.executed && !state.verificationResult?.verified) {
+        // Action executed but verification failed — recoverable
+        return 'RECOVERABLE_FAILURE';
+      }
+
+      // No action selected, no errors — normal idle cycle
+      return 'SUCCESS';
+    }
+
+    // Cycle had errors — classify based on severity
+    // If all errors are from phases that failed, it's a recoverable failure
+    // If the cycle couldn't even perceive, it's a hard failure
+    const criticalPhases = ['perceive'];
+    const hasCriticalErrors = state.errors.some((e) =>
+      criticalPhases.some((p) => e.startsWith(p + ':')),
+    );
+
+    // If the cycle reached the record phase, it completed most of its work
+    if (state.phase === 'record' || state.phase === 'replan') {
+      return 'RECOVERABLE_FAILURE';
+    }
+
+    if (hasCriticalErrors) {
+      return 'HARD_FAILURE';
+    }
+
+    return 'RECOVERABLE_FAILURE';
   }
 
   private enterCooldown(): void {
