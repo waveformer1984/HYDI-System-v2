@@ -792,3 +792,80 @@ export function createStaleStateRepairHandler(options: {
     }
   };
 }
+
+/**
+ * Create a repair handler for Ollama (local model) service restart.
+ * This is R0 — safe, reversible, local.
+ *
+ * The handler attempts to start Ollama via `ollama serve` and then
+ * verifies the service is responding at the configured URL. If Ollama
+ * is already running and healthy, the handler returns success without
+ * restarting (idempotent).
+ */
+export function createOllamaRepairHandler(options: {
+  url: string;
+  model?: string;
+}): (capabilityId: string, procedure: string) => Promise<{ success: boolean; evidence: string }> {
+  return async (capabilityId: string, _procedure: string) => {
+    const { exec } = await import('child_process');
+    const { promisify } = await import('util');
+    const execAsync = promisify(exec);
+
+    try {
+      // Precondition: check if Ollama is already healthy
+      try {
+        const response = await fetch(options.url, { signal: AbortSignal.timeout(5000) });
+        if (response.ok) {
+          return {
+            success: true,
+            evidence: `Ollama already healthy at ${options.url} (HTTP ${response.status}) — no restart needed`,
+          };
+        }
+      } catch {
+        // Ollama not responding — proceed with restart
+      }
+
+      // Execute: start Ollama
+      try {
+        // On Windows, use `start /B` to run in background; on Unix, use nohup
+        const isWindows = process.platform === 'win32';
+        if (isWindows) {
+          await execAsync('start /B ollama serve', { timeout: 5000 });
+        } else {
+          await execAsync('nohup ollama serve > /dev/null 2>&1 &', { timeout: 5000 });
+        }
+      } catch (startError) {
+        // `ollama serve` might fail if already running or not installed
+        // Don't fail yet — verification will determine the real state
+      }
+
+      // Wait for Ollama to come up (up to 15 seconds)
+      const deadline = Date.now() + 15000;
+      while (Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+        try {
+          const response = await fetch(options.url, { signal: AbortSignal.timeout(5000) });
+          if (response.ok) {
+            return {
+              success: true,
+              evidence: `Ollama restarted and verified healthy at ${options.url} (HTTP ${response.status})`,
+            };
+          }
+        } catch {
+          // Still waiting
+        }
+      }
+
+      // Verify: Ollama did not come up
+      return {
+        success: false,
+        evidence: `Ollama restart failed — service not responding at ${options.url} after 15s`,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        evidence: `Ollama repair failed for ${capabilityId}: ${error instanceof Error ? error.message : 'unknown error'}`,
+      };
+    }
+  };
+}

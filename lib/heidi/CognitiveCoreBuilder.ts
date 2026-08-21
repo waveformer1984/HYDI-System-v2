@@ -52,7 +52,7 @@ import {
   createTwilioVerifyProbe,
 } from '../operational/EnhancedCredentialProbes';
 import { BlockerResolutionEngine } from '../operational/BlockerResolutionEngine';
-import { SelfRepairEngine, createDatabaseRepairHandler } from '../operational/SelfRepairEngine';
+import { SelfRepairEngine, createDatabaseRepairHandler, createOllamaRepairHandler } from '../operational/SelfRepairEngine';
 
 export interface CognitiveCoreBuilderOptions {
   /** Database config for CognitiveCore's internal pool (identity, goals, world, etc.) */
@@ -361,9 +361,26 @@ export class CognitiveCoreBuilder {
       // auto-repairing and escalate. This prevents indefinite
       // oscillation between capabilities that perturb each other.
       // See tests/unit/heidi-self-repair-oscillation.test.ts.
+      //
+      // The verifyRepair function provides independent post-repair
+      // verification using the CapabilityHealthManager — repairs are
+      // only marked verified if BOTH the handler returns success AND
+      // the independent health check confirms the capability is healthy.
+      const chmForVerify = this.opts.capabilityHealthManager || chm;
       const sre = this.opts.selfRepairEngine || new SelfRepairEngine({
         flappingThreshold: 3,
         flappingWindowCycles: 10,
+        verifyRepair: async (capabilityId: string) => {
+          try {
+            const report = await chmForVerify.checkCapability(capabilityId);
+            if (report && report.state === 'READY') {
+              return { healthy: true, evidence: report.evidence };
+            }
+            return { healthy: false, evidence: report ? `State: ${report.state} — ${report.evidence}` : 'No report' };
+          } catch (error) {
+            return { healthy: false, evidence: `Verification threw: ${error instanceof Error ? error.message : 'unknown'}` };
+          }
+        },
       });
 
       // Register real repair handler for database connectivity (R0)
@@ -377,6 +394,12 @@ export class CognitiveCoreBuilder {
           password: dbCfg.password,
         }));
       }
+
+      // Register real repair handler for Ollama local model (R0)
+      const ollamaUrl = process.env.LOCAL_MODEL_URL || 'http://localhost:11434';
+      sre.registerRepairHandler('system.local_model', createOllamaRepairHandler({
+        url: ollamaUrl,
+      }));
 
       bridge.selfRepairEngine = {
         runSelfRepair: (healthSummary: unknown, options?: unknown) => sre.runSelfRepair(healthSummary as any, options as any),
