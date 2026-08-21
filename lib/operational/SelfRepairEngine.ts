@@ -116,6 +116,8 @@ export class SelfRepairEngine {
   // after the capability stays READY for flappingWindowCycles cycles).
   private flappingCapabilities: Set<string> = new Set();
 
+  private verifyRepairFn?: (capabilityId: string) => Promise<{ healthy: boolean; evidence: string }>;
+
   constructor(options?: {
     maxAutoRepairsPerCycle?: number;
     onRepair?: Map<string, (capabilityId: string, procedure: string) => Promise<{ success: boolean; evidence: string }>>;
@@ -124,11 +126,16 @@ export class SelfRepairEngine {
     flappingThreshold?: number;
     /** Rolling window (in cycles) for flapping detection. Default: 10. */
     flappingWindowCycles?: number;
+    /** Independent post-repair verification function. If provided, repairs
+     *  are only marked verified if BOTH the handler returns success AND
+     *  this function confirms the capability is healthy. */
+    verifyRepair?: (capabilityId: string) => Promise<{ healthy: boolean; evidence: string }>;
   }) {
     this.blockerEngine = new BlockerResolutionEngine();
     this.maxAutoRepairsPerCycle = options?.maxAutoRepairsPerCycle || 5;
     this.repairHandlers = options?.onRepair || new Map();
     this.maxHistoryEntries = options?.maxHistoryEntries || 500;
+    this.verifyRepairFn = options?.verifyRepair;
     // Default: flapping detection disabled (Infinity threshold) to
     // preserve backward compatibility for existing callers that don't
     // pass the new options. The daemon and tests opt in explicitly.
@@ -520,8 +527,28 @@ export class SelfRepairEngine {
       // EXECUTE
       const result = await handler(report.capabilityId, report.recoveryProcedure);
 
-      // VERIFY
-      const verified = result.success;
+      // VERIFY — two layers:
+      // 1. Handler's own success flag (necessary but not sufficient)
+      // 2. Independent post-repair health check (if verifyRepairFn is wired)
+      let verified = result.success;
+      let verificationEvidence = result.evidence;
+
+      if (verified && this.verifyRepairFn) {
+        // Independent verification — don't trust the handler alone
+        try {
+          const postCheck = await this.verifyRepairFn(report.capabilityId);
+          if (!postCheck.healthy) {
+            verified = false;
+            verificationEvidence = `Handler reported success but independent verification failed: ${postCheck.evidence}`;
+          } else {
+            verificationEvidence = `${result.evidence} — independently verified: ${postCheck.evidence}`;
+          }
+        } catch (verifyError) {
+          // Verification function threw — be conservative and mark unverified
+          verified = false;
+          verificationEvidence = `Handler reported success but verification threw: ${verifyError instanceof Error ? verifyError.message : 'unknown'}`;
+        }
+      }
 
       return {
         repairId,
@@ -535,7 +562,7 @@ export class SelfRepairEngine {
         authorizedBy: 'heidi_autonomous_r0r1',
         executed: true,
         verified,
-        verificationEvidence: result.evidence,
+        verificationEvidence,
         timestamp,
         rollbackInfo: verified ? null : `Restore previous state of ${report.capabilityId}`,
       };
@@ -720,20 +747,48 @@ export function createDatabaseRepairHandler(config: {
  * Create a repair handler for stale campaign state.
  * This is R0 — safe, reversible, local.
  *
- * WARNING: This is currently a FABRICATED-SUCCESS STUB. It unconditionally
- * returns { success: true } without doing any real work. It is NOT wired
- * to any capability in CognitiveCoreBuilder.ts. Do NOT register it as a
- * repair handler for a real capability until it actually performs a real
- * state-clearing operation with postcondition verification.
+ * The handler clears stale state by removing the stale runtime artifact
+ * and then verifies the artifact no longer exists. If the artifact cannot
+ * be removed or still exists after removal, the repair is reported as
+ * failed — never as a fabricated success.
  */
-export function createStaleStateRepairHandler(): (capabilityId: string, procedure: string) => Promise<{ success: boolean; evidence: string }> {
+export function createStaleStateRepairHandler(options: {
+  statePath: string;
+}): (capabilityId: string, procedure: string) => Promise<{ success: boolean; evidence: string }> {
   return async (capabilityId: string, _procedure: string) => {
-    // FABRICATED-SUCCESS STUB — does not perform any real repair.
-    // See warning above. Do not wire this to a real capability without
-    // implementing actual state-clearing + verification first.
-    return {
-      success: true,
-      evidence: `Stale state cleared for ${capabilityId}`,
-    };
+    const { existsSync, unlinkSync } = await import('fs');
+    const { resolve } = await import('path');
+    const fullPath = resolve(options.statePath);
+
+    try {
+      // Precondition: the stale state artifact must exist
+      if (!existsSync(fullPath)) {
+        return {
+          success: true,
+          evidence: `Stale state artifact already absent for ${capabilityId} at ${fullPath}`,
+        };
+      }
+
+      // Execute: remove the stale artifact
+      unlinkSync(fullPath);
+
+      // Verify: confirm the artifact no longer exists
+      if (existsSync(fullPath)) {
+        return {
+          success: false,
+          evidence: `Stale state artifact still present after removal for ${capabilityId} at ${fullPath}`,
+        };
+      }
+
+      return {
+        success: true,
+        evidence: `Stale state artifact removed and verified absent for ${capabilityId} at ${fullPath}`,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        evidence: `Stale state repair failed for ${capabilityId}: ${error instanceof Error ? error.message : 'unknown error'}`,
+      };
+    }
   };
 }

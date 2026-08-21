@@ -124,8 +124,9 @@ export class BlockerResolutionEngine {
               escalated++;
             }
           } else {
-            // Mark as repairable but don't execute without a handler
-            resolved++;
+            // Repairable in principle but no handler available — escalate
+            // instead of falsely counting as resolved.
+            escalated++;
           }
           break;
         case 'ESCALATE_TO_HUMAN':

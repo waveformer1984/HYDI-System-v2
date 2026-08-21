@@ -95,7 +95,8 @@ export class DurableAcquisitionStore {
       }
       fs.appendFileSync(this.filePath, JSON.stringify(record) + '\n', 'utf8');
     } catch (e) {
-      // Best effort — don't kill the daemon if disk write fails
+      // Best effort — don't kill the daemon if disk write fails, but log it
+      console.error(`[DurableAcquisitionStore] Write failed: ${e instanceof Error ? e.message : 'unknown'}`);
     }
   }
 
@@ -103,7 +104,9 @@ export class DurableAcquisitionStore {
     try {
       const backupPath = this.filePath.replace('.jsonl', `.${Date.now()}.jsonl`);
       fs.renameSync(this.filePath, backupPath);
-    } catch { /* best effort */ }
+    } catch (e) {
+      console.error(`[DurableAcquisitionStore] Rotation failed: ${e instanceof Error ? e.message : 'unknown'}`);
+    }
   }
 
   /**

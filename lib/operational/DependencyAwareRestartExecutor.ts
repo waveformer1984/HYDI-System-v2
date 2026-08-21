@@ -111,9 +111,31 @@ export class DependencyAwareRestartExecutor {
   async checkHealth(target: string, timeoutMs = 10000): Promise<boolean> {
     const healthUrl = this.healthChecks.get(target);
     if (!healthUrl) {
-      // No health check defined — assume healthy
-      return true;
+      // No health check defined — cannot verify health, so report unknown.
+      // Callers must treat this as "unverified" rather than "healthy".
+      return false;
     }
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const response = await fetch(healthUrl, { signal: controller.signal });
+      return response.ok;
+    } catch {
+      return false;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  /**
+   * Check whether a health check URL is registered for the target.
+   * Used by executeRestart to distinguish "no health check available"
+   * from "health check failed".
+   */
+  hasHealthCheck(target: string): boolean {
+    return this.healthChecks.has(target);
+  }
 
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -162,13 +184,24 @@ export class DependencyAwareRestartExecutor {
           process.kill(pid, 'SIGHUP');
           await this.sleep(2000);
 
-          const healthy = await this.checkHealth(target);
-          if (healthy) {
+          if (this.hasHealthCheck(target)) {
+            const healthy = await this.checkHealth(target);
+            if (healthy) {
+              return {
+                target,
+                restarted: true,
+                healthy: true,
+                evidence: `Reloaded ${target} via SIGHUP (PID ${pid}) — health check passed`,
+                durationMs: Date.now() - start,
+              };
+            }
+          } else {
+            // No health check registered — proceed but mark as unverified
             return {
               target,
               restarted: true,
               healthy: true,
-              evidence: `Reloaded ${target} via SIGHUP (PID ${pid}) — health check passed`,
+              evidence: `Reloaded ${target} via SIGHUP (PID ${pid}) — health UNVERIFIED (no health check registered)`,
               durationMs: Date.now() - start,
             };
           }
@@ -202,13 +235,24 @@ export class DependencyAwareRestartExecutor {
         if (target === 'heidi-web') {
           // Next.js dev server picks up .env changes on next request
           // No restart needed for env var changes in dev mode
-          const healthy = await this.checkHealth(target);
-          if (healthy) {
+          if (this.hasHealthCheck(target)) {
+            const healthy = await this.checkHealth(target);
+            if (healthy) {
+              return {
+                target,
+                restarted: false,
+                healthy: true,
+                evidence: `${target} picked up config change (dev mode hot-reload) — health check passed`,
+                durationMs: Date.now() - start,
+              };
+            }
+          } else {
+            // No health check registered — proceed but mark as unverified
             return {
               target,
               restarted: false,
               healthy: true,
-              evidence: `${target} picked up config change (dev mode hot-reload) — no restart needed`,
+              evidence: `${target} picked up config change (dev mode hot-reload) — health UNVERIFIED (no health check registered)`,
               durationMs: Date.now() - start,
             };
           }
