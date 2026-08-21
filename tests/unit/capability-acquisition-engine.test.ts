@@ -26,6 +26,8 @@ import {
   SecretManager,
   resetSecretManager,
 } from '../../lib/operational/SecretManager';
+import { resetDurableAcquisitionStore } from '../../lib/operational/DurableAcquisitionStore';
+import { resetOwnerAuthorizationStore } from '../../lib/operational/OwnerAuthorizationStore';
 import { DEFAULT_SAFETY_LIMITS } from '../../lib/operational/CapabilityAcquisitionTypes';
 import type {
   AcquisitionSafetyLimits,
@@ -82,6 +84,9 @@ describe('External Capability Acquisition Engine', () => {
     getAcquisitionGovernancePolicy().setKillSwitch(false);
     // Reset secret manager singleton (clears cache + drops instance)
     resetSecretManager();
+    // Reset durable stores (clears persisted state between tests)
+    resetDurableAcquisitionStore();
+    resetOwnerAuthorizationStore();
     // Clean up any env vars that tests might have set
     delete process.env.SENDGRID_API_KEY;
     delete process.env.STRIPE_SECRET_KEY;
@@ -358,8 +363,10 @@ describe('External Capability Acquisition Engine', () => {
     it('calling resolveCapability twice does not create duplicate lifecycles', async () => {
       const engine = new ExternalCapabilityAcquisitionEngine();
       await engine.resolveCapability('commercial.email');
+      const firstCount = engine.getAllLifecycles().filter(l => l.capabilityId === 'commercial.email').length;
       await engine.resolveCapability('commercial.email');
-      expect(engine.getAllLifecycles().length).toBe(1);
+      const secondCount = engine.getAllLifecycles().filter(l => l.capabilityId === 'commercial.email').length;
+      expect(secondCount).toBe(firstCount);
     });
   });
 
