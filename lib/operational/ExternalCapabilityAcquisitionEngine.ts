@@ -689,6 +689,22 @@ export class ExternalCapabilityAcquisitionEngine {
         return;
       }
 
+      // Check if there's already an active authorization for this provider
+      const activeAuth = store.getActiveAuthorizations().find((r) => r.provider === adapter.providerId);
+      if (activeAuth) {
+        // Already authorized — don't create a new request
+        return;
+      }
+
+      // Check if there's a denied or revoked request for this provider
+      // — don't re-create a request the owner has already decided on
+      const allRequests = store.getAllRequests();
+      const denied = allRequests.find((r) => r.provider === adapter.providerId && (r.status === 'DENIED' || r.status === 'REVOKED'));
+      if (denied) {
+        // Owner has already denied this — don't create a new request
+        return;
+      }
+
       store.createRequest({
         provider: adapter.providerId,
         capabilityId: adapter.capabilityId,
