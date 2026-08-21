@@ -192,7 +192,7 @@ export class ExternalCapabilityAcquisitionEngine {
     if (this.circuitBreakerTripped.has(capabilityId)) {
       const lifecycle = this.lifecycles.get(capabilityId);
       if (lifecycle) {
-        this.recordAudit(lifecycle, 'CIRCUIT_BREAKER_TRIPPED', `Circuit breaker tripped for ${capabilityId} — not retrying`);
+        // Return existing lifecycle — don't create a new one or re-record
         return lifecycle;
       }
       return this.createBlockedLifecycle(capabilityId, 'UNKNOWN', 'Circuit breaker tripped');
@@ -215,7 +215,48 @@ export class ExternalCapabilityAcquisitionEngine {
       return this.createBlockedLifecycle(capabilityId, 'UNKNOWN', `No provider adapter registered for ${capabilityId}`);
     }
 
-    // Start the lifecycle
+    // ─── Reuse existing lifecycle if nothing has changed ───────────────
+    //
+    // The daemon calls resolveCapability every cycle (15-30s). If the
+    // capability is in the same blocked/policy-blocked state with the same
+    // blocker as the previous cycle, there's no reason to create a new
+    // lifecycle — just return the existing one. This prevents the JSONL
+    // stores from growing unboundedly with duplicate snapshots.
+    //
+    // BUT: if the conditions that caused the terminal state have changed
+    // (e.g., owner granted full authorization, or credentials were added),
+    // we must allow a new attempt.
+    const existing = this.lifecycles.get(capabilityId);
+    if (existing) {
+      const isTerminal = existing.currentState === 'BLOCKED' ||
+                         existing.currentState === 'POLICY_BLOCKED' ||
+                         existing.currentState === 'READY' ||
+                         existing.currentState === 'ACQUISITION_FAILED' ||
+                         existing.currentState === 'VERIFICATION_FAILED' ||
+                         existing.currentState === 'PROVISIONING_FAILED';
+      if (isTerminal && existing.currentState === 'READY') {
+        // Already ready — no need to re-attempt
+        return existing;
+      }
+      if (isTerminal && existing.currentState === 'POLICY_BLOCKED' && existing.policyDecision === 'REQUIRES_OWNER_AUTHORIZATION') {
+        // Check if FULL authorization has been granted (all commitment types).
+        // Use the same check as the authorize() method to avoid mismatch.
+        const providerPlan = adapter.getAcquisitionPlan();
+        const hasFullAuth = providerPlan.commitmentTypes.every((ct) =>
+          this.governancePolicy.checkOwnerAuthorization(adapter.providerId, ct, this.ownerAuthorizations),
+        );
+        if (!hasFullAuth) {
+          // Authorization still incomplete — reuse existing lifecycle
+          return existing;
+        }
+        // Full authorization granted — fall through to create new lifecycle
+      } else if (isTerminal) {
+        // Other terminal states (BLOCKED, ACQUISITION_FAILED, etc.) — reuse
+        return existing;
+      }
+    }
+
+    // Start a new lifecycle (genuinely new attempt)
     const lifecycleId = `acq-${capabilityId}-${Date.now()}`;
     const lifecycle: AcquisitionLifecycle = {
       id: lifecycleId,
@@ -585,6 +626,13 @@ export class ExternalCapabilityAcquisitionEngine {
   // ─── Helpers ────────────────────────────────────────────────────────────
 
   private transition(lifecycle: AcquisitionLifecycle, from: CapabilityAcquisitionState, to: CapabilityAcquisitionState, reason: string): void {
+    // Skip no-op transitions (same from → to with same reason)
+    // This prevents unbounded JSONL growth from repeated identical transitions
+    const lastTransition = lifecycle.transitions[lifecycle.transitions.length - 1];
+    if (lastTransition && lastTransition.from === from && lastTransition.to === to && lastTransition.reason === reason) {
+      return; // Duplicate transition — don't record or persist
+    }
+
     const transition: StateTransition = {
       from,
       to,
@@ -611,10 +659,25 @@ export class ExternalCapabilityAcquisitionEngine {
     lifecycle.auditRecords.push(record);
     this.onAuditEvent?.(record);
 
-    // Record to operational memory for long-term history
+    // Record to operational memory for long-term history — but only if
+    // this is a genuinely new event, not a repeated identical one.
+    // This prevents unbounded JSONL growth from duplicate audit events
+    // every daemon cycle.
     try {
       const memory = getOperationalMemoryStore();
       const histEventType = this.mapAuditToHistoryEvent(eventType);
+
+      // Check the last recorded event for this capability
+      const lastEvents = memory.getLastEvents(lifecycle.capabilityId, 1);
+      const lastEvent = lastEvents[0];
+      if (lastEvent &&
+          lastEvent.eventType === histEventType &&
+          lastEvent.state === lifecycle.currentState &&
+          lastEvent.reason === description) {
+        // Duplicate event — don't record again
+        return;
+      }
+
       memory.record({
         capabilityId: lifecycle.capabilityId,
         provider: lifecycle.provider,
@@ -720,29 +783,35 @@ export class ExternalCapabilityAcquisitionEngine {
   }
 
   private createBlockedLifecycle(capabilityId: string, blocker: CapabilityBlocker, reason: string): AcquisitionLifecycle {
-    return {
-      id: `acq-${capabilityId}-${Date.now()}`,
+    // Reuse existing lifecycle if it's in the same blocked state with the same blocker.
+    // This prevents minting a fresh lifecycle ID every cycle tick.
+    const existing = this.lifecycles.get(capabilityId);
+    if (existing &&
+        existing.currentState === 'BLOCKED' &&
+        existing.blocker === blocker &&
+        existing.lastError === reason) {
+      return existing;
+    }
+
+    const lifecycle: AcquisitionLifecycle = {
+      id: existing?.id || `acq-${capabilityId}-${Date.now()}`,
       capabilityId,
-      provider: 'unknown',
+      provider: existing?.provider || 'unknown',
       currentState: 'BLOCKED',
       blocker,
       plan: null,
       policyDecision: null,
-      startedAt: new Date().toISOString(),
+      startedAt: existing?.startedAt || new Date().toISOString(),
       completedAt: new Date().toISOString(),
-      transitions: [],
-      auditRecords: [{
-        timestamp: new Date().toISOString(),
-        eventType: 'AUTHORIZATION_DENIED',
-        capabilityId,
-        provider: 'unknown',
-        lifecycleId: `acq-${capabilityId}-${Date.now()}`,
-        description: reason,
-      }],
-      retryCount: 0,
+      transitions: existing?.transitions || [],
+      auditRecords: existing?.auditRecords || [],
+      retryCount: existing?.retryCount || 0,
       lastError: reason,
-      credentialFingerprints: {},
+      credentialFingerprints: existing?.credentialFingerprints || {},
     };
+
+    this.lifecycles.set(capabilityId, lifecycle);
+    return lifecycle;
   }
 
   /**

@@ -124,6 +124,10 @@ export class DurableAcquisitionStore {
   /**
    * Update the acquisition state for a capability and persist to disk.
    * Called after every state transition.
+   *
+   * IMPORTANT: Only appends to disk if the record actually changed.
+   * This prevents unbounded JSONL growth from repeated identical state
+   * snapshots every daemon cycle.
    */
   updateFromLifecycle(lifecycle: AcquisitionLifecycle): void {
     const existing = this.state.get(lifecycle.capabilityId);
@@ -147,6 +151,23 @@ export class DurableAcquisitionStore {
       auditEventCount: lifecycle.auditRecords.length,
       lastAuditEvent: lifecycle.auditRecords[lifecycle.auditRecords.length - 1],
     };
+
+    // Only persist if something actually changed.
+    // Compare key fields that matter for operational state.
+    if (existing) {
+      const unchanged =
+        existing.lifecycleId === record.lifecycleId &&
+        existing.currentState === record.currentState &&
+        existing.blocker === record.blocker &&
+        existing.policyDecision === record.policyDecision &&
+        existing.retryCount === record.retryCount &&
+        existing.lastError === record.lastError &&
+        existing.transitions.length === record.transitions.length;
+      if (unchanged) {
+        // Nothing changed — don't append to disk
+        return;
+      }
+    }
 
     this.state.set(lifecycle.capabilityId, record);
     this.saveCapability(lifecycle.capabilityId);
