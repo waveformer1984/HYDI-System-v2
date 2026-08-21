@@ -245,11 +245,27 @@ export class ExternalCapabilityAcquisitionEngine {
         const hasFullAuth = providerPlan.commitmentTypes.every((ct) =>
           this.governancePolicy.checkOwnerAuthorization(adapter.providerId, ct, this.ownerAuthorizations),
         );
-        if (!hasFullAuth) {
-          // Authorization still incomplete — reuse existing lifecycle
-          return existing;
+        if (hasFullAuth) {
+          // Full authorization granted — fall through to create new lifecycle
+        } else {
+          // Authorization still incomplete.
+          // Check if there's a pending request — if so, we're waiting.
+          // If not, we need to re-attempt to create one (e.g., after revocation).
+          try {
+            const { getOwnerAuthorizationStore } = await import('./OwnerAuthorizationStore');
+            const store = getOwnerAuthorizationStore();
+            const hasPending = store.getPendingRequests().some((r) => r.provider === adapter.providerId);
+            if (hasPending) {
+              // Still waiting for owner decision — reuse existing lifecycle
+              return existing;
+            }
+            // No pending request and no active authorization —
+            // fall through to re-attempt (will create a new pending request)
+          } catch {
+            // Store failure — reuse existing lifecycle to be safe
+            return existing;
+          }
         }
-        // Full authorization granted — fall through to create new lifecycle
       } else if (isTerminal) {
         // Other terminal states (BLOCKED, ACQUISITION_FAILED, etc.) — reuse
         return existing;
@@ -759,13 +775,30 @@ export class ExternalCapabilityAcquisitionEngine {
         return;
       }
 
-      // Check if there's a denied or revoked request for this provider
-      // — don't re-create a request the owner has already decided on
+      // Check if there's a denied request for this provider
+      // — don't re-create a request the owner has explicitly denied
       const allRequests = store.getAllRequests();
-      const denied = allRequests.find((r) => r.provider === adapter.providerId && (r.status === 'DENIED' || r.status === 'REVOKED'));
+      const denied = allRequests.find((r) => r.provider === adapter.providerId && r.status === 'DENIED');
       if (denied) {
-        // Owner has already denied this — don't create a new request
+        // Owner has explicitly denied this — don't create a new request
         return;
+      }
+
+      // REVOKED is different from DENIED — revocation means the owner
+      // changed their mind, not that they rejected the acquisition.
+      // Allow a new pending request after revocation, but only if enough
+      // time has passed (5 minute cooldown to prevent rapid re-creation).
+      const revoked = allRequests
+        .filter((r) => r.provider === adapter.providerId && r.status === 'REVOKED')
+        .sort((a, b) => (b.decidedAt || b.requestedAt).localeCompare(a.decidedAt || a.requestedAt))[0];
+      if (revoked) {
+        const revokedTime = new Date(revoked.decidedAt || revoked.requestedAt).getTime();
+        const elapsed = Date.now() - revokedTime;
+        if (elapsed < 300000) { // 5 minutes
+          // Too soon after revocation — don't re-create
+          return;
+        }
+        // Enough time has passed — fall through to create a new request
       }
 
       store.createRequest({
