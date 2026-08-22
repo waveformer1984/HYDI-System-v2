@@ -63,6 +63,20 @@ export {
   getGoalStateMachine,
 } from './GoalStateMachine';
 
+export type {
+  OperationalStatus,
+  OperationalPhase,
+  AuthorizationState,
+  VerificationState,
+  WaitingFor,
+} from './OperationalStatus';
+
+export {
+  renderOperationalStatus,
+  goalStatusToPhase,
+  getOperationalStatus,
+} from './OperationalStatus';
+
 export {
   getIdentityManager,
   getInterventionQueue,

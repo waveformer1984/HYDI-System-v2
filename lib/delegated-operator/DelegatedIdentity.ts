@@ -483,24 +483,54 @@ export class DelegatedIdentityManager {
 
   /**
    * Match a resource against a boundary pattern.
+   * Paths are normalized to prevent traversal attacks.
    */
   private matchResource(boundary: ResourceBoundary, target: string): boolean {
+    // Normalize filesystem paths to prevent traversal attacks
+    const normalizedTarget = this.normalizePath(target);
+    const normalizedPattern = this.normalizePath(boundary.pattern);
+
     switch (boundary.matchMode) {
       case 'exact':
-        return target === boundary.pattern;
+        return normalizedTarget === normalizedPattern;
       case 'prefix':
-        return target.startsWith(boundary.pattern);
+        return normalizedTarget.startsWith(normalizedPattern);
       case 'regex':
         try {
-          return new RegExp(boundary.pattern).test(target);
+          return new RegExp(boundary.pattern).test(normalizedTarget);
         } catch {
           return false;
         }
       case 'glob':
-        return this.globMatch(boundary.pattern, target);
+        return this.globMatch(normalizedPattern, normalizedTarget);
       default:
         return false;
     }
+  }
+
+  /**
+   * Normalize a filesystem path to prevent traversal attacks.
+   * Resolves .. and . components and converts backslashes to forward slashes.
+   */
+  private normalizePath(p: string): string {
+    // Convert backslashes to forward slashes
+    let normalized = p.replace(/\\/g, '/');
+    // Resolve .. and . components
+    const parts = normalized.split('/');
+    const resolved: string[] = [];
+    for (const part of parts) {
+      if (part === '..') {
+        resolved.pop();
+      } else if (part !== '.' && part !== '') {
+        resolved.push(part);
+      } else if (part === '' && resolved.length === 0) {
+        // Leading slash — keep it
+      }
+    }
+    // Reconstruct
+    const isAbsolute = normalized.startsWith('/');
+    const result = (isAbsolute ? '/' : '') + resolved.join('/');
+    return result.toLowerCase();
   }
 
   /**

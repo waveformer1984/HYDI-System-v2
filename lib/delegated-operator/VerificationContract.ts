@@ -148,8 +148,9 @@ export class VerificationContractRegistry {
 
   /**
    * Verify an action result against its contract.
+   * Optional context provides values for placeholder substitution (e.g. {target}).
    */
-  verify(capability: string, observedState: Record<string, unknown>): VerificationResult {
+  verify(capability: string, observedState: Record<string, unknown>, context?: Record<string, unknown>): VerificationResult {
     const contract = this.contracts.get(capability);
     if (!contract) {
       return {
@@ -164,9 +165,12 @@ export class VerificationContractRegistry {
     const failedConditions: string[] = [];
     for (const condition of contract.verification.conditions) {
       const fieldValue = this.extractField(observedState, condition.field);
-      if (!this.checkCondition(fieldValue, condition)) {
+      // Substitute placeholders in expected value (e.g. {target} → context.target)
+      const expected = this.substitutePlaceholders(condition.expected, context);
+      const resolvedCondition = { ...condition, expected };
+      if (!this.checkCondition(fieldValue, resolvedCondition)) {
         failedConditions.push(
-          `${condition.field} ${condition.operator} ${condition.expected} (got: ${fieldValue})`,
+          `${condition.field} ${condition.operator} ${expected} (got: ${fieldValue})`,
         );
       }
     }
@@ -181,6 +185,17 @@ export class VerificationContractRegistry {
       failedConditions,
       observedState,
     };
+  }
+
+  /**
+   * Substitute placeholders like {target} in a value using context.
+   */
+  private substitutePlaceholders(value: string | number | boolean | null, context?: Record<string, unknown>): string | number | boolean | null {
+    if (typeof value !== 'string' || !context) return value;
+    return value.replace(/\{(\w+)\}/g, (match, key: string) => {
+      const replacement = context[key];
+      return replacement !== undefined ? String(replacement) : match;
+    });
   }
 
   /**
