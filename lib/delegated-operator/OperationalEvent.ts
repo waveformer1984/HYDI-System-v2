@@ -107,6 +107,7 @@ export interface OperationalEventPayload {
 
   // ─── General ────────────────────────────────────────────────────
   reason?: string;
+  goalText?: string;
 
   // ─── Stale state ────────────────────────────────────────────────
   staleKeys?: string[];
@@ -134,15 +135,15 @@ const FORBIDDEN_PATTERNS: RegExp[] = [
   /AKIA[A-Z0-9]{16}/g,
   /-----BEGIN[A-Z ]*PRIVATE KEY-----/g,
   /Bearer\s+[A-Za-z0-9._\-]+/gi,
-  /password\s*=\s*[^\s;]+/gi,
-  /secret\s*=\s*[^\s;]+/gi,
-  /token\s*=\s*[^\s;]+/gi,
-  /api_key\s*=\s*[^\s;]+/gi,
-  /session_cookie\s*=\s*[^\s;]+/gi,
-  /cookie\s*=\s*[^\s;]+/gi,
-  /mfa_secret\s*=\s*[^\s;]+/gi,
-  /otp\s*=\s*[^\s;]+/gi,
-  /authorization\s*=\s*[^\s;]+/gi,
+  /password\s*=\s*[^\s;"\\]+/gi,
+  /secret\s*=\s*[^\s;"\\]+/gi,
+  /token\s*=\s*[^\s;"\\]+/gi,
+  /api_key\s*=\s*[^\s;"\\]+/gi,
+  /session_cookie\s*=\s*[^\s;"\\]+/gi,
+  /cookie\s*=\s*[^\s;"\\]+/gi,
+  /mfa_secret\s*=\s*[^\s;"\\]+/gi,
+  /otp\s*=\s*[^\s;"\\]+/gi,
+  /authorization\s*=\s*[^\s;"\\]+/gi,
 ];
 
 /**
@@ -526,6 +527,7 @@ export class OperationalEventPersistence {
         recoveryReason: payload.recoveryReason as string | undefined,
         restoredFromPersistence: payload.restoredFromPersistence as boolean | undefined,
         reason: payload.reason as string | undefined,
+        goalText: payload.goalText as string | undefined,
         staleKeys: payload.staleKeys as string[] | undefined,
         expectedState: payload.expectedState as Record<string, unknown> | undefined,
         actualState: payload.actualState as Record<string, unknown> | undefined,
