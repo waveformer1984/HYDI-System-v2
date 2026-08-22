@@ -374,6 +374,7 @@ export class HumanProxyControlPlane {
     identityId?: string;
     eventType: OperationalEvent['eventType'];
     payload?: OperationalEvent['payload'];
+    idempotencyKey?: string;
   }): Promise<OperationalEvent> {
     return this.eventStream.record(params);
   }

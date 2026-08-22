@@ -20,24 +20,30 @@ import { randomUUID } from 'crypto';
 
 export type OperationalEventType =
   | 'GOAL_CREATED'
+  | 'GOAL_ACCEPTED'
   | 'GOAL_STARTED'
   | 'PLAN_CREATED'
   | 'ACTION_SELECTED'
   | 'AUTHORIZATION_GRANTED'
   | 'AUTHORIZATION_DENIED'
+  | 'SAFETY_DENIAL'
   | 'ACTION_STARTED'
   | 'ACTION_COMPLETED'
   | 'ACTION_FAILED'
   | 'VERIFICATION_STARTED'
   | 'VERIFICATION_PASSED'
   | 'VERIFICATION_FAILED'
+  | 'DEVIATION_DETECTED'
   | 'REPLAN_STARTED'
   | 'REPLAN_COMPLETED'
   | 'INTERVENTION_REQUIRED'
   | 'INTERVENTION_APPROVED'
   | 'INTERVENTION_REJECTED'
+  | 'INTERVENTION_CANCELLED'
+  | 'INTERVENTION_EXPIRED'
   | 'CHECKPOINT_CREATED'
   | 'CHECKPOINT_RESTORED'
+  | 'CHECKPOINT_REJECTED'
   | 'RECOVERY_STARTED'
   | 'RECOVERY_COMPLETED'
   | 'STALE_STATE_DETECTED'
@@ -45,7 +51,8 @@ export type OperationalEventType =
   | 'GOAL_RESUMED'
   | 'GOAL_COMPLETED'
   | 'GOAL_FAILED'
-  | 'GOAL_CANCELLED';
+  | 'GOAL_CANCELLED'
+  | 'GOAL_EXPIRED';
 
 // ---------------------------------------------------------------------------
 // Event Interface
@@ -213,6 +220,7 @@ export function createOperationalEvent(params: {
 export class OperationalEventStream {
   private events = new Map<string, OperationalEvent[]>(); // goalId → events
   private sequences = new Map<string, number>(); // goalId → next sequence
+  private idempotencyKeys = new Map<string, OperationalEvent>(); // key → event
   private persistence: OperationalEventPersistence | null = null;
   private localAuditPath: string | null = null;
 
@@ -240,7 +248,15 @@ export class OperationalEventStream {
     identityId?: string;
     eventType: OperationalEventType;
     payload?: OperationalEventPayload;
+    /** Optional idempotency key — if provided, duplicate records are ignored */
+    idempotencyKey?: string;
   }): Promise<OperationalEvent> {
+    // Idempotency check — if the same key was already recorded, return the existing event
+    if (params.idempotencyKey) {
+      const existing = this.idempotencyKeys.get(params.idempotencyKey);
+      if (existing) return existing;
+    }
+
     const seq = (this.sequences.get(params.goalId) ?? 0) + 1;
     this.sequences.set(params.goalId, seq);
 
@@ -252,6 +268,11 @@ export class OperationalEventStream {
       payload: params.payload,
       sequence: seq,
     });
+
+    // Track idempotency
+    if (params.idempotencyKey) {
+      this.idempotencyKeys.set(params.idempotencyKey, event);
+    }
 
     // In-memory
     const goalEvents = this.events.get(params.goalId) ?? [];
@@ -343,6 +364,7 @@ export class OperationalEventStream {
   clearAll(): void {
     this.events.clear();
     this.sequences.clear();
+    this.idempotencyKeys.clear();
   }
 
   /**
@@ -463,24 +485,30 @@ export class OperationalEventPersistence {
   private mapEventType(type: OperationalEventType): string {
     const mapping: Record<OperationalEventType, string> = {
       GOAL_CREATED: 'goal_received',
+      GOAL_ACCEPTED: 'goal_received',
       GOAL_STARTED: 'goal_received',
       PLAN_CREATED: 'decision',
       ACTION_SELECTED: 'decision',
       AUTHORIZATION_GRANTED: 'decision',
       AUTHORIZATION_DENIED: 'decision',
+      SAFETY_DENIAL: 'escalation',
       ACTION_STARTED: 'action',
       ACTION_COMPLETED: 'action',
       ACTION_FAILED: 'failure',
       VERIFICATION_STARTED: 'observation',
       VERIFICATION_PASSED: 'observation',
       VERIFICATION_FAILED: 'failure',
+      DEVIATION_DETECTED: 'deviation',
       REPLAN_STARTED: 'replan',
       REPLAN_COMPLETED: 'replan',
       INTERVENTION_REQUIRED: 'intervention',
       INTERVENTION_APPROVED: 'intervention',
       INTERVENTION_REJECTED: 'intervention',
+      INTERVENTION_CANCELLED: 'intervention',
+      INTERVENTION_EXPIRED: 'intervention',
       CHECKPOINT_CREATED: 'decision',
       CHECKPOINT_RESTORED: 'decision',
+      CHECKPOINT_REJECTED: 'deviation',
       RECOVERY_STARTED: 'deviation',
       RECOVERY_COMPLETED: 'deviation',
       STALE_STATE_DETECTED: 'deviation',
@@ -489,6 +517,7 @@ export class OperationalEventPersistence {
       GOAL_COMPLETED: 'completion',
       GOAL_FAILED: 'failure',
       GOAL_CANCELLED: 'deviation',
+      GOAL_EXPIRED: 'escalation',
     };
     return mapping[type] ?? 'decision';
   }

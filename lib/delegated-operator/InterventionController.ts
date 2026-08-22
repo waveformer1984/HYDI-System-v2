@@ -289,8 +289,17 @@ export class InterventionController {
       return this.fail(interventionId, 'cancelled', 'Failed to cancel intervention');
     }
 
-    // Record goal cancelled event
+    // Record intervention cancelled and goal cancelled events
     const controlPlane = getHumanProxyControlPlane();
+    await controlPlane.recordEvent({
+      goalId: entry.goalId,
+      identityId: entry.identityId,
+      eventType: 'INTERVENTION_CANCELLED',
+      payload: {
+        interventionId,
+        reason: reason ?? `Cancelled by ${cancelledBy}`,
+      },
+    });
     await controlPlane.recordEvent({
       goalId: entry.goalId,
       identityId: entry.identityId,
@@ -315,9 +324,48 @@ export class InterventionController {
 
   /**
    * EXPIRE stale interventions.
+   * Emits INTERVENTION_EXPIRED and GOAL_EXPIRED events for each expired intervention.
    */
-  expireStale(): number {
-    return getInterventionQueue().expireStale();
+  async expireStale(): Promise<number> {
+    const queue = getInterventionQueue();
+    // Get pending interventions before expiry
+    const pending = queue.getPending();
+    const toExpire = pending.filter(
+      (intv) => new Date(intv.expiresAt).getTime() < Date.now(),
+    );
+
+    const expired = queue.expireStale();
+
+    // Emit events for each expired intervention
+    if (expired > 0 && toExpire.length > 0) {
+      const controlPlane = getHumanProxyControlPlane();
+      for (const intv of toExpire.slice(0, expired)) {
+        try {
+          await controlPlane.recordEvent({
+            goalId: intv.goalId,
+            identityId: intv.identityId,
+            eventType: 'INTERVENTION_EXPIRED',
+            payload: {
+              interventionId: intv.requestId,
+              reason: 'Intervention expired',
+            },
+          });
+          await controlPlane.recordEvent({
+            goalId: intv.goalId,
+            identityId: intv.identityId,
+            eventType: 'GOAL_EXPIRED',
+            payload: {
+              interventionId: intv.requestId,
+              reason: 'Intervention expired — goal abandoned',
+            },
+          });
+        } catch {
+          // Best effort — don't block expiry on event recording
+        }
+      }
+    }
+
+    return expired;
   }
 
   // ─── Helpers ─────────────────────────────────────────────────────
