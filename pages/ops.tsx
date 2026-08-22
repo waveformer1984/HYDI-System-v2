@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback, FormEvent, KeyboardEvent } from 'react'
 import Head from 'next/head'
+import { HumanProxyPanel } from '../components/HumanProxyPanel'
 
 // ─── Types ──────────────────────────────────────────────────────────────
 
@@ -88,7 +89,7 @@ interface ChatMessage {
   isStreaming?: boolean
 }
 
-type Tab = 'status' | 'audit' | 'autonomy' | 'memory' | 'chat'
+type Tab = 'status' | 'audit' | 'autonomy' | 'memory' | 'chat' | 'proxy'
 
 // ─── Page ───────────────────────────────────────────────────────────────
 
@@ -177,6 +178,7 @@ export default function OpsPage() {
           ['autonomy', 'Autonomy'],
           ['memory', 'Memory'],
           ['chat', 'Chat'],
+          ['proxy', 'Human Proxy'],
         ] as [Tab, string][]).map(([id, label]) => (
           <button
             key={id}
@@ -212,6 +214,7 @@ export default function OpsPage() {
           {tab === 'autonomy' && <AutonomyPanel status={status} />}
           {tab === 'memory' && <MemoryPanel status={status} />}
           {tab === 'chat' && <ChatPanel />}
+          {tab === 'proxy' && <HumanProxyPanel />}
         </div>
       </div>
     </div>

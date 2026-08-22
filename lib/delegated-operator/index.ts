@@ -96,3 +96,47 @@ export {
 export type {
   DelegationRequest,
 } from './DelegatedOperatorIntegration';
+
+// ─── Human Proxy Control Plane ─────────────────────────────────────
+
+export type {
+  OperationalGoalState,
+  PersistenceState,
+} from './OperationalGoalState';
+
+export {
+  buildOperationalGoalState,
+  sanitizeOperationalGoalState,
+  isOperationalGoalStateClean,
+} from './OperationalGoalState';
+
+export type {
+  OperationalEvent,
+  OperationalEventType,
+  OperationalEventPayload,
+} from './OperationalEvent';
+
+export {
+  createOperationalEvent,
+  sanitizeOperationalEventPayload,
+  isOperationalEventClean,
+  OperationalEventStream,
+  OperationalEventPersistence,
+  getOperationalEventStream,
+} from './OperationalEvent';
+
+export {
+  HumanProxyControlPlane,
+  getHumanProxyControlPlane,
+} from './HumanProxyControlPlane';
+
+export type {
+  InterventionResolution,
+  InterventionResolutionResult,
+  InterventionDetail,
+} from './InterventionController';
+
+export {
+  InterventionController,
+  getInterventionController,
+} from './InterventionController';

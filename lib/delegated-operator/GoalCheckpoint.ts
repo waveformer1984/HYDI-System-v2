@@ -155,6 +155,15 @@ export class GoalCheckpointManager {
   }
 
   /**
+   * List all active (non-terminal) checkpoints.
+   * Terminal statuses: COMPLETED, FAILED, EXPIRED
+   */
+  listActive(): GoalCheckpoint[] {
+    const terminal: GoalRuntimeStatus[] = ['COMPLETED', 'FAILED', 'EXPIRED'];
+    return this.getAllCheckpoints().filter((cp) => !terminal.includes(cp.status));
+  }
+
+  /**
    * Revalidate the environment after a restart.
    *
    * This does NOT replay side effects. It checks whether the
