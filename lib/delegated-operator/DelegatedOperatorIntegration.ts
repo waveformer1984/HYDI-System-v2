@@ -37,6 +37,7 @@ import {
 import { InterventionQueue } from './InterventionQueue';
 import { InterventionPersistence } from './InterventionPersistence';
 import { GoalCheckpointManager } from './GoalCheckpoint';
+import { CheckpointPersistence } from './CheckpointPersistence';
 import { VerificationContractRegistry, createDefaultVerificationContracts } from './VerificationContract';
 import { executeGoalViaAdaptiveOperator } from '../adaptive-operator/AdaptiveOperatorIntegration';
 import { STRICT_CONFIRMATION } from '../human-action/AuthorityManager';
@@ -100,20 +101,30 @@ export function initializePersistence(supabase: import('@supabase/supabase-js').
   const persistence = new InterventionPersistence(supabase);
   const queue = getInterventionQueue();
   queue.attachPersistence(persistence);
-  getLogger().info('Intervention persistence initialized (Supabase)');
+
+  const checkpointPersistence = new CheckpointPersistence(supabase);
+  const checkpointManager = getCheckpointManager();
+  checkpointManager.attachPersistence(checkpointPersistence);
+
+  getLogger().info('Intervention + checkpoint persistence initialized (Supabase)');
 }
 
 /**
  * Restore in-memory state from Supabase persistence after restart.
- * Loads pending interventions and checkpoints.
+ * Loads pending interventions and active checkpoints.
  */
 export async function restoreFromPersistence(): Promise<{
   interventionsRestored: number;
+  checkpointsRestored: number;
 }> {
   const queue = getInterventionQueue();
   const interventionsRestored = await queue.restoreFromPersistence();
-  getLogger().info(`Restored ${interventionsRestored} interventions from persistence`);
-  return { interventionsRestored };
+
+  const checkpointManager = getCheckpointManager();
+  const checkpointsRestored = await checkpointManager.restoreFromPersistence();
+
+  getLogger().info(`Restored ${interventionsRestored} interventions, ${checkpointsRestored} checkpoints from persistence`);
+  return { interventionsRestored, checkpointsRestored };
 }
 
 /**

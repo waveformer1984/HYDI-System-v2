@@ -21,6 +21,17 @@ const SECRET_PATTERNS = [
   /AKIA[0-9A-Z]{16}/g,
   /-----BEGIN[ A-Z]*PRIVATE KEY-----[\s\S]*?-----END[ A-Z]*PRIVATE KEY-----/g,
   /Bearer\s+[A-Za-z0-9._-]{10,}/g,
+  // Inline key=value patterns for secrets embedded in strings
+  /password\s*=\s*[^\s,;}\]]+/gi,
+  /secret\s*=\s*[^\s,;}\]]+/gi,
+  /token\s*=\s*[^\s,;}\]]+/gi,
+  /api[_-]?key\s*=\s*[^\s,;}\]]+/gi,
+  /session[_-]?cookie\s*=\s*[^\s,;}\]]+/gi,
+  /cookie\s*=\s*[^\s,;}\]]+/gi,
+  /mfa[_-]?secret\s*=\s*[^\s,;}\]]+/gi,
+  /session[_-]?secret\s*=\s*[^\s,;}\]]+/gi,
+  /otp\s*=\s*[^\s,;}\]]+/gi,
+  /authorization\s*=\s*[^\s,;}\]]+/gi,
 ];
 
 const SENSITIVE_KEY_RE = /(password|secret|token|api[_-]?key|authorization|service_role|private_key|credential|cookie|session_secret|mfa_secret|otp)/i;

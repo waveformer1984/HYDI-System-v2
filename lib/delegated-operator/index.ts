@@ -54,6 +54,10 @@ export {
   GoalCheckpointManager,
 } from './GoalCheckpoint';
 
+export {
+  CheckpointPersistence,
+} from './CheckpointPersistence';
+
 export type {
   StateTransition,
 } from './GoalStateMachine';

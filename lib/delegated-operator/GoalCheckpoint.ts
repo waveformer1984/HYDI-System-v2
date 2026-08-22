@@ -13,6 +13,7 @@
  */
 
 import { randomUUID } from 'crypto';
+import type { CheckpointPersistence } from './CheckpointPersistence';
 
 // ---------------------------------------------------------------------------
 // Goal Runtime Status
@@ -102,9 +103,19 @@ export interface CheckpointAction {
 export class GoalCheckpointManager {
   private checkpoints = new Map<string, GoalCheckpoint>();
   private goalToCheckpoint = new Map<string, string>();
+  private persistence: CheckpointPersistence | null = null;
+
+  /**
+   * Attach Supabase persistence. After attaching, all checkpoint operations
+   * are also written to Supabase, surviving restart.
+   */
+  attachPersistence(persistence: CheckpointPersistence): void {
+    this.persistence = persistence;
+  }
 
   /**
    * Create a checkpoint for a goal.
+   * Also persists to Supabase if persistence is attached.
    */
   checkpoint(input: Omit<GoalCheckpoint, 'checkpointId' | 'createdAt'>): GoalCheckpoint {
     const checkpointId = `ckpt_${randomUUID()}`;
@@ -118,6 +129,12 @@ export class GoalCheckpointManager {
 
     this.checkpoints.set(checkpointId, checkpoint);
     this.goalToCheckpoint.set(input.goalId, checkpointId);
+
+    // Persist to Supabase (fire-and-forget — non-fatal if it fails)
+    if (this.persistence) {
+      this.persistence.save(checkpoint).catch(() => { /* non-fatal */ });
+    }
+
     return checkpoint;
   }
 
@@ -251,5 +268,31 @@ export class GoalCheckpointManager {
     if (!checkpointId) return false;
     this.goalToCheckpoint.delete(goalId);
     return this.checkpoints.delete(checkpointId);
+  }
+
+  /**
+   * Restore active checkpoints from Supabase persistence.
+   * Called on daemon startup to recover checkpoints that survived restart.
+   * Only non-terminal checkpoints are restored.
+   */
+  async restoreFromPersistence(): Promise<number> {
+    if (!this.persistence) return 0;
+
+    try {
+      const active = await this.persistence.listActive();
+
+      for (const cp of active) {
+        // Don't overwrite in-memory checkpoints that may have been added
+        // during this session before restore was called
+        if (!this.checkpoints.has(cp.checkpointId)) {
+          this.checkpoints.set(cp.checkpointId, cp);
+          this.goalToCheckpoint.set(cp.goalId, cp.checkpointId);
+        }
+      }
+
+      return active.length;
+    } catch {
+      return 0;
+    }
   }
 }
