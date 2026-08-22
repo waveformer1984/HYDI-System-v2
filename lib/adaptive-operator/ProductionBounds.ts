@@ -92,3 +92,55 @@ export function isAdaptiveOperatorEnabled(): boolean {
   }
   return raw === 'true' || raw === '1' || raw === 'yes';
 }
+
+/**
+ * Goal category allowlist for staged rollout.
+ *
+ * When ADAPTIVE_OPERATOR_GOAL_ALLOWLIST is set (comma-separated), only
+ * goals matching the allowed categories are delegated to AdaptiveOperator.
+ * Goals outside the allowlist fall back to the legacy path.
+ *
+ * Categories:
+ *   - infra: CODE_HEALTHY, SERVICES_RUNNING, ENDPOINT_VERIFIED, CREDENTIALS_READY
+ *   - revenue: REVENUE_LEDGER_VERIFIED, PAYOUTS_RECONCILED
+ *   - connect: CONNECT_ACCOUNT_VERIFIED
+ *   - browser: BROWSER_NAVIGATED
+ *   - file: FILE_MODIFIED, FILE_DELETED, DIRECTORY_EXISTS
+ *
+ * When unset, all categories are allowed (Stage 3+).
+ */
+export type GoalCategory = 'infra' | 'revenue' | 'connect' | 'browser' | 'file';
+
+const GOAL_KEYWORDS: Record<GoalCategory, string[]> = {
+  infra: ['health', 'service', 'port', 'endpoint', 'code', 'credential', 'config', 'diagnose', 'check', 'inspect', 'fix', 'repair', 'recover'],
+  revenue: ['reconcile', 'payout', 'ledger', 'revenue', 'earnings', 'income'],
+  connect: ['connect account', 'connected account', 'onboard'],
+  browser: ['navigate', 'browser', 'page'],
+  file: ['create', 'delete', 'remove', 'modify', 'write', 'update', 'change', 'project', 'directory'],
+};
+
+export function getGoalAllowlist(): GoalCategory[] | null {
+  const raw = process.env.ADAPTIVE_OPERATOR_GOAL_ALLOWLIST;
+  if (!raw) return null; // unset = all allowed
+  const categories = raw.split(',').map((s) => s.trim().toLowerCase()) as GoalCategory[];
+  return categories.filter((c) => GOAL_KEYWORDS[c]);
+}
+
+/**
+ * Check if a goal statement is allowed by the allowlist.
+ * Returns true if the goal matches at least one allowed category.
+ * If no allowlist is set, returns true (all goals allowed).
+ */
+export function isGoalAllowed(goalStatement: string): boolean {
+  const allowlist = getGoalAllowlist();
+  if (!allowlist) return true; // no allowlist = all allowed
+
+  const lower = goalStatement.toLowerCase();
+  for (const category of allowlist) {
+    const keywords = GOAL_KEYWORDS[category];
+    if (keywords.some((kw) => lower.includes(kw))) {
+      return true;
+    }
+  }
+  return false;
+}

@@ -192,6 +192,13 @@ export class AdaptiveOperator {
         this.budgetTracker.recordAction(goalId, result);
         goal.actionCount++;
 
+        // Feed the action result back into the world state as an
+        // observation. This is critical for revenue-engine goals: the
+        // HTTP response body from a revenue/payout/connect-account query
+        // needs to become a structured observation that the objective's
+        // check() can verify against.
+        this.recordActionResultAsObservation(intent, result, goalId);
+
         // Record in task memory
         this.taskMemory.record(goalId, 'action', {
           actionId: result.actionId,
@@ -237,6 +244,36 @@ export class AdaptiveOperator {
         const deviation = await this.replanningEngine.analyzeDeviation(nextObjective, result, goalId);
 
         if (deviation.classification === 'EXPECTED') {
+          // Post-action verification: confirm the objective's check()
+          // is actually satisfied against the updated world state, not
+          // just that the action returned successfully. This prevents
+          // false completion when an action succeeds but the result
+          // doesn't satisfy the objective's verification condition
+          // (e.g., HTTP 200 with unmatched payouts).
+          const verification = this.planner.verifyObjective(nextObjective.name);
+          if (verification && !verification.satisfied) {
+            // Action succeeded but objective is NOT verified — this is
+            // a deviation, not a completion. The action's result was
+            // recorded as an observation, but the objective's check()
+            // says the condition isn't met.
+            nextObjective.retryCount++;
+            this.budgetTracker.recordRetry(goalId);
+            if (nextObjective.retryCount < nextObjective.maxRetries) {
+              // Replan — the action succeeded but didn't achieve the goal
+              goal.status = 'replanning';
+              goal.replanCount++;
+              this.budgetTracker.recordReplan(goalId);
+              if (this.onReplan) {
+                this.onReplan(goalId, `Expected: ${nextObjective.expectedOutcome}. Actual: ${verification.evidence}. Deviation is recoverable.`, plan);
+              }
+              plan = this.planner.replan(goal, plan, `Objective ${nextObjective.name} not verified: ${verification.evidence}`);
+              break;
+            }
+            nextObjective.status = 'failed';
+            nextObjective.failureReason = `Verification failed: ${verification.evidence}`;
+            this.recordFailure(goalId, nextObjective.objectiveId, result);
+            continue;
+          }
           nextObjective.status = 'complete';
           nextObjective.completedAt = new Date().toISOString();
           nextObjective.results = [...(nextObjective.results ?? []), result];
@@ -449,6 +486,107 @@ export class AdaptiveOperator {
         confidence: obs.confidence,
         timestamp: obs.timestamp,
       });
+    }
+  }
+
+  /**
+   * Feed an action result back into the world state as a structured
+   * observation. This is critical for revenue-engine goals: the HTTP
+   * response body from a revenue/payout/connect-account query needs to
+   * become a structured observation that the objective's check() can
+   * verify against.
+   *
+   * Mapping rules:
+   *   - network.http_request → parse JSON response body, map to
+   *     revenue:* observation keys based on the response shape
+   *   - infra.health_check → map to health:* observation key
+   *   - Other capabilities → generic action:result observation
+   */
+  private recordActionResultAsObservation(
+    intent: HumanActionIntent,
+    result: HumanActionResult,
+    goalId: string,
+  ): void {
+    if (result.outcome !== 'success') return;
+    if (!result.result) return;
+
+    let obsKey = '';
+    let obsCategory: import('./AdaptiveOperatorTypes').ObservationCategory = 'action_result';
+    let obsValue: Record<string, unknown> = {};
+    let obsSummary = '';
+
+    const rawResult = result.result as Record<string, unknown>;
+
+    if (intent.capability === 'network.http_request') {
+      // Try to parse the HTTP response body as JSON
+      let body: unknown = rawResult.body ?? rawResult.data ?? rawResult;
+      if (typeof body === 'string') {
+        try { body = JSON.parse(body); } catch { /* not JSON */ }
+      }
+
+      // Map response shape to observation key
+      const obj = body as Record<string, unknown>;
+      if (obj && typeof obj === 'object') {
+        if ('entryCount' in obj || 'verifiedCount' in obj || 'unverifiedCount' in obj) {
+          obsKey = 'revenue:ledger_summary';
+          obsCategory = 'revenue';
+          obsValue = obj;
+          obsSummary = `Revenue ledger: ${obj.entryCount ?? 0} entries, ${(obj.unverifiedCount ?? 0)} unverified`;
+        } else if ('matched' in obj || 'unmatched' in obj || 'pending' in obj) {
+          obsKey = 'revenue:payout_reconciliation';
+          obsCategory = 'revenue';
+          obsValue = obj;
+          obsSummary = `Payout reconciliation: matched=${obj.matched ?? 0}, unmatched=${obj.unmatched ?? 0}, pending=${obj.pending ?? 0}`;
+        } else if ('chargesEnabled' in obj || 'payoutsEnabled' in obj || 'detailsSubmitted' in obj) {
+          obsKey = 'revenue:connect_account';
+          obsCategory = 'revenue';
+          obsValue = obj;
+          obsSummary = `Connect account: charges=${obj.chargesEnabled}, payouts=${obj.payoutsEnabled}, details=${obj.detailsSubmitted}`;
+        } else if ('summary' in obj && typeof obj.summary === 'object') {
+          // Wrapped response — check the summary object
+          const summary = obj.summary as Record<string, unknown>;
+          if ('entryCount' in summary || 'verifiedCount' in summary) {
+            obsKey = 'revenue:ledger_summary';
+            obsCategory = 'revenue';
+            obsValue = summary;
+            obsSummary = `Revenue ledger: ${summary.entryCount ?? 0} entries, ${summary.unverifiedCount ?? 0} unverified`;
+          }
+        }
+      }
+
+      // Fallback: generic HTTP observation
+      if (!obsKey) {
+        obsKey = `http:${intent.target}`;
+        obsCategory = 'api';
+        obsValue = { statusCode: rawResult.statusCode ?? 200, body: body };
+        obsSummary = `HTTP ${rawResult.statusCode ?? 200} from ${intent.target}`;
+      }
+    } else if (intent.capability === 'infra.health_check') {
+      obsKey = `health:${intent.target}`;
+      obsCategory = 'health';
+      obsValue = rawResult;
+      obsSummary = `Health check ${intent.target}: ${rawResult.healthy ? 'healthy' : 'unhealthy'}`;
+    } else {
+      // Generic action result observation
+      obsKey = `action:${intent.capability}:${intent.target}`;
+      obsCategory = 'action_result';
+      obsValue = { outcome: result.outcome, result: rawResult };
+      obsSummary = `${intent.capability} on ${intent.target}: ${result.outcome}`;
+    }
+
+    if (obsKey) {
+      const obs = this.worldStateManager.observe({
+        timestamp: new Date().toISOString(),
+        source: 'action_result',
+        confidence: result.verified ? 0.95 : 0.7,
+        freshness: 'current' as const,
+        correlationId: goalId,
+        category: obsCategory,
+        key: obsKey,
+        value: obsValue,
+        summary: obsSummary,
+      });
+      if (this.onObservation) this.onObservation(obs);
     }
   }
 

@@ -57,7 +57,8 @@ export type ObservationSource =
   | 'health'         // health endpoint
   | 'capability'     // capability health check
   | 'inference'      // inferred from other observations
-  | 'human';         // reported by human
+  | 'human'          // reported by human
+  | 'action_result'; // derived from a HumanActionEngine execution result
 
 export type ObservationFreshness =
   | 'current'        // observed within the last few seconds
@@ -83,7 +84,8 @@ export type ObservationCategory =
   | 'action_result'
   | 'verification'
   | 'environment'
-  | 'health';
+  | 'health'
+  | 'revenue';
 
 /**
  * The complete world state — a snapshot of everything HYDI has observed.

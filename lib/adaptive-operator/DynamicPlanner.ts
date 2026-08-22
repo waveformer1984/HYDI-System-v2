@@ -333,6 +333,129 @@ const OBJECTIVE_TEMPLATES: Record<string, ObjectiveTemplate> = {
       }];
     },
   },
+
+  // =====================================================================
+  // REVENUE-ENGINE OBJECTIVES
+  // =====================================================================
+  // These objectives cover the actual revenue engine, not just infra
+  // health-checks. They follow the same pattern as ENDPOINT_VERIFIED:
+  //   - check() examines world state for a matching observation
+  //   - generateIntents() produces HumanActionIntents that the engine
+  //     will execute through real adapters (HTTP, etc.)
+  //
+  // IMPORTANT: Financial actions (Stripe payouts, transfers, refunds)
+  // are R3+ (HIGH/CRITICAL) and require human authorization per
+  // AutonomyContract. These templates generate READ-ONLY observation
+  // intents only. Any actual financial operation will be blocked by
+  // the AuthorityManager and escalated to a human.
+  // =====================================================================
+
+  REVENUE_LEDGER_VERIFIED: {
+    name: 'REVENUE_LEDGER_VERIFIED',
+    description: 'Revenue ledger has entries and all are provider-verified',
+    riskLevel: 'R0',
+    dependsOn: [],
+    check: (ws) => {
+      const revObs = Array.from(ws.observations.values()).find((o) => o.key === 'revenue:ledger_summary');
+      if (!revObs) {
+        return { satisfied: false, confidence: 0.3, evidence: 'Revenue ledger not yet queried', needsInvestigation: true };
+      }
+      const value = revObs.value as { entryCount?: number; verifiedCount?: number; unverifiedCount?: number };
+      const total = value.entryCount ?? 0;
+      const unverified = value.unverifiedCount ?? 0;
+      return {
+        satisfied: total > 0 && unverified === 0,
+        confidence: 0.9,
+        evidence: `${total} entries, ${unverified} unverified`,
+        needsInvestigation: unverified > 0,
+      };
+    },
+    generateIntents: (_ws, goalId, _rootDir, _registry, ctx?: unknown) => {
+      // Query the local revenue API for a ledger summary.
+      // ctx can be a date range string (e.g., "2026-08-01:2026-08-31")
+      // or omitted for "latest".
+      const target = (ctx as string) || 'http://localhost:3000/api/revenue?summary=true';
+      return [{
+        intentId: randomUUID(), goalId, actor: 'heidi',
+        category: 'INFRASTRUCTURE' as const, capability: 'network.http_request',
+        operation: 'http_get', target,
+        parameters: { method: 'GET', headers: { 'Accept': 'application/json' } },
+        reason: 'Query revenue ledger summary to verify entries are provider-backed',
+        expectedResult: 'JSON with entryCount, verifiedCount, unverifiedCount',
+      }];
+    },
+  },
+
+  PAYOUTS_RECONCILED: {
+    name: 'PAYOUTS_RECONCILED',
+    description: 'Stripe payouts reconciled against revenue ledger entries',
+    riskLevel: 'R0',
+    dependsOn: ['REVENUE_LEDGER_VERIFIED'],
+    check: (ws) => {
+      const payoutObs = Array.from(ws.observations.values()).find((o) => o.key === 'revenue:payout_reconciliation');
+      if (!payoutObs) {
+        return { satisfied: false, confidence: 0.3, evidence: 'Payout reconciliation not yet checked', needsInvestigation: true };
+      }
+      const value = payoutObs.value as { matched?: number; unmatched?: number; pending?: number };
+      const unmatched = value.unmatched ?? 0;
+      const pending = value.pending ?? 0;
+      return {
+        satisfied: unmatched === 0 && pending === 0,
+        confidence: 0.9,
+        evidence: `matched: ${value.matched ?? 0}, unmatched: ${unmatched}, pending: ${pending}`,
+        needsInvestigation: unmatched > 0 || pending > 0,
+      };
+    },
+    generateIntents: (_ws, goalId, _rootDir, _registry, ctx?: unknown) => {
+      // Query the local Stripe Connect webhook / payout status.
+      // This is READ-ONLY — no payout is created or modified.
+      const target = (ctx as string) || 'http://localhost:3000/api/stripe-connect-webhook?status=recent';
+      return [{
+        intentId: randomUUID(), goalId, actor: 'heidi',
+        category: 'INFRASTRUCTURE' as const, capability: 'network.http_request',
+        operation: 'http_get', target,
+        parameters: { method: 'GET', headers: { 'Accept': 'application/json' } },
+        reason: 'Query recent Stripe payout status for reconciliation',
+        expectedResult: 'JSON with payout reconciliation summary',
+      }];
+    },
+  },
+
+  CONNECT_ACCOUNT_VERIFIED: {
+    name: 'CONNECT_ACCOUNT_VERIFIED',
+    description: 'Stripe Connect account is verified and ready to receive payouts',
+    riskLevel: 'R0',
+    dependsOn: [],
+    check: (ws) => {
+      const acctObs = Array.from(ws.observations.values()).find((o) => o.key === 'revenue:connect_account');
+      if (!acctObs) {
+        return { satisfied: false, confidence: 0.3, evidence: 'Connect account not yet checked', needsInvestigation: true };
+      }
+      const value = acctObs.value as { chargesEnabled?: boolean; payoutsEnabled?: boolean; detailsSubmitted?: boolean };
+      return {
+        satisfied: value.chargesEnabled === true && value.payoutsEnabled === true && value.detailsSubmitted === true,
+        confidence: 0.95,
+        evidence: `charges: ${value.chargesEnabled}, payouts: ${value.payoutsEnabled}, details: ${value.detailsSubmitted}`,
+        needsInvestigation: !(value.chargesEnabled && value.payoutsEnabled && value.detailsSubmitted),
+      };
+    },
+    generateIntents: (_ws, goalId, _rootDir, _registry, ctx?: unknown) => {
+      // ctx is the Stripe Connect account ID (e.g., "acct_abc123")
+      // If not provided, query the local API for the default/active account.
+      const accountId = (ctx as string) || '';
+      const target = accountId
+        ? `http://localhost:3000/api/revenue?connect_account=${accountId}`
+        : 'http://localhost:3000/api/revenue?connect_status=true';
+      return [{
+        intentId: randomUUID(), goalId, actor: 'heidi',
+        category: 'INFRASTRUCTURE' as const, capability: 'network.http_request',
+        operation: 'http_get', target,
+        parameters: { method: 'GET', headers: { 'Accept': 'application/json' } },
+        reason: 'Check Stripe Connect account verification status',
+        expectedResult: 'JSON with chargesEnabled, payoutsEnabled, detailsSubmitted',
+      }];
+    },
+  },
 };
 
 // ---------------------------------------------------------------------------
@@ -346,6 +469,28 @@ export class DynamicPlanner {
     private rootDir: string,
     private taskMemory: TaskMemoryStore,
   ) {}
+
+  /**
+   * Verify whether an objective's check() is satisfied against the
+   * current world state. Used by AdaptiveOperator after action execution
+   * to confirm that a successful action actually achieved the objective's
+   * verification condition — not just that the action returned without
+   * throwing.
+   *
+   * Returns { satisfied, confidence, evidence } or null if the template
+   * is not found.
+   */
+  verifyObjective(objectiveName: string): {
+    satisfied: boolean;
+    confidence: number;
+    evidence: string;
+    needsInvestigation?: boolean;
+  } | null {
+    const template = OBJECTIVE_TEMPLATES[objectiveName];
+    if (!template) return null;
+    const worldState = this.worldStateManager.getWorldState();
+    return template.check(worldState);
+  }
 
   /**
    * Generate a plan for a goal based on current world state.
@@ -524,6 +669,21 @@ export class DynamicPlanner {
     // "health" / "service" / "port"
     if (statement.includes('health') || statement.includes('service') || statement.includes('port')) {
       return ['SERVICES_RUNNING', 'ENDPOINT_VERIFIED'];
+    }
+
+    // "reconcile" / "payout" / "stripe" / "ledger" — revenue reconciliation
+    if (statement.includes('reconcile') || statement.includes('payout') || statement.includes('ledger')) {
+      return ['REVENUE_LEDGER_VERIFIED', 'PAYOUTS_RECONCILED'];
+    }
+
+    // "connect account" / "onboard" / "connected account" — Stripe Connect
+    if (statement.includes('connect account') || statement.includes('connected account') || statement.includes('onboard')) {
+      return ['CONNECT_ACCOUNT_VERIFIED', 'REVENUE_LEDGER_VERIFIED'];
+    }
+
+    // "revenue" / "earnings" / "income" — general revenue health
+    if (statement.includes('revenue') || statement.includes('earnings') || statement.includes('income')) {
+      return ['REVENUE_LEDGER_VERIFIED', 'PAYOUTS_RECONCILED', 'CONNECT_ACCOUNT_VERIFIED'];
     }
 
     // Default: observe everything

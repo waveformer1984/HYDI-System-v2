@@ -48,4 +48,7 @@ export { CompletionEvaluator } from './CompletionEvaluator';
 export { TaskMemoryStore } from './TaskMemoryStore';
 export { FailureClassifier, ActionBudgetTracker } from './FailureClassifier';
 export { AdaptiveOperator } from './AdaptiveOperator';
-export { getProductionAutonomyBounds, isAdaptiveOperatorEnabled } from './ProductionBounds';
+export { getProductionAutonomyBounds, isAdaptiveOperatorEnabled, isGoalAllowed, getGoalAllowlist } from './ProductionBounds';
+export type { GoalCategory } from './ProductionBounds';
+export { SupabasePersistence } from './SupabasePersistence';
+export type { AdaptiveEventType, AdaptiveEvent } from './SupabasePersistence';

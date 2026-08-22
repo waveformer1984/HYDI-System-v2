@@ -36,6 +36,7 @@ import type { WorkSession, WorkSessionStep } from '../work-sessions';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { GoalExecutionResult } from './AdaptiveOperatorTypes';
 import { AdaptiveOperator, getProductionAutonomyBounds } from './index';
+import { SupabasePersistence, type AdaptiveEventType } from './SupabasePersistence';
 import {
   HumanActionEngine,
   ActionCapabilityRegistry,
@@ -117,6 +118,14 @@ export async function executeGoalViaAdaptiveOperator(
     },
   });
 
+  // --- Supabase persistence (durable, survives cold starts) ---
+  const persistence = new SupabasePersistence(request.supabase);
+  if (persistence.isEnabled()) {
+    logger.info('Supabase persistence enabled for AdaptiveOperator');
+  } else {
+    logger.warn('Supabase persistence not configured — falling back to local disk only');
+  }
+
   // --- Build production HumanActionEngine ---
   const registry: ActionCapabilityRegistry = createDefaultActionCapabilityRegistry();
   const authorityManager = new AuthorityManager(STRICT_CONFIRMATION);
@@ -165,7 +174,7 @@ export async function executeGoalViaAdaptiveOperator(
   engine.registerAdapter(new DevelopmentAdapter());
   engine.registerAdapter(new InfrastructureAdapter());
 
-  // --- Create AdaptiveOperator with observability ---
+  // --- Create AdaptiveOperator with observability + Supabase persistence ---
   const operator = new AdaptiveOperator(engine, registry, {
     rootDir,
     authorityId: auth.authorityId,
@@ -176,6 +185,19 @@ export async function executeGoalViaAdaptiveOperator(
         actionId: req.actionId,
         reason: req.reason,
       });
+      // Persist to Supabase (durable)
+      persistence.writeEvent({
+        goalId: req.goalId,
+        sessionId: request.sessionId,
+        userId: request.userId,
+        eventType: 'intervention' as AdaptiveEventType,
+        payload: {
+          interventionType: req.interventionType,
+          actionId: req.actionId,
+          reason: req.reason,
+          requiredHumanAction: req.requiredHumanAction,
+        },
+      }).catch(() => { /* non-fatal */ });
     },
     onReplan: (goalId, reason, plan) => {
       logger.warn('Replan triggered', {
@@ -185,9 +207,32 @@ export async function executeGoalViaAdaptiveOperator(
         objectiveCount: plan.objectives.length,
         executionOrder: plan.executionOrder,
       });
+      // Persist to Supabase (durable)
+      persistence.writeEvent({
+        goalId,
+        sessionId: request.sessionId,
+        userId: request.userId,
+        eventType: 'replan' as AdaptiveEventType,
+        payload: {
+          reason,
+          newPlanVersion: plan.version,
+          objectiveCount: plan.objectives.length,
+          executionOrder: plan.executionOrder,
+        },
+      }).catch(() => { /* non-fatal */ });
     },
     onGoalComplete: (goalId, status, summary) => {
       logger.info('Goal completed', { goalId, status, summary });
+      // Persist to Supabase (durable)
+      const eventType: AdaptiveEventType = status === 'escalated' || status === 'failed'
+        ? 'escalation' : 'completion';
+      persistence.writeEvent({
+        goalId,
+        sessionId: request.sessionId,
+        userId: request.userId,
+        eventType,
+        payload: { status, summary },
+      }).catch(() => { /* non-fatal */ });
     },
     onObservation: (obs) => {
       logger.debug('Observation recorded', {
@@ -196,8 +241,42 @@ export async function executeGoalViaAdaptiveOperator(
         confidence: obs.confidence,
         summary: obs.summary,
       });
+      // Persist to Supabase (durable) — observations are high-volume,
+      // so we only persist if DEBUG flag is on to avoid flooding the table.
+      // Replans and completions are always persisted (above).
+      if (process.env.ADAPTIVE_OPERATOR_PERSIST_OBSERVATIONS === 'true') {
+        persistence.writeEvent({
+          goalId: '', // observation doesn't have goalId in the callback
+          sessionId: request.sessionId,
+          userId: request.userId,
+          eventType: 'observation' as AdaptiveEventType,
+          payload: {
+            key: obs.key,
+            category: obs.category,
+            confidence: obs.confidence,
+            summary: obs.summary,
+          },
+        }).catch(() => { /* non-fatal */ });
+      }
     },
   });
+
+  // Persist goal_received event
+  persistence.writeEvent({
+    goalId: '', // will be set after executeGoal returns
+    sessionId: request.sessionId,
+    userId: request.userId,
+    eventType: 'goal_received' as AdaptiveEventType,
+    payload: {
+      goal: request.goal,
+      bounds: {
+        maxActions: bounds.maxActionsPerPlan,
+        maxReplans: bounds.maxReplans,
+        maxRetries: bounds.maxRetries,
+        maxRisk: bounds.maxRisk,
+      },
+    },
+  }).catch(() => { /* non-fatal */ });
 
   // --- Execute the goal ---
   // Extract a target URL from the goal statement (if present) so the
@@ -231,6 +310,45 @@ export async function executeGoalViaAdaptiveOperator(
         || goalResult.budget.replansUsed >= bounds.maxReplans,
     },
   });
+
+  // --- Persist final result to Supabase (durable) ---
+  const budgetExhausted = goalResult.budget.actionsExecuted >= bounds.maxActionsPerPlan
+    || goalResult.budget.replansUsed >= bounds.maxReplans;
+  if (budgetExhausted) {
+    persistence.writeEvent({
+      goalId: goalResult.goalId,
+      sessionId: request.sessionId,
+      userId: request.userId,
+      eventType: 'budget_exhausted' as AdaptiveEventType,
+      payload: {
+        actionsExecuted: goalResult.budget.actionsExecuted,
+        replansUsed: goalResult.budget.replansUsed,
+        retriesUsed: goalResult.budget.retriesUsed,
+        bounds: {
+          maxActions: bounds.maxActionsPerPlan,
+          maxReplans: bounds.maxReplans,
+          maxRetries: bounds.maxRetries,
+        },
+      },
+    }).catch(() => { /* non-fatal */ });
+  }
+  // Always persist the final completion/escalation event with full result
+  persistence.writeEvent({
+    goalId: goalResult.goalId,
+    sessionId: request.sessionId,
+    userId: request.userId,
+    eventType: 'completion' as AdaptiveEventType,
+    payload: {
+      status: goalResult.status,
+      summary: goalResult.summary,
+      actionsExecuted: goalResult.actionsExecuted,
+      replans: goalResult.replans,
+      objectivesCompleted: goalResult.objectivesCompleted,
+      objectivesFailed: goalResult.objectivesFailed,
+      durationMs: goalResult.durationMs,
+      completionConfidence: goalResult.completionConfidence,
+    },
+  }).catch(() => { /* non-fatal */ });
 
   // --- Convert to WorkSession shape for API/UI compatibility ---
   const workSession = goalResultToWorkSession(goalResult, request, interventions);

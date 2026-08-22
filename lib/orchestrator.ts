@@ -34,7 +34,7 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { buildCognitiveCore } from './heidi/CognitiveCoreBuilder';
 import type { CognitiveCore, CognitiveState } from './heidi/CognitiveCore';
 import { getMetricsService, type PartialInferenceMetric } from './metrics';
-import { isAdaptiveOperatorEnabled } from './adaptive-operator/ProductionBounds';
+import { isAdaptiveOperatorEnabled, isGoalAllowed } from './adaptive-operator/ProductionBounds';
 
 // Lazy client: a missing NEXT_PUBLIC_SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY
 // must surface as a normal caught error inside processChat's try/catch (which
@@ -1273,8 +1273,8 @@ Respond with JSON:`;
    * lib/adaptive-operator/AdaptiveOperatorIntegration.ts.
    */
   async startWorkSession(goal: string, sessionId: string, userId: string, maxSteps = 5): Promise<WorkSession | null> {
-    // --- AdaptiveOperator path (feature-flagged) ---
-    if (isAdaptiveOperatorEnabled()) {
+    // --- AdaptiveOperator path (feature-flagged + goal allowlist) ---
+    if (isAdaptiveOperatorEnabled() && isGoalAllowed(goal)) {
       console.log(`[Orchestrator] AdaptiveOperator enabled — delegating goal: "${goal}"`);
       try {
         const { executeGoalViaAdaptiveOperator } = await import('./adaptive-operator/AdaptiveOperatorIntegration');
