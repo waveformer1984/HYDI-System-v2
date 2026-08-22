@@ -89,3 +89,10 @@ hydi.db
 
 # HYDI operational runtime data — durable event logs and decision records (local-only)
 .hydi-operational/
+
+# Daemon runtime artifacts
+.heidi-daemon.lock
+.heidi-daemon-audit.jsonl
+.commit-msg-*.txt
+.endurance-report.json
+pm2-state.json
