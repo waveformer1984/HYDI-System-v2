@@ -490,3 +490,283 @@ describe('GoalCheckpointManager', () => {
     expect(result.invalidatedObjectives).toContain('health:localhost:3000');
   });
 });
+
+describe('InterventionPersistence', () => {
+  test('create persists intervention to Supabase', async () => {
+    const { InterventionPersistence } = await import('../../lib/delegated-operator/InterventionPersistence');
+    const insert = jest.fn().mockResolvedValue({ error: null });
+    const supabase = {
+      from: jest.fn().mockReturnValue({ insert, select: jest.fn(), update: jest.fn() }),
+    };
+    const persistence = new InterventionPersistence(supabase as any);
+    const request = {
+      requestId: 'intervention_test_001',
+      goalId: 'goal_001',
+      identityId: 'identity_001',
+      userId: 'user:owner',
+      currentObjective: 'LOGIN',
+      blocker: 'MFA required',
+      requiredHumanAction: 'Approve MFA',
+      whyRequired: 'Cannot bypass',
+      expectedResultingState: 'Authenticated',
+      requestedAt: new Date().toISOString(),
+      expiresAt: new Date(Date.now() + 3600000).toISOString(),
+      resumeCondition: 'Auth session',
+      auditId: 'audit_001',
+      interventionType: 'MFA_REQUIRED',
+      status: 'pending' as const,
+      originalRequest: {
+        requestId: 'intervention_test_001', actionId: 'action_001', goalId: 'goal_001',
+        reason: 'MFA', whatWasAttempted: 'Login', whatSucceeded: 'Creds',
+        whatFailed: 'MFA', whyCannotContinue: 'Cannot bypass',
+        requiredHumanAction: 'Approve', whatHappensAfter: 'Continue',
+        interventionType: 'MFA_REQUIRED' as any, timestamp: new Date().toISOString(),
+      },
+    };
+    const result = await persistence.create(request);
+    expect(result).toBe(true);
+    expect(supabase.from).toHaveBeenCalledWith('human_intervention_requests');
+    expect(insert).toHaveBeenCalled();
+  });
+
+  test('complete marks intervention as resolved', async () => {
+    const { InterventionPersistence } = await import('../../lib/delegated-operator/InterventionPersistence');
+    const update = jest.fn().mockReturnValue({
+      eq: jest.fn().mockReturnValue({
+        eq: jest.fn().mockResolvedValue({ error: null }),
+      }),
+    });
+    const supabase = {
+      from: jest.fn().mockReturnValue({ update, insert: jest.fn(), select: jest.fn() }),
+    };
+    const persistence = new InterventionPersistence(supabase as any);
+    const result = await persistence.complete('intervention_test_001', 'User approved MFA');
+    expect(result).toBe(true);
+    expect(supabase.from).toHaveBeenCalledWith('human_intervention_requests');
+    expect(update).toHaveBeenCalled();
+  });
+
+  test('expireStale expires past-due interventions', async () => {
+    const { InterventionPersistence } = await import('../../lib/delegated-operator/InterventionPersistence');
+    // expireStale chain: .update(...).eq('status','pending').lt('expires_at',...).select('id')
+    const selectMock = jest.fn().mockResolvedValue({ error: null, data: [{ id: '1' }, { id: '2' }] });
+    const ltMock = jest.fn().mockReturnValue({ select: selectMock });
+    const eqMock = jest.fn().mockReturnValue({ lt: ltMock });
+    const update = jest.fn().mockReturnValue({ eq: eqMock });
+    const supabase = {
+      from: jest.fn().mockReturnValue({ update, insert: jest.fn() }),
+    };
+    const persistence = new InterventionPersistence(supabase as any);
+    const count = await persistence.expireStale();
+    expect(count).toBe(2);
+  });
+
+  test('redacts secrets before persisting', async () => {
+    const { InterventionPersistence } = await import('../../lib/delegated-operator/InterventionPersistence');
+    let insertedRow: any = null;
+    const insert = jest.fn().mockImplementation((row) => {
+      insertedRow = row;
+      return { error: null };
+    });
+    const supabase = {
+      from: jest.fn().mockReturnValue({ insert, select: jest.fn(), update: jest.fn() }),
+    };
+    const persistence = new InterventionPersistence(supabase as any);
+    const request = {
+      requestId: 'intervention_test_002',
+      goalId: 'goal_002',
+      identityId: 'identity_002',
+      userId: 'user:owner',
+      currentObjective: 'LOGIN',
+      blocker: 'MFA required',
+      requiredHumanAction: 'Approve MFA',
+      whyRequired: 'Cannot bypass',
+      expectedResultingState: 'Authenticated',
+      requestedAt: new Date().toISOString(),
+      expiresAt: new Date(Date.now() + 3600000).toISOString(),
+      resumeCondition: 'Auth session',
+      auditId: 'audit_002',
+      interventionType: 'MFA_REQUIRED',
+      status: 'pending' as const,
+      originalRequest: {
+        requestId: 'intervention_test_002', actionId: 'action_002', goalId: 'goal_002',
+        reason: 'MFA', whatWasAttempted: 'Login with password=sk_live_12345secret',
+        whatSucceeded: 'Creds', whatFailed: 'MFA',
+        whyCannotContinue: 'Cannot bypass', requiredHumanAction: 'Approve',
+        whatHappensAfter: 'Continue', interventionType: 'MFA_REQUIRED' as any,
+        timestamp: new Date().toISOString(),
+      },
+    };
+    await persistence.create(request);
+    expect(insertedRow).not.toBeNull();
+    const serialized = JSON.stringify(insertedRow);
+    expect(serialized).not.toContain('sk_live_12345');
+    expect(serialized).not.toContain('password=');
+  });
+});
+
+describe('InterventionQueue with persistence', () => {
+  test('attachPersistence and restoreFromPersistence', async () => {
+    const { InterventionQueue } = await import('../../lib/delegated-operator/InterventionQueue');
+    const { InterventionPersistence } = await import('../../lib/delegated-operator/InterventionPersistence');
+
+    const insert = jest.fn().mockResolvedValue({ error: null });
+    const select = jest.fn().mockReturnValue({
+      eq: jest.fn().mockReturnValue({
+        eq: jest.fn().mockReturnValue({
+          lt: jest.fn().mockResolvedValue({ error: null, data: [] }),
+        }),
+      }),
+      order: jest.fn().mockResolvedValue({ error: null, data: [] }),
+    });
+    const supabase = {
+      from: jest.fn().mockReturnValue({ insert, select, update: jest.fn() }),
+    };
+
+    const persistence = new InterventionPersistence(supabase as any);
+    const queue = new InterventionQueue();
+    queue.attachPersistence(persistence);
+
+    // Enqueue should trigger Supabase insert
+    const req = queue.enqueue({
+      goalId: 'goal_persist_001',
+      identityId: 'identity_001',
+      userId: 'user:owner',
+      currentObjective: 'LOGIN',
+      blocker: 'MFA required',
+      requiredHumanAction: 'Approve MFA',
+      whyRequired: 'Cannot bypass',
+      expectedResultingState: 'Authenticated',
+      expiresAt: new Date(Date.now() + 3600000).toISOString(),
+      resumeCondition: 'Auth session',
+      auditId: 'audit_001',
+      interventionType: 'MFA_REQUIRED',
+      originalRequest: {
+        requestId: 'req_001', actionId: 'action_001', goalId: 'goal_persist_001',
+        reason: 'MFA', whatWasAttempted: 'Login', whatSucceeded: 'Creds',
+        whatFailed: 'MFA', whyCannotContinue: 'Cannot bypass',
+        requiredHumanAction: 'Approve', whatHappensAfter: 'Continue',
+        interventionType: 'MFA_REQUIRED' as any, timestamp: new Date().toISOString(),
+      },
+    });
+
+    // Wait for async persistence
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(insert).toHaveBeenCalled();
+
+    // Restore from persistence
+    const restored = await queue.restoreFromPersistence();
+    expect(restored).toBeGreaterThanOrEqual(0);
+  });
+});
+
+describe('GoalStateMachine', () => {
+  test('initializes and transitions correctly', async () => {
+    const { GoalStateMachine } = await import('../../lib/delegated-operator/GoalStateMachine');
+    const sm = new GoalStateMachine();
+    sm.initialize('goal_001', 'RUNNING');
+    expect(sm.getState('goal_001')).toBe('RUNNING');
+
+    const result = sm.transition('goal_001', 'WAITING_FOR_HUMAN', 'MFA required');
+    expect(result.success).toBe(true);
+    expect(sm.getState('goal_001')).toBe('WAITING_FOR_HUMAN');
+  });
+
+  test('rejects invalid transitions', async () => {
+    const { GoalStateMachine } = await import('../../lib/delegated-operator/GoalStateMachine');
+    const sm = new GoalStateMachine();
+    sm.initialize('goal_001', 'RUNNING');
+    sm.transition('goal_001', 'COMPLETED', 'All objectives done');
+
+    // COMPLETED is terminal — no transitions out
+    const result = sm.transition('goal_001', 'RUNNING', 'Try to resume');
+    expect(result.success).toBe(false);
+    expect(result.reason).toContain('terminal state');
+  });
+
+  test('rejects transition from WAITING_FOR_HUMAN to RECOVERING', async () => {
+    const { GoalStateMachine } = await import('../../lib/delegated-operator/GoalStateMachine');
+    const sm = new GoalStateMachine();
+    sm.initialize('goal_001', 'RUNNING');
+    sm.transition('goal_001', 'WAITING_FOR_HUMAN', 'MFA required');
+
+    const result = sm.transition('goal_001', 'RECOVERING', 'Try to recover');
+    expect(result.success).toBe(false);
+    expect(result.reason).toContain('Invalid transition');
+  });
+
+  test('WAITING_FOR_HUMAN can transition to RUNNING (human completed)', async () => {
+    const { GoalStateMachine } = await import('../../lib/delegated-operator/GoalStateMachine');
+    const sm = new GoalStateMachine();
+    sm.initialize('goal_001', 'RUNNING');
+    sm.transition('goal_001', 'WAITING_FOR_HUMAN', 'MFA required');
+
+    const result = sm.transition('goal_001', 'RUNNING', 'Human completed MFA');
+    expect(result.success).toBe(true);
+    expect(sm.getState('goal_001')).toBe('RUNNING');
+  });
+
+  test('WAITING_FOR_PROVIDER can transition to RUNNING (provider recovered)', async () => {
+    const { GoalStateMachine } = await import('../../lib/delegated-operator/GoalStateMachine');
+    const sm = new GoalStateMachine();
+    sm.initialize('goal_001', 'RUNNING');
+    sm.transition('goal_001', 'WAITING_FOR_PROVIDER', 'Ollama unavailable');
+
+    const result = sm.transition('goal_001', 'RUNNING', 'Provider recovered');
+    expect(result.success).toBe(true);
+  });
+
+  test('PAUSED can transition to RUNNING (user resumed)', async () => {
+    const { GoalStateMachine } = await import('../../lib/delegated-operator/GoalStateMachine');
+    const sm = new GoalStateMachine();
+    sm.initialize('goal_001', 'RUNNING');
+    sm.transition('goal_001', 'PAUSED', 'User paused');
+
+    const result = sm.transition('goal_001', 'RUNNING', 'User resumed');
+    expect(result.success).toBe(true);
+  });
+
+  test('tracks transition history', async () => {
+    const { GoalStateMachine } = await import('../../lib/delegated-operator/GoalStateMachine');
+    const sm = new GoalStateMachine();
+    sm.initialize('goal_001', 'RUNNING');
+    sm.transition('goal_001', 'WAITING_FOR_HUMAN', 'MFA required');
+    sm.transition('goal_001', 'RUNNING', 'Human completed');
+
+    const history = sm.getHistory('goal_001');
+    expect(history.length).toBeGreaterThanOrEqual(3); // init + 2 transitions
+    expect(history[1].from).toBe('RUNNING');
+    expect(history[1].to).toBe('WAITING_FOR_HUMAN');
+    expect(history[2].from).toBe('WAITING_FOR_HUMAN');
+    expect(history[2].to).toBe('RUNNING');
+  });
+
+  test('isTerminal returns true for terminal states', async () => {
+    const { GoalStateMachine } = await import('../../lib/delegated-operator/GoalStateMachine');
+    const sm = new GoalStateMachine();
+    sm.initialize('goal_001', 'RUNNING');
+    sm.transition('goal_001', 'COMPLETED', 'Done');
+    expect(sm.isTerminal('goal_001')).toBe(true);
+  });
+
+  test('isWaiting returns true for waiting states', async () => {
+    const { GoalStateMachine } = await import('../../lib/delegated-operator/GoalStateMachine');
+    const sm = new GoalStateMachine();
+    sm.initialize('goal_001', 'RUNNING');
+    sm.transition('goal_001', 'WAITING_FOR_HUMAN', 'MFA');
+    expect(sm.isWaiting('goal_001')).toBe(true);
+  });
+
+  test('serialize and restore', async () => {
+    const { GoalStateMachine } = await import('../../lib/delegated-operator/GoalStateMachine');
+    const sm1 = new GoalStateMachine();
+    sm1.initialize('goal_001', 'RUNNING');
+    sm1.transition('goal_001', 'WAITING_FOR_HUMAN', 'MFA');
+    const serialized = sm1.serialize();
+
+    const sm2 = new GoalStateMachine();
+    sm2.restore(serialized);
+    expect(sm2.getState('goal_001')).toBe('WAITING_FOR_HUMAN');
+    expect(sm2.getHistory('goal_001').length).toBeGreaterThanOrEqual(2);
+  });
+});

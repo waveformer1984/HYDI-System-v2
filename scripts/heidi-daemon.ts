@@ -607,6 +607,27 @@ async function main(): Promise<void> {
     console.log(`[daemon] Self-repair: ${r.totalIssues} issues, ${r.repaired} repaired, ${r.workedAround} worked around, ${r.escalated} escalated, ${r.refused} refused`);
   }
 
+  // 4b. Delegated operator recovery — restore interventions and checkpoints
+  //     from Supabase persistence so they survive daemon restart.
+  try {
+    const { initializePersistence, restoreFromPersistence } = await import('../lib/delegated-operator');
+    if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      const { createClient } = await import('@supabase/supabase-js');
+      const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+      initializePersistence(supabase);
+      const restored = await restoreFromPersistence();
+      if (restored.interventionsRestored > 0) {
+        console.log(`[daemon] Restored ${restored.interventionsRestored} pending intervention(s) from Supabase`);
+      } else {
+        console.log('[daemon] No pending interventions to restore');
+      }
+    } else {
+      console.log('[daemon] Supabase not configured — intervention persistence disabled');
+    }
+  } catch (err) {
+    console.warn(`[daemon] Delegated operator recovery skipped: ${err instanceof Error ? err.message : 'unknown'}`);
+  }
+
   // 5. Single-cycle mode
   if (config.once) {
     console.log('[daemon] Running single cognitive cycle...');

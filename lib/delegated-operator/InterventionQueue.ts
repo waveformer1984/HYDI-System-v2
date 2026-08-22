@@ -8,6 +8,7 @@
 
 import { randomUUID } from 'crypto';
 import type { HumanInterventionRequest } from '../human-action/HumanActionTypes';
+import type { InterventionPersistence } from './InterventionPersistence';
 
 // ---------------------------------------------------------------------------
 // Persistent Intervention Request
@@ -69,9 +70,19 @@ export class InterventionQueue {
   private queue = new Map<string, PersistentInterventionRequest>();
   private goalIndex = new Map<string, string[]>();
   private listeners: Array<(request: PersistentInterventionRequest) => void> = [];
+  private persistence: InterventionPersistence | null = null;
+
+  /**
+   * Attach Supabase persistence. After attaching, all enqueue/resolve/cancel
+   * operations are also written to Supabase, surviving restart.
+   */
+  attachPersistence(persistence: InterventionPersistence): void {
+    this.persistence = persistence;
+  }
 
   /**
    * Add a new intervention request to the queue.
+   * Also persists to Supabase if persistence is attached.
    */
   enqueue(request: Omit<PersistentInterventionRequest, 'requestId' | 'requestedAt' | 'status'>): PersistentInterventionRequest {
     const requestId = `intervention_${randomUUID()}`;
@@ -89,6 +100,11 @@ export class InterventionQueue {
     goalEntries.push(requestId);
     this.goalIndex.set(request.goalId, goalEntries);
 
+    // Persist to Supabase (fire-and-forget — non-fatal if it fails)
+    if (this.persistence) {
+      this.persistence.create(entry).catch(() => { /* non-fatal */ });
+    }
+
     // Notify listeners
     for (const listener of this.listeners) {
       try { listener(entry); } catch { /* ignore */ }
@@ -99,6 +115,7 @@ export class InterventionQueue {
 
   /**
    * Mark an intervention as resolved.
+   * Also persists the resolution to Supabase if persistence is attached.
    */
   resolve(requestId: string, resolutionNote: string): boolean {
     const entry = this.queue.get(requestId);
@@ -108,17 +125,28 @@ export class InterventionQueue {
     entry.status = 'resolved';
     entry.resolvedAt = new Date().toISOString();
     entry.resolutionNote = resolutionNote;
+
+    if (this.persistence) {
+      this.persistence.complete(requestId, resolutionNote).catch(() => { /* non-fatal */ });
+    }
+
     return true;
   }
 
   /**
    * Cancel an intervention (e.g. goal was cancelled).
+   * Also persists the cancellation to Supabase if persistence is attached.
    */
   cancel(requestId: string): boolean {
     const entry = this.queue.get(requestId);
     if (!entry) return false;
     if (entry.status !== 'pending') return false;
     entry.status = 'cancelled';
+
+    if (this.persistence) {
+      this.persistence.cancel(requestId).catch(() => { /* non-fatal */ });
+    }
+
     return true;
   }
 
@@ -155,6 +183,7 @@ export class InterventionQueue {
 
   /**
    * Expire interventions that have passed their expiry time.
+   * Also persists expirations to Supabase if persistence is attached.
    */
   expireStale(): number {
     const now = Date.now();
@@ -166,7 +195,42 @@ export class InterventionQueue {
         expired++;
       }
     }
+    // Also expire in Supabase
+    if (this.persistence && expired > 0) {
+      this.persistence.expireStale().catch(() => { /* non-fatal */ });
+    }
     return expired;
+  }
+
+  /**
+   * Restore pending interventions from Supabase persistence.
+   * Called on daemon startup to recover interventions that survived restart.
+   */
+  async restoreFromPersistence(): Promise<number> {
+    if (!this.persistence) return 0;
+
+    try {
+      // First expire stale interventions in Supabase
+      await this.persistence.expireStale();
+
+      // Then load all pending interventions
+      const pending = await this.persistence.listPending();
+
+      for (const entry of pending) {
+        // Don't overwrite in-memory entries that may have been added
+        // during this session before restore was called
+        if (!this.queue.has(entry.requestId)) {
+          this.queue.set(entry.requestId, entry);
+          const goalEntries = this.goalIndex.get(entry.goalId) ?? [];
+          goalEntries.push(entry.requestId);
+          this.goalIndex.set(entry.goalId, goalEntries);
+        }
+      }
+
+      return pending.length;
+    } catch {
+      return 0;
+    }
   }
 
   /**

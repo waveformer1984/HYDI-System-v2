@@ -24,6 +24,10 @@ export {
   InterventionQueue,
 } from './InterventionQueue';
 
+export {
+  InterventionPersistence,
+} from './InterventionPersistence';
+
 export type {
   VerificationContract,
   VerificationResult,
@@ -50,6 +54,15 @@ export {
   GoalCheckpointManager,
 } from './GoalCheckpoint';
 
+export type {
+  StateTransition,
+} from './GoalStateMachine';
+
+export {
+  GoalStateMachine,
+  getGoalStateMachine,
+} from './GoalStateMachine';
+
 export {
   getIdentityManager,
   getInterventionQueue,
@@ -58,6 +71,8 @@ export {
   executeGoalAsDelegatedOperator,
   resumeGoalFromCheckpoint,
   evaluateActionAuthority,
+  initializePersistence,
+  restoreFromPersistence,
 } from './DelegatedOperatorIntegration';
 
 export type {

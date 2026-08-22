@@ -3,13 +3,18 @@
  *
  * GET  /api/interventions          — list pending interventions
  * GET  /api/interventions?id=xxx   — get a specific intervention
- * POST /api/interventions          — resolve an intervention { id, resolution }
+ * GET  /api/interventions?goalId=x — list interventions for a goal
+ * POST /api/interventions          — resolve or cancel an intervention
+ *   { id, resolution }             — resolve
+ *   { id, action: "cancel" }       — cancel
  *
  * All routes require auth (owner or operator role).
+ * Interventions are persisted to Supabase and survive restart.
  */
 
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { requireAuth } from '../../../lib/auth/requireAuth.js';
+import { getInterventionQueue } from '../../../lib/delegated-operator/DelegatedOperatorIntegration';
 
 let _supabase: ReturnType<typeof import('@supabase/supabase-js').createClient> | null = null;
 function getSupabase() {
@@ -21,21 +26,6 @@ function getSupabase() {
     _supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
   }
   return _supabase;
-}
-
-// In-memory intervention queue (shared singleton)
-// In production, this would be backed by Supabase
-let _queue: any = null;
-function getQueue() {
-  if (!_queue) {
-    try {
-      const { InterventionQueue } = require('../../../lib/delegated-operator/InterventionQueue');
-      _queue = new InterventionQueue();
-    } catch {
-      _queue = null;
-    }
-  }
-  return _queue;
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -52,10 +42,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   });
   if (!auth) return; // requireAuth already sent error response
 
-  const queue = getQueue();
-  if (!queue) {
-    return res.status(503).json({ error: 'Intervention queue not available' });
-  }
+  const queue = getInterventionQueue();
 
   // GET — list or get specific intervention
   if (req.method === 'GET') {
@@ -82,7 +69,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     });
   }
 
-  // POST — resolve an intervention
+  // POST — resolve or cancel an intervention
   if (req.method === 'POST') {
     const { id, resolution, action } = req.body;
 

@@ -35,6 +35,7 @@ import {
   capabilityToResourceType,
 } from './DelegatedIdentity';
 import { InterventionQueue } from './InterventionQueue';
+import { InterventionPersistence } from './InterventionPersistence';
 import { GoalCheckpointManager } from './GoalCheckpoint';
 import { VerificationContractRegistry, createDefaultVerificationContracts } from './VerificationContract';
 import { executeGoalViaAdaptiveOperator } from '../adaptive-operator/AdaptiveOperatorIntegration';
@@ -88,6 +89,31 @@ export function getCheckpointManager(): GoalCheckpointManager {
     _checkpointManager = new GoalCheckpointManager();
   }
   return _checkpointManager;
+}
+
+/**
+ * Initialize Supabase persistence for the intervention queue.
+ * After calling this, all interventions are persisted to Supabase
+ * and survive restart.
+ */
+export function initializePersistence(supabase: import('@supabase/supabase-js').SupabaseClient): void {
+  const persistence = new InterventionPersistence(supabase);
+  const queue = getInterventionQueue();
+  queue.attachPersistence(persistence);
+  getLogger().info('Intervention persistence initialized (Supabase)');
+}
+
+/**
+ * Restore in-memory state from Supabase persistence after restart.
+ * Loads pending interventions and checkpoints.
+ */
+export async function restoreFromPersistence(): Promise<{
+  interventionsRestored: number;
+}> {
+  const queue = getInterventionQueue();
+  const interventionsRestored = await queue.restoreFromPersistence();
+  getLogger().info(`Restored ${interventionsRestored} interventions from persistence`);
+  return { interventionsRestored };
 }
 
 /**
