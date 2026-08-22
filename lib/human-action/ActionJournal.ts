@@ -285,11 +285,16 @@ export class ActionJournal {
 
   private scheduleFlush(): void {
     if (this.flushTimer) return;
+    // Use unref so the timer doesn't keep the process alive
     this.flushTimer = setTimeout(() => {
       this.flush().catch(() => {
         // Flush failed — will retry on next schedule
       });
     }, this.flushIntervalMs);
+    // Allow the process to exit even if the timer is pending
+    if (this.flushTimer && typeof this.flushTimer.unref === 'function') {
+      this.flushTimer.unref();
+    }
   }
 
   private redactResult(result: HumanActionResult): HumanActionResult {

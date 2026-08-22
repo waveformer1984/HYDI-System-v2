@@ -167,9 +167,9 @@ export class InfrastructureAdapter implements ActionAdapter {
         checkedAt: new Date().toISOString(),
       });
       return {
-        verified: true,
+        verified: output.healthy,
         evidence,
-        reason: 'Health check completed',
+        reason: output.healthy ? 'Service verified healthy' : 'Service not healthy',
       };
     }
 

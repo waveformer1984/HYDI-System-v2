@@ -80,7 +80,31 @@ export class BrowserAdapter implements ActionAdapter {
     chromeExecutablePath?: string; // path to Chrome binary
   }) {
     this.chromeEndpoint = options?.chromeEndpoint ?? process.env.CHROME_WS_ENDPOINT ?? null;
-    this.chromeExecutablePath = options?.chromeExecutablePath ?? process.env.CHROME_PATH ?? null;
+    this.chromeExecutablePath = options?.chromeExecutablePath ?? process.env.CHROME_PATH ?? this.detectChrome();
+  }
+
+  /**
+   * Auto-detect Chrome executable path on the current platform.
+   */
+  private detectChrome(): string | null {
+    const fs = require('fs');
+    const candidates: string[] = [];
+    if (process.platform === 'win32') {
+      candidates.push(
+        'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+        'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+        'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
+        'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
+      );
+    } else if (process.platform === 'darwin') {
+      candidates.push('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome');
+    } else {
+      candidates.push('/usr/bin/google-chrome', '/usr/bin/chromium', '/usr/bin/chromium-browser');
+    }
+    for (const c of candidates) {
+      try { if (fs.existsSync(c)) return c; } catch { /* ignore */ }
+    }
+    return null;
   }
 
   async execute(
@@ -483,8 +507,12 @@ export class BrowserAdapter implements ActionAdapter {
     // Synchronous check — if puppeteer was loaded and browser state exists
     if (this.state) return { available: true, reason: null };
     if (!puppeteerImportAttempted) {
-      // Not yet attempted — report as potentially available
-      return { available: false, reason: 'Browser not initialized — call execute() to initialize' };
+      // Not yet attempted — check if we have what we need
+      const hasChrome = this.chromeEndpoint || this.chromeExecutablePath;
+      if (hasChrome) {
+        return { available: true, reason: null };
+      }
+      return { available: false, reason: 'No Chrome executable found' };
     }
     return { available: puppeteer !== null, reason: puppeteer ? null : 'puppeteer not installed' };
   }
