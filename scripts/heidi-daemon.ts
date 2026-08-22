@@ -583,6 +583,17 @@ async function main(): Promise<void> {
       console.log(`[daemon] IPC message received at ${new Date().toISOString()} (epoch ms: ${Date.now()})`);
       gracefulShutdown('IPC_SHUTDOWN');
     }
+    if (typeof msg === 'object' && msg !== null && 'type' in msg) {
+      const m = msg as { type: string; reason?: string };
+      if (m.type === 'kill_switch') {
+        console.log(`[daemon] Kill switch activated via IPC: ${m.reason || 'manual'}`);
+        core.activateKillSwitch(m.reason || 'IPC kill_switch');
+      }
+      if (m.type === 'kill_switch_off') {
+        console.log('[daemon] Kill switch deactivated via IPC');
+        core.deactivateKillSwitch();
+      }
+    }
   });
 
   // 4. Run initial self-sufficiency observation
@@ -635,6 +646,20 @@ async function main(): Promise<void> {
 
   async function runSelfSufficiencyInterval(): Promise<void> {
     if (shuttingDown) return;
+
+    // Kill switch check: if the cognitive core's kill switch is active,
+    // do not perform autonomous self-sufficiency actions (repair, acquisition).
+    // The daemon continues to observe and report status, but does not
+    // execute any autonomous actions that could modify the system.
+    const loopStatus = core.getLoopStatus();
+    if (loopStatus.killSwitchActive) {
+      // Log periodically but don't act
+      if (selfSufficiencyCycleCount % 10 === 0) {
+        console.log(`[daemon] Kill switch active — self-sufficiency actions suspended (cycle ${selfSufficiencyCycleCount})`);
+      }
+      selfSufficiencyCycleCount++;
+      return;
+    }
 
     // Track in-flight state so gracefulShutdown can wait for us
     ssfInFlight = true;
