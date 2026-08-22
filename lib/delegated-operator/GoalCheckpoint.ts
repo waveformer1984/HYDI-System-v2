@@ -156,10 +156,11 @@ export class GoalCheckpointManager {
 
   /**
    * List all active (non-terminal) checkpoints.
-   * Terminal statuses: COMPLETED, FAILED, EXPIRED
+   * Terminal statuses: COMPLETED, PARTIAL, FAILED, EXPIRED
+   * (must match GoalStateMachine.TERMINAL_STATES)
    */
   listActive(): GoalCheckpoint[] {
-    const terminal: GoalRuntimeStatus[] = ['COMPLETED', 'FAILED', 'EXPIRED'];
+    const terminal: GoalRuntimeStatus[] = ['COMPLETED', 'PARTIAL', 'FAILED', 'EXPIRED'];
     return this.getAllCheckpoints().filter((cp) => !terminal.includes(cp.status));
   }
 

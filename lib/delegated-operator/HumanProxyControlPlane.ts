@@ -37,6 +37,16 @@ import {
 } from './DelegatedOperatorIntegration';
 import { goalStatusToPhase, type AuthorizationState, type VerificationState } from './OperationalStatus';
 
+/**
+ * Terminal goal statuses — must match GoalStateMachine.TERMINAL_STATES.
+ * A terminal goal cannot have active interventions, resume, or reopen.
+ */
+const TERMINAL_GOAL_STATUSES: Set<GoalRuntimeStatus> = new Set(['COMPLETED', 'PARTIAL', 'FAILED', 'EXPIRED']);
+
+function isTerminalStatus(status: GoalRuntimeStatus): boolean {
+  return TERMINAL_GOAL_STATUSES.has(status);
+}
+
 // ---------------------------------------------------------------------------
 // Control Plane
 // ---------------------------------------------------------------------------
@@ -130,8 +140,9 @@ export class HumanProxyControlPlane {
     const lastActionStarted = events.filter((e) => e.eventType === 'ACTION_STARTED').pop();
 
     // Determine next action from last ACTION_SELECTED that hasn't completed
+    // Terminal goals have no next action
     const actionSelected = events.filter((e) => e.eventType === 'ACTION_SELECTED').pop();
-    const nextAction = actionSelected?.payload.capability;
+    const nextAction = isTerminalStatus(checkpoint.status) ? undefined : actionSelected?.payload.capability;
 
     // Determine persistence state
     let persistenceState: PersistenceState = 'not_persisted';
@@ -147,19 +158,21 @@ export class HumanProxyControlPlane {
       goalText: checkpoint.goalStatement,
       status: checkpoint.status,
       startedAt: checkpoint.createdAt,
-      currentAction: lastActionStarted?.payload.capability,
-      currentCapability: lastActionStarted?.payload.capability,
-      targetResource: lastActionStarted?.payload.targetResource,
-      resourceType: lastActionStarted?.payload.resourceType,
-      riskLevel: lastActionStarted?.payload.riskLevel,
+      // Terminal goals have no current action
+      currentAction: isTerminalStatus(checkpoint.status) ? undefined : lastActionStarted?.payload.capability,
+      currentCapability: isTerminalStatus(checkpoint.status) ? undefined : lastActionStarted?.payload.capability,
+      targetResource: isTerminalStatus(checkpoint.status) ? undefined : lastActionStarted?.payload.targetResource,
+      resourceType: isTerminalStatus(checkpoint.status) ? undefined : lastActionStarted?.payload.resourceType,
+      riskLevel: isTerminalStatus(checkpoint.status) ? undefined : lastActionStarted?.payload.riskLevel,
       authorizationState,
       authorizationReason,
       verificationState,
       verificationContract,
-      interventionRequired: currentIntervention !== null,
-      interventionId: currentIntervention?.requestId,
-      interventionType: currentIntervention?.interventionType,
-      interventionReason: currentIntervention?.blocker,
+      // Terminal goals cannot have active interventions — suppress orphaned pending interventions
+      interventionRequired: !isTerminalStatus(checkpoint.status) && currentIntervention !== null,
+      interventionId: !isTerminalStatus(checkpoint.status) ? currentIntervention?.requestId : undefined,
+      interventionType: !isTerminalStatus(checkpoint.status) ? currentIntervention?.interventionType : undefined,
+      interventionReason: !isTerminalStatus(checkpoint.status) ? currentIntervention?.blocker : undefined,
       checkpointId: checkpoint.checkpointId,
       lastCompletedAction: lastCompleted?.payload.capability,
       nextAction,
@@ -171,7 +184,7 @@ export class HumanProxyControlPlane {
       failedActionCount: failedActions.length,
       sideEffects: checkpoint.executedSideEffects,
       warnings: checkpoint.failedObjectives.length > 0 ? [`Failed objectives: ${checkpoint.failedObjectives.join(', ')}`] : [],
-      blockers: currentIntervention ? [currentIntervention.blocker] : [],
+      blockers: !isTerminalStatus(checkpoint.status) && currentIntervention ? [currentIntervention.blocker] : [],
       finalState: checkpoint.status === 'COMPLETED' ? checkpoint.verifiedState : undefined,
       finalVerification: checkpoint.status === 'COMPLETED' ? 'verified' : undefined,
       persistenceState,
@@ -220,9 +233,18 @@ export class HumanProxyControlPlane {
 
   /**
    * List all pending interventions across all goals.
+   * Filters out interventions for terminal goals (orphaned interventions).
    */
   listPendingInterventions(): PersistentInterventionRequest[] {
-    return getInterventionQueue().getPending();
+    const queue = getInterventionQueue();
+    const checkpointManager = getCheckpointManager();
+    return queue.getPending().filter((intv) => {
+      const cp = checkpointManager.getCheckpoint(intv.goalId);
+      // If no checkpoint exists, keep the intervention (may be a new goal)
+      // If checkpoint exists and is terminal, filter it out (orphaned)
+      if (!cp) return true;
+      return !isTerminalStatus(cp.status);
+    });
   }
 
   /**
@@ -277,12 +299,18 @@ export class HumanProxyControlPlane {
     let completedGoals = 0;
     let failedGoals = 0;
 
+    // Count active goal metrics
     for (const goal of activeGoals) {
       totalActions += goal.actionCount;
       totalReplans += goal.replanCount;
       totalRecoveries += goal.recoveryCount;
-      if (goal.status === 'COMPLETED') completedGoals++;
-      if (goal.status === 'FAILED') failedGoals++;
+    }
+
+    // Count terminal goals from all checkpoints
+    const allCheckpoints = getCheckpointManager().getAllCheckpoints();
+    for (const cp of allCheckpoints) {
+      if (cp.status === 'COMPLETED') completedGoals++;
+      else if (cp.status === 'FAILED' || cp.status === 'EXPIRED') failedGoals++;
     }
 
     return {
