@@ -281,22 +281,28 @@ export class GoalCheckpointManager {
   }
 
   /**
-   * Restore active checkpoints from Supabase persistence.
+   * Restore checkpoints from Supabase persistence.
    * Called on daemon startup to recover checkpoints that survived restart.
-   * Only non-terminal checkpoints are restored.
+   *
+   * Loads ALL checkpoints (including terminal) so that:
+   *   - Active goals can be resumed
+   *   - Terminal goals are known (prevents stale intervention resurrection)
+   *   - listActive() still only returns non-terminal goals for execution
+   *
+   * The latest checkpoint per goal wins (listAll returns DESC by created_at).
    */
   async restoreFromPersistence(): Promise<number> {
     if (!this.persistence) return 0;
 
     try {
-      const active = await this.persistence.listActive();
+      const all = await this.persistence.listAll();
 
-      // listActive returns ordered by created_at DESC, so the first
+      // listAll returns ordered by created_at DESC, so the first
       // checkpoint for each goal is the latest. We must NOT overwrite
       // goalToCheckpoint with older checkpoints for the same goal.
       const seenGoals = new Set<string>();
 
-      for (const cp of active) {
+      for (const cp of all) {
         // Don't overwrite in-memory checkpoints that may have been added
         // during this session before restore was called
         if (!this.checkpoints.has(cp.checkpointId)) {
@@ -311,7 +317,7 @@ export class GoalCheckpointManager {
         }
       }
 
-      return active.length;
+      return all.length;
     } catch {
       return 0;
     }

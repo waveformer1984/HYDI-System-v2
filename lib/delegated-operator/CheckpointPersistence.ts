@@ -206,6 +206,28 @@ export class CheckpointPersistence {
   }
 
   /**
+   * List ALL checkpoints including terminal ones.
+   * Used during restart recovery to ensure terminal goals are known
+   * so that stale interventions on terminal goals can be filtered out.
+   */
+  async listAll(): Promise<GoalCheckpoint[]> {
+    if (!this.enabled || !this.supabase) return [];
+
+    try {
+      const { data, error } = await this.supabase
+        .from('goal_checkpoints')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error || !data) return [];
+
+      return data.map((row) => this.rowToCheckpoint(row as Record<string, unknown>));
+    } catch {
+      return [];
+    }
+  }
+
+  /**
    * Delete a checkpoint (after goal completion).
    */
   async delete(checkpointId: string): Promise<boolean> {
