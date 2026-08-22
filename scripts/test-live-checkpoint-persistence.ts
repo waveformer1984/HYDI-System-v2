@@ -148,10 +148,10 @@ async function main() {
   assert(restored?.goalId === 'goal_ckpt_test_001', `Same goalId: ${restored?.goalId}`);
   assert(restored?.identityId === 'identity_ckpt_test_001', `Same identity: ${restored?.identityId}`);
   assert(restored?.planVersion === 1, `Same plan version: ${restored?.planVersion}`);
-  assert(restored?.completedObjectives.includes('RESOURCE_CREATED'), 'Same completed objectives');
+  assert(!!restored?.completedObjectives.includes('RESOURCE_CREATED'), 'Same completed objectives');
   assert(restored?.executedActions.length === 1, `Same executed actions count: ${restored?.executedActions.length}`);
   assert(restored?.executedActions[0]?.actionId === 'act_ckpt_001', 'Same action ID');
-  assert(restored?.executedSideEffects.includes(`create:${testFile}`), 'Same executed side effects');
+  assert(!!restored?.executedSideEffects.includes(`create:${testFile}`), 'Same executed side effects');
   assert(restored?.status === 'RUNNING', `Same status: ${restored?.status}`);
 
   // ─── TEST 6: Idempotency — do NOT create resource again ─────────

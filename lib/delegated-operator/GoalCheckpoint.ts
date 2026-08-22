@@ -281,12 +281,23 @@ export class GoalCheckpointManager {
     try {
       const active = await this.persistence.listActive();
 
+      // listActive returns ordered by created_at DESC, so the first
+      // checkpoint for each goal is the latest. We must NOT overwrite
+      // goalToCheckpoint with older checkpoints for the same goal.
+      const seenGoals = new Set<string>();
+
       for (const cp of active) {
         // Don't overwrite in-memory checkpoints that may have been added
         // during this session before restore was called
         if (!this.checkpoints.has(cp.checkpointId)) {
           this.checkpoints.set(cp.checkpointId, cp);
-          this.goalToCheckpoint.set(cp.goalId, cp.checkpointId);
+
+          // Only set goalToCheckpoint if we haven't seen this goal yet
+          // (the first one in the DESC-ordered list is the latest)
+          if (!seenGoals.has(cp.goalId)) {
+            this.goalToCheckpoint.set(cp.goalId, cp.checkpointId);
+            seenGoals.add(cp.goalId);
+          }
         }
       }
 

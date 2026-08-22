@@ -276,7 +276,7 @@ async function main() {
   assert(restoredCp !== null, 'Restored checkpoint found in memory');
   assert(restoredCp?.goalId === goalId, `Restored checkpoint goalId: ${restoredCp?.goalId}`);
   assert(restoredCp?.status === 'WAITING_FOR_HUMAN', `Restored checkpoint status: ${restoredCp?.status}`);
-  assert(restoredCp?.completedObjectives.includes('INITIAL_SETUP'), 'Completed objectives preserved');
+  assert(!!restoredCp?.completedObjectives.includes('INITIAL_SETUP'), 'Completed objectives preserved');
 
   // Verify restored intervention matches
   const restoredInt = freshInterventionQueue.get(intervention.requestId);

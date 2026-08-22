@@ -272,7 +272,7 @@ async function main() {
   console.log('\n═══ Phase 11: Credential Lifecycle Through Real Operator ═══');
 
   // Test credential operations through the delegated identity
-  const credOps = [
+  const credOps: Array<{ name: string; capability: string; sideEffect: any; risk: RiskLevel; expectedAuth: boolean }> = [
     { name: 'DISCOVER', capability: 'credential.discover', sideEffect: 'AUTHENTICATE', risk: 'R1' as RiskLevel, expectedAuth: true },
     { name: 'VALIDATE', capability: 'credential.validate', sideEffect: 'AUTHENTICATE', risk: 'R1' as RiskLevel, expectedAuth: true },
     { name: 'PROVISION', capability: 'credential.provision', sideEffect: 'AUTHENTICATE', risk: 'R2' as RiskLevel, expectedAuth: true },
