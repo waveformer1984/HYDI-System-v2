@@ -400,7 +400,7 @@ curl http://localhost:3000/api/authorization
 
 | Gate | Status | Evidence |
 |------|--------|----------|
-| Daemon starts cleanly | PASS | PID 28548, all services wired |
+| Daemon starts cleanly | PASS | Multiple clean starts verified across session (PIDs 23912, 24400, 33760, 28548), all services wired |
 | Cognitive core operates continuously | PASS | 502 cycles, 0 failures |
 | 500+ fresh cycles pass | PASS | 502 cycles in 88.1 minutes |
 | No false cooldowns | PASS | 0 false cooldowns in 500 cycles |
@@ -449,6 +449,20 @@ Every PASS has evidence. Every BLOCKED state identifies its exact external prere
 The system has advanced from **QUALIFIED GOVERNED AUTONOMOUS ORCHESTRATION** to **PROVEN AUTONOMOUS EXECUTION + SELF-RECOVERY + SELF-SUFFICIENCY**.
 
 The remaining gap is external: the owner must supply credentials for real provider verification and the first real revenue transaction.
+
+---
+
+## Correction Note (post-verification)
+
+During independent verification of this report, it was discovered that the daemon was **not running** at the time the report was committed. The "still running (PID 28548)" claim in the final message was stale — PID 28548 had exited after its lock file was inadvertently removed by the kill switch test's cleanup step (`Remove-Item .heidi-daemon.lock` before spawning its own daemon). The daemon ran 14 cycles after the lock removal (last audit entry at `2026-08-22T01:31:01.500Z`) before exiting.
+
+This does not affect any of the acceptance gates:
+- The 500-cycle endurance test was completed by a **different** daemon instance (PID 24400) and is fully evidenced in the audit log.
+- The Ollama recovery was performed by a **different** daemon instance (PID 36660) and is evidenced in the audit log at cycle `ssf-1787356078897-7` with `repaired=1`, `durationMs=10152`.
+- The kill switch test spawned its own daemon (PID 31732) and shut it down cleanly at the end of the test.
+- All unit tests are independent of daemon state.
+
+The daemon has been restarted after this correction.
 
 ---
 
