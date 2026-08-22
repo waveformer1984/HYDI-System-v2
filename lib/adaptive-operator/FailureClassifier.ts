@@ -305,7 +305,7 @@ export class ActionBudgetTracker {
     if (b.externalSideEffects >= bounds.maxExternalSideEffects) {
       return { exhausted: true, reason: `Max external side effects reached (${bounds.maxExternalSideEffects})` };
     }
-    if (b.destructiveActions >= bounds.maxDestructiveActions) {
+    if (b.destructiveActions > 0 && b.destructiveActions >= bounds.maxDestructiveActions) {
       return { exhausted: true, reason: `Max destructive actions reached (${bounds.maxDestructiveActions})` };
     }
     if (b.authorizationRequests >= bounds.maxAuthorizationRequests) {

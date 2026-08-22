@@ -48,3 +48,4 @@ export { CompletionEvaluator } from './CompletionEvaluator';
 export { TaskMemoryStore } from './TaskMemoryStore';
 export { FailureClassifier, ActionBudgetTracker } from './FailureClassifier';
 export { AdaptiveOperator } from './AdaptiveOperator';
+export { getProductionAutonomyBounds, isAdaptiveOperatorEnabled } from './ProductionBounds';

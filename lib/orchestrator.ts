@@ -34,6 +34,7 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { buildCognitiveCore } from './heidi/CognitiveCoreBuilder';
 import type { CognitiveCore, CognitiveState } from './heidi/CognitiveCore';
 import { getMetricsService, type PartialInferenceMetric } from './metrics';
+import { isAdaptiveOperatorEnabled } from './adaptive-operator/ProductionBounds';
 
 // Lazy client: a missing NEXT_PUBLIC_SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY
 // must surface as a normal caught error inside processChat's try/catch (which
@@ -1263,8 +1264,51 @@ Respond with JSON:`;
    * vocabulary (this.allowedActionTypes — no new code-editing/test-running/
    * git capability), persist it, then run steps until the plan completes,
    * a step fails or is ProtoForge-blocked, or `maxSteps` is reached.
+   *
+   * When ADAPTIVE_OPERATOR_ENABLED=true, delegates to AdaptiveOperator
+   * instead of the LLM-decompose-then-run-step-by-step path. AdaptiveOperator
+   * observes the real environment, generates a reality-driven plan, executes
+   * through the governed HumanActionEngine, verifies outcomes, and replans
+   * on deviations — all within production autonomy bounds. See
+   * lib/adaptive-operator/AdaptiveOperatorIntegration.ts.
    */
   async startWorkSession(goal: string, sessionId: string, userId: string, maxSteps = 5): Promise<WorkSession | null> {
+    // --- AdaptiveOperator path (feature-flagged) ---
+    if (isAdaptiveOperatorEnabled()) {
+      console.log(`[Orchestrator] AdaptiveOperator enabled — delegating goal: "${goal}"`);
+      try {
+        const { executeGoalViaAdaptiveOperator } = await import('./adaptive-operator/AdaptiveOperatorIntegration');
+        const result = await executeGoalViaAdaptiveOperator({
+          goal,
+          sessionId,
+          userId,
+          supabase: this.supabase,
+        });
+        // Persist the work session to Supabase so the existing API/UI
+        // (api/work-sessions) can display it.
+        try {
+          await this.supabase.from('work_sessions').upsert({
+            id: result.workSession.id,
+            session_id: result.workSession.session_id,
+            user_id: result.workSession.user_id,
+            goal: result.workSession.goal,
+            status: result.workSession.status,
+            steps: result.workSession.steps,
+            created_at: result.workSession.created_at,
+            updated_at: result.workSession.updated_at,
+            completed_at: result.workSession.completed_at,
+          });
+        } catch (persistErr) {
+          console.error('[Orchestrator] Failed to persist AdaptiveOperator work session:', persistErr instanceof Error ? persistErr.message : 'Unknown error');
+        }
+        return result.workSession;
+      } catch (adaptiveErr) {
+        console.error('[Orchestrator] AdaptiveOperator failed, falling back to legacy work session:', adaptiveErr instanceof Error ? adaptiveErr.message : 'Unknown error');
+        // Fall through to legacy path
+      }
+    }
+
+    // --- Legacy path: LLM decompose → run steps one-by-one ---
     const prompt = buildPlanPrompt(goal, this.allowedActionTypes);
     const modelResponse = await this.modelManager.generateResponse(prompt, sessionId);
 
