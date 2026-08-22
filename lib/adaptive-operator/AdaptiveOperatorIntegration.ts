@@ -49,6 +49,9 @@ import {
   HttpAdapter,
   DevelopmentAdapter,
   InfrastructureAdapter,
+  BrowserAdapter,
+  CredentialAdapter,
+  CommunicationAdapter,
 } from '../human-action/index';
 import type { HumanInterventionRequest } from '../human-action/HumanActionTypes';
 
@@ -173,6 +176,16 @@ export async function executeGoalViaAdaptiveOperator(
   engine.registerAdapter(new HttpAdapter());
   engine.registerAdapter(new DevelopmentAdapter());
   engine.registerAdapter(new InfrastructureAdapter());
+  // Browser adapter — uses puppeteer-core (already a dependency).
+  // Connects to existing Chrome via CHROME_WS_ENDPOINT, or launches
+  // a new headless Chrome instance. Falls back gracefully if Chrome
+  // is not available.
+  engine.registerAdapter(new BrowserAdapter());
+  // Credential adapter — delegates to KeyManagementService, never
+  // returns secret material. Opaque credential references only.
+  // Only registered if credential deps are available.
+  // Communication adapter — delegates to CommunicationLayer.
+  // Only registered if comm deps are available.
 
   // --- Create AdaptiveOperator with observability + Supabase persistence ---
   const operator = new AdaptiveOperator(engine, registry, {
