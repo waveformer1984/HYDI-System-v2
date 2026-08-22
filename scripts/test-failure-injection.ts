@@ -151,7 +151,7 @@ async function main() {
     const state = controlPlane.getGoalState(goalId);
     assert(state !== null, 'Provider failure: state exists');
     assert(state?.status === 'WAITING_FOR_PROVIDER', 'Provider failure: status is WAITING_FOR_PROVIDER');
-    assert(state?.failedActionCount >= 1, 'Provider failure: failed action count tracked');
+    assert((state?.failedActionCount ?? 0) >= 1, 'Provider failure: failed action count tracked');
   }
 
   // ─── Test 3: Browser failure (Chrome not found) ───────────────────
@@ -178,7 +178,7 @@ async function main() {
     const events = controlPlane.getGoalEvents(goalId);
     const failEvent = events.find((e) => e.eventType === 'ACTION_FAILED');
     assert(failEvent !== undefined, 'Browser failure: ACTION_FAILED event recorded');
-    assert(failEvent?.payload.errorMessage?.includes('Chrome not found'), 'Browser failure: error message preserved');
+    assert(!!failEvent?.payload.errorMessage?.includes('Chrome not found'), 'Browser failure: error message preserved');
   }
 
   // ─── Test 4: Authentication failure (expired identity) ────────────
@@ -203,7 +203,7 @@ async function main() {
 
     const validCheck = identityManager.isIdentityValid(expiredIdentity.identityId);
     assert(!validCheck.valid, 'Expired identity is not valid');
-    assert(validCheck.reason?.includes('expired'), `Expired identity reason: ${validCheck.reason}`);
+    assert(!!validCheck.reason?.includes('expired'), `Expired identity reason: ${validCheck.reason}`);
 
     const goalId = 'goal_fail_auth';
     await controlPlane.recordEvent({
@@ -270,7 +270,7 @@ async function main() {
     const events = controlPlane.getGoalEvents(goalId);
     const staleEvent = events.find((e) => e.eventType === 'STALE_STATE_DETECTED');
     assert(staleEvent !== undefined, 'Stale checkpoint: STALE_STATE_DETECTED event recorded');
-    assert(staleEvent?.payload.reason?.includes('Checkpoint age'), 'Stale checkpoint: reason preserved');
+    assert(!!staleEvent?.payload.reason?.includes('Checkpoint age'), 'Stale checkpoint: reason preserved');
   }
 
   // ─── Test 7: Supabase persistence failure ─────────────────────────
@@ -399,13 +399,25 @@ async function main() {
     const violationEvent = events.find((e) => e.eventType === 'SAFETY_DENIAL');
     assert(violationEvent !== undefined, 'Resource boundary: SAFETY_DENIAL recorded');
     assert(violationEvent?.payload.targetResource === '/etc/passwd', 'Resource boundary: target preserved');
-    assert(violationEvent?.payload.reason?.includes('outside allowed boundaries'), 'Resource boundary: reason preserved');
+    assert(!!violationEvent?.payload.reason?.includes('outside allowed boundaries'), 'Resource boundary: reason preserved');
   }
 
   // ─── Test 12: Security event — secret in payload ──────────────────
   console.log('\n  ─── Security Event — Secret in Payload ───');
   {
     const goalId = 'goal_fail_secret';
+    checkpointManager.checkpoint({
+      goalId, identityId: identity.identityId,
+      goalStatement: 'Secret test',
+      planVersion: 1, completedObjectives: [], failedObjectives: [],
+      inProgressObjectives: ['OBJ_1'], pendingObjectives: [],
+      executedActions: [], verifiedState: {},
+      status: 'RUNNING',
+      resumeCondition: 'Continue',
+      executedSideEffects: [], summary: 'Secret test',
+    });
+    await new Promise((r) => setTimeout(r, 50));
+
     await controlPlane.recordEvent({
       goalId, identityId: identity.identityId, eventType: 'ACTION_FAILED',
       payload: {
@@ -417,7 +429,9 @@ async function main() {
     const events = controlPlane.getGoalEvents(goalId);
     const secretEvent = events.find((e) => e.eventType === 'ACTION_FAILED');
     assert(secretEvent !== undefined, 'Secret event: recorded');
-    assert(isOperationalGoalStateClean(controlPlane.getGoalState(goalId)!), 'Secret event: state is clean');
+    const secretState = controlPlane.getGoalState(goalId);
+    assert(secretState !== null, 'Secret event: state exists');
+    assert(secretState !== null && isOperationalGoalStateClean(secretState), 'Secret event: state is clean');
     const evtStr = JSON.stringify(secretEvent);
     assert(!evtStr.includes('sk_live_SECRET'), 'Secret event: no sk_live in event');
     assert(!evtStr.includes('password=SuperSecret'), 'Secret event: no password in event');
@@ -440,7 +454,7 @@ async function main() {
     const events = controlPlane.getGoalEvents(goalId);
     const traversalEvent = events.find((e) => e.eventType === 'SAFETY_DENIAL');
     assert(traversalEvent !== undefined, 'Path traversal: SAFETY_DENIAL recorded');
-    assert(traversalEvent?.payload.targetResource?.includes('..'), 'Path traversal: path preserved in event');
+    assert(!!traversalEvent?.payload.targetResource?.includes('..'), 'Path traversal: path preserved in event');
     assert(traversalEvent?.payload.reason === 'Path traversal detected', 'Path traversal: reason preserved');
   }
 
@@ -496,7 +510,7 @@ async function main() {
     assert(recCompleted !== undefined, 'Recovery: RECOVERY_COMPLETED recorded');
 
     const state = controlPlane.getGoalState(goalId);
-    assert(state?.recoveryCount >= 1, 'Recovery: recovery count tracked');
+    assert((state?.recoveryCount ?? 0) >= 1, 'Recovery: recovery count tracked');
   }
 
   // ─── Test 16: All failures produce events ─────────────────────────

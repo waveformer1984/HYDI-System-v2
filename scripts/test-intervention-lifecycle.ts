@@ -301,7 +301,7 @@ async function main() {
   const restored = await freshQueue.restoreFromPersistence();
   assert(restored > 0, `Interventions restored from Supabase: ${restored}`);
   const restoredPending = freshQueue.getPending();
-  const restoredIntv = restoredPending.find((i) => i.requestId === reqId6);
+  const restoredIntv = restoredPending.find((i: { requestId: string; status: string; blocker: string }) => i.requestId === reqId6);
   assert(restoredIntv !== undefined, 'Pending intervention restored after restart');
   assert(restoredIntv?.status === 'pending', 'Restored intervention is pending');
   assert(restoredIntv?.blocker === 'PERSISTENCE_TEST', `Restored intervention blocker matches (got ${restoredIntv?.blocker})`);
