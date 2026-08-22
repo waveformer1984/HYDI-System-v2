@@ -53,6 +53,13 @@ import {
 } from '../operational/EnhancedCredentialProbes';
 import { BlockerResolutionEngine } from '../operational/BlockerResolutionEngine';
 import { SelfRepairEngine, createDatabaseRepairHandler, createOllamaRepairHandler } from '../operational/SelfRepairEngine';
+import { KeyManagementService } from '../operational/KeyManagementService';
+import { KeyCompromiseResponse } from '../operational/KeyCompromiseResponse';
+import { KeyHealthMonitor } from '../operational/KeyHealthMonitor';
+import { SecretScanner } from '../operational/SecretScanner';
+import { KeyLifecycleScheduler } from '../operational/KeyLifecycleScheduler';
+import { EnvVarVault, VaultRegistry, LocalDevVault } from '../operational/KeyVaults';
+import { createKeyManagementBridge } from './KeyManagementBridge';
 
 export interface CognitiveCoreBuilderOptions {
   /** Database config for CognitiveCore's internal pool (identity, goals, world, etc.) */
@@ -91,6 +98,10 @@ export interface CognitiveCoreBuilderOptions {
   selfRepairEngine?: SelfRepairEngine;
   /** Enable self-sufficiency wiring (default: true). Set false to skip. */
   enableSelfSufficiency?: boolean;
+  /** Pre-built KeyManagementService instance. If absent, one is created. */
+  keyManagementService?: KeyManagementService;
+  /** Enable key management wiring (default: true). Set false to skip. */
+  enableKeyManagement?: boolean;
 }
 
 export class CognitiveCoreBuilder {
@@ -410,6 +421,41 @@ export class CognitiveCoreBuilder {
         registerRepairHandler: (capabilityId: string, handler: (capabilityId: string, procedure: string) => Promise<{ success: boolean; evidence: string }>) =>
           sre.registerRepairHandler(capabilityId, handler),
       };
+    }
+
+    // 9. Key Management — credential lifecycle, rotation, compromise response
+    //
+    // Wires the Key Management Plane:
+    //   - KeyManagementService (lifecycle orchestration)
+    //   - KeyCompromiseResponse (compromise workflow)
+    //   - KeyHealthMonitor (continuous health evaluation)
+    //   - SecretScanner (repository/runtime secret detection)
+    //   - KeyLifecycleScheduler (durable recurring tasks)
+    //
+    // All operations pass through KeyPolicyEngine (R0/R1/R2/R3/R5).
+    // Secret values are NEVER exposed through the bridge.
+    if (this.opts.enableKeyManagement !== false && notOverridden('keyManagement')) {
+      try {
+        const root = this.opts.root || path.resolve(__dirname, '..', '..');
+        const kms = this.opts.keyManagementService || new KeyManagementService(
+          root,
+          undefined,
+          new VaultRegistry(new EnvVarVault()),
+        );
+
+        // Create secret scanner
+        const scanner = new SecretScanner(root);
+
+        // Create health monitor
+        const healthMonitor = new KeyHealthMonitor(kms, scanner);
+
+        // Create compromise response
+        const compromiseResponse = new KeyCompromiseResponse(kms);
+
+        bridge.keyManagement = createKeyManagementBridge(kms, compromiseResponse, healthMonitor, scanner);
+      } catch {
+        // Key management not loadable — skip
+      }
     }
 
     return new CognitiveCore(this.opts.dbConfig, bridge);

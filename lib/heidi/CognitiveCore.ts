@@ -307,6 +307,21 @@ export interface ExecutionBridge {
     getHistory: () => unknown[];
     registerRepairHandler: (capabilityId: string, handler: (capabilityId: string, procedure: string) => Promise<{ success: boolean; evidence: string }>) => void;
   } | null;
+  // Key management: credential lifecycle, rotation, compromise response
+  keyManagement?: {
+    discover: () => Promise<{ added: unknown[]; updated: unknown[]; removed: unknown[] }>;
+    getInventory: () => unknown;
+    getKey: (keyId: string) => unknown | null;
+    validate: (keyId: string) => Promise<unknown>;
+    rotate: (keyId: string) => Promise<unknown>;
+    revoke: (keyId: string) => Promise<unknown>;
+    recover: (keyId: string) => Promise<unknown>;
+    generate: (providerId: string, options: unknown) => Promise<unknown>;
+    respondToCompromise: (keyId: string, suspicion: string) => Promise<unknown>;
+    checkHealth: () => Promise<unknown>;
+    scan: () => Promise<unknown>;
+    setKillSwitch: (active: boolean) => void;
+  } | null;
 }
 
 export class CognitiveCore {
