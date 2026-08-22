@@ -28,7 +28,10 @@ import type {
   KeyHealthStatus,
   KeyHealthFinding,
   KeyHealthFindingType,
+  CredentialHealthState,
+  CredentialServiceHealthReport,
 } from './KeyManagementTypes';
+import type { CapabilityHealthState } from './CapabilityHealthManager';
 import type { KeyInventoryStore } from './KeyInventory';
 import type { KeyManagementService } from './KeyManagementService';
 import type { SecretScanner } from './SecretScanner';
@@ -228,6 +231,139 @@ export class KeyHealthMonitor {
     this.lastScanFindings.clear();
     for (const finding of scanFindings) {
       this.lastScanFindings.set(finding.fingerprint, true);
+    }
+  }
+
+  /**
+   * Assess the credential health state distinctly from the service health state.
+   *
+   * A credential can be VALID while the service is DEGRADED (e.g., Stripe API
+   * is down but the key is fine). Conversely, a credential can be EXPIRED while
+   * the service is still READY (e.g., using a cached token).
+   *
+   * This distinction is essential for correct diagnosis and recovery.
+   */
+  assessCredentialHealth(key: KeyMetadata): CredentialHealthState {
+    // Compromised takes priority
+    if (key.compromiseStatus === 'CONFIRMED' || key.compromiseStatus === 'SUSPECTED') {
+      return 'COMPROMISED';
+    }
+
+    // Revoked
+    if (key.lifecycleState === 'REVOKED') {
+      return 'REVOKED';
+    }
+
+    // Check validation result
+    if (key.lastValidationResult === 'INVALID') {
+      return 'REVOKED';
+    }
+    if (key.lastValidationResult === 'EXPIRED') {
+      return 'EXPIRED';
+    }
+    if (key.lastValidationResult === 'REVOKED') {
+      return 'REVOKED';
+    }
+
+    // Check expiration
+    if (key.expiresAt) {
+      const expiresMs = new Date(key.expiresAt).getTime();
+      const now = Date.now();
+      const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
+
+      if (expiresMs < now) {
+        return 'EXPIRED';
+      }
+      if (expiresMs - now < thirtyDaysMs) {
+        return 'EXPIRING_SOON';
+      }
+    }
+
+    // Check rotation overdue
+    if (key.rotationIntervalDays && key.lastRotatedAt) {
+      const lastRotatedMs = new Date(key.lastRotatedAt).getTime();
+      const rotationDueMs = lastRotatedMs + key.rotationIntervalDays * 24 * 60 * 60 * 1000;
+      if (Date.now() > rotationDueMs) {
+        return 'ROTATION_REQUIRED';
+      }
+    }
+
+    // Validated and not expiring
+    if (key.lastValidationResult === 'VALID') {
+      return 'VALID';
+    }
+
+    // Not yet validated
+    return 'UNKNOWN';
+  }
+
+  /**
+   * Produce a combined health report that distinguishes credential health
+   * from service health.
+   *
+   * @param key - The credential metadata
+   * @param serviceState - The service health state from CapabilityHealthManager
+   * @param serviceEvidence - Evidence from the service health check
+   */
+  assessCombinedHealth(
+    key: KeyMetadata,
+    serviceState: CapabilityHealthState,
+    serviceEvidence: string,
+  ): CredentialServiceHealthReport {
+    const credentialState = this.assessCredentialHealth(key);
+
+    // Determine if the credential is the root cause of the service issue
+    let credentialIsRootCause = false;
+    if (serviceState === 'BLOCKED' && credentialState === 'BLOCKED') {
+      credentialIsRootCause = true;
+    } else if (serviceState === 'DEGRADED' && (
+      credentialState === 'EXPIRED' ||
+      credentialState === 'REVOKED' ||
+      credentialState === 'COMPROMISED' ||
+      credentialState === 'ROTATION_REQUIRED'
+    )) {
+      credentialIsRootCause = true;
+    } else if (serviceState === 'UNAVAILABLE' && credentialState === 'VALID') {
+      // Service is down but credential is fine — not a credential issue
+      credentialIsRootCause = false;
+    }
+
+    const credentialEvidence = this.describeCredentialState(credentialState, key);
+
+    return {
+      credentialState,
+      serviceState,
+      credentialEvidence,
+      serviceEvidence,
+      credentialIsRootCause,
+      lastCredentialValidation: key.lastValidationAt,
+      lastServiceCheck: new Date().toISOString(),
+    };
+  }
+
+  /**
+   * Describe a credential health state in human-readable terms.
+   */
+  private describeCredentialState(state: CredentialHealthState, key: KeyMetadata): string {
+    switch (state) {
+      case 'VALID':
+        return `Credential is valid (last validated: ${key.lastValidationAt ?? 'never'})`;
+      case 'EXPIRING_SOON':
+        return `Credential expires soon (${key.expiresAt})`;
+      case 'EXPIRED':
+        return `Credential expired (${key.expiresAt ?? 'unknown expiration'})`;
+      case 'REVOKED':
+        return 'Credential has been revoked by the provider';
+      case 'COMPROMISED':
+        return `Credential compromise status: ${key.compromiseStatus}`;
+      case 'ROTATION_REQUIRED':
+        return `Rotation is overdue (last rotated: ${key.lastRotatedAt ?? 'never'})`;
+      case 'UNKNOWN':
+        return 'Credential has not been validated yet';
+      case 'BLOCKED':
+        return 'Credential is missing entirely';
+      default:
+        return `Credential state: ${state}`;
     }
   }
 

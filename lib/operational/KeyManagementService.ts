@@ -76,6 +76,10 @@ export class KeyManagementService {
   private root: string;
   private killSwitchActive = false;
   private autonomousModeEnabled = true;
+  /** Per-key rotation lock — prevents concurrent rotations from creating duplicate replacements */
+  private rotationLocks: Map<string, { startedAt: number; correlationId: string }> = new Map();
+  /** Rotation lock TTL — if a lock is older than this, it's considered stale and can be reclaimed */
+  private static readonly ROTATION_LOCK_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
   constructor(
     root: string,
@@ -522,10 +526,41 @@ export class KeyManagementService {
       return this.failOperation('ROTATE', key, policy, start, `Provider ${key.provider} does not support rotation`);
     }
 
+    // ─── Idempotency / Concurrency Lock ───────────────────────────────
+    // Prevent concurrent rotation requests from creating multiple replacement
+    // credentials. If a rotation is already in progress for this key, return
+    // immediately with a "rotation in progress" result.
+    const existingLock = this.rotationLocks.get(keyId);
+    if (existingLock) {
+      const lockAge = Date.now() - existingLock.startedAt;
+      if (lockAge < KeyManagementService.ROTATION_LOCK_TTL_MS) {
+        // Active lock — return idempotent "already in progress" result
+        return {
+          success: true, // Not a failure — the rotation is proceeding
+          keyId,
+          operation: 'ROTATE',
+          previousState: key.lifecycleState,
+          resultingState: 'ROTATING',
+          validationResult: null,
+          failureReason: null,
+          policyEvaluation: policy,
+          durationMs: Date.now() - start,
+          message: `Rotation already in progress for ${key.envVar ?? keyId} (started ${lockAge}ms ago, correlation: ${existingLock.correlationId})`,
+        };
+      }
+      // Stale lock — reclaim it
+      this.rotationLocks.delete(keyId);
+    }
+
+    // Acquire lock
+    const correlationId = randomUUID();
+    this.rotationLocks.set(keyId, { startedAt: Date.now(), correlationId });
+
     const vault = this.vaults.get(key.storageBackend);
     const oldValue = await vault.retrieve(keyId);
 
     if (!oldValue) {
+      this.releaseRotationLock(keyId);
       return this.failOperation('ROTATE', key, policy, start, 'Old key value not found in vault');
     }
 
@@ -549,6 +584,7 @@ export class KeyManagementService {
         await vault.delete(newKeyId);
         this.inventory.updateLifecycleState(keyId, 'ACTIVE');
         this.inventory.updateValidation(keyId, validationState);
+        this.releaseRotationLock(keyId);
 
         this.audit.record(this.makeAuditInput('ROTATE', keyId, key.provider, key.envVar, 'ROTATING', policy, start, `New key validation failed: ${validationState}`, {
           newKeyId,
@@ -643,6 +679,9 @@ export class KeyManagementService {
         durationMs: Date.now() - start,
         message: `Rotation failed: ${reason}. Old key retained.`,
       };
+    } finally {
+      // Always release the rotation lock — whether success or failure
+      this.releaseRotationLock(keyId);
     }
   }
 
@@ -857,6 +896,14 @@ export class KeyManagementService {
       killSwitchActive: this.killSwitchActive,
       autonomousModeEnabled: this.autonomousModeEnabled,
     };
+  }
+
+  /**
+   * Release the rotation lock for a key.
+   * Called in the finally block of rotate() to ensure the lock is always released.
+   */
+  private releaseRotationLock(keyId: string): void {
+    this.rotationLocks.delete(keyId);
   }
 
   private detectEnvironment(): string {

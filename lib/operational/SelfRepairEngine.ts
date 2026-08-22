@@ -91,6 +91,12 @@ export class SelfRepairEngine {
   private maxAutoRepairsPerCycle: number = 5;
   private maxHistoryEntries: number = 500;
   private repairHandlers: Map<string, (capabilityId: string, procedure: string) => Promise<{ success: boolean; evidence: string }>>;
+  /** Optional KMS reference for credential recovery */
+  private kms: import('./KeyManagementService').KeyManagementService | null = null;
+  /** Track credential recovery attempts per capability to prevent auto-rotation on single failures */
+  private credentialFailureCounts: Map<string, number> = new Map();
+  /** Minimum observations before attempting credential recovery */
+  private static readonly MIN_OBSERVATIONS_FOR_RECOVERY = 3;
   // Track the last recorded repair per capability+action to dedup consecutive
   // identical workarounds/escalations for still-blocked capabilities. Without
   // this, a capability that stays blocked indefinitely (e.g. missing Stripe
@@ -151,6 +157,21 @@ export class SelfRepairEngine {
     handler: (capabilityId: string, procedure: string) => Promise<{ success: boolean; evidence: string }>,
   ): void {
     this.repairHandlers.set(capabilityId, handler);
+  }
+
+  /**
+   * Set the KeyManagementService reference for credential recovery.
+   *
+   * When set, the self-repair engine will attempt credential recovery
+   * (via KMS.recover()) for capabilities that fail due to invalid
+   * credentials — but ONLY after sufficient observation confidence
+   * (MIN_OBSERVATIONS_FOR_RECOVERY consecutive failures).
+   *
+   * This integrates credential recovery into the existing HEIDI
+   * governed-autonomy pipeline without creating a parallel path.
+   */
+  setKeyManagementService(kms: import('./KeyManagementService').KeyManagementService): void {
+    this.kms = kms;
   }
 
   /**
@@ -233,6 +254,76 @@ export class SelfRepairEngine {
         escalated++;
         repairs.push(this.createEscalatedRepair(report, resolution.reasoning));
         continue;
+      }
+
+      // ─── Credential Recovery Integration ───────────────────────────
+      // When a capability is DEGRADED or BLOCKED due to credential issues
+      // and we have a KMS, attempt credential recovery — but ONLY after
+      // sufficient observation confidence (never auto-rotate on a single
+      // auth failure).
+      if (this.kms && report.failureClassification === 'MISSING_EXTERNAL_CREDENTIAL') {
+        const capId = report.capabilityId;
+        const failureCount = (this.credentialFailureCounts.get(capId) ?? 0) + 1;
+        this.credentialFailureCounts.set(capId, failureCount);
+
+        if (failureCount >= SelfRepairEngine.MIN_OBSERVATIONS_FOR_RECOVERY) {
+          // Sufficient confidence — attempt credential recovery
+          // Find the key in inventory that matches this capability
+          const inventory = this.kms.getInventory();
+          const keyForCap = inventory.keys.find(k =>
+            k.dependencies.includes(capId) && k.lifecycleState === 'ACTIVE'
+          );
+
+          if (keyForCap) {
+            try {
+              const recoverResult = await this.kms.recover(keyForCap.id);
+              if (recoverResult.success) {
+                repaired++;
+                autoRepairsThisCycle++;
+                this.credentialFailureCounts.delete(capId);
+                repairs.push({
+                  repairId: `cred-recovery-${capId}-${Date.now()}`,
+                  capabilityId: capId,
+                  problem: `Credential failure detected after ${failureCount} observations`,
+                  evidence: recoverResult.message,
+                  classification: 'MISSING_EXTERNAL_CREDENTIAL',
+                  riskLevel: 'R1',
+                  plannedAction: 'CREDENTIAL_RECOVERY via KMS.recover()',
+                  authorized: true,
+                  authorizedBy: 'heidi-self-repair',
+                  executed: true,
+                  verified: true,
+                  verificationEvidence: recoverResult.message,
+                  timestamp: new Date().toISOString(),
+                  rollbackInfo: null,
+                });
+                continue;
+              } else {
+                // Recovery failed — escalate
+                escalated++;
+                this.credentialFailureCounts.delete(capId);
+                repairs.push(this.createEscalatedRepair(report,
+                  `Credential recovery attempted but failed: ${recoverResult.failureReason}. Escalating to human.`));
+                continue;
+              }
+            } catch (error) {
+              // Recovery threw — escalate
+              escalated++;
+              const reason = error instanceof Error ? error.message : 'unknown';
+              repairs.push(this.createEscalatedRepair(report,
+                `Credential recovery failed with error: ${reason}. Escalating to human.`));
+              continue;
+            }
+          }
+        } else {
+          // Not enough observations — work around and continue
+          workedAround++;
+          repairs.push(this.createWorkaroundRepair(report, resolution));
+          continue;
+        }
+      } else if (report.state === 'READY' || report.state === 'DEGRADED') {
+        // Reset failure count when capability is not blocked
+        this.credentialFailureCounts.delete(report.capabilityId);
       }
 
       // For REPAIR_AUTONOMOUSLY and PREPARE_REPAIR, check authorization

@@ -18,6 +18,7 @@
  */
 
 import type { CredentialState, CapabilityBlocker, AuthorizationLevel } from './CapabilityAcquisitionTypes';
+import type { CapabilityHealthState } from './CapabilityHealthManager';
 
 // ─── Key Metadata Model ──────────────────────────────────────────────────
 
@@ -199,8 +200,36 @@ export interface KeyVault {
    * SECURITY: The returned value must NOT be stored in domain objects,
    * logged, or transmitted. It should be used immediately for the
    * intended operation and then discarded.
+   *
+   * DEPRECATED: Use retrieveForAuthorizedOperation() instead, which
+   * enforces authorization before returning the secret material.
+   * This method is kept for backward compatibility but should not
+   * be used in new code.
    */
   retrieve(keyId: string): Promise<string | null>;
+
+  /**
+   * Retrieve a secret value from the vault FOR an authorized operation.
+   *
+   * This is the preferred retrieval method. It enforces that:
+   *   1. The caller has a valid authorization context
+   *   2. The operation is permitted by policy
+   *   3. The key exists and is in a state that allows retrieval
+   *
+   * Returns null if the key is not found or authorization is denied.
+   * SECURITY: The returned CredentialMaterial must NOT be stored in
+   * domain objects, logged, or transmitted. Use it immediately and
+   * discard it.
+   *
+   * @param keyId - The key identifier to retrieve
+   * @param operation - The operation that needs the credential (for audit)
+   * @param authorizationToken - Authorization context (from PolicyEngine)
+   */
+  retrieveForAuthorizedOperation(
+    keyId: string,
+    operation: string,
+    authorizationToken: AuthorizationToken,
+  ): Promise<CredentialMaterial | null>;
 
   /**
    * Delete a secret from the vault.
@@ -507,6 +536,173 @@ export interface KeyInventorySummary {
   byRiskLevel: Record<KeyRiskLevel, number>;
   byProvider: Record<string, number>;
   byStorageBackend: Record<KeyStorageBackend, number>;
+}
+
+// ─── Opaque Credential Reference ──────────────────────────────────────────
+
+/**
+ * Opaque reference to a credential — used in decision objects, audit records,
+ * telemetry, dashboard responses, and LLM/HEIDI context.
+ *
+ * This is the ONLY type that should appear in:
+ *   - audit records
+ *   - API responses
+ *   - dashboard payloads
+ *   - error messages
+ *   - HEIDI decision context
+ *   - LLM prompts
+ *
+ * It NEVER contains the secret value. It is a stable, opaque identifier
+ * that can be resolved to the actual material ONLY through the
+ * CredentialVault.retrieveForAuthorizedOperation() method.
+ *
+ * Example: "cred_01J..."
+ */
+export type CredentialRef = string;
+
+/**
+ * Authorization token for vault retrieval.
+ *
+ * This is issued by the KeyPolicyEngine when an operation is authorized.
+ * It proves that the caller has gone through the governance pipeline
+ * and is permitted to access the credential material.
+ *
+ * The token is opaque — it does not contain the secret value.
+ * It is validated by the vault before returning the material.
+ */
+export interface AuthorizationToken {
+  /** The operation that was authorized */
+  operation: string;
+  /** The policy decision that authorized this operation */
+  decision: string;
+  /** The policy ID that matched */
+  policyId: string;
+  /** The authorization level required */
+  requiredAuthorization: string;
+  /** When the token was issued */
+  issuedAt: string;
+  /** The key ID that this token authorizes access to (or 'any' for discovery) */
+  keyId: string;
+  /** Whether this is a dry-run (no actual side effects) */
+  dryRun: boolean;
+}
+
+/**
+ * Branded type for actual credential material (the secret value).
+ *
+ * This type exists to make it explicit in the type system when a function
+ * handles actual secret material. It should NEVER appear in:
+ *   - domain objects (use CredentialRef)
+ *   - audit records (use CredentialRef)
+ *   - API responses (use CredentialRef)
+ *   - logs (never)
+ *   - LLM context (never)
+ *
+ * It should ONLY appear as a parameter to:
+ *   - KeyVault.store()
+ *   - KeyVault.retrieveForAuthorizedOperation() return value
+ *   - KeyProvider.create() return value
+ *   - KeyProvider.validate() parameter
+ *   - KeyProvider.provision() parameter
+ *   - KeyProvider.rotate() return value
+ *   - KeyProvider.revoke() parameter
+ *   - KeyProvider.destroy() parameter
+ */
+export type CredentialMaterial = string & { readonly __brand: 'CredentialMaterial' };
+
+/**
+ * Brand a plaintext string as CredentialMaterial.
+ * This is a type-level marker — it does NOT encrypt or protect the value.
+ * It simply makes it explicit in the type system that this string contains
+ * actual secret material.
+ */
+export function brandCredentialMaterial(value: string): CredentialMaterial {
+  return value as CredentialMaterial;
+}
+
+/**
+ * Check if a value looks like a CredentialRef (opaque ID).
+ * CredentialRefs are UUIDs or prefixed identifiers like "cred_...".
+ */
+export function isCredentialRef(value: unknown): value is CredentialRef {
+  if (typeof value !== 'string') return false;
+  // UUID format or cred_ prefix
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
+    || value.startsWith('cred_');
+}
+
+// ─── Credential Health State (distinct from service health) ───────────────
+
+/**
+ * The health state of a credential itself — distinct from the health of
+ * the service that consumes it.
+ *
+ * A credential can be VALID (credential is healthy) while the service is
+ * DEGRADED (service has issues unrelated to the credential).
+ * Conversely, a credential can be EXPIRED while the service is still
+ * READY (using a cached token or fallback).
+ *
+ * This distinction is essential for correct diagnosis.
+ */
+export type CredentialHealthState =
+  | 'VALID'           // credential is valid and not expiring soon
+  | 'EXPIRING_SOON'   // credential is valid but expires within 30 days
+  | 'EXPIRED'         // credential has passed its expiration date
+  | 'REVOKED'         // credential has been revoked by the provider
+  | 'COMPROMISED'     // credential is suspected or confirmed compromised
+  | 'ROTATION_REQUIRED' // credential is valid but rotation is overdue
+  | 'UNKNOWN'         // credential has not been validated
+  | 'BLOCKED';        // credential is missing entirely
+
+/**
+ * Combined health report that distinguishes credential health from service health.
+ */
+export interface CredentialServiceHealthReport {
+  /** The credential health state (is the key valid?) */
+  credentialState: CredentialHealthState;
+  /** The service health state (is the dependent service working?) */
+  serviceState: CapabilityHealthState;
+  /** Evidence for the credential state */
+  credentialEvidence: string;
+  /** Evidence for the service state */
+  serviceEvidence: string;
+  /** Whether the service failure is caused by the credential */
+  credentialIsRootCause: boolean;
+  /** When the credential was last validated */
+  lastCredentialValidation: string | null;
+  /** When the service was last checked */
+  lastServiceCheck: string | null;
+}
+
+// ─── Provisioning Capability Result ───────────────────────────────────────
+
+/**
+ * Result of checking whether a credential can be autonomously provisioned.
+ */
+export type ProvisioningCapability =
+  | 'AUTOMATED'              // provider supports full autonomous creation
+  | 'SUPPORTED'              // provider supports creation but needs authorization
+  | 'REQUIRES_AUTHORIZATION' // provider supports creation but needs owner authorization
+  | 'REQUIRES_HUMAN_ACTION'  // provider does not support API-based creation
+  | 'UNSUPPORTED'            // provider does not support this operation at all
+  | 'FAILED'                 // attempt was made and failed
+  | 'UNKNOWN';               // capability not yet determined
+
+/**
+ * Result of a provisioning capability check.
+ */
+export interface ProvisioningCapabilityResult {
+  capability: ProvisioningCapability;
+  /** What the provider supports */
+  providerSupports: boolean;
+  /** What policy allows */
+  policyAllows: boolean;
+  /** The exact human/provider action required if automation is not possible */
+  requiredHumanAction: string | null;
+  /** The authorization level required */
+  requiredAuthorization: string;
+  /** Evidence/explanation */
+  evidence: string;
 }
 
 // ─── Errors ──────────────────────────────────────────────────────────────

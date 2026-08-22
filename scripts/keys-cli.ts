@@ -7,14 +7,14 @@
  *   npx tsx scripts/keys-cli.ts inspect <id>
  *   npx tsx scripts/keys-cli.ts scan
  *   npx tsx scripts/keys-cli.ts health
- *   npx tsx scripts/keys-cli.ts rotate <id>
- *   npx tsx scripts/keys-cli.ts revoke <id>
+ *   npx tsx scripts/keys-cli.ts rotate <id> [--dry-run]
+ *   npx tsx scripts/keys-cli.ts revoke <id> [--dry-run]
  *   npx tsx scripts/keys-cli.ts reconcile
  *   npx tsx scripts/keys-cli.ts audit [--limit=50]
  *   npx tsx scripts/keys-cli.ts generate <provider> [--dry-run]
  *   npx tsx scripts/keys-cli.ts validate <id>
  *   npx tsx scripts/keys-cli.ts recover <id>
- *   npx tsx scripts/keys-cli.ts compromise <id> --suspicion="reason"
+ *   npx tsx scripts/keys-cli.ts compromise <id> --suspicion="reason" [--dry-run]
  *
  * SECURITY: This CLI NEVER displays secret values.
  * Only metadata, fingerprints, and lifecycle states are shown.
@@ -139,8 +139,25 @@ async function main() {
 
     case 'rotate': {
       if (!arg) {
-        console.error('Usage: keys-cli.ts rotate <id>');
+        console.error('Usage: keys-cli.ts rotate <id> [--dry-run]');
         process.exit(1);
+      }
+      const flags = parseFlags();
+      const dryRun = flags['dry-run'] === 'true';
+      if (dryRun) {
+        const key = kms.getKey(arg);
+        if (!key) {
+          console.error(`Key not found: ${arg}`);
+          process.exit(1);
+        }
+        console.log(`\n=== Dry Run: Rotate ${key.envVar ?? arg} ===\n`);
+        console.log(`Provider: ${key.provider}`);
+        console.log(`Current state: ${key.lifecycleState}`);
+        console.log(`Risk level: ${key.riskLevel}`);
+        console.log(`Fingerprint: ${key.fingerprint ?? 'null'}`);
+        console.log(`\nWould: create replacement key, validate it, provision it, disable old key, deprecate old key`);
+        console.log(`No changes will be made.`);
+        break;
       }
       console.log(`Rotating key ${arg}...`);
       const result = await kms.rotate(arg);
@@ -152,8 +169,23 @@ async function main() {
 
     case 'revoke': {
       if (!arg) {
-        console.error('Usage: keys-cli.ts revoke <id>');
+        console.error('Usage: keys-cli.ts revoke <id> [--dry-run]');
         process.exit(1);
+      }
+      const flags = parseFlags();
+      const dryRun = flags['dry-run'] === 'true';
+      if (dryRun) {
+        const key = kms.getKey(arg);
+        if (!key) {
+          console.error(`Key not found: ${arg}`);
+          process.exit(1);
+        }
+        console.log(`\n=== Dry Run: Revoke ${key.envVar ?? arg} ===\n`);
+        console.log(`Provider: ${key.provider}`);
+        console.log(`Current state: ${key.lifecycleState}`);
+        console.log(`\nWould: call provider.revoke(), mark as REVOKED, delete from vault`);
+        console.log(`No changes will be made.`);
+        break;
       }
       console.log(`Revoking key ${arg}...`);
       const result = await kms.revoke(arg);
@@ -230,11 +262,26 @@ async function main() {
 
     case 'compromise': {
       if (!arg) {
-        console.error('Usage: keys-cli.ts compromise <id> --suspicion="reason"');
+        console.error('Usage: keys-cli.ts compromise <id> --suspicion="reason" [--dry-run]');
         process.exit(1);
       }
       const flags = parseFlags();
       const suspicion = flags.suspicion ?? 'Suspected compromise';
+      const dryRun = flags['dry-run'] === 'true';
+      if (dryRun) {
+        const key = kms.getKey(arg);
+        if (!key) {
+          console.error(`Key not found: ${arg}`);
+          process.exit(1);
+        }
+        console.log(`\n=== Dry Run: Compromise Response for ${key.envVar ?? arg} ===\n`);
+        console.log(`Provider: ${key.provider}`);
+        console.log(`Current state: ${key.lifecycleState}`);
+        console.log(`Suspicion: ${suspicion}`);
+        console.log(`\nWould: isolate, revoke, replace, provision, verify, scan for residual exposure`);
+        console.log(`No changes will be made.`);
+        break;
+      }
       console.log(`Executing compromise response for key ${arg}...`);
       const compromiseResponse = new KeyCompromiseResponse(kms);
       const result = await compromiseResponse.respond(arg, suspicion);

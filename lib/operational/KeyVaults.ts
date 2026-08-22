@@ -23,7 +23,8 @@
 import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from 'crypto';
 import fs from 'fs';
 import path from 'path';
-import type { KeyVault, KeyStorageBackend } from './KeyManagementTypes';
+import type { KeyVault, KeyStorageBackend, CredentialMaterial, AuthorizationToken } from './KeyManagementTypes';
+import { brandCredentialMaterial } from './KeyManagementTypes';
 
 // ─── LocalDevVault (encrypted file) ──────────────────────────────────────
 
@@ -253,6 +254,22 @@ export class LocalDevVault implements KeyVault {
     }
   }
 
+  async retrieveForAuthorizedOperation(
+    keyId: string,
+    operation: string,
+    token: AuthorizationToken,
+  ): Promise<CredentialMaterial | null> {
+    // Validate authorization token
+    if (!token || token.operation !== operation) {
+      return null;
+    }
+    if (token.keyId !== keyId && token.keyId !== 'any') {
+      return null;
+    }
+    const value = await this.retrieve(keyId);
+    return value ? brandCredentialMaterial(value) : null;
+  }
+
   async delete(keyId: string): Promise<boolean> {
     this.ensureLoaded();
     const existed = this.entries.delete(keyId);
@@ -318,6 +335,22 @@ export class EnvVarVault implements KeyVault {
     return typeof value === 'string' && value.length > 0 ? value : null;
   }
 
+  async retrieveForAuthorizedOperation(
+    keyId: string,
+    operation: string,
+    token: AuthorizationToken,
+  ): Promise<CredentialMaterial | null> {
+    // Validate authorization token
+    if (!token || token.operation !== operation) {
+      return null;
+    }
+    if (token.keyId !== keyId && token.keyId !== 'any') {
+      return null;
+    }
+    const value = await this.retrieve(keyId);
+    return value ? brandCredentialMaterial(value) : null;
+  }
+
   async delete(keyId: string): Promise<boolean> {
     const existed = this.managedKeys.has(keyId);
     this.managedKeys.delete(keyId);
@@ -359,6 +392,22 @@ export class InMemoryVault implements KeyVault {
 
   async retrieve(keyId: string): Promise<string | null> {
     return this.entries.get(keyId) ?? null;
+  }
+
+  async retrieveForAuthorizedOperation(
+    keyId: string,
+    operation: string,
+    token: AuthorizationToken,
+  ): Promise<CredentialMaterial | null> {
+    // InMemoryVault is for testing only — authorization is still checked
+    if (!token || token.operation !== operation) {
+      return null;
+    }
+    if (token.keyId !== keyId && token.keyId !== 'any') {
+      return null;
+    }
+    const value = await this.retrieve(keyId);
+    return value ? brandCredentialMaterial(value) : null;
   }
 
   async delete(keyId: string): Promise<boolean> {
