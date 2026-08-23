@@ -1,17 +1,32 @@
 /**
  * API LAYER - /api/execute
- * 
- * Executes parsed actions ONLY with schema validation before execution
+ *
+ * SECURITY: This route previously allowed unauthenticated direct execution of
+ * actions (send_email, create_task, update_database, etc.), bypassing
+ * HumanActionEngine, AuthorityManager, AdaptiveOperator, and the entire
+ * governed execution pipeline. This is a critical safety violation.
+ *
+ * The route now requires authentication and rejects all direct execution
+ * attempts. Callers must use the proper governed execution path:
+ *   POST /api/goals → AdaptiveOperator → HumanActionEngine
+ *
+ * This route is retained as a governance denial endpoint to ensure any
+ * legacy callers receive a clear error directing them to the correct path.
  */
 
 import { NextApiRequest, NextApiResponse } from 'next';
+import { requireAuth } from '../../lib/auth/requireAuth.js';
 
-interface ExecuteRequest {
-  session_id: string;
-  actions: Array<{
-    type: string;
-    payload: Record<string, any>;
-  }>;
+let _supabase: ReturnType<typeof import('@supabase/supabase-js').createClient> | null = null;
+function getSupabase() {
+  if (!_supabase) {
+    const { createClient } = require('@supabase/supabase-js') as typeof import('@supabase/supabase-js');
+    if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      throw new Error('Supabase env vars not configured');
+    }
+    _supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+  }
+  return _supabase;
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -19,139 +34,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  try {
-    const { session_id, actions }: ExecuteRequest = req.body;
+  // Require authentication — this was previously unauthenticated
+  const auth = await requireAuth(req, res, getSupabase(), {
+    permission: 'work_sessions:create',
+    routeName: 'execute',
+  });
+  if (!auth.ok) return;
 
-    if (!session_id || !actions) {
-      return res.status(400).json({ 
-        error: 'Missing required fields: session_id, actions' 
-      });
-    }
-
-    if (!Array.isArray(actions)) {
-      return res.status(400).json({ 
-        error: 'actions must be an array' 
-      });
-    }
-
-    // Validate schema for each action
-    const allowedActionTypes = ['send_email', 'create_task', 'update_database', 'fetch_data', 'schedule_event'];
-    const results = [];
-
-    for (const action of actions) {
-      // Validate action structure
-      if (!action.type || typeof action.type !== 'string') {
-        results.push({
-          action,
-          status: 'failed',
-          error: 'Action must have a valid type string'
-        });
-        continue;
-      }
-
-      if (!action.payload || typeof action.payload !== 'object') {
-        results.push({
-          action,
-          status: 'failed',
-          error: 'Action must have a valid payload object'
-        });
-        continue;
-      }
-
-      // Validate action type
-      if (!allowedActionTypes.includes(action.type)) {
-        results.push({
-          action,
-          status: 'failed',
-          error: `Action type '${action.type}' not allowed`
-        });
-        continue;
-      }
-
-      // Execute action (async safe, never block)
-      try {
-        const result = await executeAction(action.type, action.payload, session_id);
-        results.push({
-          action,
-          status: 'completed',
-          result
-        });
-      } catch (error) {
-        console.error(`Action execution failed for ${action.type}:`, error);
-        results.push({
-          action,
-          status: 'failed',
-          error: error instanceof Error ? error.message : 'Unknown error'
-        });
-      }
-    }
-
-    res.status(200).json({
-      session_id,
-      results,
-      total_actions: actions.length,
-      completed: results.filter(r => r.status === 'completed').length,
-      failed: results.filter(r => r.status === 'failed').length
-    });
-
-  } catch (error) {
-    console.error('Execute API error:', error);
-    res.status(500).json({ 
-      error: 'Internal server error',
-      message: error instanceof Error ? error.message : 'Unknown error'
-    });
-  }
-}
-
-/**
- * Execute individual action
- */
-async function executeAction(type: string, payload: Record<string, any>, sessionId: string): Promise<any> {
-  switch (type) {
-    case 'send_email':
-      return await sendEmail(payload, sessionId);
-    case 'create_task':
-      return await createTask(payload, sessionId);
-    case 'update_database':
-      return await updateDatabase(payload, sessionId);
-    case 'fetch_data':
-      return await fetchData(payload, sessionId);
-    case 'schedule_event':
-      return await scheduleEvent(payload, sessionId);
-    default:
-      throw new Error(`Unknown action type: ${type}`);
-  }
-}
-
-/**
- * Action implementations (simplified for demo)
- */
-async function sendEmail(payload: any, _sessionId: string): Promise<any> {
-  // In production, integrate with actual email service
-  console.log(`[ACTION] Sending email:`, payload);
-  return { sent: true, message_id: `msg_${Date.now()}` };
-}
-
-async function createTask(payload: any, _sessionId: string): Promise<any> {
-  // In production, integrate with task management system
-  console.log(`[ACTION] Creating task:`, payload);
-  return { task_id: `task_${Date.now()}`, created: true };
-}
-
-async function updateDatabase(payload: any, _sessionId: string): Promise<any> {
-  // In production, integrate with database service
-  console.log(`[ACTION] Updating database:`, payload);
-  return { updated: true, affected_rows: 1 };
-}
-
-async function fetchData(payload: any, _sessionId: string): Promise<any> {
-  // In production, integrate with data service
-  console.log(`[ACTION] Fetching data:`, payload);
-  return { data: `sample_data_${Date.now()}`, count: 42 };
-}
-
-async function scheduleEvent(payload: any, _sessionId: string): Promise<any> {
-  // In production, integrate with scheduling service
-  console.log(`[ACTION] Scheduling event:`, payload);
-  return { scheduled: true, event_id: `event_${Date.now()}` };
+  // Reject all direct execution attempts — the governed path is /api/goals
+  return res.status(403).json({
+    error: 'Direct execution is forbidden',
+    reason: 'This endpoint bypasses HumanActionEngine and the governed execution pipeline. Use POST /api/goals to create a goal that will be executed through the proper governed path: AdaptiveOperator → HumanActionEngine → AuthorityManager → VerificationContract.',
+    governed_path: '/api/goals',
+    timestamp: new Date().toISOString(),
+  });
 }

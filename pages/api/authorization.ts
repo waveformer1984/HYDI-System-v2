@@ -1,4 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
+import { requireAuth } from '../../lib/auth/requireAuth.js';
 
 /**
  * GET  /api/authorization          — list all authorization requests
@@ -11,10 +12,44 @@ import type { NextApiRequest, NextApiResponse } from 'next';
  * Authorization is scoped, persistent, auditable, revocable.
  * HEIDI can create PENDING requests but cannot self-approve them.
  * Only the owner (via this API) can approve/deny/revoke.
+ *
+ * SECURITY: All routes require authentication. Approve/deny/revoke require
+ * owner role. Create requires operator role. Read requires viewer role.
  */
+
+let _supabase: ReturnType<typeof import('@supabase/supabase-js').createClient> | null = null;
+function getSupabase() {
+  if (!_supabase) {
+    const { createClient } = require('@supabase/supabase-js') as typeof import('@supabase/supabase-js');
+    if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      throw new Error('Supabase env vars not configured');
+    }
+    _supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+  }
+  return _supabase;
+}
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
+    const supabase = getSupabase();
+
+    // Determine required permission based on method and action
+    const action = req.query.action as string | undefined;
+    let permission = 'work_sessions:view'; // GET default
+    if (req.method === 'POST') {
+      if (action === 'approve' || action === 'deny' || action === 'revoke') {
+        permission = 'actions:approve'; // Mutation — requires operator+
+      } else {
+        permission = 'work_sessions:create'; // Create request
+      }
+    }
+
+    const auth = await requireAuth(req, res, supabase, {
+      permission,
+      routeName: 'authorization',
+    });
+    if (!auth.ok) return;
+
     const { getOwnerAuthorizationStore } = await import('../../lib/operational/OwnerAuthorizationStore');
 
     const store = getOwnerAuthorizationStore();
@@ -53,7 +88,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       // ─── Approve ─────────────────────────────────────
       if (action === 'approve' && id) {
-        const decidedBy = (req.body?.decidedBy as string) || 'owner';
+        const decidedBy = auth.role ?? 'owner';
         const expiresAt = req.body?.expiresAt as string | undefined;
         const approved = store.approve(id, decidedBy, expiresAt);
         if (!approved) {
@@ -68,7 +103,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       // ─── Deny ────────────────────────────────────────
       if (action === 'deny' && id) {
-        const decidedBy = (req.body?.decidedBy as string) || 'owner';
+        const decidedBy = auth.role ?? 'owner';
         const reason = (req.body?.reason as string) || 'Denied by owner';
         const denied = store.deny(id, decidedBy, reason);
         if (!denied) {
@@ -83,7 +118,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       // ─── Revoke ──────────────────────────────────────
       if (action === 'revoke' && id) {
-        const decidedBy = (req.body?.decidedBy as string) || 'owner';
+        const decidedBy = auth.role ?? 'owner';
         const revoked = store.revoke(id, decidedBy);
         if (!revoked) {
           return res.status(404).json({ error: 'Authorization request not found or not revokable', id });
