@@ -1,0 +1,86 @@
+{
+  "phase": "13",
+  "timestamp": "2026-08-24T05:19:52.437Z",
+  "head": "382aa3b70c4bc71f2f171f42f995efb6f0020407",
+  "branch": "feat/governed-autonomy",
+  "totalAssertions": 75,
+  "passed": 75,
+  "failed": 0,
+  "invariants": 12,
+  "passCount": 12,
+  "failCount": 0,
+  "results": [
+    {
+      "id": "DH01",
+      "invariant": "Authentication and RBAC on all operator routes",
+      "status": "PASS",
+      "detail": "10 operator routes, all authenticated, read routes use viewer-compatible permissions"
+    },
+    {
+      "id": "DH02",
+      "invariant": "No secret exposure in dashboard responses",
+      "status": "PASS",
+      "detail": "sanitizeResponse used in all 10 operator routes; secret patterns stripped"
+    },
+    {
+      "id": "DH03",
+      "invariant": "Correct tenant/goal filtering",
+      "status": "PASS",
+      "detail": "getGoalEvents returns only events for the specified goal"
+    },
+    {
+      "id": "DH04",
+      "invariant": "Terminal-state correctness",
+      "status": "PASS",
+      "detail": "Terminal goals have correct status; excluded from active goals list"
+    },
+    {
+      "id": "DH05",
+      "invariant": "Safe intervention controls (approve/reject/cancel only)",
+      "status": "PASS",
+      "detail": "Only approve/reject/cancel mutation routes exist, all requiring actions:approve"
+    },
+    {
+      "id": "DH06",
+      "invariant": "No mutation from read-only views",
+      "status": "PASS",
+      "detail": "7 read routes, all using read-only permissions"
+    },
+    {
+      "id": "DH07",
+      "invariant": "Accurate recovery and health display",
+      "status": "PASS",
+      "detail": "Recovery and status routes are read-only, authenticated, and return operational data"
+    },
+    {
+      "id": "DH08",
+      "invariant": "SSE remains transport-only (no state mutation)",
+      "status": "PASS",
+      "detail": "SSE source has no enqueue/checkpoint/approve/reject/cancel; uses sanitizeResponse"
+    },
+    {
+      "id": "DH09",
+      "invariant": "SanitizeResponse applied to all operator responses",
+      "status": "PASS",
+      "detail": "sanitizeResponse used in all 10 operator routes"
+    },
+    {
+      "id": "DH10",
+      "invariant": "Goal events endpoint is read-only",
+      "status": "PASS",
+      "detail": "Goal events route is GET-only, authenticated, uses getGoalEvents"
+    },
+    {
+      "id": "DH11",
+      "invariant": "Recovery endpoint is read-only",
+      "status": "PASS",
+      "detail": "Recovery route is read-only and authenticated"
+    },
+    {
+      "id": "DH12",
+      "invariant": "Status endpoint is read-only",
+      "status": "PASS",
+      "detail": "Status route is read-only and authenticated"
+    }
+  ]
+}

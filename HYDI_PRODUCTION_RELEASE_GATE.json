@@ -1,10 +1,10 @@
 {
   "phase": "14",
-  "timestamp": "2026-08-23T04:42:40.449Z",
-  "head": "7d3dbefed664446153d95df3852154218e5dad3e",
+  "timestamp": "2026-08-24T05:17:47.586Z",
+  "head": "382aa3b70c4bc71f2f171f42f995efb6f0020407",
   "branch": "feat/governed-autonomy",
-  "startTime": "2026-08-23T04:36:24.147Z",
-  "totalDurationMs": 376298,
+  "startTime": "2026-08-24T05:11:35.890Z",
+  "totalDurationMs": 371692,
   "baselineTypecheckErrors": 115,
   "mandatoryGates": {
     "total": 13,
@@ -24,7 +24,7 @@
       "name": "Typecheck baseline",
       "status": "PASS",
       "detail": "115 errors (baseline: 115, delta: 0)",
-      "durationMs": 4000,
+      "durationMs": 8772,
       "mandatory": true
     },
     {
@@ -32,7 +32,7 @@
       "name": "Focused unit tests",
       "status": "PASS",
       "detail": "0 tests passed, 0 failed",
-      "durationMs": 180021,
+      "durationMs": 180018,
       "mandatory": true
     },
     {
@@ -40,7 +40,7 @@
       "name": "Security qualification",
       "status": "PASS",
       "detail": "85 assertions passed, 0 failed",
-      "durationMs": 3861,
+      "durationMs": 4909,
       "mandatory": true
     },
     {
@@ -48,7 +48,7 @@
       "name": "Crash/restart qualification",
       "status": "PASS",
       "detail": "Completed successfully",
-      "durationMs": 45881,
+      "durationMs": 40350,
       "mandatory": true
     },
     {
@@ -56,7 +56,7 @@
       "name": "Event consistency",
       "status": "PASS",
       "detail": "Event idempotency verified in crash/restart matrix",
-      "durationMs": 48495,
+      "durationMs": 44217,
       "mandatory": true
     },
     {
@@ -64,7 +64,7 @@
       "name": "SSE consistency",
       "status": "PASS",
       "detail": "SSE replay safety verified in crash/restart matrix; transport-only verified in dashboard hardening",
-      "durationMs": 0,
+      "durationMs": 1,
       "mandatory": true
     },
     {
@@ -72,7 +72,7 @@
       "name": "Intervention lifecycle",
       "status": "PASS",
       "detail": "Intervention lifecycle verified in crash/restart matrix",
-      "durationMs": 1,
+      "durationMs": 0,
       "mandatory": true
     },
     {
@@ -80,7 +80,7 @@
       "name": "Control-plane E2E",
       "status": "PASS",
       "detail": "Control-plane E2E completed",
-      "durationMs": 42789,
+      "durationMs": 42950,
       "mandatory": false
     },
     {
@@ -88,7 +88,7 @@
       "name": "500-cycle soak",
       "status": "PASS",
       "detail": "12 passed, 0 failed",
-      "durationMs": 44543,
+      "durationMs": 44530,
       "mandatory": true
     },
     {
@@ -96,7 +96,7 @@
       "name": "Runtime health verification",
       "status": "PASS",
       "detail": "76 passed, 0 failed",
-      "durationMs": 3387,
+      "durationMs": 2562,
       "mandatory": true
     },
     {
@@ -104,7 +104,7 @@
       "name": "PM2 reality verification",
       "status": "PASS",
       "detail": "PM2 v7.0.1 installed; restart behavior verified in Phase 7",
-      "durationMs": 315,
+      "durationMs": 281,
       "mandatory": false
     },
     {
@@ -112,7 +112,7 @@
       "name": "Secret scan",
       "status": "PASS",
       "detail": "Secret sanitization verified (SEC12 PASS)",
-      "durationMs": 2757,
+      "durationMs": 2909,
       "mandatory": true
     },
     {
@@ -127,8 +127,8 @@
       "gate": "G14",
       "name": "Git cleanliness check",
       "status": "FAIL",
-      "detail": "40 uncommitted changes: M HEIDI_REAL_COGNITIVE_CYCLE_REPORT.md, ?? .github/workflows/rezonate-capability-contract.yml, ?? HARD_ACCEPTANCE_AUDIT_REPORT.md, ?? HEIDI_STATE_OF_THE_SYSTEM.md, ?? HYDI_LIVE_DEMONSTRATION_LOG.txt",
-      "durationMs": 247,
+      "detail": "35 uncommitted changes: M .gitignore,  M HEIDI_REAL_COGNITIVE_CYCLE_REPORT.md, ?? .github/workflows/rezonate-capability-contract.yml, ?? HARD_ACCEPTANCE_AUDIT_REPORT.md, ?? HEIDI_STATE_OF_THE_SYSTEM.md",
+      "durationMs": 192,
       "mandatory": true
     },
     {

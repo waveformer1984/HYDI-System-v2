@@ -1,0 +1,86 @@
+{
+  "phase": "12",
+  "timestamp": "2026-08-24T05:19:47.814Z",
+  "head": "382aa3b70c4bc71f2f171f42f995efb6f0020407",
+  "branch": "feat/governed-autonomy",
+  "totalAssertions": 63,
+  "passed": 63,
+  "failed": 0,
+  "invariants": 12,
+  "passCount": 12,
+  "failCount": 0,
+  "results": [
+    {
+      "id": "W01",
+      "invariant": "Health degradation detection",
+      "status": "PASS",
+      "detail": "Watchdog detects ollama, database, memory, disk, and failure rate degradation"
+    },
+    {
+      "id": "W02",
+      "invariant": "Bounded, policy-approved recovery only",
+      "status": "PASS",
+      "detail": "Recovery attempts bounded by maxRecoveryAttempts; default rules only probe/alert/retry-bounded"
+    },
+    {
+      "id": "W03",
+      "invariant": "Human escalation when authority or risk limits require it",
+      "status": "PASS",
+      "detail": "Escalations generated after maxRecoveryAttempts; events published to event bus"
+    },
+    {
+      "id": "W04",
+      "invariant": "No self-modification or governance bypass",
+      "status": "PASS",
+      "detail": "Watchdog source contains no process.exit, auth bypass, or governance component modification"
+    },
+    {
+      "id": "W05",
+      "invariant": "Actions are authorized, observable, persisted, auditable",
+      "status": "PASS",
+      "detail": "All actions published to event bus with unique IDs and timestamps; findings/escalations retrievable"
+    },
+    {
+      "id": "W06",
+      "invariant": "Retry/backoff avoids storms",
+      "status": "PASS",
+      "detail": "maxRecoveryAttempts bounded (default 3); interval default 30s; attempts do not grow unboundedly"
+    },
+    {
+      "id": "W07",
+      "invariant": "Watchdog failure does not create a false healthy state",
+      "status": "PASS",
+      "detail": "Tick failures are caught and logged; watchdog continues running without false findings"
+    },
+    {
+      "id": "W08",
+      "invariant": "Watchdog does not escalate autonomy level",
+      "status": "PASS",
+      "detail": "No autonomy level references in watchdog source"
+    },
+    {
+      "id": "W09",
+      "invariant": "Watchdog does not bypass authorization",
+      "status": "PASS",
+      "detail": "No authorization component references in watchdog source"
+    },
+    {
+      "id": "W10",
+      "invariant": "Watchdog does not modify protected assets",
+      "status": "PASS",
+      "detail": "No file writes, deletions, exec, or spawn in watchdog source"
+    },
+    {
+      "id": "W11",
+      "invariant": "Kill switch suspends watchdog actions",
+      "status": "PASS",
+      "detail": "Daemon suspends self-sufficiency actions (including watchdog) when kill switch is active"
+    },
+    {
+      "id": "W12",
+      "invariant": "Findings and escalations are recorded",
+      "status": "PASS",
+      "detail": "WatchdogFinding and Escalation interfaces define all required fields"
+    }
+  ]
+}
