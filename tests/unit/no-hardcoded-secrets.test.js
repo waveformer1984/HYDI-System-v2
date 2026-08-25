@@ -44,6 +44,8 @@ const ALLOWLIST = new Set([
   'tests/unit/delegated-operator.test.ts',
   'tests/unit/key-management-qualification.test.ts',
   'tests/unit/key-management.test.ts',
+  'tests/unit/credential-governance-no-false-green.test.ts', // fake secret-shaped fixtures for no-false-green enforcement tests
+  'tests/unit/credential-governance-autonomy.test.ts', // fake secret-shaped fixtures for autonomy tests
   'HYDI_HUMAN_PROXY_CONTROL_PLANE_REPORT.md', // documentation showing PEM block format, not a real key
   // Historical secret remediation docs — truncated prefixes (15 chars) for identification, not usable keys:
   'docs/HISTORICAL_SECRET_REMEDIATION_REPORT.md', // documents historical exposure with truncated prefixes for rotation identification

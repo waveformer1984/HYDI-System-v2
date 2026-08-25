@@ -176,6 +176,13 @@ export class EvidenceStore {
   }
 
   /**
+   * Get all evidence records.
+   */
+  getAll(): EvidenceRecord[] {
+    return Array.from(this.records.values());
+  }
+
+  /**
    * Get all evidence for an operation.
    */
   getByOperation(operationId: string): EvidenceRecord[] {

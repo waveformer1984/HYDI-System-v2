@@ -53,7 +53,8 @@ export type RemediationStatus =
   | 'STILL_IN_HISTORY'
   | 'REMEDIATION_COMPLETE'
   | 'OWNER_ACTION_REQUIRED'
-  | 'ESCALATED';
+  | 'ESCALATED'
+  | 'NON_CREDENTIAL_PLACEHOLDER';
 
 export type CleanupStatus =
   | 'NOT_STARTED'
