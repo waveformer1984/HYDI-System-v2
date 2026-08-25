@@ -4,10 +4,10 @@
 
 | Field | Value |
 |-------|-------|
-| HEAD | `0e9202c4c6178683f71bfe371e7f63d8aa76dc6d` |
+| HEAD | `9eaec75c5585c3995e35c36ab66f59a9b8e3894c` |
 | Branch | `feat/governed-autonomy` |
-| Timestamp | 2026-08-25T05:47:29.816Z |
-| Total Duration | 431.2s |
+| Timestamp | 2026-08-25T06:08:14.925Z |
+| Total Duration | 365.1s |
 | Baseline Typecheck Errors | 115 |
 | Mandatory Gates | 12/13 passed |
 | Optional Gates | 2 passed, 0 skipped, 0 failed |
@@ -17,20 +17,20 @@
 
 | Gate | Name | Status | Mandatory | Duration | Detail |
 |------|------|--------|-----------|----------|--------|
-| G01 | Typecheck baseline | PASS | Yes | 19655ms | 115 errors (baseline: 115, delta: 0) |
+| G01 | Typecheck baseline | PASS | Yes | 6442ms | 115 errors (baseline: 115, delta: 0) |
 | G02 | Focused unit tests | PASS | Yes | 180011ms | 0 tests passed, 0 failed |
-| G03 | Security qualification | PASS | Yes | 4750ms | 85 assertions passed, 0 failed |
-| G04 | Crash/restart qualification | PASS | Yes | 88898ms | Completed successfully |
-| G05 | Event consistency | PASS | Yes | 46083ms | Event idempotency verified in crash/restart matrix |
+| G03 | Security qualification | PASS | Yes | 3229ms | 85 assertions passed, 0 failed |
+| G04 | Crash/restart qualification | PASS | Yes | 43902ms | Completed successfully |
+| G05 | Event consistency | PASS | Yes | 40796ms | Event idempotency verified in crash/restart matrix |
 | G06 | SSE consistency | PASS | Yes | 0ms | SSE replay safety verified in crash/restart matrix; transport-only verified in dashboard hardening |
 | G07 | Intervention lifecycle | PASS | Yes | 0ms | Intervention lifecycle verified in crash/restart matrix |
-| G08 | Control-plane E2E | PASS | No | 37171ms | Control-plane E2E completed |
-| G09 | 500-cycle soak | PASS | Yes | 49228ms | 12 passed, 0 failed |
-| G10 | Runtime health verification | PASS | Yes | 2331ms | 76 passed, 0 failed |
-| G11 | PM2 reality verification | PASS | No | 260ms | PM2 v7.0.1 installed; restart behavior verified in Phase 7 |
-| G12 | Secret scan | PASS | Yes | 2644ms | Secret sanitization verified (SEC12 PASS) |
+| G08 | Control-plane E2E | PASS | No | 42452ms | Control-plane E2E completed |
+| G09 | 500-cycle soak | PASS | Yes | 43198ms | 12 passed, 0 failed |
+| G10 | Runtime health verification | PASS | Yes | 2097ms | 76 passed, 0 failed |
+| G11 | PM2 reality verification | PASS | No | 258ms | PM2 v7.0.1 installed; restart behavior verified in Phase 7 |
+| G12 | Secret scan | PASS | Yes | 2579ms | Secret sanitization verified (SEC12 PASS) |
 | G13 | Artifact verification | PASS | Yes | 1ms | All 7 required artifacts present |
-| G14 | Git cleanliness check | FAIL | Yes | 178ms | 36 uncommitted changes: M .gitignore,  M HEIDI_REAL_COGNITIVE_CYCLE_REPORT.md,  M HYDI_PRODUCTION_RELEASE_GATE.md, ?? .github/workflows/rezonate-capability-contract.yml, ?? HARD_ACCEPTANCE_AUDIT_REPORT.md |
+| G14 | Git cleanliness check | FAIL | Yes | 140ms | 35 uncommitted changes: M HEIDI_REAL_COGNITIVE_CYCLE_REPORT.md,  M HYDI_PRODUCTION_RELEASE_GATE.md, ?? .github/workflows/rezonate-capability-contract.yml, ?? HARD_ACCEPTANCE_AUDIT_REPORT.md, ?? HEIDI_STATE_OF_THE_SYSTEM.md |
 | G15 | Regression comparison | PASS | Yes | 0ms | No regression — typecheck delta = 0 |
 
 ## Known Limitations
@@ -52,7 +52,7 @@
 
 ## Failure Details
 
-- **G14 Git cleanliness check**: 36 uncommitted changes: M .gitignore,  M HEIDI_REAL_COGNITIVE_CYCLE_REPORT.md,  M HYDI_PRODUCTION_RELEASE_GATE.md, ?? .github/workflows/rezonate-capability-contract.yml, ?? HARD_ACCEPTANCE_AUDIT_REPORT.md
+- **G14 Git cleanliness check**: 35 uncommitted changes: M HEIDI_REAL_COGNITIVE_CYCLE_REPORT.md,  M HYDI_PRODUCTION_RELEASE_GATE.md, ?? .github/workflows/rezonate-capability-contract.yml, ?? HARD_ACCEPTANCE_AUDIT_REPORT.md, ?? HEIDI_STATE_OF_THE_SYSTEM.md
 
 ---
 

@@ -1,10 +1,10 @@
 {
   "phase": "14",
-  "timestamp": "2026-08-25T05:47:29.816Z",
-  "head": "0e9202c4c6178683f71bfe371e7f63d8aa76dc6d",
+  "timestamp": "2026-08-25T06:08:14.925Z",
+  "head": "9eaec75c5585c3995e35c36ab66f59a9b8e3894c",
   "branch": "feat/governed-autonomy",
-  "startTime": "2026-08-25T05:40:18.602Z",
-  "totalDurationMs": 431210,
+  "startTime": "2026-08-25T06:02:09.818Z",
+  "totalDurationMs": 365105,
   "baselineTypecheckErrors": 115,
   "mandatoryGates": {
     "total": 13,
@@ -24,7 +24,7 @@
       "name": "Typecheck baseline",
       "status": "PASS",
       "detail": "115 errors (baseline: 115, delta: 0)",
-      "durationMs": 19655,
+      "durationMs": 6442,
       "mandatory": true
     },
     {
@@ -40,7 +40,7 @@
       "name": "Security qualification",
       "status": "PASS",
       "detail": "85 assertions passed, 0 failed",
-      "durationMs": 4750,
+      "durationMs": 3229,
       "mandatory": true
     },
     {
@@ -48,7 +48,7 @@
       "name": "Crash/restart qualification",
       "status": "PASS",
       "detail": "Completed successfully",
-      "durationMs": 88898,
+      "durationMs": 43902,
       "mandatory": true
     },
     {
@@ -56,7 +56,7 @@
       "name": "Event consistency",
       "status": "PASS",
       "detail": "Event idempotency verified in crash/restart matrix",
-      "durationMs": 46083,
+      "durationMs": 40796,
       "mandatory": true
     },
     {
@@ -80,7 +80,7 @@
       "name": "Control-plane E2E",
       "status": "PASS",
       "detail": "Control-plane E2E completed",
-      "durationMs": 37171,
+      "durationMs": 42452,
       "mandatory": false
     },
     {
@@ -88,7 +88,7 @@
       "name": "500-cycle soak",
       "status": "PASS",
       "detail": "12 passed, 0 failed",
-      "durationMs": 49228,
+      "durationMs": 43198,
       "mandatory": true
     },
     {
@@ -96,7 +96,7 @@
       "name": "Runtime health verification",
       "status": "PASS",
       "detail": "76 passed, 0 failed",
-      "durationMs": 2331,
+      "durationMs": 2097,
       "mandatory": true
     },
     {
@@ -104,7 +104,7 @@
       "name": "PM2 reality verification",
       "status": "PASS",
       "detail": "PM2 v7.0.1 installed; restart behavior verified in Phase 7",
-      "durationMs": 260,
+      "durationMs": 258,
       "mandatory": false
     },
     {
@@ -112,7 +112,7 @@
       "name": "Secret scan",
       "status": "PASS",
       "detail": "Secret sanitization verified (SEC12 PASS)",
-      "durationMs": 2644,
+      "durationMs": 2579,
       "mandatory": true
     },
     {
@@ -127,8 +127,8 @@
       "gate": "G14",
       "name": "Git cleanliness check",
       "status": "FAIL",
-      "detail": "36 uncommitted changes: M .gitignore,  M HEIDI_REAL_COGNITIVE_CYCLE_REPORT.md,  M HYDI_PRODUCTION_RELEASE_GATE.md, ?? .github/workflows/rezonate-capability-contract.yml, ?? HARD_ACCEPTANCE_AUDIT_REPORT.md",
-      "durationMs": 178,
+      "detail": "35 uncommitted changes: M HEIDI_REAL_COGNITIVE_CYCLE_REPORT.md,  M HYDI_PRODUCTION_RELEASE_GATE.md, ?? .github/workflows/rezonate-capability-contract.yml, ?? HARD_ACCEPTANCE_AUDIT_REPORT.md, ?? HEIDI_STATE_OF_THE_SYSTEM.md",
+      "durationMs": 140,
       "mandatory": true
     },
     {
