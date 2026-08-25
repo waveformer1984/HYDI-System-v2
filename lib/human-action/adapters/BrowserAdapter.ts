@@ -149,6 +149,32 @@ export class BrowserAdapter implements ActionAdapter {
       switch (action.capability) {
         case 'browser.navigate': {
           const url = (action.parameters.url as string) ?? action.target;
+
+          // Defense-in-depth: block restricted browser protocols even if
+          // the authority-level resource patterns allow them. This enforces
+          // the browser_origin deny rules from DelegatedIdentity at the
+          // adapter level, preventing navigation to chrome://, about:, and
+          // other privileged browser URLs regardless of authority configuration.
+          const restrictedProtocols = ['chrome:', 'about:', 'chrome-extension:', 'devtools:', 'view-source:'];
+          const urlLower = url.toLowerCase();
+          for (const proto of restrictedProtocols) {
+            if (urlLower.startsWith(proto)) {
+              return {
+                executed: false,
+                output: null,
+                error: `Navigation to restricted protocol '${proto}' is blocked by BrowserAdapter defense-in-depth`,
+                evidence: [{
+                  check: 'resource_boundary',
+                  status: 'fail',
+                  value: `Blocked: ${url}`,
+                  detail: `Restricted protocol ${proto} denied at adapter level`,
+                  checkedAt: new Date().toISOString(),
+                }],
+                durationMs: Date.now() - startTime,
+              };
+            }
+          }
+
           await this.state.page.goto(url, { waitUntil: 'networkidle2', timeout: action.timeoutMs });
           this.state.currentUrl = this.state.page.url();
           output = { url: this.state.currentUrl, title: await this.state.page.title() };
@@ -221,7 +247,7 @@ export class BrowserAdapter implements ActionAdapter {
           } else {
             await this.state.page.keyboard.press('Enter');
           }
-          await this.state.page.waitForNavigation({ waitUntil: 'networkidle2', timeout: action.timeoutMs }).catch(() => {});
+          await this.state.page.waitForNavigation({ waitUntil: 'networkidle2', timeout: action.timeoutMs }).catch(() => { });
           this.state.currentUrl = this.state.page.url();
           output = { submitted: true, url: this.state.currentUrl };
           evidence.push({

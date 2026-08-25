@@ -83,10 +83,9 @@ serve(async (req) => {
     } catch (error) {
       console.error('JWT verification error:', error.message)
       return new Response(
-        JSON.stringify({ 
-          success: false, 
+        JSON.stringify({
+          success: false,
           message: 'Invalid authorization token',
-          debug: error.message 
         }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
@@ -94,7 +93,7 @@ serve(async (req) => {
 
     // Parse request body
     const body: BreakGlassRequest = await req.json()
-    
+
     // Validate request
     if (!body.level || !body.ttl_minutes || !body.reason) {
       return new Response(
@@ -137,7 +136,7 @@ serve(async (req) => {
 
     // Apply break-glass override
     const expiresAt = new Date(Date.now() + body.ttl_minutes * 60 * 1000).toISOString()
-    
+
     const { data: updateResult, error: updateError } = await supabase
       .from('keeper_circuit_state')
       .update({
@@ -195,24 +194,24 @@ serve(async (req) => {
 
     return new Response(
       JSON.stringify(response),
-      { 
-        status: 200, 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+      {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       }
     )
 
   } catch (error) {
     console.error('Break-glass error:', error.message)
-    
+
     return new Response(
-      JSON.stringify({ 
-        success: false, 
+      JSON.stringify({
+        success: false,
         message: 'Internal server error',
-        error: error.message 
+        error: error.message
       }),
-      { 
-        status: 500, 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+      {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       }
     )
   }

@@ -1,9 +1,14 @@
 import { ReplayEngine } from '../lib/replay-engine'
+import { requireAuth } from '../lib/auth/requireAuth'
 
 const engine = new ReplayEngine()
 
 export default async function handler(req, res) {
   try {
+    // Require authentication for all methods — replay can trigger DB writes
+    const auth = await requireAuth(req, res, null, { permission: 'work_sessions:view', routeName: 'traces' })
+    if (!auth.ok) return
+
     if (req.method === 'GET') {
       const sampleSize = Math.min(parseInt(req.query.sample || '20', 10), 100)
       const report = await engine.validateDeterminism(sampleSize)
