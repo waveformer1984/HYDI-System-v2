@@ -1,7 +1,7 @@
 {
   "phase": "8",
-  "timestamp": "2026-08-25T05:59:31.250Z",
-  "head": "6697f8f0b39c35eda66b59b4ac78f87a5e31185b",
+  "timestamp": "2026-08-25T06:08:14.601Z",
+  "head": "9eaec75c5585c3995e35c36ab66f59a9b8e3894c",
   "branch": "feat/governed-autonomy",
   "totalAssertions": 85,
   "passed": 85,
