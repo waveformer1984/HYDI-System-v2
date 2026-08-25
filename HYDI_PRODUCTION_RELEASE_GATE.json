@@ -1,15 +1,15 @@
 {
   "phase": "14",
-  "timestamp": "2026-08-25T06:17:24.831Z",
-  "head": "57be12589a0a5cafa14a6c1519097d25cea546cb",
+  "timestamp": "2026-08-25T14:41:05.852Z",
+  "head": "8241ac028e9ca35afac361db54cc91b1eede18d1",
   "branch": "feat/governed-autonomy",
-  "startTime": "2026-08-25T06:11:25.966Z",
-  "totalDurationMs": 358862,
+  "startTime": "2026-08-25T14:34:29.253Z",
+  "totalDurationMs": 396595,
   "baselineTypecheckErrors": 115,
   "mandatoryGates": {
     "total": 13,
-    "passed": 12,
-    "failed": 1
+    "passed": 13,
+    "failed": 0
   },
   "optionalGates": {
     "total": 2,
@@ -17,14 +17,14 @@
     "skipped": 0,
     "failed": 0
   },
-  "releaseReady": false,
+  "releaseReady": true,
   "results": [
     {
       "gate": "G01",
       "name": "Typecheck baseline",
       "status": "PASS",
       "detail": "115 errors (baseline: 115, delta: 0)",
-      "durationMs": 4948,
+      "durationMs": 4297,
       "mandatory": true
     },
     {
@@ -32,7 +32,7 @@
       "name": "Focused unit tests",
       "status": "PASS",
       "detail": "0 tests passed, 0 failed",
-      "durationMs": 180018,
+      "durationMs": 180017,
       "mandatory": true
     },
     {
@@ -40,7 +40,7 @@
       "name": "Security qualification",
       "status": "PASS",
       "detail": "85 assertions passed, 0 failed",
-      "durationMs": 3539,
+      "durationMs": 9789,
       "mandatory": true
     },
     {
@@ -48,7 +48,7 @@
       "name": "Crash/restart qualification",
       "status": "PASS",
       "detail": "Completed successfully",
-      "durationMs": 44287,
+      "durationMs": 57614,
       "mandatory": true
     },
     {
@@ -56,7 +56,7 @@
       "name": "Event consistency",
       "status": "PASS",
       "detail": "Event idempotency verified in crash/restart matrix",
-      "durationMs": 39531,
+      "durationMs": 50563,
       "mandatory": true
     },
     {
@@ -80,7 +80,7 @@
       "name": "Control-plane E2E",
       "status": "PASS",
       "detail": "Control-plane E2E completed",
-      "durationMs": 37464,
+      "durationMs": 39248,
       "mandatory": false
     },
     {
@@ -88,7 +88,7 @@
       "name": "500-cycle soak",
       "status": "PASS",
       "detail": "12 passed, 0 failed",
-      "durationMs": 43715,
+      "durationMs": 46782,
       "mandatory": true
     },
     {
@@ -96,7 +96,7 @@
       "name": "Runtime health verification",
       "status": "PASS",
       "detail": "76 passed, 0 failed",
-      "durationMs": 2263,
+      "durationMs": 3673,
       "mandatory": true
     },
     {
@@ -104,7 +104,7 @@
       "name": "PM2 reality verification",
       "status": "PASS",
       "detail": "PM2 v7.0.1 installed; restart behavior verified in Phase 7",
-      "durationMs": 384,
+      "durationMs": 367,
       "mandatory": false
     },
     {
@@ -112,7 +112,7 @@
       "name": "Secret scan",
       "status": "PASS",
       "detail": "Secret sanitization verified (SEC12 PASS)",
-      "durationMs": 2598,
+      "durationMs": 4041,
       "mandatory": true
     },
     {
@@ -120,15 +120,15 @@
       "name": "Artifact verification",
       "status": "PASS",
       "detail": "All 7 required artifacts present",
-      "durationMs": 0,
+      "durationMs": 1,
       "mandatory": true
     },
     {
       "gate": "G14",
       "name": "Git cleanliness check",
-      "status": "FAIL",
-      "detail": "34 uncommitted changes: M HEIDI_REAL_COGNITIVE_CYCLE_REPORT.md, ?? .github/workflows/rezonate-capability-contract.yml, ?? HARD_ACCEPTANCE_AUDIT_REPORT.md, ?? HEIDI_STATE_OF_THE_SYSTEM.md, ?? HYDI_LIVE_DEMONSTRATION_LOG.txt",
-      "durationMs": 115,
+      "status": "PASS",
+      "detail": "Working tree acceptable: 39 user-owned, 4 generated, 0 transient — 0 unknown, 0 protected",
+      "durationMs": 203,
       "mandatory": true
     },
     {
@@ -151,5 +151,5 @@
     "24-hour qualification requires an actual 24-hour run to complete",
     "Environmental failures are classified as ENVIRONMENTAL, not PASS"
   ],
-  "releaseRecommendation": "NOT READY — mandatory gate(s) failed"
+  "releaseRecommendation": "READY — all mandatory gates passed"
 }
