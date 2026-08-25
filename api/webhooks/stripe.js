@@ -170,11 +170,17 @@ async function handleStripeWebhook(req, res) {
     });
   }
 
-  // ─── Customer Job Bridge ───
+  // ─── Customer Job Bridge (synchronous) ───
   // For checkout.session.completed events that have a linked customer job,
-  // activate the job directly. This runs synchronously before the async queue
-  // to ensure the job is activated even if the queue is slow or unavailable.
-  // Idempotency is handled inside the bridge (stripe_event_id check).
+  // activate the job synchronously. This is the SOLE owner of job activation
+  // and revenue_ledger writes for job-based checkouts.
+  //
+  // If the bridge processes the event (job found), we SKIP the async queue
+  // to prevent the RevenueIngestionWorker/ProvisioningWorker from also
+  // processing it (they write to different tables — revenue_tracking,
+  // customers, customer_services — but would create spurious records for
+  // job-based checkouts that don't use the tier/subscription model).
+  let jobBridgeProcessed = false;
   if (event.type === 'checkout.session.completed') {
     try {
       const { processJobPaymentConfirmation } = require('../../lib/revenue/JobWebhookBridge');
@@ -187,12 +193,26 @@ async function handleStripeWebhook(req, res) {
         currency: session.currency || 'usd',
       });
       if (jobResult.processed) {
+        jobBridgeProcessed = true;
         console.log(`[📦 JOB BRIDGE] Job ${jobResult.jobId} ${jobResult.idempotent ? '(idempotent skip)' : 'activated'} for event ${event.id}`);
       }
     } catch (jobBridgeErr) {
       // Log but don't fail the webhook — the async queue may still process it
       console.error('[📦 JOB BRIDGE] Error:', jobBridgeErr instanceof Error ? jobBridgeErr.message : jobBridgeErr);
     }
+  }
+
+  // If the job bridge handled this event, skip the async queue entirely.
+  // The synchronous bridge is the single owner of job/ledger state for
+  // checkout.session.completed. The async workers handle the old
+  // tier/subscription checkout flow and don't know about customer jobs.
+  if (jobBridgeProcessed) {
+    console.log(`[📦 JOB BRIDGE] Skipping async queue for job-linked event ${event.id}`);
+    return res.status(200).json({
+      received: true,
+      status: 'JOB_PROCESSED',
+      eventId: event.id,
+    });
   }
 
   // GATE 3: URSULA (Queue for async processing)

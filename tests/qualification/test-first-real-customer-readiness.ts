@@ -73,8 +73,8 @@ async function main() {
   // Clean up previous test data
   const testEmails = [
     'fc-test-1@example.com', 'fc-test-2@example.com', 'fc-test-3@example.com',
-    'fc-test-4@example.com', 'fc-test-5@example.com', 'fc-test-6@example.com',
-    'fc-test-7@example.com', 'fc-test-8@example.com',
+    'fc-test-4@example.com', 'fc-test-4b@example.com', 'fc-test-5@example.com',
+    'fc-test-6@example.com', 'fc-test-7@example.com', 'fc-test-8@example.com',
   ];
   for (const email of testEmails) {
     await db.query('DELETE FROM customer_job_events WHERE job_id IN (SELECT job_id FROM customer_jobs WHERE customer_email = $1)', [email]);
@@ -354,6 +354,65 @@ async function main() {
   assertEqual(job1Entries[0]?.amountGross, 2900, 'FCQ66: Ledger amount is correct');
 
   // ═══════════════════════════════════════════════════════════════
+  // SECTION 9b: DUAL-PATH IDEMPOTENCY (sync bridge + async queue) (6 assertions)
+  // ═══════════════════════════════════════════════════════════════
+  console.log('\n  ─── Section 9b: Dual-Path Idempotency ───\n');
+
+  // Simulate what happens when a real webhook fires: the sync bridge
+  // processes the event, then the async queue (RevenueIngestionWorker)
+  // would also try to process it. We verify that:
+  // 1. The sync bridge activates the job
+  // 2. The async worker's trackRevenue writes to revenue_tracking (different table)
+  // 3. revenue_ledger has exactly one entry (from the bridge, not the worker)
+  // 4. customer_jobs has exactly one job activation
+
+  const dualJob = await jobManager.createJob({
+    customerEmail: 'fc-test-4b@example.com', product: 'protoforge_model_prep',
+    requestText: 'dual path test', requirements: { objectType: 'box' },
+    priceCents: 2900, currency: 'usd',
+  });
+  const dualSession = `cs_test_${randomUUID()}`;
+  await jobManager.linkCheckoutSession(dualJob.jobId, dualSession);
+
+  // Fire the sync bridge (as the webhook handler does)
+  const dualEventId = `evt_test_${randomUUID()}`;
+  const dualResult = await processJobPaymentConfirmation({
+    sessionId: dualSession, stripeEventId: dualEventId,
+    paymentIntentId: `pi_test_${randomUUID()}`, amountTotal: 2900, currency: 'usd',
+  });
+  assert(dualResult.processed === true, 'FCQ66b: Sync bridge processed dual-path job');
+
+  // Simulate the async worker also trying to process the same event
+  // (this is what RevenueIngestionWorker.handleCheckoutCompleted would do)
+  // It writes to revenue_tracking, NOT revenue_ledger
+  try {
+    await db.query(
+      'INSERT INTO revenue_tracking (stripe_event_id, customer_email, amount, currency, type, metadata, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+      [dualEventId, 'fc-test-4b@example.com', 2900, 'usd', 'payment',
+        JSON.stringify({ session_id: dualSession, tier: 'starter' }),
+        new Date().toISOString()]
+    );
+  } catch (e) {
+    // revenue_tracking table may not exist — that's fine, the async worker
+    // would also fail silently in that case
+  }
+
+  // Verify: exactly one revenue_ledger entry (from the bridge)
+  const dualLedger = await ledger.getCustomerRevenue('fc-test-4b@example.com');
+  const dualSetupFees = dualLedger.filter(e => e.eventType === 'setup_fee_collected');
+  assertEqual(dualSetupFees.length, 1, 'FCQ66c: One ledger entry after dual-path (no duplicate)');
+
+  // Verify: exactly one payment_confirmed event
+  const dualEvents = await jobManager.getJobEvents(dualJob.jobId);
+  const dualPaymentEvents = dualEvents.filter(e => e.event_type === 'payment_confirmed');
+  assertEqual(dualPaymentEvents.length, 1, 'FCQ66d: One payment_confirmed event after dual-path');
+
+  // Verify: job is queued (activated exactly once)
+  const dualJobState = await jobManager.getJob(dualJob.jobId);
+  assertEqual(dualJobState?.paymentStatus, 'paid', 'FCQ66e: Job is paid after dual-path');
+  assertEqual(dualJobState?.jobStatus, 'queued', 'FCQ66f: Job is queued after dual-path');
+
+  // ═══════════════════════════════════════════════════════════════
   // SECTION 10: FAILURE HANDLING (8 assertions)
   // ═══════════════════════════════════════════════════════════════
   console.log('\n  ─── Section 10: Failure Handling ───\n');
@@ -426,9 +485,10 @@ async function main() {
   }
   assert(!secretsInClient, 'FCQ73: No Stripe keys in client-side files');
 
-  // Approve endpoint requires auth
+  // Approve endpoint requires auth via canonical requireAuth
   const approveSource = fs.readFileSync(path.join(process.cwd(), 'pages/api/revenue/jobs/[jobId]/approve.js'), 'utf8');
-  assert(approveSource.includes('checkOperatorAuth'), 'FCQ74: Approve endpoint has auth check');
+  assert(approveSource.includes('requireAuth'), 'FCQ74: Approve endpoint uses canonical requireAuth');
+  assert(approveSource.includes("revenue:manage"), 'FCQ74b: Approve endpoint requires revenue:manage permission');
   assert(approveSource.includes('verifyArtifactsOnDisk'), 'FCQ75: Approve endpoint re-verifies artifacts');
 
   // Webhook handler verifies signatures

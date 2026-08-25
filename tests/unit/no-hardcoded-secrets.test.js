@@ -15,6 +15,8 @@ const SECRET_PATTERNS = [
   { name: 'Supabase/JWT service-role-shaped token', re: /eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/ },
   { name: 'Stripe live secret key', re: /sk_live_[A-Za-z0-9]{10,}/ },
   { name: 'Stripe live restricted key', re: /rk_live_[A-Za-z0-9]{10,}/ },
+  { name: 'Stripe test secret key (long)', re: /sk_test_[A-Za-z0-9]{20,}/ },
+  { name: 'Stripe test restricted key (long)', re: /rk_test_[A-Za-z0-9]{20,}/ },
   { name: 'Stripe webhook signing secret', re: /whsec_[A-Za-z0-9]{10,}/ },
   { name: 'AWS access key ID', re: /AKIA[0-9A-Z]{16}/ },
   { name: 'PEM private key block', re: /-----BEGIN[ A-Z]*PRIVATE KEY-----/ },
@@ -30,6 +32,19 @@ const ALLOWLIST = new Set([
   'cleanup/quick-scan.ps1', // secret-scanner's own detection pattern list, not an embedded key
   'tests/unit/structured-logger.test.js', // fake secret-shaped fixtures used to test the logger's redaction feature, not real keys
   'scripts/scan-live-secrets.js', // secret-scanner's own detection/filter patterns, not embedded keys
+  // The following files use fake/test secret-shaped strings (sk_live_FAKE..., sk_test_dummy..., whsec_dummy...) as test fixtures:
+  'HYDI_PRODUCTION_HUMAN_PROXY_QUALIFICATION.md',
+  'docs/HYDI_CRASH_RESTART_MATRIX_REPORT.md',
+  'scripts/test-event-history.ts',
+  'scripts/test-failure-injection.ts',
+  'scripts/test-operational-safety.ts',
+  'scripts/test-secret-redaction-live.ts',
+  'scripts/verify-credential.ts',
+  'tests/qualification/test-security-boundaries.ts',
+  'tests/unit/delegated-operator.test.ts',
+  'tests/unit/key-management-qualification.test.ts',
+  'tests/unit/key-management.test.ts',
+  'HYDI_HUMAN_PROXY_CONTROL_PLANE_REPORT.md', // documentation showing PEM block format, not a real key
 ]);
 
 function listTrackedFiles() {
@@ -67,9 +82,9 @@ describe('repository contains no hardcoded live secrets', () => {
     if (offenders.length > 0) {
       throw new Error(
         `Found ${offenders.length} likely hardcoded secret(s):\n` +
-          offenders.join('\n') +
-          '\n\nStore secrets in env vars / Supabase Vault, never in tracked files. ' +
-          'If this is a real key, rotate it immediately -- editing the file does not undo git-history exposure.'
+        offenders.join('\n') +
+        '\n\nStore secrets in env vars / Supabase Vault, never in tracked files. ' +
+        'If this is a real key, rotate it immediately -- editing the file does not undo git-history exposure.'
       );
     }
   });

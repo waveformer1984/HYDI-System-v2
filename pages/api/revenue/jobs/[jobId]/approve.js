@@ -1,31 +1,31 @@
 // Operator approval endpoint — human reviews and approves artifacts for delivery
 // POST /api/revenue/jobs/:jobId/approve
 //
-// Requires operator authentication (x-hydi-service-token or x-hydi-device-token).
+// Uses the canonical requireAuth guard with RBAC permission 'revenue:manage'.
+// Accepts x-hydi-service-token (HMAC, role=owner) or x-hydi-device-token
+// (per-device, role resolved from registration).
 // Re-verifies artifacts on disk before approving delivery.
 // This is the human gate — no automated delivery bypass exists.
 
 const { getJobManager } = require('../../../../lib/revenue/JobManager');
 const { verifyArtifacts } = require('../../../../lib/revenue/ModelArtifactGenerator');
+const { requireAuth } = require('../../../../lib/auth/requireAuth');
+const { createClient } = require('@supabase/supabase-js');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-// Simple operator auth — checks for service token
-// In production, this should use the full requireAuth with RBAC
-function checkOperatorAuth(req) {
-  const token = req.headers['x-hydi-service-token'] || req.headers['x-hydi-device-token'];
-  if (!token) return { ok: false, error: 'Authentication required — provide x-hydi-service-token or x-hydi-device-token' };
-
-  // Basic token format check
-  if (token.length < 10) return { ok: false, error: 'Invalid token format' };
-
-  // In a full implementation, this would verify the HMAC signature
-  // and check RBAC permissions (revenue:manage).
-  // For now, we accept any well-formed token as operator-level.
-  // The full requireAuth middleware can be added when the operator
-  // dashboard is integrated.
-  return { ok: true, actor: 'operator' };
+// Lazy-init Supabase client for auth audit logging
+let supabaseClient = null;
+function getSupabase() {
+  if (!supabaseClient) {
+    const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
+    if (url && key) {
+      supabaseClient = createClient(url, key);
+    }
+  }
+  return supabaseClient;
 }
 
 export default async function handler(req, res) {
@@ -34,9 +34,18 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  // Authenticate
-  const auth = checkOperatorAuth(req);
-  if (!auth.ok) return res.status(401).json({ error: auth.error });
+  // Authenticate using the canonical RBAC guard
+  const supabase = getSupabase();
+  if (!supabase) {
+    return res.status(500).json({ error: 'Auth infrastructure unavailable — SUPABASE_URL not configured' });
+  }
+
+  const auth = await requireAuth(req, res, supabase, {
+    permission: 'revenue:manage',
+    routeName: 'job-approve',
+    rateMax: 20,
+  });
+  if (!auth.ok) return; // requireAuth already wrote the 401/403 response
 
   try {
     const { jobId } = req.query;
@@ -67,7 +76,7 @@ export default async function handler(req, res) {
       }
 
       // Approve for delivery
-      const approvedJob = await jobManager.approveForDelivery(jobId, auth.actor, notes);
+      const approvedJob = await jobManager.approveForDelivery(jobId, `human:${auth.role}`, notes);
       return res.status(200).json({
         jobId: approvedJob.jobId,
         jobStatus: approvedJob.jobStatus,
@@ -77,7 +86,7 @@ export default async function handler(req, res) {
       });
     } else {
       // Reject
-      const rejectedJob = await jobManager.failExecution(jobId, `Delivery rejected by ${auth.actor}: ${notes || 'No reason provided'}`);
+      const rejectedJob = await jobManager.failExecution(jobId, `Delivery rejected by ${auth.role}: ${notes || 'No reason provided'}`);
       return res.status(200).json({
         jobId: rejectedJob.jobId,
         jobStatus: rejectedJob.jobStatus,
