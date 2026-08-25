@@ -51,10 +51,12 @@ export class StripeBridge {
 
     const key = stripeSecretKey || process.env.STRIPE_SECRET_KEY!;
 
-    // Safety guard: refuse live keys without explicit opt-in
-    if (key.startsWith('sk_live_') && process.env.ALLOW_LIVE_STRIPE !== 'true') {
+    // Safety guard: refuse ANY live keys (sk_live_ or rk_live_) without explicit opt-in
+    const isLiveKey = key.startsWith('sk_live_') || key.startsWith('rk_live_');
+    if (isLiveKey && process.env.ALLOW_LIVE_STRIPE !== 'true') {
       this.stripe = null;
       this.mode = 'disabled';
+      console.error('StripeBridge: live key detected but ALLOW_LIVE_STRIPE is not "true" — refusing to construct live client');
       return;
     }
 
@@ -65,7 +67,7 @@ export class StripeBridge {
 
     this.mode = key.startsWith('sk_test_') || key.startsWith('rk_test_')
       ? 'test'
-      : 'live';
+      : isLiveKey ? 'live' : 'live';
   }
 
   /**
@@ -80,6 +82,70 @@ export class StripeBridge {
    */
   isConfigured(): boolean {
     return this.stripe !== null;
+  }
+
+  /**
+   * Is Stripe in live (production) mode?
+   */
+  isLive(): boolean {
+    return this.mode === 'live';
+  }
+
+  /**
+   * Is Stripe in test mode?
+   */
+  isTest(): boolean {
+    return this.mode === 'test';
+  }
+
+  /**
+   * Production readiness check.
+   * Returns a detailed report of what is configured and what is missing.
+   * NEVER exposes secret values — only presence/mode indicators.
+   */
+  getProductionReadiness(): {
+    ready: boolean;
+    stripeMode: 'disabled' | 'test' | 'live';
+    stripeKeyPresent: boolean;
+    webhookSecretPresent: boolean;
+    liveStripeExplicitlyAllowed: boolean;
+    webhookProcessingEnabled: boolean;
+    blockers: string[];
+  } {
+    const blockers: string[] = [];
+    const key = process.env.STRIPE_SECRET_KEY;
+    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET_01 || process.env.STRIPE_WEBHOOK_SECRET;
+    const liveAllowed = process.env.ALLOW_LIVE_STRIPE === 'true';
+    const webhookEnabled = process.env.WEBHOOK_PROCESSING_ENABLED === 'true';
+
+    if (!key) {
+      blockers.push('STRIPE_SECRET_KEY is not set');
+    }
+    if (!webhookSecret) {
+      blockers.push('STRIPE_WEBHOOK_SECRET_01 (or STRIPE_WEBHOOK_SECRET) is not set — webhook signature verification will fail');
+    }
+    if (key && (key.startsWith('sk_live_') || key.startsWith('rk_live_')) && !liveAllowed) {
+      blockers.push('Live Stripe key detected but ALLOW_LIVE_STRIPE is not "true"');
+    }
+    if (!webhookEnabled) {
+      blockers.push('WEBHOOK_PROCESSING_ENABLED is not "true" — webhook handler will return "paused"');
+    }
+    if (this.mode === 'test') {
+      blockers.push('Stripe is in TEST mode — not suitable for real customer payments');
+    }
+    if (this.mode === 'disabled') {
+      blockers.push('Stripe is disabled — no key configured or live key blocked');
+    }
+
+    return {
+      ready: blockers.length === 0,
+      stripeMode: this.mode,
+      stripeKeyPresent: !!key,
+      webhookSecretPresent: !!webhookSecret,
+      liveStripeExplicitlyAllowed: liveAllowed,
+      webhookProcessingEnabled: webhookEnabled,
+      blockers,
+    };
   }
 
   // -----------------------------------------------------------------------

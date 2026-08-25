@@ -70,8 +70,8 @@ export default async function handler(req, res) {
       customerName,
       prospectId: null,
       opportunityId: null,
-      successUrl: `${origin}/api/revenue/jobs/${job.jobId}/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancelUrl: `${origin}/api/revenue/jobs/${job.jobId}/cancel`,
+      successUrl: `${origin}/services/model-prep/success?jobId=${job.jobId}&session_id={CHECKOUT_SESSION_ID}`,
+      cancelUrl: `${origin}/services/model-prep/cancel?jobId=${job.jobId}`,
     });
 
     if ('error' in checkoutResult) {
