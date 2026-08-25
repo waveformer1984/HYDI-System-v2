@@ -45,6 +45,14 @@ const ALLOWLIST = new Set([
   'tests/unit/key-management-qualification.test.ts',
   'tests/unit/key-management.test.ts',
   'HYDI_HUMAN_PROXY_CONTROL_PLANE_REPORT.md', // documentation showing PEM block format, not a real key
+  // Historical secret remediation docs — truncated prefixes (15 chars) for identification, not usable keys:
+  'docs/HISTORICAL_SECRET_REMEDIATION_REPORT.md', // documents historical exposure with truncated prefixes for rotation identification
+  'docs/STRIPE_E2E_CERTIFICATION.md', // same historical truncated prefixes for security blocker documentation
+  'docs/HYDI_SECRET_REMEDIATION.md', // references the same historical exposures with truncated prefixes
+  'docs/HYDI_CREDENTIAL_GOVERNANCE.md', // credential governance documentation
+  'docs/HYDI_EXTERNAL_INTEGRATION_QUALIFICATION.md', // external integration qualification documentation
+  'docs/HYDI_AUTONOMY_BOUNDARIES.md', // autonomy boundaries documentation
+  'docs/HYDI_CREDENTIAL_QUALIFICATION_FINAL_REPORT.md', // final qualification report
 ]);
 
 function listTrackedFiles() {

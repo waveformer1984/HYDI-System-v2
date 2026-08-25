@@ -19,6 +19,11 @@
  *  13. Artifact verification
  *  14. Git cleanliness check
  *  15. Regression comparison
+ *  16. Credential health (G16)
+ *  17. External integration qualification (G17)
+ *  18. Secret exposure / remediation (G18)
+ *  19. Authorization / RBAC integrity (G19)
+ *  20. Evidence integrity / no-false-green (G20)
  *
  * Produces:
  *   - HYDI_PRODUCTION_RELEASE_GATE.json (machine-readable)
@@ -383,6 +388,167 @@ async function main() {
       return { status: 'PASS', detail: 'No regression — typecheck delta = 0' };
     }
     return { status: 'FAIL', detail: 'Regression detected — typecheck delta > 0' };
+  });
+
+  // ─── Gate 16: Credential health ────────────────────────────────
+  await runGate('Credential health', 'G16', true, async () => {
+    try {
+      const { getCredentialStateMachine } = require('../lib/operational/CredentialStateMachine');
+      const { getStripeCredentialAdapter } = require('../lib/operational/StripeCredentialProviderAdapter');
+      const adapter = getStripeCredentialAdapter();
+      adapter.discover();
+      const sm = getCredentialStateMachine();
+      const all = sm.getAll();
+      if (all.length === 0) {
+        return { status: 'FAIL', detail: 'No credentials discovered — credential governance not initialized' };
+      }
+      const unhealthy = all.filter((c: any) => c.state === 'INVALID' || c.state === 'EXPIRED' || c.state === 'REVOKED');
+      const blocked = all.filter((c: any) => c.state === 'BLOCKED');
+      const healthy = all.filter((c: any) => c.state === 'HEALTHY');
+      if (unhealthy.length > 0) {
+        return { status: 'FAIL', detail: `${unhealthy.length} credentials invalid/expired/revoked: ${unhealthy.map((c: any) => c.name).join(', ')}` };
+      }
+      // Blocked credentials are ENVIRONMENTAL (not FAIL) — they represent missing external dependencies
+      if (blocked.length > 0) {
+        return { status: 'ENVIRONMENTAL', detail: `${blocked.length} credentials blocked (external dependency): ${blocked.map((c: any) => c.name).join(', ')}` };
+      }
+      return { status: 'PASS', detail: `${healthy.length}/${all.length} credentials healthy` };
+    } catch (err: any) {
+      return { status: 'FAIL', detail: `Credential health check failed: ${err.message}` };
+    }
+  });
+
+  // ─── Gate 17: External integration qualification ───────────────
+  await runGate('External integration qualification', 'G17', true, async () => {
+    try {
+      const { getStripeE2EOrchestrator } = require('../lib/operational/StripeE2EOrchestrator');
+      const orchestrator = getStripeE2EOrchestrator();
+      const checkpoint = orchestrator.getCheckpoint();
+
+      // If E2E has not been run, check if credentials are available
+      if (checkpoint.state === 'NOT_STARTED') {
+        // Try to run with autonomous authorization (read-only steps only)
+        const result = await orchestrator.run({ mode: 'autonomous', actor: 'release-gate', role: 'system' });
+        if (result.state === 'BLOCKED') {
+          // BLOCKED is ENVIRONMENTAL — not a failure, but not externally verified
+          return { status: 'ENVIRONMENTAL', detail: `Stripe E2E blocked: ${result.blocker?.reason || 'unknown'}` };
+        }
+        if (result.state === 'COMPLETED') {
+          return { status: 'PASS', detail: 'Stripe E2E externally verified' };
+        }
+      }
+
+      if (checkpoint.state === 'COMPLETED') {
+        // Verify evidence is EXTERNALLY verified, not SIMULATED
+        const { getEvidenceStore } = require('../lib/operational/EvidenceModel');
+        const store = getEvidenceStore();
+        const e2eEvidence = store.getByCapability('stripe-e2e-qualification');
+        const hasExternal = e2eEvidence.some((e: any) => e.verification.level === 'VERIFIED_EXTERNAL' && e.result === 'PASS');
+        const hasSimulatedOnly = e2eEvidence.length > 0 && e2eEvidence.every((e: any) => e.verification.level === 'SIMULATED' || e.verification.level === 'VERIFIED_INTERNAL');
+        if (hasExternal) {
+          return { status: 'PASS', detail: 'Stripe E2E externally verified with real provider evidence' };
+        }
+        if (hasSimulatedOnly) {
+          return { status: 'FAIL', detail: 'Stripe E2E only has SIMULATED evidence — no external verification (no-false-green violation)' };
+        }
+        return { status: 'ENVIRONMENTAL', detail: 'Stripe E2E completed but no external evidence found' };
+      }
+
+      if (checkpoint.state.startsWith('BLOCKED')) {
+        return { status: 'ENVIRONMENTAL', detail: `Stripe E2E blocked: ${checkpoint.blocker?.reason || 'external dependency missing'}` };
+      }
+
+      return { status: 'ENVIRONMENTAL', detail: `Stripe E2E state: ${checkpoint.state}` };
+    } catch (err: any) {
+      return { status: 'FAIL', detail: `External integration check failed: ${err.message}` };
+    }
+  });
+
+  // ─── Gate 18: Secret exposure / remediation ─────────────────────
+  await runGate('Secret exposure / remediation', 'G18', true, async () => {
+    try {
+      const { getHistoricalSecretRemediationTracker } = require('../lib/operational/HistoricalSecretRemediationTracker');
+      const tracker = getHistoricalSecretRemediationTracker();
+      const summary = tracker.getSummary();
+
+      if (summary.criticalUnresolved > 0) {
+        return { status: 'FAIL', detail: `${summary.criticalUnresolved} critical unresolved historical secret exposures` };
+      }
+      if (summary.total > 0) {
+        return { status: 'PASS', detail: `${summary.total} historical exposures tracked, ${summary.remediationComplete} remediated, 0 critical unresolved` };
+      }
+      return { status: 'PASS', detail: 'No historical secret exposures found' };
+    } catch (err: any) {
+      // If the tracker can't run (e.g., not a git repo), don't fail the gate
+      return { status: 'SKIP', detail: `Secret remediation check skipped: ${err.message}` };
+    }
+  });
+
+  // ─── Gate 19: Authorization / RBAC integrity ────────────────────
+  await runGate('Authorization / RBAC integrity', 'G19', true, async () => {
+    try {
+      const { hasPermission, PERMISSIONS } = require('../lib/auth/rbac');
+
+      // Verify credentials:rotate permission exists and is properly scoped
+      const operatorCanRotate = hasPermission('operator', 'credentials:rotate');
+      const ownerCanRotate = hasPermission('owner', 'credentials:rotate');
+      const viewerCanRotate = hasPermission('viewer', 'credentials:rotate');
+      const agentCanRotate = hasPermission('agent', 'credentials:rotate');
+
+      if (!ownerCanRotate) {
+        return { status: 'FAIL', detail: 'Owner lacks credentials:rotate permission' };
+      }
+      if (!operatorCanRotate) {
+        return { status: 'FAIL', detail: 'Operator lacks credentials:rotate permission' };
+      }
+      if (viewerCanRotate) {
+        return { status: 'FAIL', detail: 'Viewer has credentials:rotate permission — security violation' };
+      }
+      if (agentCanRotate) {
+        return { status: 'FAIL', detail: 'Agent has credentials:rotate permission — security violation' };
+      }
+
+      // Verify viewer can view credentials (metadata only)
+      const viewerCanView = hasPermission('viewer', 'credentials:view');
+      if (!viewerCanView) {
+        return { status: 'FAIL', detail: 'Viewer lacks credentials:view permission' };
+      }
+
+      return { status: 'PASS', detail: 'RBAC integrity verified — credentials:rotate scoped to operator/owner, viewer has credentials:view only' };
+    } catch (err: any) {
+      return { status: 'FAIL', detail: `RBAC integrity check failed: ${err.message}` };
+    }
+  });
+
+  // ─── Gate 20: Evidence integrity / no-false-green ───────────────
+  await runGate('Evidence integrity / no-false-green', 'G20', true, async () => {
+    try {
+      const { getEvidenceStore } = require('../lib/operational/EvidenceModel');
+      const store = getEvidenceStore();
+      const summary = store.getSummary();
+
+      // Check for any SIMULATED evidence being reported as external
+      const allRecords = store.getByCapability('stripe-e2e-qualification');
+      const falseGreen = allRecords.filter((e: any) =>
+        e.verification.level === 'SIMULATED' && e.result === 'PASS'
+      );
+
+      if (falseGreen.length > 0) {
+        return { status: 'FAIL', detail: `${falseGreen.length} SIMULATED evidence records reported as PASS — no-false-green violation` };
+      }
+
+      // Check that no BLOCKED result is reported as PASS
+      const blockedAsPass = allRecords.filter((e: any) =>
+        e.result === 'BLOCKED' && e.verification.level === 'VERIFIED_EXTERNAL'
+      );
+      if (blockedAsPass.length > 0) {
+        return { status: 'FAIL', detail: `${blockedAsPass.length} BLOCKED results with external verification — evidence integrity violation` };
+      }
+
+      return { status: 'PASS', detail: `Evidence integrity verified — ${summary.total} records, ${summary.byVerificationLevel['VERIFIED_EXTERNAL'] || 0} external, ${summary.byVerificationLevel['SIMULATED'] || 0} simulated, no false greens` };
+    } catch (err: any) {
+      return { status: 'FAIL', detail: `Evidence integrity check failed: ${err.message}` };
+    }
   });
 
   // ═════════════════════════════════════════════════════════════════

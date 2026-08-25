@@ -73,6 +73,24 @@ The following were verified through the qualification suite and code audit, but 
 | Release gate | 15/15 PASS (after G14 policy update) |
 | Secret scan (no-hardcoded-secrets) | 2/2 PASS |
 | Pre-commit secret hook | INSTALLED |
+| Credential governance no-false-green | 14/14 PASS |
+
+---
+
+## Evidence Verification Level Distinction
+
+This certification explicitly distinguishes between verification levels per the HYDI Evidence Model:
+
+| Verification Level | Description | Present in this certification? |
+|--------------------|-------------|-------------------------------|
+| `VERIFIED_EXTERNAL` | Proven against real external provider API | NO — no valid Stripe credentials available |
+| `VERIFIED_INTERNAL` | Proven against internal state (code audit, qualification tests) | YES — webhook security, idempotency, RBAC |
+| `SIMULATED` | Produced by test fixture, mock, or simulation | NO — no mocks were used or reported as real |
+| `BLOCKED` | Could not be performed; blocker recorded | YES — Stripe E2E is BLOCKED |
+| `UNAVAILABLE` | External dependency unavailable | YES — Stripe API unavailable (invalid key) |
+| `UNKNOWN` | Verification not yet performed | NO |
+
+**CRITICAL:** No SIMULATED evidence is reported as VERIFIED_EXTERNAL. No internal verification is reported as external verification. The Stripe E2E test is honestly reported as BLOCKED, not PASS.
 
 ---
 

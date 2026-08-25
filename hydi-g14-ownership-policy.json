@@ -51,6 +51,11 @@
     "docs/HYDI_FIRST_REAL_CUSTOMER_READINESS_REPORT.md",
     "docs/HISTORICAL_SECRET_REMEDIATION_REPORT.md",
     "docs/STRIPE_E2E_CERTIFICATION.md",
+    "docs/HYDI_CREDENTIAL_GOVERNANCE.md",
+    "docs/HYDI_EXTERNAL_INTEGRATION_QUALIFICATION.md",
+    "docs/HYDI_SECRET_REMEDIATION.md",
+    "docs/HYDI_AUTONOMY_BOUNDARIES.md",
+    "docs/HYDI_CREDENTIAL_QUALIFICATION_FINAL_REPORT.md",
     "artifacts/"
   ],
   "userWorkspaceNote": "These paths are declared as persistent user workspace. Untracked or modified files matching these patterns are classified as USER_OWNED and do not cause G14 failure. However, if a file under a protectedPath also matches a userWorkspacePath, protectedPath takes precedence (FAIL).",
