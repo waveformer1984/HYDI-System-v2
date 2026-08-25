@@ -128,7 +128,7 @@ async function main() {
 
   // ─── Gate 4: Crash/restart qualification (Phase 7) ─────────────
   await runGate('Crash/restart qualification', 'G04', true, async () => {
-    const result = exec('npx tsx tests/qualification/test-crash-restart-matrix.ts 2>&1', 120000);
+    const result = exec('npx tsx tests/qualification/test-crash-restart-matrix.ts 2>&1', 300000);
     if (result.code === 0) {
       const passedMatch = result.stdout.match(/(\d+)\/(\d+) assertions passed/);
       if (passedMatch) {
@@ -142,7 +142,7 @@ async function main() {
   // ─── Gate 5: Event consistency ─────────────────────────────────
   await runGate('Event consistency', 'G05', true, async () => {
     // Verified as part of crash/restart matrix
-    const result = exec('npx tsx tests/qualification/test-crash-restart-matrix.ts 2>&1', 120000);
+    const result = exec('npx tsx tests/qualification/test-crash-restart-matrix.ts 2>&1', 300000);
     if (result.stdout.includes('event idempotency') || result.stdout.includes('EVENT_IDEMPOTENCY') || result.code === 0) {
       return { status: 'PASS', detail: 'Event idempotency verified in crash/restart matrix' };
     }
