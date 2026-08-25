@@ -248,15 +248,131 @@ async function main() {
     return { status: 'FAIL', detail: `Missing: ${missing.join(', ')}` };
   });
 
-  // ─── Gate 14: Git cleanliness check ────────────────────────────
+  // ─── Gate 14: Git cleanliness check (ownership-policy-based) ────
   await runGate('Git cleanliness check', 'G14', true, async () => {
-    const status = exec('git status --porcelain 2>&1', 10000).stdout.trim();
-    // Allow untracked result JSON files (they're generated outputs)
-    const lines = status.split('\n').filter((l) => l.trim() && !l.endsWith('.json') && !l.startsWith('?? hydi-phase'));
-    if (lines.length === 0) {
-      return { status: 'PASS', detail: 'Working tree clean (excluding generated JSON outputs)' };
+    const status = exec('git status --porcelain 2>&1', 10000).stdout.replace(/\n+$/, '');
+    if (!status.trim()) {
+      return { status: 'PASS', detail: 'Working tree clean' };
     }
-    return { status: 'FAIL', detail: `${lines.length} uncommitted changes: ${lines.slice(0, 5).join(', ')}` };
+
+    // Load the version-controlled ownership policy
+    const policyPath = path.join(process.cwd(), 'hydi-g14-ownership-policy.json');
+    if (!fs.existsSync(policyPath)) {
+      return { status: 'FAIL', detail: 'Ownership policy file (hydi-g14-ownership-policy.json) missing — cannot evaluate G14 safely' };
+    }
+    const policy = JSON.parse(fs.readFileSync(policyPath, 'utf8'));
+
+    // --- Classification helpers ---
+    // Extract the file path from a porcelain line: "XY path" or "XY path -> destpath"
+    function extractFilePath(porcelainLine: string): string {
+      // Porcelain format: 2 status chars + space + path (possibly quoted, possibly "orig -> dest")
+      const trimmed = porcelainLine.slice(3); // skip "XY "
+      if (trimmed.includes(' -> ')) {
+        return trimmed.split(' -> ')[1].replace(/^"|"$/g, '');
+      }
+      return trimmed.replace(/^"|"$/g, '');
+    }
+
+    // Check if a file path matches a pattern (supports glob * and directory prefixes)
+    function matchesPattern(filePath: string, pattern: string): boolean {
+      // Normalize: remove leading ./
+      const fp = filePath.replace(/^\.\//, '');
+      const pat = pattern.replace(/^\.\//, '');
+
+      // Directory prefix match (pattern ends with /)
+      if (pat.endsWith('/')) {
+        return fp.startsWith(pat) || fp === pat.slice(0, -1);
+      }
+
+      // Glob match: convert * to regex
+      if (pat.includes('*')) {
+        const regexStr = '^' + pat.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*') + '$';
+        return new RegExp(regexStr).test(fp);
+      }
+
+      // Exact match
+      return fp === pat;
+    }
+
+    // Check if file is under a protected path
+    function isProtected(filePath: string): boolean {
+      return policy.protectedPaths.some((p: string) => matchesPattern(filePath, p));
+    }
+
+    // Check if file matches user workspace
+    function isUserWorkspace(filePath: string): boolean {
+      return policy.userWorkspacePaths.some((p: string) => matchesPattern(filePath, p));
+    }
+
+    // Check if file matches generated output
+    function isGenerated(filePath: string): boolean {
+      return policy.generatedOutputPatterns.some((p: string) => matchesPattern(filePath, p));
+    }
+
+    // Check if file matches transient
+    function isTransient(filePath: string): boolean {
+      return policy.transientPatterns.some((p: string) => matchesPattern(filePath, p));
+    }
+
+    // Classify each porcelain line
+    const lines = status.split('\n').filter((l) => l.trim());
+    const classified: { line: string; filePath: string; classification: string }[] = [];
+    const unknown: string[] = [];
+    const protectedBlocked: string[] = [];
+
+    for (const line of lines) {
+      const filePath = extractFilePath(line);
+      const statusChars = line.slice(0, 2);
+
+      // Protected path check — ALWAYS blocks, regardless of other classifications
+      if (isProtected(filePath)) {
+        protectedBlocked.push(`${line} [PROTECTED]`);
+        classified.push({ line, filePath, classification: 'PROTECTED' });
+        continue;
+      }
+
+      // User workspace check
+      if (isUserWorkspace(filePath)) {
+        classified.push({ line, filePath, classification: 'USER_OWNED' });
+        continue;
+      }
+
+      // Generated output check
+      if (isGenerated(filePath)) {
+        classified.push({ line, filePath, classification: 'GENERATED' });
+        continue;
+      }
+
+      // Transient check
+      if (isTransient(filePath)) {
+        classified.push({ line, filePath, classification: 'TRANSIENT' });
+        continue;
+      }
+
+      // Unknown — blocks
+      unknown.push(`${line} [UNKNOWN]`);
+      classified.push({ line, filePath, classification: 'UNKNOWN' });
+    }
+
+    // Build result
+    if (protectedBlocked.length > 0 && unknown.length === 0) {
+      return { status: 'FAIL', detail: `${protectedBlocked.length} protected-path modifications: ${protectedBlocked.slice(0, 5).join(', ')}` };
+    }
+    if (unknown.length > 0) {
+      return { status: 'FAIL', detail: `${unknown.length} unknown/unclassified changes: ${unknown.slice(0, 5).join(', ')}` };
+    }
+    if (protectedBlocked.length > 0) {
+      return { status: 'FAIL', detail: `${protectedBlocked.length} protected-path modifications + ${unknown.length} unknown: ${protectedBlocked.slice(0, 3).join(', ')}` };
+    }
+
+    // All files classified as USER_OWNED, GENERATED, or TRANSIENT
+    const userOwned = classified.filter((c) => c.classification === 'USER_OWNED').length;
+    const generated = classified.filter((c) => c.classification === 'GENERATED').length;
+    const transient = classified.filter((c) => c.classification === 'TRANSIENT').length;
+    return {
+      status: 'PASS',
+      detail: `Working tree acceptable: ${userOwned} user-owned, ${generated} generated, ${transient} transient — 0 unknown, 0 protected`
+    };
   });
 
   // ─── Gate 15: Regression comparison ────────────────────────────
@@ -377,14 +493,14 @@ ${jsonOutput.safetyExceptions.map((s) => `- ${s}`).join('\n')}
 ## Release Recommendation
 
 ${releaseReady
-  ? '**READY** — All mandatory gates passed. The system meets the continuous runtime qualification criteria.'
-  : '**NOT READY** — Mandatory gate(s) failed. The system does not meet the continuous runtime qualification criteria.'}
+      ? '**READY** — All mandatory gates passed. The system meets the continuous runtime qualification criteria.'
+      : '**NOT READY** — Mandatory gate(s) failed. The system does not meet the continuous runtime qualification criteria.'}
 
 ## Failure Details
 
 ${mandatoryFail > 0
-  ? mandatoryGates.filter((r) => r.status === 'FAIL').map((r) => `- **${r.gate} ${r.name}**: ${r.detail}`).join('\n')
-  : 'None'}
+      ? mandatoryGates.filter((r) => r.status === 'FAIL').map((r) => `- **${r.gate} ${r.name}**: ${r.detail}`).join('\n')
+      : 'None'}
 
 ---
 
