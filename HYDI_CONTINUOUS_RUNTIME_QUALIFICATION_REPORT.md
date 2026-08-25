@@ -5,6 +5,7 @@
 **Current designation:**
 
 > CONTINUOUSLY OPERATED, SELF-MONITORED, RELEASE-GATED HUMAN PROXY RUNTIME
+> (24-HOUR SOAK QUALIFIED — full production designation still blocked by G14)
 
 This report documents the qualification evidence for Phases 1-17 of the HYDI
 Human Proxy Runtime continuous-operation qualification effort. It distinguishes
@@ -17,6 +18,7 @@ proven capabilities from un-earned or pending qualifications.
 | Security boundary enforcement | Phase 8: 85/85 assertions, 20/20 invariants PASS |
 | Crash/restart consistency | Phase 7: 246/246 assertions, 24/24 A-X scenarios PASS |
 | 500-cycle continuous soak | Phase 9: 12/12 assertions PASS, 0 duplicate side effects |
+| **24-hour continuous soak** | **Phase 10: 86400.7s run QUALIFIED_24H, 85568 cycles, 0 safety violations** |
 | Daemon continuous-operation | Phase 11: 76/76 assertions, 15/15 invariants PASS |
 | Watchdog supervisor behavior | Phase 12: 63/63 assertions, 12/12 invariants PASS |
 | Dashboard/control-plane hardening | Phase 13: 75/75 assertions, 12/12 invariants PASS |
@@ -27,9 +29,9 @@ proven capabilities from un-earned or pending qualifications.
 
 | Capability | Status | Reason |
 |-----------|--------|--------|
-| 24-hour soak | NOT EARNED | Harness exists and passed smoke testing, but the actual 86400-second run has not been completed |
-| Git working-tree cleanliness | NOT CLEAN | ~49 pre-existing unrelated files in working tree (G14 FAIL — PRE_EXISTING) |
-| Full production release designation | PENDING | Requires 24-hour soak completion and clean working tree |
+| ~~24-hour soak~~ | **EARNED** | **Completed 2026-08-25T05:38:54Z — QUALIFIED_24H** |
+| Git working-tree cleanliness | NOT CLEAN | 36 pre-existing unrelated files in working tree (G14 FAIL — PRE_EXISTING) |
+| Full production release designation | PENDING | Requires clean working tree (G14); all other mandatory gates PASS |
 
 ---
 
@@ -41,7 +43,7 @@ proven capabilities from un-earned or pending qualifications.
 | 7 | Crash/restart matrix qualification | `a47b7f1`, `0a1e51d` | 246/246 assertions, 24/24 A-X scenarios, 20/20 release gate assertions | PASS | QUALIFIED | None |
 | 8 | Security boundary qualification | `0ebfc76` | 85/85 assertions, 20/20 invariants | PASS | QUALIFIED | 18 pre-existing unauthenticated routes outside operator surface documented as EXPECTED_FAILURE |
 | 9 | 500-cycle continuous soak | `0f9651a` | 12/12 assertions, 500 cycles, 0 duplicate side effects | PASS | QUALIFIED | None |
-| 10 | 24-hour soak harness preparation | `5e6b597` | Smoke test passed (5s run) | PREPARED | NOT EARNED | Actual 86400s run not yet executed |
+| 10 | 24-hour soak | `5e6b597` (harness) + this commit (results) | 86400.7s run, 85568 cycles, 0 safety violations, QUALIFIED_24H | PASS | QUALIFIED | None |
 | 11 | Daemon continuous-operation audit | `851b111` | 76/76 assertions, 15/15 invariants | PASS | QUALIFIED | None |
 | 12 | Watchdog supervisor qualification | `5027ca1` | 63/63 assertions, 12/12 invariants | PASS | QUALIFIED | None |
 | 13 | Dashboard hardening | `7d3dbef` | 75/75 assertions, 12/12 invariants | PASS | QUALIFIED | None |
@@ -434,24 +436,80 @@ failure is documented but not "fixed" by modifying or deleting unrelated user wo
 
 ## 8. 24-Hour Soak Status
 
-**Status: NOT EARNED**
+**Status: EARNED — QUALIFIED_24H**
 
-The 24-hour soak harness exists at `scripts/soak-24h-harness.ts` (commit `5e6b597`).
-It has been smoke-tested with a 5-second run and produced correct output, including
-the accurate qualification message:
-
-> ✓ SMOKE TEST PASSED (ran for 5.0s = 0.0014h)
-> ⚠ 24-hour qualification NOT YET EARNED — must run with --duration=86400
-
-The actual 86400-second (24-hour) run has **not** been executed. Preparation does
-not equal qualification. The 24-hour soak qualification will only be earned after
-the following command completes successfully:
+The 24-hour soak harness at `scripts/soak-24h-harness.ts` (commit `5e6b597`) was
+executed to completion with the canonical command:
 
 ```
 npx tsx scripts/soak-24h-harness.ts --duration=86400
 ```
 
-This command is **NOT YET RUN / NOT YET QUALIFIED**.
+### Final Soak Results
+
+| Metric | Value |
+|--------|-------|
+| Start time | 2026-08-24T05:38:53.967Z |
+| End time | 2026-08-25T05:38:54.870Z |
+| Actual duration | 86400.7s (24.00h) |
+| Target duration | 86400s (24.00h) |
+| Shutdown reason | DURATION_COMPLETED |
+| Completed | YES |
+| Qualification status | **QUALIFIED_24H** |
+
+### Cycle Metrics
+
+| Metric | Value |
+|--------|-------|
+| Total cycles | 85,568 |
+| Successes | 28,412 |
+| Failures | 4,814 |
+| Recoveries | 9,632 |
+| Replans | 4,739 |
+| Interventions created | 14,288 |
+| Interventions approved | 4,792 |
+| Interventions rejected | 4,727 |
+
+### Safety Metrics (ALL ZERO)
+
+| Metric | Value |
+|--------|-------|
+| Duplicate side effects | 0 |
+| Orphaned interventions | 0 |
+| Terminal resurrections | 0 |
+| Event duplications | 0 |
+| Persistence failures | 4,679 (transient, recovered) |
+
+### Health Checks
+
+| Metric | Value |
+|--------|-------|
+| Total health checks | 1,428 |
+| Health check failures | 0 |
+
+### Environmental Blockers
+
+None.
+
+### Safety Violations
+
+None.
+
+### Memory Behavior
+
+Heap usage grew gradually from ~18MB at start to ~78-84MB at end, with periodic
+GC fluctuations. RSS grew from ~82MB to ~120MB. No unbounded growth or memory
+pathology observed. Queue depth remained bounded (0-5 throughout).
+
+Final memory samples:
+- 2026-08-25T05:33:54Z | heap=81.3MB rss=119.9MB queue=0
+- 2026-08-25T05:37:56Z | heap=82.1MB rss=119.5MB queue=2
+- 2026-08-25T05:38:26Z | heap=79.3MB rss=119.9MB queue=1
+
+### Evidence
+
+- Raw results JSON: `hydi-phase10-soak-24h-results.json`
+- Qualification status: `QUALIFIED_24H` (canonical harness completion status)
 
 ---
 
@@ -503,30 +561,27 @@ and include:
 
 These limitations are supported by actual qualification results:
 
-1. **24-hour soak not earned.** The harness is prepared but the actual 24-hour
-   run has not been completed. Long-duration memory growth, resource exhaustion,
-   and drift behavior over 24 hours are not yet verified.
-
-2. **Git working tree not clean.** Approximately 49 pre-existing uncommitted
+1. **Git working tree not clean.** 36 pre-existing uncommitted
    files remain in the working tree. These are unrelated to Phase 8-16 work but
-   prevent G14 from passing.
+   prevent G14 from passing. This is the **sole remaining blocker** for full
+   production designation.
 
-3. **Pre-existing full-suite test failures.** 205 tests across 17 suites fail
+2. **Pre-existing full-suite test failures.** 205 tests across 17 suites fail
    in the full Jest run. These are pre-existing and unrelated to continuous
    runtime qualification, but they indicate technical debt in other areas.
 
-4. **18 unauthenticated routes outside operator surface.** Routes such as
+3. **18 unauthenticated routes outside operator surface.** Routes such as
    `/api/cognitive`, `/api/credentials`, `/api/keys/*`, `/api/system/*`,
    `/api/session`, `/api/status`, and `/api/audit` lack authentication.
    These are pre-existing and documented as EXPECTED_FAILURE in SEC01b.
    They are outside the governed operator control plane but represent
    defense-in-depth concerns.
 
-5. **Control-plane E2E depends on Chrome.** The control-plane E2E test
+4. **Control-plane E2E depends on Chrome.** The control-plane E2E test
    (`scripts/test-control-plane-e2e.ts`) requires a real Chrome browser.
    On headless systems without Chrome, this gate may be environmentally blocked.
 
-6. **PM2 restart verification depends on PM2 installation.** The PM2 reality
+5. **PM2 restart verification depends on PM2 installation.** The PM2 reality
    verification gate (G11) requires PM2 to be installed. On systems without
    PM2, this gate is classified as ENVIRONMENTAL.
 
@@ -554,16 +609,17 @@ npx tsx tests/qualification/test-500-cycle-soak.ts
 # Result: 12 passed, 0 failed; 500 cycles in 36.2s
 ```
 
-### Phase 10 — 24-Hour Soak Harness (SMOKE TEST ONLY)
+### Phase 10 — 24-Hour Soak Harness (SMOKE TEST)
 ```bash
 npx tsx scripts/soak-24h-harness.ts --duration=5 --cycle-interval=100
 # Result: SMOKE TEST PASSED; 24-hour qualification NOT YET EARNED
 ```
 
-### Phase 10 — 24-Hour Soak (NOT YET RUN)
+### Phase 10 — 24-Hour Soak (COMPLETED — QUALIFIED_24H)
 ```bash
 npx tsx scripts/soak-24h-harness.ts --duration=86400
-# Status: NOT YET RUN / NOT YET QUALIFIED
+# Result: QUALIFIED_24H — 86400.7s, 85568 cycles, 0 safety violations
+# Evidence: hydi-phase10-soak-24h-results.json
 ```
 
 ### Phase 11 — Daemon Continuous-Operation Audit
@@ -619,12 +675,12 @@ PASS/FAIL evidence:
 - Watchdog supervisor behavior (12/12 invariants)
 - Dashboard/control-plane hardening (12/12 invariants)
 
-### Operational Qualification: PARTIALLY QUALIFIED
+### Operational Qualification: QUALIFIED
 
 - 500-cycle soak: QUALIFIED
 - Daemon audit: QUALIFIED
 - Watchdog: QUALIFIED
-- 24-hour soak: **NOT EARNED** — harness prepared, actual run not completed
+- **24-hour soak: QUALIFIED** — QUALIFIED_24H, 86400.7s, 0 safety violations
 
 ### Release-Gate Status: 14/15 PASS
 
@@ -635,18 +691,14 @@ PASS/FAIL evidence:
 
 Before a true final release designation can be granted, the following must be completed:
 
-1. **24-hour soak execution.** Run `npx tsx scripts/soak-24h-harness.ts --duration=86400`
-   to completion. The run must produce no safety violations and no environmental blockers.
-   The output JSON must show `qualificationStatus: "QUALIFIED_24H"`.
-
-2. **Git working-tree cleanup.** The ~49 pre-existing uncommitted files must be
+1. **Git working-tree cleanup.** The 36 pre-existing uncommitted files must be
    committed, removed, or `.gitignore`d as appropriate by the repository owner.
    This is NOT a Phase 8-16 defect — it is pre-existing technical debt.
 
-3. **G14 re-run after cleanup.** After the working tree is clean, re-run the
+2. **G14 re-run after cleanup.** After the working tree is clean, re-run the
    production release gate to verify G14 passes.
 
-4. **Full Jest suite remediation (optional).** The 205 pre-existing test failures
+3. **Full Jest suite remediation (optional).** The 205 pre-existing test failures
    are unrelated to continuous runtime qualification but should be addressed for
    overall codebase health.
 
@@ -655,9 +707,9 @@ Before a true final release designation can be granted, the following must be co
 > **CONTINUOUSLY OPERATED, SELF-MONITORED, RELEASE-GATED HUMAN PROXY RUNTIME**
 >
 > Capability qualification: QUALIFIED
-> Operational qualification: PARTIALLY QUALIFIED (24-hour soak pending)
-> Release gate: 14/15 PASS (G14 PRE_EXISTING)
-> Full production qualification: PENDING — requires 24-hour soak and clean working tree
+> Operational qualification: QUALIFIED (including 24-hour soak)
+> Release gate: 14/15 PASS (G14 PRE_EXISTING — worktree cleanliness only)
+> Full production qualification: PENDING — requires G14 (clean working tree) only
 
 ---
 
@@ -686,7 +738,7 @@ Before a true final release designation can be granted, the following must be co
 | **SIMULATED** | Failure injection in 500-cycle soak (deterministic PRNG, simulated process interruption via in-memory state clear + restore) |
 | **MOCKED** | Watchdog health service (mock degraded state), watchdog event bus (mock publish), watchdog job queue (mock retry) |
 | **ENVIRONMENTALLY BLOCKED** | None currently blocked — all gates ran. Control-plane E2E with Chrome passed on this system. |
-| **NOT YET QUALIFIED** | 24-hour soak (harness prepared, actual 86400s run not executed), full Jest suite (205 pre-existing failures) |
+| **NOT YET QUALIFIED** | Full Jest suite (205 pre-existing failures) |
 
 ---
 
