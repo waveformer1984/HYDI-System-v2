@@ -55,6 +55,13 @@ const FULFILLMENT_TEMPLATES: Record<OfferId, { stepId: string; name: string }[]>
     { stepId: 'first_appointment', name: 'First appointment booked' },
     { stepId: 'first_report', name: 'First monthly performance report' },
   ],
+  protoforge_model_prep: [
+    { stepId: 'job_queued', name: 'Job queued for HEIDI execution' },
+    { stepId: 'model_generation', name: 'OpenSCAD + STL model generation' },
+    { stepId: 'artifact_verification', name: 'Artifact verification' },
+    { stepId: 'human_review', name: 'Human review and approval' },
+    { stepId: 'delivery', name: 'Artifact delivery to customer' },
+  ],
 };
 
 export class CustomerLifecycle {

@@ -201,6 +201,34 @@ const DEFAULT_OFFERS: Record<OfferId, CommercialOffer> = {
     cancellationBehavior: 'Cancel anytime. Service continues until end of current billing period. Prospect data remains available to the customer.',
     active: true,
   },
+
+  // ProtoForge: Productized 3D model preparation
+  protoforge_model_prep: {
+    offerId: 'protoforge_model_prep',
+    name: '3D-Printable Model Preparation Package',
+    description: 'Send us a description of a simple object. We produce a parameterized OpenSCAD source file, a print-ready STL mesh, and a specification document. Delivered as a downloadable package.',
+    category: 'protoforge',
+    setupPrice: 2900,        // $29.00 in cents
+    recurringPrice: 0,
+    billingInterval: 'one_time',
+    includedCapabilities: [
+      'model_generation',
+      'stl_export',
+      'documentation',
+    ],
+    usageLimits: {
+      maxParts: 1,
+      maxDimensionMm: 100,
+    },
+    implementationRequirements: [
+      'object_description',
+      'preferred_dimensions',
+    ],
+    marginTarget: 0.85,
+    upgradePath: null,
+    cancellationBehavior: 'Full refund if artifact generation fails. One free revision if artifact does not match description.',
+    active: true,
+  },
 };
 
 // ---------------------------------------------------------------------------
