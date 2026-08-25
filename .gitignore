@@ -73,6 +73,15 @@ tests/soak-test-report.json
 # TypeScript incremental build info
 tsconfig.tsbuildinfo
 
+# Temporary/ad-hoc output files
+tmp-*.txt
+_boot2.txt
+
+# Qualification transient artifacts (canonical evidence is in committed phase result JSONs and reports)
+hydi-phase1-worktree-audit.json
+hydi-phase7-restart-results.json
+hydi-preflight-smoke-results.json
+
 # Misc runtime/dev artifacts
 actions-runner/
 heidi_snapshot.json
