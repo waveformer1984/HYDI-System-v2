@@ -1,30 +1,30 @@
 {
   "phase": "14",
-  "timestamp": "2026-08-25T14:41:05.852Z",
-  "head": "8241ac028e9ca35afac361db54cc91b1eede18d1",
+  "timestamp": "2026-08-25T15:46:57.471Z",
+  "head": "0bc0df7039ade5057b16aeefe86d348fdcb9fbf2",
   "branch": "feat/governed-autonomy",
-  "startTime": "2026-08-25T14:34:29.253Z",
-  "totalDurationMs": 396595,
+  "startTime": "2026-08-25T15:29:54.068Z",
+  "totalDurationMs": 1023248,
   "baselineTypecheckErrors": 115,
   "mandatoryGates": {
     "total": 13,
-    "passed": 13,
-    "failed": 0
+    "passed": 5,
+    "failed": 8
   },
   "optionalGates": {
     "total": 2,
-    "passed": 2,
-    "skipped": 0,
-    "failed": 0
+    "passed": 0,
+    "skipped": 1,
+    "failed": 1
   },
-  "releaseReady": true,
+  "releaseReady": false,
   "results": [
     {
       "gate": "G01",
       "name": "Typecheck baseline",
       "status": "PASS",
       "detail": "115 errors (baseline: 115, delta: 0)",
-      "durationMs": 4297,
+      "durationMs": 12043,
       "mandatory": true
     },
     {
@@ -32,7 +32,7 @@
       "name": "Focused unit tests",
       "status": "PASS",
       "detail": "0 tests passed, 0 failed",
-      "durationMs": 180017,
+      "durationMs": 180042,
       "mandatory": true
     },
     {
@@ -40,79 +40,79 @@
       "name": "Security qualification",
       "status": "PASS",
       "detail": "85 assertions passed, 0 failed",
-      "durationMs": 9789,
+      "durationMs": 44335,
       "mandatory": true
     },
     {
       "gate": "G04",
       "name": "Crash/restart qualification",
-      "status": "PASS",
-      "detail": "Completed successfully",
-      "durationMs": 57614,
+      "status": "FAIL",
+      "detail": "Exit code 1",
+      "durationMs": 120150,
       "mandatory": true
     },
     {
       "gate": "G05",
       "name": "Event consistency",
-      "status": "PASS",
-      "detail": "Event idempotency verified in crash/restart matrix",
-      "durationMs": 50563,
+      "status": "FAIL",
+      "detail": "Event consistency not verified",
+      "durationMs": 62666,
       "mandatory": true
     },
     {
       "gate": "G06",
       "name": "SSE consistency",
-      "status": "PASS",
-      "detail": "SSE replay safety verified in crash/restart matrix; transport-only verified in dashboard hardening",
-      "durationMs": 0,
+      "status": "FAIL",
+      "detail": "SSE consistency depends on G03 and G04",
+      "durationMs": 2,
       "mandatory": true
     },
     {
       "gate": "G07",
       "name": "Intervention lifecycle",
-      "status": "PASS",
-      "detail": "Intervention lifecycle verified in crash/restart matrix",
-      "durationMs": 0,
+      "status": "FAIL",
+      "detail": "Intervention lifecycle depends on G04",
+      "durationMs": 1,
       "mandatory": true
     },
     {
       "gate": "G08",
       "name": "Control-plane E2E",
-      "status": "PASS",
-      "detail": "Control-plane E2E completed",
-      "durationMs": 39248,
+      "status": "ENVIRONMENTAL",
+      "detail": "E2E may require Chrome/browser — exit code 1",
+      "durationMs": 120022,
       "mandatory": false
     },
     {
       "gate": "G09",
       "name": "500-cycle soak",
-      "status": "PASS",
-      "detail": "12 passed, 0 failed",
-      "durationMs": 46782,
+      "status": "FAIL",
+      "detail": "Exit code 1",
+      "durationMs": 300041,
       "mandatory": true
     },
     {
       "gate": "G10",
       "name": "Runtime health verification",
-      "status": "PASS",
-      "detail": "76 passed, 0 failed",
-      "durationMs": 3673,
+      "status": "FAIL",
+      "detail": "Exit code 1",
+      "durationMs": 60066,
       "mandatory": true
     },
     {
       "gate": "G11",
       "name": "PM2 reality verification",
-      "status": "PASS",
-      "detail": "PM2 v7.0.1 installed; restart behavior verified in Phase 7",
-      "durationMs": 367,
+      "status": "FAIL",
+      "detail": "PM2 installed but crash/restart matrix failed",
+      "durationMs": 2365,
       "mandatory": false
     },
     {
       "gate": "G12",
       "name": "Secret scan",
-      "status": "PASS",
-      "detail": "Secret sanitization verified (SEC12 PASS)",
-      "durationMs": 4041,
+      "status": "FAIL",
+      "detail": "Secret sanitization not verified",
+      "durationMs": 120022,
       "mandatory": true
     },
     {
@@ -120,15 +120,15 @@
       "name": "Artifact verification",
       "status": "PASS",
       "detail": "All 7 required artifacts present",
-      "durationMs": 1,
+      "durationMs": 24,
       "mandatory": true
     },
     {
       "gate": "G14",
       "name": "Git cleanliness check",
-      "status": "PASS",
-      "detail": "Working tree acceptable: 39 user-owned, 4 generated, 0 transient — 0 unknown, 0 protected",
-      "durationMs": 203,
+      "status": "FAIL",
+      "detail": "3 unknown/unclassified changes: ?? hydi-adversarial-crash-matrix-results.json [UNKNOWN], ?? hydi-g14-ownership-policy-results.json [UNKNOWN], ?? hydi-post-qualification-adversarial-results.json [UNKNOWN]",
+      "durationMs": 1468,
       "mandatory": true
     },
     {
@@ -136,7 +136,7 @@
       "name": "Regression comparison",
       "status": "PASS",
       "detail": "No regression — typecheck delta = 0",
-      "durationMs": 0,
+      "durationMs": 1,
       "mandatory": true
     }
   ],
@@ -151,5 +151,5 @@
     "24-hour qualification requires an actual 24-hour run to complete",
     "Environmental failures are classified as ENVIRONMENTAL, not PASS"
   ],
-  "releaseRecommendation": "READY — all mandatory gates passed"
+  "releaseRecommendation": "NOT READY — mandatory gate(s) failed"
 }
