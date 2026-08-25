@@ -134,6 +134,31 @@ export class InterventionQueue {
   }
 
   /**
+   * Async resolve — awaits persistence before returning.
+   * Use this when the caller needs the resolution to be durable
+   * before proceeding (e.g. before a restart or verification).
+   */
+  async resolveAsync(requestId: string, resolutionNote: string): Promise<boolean> {
+    const entry = this.queue.get(requestId);
+    if (!entry) return false;
+    if (entry.status !== 'pending') return false;
+
+    entry.status = 'resolved';
+    entry.resolvedAt = new Date().toISOString();
+    entry.resolutionNote = resolutionNote;
+
+    if (this.persistence) {
+      try {
+        await this.persistence.complete(requestId, resolutionNote);
+      } catch {
+        /* non-fatal — in-memory state is already resolved */
+      }
+    }
+
+    return true;
+  }
+
+  /**
    * Cancel an intervention (e.g. goal was cancelled).
    * Also persists the cancellation to Supabase if persistence is attached.
    */
@@ -145,6 +170,28 @@ export class InterventionQueue {
 
     if (this.persistence) {
       this.persistence.cancel(requestId).catch(() => { /* non-fatal */ });
+    }
+
+    return true;
+  }
+
+  /**
+   * Async cancel — awaits persistence before returning.
+   * Use this when the caller needs the cancellation to be durable
+   * before proceeding (e.g. before a restart or verification).
+   */
+  async cancelAsync(requestId: string): Promise<boolean> {
+    const entry = this.queue.get(requestId);
+    if (!entry) return false;
+    if (entry.status !== 'pending') return false;
+    entry.status = 'cancelled';
+
+    if (this.persistence) {
+      try {
+        await this.persistence.cancel(requestId);
+      } catch {
+        /* non-fatal — in-memory state is already cancelled */
+      }
     }
 
     return true;

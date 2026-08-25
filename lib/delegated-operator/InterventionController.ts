@@ -154,7 +154,7 @@ export class InterventionController {
 
     // Mark as resolved (approved)
     const resolutionNote = `Approved by ${approvedBy}${note ? ': ' + note : ''}`;
-    const resolved = queue.resolve(interventionId, resolutionNote);
+    const resolved = await queue.resolveAsync(interventionId, resolutionNote);
     if (!resolved) {
       return this.fail(interventionId, 'approved', 'Failed to resolve intervention');
     }
@@ -233,7 +233,7 @@ export class InterventionController {
 
     // Mark as resolved (rejected)
     const resolutionNote = `Rejected by ${rejectedBy}${reason ? ': ' + reason : ''}`;
-    const resolved = queue.resolve(interventionId, resolutionNote);
+    const resolved = await queue.resolveAsync(interventionId, resolutionNote);
     if (!resolved) {
       return this.fail(interventionId, 'rejected', 'Failed to resolve intervention');
     }
@@ -284,7 +284,7 @@ export class InterventionController {
       return this.fail(interventionId, 'cancelled', `Intervention is not pending (status: ${entry.status})`);
     }
 
-    const cancelled = queue.cancel(interventionId);
+    const cancelled = await queue.cancelAsync(interventionId);
     if (!cancelled) {
       return this.fail(interventionId, 'cancelled', 'Failed to cancel intervention');
     }
