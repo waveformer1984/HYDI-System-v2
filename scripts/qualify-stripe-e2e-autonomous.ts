@@ -89,6 +89,7 @@ interface CertificationResult {
   blockerOwnership: 'AUTONOMOUS' | 'HUMAN_AUTH_REQUIRED' | 'HUMAN_EXTERNAL_ACTION_REQUIRED' | 'BLOCKED';
   transitions: TransitionRecord[];
   webhookReceipt: WebhookReceipt | null;
+  allReceivedWebhooks: { eventId: string | null; eventType: string | null; signatureValid: boolean; payloadHash: string | null; receivedAt: string | null }[];
   checkoutSessionId: string | null;
   stripeEventId: string | null;
   credentialFingerprint: string | null;
@@ -116,6 +117,7 @@ class StripeE2EQualificationRunner {
   private transitions: TransitionRecord[] = [];
   private evidenceIds: string[] = [];
   private listenerProcess: ChildProcess | null = null;
+  private listenerWasStarted = false; // Track separately from listenerProcess (which is nulled in cleanup)
   private webhookServer: http.Server | null = null;
   private webhookReceipt: WebhookReceipt = {
     received: false,
@@ -127,6 +129,12 @@ class StripeE2EQualificationRunner {
     receivedAt: null,
     body: null,
   };
+  // Track ALL received webhooks — stripe trigger sends multiple events
+  // (checkout.session.completed, charge.updated, payment_intent.succeeded, etc.)
+  // We must not let a later event overwrite the one we verified.
+  private allReceivedWebhooks: WebhookReceipt[] = [];
+  // The specific webhook that was signature-verified (locked once verified)
+  private verifiedWebhook: WebhookReceipt | null = null;
   private currentWebhookSecret: string | null = null;
   private checkoutSessionId: string | null = null;
   private stripeEventId: string | null = null;
@@ -466,8 +474,8 @@ class StripeE2EQualificationRunner {
           req.on('end', () => {
             const signatureHeader = req.headers['stripe-signature'] as string || null;
 
-            // Record the receipt
-            this.webhookReceipt = {
+            // Create a receipt for this specific webhook delivery
+            const receipt: WebhookReceipt = {
               received: true,
               eventId: null,
               eventType: null,
@@ -481,18 +489,28 @@ class StripeE2EQualificationRunner {
             // Try to parse the event ID and type from the body
             try {
               const event = JSON.parse(body);
-              this.webhookReceipt.eventId = event.id || null;
-              this.webhookReceipt.eventType = event.type || null;
-              this.stripeEventId = event.id || null;
+              receipt.eventId = event.id || null;
+              receipt.eventType = event.type || null;
 
               // Check for duplicate delivery
               if (receivedEvents.includes(event.id)) {
-                this.webhookReceipt.received = true; // Still received, but duplicate
+                // Duplicate — record but don't overwrite primary receipt
               }
               receivedEvents.push(event.id);
             } catch {
               // Body is not valid JSON — fail closed
               this.failClosedReason = 'Webhook body is not valid JSON';
+            }
+
+            // Track ALL received webhooks
+            this.allReceivedWebhooks.push(receipt);
+
+            // Only set the primary webhookReceipt if we haven't verified one yet
+            // This prevents later events (charge.updated, etc.) from overwriting
+            // the checkout.session.completed event that we verified.
+            if (!this.verifiedWebhook && !this.webhookReceipt.received) {
+              this.webhookReceipt = receipt;
+              this.stripeEventId = receipt.eventId;
             }
 
             res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -556,6 +574,7 @@ class StripeE2EQualificationRunner {
             const durationMs = Date.now() - start;
             this.recordTransition('start_listener', 'NOT_RUNNING', 'RUNNING',
               `Listener started, forwarding to ${forwardTo}`, 'PASS', 'VERIFIED_EXTERNAL', durationMs);
+            this.listenerWasStarted = true;
             console.log('[STEP 3] ✓ stripe listen running');
             resolve();
           }
@@ -570,6 +589,7 @@ class StripeE2EQualificationRunner {
             const durationMs = Date.now() - start;
             this.recordTransition('start_listener', 'NOT_RUNNING', 'RUNNING',
               `Listener started (stderr), forwarding to ${forwardTo}`, 'PASS', 'VERIFIED_EXTERNAL', durationMs);
+            this.listenerWasStarted = true;
             console.log('[STEP 3] ✓ stripe listen running');
             resolve();
           }
@@ -747,31 +767,52 @@ class StripeE2EQualificationRunner {
 
   private async stepVerifyWebhookDelivery(): Promise<void> {
     const start = Date.now();
-    console.log('[STEP 8] Verifying webhook delivery...');
+    console.log('[STEP 8] Verifying webhook delivery (waiting for checkout.session.completed)...');
 
-    // Wait for the webhook to arrive (with timeout)
+    // Wait for the checkout.session.completed event specifically
+    // stripe trigger checkout.session.completed sends multiple side-effect events
+    // (product.created, price.created, charge.succeeded, etc.) but we need
+    // the actual checkout.session.completed event for the causal chain.
+    const targetEventType = 'checkout.session.completed';
     const maxWait = 30000;
     const checkInterval = 500;
     let waited = 0;
 
-    while (!this.webhookReceipt.received && waited < maxWait) {
+    while (waited < maxWait) {
+      // Check if we've received the target event
+      const targetEvent = this.allReceivedWebhooks.find(w => w.eventType === targetEventType);
+      if (targetEvent) {
+        // Set this as the primary webhook receipt for signature verification
+        this.webhookReceipt = targetEvent;
+        this.stripeEventId = targetEvent.eventId;
+        break;
+      }
       await new Promise(resolve => setTimeout(resolve, checkInterval));
       waited += checkInterval;
     }
 
-    if (!this.webhookReceipt.received) {
+    // Check if we got the target event
+    const targetEvent = this.allReceivedWebhooks.find(w => w.eventType === targetEventType);
+    if (!targetEvent) {
+      // Did we receive any webhooks at all?
+      const anyReceived = this.allReceivedWebhooks.length > 0;
       this.recordTransition('verify_webhook_delivery', 'WAITING', 'BLOCKED',
-        `Webhook not received after ${maxWait / 1000}s`, 'BLOCKED', 'VERIFIED_EXTERNAL');
-      this.failClosedReason = `Webhook not received after ${maxWait / 1000}s`;
-      console.log(`[STEP 8] ✗ Webhook not received after ${maxWait / 1000}s`);
+        anyReceived
+          ? `Received ${this.allReceivedWebhooks.length} webhooks but none was ${targetEventType} (types: ${this.allReceivedWebhooks.map(w => w.eventType).join(', ')})`
+          : `No webhook received after ${maxWait / 1000}s`,
+        'BLOCKED', 'VERIFIED_EXTERNAL');
+      this.failClosedReason = anyReceived
+        ? `Target event ${targetEventType} not received (got: ${this.allReceivedWebhooks.map(w => w.eventType).join(', ')})`
+        : `No webhook received after ${maxWait / 1000}s`;
+      console.log(`[STEP 8] ✗ ${this.failClosedReason}`);
       return;
     }
 
     const durationMs = Date.now() - start;
     this.recordTransition('verify_webhook_delivery', 'WAITING', 'RECEIVED',
-      `Webhook received — event: ${this.webhookReceipt.eventId}, type: ${this.webhookReceipt.eventType}, payload hash: ${this.webhookReceipt.payloadHash}`,
+      `Target webhook received — event: ${targetEvent.eventId}, type: ${targetEvent.eventType}, payload hash: ${targetEvent.payloadHash} (${this.allReceivedWebhooks.length} total events received)`,
       'PASS', 'VERIFIED_EXTERNAL', durationMs);
-    console.log(`[STEP 8] ✓ Webhook received — ${this.webhookReceipt.eventId}`);
+    console.log(`[STEP 8] ✓ checkout.session.completed received — ${targetEvent.eventId} (${this.allReceivedWebhooks.length} total events)`);
   }
 
   private async stepVerifySignature(): Promise<void> {
@@ -802,16 +843,20 @@ class StripeE2EQualificationRunner {
 
     this.webhookReceipt.signatureValid = signatureValid;
 
+    // Lock the verified webhook so subsequent events don't overwrite it
     if (signatureValid) {
+      this.verifiedWebhook = { ...this.webhookReceipt };
       const durationMs = Date.now() - start;
       this.recordTransition('verify_signature', 'UNVERIFIED', 'VERIFIED',
-        'Stripe signature verified (HMAC-SHA256)', 'PASS', 'VERIFIED_EXTERNAL', durationMs);
-      console.log('[STEP 9] ✓ Signature verified');
+        `Stripe signature verified (HMAC-SHA256) — event: ${this.webhookReceipt.eventId}, type: ${this.webhookReceipt.eventType}`,
+        'PASS', 'VERIFIED_EXTERNAL', durationMs);
+      console.log(`[STEP 9] ✓ Signature verified — ${this.webhookReceipt.eventId} (${this.webhookReceipt.eventType})`);
     } else {
       this.recordTransition('verify_signature', 'UNVERIFIED', 'INVALID',
-        'Stripe signature verification FAILED', 'FAIL', 'VERIFIED_EXTERNAL');
+        `Stripe signature verification FAILED — event: ${this.webhookReceipt.eventId}, type: ${this.webhookReceipt.eventType}`,
+        'FAIL', 'VERIFIED_EXTERNAL');
       this.failClosedReason = 'Stripe signature verification failed';
-      console.log('[STEP 9] ✗ Signature verification FAILED');
+      console.log(`[STEP 9] ✗ Signature verification FAILED — ${this.webhookReceipt.eventId}`);
     }
   }
 
@@ -862,22 +907,44 @@ class StripeE2EQualificationRunner {
     // Wait a bit more to see if a duplicate arrives
     await new Promise(resolve => setTimeout(resolve, 5000));
 
-    // Check if we received exactly one event
-    // (The webhookReceipt only records the last one, but we can check
-    // if the event ID matches what we triggered)
-    if (!this.webhookReceipt.received) {
+    // Check all received webhooks for duplicates
+    const eventIds = this.allReceivedWebhooks.map(w => w.eventId).filter(Boolean) as string[];
+    const uniqueEventIds = new Set(eventIds);
+    const duplicates = eventIds.length - uniqueEventIds.size;
+
+    // Find the checkout.session.completed event specifically
+    const checkoutEvent = this.allReceivedWebhooks.find(w => w.eventType === 'checkout.session.completed');
+    const verifiedEvent = this.verifiedWebhook || checkoutEvent;
+
+    if (!verifiedEvent) {
       this.recordTransition('verify_idempotency', 'UNKNOWN', 'BLOCKED',
-        'No webhook received — cannot verify idempotency', 'BLOCKED', 'VERIFIED_INTERNAL');
+        'No verified webhook to check idempotency against', 'BLOCKED', 'VERIFIED_INTERNAL');
+      this.failClosedReason = 'No verified webhook for idempotency check';
       return;
     }
 
-    // In a real system, we'd check the database for duplicate event processing
-    // For this runner, we verify that we received exactly one event with the expected ID
+    // Check if the verified event was delivered more than once
+    const verifiedEventDeliveries = eventIds.filter(id => id === verifiedEvent.eventId).length;
+
     const durationMs = Date.now() - start;
-    this.recordTransition('verify_idempotency', 'UNKNOWN', 'VERIFIED',
-      `Single webhook delivery confirmed — event: ${this.webhookReceipt.eventId}`,
-      'PASS', 'VERIFIED_EXTERNAL', durationMs);
-    console.log('[STEP 10] ✓ Idempotency verified (single delivery)');
+    if (duplicates === 0 && verifiedEventDeliveries === 1) {
+      this.recordTransition('verify_idempotency', 'UNKNOWN', 'VERIFIED',
+        `Idempotency verified — ${uniqueEventIds.size} unique events received, 0 duplicates, verified event ${verifiedEvent.eventId} delivered exactly once`,
+        'PASS', 'VERIFIED_EXTERNAL', durationMs);
+      console.log(`[STEP 10] ✓ Idempotency verified — ${uniqueEventIds.size} unique events, 0 duplicates`);
+    } else if (verifiedEventDeliveries === 1) {
+      // Other events had duplicates but the verified one didn't — still PASS
+      this.recordTransition('verify_idempotency', 'UNKNOWN', 'VERIFIED',
+        `Idempotency verified for target event — ${uniqueEventIds.size} unique events, ${duplicates} duplicate(s) of other events, verified event ${verifiedEvent.eventId} delivered exactly once`,
+        'PASS', 'VERIFIED_EXTERNAL', durationMs);
+      console.log(`[STEP 10] ✓ Idempotency verified — target event delivered once (${duplicates} other duplicates)`);
+    } else {
+      this.recordTransition('verify_idempotency', 'UNKNOWN', 'FAILED',
+        `Idempotency FAILED — verified event ${verifiedEvent.eventId} delivered ${verifiedEventDeliveries} times`,
+        'FAIL', 'VERIFIED_EXTERNAL');
+      this.failClosedReason = `Duplicate delivery of verified event ${verifiedEvent.eventId}`;
+      console.log(`[STEP 10] ✗ Idempotency FAILED — ${verifiedEventDeliveries} deliveries of ${verifiedEvent.eventId}`);
+    }
   }
 
   // ─── Cleanup ─────────────────────────────────────────────────────────
@@ -1013,6 +1080,9 @@ class StripeE2EQualificationRunner {
       ? crypto.createHash('sha256').update(this.currentWebhookSecret).digest('hex').substring(0, 16)
       : null;
 
+    // Use the verified webhook for the certification, not the last received one
+    const certWebhookReceipt = this.verifiedWebhook || (this.webhookReceipt.received ? this.webhookReceipt : null);
+
     return {
       certificationId: `CERT-E2E-${randomUUID().substring(0, 8)}`,
       generatedAt: new Date().toISOString(),
@@ -1024,13 +1094,20 @@ class StripeE2EQualificationRunner {
       accountMode: accountInfo.mode,
       blockerOwnership: ownership,
       transitions: this.transitions,
-      webhookReceipt: this.webhookReceipt.received ? this.webhookReceipt : null,
+      webhookReceipt: certWebhookReceipt,
+      allReceivedWebhooks: this.allReceivedWebhooks.map(w => ({
+        eventId: w.eventId,
+        eventType: w.eventType,
+        signatureValid: w.signatureValid,
+        payloadHash: w.payloadHash,
+        receivedAt: w.receivedAt,
+      })),
       checkoutSessionId: this.checkoutSessionId,
-      stripeEventId: this.stripeEventId,
+      stripeEventId: certWebhookReceipt?.eventId || this.stripeEventId,
       credentialFingerprint: this.credentialFingerprint,
       credentialSource: this.credentialSource,
       webhookSecretFingerprint,
-      listenerStarted: this.listenerProcess !== null,
+      listenerStarted: this.listenerWasStarted, // Use tracked state, not process reference
       listenerPid: null, // Not available cross-platform
       cleanedUp: this.cleanedUp,
       humanActionRequest: this.humanActionRequest,
@@ -1086,6 +1163,8 @@ async function main(): Promise<void> {
   console.log(`  Transitions:          ${result.transitions.length}`);
   console.log(`  Webhook Received:     ${result.webhookReceipt?.received ?? false}`);
   console.log(`  Signature Valid:      ${result.webhookReceipt?.signatureValid ?? false}`);
+  console.log(`  Verified Event:       ${result.webhookReceipt?.eventId || 'N/A'} (${result.webhookReceipt?.eventType || 'N/A'})`);
+  console.log(`  All Events Received:  ${result.allReceivedWebhooks.length}`);
   console.log(`  Checkout Session:     ${result.checkoutSessionId || 'N/A'}`);
   console.log(`  Stripe Event ID:      ${result.stripeEventId || 'N/A'}`);
   console.log(`  Credential Fingerprint: ${result.credentialFingerprint || 'N/A'}`);
