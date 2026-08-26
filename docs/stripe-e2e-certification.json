@@ -1,0 +1,66 @@
+{
+  "certificationId": "CERT-E2E-6da62252",
+  "generatedAt": "2026-08-26T03:48:57.679Z",
+  "runId": "d9018b2a-182b-4ead-9c8c-a204124faba7",
+  "phase": "unauth",
+  "cliState": "EXPIRED",
+  "cliVersion": "stripe version 1.35.0",
+  "accountId": "acct_1R8ZCrITaXOHazrh",
+  "accountMode": "test",
+  "blockerOwnership": "HUMAN_EXTERNAL_ACTION_REQUIRED",
+  "transitions": [
+    {
+      "step": "cli_auth_check",
+      "timestamp": "2026-08-26T03:48:56.910Z",
+      "fromState": "UNKNOWN",
+      "toState": "EXPIRED",
+      "evidence": "CLI session expired — API key rejected by Stripe",
+      "verificationLevel": "VERIFIED_EXTERNAL",
+      "result": "BLOCKED",
+      "durationMs": 0
+    },
+    {
+      "step": "unauth_flow",
+      "timestamp": "2026-08-26T03:48:57.675Z",
+      "fromState": "EXPIRED",
+      "toState": "HUMAN_EXTERNAL_ACTION_REQUIRED",
+      "evidence": "CLI state EXPIRED requires human action — durable request created",
+      "verificationLevel": "VERIFIED_INTERNAL",
+      "result": "BLOCKED",
+      "durationMs": 0
+    },
+    {
+      "step": "cleanup",
+      "timestamp": "2026-08-26T03:48:57.678Z",
+      "fromState": "RUNNING",
+      "toState": "CLEANED",
+      "evidence": "Listener stopped, webhook server closed, env vars restored, credential removed",
+      "verificationLevel": "VERIFIED_INTERNAL",
+      "result": "PASS",
+      "durationMs": 0
+    }
+  ],
+  "webhookReceipt": null,
+  "checkoutSessionId": null,
+  "stripeEventId": null,
+  "credentialFingerprint": null,
+  "credentialSource": null,
+  "webhookSecretFingerprint": null,
+  "listenerStarted": false,
+  "listenerPid": null,
+  "cleanedUp": true,
+  "humanActionRequest": {
+    "id": "AR-a0905a55",
+    "action": "Stripe CLI session expired — run \"stripe login\" to re-authenticate",
+    "createdAt": "2026-08-26T03:48:57.675Z",
+    "resolved": false
+  },
+  "recommendation": "READY_WITH_BLOCKERS",
+  "failClosedReason": null,
+  "evidenceIds": [
+    "535ba9ce-51d2-4c5b-acdd-e69f2dd3af0e",
+    "48af04e5-311b-45dd-9d46-20d9044a5c68",
+    "a556d368-b5f8-4f3c-b435-be782b67cc13",
+    "c84f772d-742b-40fa-b18e-34afc7ce3109"
+  ]
+}

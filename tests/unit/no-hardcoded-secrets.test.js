@@ -51,6 +51,7 @@ const ALLOWLIST = new Set([
   // Historical secret remediation docs — truncated prefixes (15 chars) for identification, not usable keys:
   'docs/HISTORICAL_SECRET_REMEDIATION_REPORT.md', // documents historical exposure with truncated prefixes for rotation identification
   'docs/STRIPE_E2E_CERTIFICATION.md', // same historical truncated prefixes for security blocker documentation
+  'docs/stripe-e2e-certification.json', // machine-readable certification — fingerprints and redacted metadata only, no raw secrets
   'docs/HYDI_SECRET_REMEDIATION.md', // references the same historical exposures with truncated prefixes
   'docs/HYDI_CREDENTIAL_GOVERNANCE.md', // credential governance documentation
   'docs/HYDI_EXTERNAL_INTEGRATION_QUALIFICATION.md', // external integration qualification documentation

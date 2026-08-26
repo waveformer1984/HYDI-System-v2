@@ -572,6 +572,25 @@ export class CredentialSourceManager {
   }
 
   /**
+   * Remove a credential from all sources that support removal.
+   */
+  async removeCredential(
+    provider: CredentialProvider,
+    credentialType: string,
+    environment: CredentialEnvironment
+  ): Promise<void> {
+    for (const source of this.sources) {
+      try {
+        if (source.sourceType === 'SECURE_LOCAL' || source.sourceType === 'ENVIRONMENT') {
+          await (source as any).removeCredential?.(provider, credentialType, environment);
+        }
+      } catch {
+        continue;
+      }
+    }
+  }
+
+  /**
    * Check if a credential is available from any source.
    */
   async isAvailable(
