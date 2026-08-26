@@ -382,13 +382,29 @@ async function shutdown(code = 0) {
         log(mod.id, 'stopping in-process module...');
         await entry.instance[mod.stopMethod]();
       } else if (entry.type === 'process' && entry.child && entry.child.exitCode === null) {
-        log(mod.id, 'sending SIGTERM...');
-        entry.child.kill('SIGTERM');
-        const killed = await Promise.race([
-          new Promise((r) => entry.child.once('exit', () => r(true))),
-          sleep(timeout).then(() => false),
-        ]);
-        if (!killed) { log(mod.id, c('33', 'SIGTERM timed out -> SIGKILL')); entry.child.kill('SIGKILL'); }
+        // On Windows, child processes spawned with shell: true create an
+        // intermediate cmd.exe process. SIGTERM kills cmd.exe but not its
+        // children (e.g. next dev survives). Use taskkill /T /F to kill
+        // the entire process tree as the primary method on Windows.
+        if (process.platform === 'win32' && entry.child.pid) {
+          log(mod.id, `taskkill /T /F PID ${entry.child.pid} (Windows process tree kill)`);
+          try {
+            require('child_process').execSync(
+              `taskkill /PID ${entry.child.pid} /T /F`,
+              { stdio: 'ignore' }
+            );
+          } catch (e) {
+            // Process may have already exited
+          }
+        } else {
+          log(mod.id, 'sending SIGTERM...');
+          entry.child.kill('SIGTERM');
+          const killed = await Promise.race([
+            new Promise((r) => entry.child.once('exit', () => r(true))),
+            sleep(timeout).then(() => false),
+          ]);
+          if (!killed) { log(mod.id, c('33', 'SIGTERM timed out -> SIGKILL')); entry.child.kill('SIGKILL'); }
+        }
       }
     } catch (e) {
       log(mod.id, c('31', `error during stop: ${e.message}`));
@@ -401,6 +417,17 @@ async function shutdown(code = 0) {
 process.on('SIGINT', () => shutdown(0));
 process.on('SIGTERM', () => shutdown(0));
 process.on('uncaughtException', (e) => { console.error('uncaughtException:', e); shutdown(1); });
+
+// PM2 IPC shutdown — when shutdown_with_message: true is set in ecosystem.config.js,
+// PM2 sends an IPC 'shutdown' message instead of using taskkill /T /F on Windows.
+// This gives boot-agent time to gracefully stop all child processes (next dev,
+// protoforge-core, etc.) before PM2 force-kills the process tree.
+process.on('message', (msg) => {
+  if (msg === 'shutdown') {
+    log('boot-agent', 'received PM2 shutdown message — initiating graceful shutdown');
+    shutdown(0);
+  }
+});
 
 // ---------------------------------------------------------------------------
 // Main

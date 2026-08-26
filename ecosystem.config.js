@@ -68,7 +68,16 @@ module.exports = {
       error_file: './logs/pm2-hydi-boot.err.log',
       out_file: './logs/pm2-hydi-boot.out.log',
       merge_logs: true,
-      kill_timeout: 10000,     // give boot-agent 10s for graceful shutdown
+      // CRITICAL: On Windows, PM2's default stop behavior uses
+      // `taskkill /pid <pid> /T /F` (force kill the entire process tree),
+      // which gives no chance for graceful shutdown. With
+      // shutdown_with_message: true, PM2 sends an IPC 'shutdown' message
+      // instead, which boot-agent.js handles by gracefully stopping all
+      // child processes (next dev, protoforge-core, etc.) in reverse order.
+      // PM2 then waits up to kill_timeout (20s) for the process to exit
+      // on its own before falling back to force kill.
+      shutdown_with_message: true,
+      kill_timeout: 20000,     // 20s — boot-agent needs time to SIGTERM next dev + protoforge-core
     },
     {
       // Watchdog: continuously polls health endpoints and calls RecoveryEngine

@@ -147,12 +147,70 @@ Database state:  1 job activation, 1 ledger entry, 0 duplicates
    from `stripe listen --print-secret` (deterministic per account).
 
 5. **`webhook_events.stripe_event_id` column missing** — The
-   `WebhookQueueAdapter` tries to update a `stripe_event_id` column that
-   doesn't exist in the `webhook_events` table. This causes the async
-   queue path to fail with a 500 error. This is NOT a problem for
-   job-linked checkouts (the bridge skips the queue), but it IS a bug for
-   the old tier/subscription checkout flow. **Not yet fixed** — tracked
-   as a follow-up.
+   `WebhookQueueAdapter` referenced a `stripe_event_id` column that
+   doesn't exist in the `webhook_events` table (the table uses `event_id`).
+   This caused the async queue path to fail with a 500 error. This was
+   NOT a problem for job-linked checkouts (the bridge skips the queue),
+   but it WAS a live bug for the old tier/subscription checkout flow
+   (`/api/checkout`), which is still reachable by customers. **Fixed** —
+   `WebhookQueueAdapter` now uses `event_id` consistently. Verified with
+   a non-job-linked webhook that successfully queued for async processing.
+
+6. **`JobWebhookBridge` raw-SQL fallback silently diverging** — The `.js`
+   shim's `require('./JobWebhookBridge.ts')` failed silently because
+   webpack wraps ESM modules in an async boundary that synchronous
+   `require()` can't resolve. The raw-SQL fallback ran instead, which
+   duplicated `JobManager.confirmPayment()` and `RevenueLedger.recordEvent()`
+   logic without recording `payment_confirmed` events in
+   `customer_job_events`. **Fixed** — the `.js` shim now uses dynamic
+   `import()` to load the real `JobManager` and `RevenueLedger` classes
+   at call time, respecting webpack's async boundary. The `.ts` version
+   was removed (it was never actually executing). The raw-SQL fallback
+   was removed entirely. Verified by the presence of `payment_confirmed`
+   events in `customer_job_events` after the production-path E2E test.
+
+---
+
+## Runtime Intent
+
+The system is designed for both dev and production modes:
+
+- **Dev mode** (current): `npm run dev` → `next dev` — on-demand compilation
+- **Production mode**: `npm run start` → `next start` — requires `npm run build` first
+
+The ecosystem config supports both via `env` / `env_production` and
+`args` / `argsProd` in `boot.config.json`. The production-path E2E test
+has been verified against `next dev`. A production build test is
+recommended but not yet performed — module resolution for `require()`
+calls can behave differently in `next build` / `next start`, though the
+dynamic `import()` fix should work in both contexts since webpack
+handles ESM modules the same way in both modes.
+
+## PM2 Restart Reliability (Windows)
+
+PM2 on Windows has a known bug where `pm2 restart` and `pm2 start` fail
+with "Process N not found" after a stop. The fixes applied:
+
+1. **`shutdown_with_message: true`** in `ecosystem.config.js` for
+   `hydi-boot` — PM2 sends an IPC 'shutdown' message instead of using
+   `taskkill /T /F` directly, giving boot-agent time for graceful shutdown.
+
+2. **`taskkill /T /F` as primary kill method on Windows** in
+   `boot-agent.js` — when shutting down child processes spawned with
+   `shell: true` (which creates an intermediate `cmd.exe`), SIGTERM
+   kills `cmd.exe` but not its children (e.g. `next dev` survives).
+   `taskkill /T /F` kills the entire process tree.
+
+3. **`scripts/pm2-restart.js`** — a restart helper that works around
+   the PM2-on-Windows bug by falling back to `pm2 delete` + `pm2 start
+   ecosystem.config.js` when `pm2 restart` fails.
+
+   Usage:
+   ```
+   node scripts/pm2-restart.js hydi-boot    # restart one app
+   node scripts/pm2-restart.js all          # restart all apps
+   node scripts/pm2-restart.js --prod       # restart in production mode
+   ```
 
 ---
 
@@ -161,8 +219,9 @@ Database state:  1 job activation, 1 ledger entry, 0 duplicates
 | Certification | Path Tested | Double-Processing Risk |
 |--------------|-------------|----------------------|
 | CERT-E2E-cf1b55c9 | Standalone receiver (qualification harness) | N/A — doesn't test production handler |
-| prod-e2e-e94585ee | Real `/api/webhooks/stripe` (production) | **None** — bridge skips queue, RPC catches duplicates |
+| prod-e2e-cffd9b7a | Real `/api/webhooks/stripe` (production) | **None** — bridge skips queue, RPC catches duplicates |
 
 Both certifications are valuable. The first proves the verification logic
 is sound. The second proves the production handler works end-to-end with
-no double processing.
+no double processing, using the real `JobManager` and `RevenueLedger`
+classes (not a raw-SQL fallback).
