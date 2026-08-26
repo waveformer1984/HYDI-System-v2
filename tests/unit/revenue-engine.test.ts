@@ -48,14 +48,14 @@ describe('OfferCatalog', () => {
     catalog = new OfferCatalog();
   });
 
-  test('has all 6 default offers', () => {
+  test('has all 7 default offers', () => {
     const offers = catalog.getAll();
-    expect(offers.length).toBe(6);
+    expect(offers.length).toBe(7);
   });
 
   test('all default offers are active', () => {
     const active = catalog.getActive();
-    expect(active.length).toBe(6);
+    expect(active.length).toBe(7);
   });
 
   test('AI Operations Setup has correct pricing', () => {

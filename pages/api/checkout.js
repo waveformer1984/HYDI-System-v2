@@ -1,8 +1,33 @@
-// Bridges the Vercel-style handler in api/checkout.js into Next.js's actual
-// routing surface. Next.js's pages router only ever serves pages/api/*
-// (never a bare top-level api/ directory, which is a Vercel-platform-only
-// convention) -- since this deployment runs via `next dev`/`next start`
-// rather than Vercel (see CLAUDE.md's Local-First Architecture section),
-// /api/checkout was previously unreachable, meaning HYDI tier checkout
-// sessions could not be created in production. See ISSUES_FOUND.md.
-export { default } from '../../api/checkout.js';
+// Legacy tier/subscription checkout bridge.
+//
+// This route re-exports the Vercel-style handler in api/checkout.js, which
+// creates subscription-mode Stripe Checkout Sessions for the old
+// starter/pro/enterprise tier model. It is NOT linked to the customer job
+// pipeline (JobManager) and its webhook events bypass JobWebhookBridge.
+//
+// The qualified production revenue path is:
+//   POST /api/revenue/jobs  →  Stripe Checkout  →  webhook  →  JobManager
+//
+// This legacy route is explicitly UNSUPPORTED in production. It returns
+// 410 Gone with a pointer to the qualified path when NODE_ENV=production.
+// In development it remains available for testing.
+//
+// See docs/REVENUE_PATH_BOUNDARY.md for the full boundary definition.
+
+const isProduction = process.env.NODE_ENV === 'production';
+
+export default async function handler(req, res) {
+    if (isProduction) {
+        res.setHeader('Allow', ['POST']);
+        return res.status(410).json({
+            error: 'Legacy checkout is not supported in production',
+            reason: 'This route creates subscription-mode sessions not linked to the customer job pipeline. Use POST /api/revenue/jobs instead.',
+            qualifiedPath: '/api/revenue/jobs',
+            documentation: 'docs/REVENUE_PATH_BOUNDARY.md',
+        });
+    }
+
+    // Development: delegate to the legacy handler
+    const legacy = (await import('../../api/checkout.js')).default;
+    return legacy(req, res);
+}
