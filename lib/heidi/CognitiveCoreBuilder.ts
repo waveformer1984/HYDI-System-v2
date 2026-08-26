@@ -60,6 +60,7 @@ import { SecretScanner } from '../operational/SecretScanner';
 import { KeyLifecycleScheduler } from '../operational/KeyLifecycleScheduler';
 import { EnvVarVault, VaultRegistry, LocalDevVault } from '../operational/KeyVaults';
 import { createKeyManagementBridge } from './KeyManagementBridge';
+import { createControlPlaneBridge } from './ControlPlaneBridge';
 
 export interface CognitiveCoreBuilderOptions {
   /** Database config for CognitiveCore's internal pool (identity, goals, world, etc.) */
@@ -102,6 +103,10 @@ export interface CognitiveCoreBuilderOptions {
   keyManagementService?: KeyManagementService;
   /** Enable key management wiring (default: true). Set false to skip. */
   enableKeyManagement?: boolean;
+  /** Pre-built ProductionOperationsControlPlane instance. If absent, one is created. */
+  controlPlane?: import('../operational/ProductionOperationsControlPlane').ProductionOperationsControlPlane;
+  /** Enable production operations control plane wiring (default: true). Set false to skip. */
+  enableControlPlane?: boolean;
 }
 
 export class CognitiveCoreBuilder {
@@ -384,16 +389,16 @@ export class CognitiveCoreBuilder {
         flappingWindowCycles: 10,
         verifyRepair: chmForVerify
           ? async (capabilityId: string) => {
-              try {
-                const report = await chmForVerify.checkCapability(capabilityId);
-                if (report && report.state === 'READY') {
-                  return { healthy: true, evidence: report.evidence };
-                }
-                return { healthy: false, evidence: report ? `State: ${report.state} — ${report.evidence}` : 'No report' };
-              } catch (error) {
-                return { healthy: false, evidence: `Verification threw: ${error instanceof Error ? error.message : 'unknown'}` };
+            try {
+              const report = await chmForVerify.checkCapability(capabilityId);
+              if (report && report.state === 'READY') {
+                return { healthy: true, evidence: report.evidence };
               }
+              return { healthy: false, evidence: report ? `State: ${report.state} — ${report.evidence}` : 'No report' };
+            } catch (error) {
+              return { healthy: false, evidence: `Verification threw: ${error instanceof Error ? error.message : 'unknown'}` };
             }
+          }
           : undefined,
       });
 
@@ -455,6 +460,27 @@ export class CognitiveCoreBuilder {
         bridge.keyManagement = createKeyManagementBridge(kms, compromiseResponse, healthMonitor, scanner);
       } catch {
         // Key management not loadable — skip
+      }
+    }
+
+    // 10. Production Operations Control Plane — preflight, blocker resolution,
+    //     credential health, configuration control, transaction authorization state.
+    //
+    // This wires the control plane into CognitiveCore's ExecutionBridge so
+    // HYDI can autonomously run preflight, resolve safe blockers, and report
+    // credential/configuration health — all through the same governed bridge.
+    //
+    // SECURITY: The bridge NEVER exposes raw credential values.
+    // FINANCIAL SAFETY: The bridge can report authorization state but can
+    //   NEVER create a transaction authorization. Human authorization remains
+    //   a separate, explicit, human-initiated action.
+    if (this.opts.enableControlPlane !== false && notOverridden('controlPlane')) {
+      try {
+        const cp = this.opts.controlPlane
+          || (await import('../operational/ProductionOperationsControlPlane')).getProductionOperationsControlPlane();
+        bridge.controlPlane = createControlPlaneBridge(cp);
+      } catch {
+        // ProductionOperationsControlPlane not loadable — skip
       }
     }
 

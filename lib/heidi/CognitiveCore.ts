@@ -322,6 +322,27 @@ export interface ExecutionBridge {
     scan: () => Promise<unknown>;
     setKillSwitch: (active: boolean) => void;
   } | null;
+  // Production Operations Control Plane — preflight, blocker resolution,
+  // credential health, configuration control, transaction authorization state.
+  //
+  // SECURITY: This bridge NEVER exposes raw credential values.
+  // It returns metadata only (mode, health, configured, prefix).
+  // Financial authorization is never created by this bridge — it can
+  // only report authorization state. Human authorization remains external.
+  controlPlane?: {
+    /** Run a read-only preflight check. Returns READY/BLOCKED/FAILED with blocker list. */
+    preflight: () => Promise<unknown>;
+    /** Run the autonomous preflight loop: preflight → resolve auto-resolvable → verify → rerun. Bounded retries. */
+    autonomousPreflight: () => Promise<unknown>;
+    /** Get a safe, redacted status report (no secrets). */
+    getStatus: () => Promise<unknown>;
+    /** Get Stripe credential health metadata (mode, configured, valid — never the key). */
+    getCredentialHealth: () => Promise<unknown>;
+    /** Get the current transaction authorization state (does NOT create one). */
+    getTransactionAuthorizationState: () => unknown;
+    /** Apply a safe, non-secret configuration change (policy-checked, validated, audited). */
+    applySafeConfiguration: (key: string, value: string, reason: string) => Promise<unknown>;
+  } | null;
 }
 
 export class CognitiveCore {
