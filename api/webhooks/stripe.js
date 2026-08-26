@@ -138,7 +138,15 @@ async function handleStripeWebhook(req, res) {
     // See config export below (bodyParser: false) for why this can't just
     // read req.body directly.
     const rawBody = await getRawBody(req);
-    const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+    // Safety guard: refuse to construct a live Stripe client without explicit opt-in.
+    // This mirrors the guard in lib/revenue/StripeBridge.ts and api/checkout.js.
+    const stripeKey = process.env.STRIPE_SECRET_KEY;
+    const isLiveKey = stripeKey && (stripeKey.startsWith('sk_live_') || stripeKey.startsWith('rk_live_'));
+    if (isLiveKey && process.env.ALLOW_LIVE_STRIPE !== 'true') {
+      console.error('[webhook] Live Stripe key detected but ALLOW_LIVE_STRIPE is not "true" — refusing to process webhook');
+      return res.status(503).send('Webhook processing disabled: live mode not authorized');
+    }
+    const stripe = require('stripe')(stripeKey);
     event = stripe.webhooks.constructEvent(rawBody, sig, webhookSecret);
   } catch (err) {
     console.log('Webhook signature verification failed:', err.message);
@@ -496,7 +504,12 @@ async function updateRevenueMetrics(amount, currency) {
 
 async function getCustomerEmail(customerId) {
   try {
-    const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+    const stripeKey = process.env.STRIPE_SECRET_KEY;
+    const isLiveKey = stripeKey && (stripeKey.startsWith('sk_live_') || stripeKey.startsWith('rk_live_'));
+    if (isLiveKey && process.env.ALLOW_LIVE_STRIPE !== 'true') {
+      return { error: 'Live mode not authorized' };
+    }
+    const stripe = require('stripe')(stripeKey);
     const customer = await stripe.customers.retrieve(customerId);
     return { email: customer.email };
   } catch (err) {
