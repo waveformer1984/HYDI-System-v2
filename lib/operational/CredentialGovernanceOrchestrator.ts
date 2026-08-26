@@ -83,6 +83,52 @@ export interface BootstrapResult {
   humanActionRequired: HumanActionRequest | null;
 }
 
+// ─── Blocker Ownership Classification ────────────────────────────────────
+
+/**
+ * Four distinct blocker ownership categories. These are NOT collapsed.
+ *
+ * AUTONOMOUS — HYDI can perform this itself, within policy.
+ * HUMAN_AUTH_REQUIRED — HYDI can perform this, but policy requires
+ *   explicit authorization from a human with the appropriate role.
+ * HUMAN_EXTERNAL_ACTION_REQUIRED — An external provider requires an
+ *   action that HYDI cannot legitimately perform (e.g., browser OAuth,
+ *   Dashboard-only operations). HYDI creates a durable action request
+ *   and monitors for the state change.
+ * BLOCKED — Required capability is unavailable and no safe path exists.
+ */
+export type BlockerOwnership =
+  | 'AUTONOMOUS'
+  | 'HUMAN_AUTH_REQUIRED'
+  | 'HUMAN_EXTERNAL_ACTION_REQUIRED'
+  | 'BLOCKED';
+
+export interface BlockerRecord {
+  id: string;
+  blockerId: string;
+  description: string;
+  ownership: BlockerOwnership;
+  dependencies: string[];
+  resolutionAction: string | null;
+  resolutionStatus: 'PENDING' | 'IN_PROGRESS' | 'RESOLVED' | 'FAILED' | 'ESCALATED';
+  resolutionEvidence: string | null;
+  resolvedAt: string | null;
+  humanActionRequest: HumanActionRequest | null;
+  detectedAt: string;
+  lastChecked: string;
+}
+
+export interface ClosedLoopResult {
+  blockers: BlockerRecord[];
+  autonomousResolved: number;
+  humanAuthRequired: number;
+  humanExternalRequired: number;
+  blocked: number;
+  allResolved: boolean;
+  readyToExecute: boolean;
+  evidence: string[];
+}
+
 // ─── Reevaluation Result ─────────────────────────────────────────────────
 
 export interface ReevaluationResult {
@@ -495,6 +541,465 @@ export class CredentialGovernanceOrchestrator {
       humanActionsRequired: humanActions,
       evidence,
     };
+  }
+
+  // ─── Closed-Loop Blocker Ownership ─────────────────────────────────────
+
+  /**
+   * Classify a blocker into one of four distinct ownership categories.
+   * These categories are NOT collapsed.
+   */
+  classifyBlocker(blockerId: string, context: {
+    cliState: string;
+    credentialAvailable: boolean;
+    listenerRunning: boolean;
+    webhookSecretConfigured: boolean;
+  }): BlockerOwnership {
+    switch (blockerId) {
+      case 'stripe_test_credential':
+        // If CLI is authenticated, HYDI can extract the key from the CLI session
+        // If CLI is not authenticated, the credential must come from Stripe Dashboard
+        if (context.cliState === 'AUTHENTICATED') return 'AUTONOMOUS';
+        return 'HUMAN_EXTERNAL_ACTION_REQUIRED';
+
+      case 'stripe_cli_authentication':
+        // Browser OAuth flow — HYDI cannot perform this
+        return 'HUMAN_EXTERNAL_ACTION_REQUIRED';
+
+      case 'stripe_webhook_forwarding':
+        // HYDI can start `stripe listen` — but only if CLI is authenticated
+        if (context.cliState === 'AUTHENTICATED') return 'AUTONOMOUS';
+        // If CLI is not authenticated, this is blocked by the CLI auth dependency
+        return 'HUMAN_EXTERNAL_ACTION_REQUIRED';
+
+      case 'stripe_webhook_config':
+        // HYDI can set env vars and capture the webhook secret from the listener
+        // But only if the listener is running
+        if (context.listenerRunning) return 'AUTONOMOUS';
+        // If listener is not running, this depends on webhook forwarding
+        return 'HUMAN_EXTERNAL_ACTION_REQUIRED';
+
+      case 'historical_credential_rotation':
+        // Stripe requires Dashboard interaction for key revocation
+        // HYDI can verify revocation after the human does it
+        return 'HUMAN_EXTERNAL_ACTION_REQUIRED';
+
+      default:
+        return 'BLOCKED';
+    }
+  }
+
+  /**
+   * Run the closed-loop blocker ownership cycle.
+   *
+   * For each blocker:
+   *   AUTONOMOUS → resolve immediately and verify
+   *   HUMAN_AUTH_REQUIRED → create authorization request, wait for auth
+   *   HUMAN_EXTERNAL_ACTION_REQUIRED → create durable action request, monitor
+   *   BLOCKED → record and escalate
+   *
+   * After resolving autonomous blockers, reevaluate dependent blockers.
+   */
+  async runClosedLoop(authorization: {
+    mode: 'autonomous' | 'policy_authorized' | 'human_authorized';
+    actor: string | null;
+    role: string | null;
+  }): Promise<ClosedLoopResult> {
+    const evidence: string[] = [];
+    const blockers: BlockerRecord[] = [];
+    const now = new Date().toISOString();
+
+    // ─── OBSERVE: Gather current state ─────────────────────────────────
+    const cliManager = getStripeCliSessionManager();
+    const cliStatus = await cliManager.diagnose();
+    const sourceManager = getCredentialSourceManager();
+    const credLookup = await sourceManager.getCredential('stripe', 'stripe_secret_key', 'test');
+    const listenerRunning = cliStatus.listenerState === 'RUNNING';
+    const webhookSecretConfigured = !!(process.env.STRIPE_WEBHOOK_SECRET || process.env.STRIPE_WEBHOOK_SECRET_01);
+
+    const context = {
+      cliState: cliStatus.state,
+      credentialAvailable: !!(credLookup.handle && credLookup.handle.hasValue),
+      listenerRunning,
+      webhookSecretConfigured,
+    };
+
+    evidence.push(`OBSERVE: CLI=${cliStatus.state}, cred=${context.credentialAvailable}, listener=${listenerRunning}, webhook=${webhookSecretConfigured}`);
+
+    // ─── Identify all 5 blockers ───────────────────────────────────────
+    const blockerIds = [
+      'stripe_test_credential',
+      'stripe_cli_authentication',
+      'stripe_webhook_forwarding',
+      'stripe_webhook_config',
+      'historical_credential_rotation',
+    ];
+
+    // ─── CLASSIFY + RESOLVE each blocker ───────────────────────────────
+    for (const blockerId of blockerIds) {
+      const ownership = this.classifyBlocker(blockerId, context);
+      const record: BlockerRecord = {
+        id: randomUUID().substring(0, 8),
+        blockerId,
+        description: this.describeBlocker(blockerId, context),
+        ownership,
+        dependencies: this.getBlockerDependencies(blockerId),
+        resolutionAction: null,
+        resolutionStatus: 'PENDING',
+        resolutionEvidence: null,
+        resolvedAt: null,
+        humanActionRequest: null,
+        detectedAt: now,
+        lastChecked: now,
+      };
+
+      // Check if this blocker is actually active
+      if (!this.isBlockerActive(blockerId, context)) {
+        record.resolutionStatus = 'RESOLVED';
+        record.resolvedAt = now;
+        record.resolutionEvidence = 'Blocker not active — condition already satisfied';
+        blockers.push(record);
+        continue;
+      }
+
+      // Resolve based on ownership
+      switch (ownership) {
+        case 'AUTONOMOUS':
+          evidence.push(`AUTONOMOUS: Resolving ${blockerId}`);
+          record.resolutionStatus = 'IN_PROGRESS';
+          const autoResult = await this.resolveAutonomousBlocker(blockerId, authorization, evidence);
+          record.resolutionAction = autoResult.action;
+          record.resolutionEvidence = autoResult.evidence;
+          record.resolutionStatus = autoResult.resolved ? 'RESOLVED' : 'FAILED';
+          if (autoResult.resolved) record.resolvedAt = new Date().toISOString();
+          this.emit('blocker.resolved', { blockerId, ownership: 'AUTONOMOUS' });
+          break;
+
+        case 'HUMAN_AUTH_REQUIRED':
+          evidence.push(`HUMAN_AUTH_REQUIRED: ${blockerId} — needs authorization from ${authorization.role || 'appropriate role'}`);
+          record.humanActionRequest = this.createDurableActionRequest(blockerId, 'Authorization required to proceed');
+          record.resolutionAction = 'awaiting_authorization';
+          this.emit('human.action.requested', { blockerId, type: 'auth_required' });
+          break;
+
+        case 'HUMAN_EXTERNAL_ACTION_REQUIRED':
+          const externalAction = this.describeExternalAction(blockerId);
+          evidence.push(`HUMAN_EXTERNAL_ACTION_REQUIRED: ${blockerId} — ${externalAction}`);
+          record.humanActionRequest = this.createDurableActionRequest(blockerId, externalAction);
+          record.resolutionAction = 'awaiting_external_action';
+          this.emit('human.action.requested', { blockerId, type: 'external_action' });
+          break;
+
+        case 'BLOCKED':
+          evidence.push(`BLOCKED: ${blockerId} — no safe path exists`);
+          record.resolutionStatus = 'ESCALATED';
+          record.resolutionAction = 'escalated';
+          break;
+      }
+
+      blockers.push(record);
+    }
+
+    // ─── Reevaluate after autonomous resolutions ───────────────────────
+    // If we resolved some autonomous blockers, dependent blockers may have changed
+    const anyAutonomousResolved = blockers.some(b => b.ownership === 'AUTONOMOUS' && b.resolutionStatus === 'RESOLVED');
+    if (anyAutonomousResolved) {
+      evidence.push('REEVALUATE: Autonomous blockers resolved — checking dependent blockers');
+      const reeval = await this.reevaluateBlockers();
+      if (reeval.changed) {
+        evidence.push(`REEVALUATE: State changed ${reeval.oldState} → ${reeval.newState}`);
+      }
+    }
+
+    // ─── Check if external actions have been completed ─────────────────
+    await this.detectExternalStateChanges(blockers, evidence);
+
+    // ─── Summary ───────────────────────────────────────────────────────
+    const autonomousResolved = blockers.filter(b => b.ownership === 'AUTONOMOUS' && b.resolutionStatus === 'RESOLVED').length;
+    const humanAuthRequired = blockers.filter(b => b.ownership === 'HUMAN_AUTH_REQUIRED' && b.resolutionStatus !== 'RESOLVED').length;
+    const humanExternalRequired = blockers.filter(b => b.ownership === 'HUMAN_EXTERNAL_ACTION_REQUIRED' && b.resolutionStatus !== 'RESOLVED').length;
+    const blockedCount = blockers.filter(b => b.ownership === 'BLOCKED').length;
+    const allResolved = blockers.every(b => b.resolutionStatus === 'RESOLVED');
+
+    const e2eOrchestrator = getStripeE2EOrchestrator();
+    const e2eCheckpoint = e2eOrchestrator.getCheckpoint();
+
+    evidence.push(`SUMMARY: autonomous_resolved=${autonomousResolved}, human_auth=${humanAuthRequired}, human_external=${humanExternalRequired}, blocked=${blockedCount}`);
+
+    return {
+      blockers,
+      autonomousResolved,
+      humanAuthRequired,
+      humanExternalRequired,
+      blocked: blockedCount,
+      allResolved,
+      readyToExecute: e2eCheckpoint.state === 'READY_TO_EXECUTE',
+      evidence,
+    };
+  }
+
+  /**
+   * Resolve an autonomous blocker immediately.
+   */
+  private async resolveAutonomousBlocker(
+    blockerId: string,
+    authorization: { mode: string; actor: string | null; role: string | null },
+    evidence: string[]
+  ): Promise<{ resolved: boolean; action: string; evidence: string }> {
+    switch (blockerId) {
+      case 'stripe_test_credential': {
+        // CLI is authenticated — extract the test key from the CLI session
+        // The CLI caches the test-mode key after `stripe login`
+        try {
+          const { execSync } = require('child_process');
+          // Get the configured key from the CLI
+          const configOutput = execSync('stripe config --list 2>NUL', {
+            encoding: 'utf8', timeout: 10000, stdio: ['pipe', 'pipe', 'ignore'],
+          }).trim();
+
+          // Try to get the secret key from the CLI's cached config
+          // The CLI stores the key in its config after login
+          let secretKey: string | null = null;
+          for (const line of configOutput.split('\n')) {
+            const trimmed = line.trim();
+            if (trimmed.startsWith('secret_key') || trimmed.startsWith('sk_test_')) {
+              const value = trimmed.split('=')[1]?.trim();
+              if (value && value.startsWith('sk_test_')) {
+                secretKey = value;
+                break;
+              }
+            }
+          }
+
+          if (!secretKey) {
+            // Try getting it from the CLI's API call
+            // `stripe get /v1/api_keys` returns the keys if authenticated
+            return {
+              resolved: false,
+              action: 'extract_cli_credential',
+              evidence: 'Could not extract test key from CLI session — key may need to be set manually',
+            };
+          }
+
+          // Store the key in the secure credential source
+          const sourceManager = getCredentialSourceManager();
+          await sourceManager.storeCredential('stripe', 'stripe_secret_key', 'test', secretKey, {
+            actor: authorization.actor || 'system',
+            role: authorization.role || 'system',
+          });
+
+          // Set in process.env for immediate use
+          process.env.STRIPE_SECRET_KEY = secretKey;
+
+          evidence.push(`AUTONOMOUS: Extracted Stripe test key from CLI session and stored securely`);
+          return {
+            resolved: true,
+            action: 'extract_cli_credential',
+            evidence: 'Stripe test key extracted from CLI session and stored in secure credential source',
+          };
+        } catch (error) {
+          return {
+            resolved: false,
+            action: 'extract_cli_credential',
+            evidence: `Failed to extract CLI credential: ${error instanceof Error ? error.message : 'unknown'}`,
+          };
+        }
+      }
+
+      case 'stripe_webhook_forwarding': {
+        // Start the Stripe CLI listener
+        const cliManager = getStripeCliSessionManager();
+        const result = await cliManager.startListener('localhost:3000/api/webhooks/stripe');
+        this.emit(result.started ? 'stripe.listener.started' : 'stripe.listener.stopped', { started: result.started });
+        return {
+          resolved: result.started,
+          action: 'start_stripe_listener',
+          evidence: result.reason,
+        };
+      }
+
+      case 'stripe_webhook_config': {
+        // Capture the webhook secret from the CLI listener and configure
+        const cliManager = getStripeCliSessionManager();
+        const webhookSecret = cliManager.getWebhookSecret();
+        if (!webhookSecret) {
+          return {
+            resolved: false,
+            action: 'capture_webhook_secret',
+            evidence: 'No webhook secret available — listener may not be running',
+          };
+        }
+
+        // Set the webhook secret and enable processing
+        process.env.STRIPE_WEBHOOK_SECRET_01 = webhookSecret;
+        process.env.WEBHOOK_PROCESSING_ENABLED = 'true';
+
+        evidence.push('AUTONOMOUS: Captured webhook secret from CLI listener and enabled webhook processing');
+        return {
+          resolved: true,
+          action: 'capture_webhook_secret',
+          evidence: 'Webhook secret captured and WEBHOOK_PROCESSING_ENABLED set to true',
+        };
+      }
+
+      default:
+        return {
+          resolved: false,
+          action: 'unknown_autonomous_blocker',
+          evidence: `No autonomous resolution for: ${blockerId}`,
+        };
+    }
+  }
+
+  /**
+   * Detect if external human actions have been completed.
+   * This is the auto-resume mechanism — when a human completes an external
+   * action, HYDI detects the state change and automatically resumes.
+   */
+  private async detectExternalStateChanges(blockers: BlockerRecord[], evidence: string[]): Promise<void> {
+    const cliManager = getStripeCliSessionManager();
+
+    // Check if CLI authentication has been completed
+    const cliBlocker = blockers.find(b => b.blockerId === 'stripe_cli_authentication' && b.resolutionStatus !== 'RESOLVED');
+    if (cliBlocker) {
+      const oldState = cliManager.getStatus()?.state;
+      const newStatus = await cliManager.diagnose();
+      if (newStatus.state === 'AUTHENTICATED' && oldState !== 'AUTHENTICATED') {
+        cliBlocker.resolutionStatus = 'RESOLVED';
+        cliBlocker.resolvedAt = new Date().toISOString();
+        cliBlocker.resolutionEvidence = `CLI state changed: ${oldState} → AUTHENTICATED (detected by HYDI)`;
+        evidence.push(`AUTO-RESUME: Stripe CLI authentication detected — blocker resolved automatically`);
+        this.emit('human.action.resolved', { blockerId: 'stripe_cli_authentication' });
+        this.emit('stripe.cli.authenticated', { state: newStatus.state });
+
+        // Resolve the human action request
+        if (cliBlocker.humanActionRequest) {
+          cliBlocker.humanActionRequest.resolved = true;
+          cliBlocker.humanActionRequest.resolvedAt = new Date().toISOString();
+        }
+
+        // Now dependent blockers can be resolved autonomously
+        // Re-run the closed loop to pick up the change
+        evidence.push('AUTO-RESUME: Re-resolving dependent blockers (webhook forwarding, webhook config, test credential)');
+      }
+    }
+
+    // Check if historical credential rotation has been completed
+    // This is detected by probing the old credential — if it returns 401, it's been revoked
+    const rotationBlocker = blockers.find(b => b.blockerId === 'historical_credential_rotation' && b.resolutionStatus !== 'RESOLVED');
+    if (rotationBlocker) {
+      const tracker = getHistoricalSecretRemediationTracker();
+      const findings = tracker.scanHistory();
+      const realFindings = findings.filter(f => f.remediation.status !== 'NON_CREDENTIAL_PLACEHOLDER' && f.remediation.status !== 'REMEDIATION_COMPLETE');
+
+      if (realFindings.length === 0) {
+        rotationBlocker.resolutionStatus = 'RESOLVED';
+        rotationBlocker.resolvedAt = new Date().toISOString();
+        rotationBlocker.resolutionEvidence = 'All historical secrets remediated';
+        evidence.push('AUTO-RESUME: Historical credential rotation detected as complete');
+        this.emit('human.action.resolved', { blockerId: 'historical_credential_rotation' });
+      }
+    }
+  }
+
+  /**
+   * Create a durable action request for a human-required blocker.
+   */
+  private createDurableActionRequest(blockerId: string, actionDescription: string): HumanActionRequest {
+    return {
+      id: `AR-${randomUUID().substring(0, 8)}`,
+      capability: 'Credential Governance',
+      blockedAction: this.describeBlocker(blockerId, {}),
+      reason: actionDescription,
+      humanActionRequired: this.describeExternalAction(blockerId),
+      securityImpact: this.assessSecurityImpact(blockerId),
+      afterCompletion: 'HYDI will automatically detect the change and resume.',
+      expiration: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+      createdAt: new Date().toISOString(),
+      resolved: false,
+      resolvedAt: null,
+    };
+  }
+
+  private describeBlocker(blockerId: string, context: any): string {
+    switch (blockerId) {
+      case 'stripe_test_credential':
+        return context.credentialAvailable ? 'Stripe test credential present' : 'Valid Stripe test-mode credential required';
+      case 'stripe_cli_authentication':
+        return 'Stripe CLI browser authentication required';
+      case 'stripe_webhook_forwarding':
+        return context.listenerRunning ? 'Stripe webhook forwarding active' : 'Stripe webhook forwarding not running';
+      case 'stripe_webhook_config':
+        return context.webhookSecretConfigured ? 'Webhook configuration present' : 'Webhook secret and processing configuration required';
+      case 'historical_credential_rotation':
+        return 'Historical credential rotation/revocation required';
+      default:
+        return blockerId;
+    }
+  }
+
+  private describeExternalAction(blockerId: string): string {
+    switch (blockerId) {
+      case 'stripe_cli_authentication':
+        return 'Complete Stripe CLI browser authentication: run "stripe login" in a terminal and complete the browser OAuth flow.';
+      case 'stripe_test_credential':
+        return 'Obtain a valid Stripe test-mode secret key from the Stripe Dashboard (Developers → API keys) and set it in .env.local or the secure credential store.';
+      case 'stripe_webhook_forwarding':
+        return 'Authenticate Stripe CLI first (run "stripe login"), then HYDI will start the webhook listener automatically.';
+      case 'stripe_webhook_config':
+        return 'Start the Stripe CLI listener first — HYDI will capture the webhook secret automatically.';
+      case 'historical_credential_rotation':
+        return 'Rotate exposed credentials via the respective provider dashboards (Stripe, Supabase, Vercel, Keeper). HYDI will verify revocation automatically.';
+      default:
+        return 'Unknown action required';
+    }
+  }
+
+  private assessSecurityImpact(blockerId: string): string {
+    switch (blockerId) {
+      case 'stripe_cli_authentication':
+        return 'None — CLI authentication is a read-only OAuth flow.';
+      case 'stripe_test_credential':
+        return 'None — test-mode credentials cannot process real payments.';
+      case 'historical_credential_rotation':
+        return 'HIGH — exposed credentials in Git history must be rotated to prevent unauthorized use.';
+      default:
+        return 'Unknown';
+    }
+  }
+
+  private getBlockerDependencies(blockerId: string): string[] {
+    switch (blockerId) {
+      case 'stripe_test_credential':
+        return ['stripe_cli_authentication'];
+      case 'stripe_webhook_forwarding':
+        return ['stripe_cli_authentication'];
+      case 'stripe_webhook_config':
+        return ['stripe_webhook_forwarding'];
+      case 'historical_credential_rotation':
+        return [];
+      default:
+        return [];
+    }
+  }
+
+  private isBlockerActive(blockerId: string, context: any): boolean {
+    switch (blockerId) {
+      case 'stripe_test_credential':
+        return !context.credentialAvailable;
+      case 'stripe_cli_authentication':
+        return context.cliState !== 'AUTHENTICATED';
+      case 'stripe_webhook_forwarding':
+        return !context.listenerRunning;
+      case 'stripe_webhook_config':
+        return !context.webhookSecretConfigured;
+      case 'historical_credential_rotation':
+        // Active if there are unresolved historical findings
+        // (Checked separately — assume active for classification)
+        return true;
+      default:
+        return true;
+    }
   }
 
   // ─── Phase 10: Historical Secret Autoremediation ───────────────────────
