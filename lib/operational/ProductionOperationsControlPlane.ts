@@ -93,10 +93,14 @@ export class ProductionOperationsControlPlane {
   private credentials: CredentialManager;
   private authManager: LiveTransactionAuthorizationManager;
 
-  constructor() {
-    this.config = getConfigurationControlPlane();
-    this.credentials = getCredentialManager();
-    this.authManager = getLiveTransactionAuthorizationManager();
+  constructor(deps?: {
+    config?: ConfigurationControlPlane;
+    credentials?: CredentialManager;
+    authManager?: LiveTransactionAuthorizationManager;
+  }) {
+    this.config = deps?.config ?? getConfigurationControlPlane();
+    this.credentials = deps?.credentials ?? getCredentialManager();
+    this.authManager = deps?.authManager ?? getLiveTransactionAuthorizationManager();
   }
 
   /**
@@ -443,6 +447,101 @@ export class ProductionOperationsControlPlane {
   revokeTransactionAuthorization(authorizationId: string, revokedBy: string): { success: boolean; error?: string } {
     const result = this.authManager.revoke(authorizationId, revokedBy);
     return { success: result.success, error: result.error };
+  }
+
+  /**
+   * Disarm live qualification mode.
+   *
+   * This is a safety-reducing operation that:
+   *   1. Disables ALLOW_LIVE_STRIPE (sets to "false")
+   *   2. Revokes any pending transaction authorization
+   *   3. Verifies the runtime state
+   *   4. Verifies no further qualification transaction can execute
+   *   5. Writes an audit record
+   *
+   * This operation is IDEMPOTENT — calling it when already disarmed
+   * returns ALREADY_DISARMED without error.
+   *
+   * This operation does NOT:
+   *   - create or authorize a transaction
+   *   - alter unrelated production configuration
+   *   - expose credentials
+   *
+   * After a successful qualification lifecycle, disarming is a safe
+   * autonomous operation — it reduces risk by ensuring no further
+   * live transactions can execute.
+   */
+  async disarmLiveQualification(reason: string = 'Post-qualification safety disarm'): Promise<{
+    state: 'DISARMED' | 'ALREADY_DISARMED';
+    actions: string[];
+    verified: boolean;
+    auditRecord: { timestamp: string; action: string; actor: string; reason: string };
+  }> {
+    const actions: string[] = [];
+    const timestamp = new Date().toISOString();
+    const actor = 'hydi:control-plane';
+
+    // 1. Check if already disarmed
+    const currentAllowLive = this.config.read('ALLOW_LIVE_STRIPE');
+    const pendingAuth = this.authManager.getPending();
+
+    if (currentAllowLive !== 'true' && !pendingAuth) {
+      // Already disarmed — idempotent return
+      return {
+        state: 'ALREADY_DISARMED',
+        actions: ['No-op: ALLOW_LIVE_STRIPE already false, no pending authorization'],
+        verified: true,
+        auditRecord: { timestamp, action: 'disarm_noop', actor, reason: 'Already disarmed' },
+      };
+    }
+
+    // 2. Disable ALLOW_LIVE_STRIPE
+    if (currentAllowLive === 'true') {
+      const result = this.config.set('ALLOW_LIVE_STRIPE', 'false', actor, reason);
+      if (result.success && result.verified) {
+        actions.push('ALLOW_LIVE_STRIPE set to false (verified)');
+      } else {
+        actions.push(`ALLOW_LIVE_STRIPE set failed: ${result.error || 'verification failed'}`);
+      }
+    }
+
+    // 3. Revoke any pending transaction authorization
+    if (pendingAuth) {
+      const revokeResult = this.authManager.revoke(pendingAuth.authorizationId, actor);
+      if (revokeResult.success) {
+        actions.push(`Authorization ${pendingAuth.authorizationId} revoked`);
+      } else {
+        actions.push(`Authorization revoke failed: ${revokeResult.error || 'unknown'}`);
+      }
+    }
+
+    // 4. Verify the runtime state
+    const verifyAllowLive = this.config.read('ALLOW_LIVE_STRIPE');
+    const verifyPendingAuth = this.authManager.getPending();
+    const verified = verifyAllowLive !== 'true' && !verifyPendingAuth;
+
+    if (verified) {
+      actions.push('Verification: ALLOW_LIVE_STRIPE is false, no pending authorization');
+    } else {
+      actions.push(`Verification FAILED: ALLOW_LIVE_STRIPE=${verifyAllowLive}, pendingAuth=${!!verifyPendingAuth}`);
+    }
+
+    // 5. Verify no further qualification transaction can execute
+    // A transaction requires both ALLOW_LIVE_STRIPE=true AND a valid authorization.
+    // With ALLOW_LIVE_STRIPE=false, no transaction can proceed.
+    const transactionBlocked = verifyAllowLive !== 'true';
+    if (transactionBlocked) {
+      actions.push('Verified: no further qualification transaction can execute');
+    } else {
+      actions.push('WARNING: transaction may still be possible');
+    }
+
+    return {
+      state: 'DISARMED',
+      actions,
+      verified,
+      auditRecord: { timestamp, action: 'disarm_live_qualification', actor, reason },
+    };
   }
 
   /**

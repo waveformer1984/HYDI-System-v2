@@ -85,5 +85,15 @@ export function createControlPlaneBridge(
     async applySafeConfiguration(key: string, value: string, reason: string) {
       return controlPlane.applySafeConfiguration(key, value, reason);
     },
+
+    /**
+     * Disarm live qualification mode.
+     * Disables ALLOW_LIVE_STRIPE, revokes pending authorization, verifies state.
+     * Idempotent — returns ALREADY_DISARMED if already disarmed.
+     * This is a safety-reducing operation, autonomous-safe.
+     */
+    async disarmLiveQualification(reason?: string) {
+      return controlPlane.disarmLiveQualification(reason);
+    },
   };
 }

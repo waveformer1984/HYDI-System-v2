@@ -342,6 +342,8 @@ export interface ExecutionBridge {
     getTransactionAuthorizationState: () => unknown;
     /** Apply a safe, non-secret configuration change (policy-checked, validated, audited). */
     applySafeConfiguration: (key: string, value: string, reason: string) => Promise<unknown>;
+    /** Disarm live qualification mode (safety-reducing, idempotent, autonomous-safe). */
+    disarmLiveQualification: (reason?: string) => Promise<unknown>;
   } | null;
 }
 
