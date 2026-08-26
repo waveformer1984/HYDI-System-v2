@@ -423,9 +423,9 @@ export class CommunicationLayer {
     // 7. Record audit event
     const eventType = deliveryStatus === 'sent' ? 'outbound_sent' :
       deliveryStatus === 'failed' ? 'outbound_failed' :
-      deliveryStatus === 'killed' ? 'outbound_killed' :
-      deliveryStatus === 'rate_limited' ? 'outbound_rate_limited' :
-      'outbound_suppressed';
+        deliveryStatus === 'killed' ? 'outbound_killed' :
+          deliveryStatus === 'rate_limited' ? 'outbound_rate_limited' :
+            'outbound_suppressed';
 
     const auditEvent = await this.store.recordEvent({
       eventType,
@@ -728,7 +728,7 @@ export class CommunicationLayer {
     authContext?: AuthorizationContext,
     conversationId?: string,
   ): Promise<OutboundMessageResult> {
-    let convId = conversationId || request.conversationId || '';
+    const convId = conversationId || request.conversationId || '';
 
     // Still persist the denied message for audit
     if (convId) {
@@ -751,7 +751,7 @@ export class CommunicationLayer {
     await this.store.recordEvent({
       eventType: status === 'killed' ? 'outbound_killed' :
         status === 'rate_limited' ? 'outbound_rate_limited' :
-        'outbound_suppressed',
+          'outbound_suppressed',
       channelId: request.channelId,
       conversationId: convId || null,
       actor: request.actor,
@@ -799,7 +799,7 @@ export function getCommunicationLayer(config?: CommunicationLayerConfig): Commun
 
 export function resetCommunicationLayer(): void {
   if (_instance) {
-    _instance.close().catch(() => {});
+    _instance.close().catch(() => { });
     _instance = null;
   }
 }

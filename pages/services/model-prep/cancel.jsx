@@ -1,6 +1,7 @@
 // Stripe Checkout cancel page
 // Customer lands here if they cancel the checkout.
 
+import Link from 'next/link';
 import { useRouter } from 'next/router';
 
 export default function JobCancelPage() {
@@ -24,7 +25,7 @@ export default function JobCancelPage() {
       )}
 
       <p style={{ marginTop: '24px' }}>
-        <a href="/services/model-prep" style={{ color: '#2563eb' }}>← Try again</a>
+        <Link href="/services/model-prep" style={{ color: '#2563eb' }}>← Try again</Link>
       </p>
     </div>
   );

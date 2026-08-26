@@ -314,7 +314,7 @@ export class DelegatedIdentityManager {
 
     // 3. Check capability inclusion (if specified, must be included)
     if (ctx.identity.includedCapabilities.length > 0 &&
-        !ctx.identity.includedCapabilities.includes(ctx.capability)) {
+      !ctx.identity.includedCapabilities.includes(ctx.capability)) {
       return {
         authorized: false,
         requiresConfirmation: false,
@@ -444,7 +444,7 @@ export class DelegatedIdentityManager {
     if (!policy) {
       // No explicit policy — default to conservative
       if (ctx.sideEffectCategory === 'FINANCIAL' || ctx.sideEffectCategory === 'DELETE' ||
-          ctx.sideEffectCategory === 'EXTERNAL_COMMITMENT' || ctx.sideEffectCategory === 'DEPLOY') {
+        ctx.sideEffectCategory === 'EXTERNAL_COMMITMENT' || ctx.sideEffectCategory === 'DEPLOY') {
         return {
           allowed: true,
           requiresConfirmation: true,
@@ -514,7 +514,7 @@ export class DelegatedIdentityManager {
    */
   private normalizePath(p: string): string {
     // Convert backslashes to forward slashes
-    let normalized = p.replace(/\\/g, '/');
+    const normalized = p.replace(/\\/g, '/');
     // Resolve .. and . components
     const parts = normalized.split('/');
     const resolved: string[] = [];
@@ -631,10 +631,10 @@ export function createDefaultResourceBoundaries(workspaceRoot: string): Resource
 export function capabilityToSideEffectCategory(capability: string): SideEffectCategory {
   // READ operations
   if (capability.includes('read') || capability.includes('inspect') ||
-      capability.includes('discover') || capability.includes('validate') ||
-      capability.includes('screenshot') || capability.includes('health_check') ||
-      capability.includes('dns_lookup') || capability.includes('connectivity_test') ||
-      capability.includes('git_status')) {
+    capability.includes('discover') || capability.includes('validate') ||
+    capability.includes('screenshot') || capability.includes('health_check') ||
+    capability.includes('dns_lookup') || capability.includes('connectivity_test') ||
+    capability.includes('git_status')) {
     return 'READ';
   }
 
@@ -645,8 +645,8 @@ export function capabilityToSideEffectCategory(capability: string): SideEffectCa
 
   // FINANCIAL operations
   if (capability.includes('financial') || capability.includes('charge') ||
-      capability.includes('subscription') || capability.includes('refund') ||
-      capability.includes('payout')) {
+    capability.includes('subscription') || capability.includes('refund') ||
+    capability.includes('payout')) {
     return 'FINANCIAL';
   }
 
@@ -670,17 +670,17 @@ export function capabilityToSideEffectCategory(capability: string): SideEffectCa
 
   // CREATE operations
   if (capability.includes('create') || capability.includes('write') ||
-      capability.includes('start') || capability.includes('provision')) {
+    capability.includes('start') || capability.includes('provision')) {
     return 'CREATE';
   }
 
   // MODIFY operations
   if (capability.includes('modify') || capability.includes('update') ||
-      capability.includes('move') || capability.includes('type') ||
-      capability.includes('click') || capability.includes('select') ||
-      capability.includes('submit') || capability.includes('commit') ||
-      capability.includes('branch') || capability.includes('build') ||
-      capability.includes('restart') || capability.includes('navigate')) {
+    capability.includes('move') || capability.includes('type') ||
+    capability.includes('click') || capability.includes('select') ||
+    capability.includes('submit') || capability.includes('commit') ||
+    capability.includes('branch') || capability.includes('build') ||
+    capability.includes('restart') || capability.includes('navigate')) {
     return 'MODIFY';
   }
 

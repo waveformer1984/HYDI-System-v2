@@ -3,6 +3,7 @@
 // Customer accesses via jobId (from the success page or saved link).
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/router';
 
 // Map internal job status to customer-safe display
@@ -46,7 +47,7 @@ export default function JobStatusPage() {
             fetch(`/api/revenue/jobs/${jobId}/delivery?token=${data.job.deliveryToken}`)
               .then(r => r.json())
               .then(d => setDeliveryInfo(d))
-              .catch(() => {});
+              .catch(() => { });
           }
         }
       })
@@ -157,7 +158,7 @@ export default function JobStatusPage() {
       )}
 
       <p style={{ fontSize: '14px' }}>
-        <a href="/services/model-prep" style={{ color: '#2563eb' }}>← Submit another job</a>
+        <Link href="/services/model-prep" style={{ color: '#2563eb' }}>← Submit another job</Link>
       </p>
     </div>
   );

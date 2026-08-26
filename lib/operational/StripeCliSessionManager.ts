@@ -108,7 +108,7 @@ export class StripeCliSessionManager {
     let state: StripeCliState = 'UNKNOWN';
     let accountId: string | null = null;
     let accountMode: 'test' | 'live' | 'unknown' = 'unknown';
-    let sessionExpiry: string | null = null;
+    const sessionExpiry: string | null = null;
     let evidence = '';
     let blocker: EvidenceBlocker | null = null;
 

@@ -1,5 +1,5 @@
 const RevenueEngine = require('../../../revenue-engine');
-const { requireAuth } = require('../../../lib/auth/requireAuth.js');
+const { requireAuth } = require('../../../lib/auth/requireAuth');
 
 const engine = new RevenueEngine();
 
@@ -16,16 +16,16 @@ export default async function handler(req, res) {
 
   try {
     const result = await engine.runRevenueCycle();
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       metrics: result.metrics,
-      report: result.report 
+      report: result.report
     });
   } catch (error) {
     console.error('Revenue cycle error:', error);
-    res.status(500).json({ 
-      success: false, 
-      error: error.message 
+    res.status(500).json({
+      success: false,
+      error: error.message
     });
   }
 }

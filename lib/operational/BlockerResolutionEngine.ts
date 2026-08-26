@@ -181,7 +181,7 @@ export class BlockerResolutionEngine {
 
     // Determine resolution action
     let resolutionAction: ResolutionAction;
-    let requiredAuthorization = report.requiredAuthorization;
+    const requiredAuthorization = report.requiredAuthorization;
     let reasoning: string;
 
     switch (blocker) {

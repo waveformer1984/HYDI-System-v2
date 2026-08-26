@@ -183,11 +183,10 @@ export default function OpsPage() {
           <button
             key={id}
             onClick={() => setTab(id)}
-            className={`px-3 py-1.5 text-xs rounded-lg transition-colors ${
-              tab === id
-                ? 'bg-violet-600/20 text-violet-300 border border-violet-500/20'
-                : 'text-gray-500 hover:text-gray-300 hover:bg-white/[0.04] border border-transparent'
-            }`}
+            className={`px-3 py-1.5 text-xs rounded-lg transition-colors ${tab === id
+              ? 'bg-violet-600/20 text-violet-300 border border-violet-500/20'
+              : 'text-gray-500 hover:text-gray-300 hover:bg-white/[0.04] border border-transparent'
+              }`}
           >
             {label}
           </button>
@@ -326,21 +325,19 @@ function AuditPanel({
       <div className="flex gap-2">
         <button
           onClick={() => onSourceChange('heidi_events')}
-          className={`px-3 py-1 text-xs rounded-lg transition-colors ${
-            source === 'heidi_events'
-              ? 'bg-violet-600/20 text-violet-300 border border-violet-500/20'
-              : 'text-gray-500 hover:text-gray-300 bg-white/[0.04] border border-white/[0.06]'
-          }`}
+          className={`px-3 py-1 text-xs rounded-lg transition-colors ${source === 'heidi_events'
+            ? 'bg-violet-600/20 text-violet-300 border border-violet-500/20'
+            : 'text-gray-500 hover:text-gray-300 bg-white/[0.04] border border-white/[0.06]'
+            }`}
         >
           heidi_events (DB)
         </button>
         <button
           onClick={() => onSourceChange('daemon')}
-          className={`px-3 py-1 text-xs rounded-lg transition-colors ${
-            source === 'daemon'
-              ? 'bg-violet-600/20 text-violet-300 border border-violet-500/20'
-              : 'text-gray-500 hover:text-gray-300 bg-white/[0.04] border border-white/[0.06]'
-          }`}
+          className={`px-3 py-1 text-xs rounded-lg transition-colors ${source === 'daemon'
+            ? 'bg-violet-600/20 text-violet-300 border border-violet-500/20'
+            : 'text-gray-500 hover:text-gray-300 bg-white/[0.04] border border-white/[0.06]'
+            }`}
         >
           daemon audit log
         </button>
@@ -372,13 +369,12 @@ function AuditRow({ entry }: { entry: AuditEntry }) {
       <div className="flex items-center gap-2 text-xs">
         <span className="font-mono text-violet-400/80">{entry.event_type}</span>
         {entry.verdict && (
-          <span className={`px-1.5 py-0.5 rounded text-[10px] ${
-            entry.verdict === 'success' || entry.verdict === 'repaired'
-              ? 'bg-emerald-400/10 text-emerald-400/80'
-              : entry.verdict === 'fail' || entry.verdict === 'error'
+          <span className={`px-1.5 py-0.5 rounded text-[10px] ${entry.verdict === 'success' || entry.verdict === 'repaired'
+            ? 'bg-emerald-400/10 text-emerald-400/80'
+            : entry.verdict === 'fail' || entry.verdict === 'error'
               ? 'bg-red-400/10 text-red-400/80'
               : 'bg-white/[0.04] text-gray-500'
-          }`}>
+            }`}>
             {entry.verdict}
           </span>
         )}
@@ -721,15 +717,15 @@ function MemoryPanel({ status }: { status: StatusData | null }) {
       <Section title="Reflection Files (local)">
         <div className="text-xs text-gray-500 space-y-2">
           <div>
-            <span className="text-gray-400">data/awareness/reflections.json</span> — HEIDI's self-reflection log, updated during cognitive cycles.
+            <span className="text-gray-400">data/awareness/reflections.json</span> — HEIDI&apos;s self-reflection log, updated during cognitive cycles.
           </div>
           <div>
             <span className="text-gray-400">data/memory/reflective_memory.json</span> — Persistent reflective memory across sessions.
           </div>
           <div className="text-gray-600 mt-2">
             These files are written by the cognitive core during operation. They contain stored observations,
-            not HEIDI's generated interpretation. The distinction matters: stored information is factual
-            state; interpretation is HEIDI's reasoning about that state.
+            not HEIDI&apos;s generated interpretation. The distinction matters: stored information is factual
+            state; interpretation is HEIDI&apos;s reasoning about that state.
           </div>
         </div>
       </Section>
@@ -737,7 +733,7 @@ function MemoryPanel({ status }: { status: StatusData | null }) {
       <Section title="Recent Cognitive Cycle Records (from heidi_events)">
         <div className="text-xs text-gray-500">
           Cognitive cycle records are stored in the <span className="font-mono text-gray-400">heidi_events</span> table
-          with <span className="font-mono text-gray-400">event_type = 'cognitive_cycle'</span>. Each record includes
+          with <span className="font-mono text-gray-400">event_type = &apos;cognitive_cycle&apos;</span>. Each record includes
           the cycle ID, phase, outcome (success/fail), execution and verification results. See the Activity / Audit
           tab for live records.
         </div>
@@ -992,9 +988,8 @@ function DataRow({
   return (
     <div className="flex items-center justify-between text-xs">
       <span className="text-gray-500">{label}</span>
-      <span className={`font-mono ${
-        good ? 'text-emerald-400' : bad ? 'text-red-400' : 'text-gray-300'
-      }`}>
+      <span className={`font-mono ${good ? 'text-emerald-400' : bad ? 'text-red-400' : 'text-gray-300'
+        }`}>
         {value}
       </span>
     </div>
@@ -1007,13 +1002,11 @@ function CapabilityRow({ cap }: { cap: CapReport }) {
   return (
     <div className="text-xs space-y-0.5">
       <div className="flex items-center gap-2">
-        <span className={`w-1.5 h-1.5 rounded-full ${
-          isReady ? 'bg-emerald-400' : isBlocked ? 'bg-red-400' : 'bg-gray-500'
-        }`} />
+        <span className={`w-1.5 h-1.5 rounded-full ${isReady ? 'bg-emerald-400' : isBlocked ? 'bg-red-400' : 'bg-gray-500'
+          }`} />
         <span className="font-mono text-gray-300">{cap.capabilityId}</span>
-        <span className={`ml-auto text-[10px] ${
-          isReady ? 'text-emerald-400/70' : isBlocked ? 'text-red-400/70' : 'text-gray-600'
-        }`}>
+        <span className={`ml-auto text-[10px] ${isReady ? 'text-emerald-400/70' : isBlocked ? 'text-red-400/70' : 'text-gray-600'
+          }`}>
           {cap.state}
         </span>
       </div>
@@ -1056,11 +1049,10 @@ function ControlButton({
     <button
       onClick={onClick}
       disabled={disabled}
-      className={`px-3 py-1.5 text-xs rounded-lg border transition-colors disabled:opacity-40 ${
-        danger
-          ? 'bg-red-500/10 hover:bg-red-500/20 text-red-300 border-red-500/20'
-          : 'bg-white/[0.04] hover:bg-white/[0.08] text-gray-300 border-white/[0.06]'
-      }`}
+      className={`px-3 py-1.5 text-xs rounded-lg border transition-colors disabled:opacity-40 ${danger
+        ? 'bg-red-500/10 hover:bg-red-500/20 text-red-300 border-red-500/20'
+        : 'bg-white/[0.04] hover:bg-white/[0.08] text-gray-300 border-white/[0.06]'
+        }`}
     >
       {label}
     </button>

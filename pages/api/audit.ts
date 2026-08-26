@@ -61,7 +61,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             },
             verdict: parsed.selfRepairResult?.repaired > 0 ? 'repaired' : 'cycled',
             created_at: parsed.timestamp,
-            source: 'daemon_audit',
+            source: 'daemon_audit' as const,
           };
         } catch {
           return null as unknown as AuditEntry;
@@ -98,7 +98,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         payload: typeof row.payload === 'string' ? JSON.parse(row.payload) : row.payload,
         verdict: row.verdict,
         created_at: row.created_at,
-        source: 'heidi_events',
+        source: 'heidi_events' as const,
       }));
 
       return res.status(200).json({ entries, count: entries.length, source: 'heidi_events' });

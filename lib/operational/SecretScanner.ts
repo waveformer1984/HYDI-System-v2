@@ -273,7 +273,7 @@ export class SecretScanner {
     const start = Date.now();
     const findings: SecretScanFinding[] = [];
     let scannedFiles = 0;
-    let scannedLines = 0;
+    const scannedLines = 0;
     const maxFiles = options?.maxFiles ?? 10000;
 
     await this.scanDirectory(this.root, findings, { scannedFiles: 0, scannedLines: 0, maxFiles }, (count) => {

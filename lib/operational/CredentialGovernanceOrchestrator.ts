@@ -1026,7 +1026,7 @@ export class CredentialGovernanceOrchestrator {
     let placeholders = 0;
     let realCredentials = 0;
     let awaitingAuth = 0;
-    let remediated = 0;
+    const remediated = 0;
 
     for (const finding of findings) {
       // Classify: is this a real credential or a placeholder?

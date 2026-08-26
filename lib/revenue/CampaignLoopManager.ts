@@ -264,12 +264,12 @@ export class CampaignLoopManager {
     const timestamp = new Date().toISOString();
     const actionsTaken: string[] = [];
     const failures: string[] = [];
-    let prospectsProcessed = 0;
-    let opportunitiesCreated = 0;
-    let draftsPrepared = 0;
-    let authorizationPackagesCreated = 0;
-    let responsesProcessed = 0;
-    let replanned = false;
+    const prospectsProcessed = 0;
+    const opportunitiesCreated = 0;
+    const draftsPrepared = 0;
+    const authorizationPackagesCreated = 0;
+    const responsesProcessed = 0;
+    const replanned = false;
 
     // Guard: no overlapping cycles
     if (this.cycleInFlight) {

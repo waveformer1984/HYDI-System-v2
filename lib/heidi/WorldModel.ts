@@ -255,20 +255,20 @@ export class WorldModel {
     // Sync services from boot.config.json
     try {
       const bootConfig = require('../../boot.config.json');
-      for (const module of bootConfig.modules || []) {
+      for (const moduleInstance of bootConfig.modules || []) {
         await this.upsertEntity({
           entityType: 'service',
-          entityId: module.id,
-          entityName: module.name || module.id,
+          entityId: moduleInstance.id,
+          entityName: moduleInstance.name || moduleInstance.id,
           entityCategory: 'runtime_service',
           status: 'unknown',
-          properties: { port: module.port, command: module.command },
-          relationships: (module.dependsOn || []).map((dep: string) => ({
+          properties: { port: moduleInstance.port, command: moduleInstance.command },
+          relationships: (moduleInstance.dependsOn || []).map((dep: string) => ({
             type: 'depends_on' as const,
             targetEntityType: 'service' as EntityType,
             targetEntityId: dep,
           })),
-          healthEndpoint: module.healthEndpoint || (module.port ? `http://localhost:${module.port}/health` : null),
+          healthEndpoint: moduleInstance.healthEndpoint || (moduleInstance.port ? `http://localhost:${moduleInstance.port}/health` : null),
           owner: 'system',
         });
         synced++;

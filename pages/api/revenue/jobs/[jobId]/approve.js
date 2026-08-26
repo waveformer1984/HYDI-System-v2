@@ -7,9 +7,9 @@
 // Re-verifies artifacts on disk before approving delivery.
 // This is the human gate — no automated delivery bypass exists.
 
-const { getJobManager } = require('../../../../lib/revenue/JobManager');
-const { verifyArtifacts } = require('../../../../lib/revenue/ModelArtifactGenerator');
-const { requireAuth } = require('../../../../lib/auth/requireAuth');
+const { getJobManager } = require('../../../../../lib/revenue/JobManager');
+const { verifyArtifacts } = require('../../../../../lib/revenue/ModelArtifactGenerator');
+const { requireAuth } = require('../../../../../lib/auth/requireAuth');
 const { createClient } = require('@supabase/supabase-js');
 const fs = require('fs');
 const path = require('path');

@@ -55,8 +55,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     } catch { /* best effort */ }
 
     // ─── Capabilities ─────────────────────────────────────────────────
-    let capabilities: any = {};
-    let capabilitySummary = { total: 0, ready: 0, blocked: 0, policyBlocked: 0, failed: 0 };
+    const capabilities: any = {};
+    const capabilitySummary = { total: 0, ready: 0, blocked: 0, policyBlocked: 0, failed: 0 };
     try {
       const { getAcquisitionEngine } = await import('../../lib/operational/ExternalCapabilityAcquisitionEngine');
       const { getProviderAdapterRegistry } = await import('../../lib/operational/ProviderAdapters');

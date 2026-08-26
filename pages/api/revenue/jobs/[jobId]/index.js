@@ -5,7 +5,7 @@
 // This is used by the customer to check on their job status
 // and by the operator to monitor execution.
 
-const { getJobManager } = require('../../../../lib/revenue/JobManager');
+const { getJobManager } = require('../../../../../lib/revenue/JobManager');
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') {

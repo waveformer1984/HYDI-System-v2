@@ -7,9 +7,9 @@
 //
 // This is the customer-facing entry point for the revenue loop.
 
-const { getJobManager } = require('../../../lib/revenue/JobManager');
-const { StripeBridge } = require('../../../lib/revenue/StripeBridge');
-const { getOfferCatalog } = require('../../../lib/revenue/OfferCatalog');
+const { getJobManager } = require('../../../../lib/revenue/JobManager');
+const { StripeBridge } = require('../../../../lib/revenue/StripeBridge');
+const { getOfferCatalog } = require('../../../../lib/revenue/OfferCatalog');
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {

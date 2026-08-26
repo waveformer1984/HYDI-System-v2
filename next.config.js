@@ -19,6 +19,17 @@ const nextConfig = {
     // had never surfaced because lint never actually looked at them.
     dirs: ['pages', 'components', 'lib', 'src', 'hooks', 'workers', 'agents', 'revenue-engine', 'api', 'kilo'],
   },
+  webpack: (config, { isServer }) => {
+    // Allow require() of .ts files from .js files in the pages/ directory.
+    // next dev resolves .ts extensions automatically, but next build's
+    // webpack production config doesn't include .ts in resolve.extensions
+    // for .js files. This ensures consistent module resolution across
+    // both dev and production builds.
+    if (!config.resolve.extensions.includes('.ts')) {
+      config.resolve.extensions.push('.ts');
+    }
+    return config;
+  },
 }
 
 module.exports = nextConfig
