@@ -3,7 +3,7 @@
 //
 // Streams the actual file content to the customer.
 
-const { getJobManager } = require('../../../../../lib/revenue/JobManager');
+import { getJobManager } from '../../../../../lib/revenue/JobManager';
 const fs = require('fs');
 const path = require('path');
 

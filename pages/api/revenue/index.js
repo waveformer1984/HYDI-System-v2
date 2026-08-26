@@ -1,5 +1,5 @@
-const RevenueAPI = require('../../../api/revenue');
-const { requireAuth } = require('../../../lib/auth/requireAuth');
+import RevenueAPI from '../../../api/revenue';
+import { requireAuth } from '../../../lib/auth/requireAuth';
 
 const revenueAPI = new RevenueAPI();
 

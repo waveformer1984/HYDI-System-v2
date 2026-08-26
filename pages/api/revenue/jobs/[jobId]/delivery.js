@@ -5,7 +5,7 @@
 // Requires the delivery token that was generated when the
 // human approved the artifact for delivery.
 
-const { getJobManager } = require('../../../../../lib/revenue/JobManager');
+import { getJobManager } from '../../../../../lib/revenue/JobManager';
 const fs = require('fs');
 const path = require('path');
 

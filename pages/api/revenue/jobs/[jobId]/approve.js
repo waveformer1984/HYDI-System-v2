@@ -7,13 +7,13 @@
 // Re-verifies artifacts on disk before approving delivery.
 // This is the human gate — no automated delivery bypass exists.
 
-const { getJobManager } = require('../../../../../lib/revenue/JobManager');
-const { verifyArtifacts } = require('../../../../../lib/revenue/ModelArtifactGenerator');
-const { requireAuth } = require('../../../../../lib/auth/requireAuth');
-const { createClient } = require('@supabase/supabase-js');
-const fs = require('fs');
-const path = require('path');
-const crypto = require('crypto');
+import { getJobManager } from '../../../../../lib/revenue/JobManager';
+import { verifyArtifacts } from '../../../../../lib/revenue/ModelArtifactGenerator';
+import { requireAuth } from '../../../../../lib/auth/requireAuth';
+import { createClient } from '@supabase/supabase-js';
+import fs from 'fs';
+import path from 'path';
+import crypto from 'crypto';
 
 // Lazy-init Supabase client for auth audit logging
 let supabaseClient = null;

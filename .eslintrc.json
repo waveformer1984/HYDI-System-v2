@@ -25,7 +25,36 @@
         "sourceType": "module"
       },
       "rules": {
-        "@typescript-eslint/no-explicit-any": "warn",
+        "@typescript-eslint/no-explicit-any": "warn"
+      }
+    },
+    {
+      "files": [
+        "pages/api/authorization.ts",
+        "pages/api/execute.ts",
+        "pages/api/interventions/route.ts",
+        "pages/api/goals/route.ts",
+        "lib/operational/CredentialGovernanceOrchestrator.ts",
+        "lib/heidi/WorldModel.ts",
+        "lib/operational/CredentialSource.ts",
+        "lib/operational/HistoricalSecretRemediationTracker.ts",
+        "lib/human-action/adapters/BrowserAdapter.ts",
+        "lib/delegated-operator/OperationalEvent.ts",
+        "lib/operator-api-shared.ts",
+        "lib/delegated-operator/DelegatedOperatorIntegration.ts",
+        "lib/adaptive-operator/AdaptiveOperatorIntegration.ts",
+        "lib/orchestrator.ts",
+        "lib/human-action/HumanActionEngine.ts",
+        "lib/operational/KeyManagementService.ts",
+        "lib/operational/ExternalCapabilityAcquisitionEngine.ts",
+        "lib/communication/revenueBridge.ts",
+        "lib/communication/channels/anthropicAdapter.ts",
+        "lib/communication/channels/pushAdapter.ts",
+        "lib/operational/RecoveryEngine.ts",
+        "lib/operational/HealthProvenanceChecker.ts",
+        "lib/health/collectors/workers.ts"
+      ],
+      "rules": {
         "@typescript-eslint/no-require-imports": "off"
       }
     },

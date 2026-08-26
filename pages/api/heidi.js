@@ -4,7 +4,7 @@
  * Handles chat requests, health integration, and local model switching.
  */
 
-const { HeidiLocalHandler } = require('../../api/local-model');
+import { HeidiLocalHandler } from '../../api/local-model';
 
 // Initialize Heidi handler
 const heidiHandler = new HeidiLocalHandler({
