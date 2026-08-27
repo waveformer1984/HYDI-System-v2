@@ -514,8 +514,8 @@ describe('Financial safety boundaries', () => {
     const envPath = createTempEnvFile('ALLOW_LIVE_STRIPE=false\n');
     const ccp = new ConfigurationControlPlane(envPath);
 
-    // Change ALLOW_LIVE_STRIPE to true
-    const result = ccp.set('ALLOW_LIVE_STRIPE', 'true', 'hydi', 'auto-resolve');
+    // Change ALLOW_LIVE_STRIPE to true (operator action — not HYDI auto-resolve)
+    const result = ccp.set('ALLOW_LIVE_STRIPE', 'true', 'operator', 'explicit operator decision');
     expect(result.success).toBe(true);
 
     // But this does NOT create a transaction authorization
@@ -585,20 +585,25 @@ describe('ProductionOperationsControlPlane', () => {
     cleanupTempFile(envPath);
   });
 
-  test('auto-resolvable blocker ALLOW_LIVE_STRIPE_UNSET is resolved by setting config', () => {
+  test('ALLOW_LIVE_STRIPE can be set by operator through ConfigurationControlPlane (but NOT auto-resolved by control plane)', () => {
     const envPath = createTempEnvFile('NODE_ENV=development\n');
     const ccp = new ConfigurationControlPlane(envPath);
 
     // Before: not set
     expect(ccp.read('ALLOW_LIVE_STRIPE')).toBeNull();
 
-    // Auto-resolve
-    const result = ccp.set('ALLOW_LIVE_STRIPE', 'true', 'hydi:control-plane', 'auto-resolve');
+    // Operator sets it explicitly
+    const result = ccp.set('ALLOW_LIVE_STRIPE', 'true', 'operator', 'explicit operator decision to enable live mode');
     expect(result.success).toBe(true);
     expect(result.verified).toBe(true);
 
     // After: set to true
     expect(ccp.read('ALLOW_LIVE_STRIPE')).toBe('true');
+
+    // NOTE: The control plane classifier must NOT auto-resolve ALLOW_LIVE_STRIPE_UNSET.
+    // This test verifies the config plane CAN set it (for operator use),
+    // not that the control plane SHOULD set it autonomously.
+    // The control plane classifies ALLOW_LIVE_STRIPE_UNSET as OPERATOR_INPUT_REQUIRED.
 
     cleanupTempFile(envPath);
   });

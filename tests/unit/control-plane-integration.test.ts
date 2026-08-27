@@ -130,11 +130,14 @@ describe('Control Plane Integration: CognitiveCore → ExecutionBridge → Contr
         expect(testModeBlocker.operatorAction).toBeTruthy();
       }
 
-      // ALLOW_LIVE_STRIPE_UNSET should be AUTO_RESOLVABLE (owned by hydi)
+      // ALLOW_LIVE_STRIPE_UNSET must be OPERATOR_INPUT_REQUIRED (owned by operator).
+      // This flag represents a deliberate human decision to go live — HYDI must
+      // never set it autonomously.
       const allowLiveBlocker = result.blockers.find((b: any) => b.code === 'ALLOW_LIVE_STRIPE_UNSET');
       if (allowLiveBlocker) {
-        expect(allowLiveBlocker.owner).toBe('hydi');
-        expect(allowLiveBlocker.resolution).toBe('AUTO_RESOLVABLE');
+        expect(allowLiveBlocker.owner).toBe('operator');
+        expect(allowLiveBlocker.resolution).toBe('OPERATOR_INPUT_REQUIRED');
+        expect(allowLiveBlocker.hydiAction).toBeNull();
       }
     }
   });

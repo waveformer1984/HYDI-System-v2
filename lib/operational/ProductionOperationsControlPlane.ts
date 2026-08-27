@@ -197,14 +197,21 @@ export class ProductionOperationsControlPlane {
     }
 
     // Blocker: ALLOW_LIVE_STRIPE not set
+    //
+    // This flag represents a deliberate human decision to move from test
+    // money to real money. It is operator-owned — HYDI must NEVER set it
+    // autonomously. The test for HYDI-owned vs operator-owned is not
+    // "can HYDI technically flip this env var" but "does flipping this
+    // represent a deliberate human decision with financial consequence."
+    // This one does.
     if (allowLive !== 'true') {
       blockers.push({
         code: 'ALLOW_LIVE_STRIPE_UNSET',
-        description: 'ALLOW_LIVE_STRIPE is not set to "true". The system cannot enter live mode.',
-        owner: 'hydi',
-        resolution: 'AUTO_RESOLVABLE',
-        hydiAction: 'Set ALLOW_LIVE_STRIPE=true in .env.local',
-        operatorAction: null,
+        description: 'ALLOW_LIVE_STRIPE is not set to "true". The system cannot enter live mode. This flag represents a deliberate human decision to move from test to live money.',
+        owner: 'operator',
+        resolution: 'OPERATOR_INPUT_REQUIRED',
+        hydiAction: null,
+        operatorAction: 'Set ALLOW_LIVE_STRIPE=true in .env.local. This represents your explicit decision to enable live payment mode.',
         blocks: true,
       });
     }
@@ -323,25 +330,13 @@ export class ProductionOperationsControlPlane {
 
   /**
    * Resolve an auto-resolvable blocker.
+   *
+   * NOTE: ALLOW_LIVE_STRIPE_UNSET is NOT here. That flag represents a
+   * deliberate human decision to move from test to live money and is
+   * operator-owned. HYDI must never set it autonomously.
    */
   private async resolveAutoResolvable(blocker: ProductionBlocker): Promise<BlockerResolutionResult> {
     switch (blocker.code) {
-      case 'ALLOW_LIVE_STRIPE_UNSET': {
-        const result = this.config.set(
-          'ALLOW_LIVE_STRIPE',
-          'true',
-          'hydi:control-plane',
-          'Auto-resolving: enabling live mode for qualification preflight'
-        );
-        return {
-          blockerCode: blocker.code,
-          resolved: result.success && result.verified,
-          action: `Set ALLOW_LIVE_STRIPE=true (verified: ${result.verified})`,
-          error: result.error,
-          requiresOperatorInput: false,
-          requiresHumanAuthorization: false,
-        };
-      }
       case 'WEBHOOK_PROCESSING_DISABLED': {
         const result = this.config.set(
           'WEBHOOK_PROCESSING_ENABLED',

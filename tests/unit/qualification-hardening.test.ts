@@ -137,27 +137,35 @@ describe('Autonomous preflight through real bridge', () => {
 // ─── Section 2: Blocker auto-resolution ──────────────────────────────────
 
 describe('Blocker auto-resolution', () => {
-  test('ALLOW_LIVE_STRIPE_UNSET is auto-resolved by HYDI', async () => {
+  test('ALLOW_LIVE_STRIPE_UNSET is operator-owned — HYDI must NOT auto-resolve it', async () => {
     const { bridge, cp, cleanup } = buildBridgeWithTempEnv({
       WEBHOOK_PROCESSING_ENABLED: 'true',
       LIVE_QUALIFICATION_CUSTOMER_EMAIL: 'test@example.com',
     });
     try {
-      // Verify it's initially unset
+      // Verify it's initially unset/false
       const preflight1 = await bridge.preflight() as any;
       const blocker = preflight1.blockers.find((b: any) => b.code === 'ALLOW_LIVE_STRIPE_UNSET');
       expect(blocker).toBeDefined();
-      expect(blocker.owner).toBe('hydi');
-      expect(blocker.resolution).toBe('AUTO_RESOLVABLE');
+      // This flag represents a deliberate human decision to go live.
+      // It must be operator-owned, not auto-resolvable.
+      expect(blocker.owner).toBe('operator');
+      expect(blocker.resolution).toBe('OPERATOR_INPUT_REQUIRED');
+      expect(blocker.hydiAction).toBeNull();
+      expect(blocker.operatorAction).toContain('ALLOW_LIVE_STRIPE');
 
-      // Run autonomous preflight — should resolve it
+      // Run autonomous preflight — must NOT resolve ALLOW_LIVE_STRIPE_UNSET
       const result = await bridge.autonomousPreflight() as any;
-      expect(result.resolutionResults.length).toBeGreaterThan(0);
 
-      // Verify the resolution was attempted
+      // There must be NO resolution attempt for ALLOW_LIVE_STRIPE_UNSET
       const resolution = result.resolutionResults.find((r: any) => r.blockerCode === 'ALLOW_LIVE_STRIPE_UNSET');
-      if (resolution) {
-        expect(resolution.resolved).toBe(true);
+      expect(resolution).toBeUndefined();
+
+      // The final state must be OPERATOR_INPUT_REQUIRED (not READY)
+      // because ALLOW_LIVE_STRIPE is operator-owned
+      if (preflight1.blockers.some((b: any) => b.code === 'STRIPE_CREDENTIAL_MISSING' || b.code === 'STRIPE_CREDENTIAL_TEST_MODE')) {
+        // If there's also a credential blocker, that's also operator-owned
+        expect(['OPERATOR_INPUT_REQUIRED']).toContain(result.finalState);
       }
     } finally { cleanup(); }
   });
