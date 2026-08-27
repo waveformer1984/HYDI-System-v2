@@ -81,10 +81,10 @@ export interface ConfigSnapshot {
 const CONFIG_REGISTRY: Map<string, ConfigKeyDescriptor> = new Map([
   ['ALLOW_LIVE_STRIPE', {
     key: 'ALLOW_LIVE_STRIPE',
-    description: 'Authorizes the system to report READY during live preflight. Does NOT authorize a charge.',
+    description: 'Authorizes the system to report READY during live preflight. Does NOT authorize a charge. This flag represents a deliberate human decision to move from test to live money — it is operator-owned and NOT auto-modifiable.',
     isSecret: false,
     type: 'boolean',
-    autoModifiable: true,
+    autoModifiable: false,
     requiresRestart: true,
     default: 'false',
   }],
@@ -256,9 +256,13 @@ export class ConfigurationControlPlane {
    * @param value The new value
    * @param changedBy Who is making the change
    * @param reason Why the change is being made
+   * @param operatorOverride When true, allows setting non-autoModifiable keys
+   *   (e.g. ALLOW_LIVE_STRIPE). This must only be set when the call originates
+   *   from an explicit operator action (e.g. the one-click Authorize endpoint),
+   *   never from autonomous HYDI code.
    * @returns Result with success status and change record
    */
-  set(key: string, value: string, changedBy: string, reason: string): ConfigChangeResult {
+  set(key: string, value: string, changedBy: string, reason: string, operatorOverride: boolean = false): ConfigChangeResult {
     // Check secret keys first — these are NEVER managed here
     if (this.isSecretKey(key)) {
       return { success: false, key, value: null, verified: false, error: `Secret keys must be managed through CredentialManager, not ConfigurationControlPlane` };
@@ -266,6 +270,20 @@ export class ConfigurationControlPlane {
     const desc = this.getDescriptor(key);
     if (!desc) {
       return { success: false, key, value: null, verified: false, error: `Unknown configuration key: ${key}` };
+    }
+
+    // Enforce autoModifiable policy — non-autoModifiable keys require operatorOverride.
+    // This is the structural enforcement: even if a future code change reclassifies
+    // a blocker as auto-resolvable, the ConfigurationControlPlane will refuse to
+    // write the value without an explicit operatorOverride.
+    if (!desc.autoModifiable && !operatorOverride) {
+      return {
+        success: false,
+        key,
+        value: null,
+        verified: false,
+        error: `Configuration key "${key}" is not auto-modifiable. It represents a deliberate human decision and requires operator override (operatorOverride=true).`,
+      };
     }
 
     // Validate

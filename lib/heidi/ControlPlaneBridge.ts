@@ -95,5 +95,35 @@ export function createControlPlaneBridge(
     async disarmLiveQualification(reason?: string) {
       return controlPlane.disarmLiveQualification(reason);
     },
+
+    /**
+     * Stage a live authorization request — the one-click "Authorize" flow.
+     * HYDI runs all autonomous steps and produces a human-readable summary
+     * with a pending LiveAuthorizationRequest. The human clicks "Allow" to resolve.
+     *
+     * This does NOT set ALLOW_LIVE_STRIPE or issue a transaction authorization.
+     * Those happen on the approval click.
+     */
+    async stageLiveAuthorization(params?: {
+      customer?: string;
+      amountCents?: number;
+      product?: string;
+    }) {
+      return controlPlane.stageLiveAuthorization(params || {});
+    },
+
+    /**
+     * Get the pending live authorization request (if any).
+     */
+    getPendingLiveAuthorizationRequest() {
+      return controlPlane.getPendingLiveAuthorizationRequest();
+    },
+
+    /**
+     * Get a live authorization request by ID.
+     */
+    getLiveAuthorizationRequest(requestId: string) {
+      return controlPlane.getLiveAuthorizationRequest(requestId);
+    },
   };
 }

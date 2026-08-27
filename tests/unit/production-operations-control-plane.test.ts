@@ -62,21 +62,21 @@ describe('ConfigurationControlPlane', () => {
   });
 
   test('sets a new value atomically', () => {
-    const result = ccp.set('ALLOW_LIVE_STRIPE', 'true', 'test', 'unit test');
+    const result = ccp.set('ALLOW_LIVE_STRIPE', 'true', 'test', 'unit test', true);
     expect(result.success).toBe(true);
     expect(result.verified).toBe(true);
     expect(ccp.read('ALLOW_LIVE_STRIPE')).toBe('true');
   });
 
   test('updates an existing value', () => {
-    const result = ccp.set('NODE_ENV', 'production', 'test', 'unit test');
+    const result = ccp.set('NODE_ENV', 'production', 'test', 'unit test', true);
     expect(result.success).toBe(true);
     expect(result.verified).toBe(true);
     expect(ccp.read('NODE_ENV')).toBe('production');
   });
 
   test('validates boolean type', () => {
-    const result = ccp.set('ALLOW_LIVE_STRIPE', 'maybe', 'test', 'unit test');
+    const result = ccp.set('ALLOW_LIVE_STRIPE', 'maybe', 'test', 'unit test', true);
     expect(result.success).toBe(false);
     expect(result.error).toContain('true');
     expect(result.error).toContain('false');
@@ -89,9 +89,22 @@ describe('ConfigurationControlPlane', () => {
   });
 
   test('validates enum type', () => {
-    const result = ccp.set('NODE_ENV', 'staging', 'test', 'unit test');
+    const result = ccp.set('NODE_ENV', 'staging', 'test', 'unit test', true);
     expect(result.success).toBe(false);
     expect(result.error).toContain('development');
+  });
+
+  test('non-autoModifiable keys reject without operatorOverride', () => {
+    const result = ccp.set('ALLOW_LIVE_STRIPE', 'true', 'hydi', 'auto-resolve');
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('not auto-modifiable');
+    expect(result.error).toContain('operator override');
+  });
+
+  test('non-autoModifiable keys accept with operatorOverride', () => {
+    const result = ccp.set('ALLOW_LIVE_STRIPE', 'true', 'operator', 'explicit operator decision', true);
+    expect(result.success).toBe(true);
+    expect(result.verified).toBe(true);
   });
 
   test('rejects unknown keys', () => {
@@ -107,7 +120,7 @@ describe('ConfigurationControlPlane', () => {
   });
 
   test('records audit log on change', () => {
-    ccp.set('ALLOW_LIVE_STRIPE', 'true', 'test-operator', 'testing audit');
+    ccp.set('ALLOW_LIVE_STRIPE', 'true', 'test-operator', 'testing audit', true);
     const log = ccp.getAuditLog();
     expect(log.length).toBe(1);
     expect(log[0].key).toBe('ALLOW_LIVE_STRIPE');
@@ -117,7 +130,7 @@ describe('ConfigurationControlPlane', () => {
   });
 
   test('rollback restores previous value', () => {
-    ccp.set('ALLOW_LIVE_STRIPE', 'true', 'test', 'initial set');
+    ccp.set('ALLOW_LIVE_STRIPE', 'true', 'test', 'initial set', true);
     const log = ccp.getAuditLog();
     const change = log[0];
 
@@ -128,8 +141,8 @@ describe('ConfigurationControlPlane', () => {
   });
 
   test('rollback restores previous non-null value', () => {
-    ccp.set('ALLOW_LIVE_STRIPE', 'false', 'test', 'initial');
-    ccp.set('ALLOW_LIVE_STRIPE', 'true', 'test', 'change');
+    ccp.set('ALLOW_LIVE_STRIPE', 'false', 'test', 'initial', true);
+    ccp.set('ALLOW_LIVE_STRIPE', 'true', 'test', 'change', true);
     const log = ccp.getAuditLog();
     const change = log[1]; // the second change
 
@@ -138,8 +151,10 @@ describe('ConfigurationControlPlane', () => {
     expect(ccp.read('ALLOW_LIVE_STRIPE')).toBe('false');
   });
 
-  test('canAutoModify returns true for auto-modifiable keys', () => {
-    expect(ccp.canAutoModify('ALLOW_LIVE_STRIPE')).toBe(true);
+  test('canAutoModify returns false for operator-owned keys, true for auto-modifiable keys', () => {
+    // ALLOW_LIVE_STRIPE is operator-owned — not auto-modifiable
+    expect(ccp.canAutoModify('ALLOW_LIVE_STRIPE')).toBe(false);
+    // WEBHOOK_PROCESSING_ENABLED is auto-modifiable
     expect(ccp.canAutoModify('WEBHOOK_PROCESSING_ENABLED')).toBe(true);
   });
 
@@ -155,7 +170,7 @@ describe('ConfigurationControlPlane', () => {
   });
 
   test('getSafeSummary redacts secret values', () => {
-    ccp.set('ALLOW_LIVE_STRIPE', 'true', 'test', 'setup');
+    ccp.set('ALLOW_LIVE_STRIPE', 'true', 'test', 'setup', true);
     const summary = ccp.getSafeSummary();
     expect(summary['ALLOW_LIVE_STRIPE'].value).toBe('true');
     expect(summary['STRIPE_SECRET_KEY'].isSecret).toBe(true);
@@ -166,7 +181,7 @@ describe('ConfigurationControlPlane', () => {
   });
 
   test('readAll returns snapshot of all config values', () => {
-    ccp.set('ALLOW_LIVE_STRIPE', 'true', 'test', 'setup');
+    ccp.set('ALLOW_LIVE_STRIPE', 'true', 'test', 'setup', true);
     const snapshot = ccp.readAll();
     expect(snapshot.values['ALLOW_LIVE_STRIPE']).toBe('true');
     expect(snapshot.values['NODE_ENV']).toBe('development');
@@ -514,8 +529,8 @@ describe('Financial safety boundaries', () => {
     const envPath = createTempEnvFile('ALLOW_LIVE_STRIPE=false\n');
     const ccp = new ConfigurationControlPlane(envPath);
 
-    // Change ALLOW_LIVE_STRIPE to true (operator action — not HYDI auto-resolve)
-    const result = ccp.set('ALLOW_LIVE_STRIPE', 'true', 'operator', 'explicit operator decision');
+    // Change ALLOW_LIVE_STRIPE to true (operator action — requires operatorOverride)
+    const result = ccp.set('ALLOW_LIVE_STRIPE', 'true', 'operator', 'explicit operator decision', true);
     expect(result.success).toBe(true);
 
     // But this does NOT create a transaction authorization
@@ -592,8 +607,8 @@ describe('ProductionOperationsControlPlane', () => {
     // Before: not set
     expect(ccp.read('ALLOW_LIVE_STRIPE')).toBeNull();
 
-    // Operator sets it explicitly
-    const result = ccp.set('ALLOW_LIVE_STRIPE', 'true', 'operator', 'explicit operator decision to enable live mode');
+    // Operator sets it explicitly (requires operatorOverride since it's not autoModifiable)
+    const result = ccp.set('ALLOW_LIVE_STRIPE', 'true', 'operator', 'explicit operator decision to enable live mode', true);
     expect(result.success).toBe(true);
     expect(result.verified).toBe(true);
 

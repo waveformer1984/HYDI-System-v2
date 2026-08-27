@@ -29,6 +29,13 @@ import {
   getLiveTransactionAuthorizationManager,
   type LiveTransactionAuthorization,
 } from '../revenue/LiveTransactionAuthorization';
+import {
+  LiveAuthorizationRequestManager,
+  type LiveAuthorizationRequest,
+  type LiveAuthorizationEvidence,
+  type LiveAuthorizationResult,
+  type LiveAuthorizationAuditRecord,
+} from './LiveAuthorizationRequestManager';
 import { getStripeMode, isLiveModeAuthorized } from '../revenue/stripe-mode';
 import { randomUUID } from 'crypto';
 
@@ -92,15 +99,28 @@ export class ProductionOperationsControlPlane {
   private config: ConfigurationControlPlane;
   private credentials: CredentialManager;
   private authManager: LiveTransactionAuthorizationManager;
+  private authRequestManager: LiveAuthorizationRequestManager | null;
 
   constructor(deps?: {
     config?: ConfigurationControlPlane;
     credentials?: CredentialManager;
     authManager?: LiveTransactionAuthorizationManager;
+    authRequestManager?: LiveAuthorizationRequestManager;
   }) {
     this.config = deps?.config ?? getConfigurationControlPlane();
     this.credentials = deps?.credentials ?? getCredentialManager();
     this.authManager = deps?.authManager ?? getLiveTransactionAuthorizationManager();
+    this.authRequestManager = deps?.authRequestManager ?? null;
+  }
+
+  /**
+   * Get the LiveAuthorizationRequestManager (lazy-init if not injected).
+   */
+  getAuthRequestManager(): LiveAuthorizationRequestManager {
+    if (!this.authRequestManager) {
+      this.authRequestManager = new LiveAuthorizationRequestManager(this.config, this.authManager);
+    }
+    return this.authRequestManager;
   }
 
   /**
@@ -492,7 +512,10 @@ export class ProductionOperationsControlPlane {
 
     // 2. Disable ALLOW_LIVE_STRIPE
     if (currentAllowLive === 'true') {
-      const result = this.config.set('ALLOW_LIVE_STRIPE', 'false', actor, reason);
+      // Disarm is safety-reducing (turning OFF live mode), so HYDI is allowed
+      // to do it autonomously. Use operatorOverride to bypass the autoModifiable
+      // check, since this is reducing risk, not increasing it.
+      const result = this.config.set('ALLOW_LIVE_STRIPE', 'false', actor, reason, true);
       if (result.success && result.verified) {
         actions.push('ALLOW_LIVE_STRIPE set to false (verified)');
       } else {
@@ -537,6 +560,126 @@ export class ProductionOperationsControlPlane {
       verified,
       auditRecord: { timestamp, action: 'disarm_live_qualification', actor, reason },
     };
+  }
+
+  /**
+   * Stage a live authorization request — the one-click "Authorize" flow.
+   *
+   * This runs all autonomous steps (preflight) and stages a
+   * LiveAuthorizationRequest that the human can resolve with a single click.
+   *
+   * This does NOT:
+   *   - set ALLOW_LIVE_STRIPE (that happens on approval click)
+   *   - issue a transaction authorization (that happens on approval click)
+   *   - execute a transaction
+   *   - display or require the Stripe key
+   *
+   * Returns the pending request with a human-readable summary.
+   */
+  async stageLiveAuthorization(params: {
+    customer?: string;
+    amountCents?: number;
+    product?: string;
+  }): Promise<LiveAuthorizationResult> {
+    // Run preflight to collect evidence
+    const preflight = await this.runPreflight();
+    const credHealth = await this.credentials.getStripeCredentialHealth();
+
+    const customer = params.customer || this.config.read('LIVE_QUALIFICATION_CUSTOMER_EMAIL') || '';
+    if (!customer) {
+      return {
+        success: false,
+        request: null,
+        transactionAuthorization: null,
+        error: 'No customer email configured. Set LIVE_QUALIFICATION_CUSTOMER_EMAIL or provide customer parameter.',
+      };
+    }
+
+    const evidence: LiveAuthorizationEvidence = {
+      verified: preflight.checks.filter(c => c.status === 'PASS').map(c => c.label),
+      notVerified: preflight.blockers.map(b => `${b.code}: ${b.description}`),
+      preflightState: preflight.state,
+      stripeMode: preflight.stripeMode || 'unknown',
+      stripeCredentialHealth: {
+        configured: credHealth.configured,
+        mode: credHealth.mode,
+        valid: credHealth.valid,
+        prefix: credHealth.prefix,
+      },
+      buildStatus: {
+        // These are not run here — they're filled in by the caller if desired
+        typecheck: false,
+        build: false,
+        tests: false,
+      },
+      collectedAt: new Date().toISOString(),
+    };
+
+    return this.getAuthRequestManager().stageAuthorization({
+      customer,
+      amountCents: params.amountCents,
+      product: params.product,
+      evidence,
+    });
+  }
+
+  /**
+   * Resolve a live authorization request — the "Allow" click.
+   *
+   * This is the operator action. It:
+   *   1. Sets ALLOW_LIVE_STRIPE=true (operatorOverride)
+   *   2. Issues a LiveTransactionAuthorization (single-use, scoped)
+   *   3. Records the audit trail
+   *
+   * This does NOT execute a transaction.
+   */
+  resolveLiveAuthorization(params: {
+    requestId: string;
+    resolvedBy: string;
+    resolution: 'approve' | 'deny';
+    resolvedVia?: string;
+  }): LiveAuthorizationResult {
+    const mgr = this.getAuthRequestManager();
+    if (params.resolution === 'approve') {
+      return mgr.resolveApproval({
+        requestId: params.requestId,
+        resolvedBy: params.resolvedBy,
+        resolvedVia: params.resolvedVia,
+      });
+    } else {
+      return mgr.resolveDenial({
+        requestId: params.requestId,
+        resolvedBy: params.resolvedBy,
+      });
+    }
+  }
+
+  /**
+   * Get the pending live authorization request (if any).
+   */
+  getPendingLiveAuthorizationRequest(): LiveAuthorizationRequest | null {
+    return this.getAuthRequestManager().getPending();
+  }
+
+  /**
+   * Get a live authorization request by ID.
+   */
+  getLiveAuthorizationRequest(requestId: string): LiveAuthorizationRequest | null {
+    return this.getAuthRequestManager().get(requestId);
+  }
+
+  /**
+   * Get the audit trail of all resolved authorization requests.
+   */
+  getLiveAuthorizationAuditTrail(): LiveAuthorizationAuditRecord[] {
+    return this.getAuthRequestManager().getAuditTrail();
+  }
+
+  /**
+   * Revoke a pending live authorization request.
+   */
+  revokeLiveAuthorizationRequest(requestId: string, revokedBy: string): LiveAuthorizationResult {
+    return this.getAuthRequestManager().revoke(requestId, revokedBy);
   }
 
   /**

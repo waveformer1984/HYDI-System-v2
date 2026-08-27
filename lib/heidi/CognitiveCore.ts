@@ -344,6 +344,12 @@ export interface ExecutionBridge {
     applySafeConfiguration: (key: string, value: string, reason: string) => Promise<unknown>;
     /** Disarm live qualification mode (safety-reducing, idempotent, autonomous-safe). */
     disarmLiveQualification: (reason?: string) => Promise<unknown>;
+    /** Stage a live authorization request (one-click Authorize flow). Does NOT set ALLOW_LIVE_STRIPE or issue auth. */
+    stageLiveAuthorization: (params?: { customer?: string; amountCents?: number; product?: string }) => Promise<unknown>;
+    /** Get the pending live authorization request (if any). */
+    getPendingLiveAuthorizationRequest: () => unknown;
+    /** Get a live authorization request by ID. */
+    getLiveAuthorizationRequest: (requestId: string) => unknown;
   } | null;
 }
 
