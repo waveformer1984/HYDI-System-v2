@@ -187,5 +187,110 @@ module.exports = {
       // + 6.6s additional safety for event-loop jitter under load.
       kill_timeout: 50000,
     },
+    {
+      // Stuck Job Scheduler: continuously runs the StuckJobDetector on an
+      // hourly interval to autonomously detect and recover stuck jobs.
+      // This is the first real autonomous operations goal — it runs on a
+      // real recurring trigger, not a one-off script.
+      // See lib/operational/StuckJobDetector.ts for the bounded recovery
+      // actions (retry once for executing, escalate for awaiting_review).
+      name: 'hydi-stuck-job-scheduler',
+      script: 'scripts/stuck-job-scheduler.js',
+      cwd: __dirname,
+      instances: 1,
+      exec_mode: 'fork',
+      args: '',
+      env: {
+        NODE_ENV: 'development',
+        STUCK_JOB_INTERVAL_MS: '3600000',  // 1 hour
+        STUCK_JOB_EXECUTING_HOURS: '4',
+        STUCK_JOB_REVIEW_HOURS: '48',
+      },
+      env_production: {
+        NODE_ENV: 'production',
+        STUCK_JOB_INTERVAL_MS: '3600000',
+        STUCK_JOB_EXECUTING_HOURS: '4',
+        STUCK_JOB_REVIEW_HOURS: '48',
+      },
+      autorestart: true,
+      watch: false,
+      max_memory_restart: '200M',
+      min_uptime: '10s',
+      max_restarts: 10,
+      restart_delay: 5000,
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+      error_file: './logs/pm2-stuck-job-scheduler.err.log',
+      out_file: './logs/pm2-stuck-job-scheduler.out.log',
+      merge_logs: true,
+      kill_timeout: 10000,
+    },
+    {
+      // Revenue Reconciliation Scheduler: runs the
+      // RevenueReconciliationDetector on a daily schedule.
+      // STRICTLY READ-ONLY — never modifies financial state.
+      // Discrepancies are escalated through EscalationNotifier.
+      name: 'hydi-revenue-reconciliation',
+      script: 'scripts/revenue-reconciliation-scheduler.js',
+      cwd: __dirname,
+      instances: 1,
+      exec_mode: 'fork',
+      args: '',
+      env: {
+        NODE_ENV: 'development',
+        RECONCILIATION_INTERVAL_MS: '86400000',  // 24 hours
+        RECONCILIATION_OBSERVE_ONLY: 'false',
+      },
+      env_production: {
+        NODE_ENV: 'production',
+        RECONCILIATION_INTERVAL_MS: '86400000',
+        RECONCILIATION_OBSERVE_ONLY: 'false',
+      },
+      autorestart: true,
+      watch: false,
+      max_memory_restart: '200M',
+      min_uptime: '10s',
+      max_restarts: 10,
+      restart_delay: 5000,
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+      error_file: './logs/pm2-revenue-reconciliation.err.log',
+      out_file: './logs/pm2-revenue-reconciliation.out.log',
+      merge_logs: true,
+      kill_timeout: 10000,
+    },
+    {
+      // Failed Webhook Retry Scheduler: runs the FailedWebhookDetector
+      // every 30 minutes. Retries failed webhooks ONCE (bounded),
+      // then escalates persistent failures. Stale 'processing' webhooks
+      // are escalated (not auto-reset) to avoid duplicate processing.
+      name: 'hydi-failed-webhook-retry',
+      script: 'scripts/failed-webhook-scheduler.js',
+      cwd: __dirname,
+      instances: 1,
+      exec_mode: 'fork',
+      args: '',
+      env: {
+        NODE_ENV: 'development',
+        WEBHOOK_RETRY_INTERVAL_MS: '1800000',  // 30 minutes
+        WEBHOOK_STALE_THRESHOLD_MS: '3600000', // 1 hour
+        WEBHOOK_RETRY_OBSERVE_ONLY: 'false',
+      },
+      env_production: {
+        NODE_ENV: 'production',
+        WEBHOOK_RETRY_INTERVAL_MS: '1800000',
+        WEBHOOK_STALE_THRESHOLD_MS: '3600000',
+        WEBHOOK_RETRY_OBSERVE_ONLY: 'false',
+      },
+      autorestart: true,
+      watch: false,
+      max_memory_restart: '200M',
+      min_uptime: '10s',
+      max_restarts: 10,
+      restart_delay: 5000,
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+      error_file: './logs/pm2-failed-webhook-retry.err.log',
+      out_file: './logs/pm2-failed-webhook-retry.out.log',
+      merge_logs: true,
+      kill_timeout: 10000,
+    },
   ],
 };
