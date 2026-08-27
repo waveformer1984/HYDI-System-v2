@@ -419,6 +419,131 @@ export class LiveAuthorizationRequestManager {
   }
 
   /**
+   * AUTO-REVERT: Check whether the authorized window has ended and revert
+   * ALLOW_LIVE_STRIPE to false if so.
+   *
+   * The authorized window ends when EITHER:
+   *   1. The LiveTransactionAuthorization is consumed (transaction completed)
+   *   2. The LiveTransactionAuthorization expires (15-minute window lapses)
+   *   3. The LiveTransactionAuthorization is revoked
+   *
+   * Whichever comes first. This method is idempotent — calling it when
+   * ALLOW_LIVE_STRIPE is already false is a no-op.
+   *
+   * This should be called:
+   *   - After every preflight check
+   *   - After every webhook event (in case the transaction completed)
+   *   - Periodically (e.g., from a health check or status report)
+   *
+   * Returns the revert action taken (if any) for audit logging.
+   */
+  checkAndAutoRevert(): { reverted: boolean; reason: string; authorizationId?: string } {
+    // If ALLOW_LIVE_STRIPE is not true, nothing to revert
+    const current = this.config.read('ALLOW_LIVE_STRIPE');
+    if (current !== 'true') {
+      return { reverted: false, reason: 'ALLOW_LIVE_STRIPE is not true — nothing to revert' };
+    }
+
+    // Find the approved request that set the flag
+    const approvedRequest = Array.from(this.requests.values()).find(
+      r => r.resolution === 'approved' && r.transactionAuthorizationId !== null
+    );
+
+    if (!approvedRequest || !approvedRequest.transactionAuthorizationId) {
+      // No approved request found — the flag was set by some other means.
+      // This shouldn't happen in the one-click flow, but if it does, leave
+      // the flag alone (don't autonomously revert an operator's manual setting).
+      return { reverted: false, reason: 'ALLOW_LIVE_STRIPE is true but no approved one-click request found — leaving flag unchanged' };
+    }
+
+    // Check the transaction authorization state
+    const auth = this.authManager.get(approvedRequest.transactionAuthorizationId);
+    if (!auth) {
+      // Authorization was deleted — revert the flag
+      this.config.set(
+        'ALLOW_LIVE_STRIPE',
+        'false',
+        'hydi:auto-revert',
+        `Auto-revert: transaction authorization ${approvedRequest.transactionAuthorizationId} not found`,
+        true, // operatorOverride — safety-reducing, autonomous-safe
+      );
+      return {
+        reverted: true,
+        reason: `Transaction authorization ${approvedRequest.transactionAuthorizationId} not found — ALLOW_LIVE_STRIPE reverted to false`,
+        authorizationId: approvedRequest.transactionAuthorizationId,
+      };
+    }
+
+    // If the authorization is consumed, expired, or revoked → revert the flag
+    if (auth.state === 'CONSUMED') {
+      this.config.set(
+        'ALLOW_LIVE_STRIPE',
+        'false',
+        'hydi:auto-revert',
+        `Auto-revert: transaction ${auth.authorizationId} was consumed (transaction completed)`,
+        true,
+      );
+      return {
+        reverted: true,
+        reason: `Transaction authorization ${auth.authorizationId} consumed — ALLOW_LIVE_STRIPE reverted to false`,
+        authorizationId: auth.authorizationId,
+      };
+    }
+
+    if (auth.state === 'EXPIRED') {
+      this.config.set(
+        'ALLOW_LIVE_STRIPE',
+        'false',
+        'hydi:auto-revert',
+        `Auto-revert: transaction ${auth.authorizationId} expired (15-minute window lapsed)`,
+        true,
+      );
+      return {
+        reverted: true,
+        reason: `Transaction authorization ${auth.authorizationId} expired — ALLOW_LIVE_STRIPE reverted to false`,
+        authorizationId: auth.authorizationId,
+      };
+    }
+
+    if (auth.state === 'REVOKED') {
+      this.config.set(
+        'ALLOW_LIVE_STRIPE',
+        'false',
+        'hydi:auto-revert',
+        `Auto-revert: transaction ${auth.authorizationId} was revoked`,
+        true,
+      );
+      return {
+        reverted: true,
+        reason: `Transaction authorization ${auth.authorizationId} revoked — ALLOW_LIVE_STRIPE reverted to false`,
+        authorizationId: auth.authorizationId,
+      };
+    }
+
+    if (auth.state === 'REJECTED') {
+      this.config.set(
+        'ALLOW_LIVE_STRIPE',
+        'false',
+        'hydi:auto-revert',
+        `Auto-revert: transaction ${auth.authorizationId} was rejected`,
+        true,
+      );
+      return {
+        reverted: true,
+        reason: `Transaction authorization ${auth.authorizationId} rejected — ALLOW_LIVE_STRIPE reverted to false`,
+        authorizationId: auth.authorizationId,
+      };
+    }
+
+    // Authorization is still PENDING — the window is still active
+    return {
+      reverted: false,
+      reason: `Transaction authorization ${auth.authorizationId} is still PENDING — authorized window active`,
+      authorizationId: auth.authorizationId,
+    };
+  }
+
+  /**
    * Get the current pending request, if any.
    * Auto-expires stale requests.
    */

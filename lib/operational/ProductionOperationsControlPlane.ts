@@ -144,6 +144,17 @@ export class ProductionOperationsControlPlane {
     const checks: PreflightCheck[] = [];
     const blockers: ProductionBlocker[] = [];
 
+    // AUTO-REVERT: Before reading the flag, check whether the authorized
+    // window has ended (transaction consumed, expired, or revoked) and
+    // revert ALLOW_LIVE_STRIPE to false if so. This ensures the flag
+    // doesn't stay true after the one authorized transaction completes
+    // or the 15-minute window lapses.
+    try {
+      this.getAuthRequestManager().checkAndAutoRevert();
+    } catch {
+      // Auto-revert failure must not block preflight
+    }
+
     // === Configuration checks ===
     const allowLive = this.config.read('ALLOW_LIVE_STRIPE');
     const customerEmail = this.config.read('LIVE_QUALIFICATION_CUSTOMER_EMAIL');
@@ -693,6 +704,13 @@ export class ProductionOperationsControlPlane {
     configAuditLog: import('./ConfigurationControlPlane').ConfigChange[];
     credentialAuditLog: any[];
   }> {
+    // AUTO-REVERT: Check whether the authorized window has ended
+    try {
+      this.getAuthRequestManager().checkAndAutoRevert();
+    } catch {
+      // Auto-revert failure must not block status report
+    }
+
     const stripeHealth = await this.credentials.getStripeCredentialHealth();
     const pendingAuth = this.authManager.getPending();
 

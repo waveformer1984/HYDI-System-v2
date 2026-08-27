@@ -65,6 +65,12 @@ function buildControlPlane(initialConfig: Record<string, string> = {}): {
   return { cp, config, authManager, reqManager, cleanup };
 }
 
+// process.env is global — clean up between ALL tests to prevent pollution
+// from tests that set ALLOW_LIVE_STRIPE in process.env via ConfigurationControlPlane
+afterEach(() => {
+  delete process.env.ALLOW_LIVE_STRIPE;
+});
+
 // ─── Section 1: Staging the authorization request ────────────────────────
 
 describe('One-click Authorize: staging', () => {
@@ -498,5 +504,208 @@ describe('One-click Authorize: structural enforcement', () => {
       expect(result.success).toBe(false);
       expect(result.error).toContain('not auto-modifiable');
     } finally { cleanup(); }
+  });
+});
+
+// ─── Section 8: Auto-revert of ALLOW_LIVE_STRIPE ─────────────────────────
+
+describe('One-click Authorize: auto-revert of ALLOW_LIVE_STRIPE', () => {
+  test('flag is false before authorization', async () => {
+    const { cp, config, cleanup } = buildControlPlane();
+    try {
+      expect(config.read('ALLOW_LIVE_STRIPE')).not.toBe('true');
+      expect(process.env.ALLOW_LIVE_STRIPE).not.toBe('true');
+    } finally { cleanup(); }
+  });
+
+  test('flag is true immediately after approval', async () => {
+    const { cp, config, cleanup } = buildControlPlane();
+    try {
+      const stage = await cp.stageLiveAuthorization({ customer: 'test@example.com' });
+      cp.resolveLiveAuthorization({
+        requestId: stage.request!.id,
+        resolvedBy: 'operator@test',
+        resolution: 'approve',
+      });
+      expect(config.read('ALLOW_LIVE_STRIPE')).toBe('true');
+    } finally { cleanup(); }
+  });
+
+  test('flag reverts to false after transaction is consumed (transaction completed)', async () => {
+    const { cp, config, authManager, reqManager, cleanup } = buildControlPlane();
+    try {
+      const stage = await cp.stageLiveAuthorization({ customer: 'test@example.com' });
+      const result = cp.resolveLiveAuthorization({
+        requestId: stage.request!.id,
+        resolvedBy: 'operator@test',
+        resolution: 'approve',
+      });
+      expect(config.read('ALLOW_LIVE_STRIPE')).toBe('true');
+
+      // Simulate the transaction completing — consume the authorization
+      const authId = result.transactionAuthorization!.authorizationId;
+      authManager.consume(authId, 'job-test-123', 2900, 'test@example.com');
+      expect(authManager.get(authId)!.state).toBe('CONSUMED');
+
+      // Now run checkAndAutoRevert — should revert the flag
+      const revertResult = reqManager.checkAndAutoRevert();
+      expect(revertResult.reverted).toBe(true);
+      expect(revertResult.reason).toContain('consumed');
+
+      // Flag should be false now
+      expect(config.read('ALLOW_LIVE_STRIPE')).toBe('false');
+    } finally { cleanup(); }
+  });
+
+  test('flag reverts to false after 15-minute window lapses (expired, unused)', async () => {
+    const { cp, config, authManager, reqManager, cleanup } = buildControlPlane();
+    try {
+      const stage = await cp.stageLiveAuthorization({ customer: 'test@example.com' });
+      cp.resolveLiveAuthorization({
+        requestId: stage.request!.id,
+        resolvedBy: 'operator@test',
+        resolution: 'approve',
+      });
+      expect(config.read('ALLOW_LIVE_STRIPE')).toBe('true');
+
+      // Simulate the 15-minute window lapsing — expire the authorization
+      const pendingAuth = authManager.getPending();
+      expect(pendingAuth).not.toBeNull();
+      if (pendingAuth) {
+        pendingAuth.expiresAt = new Date(Date.now() - 1000).toISOString(); // expired 1 second ago
+      }
+
+      // getPending() should auto-expire it
+      authManager.getPending();
+      const auth = authManager.get(pendingAuth!.authorizationId);
+      expect(auth!.state).toBe('EXPIRED');
+
+      // Now run checkAndAutoRevert — should revert the flag
+      const revertResult = reqManager.checkAndAutoRevert();
+      expect(revertResult.reverted).toBe(true);
+      expect(revertResult.reason).toContain('expired');
+
+      // Flag should be false now
+      expect(config.read('ALLOW_LIVE_STRIPE')).toBe('false');
+    } finally { cleanup(); }
+  });
+
+  test('flag reverts to false after authorization is revoked', async () => {
+    const { cp, config, authManager, reqManager, cleanup } = buildControlPlane();
+    try {
+      const stage = await cp.stageLiveAuthorization({ customer: 'test@example.com' });
+      const result = cp.resolveLiveAuthorization({
+        requestId: stage.request!.id,
+        resolvedBy: 'operator@test',
+        resolution: 'approve',
+      });
+      expect(config.read('ALLOW_LIVE_STRIPE')).toBe('true');
+
+      // Revoke the transaction authorization
+      authManager.revoke(result.transactionAuthorization!.authorizationId, 'operator@test');
+      const auth = authManager.get(result.transactionAuthorization!.authorizationId);
+      expect(auth!.state).toBe('REVOKED');
+
+      // Now run checkAndAutoRevert — should revert the flag
+      const revertResult = reqManager.checkAndAutoRevert();
+      expect(revertResult.reverted).toBe(true);
+      expect(revertResult.reason).toContain('revoked');
+
+      // Flag should be false now
+      expect(config.read('ALLOW_LIVE_STRIPE')).toBe('false');
+    } finally { cleanup(); }
+  });
+
+  test('flag stays true while authorization is still PENDING (window active)', async () => {
+    const { cp, config, reqManager, cleanup } = buildControlPlane();
+    try {
+      const stage = await cp.stageLiveAuthorization({ customer: 'test@example.com' });
+      cp.resolveLiveAuthorization({
+        requestId: stage.request!.id,
+        resolvedBy: 'operator@test',
+        resolution: 'approve',
+      });
+      expect(config.read('ALLOW_LIVE_STRIPE')).toBe('true');
+
+      // Run checkAndAutoRevert — should NOT revert (authorization still pending)
+      const revertResult = reqManager.checkAndAutoRevert();
+      expect(revertResult.reverted).toBe(false);
+      expect(revertResult.reason).toContain('PENDING');
+
+      // Flag should still be true
+      expect(config.read('ALLOW_LIVE_STRIPE')).toBe('true');
+    } finally { cleanup(); }
+  });
+
+  test('checkAndAutoRevert is idempotent — calling when already false is a no-op', async () => {
+    const { cp, config, reqManager, cleanup } = buildControlPlane();
+    try {
+      // Flag is false — calling checkAndAutoRevert should be a no-op
+      const revertResult = reqManager.checkAndAutoRevert();
+      expect(revertResult.reverted).toBe(false);
+      expect(config.read('ALLOW_LIVE_STRIPE')).not.toBe('true');
+    } finally { cleanup(); }
+  });
+
+  test('preflight triggers auto-revert when authorization is consumed', async () => {
+    const { cp, config, authManager, cleanup } = buildControlPlane();
+    try {
+      const stage = await cp.stageLiveAuthorization({ customer: 'test@example.com' });
+      const result = cp.resolveLiveAuthorization({
+        requestId: stage.request!.id,
+        resolvedBy: 'operator@test',
+        resolution: 'approve',
+      });
+      expect(config.read('ALLOW_LIVE_STRIPE')).toBe('true');
+
+      // Consume the authorization (transaction completed)
+      authManager.consume(result.transactionAuthorization!.authorizationId, 'job-123', 2900, 'test@example.com');
+
+      // Run preflight — should trigger auto-revert
+      await cp.runPreflight();
+      expect(config.read('ALLOW_LIVE_STRIPE')).toBe('false');
+    } finally { cleanup(); }
+  });
+});
+
+// ─── Section 9: process.env in-memory update ─────────────────────────────
+
+describe('One-click Authorize: process.env in-memory update', () => {
+  test('setting ALLOW_LIVE_STRIPE updates process.env immediately', async () => {
+    const { config, cleanup } = buildControlPlane();
+    try {
+      // Clear it first
+      delete process.env.ALLOW_LIVE_STRIPE;
+      expect(process.env.ALLOW_LIVE_STRIPE).toBeUndefined();
+
+      // Set it
+      config.set('ALLOW_LIVE_STRIPE', 'true', 'operator', 'one-click authorize', true);
+      expect(process.env.ALLOW_LIVE_STRIPE).toBe('true');
+    } finally {
+      delete process.env.ALLOW_LIVE_STRIPE;
+      cleanup();
+    }
+  });
+
+  test('reverting ALLOW_LIVE_STRIPE updates process.env immediately', async () => {
+    const { cp, config, authManager, reqManager, cleanup } = buildControlPlane();
+    try {
+      const stage = await cp.stageLiveAuthorization({ customer: 'test@example.com' });
+      const result = cp.resolveLiveAuthorization({
+        requestId: stage.request!.id,
+        resolvedBy: 'operator@test',
+        resolution: 'approve',
+      });
+      expect(process.env.ALLOW_LIVE_STRIPE).toBe('true');
+
+      // Consume and auto-revert
+      authManager.consume(result.transactionAuthorization!.authorizationId, 'job-123', 2900, 'test@example.com');
+      reqManager.checkAndAutoRevert();
+
+      expect(process.env.ALLOW_LIVE_STRIPE).toBe('false');
+    } finally {
+      delete process.env.ALLOW_LIVE_STRIPE;
+      cleanup();
+    }
   });
 });

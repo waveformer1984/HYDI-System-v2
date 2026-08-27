@@ -303,6 +303,14 @@ export class ConfigurationControlPlane {
       return { success: false, key, value: null, verified: false, error: msg };
     }
 
+    // Also update process.env in-memory so the running server sees the
+    // change without requiring a restart. This is critical for the one-click
+    // Authorize flow: the operator clicks "Allow", the flag is set, and
+    // StripeBridge (which reads process.env.ALLOW_LIVE_STRIPE) must see it
+    // immediately. Without this, the flag would only take effect after a
+    // server restart, making the 15-minute window meaningless.
+    process.env[key] = value;
+
     // Verify (read-back)
     const readBack = this.read(key);
     const verified = readBack === value;
@@ -336,6 +344,8 @@ export class ConfigurationControlPlane {
     } else {
       try {
         this.writeEnvValue(change.key, change.rollbackValue);
+        // Update process.env in-memory for the running server
+        process.env[change.key] = change.rollbackValue;
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'Unknown error';
         return { success: false, key: change.key, value: null, verified: false, error: msg };
@@ -457,6 +467,9 @@ export class ConfigurationControlPlane {
     }
 
     writeFileSync(this.envLocalPath, newLines.join('\n'), { encoding: 'utf8' });
+
+    // Also clear from process.env so the running server sees the removal
+    delete process.env[key];
   }
 }
 

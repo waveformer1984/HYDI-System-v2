@@ -6,10 +6,20 @@
 // confirms payment, the job transitions to 'queued'.
 //
 // This is the customer-facing entry point for the revenue loop.
+//
+// LIVE MODE GUARD: If Stripe is in live mode (ALLOW_LIVE_STRIPE=true
+// with a live key), this route checks for a valid pending
+// LiveTransactionAuthorization matching the customer email. If none
+// exists, the route refuses to create a live Checkout Session and
+// returns 403. This prevents real customer traffic from riding along
+// during a controlled qualification window — only the specifically
+// authorized qualification transaction may proceed.
 
 import { getJobManager } from '../../../../lib/revenue/JobManager';
 import { StripeBridge } from '../../../../lib/revenue/StripeBridge';
 import { getOfferCatalog } from '../../../../lib/revenue/OfferCatalog';
+import { getStripeMode } from '../../../../lib/revenue/stripe-mode';
+import { getLiveTransactionAuthorizationManager } from '../../../../lib/revenue/LiveTransactionAuthorization';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -61,6 +71,41 @@ export default async function handler(req, res) {
         checkoutUrl: null,
         message: 'Job created. Stripe not configured — use test mode to simulate payment.',
       });
+    }
+
+    // LIVE MODE GUARD: If Stripe is in live mode, require a valid pending
+    // LiveTransactionAuthorization matching this customer. This prevents
+    // real customer traffic from riding along during a controlled
+    // qualification window. Only the specifically authorized qualification
+    // transaction may proceed.
+    const stripeMode = getStripeMode();
+    if (stripeMode.mode === 'live') {
+      const authManager = getLiveTransactionAuthorizationManager();
+      const pendingAuth = authManager.getPending();
+      if (!pendingAuth) {
+        // No pending authorization — refuse live checkout
+        return res.status(403).json({
+          jobId: job.jobId,
+          error: 'Live mode is active but no transaction authorization is pending. Live checkout is restricted to controlled qualification transactions.',
+          liveModeGuarded: true,
+        });
+      }
+      // Check that the customer matches the authorized customer
+      if (pendingAuth.customer !== customerEmail) {
+        return res.status(403).json({
+          jobId: job.jobId,
+          error: 'Live mode is active but this customer does not match the authorized qualification customer. Live checkout is restricted to the controlled qualification transaction.',
+          liveModeGuarded: true,
+        });
+      }
+      // Check that the amount does not exceed the authorized amount
+      if (job.priceCents > pendingAuth.amountCents) {
+        return res.status(403).json({
+          jobId: job.jobId,
+          error: 'Live mode is active but the job price exceeds the authorized amount. Live checkout is restricted to the controlled qualification transaction.',
+          liveModeGuarded: true,
+        });
+      }
     }
 
     const origin = req.headers.origin || 'http://localhost:3000';

@@ -1,10 +1,27 @@
 /**
  * HYDI Revenue Engine API
  * REST endpoints for the 5 core money-making systems
+ *
+ * LIVE MODE GUARD: createCheckout checks for a valid pending
+ * LiveTransactionAuthorization when live mode is active. This
+ * prevents real customer traffic from riding along during a
+ * controlled qualification window.
  */
 
 const { createClient } = require('@supabase/supabase-js');
 const Stripe = require('stripe');
+
+// Lazy-loaded live mode guard helpers (avoid require-cycle at module load)
+let _getStripeMode = null;
+let _getLiveTransactionAuthorizationManager = null;
+function loadLiveModeGuard() {
+  if (!_getStripeMode) {
+    _getStripeMode = require('../lib/revenue/stripe-mode').getStripeMode;
+  }
+  if (!_getLiveTransactionAuthorizationManager) {
+    _getLiveTransactionAuthorizationManager = require('../lib/revenue/LiveTransactionAuthorization').getLiveTransactionAuthorizationManager;
+  }
+}
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -13,8 +30,8 @@ const supabase = createClient(
 
 const stripe = (process.env.STRIPE_SECRET_KEY)
   ? (process.env.STRIPE_SECRET_KEY.startsWith('sk_live_') && process.env.ALLOW_LIVE_STRIPE !== 'true'
-      ? null // refuse to construct a live client in dev/test without explicit opt-in
-      : new Stripe(process.env.STRIPE_SECRET_KEY))
+    ? null // refuse to construct a live client in dev/test without explicit opt-in
+    : new Stripe(process.env.STRIPE_SECRET_KEY))
   : null;
 
 class RevenueAPI {
@@ -29,10 +46,10 @@ class RevenueAPI {
       const { status, limit = 50 } = req.query;
       let query = this.supabase.from('leads').select('*').order('created_at', { ascending: false }).limit(parseInt(limit));
       if (status) query = query.eq('status', status);
-      
+
       const { data, error } = await query;
       if (error) throw error;
-      
+
       res.json({ success: true, leads: data });
     } catch (error) {
       res.status(500).json({ success: false, error: error.message });
@@ -48,10 +65,10 @@ class RevenueAPI {
         status: 'new',
         created_at: new Date().toISOString()
       };
-      
+
       const { data, error } = await this.supabase.from('leads').insert(lead).select().single();
       if (error) throw error;
-      
+
       res.json({ success: true, lead: data });
     } catch (error) {
       res.status(500).json({ success: false, error: error.message });
@@ -120,7 +137,32 @@ class RevenueAPI {
 
     try {
       const { quoteId, customerEmail } = req.body;
-      
+
+      // LIVE MODE GUARD: If Stripe is in live mode, require a valid pending
+      // LiveTransactionAuthorization matching this customer. This prevents
+      // real customer traffic from riding along during a controlled
+      // qualification window.
+      loadLiveModeGuard();
+      const stripeMode = _getStripeMode();
+      if (stripeMode.mode === 'live') {
+        const authManager = _getLiveTransactionAuthorizationManager();
+        const pendingAuth = authManager.getPending();
+        if (!pendingAuth) {
+          return res.status(403).json({
+            success: false,
+            error: 'Live mode is active but no transaction authorization is pending. Live checkout is restricted to controlled qualification transactions.',
+            liveModeGuarded: true,
+          });
+        }
+        if (pendingAuth.customer !== customerEmail) {
+          return res.status(403).json({
+            success: false,
+            error: 'Live mode is active but this customer does not match the authorized qualification customer.',
+            liveModeGuarded: true,
+          });
+        }
+      }
+
       // Get quote
       const { data: quote, error: quoteError } = await this.supabase.from('quotes').select('*').eq('id', quoteId).single();
       if (quoteError || !quote) throw new Error('Quote not found');
@@ -169,10 +211,10 @@ class RevenueAPI {
       const { period = 'today' } = req.query;
       const now = new Date();
       let startDate;
-      
-      switch(period) {
+
+      switch (period) {
         case 'today':
-          startDate = new Date(now.setHours(0,0,0,0));
+          startDate = new Date(now.setHours(0, 0, 0, 0));
           break;
         case 'week':
           startDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
