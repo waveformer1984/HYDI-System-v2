@@ -11,24 +11,41 @@ import { RevenueReconciliationDetector } from '../../lib/operational/RevenueReco
 import { resetEscalationNotifier } from '../../lib/operational/EscalationNotifier';
 
 // Mock Supabase client that returns configurable data
-function createMockSupabase(jobs: any[], ledgerEntries: any[], jobEvents: Record<string, any[]>) {
+function createMockSupabase(jobs: any[], ledgerEntries: any[], jobEvents: Record<string, any[]>, options?: { boundary?: string | null }) {
   const insertLog: any[] = [];
+  const boundary = options?.boundary;
 
   return {
     _insertLog: insertLog,
     from(table: string) {
+      if (table === 'operational_boundary') {
+        return {
+          select: () => ({
+            eq: () => ({
+              single: () => Promise.resolve({
+                data: boundary === undefined ? { go_live_at: new Date().toISOString() } : (boundary === null ? null : { go_live_at: boundary }),
+                error: boundary === null ? { message: 'not found' } : null,
+              }),
+            }),
+          }),
+        };
+      }
       if (table === 'customer_jobs') {
         return {
           select: () => ({
             in: (_col: string, _vals: any[]) => ({
-              or: (_filter: string) => Promise.resolve({ data: jobs, error: null }),
+              or: (_filter: string) => ({
+                gte: () => Promise.resolve({ data: jobs, error: null }),
+              }),
             }),
           }),
         };
       }
       if (table === 'revenue_ledger') {
         return {
-          select: () => Promise.resolve({ data: ledgerEntries, error: null }),
+          select: () => ({
+            gte: () => Promise.resolve({ data: ledgerEntries, error: null }),
+          }),
         };
       }
       if (table === 'operator_escalations') {
@@ -79,9 +96,9 @@ describe('RevenueReconciliationDetector qualification scenarios', () => {
   beforeEach(() => {
     resetEscalationNotifier();
     // Suppress console output during tests
-    jest.spyOn(console, 'log').mockImplementation(() => {});
-    jest.spyOn(console, 'error').mockImplementation(() => {});
-    jest.spyOn(console, 'warn').mockImplementation(() => {});
+    jest.spyOn(console, 'log').mockImplementation(() => { });
+    jest.spyOn(console, 'error').mockImplementation(() => { });
+    jest.spyOn(console, 'warn').mockImplementation(() => { });
   });
 
   afterEach(() => {

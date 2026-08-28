@@ -29,6 +29,7 @@
  */
 
 import { EscalationNotifier, getEscalationNotifier } from './EscalationNotifier';
+import { getOperationalBoundary, BoundaryResult } from './OperationalBoundary';
 import { createClient } from '@supabase/supabase-js';
 
 export interface WebhookRetrySummary {
@@ -84,12 +85,22 @@ export class FailedWebhookDetector {
     const timestamp = new Date().toISOString();
     console.log(`[${timestamp}] Failed Webhook Detector starting`);
 
-    // 1. Get all failed webhooks
-    const failedWebhooks = await this.getWebhooksByStatus('failed');
+    // 0. Fetch the operational boundary (go-live timestamp).
+    // Records created before this timestamp are test/qualification data
+    // and are excluded from detection to prevent false findings.
+    const boundary = await getOperationalBoundary(this.supabase);
+    if (boundary.hasBoundary) {
+      console.log(`  Operational boundary: go_live_at = ${boundary.goLiveAt}`);
+    } else {
+      console.log(`  Operational boundary: not set (no filtering)`);
+    }
+
+    // 1. Get all failed webhooks (filtered by boundary)
+    const failedWebhooks = await this.getWebhooksByStatus('failed', boundary);
     console.log(`  Failed webhooks: ${failedWebhooks.length}`);
 
-    // 2. Get stale 'processing' webhooks (stuck in processing)
-    const staleWebhooks = await this.getStaleProcessingWebhooks();
+    // 2. Get stale 'processing' webhooks (stuck in processing, filtered by boundary)
+    const staleWebhooks = await this.getStaleProcessingWebhooks(boundary);
     console.log(`  Stale processing webhooks: ${staleWebhooks.length}`);
 
     const details: WebhookRetrySummary['details'] = [];
@@ -204,14 +215,19 @@ export class FailedWebhookDetector {
 
   /**
    * Get webhooks by status.
+   * If a boundary is set, only webhooks created at or after the boundary
+   * are returned (pre-boundary webhooks are test/qualification data).
    */
-  private async getWebhooksByStatus(status: string): Promise<WebhookRecord[]> {
+  private async getWebhooksByStatus(status: string, boundary: BoundaryResult): Promise<WebhookRecord[]> {
     if (!this.supabase) return [];
-    const { data, error } = await this.supabase
+    let query = this.supabase
       .from('webhook_events')
       .select('id, event_id, type, status, payload, created_at')
-      .eq('status', status)
-      .order('created_at', { ascending: false });
+      .eq('status', status);
+    if (boundary.hasBoundary && boundary.goLiveAt) {
+      query = query.gte('created_at', boundary.goLiveAt);
+    }
+    const { data, error } = await query.order('created_at', { ascending: false });
     if (error || !data) {
       console.error(`  Webhook query (status=${status}) failed:`, error?.message);
       return [];
@@ -221,16 +237,21 @@ export class FailedWebhookDetector {
 
   /**
    * Get webhooks stuck in 'processing' status beyond the stale threshold.
+   * If a boundary is set, only webhooks created at or after the boundary
+   * are returned (pre-boundary webhooks are test/qualification data).
    */
-  private async getStaleProcessingWebhooks(): Promise<WebhookRecord[]> {
+  private async getStaleProcessingWebhooks(boundary: BoundaryResult): Promise<WebhookRecord[]> {
     if (!this.supabase) return [];
     const cutoff = new Date(Date.now() - this.staleThresholdMs).toISOString();
-    const { data, error } = await this.supabase
+    let query = this.supabase
       .from('webhook_events')
       .select('id, event_id, type, status, payload, created_at')
       .eq('status', 'processing')
-      .lt('created_at', cutoff)
-      .order('created_at', { ascending: false });
+      .lt('created_at', cutoff);
+    if (boundary.hasBoundary && boundary.goLiveAt) {
+      query = query.gte('created_at', boundary.goLiveAt);
+    }
+    const { data, error } = await query.order('created_at', { ascending: false });
     if (error || !data) {
       console.error('  Stale processing query failed:', error?.message);
       return [];

@@ -14,10 +14,12 @@ function createMockSupabase(config: {
   failedWebhooks?: any[];
   staleWebhooks?: any[];
   retryLog?: Record<string, boolean>;
+  boundary?: string | null;
 }) {
   const failedWebhooks = config.failedWebhooks || [];
   const staleWebhooks = config.staleWebhooks || [];
   const retryLog = config.retryLog || {};
+  const boundary = config.boundary;
   const insertLog: any[] = [];
   const updateLog: any[] = [];
 
@@ -30,6 +32,7 @@ function createMockSupabase(config: {
       },
       eq(_col: string, _val: string) { return this; },
       lt(_col: string, _val: string) { return this; },
+      gte(_col: string, _val: string) { return this; },
       order(_col: string, _opts: any) { return this; },
       limit(_n: number) { return this; },
       maybeSingle() { return Promise.resolve(resolveData); },
@@ -42,6 +45,18 @@ function createMockSupabase(config: {
     _insertLog: insertLog,
     _updateLog: updateLog,
     from(table: string) {
+      if (table === 'operational_boundary') {
+        return {
+          select: () => ({
+            eq: () => ({
+              single: () => Promise.resolve({
+                data: boundary === undefined ? { go_live_at: new Date().toISOString() } : (boundary === null ? null : { go_live_at: boundary }),
+                error: boundary === null ? { message: 'not found' } : null,
+              }),
+            }),
+          }),
+        };
+      }
       if (table === 'webhook_events') {
         return {
           select: (_cols?: string) => {
@@ -54,6 +69,7 @@ function createMockSupabase(config: {
                 return this;
               },
               lt(_col: string, _val: string) { return this; },
+              gte(_col: string, _val: string) { return this; },
               order(_col: string, _opts: any) { return this; },
               limit(_n: number) { return this; },
               then(resolve: any, reject: any) {

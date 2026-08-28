@@ -36,6 +36,7 @@
 
 import { RevenueReconciler, ReconciliationResult } from '../revenue/RevenueReconciler';
 import { EscalationNotifier, getEscalationNotifier } from './EscalationNotifier';
+import { getOperationalBoundary, isBeforeBoundary, BoundaryResult } from './OperationalBoundary';
 import { createClient } from '@supabase/supabase-js';
 
 export interface ReconciliationSummary {
@@ -78,12 +79,22 @@ export class RevenueReconciliationDetector {
     const timestamp = new Date().toISOString();
     console.log(`[${timestamp}] Revenue Reconciliation Detector starting`);
 
-    // 1. Get ledger summary
-    const ledgerSummary = await this.getLedgerSummary();
+    // 0. Fetch the operational boundary (go-live timestamp).
+    // Records created before this timestamp are test/qualification data
+    // and are excluded from detection to prevent false findings.
+    const boundary = await getOperationalBoundary(this.supabase);
+    if (boundary.hasBoundary) {
+      console.log(`  Operational boundary: go_live_at = ${boundary.goLiveAt}`);
+    } else {
+      console.log(`  Operational boundary: not set (no filtering)`);
+    }
+
+    // 1. Get ledger summary (filtered by boundary)
+    const ledgerSummary = await this.getLedgerSummary(boundary);
     console.log(`  Ledger: ${ledgerSummary.total} entries, ${ledgerSummary.verified} verified, ${ledgerSummary.unverified} unverified`);
 
-    // 2. Get all jobs that have reached payment/delivery stages
-    const jobs = await this.getRelevantJobs();
+    // 2. Get all jobs that have reached payment/delivery stages (filtered by boundary)
+    const jobs = await this.getRelevantJobs(boundary);
     console.log(`  Jobs to reconcile: ${jobs.length}`);
 
     // 3. Reconcile each job
@@ -169,14 +180,18 @@ export class RevenueReconciliationDetector {
 
   /**
    * Get a summary of the revenue ledger.
+   * If a boundary is set, only entries created at or after the boundary
+   * are counted (pre-boundary entries are test/qualification data).
    */
-  private async getLedgerSummary(): Promise<{ total: number; verified: number; unverified: number }> {
+  private async getLedgerSummary(boundary: BoundaryResult): Promise<{ total: number; verified: number; unverified: number }> {
     if (!this.supabase) {
       return { total: 0, verified: 0, unverified: 0 };
     }
-    const { data, error } = await this.supabase
-      .from('revenue_ledger')
-      .select('verified');
+    let query = this.supabase.from('revenue_ledger').select('verified, recorded_at');
+    if (boundary.hasBoundary && boundary.goLiveAt) {
+      query = query.gte('recorded_at', boundary.goLiveAt);
+    }
+    const { data, error } = await query;
     if (error || !data) {
       console.error('  Ledger query failed:', error?.message);
       return { total: 0, verified: 0, unverified: 0 };
@@ -189,17 +204,23 @@ export class RevenueReconciliationDetector {
   /**
    * Get jobs that are relevant for reconciliation.
    * Only jobs that have reached payment or delivery stages need reconciliation.
+   * If a boundary is set, only jobs created at or after the boundary are
+   * returned (pre-boundary jobs are test/qualification data).
    */
-  private async getRelevantJobs(): Promise<Array<{ job_id: string }>> {
+  private async getRelevantJobs(boundary: BoundaryResult): Promise<Array<{ job_id: string }>> {
     if (!this.supabase) {
       return [];
     }
     // Reconcile jobs that are delivered, awaiting_review, or have payment_status = 'paid'
-    const { data, error } = await this.supabase
+    let query = this.supabase
       .from('customer_jobs')
-      .select('job_id')
+      .select('job_id, created_at')
       .in('job_status', ['delivered', 'awaiting_review', 'failed', 'refunded'])
       .or('payment_status.eq.paid');
+    if (boundary.hasBoundary && boundary.goLiveAt) {
+      query = query.gte('created_at', boundary.goLiveAt);
+    }
+    const { data, error } = await query;
     if (error || !data) {
       console.error('  Jobs query failed:', error?.message);
       return [];

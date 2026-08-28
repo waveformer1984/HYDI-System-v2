@@ -51,6 +51,41 @@ npx jest --testNamePattern="should classify events"
 | DSL policy engine | `lib/protoforge/policy-engine.js` |
 | Test files | `tests/unit/` (unit), `tests/migrations/` (one per SQL migration) |
 
+## Operational Boundary (Test Data vs Production Data)
+
+The `operational_boundary` table (single row, `id=1`) defines a `go_live_at`
+timestamp that separates test/qualification data from real production data.
+All operational detectors respect this boundary:
+
+- `RevenueReconciliationDetector` — excludes jobs and ledger entries created before `go_live_at`
+- `FailedWebhookDetector` — excludes webhook events created before `go_live_at`
+- `StuckJobDetector` — should also respect this boundary going forward
+
+**Before running qualification tests** that create `customer_jobs`, `webhook_events`,
+or `revenue_ledger` rows against the local Supabase instance:
+
+1. Check the current boundary: `SELECT go_live_at FROM operational_boundary WHERE id = 1;`
+2. If your test data should be excluded from operational detectors, ensure it is
+   created **before** the current `go_live_at` timestamp (this is the default —
+   new test data created "now" will be after the boundary if the boundary was
+   set in the past).
+3. If you need to reset the boundary to exclude all existing data (including
+   data you just created), update it:
+   ```sql
+   UPDATE operational_boundary SET go_live_at = now(), updated_at = now() WHERE id = 1;
+   ```
+4. When the system actually goes live with real customers, set the boundary to
+   the real go-live timestamp:
+   ```sql
+   UPDATE operational_boundary SET go_live_at = '2026-09-01T00:00:00Z', updated_at = now() WHERE id = 1;
+   ```
+
+**Why this exists:** Without a boundary, every qualification test run pollutes
+the operational detectors with test data that looks like real discrepancies
+(e.g., "payment confirmed but no ledger entry" mismatches from test jobs that
+never went through the full ledger pipeline). The boundary ensures detectors
+only report on real production data.
+
 ## Hard Constraints — Never Violate
 
 ### Six-Layer Pipeline
