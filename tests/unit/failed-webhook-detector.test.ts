@@ -482,4 +482,96 @@ describe('FailedWebhookDetector qualification scenarios', () => {
     expect(summary.totalFailed).toBe(1);
     expect(summary.retried).toBe(1);
   });
+
+  // --- Persisted is_test_mode column tests ---
+  // These verify the durable marker that survives go-live mode transitions.
+  // The key scenario: system is in LIVE mode, but a record has is_test_mode=true
+  // (stamped at creation/backfill time). The record must still be excluded.
+
+  test('a backfilled record (is_test_mode=true) is excluded even when system is in LIVE mode', async () => {
+    // This is the direct proof that the exclusion survives the go-live transition.
+    // Before the fix, these 7 records were only excluded because getStripeMode()
+    // returned 'test'. After go-live, getStripeMode() returns 'live' and they
+    // would resurface. Now they're excluded via the persisted column.
+    const futureBoundary = '2020-01-01T00:00:00Z';
+    const failedWebhooks = [{
+      id: 'webhook-backfilled-test-mode',
+      event_id: 'evt_3U8YLcITaXOHazrh1XQMmQ0I',
+      type: 'charge.updated',
+      status: 'failed',
+      payload: {},
+      is_test_mode: true, // persisted marker — fixed at backfill time
+      created_at: new Date().toISOString(),
+    }];
+
+    // System is in LIVE mode — simulating post-go-live
+    jest.mocked(getStripeMode).mockReturnValueOnce({
+      mode: 'live', keyPrefix: 'sk_live_', liveAllowed: true, configured: true, webhookConfigured: true,
+    });
+
+    const mock = createMockSupabase({ failedWebhooks, retryLog: {}, boundary: futureBoundary });
+    const detector = new FailedWebhookDetector({ supabase: mock, observeOnly: false });
+
+    const summary = await detector.detectAndRecover();
+
+    // Excluded via persisted column, NOT via runtime mode check
+    expect(summary.totalFailed).toBe(0);
+    expect(summary.retried).toBe(0);
+    expect(summary.escalated).toBe(0);
+  });
+
+  test('a stale processing webhook with is_test_mode=true is excluded in LIVE mode', async () => {
+    // Same test but for stale processing webhooks (the exact 7 records)
+    const pastBoundary = '2020-01-01T00:00:00Z';
+    const staleWebhooks = [
+      { id: 'w-1', event_id: 'evt_3U8YLcITaXOHazrh1XQMmQ0I', type: 'charge.updated', status: 'processing', payload: {}, is_test_mode: true, created_at: '2020-06-01T00:00:00Z' },
+      { id: 'w-2', event_id: 'evt_3U8YLcITaXOHazrh1RmFKrZs', type: 'payment_intent.created', status: 'processing', payload: {}, is_test_mode: true, created_at: '2020-06-01T00:00:00Z' },
+      { id: 'w-3', event_id: 'evt_1U8YLdITaXOHazrhY3QdzvGS', type: 'checkout.session.completed', status: 'processing', payload: {}, is_test_mode: true, created_at: '2020-06-01T00:00:00Z' },
+      { id: 'w-4', event_id: 'evt_3U8YLcITaXOHazrh1Cj3dbVo', type: 'payment_intent.succeeded', status: 'processing', payload: {}, is_test_mode: true, created_at: '2020-06-01T00:00:00Z' },
+      { id: 'w-5', event_id: 'evt_3U8YLcITaXOHazrh116pvPHP', type: 'charge.succeeded', status: 'processing', payload: {}, is_test_mode: true, created_at: '2020-06-01T00:00:00Z' },
+      { id: 'w-6', event_id: 'evt_1U8YLaITaXOHazrhB51GSZmJ', type: 'price.created', status: 'processing', payload: {}, is_test_mode: true, created_at: '2020-06-01T00:00:00Z' },
+      { id: 'w-7', event_id: 'evt_1U8YLZITaXOHazrhaSQSjd84', type: 'product.created', status: 'processing', payload: {}, is_test_mode: true, created_at: '2020-06-01T00:00:00Z' },
+    ];
+
+    // System is in LIVE mode — simulating post-go-live
+    jest.mocked(getStripeMode).mockReturnValue({
+      mode: 'live', keyPrefix: 'sk_live_', liveAllowed: true, configured: true, webhookConfigured: true,
+    });
+
+    const mock = createMockSupabase({ staleWebhooks, retryLog: {}, boundary: pastBoundary });
+    const detector = new FailedWebhookDetector({ supabase: mock, observeOnly: false });
+
+    const summary = await detector.detectAndRecover();
+
+    // All 7 excluded via persisted column — zero findings
+    expect(summary.totalStale).toBe(0);
+    expect(summary.escalated).toBe(0);
+
+    // Restore default mock
+    jest.mocked(getStripeMode).mockReturnValue({
+      mode: 'live', keyPrefix: 'sk_live_', liveAllowed: true, configured: true, webhookConfigured: true,
+    });
+  });
+
+  test('a live-mode record with is_test_mode=false IS checked in LIVE mode', async () => {
+    const futureBoundary = '2020-01-01T00:00:00Z';
+    const failedWebhooks = [{
+      id: 'webhook-live-not-test',
+      event_id: 'evt_3U8YLcITaXOHazrh1XQMmQ0I',
+      type: 'checkout.session.completed',
+      status: 'failed',
+      payload: {},
+      is_test_mode: false, // explicitly marked as NOT test
+      created_at: new Date().toISOString(),
+    }];
+
+    const mock = createMockSupabase({ failedWebhooks, retryLog: {}, boundary: futureBoundary });
+    const detector = new FailedWebhookDetector({ supabase: mock, observeOnly: false });
+
+    const summary = await detector.detectAndRecover();
+
+    // Checked — it's a real live record
+    expect(summary.totalFailed).toBe(1);
+    expect(summary.retried).toBe(1);
+  });
 });

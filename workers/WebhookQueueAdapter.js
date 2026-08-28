@@ -8,6 +8,7 @@ const QueueManager = require('./QueueManager');
 const { createClient } = require('@supabase/supabase-js');
 require('dotenv').config();
 const logger = require('../lib/structured-logger').child({ component: 'WebhookQueueAdapter' });
+const { getStripeMode } = require('../lib/revenue/stripe-mode');
 
 class WebhookQueueAdapter {
     constructor() {
@@ -58,6 +59,10 @@ class WebhookQueueAdapter {
         }
 
         // Store webhook event for tracking
+        // Stamp is_test_mode at insert time based on the system's current Stripe mode.
+        // This makes every record self-describing — the detector doesn't need to
+        // check the runtime mode later (which would break at go-live).
+        const stripeMode = getStripeMode();
         const { data: webhookRecord, error: webhookError } = await this.supabase
             .from('webhook_events')
             .insert({
@@ -65,7 +70,8 @@ class WebhookQueueAdapter {
                 type: event.type,
                 status: 'queued',
                 payload: event,
-                created_at: new Date().toISOString()
+                created_at: new Date().toISOString(),
+                is_test_mode: stripeMode.mode === 'test'
             })
             .select()
             .single();

@@ -8,6 +8,7 @@ const HeidiRevenueOutreach = require('../../modules/heidi-revenue-outreach');
 const UniversalAgentBus = require('../../modules/universal-agent-bus');
 const WebhookQueueAdapter = require('../../workers/WebhookQueueAdapter');
 const { getRawBody } = require('../../lib/get-raw-body');
+const { getStripeMode } = require('../../lib/revenue/stripe-mode');
 
 require('dotenv').config();
 
@@ -154,9 +155,12 @@ async function handleStripeWebhook(req, res) {
   }
 
   // TRUE IDEMPOTENCY WITH RPC FUNCTION
+  // Stamp is_test_mode at insert time based on the system's current Stripe mode.
+  const stripeMode = getStripeMode();
   const { data: eventId } = await supabase.rpc('claim_webhook_event', {
     p_event_id: event.id,
-    p_type: event.type
+    p_type: event.type,
+    p_is_test_mode: stripeMode.mode === 'test'
   });
 
   // Already processed

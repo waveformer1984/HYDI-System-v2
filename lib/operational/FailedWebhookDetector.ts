@@ -57,6 +57,7 @@ export interface WebhookRecord {
   status: string;
   payload: any;
   created_at: string;
+  is_test_mode?: boolean | null;
 }
 
 // Threshold for considering a 'processing' webhook as stale (1 hour)
@@ -227,20 +228,26 @@ export class FailedWebhookDetector {
 
   /**
    * Check whether a webhook record is test-mode.
-   * A webhook is test-mode if ANY of:
-   *   - Its event_id starts with evt_test_ (synthetic test event), OR
-   *   - Its payload contains a cs_test_ checkout session ID, OR
-   *   - The system is currently running with a test-mode Stripe key (sk_test_).
-   *     In this case, ALL real Stripe events in the database were generated
-   *     in test mode, so they are all test data. This catches events with
-   *     real-looking IDs (e.g. evt_3U8YLcITaXOHazrh1XQMmQ0I) and empty payloads.
+   *
+   * Exclusion is checked in order of permanence:
+   *   1. Persisted is_test_mode column (fact fixed at creation/backfill time)
+   *      — this survives across go-live mode transitions.
+   *   2. evt_test_ prefix in event_id (synthetic test event — permanent property)
+   *   3. cs_test_ in payload (test-mode checkout session — permanent property)
+   *   4. System Stripe mode is 'test' (runtime fallback — only matters for
+   *      records created before the is_test_mode column existed and weren't
+   *      backfilled. After the backfill migration, this is a safety net only.)
    */
   private isTestWebhook(webhook: WebhookRecord): boolean {
-    // Check event_id first (fast path for synthetic test events)
+    // 1. Persisted column — check first, this is the durable marker
+    if (webhook.is_test_mode === true) {
+      return true;
+    }
+    // 2. Synthetic test event ID
     if (isSyntheticTestEvent(webhook.event_id)) {
       return true;
     }
-    // Check payload for cs_test_ checkout session ID
+    // 3. Test-mode checkout session in payload
     if (webhook.payload) {
       const payloadStr = typeof webhook.payload === 'string'
         ? webhook.payload
@@ -249,8 +256,7 @@ export class FailedWebhookDetector {
         return true;
       }
     }
-    // Check system Stripe mode: if the system is running with a test key,
-    // all real Stripe events are test-mode events.
+    // 4. Runtime system-mode fallback (for un-backfilled records only)
     const stripeMode = getStripeMode();
     if (stripeMode.mode === 'test') {
       return true;
@@ -267,7 +273,7 @@ export class FailedWebhookDetector {
     if (!this.supabase) return [];
     let query = this.supabase
       .from('webhook_events')
-      .select('id, event_id, type, status, payload, created_at')
+      .select('id, event_id, type, status, payload, created_at, is_test_mode')
       .eq('status', status);
     if (boundary.hasBoundary && boundary.goLiveAt) {
       query = query.gte('created_at', boundary.goLiveAt);
@@ -290,7 +296,7 @@ export class FailedWebhookDetector {
     const cutoff = new Date(Date.now() - this.staleThresholdMs).toISOString();
     let query = this.supabase
       .from('webhook_events')
-      .select('id, event_id, type, status, payload, created_at')
+      .select('id, event_id, type, status, payload, created_at, is_test_mode')
       .eq('status', 'processing')
       .lt('created_at', cutoff);
     if (boundary.hasBoundary && boundary.goLiveAt) {

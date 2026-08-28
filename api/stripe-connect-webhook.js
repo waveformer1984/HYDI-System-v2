@@ -6,6 +6,7 @@
 const Stripe = require('stripe');
 const { createClient } = require('@supabase/supabase-js');
 const { getRawBody } = require('../lib/get-raw-body');
+const { getStripeMode } = require('../lib/revenue/stripe-mode');
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 const supabase = createClient(
@@ -60,9 +61,12 @@ async function handler(req, res) {
 
   // Idempotency guard -- Stripe retries on timeout/non-2xx, which would otherwise
   // double-insert ledger rows. Shares the same webhook_events table/RPC as api/webhooks/stripe.js.
+  // Stamp is_test_mode at insert time based on the system's current Stripe mode.
+  const stripeMode = getStripeMode();
   const { data: claimedId } = await supabase.rpc('claim_webhook_event', {
     p_event_id: event.id,
     p_type: `connect:${event.type}`,
+    p_is_test_mode: stripeMode.mode === 'test',
   });
 
   if (!claimedId) {
@@ -122,8 +126,8 @@ async function handlePaymentIntentSucceeded(paymentIntent) {
 
   const charge = paymentIntent.latest_charge
     ? await stripe.charges.retrieve(paymentIntent.latest_charge, {
-        stripeAccount: connectAccountId,
-      })
+      stripeAccount: connectAccountId,
+    })
     : null;
 
   const gross = paymentIntent.amount / 100;
