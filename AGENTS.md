@@ -53,38 +53,55 @@ npx jest --testNamePattern="should classify events"
 
 ## Operational Boundary (Test Data vs Production Data)
 
+Operational detectors (`RevenueReconciliationDetector`, `FailedWebhookDetector`)
+use a **two-layer exclusion** to prevent test/qualification data from polluting
+findings:
+
+### Layer 1: Mode-based exclusion (primary, permanent)
+
+Every record created by a test/qualification run carries a permanent test-mode
+marker in its Stripe IDs. The detectors check these markers and exclude
+test-mode records automatically — no manual configuration needed.
+
+**For jobs** (`customer_jobs`):
+- A job is test-mode if its `stripe_checkout_session_id` starts with `cs_test_`
+  (vs `cs_live_` for real customer transactions).
+- A job with no checkout session ID is also treated as test-mode (defensive —
+  real live transactions always have a `cs_live_` ID).
+
+**For webhooks** (`webhook_events`):
+- A webhook is test-mode if its `event_id` starts with `evt_test_` (synthetic
+  test event), OR
+- Its payload contains a `cs_test_` checkout session ID, OR
+- The system is currently running with a test-mode Stripe key (`sk_test_`).
+  This catches real Stripe test-mode events (e.g. `evt_3U8YLcITaXOHazrh1XQMmQ0I`)
+  that have real-looking event IDs and may have empty payloads. When the system
+  has never been in live mode, all real Stripe events in the database were
+  generated in test mode.
+
+The mode check is implemented in `lib/revenue/stripe-mode.ts` (`isTestRecord`,
+`isTestCheckoutSession`, `isSyntheticTestEvent`, `getStripeMode`).
+
+**This is the primary mechanism. It works automatically. Qualification scripts
+do not need to do anything special — their test data will be excluded because
+it uses `cs_test_` checkout sessions and `evt_test_` event IDs.**
+
+### Layer 2: Timestamp boundary (secondary, historical floor)
+
 The `operational_boundary` table (single row, `id=1`) defines a `go_live_at`
-timestamp that separates test/qualification data from real production data.
-All operational detectors respect this boundary:
+timestamp. Records created before this timestamp are also excluded. This is a
+secondary guard for old records that might not have identifiable Stripe IDs.
 
-- `RevenueReconciliationDetector` — excludes jobs and ledger entries created before `go_live_at`
-- `FailedWebhookDetector` — excludes webhook events created before `go_live_at`
-- `StuckJobDetector` — should also respect this boundary going forward
+The boundary defaults to `now()`, meaning all existing data is treated as
+pre-go-live. When the system actually goes live, update it:
+```sql
+UPDATE operational_boundary SET go_live_at = '2026-09-01T00:00:00Z', updated_at = now() WHERE id = 1;
+```
 
-**Before running qualification tests** that create `customer_jobs`, `webhook_events`,
-or `revenue_ledger` rows against the local Supabase instance:
-
-1. Check the current boundary: `SELECT go_live_at FROM operational_boundary WHERE id = 1;`
-2. If your test data should be excluded from operational detectors, ensure it is
-   created **before** the current `go_live_at` timestamp (this is the default —
-   new test data created "now" will be after the boundary if the boundary was
-   set in the past).
-3. If you need to reset the boundary to exclude all existing data (including
-   data you just created), update it:
-   ```sql
-   UPDATE operational_boundary SET go_live_at = now(), updated_at = now() WHERE id = 1;
-   ```
-4. When the system actually goes live with real customers, set the boundary to
-   the real go-live timestamp:
-   ```sql
-   UPDATE operational_boundary SET go_live_at = '2026-09-01T00:00:00Z', updated_at = now() WHERE id = 1;
-   ```
-
-**Why this exists:** Without a boundary, every qualification test run pollutes
-the operational detectors with test data that looks like real discrepancies
-(e.g., "payment confirmed but no ledger entry" mismatches from test jobs that
-never went through the full ledger pipeline). The boundary ensures detectors
-only report on real production data.
+**The timestamp boundary is not the primary mechanism.** The mode check is.
+The timestamp only matters for records that predate both mechanisms. Going
+forward, mode detection keeps working automatically without any timestamp
+maintenance.
 
 ## Hard Constraints — Never Violate
 

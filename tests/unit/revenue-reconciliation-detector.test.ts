@@ -106,7 +106,7 @@ describe('RevenueReconciliationDetector qualification scenarios', () => {
   });
 
   test('a job with a real mismatch is detected and escalated', async () => {
-    const jobs = [{ job_id: 'job-mismatch-001' }];
+    const jobs = [{ job_id: 'job-mismatch-001', stripe_checkout_session_id: 'cs_live_test1' }];
     const ledger = [{ verified: true }, { verified: true }];
 
     const detector = new RevenueReconciliationDetector({
@@ -140,9 +140,9 @@ describe('RevenueReconciliationDetector qualification scenarios', () => {
 
   test('a healthy job population is NOT flagged as mismatch (false-positive prevention)', async () => {
     const jobs = [
-      { job_id: 'job-healthy-001' },
-      { job_id: 'job-healthy-002' },
-      { job_id: 'job-healthy-003' },
+      { job_id: 'job-healthy-001', stripe_checkout_session_id: 'cs_live_h1' },
+      { job_id: 'job-healthy-002', stripe_checkout_session_id: 'cs_live_h2' },
+      { job_id: 'job-healthy-003', stripe_checkout_session_id: 'cs_live_h3' },
     ];
     const ledger = [{ verified: true }, { verified: true }, { verified: true }];
 
@@ -186,7 +186,7 @@ describe('RevenueReconciliationDetector qualification scenarios', () => {
   });
 
   test('a job in BLOCKED state (awaiting_review) is NOT escalated', async () => {
-    const jobs = [{ job_id: 'job-blocked-001' }];
+    const jobs = [{ job_id: 'job-blocked-001', stripe_checkout_session_id: 'cs_live_blocked' }];
     const ledger = [{ verified: true }];
 
     const detector = new RevenueReconciliationDetector({
@@ -215,10 +215,10 @@ describe('RevenueReconciliationDetector qualification scenarios', () => {
 
   test('a mix of healthy and mismatched jobs only escalates the mismatches', async () => {
     const jobs = [
-      { job_id: 'job-healthy-001' },
-      { job_id: 'job-mismatch-001' },
-      { job_id: 'job-healthy-002' },
-      { job_id: 'job-blocked-001' },
+      { job_id: 'job-healthy-001', stripe_checkout_session_id: 'cs_live_h1' },
+      { job_id: 'job-mismatch-001', stripe_checkout_session_id: 'cs_live_m1' },
+      { job_id: 'job-healthy-002', stripe_checkout_session_id: 'cs_live_h2' },
+      { job_id: 'job-blocked-001', stripe_checkout_session_id: 'cs_live_b1' },
     ];
     const ledger = [{ verified: true }];
 
@@ -258,7 +258,7 @@ describe('RevenueReconciliationDetector qualification scenarios', () => {
   });
 
   test('observe-only mode detects mismatches but does NOT escalate', async () => {
-    const jobs = [{ job_id: 'job-mismatch-001' }];
+    const jobs = [{ job_id: 'job-mismatch-001', stripe_checkout_session_id: 'cs_live_obs' }];
     const ledger = [{ verified: false }];
 
     const detector = new RevenueReconciliationDetector({
@@ -301,5 +301,149 @@ describe('RevenueReconciliationDetector qualification scenarios', () => {
     expect(summary.mismatch).toBe(0);
     expect(summary.escalated).toBe(0);
     expect(summary.unverifiedLedgerEntries).toBe(0);
+  });
+
+  // --- Mode-based exclusion tests ---
+  // These verify the primary, permanent exclusion: test-mode records
+  // (cs_test_* checkout sessions) are excluded even when their timestamp
+  // is after the go_live_at boundary. This is the gap that the timestamp-only
+  // boundary would have missed.
+
+  test('a test-mode job (cs_test_) created AFTER the boundary is excluded', async () => {
+    // This is the specific scenario that would have slipped through the
+    // timestamp-only fix: a new test job created after go_live_at.
+    const futureBoundary = '2020-01-01T00:00:00Z'; // boundary in the past — everything is "after" it
+    const jobs = [{
+      job_id: 'job-test-after-boundary',
+      stripe_checkout_session_id: 'cs_test_newQualificationRun',
+      created_at: new Date().toISOString(),
+    }];
+    const ledger = [{ verified: true }];
+
+    const detector = new RevenueReconciliationDetector({
+      supabase: createMockSupabase(jobs, ledger, {}, { boundary: futureBoundary }),
+      observeOnly: false,
+    });
+
+    (detector as any).reconciler = mockReconciler({
+      'job-test-after-boundary': {
+        state: 'MISMATCH',
+        jobId: 'job-test-after-boundary',
+        timestamp: new Date().toISOString(),
+        correlation: {},
+        stages: {},
+        violations: ['SAFETY: Missing ledger entry'],
+        summary: 'Job job-test-after-boundary: MISMATCH.',
+      },
+    });
+
+    const summary = await detector.detectAndEscalate();
+
+    // The test-mode job must be excluded — zero findings
+    expect(summary.totalJobs).toBe(0);
+    expect(summary.mismatch).toBe(0);
+    expect(summary.escalated).toBe(0);
+  });
+
+  test('a live-mode job (cs_live_) created after the boundary IS checked', async () => {
+    const futureBoundary = '2020-01-01T00:00:00Z';
+    const jobs = [{
+      job_id: 'job-live-after-boundary',
+      stripe_checkout_session_id: 'cs_live_realCustomer123',
+      created_at: new Date().toISOString(),
+    }];
+    const ledger = [{ verified: true }];
+
+    const detector = new RevenueReconciliationDetector({
+      supabase: createMockSupabase(jobs, ledger, {}, { boundary: futureBoundary }),
+      observeOnly: false,
+    });
+
+    (detector as any).reconciler = mockReconciler({
+      'job-live-after-boundary': {
+        state: 'MISMATCH',
+        jobId: 'job-live-after-boundary',
+        timestamp: new Date().toISOString(),
+        correlation: {},
+        stages: {},
+        violations: ['SAFETY: Missing ledger entry'],
+        summary: 'Job job-live-after-boundary: MISMATCH.',
+      },
+    });
+
+    const summary = await detector.detectAndEscalate();
+
+    // The live-mode job must be checked — it's a real customer
+    expect(summary.totalJobs).toBe(1);
+    expect(summary.mismatch).toBe(1);
+    expect(summary.escalated).toBe(1);
+  });
+
+  test('a job with no checkout session ID is excluded (defensive)', async () => {
+    const futureBoundary = '2020-01-01T00:00:00Z';
+    const jobs = [{
+      job_id: 'job-no-checkout',
+      stripe_checkout_session_id: null,
+      created_at: new Date().toISOString(),
+    }];
+    const ledger = [{ verified: true }];
+
+    const detector = new RevenueReconciliationDetector({
+      supabase: createMockSupabase(jobs, ledger, {}, { boundary: futureBoundary }),
+      observeOnly: false,
+    });
+
+    (detector as any).reconciler = mockReconciler({});
+
+    const summary = await detector.detectAndEscalate();
+
+    // No checkout session = not a real live transaction = excluded
+    expect(summary.totalJobs).toBe(0);
+    expect(summary.escalated).toBe(0);
+  });
+
+  test('mix of test-mode and live-mode jobs — only live jobs are checked', async () => {
+    const futureBoundary = '2020-01-01T00:00:00Z';
+    const jobs = [
+      { job_id: 'job-test-1', stripe_checkout_session_id: 'cs_test_abc', created_at: new Date().toISOString() },
+      { job_id: 'job-live-1', stripe_checkout_session_id: 'cs_live_xyz', created_at: new Date().toISOString() },
+      { job_id: 'job-test-2', stripe_checkout_session_id: 'cs_test_def', created_at: new Date().toISOString() },
+      { job_id: 'job-live-2', stripe_checkout_session_id: 'cs_live_uvw', created_at: new Date().toISOString() },
+    ];
+    const ledger = [{ verified: true }];
+
+    const detector = new RevenueReconciliationDetector({
+      supabase: createMockSupabase(jobs, ledger, {}, { boundary: futureBoundary }),
+      observeOnly: false,
+    });
+
+    (detector as any).reconciler = mockReconciler({
+      'job-live-1': {
+        state: 'MISMATCH',
+        jobId: 'job-live-1',
+        timestamp: new Date().toISOString(),
+        correlation: {},
+        stages: {},
+        violations: ['SAFETY: Missing ledger entry'],
+        summary: 'Job job-live-1: MISMATCH.',
+      },
+      'job-live-2': {
+        state: 'CONSISTENT',
+        jobId: 'job-live-2',
+        timestamp: new Date().toISOString(),
+        correlation: {},
+        stages: {},
+        violations: [],
+        summary: 'Job job-live-2: all stages PASS',
+      },
+    });
+
+    const summary = await detector.detectAndEscalate();
+
+    // Only the 2 live jobs are checked; the 2 test jobs are excluded
+    expect(summary.totalJobs).toBe(2);
+    expect(summary.mismatch).toBe(1); // job-live-1
+    expect(summary.consistent).toBe(1); // job-live-2
+    expect(summary.escalated).toBe(1); // only the mismatch
   });
 });

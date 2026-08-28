@@ -15,6 +15,7 @@
  */
 
 require('./babel-register');
+require('dotenv').config({ path: '.env.local' });
 
 const { createClient } = require('@supabase/supabase-js');
 const { RevenueReconciliationDetector } = require('../lib/operational/RevenueReconciliationDetector');

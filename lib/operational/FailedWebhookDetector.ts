@@ -30,6 +30,7 @@
 
 import { EscalationNotifier, getEscalationNotifier } from './EscalationNotifier';
 import { getOperationalBoundary, BoundaryResult } from './OperationalBoundary';
+import { isTestRecord, isSyntheticTestEvent, getStripeMode } from '../revenue/stripe-mode';
 import { createClient } from '@supabase/supabase-js';
 
 export interface WebhookRetrySummary {
@@ -96,11 +97,22 @@ export class FailedWebhookDetector {
     }
 
     // 1. Get all failed webhooks (filtered by boundary)
-    const failedWebhooks = await this.getWebhooksByStatus('failed', boundary);
+    const rawFailed = await this.getWebhooksByStatus('failed', boundary);
+    // Filter out test-mode webhooks (evt_test_* event IDs or cs_test_* in payload).
+    // This is the primary, permanent exclusion — test-mode records are always
+    // test data regardless of timestamp.
+    const failedWebhooks = rawFailed.filter((w) => !this.isTestWebhook(w));
+    if (rawFailed.length !== failedWebhooks.length) {
+      console.log(`  Mode filter: excluded ${rawFailed.length - failedWebhooks.length} test-mode failed webhooks`);
+    }
     console.log(`  Failed webhooks: ${failedWebhooks.length}`);
 
     // 2. Get stale 'processing' webhooks (stuck in processing, filtered by boundary)
-    const staleWebhooks = await this.getStaleProcessingWebhooks(boundary);
+    const rawStale = await this.getStaleProcessingWebhooks(boundary);
+    const staleWebhooks = rawStale.filter((w) => !this.isTestWebhook(w));
+    if (rawStale.length !== staleWebhooks.length) {
+      console.log(`  Mode filter: excluded ${rawStale.length - staleWebhooks.length} test-mode stale webhooks`);
+    }
     console.log(`  Stale processing webhooks: ${staleWebhooks.length}`);
 
     const details: WebhookRetrySummary['details'] = [];
@@ -211,6 +223,39 @@ export class FailedWebhookDetector {
     console.log(`[${timestamp}] Failed Webhook Detector complete`);
 
     return summary;
+  }
+
+  /**
+   * Check whether a webhook record is test-mode.
+   * A webhook is test-mode if ANY of:
+   *   - Its event_id starts with evt_test_ (synthetic test event), OR
+   *   - Its payload contains a cs_test_ checkout session ID, OR
+   *   - The system is currently running with a test-mode Stripe key (sk_test_).
+   *     In this case, ALL real Stripe events in the database were generated
+   *     in test mode, so they are all test data. This catches events with
+   *     real-looking IDs (e.g. evt_3U8YLcITaXOHazrh1XQMmQ0I) and empty payloads.
+   */
+  private isTestWebhook(webhook: WebhookRecord): boolean {
+    // Check event_id first (fast path for synthetic test events)
+    if (isSyntheticTestEvent(webhook.event_id)) {
+      return true;
+    }
+    // Check payload for cs_test_ checkout session ID
+    if (webhook.payload) {
+      const payloadStr = typeof webhook.payload === 'string'
+        ? webhook.payload
+        : JSON.stringify(webhook.payload);
+      if (payloadStr.includes('cs_test_')) {
+        return true;
+      }
+    }
+    // Check system Stripe mode: if the system is running with a test key,
+    // all real Stripe events are test-mode events.
+    const stripeMode = getStripeMode();
+    if (stripeMode.mode === 'test') {
+      return true;
+    }
+    return false;
   }
 
   /**

@@ -37,6 +37,7 @@
 import { RevenueReconciler, ReconciliationResult } from '../revenue/RevenueReconciler';
 import { EscalationNotifier, getEscalationNotifier } from './EscalationNotifier';
 import { getOperationalBoundary, isBeforeBoundary, BoundaryResult } from './OperationalBoundary';
+import { isTestRecord } from '../revenue/stripe-mode';
 import { createClient } from '@supabase/supabase-js';
 
 export interface ReconciliationSummary {
@@ -204,8 +205,15 @@ export class RevenueReconciliationDetector {
   /**
    * Get jobs that are relevant for reconciliation.
    * Only jobs that have reached payment or delivery stages need reconciliation.
-   * If a boundary is set, only jobs created at or after the boundary are
-   * returned (pre-boundary jobs are test/qualification data).
+   *
+   * Two exclusion filters are applied:
+   *   1. Mode check (primary, permanent): excludes any job whose
+   *      stripe_checkout_session_id starts with cs_test_ (vs cs_live_).
+   *      This is a permanent property of the record — test-mode jobs
+   *      are always test data regardless of when they were created.
+   *   2. Timestamp boundary (secondary, historical floor): excludes
+   *      jobs created before go_live_at. This catches any old records
+   *      that might not have a checkout session ID at all.
    */
   private async getRelevantJobs(boundary: BoundaryResult): Promise<Array<{ job_id: string }>> {
     if (!this.supabase) {
@@ -214,7 +222,7 @@ export class RevenueReconciliationDetector {
     // Reconcile jobs that are delivered, awaiting_review, or have payment_status = 'paid'
     let query = this.supabase
       .from('customer_jobs')
-      .select('job_id, created_at')
+      .select('job_id, created_at, stripe_checkout_session_id')
       .in('job_status', ['delivered', 'awaiting_review', 'failed', 'refunded'])
       .or('payment_status.eq.paid');
     if (boundary.hasBoundary && boundary.goLiveAt) {
@@ -225,7 +233,16 @@ export class RevenueReconciliationDetector {
       console.error('  Jobs query failed:', error?.message);
       return [];
     }
-    return data;
+    // Filter out test-mode records (cs_test_* checkout sessions).
+    // This is the primary, permanent exclusion — test-mode records are
+    // always test data regardless of timestamp.
+    const liveJobs = data.filter((job: any) => {
+      return !isTestRecord({ checkoutSessionId: job.stripe_checkout_session_id });
+    });
+    if (data.length !== liveJobs.length) {
+      console.log(`  Mode filter: excluded ${data.length - liveJobs.length} test-mode jobs (cs_test_* checkout sessions)`);
+    }
+    return liveJobs;
   }
 
   /**

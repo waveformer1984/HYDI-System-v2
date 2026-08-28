@@ -16,6 +16,7 @@
  */
 
 require('./babel-register');
+require('dotenv').config({ path: '.env.local' });
 
 const { createClient } = require('@supabase/supabase-js');
 const { FailedWebhookDetector } = require('../lib/operational/FailedWebhookDetector');

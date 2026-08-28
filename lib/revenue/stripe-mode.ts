@@ -67,3 +67,77 @@ export function isLiveModeAuthorized(): boolean {
   const info = getStripeMode();
   return info.mode === 'live' && info.liveAllowed;
 }
+
+// ---------------------------------------------------------------------------
+// Per-record mode detection
+//
+// The system-level mode (above) tells you what key is configured. But each
+// individual record also carries a permanent test/live marker in its IDs:
+//
+//   - Checkout session IDs:  cs_test_*  (test)  vs  cs_live_*  (live)
+//   - Payment intent IDs:    pi_*       (both modes — check the checkout session)
+//   - Stripe event IDs:      evt_test_* is a synthetic test event;
+//                            evt_<real Stripe ID> is a real Stripe event.
+//                            Real Stripe events generated against a test key
+//                            (sk_test_) are test-mode events. The only way to
+//                            know that from the event ID alone is that real
+//                            Stripe event IDs have a distinctive base64-like
+//                            suffix (e.g. evt_3U8YLcITaXOHazrh1XQMmQ0I) while
+//                            synthetic test events use evt_test_ prefix.
+//
+// For operational detectors (RevenueReconciliation, FailedWebhook), the key
+// question is: "was this record created by a test/qualification run, or by a
+// real customer transaction?" The per-record checks below answer that.
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns true if a Stripe checkout session ID is a test-mode session.
+ * Stripe checkout session IDs start with `cs_test_` (test) or `cs_live_` (live).
+ * A null/empty ID is treated as test-mode (defensive — real live transactions
+ * always have a cs_live_ ID).
+ */
+export function isTestCheckoutSession(checkoutSessionId: string | null | undefined): boolean {
+  if (!checkoutSessionId) return true; // defensive: no checkout = not a real live transaction
+  return checkoutSessionId.startsWith('cs_test_');
+}
+
+/**
+ * Returns true if a Stripe event ID is a synthetic test event.
+ * Synthetic test events created by qualification scripts use the `evt_test_`
+ * prefix. Real Stripe events use `evt_` followed by a base64-like ID.
+ *
+ * Note: real Stripe events generated against a sk_test_ key are also test-mode
+ * events, but they cannot be distinguished from live events by event ID alone.
+ * The caller should additionally check the checkout session ID or the system
+ * mode if it matters to distinguish "real Stripe test-mode event" from
+ * "real Stripe live-mode event". For operational detector purposes, the
+ * evt_test_ prefix is sufficient — real Stripe test-mode events would only
+ * appear in this database if a qualification script triggered them, which
+ * means they're test data regardless.
+ */
+export function isSyntheticTestEvent(eventId: string | null | undefined): boolean {
+  if (!eventId) return true; // defensive
+  return eventId.startsWith('evt_test_');
+}
+
+/**
+ * Returns true if a record is test-mode based on its checkout session ID
+ * OR its event ID. This is the combined check for operational detectors.
+ *
+ * If the checkout session ID is available and starts with cs_test_, the
+ * record is test-mode. If the event ID starts with evt_test_, the record
+ * is test-mode. If neither is available, the record is treated as test-mode
+ * (defensive — real live records always have identifiable live IDs).
+ */
+export function isTestRecord(options: {
+  checkoutSessionId?: string | null;
+  eventId?: string | null;
+}): boolean {
+  if (options.checkoutSessionId !== undefined) {
+    return isTestCheckoutSession(options.checkoutSessionId);
+  }
+  if (options.eventId !== undefined) {
+    return isSyntheticTestEvent(options.eventId);
+  }
+  return true; // defensive: no identifiers = treat as test
+}
