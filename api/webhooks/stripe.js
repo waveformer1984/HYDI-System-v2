@@ -257,6 +257,14 @@ async function handleStripeWebhook(req, res) {
   }
 
   // GATE 3: URSULA (Queue for async processing)
+  // NOTE: The async-queue fallback path does NOT call consume() on the
+  // LiveTransactionAuthorization. consume() only runs in the synchronous
+  // fast path above (lines 220-238). If processJobPaymentConfirmation
+  // throws and the event falls through to this queue, the authorization
+  // stays RESERVED until it expires (15-minute safety net), at which point
+  // autoRevertAllowedStripe() reverts ALLOW_LIVE_STRIPE to false. This is
+  // an accepted gap — the async worker handles the old tier/subscription
+  // flow, not the job-based checkout flow that uses live authorizations.
   console.log(`[🚀 CASCADE PASSED] Queuing event for processing: ${event.type}`);
 
   try {
@@ -424,7 +432,9 @@ async function createPaidLead(email, customerId, tier, session) {
     console.log(`Created paid lead for ${email} (${tier} tier)`);
     return data[0];
   } catch (err) {
-    console.error('Failed to create paid lead:', err);
+    console.error('Failed to create paid lead:', err instanceof Error ? err.message : String(err),
+      (err && typeof err === 'object' && 'type' in err) ? `type=${err.type}` : '',
+      (err && typeof err === 'object' && 'code' in err) ? `code=${err.code}` : '');
     throw err;
   }
 }
@@ -522,7 +532,9 @@ async function updateHeidiMemory(email, interactionType, data) {
         interaction_data: data
       });
   } catch (err) {
-    console.error('Failed to update Heidi memory:', err);
+    console.error('Failed to update Heidi memory:', err instanceof Error ? err.message : String(err),
+      (err && typeof err === 'object' && 'type' in err) ? `type=${err.type}` : '',
+      (err && typeof err === 'object' && 'code' in err) ? `code=${err.code}` : '');
   }
 }
 
@@ -531,7 +543,9 @@ async function updateRevenueMetrics(amount, currency) {
     // This would update a revenue tracking table
     console.log(`Revenue updated: ${amount} ${currency}`);
   } catch (err) {
-    console.error('Failed to update revenue metrics:', err);
+    console.error('Failed to update revenue metrics:', err instanceof Error ? err.message : String(err),
+      (err && typeof err === 'object' && 'type' in err) ? `type=${err.type}` : '',
+      (err && typeof err === 'object' && 'code' in err) ? `code=${err.code}` : '');
   }
 }
 
@@ -546,7 +560,9 @@ async function getCustomerEmail(customerId) {
     const customer = await stripe.customers.retrieve(customerId);
     return { email: customer.email };
   } catch (err) {
-    console.error('Failed to get customer:', err);
+    console.error('Failed to get customer:', err instanceof Error ? err.message : String(err),
+      (err && typeof err === 'object' && 'type' in err) ? `type=${err.type}` : '',
+      (err && typeof err === 'object' && 'code' in err) ? `code=${err.code}` : '');
     return null;
   }
 }
@@ -556,7 +572,9 @@ async function updateCustomerTier(customerId, tier, subscription) {
     // Update customer's tier in database
     console.log(`Updated customer ${customerId} to ${tier} tier`);
   } catch (err) {
-    console.error('Failed to update customer tier:', err);
+    console.error('Failed to update customer tier:', err instanceof Error ? err.message : String(err),
+      (err && typeof err === 'object' && 'type' in err) ? `type=${err.type}` : '',
+      (err && typeof err === 'object' && 'code' in err) ? `code=${err.code}` : '');
   }
 }
 
@@ -565,7 +583,9 @@ async function extendSubscriptionServices(customerId, invoice) {
     // Extend service access
     console.log(`Extended services for customer ${customerId}`);
   } catch (err) {
-    console.error('Failed to extend services:', err);
+    console.error('Failed to extend services:', err instanceof Error ? err.message : String(err),
+      (err && typeof err === 'object' && 'type' in err) ? `type=${err.type}` : '',
+      (err && typeof err === 'object' && 'code' in err) ? `code=${err.code}` : '');
   }
 }
 
@@ -574,7 +594,9 @@ async function deactivateServices(customerId) {
     // Deactivate customer's services
     console.log(`Deactivated services for customer ${customerId}`);
   } catch (err) {
-    console.error('Failed to deactivate services:', err);
+    console.error('Failed to deactivate services:', err instanceof Error ? err.message : String(err),
+      (err && typeof err === 'object' && 'type' in err) ? `type=${err.type}` : '',
+      (err && typeof err === 'object' && 'code' in err) ? `code=${err.code}` : '');
   }
 }
 
