@@ -50,7 +50,10 @@ try {
 // ---------------------------------------------------------------------------
 const argv = process.argv.slice(2);
 const flags = {
-  prod: argv.includes('--prod'),
+  // --prod flag OR NODE_ENV=production triggers production mode (argsProd).
+  // This allows PM2's --env production to work without passing --prod explicitly,
+  // since PM2 doesn't support per-env args directly.
+  prod: argv.includes('--prod') || process.env.NODE_ENV === 'production',
   noHealth: argv.includes('--no-health'),
   dryRun: argv.includes('--dry-run'),
   json: argv.includes('--json'),
