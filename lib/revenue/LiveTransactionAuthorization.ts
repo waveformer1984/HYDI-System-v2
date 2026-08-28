@@ -177,14 +177,25 @@ export class LiveTransactionAuthorizationManager {
   }
 
   /**
-   * Atomically reserve an authorization for a checkout session.
+   * Reserve an authorization for a checkout session.
    *
    * This transitions PENDING → RESERVED, binding the checkout session ID.
    * The authorization is NOT consumed — consumption happens only when the
    * webhook confirms payment (checkout.session.completed).
    *
-   * This is atomic: if the auth is not PENDING, the reservation fails.
-   * Two concurrent requests cannot both reserve the same authorization.
+   * Concurrency guarantee: This method is synchronous. In a single Node.js
+   * process, the event loop cannot interleave two synchronous calls — the
+   * first reserve() runs to completion (including writeFileSync) before the
+   * second begins. Therefore two concurrent requests (e.g. Promise.all)
+   * cannot both pass the PENDING check and both transition to RESERVED.
+   * Only the first wins; the second sees RESERVED and fails.
+   *
+   * Multi-process caveat: If PM2 cluster mode or any multi-process deployment
+   * runs this route in more than one process, each process has its own
+   * in-memory Map and singleton. Two processes could both read PENDING from
+   * disk and both write RESERVED. For multi-process safety, move the store
+   * to the database with a conditional UPDATE (WHERE state = 'PENDING') and
+   * check the affected row count.
    *
    * If the auth is already RESERVED with the same checkout session ID,
    * this is idempotent (returns success) — this supports retry within

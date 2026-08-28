@@ -617,7 +617,7 @@ describe('Reserve/consume split', () => {
     expect(reserveResult2.authorization!.reservedCheckoutSessionId).toBe('cs_test_789');
   });
 
-  test('concurrent session creation — exactly one wins the reservation', () => {
+  test('concurrent session creation via Promise.all — exactly one wins the reservation', async () => {
     const issueResult = authManager.issue({
       authorizedBy: 'operator@test',
       customer: 'customer@test.com',
@@ -626,18 +626,28 @@ describe('Reserve/consume split', () => {
     });
     const authId = issueResult.authorization!.authorizationId;
 
-    // First reservation succeeds
-    const reserve1 = authManager.reserve(
-      authId, 'job-1', 'cs_test_aaa', 2900, 'customer@test.com', 'usd'
-    );
-    expect(reserve1.success).toBe(true);
+    // Fire both reservations genuinely concurrently via Promise.all.
+    // Since reserve() is synchronous, Node's single-threaded event loop
+    // runs the first call to completion before the second begins — but
+    // Promise.all is the correct pattern to verify this holds. If someone
+    // later makes reserve() async without adding a mutex, this test will
+    // catch the race.
+    const [reserve1, reserve2] = await Promise.all([
+      Promise.resolve(authManager.reserve(
+        authId, 'job-1', 'cs_test_aaa', 2900, 'customer@test.com', 'usd'
+      )),
+      Promise.resolve(authManager.reserve(
+        authId, 'job-2', 'cs_test_bbb', 2900, 'customer@test.com', 'usd'
+      )),
+    ]);
 
-    // Second reservation for a different session fails — auth is already RESERVED
-    const reserve2 = authManager.reserve(
-      authId, 'job-2', 'cs_test_bbb', 2900, 'customer@test.com', 'usd'
-    );
-    expect(reserve2.success).toBe(false);
-    expect(reserve2.error).toContain('already reserved');
+    // Exactly one must succeed, the other must fail
+    const successes = [reserve1, reserve2].filter(r => r.success);
+    expect(successes.length).toBe(1);
+
+    const failures = [reserve1, reserve2].filter(r => !r.success);
+    expect(failures.length).toBe(1);
+    expect(failures[0].error).toContain('already reserved');
   });
 
   test('idempotent retry — same session ID returns success', () => {

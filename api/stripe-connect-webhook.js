@@ -119,7 +119,13 @@ async function handler(req, res) {
 
     return res.status(200).json({ received: true });
   } catch (error) {
-    console.error('[Connect Webhook] Processing error:', error);
+    // Log only safe fields — never the raw error object, which may contain
+    // request headers or the Stripe secret key if Stripe includes them in
+    // the error response.
+    const msg = error instanceof Error ? error.message : String(error);
+    const type = (error && typeof error === 'object' && 'type' in error) ? error.type : undefined;
+    const code = (error && typeof error === 'object' && 'code' in error) ? error.code : undefined;
+    console.error('[Connect Webhook] Processing error:', msg, type ? `type=${type}` : '', code ? `code=${code}` : '');
     return res.status(500).json({ error: 'Internal server error' });
   }
 }
