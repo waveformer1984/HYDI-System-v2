@@ -92,6 +92,7 @@ describe('webhook idempotency', () => {
     expect(mockRpc).toHaveBeenCalledWith('claim_webhook_event', {
       p_event_id: 'evt_dup_test',
       p_type: 'connect:payment_intent.succeeded',
+      p_is_test_mode: true,
     });
   });
 
@@ -194,6 +195,74 @@ describe('FEE_STRUCTURE', () => {
       (gross * FEE_STRUCTURE.stripe_fee_percent) / 100 + FEE_STRUCTURE.stripe_fixed_fee;
     expect(platform + agent + stripeFee).toBeCloseTo(18.2, 2);
   });
+});
+
+describe('live-mode guard', () => {
+  // The connect webhook handler must refuse to process live-mode webhooks
+  // when ALLOW_LIVE_STRIPE is not explicitly set to 'true'. This prevents
+  // live Connect webhooks from being processed without explicit authorization.
+  it('returns 503 when live key is configured but ALLOW_LIVE_STRIPE is not true', async () => {
+    // Save and restore env
+    const savedKey = process.env.STRIPE_SECRET_KEY;
+    const savedAllow = process.env.ALLOW_LIVE_STRIPE;
+    process.env.STRIPE_SECRET_KEY = 'sk_live_testguardkey1234567890abcdef';
+    delete process.env.ALLOW_LIVE_STRIPE;
+
+    try {
+      // Re-require to pick up new env (module may be cached with old config)
+      // The handler reads getStripeMode() at request time, so we just need
+      // the env vars set.
+      const req = { method: 'POST', headers: { 'stripe-signature': 'sig' }, body: Buffer.from('{}') };
+      const res = fakeRes();
+      await handler(req, res);
+
+      expect(res.statusCode).toBe(503);
+      expect(res.body.error).toContain('Live mode not authorized');
+    } finally {
+      // Restore env
+      process.env.STRIPE_SECRET_KEY = savedKey;
+      if (savedAllow) process.env.ALLOW_LIVE_STRIPE = savedAllow;
+      else delete process.env.ALLOW_LIVE_STRIPE;
+    }
+  });
+
+  it('does not block test-mode webhooks (sk_test_ key)', async () => {
+    // Save and restore env
+    const savedKey = process.env.STRIPE_SECRET_KEY;
+    process.env.STRIPE_SECRET_KEY = 'sk_test_fake';
+
+    try {
+      mockConstructEvent.mockReturnValue({
+        id: 'evt_test_guard_check',
+        type: 'payment_intent.succeeded',
+        data: { object: { id: 'pi_test', amount: 1000, currency: 'usd', metadata: {} } },
+      });
+      mockRpc.mockResolvedValueOnce({ data: 'claim_guard', error: null });
+
+      const req = { method: 'POST', headers: { 'stripe-signature': 'sig' }, body: Buffer.from('{}') };
+      const res = fakeRes();
+      await handler(req, res);
+
+      // Should NOT be 503 — test mode is allowed
+      expect(res.statusCode).not.toBe(503);
+    } finally {
+      process.env.STRIPE_SECRET_KEY = savedKey;
+    }
+  });
+});
+
+afterAll(() => {
+  // Clean up env vars to prevent leakage to other test files
+  delete process.env.STRIPE_SECRET_KEY;
+  delete process.env.SUPABASE_URL;
+  delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+  delete process.env.STRIPE_CONNECT_WEBHOOK_SECRET;
+  delete process.env.STRIPE_ACCOUNT_GALACTIC_BYTES;
+  delete process.env.STRIPE_ACCOUNT_DETAILER_BOT;
+  delete process.env.STRIPE_ACCOUNT_LIPI_V2;
+  delete process.env.STRIPE_ACCOUNT_PROTOGRANCE_AROMATICS;
+  delete process.env.STRIPE_ACCOUNT_REZONATE;
+  delete process.env.STRIPE_ACCOUNT_WAVEFORMER_STUDIO;
 });
 
 describe('REVENUE_STREAM_ACCOUNTS', () => {

@@ -6,7 +6,7 @@
 const Stripe = require('stripe');
 const { createClient } = require('@supabase/supabase-js');
 const { getRawBody } = require('../lib/get-raw-body');
-const { getStripeMode } = require('../lib/revenue/stripe-mode');
+const { getStripeMode, isLiveModeAuthorized } = require('../lib/revenue/stripe-mode');
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 const supabase = createClient(
@@ -37,6 +37,15 @@ async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
+  // Live-mode guard: if the configured key is a live key but ALLOW_LIVE_STRIPE
+  // is not explicitly set to 'true', refuse to process. This prevents live
+  // Connect webhooks from being processed without explicit authorization.
+  const stripeMode = getStripeMode();
+  if (stripeMode.configured && stripeMode.keyPrefix.startsWith('sk_live_') && !isLiveModeAuthorized()) {
+    console.error('[Connect Webhook] Live Stripe key detected but ALLOW_LIVE_STRIPE is not "true" — refusing to process webhook');
+    return res.status(503).json({ error: 'Live mode not authorized' });
+  }
+
   const sig = req.headers['stripe-signature'];
   const webhookSecret = process.env.STRIPE_CONNECT_WEBHOOK_SECRET;
 
@@ -62,7 +71,6 @@ async function handler(req, res) {
   // Idempotency guard -- Stripe retries on timeout/non-2xx, which would otherwise
   // double-insert ledger rows. Shares the same webhook_events table/RPC as api/webhooks/stripe.js.
   // Stamp is_test_mode at insert time based on the system's current Stripe mode.
-  const stripeMode = getStripeMode();
   const { data: claimedId } = await supabase.rpc('claim_webhook_event', {
     p_event_id: event.id,
     p_type: `connect:${event.type}`,

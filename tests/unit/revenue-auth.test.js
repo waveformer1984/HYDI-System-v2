@@ -43,6 +43,14 @@ beforeAll(() => {
   process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-key';
 });
 
+afterAll(() => {
+  // Restore env vars to prevent leakage to other test files that may
+  // run in the same Jest worker process.
+  delete process.env.HYDI_SERVICE_SECRET;
+  delete process.env.SUPABASE_URL;
+  delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+});
+
 beforeEach(() => {
   require('../../lib/rate-limit').__reset();
 });

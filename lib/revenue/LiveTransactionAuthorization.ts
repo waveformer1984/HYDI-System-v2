@@ -172,12 +172,14 @@ export class LiveTransactionAuthorizationManager {
   /**
    * Validate and consume an authorization for a specific transaction.
    * This is single-use — once consumed, the authorization cannot be reused.
+   * @param currency Optional currency check — if provided, must match the authorized currency.
    */
   consume(
     authorizationId: string,
     jobId: string,
     amountCents: number,
-    customer: string
+    customer: string,
+    currency?: string
   ): AuthorizationResult {
     const auth = this.authorizations.get(authorizationId);
     if (!auth) {
@@ -222,6 +224,17 @@ export class LiveTransactionAuthorizationManager {
         success: false,
         authorization: auth,
         error: `Customer "${customer}" does not match authorized customer`,
+      };
+    }
+
+    // Check currency (if provided and authorization has a currency set)
+    if (currency && auth.currency && currency !== auth.currency) {
+      auth.state = 'REJECTED';
+      this.saveStore();
+      return {
+        success: false,
+        authorization: auth,
+        error: `Currency "${currency}" does not match authorized currency "${auth.currency}"`,
       };
     }
 
@@ -291,8 +304,9 @@ export class LiveTransactionAuthorizationManager {
 
   /**
    * Check if a transaction is authorized without consuming the authorization.
+   * @param currency Optional currency check — if provided, must match the authorized currency.
    */
-  checkAuthorized(amountCents: number, customer: string): { authorized: boolean; reason: string; authorization?: LiveTransactionAuthorization } {
+  checkAuthorized(amountCents: number, customer: string, currency?: string): { authorized: boolean; reason: string; authorization?: LiveTransactionAuthorization } {
     const pending = this.getPending();
     if (!pending) {
       return { authorized: false, reason: 'No pending authorization. Explicit human authorization required.' };
@@ -304,6 +318,10 @@ export class LiveTransactionAuthorizationManager {
 
     if (customer !== pending.customer) {
       return { authorized: false, reason: `Customer does not match authorized customer`, authorization: pending };
+    }
+
+    if (currency && pending.currency && currency !== pending.currency) {
+      return { authorized: false, reason: `Currency does not match authorized currency`, authorization: pending };
     }
 
     return { authorized: true, reason: 'Authorization valid', authorization: pending };

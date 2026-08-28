@@ -397,7 +397,7 @@ describe('LiveTransactionAuthorization', () => {
     expect(consume.error).toContain('does not match');
   });
 
-  test('expires after time window', () => {
+  test('expires after time window', async () => {
     const issueResult = authManager.issue({
       authorizedBy: 'operator@test',
       customer: 'customer@test.com',
@@ -405,7 +405,13 @@ describe('LiveTransactionAuthorization', () => {
     });
     const authId = issueResult.authorization!.authorizationId;
 
-    // Wait a tiny bit to ensure expiry
+    // Wait for at least 1ms to ensure Date.now() has advanced past the
+    // issuedAt millisecond. With expiryMinutes: 0, expiresAt === issuedAt,
+    // and the expiry check uses strict > (new Date() > new Date(expiresAt)).
+    // Without this delay, the consume call may run in the same millisecond
+    // as the issue call, making the authorization appear non-expired.
+    await new Promise(resolve => setTimeout(resolve, 10));
+
     const consume = authManager.consume(authId, 'job-123', 2900, 'customer@test.com');
     expect(consume.success).toBe(false);
     expect(consume.error).toContain('expired');
@@ -474,6 +480,60 @@ describe('LiveTransactionAuthorization', () => {
     const check = authManager.checkAuthorized(2900, 'wrong@test.com');
     expect(check.authorized).toBe(false);
     expect(check.reason).toContain('does not match');
+  });
+
+  test('consume rejects wrong currency', () => {
+    const issueResult = authManager.issue({
+      authorizedBy: 'operator@test',
+      customer: 'customer@test.com',
+      amountCents: 2900,
+      currency: 'usd',
+    });
+    const authId = issueResult.authorization!.authorizationId;
+
+    const consume = authManager.consume(authId, 'job-123', 2900, 'customer@test.com', 'eur');
+    expect(consume.success).toBe(false);
+    expect(consume.error).toContain('Currency');
+    expect(consume.error).toContain('does not match');
+  });
+
+  test('consume accepts matching currency', () => {
+    const issueResult = authManager.issue({
+      authorizedBy: 'operator@test',
+      customer: 'customer@test.com',
+      amountCents: 2900,
+      currency: 'usd',
+    });
+    const authId = issueResult.authorization!.authorizationId;
+
+    const consume = authManager.consume(authId, 'job-123', 2900, 'customer@test.com', 'usd');
+    expect(consume.success).toBe(true);
+  });
+
+  test('consume accepts when currency not provided (backward compat)', () => {
+    const issueResult = authManager.issue({
+      authorizedBy: 'operator@test',
+      customer: 'customer@test.com',
+      amountCents: 2900,
+      currency: 'usd',
+    });
+    const authId = issueResult.authorization!.authorizationId;
+
+    const consume = authManager.consume(authId, 'job-123', 2900, 'customer@test.com');
+    expect(consume.success).toBe(true);
+  });
+
+  test('checkAuthorized rejects wrong currency', () => {
+    authManager.issue({
+      authorizedBy: 'operator@test',
+      customer: 'customer@test.com',
+      amountCents: 2900,
+      currency: 'usd',
+    });
+
+    const check = authManager.checkAuthorized(2900, 'customer@test.com', 'eur');
+    expect(check.authorized).toBe(false);
+    expect(check.reason).toContain('Currency');
   });
 
   test('persists across instances (durable store)', () => {

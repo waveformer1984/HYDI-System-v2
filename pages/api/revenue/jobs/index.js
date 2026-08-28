@@ -106,6 +106,14 @@ export default async function handler(req, res) {
           liveModeGuarded: true,
         });
       }
+      // Check that the currency matches the authorized currency
+      if (pendingAuth.currency && job.currency && pendingAuth.currency !== job.currency) {
+        return res.status(403).json({
+          jobId: job.jobId,
+          error: 'Live mode is active but the job currency does not match the authorized currency. Live checkout is restricted to the controlled qualification transaction.',
+          liveModeGuarded: true,
+        });
+      }
     }
 
     const origin = req.headers.origin || 'http://localhost:3000';
@@ -124,6 +132,30 @@ export default async function handler(req, res) {
         jobId: job.jobId,
         error: checkoutResult.error,
       });
+    }
+
+    // CONSUME THE AUTHORIZATION: Now that the checkout session has been
+    // successfully created, consume the authorization to enforce single-use.
+    // This prevents the same pending authorization from being used to create
+    // multiple live checkout sessions within the 15-minute window.
+    if (stripeMode.mode === 'live') {
+      const authManager = getLiveTransactionAuthorizationManager();
+      const pendingAuth = authManager.getPending();
+      if (pendingAuth) {
+        const consumeResult = authManager.consume(
+          pendingAuth.authorizationId,
+          job.jobId,
+          job.priceCents,
+          customerEmail,
+          job.currency
+        );
+        if (!consumeResult.success) {
+          // The authorization was consumed by a concurrent request or expired
+          // between the pre-check and now. The checkout session was already
+          // created, but we should log this for audit purposes.
+          console.error('[Live Mode] Authorization consumption failed after checkout creation:', consumeResult.error);
+        }
+      }
     }
 
     // Link the checkout session to the job
