@@ -9,6 +9,7 @@ const UniversalAgentBus = require('../../modules/universal-agent-bus');
 const WebhookQueueAdapter = require('../../workers/WebhookQueueAdapter');
 const { getRawBody } = require('../../lib/get-raw-body');
 const { getStripeMode } = require('../../lib/revenue/stripe-mode');
+const { getLiveTransactionAuthorizationManager } = require('../../lib/revenue/LiveTransactionAuthorization');
 
 require('dotenv').config();
 
@@ -207,6 +208,34 @@ async function handleStripeWebhook(req, res) {
       if (jobResult.processed) {
         jobBridgeProcessed = true;
         console.log(`[📦 JOB BRIDGE] Job ${jobResult.jobId} ${jobResult.idempotent ? '(idempotent skip)' : 'activated'} for event ${event.id}`);
+      }
+
+      // LIVE MODE: Consume the authorization now that payment is confirmed.
+      // The authorization was RESERVED at checkout-session-creation time.
+      // This is the correct point to consume — the customer has actually paid.
+      // The authorization ID is in the session metadata (hydi_authorization_id),
+      // set by createSetupCheckoutSession when liveAuthId was provided.
+      const sessionMetadata = session.metadata || {};
+      const authId = sessionMetadata.hydi_authorization_id;
+      if (authId) {
+        try {
+          const authManager = getLiveTransactionAuthorizationManager();
+          const consumeResult = authManager.consume(
+            authId,
+            jobResult.jobId || 'unknown',
+            session.amount_total || 0,
+            session.customer_email || session.customer_details?.email || '',
+            session.currency || 'usd'
+          );
+          if (consumeResult.success) {
+            console.log(`[🔒 LIVE AUTH] Authorization ${authId} consumed for checkout session ${session.id}`);
+          } else if (!consumeResult.error?.includes('already')) {
+            // Not already consumed — log the failure for audit
+            console.error(`[🔒 LIVE AUTH] Authorization consumption failed for session ${session.id}:`, consumeResult.error);
+          }
+        } catch (authErr) {
+          console.error('[🔒 LIVE AUTH] Error consuming authorization:', authErr instanceof Error ? authErr.message : authErr);
+        }
       }
     } catch (jobBridgeErr) {
       // Log but don't fail the webhook — the async queue may still process it

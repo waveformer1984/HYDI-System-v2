@@ -535,10 +535,12 @@ export class LiveAuthorizationRequestManager {
       };
     }
 
-    // Authorization is still PENDING — the window is still active
+    // Authorization is still PENDING or RESERVED — the window is still active.
+    // RESERVED means a checkout session was created but payment not yet
+    // confirmed; the window should remain open until consumption or expiry.
     return {
       reverted: false,
-      reason: `Transaction authorization ${auth.authorizationId} is still PENDING — authorized window active`,
+      reason: `Transaction authorization ${auth.authorizationId} is still ${auth.state} — authorized window active`,
       authorizationId: auth.authorizationId,
     };
   }

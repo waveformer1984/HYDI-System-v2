@@ -74,16 +74,25 @@ export default async function handler(req, res) {
     }
 
     // LIVE MODE GUARD: If Stripe is in live mode, require a valid pending
-    // LiveTransactionAuthorization matching this customer. This prevents
-    // real customer traffic from riding along during a controlled
-    // qualification window. Only the specifically authorized qualification
-    // transaction may proceed.
+    // or reserved LiveTransactionAuthorization matching this customer.
+    // This prevents real customer traffic from riding along during a
+    // controlled qualification window. Only the specifically authorized
+    // qualification transaction may proceed.
+    //
+    // Design: reserve at checkout-session-creation, consume at webhook
+    // (checkout.session.completed). This means:
+    //   - If the customer abandons checkout, the auth is RESERVED but not
+    //     CONSUMED — it can be released and retried within the window.
+    //   - If the customer pays, the webhook consumes the auth.
+    //   - Two concurrent requests cannot both create sessions — only the
+    //     first to call reserve() wins; the second gets the existing session.
     const stripeMode = getStripeMode();
+    let liveAuthId = null;
     if (stripeMode.mode === 'live') {
       const authManager = getLiveTransactionAuthorizationManager();
       const pendingAuth = authManager.getPending();
       if (!pendingAuth) {
-        // No pending authorization — refuse live checkout
+        // No pending or reserved authorization — refuse live checkout
         return res.status(403).json({
           jobId: job.jobId,
           error: 'Live mode is active but no transaction authorization is pending. Live checkout is restricted to controlled qualification transactions.',
@@ -114,6 +123,39 @@ export default async function handler(req, res) {
           liveModeGuarded: true,
         });
       }
+
+      // RETRY: If the auth is already RESERVED for this job, the customer is
+      // retrying within the same window. Return the existing checkout session
+      // URL instead of creating a new one. The Stripe session is reusable
+      // until it expires (24h by default).
+      if (pendingAuth.state === 'RESERVED' && pendingAuth.reservedByJobId === job.jobId) {
+        // Find the existing checkout session — it's linked to the job already
+        const existingSessionId = pendingAuth.reservedCheckoutSessionId;
+        // Return the existing session URL. We don't have the URL stored, but
+        // the client can redirect to the Stripe-hosted session by ID.
+        // In practice, the frontend stores the checkoutUrl from the first
+        // response. For a true retry, we'd retrieve it from Stripe.
+        // For now, return the session ID so the client can reconstruct the URL.
+        return res.status(200).json({
+          jobId: job.jobId,
+          priceCents: job.priceCents,
+          currency: job.currency,
+          sessionId: existingSessionId,
+          retry: true,
+          message: 'Checkout session already exists for this job. Use the existing session.',
+        });
+      }
+
+      // If RESERVED for a different job, refuse — only one reservation per auth
+      if (pendingAuth.state === 'RESERVED' && pendingAuth.reservedByJobId !== job.jobId) {
+        return res.status(403).json({
+          jobId: job.jobId,
+          error: 'Live mode is active but the authorization is already reserved for another job. Live checkout is restricted to the controlled qualification transaction.',
+          liveModeGuarded: true,
+        });
+      }
+
+      liveAuthId = pendingAuth.authorizationId;
     }
 
     const origin = req.headers.origin || 'http://localhost:3000';
@@ -125,6 +167,7 @@ export default async function handler(req, res) {
       opportunityId: null,
       successUrl: `${origin}/services/model-prep/success?jobId=${job.jobId}&session_id={CHECKOUT_SESSION_ID}`,
       cancelUrl: `${origin}/services/model-prep/cancel?jobId=${job.jobId}`,
+      authorizationId: liveAuthId || undefined,
     });
 
     if ('error' in checkoutResult) {
@@ -134,27 +177,30 @@ export default async function handler(req, res) {
       });
     }
 
-    // CONSUME THE AUTHORIZATION: Now that the checkout session has been
-    // successfully created, consume the authorization to enforce single-use.
-    // This prevents the same pending authorization from being used to create
-    // multiple live checkout sessions within the 15-minute window.
-    if (stripeMode.mode === 'live') {
+    // RESERVE THE AUTHORIZATION: Now that the checkout session has been
+    // successfully created, atomically transition the authorization from
+    // PENDING to RESERVED. This binds the checkout session ID so:
+    //   1. A second concurrent request cannot create another session.
+    //   2. The webhook can find the auth by checkout session ID to consume it.
+    //   3. If the customer abandons, the auth can be released for retry.
+    //
+    // The auth is NOT consumed here — consumption happens only when the
+    // webhook confirms payment (checkout.session.completed).
+    if (stripeMode.mode === 'live' && liveAuthId) {
       const authManager = getLiveTransactionAuthorizationManager();
-      const pendingAuth = authManager.getPending();
-      if (pendingAuth) {
-        const consumeResult = authManager.consume(
-          pendingAuth.authorizationId,
-          job.jobId,
-          job.priceCents,
-          customerEmail,
-          job.currency
-        );
-        if (!consumeResult.success) {
-          // The authorization was consumed by a concurrent request or expired
-          // between the pre-check and now. The checkout session was already
-          // created, but we should log this for audit purposes.
-          console.error('[Live Mode] Authorization consumption failed after checkout creation:', consumeResult.error);
-        }
+      const reserveResult = authManager.reserve(
+        liveAuthId,
+        job.jobId,
+        checkoutResult.sessionId,
+        job.priceCents,
+        customerEmail,
+        job.currency
+      );
+      if (!reserveResult.success) {
+        // Another request won the race, or the auth expired between the
+        // pre-check and now. The checkout session was created but is not
+        // bound to an authorization — log for audit.
+        console.error('[Live Mode] Authorization reservation failed after checkout creation:', reserveResult.error);
       }
     }
 

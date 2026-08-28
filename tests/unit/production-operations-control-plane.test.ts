@@ -445,7 +445,7 @@ describe('LiveTransactionAuthorization', () => {
   test('checkAuthorized returns false without pending auth', () => {
     const check = authManager.checkAuthorized(2900, 'customer@test.com');
     expect(check.authorized).toBe(false);
-    expect(check.reason).toContain('No pending authorization');
+    expect(check.reason).toContain('No pending or reserved authorization');
   });
 
   test('checkAuthorized returns true with valid pending auth', () => {
@@ -547,6 +547,189 @@ describe('LiveTransactionAuthorization', () => {
     const all = newManager.getAll();
     expect(all.length).toBe(1);
     expect(all[0].customer).toBe('customer@test.com');
+  });
+});
+
+// ─── Reserve/consume split tests ─────────────────────────────────────────
+//
+// The authorization lifecycle is:
+//   PENDING → RESERVED (at checkout session creation) → CONSUMED (at webhook)
+//
+// This split ensures:
+//   - Abandonment does not destroy the authorization (it stays RESERVED,
+//     can be released back to PENDING for retry within the window).
+//   - Two concurrent session-creation requests cannot both win — only the
+//     first to call reserve() succeeds.
+//   - Consumption happens only when payment is actually confirmed.
+
+describe('Reserve/consume split', () => {
+  let authManager: LiveTransactionAuthorizationManager;
+  let tempStorePath: string;
+
+  beforeEach(() => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'hydi-reserve-'));
+    tempStorePath = path.join(tmpDir, 'auth-store.json');
+    authManager = new LiveTransactionAuthorizationManager(tempStorePath);
+  });
+
+  test('reserve transitions PENDING → RESERVED with checkout session ID', () => {
+    const issueResult = authManager.issue({
+      authorizedBy: 'operator@test',
+      customer: 'customer@test.com',
+      amountCents: 2900,
+      currency: 'usd',
+    });
+    const authId = issueResult.authorization!.authorizationId;
+
+    const reserveResult = authManager.reserve(
+      authId, 'job-1', 'cs_test_123', 2900, 'customer@test.com', 'usd'
+    );
+    expect(reserveResult.success).toBe(true);
+    expect(reserveResult.authorization!.state).toBe('RESERVED');
+    expect(reserveResult.authorization!.reservedCheckoutSessionId).toBe('cs_test_123');
+    expect(reserveResult.authorization!.reservedByJobId).toBe('job-1');
+  });
+
+  test('abandonment does not destroy authorization — RESERVED auth can be released', () => {
+    const issueResult = authManager.issue({
+      authorizedBy: 'operator@test',
+      customer: 'customer@test.com',
+      amountCents: 2900,
+      currency: 'usd',
+    });
+    const authId = issueResult.authorization!.authorizationId;
+
+    // Reserve for a checkout session
+    authManager.reserve(authId, 'job-1', 'cs_test_456', 2900, 'customer@test.com', 'usd');
+
+    // Customer abandons checkout — release the reservation
+    const releaseResult = authManager.release(authId);
+    expect(releaseResult.success).toBe(true);
+    expect(releaseResult.authorization!.state).toBe('PENDING');
+    expect(releaseResult.authorization!.reservedCheckoutSessionId).toBeNull();
+
+    // The authorization is still usable — reserve again for a new session
+    const reserveResult2 = authManager.reserve(
+      authId, 'job-1', 'cs_test_789', 2900, 'customer@test.com', 'usd'
+    );
+    expect(reserveResult2.success).toBe(true);
+    expect(reserveResult2.authorization!.state).toBe('RESERVED');
+    expect(reserveResult2.authorization!.reservedCheckoutSessionId).toBe('cs_test_789');
+  });
+
+  test('concurrent session creation — exactly one wins the reservation', () => {
+    const issueResult = authManager.issue({
+      authorizedBy: 'operator@test',
+      customer: 'customer@test.com',
+      amountCents: 2900,
+      currency: 'usd',
+    });
+    const authId = issueResult.authorization!.authorizationId;
+
+    // First reservation succeeds
+    const reserve1 = authManager.reserve(
+      authId, 'job-1', 'cs_test_aaa', 2900, 'customer@test.com', 'usd'
+    );
+    expect(reserve1.success).toBe(true);
+
+    // Second reservation for a different session fails — auth is already RESERVED
+    const reserve2 = authManager.reserve(
+      authId, 'job-2', 'cs_test_bbb', 2900, 'customer@test.com', 'usd'
+    );
+    expect(reserve2.success).toBe(false);
+    expect(reserve2.error).toContain('already reserved');
+  });
+
+  test('idempotent retry — same session ID returns success', () => {
+    const issueResult = authManager.issue({
+      authorizedBy: 'operator@test',
+      customer: 'customer@test.com',
+      amountCents: 2900,
+      currency: 'usd',
+    });
+    const authId = issueResult.authorization!.authorizationId;
+
+    // First reservation
+    authManager.reserve(authId, 'job-1', 'cs_test_retry', 2900, 'customer@test.com', 'usd');
+
+    // Same session ID — idempotent success
+    const retry = authManager.reserve(
+      authId, 'job-1', 'cs_test_retry', 2900, 'customer@test.com', 'usd'
+    );
+    expect(retry.success).toBe(true);
+    expect(retry.authorization!.state).toBe('RESERVED');
+  });
+
+  test('consume from RESERVED succeeds (webhook path)', () => {
+    const issueResult = authManager.issue({
+      authorizedBy: 'operator@test',
+      customer: 'customer@test.com',
+      amountCents: 2900,
+      currency: 'usd',
+    });
+    const authId = issueResult.authorization!.authorizationId;
+
+    // Reserve at checkout creation
+    authManager.reserve(authId, 'job-1', 'cs_test_consume', 2900, 'customer@test.com', 'usd');
+
+    // Consume at webhook (checkout.session.completed)
+    const consumeResult = authManager.consume(authId, 'job-1', 2900, 'customer@test.com', 'usd');
+    expect(consumeResult.success).toBe(true);
+    expect(consumeResult.authorization!.state).toBe('CONSUMED');
+    expect(consumeResult.authorization!.consumedByJobId).toBe('job-1');
+  });
+
+  test('getByCheckoutSessionId finds RESERVED authorization', () => {
+    const issueResult = authManager.issue({
+      authorizedBy: 'operator@test',
+      customer: 'customer@test.com',
+      amountCents: 2900,
+      currency: 'usd',
+    });
+    const authId = issueResult.authorization!.authorizationId;
+
+    authManager.reserve(authId, 'job-1', 'cs_test_lookup', 2900, 'customer@test.com', 'usd');
+
+    const found = authManager.getByCheckoutSessionId('cs_test_lookup');
+    expect(found).not.toBeNull();
+    expect(found!.authorizationId).toBe(authId);
+  });
+
+  test('getByCheckoutSessionId returns null for non-reserved session', () => {
+    expect(authManager.getByCheckoutSessionId('cs_nonexistent')).toBeNull();
+  });
+
+  test('consume from CONSUMED fails', () => {
+    const issueResult = authManager.issue({
+      authorizedBy: 'operator@test',
+      customer: 'customer@test.com',
+      amountCents: 2900,
+      currency: 'usd',
+    });
+    const authId = issueResult.authorization!.authorizationId;
+
+    authManager.reserve(authId, 'job-1', 'cs_test_dup', 2900, 'customer@test.com', 'usd');
+    authManager.consume(authId, 'job-1', 2900, 'customer@test.com', 'usd');
+
+    // Second consume attempt fails
+    const consume2 = authManager.consume(authId, 'job-2', 2900, 'customer@test.com', 'usd');
+    expect(consume2.success).toBe(false);
+    expect(consume2.error).toContain('CONSUMED');
+  });
+
+  test('release on non-RESERVED auth fails', () => {
+    const issueResult = authManager.issue({
+      authorizedBy: 'operator@test',
+      customer: 'customer@test.com',
+      amountCents: 2900,
+      currency: 'usd',
+    });
+    const authId = issueResult.authorization!.authorizationId;
+
+    // PENDING — cannot release
+    const release = authManager.release(authId);
+    expect(release.success).toBe(false);
+    expect(release.error).toContain('not RESERVED');
   });
 });
 

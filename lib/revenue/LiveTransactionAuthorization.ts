@@ -28,7 +28,8 @@ import { join, dirname } from 'path';
 
 export type AuthorizationState =
   | 'PENDING'      // issued but not yet used
-  | 'CONSUMED'     // used for a transaction
+  | 'RESERVED'     // checkout session created but payment not yet confirmed
+  | 'CONSUMED'     // payment confirmed — used for a transaction
   | 'EXPIRED'      // time window elapsed
   | 'REVOKED'      // manually revoked
   | 'REJECTED';    // validation failed
@@ -58,6 +59,10 @@ export interface LiveTransactionAuthorization {
   consumedAt: string | null;
   /** The job ID this authorization was used for */
   consumedByJobId: string | null;
+  /** The checkout session ID reserved against this authorization (if RESERVED) */
+  reservedCheckoutSessionId: string | null;
+  /** The job ID this authorization is reserved for (if RESERVED) */
+  reservedByJobId: string | null;
   /** Hash of the authorization for integrity verification */
   integrityHash: string;
 }
@@ -160,6 +165,8 @@ export class LiveTransactionAuthorizationManager {
       state: 'PENDING',
       consumedAt: null,
       consumedByJobId: null,
+      reservedCheckoutSessionId: null,
+      reservedByJobId: null,
       integrityHash,
     };
 
@@ -170,7 +177,169 @@ export class LiveTransactionAuthorizationManager {
   }
 
   /**
+   * Atomically reserve an authorization for a checkout session.
+   *
+   * This transitions PENDING → RESERVED, binding the checkout session ID.
+   * The authorization is NOT consumed — consumption happens only when the
+   * webhook confirms payment (checkout.session.completed).
+   *
+   * This is atomic: if the auth is not PENDING, the reservation fails.
+   * Two concurrent requests cannot both reserve the same authorization.
+   *
+   * If the auth is already RESERVED with the same checkout session ID,
+   * this is idempotent (returns success) — this supports retry within
+   * the same window where the customer refreshes the page.
+   */
+  reserve(
+    authorizationId: string,
+    jobId: string,
+    checkoutSessionId: string,
+    amountCents: number,
+    customer: string,
+    currency?: string
+  ): AuthorizationResult {
+    const auth = this.authorizations.get(authorizationId);
+    if (!auth) {
+      return { success: false, authorization: null, error: 'Authorization not found' };
+    }
+
+    // Idempotent retry: same session already reserved
+    if (auth.state === 'RESERVED' && auth.reservedCheckoutSessionId === checkoutSessionId) {
+      return { success: true, authorization: auth };
+    }
+
+    // Already reserved by a different session
+    if (auth.state === 'RESERVED') {
+      return {
+        success: false,
+        authorization: auth,
+        error: `Authorization is already reserved for checkout session ${auth.reservedCheckoutSessionId}`,
+      };
+    }
+
+    if (auth.state !== 'PENDING') {
+      return {
+        success: false,
+        authorization: auth,
+        error: `Authorization is ${auth.state}, not PENDING. Cannot be reserved.`,
+      };
+    }
+
+    // Check expiry
+    if (new Date() > new Date(auth.expiresAt)) {
+      auth.state = 'EXPIRED';
+      this.saveStore();
+      return {
+        success: false,
+        authorization: auth,
+        error: 'Authorization has expired',
+      };
+    }
+
+    // Check amount
+    if (amountCents > auth.amountCents) {
+      auth.state = 'REJECTED';
+      this.saveStore();
+      return {
+        success: false,
+        authorization: auth,
+        error: `Amount ${amountCents} cents exceeds authorized ${auth.amountCents} cents`,
+      };
+    }
+
+    // Check customer
+    if (customer !== auth.customer) {
+      auth.state = 'REJECTED';
+      this.saveStore();
+      return {
+        success: false,
+        authorization: auth,
+        error: `Customer "${customer}" does not match authorized customer`,
+      };
+    }
+
+    // Check currency (if provided and authorization has a currency set)
+    if (currency && auth.currency && currency !== auth.currency) {
+      auth.state = 'REJECTED';
+      this.saveStore();
+      return {
+        success: false,
+        authorization: auth,
+        error: `Currency "${currency}" does not match authorized currency "${auth.currency}"`,
+      };
+    }
+
+    // Reserve
+    auth.state = 'RESERVED';
+    auth.reservedCheckoutSessionId = checkoutSessionId;
+    auth.reservedByJobId = jobId;
+    this.saveStore();
+
+    return { success: true, authorization: auth };
+  }
+
+  /**
+   * Release a reservation, returning the authorization to PENDING.
+   *
+   * This is used when a checkout session is abandoned or expires without
+   * payment, allowing the same authorization to be used for a new session
+   * within the remaining time window.
+   */
+  release(authorizationId: string): AuthorizationResult {
+    const auth = this.authorizations.get(authorizationId);
+    if (!auth) {
+      return { success: false, authorization: null, error: 'Authorization not found' };
+    }
+
+    if (auth.state !== 'RESERVED') {
+      return {
+        success: false,
+        authorization: auth,
+        error: `Authorization is ${auth.state}, not RESERVED. Cannot be released.`,
+      };
+    }
+
+    // Check expiry — if expired, transition to EXPIRED instead of PENDING
+    if (new Date() > new Date(auth.expiresAt)) {
+      auth.state = 'EXPIRED';
+      this.saveStore();
+      return {
+        success: false,
+        authorization: auth,
+        error: 'Authorization has expired',
+      };
+    }
+
+    auth.state = 'PENDING';
+    auth.reservedCheckoutSessionId = null;
+    auth.reservedByJobId = null;
+    this.saveStore();
+
+    return { success: true, authorization: auth };
+  }
+
+  /**
+   * Get a RESERVED authorization by its checkout session ID.
+   *
+   * This is used by the webhook handler to find which authorization to
+   * consume when a checkout.session.completed event arrives.
+   */
+  getByCheckoutSessionId(checkoutSessionId: string): LiveTransactionAuthorization | null {
+    for (const auth of this.authorizations.values()) {
+      if (auth.state === 'RESERVED' && auth.reservedCheckoutSessionId === checkoutSessionId) {
+        return auth;
+      }
+    }
+    return null;
+  }
+
+  /**
    * Validate and consume an authorization for a specific transaction.
+   *
+   * This is called by the webhook handler when checkout.session.completed
+   * fires. The authorization must be RESERVED (not PENDING) — reservation
+   * happens at checkout session creation time.
+   *
    * This is single-use — once consumed, the authorization cannot be reused.
    * @param currency Optional currency check — if provided, must match the authorized currency.
    */
@@ -186,11 +355,13 @@ export class LiveTransactionAuthorizationManager {
       return { success: false, authorization: null, error: 'Authorization not found' };
     }
 
-    if (auth.state !== 'PENDING') {
+    // Allow consume from RESERVED (normal path) or PENDING (backward compat
+    // for callers that haven't been migrated to the reserve/consume split)
+    if (auth.state !== 'RESERVED' && auth.state !== 'PENDING') {
       return {
         success: false,
         authorization: auth,
-        error: `Authorization is ${auth.state}, not PENDING. Cannot be consumed.`,
+        error: `Authorization is ${auth.state}, not RESERVED or PENDING. Cannot be consumed.`,
       };
     }
 
@@ -271,9 +442,14 @@ export class LiveTransactionAuthorizationManager {
   }
 
   /**
-   * Get the current pending authorization, if any.
+   * Get the current pending or reserved authorization, if any.
+   *
+   * Returns PENDING first, then RESERVED. This allows the checkout route
+   * to find an existing reservation for retry (returning the same session
+   * URL) or a fresh PENDING auth to reserve.
    */
   getPending(): LiveTransactionAuthorization | null {
+    let reserved: LiveTransactionAuthorization | null = null;
     for (const auth of this.authorizations.values()) {
       if (auth.state === 'PENDING') {
         // Check expiry
@@ -284,8 +460,17 @@ export class LiveTransactionAuthorizationManager {
         }
         return auth;
       }
+      if (auth.state === 'RESERVED' && !reserved) {
+        // Check expiry
+        if (new Date() > new Date(auth.expiresAt)) {
+          auth.state = 'EXPIRED';
+          this.saveStore();
+          continue;
+        }
+        reserved = auth;
+      }
     }
-    return null;
+    return reserved;
   }
 
   /**
@@ -309,7 +494,7 @@ export class LiveTransactionAuthorizationManager {
   checkAuthorized(amountCents: number, customer: string, currency?: string): { authorized: boolean; reason: string; authorization?: LiveTransactionAuthorization } {
     const pending = this.getPending();
     if (!pending) {
-      return { authorized: false, reason: 'No pending authorization. Explicit human authorization required.' };
+      return { authorized: false, reason: 'No pending or reserved authorization. Explicit human authorization required.' };
     }
 
     if (amountCents > pending.amountCents) {

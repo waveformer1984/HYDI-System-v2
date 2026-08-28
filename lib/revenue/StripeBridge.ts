@@ -164,6 +164,7 @@ export class StripeBridge {
     opportunityId?: string;
     successUrl: string;
     cancelUrl: string;
+    authorizationId?: string;
   }): Promise<{ sessionId: string; url: string } | { error: string }> {
     if (!this.stripe) {
       return { error: 'Stripe is not configured — set STRIPE_SECRET_KEY to enable checkout' };
@@ -197,6 +198,7 @@ export class StripeBridge {
           opportunity_id: input.opportunityId || '',
           customer_name: input.customerName || '',
           type: 'setup_fee',
+          ...(input.authorizationId ? { hydi_authorization_id: input.authorizationId } : {}),
         },
         success_url: input.successUrl,
         cancel_url: input.cancelUrl,
