@@ -13,6 +13,17 @@
  * path.
  */
 
+/**
+ * NOTE (updated): the assertions below were originally written expecting
+ * missing-credential blockers to resolve as WORK_AROUND. That expectation
+ * predates fix(false-autonomy) ["remove fabricated success, strengthen
+ * verification"], which deliberately changed BlockerResolutionEngine to
+ * ESCALATE_TO_HUMAN for MISSING_EXTERNAL_CREDENTIAL — HEIDI must not
+ * fabricate a "worked around" result for something it cannot actually
+ * do without a human providing credentials. This file's assertions were
+ * updated to match that intentional, safety-motivated behavior.
+ */
+
 import {
   CapabilityHealthManager,
   createCredentialProbe,
@@ -124,15 +135,15 @@ describe('Missing-credential capability reaches BlockerResolutionEngine as BLOCK
     const result = await bre.resolveBlockers(summary.reports);
 
     expect(result.totalBlockers).toBe(1);
-    expect(result.workedAround).toBe(1);
-    expect(result.escalated).toBe(0);
+    expect(result.escalated).toBe(1);
+    expect(result.workedAround).toBe(0);
     expect(result.resolutions).toHaveLength(1);
     expect(result.resolutions[0].capabilityId).toBe('test.credential_gated');
     expect(result.resolutions[0].blockerClassification).toBe('MISSING_EXTERNAL_CREDENTIAL');
-    expect(result.resolutions[0].resolutionAction).toBe('WORK_AROUND');
+    expect(result.resolutions[0].resolutionAction).toBe('ESCALATE_TO_HUMAN');
   });
 
-  test('SelfRepairEngine.runSelfRepair finds and works around BLOCKED capabilities', async () => {
+  test('SelfRepairEngine.runSelfRepair escalates BLOCKED capabilities with a runbook (does not fabricate success)', async () => {
     const chm = new CapabilityHealthManager();
     chm.registerProbe(createCredentialProbe({
       capabilityId: 'test.credential_gated',
@@ -147,13 +158,13 @@ describe('Missing-credential capability reaches BlockerResolutionEngine as BLOCK
     const result = await sre.runSelfRepair(summary);
 
     expect(result.totalIssues).toBe(1);
-    expect(result.workedAround).toBe(1);
+    expect(result.escalated).toBe(1);
     expect(result.repaired).toBe(0);
-    expect(result.escalated).toBe(0);
+    expect(result.workedAround).toBe(0);
     expect(result.repairs).toHaveLength(1);
     expect(result.repairs[0].capabilityId).toBe('test.credential_gated');
     expect(result.repairs[0].classification).toBe('MISSING_EXTERNAL_CREDENTIAL');
-    expect(result.repairs[0].plannedAction).toContain('WORK_AROUND');
+    expect(result.repairs[0].plannedAction).toContain('ESCALATE');
   });
 
   test('full path: checkAll → resolveBlockers with 4 missing-credential capabilities', async () => {
@@ -194,14 +205,16 @@ describe('Missing-credential capability reaches BlockerResolutionEngine as BLOCK
     const result = await bre.resolveBlockers(summary.reports);
 
     expect(result.totalBlockers).toBe(4);
-    expect(result.workedAround).toBe(4);
-    expect(result.escalated).toBe(0);
+    expect(result.escalated).toBe(4);
+    expect(result.workedAround).toBe(0);
     expect(result.resolutions).toHaveLength(4);
 
-    // Every resolution should be WORK_AROUND for MISSING_EXTERNAL_CREDENTIAL
+    // Every resolution should be ESCALATE_TO_HUMAN for MISSING_EXTERNAL_CREDENTIAL —
+    // see fix(false-autonomy): HEIDI must not report fabricated success/workaround
+    // for a capability it cannot actually operate without.
     for (const res of result.resolutions) {
       expect(res.blockerClassification).toBe('MISSING_EXTERNAL_CREDENTIAL');
-      expect(res.resolutionAction).toBe('WORK_AROUND');
+      expect(res.resolutionAction).toBe('ESCALATE_TO_HUMAN');
     }
   });
 });
