@@ -17,7 +17,19 @@ class LocalModelAdapter extends EventEmitter {
 
     // Real local inference backend (Ollama) -- see runLlamaInference() below.
     this.ollamaClient = new OllamaClient();
-    
+
+    // LATENCY THRESHOLD: was a hardcoded 3000ms in trackLatency() below, tuned for a
+    // backend that can actually run calls in parallel. This Ollama deployment is
+    // configured with OLLAMA_MAX_LOADED_MODELS=1 / OLLAMA_NUM_PARALLEL=1 (single
+    // concurrent slot), and the heartbeat monitor alone fires ~6 concurrent health
+    // checks every 30s on top of any live orchestrator task, so normal queued-behind-
+    // one-slot latency routinely exceeds 3s even when nothing is actually wrong. Made
+    // configurable so it can be tuned per deployment instead of silently misreporting
+    // healthy queued responses as DEGRADED.
+    this.latencyDegradedThresholdMs = options.latencyDegradedThresholdMs
+      || Number(process.env.LOCAL_MODEL_LATENCY_DEGRADED_MS)
+      || 6000;
+
     // FALLBACK CIRCUIT BREAKER: Prevent cascade failure loops
     this.fallbackConfig = {
       maxDepth: 2, // Max 2 fallbacks before giving up
@@ -504,7 +516,7 @@ class LocalModelAdapter extends EventEmitter {
    * Track latency with anomaly detection (NO AUTO-FALLBACK)
    */
   trackLatency(modelId, latency, isError = false) {
-    const threshold = 3000; // 3s threshold
+    const threshold = this.latencyDegradedThresholdMs;
     
     // Log for anomaly detection
     const status = latency > threshold ? 'DEGRADED' : 'HEALTHY';
@@ -937,6 +949,21 @@ class LocalModelAdapter extends EventEmitter {
   async runLlamaInference(modelPath, params) {
     const model = params.ollamaModel || process.env.OLLAMA_MODEL || 'llama3';
 
+    // This Ollama deployment only runs one request at a time (OLLAMA_MAX_LOADED_MODELS=1,
+    // OLLAMA_NUM_PARALLEL=1). Without client-side serialization, every concurrent caller
+    // (the heartbeat monitor alone fires ~6 calls in parallel every 30s, plus whatever the
+    // orchestrator is doing) fires its own generate() request simultaneously; Ollama queues
+    // them internally anyway, but each caller's own timeout is racing against
+    // queue-wait-time + real-inference-time with no visibility into the wait, so calls near
+    // the back of the queue spuriously "time out" even though nothing failed. Chaining calls
+    // through this._ollamaQueue makes that queuing explicit and deterministic instead.
+    this._ollamaQueue = (this._ollamaQueue || Promise.resolve())
+      .catch(() => {}) // a prior call's rejection must not poison the chain for later callers
+      .then(() => this._runOllamaGenerate(model, modelPath, params));
+    return this._ollamaQueue;
+  }
+
+  async _runOllamaGenerate(model, modelPath, params) {
     try {
       const result = await this.ollamaClient.generate(params.prompt, {
         model,

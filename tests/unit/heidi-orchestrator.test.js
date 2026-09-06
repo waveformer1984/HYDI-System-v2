@@ -52,6 +52,21 @@ describe('HeidiOrchestrator', () => {
       expect(orchestrator.driftScore).toBe(0);
     });
 
+    // Regression coverage: timeoutMs defaulted to a flat 8000ms sized for a backend that
+    // can serve calls in parallel. The local Ollama deployment serializes to a single
+    // concurrent slot (see LocalModelAdapter's _ollamaQueue), so a task queued behind a
+    // couple of others can legitimately take longer than 8s to even start. Raised to give
+    // real queued latency room before calling it a timeout.
+    test('defaults timeoutMs to 15000ms (raised from the old flat 8000ms)', () => {
+      const defaultOrchestrator = new HeidiOrchestrator({});
+      expect(defaultOrchestrator.config.timeoutMs).toBe(15000);
+    });
+
+    test('an explicit timeoutMs still overrides the default', () => {
+      const customOrchestrator = new HeidiOrchestrator({ timeoutMs: 2500 });
+      expect(customOrchestrator.config.timeoutMs).toBe(2500);
+    });
+
     test('starts with empty metrics', () => {
       expect(orchestrator.metrics.tasksProcessed).toBe(0);
       expect(orchestrator.metrics.tasksFailed).toBe(0);

@@ -23,7 +23,13 @@ class HeidiOrchestrator extends EventEmitter {
       confidenceThreshold: config.confidenceThreshold || 0.7,
       costThreshold: config.costThreshold || 0.10, // $0.10 per request
       maxRetries: config.maxRetries || 2,
-      timeoutMs: config.timeoutMs || 8000,
+      // Was a flat 8000ms, sized for a backend that can serve calls in parallel. The local
+      // Ollama deployment is configured for a single concurrent slot (OLLAMA_MAX_LOADED_MODELS=1,
+      // OLLAMA_NUM_PARALLEL=1), and LocalModelAdapter now serializes calls against that slot
+      // (see runLlamaInference's _ollamaQueue), so a task queued behind a couple of others can
+      // legitimately take longer than 8s to even start without anything being wrong. Raised to
+      // give real queued latency room before calling it a timeout; still overridable per caller.
+      timeoutMs: config.timeoutMs || Number(process.env.ORCHESTRATOR_TIMEOUT_MS) || 15000,
       revenuePriority: config.revenuePriority !== false, // Default to true
       ...config
     };
