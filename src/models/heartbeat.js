@@ -29,13 +29,53 @@ class UrsulaModelHeartbeat extends EventEmitter {
       timeoutThreshold: 45000, // 45 seconds
       modelsToMonitor: [ // Key models that should always be responsive
         'gpt-4-local',
-        'gpt-35-turbo', 
+        'gpt-35-turbo',
         'local-llama',
         'local-classifier',
         'document-summarizer', // Using the service name that maps to local-llama
         'sentiment-analyzer'   // Using the service name that maps to local-classifier
       ]
     };
+
+    // Service-name aliases -> the real LocalModelAdapter model id that backs them.
+    // 'document-summarizer' and 'sentiment-analyzer' above are monitored under their
+    // service names, but LocalModelAdapter only ever registers/loads the real model ids
+    // ('local-llama', 'local-classifier', ...) -- it never learned these aliases. Every
+    // health check and recovery attempt must resolve through this map before touching
+    // the adapter, or every call fails with "not loaded" / "No configuration found".
+    this.serviceModelMap = {
+      'document-summarizer': 'local-llama',
+      'sentiment-analyzer': 'local-classifier',
+      'seo-article-generator': 'gpt-4-local',
+      'social-post-creator': 'gpt-35-turbo',
+      'code-reviewer': 'code-specialist',
+      'api-doc-generator': 'code-parser',
+      'test-generator': 'code-specialist',
+      'bug-detector': 'bug-finder',
+      'database-optimizer': 'db-specialist',
+      'security-auditor': 'security-scanner',
+      'invoice-processor': 'local-ocr',
+      'survey-analyzer': 'gpt-35-turbo',
+      'lead-qualifier': 'gpt-4-local',
+      'appointment-scheduler': 'rule-engine',
+      'follow-up-automator': 'gpt-35-turbo',
+      'ticket-triage': 'local-classifier',
+      'inventory-optimizer': 'predictive-model',
+      'price-optimizer': 'pricing-engine',
+      'email-automator': 'gpt-35-turbo',
+      'report-generator': 'gpt-4-local'
+    };
+  }
+
+  /**
+   * Resolve a monitored model id (which may be a service-name alias like
+   * 'document-summarizer') to the real LocalModelAdapter model id that backs it.
+   * Returns the input unchanged if it isn't an alias.
+   * @param {string} modelId
+   * @returns {string}
+   */
+  resolveModelId(modelId) {
+    return this.serviceModelMap[modelId] || modelId;
   }
 
   /**
@@ -209,12 +249,17 @@ class UrsulaModelHeartbeat extends EventEmitter {
     let timeoutId;
 
     try {
-      // Try to execute a simple inference to test responsiveness
+      // Try to execute a simple inference to test responsiveness. modelId may be a
+      // service-name alias (e.g. 'document-summarizer') -- LocalModelAdapter only knows
+      // the real backing model id, so resolve before calling into it. The result below
+      // still reports the original `modelId` so failedModels/heartbeat_check stay keyed
+      // consistently by whatever name is in config.modelsToMonitor.
+      const realModelId = this.resolveModelId(modelId);
       const testInput = this.getTestInputForModel(modelId);
       if (this._destroyed) throw new Error('Heartbeat stopped');
 
       // Execute with a short timeout
-      const resultPromise = this.adapter.execute(modelId, testInput, {
+      const resultPromise = this.adapter.execute(realModelId, testInput, {
         tier: 'starter', // Use lowest tier for health check
         timeout: 5000 // 5 second timeout for health check
       });
@@ -288,31 +333,11 @@ class UrsulaModelHeartbeat extends EventEmitter {
     }
     
     // Otherwise, try to map from service names or use a generic input
-    const serviceModelMap = {
-      'document-summarizer': 'local-llama',
-      'sentiment-analyzer': 'local-classifier',
-      'seo-article-generator': 'gpt-4-local',
-      'social-post-creator': 'gpt-35-turbo',
-      'code-reviewer': 'code-specialist',
-      'api-doc-generator': 'code-parser',
-      'test-generator': 'code-specialist',
-      'bug-detector': 'bug-finder',
-      'database-optimizer': 'db-specialist',
-      'security-auditor': 'security-scanner',
-      'invoice-processor': 'local-ocr',
-      'survey-analyzer': 'gpt-35-turbo',
-      'lead-qualifier': 'gpt-4-local',
-      'appointment-scheduler': 'rule-engine',
-      'follow-up-automator': 'gpt-35-turbo',
-      'ticket-triage': 'local-classifier',
-      'inventory-optimizer': 'predictive-model',
-      'price-optimizer': 'pricing-engine',
-      'email-automator': 'gpt-35-turbo',
-      'report-generator': 'gpt-4-local'
-    };
-    
-    const baseModel = serviceModelMap[modelId] || modelId;
-    return this.getTestInputForModel(baseModel) || { task: 'Health check ping' };
+    const baseModel = this.resolveModelId(modelId);
+    if (baseModel !== modelId) {
+      return this.getTestInputForModel(baseModel) || { task: 'Health check ping' };
+    }
+    return { task: 'Health check ping' };
   }
 
   /**
@@ -339,21 +364,26 @@ class UrsulaModelHeartbeat extends EventEmitter {
       if (this._destroyed) return;
       try {
         console.log(`[HEARTBEAT] 🔄 Recovering model: ${modelId}`);
-        
+
+        // modelId may be a service-name alias (e.g. 'document-summarizer'); the adapter
+        // only ever registers the real backing model id ('local-llama'), so every lookup
+        // below has to go through that resolution or it always misses.
+        const realModelId = this.resolveModelId(modelId);
+
         // Try to unload and reload the model
-        if (this.adapter.models.has(modelId)) {
-          await this.adapter.unloadModel(modelId);
+        if (this.adapter.models.has(realModelId)) {
+          await this.adapter.unloadModel(realModelId);
           if (this._destroyed) return;
-          
+
           // Small delay to ensure cleanup
           await new Promise(resolve => setTimeout(resolve, 1000));
         }
-        
+
         if (this._destroyed) return;
         // Reload the model
-        const modelConfig = this.adapter.modelConfigs[modelId];
+        const modelConfig = this.adapter.modelConfigs[realModelId];
         if (modelConfig) {
-          await this.adapter.loadModel(modelId, modelConfig);
+          await this.adapter.loadModel(realModelId, modelConfig);
           console.log(`[HEARTBEAT] ✅ Model ${modelId} recovered successfully`);
           
           // Reset failure count
