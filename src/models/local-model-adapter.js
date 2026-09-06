@@ -7,12 +7,16 @@ const { spawn } = require('child_process');
 const fs = require('fs').promises;
 const path = require('path');
 const EventEmitter = require('events');
+const OllamaClient = require('../../heidi-core/brain/ollama-client');
 
 class LocalModelAdapter extends EventEmitter {
   constructor(options = {}) {
     super();
     this.models = new Map();
     this.modelProcesses = new Map();
+
+    // Real local inference backend (Ollama) -- see runLlamaInference() below.
+    this.ollamaClient = new OllamaClient();
     
     // FALLBACK CIRCUIT BREAKER: Prevent cascade failure loops
     this.fallbackConfig = {
@@ -920,23 +924,38 @@ class LocalModelAdapter extends EventEmitter {
 
   /**
    * Run Llama inference process
+   *
+   * NOTE: This originally spawned a llama.cpp binary at './bin/main', which
+   * was never built/shipped -- every call failed with "spawn ./bin/main
+   * ENOENT", causing the orchestrator's revenue loop (and any other caller
+   * of a 'llama'/'codellama' model) to fail every single cycle. Real local
+   * inference already works elsewhere in this codebase via Ollama (see
+   * lib/ModelManager.ts, used by the live /api/chat endpoint), so route
+   * through the same, already-verified-working backend here instead.
+   * modelPath is retained only for logging/diagnostics.
    */
   async runLlamaInference(modelPath, params) {
-    const args = [
-      '-m', modelPath,
-      '-p', params.prompt,
-      '--temp', params.temperature.toString(),
-      '-n', params.maxTokens.toString(),
-      '-c', params.contextSize.toString()
-    ];
+    const model = params.ollamaModel || process.env.OLLAMA_MODEL || 'llama3';
 
-    return this.runTrackedProcess('./bin/main', args, params.timeout || 30000, (output) => ({
-      output: output.trim(),
-      tokens: output.split(' ').length,
-      confidence: 0.95
-    }));
+    try {
+      const result = await this.ollamaClient.generate(params.prompt, {
+        model,
+        temperature: params.temperature,
+        maxTokens: params.maxTokens
+      });
+
+      const text = (result && result.text) || '';
+      const completionTokens = result && result.tokens && result.tokens.completion;
+
+      return {
+        output: text.trim(),
+        tokens: typeof completionTokens === 'number' ? completionTokens : text.split(/\s+/).filter(Boolean).length,
+        confidence: 0.85
+      };
+    } catch (error) {
+      throw new Error(`Ollama inference failed for model '${model}' (config path ${modelPath}): ${error.message}`);
+    }
   }
-
   /**
    * Parse code into AST
    */
