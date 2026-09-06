@@ -23,23 +23,30 @@ const redisStream = require('../queue/RedisStreamBroker');
 class HeidiCoreLoop extends EventEmitter {
   constructor(config = {}) {
     super();
-    
+
+    // Optional: an already-constructed HeidiControlPlane instance to report
+    // task outcomes to (see recordControlPlaneOutcome below). Kept out of
+    // this.config -- destructured off here rather than left in the spread --
+    // so it isn't stored as a plain config value alongside primitive settings.
+    const { controlPlane, ...restConfig } = config;
+    this.controlPlane = controlPlane || null;
+
     this.config = {
       // Loop timing
       loopInterval: config.loopInterval || 60000, // 1 minute default
       observationInterval: config.observationInterval || 300000, // 5 minutes
       reflectionInterval: config.reflectionInterval || 900000, // 15 minutes
-      
+
       // Loop controls
       enableAutoActions: config.enableAutoActions !== false,
       maxConcurrentLoops: config.maxConcurrentLoops || 5,
       enableRevenueMode: config.enableRevenueMode !== false,
-      
+
       // Thresholds
       actionConfidenceThreshold: config.actionConfidenceThreshold || 0.7,
       adaptationThreshold: config.adaptationThreshold || 0.3,
-      
-      ...config
+
+      ...restConfig
     };
     
     // Initialize all layers
@@ -898,10 +905,58 @@ class HeidiCoreLoop extends EventEmitter {
   
   handleTaskCompleted(event) {
     console.log(`[CORE LOOP] Task completed: ${event.task.id}`);
+    this.recordControlPlaneOutcome(event, true);
   }
-  
+
   handleTaskFailed(event) {
     console.log(`[CORE LOOP] Task failed: ${event.task.id} - ${event.error}`);
+    this.recordControlPlaneOutcome(event, false);
+  }
+
+  /**
+   * Feed this loop's task outcomes into the control plane's learning
+   * history (HeidiControlPlane.recordActionOutcome / this.state.learningHistory).
+   *
+   * Without this, the control plane's feedback cycle (runFeedbackCycle(),
+   * on a 60s timer) logs "[CONTROL PLANE] Insufficient data for feedback
+   * cycle" forever, no matter how many core-loop tasks actually run:
+   * recordActionOutcome() was previously only ever called from
+   * HYDISystem's separate handleIntelligenceRequest()/handleActionRequest()
+   * paths, which the autonomous core loop (this class) never goes through.
+   * This method is the missing connection between "the loop that does the
+   * work" and "the system that's supposed to learn from it".
+   */
+  recordControlPlaneOutcome(event, success) {
+    if (!this.controlPlane || typeof this.controlPlane.recordActionOutcome !== 'function') return;
+
+    const { task, result, error } = event;
+    if (!task) return;
+
+    const decision = result && result.decision;
+    const evaluation = result && result.evaluation;
+    const action = result && result.action;
+    const measurement = result && result.measurement;
+
+    try {
+      this.controlPlane.recordActionOutcome(
+        {
+          id: task.id,
+          type: task.type,
+          model: (decision && decision.model) || (action && action.model) || 'unknown',
+          strategy: (decision && decision.strategy) || (action && action.strategy),
+          confidence: evaluation ? evaluation.confidence : undefined,
+          cost: evaluation ? evaluation.cost : undefined
+        },
+        {
+          success: success && (action ? action.success !== false : true),
+          latency: action ? action.latency || 0 : 0,
+          revenue: measurement ? measurement.revenueImpact || 0 : 0,
+          error: error ? (error.message || String(error)) : undefined
+        }
+      );
+    } catch (err) {
+      console.error('[CORE LOOP] Failed to record control-plane outcome:', err.message);
+    }
   }
   
   handleReflectionCompleted(reflection) {

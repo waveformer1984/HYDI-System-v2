@@ -152,13 +152,18 @@ class HYDISystem extends EventEmitter {
     });
     
     // Core Loop (connects all layers)
+    // controlPlane is passed through so the loop's task outcomes feed
+    // HeidiControlPlane's learning history (see HeidiCoreLoop.recordControlPlaneOutcome) --
+    // without it, the control plane's feedback cycle never sees any data
+    // from the autonomous loop, only from the separate handle*Request() paths.
     this.coreLoop = new HeidiCoreLoop({
       loopInterval: this.config.loopInterval,
       observationInterval: this.config.observationInterval,
       reflectionInterval: this.config.reflectionInterval,
       enableRevenueMode: this.config.enableRevenueMode,
       enableAutoActions: this.config.enableAutoActions,
-      actionConfidenceThreshold: this.config.confidenceThreshold
+      actionConfidenceThreshold: this.config.confidenceThreshold,
+      controlPlane: this.controlPlane
     });
 
     // V3 Autonomy Manager (reliability, mission planning, decision intelligence)

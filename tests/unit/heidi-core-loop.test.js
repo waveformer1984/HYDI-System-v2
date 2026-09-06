@@ -382,6 +382,98 @@ describe('HeidiCoreLoop', () => {
     });
   });
 
+  // ── Control-plane wiring ──────────────────────────────────────────────────
+  // Regression coverage: HeidiControlPlane.recordActionOutcome() was
+  // previously never called for tasks processed by the autonomous core
+  // loop -- only from HYDISystem's separate handleIntelligenceRequest()/
+  // handleActionRequest() paths -- so the control plane's feedback cycle
+  // logged "Insufficient data" forever regardless of how many loops ran.
+
+  describe('control-plane wiring (recordControlPlaneOutcome)', () => {
+    function makeControlPlane() {
+      return { recordActionOutcome: jest.fn() };
+    }
+
+    it('does nothing when no controlPlane is configured (no throw)', () => {
+      const loop = makeLoop();
+      expect(() =>
+        loop.orchestrator.emit('task_completed', {
+          taskId: 't1',
+          task: { id: 't1', type: 'revenue' },
+          result: {},
+        })
+      ).not.toThrow();
+    });
+
+    it('forwards a successful task_completed event to controlPlane.recordActionOutcome', () => {
+      const controlPlane = makeControlPlane();
+      const loop = makeLoop({ controlPlane });
+
+      loop.orchestrator.emit('task_completed', {
+        taskId: 't1',
+        task: { id: 't1', type: 'revenue' },
+        result: {
+          decision: { model: 'gpt-4-local', strategy: 'local' },
+          evaluation: { confidence: 0.82, cost: 0.01 },
+          action: { success: true, latency: 1234 },
+          measurement: { revenueImpact: 49.99 },
+        },
+      });
+
+      expect(controlPlane.recordActionOutcome).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 't1',
+          type: 'revenue',
+          model: 'gpt-4-local',
+          strategy: 'local',
+          confidence: 0.82,
+          cost: 0.01,
+        }),
+        expect.objectContaining({ success: true, latency: 1234, revenue: 49.99 })
+      );
+    });
+
+    it('forwards a failed task_failed event with success=false and the error message', () => {
+      const controlPlane = makeControlPlane();
+      const loop = makeLoop({ controlPlane });
+
+      loop.orchestrator.emit('task_failed', {
+        taskId: 't2',
+        task: { id: 't2', type: 'revenue' },
+        error: new Error('spawn ./bin/main ENOENT'),
+      });
+
+      expect(controlPlane.recordActionOutcome).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 't2', type: 'revenue', model: 'unknown' }),
+        expect.objectContaining({ success: false, error: 'spawn ./bin/main ENOENT' })
+      );
+    });
+
+    it('does not throw if recordActionOutcome itself throws', () => {
+      const controlPlane = {
+        recordActionOutcome: jest.fn(() => {
+          throw new Error('boom');
+        }),
+      };
+      const loop = makeLoop({ controlPlane });
+
+      expect(() =>
+        loop.orchestrator.emit('task_completed', {
+          taskId: 't3',
+          task: { id: 't3', type: 'analysis' },
+          result: {},
+        })
+      ).not.toThrow();
+    });
+
+    it('keeps controlPlane out of loop.config', () => {
+      const controlPlane = makeControlPlane();
+      const loop = makeLoop({ controlPlane });
+      expect(loop.controlPlane).toBe(controlPlane);
+      expect(loop.config.controlPlane).toBeUndefined();
+    });
+  });
+
   // ── Event emissions ───────────────────────────────────────────────────────
 
   describe('event emissions', () => {
