@@ -156,6 +156,13 @@ class HYDISystem extends EventEmitter {
     // HeidiControlPlane's learning history (see HeidiCoreLoop.recordControlPlaneOutcome) --
     // without it, the control plane's feedback cycle never sees any data
     // from the autonomous loop, only from the separate handle*Request() paths.
+    //
+    // orchestrator is passed through so the live autonomous loop runs against the SAME
+    // HeidiOrchestrator instance as this.orchestrator (used by handleIntelligenceRequest/
+    // handleActionRequest, HYDIAutonomyManager below, and getStatus()'s orchestrator
+    // section) instead of HeidiCoreLoop silently constructing its own second, independent
+    // instance -- see HeidiCoreLoop's constructor comment for why that split was a bug
+    // source, not just a wart.
     this.coreLoop = new HeidiCoreLoop({
       loopInterval: this.config.loopInterval,
       observationInterval: this.config.observationInterval,
@@ -163,7 +170,8 @@ class HYDISystem extends EventEmitter {
       enableRevenueMode: this.config.enableRevenueMode,
       enableAutoActions: this.config.enableAutoActions,
       actionConfidenceThreshold: this.config.confidenceThreshold,
-      controlPlane: this.controlPlane
+      controlPlane: this.controlPlane,
+      orchestrator: this.orchestrator
     });
 
     // V3 Autonomy Manager (reliability, mission planning, decision intelligence)
@@ -841,19 +849,26 @@ class HYDISystem extends EventEmitter {
   }
   
   handleLearningRecorded(record) {
-    console.log(`[HYDI SYSTEM] Learning recorded: ${record.actionType} (success: ${record.success})`);
-    
+    // `record` is the CASCADE v3 feedbackPacket emitted by HeidiControlPlane.recordActionOutcome()
+    // (see src/control/HeidiControlPlane.js) -- its field names (task_type, success_boolean,
+    // model_used, expected_outcome.*, actual_outcome.*) never matched the actionType/success/etc.
+    // names this handler used to read, so every log line and every selfAwareness.trackAction()
+    // call here silently received all-undefined fields.
+    const actionType = record.task_type;
+    const success = record.success_boolean;
+    console.log(`[HYDI SYSTEM] Learning recorded: ${actionType} (success: ${success})`);
+
     // Update self-awareness if available
     if (this.selfAwareness) {
       this.selfAwareness.trackAction({
-        id: record.actionId,
-        type: record.actionType,
-        success: record.success,
-        confidence: record.confidence,
-        latency: record.latency,
-        cost: record.cost,
-        revenue: record.revenue,
-        model: record.model,
+        id: record.action_id,
+        type: actionType,
+        success,
+        confidence: record.expected_outcome ? record.expected_outcome.confidence : undefined,
+        latency: record.actual_outcome ? record.actual_outcome.latency : undefined,
+        cost: record.expected_outcome ? record.expected_outcome.estimated_cost : undefined,
+        revenue: record.revenue_delta,
+        model: record.model_used,
         strategy: record.strategy
       });
     }

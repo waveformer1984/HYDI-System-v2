@@ -93,6 +93,31 @@ describe('HeidiCoreLoop', () => {
       expect(metrics.adaptations).toBe(0);
       expect(metrics.revenueGenerated).toBe(0);
     });
+
+    // Regression coverage: HYDISystem.js used to hold its own top-level HeidiOrchestrator
+    // (for handleIntelligenceRequest/handleActionRequest, HYDIAutonomyManager, and status
+    // reporting) while this class separately constructed a second, independent
+    // HeidiOrchestrator that the live autonomous loop actually ran against -- two
+    // instances with two different metrics/drift/model histories, silently out of sync.
+    // HYDISystem now hands in its own instance via config.orchestrator so every consumer
+    // shares one; this class must still construct its own when none is given so it keeps
+    // working standalone.
+    it('uses a provided orchestrator instance instead of constructing its own', () => {
+      const sharedOrchestrator = mockSubsystem();
+      const loop = new HeidiCoreLoop({ orchestrator: sharedOrchestrator });
+      expect(loop.orchestrator).toBe(sharedOrchestrator);
+    });
+
+    it('constructs its own orchestrator when none is provided (standalone use)', () => {
+      const loop = makeLoop();
+      expect(loop.orchestrator).toBeDefined();
+    });
+
+    it('does not leak the injected orchestrator into this.config', () => {
+      const sharedOrchestrator = mockSubsystem();
+      const loop = new HeidiCoreLoop({ orchestrator: sharedOrchestrator });
+      expect(loop.config.orchestrator).toBeUndefined();
+    });
   });
 
   // ── start / stop ─────────────────────────────────────────────────────────

@@ -28,7 +28,18 @@ class HeidiCoreLoop extends EventEmitter {
     // task outcomes to (see recordControlPlaneOutcome below). Kept out of
     // this.config -- destructured off here rather than left in the spread --
     // so it isn't stored as a plain config value alongside primitive settings.
-    const { controlPlane, ...restConfig } = config;
+    //
+    // `orchestrator` is likewise optional: HYDISystem.js used to construct its own
+    // top-level HeidiOrchestrator (for handleIntelligenceRequest/handleActionRequest,
+    // HYDIAutonomyManager, and status reporting) while this class *separately*
+    // constructed a second, independent HeidiOrchestrator that the live autonomous loop
+    // actually runs against -- two instances with two different metrics/drift/model
+    // histories, silently out of sync (this is what caused the control-plane wiring gap
+    // and the "avoiding strategy unknown" bug fixed earlier). Accepting an already-built
+    // instance here lets HYDISystem hand in the one shared orchestrator so every consumer
+    // reads and writes the same state. Falls back to constructing its own when none is
+    // given, so this class still works standalone (e.g. in tests).
+    const { controlPlane, orchestrator, ...restConfig } = config;
     this.controlPlane = controlPlane || null;
 
     this.config = {
@@ -50,7 +61,7 @@ class HeidiCoreLoop extends EventEmitter {
     };
     
     // Initialize all layers
-    this.orchestrator = new HeidiOrchestrator({
+    this.orchestrator = orchestrator || new HeidiOrchestrator({
       confidenceThreshold: this.config.actionConfidenceThreshold,
       revenuePriority: this.config.enableRevenueMode
     });

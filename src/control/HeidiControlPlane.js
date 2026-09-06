@@ -615,8 +615,10 @@ class HeidiControlPlane extends EventEmitter {
     
     // CASCADE v3: Create structured feedback packet
     const feedbackPacket = {
+      action_id: action.id,
       task_type: action.type,
       model_used: action.model,
+      strategy: action.strategy,
       expected_outcome: {
         success: action.confidence > 0.5,
         confidence: action.confidence,
