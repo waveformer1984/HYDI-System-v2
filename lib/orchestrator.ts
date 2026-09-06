@@ -1,8 +1,8 @@
 /**
  * MAIN ORCHESTRATOR - Heidi Production Agent
- * 
+ *
  * This is the core routing engine with memory, tools, and enforced output contracts.
- * 
+ *
  * Responsibilities:
  * - Retrieve memory context
  * - Route to ModelManager
@@ -10,6 +10,20 @@
  * - Execute actions
  * - Maintain session state
  * - Record per-request metrics to the MetricsService
+ *
+ * NAMING COLLISION WARNING: this file exports a class also named
+ * `HeidiOrchestrator`, but it is NOT the same orchestrator as
+ * src/orchestrator/HeidiOrchestrator.js. That is a separate, unrelated
+ * class (plain JS, CommonJS) that routes autonomous revenue-loop tasks for
+ * HeidiCoreLoop/HYDISystem (model selection, avoidStrategies/preferStrategies,
+ * confidence/cost thresholds) -- it has nothing to do with per-request chat
+ * routing. THIS class is used exclusively by pages/api/chat.ts for the
+ * single-user-facing /api/chat endpoint's system-state short-circuiting
+ * (trySystemStateResponse) and has no connection to the autonomous loop's
+ * decision/adapt cycle. If you're grepping for "HeidiOrchestrator" while
+ * touching either the chat endpoint or the revenue loop, check the import
+ * path, not just the class name -- they are easy to confuse and this
+ * confusion was a real source of bugs earlier in this codebase's history.
  */
 
 import { randomUUID } from 'crypto';

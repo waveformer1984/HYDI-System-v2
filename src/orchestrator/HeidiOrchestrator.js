@@ -1,12 +1,30 @@
 /**
  * HEIDI ORCHESTRATOR - Layer 2: The Brainstem
  * CASCADE v2 Evolution - Simple, ruthless, effective
- * 
+ *
  * Core responsibilities:
  * - Route tasks
- * - Decide model (local vs API)  
+ * - Decide model (local vs API)
  * - Enforce rules (no drift, no nonsense)
  * - Trigger actions
+ *
+ * NAMING COLLISION WARNING: lib/orchestrator.ts also exports a class named
+ * `HeidiOrchestrator`, but it is NOT the same orchestrator as this one.
+ * That is a separate, unrelated TypeScript class used exclusively by
+ * pages/api/chat.ts for per-request chat routing (system-state
+ * short-circuiting for the single-user-facing /api/chat endpoint) -- it has
+ * no connection to the autonomous revenue loop. THIS class is the one
+ * HeidiCoreLoop/HYDISystem actually run their Observe->Decide->Act loop
+ * against (model selection, avoidStrategies/preferStrategies, confidence/
+ * cost thresholds). Historically, HYDISystem.js and HeidiCoreLoop.js also
+ * each constructed their own separate instance of *this* same class,
+ * independently of each other -- that duplication (not the naming
+ * collision with lib/orchestrator.ts) was the root cause of the
+ * control-plane wiring gap and "avoiding strategy unknown" bugs fixed
+ * elsewhere in this codebase's history; HeidiCoreLoop now accepts a shared
+ * instance via config.orchestrator instead of always constructing its own.
+ * If you're grepping for "HeidiOrchestrator", check the import path, not
+ * just the class name.
  */
 
 const EventEmitter = require('events');
