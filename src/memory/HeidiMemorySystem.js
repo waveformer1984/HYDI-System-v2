@@ -348,7 +348,17 @@ class HeidiMemorySystem extends EventEmitter {
   analyzeWhatFailed() {
     const failuresByType = {};
     for (const failure of this.reflectiveMemory.whatFailed.values()) {
-      const type = failure.strategy.type || 'unknown';
+      // BUG FIX: decision/strategy objects stored here (see
+      // HeidiCoreLoop.storeWhatFailed callers) have `.model` and `.strategy`
+      // fields, never `.type` -- this always fell through to 'unknown',
+      // which meant every failure got bucketed into one meaningless group
+      // regardless of which model actually failed. generateRecommendations()
+      // then produced a 'failure_mitigation' adaptation targeting the
+      // literal string 'unknown', logged as if a real model were being
+      // avoided ("[CORE LOOP] Failure mitigation: avoiding strategy unknown")
+      // while doing nothing. Prefer the specific model, then the coarser
+      // strategy, and only fall back to 'unknown' if truly absent.
+      const type = (failure.strategy && (failure.strategy.model || failure.strategy.strategy)) || 'unknown';
       if (!failuresByType[type]) failuresByType[type] = [];
       failuresByType[type].push(failure);
     }
@@ -448,7 +458,10 @@ class HeidiMemorySystem extends EventEmitter {
     const strategyTypes = {};
     for (const s of strategies) {
       modelUsage[s.strategy.model] = (modelUsage[s.strategy.model] || 0) + 1;
-      const t = s.strategy.type || 'unknown';
+      // Same fix as analyzeWhatFailed(): decision objects have `.strategy`
+      // (e.g. 'local'/'hybrid'), never `.type`, so this always bucketed
+      // into 'unknown' and 'local_strategies_preferred' could never fire.
+      const t = s.strategy.strategy || 'unknown';
       strategyTypes[t] = (strategyTypes[t] || 0) + 1;
     }
     if (modelUsage['gpt-4-local'] > strategies.length * 0.5) patterns.push('gpt-4_local_dominates_success');

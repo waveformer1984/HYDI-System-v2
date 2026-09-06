@@ -119,4 +119,66 @@ describe('HeidiOrchestrator', () => {
       expect(orchestrator.driftScore).toBe(0);
     });
   });
+
+  // Regression coverage: HeidiCoreLoop.applyAdaptation() pushes model IDs
+  // into config.avoidStrategies / config.preferStrategies (via
+  // 'failure_mitigation' / 'success_amplification' adaptations), but until
+  // now nothing in this class ever read those arrays back when choosing a
+  // model -- every task handler returned the same hardcoded model
+  // regardless, so the adaptation logged as if routing changed but had no
+  // real effect.
+  describe('selectModel (adaptation-aware routing)', () => {
+    test('returns the first candidate when nothing is avoided or preferred', () => {
+      expect(orchestrator.selectModel(['gpt-4-local', 'gpt-35-turbo'])).toBe('gpt-4-local');
+    });
+
+    test('skips a candidate flagged in config.avoidStrategies', () => {
+      orchestrator.config.avoidStrategies = ['gpt-4-local'];
+      expect(orchestrator.selectModel(['gpt-4-local', 'gpt-35-turbo'])).toBe('gpt-35-turbo');
+    });
+
+    test('prefers a candidate flagged in config.preferStrategies', () => {
+      orchestrator.config.preferStrategies = ['local-llama'];
+      expect(orchestrator.selectModel(['gpt-4-local', 'local-llama'])).toBe('local-llama');
+    });
+
+    test('avoidance takes precedence over a conflicting preference', () => {
+      orchestrator.config.avoidStrategies = ['local-llama'];
+      orchestrator.config.preferStrategies = ['local-llama'];
+      expect(orchestrator.selectModel(['gpt-4-local', 'local-llama'])).toBe('gpt-4-local');
+    });
+
+    test('falls back to using an avoided candidate if every option is avoided', () => {
+      orchestrator.config.avoidStrategies = ['gpt-4-local', 'gpt-35-turbo'];
+      expect(orchestrator.selectModel(['gpt-4-local', 'gpt-35-turbo'])).toBe('gpt-4-local');
+    });
+  });
+
+  describe('task handlers respect avoidStrategies', () => {
+    test('handleRevenueTask uses defaults when nothing is avoided', async () => {
+      const decision = await orchestrator.handleRevenueTask({});
+      expect(decision.model).toBe('gpt-4-local');
+      expect(decision.fallback).toBe('gpt-35-turbo');
+    });
+
+    test('handleRevenueTask routes around an avoided primary model', async () => {
+      orchestrator.config.avoidStrategies = ['gpt-4-local'];
+      const decision = await orchestrator.handleRevenueTask({});
+      expect(decision.model).toBe('gpt-35-turbo');
+      expect(decision.fallback).not.toBe('gpt-35-turbo'); // fallback must differ from the chosen model
+    });
+
+    test('handleCriticalTask, handleStandardTask, handleTechnicalTask use their documented defaults', async () => {
+      expect((await orchestrator.handleCriticalTask({})).model).toBe('gpt-4-local');
+      expect((await orchestrator.handleStandardTask({})).model).toBe('gpt-35-turbo');
+      expect((await orchestrator.handleTechnicalTask({})).model).toBe('code-specialist');
+    });
+
+    test('handleReflectionTask ignores avoidStrategies (privacy invariant: local-only, no fallback)', async () => {
+      orchestrator.config.avoidStrategies = ['local-llama'];
+      const decision = await orchestrator.handleReflectionTask({});
+      expect(decision.model).toBe('local-llama');
+      expect(decision.fallback).toBeNull();
+    });
+  });
 });

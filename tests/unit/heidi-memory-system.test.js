@@ -113,6 +113,56 @@ describe('HeidiMemorySystem', () => {
     });
   });
 
+  // Regression coverage: analyzeWhatFailed() / identifySuccessPatterns() used
+  // to group by a `.type` field that decision objects never have (they carry
+  // `.model` and `.strategy` instead), so every failure collapsed into a
+  // single meaningless 'unknown' bucket and generateRecommendations() then
+  // emitted a 'failure_mitigation' adaptation targeting the literal string
+  // 'unknown' -- logged as if a real model were being avoided while doing
+  // nothing, since nothing routes on the string 'unknown'.
+  describe('failure grouping targets the real model/strategy, not "unknown"', () => {
+    test('analyzeWhatFailed groups repeated failures by model, not "unknown"', () => {
+      memory.storeWhatFailed('loop_1', { model: 'gpt-4-local', strategy: 'local' }, 'spawn ENOENT', { type: 'revenue' });
+      memory.storeWhatFailed('loop_2', { model: 'gpt-4-local', strategy: 'local' }, 'spawn ENOENT', { type: 'revenue' });
+      memory.storeWhatFailed('loop_3', { model: 'gpt-4-local', strategy: 'local' }, 'spawn ENOENT', { type: 'revenue' });
+
+      const analysis = memory.analyzeWhatFailed();
+      expect(analysis.totalFailures).toBe(3);
+      expect(analysis.commonFailures[0].type).toBe('gpt-4-local');
+      expect(analysis.commonFailures[0].count).toBe(3);
+      expect(analysis.commonFailures.some((f) => f.type === 'unknown')).toBe(false);
+    });
+
+    test('falls back to strategy, then "unknown", when model is absent', () => {
+      memory.storeWhatFailed('loop_1', { strategy: 'hybrid' }, 'timeout', { type: 'critical' });
+      memory.storeWhatFailed('loop_2', {}, 'mystery failure', { type: 'chat' });
+
+      const analysis = memory.analyzeWhatFailed();
+      const types = analysis.commonFailures.map((f) => f.type);
+      expect(types).toContain('hybrid');
+      expect(types).toContain('unknown');
+    });
+
+    test('generateRecommendations targets the actual failing model, not "unknown"', () => {
+      for (let i = 0; i < 3; i++) {
+        memory.storeWhatFailed(`loop_${i}`, { model: 'gpt-35-turbo', strategy: 'local' }, 'spawn ENOENT', { type: 'revenue' });
+      }
+      const recs = memory.generateRecommendations();
+      const mitigation = recs.find((r) => r.type === 'failure_mitigation');
+      expect(mitigation).toBeDefined();
+      expect(mitigation.target).toBe('gpt-35-turbo');
+    });
+
+    test('identifySuccessPatterns detects local-strategy preference by strategy, not "unknown"', () => {
+      memory.storeWhatWorked('s1', { model: 'gpt-4-local', strategy: 'local' }, { success: true, latency: 100, confidence: 0.9 });
+      memory.storeWhatWorked('s2', { model: 'gpt-4-local', strategy: 'local' }, { success: true, latency: 100, confidence: 0.9 });
+      memory.storeWhatWorked('s3', { model: 'gpt-4-local', strategy: 'local' }, { success: true, latency: 100, confidence: 0.9 });
+
+      const analysis = memory.analyzeWhatWorked();
+      expect(analysis.patterns).toContain('local_strategies_preferred');
+    });
+  });
+
   describe('getStatus', () => {
     test('returns valid status object', () => {
       const status = memory.getStatus();

@@ -410,44 +410,89 @@ class HeidiOrchestrator extends EventEmitter {
   }
   
   /**
+   * Pick the best available model from a candidate list, skipping any
+   * model that adaptation has flagged as avoided (this.config.avoidStrategies)
+   * and preferring one flagged as successful (this.config.preferStrategies)
+   * when possible.
+   *
+   * Without this, HeidiCoreLoop.applyAdaptation()'s 'failure_mitigation'
+   * and 'success_amplification' adaptations pushed model IDs into
+   * config.avoidStrategies / config.preferStrategies, but nothing in this
+   * class ever read those arrays back -- the adaptation logged a message
+   * ("[CORE LOOP] Failure mitigation: avoiding strategy X") implying
+   * routing had changed, when every task handler below returned the same
+   * hardcoded model regardless. Falls back to using an avoided candidate
+   * anyway rather than returning nothing if every candidate is avoided --
+   * a degraded model beats no decision at all.
+   */
+  selectModel(candidates) {
+    const available = candidates.filter(Boolean);
+    const avoid = new Set(this.config.avoidStrategies || []);
+    const prefer = this.config.preferStrategies || [];
+
+    const preferred = available.find((c) => prefer.includes(c) && !avoid.has(c));
+    if (preferred) return preferred;
+
+    const nonAvoided = available.find((c) => !avoid.has(c));
+    if (nonAvoided) return nonAvoided;
+
+    if (available.length && avoid.size) {
+      console.log(`[ORCHESTRATOR] All candidates avoided (${available.join(', ')}) -- using ${available[0]} anyway, no safe alternative`);
+    }
+    return available[0];
+  }
+
+  /**
    * TASK HANDLERS - Specialized routing logic
    */
   async handleRevenueTask(_task) {
     console.log('[ORCHESTRATOR] Revenue task - highest priority');
-    
+
+    const model = this.selectModel(['gpt-4-local', 'gpt-35-turbo', 'local-llama']);
+    const fallback = this.selectModel(['gpt-35-turbo', 'local-llama'].filter((m) => m !== model));
+
     return {
-      model: 'gpt-4-local', // Best local model for revenue
+      model, // Best available local model for revenue (adaptation-aware)
       strategy: 'local',
-      fallback: 'gpt-35-turbo',
+      fallback,
       reasoning: 'Revenue tasks get best local model with fallback'
     };
   }
-  
+
   async handleCriticalTask(_task) {
     console.log('[ORCHESTRATOR] Critical task - high reliability');
-    
+
+    const model = this.selectModel(['gpt-4-local', 'local-llama', 'gpt-35-turbo']);
+    const fallback = this.selectModel(['local-llama', 'gpt-35-turbo'].filter((m) => m !== model));
+
     return {
-      model: 'gpt-4-local',
+      model,
       strategy: 'hybrid', // Try local, verify with external if needed
-      fallback: 'local-llama',
+      fallback,
       reasoning: 'Critical tasks use hybrid strategy for maximum reliability'
     };
   }
-  
+
   async handleStandardTask(_task) {
     console.log('[ORCHESTRATOR] Standard task - cost effective');
-    
+
+    const model = this.selectModel(['gpt-35-turbo', 'local-llama', 'gpt-4-local']);
+    const fallback = this.selectModel(['local-llama', 'gpt-4-local'].filter((m) => m !== model));
+
     return {
-      model: 'gpt-35-turbo',
+      model,
       strategy: 'local',
-      fallback: 'local-llama',
+      fallback,
       reasoning: 'Standard tasks use cost-effective local models'
     };
   }
-  
+
   async handleReflectionTask(_task) {
     console.log('[ORCHESTRATOR] Reflection task - local only');
-    
+
+    // Deliberately does not consult avoidStrategies / fall back to another
+    // model: reflection tasks stay local-only for privacy, and there is no
+    // safe non-local alternative to substitute if local-llama is avoided.
     return {
       model: 'local-llama',
       strategy: 'local',
@@ -455,14 +500,17 @@ class HeidiOrchestrator extends EventEmitter {
       reasoning: 'Reflection tasks stay local for privacy and speed'
     };
   }
-  
+
   async handleTechnicalTask(_task) {
     console.log('[ORCHESTRATOR] Technical task - specialist models');
-    
+
+    const model = this.selectModel(['code-specialist', 'gpt-4-local', 'local-llama']);
+    const fallback = this.selectModel(['gpt-4-local', 'local-llama'].filter((m) => m !== model));
+
     return {
-      model: 'code-specialist',
+      model,
       strategy: 'local',
-      fallback: 'gpt-4-local',
+      fallback,
       reasoning: 'Technical tasks use specialist models with general fallback'
     };
   }
