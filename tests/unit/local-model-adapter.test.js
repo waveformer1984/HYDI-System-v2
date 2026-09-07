@@ -122,6 +122,58 @@ describe('LocalModelAdapter Llama inference (Ollama-backed)', () => {
     await expect(first).rejects.toThrow(/Ollama inference failed for model/);
     await expect(second).resolves.toEqual(expect.objectContaining({ output: 'still works' }));
   });
+
+  // Regression coverage for the "heartbeat evicts the chat model" incident: this
+  // Ollama deployment holds only one loaded model at a time (OLLAMA_MAX_LOADED_MODELS=1).
+  // runLlamaInference used to default to the literal 'llama3', while the live chat path
+  // (lib/ModelManager.ts's getLocalModelName()) defaults to 'llama3.2:3b' -- two different
+  // model tags. Every ~30s heartbeat sweep (which calls every alias in modelConfigs, all
+  // routed through here) would load 'llama3' and evict whatever the chat path had warm,
+  // so the next real chat message paid a full cold-load (measured at 37s for llama3.2:3b
+  // alone). The default here must match ModelManager's exactly.
+  describe('runLlamaInference model resolution matches lib/ModelManager.ts exactly', () => {
+    const ENV_KEYS = ['LOCAL_MODEL_NAME', 'OLLAMA_MODEL'];
+    let savedEnv;
+
+    beforeEach(() => {
+      savedEnv = Object.fromEntries(ENV_KEYS.map((k) => [k, process.env[k]]));
+      for (const k of ENV_KEYS) delete process.env[k];
+    });
+
+    afterEach(() => {
+      for (const k of ENV_KEYS) {
+        if (savedEnv[k] === undefined) delete process.env[k];
+        else process.env[k] = savedEnv[k];
+      }
+    });
+
+    async function modelPassedToOllama(overrides) {
+      adapter = new LocalModelAdapter({ autoInitialize: false, startMonitoring: false });
+      const spy = jest.spyOn(adapter.ollamaClient, 'generate').mockResolvedValue({ text: 'ok' });
+      await adapter.runLlamaInference('/unused', { prompt: 'x', temperature: 0.5, maxTokens: 10, ...overrides });
+      return spy.mock.calls[0][1].model;
+    }
+
+    test('defaults to llama3.2:3b (matching ModelManager.getLocalModelName default) when no env vars are set', async () => {
+      await expect(modelPassedToOllama({})).resolves.toBe('llama3.2:3b');
+    });
+
+    test('LOCAL_MODEL_NAME takes priority over OLLAMA_MODEL, matching ModelManager', async () => {
+      process.env.LOCAL_MODEL_NAME = 'qwen2.5:7b';
+      process.env.OLLAMA_MODEL = 'llama3';
+      await expect(modelPassedToOllama({})).resolves.toBe('qwen2.5:7b');
+    });
+
+    test('falls back to OLLAMA_MODEL when LOCAL_MODEL_NAME is unset', async () => {
+      process.env.OLLAMA_MODEL = 'llama3.2:latest';
+      await expect(modelPassedToOllama({})).resolves.toBe('llama3.2:latest');
+    });
+
+    test('an explicit params.ollamaModel still wins over both env vars', async () => {
+      process.env.LOCAL_MODEL_NAME = 'qwen2.5:7b';
+      await expect(modelPassedToOllama({ ollamaModel: 'tinyllama' })).resolves.toBe('tinyllama');
+    });
+  });
 });
 
 // Regression coverage: trackLatency() used a hardcoded 3000ms "DEGRADED" threshold sized

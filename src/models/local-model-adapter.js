@@ -947,7 +947,17 @@ class LocalModelAdapter extends EventEmitter {
    * modelPath is retained only for logging/diagnostics.
    */
   async runLlamaInference(modelPath, params) {
-    const model = params.ollamaModel || process.env.OLLAMA_MODEL || 'llama3';
+    // MUST resolve to the exact same model as lib/ModelManager.ts's
+    // getLocalModelName() (LOCAL_MODEL_NAME -> OLLAMA_MODEL -> 'llama3.2:3b').
+    // This deployment has OLLAMA_MAX_LOADED_MODELS=1, so if this path and the
+    // live /api/chat path ever resolve to two DIFFERENT model tags, every
+    // ~30s heartbeat sweep (which calls every one of the ~13 model aliases
+    // in modelConfigs, all of which funnel through here) evicts whatever the
+    // chat path had warm, forcing a ~30-40s cold reload on the next real
+    // chat request. Confirmed by direct measurement: a cold load of
+    // llama3.2:3b alone took 37s. Previously this defaulted to the
+    // different literal 'llama3', which is exactly this bug.
+    const model = params.ollamaModel || process.env.LOCAL_MODEL_NAME || process.env.OLLAMA_MODEL || 'llama3.2:3b';
 
     // This Ollama deployment only runs one request at a time (OLLAMA_MAX_LOADED_MODELS=1,
     // OLLAMA_NUM_PARALLEL=1). Without client-side serialization, every concurrent caller
