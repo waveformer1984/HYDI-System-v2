@@ -2,6 +2,12 @@
 
 const BaseAgent = require('./BaseAgent');
 
+// NAMING COLLISION: there is a SEPARATE, unrelated class also named
+// `FinanceAgent` at pao-system/agents/business/finance.agent.ts (the PAO
+// business agent). THIS one is scoped to the HYDI V3 reliability layer
+// only, extending this directory's own BaseAgent. Check which tree a
+// given consumer lives in before assuming which "FinanceAgent" it
+// imports.
 class FinanceAgent extends BaseAgent {
   constructor(config = {}) {
     super({ ...config, name: 'FinanceAgent' });

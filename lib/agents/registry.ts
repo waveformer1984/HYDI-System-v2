@@ -6,6 +6,12 @@ import { DatabaseAgent } from './database-agent';
 import { DataFetchAgent } from './data-fetch-agent';
 import { SchedulingAgent } from './scheduling-agent';
 
+// NAMING COLLISION: there is a SEPARATE, unrelated class also named
+// `AgentRegistry` at pao-system/core/agent.registry.ts (registry for the
+// PAO business/operations agents). THIS one registers the lib/agents/*
+// "specialist" agents (database, data-fetch, scheduling, etc.). Check
+// which tree a given consumer lives in before assuming which
+// "AgentRegistry" it imports.
 export class AgentRegistry {
   private agents: SpecialistAgent[] = [];
 

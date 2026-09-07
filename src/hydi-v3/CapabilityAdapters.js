@@ -141,6 +141,12 @@ class FileOperationsAdapter extends CapabilityAdapter {
   }
 }
 
+// NAMING COLLISION: there is a SEPARATE, unrelated class also named
+// `DevelopmentAdapter` at lib/human-action/adapters/DevelopmentAdapter.ts
+// -- that one is the HumanActionEngine's real adapter (shells out via
+// exec()/execSync()). THIS one is scoped to the HYDI V3 reliability layer
+// only. Check which tree a given consumer lives in before assuming which
+// "DevelopmentAdapter" it imports.
 class DevelopmentAdapter extends CapabilityAdapter {
   constructor(config = {}) {
     super('development', ['run-tests', 'run-benchmarks', 'collect-diagnostics', 'create-engineering-report']);

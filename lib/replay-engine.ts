@@ -49,6 +49,12 @@ const CONFIDENCE_REQUIRED: Record<string, number> = {
   SYSTEM_EVENT: 0.5,
 };
 
+// NAMING COLLISION: there is a SEPARATE, unrelated class also named
+// `ReplayEngine` at lib/protoforge/replay-engine.ts. THIS one is the
+// top-level lib/ replay engine referenced by CLAUDE.md's Core Pipeline
+// section (validates that the RAW LEDGER produces deterministic pipeline
+// output). Check which one a given consumer actually imports before
+// assuming which "ReplayEngine" is in play.
 export class ReplayEngine {
   private supabase: SupabaseClient | null = null;
   private readonly driftThreshold: number;

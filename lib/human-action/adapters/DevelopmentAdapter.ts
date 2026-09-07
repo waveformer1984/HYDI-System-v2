@@ -21,6 +21,13 @@ import type {
 
 const exec = promisify(execCb);
 
+// NAMING COLLISION: there is a SEPARATE, unrelated class also named
+// `DevelopmentAdapter` at src/hydi-v3/CapabilityAdapters.js (extends that
+// file's CapabilityAdapter, HYDI V3 reliability layer only). THIS one is
+// the HumanActionEngine's real adapter -- it actually shells out via
+// exec()/execSync() to git/npm/deploy commands (see the audit note on
+// this file re: command construction). Check which tree a given consumer
+// lives in before assuming which "DevelopmentAdapter" it imports.
 export class DevelopmentAdapter implements ActionAdapter {
   adapterId = 'development';
   category = 'DEVELOPMENT' as const;

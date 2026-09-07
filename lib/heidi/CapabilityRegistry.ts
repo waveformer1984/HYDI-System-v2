@@ -95,6 +95,12 @@ interface RegisteredCapability {
   executor: CapabilityExecutor | null; // null for capabilities that are not yet wired
 }
 
+// NAMING COLLISION: there is a SEPARATE, unrelated class also named
+// `CapabilityRegistry` at src/hydi-v3/CapabilityRegistry.js (the HYDI V3
+// reliability layer's capability registry). THIS one is the lib/heidi/
+// tree's registry of governed capabilities/executors. Check which tree a
+// given consumer lives in before assuming which "CapabilityRegistry" it
+// imports.
 export class CapabilityRegistry {
   private capabilities: Map<string, RegisteredCapability> = new Map();
 

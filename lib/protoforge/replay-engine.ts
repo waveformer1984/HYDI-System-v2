@@ -106,6 +106,12 @@ export interface ReplayDeps {
   decide: (_event: LedgerEvent, _cascadeResult: CascadeResult, _kiloResult: KiloResult) => Promise<ProtoForgeResult | null>;
 }
 
+// NAMING COLLISION: there is a SEPARATE, unrelated class also named
+// `ReplayEngine` at lib/replay-engine.ts. THIS one is scoped specifically
+// to lib/protoforge/'s CASCADE/KILO/ProtoForge pipeline replay
+// (re-running generateHypotheses/decide against recorded ledger events).
+// Check which one a given consumer actually imports before assuming
+// which "ReplayEngine" is in play.
 export class ReplayEngine {
   executionTraces = new Map<string, ExecutionTrace>();
   replayHistory: ReplayResult[] = [];
