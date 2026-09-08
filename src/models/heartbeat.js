@@ -345,11 +345,37 @@ class UrsulaModelHeartbeat extends EventEmitter {
    * @returns {Promise<Array>} Array of health check results
    */
   async checkAllModels() {
-    const promises = this.config.modelsToMonitor.map(modelId =>
-      this.checkSingleModelHealth(modelId)
+    // All entries in modelsToMonitor that are of type 'llama'/'codellama' in
+    // LocalModelAdapter resolve, via runLlamaInference()'s single ollamaModel
+    // default, to the SAME real Ollama model (see local-model-adapter.js and
+    // CLAUDE.md's LOCAL_MODEL_NAME/OLLAMA_MODEL precedence) - there is
+    // currently no per-model override that makes them actually distinct.
+    // Checking each alias separately was firing N redundant real inference
+    // calls into the single-concurrency Ollama server (OLLAMA_NUM_PARALLEL=1)
+    // every 30s for zero additional signal, and was directly implicated in a
+    // live /api/chat request queuing behind heartbeat traffic and taking
+    // ~15 minutes to return. Dedupe: check each distinct real model once,
+    // apply that result to every alias backed by it.
+    const aliasesByRealModel = new Map();
+    for (const modelId of this.config.modelsToMonitor) {
+      const realModelId = this.resolveModelId(modelId);
+      if (!aliasesByRealModel.has(realModelId)) aliasesByRealModel.set(realModelId, []);
+      aliasesByRealModel.get(realModelId).push(modelId);
+    }
+
+    const realModelIds = Array.from(aliasesByRealModel.keys());
+    const realResults = await Promise.all(
+      realModelIds.map(realModelId => this.checkSingleModelHealth(realModelId))
     );
-    
-    return await Promise.all(promises);
+
+    const results = [];
+    realModelIds.forEach((realModelId, i) => {
+      const base = realResults[i];
+      for (const alias of aliasesByRealModel.get(realModelId)) {
+        results.push({ ...base, modelId: alias });
+      }
+    });
+    return results;
   }
 
   /**
