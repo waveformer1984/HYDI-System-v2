@@ -34,6 +34,7 @@ import { RevenueDatabase, getRevenueDatabase } from './RevenueDatabase';
 import { getOfferCatalog } from './OfferCatalog';
 import { getGuardrailEngine } from './FinancialGuardrails';
 import type {
+  GovernanceRecord,
   RevenueAction,
   RevenueActionType,
   RevenueControlLoopResult,
@@ -46,6 +47,14 @@ import type {
 // Revenue Control Loop
 // ---------------------------------------------------------------------------
 
+/** Decides whether one capability invocation may proceed. */
+export interface CapabilityGovernor {
+  (capabilityId: string, args: Record<string, unknown>): Promise<{
+    allowed: boolean;
+    reason: string;
+  }>;
+}
+
 export class RevenueControlLoop {
   private pipeline: ProspectPipeline;
   private ledger: RevenueLedger;
@@ -53,11 +62,69 @@ export class RevenueControlLoop {
   private guardrails = getGuardrailEngine();
   private catalog = getOfferCatalog();
 
+  /**
+   * Authorizes each mutating operation against its capability contract.
+   *
+   * Without this, one authorization of `revenue.run_cycle` admits every write
+   * below — status changes, opportunity creation, provisioning, health updates
+   * — none of which the capability registry ever sees, even though contracts
+   * exist for most of them. That is a governance bypass, not an optimisation.
+   */
+  private governor: CapabilityGovernor | null = null;
+  private governanceLog: GovernanceRecord[] = [];
+
   constructor(db?: RevenueDatabase) {
     const database = db || getRevenueDatabase();
     this.pipeline = new ProspectPipeline(undefined, database);
     this.ledger = new RevenueLedger(database);
     this.lifecycle = new CustomerLifecycle(database);
+  }
+
+  /**
+   * Supply the governor. Absent one, mutations still run but are recorded as
+   * `ungoverned` rather than silently permitted — the same advisory-then-
+   * enforcing progression used by HEIDI_CONTRACT_AUTHORITY, so this can be
+   * observed before it starts refusing work.
+   */
+  setGovernor(governor: CapabilityGovernor | null): void {
+    this.governor = governor;
+  }
+
+  getGovernanceLog(): GovernanceRecord[] {
+    return this.governanceLog.slice();
+  }
+
+  /**
+   * Run one mutating operation under its contract.
+   *
+   * Returns `null` when the governor refuses, so callers must handle refusal
+   * explicitly instead of proceeding with an unauthorized write.
+   */
+  private async governed<T>(
+    capabilityId: string,
+    args: Record<string, unknown>,
+    operation: () => Promise<T>,
+  ): Promise<{ ok: true; value: T } | { ok: false; reason: string }> {
+    if (!this.governor) {
+      this.governanceLog.push({
+        capabilityId,
+        allowed: true,
+        ungoverned: true,
+        reason: 'no governor supplied — write performed without contract authorization',
+      });
+      return { ok: true, value: await operation() };
+    }
+
+    const decision = await this.governor(capabilityId, args);
+    this.governanceLog.push({
+      capabilityId,
+      allowed: decision.allowed,
+      ungoverned: false,
+      reason: decision.reason,
+    });
+
+    if (!decision.allowed) return { ok: false, reason: decision.reason };
+    return { ok: true, value: await operation() };
   }
 
   /**
@@ -74,6 +141,8 @@ export class RevenueControlLoop {
    */
   async run(): Promise<RevenueControlLoopResult> {
     const evaluatedAt = new Date().toISOString();
+    // Per-run, so the log describes this cycle rather than accumulating.
+    this.governanceLog = [];
 
     // 1. Collect metrics
     const metrics = await this.collectMetrics();
@@ -96,6 +165,7 @@ export class RevenueControlLoop {
         executionResult: null,
         verified: false,
         verificationResult: null,
+        governance: this.governanceLog.slice(),
       };
     }
 
@@ -135,6 +205,7 @@ export class RevenueControlLoop {
       executionResult,
       verified,
       verificationResult,
+      governance: this.governanceLog.slice(),
     };
   }
 
@@ -376,17 +447,28 @@ export class RevenueControlLoop {
       switch (action.actionType) {
         case 'prospect_score': {
           if (!action.prospectId) return { executed: false, result: 'No prospect ID' };
-          const result = await this.pipeline.scoreProspect(action.prospectId);
-          return { executed: true, result: `Scored: ${result.score} — ${result.reason}` };
+          const scored = await this.governed(
+            'revenue.score_prospect',
+            { prospectId: action.prospectId },
+            () => this.pipeline.scoreProspect(action.prospectId as string),
+          );
+          if (!scored.ok) return { executed: false, result: `Refused: ${scored.reason}` };
+          return { executed: true, result: `Scored: ${scored.value.score} — ${scored.value.reason}` };
         }
 
         case 'prospect_outreach':
         case 'prospect_follow_up': {
           if (!action.prospectId) return { executed: false, result: 'No prospect ID' };
           // Mark as contacted — actual message sending is via authorized integrations
-          await this.pipeline.updateStatus(action.prospectId, 'contacted', {
-            action_type: action.actionType,
-          });
+          const contacted = await this.governed(
+            'revenue.update_prospect_status',
+            { prospectId: action.prospectId, newStatus: 'contacted' },
+            () =>
+              this.pipeline.updateStatus(action.prospectId as string, 'contacted', {
+                action_type: action.actionType,
+              }),
+          );
+          if (!contacted.ok) return { executed: false, result: `Refused: ${contacted.reason}` };
           return {
             executed: true,
             result: `Prospect ${action.prospectId} marked as contacted. Message delivery requires authorized integration.`,
@@ -404,18 +486,40 @@ export class RevenueControlLoop {
           const offer = this.catalog.get(recommendation.recommended);
           if (!offer) return { executed: false, result: 'No suitable offer found' };
 
-          const opportunity = await this.pipeline.createOpportunity({
-            prospectId: action.prospectId,
-            offerId: recommendation.recommended,
-            proposedPrice: offer.setupPrice + offer.recurringPrice,
-            estimatedValue: offer.setupPrice + (offer.recurringPrice * 12),
-            probability: 0.3,
-          });
+          const created = await this.governed(
+            'revenue.create_opportunity',
+            { prospectId: action.prospectId, offerId: recommendation.recommended },
+            () =>
+              this.pipeline.createOpportunity({
+                prospectId: action.prospectId as string,
+                offerId: recommendation.recommended,
+                proposedPrice: offer.setupPrice + offer.recurringPrice,
+                estimatedValue: offer.setupPrice + offer.recurringPrice * 12,
+                probability: 0.3,
+              }),
+          );
+          if (!created.ok) return { executed: false, result: `Refused: ${created.reason}` };
+          const opportunity = created.value;
 
-          await this.pipeline.updateStatus(action.prospectId, 'proposal_sent', {
-            opportunity_id: opportunity.opportunityId,
-            offer_id: recommendation.recommended,
-          });
+          // Second write, separately authorized. Bundling it with the
+          // opportunity creation would be the same bypass in miniature.
+          const advanced = await this.governed(
+            'revenue.update_prospect_status',
+            { prospectId: action.prospectId, newStatus: 'proposal_sent' },
+            () =>
+              this.pipeline.updateStatus(action.prospectId as string, 'proposal_sent', {
+                opportunity_id: opportunity.opportunityId,
+                offer_id: recommendation.recommended,
+              }),
+          );
+          if (!advanced.ok) {
+            return {
+              executed: true,
+              result:
+                `Created opportunity ${opportunity.opportunityId}, but the status ` +
+                `advance was refused: ${advanced.reason}`,
+            };
+          }
 
           return {
             executed: true,
@@ -429,7 +533,12 @@ export class RevenueControlLoop {
           const pending = services.find((s) => s.status === 'pending');
           if (!pending) return { executed: false, result: 'No pending service found' };
 
-          await this.lifecycle.startProvisioning(pending.serviceId);
+          const provisioned = await this.governed(
+            'revenue.start_provisioning',
+            { serviceId: pending.serviceId },
+            () => this.lifecycle.startProvisioning(pending.serviceId),
+          );
+          if (!provisioned.ok) return { executed: false, result: `Refused: ${provisioned.reason}` };
           return {
             executed: true,
             result: `Started provisioning for service ${pending.serviceId}`,
@@ -443,10 +552,21 @@ export class RevenueControlLoop {
           if (!active) return { executed: false, result: 'No active service found' };
 
           const verification = await this.lifecycle.verifyService(active.serviceId);
-          await this.lifecycle.updateHealthStatus(
-            active.serviceId,
-            verification.verified ? 'healthy' : 'unhealthy',
+          const healthWritten = await this.governed(
+            'revenue.update_health_status',
+            {
+              serviceId: active.serviceId,
+              healthStatus: verification.verified ? 'healthy' : 'unhealthy',
+            },
+            () =>
+              this.lifecycle.updateHealthStatus(
+                active.serviceId,
+                verification.verified ? 'healthy' : 'unhealthy',
+              ),
           );
+          if (!healthWritten.ok) {
+            return { executed: false, result: `Refused: ${healthWritten.reason}` };
+          }
 
           return {
             executed: true,

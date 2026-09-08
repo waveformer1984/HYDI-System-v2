@@ -1,0 +1,17 @@
+{
+  "//": "Qualification typecheck boundary. The main tsconfig excludes `scripts` and `tests` wholesale, which meant the qualification machinery was never compiler-checked — that is how a syntax error in the exercise harness reached runtime instead of the compiler. Including all of scripts/ is not the fix: it contains 114 pre-existing errors in legacy files, so the gate would fail on day one and be ignored. This checks the qualification machinery only.",
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "noEmit": true },
+  "include": [
+    "lib/capability-contract/**/*.ts",
+    "lib/heidi/contracts/**/*.ts",
+    "lib/heidi/ContractVerification.ts",
+    "scripts/capability-contract-audit.ts",
+    "scripts/capability-contract-coverage.ts",
+    "scripts/capability-contract-disagreements.ts",
+    "scripts/capability-contract-gap-map.ts",
+    "scripts/capability-qualification-matrix.ts",
+    "scripts/capability-exercise-harness.ts"
+  ],
+  "exclude": ["node_modules"]
+}

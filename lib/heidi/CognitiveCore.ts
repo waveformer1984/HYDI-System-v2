@@ -41,6 +41,16 @@ import {
   CapabilityExecutionContext,
   CapabilityExecutor,
 } from './CapabilityRegistry';
+import type { RiskLevel } from '../operational/types';
+import {
+  ContractRegistry,
+  computeAuthority,
+  type CapabilityContract,
+  type SystemStateSnapshot,
+  type VerificationRunner,
+} from '../capability-contract';
+import { createHeidiVerificationRunner, heidiObservers } from './ContractVerification';
+import { ALL_CONTRACTS } from './contracts';
 import type { ProspectRecord, OpportunityRecord } from '../revenue/types';
 import { getOfferCatalog } from '../revenue/OfferCatalog';
 
@@ -175,6 +185,29 @@ export interface SelectedAction {
   alternatives: Array<{ action: string; reason: string; rejected: boolean }>;
 }
 
+/** One capability exercised directly, with its authority and verification outcome. */
+export interface ExerciseRecord {
+  capabilityId: string;
+  startedAt: string;
+  contractRegistered: boolean;
+  tier: RiskLevel | null;
+  requiresApproval: boolean;
+  approvedBy: string | null;
+  executed: boolean;
+  executionOutcome: string | null;
+  executionError: string | null;
+  verificationOutcome: string | null;
+  verificationEvidence: string | null;
+  observationSource: string | null;
+  /** Set when the capability was deliberately not run, with the reason. */
+  skipped: string | null;
+  /**
+   * The executor's raw result, so a harness can chain one exercise into the
+   * next without re-running the capability (which would double its effect).
+   */
+  rawResult?: unknown;
+}
+
 export interface AuthorizationResult {
   authorized: boolean;
   authorizationMode: 'autonomous' | 'policy_authorized' | 'human_required' | 'prohibited';
@@ -182,6 +215,21 @@ export interface AuthorizationResult {
   policyEvaluated: string;
   capabilityId: string | null;
   escalationRecordId: string | null;
+  /**
+   * The tier the capability contract derives for THIS invocation, from
+   * (verb x target x blast radius x reversibility x state) — as opposed to
+   * `action.riskLevel`, which is a constant attached to the capability.
+   * Null when no contract is registered for the capability.
+   */
+  contractTier?: RiskLevel | null;
+  /** Why the contract arrived at that tier. */
+  contractRationale?: string | null;
+  /**
+   * Set when the contract would have refused an action the legacy risk level
+   * permits. In `advisory` mode this is recorded and the action proceeds; in
+   * `enforcing` mode the action is refused.
+   */
+  contractDisagreement?: string | null;
 }
 
 export interface ExecutionResult {
@@ -353,6 +401,9 @@ export interface ExecutionBridge {
   } | null;
 }
 
+/** Distinct from any legitimate result, including null and undefined. */
+const TIMED_OUT = Symbol('timed-out');
+
 export class CognitiveCore {
   private pool: Pool;
   private identity: HeidiIdentityModel;
@@ -361,6 +412,27 @@ export class CognitiveCore {
   private trust: TrustModel;
   private guardian: GuardianModel;
   private registry: CapabilityRegistry;
+  /**
+   * Contract registry — the capabilities that describe themselves completely
+   * enough that the planner does not need to know what they are. Verification
+   * for these runs from the contract; everything else still falls through to
+   * the legacy if-chain in verifyAction(), which is being retired branch by
+   * branch as contracts land.
+   */
+  private contracts: ContractRegistry;
+  private verifier: VerificationRunner;
+  /**
+   * `advisory` (default): the contract's tier is computed and recorded, and a
+   * disagreement with the legacy risk level is logged, but the legacy decision
+   * still governs. `enforcing`: a contract refusal blocks the action.
+   *
+   * Advisory is the default deliberately. Contract tiers are derived from
+   * declared bounds, and those declarations are new; flipping straight to
+   * enforcing would refuse work the system does today on the strength of
+   * metadata nobody has yet checked against reality. Run advisory, read the
+   * disagreements, then flip HEIDI_CONTRACT_AUTHORITY=enforcing.
+   */
+  private contractAuthorityMode: 'advisory' | 'enforcing';
   private bridge: ExecutionBridge;
   private currentCycle: CognitiveState | null = null;
   private cycleCount = 0;
@@ -397,9 +469,174 @@ export class CognitiveCore {
     this.registry = getCapabilityRegistry();
     this.bridge = bridge || {};
     this.sessionId = `cognitive-${Date.now()}`;
+    this.contractAuthorityMode =
+      process.env.HEIDI_CONTRACT_AUTHORITY === 'enforcing' ? 'enforcing' : 'advisory';
+
+    // Contract layer: register the migrated contracts and build the observers
+    // that can actually go and look at the world.
+    this.contracts = new ContractRegistry({ strict: false });
+    for (const contract of ALL_CONTRACTS) {
+      this.contracts.register(contract);
+    }
+    const observerDeps = {
+      pool: this.pool,
+      goals: this.goals,
+      operationalIntelligence: this.bridge.operationalIntelligence ?? null,
+      revenueLifecycle: this.bridge.revenueLifecycle ?? null,
+      communicationLayer: this.bridge.communicationLayer as
+        | { verifyDelivery: (id: string) => Promise<{ status: string; providerMessageId: string | null }> }
+        | null
+        ?? null,
+    };
+    this.verifier = createHeidiVerificationRunner(observerDeps);
+    // Same observers on the registry, so unobservable() reports the truth
+    // rather than flagging everything for lack of registration.
+    for (const [source, observer] of heidiObservers(observerDeps)) {
+      this.contracts.registerObserver(source, observer);
+    }
 
     // Wire capability executors if bridge components are available
     this.wireCapabilityExecutors();
+  }
+
+  // ─── Bounded external calls ───────────────────────────────────────────
+
+  /**
+   * Budget for a single memory read or write inside a cycle.
+   *
+   * Sits just above EMBEDDING_TIMEOUT_MS (15 s) so the inner, more specific
+   * timeout normally fires first and reports which provider stalled. This one
+   * is the backstop for everything else on that path — a Supabase insert, a
+   * dynamic import, an adapter that never resolves.
+   */
+  private memoryTimeoutMs(): number {
+    const parsed = parseInt(process.env.HEIDI_MEMORY_TIMEOUT_MS || '', 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 20000;
+  }
+
+  /**
+   * Run a promise with a hard deadline, returning `fallback` if it overruns.
+   *
+   * The cognitive loop is only "bounded" if every await inside it is bounded.
+   * Wrapping the call in try/catch is not enough: a promise that never settles
+   * never throws, so the catch never runs and the cycle hangs forever. This is
+   * not hypothetical — Ollama's model runner can wedge while its metadata
+   * endpoints keep answering instantly, and an unbounded embeddings call then
+   * stalls every cycle indefinitely.
+   *
+   * The losing promise is explicitly swallowed so a late rejection does not
+   * surface as an unhandled rejection after the cycle has moved on.
+   */
+  private async withDeadline<T>(
+    work: Promise<T>,
+    fallback: T,
+    label: string,
+    onTimeout?: (message: string) => void,
+  ): Promise<T> {
+    const timeoutMs = this.memoryTimeoutMs();
+    let timer: NodeJS.Timeout | null = null;
+
+    const timeout = new Promise<typeof TIMED_OUT>((resolve) => {
+      timer = setTimeout(() => resolve(TIMED_OUT), timeoutMs);
+    });
+
+    try {
+      const settled = await Promise.race([
+        work.catch((err) => {
+          throw err;
+        }),
+        timeout,
+      ]);
+
+      if (settled === TIMED_OUT) {
+        // Detach the abandoned promise so its eventual rejection is not an
+        // unhandled rejection in a cycle that already gave up on it.
+        void work.catch(() => undefined);
+        const message = `${label} exceeded ${timeoutMs}ms — continuing without it`;
+        if (onTimeout) onTimeout(message);
+        return fallback;
+      }
+
+      return settled as T;
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  }
+
+  // ─── Contract layer ───────────────────────────────────────────────────
+
+  /**
+   * The state snapshot the authority function reasons over. Deliberately
+   * conservative where HYDI does not actually know the answer: an unknown
+   * environment is not assumed to be development.
+   */
+  private contractState(state?: CognitiveState | null): SystemStateSnapshot {
+    const env = process.env.NODE_ENV;
+    const environment: SystemStateSnapshot['environment'] =
+      env === 'production' ? 'production'
+        : env === 'test' || env === 'development' ? 'development'
+          : 'unknown';
+
+    const perception = state?.perception ?? null;
+    const degradedComponents = (perception?.components ?? [])
+      .filter((c) => c.status !== 'healthy' && c.status !== 'ok')
+      .map((c) => c.name);
+
+    const healthScore =
+      perception === null ? 0.5
+        : perception.systemHealth === 'healthy' ? 1
+          : perception.systemHealth === 'degraded' ? 0.5
+            : perception.systemHealth === 'failed' ? 0.1
+              : 0.5;
+
+    return {
+      at: new Date().toISOString(),
+      environment,
+      // The loop runs unattended by construction. Claiming a human is present
+      // would let the authority function assume an approval that nobody is
+      // there to give.
+      humanPresent: false,
+      healthScore,
+      degradedComponents,
+      incidentActive:
+        perception?.systemHealth === 'degraded' || perception?.systemHealth === 'failed',
+      armedInterlocks: [],
+      extra: {},
+    };
+  }
+
+  /** The contract registered for a capability, if its verification has been migrated. */
+  getContract(capabilityId: string): CapabilityContract | null {
+    return this.contracts.get(capabilityId);
+  }
+
+  getContractRegistry(): ContractRegistry {
+    return this.contracts;
+  }
+
+  /**
+   * Migration status: which capabilities verify from a contract, which still
+   * fall through to the legacy chain, and which contracts have no observer
+   * and would therefore report `unverifiable` at run time.
+   */
+  contractCoverage(): {
+    mode: 'advisory' | 'enforcing';
+    contracted: string[];
+    legacyFallback: string[];
+    unobservable: string[];
+  } {
+    const contracted = this.contracts.list().map((c) => c.identity.id);
+    const legacyFallback = this.registry
+      .listAll()
+      .map((c) => c.capabilityId)
+      .filter((id) => contracted.indexOf(id) === -1);
+
+    return {
+      mode: this.contractAuthorityMode,
+      contracted,
+      legacyFallback,
+      unobservable: this.contracts.unobservable().map((u) => u.capabilityId),
+    };
   }
 
   /**
@@ -415,6 +652,10 @@ export class CognitiveCore {
       this.wireExecutor('tool.update_database', async (params, ctx) => this.executeViaActionExecutor(ae, 'update_database', params, ctx));
       this.wireExecutor('tool.schedule_event', async (params, ctx) => this.executeViaActionExecutor(ae, 'schedule_event', params, ctx));
       this.wireExecutor('tool.send_email', async (params, ctx) => this.executeViaActionExecutor(ae, 'send_email', params, ctx));
+      // The inverse of create_task. Registering it is what makes create_task's
+      // reversibility claim true rather than aspirational — an undo nobody
+      // wired up is not an undo.
+      this.wireExecutor('tool.cancel_task', async (params, ctx) => this.executeViaActionExecutor(ae, 'cancel_task', params, ctx));
     }
 
     // OperationalIntelligence capabilities
@@ -1241,7 +1482,12 @@ export class CognitiveCore {
       state.pendingWork = await this.goals.getPendingWork();
       if (this.bridge.memory && state.pendingWork.length > 0) {
         const query = `cognitive cycle: ${state.pendingWork.map(g => g.title).join(', ')}`;
-        state.retrievedMemory = await this.bridge.memory.retrieve(query, 'heidi', this.sessionId);
+        state.retrievedMemory = await this.withDeadline<string | null>(
+          this.bridge.memory.retrieve(query, 'heidi', this.sessionId),
+          null,
+          'retrieve_memory',
+          (message) => errors.push(message),
+        );
       }
       state.phase = 'identify_goals';
     } catch (e) {
@@ -1281,7 +1527,7 @@ export class CognitiveCore {
 
     // PHASE 10: AUTHORIZE — check capability registry + autonomy policy
     try {
-      state.authorizationResult = this.authorizeAction(state.selectedAction, state.identity);
+      state.authorizationResult = this.authorizeAction(state.selectedAction, state.identity, state);
       state.phase = 'act';
 
       // If not authorized, create escalation record
@@ -1681,7 +1927,65 @@ export class CognitiveCore {
 
   // ─── Authorization ────────────────────────────────────────────────────
 
-  private authorizeAction(action: SelectedAction | null, identity: HeidiIdentity | null): AuthorizationResult {
+  /**
+   * Authorization = legacy decision INTERSECTED with the contract's decision.
+   *
+   * Governance layers compose by intersection, never by union: a second
+   * opinion may refuse something the first permitted, but must never permit
+   * something the first refused. So the contract can only ever narrow.
+   *
+   * In `advisory` mode (the default) a contract refusal is recorded on the
+   * result and the legacy decision still governs, so the disagreements can be
+   * read off real cycles before anyone bets uptime on new metadata.
+   */
+  private authorizeAction(
+    action: SelectedAction | null,
+    identity: HeidiIdentity | null,
+    state?: CognitiveState | null,
+  ): AuthorizationResult {
+    const legacy = this.authorizeActionLegacy(action, identity);
+
+    if (!action?.capabilityId) return legacy;
+    const contract = this.contracts.get(action.capabilityId);
+    if (!contract) {
+      return { ...legacy, contractTier: null, contractRationale: null, contractDisagreement: null };
+    }
+
+    // Registry-level, so cross-contract coherence (an undo may not be gated
+    // harder than the act it reverses) is applied.
+    const decision =
+      this.contracts.authorityFor(action.capabilityId, action.params, this.contractState(state)) ??
+      computeAuthority(contract, action.params, this.contractState(state));
+
+    // R3+ means a human has to say yes; the loop has nobody to ask.
+    const contractRefuses = decision.requiresApproval || decision.tier === 'R5';
+    const disagreement =
+      legacy.authorized && contractRefuses
+        ? `contract derives ${decision.tier} for this invocation (legacy risk level ${action.riskLevel}): ${decision.rationale}`
+        : null;
+
+    if (disagreement && this.contractAuthorityMode === 'enforcing') {
+      return {
+        ...legacy,
+        authorized: false,
+        authorizationMode: decision.tier === 'R5' ? 'prohibited' : 'human_required',
+        reason: disagreement,
+        policyEvaluated: 'capability_contract',
+        contractTier: decision.tier,
+        contractRationale: decision.rationale,
+        contractDisagreement: disagreement,
+      };
+    }
+
+    return {
+      ...legacy,
+      contractTier: decision.tier,
+      contractRationale: decision.rationale,
+      contractDisagreement: disagreement,
+    };
+  }
+
+  private authorizeActionLegacy(action: SelectedAction | null, identity: HeidiIdentity | null): AuthorizationResult {
     if (!action) {
       return { authorized: false, authorizationMode: 'prohibited', reason: 'No action selected', policyEvaluated: 'none', capabilityId: null, escalationRecordId: null };
     }
@@ -1778,280 +2082,110 @@ export class CognitiveCore {
 
   // ─── Verification ─────────────────────────────────────────────────────
 
+  /**
+   * Verify through the capability's own contract.
+   *
+   * The planner contributes nothing capability-specific here: it hands over
+   * the arguments and the executor's result, and the contract says what to go
+   * look at and what must be true. `targetGoalId` is merged into the argument
+   * bag because the legacy chain read it off the action rather than the
+   * params, and contracts address it by name.
+   */
+  private async verifyThroughContract(
+    action: SelectedAction,
+    exec: ExecutionResult,
+    state: CognitiveState,
+  ): Promise<VerificationResult> {
+    const contract = this.contracts.get(action.capabilityId as string) as CapabilityContract;
+    // Name the contract AND what it went to look at. An audit record that says
+    // only "verified" is not much better than no record; the useful question
+    // later is always "verified against what?".
+    const observation = contract.verification.observation;
+    const strategy =
+      `contract:${contract.identity.id}@${contract.identity.version} ` +
+      `via ${observation.source}(${observation.target})`;
+
+    const args: Record<string, unknown> = { ...action.params };
+    if (action.targetGoalId) {
+      args.targetGoalId = action.targetGoalId;
+    }
+
+    const result = await this.verifier.verify(
+      contract,
+      args,
+      {
+        sessionId: this.sessionId,
+        actorId: 'heidi',
+        authorityId: null,
+        state: this.contractState(state),
+      },
+      exec.rawResult,
+    );
+
+    return {
+      verified: result.verified,
+      expectedState: contract.verification.description,
+      // `unverifiable` and `error` are reported as themselves rather than
+      // collapsed into "failed" — not knowing is a different problem from
+      // knowing it went wrong, and they need different responses.
+      actualState:
+        result.outcome === 'verified'
+          ? 'verified'
+          : `${result.outcome}: ${result.evidence}`,
+      verificationStrategy: strategy,
+      evidence: [
+        {
+          outcome: result.outcome,
+          confidence: result.confidence,
+          failedConditions: result.failedConditions,
+          observed: result.observedState,
+          onFailure: result.onFailure,
+          executorOutcome: exec.outcome,
+        },
+      ],
+    };
+  }
+
+  /**
+   * Verify the cycle's action.
+   *
+   * This used to be ~270 lines of hand-written `if (capabilityId === ...)`
+   * branches — the planner holding capability-specific knowledge, which meant
+   * every new capability required editing this method. All 43 registered
+   * capabilities now carry contracts, so those branches were unreachable and
+   * have been deleted. What remains is capability-agnostic.
+   *
+   * The fallback is deliberately `unverified`, not "trust the executor".
+   * The old default was `verified: exec.outcome === 'success'`, which made the
+   * answer to "did this work?" default to yes for exactly the capabilities
+   * nobody had specified. A capability reaching this path has no contract;
+   * that is a gap to close, not evidence of success.
+   * `contractCoverage().legacyFallback` lists anything that lands here.
+   */
   private async verifyAction(state: CognitiveState): Promise<VerificationResult> {
     if (!state.executionResult || !state.selectedAction) {
-      return { verified: false, expectedState: 'unknown', actualState: 'unknown', verificationStrategy: 'none', evidence: [] };
+      return {
+        verified: false,
+        expectedState: 'unknown',
+        actualState: 'no action or execution result to verify',
+        verificationStrategy: 'none',
+        evidence: [],
+      };
     }
 
     const action = state.selectedAction;
-    const exec = state.executionResult;
 
-    // If the capability registry executor already verified, use that
-    if (action.capabilityId) {
-      const cap = this.registry.get(action.capabilityId);
-      const verificationStrategy = cap?.verificationStrategy || 'unknown';
-
-      // For goal.advance, verify by re-reading the goal
-      if (action.capabilityId === 'goal.advance' && action.targetGoalId) {
-        const goal = await this.goals.getGoal(action.targetGoalId);
-        return {
-          verified: goal?.status === 'in_progress' || goal?.status === 'completed',
-          expectedState: 'in_progress or completed',
-          actualState: goal?.status || 'unknown',
-          verificationStrategy,
-          evidence: [{ goalId: action.targetGoalId, status: goal?.status }],
-        };
-      }
-
-      // For goal.complete, verify by re-reading the goal
-      if (action.capabilityId === 'goal.complete' && action.targetGoalId) {
-        const goal = await this.goals.getGoal(action.targetGoalId);
-        return {
-          verified: goal?.status === 'completed',
-          expectedState: 'completed',
-          actualState: goal?.status || 'unknown',
-          verificationStrategy,
-          evidence: [{ goalId: action.targetGoalId, status: goal?.status, result: goal?.result }],
-        };
-      }
-
-      // For tool.create_task, verify by querying the actions table
-      if (action.capabilityId === 'tool.create_task') {
-        const result = exec.rawResult as { task_id?: string } | null;
-        if (result?.task_id) {
-          try {
-            const row = await this.pool.query<QueryResultRow>(
-              `SELECT id, status FROM actions WHERE id = $1`,
-              [result.task_id],
-            );
-            return {
-              verified: row.rows.length > 0,
-              expectedState: 'task exists in actions table',
-              actualState: row.rows.length > 0 ? `task exists, status=${row.rows[0].status}` : 'task not found',
-              verificationStrategy,
-              evidence: [{ taskId: result.task_id, found: row.rows.length > 0 }],
-            };
-          } catch (e) {
-            return {
-              verified: false,
-              expectedState: 'task exists in actions table',
-              actualState: `verification query failed: ${e instanceof Error ? e.message : 'unknown'}`,
-              verificationStrategy,
-              evidence: [],
-            };
-          }
-        }
-      }
-
-      // For recovery actions, verify by re-checking health
-      if (action.capabilityId === 'recovery.governed_recover' || action.capabilityId === 'recovery.auto_recover') {
-        const component = action.params.component as string;
-        if (component && this.bridge.operationalIntelligence) {
-          try {
-            await this.bridge.operationalIntelligence.checkHealth();
-            return {
-              verified: true,
-              expectedState: 'component healthy after recovery',
-              actualState: 'health check completed after recovery',
-              verificationStrategy,
-              evidence: [{ component, postRecoveryCheck: true }],
-            };
-          } catch (e) {
-            return {
-              verified: false,
-              expectedState: 'component healthy after recovery',
-              actualState: `post-recovery check failed: ${e instanceof Error ? e.message : 'unknown'}`,
-              verificationStrategy,
-              evidence: [],
-            };
-          }
-        }
-      }
-
-      // For communication actions, verify delivery status
-      if (action.capabilityId === 'comm.send_message') {
-        const result = exec.rawResult as { deliveryStatus?: string; messageId?: string } | null;
-        return {
-          verified: result?.deliveryStatus === 'delivered' || result?.deliveryStatus === 'sent',
-          expectedState: 'message delivered or sent',
-          actualState: result?.deliveryStatus || 'unknown',
-          verificationStrategy,
-          evidence: [{ messageId: result?.messageId, deliveryStatus: result?.deliveryStatus }],
-        };
-      }
-
-      // For revenue actions, verify the result structure
-      if (action.capabilityId === 'revenue.run_cycle') {
-        const result = exec.rawResult as { selectedAction?: unknown; metrics?: unknown } | null;
-        return {
-          verified: result !== null && typeof result === 'object' && 'metrics' in result,
-          expectedState: 'RevenueControlLoopResult with metrics returned',
-          actualState: result !== null && 'metrics' in result ? 'result with metrics received' : 'incomplete result',
-          verificationStrategy,
-          evidence: [{ hasResult: result !== null, hasMetrics: result !== null && 'metrics' in result }],
-        };
-      }
-
-      // For revenue.identify_prospect, verify by re-reading the prospect from the DB
-      if (action.capabilityId === 'revenue.identify_prospect') {
-        const result = exec.rawResult as { prospectId?: string; id?: string } | null;
-        const prospectId = result?.prospectId || result?.id;
-        if (prospectId) {
-          try {
-            const row = await this.pool.query<QueryResultRow>(
-              `SELECT id FROM revenue_prospects WHERE id = $1`,
-              [prospectId],
-            );
-            return {
-              verified: row.rows.length > 0,
-              expectedState: 'prospect exists in revenue_prospects',
-              actualState: row.rows.length > 0 ? 'prospect found' : 'prospect not found',
-              verificationStrategy,
-              evidence: [{ prospectId, found: row.rows.length > 0 }],
-            };
-          } catch (e) {
-            return {
-              verified: false,
-              expectedState: 'prospect exists in revenue_prospects',
-              actualState: `verification query failed: ${e instanceof Error ? e.message : 'unknown'}`,
-              verificationStrategy,
-              evidence: [],
-            };
-          }
-        }
-        return {
-          verified: false,
-          expectedState: 'prospect ID in result',
-          actualState: 'no prospect ID in result',
-          verificationStrategy,
-          evidence: [],
-        };
-      }
-
-      // For revenue.update_prospect_status, verify by re-reading the prospect status
-      if (action.capabilityId === 'revenue.update_prospect_status') {
-        const prospectId = action.params.prospectId as string;
-        const expectedStatus = action.params.newStatus as string;
-        if (prospectId && expectedStatus) {
-          try {
-            const row = await this.pool.query<QueryResultRow>(
-              `SELECT prospect_id, status FROM revenue_prospects WHERE prospect_id = $1`,
-              [prospectId],
-            );
-            const actualStatus = row.rows.length > 0 ? row.rows[0].status as string : 'not found';
-            return {
-              verified: row.rows.length > 0 && actualStatus === expectedStatus,
-              expectedState: `prospect status = ${expectedStatus}`,
-              actualState: actualStatus,
-              verificationStrategy,
-              evidence: [{ prospectId, expectedStatus, actualStatus }],
-            };
-          } catch (e) {
-            return {
-              verified: false,
-              expectedState: `prospect status = ${expectedStatus}`,
-              actualState: `verification query failed: ${e instanceof Error ? e.message : 'unknown'}`,
-              verificationStrategy,
-              evidence: [],
-            };
-          }
-        }
-      }
-
-      // For revenue.create_opportunity, verify by re-reading the opportunity
-      if (action.capabilityId === 'revenue.create_opportunity') {
-        const result = exec.rawResult as { opportunityId?: string; id?: string } | null;
-        const opportunityId = result?.opportunityId || result?.id;
-        if (opportunityId) {
-          try {
-            const row = await this.pool.query<QueryResultRow>(
-              `SELECT opportunity_id FROM revenue_opportunities WHERE opportunity_id = $1`,
-              [opportunityId],
-            );
-            return {
-              verified: row.rows.length > 0,
-              expectedState: 'opportunity exists in revenue_opportunities',
-              actualState: row.rows.length > 0 ? 'opportunity found' : 'opportunity not found',
-              verificationStrategy,
-              evidence: [{ opportunityId, found: row.rows.length > 0 }],
-            };
-          } catch (e) {
-            return {
-              verified: false,
-              expectedState: 'opportunity exists in revenue_opportunities',
-              actualState: `verification query failed: ${e instanceof Error ? e.message : 'unknown'}`,
-              verificationStrategy,
-              evidence: [],
-            };
-          }
-        }
-      }
-
-      // For revenue.activate_service, verify by re-reading the service status
-      if (action.capabilityId === 'revenue.activate_service') {
-        const serviceId = action.params.serviceId as string;
-        if (serviceId && this.bridge.revenueLifecycle) {
-          const verifyResult = await this.bridge.revenueLifecycle.verifyService(serviceId);
-          return {
-            verified: verifyResult.verified,
-            expectedState: 'service active and verified',
-            actualState: verifyResult.result,
-            verificationStrategy,
-            evidence: [{ serviceId, verified: verifyResult.verified, details: verifyResult.details }],
-          };
-        }
-      }
-
-      // For revenue.get_verified_revenue, verify the result is an array of ledger entries
-      if (action.capabilityId === 'revenue.get_verified_revenue') {
-        const result = exec.rawResult as unknown[] | null;
-        return {
-          verified: Array.isArray(result),
-          expectedState: 'array of verified ledger entries',
-          actualState: Array.isArray(result) ? `${result.length} entries` : 'not an array',
-          verificationStrategy,
-          evidence: [{ entryCount: Array.isArray(result) ? result.length : 0 }],
-        };
-      }
-
-      // For world.query, verify answer was returned
-      if (action.capabilityId === 'world.query') {
-        return {
-          verified: typeof exec.rawResult === 'string' && exec.rawResult.length > 0,
-          expectedState: 'non-empty answer string',
-          actualState: typeof exec.rawResult === 'string' ? `answer (${exec.rawResult.length} chars)` : 'no answer',
-          verificationStrategy,
-          evidence: [{ answerLength: typeof exec.rawResult === 'string' ? exec.rawResult.length : 0 }],
-        };
-      }
-
-      // Default: trust the executor's verification
-      return {
-        verified: exec.outcome === 'success',
-        expectedState: 'executor reported success',
-        actualState: exec.outcome,
-        verificationStrategy,
-        evidence: exec.evidence,
-      };
+    if (action.capabilityId && this.contracts.get(action.capabilityId)) {
+      return this.verifyThroughContract(action, state.executionResult, state);
     }
 
-    // Fallback for observe
-    if (action.actionType === 'observe' || action.actionType === 'cognitive.observe') {
-      return {
-        verified: true,
-        expectedState: 'observation completed',
-        actualState: exec.outcome === 'success' ? 'observation completed' : 'observation failed',
-        verificationStrategy: 'perception result contains system health',
-        evidence: exec.evidence,
-      };
-    }
-
+    const id = action.capabilityId ?? action.actionType;
     return {
       verified: false,
-      expectedState: 'unknown',
-      actualState: 'unknown',
+      expectedState: 'a contract stating what success means',
+      actualState: `no contract registered for "${id}" — cannot verify`,
       verificationStrategy: 'none',
-      evidence: [],
+      evidence: [{ executorOutcome: state.executionResult.outcome, uncontracted: id }],
     };
   }
 
@@ -2104,7 +2238,12 @@ export class CognitiveCore {
           outcome: outcomeClassification,
           lesson,
         };
-        memoryStored = await this.bridge.memory.storeExperience(this.sessionId, 'heidi', experience);
+        memoryStored = await this.withDeadline(
+          this.bridge.memory.storeExperience(this.sessionId, 'heidi', experience),
+          false,
+          'storeExperience',
+          (message) => lessons.push(message),
+        );
         if (memoryStored) {
           memoryId = `mem-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
         }
@@ -2230,6 +2369,14 @@ export class CognitiveCore {
             decisionResolution: state.decisionResolution?.conflictResolution,
             authorized: state.authorizationResult?.authorized,
             authorizationMode: state.authorizationResult?.authorizationMode,
+            // Contract-layer telemetry. While authority runs in advisory mode
+            // this is the ONLY record that the contract disagreed — the
+            // decision itself is discarded at the end of the cycle. Without
+            // persisting it there is no evidence base for deciding whether
+            // enforcing mode is safe, and the advisory period collects nothing.
+            contractTier: state.authorizationResult?.contractTier ?? null,
+            contractRationale: state.authorizationResult?.contractRationale ?? null,
+            contractDisagreement: state.authorizationResult?.contractDisagreement ?? null,
             executed: state.executionResult?.executed,
             outcome: state.executionResult?.outcome,
             verified: state.verificationResult?.verified,
@@ -2246,6 +2393,57 @@ export class CognitiveCore {
     } catch {
       // heidi_events may have different schema — don't fail the cycle
     }
+  }
+
+  /**
+   * Read back the disagreements the advisory contract layer has recorded.
+   *
+   * This is the evidence for the enforcement decision: for each capability,
+   * how often the contract would have refused an action the legacy risk level
+   * permitted. A capability with many disagreements is either genuinely
+   * riskier than its static level admits, or has contract bounds that are
+   * wrong — and the rationale is what tells the two apart.
+   *
+   * Flipping HEIDI_CONTRACT_AUTHORITY=enforcing without reading this is
+   * betting uptime on metadata nobody has checked.
+   */
+  async contractDisagreements(since: number | string = 168): Promise<Array<{
+    capabilityId: string;
+    disagreements: number;
+    totalCycles: number;
+    contractTiers: string[];
+    sampleRationale: string | null;
+  }>> {
+    // A number means "last N hours"; a string is an absolute ISO boundary.
+    // The absolute form matters after a contract or authority change: cycles
+    // recorded before it carry the OLD tier, and averaging the two together
+    // reports a model nobody is running any more.
+    const absolute = typeof since === 'string';
+    const rows = await this.pool.query<QueryResultRow>(
+      `SELECT
+         payload->>'selectedCapability'    AS capability_id,
+         COUNT(*)                          AS total_cycles,
+         COUNT(payload->>'contractDisagreement') AS disagreements,
+         ARRAY_AGG(DISTINCT payload->>'contractTier')
+           FILTER (WHERE payload->>'contractTier' IS NOT NULL) AS contract_tiers,
+         (ARRAY_AGG(payload->>'contractRationale')
+           FILTER (WHERE payload->>'contractDisagreement' IS NOT NULL))[1] AS sample_rationale
+       FROM heidi_events
+       WHERE event_type = 'cognitive_cycle'
+         AND created_at > ${absolute ? '$1::timestamptz' : "now() - ($1 || ' hours')::interval"}
+         AND payload->>'selectedCapability' IS NOT NULL
+       GROUP BY payload->>'selectedCapability'
+       ORDER BY COUNT(payload->>'contractDisagreement') DESC, COUNT(*) DESC`,
+      [String(since)],
+    );
+
+    return rows.rows.map((row) => ({
+      capabilityId: row.capability_id as string,
+      disagreements: Number(row.disagreements),
+      totalCycles: Number(row.total_cycles),
+      contractTiers: (row.contract_tiers as string[] | null) ?? [],
+      sampleRationale: (row.sample_rationale as string | null) ?? null,
+    }));
   }
 
   private async recordEscalation(state: CognitiveState): Promise<void> {
@@ -2648,6 +2846,122 @@ export class CognitiveCore {
 
   getRegistry(): CapabilityRegistry {
     return this.registry;
+  }
+
+  /**
+   * Exercise one capability directly, for qualification.
+   *
+   * The cognitive loop only ever exercises whichever capabilities its goals
+   * happen to select, which left 41 of 45 contracts unexercised — and an
+   * unexercised contract is not validated, however well-formed. This runs the
+   * REAL executor and the REAL contract verification so the result is evidence
+   * about the production path, not about a stub.
+   *
+   * It deliberately does NOT bypass authority. A capability whose contract
+   * requires approval is refused unless `operatorApproval` is passed, and the
+   * decision is recorded either way. A harness that quietly self-authorized
+   * would be qualifying a governance model it had just stepped around.
+   */
+  async exerciseCapability(
+    capabilityId: string,
+    params: Record<string, unknown>,
+    options: { operatorApproval?: string } = {},
+  ): Promise<ExerciseRecord> {
+    const startedAt = new Date().toISOString();
+    const contract = this.contracts.get(capabilityId);
+    const state = this.contractState(null);
+
+    const decision = contract
+      ? this.contracts.authorityFor(capabilityId, params, state)
+      : null;
+
+    const base: ExerciseRecord = {
+      capabilityId,
+      startedAt,
+      contractRegistered: contract !== null,
+      tier: decision?.tier ?? null,
+      requiresApproval: decision?.requiresApproval ?? false,
+      approvedBy: options.operatorApproval ?? null,
+      executed: false,
+      executionOutcome: null,
+      executionError: null,
+      verificationOutcome: null,
+      verificationEvidence: null,
+      observationSource: contract?.verification.observation.source ?? null,
+      skipped: null,
+    };
+
+    if (!contract) {
+      return { ...base, skipped: `no contract registered for "${capabilityId}"` };
+    }
+
+    if (decision?.requiresApproval && !options.operatorApproval) {
+      return {
+        ...base,
+        skipped:
+          `${decision.tier} requires approval and none was supplied — ` +
+          `refused rather than self-authorized. ${decision.rationale}`,
+      };
+    }
+
+    const executor = this.registry.getExecutor(capabilityId);
+    if (!executor) {
+      return { ...base, skipped: `capability has no wired executor` };
+    }
+
+    let result: unknown = null;
+    try {
+      const capResult = await executor(params, {
+        sessionId: this.sessionId,
+        actorId: 'qualification-harness',
+        actorTrustLevel: 'trusted_system',
+        authorizationMode: options.operatorApproval ? 'human_authorized' : 'autonomous',
+        auditTrail: [],
+      });
+      result = capResult.result;
+      base.executed = capResult.executed;
+      base.executionOutcome = capResult.outcome;
+      base.executionError = capResult.error;
+    } catch (err) {
+      return {
+        ...base,
+        executed: false,
+        executionOutcome: 'failure',
+        executionError: err instanceof Error ? err.message : String(err),
+      };
+    }
+
+    // Verification only means something if the action actually ran. Verifying
+    // the result of a declined execution reports a "verification failure" that
+    // is really an execution failure — two different problems that need two
+    // different fixes.
+    if (!base.executed) {
+      return {
+        ...base,
+        verificationOutcome: null,
+        verificationEvidence: null,
+        rawResult: result,
+      };
+    }
+
+    const verification = await this.verifier.verify(
+      contract,
+      params,
+      {
+        sessionId: this.sessionId,
+        actorId: 'qualification-harness',
+        authorityId: options.operatorApproval ?? null,
+        state,
+      },
+      result,
+    );
+
+    return {
+      ...base,
+      verificationOutcome: verification.outcome,
+      verificationEvidence: verification.evidence,
+      rawResult: result,
+    };
   }
 
   /**

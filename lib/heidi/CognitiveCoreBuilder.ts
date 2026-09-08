@@ -26,6 +26,8 @@
 
 import path from 'path';
 import { CognitiveCore, type ExecutionBridge, type DBConfig } from './CognitiveCore';
+import { ContractRegistry, defaultState } from '../capability-contract';
+import { ALL_CONTRACTS } from './contracts';
 import {
   createActionExecutorBridge,
   createCommunicationLayerBridge,
@@ -185,6 +187,7 @@ export class CognitiveCoreBuilder {
         try {
           const { RevenueControlLoop } = await import('../revenue/RevenueControlLoop');
           const loop = new RevenueControlLoop();
+          loop.setGovernor(createRevenueGovernor());
           bridge.revenueControlLoop = createRevenueControlLoopBridge(loop);
         } catch {
           // RevenueControlLoop not loadable — skip
@@ -496,4 +499,53 @@ export async function buildCognitiveCore(
   opts: CognitiveCoreBuilderOptions = {},
 ): Promise<CognitiveCore> {
   return new CognitiveCoreBuilder(opts).build();
+}
+
+/**
+ * Authorizes each write RevenueControlLoop performs against its own capability
+ * contract, closing the run_cycle governance bypass.
+ *
+ * Before this, one authorization of `revenue.run_cycle` admitted every write
+ * inside the cycle — status changes, opportunity creation, provisioning,
+ * health updates — none of which the capability registry ever saw, even though
+ * contracts existed for most of them.
+ *
+ * Mode follows HEIDI_CONTRACT_AUTHORITY, deliberately. In `advisory` the
+ * decision is computed and recorded but never blocks, so the disagreements can
+ * be read off real cycles before anyone bets revenue operations on them — the
+ * same progression used everywhere else in this layer. A separate switch here
+ * would mean the enforcement decision had two answers.
+ */
+export function createRevenueGovernor(): (
+  capabilityId: string,
+  args: Record<string, unknown>,
+) => Promise<{ allowed: boolean; reason: string }> {
+  const registry = new ContractRegistry({ strict: false });
+  for (const contract of ALL_CONTRACTS) registry.register(contract, async () => ({}));
+
+  const enforcing = process.env.HEIDI_CONTRACT_AUTHORITY === 'enforcing';
+
+  return async (capabilityId, args) => {
+    const decision = registry.authorityFor(capabilityId, args, defaultState({ humanPresent: false }));
+
+    if (!decision) {
+      // An operation with no contract is the failure this exists to catch, so
+      // it is reported as such rather than waved through unnamed.
+      return {
+        allowed: !enforcing,
+        reason: `no contract registered for "${capabilityId}" — ungoverned write`,
+      };
+    }
+
+    if (!decision.requiresApproval) {
+      return { allowed: true, reason: `${decision.tier} within autonomous range` };
+    }
+
+    return {
+      allowed: !enforcing,
+      reason: enforcing
+        ? `refused: ${decision.rationale}`
+        : `advisory: would refuse — ${decision.rationale}`,
+    };
+  };
 }

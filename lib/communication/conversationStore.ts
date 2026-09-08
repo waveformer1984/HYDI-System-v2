@@ -258,7 +258,13 @@ export class ConversationStore {
   async getMessage(messageId: string): Promise<MessageRecord | null> {
     // messageId can be either our internal message_id or the UUID primary key
     const row = await this.queryOne<MessageRow>(
-      `SELECT * FROM chat_messages WHERE message_id = $1 OR id = $1`,
+      // `id::text` rather than `id = $1`. `id` is uuid and `message_id` is text,
+      // and CommunicationLayer generates ids like "out-1757...-a1b2" — never
+      // uuids. Comparing those against a uuid column made Postgres reject the
+      // whole query with "invalid input syntax for type uuid", so getMessage()
+      // threw for every real message rather than returning null. Casting the
+      // column keeps the uuid lookup working without parsing the parameter.
+      `SELECT * FROM chat_messages WHERE message_id = $1 OR id::text = $1`,
       [messageId],
     );
     return row ? this.mapMessage(row) : null;

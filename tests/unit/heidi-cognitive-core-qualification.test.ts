@@ -417,10 +417,25 @@ describe('HEIDI Live Qualification', () => {
     expect(state.executionResult!.executed).toBe(true);
     expect(state.executionResult!.outcome).toBe('success');
 
-    // It must have been verified by re-reading the actions table
+    // It must have been verified by re-reading the actions table.
+    //
+    // Verification moved from CognitiveCore's if-chain into the capability
+    // contract (lib/heidi/contracts/cognitive-contracts.ts), so the strategy
+    // label changed. The assertion is now on the substance rather than the
+    // prose: the evidence must show it actually queried `actions` and found
+    // the row, which is a stronger check than the old substring match.
     expect(state.verificationResult).not.toBeNull();
     expect(state.verificationResult!.verified).toBe(true);
-    expect(state.verificationResult!.verificationStrategy).toContain('actions table');
+    expect(state.verificationResult!.verificationStrategy).toContain('tool.create_task');
+    expect(state.verificationResult!.verificationStrategy).toContain('sql:actions');
+
+    const evidence = state.verificationResult!.evidence[0] as {
+      outcome: string;
+      observed: { table?: string; found?: boolean };
+    };
+    expect(evidence.outcome).toBe('verified');
+    expect(evidence.observed.table).toBe('actions');
+    expect(evidence.observed.found).toBe(true);
     await core.close();
   }, 60000);
 

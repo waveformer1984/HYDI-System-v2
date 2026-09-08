@@ -351,4 +351,24 @@ export interface RevenueControlLoopResult {
   executionResult: string | null;
   verified: boolean;
   verificationResult: string | null;
+  /**
+   * Every mutating operation the cycle performed, and whether a capability
+   * governor authorized it.
+   *
+   * The loop calls ProspectPipeline and CustomerLifecycle methods directly
+   * rather than dispatching through the capability registry, so a single
+   * authorization of `revenue.run_cycle` used to admit an unbounded set of
+   * writes that no sub-capability contract ever saw. This log makes those
+   * writes visible; supplying a governor makes them authorized.
+   */
+  governance: GovernanceRecord[];
+}
+
+export interface GovernanceRecord {
+  /** The capability contract that governs this operation. */
+  capabilityId: string;
+  allowed: boolean;
+  /** Set when no governor was supplied — the write happened, ungoverned. */
+  ungoverned: boolean;
+  reason: string;
 }

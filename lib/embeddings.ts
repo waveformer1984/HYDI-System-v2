@@ -16,6 +16,15 @@
  * Returns `null` when no provider is configured or a call fails, so callers
  * degrade gracefully (store memory without an embedding and skip semantic
  * retrieval) instead of writing a degenerate constant vector.
+ *
+ * EVERY provider call is bounded. Ollama answers /api/tags and /api/ps
+ * instantly while its model runner is wedged, so "the server is up" is not
+ * evidence that an embeddings call will ever return — measured on
+ * 2026-09-08, /api/embeddings hung indefinitely while /api/tags replied in
+ * milliseconds. An unbounded fetch here propagates that hang all the way up
+ * into the cognitive loop, which is how a bounded loop stops being bounded.
+ * Failing after EMBEDDING_TIMEOUT_MS yields `null`, which callers already
+ * handle.
  */
 
 export const EMBEDDING_DIM = 1536;
@@ -35,6 +44,45 @@ interface OllamaEmbeddingResponse {
 
 function ollamaBaseUrl(): string {
   return process.env.LOCAL_MODEL_URL || process.env.OLLAMA_URL || 'http://localhost:11434';
+}
+
+/**
+ * Budget for a single embeddings call.
+ *
+ * Deliberately much tighter than LOCAL_MODEL_TIMEOUT_MS (60 s, sized for a
+ * cold generative model load): embedding models are small — nomic-embed-text
+ * is ~274 MB — and this runs on the memory write of every cognitive cycle.
+ * A budget that tolerates a cold load of a 7B model would let one wedged
+ * runner stall the loop for a minute per cycle.
+ */
+export function embeddingTimeoutMs(): number {
+  const parsed = parseInt(process.env.EMBEDDING_TIMEOUT_MS || '', 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 15000;
+}
+
+/**
+ * fetch with a hard deadline. `AbortController` rather than
+ * `AbortSignal.timeout` so the timer is explicitly cleared — an uncleared
+ * timer keeps the event loop alive and turns a fast path into a slow exit.
+ */
+async function fetchWithDeadline(
+  url: string,
+  init: RequestInit,
+  timeoutMs: number,
+  label: string,
+): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new Error(`${label} timed out after ${timeoutMs}ms`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /**
@@ -68,14 +116,19 @@ async function generateOpenAIEmbedding(input: string): Promise<number[] | null> 
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return null;
 
-  const response = await fetch('https://api.openai.com/v1/embeddings', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
+  const response = await fetchWithDeadline(
+    'https://api.openai.com/v1/embeddings',
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ model: OPENAI_EMBEDDING_MODEL, input }),
     },
-    body: JSON.stringify({ model: OPENAI_EMBEDDING_MODEL, input }),
-  });
+    embeddingTimeoutMs(),
+    'OpenAI embeddings',
+  );
 
   if (!response.ok) {
     throw new Error(`OpenAI embeddings API error: ${response.status}`);
@@ -90,11 +143,16 @@ async function generateOpenAIEmbedding(input: string): Promise<number[] | null> 
 }
 
 async function generateOllamaEmbedding(input: string): Promise<number[] | null> {
-  const response = await fetch(`${ollamaBaseUrl()}/api/embeddings`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model: OLLAMA_EMBEDDING_MODEL, prompt: input }),
-  });
+  const response = await fetchWithDeadline(
+    `${ollamaBaseUrl()}/api/embeddings`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: OLLAMA_EMBEDDING_MODEL, prompt: input }),
+    },
+    embeddingTimeoutMs(),
+    'Ollama embeddings',
+  );
 
   if (!response.ok) {
     throw new Error(`Ollama embeddings API error: ${response.status}`);
