@@ -9,7 +9,20 @@ class OllamaClient {
   constructor(config = {}) {
     this.baseURL = config.baseURL || process.env.OLLAMA_URL || 'http://localhost:11434';
     this.model = config.model || process.env.OLLAMA_MODEL || 'llama3';
-    this.timeout = config.timeout || parseInt(process.env.OLLAMA_TIMEOUT_MS || '8000', 10); // hard timeout (override via OLLAMA_TIMEOUT_MS)
+    // This axios instance's timeout is the ACTUAL binding constraint on every
+    // generate()/chat() call - it fires (as "timeout of Nms exceeded") before
+    // any outer Promise.race timeout in src/models/local-model-adapter.js or
+    // lib/orchestrator.ts's ORCHESTRATOR_TIMEOUT_MS ever gets a chance to.
+    // Previously hard-coded to 8000ms and keyed ONLY to OLLAMA_TIMEOUT_MS, which
+    // nobody was setting - so every real call to a warm llama3.2:3b (observed
+    // 8-13s on this hardware) timed out by design, independent of the
+    // model-name-mismatch bug fixed separately in local-model-adapter.js.
+    // Now also honors LOCAL_MODEL_TIMEOUT_MS (the env var CLAUDE.md documents
+    // as governing local inference timeout generally) as a fallback, with a
+    // more realistic 20s default. OLLAMA_TIMEOUT_MS still wins if set, for
+    // callers that want a tighter/looser bound than the documented default.
+    this.timeout = config.timeout
+      || parseInt(process.env.OLLAMA_TIMEOUT_MS || process.env.LOCAL_MODEL_TIMEOUT_MS || '20000', 10);
     
     this.client = axios.create({
       baseURL: this.baseURL,
