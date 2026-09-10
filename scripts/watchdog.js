@@ -36,6 +36,7 @@ const path = require('path');
 // Wired into the watchdog so HEIDI monitors itself alongside components.
 const { SelfHealthMonitor } = require('../lib/operational/SelfHealthMonitor');
 const { SystemStateModel } = require('../lib/operational/SystemStateModel');
+const { evaluateEndpointHealth } = require('../lib/operational/EndpointHealthContract');
 
 // Phase 6: Observation confidence — distinguishes observer failure from target failure
 const {
@@ -115,30 +116,44 @@ function log(line) {
 // ---------------------------------------------------------------------------
 // Health check
 // ---------------------------------------------------------------------------
+// Phase II: health is decided by the endpoint's declared contract, not by the
+// status code. `ok: statusCode >= 200 && < 500` used to report HTTP 200 +
+// {"status":"degraded"} as healthy, and would have reported a 404 as healthy
+// too. See lib/operational/EndpointHealthContract.ts for the per-endpoint
+// contracts and the full rationale.
 function checkEndpoint(ep) {
   return new Promise((resolve) => {
     const url = new URL(ep.url);
     const lib = url.protocol === 'https:' ? https : http;
+
+    const settle = (observation) => {
+      const verdict = evaluateEndpointHealth(ep.name, observation);
+      resolve({
+        name: ep.name,
+        url: ep.url,
+        required: ep.required,
+        ok: verdict.ok,
+        statusCode: observation.statusCode,
+        state: verdict.state,
+        reason: verdict.reason,
+        observerFailure: verdict.observerFailure,
+        body: (observation.transportError || observation.bodyText || '').slice(0, 200),
+      });
+    };
+
     const req = lib.get(ep.url, { timeout: 5000 }, (res) => {
       let body = '';
       res.on('data', (chunk) => { body += chunk; });
       res.on('end', () => {
-        resolve({
-          name: ep.name,
-          url: ep.url,
-          required: ep.required,
-          ok: res.statusCode >= 200 && res.statusCode < 500,
-          statusCode: res.statusCode,
-          body: body.slice(0, 200),
-        });
+        settle({ statusCode: res.statusCode, bodyText: body });
       });
     });
     req.on('timeout', () => {
       req.destroy();
-      resolve({ name: ep.name, url: ep.url, required: ep.required, ok: false, statusCode: 0, body: 'timeout' });
+      settle({ statusCode: 0, bodyText: '', transportError: 'timeout' });
     });
     req.on('error', (e) => {
-      resolve({ name: ep.name, url: ep.url, required: ep.required, ok: false, statusCode: 0, body: e.message });
+      settle({ statusCode: 0, bodyText: '', transportError: e.message });
     });
   });
 }
@@ -322,35 +337,41 @@ function checkInfrastructure() {
   return results;
 }
 
-// Check Ollama health endpoint
+// Check Ollama health endpoint.
+// Phase II: this carried the same status-code-only predicate as checkEndpoint,
+// so a reachable Ollama serving zero models scored as healthy. It now goes
+// through the same contract evaluator.
+const OLLAMA_URL = 'http://127.0.0.1:11434/api/tags';
 function checkOllama() {
   return new Promise((resolve) => {
-    const req = http.get('http://127.0.0.1:11434/api/tags', { timeout: 5000 }, (res) => {
+    const settle = (observation) => {
+      const verdict = evaluateEndpointHealth('ollama', observation);
+      resolve({
+        name: 'ollama',
+        url: OLLAMA_URL,
+        required: false,
+        ok: verdict.ok,
+        statusCode: observation.statusCode,
+        state: verdict.state,
+        reason: verdict.reason,
+        observerFailure: verdict.observerFailure,
+        body: (observation.transportError || observation.bodyText || '').slice(0, 200),
+      });
+    };
+
+    const req = http.get(OLLAMA_URL, { timeout: 5000 }, (res) => {
       let body = '';
       res.on('data', (chunk) => { body += chunk; });
       res.on('end', () => {
-        resolve({
-          name: 'ollama',
-          url: 'http://127.0.0.1:11434/api/tags',
-          required: false,
-          ok: res.statusCode >= 200 && res.statusCode < 500,
-          statusCode: res.statusCode,
-          body: body.slice(0, 200),
-        });
+        settle({ statusCode: res.statusCode, bodyText: body });
       });
     });
     req.on('timeout', () => {
       req.destroy();
-      resolve({
-        name: 'ollama', url: 'http://127.0.0.1:11434/api/tags', required: false,
-        ok: false, statusCode: 0, body: 'timeout',
-      });
+      settle({ statusCode: 0, bodyText: '', transportError: 'timeout' });
     });
     req.on('error', (e) => {
-      resolve({
-        name: 'ollama', url: 'http://127.0.0.1:11434/api/tags', required: false,
-        ok: false, statusCode: 0, body: e.message,
-      });
+      settle({ statusCode: 0, bodyText: '', transportError: e.message });
     });
   });
 }
@@ -422,11 +443,15 @@ async function runCheck() {
   const allOk = failures.length === 0;
 
   if (allOk) {
-    const names = allResults.map((r) => `${r.name}:${r.statusCode}`).join('  ');
+    // Phase II: log the verdict state, not the raw status code. "heidi-web:200"
+    // was the shape that let a degraded service read as healthy at a glance.
+    const names = allResults.map((r) => `${r.name}:${r.state || r.statusCode}`).join('  ');
     log(`OK    all ${allResults.length} endpoints healthy  ${names}`);
   } else {
     for (const f of failures) {
-      log(`FAIL  ${f.name}  ${f.url}  status=${f.statusCode}  error=${f.body}`);
+      const state = f.state ? `state=${f.state}  ` : '';
+      const reason = f.reason ? `  reason=${f.reason}` : '';
+      log(`FAIL  ${f.name}  ${f.url}  ${state}status=${f.statusCode}  error=${f.body}${reason}`);
     }
     const okNames = allResults.filter((r) => r.ok).map((r) => r.name).join(',');
     log(`ALERT ${failures.length}/${allResults.length} endpoints down (ok: ${okNames || 'none'})`);
@@ -454,6 +479,17 @@ async function runCheck() {
       for (const f of failures) {
         if (!f.required) {
           log(`OBSERVE  ${f.name} is optional — logging only, not calling RecoveryEngine`);
+          continue;
+        }
+
+        // Phase II: an endpoint verdict of UNKNOWN means we failed to obtain
+        // evidence (unparseable body, undeclared contract, auth rejection) --
+        // not that the target is broken. Recovering on that would be acting on
+        // our own blindness. Same principle as the OBSERVER_FAILURE gate below,
+        // applied to the HTTP endpoint path.
+        if (f.observerFailure) {
+          log(`OBSERVE  ${f.name} state=${f.state} is an observer failure -- recovery NOT authorized. ${f.reason}`);
+          observationMetrics.recordEscalation();
           continue;
         }
 

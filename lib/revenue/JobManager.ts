@@ -75,6 +75,38 @@ const VALID_JOB_TRANSITIONS: Record<JobStatus, JobStatus[]> = {
   refunded: [],
 };
 
+/**
+ * The atomic job-claim statement, exported so the concurrency qualification
+ * (scripts/qualify-job-claim-concurrency.js) exercises the exact statement
+ * production runs rather than a copy that could drift out of sync.
+ *
+ * $1 = ISO timestamp for execution_started_at / updated_at.
+ *
+ * The inner SELECT ... FOR UPDATE SKIP LOCKED takes a row lock; a concurrent
+ * claimer never blocks on and never sees a row another claimer is already
+ * taking. The outer UPDATE ... RETURNING performs the transition and returns
+ * the claimed row in the same statement, so there is no window between "decide
+ * to take this job" and "take it".
+ *
+ * Table names are intentionally unqualified so the qualification harness can
+ * point search_path at an isolated fixture schema and run this verbatim without
+ * touching public.customer_jobs.
+ */
+export const CLAIM_NEXT_QUEUED_JOB_SQL = `UPDATE customer_jobs
+    SET job_status = 'executing',
+        execution_status = 'running',
+        execution_started_at = $1,
+        updated_at = $1
+  WHERE job_id = (
+          SELECT job_id
+            FROM customer_jobs
+           WHERE job_status = 'queued'
+           ORDER BY paid_at ASC
+           LIMIT 1
+           FOR UPDATE SKIP LOCKED
+        )
+RETURNING *`;
+
 export class JobManager {
   private db: RevenueDatabase;
   private artifactsDir: string;
@@ -341,12 +373,65 @@ export class JobManager {
   }
 
   /**
-   * Get the next queued job (FIFO).
+   * Peek at the next queued job (FIFO) WITHOUT claiming it.
+   *
+   * Read-only: two callers can both see the same job. Use this for inspection,
+   * dashboards and tests only. Executors must use claimNextQueuedJob(), which
+   * is the only concurrency-safe way to take ownership of a job.
    */
   async getNextQueuedJob(): Promise<CustomerJob | null> {
     const rows = await this.db.query("SELECT * FROM customer_jobs WHERE job_status = 'queued' ORDER BY paid_at ASC LIMIT 1");
     if (rows.length === 0) return null;
     return this.rowToJob(rows[0]);
+  }
+
+  /**
+   * Atomically claim the next queued job (FIFO) for execution.
+   *
+   * Why this exists
+   * ---------------
+   * processNextJob() previously did:
+   *
+   *     const job = await getNextQueuedJob();   // plain SELECT ... LIMIT 1
+   *     await startExecution(job.jobId);        // re-read, check 'queued', UPDATE
+   *
+   * With more than one poller process that is a textbook TOCTOU race: both
+   * SELECT the same row, both read status 'queued', and both UPDATE it to
+   * 'executing' — so one paid customer job gets executed twice. startExecution's
+   * `if (job.jobStatus !== 'queued') throw` does not close the window because
+   * the read and the write are separate statements with no lock between them.
+   * An application-level mutex would not help either: the pollers are separate
+   * OS processes (see the duplicate-poller incident in the Phase II report).
+   *
+   * The claim is therefore a single atomic statement. The inner SELECT takes a
+   * row lock with SKIP LOCKED, so a concurrent claimer never blocks on, and
+   * never sees, a row another claimer is already taking — it simply moves to the
+   * next candidate or gets nothing. The outer UPDATE ... RETURNING makes the
+   * state transition and hands back the claimed row in the same statement.
+   *
+   * Invariant: multiple pollers may observe the queue, but exactly one can
+   * claim a given job.
+   *
+   * The state transition written here is identical to startExecution()'s
+   * (job_status -> 'executing', execution_status -> 'running',
+   * execution_started_at set) and it records the same 'execution_started' event,
+   * so downstream lifecycle behaviour is unchanged.
+   *
+   * @returns the claimed job, or null if the queue is empty / fully contended.
+   */
+  async claimNextQueuedJob(actor = 'heidi'): Promise<CustomerJob | null> {
+    const now = new Date().toISOString();
+
+    const rows = await this.db.query(CLAIM_NEXT_QUEUED_JOB_SQL, [now]);
+
+    if (rows.length === 0) return null;
+
+    const job = this.rowToJob(rows[0]);
+    await this.recordEvent(job.jobId, 'execution_started', actor, 'queued', 'executing', {
+      claimedBy: actor,
+      claimMethod: 'atomic-update-skip-locked',
+    });
+    return job;
   }
 
   /**

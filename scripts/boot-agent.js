@@ -33,6 +33,7 @@ const { spawn } = require('child_process');
 const http = require('http');
 const path = require('path');
 const fs = require('fs');
+const { BootInstanceLease, SUPERSEDED_EXIT_CODE } = require('./boot-instance-lease');
 
 const ROOT = path.resolve(__dirname, '..');
 
@@ -413,8 +414,39 @@ async function shutdown(code = 0) {
       log(mod.id, c('31', `error during stop: ${e.message}`));
     }
   }
+  // Release the single-instance lease, but only if we still hold it. A
+  // superseded instance must not delete its successor's lease on the way out.
+  try { lease.release(); } catch (_) { /* lease is advisory; never block exit */ }
+
   log('boot-agent', code === 0 ? c('32', 'all modules stopped. bye.') : c('31', 'shutdown after failure.'));
   process.exit(code);
+}
+
+// ---------------------------------------------------------------------------
+// Single-instance contract
+// ---------------------------------------------------------------------------
+// See scripts/boot-instance-lease.js for why this exists: PM2 has been observed
+// to leave an old hydi-boot fork alive alongside its replacement, giving two
+// core loops and two revenue pollers. Killing the orphan does not converge --
+// PM2 just spawns another. The runtime enforces the invariant itself instead.
+const lease = new BootInstanceLease();
+const LEASE_POLL_MS = parseInt(process.env.HYDI_BOOT_LEASE_POLL_MS || '2000', 10);
+let leaseInterval = null;
+
+function startLeaseSupervision() {
+  if (leaseInterval) return;
+  leaseInterval = setInterval(() => {
+    if (shuttingDown) return;
+    if (lease.isStillOwner()) return;
+    const current = lease.read();
+    log('boot-agent', c('33',
+      `superseded: the boot lease now names ${current ? current.bootId : '(none)'} ` +
+      `(this instance is ${lease.bootId}) -- standing down so exactly one boot runtime remains`));
+    // Exit code is in hydi-boot's stop_exit_codes, so PM2 treats this as an
+    // orderly stand-down rather than a crash to restart.
+    shutdown(SUPERSEDED_EXIT_CODE);
+  }, LEASE_POLL_MS);
+  if (typeof leaseInterval.unref === 'function') leaseInterval.unref();
 }
 
 process.on('SIGINT', () => shutdown(0));
@@ -439,6 +471,19 @@ const CONFIG = loadConfig();
 
 async function main() {
   banner('HYDI Boot Agent');
+
+  // Claim the single-instance lease before doing any work. Newest claim wins:
+  // any older boot runtime notices within one poll interval and stands down,
+  // taking its core loop and poller with it.
+  const { bootId, supersededOwner } = lease.claim();
+  log('boot-agent', `boot lease claimed: ${bootId} (pid ${process.pid})`);
+  if (supersededOwner) {
+    log('boot-agent', c('33',
+      `superseding previous boot runtime ${supersededOwner.bootId} (pid ${supersededOwner.pid}, ` +
+      `started ${supersededOwner.startedAt}) -- it will stand down within ${LEASE_POLL_MS}ms`));
+  }
+  startLeaseSupervision();
+
   const settings = CONFIG.settings;
   const selected = selectModules(CONFIG.modules);
   let order;

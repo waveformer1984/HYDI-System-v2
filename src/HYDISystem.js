@@ -722,18 +722,35 @@ class HYDISystem extends EventEmitter {
    */
   
   handleLoopCompleted(event) {
-    console.log(`[HYDI SYSTEM] Loop completed: ${event.loopId}`);
-    
+    // Phase II: this handler used to hardcode `success: true, confidence: 0.9`
+    // for every loop that reached the end of the pipeline. Loops that were
+    // rejected by policy, or that ran with no model, or whose action handler
+    // returned nothing, all arrived here and were recorded as successful --
+    // in the same millisecond the memory layer was logging
+    // "Strategy that failed" and drift 1.000. The loop's own verdict decides.
+    const outcome = event.outcome || event.result?.outcome || 'UNVERIFIED';
+    const succeeded = outcome === 'SUCCESS';
+    const reason = event.reason || event.result?.outcomeReason || null;
+
+    console.log(
+      `[HYDI SYSTEM] Loop finished: ${event.loopId} outcome=${outcome}` +
+      (reason ? ` reason=${reason}` : '')
+    );
+
     // Track loop in self-awareness
     if (this.selfAwareness) {
       this.selfAwareness.trackAction({
         id: event.loopId,
         type: 'core_loop',
-        success: true,
-        confidence: 0.9,
+        success: succeeded,
+        // Confidence is a claim about how sure we are of the result. Asserting
+        // 0.9 for an outcome we could not verify is itself a false green.
+        confidence: succeeded ? 0.9 : 0,
         latency: event.duration,
         cost: 0,
         revenue: 0,
+        loopOutcome: outcome,
+        ...(reason ? { error: reason } : {}),
         outcome: event.result
       });
     }

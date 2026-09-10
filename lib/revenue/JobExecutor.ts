@@ -131,8 +131,16 @@ export async function executeJob(jobId: string): Promise<ExecutionResult> {
  */
 export async function processNextJob(): Promise<ExecutionResult | null> {
   const jobManager = getJobManager();
-  const job = await jobManager.getNextQueuedJob();
+  // Atomic claim, not a plain read. With more than one poller process running
+  // (which the boot supervisor has been observed to produce), a SELECT followed
+  // by a separate startExecution() lets two executors take the same paid job.
+  // claimNextQueuedJob() moves the row to 'executing' in one statement under
+  // FOR UPDATE SKIP LOCKED, so at most one caller can ever receive it.
+  const job = await jobManager.claimNextQueuedJob();
   if (!job) return null;
+  // The job is already 'executing' at this point, so executeJob() will skip its
+  // own startExecution() call — the transition and its audit event happened
+  // inside the claim.
   return executeJob(job.jobId);
 }
 

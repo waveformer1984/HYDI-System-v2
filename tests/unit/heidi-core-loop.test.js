@@ -306,9 +306,14 @@ describe('HeidiCoreLoop', () => {
     it('returns failed status when the action throws', async () => {
       const loop = makeLoop();
       jest.spyOn(loop, 'executeAnalysisAction').mockRejectedValue(new Error('model timeout'));
+      // 'analysis' routes through the model stack, so takeAction now requires a
+      // selected model before it will dispatch (Phase II: a task that never ran
+      // must not be reported as a failure of the model, nor as a success).
+      // The model is supplied here so this test still exercises what it is
+      // about: a handler that throws must produce FAILED.
       const action = await loop.takeAction(
         { type: 'analysis' },
-        { action: 'proceed' },
+        { action: 'proceed', model: 'llama3.2:3b' },
         'loop_test'
       );
       expect(action.status).toBe('failed');

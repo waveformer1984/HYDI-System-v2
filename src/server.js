@@ -22,6 +22,7 @@ const AdaptationExecutor = require('../modules/adaptation-executor');
 
 // Universal Agent Bus — The Forge Messaging Backbone
 const UniversalAgentBus = require('../modules/universal-agent-bus');
+const { buildProtoforgeHealth } = require('./health/protoforge-health');
 const BusGatekeeper = require('./middleware/bus-gatekeeper');
 const SimpleKeymaker = require('./middleware/simple-keymaker');
 const Keymaker = require('./middleware/keymaker');
@@ -272,31 +273,32 @@ app.post('/test-loop', async (req, res) => {
 });
 
 // Health check endpoint
+// Phase II (false-green elimination).
+//
+// This handler used to hardcode `modules: 0` ("Get module count (placeholder)")
+// and return `status: 'ok'` unconditionally, so it reported healthy whenever
+// Express could run it at all. The report is now built from observed evidence
+// by src/health/protoforge-health.js -- see that file for the full rationale.
+//
+// The HTTP status stays 200 for any handler that runs to completion: transport
+// success and semantic health are different questions, and the semantic verdict
+// belongs in the body, where lib/operational/EndpointHealthContract.ts reads it.
 app.get('/health', async (req, res) => {
   try {
-    // Get module count (placeholder)
-    const moduleCount = 0;
-    
-    // Get events count
-    const { count } = await supabase
-      .from('heidi_events')
-      .select('*', { count: 'exact', head: true });
-    
-    res.json({
-      status: 'ok',
-      modules: moduleCount,
-      events: count || 0
-    });
+    const body = await buildProtoforgeHealth({ agentBus, supabase });
+    res.json(body);
   } catch (error) {
     console.error('Health check failed:', error);
     res.status(500).json({
       status: 'error',
+      modules: null,
+      modules_state: 'UNVERIFIED',
+      events: null,
       message: error.message
     });
   }
 });
 
-// System integrity endpoint - deterministic truth enforcement
 app.get('/integrity', (req, res) => {
   try {
     const stats = protoforgeEventBus.getStats();

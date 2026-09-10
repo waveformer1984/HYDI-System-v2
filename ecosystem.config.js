@@ -78,6 +78,22 @@ module.exports = {
       // on its own before falling back to force kill.
       shutdown_with_message: true,
       kill_timeout: 20000,     // 20s — boot-agent needs time to SIGTERM next dev + protoforge-core
+
+      // Single-instance contract (see scripts/boot-instance-lease.js).
+      //
+      // PM2 has been observed to leave the outgoing hydi-boot fork alive next to
+      // its replacement: during a restart the old fork's exit event arrives
+      // AFTER the replacement is already online, PM2 attributes it to the
+      // replacement ("App [hydi-boot:4] exited with code [0]"), and autorestart
+      // spawns a second fork restart_delay later. Both forks then run their own
+      // hydi-orchestrator core loop and job-executor-poller.
+      //
+      // boot-agent now arbitrates this itself via a lease file: newest claim
+      // wins, and the superseded instance shuts its modules down and exits with
+      // SUPERSEDED_EXIT_CODE (75). Listing 75 here tells PM2 that an orderly
+      // stand-down is not a crash, so it does not immediately respawn the
+      // instance that just correctly removed itself.
+      stop_exit_codes: [75],
     },
     {
       // Watchdog: continuously polls health endpoints and calls RecoveryEngine

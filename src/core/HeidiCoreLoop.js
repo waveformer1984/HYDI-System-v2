@@ -20,6 +20,49 @@ const HeidiActionLayer = require('../actions/HeidiActionLayer');
 const selfHealing = require('../healing/SelfHealingService');
 const redisStream = require('../queue/RedisStreamBroker');
 
+/**
+ * Phase II: explicit loop outcomes.
+ *
+ * A cycle previously had exactly two externally visible fates: it threw
+ * (loop_failed) or it did not (loop_completed, which HYDISystem recorded as
+ * success:true unconditionally). Everything that went wrong without throwing --
+ * a rejected decision, a missing model, a handler returning nothing -- landed in
+ * the "completed" bucket and was reported as a success.
+ *
+ * These five outcomes are the vocabulary the rest of the system reads. They
+ * intentionally mirror the ComponentState names already used across
+ * lib/operational (HEALTHY/DEGRADED/BLOCKED/FAILED/UNKNOWN) rather than
+ * inventing a second taxonomy, with SUCCESS/UNVERIFIED as the loop-flavoured
+ * equivalents of HEALTHY/UNKNOWN.
+ */
+const LOOP_OUTCOME = Object.freeze({
+  /** The action ran and produced a result. */
+  SUCCESS: 'SUCCESS',
+  /** The action was attempted and threw. */
+  FAILED: 'FAILED',
+  /** Policy, gating, or a missing prerequisite stopped the action before it ran. */
+  BLOCKED: 'BLOCKED',
+  /** The action ran but only partially achieved its objective. */
+  DEGRADED: 'DEGRADED',
+  /** The action reported completion without evidence that anything happened. */
+  UNVERIFIED: 'UNVERIFIED'
+});
+
+/** Outcomes that may be reported to the rest of the system as a success. */
+const SUCCESSFUL_OUTCOMES = new Set([LOOP_OUTCOME.SUCCESS]);
+
+/**
+ * Task types whose action handler routes through the model stack and therefore
+ * cannot produce a completion without a selected model. Revenue and
+ * communication tasks go to the action layer instead (Stripe, email, webhooks)
+ * and legitimately need no model, so they are not gated on one -- see
+ * takeAction's dispatch table.
+ */
+const ACTION_LAYER_TASK_TYPES = new Set(['revenue', 'payment', 'communication']);
+function requiresModel(taskType) {
+  return !ACTION_LAYER_TASK_TYPES.has(taskType);
+}
+
 class HeidiCoreLoop extends EventEmitter {
   constructor(config = {}) {
     super();
@@ -92,6 +135,16 @@ class HeidiCoreLoop extends EventEmitter {
     this.metrics = {
       loopsCompleted: 0,
       loopsFailed: 0,
+      // Phase II: loopsCompleted counts pipeline runs, which is not the same as
+      // loops that achieved anything. These break that number down by outcome so
+      // "the loop is running" can never be mistaken for "the loop is working".
+      loopsByOutcome: {
+        SUCCESS: 0,
+        FAILED: 0,
+        BLOCKED: 0,
+        DEGRADED: 0,
+        UNVERIFIED: 0
+      },
       avgLoopTime: 0,
       observations: 0,
       actions: 0,
@@ -364,18 +417,29 @@ class HeidiCoreLoop extends EventEmitter {
         this.loopHistory = this.loopHistory.slice(-500);
       }
       
-      // Emit completion
+      // Phase II: 'loop_completed' means "the pipeline ran to the end", not
+      // "the loop achieved its objective". The outcome now travels with the
+      // event so listeners cannot assume the latter from the former.
+      const outcome = result.outcome || LOOP_OUTCOME.UNVERIFIED;
+      const succeeded = SUCCESSFUL_OUTCOMES.has(outcome);
+
       this.emit('loop_completed', {
         loopId,
         task,
         result,
+        outcome,
+        success: succeeded,
+        reason: result.outcomeReason || null,
         duration: loopTime
       });
-      
-      console.log(`[CORE LOOP] Loop completed: ${loopId} (${loopTime}ms)`);
-      
+
+      console.log(
+        `[CORE LOOP] Loop finished: ${loopId} outcome=${outcome} (${loopTime}ms)` +
+        (result.outcomeReason ? ` -- ${result.outcomeReason}` : '')
+      );
+
       return result;
-      
+
     } catch (error) {
       console.error(`[CORE LOOP] Loop failed: ${loopId} - ${error.message}`);
       
@@ -444,9 +508,17 @@ class HeidiCoreLoop extends EventEmitter {
     // 7. ADAPT - Update strategy based on reflection
     const adaptation = await this.adaptStrategy(task, reflection, loopId);
     
+    // Phase II: the loop's own verdict, derived from what actually happened.
+    // Reaching the end of the pipeline without throwing is not success.
+    const outcome = measurement.outcome || LOOP_OUTCOME.UNVERIFIED;
+    const success = SUCCESSFUL_OUTCOMES.has(outcome);
+
     const result = {
       loopId,
       task: task.type,
+      outcome,
+      success,
+      outcomeReason: measurement.reason || null,
       observation,
       evaluation,
       decision,
@@ -456,12 +528,15 @@ class HeidiCoreLoop extends EventEmitter {
       adaptation,
       timestamp: new Date().toISOString()
     };
-    
+
     // Store loop result in memory
     this.memorySystem.storeSession(loopId, result, 'loops');
-    
-    console.log(`[HEIDI LOOP] Completed ${task.type} loop: ${loopId}`);
-    
+
+    console.log(
+      `[HEIDI LOOP] Finished ${task.type} loop: ${loopId} outcome=${outcome}` +
+      (result.outcomeReason ? ` reason=${result.outcomeReason}` : '')
+    );
+
     return result;
   }
   
@@ -567,17 +642,41 @@ class HeidiCoreLoop extends EventEmitter {
   
   // 4. ACT
   async takeAction(task, decision, loopId) {
+    // Phase II: a rejected decision used to return an object with no `success`
+    // field at all. `measureResults` then read `action.success` as undefined,
+    // which reflectOnLoop scored as a failure (drift 1.000, accuracy 0.00) while
+    // HYDISystem.handleLoopCompleted recorded core_loop success:true. A policy
+    // rejection is neither success nor failure -- it is BLOCKED, and it must say
+    // so explicitly.
     if (decision.action === 'reject') {
       return {
         status: 'rejected',
+        outcome: LOOP_OUTCOME.BLOCKED,
+        blockedReason: decision.reason,
         reason: decision.reason,
-        result: null
+        result: null,
+        success: false
       };
     }
-    
+
+    // A model-backed task with no selected model cannot produce a completion.
+    // Reporting success here would claim an inference that never happened.
+    // Action-layer tasks (revenue, communication) need no model and are exempt.
+    if (requiresModel(task.type) && !decision.model) {
+      return {
+        status: 'blocked',
+        outcome: LOOP_OUTCOME.BLOCKED,
+        blockedReason: 'no_model_selected',
+        reason: `task type '${task.type}' routes through the model stack but no model was selected (strategy='${decision.strategy}')`,
+        strategy: decision.strategy,
+        result: null,
+        success: false
+      };
+    }
+
     try {
       let result;
-      
+
       // Execute based on task type and decision
       if (task.type === 'revenue' || task.type === 'payment') {
         result = await this.executeRevenueAction(task, decision, loopId);
@@ -592,22 +691,40 @@ class HeidiCoreLoop extends EventEmitter {
       }
       
       this.metrics.actions++;
-      
+
+      // A handler that returns nothing has not produced a completion. Claiming
+      // success:true for it is exactly the false-green this phase removes.
+      if (result === undefined || result === null) {
+        return {
+          status: 'unverified',
+          outcome: LOOP_OUTCOME.UNVERIFIED,
+          reason: `action handler for task type '${task.type}' returned no result -- completion could not be verified`,
+          strategy: decision.strategy,
+          model: decision.model,
+          result: null,
+          success: false
+        };
+      }
+
       return {
         status: 'completed',
+        outcome: LOOP_OUTCOME.SUCCESS,
         result,
         strategy: decision.strategy,
         model: decision.model,
         success: true
       };
-      
+
     } catch (error) {
       console.error(`[CORE LOOP] Action failed for ${loopId}:`, error.message);
-      
+
       return {
         status: 'failed',
+        outcome: LOOP_OUTCOME.FAILED,
         error: error.message,
         strategy: decision.strategy,
+        model: decision.model,
+        result: null,
         success: false
       };
     }
@@ -616,7 +733,12 @@ class HeidiCoreLoop extends EventEmitter {
   // 5. MEASURE
   async measureResults(task, action, _loopId) {
     const measurement = {
-      success: action.success,
+      // Phase II: outcome is carried through so downstream consumers can tell a
+      // policy block apart from an execution failure instead of seeing only a
+      // boolean (or, previously, `undefined`).
+      outcome: action.outcome || (action.success ? LOOP_OUTCOME.SUCCESS : LOOP_OUTCOME.FAILED),
+      success: action.success === true,
+      reason: action.reason || action.error || null,
       latency: action.latency || 0,
       quality: this.assessActionQuality(action),
       impact: await this.assessActionImpact(task, action),
@@ -1015,6 +1137,13 @@ class HeidiCoreLoop extends EventEmitter {
     this.metrics.loopsCompleted++;
     const n = this.metrics.loopsCompleted;
     this.metrics.avgLoopTime = ((this.metrics.avgLoopTime * (n - 1)) + loopTime) / n;
+
+    // Phase II: record what the loop actually achieved, not just that it ran.
+    const outcome = result?.outcome || LOOP_OUTCOME.UNVERIFIED;
+    if (this.metrics.loopsByOutcome[outcome] === undefined) {
+      this.metrics.loopsByOutcome[outcome] = 0;
+    }
+    this.metrics.loopsByOutcome[outcome]++;
   }
 
   // ── System observation helpers ─────────────────────────────────────────────
@@ -1179,6 +1308,16 @@ class HeidiCoreLoop extends EventEmitter {
     this.metrics = {
       loopsCompleted: 0,
       loopsFailed: 0,
+      // Phase II: loopsCompleted counts pipeline runs, which is not the same as
+      // loops that achieved anything. These break that number down by outcome so
+      // "the loop is running" can never be mistaken for "the loop is working".
+      loopsByOutcome: {
+        SUCCESS: 0,
+        FAILED: 0,
+        BLOCKED: 0,
+        DEGRADED: 0,
+        UNVERIFIED: 0
+      },
       avgLoopTime: 0,
       observations: 0,
       actions: 0,
@@ -1200,3 +1339,5 @@ class HeidiCoreLoop extends EventEmitter {
 }
 
 module.exports = HeidiCoreLoop;
+module.exports.LOOP_OUTCOME = LOOP_OUTCOME;
+module.exports.SUCCESSFUL_OUTCOMES = SUCCESSFUL_OUTCOMES;
