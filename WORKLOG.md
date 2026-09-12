@@ -4,6 +4,69 @@ Running log of autonomous production-readiness work. Newest entries first.
 
 ---
 
+## 2026-09-12 — Re-verification + critical Next.js RCE patched
+
+Branch: `claude/protoforge-ecosystem-audit-i6w9tp` (same branch as the
+2026-08-03 entry below; asked to re-run everything and confirm those
+changes had actually landed)
+
+### Confirmed the 2026-08-03 fixes are still in place
+
+`npm ls brace-expansion` / `ip-address` / `undici` all show the fixed
+versions from the prior session's commits (`d6398a4`, `3719bc1`) still
+resolved correctly — the scoped `minimatch@10.2.5` → `brace-expansion`
+override is still narrow (untouched `minimatch@3.x`/ESLint chain), and
+the `HardwareDiscovery`/`HeartbeatSystem` test fixes are both still in
+the tree and passing.
+
+### Found and fixed: critical Next.js RCE + 8 other fresh advisories
+
+A plain `npm install` (no code changed since the last session) now
+surfaced 9 vulnerabilities that didn't exist 5 weeks ago — new CVE/GHSA
+disclosures against versions this repo already had pinned, not a
+regression from anything done here. Most serious:
+
+- **`next` 9.5.6-canary.0 – 16.3.0-preview.10 (critical,
+  GHSA-p293-qw3h-jr36)**: unauthenticated remote code execution on
+  Windows-hosted servers. Also **GHSA-2xp9-vwfh-vxw4** (high):
+  unauthenticated RCE via the Image Optimization API when AVIF files are
+  used, through a vulnerable `sharp`.
+- `js-yaml` 4.0.0–4.3.1 (high): quadratic CPU consumption via `!!omap`
+  resolution (GHSA-5p4m-2wfm-xmqj, described as "CVE-2026-59870 fix not
+  backported") and unbounded merge-key CPU use (GHSA-2883-xcg3-v3hh).
+- `nodemailer` <=9.1.0 (high): 4 advisories, including two distinct
+  attacker-controlled-domain email-delivery bypasses
+  (GHSA-wmmp-3585-3rmp, GHSA-cc9r-2j5m-2m83) and a quadratic-time DoS in
+  address parsing (GHSA-2x7j-588g-ccc2).
+- `browserslist`, `nanoid`, `sharp`, `qs`, `postcss-selector-parser`,
+  `baseline-browser-mapping`: DoS/crash-class advisories, all lower
+  severity than the above.
+
+All 9 resolved with a plain `npm audit fix` — unlike the 2026-08-03
+`brace-expansion` fix, none of these needed a manual override or a
+breaking-change decision: every patched version already fits inside
+`package.json`'s existing semver ranges (`next` stayed on `^15.5.19`,
+resolving to `15.5.25`). `package.json` is unchanged; only
+`package-lock.json`'s resolved versions moved.
+
+### Verification
+
+Re-ran the full local gate (still the only trustworthy signal — see the
+2026-08-03 entry's CI-outage finding, not re-checked this pass since
+nothing suggested it had changed):
+
+- `npm audit` — 0 vulnerabilities.
+- `npm run typecheck` / `npm run typecheck:hydi-v3` — clean.
+- `npm run lint` — 0 errors, 749 warnings (unchanged from 2026-08-03).
+- `npm run lint:hydi-v3` — 0 errors, 11 warnings (unchanged).
+- `npm test` — 244/244 suites, 2320/2321 tests (1 pre-existing skip),
+  run twice back-to-back, both green.
+- `npm run test:integration:jest` — 12/12 suites, 62/62 tests.
+- `npm run build` — succeeds, same route table as before the `next`
+  patch bump.
+
+---
+
 ## 2026-08-03 — Dependency vulnerabilities, two real test bugs, CI outage reconfirmed
 
 Branch: `claude/protoforge-ecosystem-audit-i6w9tp`

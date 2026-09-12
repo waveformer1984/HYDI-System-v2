@@ -5,6 +5,15 @@ the narrative of what was fixed and why; this file is the flat list.
 
 ---
 
+## 2026-09-12 (re-verification of the 2026-08-03 pass + fresh advisories)
+
+| # | Issue | File(s) | Status |
+|---|-------|---------|--------|
+| 78 | `npm install` (no application code changed since 2026-08-03) surfaced 9 newly-disclosed vulnerabilities against already-pinned dependencies, most seriously a **critical** `next` advisory (GHSA-p293-qw3h-jr36, unauthenticated RCE on Windows-hosted servers) and a **high** one (GHSA-2xp9-vwfh-vxw4, unauthenticated RCE via the Image Optimization API on AVIF input, through a vulnerable `sharp`). Also high/moderate: `js-yaml` (quadratic CPU via `!!omap`), `nodemailer` (4 advisories, incl. two attacker-controlled-domain delivery bypasses), `browserslist`, `nanoid`, `sharp`, `qs`, `postcss-selector-parser`, `baseline-browser-mapping`. | `package-lock.json` | **Fixed** — all 9 resolved via a plain `npm audit fix`; every patched version fits inside `package.json`'s existing semver ranges (no override or breaking-change decision needed this time, unlike the 2026-08-03 `brace-expansion` fix). `npm audit`: 9 (1 low, 2 moderate, 5 high, 1 critical) → 0. |
+| — | Re-verified the 2026-08-03 fixes (#75-#77) are all still in place: the scoped `minimatch@10.2.5`→`brace-expansion` override, `ip-address`/`undici` via `express-rate-limit`, and the `HardwareDiscovery`/`HeartbeatSystem` test fixes. Did not re-check the GitHub Actions runner-dispatch outage (#77) this pass — nothing prompted re-checking it. | — | **Confirmed intact, no action needed.** |
+
+---
+
 ## 2026-08-03 (dependency + test audit, full narrative in WORKLOG.md)
 
 | # | Issue | File(s) | Status |

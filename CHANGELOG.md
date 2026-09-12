@@ -4,6 +4,13 @@
 
 ### Security
 
+- Patched a **critical** unauthenticated RCE in `next` on Windows-hosted
+  servers (GHSA-p293-qw3h-jr36) plus 8 other newly-disclosed advisories
+  (`next`'s Image Optimization API RCE via `sharp`, `js-yaml`,
+  `nodemailer`, `browserslist`, `nanoid`, `sharp`, `qs`,
+  `postcss-selector-parser`, `baseline-browser-mapping`) via `npm audit
+  fix` — all within existing `package.json` semver ranges, no breaking
+  changes.
 - Resolved 6 `npm audit` findings (3 moderate, 3 high) down to 0: `ip-address`
   (SSRF/trust-boundary bypass, via `express-rate-limit`), `undici`, and
   `brace-expansion` (a bypass of an earlier-patched DoS mitigation — bumped
