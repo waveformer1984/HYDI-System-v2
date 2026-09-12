@@ -204,6 +204,83 @@ module.exports = {
       kill_timeout: 50000,
     },
     {
+      // System Health Producer: runs true-system-health.js on an interval and
+      // verifies the row actually landed in system_health_runs.
+      //
+      // Without this, system_dashboard.current_status is a scalar subquery over
+      // an empty table -> NULL -> /api/health reports "degraded" forever. The
+      // health check existed only as a manual CLI; nothing scheduled it.
+      name: 'hydi-system-health',
+      script: 'scripts/system-health-scheduler.js',
+      cwd: __dirname,
+      instances: 1,
+      exec_mode: 'fork',
+      args: '',
+      env: {
+        NODE_ENV: 'development',
+        SYSTEM_HEALTH_INTERVAL_MS: '300000',
+        SYSTEM_HEALTH_TIMEOUT_MS: '120000',
+      },
+      env_production: {
+        NODE_ENV: 'production',
+        SYSTEM_HEALTH_INTERVAL_MS: '300000',
+        SYSTEM_HEALTH_TIMEOUT_MS: '120000',
+      },
+      autorestart: true,
+      watch: false,
+      max_memory_restart: '200M',
+      min_uptime: '10s',
+      max_restarts: 10,
+      restart_delay: 5000,
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+      error_file: './logs/pm2-system-health.err.log',
+      out_file: './logs/pm2-system-health.out.log',
+      merge_logs: true,
+      kill_timeout: 10000,
+    },
+    {
+      // HYDI Mission Runner v1 -- protoforge.daily_opportunity_scan.
+      // Gives Heidi one concrete daily operational job: find real public
+      // signals relevant to Rezonate, score them deterministically,
+      // persist them, and produce a briefing -- see lib/missions/README.md.
+      // R0/R1 only: read-only outbound HTTP, local persistence, no
+      // external contact, no spending. Human approval required for
+      // anything past "recommend" (there is no execution step in v1 at
+      // all -- see lib/missions/approval.js).
+      //
+      // NOT started automatically by this config change alone -- added so
+      // the app definition exists and is reviewable; an operator runs
+      // `pm2 start ecosystem.config.js --only hydi-protoforge-scout` (or
+      // `pm2 reload`) to actually activate it.
+      name: 'hydi-protoforge-scout',
+      script: 'scripts/protoforge-opportunity-scheduler.js',
+      cwd: __dirname,
+      instances: 1,
+      exec_mode: 'fork',
+      args: '',
+      env: {
+        NODE_ENV: 'development',
+        PROTOFORGE_SCOUT_INTERVAL_MS: '86400000',
+        PROTOFORGE_SCOUT_TIMEOUT_MS: '60000',
+      },
+      env_production: {
+        NODE_ENV: 'production',
+        PROTOFORGE_SCOUT_INTERVAL_MS: '86400000',
+        PROTOFORGE_SCOUT_TIMEOUT_MS: '60000',
+      },
+      autorestart: true,
+      watch: false,
+      max_memory_restart: '200M',
+      min_uptime: '10s',
+      max_restarts: 10,
+      restart_delay: 5000,
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+      error_file: './logs/pm2-protoforge-scout.err.log',
+      out_file: './logs/pm2-protoforge-scout.out.log',
+      merge_logs: true,
+      kill_timeout: 10000,
+    },
+    {
       // Stuck Job Scheduler: continuously runs the StuckJobDetector on an
       // hourly interval to autonomously detect and recover stuck jobs.
       // This is the first real autonomous operations goal — it runs on a

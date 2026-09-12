@@ -57,7 +57,7 @@
       "id": "hydi-orchestrator",
       "label": "HYDI System Orchestrator (Observe->Decide->Act core loop)",
       "type": "module",
-      "enabled": true,
+      "enabled": false,
       "required": false,
       "module": "src/HYDISystem.js",
       "construct": true,

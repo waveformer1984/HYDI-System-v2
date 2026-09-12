@@ -1,0 +1,243 @@
+{
+  "timestamp": "2026-08-21T13:24:38.666Z",
+  "capabilityHealth": {
+    "total": 6,
+    "ready": 2,
+    "degraded": 0,
+    "blocked": 4,
+    "unavailable": 0,
+    "repairable": 0,
+    "humanRequired": 0,
+    "prohibited": 0,
+    "unknown": 0,
+    "reports": [
+      {
+        "capabilityId": "system.local_model",
+        "description": "Local Ollama language model",
+        "provider": "ollama",
+        "dependencies": [],
+        "state": "READY",
+        "evidence": "Ollama responded at http://localhost:11434 (HTTP 200)",
+        "lastSuccessfulVerification": "2026-08-21T13:24:39.369Z",
+        "lastFailure": null,
+        "failureClassification": "NOT_BLOCKED",
+        "repairability": "not_applicable",
+        "requiredAuthorization": "R0",
+        "requiredCredentials": [],
+        "recoveryProcedure": "Start Ollama with: ollama serve",
+        "verificationProcedure": "HTTP GET to Ollama API root",
+        "checkedAt": "2026-08-21T13:24:39.369Z"
+      },
+      {
+        "capabilityId": "system.supabase",
+        "description": "Supabase connection",
+        "provider": "supabase",
+        "dependencies": [],
+        "state": "READY",
+        "evidence": "All required credentials present: SUPABASE_URL",
+        "lastSuccessfulVerification": "2026-08-21T13:24:39.369Z",
+        "lastFailure": null,
+        "failureClassification": "NOT_BLOCKED",
+        "repairability": "not_applicable",
+        "requiredAuthorization": "R0",
+        "requiredCredentials": [
+          "SUPABASE_URL"
+        ],
+        "recoveryProcedure": "Set the required environment variables in .env.local",
+        "verificationProcedure": "Check for environment variables: SUPABASE_URL",
+        "checkedAt": "2026-08-21T13:24:39.369Z"
+      },
+      {
+        "capabilityId": "commercial.stripe",
+        "description": "Stripe payment processing",
+        "provider": "stripe",
+        "dependencies": [],
+        "state": "BLOCKED",
+        "evidence": "Missing credentials: STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET",
+        "lastSuccessfulVerification": null,
+        "lastFailure": "2026-08-21T13:24:39.369Z",
+        "failureClassification": "MISSING_EXTERNAL_CREDENTIAL",
+        "repairability": "human_required",
+        "requiredAuthorization": "R0",
+        "requiredCredentials": [
+          "STRIPE_SECRET_KEY",
+          "STRIPE_WEBHOOK_SECRET"
+        ],
+        "recoveryProcedure": "Set the required environment variables in .env.local",
+        "verificationProcedure": "Check for environment variables: STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET",
+        "checkedAt": "2026-08-21T13:24:39.369Z"
+      },
+      {
+        "capabilityId": "commercial.email",
+        "description": "Email delivery (SendGrid or SMTP)",
+        "provider": "sendgrid",
+        "dependencies": [],
+        "state": "BLOCKED",
+        "evidence": "Missing credentials: SENDGRID_API_KEY",
+        "lastSuccessfulVerification": null,
+        "lastFailure": "2026-08-21T13:24:39.369Z",
+        "failureClassification": "MISSING_EXTERNAL_CREDENTIAL",
+        "repairability": "human_required",
+        "requiredAuthorization": "R0",
+        "requiredCredentials": [
+          "SENDGRID_API_KEY"
+        ],
+        "recoveryProcedure": "Set the required environment variables in .env.local",
+        "verificationProcedure": "Check for environment variables: SENDGRID_API_KEY",
+        "checkedAt": "2026-08-21T13:24:39.369Z"
+      },
+      {
+        "capabilityId": "commercial.discovery_external",
+        "description": "External prospect discovery (Google Places or Clearbit)",
+        "provider": "google_places",
+        "dependencies": [],
+        "state": "BLOCKED",
+        "evidence": "Missing credentials: GOOGLE_PLACES_API_KEY",
+        "lastSuccessfulVerification": null,
+        "lastFailure": "2026-08-21T13:24:39.369Z",
+        "failureClassification": "MISSING_EXTERNAL_CREDENTIAL",
+        "repairability": "human_required",
+        "requiredAuthorization": "R0",
+        "requiredCredentials": [
+          "GOOGLE_PLACES_API_KEY"
+        ],
+        "recoveryProcedure": "Set the required environment variables in .env.local",
+        "verificationProcedure": "Check for environment variables: GOOGLE_PLACES_API_KEY",
+        "checkedAt": "2026-08-21T13:24:39.369Z"
+      },
+      {
+        "capabilityId": "commercial.sms",
+        "description": "SMS delivery (Twilio)",
+        "provider": "twilio",
+        "dependencies": [],
+        "state": "BLOCKED",
+        "evidence": "Missing credentials: TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER",
+        "lastSuccessfulVerification": null,
+        "lastFailure": "2026-08-21T13:24:39.369Z",
+        "failureClassification": "MISSING_EXTERNAL_CREDENTIAL",
+        "repairability": "human_required",
+        "requiredAuthorization": "R0",
+        "requiredCredentials": [
+          "TWILIO_ACCOUNT_SID",
+          "TWILIO_AUTH_TOKEN",
+          "TWILIO_PHONE_NUMBER"
+        ],
+        "recoveryProcedure": "Set the required environment variables in .env.local",
+        "verificationProcedure": "Check for environment variables: TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER",
+        "checkedAt": "2026-08-21T13:24:39.369Z"
+      }
+    ]
+  },
+  "blockerResolution": {
+    "totalBlockers": 0,
+    "resolved": 0,
+    "escalated": 0,
+    "workedAround": 0,
+    "refused": 0,
+    "resolutions": [],
+    "nextActions": []
+  },
+  "selfRepair": {
+    "totalIssues": 4,
+    "repaired": 0,
+    "escalated": 0,
+    "refused": 0,
+    "workedAround": 4,
+    "repairs": [
+      {
+        "repairId": "repair_1787318679375_3ea5989j",
+        "capabilityId": "commercial.stripe",
+        "problem": "Missing credentials: STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET",
+        "evidence": "Missing credentials: STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET",
+        "classification": "MISSING_EXTERNAL_CREDENTIAL",
+        "riskLevel": "R0",
+        "plannedAction": "WORK_AROUND: Continue all pre-payment stages: discovery, qualification, outreach, response handling. Payment will be processed when Stripe is configured.",
+        "authorized": true,
+        "authorizedBy": "heidi_autonomous_r0",
+        "executed": true,
+        "verified": true,
+        "verificationEvidence": "Continuing without commercial.stripe. Other capabilities remain operational.",
+        "timestamp": "2026-08-21T13:24:39.375Z",
+        "rollbackInfo": null
+      },
+      {
+        "repairId": "repair_1787318679375_s3nu6gb3",
+        "capabilityId": "commercial.email",
+        "problem": "Missing credentials: SENDGRID_API_KEY",
+        "evidence": "Missing credentials: SENDGRID_API_KEY",
+        "classification": "MISSING_EXTERNAL_CREDENTIAL",
+        "riskLevel": "R0",
+        "plannedAction": "WORK_AROUND: Continue prospect discovery, scoring, qualification, and draft preparation. Queue authorization packages for when email is configured.",
+        "authorized": true,
+        "authorizedBy": "heidi_autonomous_r0",
+        "executed": true,
+        "verified": true,
+        "verificationEvidence": "Continuing without commercial.email. Other capabilities remain operational.",
+        "timestamp": "2026-08-21T13:24:39.375Z",
+        "rollbackInfo": null
+      },
+      {
+        "repairId": "repair_1787318679375_qhlcz05r",
+        "capabilityId": "commercial.discovery_external",
+        "problem": "Missing credentials: GOOGLE_PLACES_API_KEY",
+        "evidence": "Missing credentials: GOOGLE_PLACES_API_KEY",
+        "classification": "MISSING_EXTERNAL_CREDENTIAL",
+        "riskLevel": "R0",
+        "plannedAction": "WORK_AROUND: Continue without this capability",
+        "authorized": true,
+        "authorizedBy": "heidi_autonomous_r0",
+        "executed": true,
+        "verified": true,
+        "verificationEvidence": "Continuing without commercial.discovery_external. Other capabilities remain operational.",
+        "timestamp": "2026-08-21T13:24:39.375Z",
+        "rollbackInfo": null
+      },
+      {
+        "repairId": "repair_1787318679375_36913797",
+        "capabilityId": "commercial.sms",
+        "problem": "Missing credentials: TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER",
+        "evidence": "Missing credentials: TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER",
+        "classification": "MISSING_EXTERNAL_CREDENTIAL",
+        "riskLevel": "R0",
+        "plannedAction": "WORK_AROUND: Continue without this capability",
+        "authorized": true,
+        "authorizedBy": "heidi_autonomous_r0",
+        "executed": true,
+        "verified": true,
+        "verificationEvidence": "Continuing without commercial.sms. Other capabilities remain operational.",
+        "timestamp": "2026-08-21T13:24:39.375Z",
+        "rollbackInfo": null
+      }
+    ],
+    "summary": "Self-repair cycle complete:\n  Total issues:    4\n  Repaired:        0\n  Escalated:       0\n  Refused:         0\n  Worked around:   4\n  Lessons:\n    - commercial.stripe: Repair succeeded via WORK_AROUND: Continue all pre-payment stages: discovery, qualification, outreach, response handling. Payment will be processed when Stripe is configured.\n    - commercial.email: Repair succeeded via WORK_AROUND: Continue prospect discovery, scoring, qualification, and draft preparation. Queue authorization packages for when email is configured.\n    - commercial.discovery_external: Repair succeeded via WORK_AROUND: Continue without this capability\n    - commercial.sms: Repair succeeded via WORK_AROUND: Continue without this capability"
+  },
+  "failureMatrix": [
+    {
+      "class": "A",
+      "description": "Kill and recover protoforge-core (port 3005)",
+      "detected": true,
+      "recovered": false,
+      "evidence": "before=true, after_kill=false, after_restart=false"
+    },
+    {
+      "class": "B",
+      "description": "Simulate dependency unavailability (bad Ollama endpoint)",
+      "detected": true,
+      "targetNotMisdiagnosed": true,
+      "evidence": "bad_probe_status=404, ollama_still_healthy=true"
+    },
+    {
+      "class": "C",
+      "description": "Observation failure / stale signal",
+      "detected": true,
+      "observerNotConfusedWithTarget": true,
+      "evidence": "provenance_state=UNAVAILABLE, db_healthy=true, bad_probe_404=true"
+    }
+  ],
+  "memoryVerification": {
+    "heidiEvents": 2093,
+    "actions": 27,
+    "memories": 0,
+    "daemonAuditEntries": 756
+  }
+}

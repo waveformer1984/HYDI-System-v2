@@ -1,0 +1,11 @@
+{
+  "project_id": "apex-archive",
+  "event_type": "failure_event",
+  "emitted_at": "2026-09-07T14:16:44Z",
+  "schema_version": "draft-2",
+  "payload": {
+    "episode_id": "2026-09-07-431-km-h-the-bugatti-veyron-super-sport-s-record-run-a155e221",
+    "stage": "verify_package",
+    "reason": "verify_package.py blocked at RENDERED (42/43 checks passed): 'technical media QA independently re-passes on packaged video.mp4' FAILED -- narration duration (63.62s) vs video duration (66.15s) differ by 2.53s, exceeding the 2.0s AUDIO_VIDEO_DELTA_TOLERANCE_S in qa_check.py. Root cause: standalone_pipeline.py's build_segment_clip() ffmpeg invocation ('-loop 1 -i <img> -i <audio> ... -r 30 ...') has no explicit -framerate on the looped image input, so each per-segment clip's rendered video runs sl"
+  }
+}

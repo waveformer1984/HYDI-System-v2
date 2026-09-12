@@ -1267,6 +1267,35 @@ export class RecoveryEngine {
     // unref() so the parent CLI process can exit without waiting for the child
     child.unref();
 
+    // Durable record of this spawn, surviving the CLI process this method
+    // runs in exiting -- closes the classification gap found 2026-09-12:
+    // without this, the next boot-agent instance to check this port sees a
+    // healthy, correctly-identified process with no ancestry back to
+    // itself and can only call it 'unsupervised', indistinguishable from a
+    // genuinely unknown stray. See scripts/recovery-lease.js for the full
+    // rationale and what this does and does not solve.
+    try {
+      const { record: recordRecoveryLease } = require('../../scripts/recovery-lease');
+      recordRecoveryLease(component, {
+        pid: child.pid,
+        command,
+        args,
+        recoveredBy: 'RecoveryEngine.restartProcess',
+      });
+    } catch (e) {
+      // The lease is an audit/classification aid, not load-bearing for the
+      // recovery itself -- a failure to write it must never fail recovery.
+      this.stateModel.logEvent({
+        id: randomUUID(),
+        timestamp: new Date().toISOString(),
+        type: 'recovery_step',
+        component,
+        action: 'recovery_lease_write_failed',
+        actionResult: 'failure',
+        detail: { error: e instanceof Error ? e.message : String(e) },
+      });
+    }
+
     this.stateModel.logEvent({
       id: randomUUID(),
       timestamp: new Date().toISOString(),

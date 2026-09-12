@@ -33,7 +33,13 @@ const { spawn } = require('child_process');
 const http = require('http');
 const path = require('path');
 const fs = require('fs');
-const { BootInstanceLease, SUPERSEDED_EXIT_CODE } = require('./boot-instance-lease');
+const {
+  BootInstanceLease,
+  SUPERSEDED_EXIT_CODE,
+  PARTIAL_BOOT_REFUSED_EXIT_CODE,
+} = require('./boot-instance-lease');
+const { findPidsOnPort, getProcessInfo, isDescendantOf } = require('./process-identity');
+const recoveryLease = require('./recovery-lease');
 
 const ROOT = path.resolve(__dirname, '..');
 
@@ -370,6 +376,123 @@ async function portInUseAndHealthy(mod) {
 }
 
 // ---------------------------------------------------------------------------
+// Ownership classification for a pre-existing, healthy occupant of a
+// configured port.
+// ---------------------------------------------------------------------------
+// A healthy HTTP response only proves the port is reachable. It does not
+// prove the occupant is (a) the configured service, nor (b) something this
+// boot-agent can supervise (watch for exit, restart, or shut down). Before
+// this existed, `portInUseAndHealthy() === true` was sufficient on its own
+// to classify a module `external: true` with `child: null` -- silently
+// disowning it for the rest of the boot-agent's life, with no PID ever
+// recorded. That is exactly how a supervised protoforge-core instance
+// (PID 4568) was able to exit and be invisibly replaced by an unrelated
+// orphan (PID 25324, a `node src/server.js` child of a since-exited Jest
+// process) that happens to implement the identical health-checkable
+// service. See scripts/process-identity.js's header and
+// SUPERVISION_MODEL.md for the full incident and contract.
+//
+// Returns one of:
+//   { ownership: 'supervised',    pid }  process identity matches the
+//                                        configured command+script AND its
+//                                        ancestry traces back to this
+//                                        boot-agent process. Safe to adopt
+//                                        silently -- this is the original,
+//                                        pre-fix behavior, now proven rather
+//                                        than assumed.
+//   { ownership: 'unsupervised',  pid }  process identity matches, but
+//                                        ancestry does NOT trace back to
+//                                        this boot-agent (or a PID could not
+//                                        be attributed to the port at all,
+//                                        or its identity could not be read),
+//                                        AND no recovery lease explains it
+//                                        either. Healthy, genuinely the
+//                                        right service, but not something
+//                                        this boot-agent can restart or shut
+//                                        down, and its origin is unknown.
+//                                        Must be visible, never silent.
+//   { ownership: 'recovered',     pid,   process identity matches, ancestry
+//     recoveredAt, recoveredBy,          doesn't trace to this boot-agent,
+//     cause }                           but scripts/recovery-lease.js has a
+//                                        non-stale record naming this exact
+//                                        occupant -- RecoveryEngine spawned
+//                                        it intentionally (see that file for
+//                                        why it can't also be a real child
+//                                        of this boot-agent). Healthy,
+//                                        explained, still not something this
+//                                        boot-agent can restart or shut
+//                                        down -- distinct from 'unsupervised'
+//                                        only in that its origin is known.
+//   { ownership: 'wrong-process', pid }  something else entirely answers on
+//                                        the port -- ownership failure.
+//
+// "unsupervised" absorbs both "ancestry doesn't reach this boot-agent" and
+// "identity could not be determined" (no PID found, or the PID's info could
+// not be read). Per process-identity.js: a failed lookup proves nothing was
+// established, not that the occupant is wrong -- collapsing it into a
+// rejection (wrong-process) would treat "unknown" as "disproven", which is
+// not evidence-based. Collapsing it into silent acceptance (supervised)
+// would repeat the exact defect this fix closes. Visible-but-not-rejected
+// is the only reading the evidence actually supports.
+async function classifyOccupant(mod) {
+  const pids = findPidsOnPort(mod.port);
+  if (pids.length === 0) {
+    // Something answers the TCP/health check (could be a portproxy or a
+    // container mapping — see the wslrelay/Docker dual-listener case found
+    // on 54321 during the runtime sweep) but no PID owns it locally.
+    // Ownership cannot be established in either direction.
+    return { ownership: 'unsupervised', pid: null, name: null, cmdline: null };
+  }
+
+  const pid = pids[0]; // dual-stack (IPv4+IPv6) processes can list twice; identity is the same either way.
+  const info = getProcessInfo(pid);
+  if (!info.name) {
+    return { ownership: 'unsupervised', pid, name: null, cmdline: null };
+  }
+
+  const expectedCommand = String(mod.command || '').toLowerCase();
+  const expectedArgs = (mod.args || []).map((a) => String(a).toLowerCase());
+  const cmdlineLower = String(info.cmdline || '').toLowerCase();
+
+  // Identity requires BOTH the configured command and (when the module has
+  // args) at least one configured arg to appear in the occupant's command
+  // line. A bare command match is not enough when the configured command is
+  // itself generic (e.g. "node") -- see the identical fix in
+  // HealthProvenanceChecker.ts for the same loophole ("... || cmdline
+  // contains 'node'", which any node process satisfies).
+  const commandMatches = Boolean(expectedCommand) && cmdlineLower.includes(expectedCommand);
+  const scriptMatches = expectedArgs.length === 0 || expectedArgs.some((a) => a && cmdlineLower.includes(a));
+
+  if (!commandMatches || !scriptMatches) {
+    return { ownership: 'wrong-process', pid, name: info.name, cmdline: info.cmdline };
+  }
+
+  if (isDescendantOf(pid, process.pid)) {
+    return { ownership: 'supervised', pid, name: info.name, cmdline: info.cmdline };
+  }
+
+  // Not our own child -- but before calling it a mystery, check whether
+  // RecoveryEngine explains it. Closes the gap found 2026-09-12: a
+  // governed recovery legitimately spawns a replacement detached from the
+  // short-lived CLI that triggered it (necessary -- see
+  // RecoveryEngine.restartProcess()'s own comment), and until now nothing
+  // let a later boot-agent instance tell that apart from an unidentified
+  // stray. The lease names the shell wrapper spawn() actually returns
+  // (`child.pid`), not the final process bound to the port -- see
+  // scripts/recovery-lease.js's own note -- so this is an ancestry check
+  // via the same isDescendantOf already used above, not equality.
+  const lease = recoveryLease.getValidLease(mod.id);
+  if (lease && (String(pid) === String(lease.pid) || isDescendantOf(pid, lease.pid))) {
+    return {
+      ownership: 'recovered', pid, name: info.name, cmdline: info.cmdline,
+      recoveredAt: lease.recoveredAt, recoveredBy: lease.recoveredBy, cause: lease.cause,
+    };
+  }
+
+  return { ownership: 'unsupervised', pid, name: info.name, cmdline: info.cmdline };
+}
+
+// ---------------------------------------------------------------------------
 // Shutdown
 // ---------------------------------------------------------------------------
 async function shutdown(code = 0) {
@@ -415,8 +538,14 @@ async function shutdown(code = 0) {
     }
   }
   // Release the single-instance lease, but only if we still hold it. A
-  // superseded instance must not delete its successor's lease on the way out.
-  try { lease.release(); } catch (_) { /* lease is advisory; never block exit */ }
+  // superseded instance must not delete its successor's lease on the way out,
+  // and a partial boot (--only/--skip) never claimed one, so it must never
+  // release the canonical runtime's lease. release() enforces both by checking
+  // ownership; the isPartialBoot guard makes the second case explicit so it
+  // cannot be lost in a later refactor.
+  try {
+    if (!isPartialBoot) lease.release();
+  } catch (_) { /* lease is advisory; never block exit */ }
 
   log('boot-agent', code === 0 ? c('32', 'all modules stopped. bye.') : c('31', 'shutdown after failure.'));
   process.exit(code);
@@ -432,6 +561,26 @@ async function shutdown(code = 0) {
 const lease = new BootInstanceLease();
 const LEASE_POLL_MS = parseInt(process.env.HYDI_BOOT_LEASE_POLL_MS || '2000', 10);
 let leaseInterval = null;
+
+// A boot restricted with --only or --skip is a PARTIAL boot: it deliberately
+// brings up a subset of the module set, so it is not the canonical runtime and
+// must never own the canonical lease.
+//
+// This guard exists because of a real incident (2026-09-10): a manual
+//   node scripts/boot-agent.js --only=heidi-web
+// claimed the lease, the PM2-supervised runtime saw a newer bootId and stood
+// down with exit 75, and stop_exit_codes:[75] told PM2 not to respawn it. The
+// job-executor-poller and heidi-mobile-chat went down with it and stayed down.
+// Running boot-agent to exercise one module must not be able to take down
+// supervised production.
+const isPartialBoot = only.length > 0 || skip.length > 0;
+
+function partialBootDescription() {
+  const parts = [];
+  if (only.length) parts.push(`--only=${only.join(',')}`);
+  if (skip.length) parts.push(`--skip=${skip.join(',')}`);
+  return parts.join(' ');
+}
 
 function startLeaseSupervision() {
   if (leaseInterval) return;
@@ -472,17 +621,39 @@ const CONFIG = loadConfig();
 async function main() {
   banner('HYDI Boot Agent');
 
-  // Claim the single-instance lease before doing any work. Newest claim wins:
-  // any older boot runtime notices within one poll interval and stands down,
-  // taking its core loop and poller with it.
-  const { bootId, supersededOwner } = lease.claim();
-  log('boot-agent', `boot lease claimed: ${bootId} (pid ${process.pid})`);
-  if (supersededOwner) {
+  if (isPartialBoot) {
+    // A partial boot never claims, replaces or releases the canonical lease.
+    // If a canonical runtime is live, refuse outright rather than running
+    // alongside it -- two boot agents managing overlapping modules is the
+    // ambiguity this whole contract exists to remove.
+    const canonical = lease.inspect();
+    if (canonical.active) {
+      console.error(c('31',
+        `\nRefusing partial boot (${partialBootDescription()}): a canonical supervised runtime already holds the boot lease.`));
+      console.error(c('90', `  lease: ${canonical.reason}`));
+      console.error(c('90', `  lease file: ${lease.lockPath}`));
+      console.error(c('90',
+        '  A partial boot cannot take over the canonical runtime. Stop the supervised instance first\n' +
+        '  (e.g. `pm2 stop hydi-boot`) if you intend to replace it, or run the full boot with no --only/--skip.'));
+      process.exit(PARTIAL_BOOT_REFUSED_EXIT_CODE);
+    }
     log('boot-agent', c('33',
-      `superseding previous boot runtime ${supersededOwner.bootId} (pid ${supersededOwner.pid}, ` +
-      `started ${supersededOwner.startedAt}) -- it will stand down within ${LEASE_POLL_MS}ms`));
+      `partial boot (${partialBootDescription()}) -- NOT claiming the canonical lease (${canonical.reason})`));
+    // No claim, and therefore no lease supervision: this instance can neither be
+    // superseded nor supersede anyone.
+  } else {
+    // Canonical boot. Claim the single-instance lease before doing any work.
+    // Newest claim wins: any older boot runtime notices within one poll interval
+    // and stands down, taking its core loop and poller with it.
+    const { bootId, supersededOwner } = lease.claim();
+    log('boot-agent', `boot lease claimed: ${bootId} (pid ${process.pid})`);
+    if (supersededOwner) {
+      log('boot-agent', c('33',
+        `superseding previous boot runtime ${supersededOwner.bootId} (pid ${supersededOwner.pid}, ` +
+        `started ${supersededOwner.startedAt}) -- it will stand down within ${LEASE_POLL_MS}ms`));
+    }
+    startLeaseSupervision();
   }
-  startLeaseSupervision();
 
   const settings = CONFIG.settings;
   const selected = selectModules(CONFIG.modules);
@@ -525,8 +696,36 @@ async function main() {
   banner('Booting');
   for (const mod of order) {
     if (mod.type === 'process' && mod.port && await portInUseAndHealthy(mod)) {
-      log(mod.id, c('33', `port ${mod.port} occupied by a healthy process -- assuming already running, skipping spawn`));
-      running.push({ mod, child: null, type: 'process', external: true });
+      const occupant = await classifyOccupant(mod);
+
+      if (occupant.ownership === 'wrong-process') {
+        log(mod.id, c('31',
+          `port ${mod.port} answers a health check, but PID ${occupant.pid} (${occupant.name}) ` +
+          `does not match the configured service (${mod.command} ${(mod.args || []).join(' ')}) -- ` +
+          'refusing to adopt it.'));
+        if (mod.required) {
+          log(mod.id, c('31', 'required module blocked: an unidentified process owns its port.'));
+          await shutdown(1);
+          return;
+        }
+        log(mod.id, c('33', 'optional module: leaving the unidentified occupant alone; module considered unavailable.'));
+        continue; // do not record it as running, do not attempt to spawn on top of it.
+      }
+
+      if (occupant.ownership === 'unsupervised') {
+        log(mod.id, c('33',
+          `port ${mod.port} occupied by a correctly-identified but UNSUPERVISED process` +
+          `${occupant.pid ? ` (PID ${occupant.pid})` : ' (PID unknown)'} -- healthy, but this ` +
+          'boot-agent did not spawn it, cannot verify its ancestry, and will not restart it on exit.'));
+      } else if (occupant.ownership === 'recovered') {
+        log(mod.id, c('33',
+          `port ${mod.port} occupied by a process RecoveryEngine recovered at ${occupant.recoveredAt} ` +
+          `(PID ${occupant.pid}) -- healthy and explained, but still not a child of this boot-agent; ` +
+          'will not be restarted on exit.'));
+      } else {
+        log(mod.id, c('33', `port ${mod.port} occupied by a supervised process (PID ${occupant.pid}) -- already running, skipping spawn`));
+      }
+      running.push({ mod, child: null, type: 'process', external: true, ownership: occupant.ownership, pid: occupant.pid });
       continue;
     }
     const ok = await startModule(mod, settings);
@@ -540,7 +739,10 @@ async function main() {
   banner('Boot complete');
   const lines = running.map((r) => {
     const port = r.mod.port ? `:${r.mod.port}` : '';
-    const state = r.external ? 'external' : 'up';
+    const state = !r.external ? 'up'
+      : r.ownership === 'unsupervised' ? 'external(UNSUPERVISED)'
+      : r.ownership === 'recovered' ? 'external(RECOVERED)'
+      : 'external';
     return `  ${c('32', '●')} ${r.mod.id.padEnd(20)} ${state}${port}`;
   });
   console.log(lines.join('\n'));
@@ -550,4 +752,16 @@ async function main() {
   console.log(c('1', '\nBoot agent supervising. Press Ctrl+C to shut everything down.\n'));
 }
 
-main().catch((e) => { console.error(e); shutdown(1); });
+// Guarded so `require('./boot-agent')` (used by tests to reach
+// `classifyOccupant` in isolation) never auto-executes a real boot. Before
+// this guard existed, `require()`-ing this file for any reason ran the
+// entire boot sequence unconditionally, lease claim included — the same
+// class of hazard as the `--dry-run` lease-claim-before-check defect
+// documented on `classifyOccupant` and reported separately; this closes the
+// `require()` half of that hazard so tests can safely reach the pure
+// classification logic below without ever starting a real boot-agent.
+module.exports = { classifyOccupant };
+
+if (require.main === module) {
+  main().catch((e) => { console.error(e); shutdown(1); });
+}

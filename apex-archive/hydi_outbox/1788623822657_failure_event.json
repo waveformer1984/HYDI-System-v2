@@ -1,0 +1,11 @@
+{
+  "project_id": "apex-archive",
+  "event_type": "failure_event",
+  "emitted_at": "2026-09-05T15:57:02Z",
+  "schema_version": "draft-2",
+  "payload": {
+    "episode_id": "2026-09-05-the-weekend-group-b-died-inside-rallying-s-deadliest-season-504bd6f3",
+    "stage": "verify_package",
+    "reason": "technical media QA independently re-passes on packaged video.mp4 -- narration duration (255.23s) vs video duration (262.75s) differ by 7.52s, exceeding 2.0s tolerance. Root cause isolated to standalone_pipeline.py build_segment_clip(): a single test segment (8.1488s narration) rendered a video stream of 8.7333s (262 frames instead of the expected 244 at 30fps) even with captions disabled, reproducible in isolation. Likely cause: the '-loop 1 -i <img>' input has no explicit -framerate, so ffmpeg "
+  }
+}

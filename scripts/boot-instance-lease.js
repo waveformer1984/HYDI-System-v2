@@ -53,7 +53,47 @@ const crypto = require('crypto');
  */
 const SUPERSEDED_EXIT_CODE = 75;
 
-const DEFAULT_LOCK_PATH = path.resolve(__dirname, '..', '.hydi-boot.lock');
+/**
+ * Exit code used when a PARTIAL boot (--only / --skip) refuses to start because
+ * a canonical runtime already holds the lease.
+ *
+ * Deliberately NOT 75: 75 means "an orderly stand-down happened, do not
+ * respawn". A refused partial boot is a rejected invocation, and conflating the
+ * two would let a refusal be read as a stand-down.
+ */
+const PARTIAL_BOOT_REFUSED_EXIT_CODE = 78;
+
+/**
+ * Lease file location. HYDI_BOOT_LEASE_PATH overrides it so tests can exercise
+ * the real boot-agent CLI against an isolated temporary lease instead of the
+ * machine's live one. Production never sets it.
+ */
+const DEFAULT_LOCK_PATH = process.env.HYDI_BOOT_LEASE_PATH
+  ? path.resolve(process.env.HYDI_BOOT_LEASE_PATH)
+  : path.resolve(__dirname, '..', '.hydi-boot.lock');
+
+/**
+ * Is a process with this pid currently alive?
+ *
+ * signal 0 performs the permission/existence check without delivering a signal.
+ * EPERM means the process exists but belongs to another user — still alive.
+ *
+ * Note on PID reuse: Windows recycles PIDs aggressively, so a live pid is not
+ * proof the ORIGINAL holder is alive. That is acceptable here because this
+ * function only ever gates whether a partial boot refuses to start. A false
+ * "alive" makes a partial boot refuse; the failure mode is a refusal the
+ * operator can override by removing a stale lease, never an eviction of a
+ * running canonical runtime.
+ */
+function isPidAlive(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    return err && err.code === 'EPERM';
+  }
+}
 
 class BootInstanceLease {
   /**
@@ -66,7 +106,37 @@ class BootInstanceLease {
     this.lockPath = opts.lockPath || DEFAULT_LOCK_PATH;
     this.now = opts.now || (() => new Date());
     this.newId = opts.newId || (() => crypto.randomBytes(12).toString('hex'));
+    // Liveness probe, injectable so tests can model a live/dead holder without
+    // spawning real processes.
+    this.isAlive = opts.isAlive || isPidAlive;
     this.bootId = null;
+  }
+
+  /**
+   * Is a canonical runtime currently holding this lease?
+   *
+   * Used only to decide whether a PARTIAL boot (--only / --skip) may run. It
+   * never mutates the lease.
+   *
+   * @returns {{active: boolean, record: object|null, reason: string}}
+   */
+  inspect() {
+    const record = this.read();
+    if (!record) {
+      return { active: false, record: null, reason: 'no lease file present' };
+    }
+    if (!this.isAlive(record.pid)) {
+      return {
+        active: false,
+        record,
+        reason: `lease names bootId ${record.bootId} at pid ${record.pid}, but that pid is not alive (stale lease)`,
+      };
+    }
+    return {
+      active: true,
+      record,
+      reason: `bootId ${record.bootId} held by live pid ${record.pid} (started ${record.startedAt})`,
+    };
   }
 
   /**
@@ -149,5 +219,7 @@ class BootInstanceLease {
 module.exports = {
   BootInstanceLease,
   SUPERSEDED_EXIT_CODE,
+  PARTIAL_BOOT_REFUSED_EXIT_CODE,
   DEFAULT_LOCK_PATH,
+  isPidAlive,
 };

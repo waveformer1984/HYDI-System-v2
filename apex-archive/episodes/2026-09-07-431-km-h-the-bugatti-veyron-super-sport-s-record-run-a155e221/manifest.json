@@ -1,0 +1,201 @@
+{
+  "pipeline_version": "1.0.0",
+  "episode_id": "2026-09-07-431-km-h-the-bugatti-veyron-super-sport-s-record-run-a155e221",
+  "created_at": "2026-09-07T14:14:40.708180+00:00",
+  "title": "431 KM/H: The Bugatti Veyron Super Sport's Record Run",
+  "pillar": "special_edition",
+  "topic_slug": "bugatti-veyron-super-sport",
+  "format": "shorts",
+  "state": "RENDERED",
+  "history": [
+    {
+      "episode_id": "2026-09-07-431-km-h-the-bugatti-veyron-super-sport-s-record-run-a155e221",
+      "previous_state": null,
+      "new_state": "RESEARCH",
+      "timestamp": "2026-09-07T14:14:40.708180+00:00",
+      "actor": "task",
+      "reason": "manifest created, research begun",
+      "manifest_hash": "b3fa24767131ae3736495be566bf18d3a9399c48b86bb4353f9ecebccf92fa96"
+    },
+    {
+      "episode_id": "2026-09-07-431-km-h-the-bugatti-veyron-super-sport-s-record-run-a155e221",
+      "previous_state": "RESEARCH",
+      "new_state": "FACT_CHECKED",
+      "timestamp": "2026-09-07T14:14:40.708383+00:00",
+      "actor": "task",
+      "reason": "5 sources, 6 claims logged, none unsupported",
+      "manifest_hash": "167058ca549772290e37338b18f2a6aa664a77346c60e4733503c3ce04e7aaad"
+    },
+    {
+      "episode_id": "2026-09-07-431-km-h-the-bugatti-veyron-super-sport-s-record-run-a155e221",
+      "previous_state": "FACT_CHECKED",
+      "new_state": "SCRIPTED",
+      "timestamp": "2026-09-07T14:14:40.708480+00:00",
+      "actor": "task",
+      "reason": "structural script QA passed",
+      "manifest_hash": "46cd87a7270f17332d58e76ee27aa02f37d89a036ef03f0056d48040cb9842c9"
+    },
+    {
+      "episode_id": "2026-09-07-431-km-h-the-bugatti-veyron-super-sport-s-record-run-a155e221",
+      "previous_state": "SCRIPTED",
+      "new_state": "GENERATED",
+      "timestamp": "2026-09-07T14:14:40.710924+00:00",
+      "actor": "task",
+      "reason": "render produced via espeak-ng",
+      "manifest_hash": "662490ffc080174c2d38b4bc027b13301ec70270f733a6ea1d016b72c2cc6ebb"
+    },
+    {
+      "episode_id": "2026-09-07-431-km-h-the-bugatti-veyron-super-sport-s-record-run-a155e221",
+      "previous_state": "GENERATED",
+      "new_state": "QA_PASSED",
+      "timestamp": "2026-09-07T14:14:44.125660+00:00",
+      "actor": "task",
+      "reason": "technical media QA passed",
+      "manifest_hash": "70bb58f2b734e648fe7b177813197c4b028dbb86530bbe85c32b3c3635e387a8"
+    },
+    {
+      "episode_id": "2026-09-07-431-km-h-the-bugatti-veyron-super-sport-s-record-run-a155e221",
+      "previous_state": "QA_PASSED",
+      "new_state": "RENDERED",
+      "timestamp": "2026-09-07T14:14:45.856609+00:00",
+      "actor": "task",
+      "reason": "package assembled at episodes/2026-09-07-431-km-h-the-bugatti-veyron-super-sport-s-record-run-a155e221",
+      "manifest_hash": "634b7ba615f34bb0126d53e2ec07fae0c7c75b69cb05075683f8ff171d7a82ae"
+    }
+  ],
+  "script_sha256": "548d053ab72836249bd58b292ecf619eecf456c13c93f003e23cdf28f93239a2",
+  "render_sha256": "0489d6d30edffa9f329fc377f093e02887d4ab34412a03396059eccccc4164cc",
+  "sources": [
+    {
+      "url": "https://newsroom.bugatti.com/en/press-releases/407-kmh-a-milestone-in-automotive-history",
+      "publisher": "Bugatti Newsroom",
+      "retrieved": "2026-09-07",
+      "supports": "2005 Veyron 16.4 407 km/h production-car speed record"
+    },
+    {
+      "url": "https://newsroom.bugatti.com/en/press-releases/landspeed-worldrecord-with-the-bugatti-veyron-16-4-super-sport",
+      "publisher": "Bugatti Newsroom",
+      "retrieved": "2026-09-07",
+      "supports": "2010 Veyron Super Sport 431.072 km/h production-car speed record"
+    },
+    {
+      "url": "https://www.autoblog.com/2013/04/08/bugatti-veyron-super-sport-stripped-of-worlds-fastest-car-title/",
+      "publisher": "Autoblog",
+      "retrieved": "2026-09-07",
+      "supports": "2013 Guinness title dispute over the record car's speed limiter, and reinstatement"
+    },
+    {
+      "url": "https://paultan.org/2017/11/06/koenigsegg-agera-rs-sets-new-worlds-fastest-car-record/",
+      "publisher": "Paul Tan's Automotive News",
+      "retrieved": "2026-09-07",
+      "supports": "2017 Koenigsegg Agera RS 447 km/h record that dethroned the Veyron Super Sport"
+    },
+    {
+      "url": "https://borro.com/bugatti-veyron-super-sport/",
+      "publisher": "Borro",
+      "retrieved": "2026-09-07",
+      "supports": "Veyron Super Sport engine output, 0-100 km/h time, production-limited top speed, and production unit count"
+    }
+  ],
+  "fact_check": [
+    {
+      "claim": "On April 29, 2005, the original Bugatti Veyron 16.4 became the first series-production car to exceed 400 km/h, reaching 407 km/h at Volkswagen's Ehra-Lessien test track, driven by test driver Uwe Novacki.",
+      "source": "https://newsroom.bugatti.com/en/press-releases/407-kmh-a-milestone-in-automotive-history",
+      "source_date": "2005-04-29",
+      "confidence": "high",
+      "verification_status": "verified",
+      "notes": "Confirmed via Bugatti's own official press-release archive (primary source)."
+    },
+    {
+      "claim": "On July 3, 2010, the Bugatti Veyron 16.4 Super Sport set a new production-car land speed record of 431.072 km/h (267.856 mph), driven by test driver Pierre-Henri Raphanel at the Ehra-Lessien track, witnessed by TUV officials and a Guinness World Records adjudicator.",
+      "source": "https://newsroom.bugatti.com/en/press-releases/landspeed-worldrecord-with-the-bugatti-veyron-16-4-super-sport",
+      "source_date": "2010-07-03",
+      "confidence": "high",
+      "verification_status": "verified",
+      "notes": "Confirmed via Bugatti's own official press-release archive (primary source)."
+    },
+    {
+      "claim": "In April 2013, Guinness World Records briefly stripped the Veyron Super Sport of its 'world's fastest production car' title because the record-setting car had its speed limiter disabled beyond the specification sold to customers, then reinstated the record shortly afterward.",
+      "source": "https://www.autoblog.com/2013/04/08/bugatti-veyron-super-sport-stripped-of-worlds-fastest-car-title/",
+      "source_date": "2013-04-08",
+      "confidence": "medium",
+      "verification_status": "verified",
+      "notes": "Reported contemporaneously by a reputable automotive trade outlet; corroborated by additional coverage found during research."
+    },
+    {
+      "claim": "On November 4, 2017, the Koenigsegg Agera RS recorded a two-way average speed of 447 km/h (277.9 mph) near Pahrump, Nevada -- independently verified by Racelogic -- ending the Bugatti Veyron Super Sport's run as the world's fastest verified production car.",
+      "source": "https://paultan.org/2017/11/06/koenigsegg-agera-rs-sets-new-worlds-fastest-car-record/",
+      "source_date": "2017-11-06",
+      "confidence": "high",
+      "verification_status": "verified",
+      "notes": "Corroborated by multiple contemporaneous outlets found during research (CTV News, Top Gear, dupontregistry)."
+    },
+    {
+      "claim": "The Veyron Super Sport's quad-turbocharged 8.0-liter W16 engine produces 1,200 PS (1,200 hp) and 1,106 lb-ft of torque, with a 0-100 km/h time of 2.5 seconds; customer cars are electronically limited to 415 km/h.",
+      "source": "https://borro.com/bugatti-veyron-super-sport/",
+      "source_date": "2026-09-07",
+      "confidence": "medium",
+      "verification_status": "needs_review",
+      "notes": "Figures are consistent across several secondary/aggregator sources (Borro, Netcarshow, Zeperfs) but were not cross-checked against Bugatti's own official spec sheet during this research pass -- flagging for J to confirm against a primary Bugatti source before publishing."
+    },
+    {
+      "claim": "Bugatti built only 48 Veyron Super Sport units (2010-2011), out of roughly 450 Veyron-family cars produced in total across all variants over the model's decade-long production run.",
+      "source": "https://borro.com/bugatti-veyron-super-sport/",
+      "source_date": "2026-09-07",
+      "confidence": "medium",
+      "verification_status": "needs_review",
+      "notes": "Production totals are reported consistently by secondary sources but were not independently cross-verified against a Bugatti factory production ledger during this research pass -- flagging for J to confirm before publishing."
+    }
+  ],
+  "needs_manual_review": true,
+  "script_qa": {
+    "passed": true,
+    "errors": []
+  },
+  "technical_qa": {
+    "passed": true,
+    "checks": {
+      "has_duration": true,
+      "duration_seconds": 66.15,
+      "duration_above_minimum": true,
+      "duration_below_maximum": true,
+      "has_video_stream": true,
+      "has_audio_stream": true,
+      "resolution": "1080x1920",
+      "resolution_matches_expected": true,
+      "frame_rate": 30.0,
+      "frame_rate_as_expected": true,
+      "decodes_cleanly": true
+    },
+    "errors": []
+  },
+  "segment_durations": [
+    9.714829931972789,
+    17.052380952380954,
+    19.48766439909297,
+    10.200589569160998,
+    6.797505668934241
+  ],
+  "tts_provider": "espeak-ng",
+  "approved_by": null,
+  "approved_at": null,
+  "review_notes": null,
+  "published_url": null,
+  "published_at": null,
+  "analytics": null,
+  "analyzed_at": null,
+  "package_dir": "/sessions/brave-quirky-hypatia/mnt/HYDI-System-v2/apex-archive/episodes/2026-09-07-431-km-h-the-bugatti-veyron-super-sport-s-record-run-a155e221",
+  "package_files": [
+    "QA_REPORT.md",
+    "captions.srt",
+    "fact_check.json",
+    "metadata.json",
+    "narration.wav",
+    "script.json",
+    "script.md",
+    "sources.json",
+    "thumbnail.png",
+    "video.mp4",
+    "manifest.json"
+  ]
+}

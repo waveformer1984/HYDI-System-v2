@@ -6,6 +6,19 @@
 
 ---
 
+## LEGACY NOTICE (2026-09-10)
+
+The following components from this session have been retired as legacy architecture, superseded by the canonical boot-agent system:
+
+- **supervisor.js** → RETIRED (archived to archive/supervisor.js.legacy)
+- **memory-engine.js** → RETIRED (archived to archive/memory-engine.js.legacy)
+- **hydi-core.js** (repo root) → RETIRED (archived to archive/hydi-core.js.legacy)
+- **services-manifest.json** → RETIRED (archived to archive/services-manifest.json.legacy)
+
+Current supervision uses boot-agent + boot.config.json. The retired components are preserved in the archive/ directory for historical reference.
+
+---
+
 ## What Was Built
 
 ### Core Systems (3,000+ lines of code)

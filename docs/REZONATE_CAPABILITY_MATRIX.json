@@ -1,0 +1,77 @@
+{
+  "audit_date": "2026-08-13",
+  "status_vocabulary": ["IMPLEMENTED", "PARTIAL", "STUB", "MOCK", "DOCUMENTATION_ONLY", "DEPRECATED", "MISSING", "UNKNOWN"],
+  "categories": {
+    "Audio": [
+      {"capability": "stem separation", "status": "IMPLEMENTED", "module": "rezonate/make-stems.py", "evidence": "Real WAV output verified on disk (rezonate/stems/Bad Decision Club/); Demucs htdemucs. Deps not importable in audit sandbox so not re-executed live this session."},
+      {"capability": "stem generation (AI song generation)", "status": "IMPLEMENTED", "module": "rezonate/generate.py", "evidence": "Google Lyria 3 via Gemini API, code read in full; requires GEMINI_API_KEY, unset in audit sandbox."},
+      {"capability": "waveform generation", "status": "PARTIAL", "module": "components/song-composer/WaveformSpectrum.tsx", "evidence": "Component exists in song-composer; not opened this session, prior audit classified as UI scaffold. RezonetteModule.tsx COMPONENTS list also names an 'Audio Engine' as status:'planned' in its own source data (before the render bug overrides it to complete)."},
+      {"capability": "audio playback", "status": "PARTIAL", "module": "protoforge-applications/rezonate/src/api/router.js GET /assets/:id/file (per governance docs), RezonateDAWModule.tsx (Web Audio)", "evidence": "Governance doc describes a working stream-and-play path through the canonical app; not independently re-executed this session (would require a running server + generated asset)."},
+      {"capability": "sample management", "status": "IMPLEMENTED", "module": "rezonate/samples-catalog.json + scan-samples.js + protoforge-applications/rezonate/src/adapters/sample-library.js", "evidence": "31,148-entry catalog verified by direct read; sample-library.js covered by 7 passing unit tests."},
+      {"capability": "audio analysis", "status": "PARTIAL", "module": "rezonate/make-stems.py (librosa)", "evidence": "BPM/key only; no spectral/transient analysis found."},
+      {"capability": "metadata extraction", "status": "IMPLEMENTED", "module": "rezonate/make-stems.py (track.json), rezonate/scan-samples.js (catalog tags)", "evidence": "track.json verified present alongside real stem output; catalog tags are filename/path heuristics per code."},
+      {"capability": "BPM detection", "status": "IMPLEMENTED", "module": "rezonate/make-stems.py", "evidence": "librosa-based; code inspected, not independently re-run numerically this session."},
+      {"capability": "key detection", "status": "IMPLEMENTED", "module": "rezonate/make-stems.py", "evidence": "Krumhansl-Schmuckler profile per prior audit; code path exists, not independently re-run this session."},
+      {"capability": "spectral analysis", "status": "MISSING", "module": null, "evidence": "No spectral-analysis code found anywhere in the Rezonate surface area this session or previously."},
+      {"capability": "rendering/export (DAW export packaging)", "status": "IMPLEMENTED", "module": "protoforge-applications/rezonate/src/export/packaging.js", "evidence": "Covered by passing export.test.js (part of the 96-test suite)."}
+    ],
+    "MIDI": [
+      {"capability": "MIDI import (file-based)", "status": "MISSING", "module": null, "evidence": "No matches anywhere in the tree for standard MIDI file parsing."},
+      {"capability": "MIDI export (file-based)", "status": "MISSING", "module": null, "evidence": "No matches anywhere in the tree."},
+      {"capability": "MIDI playback", "status": "MISSING", "module": null, "evidence": "No MIDI-file playback engine found; only live hardware input handling exists."},
+      {"capability": "MIDI routing", "status": "PARTIAL", "module": "components/song-composer/MidiControllerInterface.ts", "evidence": "Routes hardware note events to app actions (section jump, transport). Does not route between MIDI devices or into a sequencer."},
+      {"capability": "MIDI note mapping", "status": "IMPLEMENTED", "module": "components/song-composer/MidiControllerInterface.ts", "evidence": "Full 188-line file read this session (2nd time). DDJ_SB3_DEFAULTS mapping + setMapping()/learnNextPad() for custom remapping."},
+      {"capability": "MIDI CC", "status": "MISSING", "module": null, "evidence": "handleMessage() explicitly filters to Note On only (isNoteOn check); CC status bytes are not handled."},
+      {"capability": "pitch bend", "status": "MISSING", "module": null, "evidence": "Not present in MidiControllerInterface.ts or anywhere else."},
+      {"capability": "aftertouch", "status": "MISSING", "module": null, "evidence": "Not present anywhere."},
+      {"capability": "program change", "status": "MISSING", "module": null, "evidence": "Not present anywhere."},
+      {"capability": "MPE", "status": "MISSING", "module": null, "evidence": "Not present anywhere."},
+      {"capability": "DDJ-SB3 hardware profile", "status": "IMPLEMENTED", "module": "components/song-composer/MidiControllerInterface.ts DDJ_SB3_DEFAULTS", "evidence": "Hardcoded note/channel map for Pioneer DDJ-SB3 hot cues, play/pause, seek, record toggle. Verified by direct read."},
+      {"capability": "Ableton integration", "status": "MISSING", "module": null, "evidence": "No .als/.adg parsing or Ableton Link found. Prior audit noted manual drag-and-drop WAV as the only workflow."},
+      {"capability": "external hardware (general)", "status": "PARTIAL", "module": "components/song-composer/MidiControllerInterface.ts (Web MIDI, any device via navigator.requestMIDIAccess)", "evidence": "isSupported()/initialize() work with any Web-MIDI-visible device, but only the DDJ-SB3 has a pre-built mapping; other devices would need manual learning-mode mapping."}
+    ],
+    "Studio": [
+      {"capability": "project management", "status": "IMPLEMENTED", "module": "protoforge-applications/rezonate/src/domain/processing-job.js + repository.js", "evidence": "Covered by passing tests (processing-job.test.js, api.test.js create/list project subtests)."},
+      {"capability": "song composer", "status": "PARTIAL", "module": "pages/song-composer.tsx + components/song-composer/*", "evidence": "12 components present; produces LLM song-structure JSON, no audio; not covered by any test found."},
+      {"capability": "sample browser", "status": "PARTIAL", "module": "components/song-composer/SampleLibrary.tsx (UI), protoforge-applications/rezonate/src/adapters/sample-library.js (backend, tested)", "evidence": "Backend adapter is real and tested; UI component not opened this session, previously classified as scaffold."},
+      {"capability": "instrument management", "status": "MISSING", "module": null, "evidence": "No instrument/patch management system found anywhere in the Rezonate surface area."},
+      {"capability": "session management", "status": "PARTIAL", "module": "supabase/functions/rezonate-engine/index.ts session_recall (stub)", "evidence": "Declared task type only, stub handler, not implemented."},
+      {"capability": "visualization (waveform/spectrum)", "status": "PARTIAL", "module": "components/song-composer/WaveformSpectrum.tsx, apps/ursula-frontend RezonateDAWModule.tsx ('waveform preview stub' per prior audit)", "evidence": "Not opened this session; classified PARTIAL based on prior audit's direct finding of a stub, consistent with this session's general pattern of UI scaffolding."},
+      {"capability": "recording", "status": "PARTIAL", "module": "apps/ursula-frontend RezonateDAWModule.tsx (MediaRecorder)", "evidence": "Uses browser MediaRecorder API per prior audit; not re-verified line-by-line this session."},
+      {"capability": "mixing", "status": "MISSING", "module": null, "evidence": "RezonetteModule.tsx source data explicitly lists 'Mixer & Master' as status:'planned' (before the render bug hides this) — no mixing DSP code found anywhere."}
+    ],
+    "AI": [
+      {"capability": "audio intelligence (classification/pattern recognition)", "status": "MISSING", "module": null, "evidence": "RezonetteModule.tsx lists 'Audio Classification' as status:'planned' in source data. No classification code found anywhere."},
+      {"capability": "stem analysis (as a service)", "status": "STUB", "module": "supabase/functions/rezonate-engine/index.ts stem_analysis task", "evidence": "Declared, stub handler only. (Stem separation itself, as opposed to 'analysis', is IMPLEMENTED — see Audio category.)"},
+      {"capability": "semantic search", "status": "MISSING", "module": null, "evidence": "Sample search (sample-library.js) is exact/tag/range filtering, not semantic/embedding-based."},
+      {"capability": "embeddings", "status": "MISSING", "module": null, "evidence": "No embedding generation or vector search found in the Rezonate surface area (the wider HYDI platform does have pgvector memories, but not applied to audio/Rezonate)."},
+      {"capability": "recommendation", "status": "MISSING", "module": null, "evidence": "RezonetteModule.tsx lists 'Mix Assistant' (predictive composition) as status:'planned'. No recommendation logic found."},
+      {"capability": "natural-language control", "status": "PARTIAL", "module": "rezonate/heidi-rezonate.js", "evidence": "Simple keyword-based command router (filler-word stripping + intent keywords), not true NLU. Read in full this session."},
+      {"capability": "local inference", "status": "UNKNOWN", "module": "protoforge-applications/rezonate/src/adapters/local-model-runtime.js", "evidence": "File exists, has a passing test (local-model-runtime.test.js), not read line-by-line this session — status intentionally left UNKNOWN rather than guessed."},
+      {"capability": "remote inference", "status": "IMPLEMENTED", "module": "rezonate/generate.py (Lyria 3), api/song-composer/generate.js (chat/LLM router)", "evidence": "Both call external/internal LLM APIs; code read in full for generate.py."}
+    ],
+    "Rezonette": [
+      {"capability": "NFT metadata", "status": "PARTIAL", "module": "protoforge-applications/rezonate/src/domain/ownership-record.js", "evidence": "Real, tested ownership data model; not an NFT-standard metadata schema (no tokenURI/ERC-721 shape found)."},
+      {"capability": "NFT minting", "status": "MOCK", "module": "apps/ursula-frontend/.../RezonetteModule.tsx", "evidence": "COMPONENTS source data marks 'NFT Minting' as status:'planned', milestone M4-M6 — but the render logic (lines 112-116) forces it to display as 'Complete'/'Built' in the UI regardless. This is a verified, concrete UI misrepresentation, not just an absent feature."},
+      {"capability": "marketplace", "status": "MOCK", "module": "apps/ursula-frontend/.../RezonetteModule.tsx", "evidence": "Same render-override bug as above applies to 'NFT Marketplace' (source status:'planned', milestone M7, displayed as 'Complete')."},
+      {"capability": "asset management", "status": "PARTIAL", "module": "protoforge-applications/rezonate/src/domain/audio-asset.js", "evidence": "Real domain model, tested (audio-asset.test.js); local/in-memory persistence, no cloud asset storage."},
+      {"capability": "wallet integration", "status": "MISSING", "module": null, "evidence": "No wallet SDK (MetaMask, WalletConnect, etc.) found anywhere in the tree."},
+      {"capability": "blockchain integration", "status": "MISSING", "module": null, "evidence": "No chain SDK, no Solidity artifacts, no on-chain calls found anywhere, despite 'Solidity' being listed as part of the advertised tech stack in RezonetteModule.tsx's UI copy (line 234 tech-stack chips) — that is marketing copy, not implemented dependency usage."}
+    ],
+    "Cloud": [
+      {"capability": "Supabase Auth", "status": "IMPLEMENTED", "module": "lib/auth/requireAuth (used by api/rezonate/route.js)", "evidence": "Referenced and gates the legacy API; not independently re-tested against a live Supabase instance this session (unit tests mock it)."},
+      {"capability": "Supabase database", "status": "IMPLEMENTED", "module": "supabase/migrations/20260522000001_rezonate_schema.sql", "evidence": "Migration file read; RLS-enabled tables defined. Wired to the deprecated legacy API, not the canonical app."},
+      {"capability": "Supabase Storage", "status": "MISSING", "module": null, "evidence": "No Supabase Storage bucket usage found for Rezonate audio assets; both prior and current audits found only local filesystem storage."},
+      {"capability": "Edge Functions", "status": "STUB", "module": "supabase/functions/rezonate-engine/index.ts", "evidence": "310 lines, all 8 task handlers are stubs; file re-verified unchanged this session (same size/mtime as prior audit)."},
+      {"capability": "API (HTTP)", "status": "IMPLEMENTED", "module": "protoforge-applications/rezonate/src/api/router.js (canonical), api/rezonate/route.js (legacy, deprecated)", "evidence": "Both are real, both are tested (96/95 and 21/21 respectively, both re-run this session)."},
+      {"capability": "realtime synchronization", "status": "MISSING", "module": null, "evidence": "No WebSocket/Supabase Realtime subscription code found for Rezonate specifically (the wider ProtoForge PolicyEngine uses Supabase Realtime, but that's unrelated to Rezonate)."}
+    ],
+    "Web": [
+      {"capability": "landing page", "status": "MISSING", "module": null, "evidence": "No Rezonate-specific marketing/landing page found (the root repo has a general landing/ directory for the wider HYDI platform, not Rezonate-specific)."},
+      {"capability": "authentication", "status": "PARTIAL", "module": "lib/auth/requireAuth (legacy API only)", "evidence": "Gates the deprecated api/rezonate/route.js. The canonical protoforge-applications/rezonate/ app has no auth layer found in its src/ tree."},
+      {"capability": "dashboard", "status": "PARTIAL", "module": "apps/ursula-frontend RezonateDAWModule.tsx, RezonetteModule.tsx, pages/song-composer.tsx", "evidence": "Three separate dashboard-style UI surfaces exist; none is a single canonical dashboard, and per the finding above, RezonetteModule.tsx's dashboard actively misreports build status."},
+      {"capability": "project management (web UI)", "status": "PARTIAL", "module": "pages/song-composer.tsx ArrangementTimeline/SongStructure components", "evidence": "UI components present, not independently opened this session; not connected to the canonical app's real project API per prior audit's traced call graph."},
+      {"capability": "creator functionality (profile/ownership UI)", "status": "MOCK", "module": "apps/ursula-frontend/.../RezonetteModule.tsx", "evidence": "'Ownership Tracking' is one of the few items whose source data says status:'active' — but it still passes through the same render override that forces every item to display as Complete, so its displayed status cannot be trusted as evidence of real functionality either."}
+    ]
+  }
+}

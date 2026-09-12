@@ -37,6 +37,7 @@ interface BootConfigModule {
   enabled?: boolean;
   required?: boolean;
   command?: string;
+  args?: string[];
   port?: number;
   health?: { url: string };
   dependsOn?: string[];
@@ -164,15 +165,34 @@ export class HealthProvenanceChecker {
     }
 
     // 2. Process identity check — is the EXPECTED process on this port?
+    //
+    // A bare command match is not enough when the configured command is
+    // itself generic (protoforge-core's configured command is literally
+    // "node") — `cmdline.includes('node')` used to be an explicit OR
+    // fallback here, which meant ANY node.exe process answering on the
+    // port passed identity, including an unrelated orphan implementing the
+    // same service. That is exactly how a supervised protoforge-core
+    // instance (PID 4568) was invisibly replaced by an unrelated orphan
+    // (PID 25324, a `node src/server.js` child of a since-exited Jest
+    // process) that happens to answer the identical health check. Identity
+    // now requires the configured command AND (when the module declares
+    // args) at least one configured arg — the actual script/module path —
+    // to both appear in the occupant's command line. This does not require
+    // exact formatting: Windows shell-wraps spawned commands
+    // (`cmd.exe /d /s /c "node src/server.js"`), so a substring match on
+    // the script path is used rather than an exact argv comparison, which
+    // would break on legitimate shell quoting differences.
     const pids = this.findPidsOnPort(mod.port);
     if (pids.length > 0) {
       const procInfo = this.getProcessInfo(pids[0]);
       const expectedCmd = mod.command || 'node';
       const cmdlineLower = (procInfo.cmdline || '').toLowerCase();
-      const expectedLower = expectedCmd.toLowerCase();
+      const expectedCmdLower = expectedCmd.toLowerCase();
+      const expectedArgs = (mod.args || []).map((a) => a.toLowerCase());
 
-      const isCorrectProcess =
-        cmdlineLower.includes(expectedLower) || cmdlineLower.includes('node');
+      const commandMatches = cmdlineLower.includes(expectedCmdLower);
+      const scriptMatches = expectedArgs.length === 0 || expectedArgs.some((a) => a && cmdlineLower.includes(a));
+      const isCorrectProcess = commandMatches && scriptMatches;
 
       evidence.push({
         check: 'process-identity',
@@ -180,7 +200,7 @@ export class HealthProvenanceChecker {
         value: isCorrectProcess
           ? `PID ${pids[0]} (${procInfo.name})`
           : `wrong process: ${procInfo.name} (PID ${pids[0]})`,
-        detail: `expected: ${expectedCmd}, cmdline: ${procInfo.cmdline.slice(0, 120)}`,
+        detail: `expected: ${expectedCmd}${mod.args ? ' ' + mod.args.join(' ') : ''}, cmdline: ${procInfo.cmdline.slice(0, 120)}`,
         checkedAt: now,
       });
 
@@ -190,7 +210,7 @@ export class HealthProvenanceChecker {
           state: 'UNAVAILABLE',
           evidence,
           dependencies: this.getDependencyStates(mod.dependsOn || []),
-          error: `wrong process on port ${mod.port}: expected ${expectedCmd}, found ${procInfo.name}`,
+          error: `wrong process on port ${mod.port}: expected ${expectedCmd}${mod.args ? ' ' + mod.args.join(' ') : ''}, found ${procInfo.name} (${procInfo.cmdline.slice(0, 120)})`,
         };
       }
     } else {

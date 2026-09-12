@@ -1,27 +1,26 @@
 [
   {
-    "id": "reflection_1784448966323",
-    "timestamp": 1784448966324,
+    "id": "reflection_1789045504526",
+    "timestamp": 1789045504526,
     "duration": 0,
     "whatWorked": {
-      "totalSuccessful": 50,
+      "totalSuccessful": 15,
       "successRate": 1,
       "topPerformers": {
         "model": {
-          "value": "unknown",
-          "count": 50
+          "value": "test-model",
+          "count": 15
         },
         "strategy": {
           "value": "unknown",
-          "count": 50
+          "count": 15
         },
         "type": {
-          "value": "core_loop",
-          "count": 50
+          "value": "test_action",
+          "count": 15
         }
       },
       "insights": [
-        "High confidence strongly correlates with success",
         "Fast execution correlates with success"
       ]
     },
@@ -30,16 +29,120 @@
     },
     "patterns": [],
     "contradictions": [],
+    "recommendations": [],
+    "selfAssessment": {
+      "overallLevel": "operational",
+      "confidence": 1,
+      "capabilities": {
+        "reasoning": true,
+        "execution": true,
+        "adaptation": true,
+        "learning": true,
+        "selfAwareness": true
+      },
+      "limitations": [],
+      "healthScore": 0.8333333333333334
+    },
+    "adaptations": [
+      {
+        "type": "model_preference",
+        "action": "increase_usage",
+        "target": "test-model",
+        "reason": "High success rate: 1.00"
+      }
+    ]
+  },
+  {
+    "id": "reflection_1789046140534",
+    "timestamp": 1789046140536,
+    "duration": 2,
+    "whatWorked": {
+      "totalSuccessful": 30,
+      "successRate": 0.8333333333333334,
+      "topPerformers": {
+        "model": {
+          "value": "unknown",
+          "count": 30
+        },
+        "strategy": {
+          "value": "unknown",
+          "count": 30
+        },
+        "type": {
+          "value": "core_loop",
+          "count": 30
+        }
+      },
+      "insights": [
+        "High confidence strongly correlates with success"
+      ]
+    },
+    "whatFailed": {
+      "totalFailed": 6,
+      "failureRate": 0.16666666666666666,
+      "commonFailures": {
+        "models": {
+          "value": "gpt-35-turbo",
+          "count": 3
+        },
+        "strategies": {
+          "value": "local",
+          "count": 6
+        },
+        "types": {
+          "value": "observation",
+          "count": 3
+        },
+        "reasons": {
+          "value": "unknown",
+          "count": 6
+        }
+      },
+      "insights": [
+        "Most common failure: unknown"
+      ]
+    },
+    "patterns": [
+      {
+        "type": "performance",
+        "pattern": "high_latency",
+        "percentage": 0.3333333333333333,
+        "avgLatency": 10020.416666666666,
+        "recommendation": "optimize_execution_speed"
+      },
+      {
+        "type": "cost",
+        "pattern": "high_cost_actions",
+        "percentage": 0.16666666666666666,
+        "avgCost": 0.0016666666666666668,
+        "recommendation": "reduce_expensive_actions"
+      },
+      {
+        "type": "model",
+        "pattern": "low_model_performance",
+        "model": "gpt-35-turbo",
+        "successRate": 0,
+        "recommendation": "reduce_model_usage"
+      },
+      {
+        "type": "model",
+        "pattern": "low_model_performance",
+        "model": "gpt-4-local",
+        "successRate": 0,
+        "recommendation": "reduce_model_usage"
+      }
+    ],
+    "contradictions": [],
     "recommendations": [
       {
         "priority": "high",
         "action": "reduce_drift",
-        "reason": "Drift score 0.333 exceeds threshold"
+        "reason": "Drift score 0.378 exceeds threshold"
       }
     ],
     "selfAssessment": {
       "overallLevel": "degraded",
-      "confidence": 0.888888888888889,
+      "confidence": 0.7629629629629631,
       "capabilities": {
         "reasoning": true,
         "execution": true,
@@ -50,82 +153,47 @@
       "limitations": [
         "High drift indicates prediction inconsistency"
       ],
-      "healthScore": 0.7222222222222223
+      "healthScore": 0.6518518518518519
     },
     "adaptations": [
+      {
+        "type": "model_preference",
+        "action": "decrease_usage",
+        "target": "gpt-35-turbo",
+        "reason": "Low success rate: 0.00"
+      },
       {
         "type": "model_preference",
         "action": "increase_usage",
         "target": "unknown",
         "reason": "High success rate: 1.00"
+      },
+      {
+        "type": "model_preference",
+        "action": "decrease_usage",
+        "target": "gpt-4-local",
+        "reason": "Low success rate: 0.00"
       }
     ]
   },
   {
-    "id": "reflection_1784448991974",
-    "timestamp": 1784448991974,
-    "duration": 0,
+    "id": "reflection_1789046333243",
+    "timestamp": 1789046333243,
+    "duration": 2,
     "whatWorked": {
-      "totalSuccessful": 2,
-      "successRate": 0.6666666666666666,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 2
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 2
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 2
-        }
-      },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
+      "message": "No successful actions to analyze"
     },
     "whatFailed": {
-      "totalFailed": 1,
-      "failureRate": 0.3333333333333333,
-      "commonFailures": {
-        "models": {
-          "value": "unknown",
-          "count": 1
-        },
-        "strategies": {
-          "value": "unknown",
-          "count": 1
-        },
-        "types": {
-          "value": "question",
-          "count": 1
-        },
-        "reasons": {
-          "value": "Cannot read properties of undefined (reading 'push')",
-          "count": 1
-        }
-      },
-      "insights": [
-        "Most common failure: Cannot read properties of undefined (reading 'push')"
-      ]
+      "message": "No failed actions to analyze"
     },
     "patterns": [],
     "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "improve_success_rate",
-        "reason": "Success rate is 0.67"
-      }
-    ],
+    "recommendations": [],
     "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.8888888888888888,
+      "overallLevel": "critical",
+      "confidence": 0.3333333333333333,
       "capabilities": {
-        "reasoning": true,
+        "reasoning": false,
         "execution": false,
         "adaptation": true,
         "learning": true,
@@ -134,1386 +202,106 @@
       "limitations": [
         "Task execution reliability needs improvement"
       ],
-      "healthScore": 0.7222222222222222
+      "healthScore": 0.5
     },
     "adaptations": []
   },
   {
-    "id": "reflection_1784449866357",
-    "timestamp": 1784449866357,
-    "duration": 0,
-    "whatWorked": {
-      "totalSuccessful": 50,
-      "successRate": 1,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 50
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 50
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 50
-        }
-      },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
-    },
-    "whatFailed": {
-      "message": "No failed actions to analyze"
-    },
-    "patterns": [],
-    "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "reduce_drift",
-        "reason": "Drift score 0.333 exceeds threshold"
-      }
-    ],
-    "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.888888888888889,
-      "capabilities": {
-        "reasoning": true,
-        "execution": true,
-        "adaptation": false,
-        "learning": true,
-        "selfAwareness": true
-      },
-      "limitations": [
-        "High drift indicates prediction inconsistency"
-      ],
-      "healthScore": 0.7222222222222223
-    },
-    "adaptations": [
-      {
-        "type": "model_preference",
-        "action": "increase_usage",
-        "target": "unknown",
-        "reason": "High success rate: 1.00"
-      }
-    ]
-  },
-  {
-    "id": "reflection_1784449892015",
-    "timestamp": 1784449892015,
-    "duration": 0,
-    "whatWorked": {
-      "totalSuccessful": 2,
-      "successRate": 0.6666666666666666,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 2
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 2
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 2
-        }
-      },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
-    },
-    "whatFailed": {
-      "totalFailed": 1,
-      "failureRate": 0.3333333333333333,
-      "commonFailures": {
-        "models": {
-          "value": "unknown",
-          "count": 1
-        },
-        "strategies": {
-          "value": "unknown",
-          "count": 1
-        },
-        "types": {
-          "value": "question",
-          "count": 1
-        },
-        "reasons": {
-          "value": "Cannot read properties of undefined (reading 'push')",
-          "count": 1
-        }
-      },
-      "insights": [
-        "Most common failure: Cannot read properties of undefined (reading 'push')"
-      ]
-    },
-    "patterns": [],
-    "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "improve_success_rate",
-        "reason": "Success rate is 0.67"
-      }
-    ],
-    "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.8888888888888888,
-      "capabilities": {
-        "reasoning": true,
-        "execution": false,
-        "adaptation": true,
-        "learning": true,
-        "selfAwareness": true
-      },
-      "limitations": [
-        "Task execution reliability needs improvement"
-      ],
-      "healthScore": 0.7222222222222222
-    },
-    "adaptations": []
-  },
-  {
-    "id": "reflection_1784450766371",
-    "timestamp": 1784450766372,
-    "duration": 0,
-    "whatWorked": {
-      "totalSuccessful": 50,
-      "successRate": 1,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 50
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 50
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 50
-        }
-      },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
-    },
-    "whatFailed": {
-      "message": "No failed actions to analyze"
-    },
-    "patterns": [],
-    "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "reduce_drift",
-        "reason": "Drift score 0.333 exceeds threshold"
-      }
-    ],
-    "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.888888888888889,
-      "capabilities": {
-        "reasoning": true,
-        "execution": true,
-        "adaptation": false,
-        "learning": true,
-        "selfAwareness": true
-      },
-      "limitations": [
-        "High drift indicates prediction inconsistency"
-      ],
-      "healthScore": 0.7222222222222223
-    },
-    "adaptations": [
-      {
-        "type": "model_preference",
-        "action": "increase_usage",
-        "target": "unknown",
-        "reason": "High success rate: 1.00"
-      }
-    ]
-  },
-  {
-    "id": "reflection_1784450792035",
-    "timestamp": 1784450792035,
-    "duration": 0,
-    "whatWorked": {
-      "totalSuccessful": 2,
-      "successRate": 0.6666666666666666,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 2
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 2
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 2
-        }
-      },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
-    },
-    "whatFailed": {
-      "totalFailed": 1,
-      "failureRate": 0.3333333333333333,
-      "commonFailures": {
-        "models": {
-          "value": "unknown",
-          "count": 1
-        },
-        "strategies": {
-          "value": "unknown",
-          "count": 1
-        },
-        "types": {
-          "value": "question",
-          "count": 1
-        },
-        "reasons": {
-          "value": "Cannot read properties of undefined (reading 'push')",
-          "count": 1
-        }
-      },
-      "insights": [
-        "Most common failure: Cannot read properties of undefined (reading 'push')"
-      ]
-    },
-    "patterns": [],
-    "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "improve_success_rate",
-        "reason": "Success rate is 0.67"
-      }
-    ],
-    "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.8888888888888888,
-      "capabilities": {
-        "reasoning": true,
-        "execution": false,
-        "adaptation": true,
-        "learning": true,
-        "selfAwareness": true
-      },
-      "limitations": [
-        "Task execution reliability needs improvement"
-      ],
-      "healthScore": 0.7222222222222222
-    },
-    "adaptations": []
-  },
-  {
-    "id": "reflection_1784451666386",
-    "timestamp": 1784451666387,
-    "duration": 0,
-    "whatWorked": {
-      "totalSuccessful": 50,
-      "successRate": 1,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 50
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 50
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 50
-        }
-      },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
-    },
-    "whatFailed": {
-      "message": "No failed actions to analyze"
-    },
-    "patterns": [],
-    "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "reduce_drift",
-        "reason": "Drift score 0.333 exceeds threshold"
-      }
-    ],
-    "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.888888888888889,
-      "capabilities": {
-        "reasoning": true,
-        "execution": true,
-        "adaptation": false,
-        "learning": true,
-        "selfAwareness": true
-      },
-      "limitations": [
-        "High drift indicates prediction inconsistency"
-      ],
-      "healthScore": 0.7222222222222223
-    },
-    "adaptations": [
-      {
-        "type": "model_preference",
-        "action": "increase_usage",
-        "target": "unknown",
-        "reason": "High success rate: 1.00"
-      }
-    ]
-  },
-  {
-    "id": "reflection_1784451692037",
-    "timestamp": 1784451692051,
-    "duration": 0,
-    "whatWorked": {
-      "totalSuccessful": 2,
-      "successRate": 0.6666666666666666,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 2
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 2
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 2
-        }
-      },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
-    },
-    "whatFailed": {
-      "totalFailed": 1,
-      "failureRate": 0.3333333333333333,
-      "commonFailures": {
-        "models": {
-          "value": "unknown",
-          "count": 1
-        },
-        "strategies": {
-          "value": "unknown",
-          "count": 1
-        },
-        "types": {
-          "value": "question",
-          "count": 1
-        },
-        "reasons": {
-          "value": "Cannot read properties of undefined (reading 'push')",
-          "count": 1
-        }
-      },
-      "insights": [
-        "Most common failure: Cannot read properties of undefined (reading 'push')"
-      ]
-    },
-    "patterns": [],
-    "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "improve_success_rate",
-        "reason": "Success rate is 0.67"
-      }
-    ],
-    "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.8888888888888888,
-      "capabilities": {
-        "reasoning": true,
-        "execution": false,
-        "adaptation": true,
-        "learning": true,
-        "selfAwareness": true
-      },
-      "limitations": [
-        "Task execution reliability needs improvement"
-      ],
-      "healthScore": 0.7222222222222222
-    },
-    "adaptations": []
-  },
-  {
-    "id": "reflection_1784452566512",
-    "timestamp": 1784452566512,
-    "duration": 0,
-    "whatWorked": {
-      "totalSuccessful": 50,
-      "successRate": 1,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 50
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 50
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 50
-        }
-      },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
-    },
-    "whatFailed": {
-      "message": "No failed actions to analyze"
-    },
-    "patterns": [],
-    "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "reduce_drift",
-        "reason": "Drift score 0.333 exceeds threshold"
-      }
-    ],
-    "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.888888888888889,
-      "capabilities": {
-        "reasoning": true,
-        "execution": true,
-        "adaptation": false,
-        "learning": true,
-        "selfAwareness": true
-      },
-      "limitations": [
-        "High drift indicates prediction inconsistency"
-      ],
-      "healthScore": 0.7222222222222223
-    },
-    "adaptations": [
-      {
-        "type": "model_preference",
-        "action": "increase_usage",
-        "target": "unknown",
-        "reason": "High success rate: 1.00"
-      }
-    ]
-  },
-  {
-    "id": "reflection_1784452592083",
-    "timestamp": 1784452592083,
-    "duration": 0,
-    "whatWorked": {
-      "totalSuccessful": 2,
-      "successRate": 0.6666666666666666,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 2
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 2
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 2
-        }
-      },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
-    },
-    "whatFailed": {
-      "totalFailed": 1,
-      "failureRate": 0.3333333333333333,
-      "commonFailures": {
-        "models": {
-          "value": "unknown",
-          "count": 1
-        },
-        "strategies": {
-          "value": "unknown",
-          "count": 1
-        },
-        "types": {
-          "value": "question",
-          "count": 1
-        },
-        "reasons": {
-          "value": "Cannot read properties of undefined (reading 'push')",
-          "count": 1
-        }
-      },
-      "insights": [
-        "Most common failure: Cannot read properties of undefined (reading 'push')"
-      ]
-    },
-    "patterns": [],
-    "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "improve_success_rate",
-        "reason": "Success rate is 0.67"
-      }
-    ],
-    "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.8888888888888888,
-      "capabilities": {
-        "reasoning": true,
-        "execution": false,
-        "adaptation": true,
-        "learning": true,
-        "selfAwareness": true
-      },
-      "limitations": [
-        "Task execution reliability needs improvement"
-      ],
-      "healthScore": 0.7222222222222222
-    },
-    "adaptations": []
-  },
-  {
-    "id": "reflection_1784453466527",
-    "timestamp": 1784453466527,
-    "duration": 0,
-    "whatWorked": {
-      "totalSuccessful": 50,
-      "successRate": 1,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 50
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 50
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 50
-        }
-      },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
-    },
-    "whatFailed": {
-      "message": "No failed actions to analyze"
-    },
-    "patterns": [],
-    "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "reduce_drift",
-        "reason": "Drift score 0.333 exceeds threshold"
-      }
-    ],
-    "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.888888888888889,
-      "capabilities": {
-        "reasoning": true,
-        "execution": true,
-        "adaptation": false,
-        "learning": true,
-        "selfAwareness": true
-      },
-      "limitations": [
-        "High drift indicates prediction inconsistency"
-      ],
-      "healthScore": 0.7222222222222223
-    },
-    "adaptations": [
-      {
-        "type": "model_preference",
-        "action": "increase_usage",
-        "target": "unknown",
-        "reason": "High success rate: 1.00"
-      }
-    ]
-  },
-  {
-    "id": "reflection_1784453492102",
-    "timestamp": 1784453492102,
-    "duration": 0,
-    "whatWorked": {
-      "totalSuccessful": 2,
-      "successRate": 0.6666666666666666,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 2
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 2
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 2
-        }
-      },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
-    },
-    "whatFailed": {
-      "totalFailed": 1,
-      "failureRate": 0.3333333333333333,
-      "commonFailures": {
-        "models": {
-          "value": "unknown",
-          "count": 1
-        },
-        "strategies": {
-          "value": "unknown",
-          "count": 1
-        },
-        "types": {
-          "value": "question",
-          "count": 1
-        },
-        "reasons": {
-          "value": "Cannot read properties of undefined (reading 'push')",
-          "count": 1
-        }
-      },
-      "insights": [
-        "Most common failure: Cannot read properties of undefined (reading 'push')"
-      ]
-    },
-    "patterns": [],
-    "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "improve_success_rate",
-        "reason": "Success rate is 0.67"
-      }
-    ],
-    "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.8888888888888888,
-      "capabilities": {
-        "reasoning": true,
-        "execution": false,
-        "adaptation": true,
-        "learning": true,
-        "selfAwareness": true
-      },
-      "limitations": [
-        "Task execution reliability needs improvement"
-      ],
-      "healthScore": 0.7222222222222222
-    },
-    "adaptations": []
-  },
-  {
-    "id": "reflection_1784454366542",
-    "timestamp": 1784454366542,
-    "duration": 0,
-    "whatWorked": {
-      "totalSuccessful": 50,
-      "successRate": 1,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 50
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 50
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 50
-        }
-      },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
-    },
-    "whatFailed": {
-      "message": "No failed actions to analyze"
-    },
-    "patterns": [],
-    "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "reduce_drift",
-        "reason": "Drift score 0.333 exceeds threshold"
-      }
-    ],
-    "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.888888888888889,
-      "capabilities": {
-        "reasoning": true,
-        "execution": true,
-        "adaptation": false,
-        "learning": true,
-        "selfAwareness": true
-      },
-      "limitations": [
-        "High drift indicates prediction inconsistency"
-      ],
-      "healthScore": 0.7222222222222223
-    },
-    "adaptations": [
-      {
-        "type": "model_preference",
-        "action": "increase_usage",
-        "target": "unknown",
-        "reason": "High success rate: 1.00"
-      }
-    ]
-  },
-  {
-    "id": "reflection_1784454392111",
-    "timestamp": 1784454392111,
-    "duration": 0,
-    "whatWorked": {
-      "totalSuccessful": 2,
-      "successRate": 0.6666666666666666,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 2
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 2
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 2
-        }
-      },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
-    },
-    "whatFailed": {
-      "totalFailed": 1,
-      "failureRate": 0.3333333333333333,
-      "commonFailures": {
-        "models": {
-          "value": "unknown",
-          "count": 1
-        },
-        "strategies": {
-          "value": "unknown",
-          "count": 1
-        },
-        "types": {
-          "value": "question",
-          "count": 1
-        },
-        "reasons": {
-          "value": "Cannot read properties of undefined (reading 'push')",
-          "count": 1
-        }
-      },
-      "insights": [
-        "Most common failure: Cannot read properties of undefined (reading 'push')"
-      ]
-    },
-    "patterns": [],
-    "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "improve_success_rate",
-        "reason": "Success rate is 0.67"
-      }
-    ],
-    "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.8888888888888888,
-      "capabilities": {
-        "reasoning": true,
-        "execution": false,
-        "adaptation": true,
-        "learning": true,
-        "selfAwareness": true
-      },
-      "limitations": [
-        "Task execution reliability needs improvement"
-      ],
-      "healthScore": 0.7222222222222222
-    },
-    "adaptations": []
-  },
-  {
-    "id": "reflection_1784455266558",
-    "timestamp": 1784455266559,
-    "duration": 0,
-    "whatWorked": {
-      "totalSuccessful": 50,
-      "successRate": 1,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 50
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 50
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 50
-        }
-      },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
-    },
-    "whatFailed": {
-      "message": "No failed actions to analyze"
-    },
-    "patterns": [],
-    "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "reduce_drift",
-        "reason": "Drift score 0.333 exceeds threshold"
-      }
-    ],
-    "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.888888888888889,
-      "capabilities": {
-        "reasoning": true,
-        "execution": true,
-        "adaptation": false,
-        "learning": true,
-        "selfAwareness": true
-      },
-      "limitations": [
-        "High drift indicates prediction inconsistency"
-      ],
-      "healthScore": 0.7222222222222223
-    },
-    "adaptations": [
-      {
-        "type": "model_preference",
-        "action": "increase_usage",
-        "target": "unknown",
-        "reason": "High success rate: 1.00"
-      }
-    ]
-  },
-  {
-    "id": "reflection_1784455292185",
-    "timestamp": 1784455292185,
-    "duration": 0,
-    "whatWorked": {
-      "totalSuccessful": 2,
-      "successRate": 0.6666666666666666,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 2
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 2
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 2
-        }
-      },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
-    },
-    "whatFailed": {
-      "totalFailed": 1,
-      "failureRate": 0.3333333333333333,
-      "commonFailures": {
-        "models": {
-          "value": "unknown",
-          "count": 1
-        },
-        "strategies": {
-          "value": "unknown",
-          "count": 1
-        },
-        "types": {
-          "value": "question",
-          "count": 1
-        },
-        "reasons": {
-          "value": "Cannot read properties of undefined (reading 'push')",
-          "count": 1
-        }
-      },
-      "insights": [
-        "Most common failure: Cannot read properties of undefined (reading 'push')"
-      ]
-    },
-    "patterns": [],
-    "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "improve_success_rate",
-        "reason": "Success rate is 0.67"
-      }
-    ],
-    "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.8888888888888888,
-      "capabilities": {
-        "reasoning": true,
-        "execution": false,
-        "adaptation": true,
-        "learning": true,
-        "selfAwareness": true
-      },
-      "limitations": [
-        "Task execution reliability needs improvement"
-      ],
-      "healthScore": 0.7222222222222222
-    },
-    "adaptations": []
-  },
-  {
-    "id": "reflection_1784456166584",
-    "timestamp": 1784456166584,
-    "duration": 0,
-    "whatWorked": {
-      "totalSuccessful": 50,
-      "successRate": 1,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 50
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 50
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 50
-        }
-      },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
-    },
-    "whatFailed": {
-      "message": "No failed actions to analyze"
-    },
-    "patterns": [],
-    "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "reduce_drift",
-        "reason": "Drift score 0.333 exceeds threshold"
-      }
-    ],
-    "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.888888888888889,
-      "capabilities": {
-        "reasoning": true,
-        "execution": true,
-        "adaptation": false,
-        "learning": true,
-        "selfAwareness": true
-      },
-      "limitations": [
-        "High drift indicates prediction inconsistency"
-      ],
-      "healthScore": 0.7222222222222223
-    },
-    "adaptations": [
-      {
-        "type": "model_preference",
-        "action": "increase_usage",
-        "target": "unknown",
-        "reason": "High success rate: 1.00"
-      }
-    ]
-  },
-  {
-    "id": "reflection_1784456192194",
-    "timestamp": 1784456192194,
-    "duration": 0,
-    "whatWorked": {
-      "totalSuccessful": 2,
-      "successRate": 0.6666666666666666,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 2
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 2
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 2
-        }
-      },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
-    },
-    "whatFailed": {
-      "totalFailed": 1,
-      "failureRate": 0.3333333333333333,
-      "commonFailures": {
-        "models": {
-          "value": "unknown",
-          "count": 1
-        },
-        "strategies": {
-          "value": "unknown",
-          "count": 1
-        },
-        "types": {
-          "value": "question",
-          "count": 1
-        },
-        "reasons": {
-          "value": "Cannot read properties of undefined (reading 'push')",
-          "count": 1
-        }
-      },
-      "insights": [
-        "Most common failure: Cannot read properties of undefined (reading 'push')"
-      ]
-    },
-    "patterns": [],
-    "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "improve_success_rate",
-        "reason": "Success rate is 0.67"
-      }
-    ],
-    "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.8888888888888888,
-      "capabilities": {
-        "reasoning": true,
-        "execution": false,
-        "adaptation": true,
-        "learning": true,
-        "selfAwareness": true
-      },
-      "limitations": [
-        "Task execution reliability needs improvement"
-      ],
-      "healthScore": 0.7222222222222222
-    },
-    "adaptations": []
-  },
-  {
-    "id": "reflection_1784457066608",
-    "timestamp": 1784457066609,
-    "duration": 0,
-    "whatWorked": {
-      "totalSuccessful": 50,
-      "successRate": 1,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 50
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 50
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 50
-        }
-      },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
-    },
-    "whatFailed": {
-      "message": "No failed actions to analyze"
-    },
-    "patterns": [],
-    "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "reduce_drift",
-        "reason": "Drift score 0.333 exceeds threshold"
-      }
-    ],
-    "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.888888888888889,
-      "capabilities": {
-        "reasoning": true,
-        "execution": true,
-        "adaptation": false,
-        "learning": true,
-        "selfAwareness": true
-      },
-      "limitations": [
-        "High drift indicates prediction inconsistency"
-      ],
-      "healthScore": 0.7222222222222223
-    },
-    "adaptations": [
-      {
-        "type": "model_preference",
-        "action": "increase_usage",
-        "target": "unknown",
-        "reason": "High success rate: 1.00"
-      }
-    ]
-  },
-  {
-    "id": "reflection_1784457092208",
-    "timestamp": 1784457092208,
-    "duration": 0,
-    "whatWorked": {
-      "totalSuccessful": 2,
-      "successRate": 0.6666666666666666,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 2
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 2
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 2
-        }
-      },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
-    },
-    "whatFailed": {
-      "totalFailed": 1,
-      "failureRate": 0.3333333333333333,
-      "commonFailures": {
-        "models": {
-          "value": "unknown",
-          "count": 1
-        },
-        "strategies": {
-          "value": "unknown",
-          "count": 1
-        },
-        "types": {
-          "value": "question",
-          "count": 1
-        },
-        "reasons": {
-          "value": "Cannot read properties of undefined (reading 'push')",
-          "count": 1
-        }
-      },
-      "insights": [
-        "Most common failure: Cannot read properties of undefined (reading 'push')"
-      ]
-    },
-    "patterns": [],
-    "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "improve_success_rate",
-        "reason": "Success rate is 0.67"
-      }
-    ],
-    "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.8888888888888888,
-      "capabilities": {
-        "reasoning": true,
-        "execution": false,
-        "adaptation": true,
-        "learning": true,
-        "selfAwareness": true
-      },
-      "limitations": [
-        "Task execution reliability needs improvement"
-      ],
-      "healthScore": 0.7222222222222222
-    },
-    "adaptations": []
-  },
-  {
-    "id": "reflection_1784457966623",
-    "timestamp": 1784457966624,
-    "duration": 0,
-    "whatWorked": {
-      "totalSuccessful": 50,
-      "successRate": 1,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 50
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 50
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 50
-        }
-      },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
-    },
-    "whatFailed": {
-      "message": "No failed actions to analyze"
-    },
-    "patterns": [],
-    "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "reduce_drift",
-        "reason": "Drift score 0.333 exceeds threshold"
-      }
-    ],
-    "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.888888888888889,
-      "capabilities": {
-        "reasoning": true,
-        "execution": true,
-        "adaptation": false,
-        "learning": true,
-        "selfAwareness": true
-      },
-      "limitations": [
-        "High drift indicates prediction inconsistency"
-      ],
-      "healthScore": 0.7222222222222223
-    },
-    "adaptations": [
-      {
-        "type": "model_preference",
-        "action": "increase_usage",
-        "target": "unknown",
-        "reason": "High success rate: 1.00"
-      }
-    ]
-  },
-  {
-    "id": "reflection_1784457992333",
-    "timestamp": 1784457992333,
+    "id": "reflection_1789047233307",
+    "timestamp": 1789047233308,
     "duration": 1,
     "whatWorked": {
-      "totalSuccessful": 2,
-      "successRate": 0.6666666666666666,
+      "totalSuccessful": 1,
+      "successRate": 0.125,
       "topPerformers": {
         "model": {
-          "value": "unknown",
-          "count": 2
+          "value": "gpt-35-turbo",
+          "count": 1
         },
         "strategy": {
-          "value": "unknown",
-          "count": 2
+          "value": "local",
+          "count": 1
         },
         "type": {
-          "value": "core_loop",
-          "count": 2
+          "value": "observation",
+          "count": 1
         }
       },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
+      "insights": []
     },
     "whatFailed": {
-      "totalFailed": 1,
-      "failureRate": 0.3333333333333333,
+      "totalFailed": 7,
+      "failureRate": 0.875,
       "commonFailures": {
         "models": {
           "value": "unknown",
-          "count": 1
+          "count": 6
         },
         "strategies": {
           "value": "unknown",
-          "count": 1
+          "count": 6
         },
         "types": {
-          "value": "question",
-          "count": 1
+          "value": "core_loop",
+          "count": 6
         },
         "reasons": {
-          "value": "Cannot read properties of undefined (reading 'push')",
-          "count": 1
+          "value": "low_confidence",
+          "count": 4
         }
       },
       "insights": [
-        "Most common failure: Cannot read properties of undefined (reading 'push')"
+        "Most common failure: low_confidence"
       ]
     },
-    "patterns": [],
+    "patterns": [
+      {
+        "type": "temporal",
+        "pattern": "low_success_hour",
+        "hour": 8,
+        "successRate": 0.125,
+        "recommendation": "avoid_actions_during_hour"
+      },
+      {
+        "type": "performance",
+        "pattern": "high_latency",
+        "percentage": 0.25,
+        "avgLatency": 9192.5,
+        "recommendation": "optimize_execution_speed"
+      },
+      {
+        "type": "cost",
+        "pattern": "high_cost_actions",
+        "percentage": 0.25,
+        "avgCost": 0.0025,
+        "recommendation": "reduce_expensive_actions"
+      },
+      {
+        "type": "model",
+        "pattern": "low_model_performance",
+        "model": "unknown",
+        "successRate": 0,
+        "recommendation": "reduce_model_usage"
+      },
+      {
+        "type": "model",
+        "pattern": "low_model_performance",
+        "model": "gpt-4-local",
+        "successRate": 0,
+        "recommendation": "reduce_model_usage"
+      }
+    ],
     "contradictions": [],
     "recommendations": [
       {
         "priority": "high",
         "action": "improve_success_rate",
-        "reason": "Success rate is 0.67"
+        "reason": "Success rate is 0.13"
       }
     ],
     "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.8888888888888888,
+      "overallLevel": "critical",
+      "confidence": 0.6666666666666666,
       "capabilities": {
         "reasoning": true,
         "execution": false,
@@ -1524,274 +312,125 @@
       "limitations": [
         "Task execution reliability needs improvement"
       ],
-      "healthScore": 0.7222222222222222
-    },
-    "adaptations": []
-  },
-  {
-    "id": "reflection_1784458866636",
-    "timestamp": 1784458866636,
-    "duration": 0,
-    "whatWorked": {
-      "totalSuccessful": 50,
-      "successRate": 1,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 50
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 50
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 50
-        }
-      },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
-    },
-    "whatFailed": {
-      "message": "No failed actions to analyze"
-    },
-    "patterns": [],
-    "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "reduce_drift",
-        "reason": "Drift score 0.333 exceeds threshold"
-      }
-    ],
-    "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.888888888888889,
-      "capabilities": {
-        "reasoning": true,
-        "execution": true,
-        "adaptation": false,
-        "learning": true,
-        "selfAwareness": true
-      },
-      "limitations": [
-        "High drift indicates prediction inconsistency"
-      ],
-      "healthScore": 0.7222222222222223
+      "healthScore": 0.5416666666666666
     },
     "adaptations": [
       {
         "type": "model_preference",
         "action": "increase_usage",
-        "target": "unknown",
+        "target": "gpt-35-turbo",
         "reason": "High success rate: 1.00"
-      }
-    ]
-  },
-  {
-    "id": "reflection_1784458892349",
-    "timestamp": 1784458892350,
-    "duration": 0,
-    "whatWorked": {
-      "totalSuccessful": 2,
-      "successRate": 0.6666666666666666,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 2
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 2
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 2
-        }
       },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
-    },
-    "whatFailed": {
-      "totalFailed": 1,
-      "failureRate": 0.3333333333333333,
-      "commonFailures": {
-        "models": {
-          "value": "unknown",
-          "count": 1
-        },
-        "strategies": {
-          "value": "unknown",
-          "count": 1
-        },
-        "types": {
-          "value": "question",
-          "count": 1
-        },
-        "reasons": {
-          "value": "Cannot read properties of undefined (reading 'push')",
-          "count": 1
-        }
-      },
-      "insights": [
-        "Most common failure: Cannot read properties of undefined (reading 'push')"
-      ]
-    },
-    "patterns": [],
-    "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "improve_success_rate",
-        "reason": "Success rate is 0.67"
-      }
-    ],
-    "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.8888888888888888,
-      "capabilities": {
-        "reasoning": true,
-        "execution": false,
-        "adaptation": true,
-        "learning": true,
-        "selfAwareness": true
-      },
-      "limitations": [
-        "Task execution reliability needs improvement"
-      ],
-      "healthScore": 0.7222222222222222
-    },
-    "adaptations": []
-  },
-  {
-    "id": "reflection_1784459766646",
-    "timestamp": 1784459766646,
-    "duration": 0,
-    "whatWorked": {
-      "totalSuccessful": 50,
-      "successRate": 1,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 50
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 50
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 50
-        }
-      },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
-    },
-    "whatFailed": {
-      "message": "No failed actions to analyze"
-    },
-    "patterns": [],
-    "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "reduce_drift",
-        "reason": "Drift score 0.333 exceeds threshold"
-      }
-    ],
-    "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.888888888888889,
-      "capabilities": {
-        "reasoning": true,
-        "execution": true,
-        "adaptation": false,
-        "learning": true,
-        "selfAwareness": true
-      },
-      "limitations": [
-        "High drift indicates prediction inconsistency"
-      ],
-      "healthScore": 0.7222222222222223
-    },
-    "adaptations": [
       {
         "type": "model_preference",
-        "action": "increase_usage",
+        "action": "decrease_usage",
         "target": "unknown",
-        "reason": "High success rate: 1.00"
+        "reason": "Low success rate: 0.00"
+      },
+      {
+        "type": "model_preference",
+        "action": "decrease_usage",
+        "target": "gpt-4-local",
+        "reason": "Low success rate: 0.00"
       }
     ]
   },
   {
-    "id": "reflection_1784459792365",
-    "timestamp": 1784459792365,
+    "id": "reflection_1789047233324",
+    "timestamp": 1789047233325,
     "duration": 1,
     "whatWorked": {
-      "totalSuccessful": 2,
-      "successRate": 0.6666666666666666,
+      "totalSuccessful": 1,
+      "successRate": 0.125,
       "topPerformers": {
         "model": {
-          "value": "unknown",
-          "count": 2
+          "value": "gpt-35-turbo",
+          "count": 1
         },
         "strategy": {
-          "value": "unknown",
-          "count": 2
+          "value": "local",
+          "count": 1
         },
         "type": {
-          "value": "core_loop",
-          "count": 2
+          "value": "observation",
+          "count": 1
         }
       },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
+      "insights": []
     },
     "whatFailed": {
-      "totalFailed": 1,
-      "failureRate": 0.3333333333333333,
+      "totalFailed": 7,
+      "failureRate": 0.875,
       "commonFailures": {
         "models": {
           "value": "unknown",
-          "count": 1
+          "count": 6
         },
         "strategies": {
           "value": "unknown",
-          "count": 1
+          "count": 6
         },
         "types": {
-          "value": "question",
-          "count": 1
+          "value": "core_loop",
+          "count": 6
         },
         "reasons": {
-          "value": "Cannot read properties of undefined (reading 'push')",
-          "count": 1
+          "value": "low_confidence",
+          "count": 4
         }
       },
       "insights": [
-        "Most common failure: Cannot read properties of undefined (reading 'push')"
+        "Most common failure: low_confidence"
       ]
     },
-    "patterns": [],
+    "patterns": [
+      {
+        "type": "temporal",
+        "pattern": "low_success_hour",
+        "hour": 8,
+        "successRate": 0.125,
+        "recommendation": "avoid_actions_during_hour"
+      },
+      {
+        "type": "performance",
+        "pattern": "high_latency",
+        "percentage": 0.25,
+        "avgLatency": 10061.25,
+        "recommendation": "optimize_execution_speed"
+      },
+      {
+        "type": "cost",
+        "pattern": "high_cost_actions",
+        "percentage": 0.25,
+        "avgCost": 0.0025,
+        "recommendation": "reduce_expensive_actions"
+      },
+      {
+        "type": "model",
+        "pattern": "low_model_performance",
+        "model": "unknown",
+        "successRate": 0,
+        "recommendation": "reduce_model_usage"
+      },
+      {
+        "type": "model",
+        "pattern": "low_model_performance",
+        "model": "gpt-4-local",
+        "successRate": 0,
+        "recommendation": "reduce_model_usage"
+      }
+    ],
     "contradictions": [],
     "recommendations": [
       {
         "priority": "high",
         "action": "improve_success_rate",
-        "reason": "Success rate is 0.67"
+        "reason": "Success rate is 0.13"
       }
     ],
     "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.8888888888888888,
+      "overallLevel": "critical",
+      "confidence": 0.6666666666666666,
       "capabilities": {
         "reasoning": true,
         "execution": false,
@@ -1802,2083 +441,47 @@
       "limitations": [
         "Task execution reliability needs improvement"
       ],
-      "healthScore": 0.7222222222222222
-    },
-    "adaptations": []
-  },
-  {
-    "id": "reflection_1784460666729",
-    "timestamp": 1784460666729,
-    "duration": 0,
-    "whatWorked": {
-      "totalSuccessful": 50,
-      "successRate": 1,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 50
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 50
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 50
-        }
-      },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
-    },
-    "whatFailed": {
-      "message": "No failed actions to analyze"
-    },
-    "patterns": [],
-    "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "reduce_drift",
-        "reason": "Drift score 0.333 exceeds threshold"
-      }
-    ],
-    "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.888888888888889,
-      "capabilities": {
-        "reasoning": true,
-        "execution": true,
-        "adaptation": false,
-        "learning": true,
-        "selfAwareness": true
-      },
-      "limitations": [
-        "High drift indicates prediction inconsistency"
-      ],
-      "healthScore": 0.7222222222222223
+      "healthScore": 0.5416666666666666
     },
     "adaptations": [
       {
         "type": "model_preference",
         "action": "increase_usage",
-        "target": "unknown",
+        "target": "gpt-35-turbo",
         "reason": "High success rate: 1.00"
-      }
-    ]
-  },
-  {
-    "id": "reflection_1784460692395",
-    "timestamp": 1784460692395,
-    "duration": 0,
-    "whatWorked": {
-      "totalSuccessful": 2,
-      "successRate": 0.6666666666666666,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 2
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 2
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 2
-        }
       },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
-    },
-    "whatFailed": {
-      "totalFailed": 1,
-      "failureRate": 0.3333333333333333,
-      "commonFailures": {
-        "models": {
-          "value": "unknown",
-          "count": 1
-        },
-        "strategies": {
-          "value": "unknown",
-          "count": 1
-        },
-        "types": {
-          "value": "question",
-          "count": 1
-        },
-        "reasons": {
-          "value": "Cannot read properties of undefined (reading 'push')",
-          "count": 1
-        }
-      },
-      "insights": [
-        "Most common failure: Cannot read properties of undefined (reading 'push')"
-      ]
-    },
-    "patterns": [],
-    "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "improve_success_rate",
-        "reason": "Success rate is 0.67"
-      }
-    ],
-    "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.8888888888888888,
-      "capabilities": {
-        "reasoning": true,
-        "execution": false,
-        "adaptation": true,
-        "learning": true,
-        "selfAwareness": true
-      },
-      "limitations": [
-        "Task execution reliability needs improvement"
-      ],
-      "healthScore": 0.7222222222222222
-    },
-    "adaptations": []
-  },
-  {
-    "id": "reflection_1784461566738",
-    "timestamp": 1784461566739,
-    "duration": 0,
-    "whatWorked": {
-      "totalSuccessful": 50,
-      "successRate": 1,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 50
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 50
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 50
-        }
-      },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
-    },
-    "whatFailed": {
-      "message": "No failed actions to analyze"
-    },
-    "patterns": [],
-    "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "reduce_drift",
-        "reason": "Drift score 0.333 exceeds threshold"
-      }
-    ],
-    "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.888888888888889,
-      "capabilities": {
-        "reasoning": true,
-        "execution": true,
-        "adaptation": false,
-        "learning": true,
-        "selfAwareness": true
-      },
-      "limitations": [
-        "High drift indicates prediction inconsistency"
-      ],
-      "healthScore": 0.7222222222222223
-    },
-    "adaptations": [
       {
         "type": "model_preference",
-        "action": "increase_usage",
+        "action": "decrease_usage",
         "target": "unknown",
-        "reason": "High success rate: 1.00"
-      }
-    ]
-  },
-  {
-    "id": "reflection_1784461592412",
-    "timestamp": 1784461592412,
-    "duration": 0,
-    "whatWorked": {
-      "totalSuccessful": 2,
-      "successRate": 0.6666666666666666,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 2
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 2
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 2
-        }
+        "reason": "Low success rate: 0.00"
       },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
-    },
-    "whatFailed": {
-      "totalFailed": 1,
-      "failureRate": 0.3333333333333333,
-      "commonFailures": {
-        "models": {
-          "value": "unknown",
-          "count": 1
-        },
-        "strategies": {
-          "value": "unknown",
-          "count": 1
-        },
-        "types": {
-          "value": "question",
-          "count": 1
-        },
-        "reasons": {
-          "value": "Cannot read properties of undefined (reading 'push')",
-          "count": 1
-        }
-      },
-      "insights": [
-        "Most common failure: Cannot read properties of undefined (reading 'push')"
-      ]
-    },
-    "patterns": [],
-    "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "improve_success_rate",
-        "reason": "Success rate is 0.67"
-      }
-    ],
-    "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.8888888888888888,
-      "capabilities": {
-        "reasoning": true,
-        "execution": false,
-        "adaptation": true,
-        "learning": true,
-        "selfAwareness": true
-      },
-      "limitations": [
-        "Task execution reliability needs improvement"
-      ],
-      "healthScore": 0.7222222222222222
-    },
-    "adaptations": []
-  },
-  {
-    "id": "reflection_1784462466763",
-    "timestamp": 1784462466763,
-    "duration": 0,
-    "whatWorked": {
-      "totalSuccessful": 50,
-      "successRate": 1,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 50
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 50
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 50
-        }
-      },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
-    },
-    "whatFailed": {
-      "message": "No failed actions to analyze"
-    },
-    "patterns": [],
-    "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "reduce_drift",
-        "reason": "Drift score 0.333 exceeds threshold"
-      }
-    ],
-    "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.888888888888889,
-      "capabilities": {
-        "reasoning": true,
-        "execution": true,
-        "adaptation": false,
-        "learning": true,
-        "selfAwareness": true
-      },
-      "limitations": [
-        "High drift indicates prediction inconsistency"
-      ],
-      "healthScore": 0.7222222222222223
-    },
-    "adaptations": [
       {
         "type": "model_preference",
-        "action": "increase_usage",
-        "target": "unknown",
-        "reason": "High success rate: 1.00"
+        "action": "decrease_usage",
+        "target": "gpt-4-local",
+        "reason": "Low success rate: 0.00"
       }
     ]
   },
   {
-    "id": "reflection_1784462492428",
-    "timestamp": 1784462492428,
-    "duration": 0,
-    "whatWorked": {
-      "totalSuccessful": 2,
-      "successRate": 0.6666666666666666,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 2
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 2
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 2
-        }
-      },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
-    },
-    "whatFailed": {
-      "totalFailed": 1,
-      "failureRate": 0.3333333333333333,
-      "commonFailures": {
-        "models": {
-          "value": "unknown",
-          "count": 1
-        },
-        "strategies": {
-          "value": "unknown",
-          "count": 1
-        },
-        "types": {
-          "value": "question",
-          "count": 1
-        },
-        "reasons": {
-          "value": "Cannot read properties of undefined (reading 'push')",
-          "count": 1
-        }
-      },
-      "insights": [
-        "Most common failure: Cannot read properties of undefined (reading 'push')"
-      ]
-    },
-    "patterns": [],
-    "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "improve_success_rate",
-        "reason": "Success rate is 0.67"
-      }
-    ],
-    "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.8888888888888888,
-      "capabilities": {
-        "reasoning": true,
-        "execution": false,
-        "adaptation": true,
-        "learning": true,
-        "selfAwareness": true
-      },
-      "limitations": [
-        "Task execution reliability needs improvement"
-      ],
-      "healthScore": 0.7222222222222222
-    },
-    "adaptations": []
-  },
-  {
-    "id": "reflection_1784463366780",
-    "timestamp": 1784463366780,
-    "duration": 0,
-    "whatWorked": {
-      "totalSuccessful": 50,
-      "successRate": 1,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 50
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 50
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 50
-        }
-      },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
-    },
-    "whatFailed": {
-      "message": "No failed actions to analyze"
-    },
-    "patterns": [],
-    "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "reduce_drift",
-        "reason": "Drift score 0.333 exceeds threshold"
-      }
-    ],
-    "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.888888888888889,
-      "capabilities": {
-        "reasoning": true,
-        "execution": true,
-        "adaptation": false,
-        "learning": true,
-        "selfAwareness": true
-      },
-      "limitations": [
-        "High drift indicates prediction inconsistency"
-      ],
-      "healthScore": 0.7222222222222223
-    },
-    "adaptations": [
-      {
-        "type": "model_preference",
-        "action": "increase_usage",
-        "target": "unknown",
-        "reason": "High success rate: 1.00"
-      }
-    ]
-  },
-  {
-    "id": "reflection_1784463392442",
-    "timestamp": 1784463392442,
-    "duration": 0,
-    "whatWorked": {
-      "totalSuccessful": 2,
-      "successRate": 0.6666666666666666,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 2
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 2
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 2
-        }
-      },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
-    },
-    "whatFailed": {
-      "totalFailed": 1,
-      "failureRate": 0.3333333333333333,
-      "commonFailures": {
-        "models": {
-          "value": "unknown",
-          "count": 1
-        },
-        "strategies": {
-          "value": "unknown",
-          "count": 1
-        },
-        "types": {
-          "value": "question",
-          "count": 1
-        },
-        "reasons": {
-          "value": "Cannot read properties of undefined (reading 'push')",
-          "count": 1
-        }
-      },
-      "insights": [
-        "Most common failure: Cannot read properties of undefined (reading 'push')"
-      ]
-    },
-    "patterns": [],
-    "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "improve_success_rate",
-        "reason": "Success rate is 0.67"
-      }
-    ],
-    "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.8888888888888888,
-      "capabilities": {
-        "reasoning": true,
-        "execution": false,
-        "adaptation": true,
-        "learning": true,
-        "selfAwareness": true
-      },
-      "limitations": [
-        "Task execution reliability needs improvement"
-      ],
-      "healthScore": 0.7222222222222222
-    },
-    "adaptations": []
-  },
-  {
-    "id": "reflection_1784464266822",
-    "timestamp": 1784464266828,
-    "duration": 0,
-    "whatWorked": {
-      "totalSuccessful": 50,
-      "successRate": 1,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 50
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 50
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 50
-        }
-      },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
-    },
-    "whatFailed": {
-      "message": "No failed actions to analyze"
-    },
-    "patterns": [],
-    "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "reduce_drift",
-        "reason": "Drift score 0.333 exceeds threshold"
-      }
-    ],
-    "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.888888888888889,
-      "capabilities": {
-        "reasoning": true,
-        "execution": true,
-        "adaptation": false,
-        "learning": true,
-        "selfAwareness": true
-      },
-      "limitations": [
-        "High drift indicates prediction inconsistency"
-      ],
-      "healthScore": 0.7222222222222223
-    },
-    "adaptations": [
-      {
-        "type": "model_preference",
-        "action": "increase_usage",
-        "target": "unknown",
-        "reason": "High success rate: 1.00"
-      }
-    ]
-  },
-  {
-    "id": "reflection_1784464292460",
-    "timestamp": 1784464292460,
-    "duration": 0,
-    "whatWorked": {
-      "totalSuccessful": 2,
-      "successRate": 0.6666666666666666,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 2
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 2
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 2
-        }
-      },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
-    },
-    "whatFailed": {
-      "totalFailed": 1,
-      "failureRate": 0.3333333333333333,
-      "commonFailures": {
-        "models": {
-          "value": "unknown",
-          "count": 1
-        },
-        "strategies": {
-          "value": "unknown",
-          "count": 1
-        },
-        "types": {
-          "value": "question",
-          "count": 1
-        },
-        "reasons": {
-          "value": "Cannot read properties of undefined (reading 'push')",
-          "count": 1
-        }
-      },
-      "insights": [
-        "Most common failure: Cannot read properties of undefined (reading 'push')"
-      ]
-    },
-    "patterns": [],
-    "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "improve_success_rate",
-        "reason": "Success rate is 0.67"
-      }
-    ],
-    "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.8888888888888888,
-      "capabilities": {
-        "reasoning": true,
-        "execution": false,
-        "adaptation": true,
-        "learning": true,
-        "selfAwareness": true
-      },
-      "limitations": [
-        "Task execution reliability needs improvement"
-      ],
-      "healthScore": 0.7222222222222222
-    },
-    "adaptations": []
-  },
-  {
-    "id": "reflection_1784465167268",
-    "timestamp": 1784465167268,
-    "duration": 0,
-    "whatWorked": {
-      "totalSuccessful": 50,
-      "successRate": 1,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 50
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 50
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 50
-        }
-      },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
-    },
-    "whatFailed": {
-      "message": "No failed actions to analyze"
-    },
-    "patterns": [],
-    "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "reduce_drift",
-        "reason": "Drift score 0.333 exceeds threshold"
-      }
-    ],
-    "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.888888888888889,
-      "capabilities": {
-        "reasoning": true,
-        "execution": true,
-        "adaptation": false,
-        "learning": true,
-        "selfAwareness": true
-      },
-      "limitations": [
-        "High drift indicates prediction inconsistency"
-      ],
-      "healthScore": 0.7222222222222223
-    },
-    "adaptations": [
-      {
-        "type": "model_preference",
-        "action": "increase_usage",
-        "target": "unknown",
-        "reason": "High success rate: 1.00"
-      }
-    ]
-  },
-  {
-    "id": "reflection_1784465192477",
-    "timestamp": 1784465192478,
-    "duration": 0,
-    "whatWorked": {
-      "totalSuccessful": 2,
-      "successRate": 0.6666666666666666,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 2
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 2
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 2
-        }
-      },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
-    },
-    "whatFailed": {
-      "totalFailed": 1,
-      "failureRate": 0.3333333333333333,
-      "commonFailures": {
-        "models": {
-          "value": "unknown",
-          "count": 1
-        },
-        "strategies": {
-          "value": "unknown",
-          "count": 1
-        },
-        "types": {
-          "value": "question",
-          "count": 1
-        },
-        "reasons": {
-          "value": "Cannot read properties of undefined (reading 'push')",
-          "count": 1
-        }
-      },
-      "insights": [
-        "Most common failure: Cannot read properties of undefined (reading 'push')"
-      ]
-    },
-    "patterns": [],
-    "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "improve_success_rate",
-        "reason": "Success rate is 0.67"
-      }
-    ],
-    "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.8888888888888888,
-      "capabilities": {
-        "reasoning": true,
-        "execution": false,
-        "adaptation": true,
-        "learning": true,
-        "selfAwareness": true
-      },
-      "limitations": [
-        "Task execution reliability needs improvement"
-      ],
-      "healthScore": 0.7222222222222222
-    },
-    "adaptations": []
-  },
-  {
-    "id": "reflection_1784466067286",
-    "timestamp": 1784466067335,
-    "duration": 0,
-    "whatWorked": {
-      "totalSuccessful": 50,
-      "successRate": 1,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 50
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 50
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 50
-        }
-      },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
-    },
-    "whatFailed": {
-      "message": "No failed actions to analyze"
-    },
-    "patterns": [],
-    "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "reduce_drift",
-        "reason": "Drift score 0.333 exceeds threshold"
-      }
-    ],
-    "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.888888888888889,
-      "capabilities": {
-        "reasoning": true,
-        "execution": true,
-        "adaptation": false,
-        "learning": true,
-        "selfAwareness": true
-      },
-      "limitations": [
-        "High drift indicates prediction inconsistency"
-      ],
-      "healthScore": 0.7222222222222223
-    },
-    "adaptations": [
-      {
-        "type": "model_preference",
-        "action": "increase_usage",
-        "target": "unknown",
-        "reason": "High success rate: 1.00"
-      }
-    ]
-  },
-  {
-    "id": "reflection_1784466092488",
-    "timestamp": 1784466092489,
-    "duration": 0,
-    "whatWorked": {
-      "totalSuccessful": 2,
-      "successRate": 0.6666666666666666,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 2
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 2
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 2
-        }
-      },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
-    },
-    "whatFailed": {
-      "totalFailed": 1,
-      "failureRate": 0.3333333333333333,
-      "commonFailures": {
-        "models": {
-          "value": "unknown",
-          "count": 1
-        },
-        "strategies": {
-          "value": "unknown",
-          "count": 1
-        },
-        "types": {
-          "value": "question",
-          "count": 1
-        },
-        "reasons": {
-          "value": "Cannot read properties of undefined (reading 'push')",
-          "count": 1
-        }
-      },
-      "insights": [
-        "Most common failure: Cannot read properties of undefined (reading 'push')"
-      ]
-    },
-    "patterns": [],
-    "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "improve_success_rate",
-        "reason": "Success rate is 0.67"
-      }
-    ],
-    "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.8888888888888888,
-      "capabilities": {
-        "reasoning": true,
-        "execution": false,
-        "adaptation": true,
-        "learning": true,
-        "selfAwareness": true
-      },
-      "limitations": [
-        "Task execution reliability needs improvement"
-      ],
-      "healthScore": 0.7222222222222222
-    },
-    "adaptations": []
-  },
-  {
-    "id": "reflection_1784466967368",
-    "timestamp": 1784466967368,
-    "duration": 0,
-    "whatWorked": {
-      "totalSuccessful": 50,
-      "successRate": 1,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 50
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 50
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 50
-        }
-      },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
-    },
-    "whatFailed": {
-      "message": "No failed actions to analyze"
-    },
-    "patterns": [],
-    "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "reduce_drift",
-        "reason": "Drift score 0.333 exceeds threshold"
-      }
-    ],
-    "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.888888888888889,
-      "capabilities": {
-        "reasoning": true,
-        "execution": true,
-        "adaptation": false,
-        "learning": true,
-        "selfAwareness": true
-      },
-      "limitations": [
-        "High drift indicates prediction inconsistency"
-      ],
-      "healthScore": 0.7222222222222223
-    },
-    "adaptations": [
-      {
-        "type": "model_preference",
-        "action": "increase_usage",
-        "target": "unknown",
-        "reason": "High success rate: 1.00"
-      }
-    ]
-  },
-  {
-    "id": "reflection_1784466992499",
-    "timestamp": 1784466992499,
-    "duration": 0,
-    "whatWorked": {
-      "totalSuccessful": 2,
-      "successRate": 0.6666666666666666,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 2
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 2
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 2
-        }
-      },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
-    },
-    "whatFailed": {
-      "totalFailed": 1,
-      "failureRate": 0.3333333333333333,
-      "commonFailures": {
-        "models": {
-          "value": "unknown",
-          "count": 1
-        },
-        "strategies": {
-          "value": "unknown",
-          "count": 1
-        },
-        "types": {
-          "value": "question",
-          "count": 1
-        },
-        "reasons": {
-          "value": "Cannot read properties of undefined (reading 'push')",
-          "count": 1
-        }
-      },
-      "insights": [
-        "Most common failure: Cannot read properties of undefined (reading 'push')"
-      ]
-    },
-    "patterns": [],
-    "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "improve_success_rate",
-        "reason": "Success rate is 0.67"
-      }
-    ],
-    "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.8888888888888888,
-      "capabilities": {
-        "reasoning": true,
-        "execution": false,
-        "adaptation": true,
-        "learning": true,
-        "selfAwareness": true
-      },
-      "limitations": [
-        "Task execution reliability needs improvement"
-      ],
-      "healthScore": 0.7222222222222222
-    },
-    "adaptations": []
-  },
-  {
-    "id": "reflection_1784467867382",
-    "timestamp": 1784467867383,
-    "duration": 0,
-    "whatWorked": {
-      "totalSuccessful": 50,
-      "successRate": 1,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 50
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 50
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 50
-        }
-      },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
-    },
-    "whatFailed": {
-      "message": "No failed actions to analyze"
-    },
-    "patterns": [],
-    "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "reduce_drift",
-        "reason": "Drift score 0.333 exceeds threshold"
-      }
-    ],
-    "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.888888888888889,
-      "capabilities": {
-        "reasoning": true,
-        "execution": true,
-        "adaptation": false,
-        "learning": true,
-        "selfAwareness": true
-      },
-      "limitations": [
-        "High drift indicates prediction inconsistency"
-      ],
-      "healthScore": 0.7222222222222223
-    },
-    "adaptations": [
-      {
-        "type": "model_preference",
-        "action": "increase_usage",
-        "target": "unknown",
-        "reason": "High success rate: 1.00"
-      }
-    ]
-  },
-  {
-    "id": "reflection_1784467892506",
-    "timestamp": 1784467892506,
-    "duration": 0,
-    "whatWorked": {
-      "totalSuccessful": 2,
-      "successRate": 0.6666666666666666,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 2
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 2
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 2
-        }
-      },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
-    },
-    "whatFailed": {
-      "totalFailed": 1,
-      "failureRate": 0.3333333333333333,
-      "commonFailures": {
-        "models": {
-          "value": "unknown",
-          "count": 1
-        },
-        "strategies": {
-          "value": "unknown",
-          "count": 1
-        },
-        "types": {
-          "value": "question",
-          "count": 1
-        },
-        "reasons": {
-          "value": "Cannot read properties of undefined (reading 'push')",
-          "count": 1
-        }
-      },
-      "insights": [
-        "Most common failure: Cannot read properties of undefined (reading 'push')"
-      ]
-    },
-    "patterns": [],
-    "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "improve_success_rate",
-        "reason": "Success rate is 0.67"
-      }
-    ],
-    "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.8888888888888888,
-      "capabilities": {
-        "reasoning": true,
-        "execution": false,
-        "adaptation": true,
-        "learning": true,
-        "selfAwareness": true
-      },
-      "limitations": [
-        "Task execution reliability needs improvement"
-      ],
-      "healthScore": 0.7222222222222222
-    },
-    "adaptations": []
-  },
-  {
-    "id": "reflection_1784468767398",
-    "timestamp": 1784468767398,
-    "duration": 0,
-    "whatWorked": {
-      "totalSuccessful": 50,
-      "successRate": 1,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 50
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 50
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 50
-        }
-      },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
-    },
-    "whatFailed": {
-      "message": "No failed actions to analyze"
-    },
-    "patterns": [],
-    "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "reduce_drift",
-        "reason": "Drift score 0.333 exceeds threshold"
-      }
-    ],
-    "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.888888888888889,
-      "capabilities": {
-        "reasoning": true,
-        "execution": true,
-        "adaptation": false,
-        "learning": true,
-        "selfAwareness": true
-      },
-      "limitations": [
-        "High drift indicates prediction inconsistency"
-      ],
-      "healthScore": 0.7222222222222223
-    },
-    "adaptations": [
-      {
-        "type": "model_preference",
-        "action": "increase_usage",
-        "target": "unknown",
-        "reason": "High success rate: 1.00"
-      }
-    ]
-  },
-  {
-    "id": "reflection_1784468792522",
-    "timestamp": 1784468792522,
-    "duration": 0,
-    "whatWorked": {
-      "totalSuccessful": 2,
-      "successRate": 0.6666666666666666,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 2
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 2
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 2
-        }
-      },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
-    },
-    "whatFailed": {
-      "totalFailed": 1,
-      "failureRate": 0.3333333333333333,
-      "commonFailures": {
-        "models": {
-          "value": "unknown",
-          "count": 1
-        },
-        "strategies": {
-          "value": "unknown",
-          "count": 1
-        },
-        "types": {
-          "value": "question",
-          "count": 1
-        },
-        "reasons": {
-          "value": "Cannot read properties of undefined (reading 'push')",
-          "count": 1
-        }
-      },
-      "insights": [
-        "Most common failure: Cannot read properties of undefined (reading 'push')"
-      ]
-    },
-    "patterns": [],
-    "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "improve_success_rate",
-        "reason": "Success rate is 0.67"
-      }
-    ],
-    "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.8888888888888888,
-      "capabilities": {
-        "reasoning": true,
-        "execution": false,
-        "adaptation": true,
-        "learning": true,
-        "selfAwareness": true
-      },
-      "limitations": [
-        "Task execution reliability needs improvement"
-      ],
-      "healthScore": 0.7222222222222222
-    },
-    "adaptations": []
-  },
-  {
-    "id": "reflection_1784469667413",
-    "timestamp": 1784469667413,
-    "duration": 0,
-    "whatWorked": {
-      "totalSuccessful": 50,
-      "successRate": 1,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 50
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 50
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 50
-        }
-      },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
-    },
-    "whatFailed": {
-      "message": "No failed actions to analyze"
-    },
-    "patterns": [],
-    "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "reduce_drift",
-        "reason": "Drift score 0.333 exceeds threshold"
-      }
-    ],
-    "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.888888888888889,
-      "capabilities": {
-        "reasoning": true,
-        "execution": true,
-        "adaptation": false,
-        "learning": true,
-        "selfAwareness": true
-      },
-      "limitations": [
-        "High drift indicates prediction inconsistency"
-      ],
-      "healthScore": 0.7222222222222223
-    },
-    "adaptations": [
-      {
-        "type": "model_preference",
-        "action": "increase_usage",
-        "target": "unknown",
-        "reason": "High success rate: 1.00"
-      }
-    ]
-  },
-  {
-    "id": "reflection_1784469692537",
-    "timestamp": 1784469692537,
-    "duration": 0,
-    "whatWorked": {
-      "totalSuccessful": 2,
-      "successRate": 0.6666666666666666,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 2
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 2
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 2
-        }
-      },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
-    },
-    "whatFailed": {
-      "totalFailed": 1,
-      "failureRate": 0.3333333333333333,
-      "commonFailures": {
-        "models": {
-          "value": "unknown",
-          "count": 1
-        },
-        "strategies": {
-          "value": "unknown",
-          "count": 1
-        },
-        "types": {
-          "value": "question",
-          "count": 1
-        },
-        "reasons": {
-          "value": "Cannot read properties of undefined (reading 'push')",
-          "count": 1
-        }
-      },
-      "insights": [
-        "Most common failure: Cannot read properties of undefined (reading 'push')"
-      ]
-    },
-    "patterns": [],
-    "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "improve_success_rate",
-        "reason": "Success rate is 0.67"
-      }
-    ],
-    "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.8888888888888888,
-      "capabilities": {
-        "reasoning": true,
-        "execution": false,
-        "adaptation": true,
-        "learning": true,
-        "selfAwareness": true
-      },
-      "limitations": [
-        "Task execution reliability needs improvement"
-      ],
-      "healthScore": 0.7222222222222222
-    },
-    "adaptations": []
-  },
-  {
-    "id": "reflection_1784470567432",
-    "timestamp": 1784470567432,
-    "duration": 0,
-    "whatWorked": {
-      "totalSuccessful": 50,
-      "successRate": 1,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 50
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 50
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 50
-        }
-      },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
-    },
-    "whatFailed": {
-      "message": "No failed actions to analyze"
-    },
-    "patterns": [],
-    "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "reduce_drift",
-        "reason": "Drift score 0.333 exceeds threshold"
-      }
-    ],
-    "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.888888888888889,
-      "capabilities": {
-        "reasoning": true,
-        "execution": true,
-        "adaptation": false,
-        "learning": true,
-        "selfAwareness": true
-      },
-      "limitations": [
-        "High drift indicates prediction inconsistency"
-      ],
-      "healthScore": 0.7222222222222223
-    },
-    "adaptations": [
-      {
-        "type": "model_preference",
-        "action": "increase_usage",
-        "target": "unknown",
-        "reason": "High success rate: 1.00"
-      }
-    ]
-  },
-  {
-    "id": "reflection_1784470592603",
-    "timestamp": 1784470592603,
-    "duration": 0,
-    "whatWorked": {
-      "totalSuccessful": 2,
-      "successRate": 0.6666666666666666,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 2
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 2
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 2
-        }
-      },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
-    },
-    "whatFailed": {
-      "totalFailed": 1,
-      "failureRate": 0.3333333333333333,
-      "commonFailures": {
-        "models": {
-          "value": "unknown",
-          "count": 1
-        },
-        "strategies": {
-          "value": "unknown",
-          "count": 1
-        },
-        "types": {
-          "value": "question",
-          "count": 1
-        },
-        "reasons": {
-          "value": "Cannot read properties of undefined (reading 'push')",
-          "count": 1
-        }
-      },
-      "insights": [
-        "Most common failure: Cannot read properties of undefined (reading 'push')"
-      ]
-    },
-    "patterns": [],
-    "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "improve_success_rate",
-        "reason": "Success rate is 0.67"
-      }
-    ],
-    "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.8888888888888888,
-      "capabilities": {
-        "reasoning": true,
-        "execution": false,
-        "adaptation": true,
-        "learning": true,
-        "selfAwareness": true
-      },
-      "limitations": [
-        "Task execution reliability needs improvement"
-      ],
-      "healthScore": 0.7222222222222222
-    },
-    "adaptations": []
-  },
-  {
-    "id": "reflection_1784471467443",
-    "timestamp": 1784471467444,
-    "duration": 0,
-    "whatWorked": {
-      "totalSuccessful": 50,
-      "successRate": 1,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 50
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 50
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 50
-        }
-      },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
-    },
-    "whatFailed": {
-      "message": "No failed actions to analyze"
-    },
-    "patterns": [],
-    "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "reduce_drift",
-        "reason": "Drift score 0.333 exceeds threshold"
-      }
-    ],
-    "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.888888888888889,
-      "capabilities": {
-        "reasoning": true,
-        "execution": true,
-        "adaptation": false,
-        "learning": true,
-        "selfAwareness": true
-      },
-      "limitations": [
-        "High drift indicates prediction inconsistency"
-      ],
-      "healthScore": 0.7222222222222223
-    },
-    "adaptations": [
-      {
-        "type": "model_preference",
-        "action": "increase_usage",
-        "target": "unknown",
-        "reason": "High success rate: 1.00"
-      }
-    ]
-  },
-  {
-    "id": "reflection_1784471492614",
-    "timestamp": 1784471492614,
-    "duration": 0,
-    "whatWorked": {
-      "totalSuccessful": 2,
-      "successRate": 0.6666666666666666,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 2
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 2
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 2
-        }
-      },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
-    },
-    "whatFailed": {
-      "totalFailed": 1,
-      "failureRate": 0.3333333333333333,
-      "commonFailures": {
-        "models": {
-          "value": "unknown",
-          "count": 1
-        },
-        "strategies": {
-          "value": "unknown",
-          "count": 1
-        },
-        "types": {
-          "value": "question",
-          "count": 1
-        },
-        "reasons": {
-          "value": "Cannot read properties of undefined (reading 'push')",
-          "count": 1
-        }
-      },
-      "insights": [
-        "Most common failure: Cannot read properties of undefined (reading 'push')"
-      ]
-    },
-    "patterns": [],
-    "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "improve_success_rate",
-        "reason": "Success rate is 0.67"
-      }
-    ],
-    "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.8888888888888888,
-      "capabilities": {
-        "reasoning": true,
-        "execution": false,
-        "adaptation": true,
-        "learning": true,
-        "selfAwareness": true
-      },
-      "limitations": [
-        "Task execution reliability needs improvement"
-      ],
-      "healthScore": 0.7222222222222222
-    },
-    "adaptations": []
-  },
-  {
-    "id": "reflection_1784472367461",
-    "timestamp": 1784472367461,
-    "duration": 0,
-    "whatWorked": {
-      "totalSuccessful": 50,
-      "successRate": 1,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 50
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 50
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 50
-        }
-      },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
-    },
-    "whatFailed": {
-      "message": "No failed actions to analyze"
-    },
-    "patterns": [],
-    "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "reduce_drift",
-        "reason": "Drift score 0.333 exceeds threshold"
-      }
-    ],
-    "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.888888888888889,
-      "capabilities": {
-        "reasoning": true,
-        "execution": true,
-        "adaptation": false,
-        "learning": true,
-        "selfAwareness": true
-      },
-      "limitations": [
-        "High drift indicates prediction inconsistency"
-      ],
-      "healthScore": 0.7222222222222223
-    },
-    "adaptations": [
-      {
-        "type": "model_preference",
-        "action": "increase_usage",
-        "target": "unknown",
-        "reason": "High success rate: 1.00"
-      }
-    ]
-  },
-  {
-    "id": "reflection_1784472392631",
-    "timestamp": 1784472392631,
-    "duration": 0,
-    "whatWorked": {
-      "totalSuccessful": 2,
-      "successRate": 0.6666666666666666,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 2
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 2
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 2
-        }
-      },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
-    },
-    "whatFailed": {
-      "totalFailed": 1,
-      "failureRate": 0.3333333333333333,
-      "commonFailures": {
-        "models": {
-          "value": "unknown",
-          "count": 1
-        },
-        "strategies": {
-          "value": "unknown",
-          "count": 1
-        },
-        "types": {
-          "value": "question",
-          "count": 1
-        },
-        "reasons": {
-          "value": "Cannot read properties of undefined (reading 'push')",
-          "count": 1
-        }
-      },
-      "insights": [
-        "Most common failure: Cannot read properties of undefined (reading 'push')"
-      ]
-    },
-    "patterns": [],
-    "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "improve_success_rate",
-        "reason": "Success rate is 0.67"
-      }
-    ],
-    "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.8888888888888888,
-      "capabilities": {
-        "reasoning": true,
-        "execution": false,
-        "adaptation": true,
-        "learning": true,
-        "selfAwareness": true
-      },
-      "limitations": [
-        "Task execution reliability needs improvement"
-      ],
-      "healthScore": 0.7222222222222222
-    },
-    "adaptations": []
-  },
-  {
-    "id": "reflection_1784473267474",
-    "timestamp": 1784473267474,
+    "id": "reflection_1789047455247",
+    "timestamp": 1789047455247,
     "duration": 1,
     "whatWorked": {
-      "totalSuccessful": 50,
-      "successRate": 1,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 50
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 50
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 50
-        }
-      },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
+      "message": "No successful actions to analyze"
     },
     "whatFailed": {
       "message": "No failed actions to analyze"
     },
     "patterns": [],
     "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "reduce_drift",
-        "reason": "Drift score 0.333 exceeds threshold"
-      }
-    ],
+    "recommendations": [],
     "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.888888888888889,
+      "overallLevel": "critical",
+      "confidence": 0.3333333333333333,
       "capabilities": {
-        "reasoning": true,
-        "execution": true,
-        "adaptation": false,
-        "learning": true,
-        "selfAwareness": true
-      },
-      "limitations": [
-        "High drift indicates prediction inconsistency"
-      ],
-      "healthScore": 0.7222222222222223
-    },
-    "adaptations": [
-      {
-        "type": "model_preference",
-        "action": "increase_usage",
-        "target": "unknown",
-        "reason": "High success rate: 1.00"
-      }
-    ]
-  },
-  {
-    "id": "reflection_1784473292644",
-    "timestamp": 1784473292644,
-    "duration": 0,
-    "whatWorked": {
-      "totalSuccessful": 2,
-      "successRate": 0.6666666666666666,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 2
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 2
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 2
-        }
-      },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
-    },
-    "whatFailed": {
-      "totalFailed": 1,
-      "failureRate": 0.3333333333333333,
-      "commonFailures": {
-        "models": {
-          "value": "unknown",
-          "count": 1
-        },
-        "strategies": {
-          "value": "unknown",
-          "count": 1
-        },
-        "types": {
-          "value": "question",
-          "count": 1
-        },
-        "reasons": {
-          "value": "Cannot read properties of undefined (reading 'push')",
-          "count": 1
-        }
-      },
-      "insights": [
-        "Most common failure: Cannot read properties of undefined (reading 'push')"
-      ]
-    },
-    "patterns": [],
-    "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "improve_success_rate",
-        "reason": "Success rate is 0.67"
-      }
-    ],
-    "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.8888888888888888,
-      "capabilities": {
-        "reasoning": true,
+        "reasoning": false,
         "execution": false,
         "adaptation": true,
         "learning": true,
@@ -3887,1803 +490,399 @@
       "limitations": [
         "Task execution reliability needs improvement"
       ],
-      "healthScore": 0.7222222222222222
+      "healthScore": 0.5
     },
     "adaptations": []
   },
   {
-    "id": "reflection_1784474167499",
-    "timestamp": 1784474167499,
-    "duration": 0,
-    "whatWorked": {
-      "totalSuccessful": 50,
-      "successRate": 1,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 50
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 50
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 50
-        }
-      },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
-    },
-    "whatFailed": {
-      "message": "No failed actions to analyze"
-    },
-    "patterns": [],
-    "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "reduce_drift",
-        "reason": "Drift score 0.333 exceeds threshold"
-      }
-    ],
-    "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.888888888888889,
-      "capabilities": {
-        "reasoning": true,
-        "execution": true,
-        "adaptation": false,
-        "learning": true,
-        "selfAwareness": true
-      },
-      "limitations": [
-        "High drift indicates prediction inconsistency"
-      ],
-      "healthScore": 0.7222222222222223
-    },
-    "adaptations": [
-      {
-        "type": "model_preference",
-        "action": "increase_usage",
-        "target": "unknown",
-        "reason": "High success rate: 1.00"
-      }
-    ]
-  },
-  {
-    "id": "reflection_1784474192662",
-    "timestamp": 1784474192662,
-    "duration": 0,
-    "whatWorked": {
-      "totalSuccessful": 2,
-      "successRate": 0.6666666666666666,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 2
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 2
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 2
-        }
-      },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
-    },
-    "whatFailed": {
-      "totalFailed": 1,
-      "failureRate": 0.3333333333333333,
-      "commonFailures": {
-        "models": {
-          "value": "unknown",
-          "count": 1
-        },
-        "strategies": {
-          "value": "unknown",
-          "count": 1
-        },
-        "types": {
-          "value": "question",
-          "count": 1
-        },
-        "reasons": {
-          "value": "Cannot read properties of undefined (reading 'push')",
-          "count": 1
-        }
-      },
-      "insights": [
-        "Most common failure: Cannot read properties of undefined (reading 'push')"
-      ]
-    },
-    "patterns": [],
-    "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "improve_success_rate",
-        "reason": "Success rate is 0.67"
-      }
-    ],
-    "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.8888888888888888,
-      "capabilities": {
-        "reasoning": true,
-        "execution": false,
-        "adaptation": true,
-        "learning": true,
-        "selfAwareness": true
-      },
-      "limitations": [
-        "Task execution reliability needs improvement"
-      ],
-      "healthScore": 0.7222222222222222
-    },
-    "adaptations": []
-  },
-  {
-    "id": "reflection_1784475067506",
-    "timestamp": 1784475067554,
-    "duration": 0,
-    "whatWorked": {
-      "totalSuccessful": 50,
-      "successRate": 1,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 50
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 50
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 50
-        }
-      },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
-    },
-    "whatFailed": {
-      "message": "No failed actions to analyze"
-    },
-    "patterns": [],
-    "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "reduce_drift",
-        "reason": "Drift score 0.333 exceeds threshold"
-      }
-    ],
-    "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.888888888888889,
-      "capabilities": {
-        "reasoning": true,
-        "execution": true,
-        "adaptation": false,
-        "learning": true,
-        "selfAwareness": true
-      },
-      "limitations": [
-        "High drift indicates prediction inconsistency"
-      ],
-      "healthScore": 0.7222222222222223
-    },
-    "adaptations": [
-      {
-        "type": "model_preference",
-        "action": "increase_usage",
-        "target": "unknown",
-        "reason": "High success rate: 1.00"
-      }
-    ]
-  },
-  {
-    "id": "reflection_1784475092680",
-    "timestamp": 1784475092680,
-    "duration": 0,
-    "whatWorked": {
-      "totalSuccessful": 2,
-      "successRate": 0.6666666666666666,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 2
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 2
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 2
-        }
-      },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
-    },
-    "whatFailed": {
-      "totalFailed": 1,
-      "failureRate": 0.3333333333333333,
-      "commonFailures": {
-        "models": {
-          "value": "unknown",
-          "count": 1
-        },
-        "strategies": {
-          "value": "unknown",
-          "count": 1
-        },
-        "types": {
-          "value": "question",
-          "count": 1
-        },
-        "reasons": {
-          "value": "Cannot read properties of undefined (reading 'push')",
-          "count": 1
-        }
-      },
-      "insights": [
-        "Most common failure: Cannot read properties of undefined (reading 'push')"
-      ]
-    },
-    "patterns": [],
-    "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "improve_success_rate",
-        "reason": "Success rate is 0.67"
-      }
-    ],
-    "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.8888888888888888,
-      "capabilities": {
-        "reasoning": true,
-        "execution": false,
-        "adaptation": true,
-        "learning": true,
-        "selfAwareness": true
-      },
-      "limitations": [
-        "Task execution reliability needs improvement"
-      ],
-      "healthScore": 0.7222222222222222
-    },
-    "adaptations": []
-  },
-  {
-    "id": "reflection_1784475967818",
-    "timestamp": 1784475967819,
-    "duration": 0,
-    "whatWorked": {
-      "totalSuccessful": 50,
-      "successRate": 1,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 50
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 50
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 50
-        }
-      },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
-    },
-    "whatFailed": {
-      "message": "No failed actions to analyze"
-    },
-    "patterns": [],
-    "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "reduce_drift",
-        "reason": "Drift score 0.333 exceeds threshold"
-      }
-    ],
-    "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.888888888888889,
-      "capabilities": {
-        "reasoning": true,
-        "execution": true,
-        "adaptation": false,
-        "learning": true,
-        "selfAwareness": true
-      },
-      "limitations": [
-        "High drift indicates prediction inconsistency"
-      ],
-      "healthScore": 0.7222222222222223
-    },
-    "adaptations": [
-      {
-        "type": "model_preference",
-        "action": "increase_usage",
-        "target": "unknown",
-        "reason": "High success rate: 1.00"
-      }
-    ]
-  },
-  {
-    "id": "reflection_1784475992695",
-    "timestamp": 1784475992695,
-    "duration": 0,
-    "whatWorked": {
-      "totalSuccessful": 2,
-      "successRate": 0.6666666666666666,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 2
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 2
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 2
-        }
-      },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
-    },
-    "whatFailed": {
-      "totalFailed": 1,
-      "failureRate": 0.3333333333333333,
-      "commonFailures": {
-        "models": {
-          "value": "unknown",
-          "count": 1
-        },
-        "strategies": {
-          "value": "unknown",
-          "count": 1
-        },
-        "types": {
-          "value": "question",
-          "count": 1
-        },
-        "reasons": {
-          "value": "Cannot read properties of undefined (reading 'push')",
-          "count": 1
-        }
-      },
-      "insights": [
-        "Most common failure: Cannot read properties of undefined (reading 'push')"
-      ]
-    },
-    "patterns": [],
-    "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "improve_success_rate",
-        "reason": "Success rate is 0.67"
-      }
-    ],
-    "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.8888888888888888,
-      "capabilities": {
-        "reasoning": true,
-        "execution": false,
-        "adaptation": true,
-        "learning": true,
-        "selfAwareness": true
-      },
-      "limitations": [
-        "Task execution reliability needs improvement"
-      ],
-      "healthScore": 0.7222222222222222
-    },
-    "adaptations": []
-  },
-  {
-    "id": "reflection_1784476867834",
-    "timestamp": 1784476867835,
-    "duration": 0,
-    "whatWorked": {
-      "totalSuccessful": 50,
-      "successRate": 1,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 50
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 50
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 50
-        }
-      },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
-    },
-    "whatFailed": {
-      "message": "No failed actions to analyze"
-    },
-    "patterns": [],
-    "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "reduce_drift",
-        "reason": "Drift score 0.333 exceeds threshold"
-      }
-    ],
-    "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.888888888888889,
-      "capabilities": {
-        "reasoning": true,
-        "execution": true,
-        "adaptation": false,
-        "learning": true,
-        "selfAwareness": true
-      },
-      "limitations": [
-        "High drift indicates prediction inconsistency"
-      ],
-      "healthScore": 0.7222222222222223
-    },
-    "adaptations": [
-      {
-        "type": "model_preference",
-        "action": "increase_usage",
-        "target": "unknown",
-        "reason": "High success rate: 1.00"
-      }
-    ]
-  },
-  {
-    "id": "reflection_1784476892709",
-    "timestamp": 1784476892709,
+    "id": "reflection_1789048133341",
+    "timestamp": 1789048133342,
     "duration": 1,
     "whatWorked": {
-      "totalSuccessful": 2,
-      "successRate": 0.6666666666666666,
+      "totalSuccessful": 1,
+      "successRate": 0.07142857142857142,
       "topPerformers": {
         "model": {
-          "value": "unknown",
-          "count": 2
+          "value": "gpt-35-turbo",
+          "count": 1
         },
         "strategy": {
-          "value": "unknown",
-          "count": 2
+          "value": "local",
+          "count": 1
         },
         "type": {
-          "value": "core_loop",
-          "count": 2
+          "value": "observation",
+          "count": 1
         }
       },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
+      "insights": []
     },
     "whatFailed": {
-      "totalFailed": 1,
-      "failureRate": 0.3333333333333333,
+      "totalFailed": 13,
+      "failureRate": 0.9285714285714286,
       "commonFailures": {
         "models": {
           "value": "unknown",
-          "count": 1
+          "count": 12
         },
         "strategies": {
           "value": "unknown",
-          "count": 1
+          "count": 12
         },
         "types": {
-          "value": "question",
-          "count": 1
+          "value": "core_loop",
+          "count": 12
         },
         "reasons": {
-          "value": "Cannot read properties of undefined (reading 'push')",
-          "count": 1
+          "value": "low_confidence",
+          "count": 10
         }
       },
       "insights": [
-        "Most common failure: Cannot read properties of undefined (reading 'push')"
+        "Most common failure: low_confidence"
       ]
     },
-    "patterns": [],
+    "patterns": [
+      {
+        "type": "temporal",
+        "pattern": "low_success_hour",
+        "hour": 8,
+        "successRate": 0.07142857142857142,
+        "recommendation": "avoid_actions_during_hour"
+      },
+      {
+        "type": "cost",
+        "pattern": "high_cost_actions",
+        "percentage": 0.14285714285714285,
+        "avgCost": 0.0014285714285714286,
+        "recommendation": "reduce_expensive_actions"
+      },
+      {
+        "type": "model",
+        "pattern": "low_model_performance",
+        "model": "unknown",
+        "successRate": 0,
+        "recommendation": "reduce_model_usage"
+      },
+      {
+        "type": "model",
+        "pattern": "low_model_performance",
+        "model": "gpt-4-local",
+        "successRate": 0,
+        "recommendation": "reduce_model_usage"
+      }
+    ],
     "contradictions": [],
     "recommendations": [
       {
         "priority": "high",
         "action": "improve_success_rate",
-        "reason": "Success rate is 0.67"
-      }
-    ],
-    "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.8888888888888888,
-      "capabilities": {
-        "reasoning": true,
-        "execution": false,
-        "adaptation": true,
-        "learning": true,
-        "selfAwareness": true
+        "reason": "Success rate is 0.07"
       },
-      "limitations": [
-        "Task execution reliability needs improvement"
-      ],
-      "healthScore": 0.7222222222222222
-    },
-    "adaptations": []
-  },
-  {
-    "id": "reflection_1784477767851",
-    "timestamp": 1784477767851,
-    "duration": 0,
-    "whatWorked": {
-      "totalSuccessful": 50,
-      "successRate": 1,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 50
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 50
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 50
-        }
-      },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
-    },
-    "whatFailed": {
-      "message": "No failed actions to analyze"
-    },
-    "patterns": [],
-    "contradictions": [],
-    "recommendations": [
       {
         "priority": "high",
         "action": "reduce_drift",
-        "reason": "Drift score 0.333 exceeds threshold"
+        "reason": "Drift score 0.348 exceeds threshold"
       }
     ],
     "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.888888888888889,
+      "overallLevel": "critical",
+      "confidence": 0.5507936507936507,
       "capabilities": {
         "reasoning": true,
-        "execution": true,
+        "execution": false,
         "adaptation": false,
         "learning": true,
         "selfAwareness": true
       },
       "limitations": [
-        "High drift indicates prediction inconsistency"
+        "High drift indicates prediction inconsistency",
+        "Task execution reliability needs improvement"
       ],
-      "healthScore": 0.7222222222222223
+      "healthScore": 0.4079365079365079
     },
     "adaptations": [
       {
         "type": "model_preference",
         "action": "increase_usage",
-        "target": "unknown",
+        "target": "gpt-35-turbo",
         "reason": "High success rate: 1.00"
-      }
-    ]
-  },
-  {
-    "id": "reflection_1784477792717",
-    "timestamp": 1784477792718,
-    "duration": 0,
-    "whatWorked": {
-      "totalSuccessful": 2,
-      "successRate": 0.6666666666666666,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 2
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 2
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 2
-        }
       },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
-    },
-    "whatFailed": {
-      "totalFailed": 1,
-      "failureRate": 0.3333333333333333,
-      "commonFailures": {
-        "models": {
-          "value": "unknown",
-          "count": 1
-        },
-        "strategies": {
-          "value": "unknown",
-          "count": 1
-        },
-        "types": {
-          "value": "question",
-          "count": 1
-        },
-        "reasons": {
-          "value": "Cannot read properties of undefined (reading 'push')",
-          "count": 1
-        }
-      },
-      "insights": [
-        "Most common failure: Cannot read properties of undefined (reading 'push')"
-      ]
-    },
-    "patterns": [],
-    "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "improve_success_rate",
-        "reason": "Success rate is 0.67"
-      }
-    ],
-    "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.8888888888888888,
-      "capabilities": {
-        "reasoning": true,
-        "execution": false,
-        "adaptation": true,
-        "learning": true,
-        "selfAwareness": true
-      },
-      "limitations": [
-        "Task execution reliability needs improvement"
-      ],
-      "healthScore": 0.7222222222222222
-    },
-    "adaptations": []
-  },
-  {
-    "id": "reflection_1784478667866",
-    "timestamp": 1784478667866,
-    "duration": 0,
-    "whatWorked": {
-      "totalSuccessful": 50,
-      "successRate": 1,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 50
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 50
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 50
-        }
-      },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
-    },
-    "whatFailed": {
-      "message": "No failed actions to analyze"
-    },
-    "patterns": [],
-    "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "reduce_drift",
-        "reason": "Drift score 0.333 exceeds threshold"
-      }
-    ],
-    "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.888888888888889,
-      "capabilities": {
-        "reasoning": true,
-        "execution": true,
-        "adaptation": false,
-        "learning": true,
-        "selfAwareness": true
-      },
-      "limitations": [
-        "High drift indicates prediction inconsistency"
-      ],
-      "healthScore": 0.7222222222222223
-    },
-    "adaptations": [
       {
         "type": "model_preference",
-        "action": "increase_usage",
+        "action": "decrease_usage",
         "target": "unknown",
-        "reason": "High success rate: 1.00"
-      }
-    ]
-  },
-  {
-    "id": "reflection_1784478692725",
-    "timestamp": 1784478692725,
-    "duration": 0,
-    "whatWorked": {
-      "totalSuccessful": 2,
-      "successRate": 0.6666666666666666,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 2
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 2
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 2
-        }
+        "reason": "Low success rate: 0.00"
       },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
-    },
-    "whatFailed": {
-      "totalFailed": 1,
-      "failureRate": 0.3333333333333333,
-      "commonFailures": {
-        "models": {
-          "value": "unknown",
-          "count": 1
-        },
-        "strategies": {
-          "value": "unknown",
-          "count": 1
-        },
-        "types": {
-          "value": "question",
-          "count": 1
-        },
-        "reasons": {
-          "value": "Cannot read properties of undefined (reading 'push')",
-          "count": 1
-        }
-      },
-      "insights": [
-        "Most common failure: Cannot read properties of undefined (reading 'push')"
-      ]
-    },
-    "patterns": [],
-    "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "improve_success_rate",
-        "reason": "Success rate is 0.67"
-      }
-    ],
-    "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.8888888888888888,
-      "capabilities": {
-        "reasoning": true,
-        "execution": false,
-        "adaptation": true,
-        "learning": true,
-        "selfAwareness": true
-      },
-      "limitations": [
-        "Task execution reliability needs improvement"
-      ],
-      "healthScore": 0.7222222222222222
-    },
-    "adaptations": []
-  },
-  {
-    "id": "reflection_1784479567883",
-    "timestamp": 1784479567883,
-    "duration": 0,
-    "whatWorked": {
-      "totalSuccessful": 50,
-      "successRate": 1,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 50
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 50
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 50
-        }
-      },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
-    },
-    "whatFailed": {
-      "message": "No failed actions to analyze"
-    },
-    "patterns": [],
-    "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "reduce_drift",
-        "reason": "Drift score 0.333 exceeds threshold"
-      }
-    ],
-    "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.888888888888889,
-      "capabilities": {
-        "reasoning": true,
-        "execution": true,
-        "adaptation": false,
-        "learning": true,
-        "selfAwareness": true
-      },
-      "limitations": [
-        "High drift indicates prediction inconsistency"
-      ],
-      "healthScore": 0.7222222222222223
-    },
-    "adaptations": [
       {
         "type": "model_preference",
-        "action": "increase_usage",
-        "target": "unknown",
-        "reason": "High success rate: 1.00"
+        "action": "decrease_usage",
+        "target": "gpt-4-local",
+        "reason": "Low success rate: 0.00"
       }
     ]
   },
   {
-    "id": "reflection_1784479592740",
-    "timestamp": 1784479592740,
-    "duration": 0,
-    "whatWorked": {
-      "totalSuccessful": 2,
-      "successRate": 0.6666666666666666,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 2
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 2
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 2
-        }
-      },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
-    },
-    "whatFailed": {
-      "totalFailed": 1,
-      "failureRate": 0.3333333333333333,
-      "commonFailures": {
-        "models": {
-          "value": "unknown",
-          "count": 1
-        },
-        "strategies": {
-          "value": "unknown",
-          "count": 1
-        },
-        "types": {
-          "value": "question",
-          "count": 1
-        },
-        "reasons": {
-          "value": "Cannot read properties of undefined (reading 'push')",
-          "count": 1
-        }
-      },
-      "insights": [
-        "Most common failure: Cannot read properties of undefined (reading 'push')"
-      ]
-    },
-    "patterns": [],
-    "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "improve_success_rate",
-        "reason": "Success rate is 0.67"
-      }
-    ],
-    "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.8888888888888888,
-      "capabilities": {
-        "reasoning": true,
-        "execution": false,
-        "adaptation": true,
-        "learning": true,
-        "selfAwareness": true
-      },
-      "limitations": [
-        "Task execution reliability needs improvement"
-      ],
-      "healthScore": 0.7222222222222222
-    },
-    "adaptations": []
-  },
-  {
-    "id": "reflection_1784480467897",
-    "timestamp": 1784480467897,
-    "duration": 0,
-    "whatWorked": {
-      "totalSuccessful": 50,
-      "successRate": 1,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 50
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 50
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 50
-        }
-      },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
-    },
-    "whatFailed": {
-      "message": "No failed actions to analyze"
-    },
-    "patterns": [],
-    "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "reduce_drift",
-        "reason": "Drift score 0.333 exceeds threshold"
-      }
-    ],
-    "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.888888888888889,
-      "capabilities": {
-        "reasoning": true,
-        "execution": true,
-        "adaptation": false,
-        "learning": true,
-        "selfAwareness": true
-      },
-      "limitations": [
-        "High drift indicates prediction inconsistency"
-      ],
-      "healthScore": 0.7222222222222223
-    },
-    "adaptations": [
-      {
-        "type": "model_preference",
-        "action": "increase_usage",
-        "target": "unknown",
-        "reason": "High success rate: 1.00"
-      }
-    ]
-  },
-  {
-    "id": "reflection_1784480492756",
-    "timestamp": 1784480492757,
-    "duration": 0,
-    "whatWorked": {
-      "totalSuccessful": 2,
-      "successRate": 0.6666666666666666,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 2
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 2
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 2
-        }
-      },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
-    },
-    "whatFailed": {
-      "totalFailed": 1,
-      "failureRate": 0.3333333333333333,
-      "commonFailures": {
-        "models": {
-          "value": "unknown",
-          "count": 1
-        },
-        "strategies": {
-          "value": "unknown",
-          "count": 1
-        },
-        "types": {
-          "value": "question",
-          "count": 1
-        },
-        "reasons": {
-          "value": "Cannot read properties of undefined (reading 'push')",
-          "count": 1
-        }
-      },
-      "insights": [
-        "Most common failure: Cannot read properties of undefined (reading 'push')"
-      ]
-    },
-    "patterns": [],
-    "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "improve_success_rate",
-        "reason": "Success rate is 0.67"
-      }
-    ],
-    "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.8888888888888888,
-      "capabilities": {
-        "reasoning": true,
-        "execution": false,
-        "adaptation": true,
-        "learning": true,
-        "selfAwareness": true
-      },
-      "limitations": [
-        "Task execution reliability needs improvement"
-      ],
-      "healthScore": 0.7222222222222222
-    },
-    "adaptations": []
-  },
-  {
-    "id": "reflection_1784481367943",
-    "timestamp": 1784481367943,
-    "duration": 0,
-    "whatWorked": {
-      "totalSuccessful": 50,
-      "successRate": 1,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 50
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 50
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 50
-        }
-      },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
-    },
-    "whatFailed": {
-      "message": "No failed actions to analyze"
-    },
-    "patterns": [],
-    "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "reduce_drift",
-        "reason": "Drift score 0.333 exceeds threshold"
-      }
-    ],
-    "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.888888888888889,
-      "capabilities": {
-        "reasoning": true,
-        "execution": true,
-        "adaptation": false,
-        "learning": true,
-        "selfAwareness": true
-      },
-      "limitations": [
-        "High drift indicates prediction inconsistency"
-      ],
-      "healthScore": 0.7222222222222223
-    },
-    "adaptations": [
-      {
-        "type": "model_preference",
-        "action": "increase_usage",
-        "target": "unknown",
-        "reason": "High success rate: 1.00"
-      }
-    ]
-  },
-  {
-    "id": "reflection_1784481392774",
-    "timestamp": 1784481392775,
-    "duration": 0,
-    "whatWorked": {
-      "totalSuccessful": 2,
-      "successRate": 0.6666666666666666,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 2
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 2
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 2
-        }
-      },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
-    },
-    "whatFailed": {
-      "totalFailed": 1,
-      "failureRate": 0.3333333333333333,
-      "commonFailures": {
-        "models": {
-          "value": "unknown",
-          "count": 1
-        },
-        "strategies": {
-          "value": "unknown",
-          "count": 1
-        },
-        "types": {
-          "value": "question",
-          "count": 1
-        },
-        "reasons": {
-          "value": "Cannot read properties of undefined (reading 'push')",
-          "count": 1
-        }
-      },
-      "insights": [
-        "Most common failure: Cannot read properties of undefined (reading 'push')"
-      ]
-    },
-    "patterns": [],
-    "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "improve_success_rate",
-        "reason": "Success rate is 0.67"
-      }
-    ],
-    "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.8888888888888888,
-      "capabilities": {
-        "reasoning": true,
-        "execution": false,
-        "adaptation": true,
-        "learning": true,
-        "selfAwareness": true
-      },
-      "limitations": [
-        "Task execution reliability needs improvement"
-      ],
-      "healthScore": 0.7222222222222222
-    },
-    "adaptations": []
-  },
-  {
-    "id": "reflection_1784482267974",
-    "timestamp": 1784482267975,
-    "duration": 0,
-    "whatWorked": {
-      "totalSuccessful": 50,
-      "successRate": 1,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 50
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 50
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 50
-        }
-      },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
-    },
-    "whatFailed": {
-      "message": "No failed actions to analyze"
-    },
-    "patterns": [],
-    "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "reduce_drift",
-        "reason": "Drift score 0.333 exceeds threshold"
-      }
-    ],
-    "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.888888888888889,
-      "capabilities": {
-        "reasoning": true,
-        "execution": true,
-        "adaptation": false,
-        "learning": true,
-        "selfAwareness": true
-      },
-      "limitations": [
-        "High drift indicates prediction inconsistency"
-      ],
-      "healthScore": 0.7222222222222223
-    },
-    "adaptations": [
-      {
-        "type": "model_preference",
-        "action": "increase_usage",
-        "target": "unknown",
-        "reason": "High success rate: 1.00"
-      }
-    ]
-  },
-  {
-    "id": "reflection_1784482292785",
-    "timestamp": 1784482292785,
-    "duration": 0,
-    "whatWorked": {
-      "totalSuccessful": 2,
-      "successRate": 0.6666666666666666,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 2
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 2
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 2
-        }
-      },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
-    },
-    "whatFailed": {
-      "totalFailed": 1,
-      "failureRate": 0.3333333333333333,
-      "commonFailures": {
-        "models": {
-          "value": "unknown",
-          "count": 1
-        },
-        "strategies": {
-          "value": "unknown",
-          "count": 1
-        },
-        "types": {
-          "value": "question",
-          "count": 1
-        },
-        "reasons": {
-          "value": "Cannot read properties of undefined (reading 'push')",
-          "count": 1
-        }
-      },
-      "insights": [
-        "Most common failure: Cannot read properties of undefined (reading 'push')"
-      ]
-    },
-    "patterns": [],
-    "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "improve_success_rate",
-        "reason": "Success rate is 0.67"
-      }
-    ],
-    "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.8888888888888888,
-      "capabilities": {
-        "reasoning": true,
-        "execution": false,
-        "adaptation": true,
-        "learning": true,
-        "selfAwareness": true
-      },
-      "limitations": [
-        "Task execution reliability needs improvement"
-      ],
-      "healthScore": 0.7222222222222222
-    },
-    "adaptations": []
-  },
-  {
-    "id": "reflection_1784483167991",
-    "timestamp": 1784483167992,
-    "duration": 0,
-    "whatWorked": {
-      "totalSuccessful": 50,
-      "successRate": 1,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 50
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 50
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 50
-        }
-      },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
-    },
-    "whatFailed": {
-      "message": "No failed actions to analyze"
-    },
-    "patterns": [],
-    "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "reduce_drift",
-        "reason": "Drift score 0.333 exceeds threshold"
-      }
-    ],
-    "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.888888888888889,
-      "capabilities": {
-        "reasoning": true,
-        "execution": true,
-        "adaptation": false,
-        "learning": true,
-        "selfAwareness": true
-      },
-      "limitations": [
-        "High drift indicates prediction inconsistency"
-      ],
-      "healthScore": 0.7222222222222223
-    },
-    "adaptations": [
-      {
-        "type": "model_preference",
-        "action": "increase_usage",
-        "target": "unknown",
-        "reason": "High success rate: 1.00"
-      }
-    ]
-  },
-  {
-    "id": "reflection_1784483192799",
-    "timestamp": 1784483192800,
-    "duration": 0,
-    "whatWorked": {
-      "totalSuccessful": 2,
-      "successRate": 0.6666666666666666,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 2
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 2
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 2
-        }
-      },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
-    },
-    "whatFailed": {
-      "totalFailed": 1,
-      "failureRate": 0.3333333333333333,
-      "commonFailures": {
-        "models": {
-          "value": "unknown",
-          "count": 1
-        },
-        "strategies": {
-          "value": "unknown",
-          "count": 1
-        },
-        "types": {
-          "value": "question",
-          "count": 1
-        },
-        "reasons": {
-          "value": "Cannot read properties of undefined (reading 'push')",
-          "count": 1
-        }
-      },
-      "insights": [
-        "Most common failure: Cannot read properties of undefined (reading 'push')"
-      ]
-    },
-    "patterns": [],
-    "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "improve_success_rate",
-        "reason": "Success rate is 0.67"
-      }
-    ],
-    "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.8888888888888888,
-      "capabilities": {
-        "reasoning": true,
-        "execution": false,
-        "adaptation": true,
-        "learning": true,
-        "selfAwareness": true
-      },
-      "limitations": [
-        "Task execution reliability needs improvement"
-      ],
-      "healthScore": 0.7222222222222222
-    },
-    "adaptations": []
-  },
-  {
-    "id": "reflection_1784484068006",
-    "timestamp": 1784484068007,
-    "duration": 0,
-    "whatWorked": {
-      "totalSuccessful": 50,
-      "successRate": 1,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 50
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 50
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 50
-        }
-      },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
-    },
-    "whatFailed": {
-      "message": "No failed actions to analyze"
-    },
-    "patterns": [],
-    "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "reduce_drift",
-        "reason": "Drift score 0.333 exceeds threshold"
-      }
-    ],
-    "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.888888888888889,
-      "capabilities": {
-        "reasoning": true,
-        "execution": true,
-        "adaptation": false,
-        "learning": true,
-        "selfAwareness": true
-      },
-      "limitations": [
-        "High drift indicates prediction inconsistency"
-      ],
-      "healthScore": 0.7222222222222223
-    },
-    "adaptations": [
-      {
-        "type": "model_preference",
-        "action": "increase_usage",
-        "target": "unknown",
-        "reason": "High success rate: 1.00"
-      }
-    ]
-  },
-  {
-    "id": "reflection_1784484092847",
-    "timestamp": 1784484092848,
-    "duration": 0,
-    "whatWorked": {
-      "totalSuccessful": 2,
-      "successRate": 0.6666666666666666,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 2
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 2
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 2
-        }
-      },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
-    },
-    "whatFailed": {
-      "totalFailed": 1,
-      "failureRate": 0.3333333333333333,
-      "commonFailures": {
-        "models": {
-          "value": "unknown",
-          "count": 1
-        },
-        "strategies": {
-          "value": "unknown",
-          "count": 1
-        },
-        "types": {
-          "value": "question",
-          "count": 1
-        },
-        "reasons": {
-          "value": "Cannot read properties of undefined (reading 'push')",
-          "count": 1
-        }
-      },
-      "insights": [
-        "Most common failure: Cannot read properties of undefined (reading 'push')"
-      ]
-    },
-    "patterns": [],
-    "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "improve_success_rate",
-        "reason": "Success rate is 0.67"
-      }
-    ],
-    "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.8888888888888888,
-      "capabilities": {
-        "reasoning": true,
-        "execution": false,
-        "adaptation": true,
-        "learning": true,
-        "selfAwareness": true
-      },
-      "limitations": [
-        "Task execution reliability needs improvement"
-      ],
-      "healthScore": 0.7222222222222222
-    },
-    "adaptations": []
-  },
-  {
-    "id": "reflection_1784484968050",
-    "timestamp": 1784484968050,
+    "id": "reflection_1789048356545",
+    "timestamp": 1789048356545,
     "duration": 1,
     "whatWorked": {
-      "totalSuccessful": 50,
-      "successRate": 1,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 50
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 50
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 50
-        }
-      },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
+      "message": "No successful actions to analyze"
     },
     "whatFailed": {
       "message": "No failed actions to analyze"
     },
     "patterns": [],
     "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "reduce_drift",
-        "reason": "Drift score 0.333 exceeds threshold"
-      }
-    ],
+    "recommendations": [],
     "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.888888888888889,
+      "overallLevel": "critical",
+      "confidence": 0.3333333333333333,
       "capabilities": {
-        "reasoning": true,
-        "execution": true,
-        "adaptation": false,
+        "reasoning": false,
+        "execution": false,
+        "adaptation": true,
         "learning": true,
         "selfAwareness": true
       },
       "limitations": [
-        "High drift indicates prediction inconsistency"
+        "Task execution reliability needs improvement"
       ],
-      "healthScore": 0.7222222222222223
+      "healthScore": 0.5
     },
-    "adaptations": [
-      {
-        "type": "model_preference",
-        "action": "increase_usage",
-        "target": "unknown",
-        "reason": "High success rate: 1.00"
-      }
-    ]
+    "adaptations": []
   },
   {
-    "id": "reflection_1784484992858",
-    "timestamp": 1784484992858,
-    "duration": 0,
+    "id": "reflection_1789049033357",
+    "timestamp": 1789049033358,
+    "duration": 1,
     "whatWorked": {
-      "totalSuccessful": 2,
-      "successRate": 0.6666666666666666,
+      "totalSuccessful": 1,
+      "successRate": 0.05,
       "topPerformers": {
         "model": {
-          "value": "unknown",
-          "count": 2
+          "value": "gpt-35-turbo",
+          "count": 1
         },
         "strategy": {
-          "value": "unknown",
-          "count": 2
+          "value": "local",
+          "count": 1
         },
         "type": {
-          "value": "core_loop",
-          "count": 2
+          "value": "observation",
+          "count": 1
         }
       },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
+      "insights": []
     },
     "whatFailed": {
-      "totalFailed": 1,
-      "failureRate": 0.3333333333333333,
+      "totalFailed": 19,
+      "failureRate": 0.95,
       "commonFailures": {
         "models": {
           "value": "unknown",
-          "count": 1
+          "count": 17
         },
         "strategies": {
           "value": "unknown",
-          "count": 1
+          "count": 17
         },
         "types": {
-          "value": "question",
-          "count": 1
+          "value": "core_loop",
+          "count": 17
         },
         "reasons": {
-          "value": "Cannot read properties of undefined (reading 'push')",
-          "count": 1
+          "value": "low_confidence",
+          "count": 14
         }
       },
       "insights": [
-        "Most common failure: Cannot read properties of undefined (reading 'push')"
+        "Most common failure: low_confidence"
       ]
     },
-    "patterns": [],
+    "patterns": [
+      {
+        "type": "temporal",
+        "pattern": "low_success_hour",
+        "hour": 8,
+        "successRate": 0.05,
+        "recommendation": "avoid_actions_during_hour"
+      },
+      {
+        "type": "cost",
+        "pattern": "high_cost_actions",
+        "percentage": 0.15,
+        "avgCost": 0.0015,
+        "recommendation": "reduce_expensive_actions"
+      },
+      {
+        "type": "model",
+        "pattern": "low_model_performance",
+        "model": "unknown",
+        "successRate": 0,
+        "recommendation": "reduce_model_usage"
+      },
+      {
+        "type": "model",
+        "pattern": "low_model_performance",
+        "model": "gpt-4-local",
+        "successRate": 0,
+        "recommendation": "reduce_model_usage"
+      }
+    ],
     "contradictions": [],
     "recommendations": [
       {
         "priority": "high",
         "action": "improve_success_rate",
-        "reason": "Success rate is 0.67"
+        "reason": "Success rate is 0.05"
+      },
+      {
+        "priority": "high",
+        "action": "reduce_drift",
+        "reason": "Drift score 0.390 exceeds threshold"
       }
     ],
     "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.8888888888888888,
+      "overallLevel": "critical",
+      "confidence": 0.52,
+      "capabilities": {
+        "reasoning": true,
+        "execution": false,
+        "adaptation": false,
+        "learning": true,
+        "selfAwareness": true
+      },
+      "limitations": [
+        "High drift indicates prediction inconsistency",
+        "Task execution reliability needs improvement"
+      ],
+      "healthScore": 0.3866666666666667
+    },
+    "adaptations": [
+      {
+        "type": "model_preference",
+        "action": "increase_usage",
+        "target": "gpt-35-turbo",
+        "reason": "High success rate: 1.00"
+      },
+      {
+        "type": "model_preference",
+        "action": "decrease_usage",
+        "target": "unknown",
+        "reason": "Low success rate: 0.00"
+      },
+      {
+        "type": "model_preference",
+        "action": "decrease_usage",
+        "target": "gpt-4-local",
+        "reason": "Low success rate: 0.00"
+      }
+    ]
+  },
+  {
+    "id": "reflection_1789049256610",
+    "timestamp": 1789049256611,
+    "duration": 1,
+    "whatWorked": {
+      "totalSuccessful": 1,
+      "successRate": 0.125,
+      "topPerformers": {
+        "model": {
+          "value": "gpt-35-turbo",
+          "count": 1
+        },
+        "strategy": {
+          "value": "local",
+          "count": 1
+        },
+        "type": {
+          "value": "observation",
+          "count": 1
+        }
+      },
+      "insights": []
+    },
+    "whatFailed": {
+      "totalFailed": 7,
+      "failureRate": 0.875,
+      "commonFailures": {
+        "models": {
+          "value": "unknown",
+          "count": 6
+        },
+        "strategies": {
+          "value": "unknown",
+          "count": 6
+        },
+        "types": {
+          "value": "core_loop",
+          "count": 6
+        },
+        "reasons": {
+          "value": "low_confidence",
+          "count": 4
+        }
+      },
+      "insights": [
+        "Most common failure: low_confidence"
+      ]
+    },
+    "patterns": [
+      {
+        "type": "temporal",
+        "pattern": "low_success_hour",
+        "hour": 8,
+        "successRate": 0.16666666666666666,
+        "recommendation": "avoid_actions_during_hour"
+      },
+      {
+        "type": "temporal",
+        "pattern": "low_success_hour",
+        "hour": 9,
+        "successRate": 0,
+        "recommendation": "avoid_actions_during_hour"
+      },
+      {
+        "type": "performance",
+        "pattern": "high_latency",
+        "percentage": 0.25,
+        "avgLatency": 8990.375,
+        "recommendation": "optimize_execution_speed"
+      },
+      {
+        "type": "cost",
+        "pattern": "high_cost_actions",
+        "percentage": 0.25,
+        "avgCost": 0.0025,
+        "recommendation": "reduce_expensive_actions"
+      },
+      {
+        "type": "model",
+        "pattern": "low_model_performance",
+        "model": "unknown",
+        "successRate": 0,
+        "recommendation": "reduce_model_usage"
+      },
+      {
+        "type": "model",
+        "pattern": "low_model_performance",
+        "model": "gpt-4-local",
+        "successRate": 0,
+        "recommendation": "reduce_model_usage"
+      }
+    ],
+    "contradictions": [],
+    "recommendations": [
+      {
+        "priority": "high",
+        "action": "improve_success_rate",
+        "reason": "Success rate is 0.13"
+      }
+    ],
+    "selfAssessment": {
+      "overallLevel": "critical",
+      "confidence": 0.6666666666666666,
       "capabilities": {
         "reasoning": true,
         "execution": false,
@@ -5694,135 +893,185 @@
       "limitations": [
         "Task execution reliability needs improvement"
       ],
-      "healthScore": 0.7222222222222222
+      "healthScore": 0.5416666666666666
     },
-    "adaptations": []
+    "adaptations": [
+      {
+        "type": "model_preference",
+        "action": "increase_usage",
+        "target": "gpt-35-turbo",
+        "reason": "High success rate: 1.00"
+      },
+      {
+        "type": "model_preference",
+        "action": "decrease_usage",
+        "target": "unknown",
+        "reason": "Low success rate: 0.00"
+      },
+      {
+        "type": "model_preference",
+        "action": "decrease_usage",
+        "target": "gpt-4-local",
+        "reason": "Low success rate: 0.00"
+      }
+    ]
   },
   {
-    "id": "reflection_1784485868054",
-    "timestamp": 1784485868054,
-    "duration": 0,
+    "id": "reflection_1789049752612",
+    "timestamp": 1789049752612,
+    "duration": 2,
     "whatWorked": {
-      "totalSuccessful": 50,
-      "successRate": 1,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 50
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 50
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 50
-        }
-      },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
+      "message": "No successful actions to analyze"
     },
     "whatFailed": {
       "message": "No failed actions to analyze"
     },
     "patterns": [],
     "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "reduce_drift",
-        "reason": "Drift score 0.333 exceeds threshold"
-      }
-    ],
+    "recommendations": [],
     "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.888888888888889,
+      "overallLevel": "critical",
+      "confidence": 0.3333333333333333,
       "capabilities": {
-        "reasoning": true,
-        "execution": true,
-        "adaptation": false,
+        "reasoning": false,
+        "execution": false,
+        "adaptation": true,
         "learning": true,
         "selfAwareness": true
       },
       "limitations": [
-        "High drift indicates prediction inconsistency"
+        "Task execution reliability needs improvement"
       ],
-      "healthScore": 0.7222222222222223
+      "healthScore": 0.5
     },
-    "adaptations": [
-      {
-        "type": "model_preference",
-        "action": "increase_usage",
-        "target": "unknown",
-        "reason": "High success rate: 1.00"
-      }
-    ]
+    "adaptations": []
   },
   {
-    "id": "reflection_1784485892953",
-    "timestamp": 1784485892953,
-    "duration": 0,
+    "id": "reflection_1789049838465",
+    "timestamp": 1789049838466,
+    "duration": 1,
     "whatWorked": {
-      "totalSuccessful": 2,
-      "successRate": 0.6666666666666666,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 2
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 2
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 2
-        }
-      },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
+      "message": "No successful actions to analyze"
     },
     "whatFailed": {
-      "totalFailed": 1,
-      "failureRate": 0.3333333333333333,
+      "message": "No failed actions to analyze"
+    },
+    "patterns": [],
+    "contradictions": [],
+    "recommendations": [],
+    "selfAssessment": {
+      "overallLevel": "critical",
+      "confidence": 0.3333333333333333,
+      "capabilities": {
+        "reasoning": false,
+        "execution": false,
+        "adaptation": true,
+        "learning": true,
+        "selfAwareness": true
+      },
+      "limitations": [
+        "Task execution reliability needs improvement"
+      ],
+      "healthScore": 0.5
+    },
+    "adaptations": []
+  },
+  {
+    "id": "reflection_1789050738543",
+    "timestamp": 1789050738544,
+    "duration": 1,
+    "whatWorked": {
+      "totalSuccessful": 1,
+      "successRate": 0.125,
+      "topPerformers": {
+        "model": {
+          "value": "gpt-35-turbo",
+          "count": 1
+        },
+        "strategy": {
+          "value": "local",
+          "count": 1
+        },
+        "type": {
+          "value": "observation",
+          "count": 1
+        }
+      },
+      "insights": []
+    },
+    "whatFailed": {
+      "totalFailed": 7,
+      "failureRate": 0.875,
       "commonFailures": {
         "models": {
           "value": "unknown",
-          "count": 1
+          "count": 6
         },
         "strategies": {
           "value": "unknown",
-          "count": 1
+          "count": 6
         },
         "types": {
-          "value": "question",
-          "count": 1
+          "value": "core_loop",
+          "count": 6
         },
         "reasons": {
-          "value": "Cannot read properties of undefined (reading 'push')",
-          "count": 1
+          "value": "low_confidence",
+          "count": 4
         }
       },
       "insights": [
-        "Most common failure: Cannot read properties of undefined (reading 'push')"
+        "Most common failure: low_confidence"
       ]
     },
-    "patterns": [],
+    "patterns": [
+      {
+        "type": "temporal",
+        "pattern": "low_success_hour",
+        "hour": 9,
+        "successRate": 0.125,
+        "recommendation": "avoid_actions_during_hour"
+      },
+      {
+        "type": "performance",
+        "pattern": "high_latency",
+        "percentage": 0.25,
+        "avgLatency": 7889.375,
+        "recommendation": "optimize_execution_speed"
+      },
+      {
+        "type": "cost",
+        "pattern": "high_cost_actions",
+        "percentage": 0.25,
+        "avgCost": 0.0025,
+        "recommendation": "reduce_expensive_actions"
+      },
+      {
+        "type": "model",
+        "pattern": "low_model_performance",
+        "model": "unknown",
+        "successRate": 0,
+        "recommendation": "reduce_model_usage"
+      },
+      {
+        "type": "model",
+        "pattern": "low_model_performance",
+        "model": "gpt-4-local",
+        "successRate": 0,
+        "recommendation": "reduce_model_usage"
+      }
+    ],
     "contradictions": [],
     "recommendations": [
       {
         "priority": "high",
         "action": "improve_success_rate",
-        "reason": "Success rate is 0.67"
+        "reason": "Success rate is 0.13"
       }
     ],
     "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.8888888888888888,
+      "overallLevel": "critical",
+      "confidence": 0.6666666666666666,
       "capabilities": {
         "reasoning": true,
         "execution": false,
@@ -5833,33 +1082,51 @@
       "limitations": [
         "Task execution reliability needs improvement"
       ],
-      "healthScore": 0.7222222222222222
+      "healthScore": 0.5416666666666666
     },
-    "adaptations": []
+    "adaptations": [
+      {
+        "type": "model_preference",
+        "action": "increase_usage",
+        "target": "gpt-35-turbo",
+        "reason": "High success rate: 1.00"
+      },
+      {
+        "type": "model_preference",
+        "action": "decrease_usage",
+        "target": "unknown",
+        "reason": "Low success rate: 0.00"
+      },
+      {
+        "type": "model_preference",
+        "action": "decrease_usage",
+        "target": "gpt-4-local",
+        "reason": "Low success rate: 0.00"
+      }
+    ]
   },
   {
-    "id": "reflection_1784486768069",
-    "timestamp": 1784486768069,
+    "id": "reflection_1789066143093",
+    "timestamp": 1789066143093,
     "duration": 0,
     "whatWorked": {
-      "totalSuccessful": 50,
+      "totalSuccessful": 15,
       "successRate": 1,
       "topPerformers": {
         "model": {
-          "value": "unknown",
-          "count": 50
+          "value": "test-model",
+          "count": 15
         },
         "strategy": {
           "value": "unknown",
-          "count": 50
+          "count": 15
         },
         "type": {
-          "value": "core_loop",
-          "count": 50
+          "value": "test_action",
+          "count": 15
         }
       },
       "insights": [
-        "High confidence strongly correlates with success",
         "Fast execution correlates with success"
       ]
     },
@@ -5868,1085 +1135,31 @@
     },
     "patterns": [],
     "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "reduce_drift",
-        "reason": "Drift score 0.333 exceeds threshold"
-      }
-    ],
+    "recommendations": [],
     "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.888888888888889,
+      "overallLevel": "operational",
+      "confidence": 1,
       "capabilities": {
         "reasoning": true,
         "execution": true,
-        "adaptation": false,
+        "adaptation": true,
         "learning": true,
         "selfAwareness": true
       },
-      "limitations": [
-        "High drift indicates prediction inconsistency"
-      ],
-      "healthScore": 0.7222222222222223
+      "limitations": [],
+      "healthScore": 0.8333333333333334
     },
     "adaptations": [
       {
         "type": "model_preference",
         "action": "increase_usage",
-        "target": "unknown",
+        "target": "test-model",
         "reason": "High success rate: 1.00"
       }
     ]
-  },
-  {
-    "id": "reflection_1784486792966",
-    "timestamp": 1784486792966,
-    "duration": 0,
-    "whatWorked": {
-      "totalSuccessful": 2,
-      "successRate": 0.6666666666666666,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 2
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 2
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 2
-        }
-      },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
-    },
-    "whatFailed": {
-      "totalFailed": 1,
-      "failureRate": 0.3333333333333333,
-      "commonFailures": {
-        "models": {
-          "value": "unknown",
-          "count": 1
-        },
-        "strategies": {
-          "value": "unknown",
-          "count": 1
-        },
-        "types": {
-          "value": "question",
-          "count": 1
-        },
-        "reasons": {
-          "value": "Cannot read properties of undefined (reading 'push')",
-          "count": 1
-        }
-      },
-      "insights": [
-        "Most common failure: Cannot read properties of undefined (reading 'push')"
-      ]
-    },
-    "patterns": [],
-    "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "improve_success_rate",
-        "reason": "Success rate is 0.67"
-      }
-    ],
-    "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.8888888888888888,
-      "capabilities": {
-        "reasoning": true,
-        "execution": false,
-        "adaptation": true,
-        "learning": true,
-        "selfAwareness": true
-      },
-      "limitations": [
-        "Task execution reliability needs improvement"
-      ],
-      "healthScore": 0.7222222222222222
-    },
-    "adaptations": []
-  },
-  {
-    "id": "reflection_1784487668085",
-    "timestamp": 1784487668085,
-    "duration": 0,
-    "whatWorked": {
-      "totalSuccessful": 50,
-      "successRate": 1,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 50
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 50
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 50
-        }
-      },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
-    },
-    "whatFailed": {
-      "message": "No failed actions to analyze"
-    },
-    "patterns": [],
-    "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "reduce_drift",
-        "reason": "Drift score 0.333 exceeds threshold"
-      }
-    ],
-    "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.888888888888889,
-      "capabilities": {
-        "reasoning": true,
-        "execution": true,
-        "adaptation": false,
-        "learning": true,
-        "selfAwareness": true
-      },
-      "limitations": [
-        "High drift indicates prediction inconsistency"
-      ],
-      "healthScore": 0.7222222222222223
-    },
-    "adaptations": [
-      {
-        "type": "model_preference",
-        "action": "increase_usage",
-        "target": "unknown",
-        "reason": "High success rate: 1.00"
+  }
+]     "reason": "High success rate: 1.00"
       }
     ]
-  },
-  {
-    "id": "reflection_1784487692979",
-    "timestamp": 1784487692980,
-    "duration": 0,
-    "whatWorked": {
-      "totalSuccessful": 2,
-      "successRate": 0.6666666666666666,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 2
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 2
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 2
-        }
-      },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
-    },
-    "whatFailed": {
-      "totalFailed": 1,
-      "failureRate": 0.3333333333333333,
-      "commonFailures": {
-        "models": {
-          "value": "unknown",
-          "count": 1
-        },
-        "strategies": {
-          "value": "unknown",
-          "count": 1
-        },
-        "types": {
-          "value": "question",
-          "count": 1
-        },
-        "reasons": {
-          "value": "Cannot read properties of undefined (reading 'push')",
-          "count": 1
-        }
-      },
-      "insights": [
-        "Most common failure: Cannot read properties of undefined (reading 'push')"
-      ]
-    },
-    "patterns": [],
-    "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "improve_success_rate",
-        "reason": "Success rate is 0.67"
-      }
-    ],
-    "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.8888888888888888,
-      "capabilities": {
-        "reasoning": true,
-        "execution": false,
-        "adaptation": true,
-        "learning": true,
-        "selfAwareness": true
-      },
-      "limitations": [
-        "Task execution reliability needs improvement"
-      ],
-      "healthScore": 0.7222222222222222
-    },
-    "adaptations": []
-  },
-  {
-    "id": "reflection_1784488568101",
-    "timestamp": 1784488568101,
-    "duration": 0,
-    "whatWorked": {
-      "totalSuccessful": 50,
-      "successRate": 1,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 50
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 50
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 50
-        }
-      },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
-    },
-    "whatFailed": {
-      "message": "No failed actions to analyze"
-    },
-    "patterns": [],
-    "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "reduce_drift",
-        "reason": "Drift score 0.333 exceeds threshold"
-      }
-    ],
-    "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.888888888888889,
-      "capabilities": {
-        "reasoning": true,
-        "execution": true,
-        "adaptation": false,
-        "learning": true,
-        "selfAwareness": true
-      },
-      "limitations": [
-        "High drift indicates prediction inconsistency"
-      ],
-      "healthScore": 0.7222222222222223
-    },
-    "adaptations": [
-      {
-        "type": "model_preference",
-        "action": "increase_usage",
-        "target": "unknown",
-        "reason": "High success rate: 1.00"
-      }
-    ]
-  },
-  {
-    "id": "reflection_1784488593006",
-    "timestamp": 1784488593006,
-    "duration": 0,
-    "whatWorked": {
-      "totalSuccessful": 2,
-      "successRate": 0.6666666666666666,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 2
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 2
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 2
-        }
-      },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
-    },
-    "whatFailed": {
-      "totalFailed": 1,
-      "failureRate": 0.3333333333333333,
-      "commonFailures": {
-        "models": {
-          "value": "unknown",
-          "count": 1
-        },
-        "strategies": {
-          "value": "unknown",
-          "count": 1
-        },
-        "types": {
-          "value": "question",
-          "count": 1
-        },
-        "reasons": {
-          "value": "Cannot read properties of undefined (reading 'push')",
-          "count": 1
-        }
-      },
-      "insights": [
-        "Most common failure: Cannot read properties of undefined (reading 'push')"
-      ]
-    },
-    "patterns": [],
-    "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "improve_success_rate",
-        "reason": "Success rate is 0.67"
-      }
-    ],
-    "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.8888888888888888,
-      "capabilities": {
-        "reasoning": true,
-        "execution": false,
-        "adaptation": true,
-        "learning": true,
-        "selfAwareness": true
-      },
-      "limitations": [
-        "Task execution reliability needs improvement"
-      ],
-      "healthScore": 0.7222222222222222
-    },
-    "adaptations": []
-  },
-  {
-    "id": "reflection_1784489468116",
-    "timestamp": 1784489468117,
-    "duration": 0,
-    "whatWorked": {
-      "totalSuccessful": 50,
-      "successRate": 1,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 50
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 50
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 50
-        }
-      },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
-    },
-    "whatFailed": {
-      "message": "No failed actions to analyze"
-    },
-    "patterns": [],
-    "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "reduce_drift",
-        "reason": "Drift score 0.333 exceeds threshold"
-      }
-    ],
-    "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.888888888888889,
-      "capabilities": {
-        "reasoning": true,
-        "execution": true,
-        "adaptation": false,
-        "learning": true,
-        "selfAwareness": true
-      },
-      "limitations": [
-        "High drift indicates prediction inconsistency"
-      ],
-      "healthScore": 0.7222222222222223
-    },
-    "adaptations": [
-      {
-        "type": "model_preference",
-        "action": "increase_usage",
-        "target": "unknown",
-        "reason": "High success rate: 1.00"
-      }
-    ]
-  },
-  {
-    "id": "reflection_1784489493021",
-    "timestamp": 1784489493021,
-    "duration": 0,
-    "whatWorked": {
-      "totalSuccessful": 2,
-      "successRate": 0.6666666666666666,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 2
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 2
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 2
-        }
-      },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
-    },
-    "whatFailed": {
-      "totalFailed": 1,
-      "failureRate": 0.3333333333333333,
-      "commonFailures": {
-        "models": {
-          "value": "unknown",
-          "count": 1
-        },
-        "strategies": {
-          "value": "unknown",
-          "count": 1
-        },
-        "types": {
-          "value": "question",
-          "count": 1
-        },
-        "reasons": {
-          "value": "Cannot read properties of undefined (reading 'push')",
-          "count": 1
-        }
-      },
-      "insights": [
-        "Most common failure: Cannot read properties of undefined (reading 'push')"
-      ]
-    },
-    "patterns": [],
-    "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "improve_success_rate",
-        "reason": "Success rate is 0.67"
-      }
-    ],
-    "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.8888888888888888,
-      "capabilities": {
-        "reasoning": true,
-        "execution": false,
-        "adaptation": true,
-        "learning": true,
-        "selfAwareness": true
-      },
-      "limitations": [
-        "Task execution reliability needs improvement"
-      ],
-      "healthScore": 0.7222222222222222
-    },
-    "adaptations": []
-  },
-  {
-    "id": "reflection_1784490368127",
-    "timestamp": 1784490368127,
-    "duration": 0,
-    "whatWorked": {
-      "totalSuccessful": 50,
-      "successRate": 1,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 50
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 50
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 50
-        }
-      },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
-    },
-    "whatFailed": {
-      "message": "No failed actions to analyze"
-    },
-    "patterns": [],
-    "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "reduce_drift",
-        "reason": "Drift score 0.333 exceeds threshold"
-      }
-    ],
-    "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.888888888888889,
-      "capabilities": {
-        "reasoning": true,
-        "execution": true,
-        "adaptation": false,
-        "learning": true,
-        "selfAwareness": true
-      },
-      "limitations": [
-        "High drift indicates prediction inconsistency"
-      ],
-      "healthScore": 0.7222222222222223
-    },
-    "adaptations": [
-      {
-        "type": "model_preference",
-        "action": "increase_usage",
-        "target": "unknown",
-        "reason": "High success rate: 1.00"
-      }
-    ]
-  },
-  {
-    "id": "reflection_1784490393036",
-    "timestamp": 1784490393036,
-    "duration": 0,
-    "whatWorked": {
-      "totalSuccessful": 2,
-      "successRate": 0.6666666666666666,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 2
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 2
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 2
-        }
-      },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
-    },
-    "whatFailed": {
-      "totalFailed": 1,
-      "failureRate": 0.3333333333333333,
-      "commonFailures": {
-        "models": {
-          "value": "unknown",
-          "count": 1
-        },
-        "strategies": {
-          "value": "unknown",
-          "count": 1
-        },
-        "types": {
-          "value": "question",
-          "count": 1
-        },
-        "reasons": {
-          "value": "Cannot read properties of undefined (reading 'push')",
-          "count": 1
-        }
-      },
-      "insights": [
-        "Most common failure: Cannot read properties of undefined (reading 'push')"
-      ]
-    },
-    "patterns": [],
-    "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "improve_success_rate",
-        "reason": "Success rate is 0.67"
-      }
-    ],
-    "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.8888888888888888,
-      "capabilities": {
-        "reasoning": true,
-        "execution": false,
-        "adaptation": true,
-        "learning": true,
-        "selfAwareness": true
-      },
-      "limitations": [
-        "Task execution reliability needs improvement"
-      ],
-      "healthScore": 0.7222222222222222
-    },
-    "adaptations": []
-  },
-  {
-    "id": "reflection_1784491268362",
-    "timestamp": 1784491268408,
-    "duration": 0,
-    "whatWorked": {
-      "totalSuccessful": 50,
-      "successRate": 1,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 50
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 50
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 50
-        }
-      },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
-    },
-    "whatFailed": {
-      "message": "No failed actions to analyze"
-    },
-    "patterns": [],
-    "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "reduce_drift",
-        "reason": "Drift score 0.333 exceeds threshold"
-      }
-    ],
-    "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.888888888888889,
-      "capabilities": {
-        "reasoning": true,
-        "execution": true,
-        "adaptation": false,
-        "learning": true,
-        "selfAwareness": true
-      },
-      "limitations": [
-        "High drift indicates prediction inconsistency"
-      ],
-      "healthScore": 0.7222222222222223
-    },
-    "adaptations": [
-      {
-        "type": "model_preference",
-        "action": "increase_usage",
-        "target": "unknown",
-        "reason": "High success rate: 1.00"
-      }
-    ]
-  },
-  {
-    "id": "reflection_1784491293040",
-    "timestamp": 1784491293040,
-    "duration": 0,
-    "whatWorked": {
-      "totalSuccessful": 2,
-      "successRate": 0.6666666666666666,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 2
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 2
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 2
-        }
-      },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
-    },
-    "whatFailed": {
-      "totalFailed": 1,
-      "failureRate": 0.3333333333333333,
-      "commonFailures": {
-        "models": {
-          "value": "unknown",
-          "count": 1
-        },
-        "strategies": {
-          "value": "unknown",
-          "count": 1
-        },
-        "types": {
-          "value": "question",
-          "count": 1
-        },
-        "reasons": {
-          "value": "Cannot read properties of undefined (reading 'push')",
-          "count": 1
-        }
-      },
-      "insights": [
-        "Most common failure: Cannot read properties of undefined (reading 'push')"
-      ]
-    },
-    "patterns": [],
-    "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "improve_success_rate",
-        "reason": "Success rate is 0.67"
-      }
-    ],
-    "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.8888888888888888,
-      "capabilities": {
-        "reasoning": true,
-        "execution": false,
-        "adaptation": true,
-        "learning": true,
-        "selfAwareness": true
-      },
-      "limitations": [
-        "Task execution reliability needs improvement"
-      ],
-      "healthScore": 0.7222222222222222
-    },
-    "adaptations": []
-  },
-  {
-    "id": "reflection_1784492168786",
-    "timestamp": 1784492168787,
-    "duration": 0,
-    "whatWorked": {
-      "totalSuccessful": 50,
-      "successRate": 1,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 50
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 50
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 50
-        }
-      },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
-    },
-    "whatFailed": {
-      "message": "No failed actions to analyze"
-    },
-    "patterns": [],
-    "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "reduce_drift",
-        "reason": "Drift score 0.333 exceeds threshold"
-      }
-    ],
-    "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.888888888888889,
-      "capabilities": {
-        "reasoning": true,
-        "execution": true,
-        "adaptation": false,
-        "learning": true,
-        "selfAwareness": true
-      },
-      "limitations": [
-        "High drift indicates prediction inconsistency"
-      ],
-      "healthScore": 0.7222222222222223
-    },
-    "adaptations": [
-      {
-        "type": "model_preference",
-        "action": "increase_usage",
-        "target": "unknown",
-        "reason": "High success rate: 1.00"
-      }
-    ]
-  },
-  {
-    "id": "reflection_1784492193069",
-    "timestamp": 1784492193069,
-    "duration": 0,
-    "whatWorked": {
-      "totalSuccessful": 2,
-      "successRate": 0.6666666666666666,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 2
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 2
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 2
-        }
-      },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
-    },
-    "whatFailed": {
-      "totalFailed": 1,
-      "failureRate": 0.3333333333333333,
-      "commonFailures": {
-        "models": {
-          "value": "unknown",
-          "count": 1
-        },
-        "strategies": {
-          "value": "unknown",
-          "count": 1
-        },
-        "types": {
-          "value": "question",
-          "count": 1
-        },
-        "reasons": {
-          "value": "Cannot read properties of undefined (reading 'push')",
-          "count": 1
-        }
-      },
-      "insights": [
-        "Most common failure: Cannot read properties of undefined (reading 'push')"
-      ]
-    },
-    "patterns": [],
-    "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "improve_success_rate",
-        "reason": "Success rate is 0.67"
-      }
-    ],
-    "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.8888888888888888,
-      "capabilities": {
-        "reasoning": true,
-        "execution": false,
-        "adaptation": true,
-        "learning": true,
-        "selfAwareness": true
-      },
-      "limitations": [
-        "Task execution reliability needs improvement"
-      ],
-      "healthScore": 0.7222222222222222
-    },
-    "adaptations": []
-  },
-  {
-    "id": "reflection_1784493068943",
-    "timestamp": 1784493068946,
-    "duration": 0,
-    "whatWorked": {
-      "totalSuccessful": 50,
-      "successRate": 1,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 50
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 50
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 50
-        }
-      },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
-    },
-    "whatFailed": {
-      "message": "No failed actions to analyze"
-    },
-    "patterns": [],
-    "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "reduce_drift",
-        "reason": "Drift score 0.333 exceeds threshold"
-      }
-    ],
-    "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.888888888888889,
-      "capabilities": {
-        "reasoning": true,
-        "execution": true,
-        "adaptation": false,
-        "learning": true,
-        "selfAwareness": true
-      },
-      "limitations": [
-        "High drift indicates prediction inconsistency"
-      ],
-      "healthScore": 0.7222222222222223
-    },
-    "adaptations": [
-      {
-        "type": "model_preference",
-        "action": "increase_usage",
-        "target": "unknown",
-        "reason": "High success rate: 1.00"
-      }
-    ]
-  },
-  {
-    "id": "reflection_1784493093085",
-    "timestamp": 1784493093085,
-    "duration": 0,
-    "whatWorked": {
-      "totalSuccessful": 2,
-      "successRate": 0.6666666666666666,
-      "topPerformers": {
-        "model": {
-          "value": "unknown",
-          "count": 2
-        },
-        "strategy": {
-          "value": "unknown",
-          "count": 2
-        },
-        "type": {
-          "value": "core_loop",
-          "count": 2
-        }
-      },
-      "insights": [
-        "High confidence strongly correlates with success",
-        "Fast execution correlates with success"
-      ]
-    },
-    "whatFailed": {
-      "totalFailed": 1,
-      "failureRate": 0.3333333333333333,
-      "commonFailures": {
-        "models": {
-          "value": "unknown",
-          "count": 1
-        },
-        "strategies": {
-          "value": "unknown",
-          "count": 1
-        },
-        "types": {
-          "value": "question",
-          "count": 1
-        },
-        "reasons": {
-          "value": "Cannot read properties of undefined (reading 'push')",
-          "count": 1
-        }
-      },
-      "insights": [
-        "Most common failure: Cannot read properties of undefined (reading 'push')"
-      ]
-    },
-    "patterns": [],
-    "contradictions": [],
-    "recommendations": [
-      {
-        "priority": "high",
-        "action": "improve_success_rate",
-        "reason": "Success rate is 0.67"
-      }
-    ],
-    "selfAssessment": {
-      "overallLevel": "degraded",
-      "confidence": 0.8888888888888888,
-      "capabilities": {
-        "reasoning": true,
-        "execution": false,
-        "adaptation": true,
-        "learning": true,
-        "selfAwareness": true
-      },
-      "limitations": [
-        "Task execution reliability needs improvement"
-      ],
-      "healthScore": 0.7222222222222222
-    },
-    "adaptations": []
   }
 ]

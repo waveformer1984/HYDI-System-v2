@@ -116,6 +116,42 @@ function log(line) {
 // ---------------------------------------------------------------------------
 // Health check
 // ---------------------------------------------------------------------------
+// Bug found 2026-09-12: protoforge-core crashed and stayed down for 9+ hours
+// (272 consecutive real ECONNREFUSED polls) because checkEndpoint/checkOllama
+// never fed their observations into classifyObservation/observationHysteresis
+// -- only the Docker-based checks (supabase_db, supabase_rest) did that. Every
+// endpoint result's `f._hysteresisState` was therefore always undefined,
+// which the recovery gate below defaults to 'HEALTHY', so the
+// "need FAILURE_CONFIRMED" branch fired on literally every poll forever and
+// RecoveryEngine was never called, no matter how long the outage ran.
+//
+// classifyEndpointObservation() closes that gap, but deliberately does NOT
+// reuse verdict.ok/observerFailure verbatim: those answer "should this be
+// reported as ok in the endpoint's own state", and DEGRADED endpoints (e.g.
+// heidi-web correctly reporting a real CRITICAL escalation -- see this
+// session's earlier health-transport-contract work) are ok:false there on
+// purpose. Recovery must not trigger for that case: the process is alive and
+// truthfully reporting a real problem a restart cannot fix, and "recovering"
+// it would be exactly the false-green-by-recovery this project has spent
+// real effort eliminating elsewhere. Only UNAVAILABLE (unreachable, 5xx,
+// 404 -- the process itself is not answering) is a target failure a process
+// restart can plausibly address. UNKNOWN (unparseable body, no contract, an
+// unverifiable auth response) is an observer failure, same as the Docker
+// checks' own convention.
+function classifyEndpointObservation(name, state) {
+  const source = {
+    name: `${name}-endpoint-check`,
+    ok: state !== 'UNAVAILABLE',
+    value: state,
+    isObserverFailure: state === 'UNKNOWN',
+    checkedAt: new Date().toISOString(),
+  };
+  const assessment = classifyObservation(name, [source]);
+  observationMetrics.recordObservation(assessment);
+  const hysteresisState = observationHysteresis.record(name, assessment);
+  return { assessment, hysteresisState };
+}
+
 // Phase II: health is decided by the endpoint's declared contract, not by the
 // status code. `ok: statusCode >= 200 && < 500` used to report HTTP 200 +
 // {"status":"degraded"} as healthy, and would have reported a 404 as healthy
@@ -128,6 +164,7 @@ function checkEndpoint(ep) {
 
     const settle = (observation) => {
       const verdict = evaluateEndpointHealth(ep.name, observation);
+      const { assessment, hysteresisState } = classifyEndpointObservation(ep.name, verdict.state);
       resolve({
         name: ep.name,
         url: ep.url,
@@ -138,6 +175,8 @@ function checkEndpoint(ep) {
         reason: verdict.reason,
         observerFailure: verdict.observerFailure,
         body: (observation.transportError || observation.bodyText || '').slice(0, 200),
+        _assessment: assessment,
+        _hysteresisState: hysteresisState,
       });
     };
 
@@ -346,6 +385,7 @@ function checkOllama() {
   return new Promise((resolve) => {
     const settle = (observation) => {
       const verdict = evaluateEndpointHealth('ollama', observation);
+      const { assessment, hysteresisState } = classifyEndpointObservation('ollama', verdict.state);
       resolve({
         name: 'ollama',
         url: OLLAMA_URL,
@@ -356,6 +396,8 @@ function checkOllama() {
         reason: verdict.reason,
         observerFailure: verdict.observerFailure,
         body: (observation.transportError || observation.bodyText || '').slice(0, 200),
+        _assessment: assessment,
+        _hysteresisState: hysteresisState,
       });
     };
 
@@ -581,7 +623,17 @@ async function main() {
   process.on('SIGTERM', () => { log('watchdog stopped'); process.exit(0); });
 }
 
-main().catch((e) => {
-  log(`watchdog error: ${e.message}`);
-  process.exit(1);
-});
+// Guarded so `require('./watchdog')` (used by tests to reach
+// classifyEndpointObservation/checkEndpoint/checkOllama in isolation) never
+// auto-executes the live monitoring loop -- mirrors the identical guard
+// added to scripts/boot-agent.js earlier in this project's history for the
+// same reason: requiring this file unconditionally ran real HTTP checks,
+// real Docker calls, and real log writes.
+module.exports = { classifyEndpointObservation, checkEndpoint, checkOllama };
+
+if (require.main === module) {
+  main().catch((e) => {
+    log(`watchdog error: ${e.message}`);
+    process.exit(1);
+  });
+}

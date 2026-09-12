@@ -95,22 +95,49 @@ async function getSystemHealth() {
     console.log('\n📡 EVENT FLOW HEALTH');
     console.log('-'.repeat(70));
     try {
+        // Event-flow evidence must exclude the events this health check itself
+        // causes to be written, or the metric measures its own output:
+        //
+        //   event flow CRITICAL -> escalation recorded -> event_bus_events gains
+        //   a row -> next evaluation sees recent activity -> event flow looks
+        //   healthy
+        //
+        // That happened: after escalation recording started working, this metric
+        // moved CRITICAL -> WARNING with no change in real event flow.
+        //
+        // The exclusion is exactly the two topics the health evaluation emits:
+        //   system:escalation  (record_system_escalation)
+        //   system:auto_heal   (auto_heal_from_trends)
+        // and no others. system:healing, for instance, is written by
+        // business-intelligence-layer.sql -- a different subsystem -- and is
+        // genuine operational evidence, so it is deliberately NOT excluded.
+        //
+        // The filter is null-safe on purpose. `topic` was added to
+        // event_bus_events after the table already had rows, so legacy rows have
+        // topic IS NULL, and both `not.in` and `neq` drop NULLs in SQL. Verified
+        // against the live table: the naive filter returned 0 rows where this
+        // one correctly returns the legacy row.
+        const SELF_GENERATED_TOPICS = ['system:escalation', 'system:auto_heal'];
+        const excludeSelfGenerated = `topic.is.null,topic.not.in.(${SELF_GENERATED_TOPICS.map((t) => `"${t}"`).join(',')})`;
+
         // Recent event activity
         const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
         const { data: recentEvents, error: recentError } = await supabase
             .from('event_bus_events')
             .select('topic, event_name, occurred_at')
             .gte('occurred_at', oneHourAgo)
+            .or(excludeSelfGenerated)
             .order('occurred_at', { ascending: false })
             .limit(20);
-            
+
         // Last event timestamp
         const { data: lastEvent, error: lastError } = await supabase
             .from('event_bus_events')
             .select('occurred_at')
+            .or(excludeSelfGenerated)
             .order('occurred_at', { ascending: false })
             .limit(1)
-            .single();
+            .maybeSingle();
             
         if (!recentError && !lastError) {
             const lastEventTime = lastEvent ? new Date(lastEvent.occurred_at) : null;
@@ -118,12 +145,20 @@ async function getSystemHealth() {
             const minutesSinceLastEvent = lastEventTime ? 
                 Math.floor((now - lastEventTime) / (1000 * 60)) : null;
             
+            // No qualifying event at all is the WORST case, not the best.
+            // Guarded explicitly because `null < 10` is true in JS, so a naive
+            // comparison chain would report a completely dead event bus as OK.
+            const eventFlowStatus =
+                minutesSinceLastEvent === null ? 'CRITICAL' :
+                minutesSinceLastEvent < 10 ? 'OK' :
+                minutesSinceLastEvent < 30 ? 'WARNING' : 'CRITICAL';
+
             health.components.eventFlow = {
-                status: minutesSinceLastEvent < 10 ? 'OK' : 
-                        minutesSinceLastEvent < 30 ? 'WARNING' : 'CRITICAL',
+                status: eventFlowStatus,
                 recentEventsCount: recentEvents?.length || 0,
                 lastEventMinutesAgo: minutesSinceLastEvent,
-                lastEventTime: lastEvent?.occurred_at
+                lastEventTime: lastEvent?.occurred_at ?? null,
+                excludesSelfGeneratedTopics: SELF_GENERATED_TOPICS
             };
             
             console.log(`  Recent events (1h): ${recentEvents?.length || 0}`);
@@ -141,7 +176,10 @@ async function getSystemHealth() {
                 });
             }
             
-            if (minutesSinceLastEvent >= 30) {
+            if (minutesSinceLastEvent === null) {
+                health.issues.push('CRITICAL: No operational events have ever been recorded (excluding health-generated events)');
+                health.status = 'CRITICAL';
+            } else if (minutesSinceLastEvent >= 30) {
                 health.issues.push(`CRITICAL: No events for ${minutesSinceLastEvent} minutes`);
                 health.status = 'CRITICAL';
             } else if (minutesSinceLastEvent >= 10) {

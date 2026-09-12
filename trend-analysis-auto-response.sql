@@ -1,3 +1,36 @@
+-- ============================================================================
+-- DEPRECATED / DO NOT EXECUTE  (annotated 2026-09-10)
+--
+-- This is the original cloud-era deployment script for the trend-analysis and
+-- auto-response functions. Evidence for that classification:
+--
+--   * header targets "Supabase Project: akbnfovjdcobifeupvbn" -- the cloud
+--     project the platform moved off (see CLAUDE.md, Local-First Architecture)
+--   * written as manual "STEP 1A / STEP 1B ..." deployment steps, not a migration
+--   * referenced by nothing: no script, workflow, package.json target or config
+--   * its three functions (analyze_health_trends, evaluate_system_escalation,
+--     auto_heal_from_trends) were folded into
+--     supabase/migrations/20260707151854_local_baseline_missing_core_objects.sql,
+--     a migration whose name says exactly that: "local baseline missing core objects"
+--
+-- WHY EXECUTING IT IS NOW HARMFUL
+--
+-- The definitions below are the PRE-FIX versions. Running this file would
+-- CREATE OR REPLACE over the corrected functions and reintroduce two defects
+-- that took /api/health down:
+--
+--   1. Both INSERTs into event_bus_events omit the NOT NULL event_type column
+--      -> constraint violation      (fixed in 20260915170000)
+--   2. evaluate_system_escalation() writes from inside the read path that
+--      system_dashboard depends on, so a SELECT mutates and therefore fails in
+--      PostgREST's read-only GET transaction
+--                                    (fixed in 20260915180000)
+--
+-- The authoritative definitions are the migrations. Change those, not this file.
+-- Retained for historical reference pending a decision to archive it under
+-- archive/*.legacy, per the convention used for supervisor.js / memory-engine.js.
+-- ============================================================================
+
 -- ========================================
 -- TREND ANALYSIS & AUTO-RESPONSE SYSTEM
 -- ProtoForge HYDI Platform

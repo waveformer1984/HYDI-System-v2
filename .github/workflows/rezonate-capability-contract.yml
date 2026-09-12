@@ -1,0 +1,76 @@
+name: Rezonate Capability Contract
+
+# P1 #7 (docs/REZONATE_CONSOLIDATION_PLAN.md): CI enforcement of the capability
+# contract, so a status claim (e.g. RezonetteModule.tsx displaying "complete") can
+# never silently drift from capability-contract.json again — this is the guard
+# against a repeat of the original P0.1 bug. Also runs the canonical Rezonate app's
+# own test suite, since it's what backs every non-PLANNED state in the contract and
+# was not previously wired into any CI workflow (root jest config only matches
+# tests/unit/**, and protoforge-applications/rezonate/tests/*.test.js uses node:test).
+
+on:
+  push:
+    branches: [clean-main]
+    paths:
+      - 'protoforge-applications/rezonate/**'
+      - 'apps/ursula-frontend/src/components/modules/RezonetteModule.tsx'
+      - 'scripts/validate-rezonate-capability-contract.js'
+      - '.github/workflows/rezonate-capability-contract.yml'
+  pull_request:
+    paths:
+      - 'protoforge-applications/rezonate/**'
+      - 'apps/ursula-frontend/src/components/modules/RezonetteModule.tsx'
+      - 'scripts/validate-rezonate-capability-contract.js'
+      - '.github/workflows/rezonate-capability-contract.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contract-guard:
+    name: Validate capability contract
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate capability-contract.json + scan for hardcoded status drift
+        run: npm run validate:rezonate-contract
+
+  rezonate-tests:
+    name: Rezonate app test suite (node:test)
+    runs-on: ubuntu-latest
+    # Informational, not blocking: there is one known, pre-existing, deliberately
+    # unfixed failure (EPERM on temp-file cleanup in tests/api.test.js, "registers an
+    # asset and serves it" — a sandbox/filesystem-timing artifact, not a logic bug).
+    # See docs/REZONATE_CONSOLIDATION_PLAN.md's explicit instruction to preserve this
+    # as a truth marker rather than silently fix or hide it. continue-on-error keeps
+    # this job's result visible without turning every run red over a known issue —
+    # if the failure count ever changes, that's a real signal to go look.
+    continue-on-error: true
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run Rezonate test suite
+        working-directory: protoforge-applications/rezonate
+        run: node --test tests/*.test.js

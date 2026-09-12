@@ -1,0 +1,99 @@
+{
+  "meta": {
+    "generatedAt": "2026-09-11T00:42:09.854Z",
+    "cyclesObserved": 4,
+    "confidenceLevel": "sufficient",
+    "testRunsExcludedFromAnalysis": 2,
+    "totalGenuineOpportunities": 61
+  },
+  "q2_q3_scoreSeparation": {
+    "rejected": {
+      "count": 44,
+      "avgRelevance": 6,
+      "avgEngagement": 22.5,
+      "avgRecency": 11,
+      "zeroKeywordMatchPct": 81.8
+    },
+    "needs_review": {
+      "count": 17,
+      "avgRelevance": 31.2,
+      "avgEngagement": 35.9,
+      "avgRecency": 17.4,
+      "zeroKeywordMatchPct": 23.5
+    },
+    "high_confidence": {
+      "count": 0,
+      "avgRelevance": null,
+      "avgEngagement": null,
+      "avgRecency": null,
+      "zeroKeywordMatchPct": null
+    }
+  },
+  "q4_sourceQuality": {
+    "hn_algolia": {
+      "count": 61,
+      "avgConfidence": 17,
+      "high_confidence": 0,
+      "needs_review": 17,
+      "rejected": 44
+    }
+  },
+  "q5_recency": {
+    "avgRecencyScore": 12.8,
+    "sampleSize": 61
+  },
+  "q6_productMapping": {
+    "rezonate": 61
+  },
+  "q7_actionability": {
+    "totalOpportunities": 61,
+    "distinctRequiredActionStrings": 2,
+    "templates": [
+      "Needs a human read to judge relevance before any follow-up.",
+      "No action -- filed for the record, not worth follow-up as scored."
+    ],
+    "isTemplated": true
+  },
+  "q8_humanWorkload": {
+    "reviewableNow": 17,
+    "estimatedMinutes": 5.7
+  },
+  "q9_deduplication": {
+    "perRun": [
+      {
+        "run_at": "2026-09-10T23:09:33.988705+00:00",
+        "found": 47,
+        "duplicates": 3
+      },
+      {
+        "run_at": "2026-09-10T23:10:24.255887+00:00",
+        "found": 0,
+        "duplicates": 50
+      },
+      {
+        "run_at": "2026-09-10T23:11:31.832364+00:00",
+        "found": 9,
+        "duplicates": 41
+      },
+      {
+        "run_at": "2026-09-11T00:23:21.22482+00:00",
+        "found": 5,
+        "duplicates": 45
+      }
+    ],
+    "avgDuplicateRatePct": 69.5,
+    "minPct": 6,
+    "maxPct": 100
+  },
+  "q10_revenueSignal": {
+    "flaggedCount": 5,
+    "totalCount": 61,
+    "examples": [
+      "Alibaba Launches AI Music Generation Model HappyShrimp in Beta",
+      "Show HN: I Built Presync.io – A macOS Music Production Tools AppStore",
+      "Best Music Distributors in 2026",
+      "Show HN: I built SyncForge to connect indie artists with sync deals",
+      "Show HN: Turn a Suno song into a music video with beat-synced auto-editing"
+    ]
+  }
+}
