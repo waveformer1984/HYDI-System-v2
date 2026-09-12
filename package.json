@@ -17,6 +17,7 @@
     "test:coverage": "jest --coverage",
     "test:integration": "node tests/hdi-adversarial.test.js",
     "test:integration:hydi-v3": "jest tests/integration/hydi-v3-integration.test.js --testMatch=\"**/*.test.js\" --runInBand --forceExit",
+    "test:integration:jest": "jest --testMatch=\"<rootDir>/tests/integration/**/*.test.js\" --runInBand --forceExit",
     "typecheck": "tsc --noEmit",
     "typecheck:hydi-v3": "tsc --noEmit -p tsconfig.typecheck.json",
     "check:ports": "node scripts/check-ports.js",
@@ -108,7 +109,7 @@
     "undici": "^6.27.0",
     "js-yaml": "^4.2.0",
     "minimatch@10.2.5": {
-      "brace-expansion": "5.0.7"
+      "brace-expansion": "5.0.9"
     },
     "sharp": "^0.35.0"
   }
