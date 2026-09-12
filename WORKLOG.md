@@ -4,6 +4,88 @@ Running log of autonomous production-readiness work. Newest entries first.
 
 ---
 
+## 2026-09-12 — Critical Next.js RCE + 8 other vulnerabilities, restored a broken CI script
+
+Branch: rebuilt directly on `clean-main` at merge-base `bc1a62a` (superseding
+an older `claude/protoforge-ecosystem-audit-i6w9tp` branch — see that
+branch's own WORKLOG for its 2026-08-03/2026-09-12 entries, since covered)
+
+Asked to merge that older branch into `clean-main`. `clean-main` had moved
+156 commits ahead in the meantime, including an independent session
+(2026-08-03 entry below) that had already fixed the same two test-flakiness
+bugs the older branch fixed, with an equivalent but differently-written
+implementation, plus `ip-address`/`undici`. A literal `git merge` produced
+real conflicts in `CHANGELOG.md`/`ISSUES_FOUND.md`/`WORKLOG.md`/
+`package-lock.json`/`HeartbeatSystem.test.js` and would have reintroduced a
+now-redundant duplicate test fix. Asked the user how to proceed; chosen
+approach was to rebuild on top of current `clean-main` and land only what
+was still actually missing there, rather than force the merge.
+
+### Found: `clean-main` still had the critical Next.js RCE + 8 other advisories
+
+A fresh `npm audit` against current `clean-main` showed 11 vulnerabilities
+(1 low, 2 moderate, 7 high, 1 critical) — the 2026-08-03 session below had
+fixed `ip-address`/`undici` but explicitly left `brace-expansion` unresolved
+(their notes say they believed no non-breaking fix existed), and none of
+the newer advisories disclosed since then were on their radar yet. Same
+root cause and same fix as documented on the superseded branch:
+
+- **`next` (critical, GHSA-p293-qw3h-jr36)**: unauthenticated RCE on
+  Windows-hosted servers. Also GHSA-2xp9-vwfh-vxw4 (high): unauthenticated
+  RCE via the Image Optimization API on AVIF input, through a vulnerable
+  `sharp`.
+- `brace-expansion` (high, GHSA-rgw5-rvv9-x895): the existing *scoped*
+  `package.json` override (`"minimatch@10.2.5": {"brace-expansion":
+  "5.0.7"}` — deliberately scoped, not global, to avoid repeating an
+  earlier incident where a blanket override broke every `minimatch@3.x`
+  consumer in the ESLint toolchain) just needed bumping to `5.0.9`. The
+  2026-08-03 session's belief that no non-breaking fix existed was because
+  they were checking for one *without* touching the existing scoped
+  override — the override itself already established the correct fix
+  shape, it just needed a version bump.
+- `js-yaml`, `nodemailer` (4 advisories), `browserslist`, `nanoid`,
+  `sharp`, `qs`, `postcss-selector-parser`, `baseline-browser-mapping`:
+  high/moderate DoS and email-delivery-bypass advisories.
+
+All 9 resolved via `npm audit fix` after the one-line `package.json`
+override bump — every patched version fits inside already-declared semver
+ranges, no breaking-change decision needed. `npm audit`: 11 → 0.
+
+### Found separately: `integration-tests.yml` has been silently broken since 2026-08-17
+
+While re-running the full verification sweep, `npm run test:integration:jest`
+failed with `Missing script`. Traced to commit `950d17e`
+("feat(g0): establish canonical repository identity...", authored by a
+different agent/tool, not this session) which deleted the
+`test:integration:jest` script from `package.json` while trimming
+`lint:hydi-v3`'s file list, but never updated
+`.github/workflows/integration-tests.yml`, which still has a
+`Run operational integration suite` step calling exactly that script. All
+12 files under `tests/integration/**` are still present and still pass —
+only the npm script that invokes them was lost. This means that workflow's
+last step would fail with "Missing script" the moment the still-open
+GitHub Actions runner-dispatch outage (`ROADMAP.md` P0 #2/2b/2c) is ever
+fixed — a second, independent reason that workflow hasn't produced a real
+signal, stacked on top of the first.
+
+### Verification
+
+- `npm audit` — 0 vulnerabilities.
+- `npm run typecheck` / `npm run typecheck:hydi-v3` — clean.
+- `npm run lint` — 0 errors, 750 warnings (pre-existing, +1 vs. the
+  2026-08-03 baseline from new code added in the 156 intervening commits,
+  not from this change).
+- `npm run lint:hydi-v3` — 0 errors, 11 warnings (unchanged).
+- `npm test` — 262/262 suites, 2498/2499 tests (1 pre-existing skip), run
+  twice back-to-back, both green (up from 244/244 at the 2026-08-03
+  baseline — new suites added in the intervening commits, not a change
+  from this session).
+- `npm run test:integration:jest` — restored and passing, 12/12 suites,
+  62/62 tests.
+- `npm run build` — succeeds, full route table generated.
+
+---
+
 ## 2026-08-03 — CI-breaking test fix + dependency security patch
 
 Branch: `claude/protoforge-ecosystem-audit-4idowa`

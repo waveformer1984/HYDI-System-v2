@@ -17,14 +17,24 @@
 
 ### Security
 
+- Patched a **critical** unauthenticated RCE in `next` on Windows-hosted
+  servers (GHSA-p293-qw3h-jr36) plus 8 other vulnerabilities (`next`'s
+  Image Optimization API RCE via `sharp`, `brace-expansion`, `js-yaml`,
+  `nodemailer`, `browserslist`, `nanoid`, `sharp`, `qs`,
+  `postcss-selector-parser`, `baseline-browser-mapping`). `brace-expansion`
+  needed the existing scoped `minimatch@10.2.5` override bumped to `5.0.9`;
+  the other 8 resolved via a plain `npm audit fix`. All within already-
+  declared `package.json` semver ranges, no breaking changes.
 - Patched `ip-address` (SSRF/trust-boundary bypass advisories, a transitive
   dependency of the production `express-rate-limit` package used across every
   rate-limited route) and `undici` via `npm audit fix`. `package.json` version
-  ranges unchanged; only lockfile resolutions moved. The remaining
-  `brace-expansion` advisory (transitive via `@typescript-eslint/*`, dev
-  tooling only) is left unresolved — forcing it via an `overrides` pin
-  previously broke `next lint` (`ISSUES_FOUND.md` #2) and npm has no
-  non-breaking resolution path for it yet.
+  ranges unchanged; only lockfile resolutions moved.
+
+### Fixed (CI)
+
+- `.github/workflows/integration-tests.yml` had been calling a
+  `test:integration:jest` npm script that a prior commit deleted from
+  `package.json` without updating the workflow — restored the script.
 
 ## [0.9.0-rc.1] — Release Candidate
 

@@ -5,6 +5,15 @@ the narrative of what was fixed and why; this file is the flat list.
 
 ---
 
+## 2026-09-12 (dependency audit re-run + CI script regression)
+
+| # | Issue | File(s) | Status |
+|---|-------|---------|--------|
+| 79 | `.github/workflows/integration-tests.yml`'s "Run operational integration suite" step calls `npm run test:integration:jest`, but commit `950d17e` (2026-08-17, "establish canonical repository identity") deleted that script from `package.json` without updating the workflow. All 12 `tests/integration/**` files are still present and pass; only the script that invokes them was lost. That workflow step would fail with `Missing script` as soon as the still-open GitHub Actions runner-dispatch outage (`ROADMAP.md` P0 #2) is fixed — a second, independent reason `integration-tests.yml` hasn't been producing a real signal. | `package.json` | **Fixed** — restored `"test:integration:jest": "jest --testMatch=\"<rootDir>/tests/integration/**/*.test.js\" --runInBand --forceExit"`. Verified: 12/12 suites, 62/62 tests. |
+| 78 | `npm audit` against current `clean-main` showed 11 vulnerabilities (1 low, 2 moderate, 7 high, 1 critical), all newly disclosed since the 2026-08-03 session below last checked: **critical** `next` RCE on Windows-hosted servers (GHSA-p293-qw3h-jr36) and a high-severity `next` Image Optimization API RCE via `sharp` (GHSA-2xp9-vwfh-vxw4), plus `js-yaml`, `nodemailer` (4 advisories), `browserslist`, `nanoid`, `sharp`, `qs`, `postcss-selector-parser`, `baseline-browser-mapping`. Also still open: `brace-expansion` (#76 below), which the 2026-08-03 session left unresolved believing no non-breaking fix existed. | `package.json`, `package-lock.json` | **Fixed.** `brace-expansion`: the existing scoped `minimatch@10.2.5` override just needed its pinned version bumped `5.0.7` → `5.0.9` — the 2026-08-03 session's search for a fix didn't consider bumping the override that was already there. The other 8: resolved via plain `npm audit fix`, all within existing `package.json` semver ranges. `npm audit`: 11 → 0. |
+
+---
+
 ## Fixed this session (2026-08-03, CI-breaking test + dependency audit)
 
 | # | Issue | File(s) | Status |
