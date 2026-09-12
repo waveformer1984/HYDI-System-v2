@@ -4,6 +4,22 @@ Running log of autonomous production-readiness work. Newest entries first.
 
 ---
 
+## 2026-09-12 (later same day) — CI runner-dispatch outage reconfirmed on a live merge
+
+PR #267 (the entry directly below) was subscribed for CI/review activity
+after opening it. Once merged, GitHub delivered three `check_run.completed`
+webhooks — `Jest Unit Tests`, `HYDI V3 Operational Integration Suite`, and
+CodeQL's `Analyze (javascript-typescript)` — all `conclusion: failure`.
+Checked each job directly rather than assuming a real regression: all
+three show `runner_id: 0`, complete in 2-4 seconds, and log downloads
+404 (no runner ever produced output) — the identical `ROADMAP.md` P0 #2
+symptom first reported 2026-07-17, now reconfirmed against a live,
+just-merged commit almost two months later. Not a real test failure and
+not caused by this change; recorded as `ROADMAP.md` item 2c. The PR merged
+anyway despite these three checks reporting failure, which is itself worth
+a maintainer's attention — it means required-check enforcement (if any is
+configured) isn't actually gating merges on `clean-main` right now.
+
 ## 2026-09-12 — Critical Next.js RCE + 8 other vulnerabilities, restored a broken CI script
 
 Branch: rebuilt directly on `clean-main` at merge-base `bc1a62a` (superseding
