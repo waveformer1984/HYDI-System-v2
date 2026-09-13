@@ -71,7 +71,9 @@ function makeCsvProspects(count: number, suffix: string = ''): Array<Record<stri
       contact_name: `Owner ${suffix}_${i}`,
       contact_email: `${prefix}${i}@camploop.test`,
       contact_phone: `555-0${i}00`,
-      website: `https://camploop-${suffix}-${i}.example`,
+      // Also must be run-unique: the pipeline checks website for a dedup
+      // match BEFORE company_name, so this collided with leftover rows too.
+      website: `https://camploop-${prefix}-${i}.example`,
       industry: 'contractor',
       location: 'Austin, TX',
       employee_count: String(10 + i),
