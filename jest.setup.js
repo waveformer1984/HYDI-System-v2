@@ -26,3 +26,10 @@ process.env.SUPABASE_URL              = process.env.SUPABASE_URL              ||
 process.env.SUPABASE_ANON_KEY         = process.env.SUPABASE_ANON_KEY         || 'test-anon-key';
 // database.js throws if SUPABASE_SERVICE_ROLE_KEY is missing — provide a stub for tests
 process.env.SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || 'test-service-role-key';
+
+// lib/embeddings.ts's default (15s) is deliberately tight for production, sized
+// for a single caller. Several *-qualification.test.ts suites make real calls
+// to a single local Ollama instance; when Jest's parallel workers run several
+// of those files at once, requests queue and a lone caller's 15s budget isn't
+// enough. Widen it for the test environment only -- production is unaffected.
+process.env.EMBEDDING_TIMEOUT_MS = process.env.EMBEDDING_TIMEOUT_MS || '45000';

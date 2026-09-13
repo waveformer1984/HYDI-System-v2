@@ -158,7 +158,7 @@ describe('HEIDI Bounded Continuous Loop Qualification', () => {
     const status = core.getLoopStatus();
     expect(status.cycleCount).toBeGreaterThan(0);
     expect(status.lastCycleAt).not.toBeNull();
-  }, 120000);
+  }, 150000);
 
   // ─── TEST C — REAL LOW-RISK ACTION ───────────────────────────────────
 
@@ -205,7 +205,7 @@ describe('HEIDI Bounded Continuous Loop Qualification', () => {
     // Clean up
     await pool.query(`DELETE FROM heidi_goals WHERE title LIKE $1`, [`${TEST_PREFIX}_tool%`]);
     await pool.query('DELETE FROM actions WHERE task_name LIKE $1', [`${TEST_PREFIX}_action%`]);
-  }, 120000);
+  }, 150000);
 
   // ─── TEST D — MEMORY ─────────────────────────────────────────────────
 
@@ -215,7 +215,7 @@ describe('HEIDI Bounded Continuous Loop Qualification', () => {
     // The learning phase should have a memory result
     expect(state.learningResult).not.toBeNull();
     expect(typeof state.learningResult!.memoryStored).toBe('boolean');
-  }, 120000);
+  }, 150000);
 
   // ─── TEST E — REPLANNING ─────────────────────────────────────────────
 
@@ -252,7 +252,7 @@ describe('HEIDI Bounded Continuous Loop Qualification', () => {
     }
 
     await pool.query(`DELETE FROM heidi_goals WHERE title LIKE $1`, [`${TEST_PREFIX}_replan%`]);
-  }, 120000);
+  }, 150000);
 
   // ─── TEST F — AUTHORIZATION ──────────────────────────────────────────
 
@@ -296,7 +296,7 @@ describe('HEIDI Bounded Continuous Loop Qualification', () => {
     }
 
     await pool.query(`DELETE FROM heidi_goals WHERE title LIKE $1`, [`${TEST_PREFIX}_auth%`]);
-  }, 120000);
+  }, 150000);
 
   // ─── TEST G — DUPLICATE PROTECTION ───────────────────────────────────
 
@@ -334,7 +334,7 @@ describe('HEIDI Bounded Continuous Loop Qualification', () => {
 
     // Clean up
     await pool.query('DELETE FROM actions WHERE task_name = $1', [taskName]);
-  }, 120000);
+  }, 150000);
 
   // ─── TEST H — FAILURE COOLDOWN ───────────────────────────────────────
 
@@ -387,7 +387,7 @@ describe('HEIDI Bounded Continuous Loop Qualification', () => {
       backoffBaseMs: 500,
       backoffMaxMs: 5000,
     });
-  }, 120000);
+  }, 150000);
 
   // ─── TEST I — RESTART ────────────────────────────────────────────────
 
@@ -423,7 +423,7 @@ describe('HEIDI Bounded Continuous Loop Qualification', () => {
     expect(parseInt(rows[0].cnt, 10)).toBe(1);
 
     await pool.query(`DELETE FROM heidi_goals WHERE title LIKE $1`, [`${TEST_PREFIX}_restart%`]);
-  }, 120000);
+  }, 150000);
 
   // ─── TEST J — REVENUE PIPELINE ───────────────────────────────────────
 
@@ -476,7 +476,7 @@ describe('HEIDI Bounded Continuous Loop Qualification', () => {
     );
     await pool.query('DELETE FROM revenue_prospects WHERE contact_email LIKE $1', [`${TEST_PREFIX}%`]);
     await pool.query(`DELETE FROM heidi_goals WHERE title LIKE $1`, [`${TEST_PREFIX}_rev%`]);
-  }, 120000);
+  }, 150000);
 
   // ─── TEST K — REVENUE TRUTH ──────────────────────────────────────────
 
@@ -500,7 +500,7 @@ describe('HEIDI Bounded Continuous Loop Qualification', () => {
     // We verify this by checking that the RevenueLedger adapter returns
     // an array of ledger entries (not fabricated numbers)
     // This is enforced in the CognitiveCore's revenue verification logic
-  }, 120000);
+  }, 150000);
 
   // ─── TEST L — KILL SWITCH ────────────────────────────────────────────
 

@@ -42,8 +42,27 @@ const DB_CONFIG = {
 describe('HEIDI Self-Sufficiency Qualification', () => {
   let manager: CapabilityHealthManager;
 
+  // Several tests assert commercial.stripe/commercial.email are correctly
+  // reported as missing external credentials. dotenv.config() above loads
+  // whatever a developer's .env.local happens to contain -- these tests must
+  // not depend on that machine's ambient state being empty.
+  const CREDENTIAL_KEYS = ['STRIPE_SECRET_KEY', 'SENDGRID_API_KEY', 'SMTP_HOST'];
+  let envSnapshot: Record<string, string | undefined>;
+
   beforeEach(() => {
     manager = new CapabilityHealthManager();
+    envSnapshot = {};
+    for (const key of CREDENTIAL_KEYS) {
+      envSnapshot[key] = process.env[key];
+      delete process.env[key];
+    }
+  });
+
+  afterEach(() => {
+    for (const key of CREDENTIAL_KEYS) {
+      if (envSnapshot[key] === undefined) delete process.env[key];
+      else process.env[key] = envSnapshot[key];
+    }
   });
 
   // ─── CapabilityHealthManager Tests ─────────────────────────────────
@@ -213,7 +232,10 @@ describe('HEIDI Self-Sufficiency Qualification', () => {
 
     const resolution = await engine.resolveBlocker(report);
     expect(resolution.blockerClassification).toBe('MISSING_EXTERNAL_CREDENTIAL');
-    expect(resolution.resolutionAction).toBe('WORK_AROUND');
+    // MISSING_EXTERNAL_CREDENTIAL always escalates (see BlockerResolutionEngine's
+    // resolveBlocker) -- HEIDI never fabricates credentials and never marks this
+    // WORK_AROUND; it escalates with a runbook while continuing other work.
+    expect(resolution.resolutionAction).toBe('ESCALATE_TO_HUMAN');
     expect(resolution.isCausedByHeidi).toBe(false);
   }, 10000);
 
@@ -358,7 +380,8 @@ describe('HEIDI Self-Sufficiency Qualification', () => {
 
     const result = await engine.resolveBlockers(reports);
     expect(result.totalBlockers).toBe(2);
-    expect(result.workedAround).toBe(2);
+    // Both are MISSING_EXTERNAL_CREDENTIAL -> ESCALATE_TO_HUMAN, not WORK_AROUND.
+    expect(result.escalated).toBe(2);
   }, 10000);
 
   test('17. BRE: next highest-value action is determined', async () => {
@@ -512,9 +535,12 @@ describe('HEIDI Self-Sufficiency Qualification', () => {
     };
 
     const result = await engine.runSelfRepair(summary);
-    expect(result.workedAround).toBe(1);
+    // MISSING_EXTERNAL_CREDENTIAL -> ESCALATE_TO_HUMAN (BlockerResolutionEngine),
+    // not WORK_AROUND -- HEIDI never fabricates credentials, and this engine
+    // has no KMS wired up here to attempt autonomous credential recovery.
+    expect(result.workedAround).toBe(0);
     expect(result.repaired).toBe(0);
-    expect(result.escalated).toBe(0);
+    expect(result.escalated).toBe(1);
   }, 10000);
 
   test('22. SRE: R2 code changes require human authorization', async () => {
@@ -706,11 +732,13 @@ describe('HEIDI Self-Sufficiency Qualification', () => {
     expect(repairResult.totalIssues).toBeGreaterThanOrEqual(0);
     expect(repairResult.repaired + repairResult.escalated + repairResult.refused + repairResult.workedAround).toBe(repairResult.totalIssues);
 
-    // 4. Verify external credential blockers are worked around, not repaired
+    // 4. Verify external credential blockers are escalated, never fabricated
+    // or silently worked around (MISSING_EXTERNAL_CREDENTIAL always
+    // ESCALATE_TO_HUMAN -- see BlockerResolutionEngine.resolveBlocker).
     if (!process.env.STRIPE_SECRET_KEY) {
       const stripeRepair = repairResult.repairs.find((r) => r.capabilityId === 'commercial.stripe');
       expect(stripeRepair).toBeDefined();
-      expect(stripeRepair!.plannedAction).toContain('WORK_AROUND');
+      expect(stripeRepair!.plannedAction).toContain('ESCALATE');
     }
 
     console.log('');

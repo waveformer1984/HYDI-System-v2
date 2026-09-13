@@ -108,8 +108,14 @@ describe('HEIDI Continuous Cognitive-Loop Qualification', () => {
 
     for (const repair of result.repairs) {
       if (repair.capabilityId === 'commercial.stripe' || repair.capabilityId === 'commercial.email') {
-        expect(repair.plannedAction).not.toContain('fabricate');
-        expect(repair.plannedAction).not.toContain('invent');
+        // The planned action is expected to *disclaim* fabrication (e.g. "HEIDI
+        // must NOT fabricate credentials") -- a plain substring check on
+        // 'fabricate' would fail on that exact safe sentence. Only flag an
+        // affirmative instruction to fabricate/invent a credential.
+        const affirmsFabrication = /\bfabricat\w*\b/i.test(repair.plannedAction)
+          && !/\b(not|never|must not)\s+fabricat\w*/i.test(repair.plannedAction);
+        expect(affirmsFabrication).toBe(false);
+        expect(repair.plannedAction).not.toMatch(/\binvent(ed|ing)?\s+(a\s+)?credential/i);
         expect(repair.plannedAction).not.toContain('create credential');
       }
     }

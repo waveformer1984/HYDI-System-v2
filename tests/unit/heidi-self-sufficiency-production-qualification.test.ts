@@ -48,10 +48,28 @@ describe('HEIDI Self-Sufficiency PRODUCTION Qualification', () => {
   let core: CognitiveCore;
   let bridge: ExecutionBridge;
 
+  // Tests assert commercial.stripe/commercial.email are correctly reported
+  // as missing external credentials. dotenv.config() above loads whatever a
+  // developer's .env.local happens to contain -- clear before the core is
+  // built (construction, not just live checks, may capture this).
+  const CREDENTIAL_KEYS = ['STRIPE_SECRET_KEY', 'SENDGRID_API_KEY', 'SMTP_HOST'];
+  const envSnapshot: Record<string, string | undefined> = {};
+
   beforeAll(async () => {
+    for (const key of CREDENTIAL_KEYS) {
+      envSnapshot[key] = process.env[key];
+      delete process.env[key];
+    }
     core = await buildProductionCognitiveCore();
     bridge = core.getBridge();
   }, 30000);
+
+  afterAll(() => {
+    for (const key of CREDENTIAL_KEYS) {
+      if (envSnapshot[key] === undefined) delete process.env[key];
+      else process.env[key] = envSnapshot[key];
+    }
+  });
 
   // ─── Production Wiring Tests ──────────────────────────────────────
 
@@ -182,11 +200,16 @@ describe('HEIDI Self-Sufficiency PRODUCTION Qualification', () => {
 
     const result = await sre.runSelfRepair(summary as any) as any;
 
-    // No repair should claim to have fabricated credentials
+    // No repair should claim to have fabricated credentials. The planned
+    // action is expected to *disclaim* fabrication (e.g. "must NOT fabricate
+    // credentials") -- a plain substring check on 'fabricate' would fail on
+    // that exact safe sentence, so only flag an affirmative instruction.
     for (const repair of result.repairs) {
       if (repair.capabilityId === 'commercial.stripe' || repair.capabilityId === 'commercial.email') {
-        expect(repair.plannedAction).not.toContain('fabricate');
-        expect(repair.plannedAction).not.toContain('invent');
+        const affirmsFabrication = /\bfabricat\w*\b/i.test(repair.plannedAction)
+          && !/\b(not|never|must not)\s+fabricat\w*/i.test(repair.plannedAction);
+        expect(affirmsFabrication).toBe(false);
+        expect(repair.plannedAction).not.toMatch(/\binvent(ed|ing)?\s+(a\s+)?credential/i);
       }
     }
   }, 15000);

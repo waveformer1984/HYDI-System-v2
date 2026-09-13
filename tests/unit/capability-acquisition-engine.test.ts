@@ -135,7 +135,11 @@ describe('External Capability Acquisition Engine', () => {
       expect(lifecycle.credentialFingerprints['SENDGRID_API_KEY']).toMatch(
         /^[a-f0-9]{16}$/,
       );
-    });
+      // A persistent 401 drives resolveCapability through its real (not
+      // mocked) retry/backoff delays -- this deterministically takes close
+      // to jest.config.js's global 15s testTimeout even under normal load,
+      // so it needs its own headroom rather than sharing the default.
+    }, 30000);
   });
 
   // 4. Configuration propagation
@@ -151,7 +155,8 @@ describe('External Capability Acquisition Engine', () => {
         (t) => t.from === 'CONFIGURING' && t.to === 'VERIFYING',
       );
       expect(configuringToVerifying).toBeDefined();
-    });
+      // Same real retry/backoff delay as above (~14s at baseline).
+    }, 30000);
   });
 
   // 5. Real capability verification
@@ -245,7 +250,10 @@ describe('External Capability Acquisition Engine', () => {
       );
       expect(failedAudit).toBeDefined();
       expect(failedAudit!.description).toContain('RATE_LIMITED');
-    });
+      // Same real (not mocked) retry/backoff delay as the provisioning tests
+      // above -- resolveCapability's actual retry policy runs regardless of
+      // which mocked layer produced the failure.
+    }, 30000);
   });
 
   // 10. Invalid credential
@@ -380,7 +388,7 @@ describe('External Capability Acquisition Engine', () => {
       const engine = new ExternalCapabilityAcquisitionEngine();
       const lifecycle = await engine.resolveCapability('commercial.email');
       expect(lifecycle.currentState).toBe('VERIFICATION_FAILED');
-    });
+    }, 30000); // real (not mocked) retry/backoff delay, see test 3 above
   });
 
   // 19. Audit completeness
@@ -402,7 +410,7 @@ describe('External Capability Acquisition Engine', () => {
       expect(eventTypes).toContain('CONFIGURATION_APPLIED');
       expect(eventTypes).toContain('VERIFICATION_STARTED');
       expect(eventTypes).toContain('VERIFICATION_FAILED');
-    });
+    }, 30000); // real (not mocked) retry/backoff delay, see test 3 above
   });
 
   // 20. Secret redaction
@@ -464,6 +472,6 @@ describe('External Capability Acquisition Engine', () => {
       const lifecycle = await engine.resolveCapability('commercial.email');
       expect(lifecycle.currentState).not.toBe('READY');
       expect(lifecycle.currentState).toBe('VERIFICATION_FAILED');
-    });
+    }, 30000); // real (not mocked) retry/backoff delay, see test 3 above
   });
 });

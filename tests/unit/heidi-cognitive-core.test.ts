@@ -397,15 +397,21 @@ describe('WorldModel', () => {
 
   test('computes health summary', async () => {
     const world = makeWorld();
-    await world.upsertEntity({ entityType: 'service', entityId: 'h1', entityName: 'Healthy 1', status: 'healthy' });
-    await world.upsertEntity({ entityType: 'service', entityId: 'd1', entityName: 'Degraded 1', status: 'degraded' });
-    await world.upsertEntity({ entityType: 'service', entityId: 'f1', entityName: 'Failed 1', status: 'failed' });
+    // getHealthSummary() aggregates the whole heidi_world_model table, not
+    // just this test's rows -- and this DB is shared with the actually
+    // running boot-agent, which registers its own service entities here.
+    // Assert on the delta this test introduces, not an absolute total.
+    const before = await world.getHealthSummary();
 
-    const summary = await world.getHealthSummary();
-    expect(summary.total).toBe(3);
-    expect(summary.healthy).toBe(1);
-    expect(summary.degraded).toBe(1);
-    expect(summary.failed).toBe(1);
+    await world.upsertEntity({ entityType: 'service', entityId: `h1-${Date.now()}`, entityName: 'Healthy 1', status: 'healthy' });
+    await world.upsertEntity({ entityType: 'service', entityId: `d1-${Date.now()}`, entityName: 'Degraded 1', status: 'degraded' });
+    await world.upsertEntity({ entityType: 'service', entityId: `f1-${Date.now()}`, entityName: 'Failed 1', status: 'failed' });
+
+    const after = await world.getHealthSummary();
+    expect(after.total - before.total).toBe(3);
+    expect(after.healthy - before.healthy).toBe(1);
+    expect(after.degraded - before.degraded).toBe(1);
+    expect(after.failed - before.failed).toBe(1);
     await world.close();
   });
 

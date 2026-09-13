@@ -57,6 +57,8 @@ const ALLOWLIST = new Set([
   'docs/HYDI_EXTERNAL_INTEGRATION_QUALIFICATION.md', // external integration qualification documentation
   'docs/HYDI_AUTONOMY_BOUNDARIES.md', // autonomy boundaries documentation
   'docs/HYDI_CREDENTIAL_QUALIFICATION_FINAL_REPORT.md', // final qualification report
+  'tests/unit/production-operations-control-plane.test.ts', // fake generic-placeholder secret fixtures testing safePrefix() redaction
+  'tests/unit/stripe-connect-webhook.test.js', // fake key testing the live-mode guard refuses processing without ALLOW_LIVE_STRIPE
 ]);
 
 function listTrackedFiles() {

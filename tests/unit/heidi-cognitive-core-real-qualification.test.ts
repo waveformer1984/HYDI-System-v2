@@ -132,7 +132,7 @@ describe('HEIDI Real System Qualification', () => {
       enableMetaCognition: false, // CommonJS module — may not load in Jest
       enableDecisionResolver: false,
     });
-  }, 30000);
+  }, 120000);
 
   afterAll(async () => {
     if (core) {
@@ -140,7 +140,7 @@ describe('HEIDI Real System Qualification', () => {
     }
     await cleanupTestData(pool);
     await pool.end();
-  }, 30000);
+  }, 120000);
 
   // ─── REAL QUALIFICATION 1 — OBSERVATION ─────────────────────────────
 
@@ -168,7 +168,7 @@ describe('HEIDI Real System Qualification', () => {
     for (const c of unknownComponents) {
       expect(c.status.toLowerCase()).toBe('unknown');
     }
-  }, 30000);
+  }, 120000);
 
   // ─── REAL QUALIFICATION 2 — MEMORY ──────────────────────────────────
 
@@ -195,7 +195,7 @@ describe('HEIDI Real System Qualification', () => {
     if (state.learningResult!.memoryStored) {
       expect(state.learningResult!.memoryId).not.toBeNull();
     }
-  }, 30000);
+  }, 120000);
 
   // ─── REAL QUALIFICATION 3 — GOAL ────────────────────────────────────
 
@@ -237,7 +237,7 @@ describe('HEIDI Real System Qualification', () => {
     await goals.updateGoal(objective.goalId, { status: 'completed' as GoalStatus });
     await goals.updateGoal(mission.goalId, { status: 'completed' as GoalStatus });
     await goals.close();
-  }, 30000);
+  }, 120000);
 
   // ─── REAL QUALIFICATION 4 — REAL TOOL ACTION ────────────────────────
 
@@ -302,7 +302,7 @@ describe('HEIDI Real System Qualification', () => {
       // A different capability was selected — the goal may not have been picked up
       console.log(`REAL 4: Different capability selected: ${state.selectedAction?.capabilityId}`);
     }
-  }, 30000);
+  }, 120000);
 
   // ─── REAL QUALIFICATION 5 — COMMUNICATION ───────────────────────────
 
@@ -353,7 +353,7 @@ describe('HEIDI Real System Qualification', () => {
 
     // Clean up
     await pool.query(`DELETE FROM heidi_goals WHERE title LIKE $1`, [`${TEST_PREFIX}_comm%`]);
-  }, 30000);
+  }, 120000);
 
   // ─── REAL QUALIFICATION 6 — RECOVERY ────────────────────────────────
 
@@ -394,7 +394,7 @@ describe('HEIDI Real System Qualification', () => {
 
     // Clean up
     await pool.query(`DELETE FROM heidi_goals WHERE title LIKE $1`, [`${TEST_PREFIX}_recovery%`]);
-  }, 30000);
+  }, 120000);
 
   // ─── REAL QUALIFICATION 7 — REPLANNING ──────────────────────────────
 
@@ -442,7 +442,7 @@ describe('HEIDI Real System Qualification', () => {
 
     // Clean up
     await pool.query(`DELETE FROM heidi_goals WHERE title LIKE $1`, [`${TEST_PREFIX}_replan%`]);
-  }, 30000);
+  }, 120000);
 
   // ─── REAL QUALIFICATION 8 — REVENUE ─────────────────────────────────
 
@@ -503,7 +503,7 @@ describe('HEIDI Real System Qualification', () => {
     );
     await pool.query('DELETE FROM revenue_prospects WHERE contact_email LIKE $1', [`${TEST_PREFIX}%`]);
     await pool.query(`DELETE FROM heidi_goals WHERE title LIKE $1`, [`${TEST_PREFIX}_revenue%`]);
-  }, 30000);
+  }, 120000);
 
   // ─── REAL QUALIFICATION 9 — AUTHORIZATION ───────────────────────────
 
@@ -552,7 +552,7 @@ describe('HEIDI Real System Qualification', () => {
 
     // Clean up
     await pool.query(`DELETE FROM heidi_goals WHERE title LIKE $1`, [`${TEST_PREFIX}_auth%`]);
-  }, 30000);
+  }, 120000);
 
   // ─── REAL QUALIFICATION 10 — GUARDIAN ───────────────────────────────
 

@@ -55,7 +55,18 @@ describe('HEIDI Real End-to-End Commercial Qualification', () => {
   let authMgr: AuthorizationPackageManager;
   let inboundHandler: InboundResponseHandler;
 
+  // Some tests assert commercial.stripe/commercial.email are correctly
+  // reported as missing external credentials. dotenv.config() above loads
+  // whatever a developer's .env.local happens to contain -- clear before
+  // construction so no adapter/workflow captures an ambient placeholder.
+  const CREDENTIAL_KEYS = ['STRIPE_SECRET_KEY', 'SENDGRID_API_KEY', 'SMTP_HOST'];
+  const envSnapshot: Record<string, string | undefined> = {};
+
   beforeAll(async () => {
+    for (const key of CREDENTIAL_KEYS) {
+      envSnapshot[key] = process.env[key];
+      delete process.env[key];
+    }
     pool = new Pool({ ...DB_CONFIG, max: 5 });
     revDb = new RevenueDatabase(DB_CONFIG);
     pipeline = new ProspectPipeline(undefined, revDb);
@@ -73,6 +84,10 @@ describe('HEIDI Real End-to-End Commercial Qualification', () => {
   afterAll(async () => {
     await goals.close();
     await pool.end();
+    for (const key of CREDENTIAL_KEYS) {
+      if (envSnapshot[key] === undefined) delete process.env[key];
+      else process.env[key] = envSnapshot[key];
+    }
   }, 30000);
 
   // ─── 1. Real prospect enters system ──────────────────────────────────

@@ -63,7 +63,11 @@ function makeCsvProspects(count: number, suffix: string = ''): Array<Record<stri
   const prefix = suffix ? `${TEST_PREFIX}_${suffix}` : TEST_PREFIX;
   for (let i = 1; i <= count; i++) {
     prospects.push({
-      company_name: `CampLoop Biz ${suffix}_${i}`,
+      // Must be unique per test RUN, not just per call within a run: the
+      // pipeline dedupes on company_name (in addition to email/website), so
+      // a fixed name here would collide with leftover rows from a prior
+      // local run and make "first import" look like a pre-existing duplicate.
+      company_name: `CampLoop Biz ${prefix}_${i}`,
       contact_name: `Owner ${suffix}_${i}`,
       contact_email: `${prefix}${i}@camploop.test`,
       contact_phone: `555-0${i}00`,
@@ -556,9 +560,26 @@ describe('HEIDI Commercial Campaign Loop Qualification', () => {
   // ─── SUMMARY ───────────────────────────────────────────────────────
 
   test('CAMPAIGN LOOP SUMMARY — verify complete campaign state', async () => {
+    // getState() reads STRIPE_SECRET_KEY/SENDGRID_API_KEY/SMTP_HOST live from
+    // process.env, not from a snapshot at construction time. This assertion's
+    // entire point is proving the workflow correctly reports BLOCKED with no
+    // credentials configured -- it must not depend on happening to run on a
+    // machine whose .env.local (loaded explicitly above) has none set.
+    const CREDENTIAL_KEYS = ['STRIPE_SECRET_KEY', 'SENDGRID_API_KEY', 'SMTP_HOST'];
+    const envSnapshot: Record<string, string | undefined> = {};
+    for (const key of CREDENTIAL_KEYS) {
+      envSnapshot[key] = process.env[key];
+      delete process.env[key];
+    }
+
     const adapter = createDiscoveryAdapterFromEnv();
     const wfState = await workflow.getState();
     const revenueResult = await workflow.verifyRevenue();
+
+    for (const key of CREDENTIAL_KEYS) {
+      if (envSnapshot[key] === undefined) delete process.env[key];
+      else process.env[key] = envSnapshot[key];
+    }
 
     console.log('');
     console.log('════════════════════════════════════════════════════════════════');
