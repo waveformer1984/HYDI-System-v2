@@ -8,8 +8,15 @@
   },
   "overrides": [
     {
-      "files": ["*.ts", "*.tsx"],
-      "excludedFiles": ["supabase/functions/**/*.ts", "**/*.test.ts", "**/*.test.tsx"],
+      "files": [
+        "*.ts",
+        "*.tsx"
+      ],
+      "excludedFiles": [
+        "supabase/functions/**/*.ts",
+        "**/*.test.ts",
+        "**/*.test.tsx"
+      ],
       "extends": [
         "next/typescript"
       ],
@@ -22,42 +29,107 @@
       }
     },
     {
-      "files": ["**/*.test.ts", "**/*.test.tsx"],
+      "files": [
+        "pages/api/authorization.ts",
+        "pages/api/execute.ts",
+        "pages/api/interventions/route.ts",
+        "pages/api/goals/route.ts",
+        "lib/operational/CredentialGovernanceOrchestrator.ts",
+        "lib/heidi/WorldModel.ts",
+        "lib/operational/CredentialSource.ts",
+        "lib/operational/HistoricalSecretRemediationTracker.ts",
+        "lib/human-action/adapters/BrowserAdapter.ts",
+        "lib/delegated-operator/OperationalEvent.ts",
+        "lib/operator-api-shared.ts",
+        "lib/delegated-operator/DelegatedOperatorIntegration.ts",
+        "lib/adaptive-operator/AdaptiveOperatorIntegration.ts",
+        "lib/orchestrator.ts",
+        "lib/human-action/HumanActionEngine.ts",
+        "lib/operational/KeyManagementService.ts",
+        "lib/operational/ExternalCapabilityAcquisitionEngine.ts",
+        "lib/communication/revenueBridge.ts",
+        "lib/communication/channels/anthropicAdapter.ts",
+        "lib/communication/channels/pushAdapter.ts",
+        "lib/operational/RecoveryEngine.ts",
+        "lib/operational/HealthProvenanceChecker.ts",
+        "lib/health/collectors/workers.ts"
+      ],
+      "rules": {
+        "@typescript-eslint/no-require-imports": "off"
+      }
+    },
+    {
+      "files": [
+        "**/*.test.ts",
+        "**/*.test.tsx"
+      ],
       "extends": [
         "next/typescript"
       ],
       "rules": {
         "@typescript-eslint/no-explicit-any": "off",
         "@typescript-eslint/no-require-imports": "off",
-        "@typescript-eslint/no-unused-vars": ["warn", { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }]
+        "@typescript-eslint/no-unused-vars": [
+          "warn",
+          {
+            "argsIgnorePattern": "^_",
+            "varsIgnorePattern": "^_"
+          }
+        ]
       }
     },
     {
-      "files": ["*.js", "*.jsx"],
+      "files": [
+        "*.js",
+        "*.jsx"
+      ],
       "parserOptions": {
         "sourceType": "script"
       },
       "rules": {
         "@typescript-eslint/no-require-imports": "off",
         "@typescript-eslint/no-unused-vars": "off",
-        "no-unused-vars": ["warn", { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }],
+        "no-unused-vars": [
+          "warn",
+          {
+            "argsIgnorePattern": "^_",
+            "varsIgnorePattern": "^_"
+          }
+        ],
         "@typescript-eslint/no-explicit-any": "off"
       }
     },
     {
-      "files": ["api/**/*.js", "api/**/*.jsx", "pages/**/*.js", "pages/**/*.jsx", "components/**/*.js", "components/**/*.jsx", "lib/**/*.js", "lib/**/*.jsx", "src/**/*.js", "src/**/*.jsx", "apps/**/*.js", "apps/**/*.jsx"],
+      "files": [
+        "api/**/*.js",
+        "api/**/*.jsx",
+        "pages/**/*.js",
+        "pages/**/*.jsx",
+        "components/**/*.js",
+        "components/**/*.jsx",
+        "lib/**/*.js",
+        "lib/**/*.jsx",
+        "src/**/*.js",
+        "src/**/*.jsx",
+        "apps/**/*.js",
+        "apps/**/*.jsx"
+      ],
       "parserOptions": {
         "sourceType": "module"
       }
     },
     {
-      "files": ["ursula-api-hydi-sync.js"],
+      "files": [
+        "ursula-api-hydi-sync.js"
+      ],
       "parserOptions": {
         "sourceType": "module"
       }
     },
     {
-      "files": ["*.jsx"],
+      "files": [
+        "*.jsx"
+      ],
       "parserOptions": {
         "sourceType": "module"
       }

@@ -20,30 +20,91 @@ const HeidiActionLayer = require('../actions/HeidiActionLayer');
 const selfHealing = require('../healing/SelfHealingService');
 const redisStream = require('../queue/RedisStreamBroker');
 
+/**
+ * Phase II: explicit loop outcomes.
+ *
+ * A cycle previously had exactly two externally visible fates: it threw
+ * (loop_failed) or it did not (loop_completed, which HYDISystem recorded as
+ * success:true unconditionally). Everything that went wrong without throwing --
+ * a rejected decision, a missing model, a handler returning nothing -- landed in
+ * the "completed" bucket and was reported as a success.
+ *
+ * These five outcomes are the vocabulary the rest of the system reads. They
+ * intentionally mirror the ComponentState names already used across
+ * lib/operational (HEALTHY/DEGRADED/BLOCKED/FAILED/UNKNOWN) rather than
+ * inventing a second taxonomy, with SUCCESS/UNVERIFIED as the loop-flavoured
+ * equivalents of HEALTHY/UNKNOWN.
+ */
+const LOOP_OUTCOME = Object.freeze({
+  /** The action ran and produced a result. */
+  SUCCESS: 'SUCCESS',
+  /** The action was attempted and threw. */
+  FAILED: 'FAILED',
+  /** Policy, gating, or a missing prerequisite stopped the action before it ran. */
+  BLOCKED: 'BLOCKED',
+  /** The action ran but only partially achieved its objective. */
+  DEGRADED: 'DEGRADED',
+  /** The action reported completion without evidence that anything happened. */
+  UNVERIFIED: 'UNVERIFIED'
+});
+
+/** Outcomes that may be reported to the rest of the system as a success. */
+const SUCCESSFUL_OUTCOMES = new Set([LOOP_OUTCOME.SUCCESS]);
+
+/**
+ * Task types whose action handler routes through the model stack and therefore
+ * cannot produce a completion without a selected model. Revenue and
+ * communication tasks go to the action layer instead (Stripe, email, webhooks)
+ * and legitimately need no model, so they are not gated on one -- see
+ * takeAction's dispatch table.
+ */
+const ACTION_LAYER_TASK_TYPES = new Set(['revenue', 'payment', 'communication']);
+function requiresModel(taskType) {
+  return !ACTION_LAYER_TASK_TYPES.has(taskType);
+}
+
 class HeidiCoreLoop extends EventEmitter {
   constructor(config = {}) {
     super();
-    
+
+    // Optional: an already-constructed HeidiControlPlane instance to report
+    // task outcomes to (see recordControlPlaneOutcome below). Kept out of
+    // this.config -- destructured off here rather than left in the spread --
+    // so it isn't stored as a plain config value alongside primitive settings.
+    //
+    // `orchestrator` is likewise optional: HYDISystem.js used to construct its own
+    // top-level HeidiOrchestrator (for handleIntelligenceRequest/handleActionRequest,
+    // HYDIAutonomyManager, and status reporting) while this class *separately*
+    // constructed a second, independent HeidiOrchestrator that the live autonomous loop
+    // actually runs against -- two instances with two different metrics/drift/model
+    // histories, silently out of sync (this is what caused the control-plane wiring gap
+    // and the "avoiding strategy unknown" bug fixed earlier). Accepting an already-built
+    // instance here lets HYDISystem hand in the one shared orchestrator so every consumer
+    // reads and writes the same state. Falls back to constructing its own when none is
+    // given, so this class still works standalone (e.g. in tests).
+    const { controlPlane, orchestrator, ...restConfig } = config;
+    this.controlPlane = controlPlane || null;
+
     this.config = {
       // Loop timing
       loopInterval: config.loopInterval || 60000, // 1 minute default
       observationInterval: config.observationInterval || 300000, // 5 minutes
       reflectionInterval: config.reflectionInterval || 900000, // 15 minutes
-      
+
       // Loop controls
       enableAutoActions: config.enableAutoActions !== false,
       maxConcurrentLoops: config.maxConcurrentLoops || 5,
       enableRevenueMode: config.enableRevenueMode !== false,
-      
+
       // Thresholds
       actionConfidenceThreshold: config.actionConfidenceThreshold || 0.7,
       adaptationThreshold: config.adaptationThreshold || 0.3,
-      
-      ...config
+
+      ...restConfig
     };
     
     // Initialize all layers
-    this.orchestrator = new HeidiOrchestrator({
+    this.orchestrator = orchestrator || new HeidiOrchestrator({
       confidenceThreshold: this.config.actionConfidenceThreshold,
       revenuePriority: this.config.enableRevenueMode
     });
@@ -74,6 +135,16 @@ class HeidiCoreLoop extends EventEmitter {
     this.metrics = {
       loopsCompleted: 0,
       loopsFailed: 0,
+      // Phase II: loopsCompleted counts pipeline runs, which is not the same as
+      // loops that achieved anything. These break that number down by outcome so
+      // "the loop is running" can never be mistaken for "the loop is working".
+      loopsByOutcome: {
+        SUCCESS: 0,
+        FAILED: 0,
+        BLOCKED: 0,
+        DEGRADED: 0,
+        UNVERIFIED: 0
+      },
       avgLoopTime: 0,
       observations: 0,
       actions: 0,
@@ -346,18 +417,29 @@ class HeidiCoreLoop extends EventEmitter {
         this.loopHistory = this.loopHistory.slice(-500);
       }
       
-      // Emit completion
+      // Phase II: 'loop_completed' means "the pipeline ran to the end", not
+      // "the loop achieved its objective". The outcome now travels with the
+      // event so listeners cannot assume the latter from the former.
+      const outcome = result.outcome || LOOP_OUTCOME.UNVERIFIED;
+      const succeeded = SUCCESSFUL_OUTCOMES.has(outcome);
+
       this.emit('loop_completed', {
         loopId,
         task,
         result,
+        outcome,
+        success: succeeded,
+        reason: result.outcomeReason || null,
         duration: loopTime
       });
-      
-      console.log(`[CORE LOOP] Loop completed: ${loopId} (${loopTime}ms)`);
-      
+
+      console.log(
+        `[CORE LOOP] Loop finished: ${loopId} outcome=${outcome} (${loopTime}ms)` +
+        (result.outcomeReason ? ` -- ${result.outcomeReason}` : '')
+      );
+
       return result;
-      
+
     } catch (error) {
       console.error(`[CORE LOOP] Loop failed: ${loopId} - ${error.message}`);
       
@@ -426,9 +508,17 @@ class HeidiCoreLoop extends EventEmitter {
     // 7. ADAPT - Update strategy based on reflection
     const adaptation = await this.adaptStrategy(task, reflection, loopId);
     
+    // Phase II: the loop's own verdict, derived from what actually happened.
+    // Reaching the end of the pipeline without throwing is not success.
+    const outcome = measurement.outcome || LOOP_OUTCOME.UNVERIFIED;
+    const success = SUCCESSFUL_OUTCOMES.has(outcome);
+
     const result = {
       loopId,
       task: task.type,
+      outcome,
+      success,
+      outcomeReason: measurement.reason || null,
       observation,
       evaluation,
       decision,
@@ -438,12 +528,15 @@ class HeidiCoreLoop extends EventEmitter {
       adaptation,
       timestamp: new Date().toISOString()
     };
-    
+
     // Store loop result in memory
     this.memorySystem.storeSession(loopId, result, 'loops');
-    
-    console.log(`[HEIDI LOOP] Completed ${task.type} loop: ${loopId}`);
-    
+
+    console.log(
+      `[HEIDI LOOP] Finished ${task.type} loop: ${loopId} outcome=${outcome}` +
+      (result.outcomeReason ? ` reason=${result.outcomeReason}` : '')
+    );
+
     return result;
   }
   
@@ -549,17 +642,41 @@ class HeidiCoreLoop extends EventEmitter {
   
   // 4. ACT
   async takeAction(task, decision, loopId) {
+    // Phase II: a rejected decision used to return an object with no `success`
+    // field at all. `measureResults` then read `action.success` as undefined,
+    // which reflectOnLoop scored as a failure (drift 1.000, accuracy 0.00) while
+    // HYDISystem.handleLoopCompleted recorded core_loop success:true. A policy
+    // rejection is neither success nor failure -- it is BLOCKED, and it must say
+    // so explicitly.
     if (decision.action === 'reject') {
       return {
         status: 'rejected',
+        outcome: LOOP_OUTCOME.BLOCKED,
+        blockedReason: decision.reason,
         reason: decision.reason,
-        result: null
+        result: null,
+        success: false
       };
     }
-    
+
+    // A model-backed task with no selected model cannot produce a completion.
+    // Reporting success here would claim an inference that never happened.
+    // Action-layer tasks (revenue, communication) need no model and are exempt.
+    if (requiresModel(task.type) && !decision.model) {
+      return {
+        status: 'blocked',
+        outcome: LOOP_OUTCOME.BLOCKED,
+        blockedReason: 'no_model_selected',
+        reason: `task type '${task.type}' routes through the model stack but no model was selected (strategy='${decision.strategy}')`,
+        strategy: decision.strategy,
+        result: null,
+        success: false
+      };
+    }
+
     try {
       let result;
-      
+
       // Execute based on task type and decision
       if (task.type === 'revenue' || task.type === 'payment') {
         result = await this.executeRevenueAction(task, decision, loopId);
@@ -574,22 +691,40 @@ class HeidiCoreLoop extends EventEmitter {
       }
       
       this.metrics.actions++;
-      
+
+      // A handler that returns nothing has not produced a completion. Claiming
+      // success:true for it is exactly the false-green this phase removes.
+      if (result === undefined || result === null) {
+        return {
+          status: 'unverified',
+          outcome: LOOP_OUTCOME.UNVERIFIED,
+          reason: `action handler for task type '${task.type}' returned no result -- completion could not be verified`,
+          strategy: decision.strategy,
+          model: decision.model,
+          result: null,
+          success: false
+        };
+      }
+
       return {
         status: 'completed',
+        outcome: LOOP_OUTCOME.SUCCESS,
         result,
         strategy: decision.strategy,
         model: decision.model,
         success: true
       };
-      
+
     } catch (error) {
       console.error(`[CORE LOOP] Action failed for ${loopId}:`, error.message);
-      
+
       return {
         status: 'failed',
+        outcome: LOOP_OUTCOME.FAILED,
         error: error.message,
         strategy: decision.strategy,
+        model: decision.model,
+        result: null,
         success: false
       };
     }
@@ -598,7 +733,12 @@ class HeidiCoreLoop extends EventEmitter {
   // 5. MEASURE
   async measureResults(task, action, _loopId) {
     const measurement = {
-      success: action.success,
+      // Phase II: outcome is carried through so downstream consumers can tell a
+      // policy block apart from an execution failure instead of seeing only a
+      // boolean (or, previously, `undefined`).
+      outcome: action.outcome || (action.success ? LOOP_OUTCOME.SUCCESS : LOOP_OUTCOME.FAILED),
+      success: action.success === true,
+      reason: action.reason || action.error || null,
       latency: action.latency || 0,
       quality: this.assessActionQuality(action),
       impact: await this.assessActionImpact(task, action),
@@ -814,34 +954,79 @@ class HeidiCoreLoop extends EventEmitter {
   }
   
   async applyAdaptations(recommendations) {
+    const { normalize, isValidType } = require('./adaptation-vocabulary');
     for (const rec of recommendations) {
-      await this.applyAdaptation(rec);
+      const normalized = normalize(rec);
+      if (!isValidType(normalized.type)) {
+        console.log(`[CORE LOOP] Unknown adaptation type: ${normalized.type}`);
+        continue;
+      }
+      await this.applyAdaptation(normalized);
     }
   }
-  
+
   async applyAdaptation(adaptation) {
     console.log(`[CORE LOOP] Applying adaptation: ${adaptation.type}`);
-    
+
     switch (adaptation.type) {
       case 'strategy_avoidance':
         // Update orchestrator preferences
         this.orchestrator.config.avoidStrategies = this.orchestrator.config.avoidStrategies || [];
         this.orchestrator.config.avoidStrategies.push(adaptation.target);
         break;
-        
+
       case 'strategy_preference':
         // Update orchestrator preferences
         this.orchestrator.config.preferStrategies = this.orchestrator.config.preferStrategies || [];
         this.orchestrator.config.preferStrategies.push(adaptation.target);
         break;
-        
+
       case 'confidence_calibration':
         // Adjust confidence threshold
-        if (adaptation.adjustment === 'lower_threshold') {
+        if (adaptation.adjustment === 'lower_threshold' || adaptation.action === 'reduce_confidence_threshold') {
           this.config.actionConfidenceThreshold = Math.max(0.5, this.config.actionConfidenceThreshold - 0.1);
+        } else if (adaptation.action === 'increase_confidence_threshold') {
+          this.config.actionConfidenceThreshold = Math.min(0.9, this.config.actionConfidenceThreshold + 0.1);
         }
         break;
-        
+
+      case 'drift_mitigation':
+        // Reduce confidence threshold to counteract drift
+        this.config.actionConfidenceThreshold = Math.max(0.5, this.config.actionConfidenceThreshold - 0.1);
+        console.log(`[CORE LOOP] Drift mitigation: lowered confidence threshold to ${this.config.actionConfidenceThreshold}`);
+        break;
+
+      case 'failure_mitigation':
+        // Avoid the failing strategy
+        if (adaptation.target) {
+          this.orchestrator.config.avoidStrategies = this.orchestrator.config.avoidStrategies || [];
+          this.orchestrator.config.avoidStrategies.push(adaptation.target);
+          console.log(`[CORE LOOP] Failure mitigation: avoiding strategy ${adaptation.target}`);
+        }
+        break;
+
+      case 'success_amplification':
+        // Prefer the successful strategy
+        if (adaptation.target) {
+          this.orchestrator.config.preferStrategies = this.orchestrator.config.preferStrategies || [];
+          this.orchestrator.config.preferStrategies.push(adaptation.target);
+          console.log(`[CORE LOOP] Success amplification: preferring strategy ${adaptation.target}`);
+        }
+        break;
+
+      case 'cost_optimization':
+        // Reduce external usage / improve ROI
+        if (adaptation.action === 'reduce_external_usage') {
+          this.config.costThreshold = Math.max(0.01, (this.config.costThreshold || 0.1) * 0.8);
+        }
+        console.log(`[CORE LOOP] Cost optimization: ${adaptation.action}`);
+        break;
+
+      case 'model_switch':
+        // Switch primary model
+        console.log(`[CORE LOOP] Model switch recommended: ${adaptation.target || adaptation.action}`);
+        break;
+
       default:
         console.log(`[CORE LOOP] Unknown adaptation type: ${adaptation.type}`);
     }
@@ -853,10 +1038,58 @@ class HeidiCoreLoop extends EventEmitter {
   
   handleTaskCompleted(event) {
     console.log(`[CORE LOOP] Task completed: ${event.task.id}`);
+    this.recordControlPlaneOutcome(event, true);
   }
-  
+
   handleTaskFailed(event) {
     console.log(`[CORE LOOP] Task failed: ${event.task.id} - ${event.error}`);
+    this.recordControlPlaneOutcome(event, false);
+  }
+
+  /**
+   * Feed this loop's task outcomes into the control plane's learning
+   * history (HeidiControlPlane.recordActionOutcome / this.state.learningHistory).
+   *
+   * Without this, the control plane's feedback cycle (runFeedbackCycle(),
+   * on a 60s timer) logs "[CONTROL PLANE] Insufficient data for feedback
+   * cycle" forever, no matter how many core-loop tasks actually run:
+   * recordActionOutcome() was previously only ever called from
+   * HYDISystem's separate handleIntelligenceRequest()/handleActionRequest()
+   * paths, which the autonomous core loop (this class) never goes through.
+   * This method is the missing connection between "the loop that does the
+   * work" and "the system that's supposed to learn from it".
+   */
+  recordControlPlaneOutcome(event, success) {
+    if (!this.controlPlane || typeof this.controlPlane.recordActionOutcome !== 'function') return;
+
+    const { task, result, error } = event;
+    if (!task) return;
+
+    const decision = result && result.decision;
+    const evaluation = result && result.evaluation;
+    const action = result && result.action;
+    const measurement = result && result.measurement;
+
+    try {
+      this.controlPlane.recordActionOutcome(
+        {
+          id: task.id,
+          type: task.type,
+          model: (decision && decision.model) || (action && action.model) || 'unknown',
+          strategy: (decision && decision.strategy) || (action && action.strategy),
+          confidence: evaluation ? evaluation.confidence : undefined,
+          cost: evaluation ? evaluation.cost : undefined
+        },
+        {
+          success: success && (action ? action.success !== false : true),
+          latency: action ? action.latency || 0 : 0,
+          revenue: measurement ? measurement.revenueImpact || 0 : 0,
+          error: error ? (error.message || String(error)) : undefined
+        }
+      );
+    } catch (err) {
+      console.error('[CORE LOOP] Failed to record control-plane outcome:', err.message);
+    }
   }
   
   handleReflectionCompleted(reflection) {
@@ -904,6 +1137,13 @@ class HeidiCoreLoop extends EventEmitter {
     this.metrics.loopsCompleted++;
     const n = this.metrics.loopsCompleted;
     this.metrics.avgLoopTime = ((this.metrics.avgLoopTime * (n - 1)) + loopTime) / n;
+
+    // Phase II: record what the loop actually achieved, not just that it ran.
+    const outcome = result?.outcome || LOOP_OUTCOME.UNVERIFIED;
+    if (this.metrics.loopsByOutcome[outcome] === undefined) {
+      this.metrics.loopsByOutcome[outcome] = 0;
+    }
+    this.metrics.loopsByOutcome[outcome]++;
   }
 
   // ── System observation helpers ─────────────────────────────────────────────
@@ -1068,6 +1308,16 @@ class HeidiCoreLoop extends EventEmitter {
     this.metrics = {
       loopsCompleted: 0,
       loopsFailed: 0,
+      // Phase II: loopsCompleted counts pipeline runs, which is not the same as
+      // loops that achieved anything. These break that number down by outcome so
+      // "the loop is running" can never be mistaken for "the loop is working".
+      loopsByOutcome: {
+        SUCCESS: 0,
+        FAILED: 0,
+        BLOCKED: 0,
+        DEGRADED: 0,
+        UNVERIFIED: 0
+      },
       avgLoopTime: 0,
       observations: 0,
       actions: 0,
@@ -1089,3 +1339,5 @@ class HeidiCoreLoop extends EventEmitter {
 }
 
 module.exports = HeidiCoreLoop;
+module.exports.LOOP_OUTCOME = LOOP_OUTCOME;
+module.exports.SUCCESSFUL_OUTCOMES = SUCCESSFUL_OUTCOMES;

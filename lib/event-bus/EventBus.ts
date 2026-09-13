@@ -15,6 +15,13 @@ import type {
 
 const PRIORITY_RANK: Record<EventPriority, number> = { high: 0, normal: 1, low: 2 };
 
+// NAMING COLLISION: there is a SEPARATE, unrelated class also named
+// `EventBus` at pao-system/core/event.bus.ts (a Redis/Kafka-style
+// EventEmitter-based bus used by the PAO agent system). THIS one is the
+// lib/-tree event bus with its own subscription/priority/history model
+// (see ./types, ./context, ./validation in this directory). Check which
+// tree a given consumer actually lives in before assuming which
+// "EventBus" it imports.
 export class EventBus {
   private subscriptions = new Map<string, Subscription[]>();
   private history: BusEvent[] = [];

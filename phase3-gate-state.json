@@ -1,0 +1,121 @@
+{
+  "phase": "PHASE 3",
+  "status": "PHASE 3 PASS",
+  "branch": "refactor/architectural-consolidation",
+  "baseCommit": "9d33bfe",
+  "runtimeFixes": {
+    "babelRegister": "scripts/babel-register.js — @babel/register with same presets as babel-jest for test-runtime parity. Fixes MODULE_NOT_FOUND crash when CLI scripts require() .ts files.",
+    "detachedSpawn": "lib/operational/RecoveryEngine.ts — recovered processes spawned with detached:true + unref() so they survive CLI exit. Previously destroy() killed them, making recovery transient.",
+    "graceMsCap": "lib/operational/RecoveryEngine.ts — recovery graceMs capped at 30s (boot graceMs up to 5min is for cold starts). Without this, hydi:recover hung 300000ms per attempt.",
+    "eventForwarder": "lib/operational/SystemStateModel.ts + OperationalIntelligence.ts — event forwarder callback wires stateModel.logEvent() to memory.record() so events reach durable JSONL storage. Previous wireEventLog() was a stub."
+  },
+  "gates": {
+    "P3-G0_BASELINE": {
+      "status": "PASS",
+      "description": "Phase 3 baseline established — canonical repo verified, branch confirmed, existing infrastructure reviewed",
+      "evidence": "CANONICAL.md verified, boot.config.json reviewed, existing health infrastructure (lib/health/, scripts/health-check.js, scripts/boot-agent.js) reviewed, existing recovery-engine.js classified as standalone (not boot-reachable)"
+    },
+    "P3-G1_STATE_MODEL": {
+      "status": "PASS",
+      "description": "Authoritative system state model with 8 component states",
+      "artifact": "lib/operational/SystemStateModel.ts, lib/operational/types.ts",
+      "tests": "tests/unit/operational-state-model.test.ts (9 tests)",
+      "evidence": "UNKNOWN never collapsed; state transitions logged; overall state is worst across components"
+    },
+    "P3-G2_HEALTH_PROVENANCE": {
+      "status": "PASS",
+      "description": "Health provenance with evidence chains for every determination",
+      "artifact": "lib/operational/HealthProvenanceChecker.ts",
+      "tests": "tests/unit/operational-no-false-greens.test.ts (9 tests)",
+      "evidence": "Every health result includes evidence[]; wrong process on port → UNAVAILABLE; database requires write/read evidence; in-process modules → UNKNOWN. Verified live: database HEALTHY with rest-reachable + service-role-write (HTTP 201) + service-role-read (1 row) + service-role-delete evidence chain."
+    },
+    "P3-G3_DEPENDENCY_GRAPH": {
+      "status": "PASS",
+      "description": "Dependency graph derived from boot.config.json + runtime deps",
+      "artifact": "lib/operational/DependencyGraphBuilder.ts",
+      "tests": "tests/unit/operational-dependency-graph.test.ts (9 tests)",
+      "evidence": "Critical path: database -> protoforge-core -> bridge -> heidi-web; recovery order respects dependencies; infrastructure nodes included"
+    },
+    "P3-G4_FAILURE_DETECTION": {
+      "status": "PASS",
+      "description": "Evidence-driven failure detection for 10 failure types",
+      "artifact": "lib/operational/HealthProvenanceChecker.ts",
+      "evidence": "Detects: process exit, wrong process, endpoint failure, functional failure, dependency failure, database failure, persistence failure, Ollama failure, bridge failure, config/security failure. Verified live across 3 failure classes (see P3-G9)."
+    },
+    "P3-G5_RECOVERY_ENGINE": {
+      "status": "PASS",
+      "description": "Bounded, capability-based recovery engine",
+      "artifact": "lib/operational/RecoveryEngine.ts",
+      "tests": "tests/unit/operational-no-false-greens.test.ts (recovery tests)",
+      "evidence": "Max 3 attempts; 5s cooldown; idempotent; concurrent recovery prevented; causal (dependencies first); command allowlist from boot.config.json. Runtime fixes: detached spawn (processes survive CLI exit), graceMs cap (30s max for recovery)."
+    },
+    "P3-G6_RECOVERY_VERIFICATION": {
+      "status": "PASS",
+      "description": "Postcondition verification — restart success is not assumed",
+      "artifact": "lib/operational/RecoveryEngine.ts",
+      "evidence": "After each attempt: re-runs full health check, reads new state, records evidence; success only if state is HEALTHY with evidence chain. Verified live: protoforge-core recovery attempt 1 → postcondition check → HEALTHY with port-listening + process-identity + health-endpoint + health-body evidence."
+    },
+    "P3-G7_OPERATIONAL_MEMORY": {
+      "status": "PASS",
+      "description": "Durable event log with correlation IDs",
+      "artifact": "lib/operational/OperationalMemory.ts, lib/operational/IncidentCorrelator.ts, lib/operational/SystemStateModel.ts (event forwarder), lib/operational/OperationalIntelligence.ts (wiring)",
+      "tests": "tests/unit/operational-memory.test.ts (6 tests), tests/unit/operational-incident-correlator.test.ts (7 tests)",
+      "evidence": "JSONL file at .hydi-operational/operational-events.jsonl; survives restarts; 5MB rotation; correlation by dependency graph + time window. Runtime-verified: live recovery produced 16 durable events including recovery_started, state_transition (UNKNOWN->RECOVERING->HEALTHY), recovery_step (process_spawned), recovery_completed. Previous gap: wireEventLog() was a stub — events went to in-memory state model only, never to durable storage. Fixed with event forwarder callback."
+    },
+    "P3-G8_SECURITY_BOUNDARIES": {
+      "status": "PASS",
+      "description": "Capability authorization and command allowlist",
+      "artifact": "lib/operational/CapabilityAuthorizer.ts",
+      "tests": "tests/unit/operational-capability-auth.test.ts (11 tests)",
+      "evidence": "8 capabilities; restart only for boot modules (protoforge-core, heidi-web, heidi-mobile-chat); denied actions counted and logged; no arbitrary shell execution. Commands read from boot.config.json, never from user/AI input."
+    },
+    "P3-G9_END_TO_END_AUTONOMY": {
+      "status": "PASS",
+      "description": "Diagnose + recover CLI commands with live failure injection demonstration",
+      "artifact": "scripts/hydi-diagnose.js, scripts/hydi-recover.js, scripts/babel-register.js, lib/operational/DiagnosticSnapshot.ts, lib/operational/OperationalIntelligence.ts",
+      "evidence": "Runtime-verified (not just unit-tested). npm run hydi:diagnose produces full snapshot with evidence chains. npm run hydi:recover performs bounded auto-recovery with detached process spawn. Live demonstration across 3 failure classes:\n1. Process failure: killed protoforge-core → UNAVAILABLE detected → heidi-web BLOCKED (not UNAVAILABLE) → recovery (1 attempt) → HEALTHY verified\n2. Port corruption: Python HTTP server on port 3005 → process-identity FAIL (wrong process: python) → UNAVAILABLE (not false HEALTHY) → recovery killed wrong process + started correct node → HEALTHY verified\n3. Dependency failure: killed protoforge-core → heidi-web BLOCKED (causal, not restarted) → auto-recover recovered protoforge-core first → heidi-web auto-unblocked → HEALTHY verified\nPrevious false green: gate claimed PASS but CLI crashed with MODULE_NOT_FOUND (require() of .ts files). Fixed with @babel/register runtime loader."
+    },
+    "P3-G10_REGRESSION": {
+      "status": "PASS",
+      "description": "Full regression suite — no Phase 2 baseline regression",
+      "evidence": "Typecheck: PASS; Lint: 0 errors, 768 warnings (pre-existing); Jest: 268 suites, 2549 passed, 1 skipped, 0 failed; Phase 3 tests: 6 suites, 51 tests, all passing"
+    }
+  },
+  "liveDemonstration": {
+    "timestamp": "2026-08-18T17:14:09Z",
+    "failureClasses": [
+      {
+        "class": "process_failure",
+        "injection": "Killed protoforge-core process on port 3005",
+        "detection": "protoforge-core: UNAVAILABLE (port not listening); heidi-web: BLOCKED (dependency failed); bridge: BLOCKED",
+        "recovery": "restart_process, 1 attempt, 30s grace",
+        "postcondition": "protoforge-core HEALTHY (port-listening + process-identity PID 27348 node + health-endpoint HTTP 200 + body {\"status\":\"ok\"}); heidi-web auto-recovered to HEALTHY; bridge auto-recovered to HEALTHY",
+        "result": "PASS"
+      },
+      {
+        "class": "port_corruption",
+        "injection": "Killed protoforge-core, started Python HTTP server on port 3005",
+        "detection": "protoforge-core: UNAVAILABLE (process-identity FAIL: wrong process python PID 10720, expected node) — NOT false HEALTHY despite port being occupied",
+        "recovery": "restart_process killed wrong process via taskkill, spawned correct node src/server.js, 1 attempt",
+        "postcondition": "protoforge-core HEALTHY (process-identity PASS: PID 27348, cmdline: node src/server.js)",
+        "result": "PASS — no false green"
+      },
+      {
+        "class": "dependency_failure",
+        "injection": "Killed protoforge-core while heidi-web was running on port 3000",
+        "detection": "protoforge-core: UNAVAILABLE (root cause); heidi-web: BLOCKED (dependency failed — NOT UNAVAILABLE, own process still running); bridge: BLOCKED; database/ollama: HEALTHY (unaffected)",
+        "recovery": "Auto-recover sorted by dependency order: protoforge-core first (root cause), then heidi-web auto-unblocked (NOT restarted — own process was fine)",
+        "postcondition": "All critical path components HEALTHY with full evidence chains",
+        "result": "PASS — causal recovery, no cascading restarts"
+      }
+    ]
+  },
+  "validation": {
+    "typecheck": "PASS",
+    "lint": "0 errors, 768 warnings (pre-existing)",
+    "jest": "268 suites, 2549 passed, 1 skipped, 0 failed",
+    "phase3Tests": "6 suites, 51 tests, all passing",
+    "runtimeReachability": "npm run hydi:diagnose and npm run hydi:recover both execute successfully against the real system",
+    "liveDemonstration": "3 failure classes demonstrated with recorded evidence — all PASS"
+  }
+}

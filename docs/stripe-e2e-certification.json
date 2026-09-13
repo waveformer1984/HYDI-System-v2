@@ -1,0 +1,219 @@
+{
+  "certificationId": "CERT-E2E-cf1b55c9",
+  "generatedAt": "2026-08-26T04:00:57.242Z",
+  "runId": "de79a626-ab6d-42fe-810b-fb53e02ef2e5",
+  "phase": "auth",
+  "cliState": "AUTHENTICATED",
+  "cliVersion": "stripe version 1.35.0",
+  "accountId": "acct_1R8ZCrITaXOHazrh",
+  "accountMode": "test",
+  "blockerOwnership": "AUTONOMOUS",
+  "transitions": [
+    {
+      "step": "cli_auth_check",
+      "timestamp": "2026-08-26T04:00:43.629Z",
+      "fromState": "UNKNOWN",
+      "toState": "AUTHENTICATED",
+      "evidence": "CLI authenticated — balance API responded (1041ms)",
+      "verificationLevel": "VERIFIED_EXTERNAL",
+      "result": "PASS",
+      "durationMs": 0
+    },
+    {
+      "step": "obtain_credential",
+      "timestamp": "2026-08-26T04:00:45.716Z",
+      "fromState": "AUTHENTICATED",
+      "toState": "CREDENTIAL_VALIDATED",
+      "evidence": "Test credential obtained from CLI, validated via /v1/balance, stored in secure source (fingerprint: 4d4da2e27ff012f4)",
+      "verificationLevel": "VERIFIED_EXTERNAL",
+      "result": "PASS",
+      "durationMs": 1406
+    },
+    {
+      "step": "start_webhook_receiver",
+      "timestamp": "2026-08-26T04:00:45.756Z",
+      "fromState": "NOT_RUNNING",
+      "toState": "RUNNING",
+      "evidence": "Webhook receiver listening on localhost:3041",
+      "verificationLevel": "VERIFIED_INTERNAL",
+      "result": "PASS",
+      "durationMs": 40
+    },
+    {
+      "step": "start_listener",
+      "timestamp": "2026-08-26T04:00:47.104Z",
+      "fromState": "NOT_RUNNING",
+      "toState": "RUNNING",
+      "evidence": "Listener started (stderr), forwarding to localhost:3041/api/webhooks/stripe",
+      "verificationLevel": "VERIFIED_EXTERNAL",
+      "result": "PASS",
+      "durationMs": 1347
+    },
+    {
+      "step": "capture_webhook_secret",
+      "timestamp": "2026-08-26T04:00:47.104Z",
+      "fromState": "UNKNOWN",
+      "toState": "SECRET_CAPTURED",
+      "evidence": "Webhook secret captured (fingerprint: 02e887294ccd4bbd)",
+      "verificationLevel": "VERIFIED_INTERNAL",
+      "result": "PASS",
+      "durationMs": 0
+    },
+    {
+      "step": "configure_env",
+      "timestamp": "2026-08-26T04:00:47.104Z",
+      "fromState": "UNCONFIGURED",
+      "toState": "CONFIGURED",
+      "evidence": "STRIPE_WEBHOOK_SECRET_01 and WEBHOOK_PROCESSING_ENABLED set",
+      "verificationLevel": "VERIFIED_INTERNAL",
+      "result": "PASS",
+      "durationMs": 0
+    },
+    {
+      "step": "create_checkout",
+      "timestamp": "2026-08-26T04:00:47.718Z",
+      "fromState": "NOT_CREATED",
+      "toState": "CREATED",
+      "evidence": "Checkout session created: cs_test_a1uFlBMb0Ci0ARHEwJ8HOqxuEEF1EViwjYqIc1MIrs4gE0EckTKH7jTJnH",
+      "verificationLevel": "VERIFIED_EXTERNAL",
+      "result": "PASS",
+      "durationMs": 614
+    },
+    {
+      "step": "trigger_event",
+      "timestamp": "2026-08-26T04:00:51.716Z",
+      "fromState": "NOT_TRIGGERED",
+      "toState": "TRIGGERED",
+      "evidence": "stripe trigger checkout.session.completed executed",
+      "verificationLevel": "VERIFIED_EXTERNAL",
+      "result": "PASS",
+      "durationMs": 3997
+    },
+    {
+      "step": "verify_webhook_delivery",
+      "timestamp": "2026-08-26T04:00:52.231Z",
+      "fromState": "WAITING",
+      "toState": "RECEIVED",
+      "evidence": "Target webhook received — event: evt_1U8Y1NITaXOHazrhMqPSI3Z4, type: checkout.session.completed, payload hash: 2de69ef13ca25737 (6 total events received)",
+      "verificationLevel": "VERIFIED_EXTERNAL",
+      "result": "PASS",
+      "durationMs": 514
+    },
+    {
+      "step": "verify_signature",
+      "timestamp": "2026-08-26T04:00:52.233Z",
+      "fromState": "UNVERIFIED",
+      "toState": "VERIFIED",
+      "evidence": "Stripe signature verified (HMAC-SHA256) — event: evt_1U8Y1NITaXOHazrhMqPSI3Z4, type: checkout.session.completed",
+      "verificationLevel": "VERIFIED_EXTERNAL",
+      "result": "PASS",
+      "durationMs": 1
+    },
+    {
+      "step": "verify_idempotency",
+      "timestamp": "2026-08-26T04:00:57.234Z",
+      "fromState": "UNKNOWN",
+      "toState": "VERIFIED",
+      "evidence": "Idempotency verified — 7 unique events received, 0 duplicates, verified event evt_1U8Y1NITaXOHazrhMqPSI3Z4 delivered exactly once",
+      "verificationLevel": "VERIFIED_EXTERNAL",
+      "result": "PASS",
+      "durationMs": 5001
+    },
+    {
+      "step": "cleanup",
+      "timestamp": "2026-08-26T04:00:57.241Z",
+      "fromState": "RUNNING",
+      "toState": "CLEANED",
+      "evidence": "Listener stopped, webhook server closed, env vars restored, credential removed",
+      "verificationLevel": "VERIFIED_INTERNAL",
+      "result": "PASS",
+      "durationMs": 0
+    }
+  ],
+  "webhookReceipt": {
+    "received": true,
+    "eventId": "evt_1U8Y1NITaXOHazrhMqPSI3Z4",
+    "eventType": "checkout.session.completed",
+    "signatureValid": true,
+    "signatureHeader": "t=1787716865,v1=2d2921ed0a5bc209253aba8cfca2da78f29c9fe19b6c9caf871d06e3d4c29058,v0=1a54624a8eaffd8173f8d31e3b90e9f399cbc2d7f0caa5db58e62cbbd438375c",
+    "payloadHash": "2de69ef13ca25737",
+    "receivedAt": "2026-08-26T04:00:52.023Z",
+    "body": "{\n  \"id\": \"evt_1U8Y1NITaXOHazrhMqPSI3Z4\",\n  \"object\": \"event\",\n  \"api_version\": \"2026-03-25.dahlia\",\n  \"created\": 1787716864,\n  \"data\": {\n    \"object\": {\n      \"id\": \"cs_test_a1rVtfeqjx7spIWh8JgyVd3EO0PBjMirovg1zDWYqiXWhcCFwkOf6YhQ34\",\n      \"object\": \"checkout.session\",\n      \"adaptive_pricing\": {\n        \"enabled\": true\n      },\n      \"after_expiration\": null,\n      \"allow_promotion_codes\": null,\n      \"amount_subtotal\": 3000,\n      \"amount_total\": 3000,\n      \"automatic_tax\": {\n        \"enabled\": false,\n        \"liability\": null,\n        \"provider\": null,\n        \"status\": null\n      },\n      \"billing_address_collection\": null,\n      \"branding_settings\": {\n        \"background_color\": \"#ffffff\",\n        \"border_style\": \"rounded\",\n        \"button_color\": \"#0074d4\",\n        \"display_name\": \"ProtoForge Industries\",\n        \"font_family\": \"default\",\n        \"icon\": null,\n        \"logo\": null\n      },\n      \"cancel_url\": \"https://httpbin.org/post\",\n      \"client_reference_id\": null,\n      \"client_secret\": null,\n      \"collected_information\": null,\n      \"consent\": null,\n      \"consent_collection\": null,\n      \"created\": 1787716862,\n      \"currency\": \"usd\",\n      \"currency_conversion\": null,\n      \"custom_fields\": [],\n      \"custom_text\": {\n        \"after_submit\": null,\n        \"shipping_address\": null,\n        \"submit\": null,\n        \"terms_of_service_acceptance\": null\n      },\n      \"customer\": null,\n      \"customer_account\": null,\n      \"customer_creation\": \"if_required\",\n      \"customer_details\": {\n        \"address\": {\n          \"city\": \"South San Francisco\",\n          \"country\": \"US\",\n          \"line1\": \"354 Oyster Point Blvd\",\n          \"line2\": null,\n          \"postal_code\": \"94080\",\n          \"state\": \"CA\"\n        },\n        \"business_name\": null,\n        \"email\": \"stripe@example.com\",\n        \"individual_name\": null,\n        \"name\": \"Jenny Rosen\",\n        \"phone\": null,\n        \"tax_exempt\": \"none\",\n        \"tax_ids\": []\n      },\n      \"customer_email\": null,\n      \"discounts\": [],\n      \"expires_at\": 1787803262,\n      \"integration_identifier\": null,\n      \"invoice\": null,\n      \"invoice_creation\": {\n        \"enabled\": false,\n        \"invoice_data\": {\n          \"account_tax_ids\": null,\n          \"custom_fields\": null,\n          \"description\": null,\n          \"footer\": null,\n          \"issuer\": null,\n          \"metadata\": {},\n          \"rendering_options\": null\n        }\n      },\n      \"livemode\": false,\n      \"locale\": null,\n      \"managed_payments\": {\n        \"enabled\": false\n      },\n      \"metadata\": {},\n      \"mode\": \"payment\",\n      \"origin_context\": null,\n      \"payment_intent\": \"pi_3U8Y1LITaXOHazrh07XJufXK\",\n      \"payment_link\": null,\n      \"payment_method_collection\": \"if_required\",\n      \"payment_method_configuration_details\": {\n        \"id\": \"pmc_1R8ZDNITaXOHazrhXlGMmQPU\",\n        \"parent\": null\n      },\n      \"payment_method_options\": {\n        \"card\": {\n          \"request_three_d_secure\": \"automatic\"\n        }\n      },\n      \"payment_method_types\": [\n        \"card\",\n        \"klarna\",\n        \"link\",\n        \"cashapp\",\n        \"amazon_pay\"\n      ],\n      \"payment_status\": \"paid\",\n      \"permissions\": null,\n      \"phone_number_collection\": {\n        \"enabled\": false\n      },\n      \"recovered_from\": null,\n      \"saved_payment_method_options\": null,\n      \"setup_intent\": null,\n      \"shipping_address_collection\": null,\n      \"shipping_cost\": null,\n      \"shipping_options\": [],\n      \"status\": \"complete\",\n      \"submit_type\": null,\n      \"subscription\": null,\n      \"success_url\": \"https://httpbin.org/post\",\n      \"total_details\": {\n        \"amount_discount\": 0,\n        \"amount_shipping\": 0,\n        \"amount_tax\": 0\n      },\n      \"ui_mode\": \"hosted_page\",\n      \"url\": null,\n      \"wallet_options\": null\n    }\n  },\n  \"livemode\": false,\n  \"pending_webhooks\": 15,\n  \"request\": {\n    \"id\": null,\n    \"idempotency_key\": null\n  },\n  \"type\": \"checkout.session.completed\"\n}"
+  },
+  "allReceivedWebhooks": [
+    {
+      "eventId": "evt_1U8Y1JITaXOHazrhDNtbQycO",
+      "eventType": "product.created",
+      "signatureValid": false,
+      "payloadHash": "40ab2bdb3ca6685a",
+      "receivedAt": "2026-08-26T04:00:51.720Z"
+    },
+    {
+      "eventId": "evt_1U8Y1JITaXOHazrh4XnD46t3",
+      "eventType": "price.created",
+      "signatureValid": false,
+      "payloadHash": "30fde0920c05db8b",
+      "receivedAt": "2026-08-26T04:00:51.722Z"
+    },
+    {
+      "eventId": "evt_3U8Y1LITaXOHazrh0rrRBBWQ",
+      "eventType": "charge.succeeded",
+      "signatureValid": false,
+      "payloadHash": "48fec0f43ad905da",
+      "receivedAt": "2026-08-26T04:00:51.767Z"
+    },
+    {
+      "eventId": "evt_3U8Y1LITaXOHazrh0DrWjp6Y",
+      "eventType": "payment_intent.succeeded",
+      "signatureValid": false,
+      "payloadHash": "b8a6b1e32592d273",
+      "receivedAt": "2026-08-26T04:00:51.849Z"
+    },
+    {
+      "eventId": "evt_3U8Y1LITaXOHazrh0uzU9t53",
+      "eventType": "payment_intent.created",
+      "signatureValid": false,
+      "payloadHash": "196c4bba19bd38f3",
+      "receivedAt": "2026-08-26T04:00:51.922Z"
+    },
+    {
+      "eventId": "evt_1U8Y1NITaXOHazrhMqPSI3Z4",
+      "eventType": "checkout.session.completed",
+      "signatureValid": true,
+      "payloadHash": "2de69ef13ca25737",
+      "receivedAt": "2026-08-26T04:00:52.023Z"
+    },
+    {
+      "eventId": "evt_3U8Y1LITaXOHazrh0guToMlV",
+      "eventType": "charge.updated",
+      "signatureValid": false,
+      "payloadHash": "138a1d94df32ab05",
+      "receivedAt": "2026-08-26T04:00:54.280Z"
+    }
+  ],
+  "checkoutSessionId": "cs_test_a1uFlBMb0Ci0ARHEwJ8HOqxuEEF1EViwjYqIc1MIrs4gE0EckTKH7jTJnH",
+  "stripeEventId": "evt_1U8Y1NITaXOHazrhMqPSI3Z4",
+  "credentialFingerprint": "4d4da2e27ff012f4",
+  "credentialSource": "stripe_cli_config",
+  "webhookSecretFingerprint": "02e887294ccd4bbd",
+  "listenerStarted": true,
+  "listenerPid": null,
+  "cleanedUp": true,
+  "humanActionRequest": null,
+  "recommendation": "READY",
+  "failClosedReason": null,
+  "evidenceIds": [
+    "4febca41-64e2-41b6-8755-a8fc54f959ab",
+    "ffa8d590-d959-44f1-9421-a32ef221ceb8",
+    "0e14fb66-6810-4536-b561-039f1fe2711d",
+    "9215173c-c29d-406a-b71e-0e369bdd657b",
+    "defc5f97-f2eb-4248-b4f1-0a47d653b24c",
+    "27e46cb2-3612-4f5f-b805-1ccdb0b5fdde",
+    "2b3b0c83-56b8-4b0b-8f86-a566498fc550",
+    "7d4c8697-ad56-462f-9aeb-6dbc9d175cf5",
+    "ce42ea7b-8c76-43f1-9909-04a141bdb35b",
+    "e571bab5-8f9c-4ca2-8b2b-dbcf28095f04",
+    "de2193eb-5883-41d5-8770-b2d897ed86b1",
+    "053fe95c-28a3-4137-9e4b-0ab89859ffdd"
+  ]
+}

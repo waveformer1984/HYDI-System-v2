@@ -2,6 +2,11 @@
 
 const { EventEmitter } = require('events');
 
+// NAMING COLLISION: there is a SEPARATE, unrelated class also named
+// `CapabilityRegistry` at lib/heidi/CapabilityRegistry.ts. THIS one is
+// scoped to the HYDI V3 reliability/autonomy layer only (see
+// src/hydi-v3/RUNBOOKS.md). Check which tree a given consumer lives in
+// before assuming which "CapabilityRegistry" it imports.
 class CapabilityRegistry extends EventEmitter {
   constructor(config = {}) {
     super();

@@ -76,6 +76,14 @@ function getSupabase(): SupabaseClient {
 }
 const supabaseProxy = new Proxy({}, { get: (_, prop) => (getSupabase() as any)[prop] }) as SupabaseClient;
 
+// NAMING COLLISION: there is a SEPARATE, unrelated class also named
+// `ModelManager` at src/hydi-v3/ModelManager.js, used only by the HYDI V3
+// reliability layer (adapter registry over Ollama/LM Studio/llama.cpp with
+// its own ModelConfiguration/ModelRegistry/ModelHealth/ModelMetrics
+// sub-modules). THIS class is the one actually used by the live /api/chat
+// endpoint (pages/api/chat.ts -> lib/orchestrator.ts's processChat()) --
+// local-first-with-API-fallback routing, circuit breaker, single-slot
+// Ollama awareness. Do not confuse the two when importing "ModelManager".
 export class ModelManager {
   // Static state survives across per-request ModelManager instances.
   private static consecutiveFailures = 0;

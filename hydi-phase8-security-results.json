@@ -1,0 +1,470 @@
+{
+  "phase": "8",
+  "timestamp": "2026-08-25T14:41:05.434Z",
+  "head": "8241ac028e9ca35afac361db54cc91b1eede18d1",
+  "branch": "feat/governed-autonomy",
+  "totalAssertions": 85,
+  "passed": 85,
+  "failed": 0,
+  "invariants": 21,
+  "passCount": 20,
+  "failCount": 0,
+  "expectedFailCount": 1,
+  "criticalCount": 1,
+  "routesScanned": 77,
+  "authenticatedRoutes": 21,
+  "unauthenticatedRoutes": 56,
+  "unauthenticatedMutations": 15,
+  "results": [
+    {
+      "id": "SEC01",
+      "invariant": "Authentication is mandatory on operator control plane",
+      "status": "PASS",
+      "detail": "All 10 operator routes require authentication",
+      "severity": "INFO",
+      "classification": "NONE"
+    },
+    {
+      "id": "SEC01b",
+      "invariant": "Unauthenticated control-plane routes identified",
+      "status": "EXPECTED_FAILURE",
+      "detail": "18 unauthenticated routes found: /api/audit, /api/cognitive, /api/credentials, /api/keys/audit, /api/keys/dashboard, /api/keys/health, /api/keys/index, /api/keys/reconcile, /api/keys/scan, /api/keys/:id, /api/session, /api/status/system, /api/status, /api/system/events, /api/system/health, /api/system/jobs, /api/system/metrics, /api/system/watchdog",
+      "severity": "CRITICAL",
+      "classification": "PRE_EXISTING"
+    },
+    {
+      "id": "SEC02",
+      "invariant": "RBAC is enforced consistently",
+      "status": "PASS",
+      "detail": "RBAC matrix verified for all 4 roles, fail-closed for unknown roles",
+      "severity": "INFO",
+      "classification": "NONE"
+    },
+    {
+      "id": "SEC03",
+      "invariant": "Viewer cannot mutate",
+      "status": "PASS",
+      "detail": "Viewer blocked from 5/5 mutation permissions",
+      "severity": "INFO",
+      "classification": "NONE"
+    },
+    {
+      "id": "SEC04",
+      "invariant": "Agent cannot exceed delegated authority",
+      "status": "PASS",
+      "detail": "Agent blocked from 4/4 privileged permissions",
+      "severity": "INFO",
+      "classification": "NONE"
+    },
+    {
+      "id": "SEC05",
+      "invariant": "Operator cannot bypass financial/destructive confirmation",
+      "status": "PASS",
+      "detail": "Confirmation matrix enforces human approval for destructive, financial, credential, deployment actions",
+      "severity": "INFO",
+      "classification": "NONE"
+    },
+    {
+      "id": "SEC06",
+      "invariant": "Owner-only operations remain owner-only",
+      "status": "PASS",
+      "detail": "Owner-only permissions verified for 3/3 checks",
+      "severity": "INFO",
+      "classification": "NONE"
+    },
+    {
+      "id": "SEC07",
+      "invariant": "Goal IDs cannot be used for cross-tenant execution",
+      "status": "PASS",
+      "detail": "Control plane is observational; execution gated by identity/authority scope. Different tenants have distinct identities.",
+      "severity": "INFO",
+      "classification": "NONE"
+    },
+    {
+      "id": "SEC08",
+      "invariant": "Intervention IDs cannot access another goal intervention",
+      "status": "PASS",
+      "detail": "Interventions are scoped by goalId; getByGoal returns only that goal interventions",
+      "severity": "INFO",
+      "classification": "NONE"
+    },
+    {
+      "id": "SEC09",
+      "invariant": "Checkpoint IDs cannot restore another goal",
+      "status": "PASS",
+      "detail": "Checkpoints are keyed by goalId; getCheckpoint(goalId) returns only that goal checkpoint",
+      "severity": "INFO",
+      "classification": "NONE"
+    },
+    {
+      "id": "SEC10",
+      "invariant": "Resource boundaries survive API manipulation",
+      "status": "PASS",
+      "detail": "Resource boundaries are part of delegated authority and enforced by DelegatedIdentity",
+      "severity": "INFO",
+      "classification": "NONE"
+    },
+    {
+      "id": "SEC11",
+      "invariant": "Path traversal remains blocked after URL decoding",
+      "status": "PASS",
+      "detail": "10/10 traversal patterns blocked; ID pattern rejects non-alphanumeric",
+      "severity": "INFO",
+      "classification": "NONE"
+    },
+    {
+      "id": "SEC12",
+      "invariant": "Secrets absent from responses, events, checkpoints, interventions",
+      "status": "PASS",
+      "detail": "sanitizeResponse strips all secret patterns; events, checkpoints, interventions verified clean",
+      "severity": "INFO",
+      "classification": "NONE"
+    },
+    {
+      "id": "SEC13",
+      "invariant": "SSE authentication and authorization are enforced",
+      "status": "PASS",
+      "detail": "SSE endpoint uses authenticate() with status:view RBAC",
+      "severity": "INFO",
+      "classification": "NONE"
+    },
+    {
+      "id": "SEC14",
+      "invariant": "Last-Event-ID cannot retrieve unauthorized history",
+      "status": "PASS",
+      "detail": "SSE replay is behind authentication; only active goals events are replayed",
+      "severity": "INFO",
+      "classification": "NONE"
+    },
+    {
+      "id": "SEC15",
+      "invariant": "Mutation endpoints reject forged authority context",
+      "status": "PASS",
+      "detail": "Operator intervention routes use auth.role from session, not request body",
+      "severity": "INFO",
+      "classification": "NONE"
+    },
+    {
+      "id": "SEC16",
+      "invariant": "Browser automation cannot escape delegated browser scope",
+      "status": "PASS",
+      "detail": "Browser actions are gated by DelegatedIdentity resource boundaries via HumanActionEngine",
+      "severity": "INFO",
+      "classification": "NONE"
+    },
+    {
+      "id": "SEC17",
+      "invariant": "Credential operations remain governed",
+      "status": "PASS",
+      "detail": "Credential management requires confirmation; credentials API returns status only (no values) but lacks auth (pre-existing)",
+      "severity": "INFO",
+      "classification": "NONE"
+    },
+    {
+      "id": "SEC18",
+      "invariant": "Control-plane APIs read-only except intervention lifecycle",
+      "status": "PASS",
+      "detail": "7 read routes, 3 intervention mutations, 0 non-intervention mutations",
+      "severity": "INFO",
+      "classification": "NONE"
+    },
+    {
+      "id": "SEC19",
+      "invariant": "No API route creates an alternate execution path",
+      "status": "PASS",
+      "detail": "/api/execute now requires auth and rejects direct execution with governance denial",
+      "severity": "INFO",
+      "classification": "NONE"
+    },
+    {
+      "id": "SEC20",
+      "invariant": "No hidden privileged fallback exists",
+      "status": "PASS",
+      "detail": "Service token → owner mapping is documented; no other hidden privileged fallbacks found",
+      "severity": "INFO",
+      "classification": "NONE"
+    }
+  ],
+  "unauthenticatedRoutesList": [
+    {
+      "path": "/api/acquisition",
+      "method": "GET",
+      "isMutation": false
+    },
+    {
+      "path": "/api/agent-manager/agents",
+      "method": "GET",
+      "isMutation": false
+    },
+    {
+      "path": "/api/agent-manager/control",
+      "method": "GET",
+      "isMutation": false
+    },
+    {
+      "path": "/api/agent-manager/tasks",
+      "method": "GET",
+      "isMutation": false
+    },
+    {
+      "path": "/api/audit",
+      "method": "GET",
+      "isMutation": false
+    },
+    {
+      "path": "/api/chat/route",
+      "method": "GET",
+      "isMutation": false
+    },
+    {
+      "path": "/api/chat",
+      "method": "POST",
+      "isMutation": true
+    },
+    {
+      "path": "/api/checkout",
+      "method": "GET",
+      "isMutation": false
+    },
+    {
+      "path": "/api/cockpit/briefing",
+      "method": "GET",
+      "isMutation": false
+    },
+    {
+      "path": "/api/cockpit/command",
+      "method": "POST",
+      "isMutation": true
+    },
+    {
+      "path": "/api/cockpit/index",
+      "method": "GET",
+      "isMutation": false
+    },
+    {
+      "path": "/api/cognitive",
+      "method": "POST",
+      "isMutation": true
+    },
+    {
+      "path": "/api/communication/:path",
+      "method": "POST",
+      "isMutation": true
+    },
+    {
+      "path": "/api/console/agents",
+      "method": "GET",
+      "isMutation": false
+    },
+    {
+      "path": "/api/console/approvals",
+      "method": "POST",
+      "isMutation": true
+    },
+    {
+      "path": "/api/console/command",
+      "method": "POST",
+      "isMutation": true
+    },
+    {
+      "path": "/api/console/health",
+      "method": "GET",
+      "isMutation": false
+    },
+    {
+      "path": "/api/console/index",
+      "method": "GET",
+      "isMutation": false
+    },
+    {
+      "path": "/api/console/state",
+      "method": "GET",
+      "isMutation": false
+    },
+    {
+      "path": "/api/console/timeline",
+      "method": "GET",
+      "isMutation": false
+    },
+    {
+      "path": "/api/credentials",
+      "method": "GET",
+      "isMutation": false
+    },
+    {
+      "path": "/api/devices/index",
+      "method": "GET",
+      "isMutation": false
+    },
+    {
+      "path": "/api/funding/chat",
+      "method": "POST",
+      "isMutation": true
+    },
+    {
+      "path": "/api/health",
+      "method": "GET",
+      "isMutation": false
+    },
+    {
+      "path": "/api/heartbeat",
+      "method": "GET",
+      "isMutation": false
+    },
+    {
+      "path": "/api/heidi-diagnostic",
+      "method": "GET",
+      "isMutation": false
+    },
+    {
+      "path": "/api/heidi-health",
+      "method": "GET",
+      "isMutation": false
+    },
+    {
+      "path": "/api/heidi-status",
+      "method": "GET",
+      "isMutation": false
+    },
+    {
+      "path": "/api/heidi",
+      "method": "POST",
+      "isMutation": true
+    },
+    {
+      "path": "/api/hydi/sync",
+      "method": "GET",
+      "isMutation": false
+    },
+    {
+      "path": "/api/keys/audit",
+      "method": "GET",
+      "isMutation": false
+    },
+    {
+      "path": "/api/keys/dashboard",
+      "method": "GET",
+      "isMutation": false
+    },
+    {
+      "path": "/api/keys/health",
+      "method": "GET",
+      "isMutation": false
+    },
+    {
+      "path": "/api/keys/index",
+      "method": "GET",
+      "isMutation": false
+    },
+    {
+      "path": "/api/keys/reconcile",
+      "method": "POST",
+      "isMutation": true
+    },
+    {
+      "path": "/api/keys/scan",
+      "method": "POST",
+      "isMutation": true
+    },
+    {
+      "path": "/api/keys/:id",
+      "method": "POST",
+      "isMutation": true
+    },
+    {
+      "path": "/api/memory/search",
+      "method": "GET",
+      "isMutation": false
+    },
+    {
+      "path": "/api/mobile-status",
+      "method": "GET",
+      "isMutation": false
+    },
+    {
+      "path": "/api/notifications/index",
+      "method": "GET",
+      "isMutation": false
+    },
+    {
+      "path": "/api/rezonate/route",
+      "method": "GET",
+      "isMutation": false
+    },
+    {
+      "path": "/api/session",
+      "method": "GET",
+      "isMutation": false
+    },
+    {
+      "path": "/api/song-composer/generate",
+      "method": "GET",
+      "isMutation": false
+    },
+    {
+      "path": "/api/song-composer/songs",
+      "method": "GET",
+      "isMutation": false
+    },
+    {
+      "path": "/api/status/system",
+      "method": "GET",
+      "isMutation": false
+    },
+    {
+      "path": "/api/status",
+      "method": "GET",
+      "isMutation": false
+    },
+    {
+      "path": "/api/stripe-connect-webhook",
+      "method": "GET",
+      "isMutation": false
+    },
+    {
+      "path": "/api/system/events",
+      "method": "POST",
+      "isMutation": true
+    },
+    {
+      "path": "/api/system/health",
+      "method": "GET",
+      "isMutation": false
+    },
+    {
+      "path": "/api/system/jobs",
+      "method": "POST",
+      "isMutation": true
+    },
+    {
+      "path": "/api/system/metrics",
+      "method": "POST",
+      "isMutation": true
+    },
+    {
+      "path": "/api/system/watchdog",
+      "method": "POST",
+      "isMutation": true
+    },
+    {
+      "path": "/api/ursula/status",
+      "method": "GET",
+      "isMutation": false
+    },
+    {
+      "path": "/api/voice/command",
+      "method": "GET",
+      "isMutation": false
+    },
+    {
+      "path": "/api/webhooks/stripe",
+      "method": "GET",
+      "isMutation": false
+    },
+    {
+      "path": "/api/work-sessions/index",
+      "method": "GET",
+      "isMutation": false
+    }
+  ]
+}

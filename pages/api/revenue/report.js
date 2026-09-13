@@ -1,5 +1,5 @@
-const RevenueEngine = require('../../../revenue-engine');
-const { requireAuth } = require('../../../lib/auth/requireAuth.js');
+import RevenueEngine from '../../../revenue-engine';
+import { requireAuth } from '../../../lib/auth/requireAuth';
 
 const engine = new RevenueEngine();
 

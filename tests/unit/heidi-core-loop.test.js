@@ -93,6 +93,31 @@ describe('HeidiCoreLoop', () => {
       expect(metrics.adaptations).toBe(0);
       expect(metrics.revenueGenerated).toBe(0);
     });
+
+    // Regression coverage: HYDISystem.js used to hold its own top-level HeidiOrchestrator
+    // (for handleIntelligenceRequest/handleActionRequest, HYDIAutonomyManager, and status
+    // reporting) while this class separately constructed a second, independent
+    // HeidiOrchestrator that the live autonomous loop actually ran against -- two
+    // instances with two different metrics/drift/model histories, silently out of sync.
+    // HYDISystem now hands in its own instance via config.orchestrator so every consumer
+    // shares one; this class must still construct its own when none is given so it keeps
+    // working standalone.
+    it('uses a provided orchestrator instance instead of constructing its own', () => {
+      const sharedOrchestrator = mockSubsystem();
+      const loop = new HeidiCoreLoop({ orchestrator: sharedOrchestrator });
+      expect(loop.orchestrator).toBe(sharedOrchestrator);
+    });
+
+    it('constructs its own orchestrator when none is provided (standalone use)', () => {
+      const loop = makeLoop();
+      expect(loop.orchestrator).toBeDefined();
+    });
+
+    it('does not leak the injected orchestrator into this.config', () => {
+      const sharedOrchestrator = mockSubsystem();
+      const loop = new HeidiCoreLoop({ orchestrator: sharedOrchestrator });
+      expect(loop.config.orchestrator).toBeUndefined();
+    });
   });
 
   // ── start / stop ─────────────────────────────────────────────────────────
@@ -281,9 +306,14 @@ describe('HeidiCoreLoop', () => {
     it('returns failed status when the action throws', async () => {
       const loop = makeLoop();
       jest.spyOn(loop, 'executeAnalysisAction').mockRejectedValue(new Error('model timeout'));
+      // 'analysis' routes through the model stack, so takeAction now requires a
+      // selected model before it will dispatch (Phase II: a task that never ran
+      // must not be reported as a failure of the model, nor as a success).
+      // The model is supplied here so this test still exercises what it is
+      // about: a handler that throws must produce FAILED.
       const action = await loop.takeAction(
         { type: 'analysis' },
-        { action: 'proceed' },
+        { action: 'proceed', model: 'llama3.2:3b' },
         'loop_test'
       );
       expect(action.status).toBe('failed');
@@ -379,6 +409,98 @@ describe('HeidiCoreLoop', () => {
 
       expect(loop.loopHistory).toHaveLength(500);
       expect(loop.loopHistory[499].id).toBe('new_1');
+    });
+  });
+
+  // ── Control-plane wiring ──────────────────────────────────────────────────
+  // Regression coverage: HeidiControlPlane.recordActionOutcome() was
+  // previously never called for tasks processed by the autonomous core
+  // loop -- only from HYDISystem's separate handleIntelligenceRequest()/
+  // handleActionRequest() paths -- so the control plane's feedback cycle
+  // logged "Insufficient data" forever regardless of how many loops ran.
+
+  describe('control-plane wiring (recordControlPlaneOutcome)', () => {
+    function makeControlPlane() {
+      return { recordActionOutcome: jest.fn() };
+    }
+
+    it('does nothing when no controlPlane is configured (no throw)', () => {
+      const loop = makeLoop();
+      expect(() =>
+        loop.orchestrator.emit('task_completed', {
+          taskId: 't1',
+          task: { id: 't1', type: 'revenue' },
+          result: {},
+        })
+      ).not.toThrow();
+    });
+
+    it('forwards a successful task_completed event to controlPlane.recordActionOutcome', () => {
+      const controlPlane = makeControlPlane();
+      const loop = makeLoop({ controlPlane });
+
+      loop.orchestrator.emit('task_completed', {
+        taskId: 't1',
+        task: { id: 't1', type: 'revenue' },
+        result: {
+          decision: { model: 'gpt-4-local', strategy: 'local' },
+          evaluation: { confidence: 0.82, cost: 0.01 },
+          action: { success: true, latency: 1234 },
+          measurement: { revenueImpact: 49.99 },
+        },
+      });
+
+      expect(controlPlane.recordActionOutcome).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 't1',
+          type: 'revenue',
+          model: 'gpt-4-local',
+          strategy: 'local',
+          confidence: 0.82,
+          cost: 0.01,
+        }),
+        expect.objectContaining({ success: true, latency: 1234, revenue: 49.99 })
+      );
+    });
+
+    it('forwards a failed task_failed event with success=false and the error message', () => {
+      const controlPlane = makeControlPlane();
+      const loop = makeLoop({ controlPlane });
+
+      loop.orchestrator.emit('task_failed', {
+        taskId: 't2',
+        task: { id: 't2', type: 'revenue' },
+        error: new Error('spawn ./bin/main ENOENT'),
+      });
+
+      expect(controlPlane.recordActionOutcome).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 't2', type: 'revenue', model: 'unknown' }),
+        expect.objectContaining({ success: false, error: 'spawn ./bin/main ENOENT' })
+      );
+    });
+
+    it('does not throw if recordActionOutcome itself throws', () => {
+      const controlPlane = {
+        recordActionOutcome: jest.fn(() => {
+          throw new Error('boom');
+        }),
+      };
+      const loop = makeLoop({ controlPlane });
+
+      expect(() =>
+        loop.orchestrator.emit('task_completed', {
+          taskId: 't3',
+          task: { id: 't3', type: 'analysis' },
+          result: {},
+        })
+      ).not.toThrow();
+    });
+
+    it('keeps controlPlane out of loop.config', () => {
+      const controlPlane = makeControlPlane();
+      const loop = makeLoop({ controlPlane });
+      expect(loop.controlPlane).toBe(controlPlane);
+      expect(loop.config.controlPlane).toBeUndefined();
     });
   });
 

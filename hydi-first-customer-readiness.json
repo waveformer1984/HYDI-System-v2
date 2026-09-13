@@ -1,0 +1,203 @@
+{
+  "test": "first-real-customer-readiness",
+  "timestamp": "2026-08-25T21:03:53.623Z",
+  "totalChecks": 47,
+  "passed": 45,
+  "failed": 2,
+  "verdict": "NOT_READY_FOR_FIRST_REAL_CUSTOMER",
+  "blockers": [
+    "FC02: STRIPE_WEBHOOK_SECRET is set",
+    "FC03: WEBHOOK_PROCESSING_ENABLED is \"true\""
+  ],
+  "stripeMode": "test",
+  "checks": [
+    {
+      "check": "FC01: STRIPE_SECRET_KEY is set",
+      "result": "PASS"
+    },
+    {
+      "check": "FC02: STRIPE_WEBHOOK_SECRET is set",
+      "result": "FAIL"
+    },
+    {
+      "check": "FC03: WEBHOOK_PROCESSING_ENABLED is \"true\"",
+      "result": "FAIL"
+    },
+    {
+      "check": "FC04: Stripe is configured",
+      "result": "PASS"
+    },
+    {
+      "check": "FC05: Stripe is not disabled",
+      "result": "PASS"
+    },
+    {
+      "check": "FC06: Stripe is in TEST mode (test payments only — NOT real revenue)",
+      "result": "PASS"
+    },
+    {
+      "check": "FC08: No silent live-to-test fallback risk",
+      "result": "PASS"
+    },
+    {
+      "check": "FC09: No Stripe secret keys exposed in client-side files",
+      "result": "PASS"
+    },
+    {
+      "check": "FC10: No actual secrets exposed via NEXT_PUBLIC_ prefix",
+      "result": "PASS"
+    },
+    {
+      "check": "FC11: Database is reachable",
+      "result": "PASS"
+    },
+    {
+      "check": "FC12: customer_jobs table exists",
+      "result": "PASS"
+    },
+    {
+      "check": "FC13: customer_job_events table exists",
+      "result": "PASS"
+    },
+    {
+      "check": "FC14: revenue_ledger table exists",
+      "result": "PASS"
+    },
+    {
+      "check": "FC15: revenue_offers table exists",
+      "result": "PASS"
+    },
+    {
+      "check": "FC16: protoforge_model_prep product exists in catalog",
+      "result": "PASS"
+    },
+    {
+      "check": "FC17: Product price is $29.00 (2900¢)",
+      "result": "PASS"
+    },
+    {
+      "check": "FC18: Product is active",
+      "result": "PASS"
+    },
+    {
+      "check": "FC19: Product is one-time payment",
+      "result": "PASS"
+    },
+    {
+      "check": "FC20: Revenue ledger is queryable",
+      "result": "PASS"
+    },
+    {
+      "check": "FC21: Revenue ledger returns valid count",
+      "result": "PASS"
+    },
+    {
+      "check": "FC22: Artifact storage directory is accessible",
+      "result": "PASS"
+    },
+    {
+      "check": "FC23: Artifact storage is writable",
+      "result": "PASS"
+    },
+    {
+      "check": "FC24: JobManager is instantiable",
+      "result": "PASS"
+    },
+    {
+      "check": "FC25: Job execution method exists",
+      "result": "PASS"
+    },
+    {
+      "check": "FC26: Job creation method exists",
+      "result": "PASS"
+    },
+    {
+      "check": "FC27: Payment confirmation method exists",
+      "result": "PASS"
+    },
+    {
+      "check": "FC28: Delivery approval method exists",
+      "result": "PASS"
+    },
+    {
+      "check": "FC29: Endpoint exists: pages/api/revenue/jobs/index.js",
+      "result": "PASS"
+    },
+    {
+      "check": "FC29: Endpoint exists: pages/api/revenue/jobs/[jobId]/index.js",
+      "result": "PASS"
+    },
+    {
+      "check": "FC29: Endpoint exists: pages/api/revenue/jobs/[jobId]/delivery.js",
+      "result": "PASS"
+    },
+    {
+      "check": "FC29: Endpoint exists: pages/api/revenue/jobs/[jobId]/download.js",
+      "result": "PASS"
+    },
+    {
+      "check": "FC29: Endpoint exists: pages/api/revenue/jobs/[jobId]/approve.js",
+      "result": "PASS"
+    },
+    {
+      "check": "FC29: Endpoint exists: pages/api/webhooks/stripe.js",
+      "result": "PASS"
+    },
+    {
+      "check": "FC30: JobWebhookBridge is wired into webhook handler",
+      "result": "PASS"
+    },
+    {
+      "check": "FC31: Webhook handles checkout.session.completed",
+      "result": "PASS"
+    },
+    {
+      "check": "FC32: Page exists: pages/services/model-prep.jsx",
+      "result": "PASS"
+    },
+    {
+      "check": "FC32: Page exists: pages/services/model-prep/success.jsx",
+      "result": "PASS"
+    },
+    {
+      "check": "FC32: Page exists: pages/services/model-prep/cancel.jsx",
+      "result": "PASS"
+    },
+    {
+      "check": "FC32: Page exists: pages/services/model-prep/status.jsx",
+      "result": "PASS"
+    },
+    {
+      "check": "FC33: FinancialGuardrails module exists",
+      "result": "PASS"
+    },
+    {
+      "check": "FC34: HumanProxyControlPlane module exists",
+      "result": "PASS"
+    },
+    {
+      "check": "FC35: InterventionQueue module exists",
+      "result": "PASS"
+    },
+    {
+      "check": "FC36: No test keys hardcoded in intake endpoint",
+      "result": "PASS"
+    },
+    {
+      "check": "FC37: No test restricted keys hardcoded in intake endpoint",
+      "result": "PASS"
+    },
+    {
+      "check": "FC38: RLS enabled on customer_job_events",
+      "result": "PASS"
+    },
+    {
+      "check": "FC38: RLS enabled on customer_jobs",
+      "result": "PASS"
+    },
+    {
+      "check": "FC38: RLS enabled on revenue_ledger",
+      "result": "PASS"
+    }
+  ]
+}

@@ -1,0 +1,170 @@
+{
+  "runId": "evidence-1787769943198",
+  "timestamp": "2026-08-26T18:45:43.198Z",
+  "baseUrl": "http://localhost:3000",
+  "stages": {
+    "jobCreated": {
+      "status": 201,
+      "jobId": "job_1787769943272_758ba29e",
+      "checkoutUrl": "present"
+    },
+    "humanApproved": {
+      "status": 200,
+      "jobStatus": "delivered",
+      "deliveryToken": "def06d8a55764989ac76595dd758b2d0"
+    }
+  },
+  "correlation": {
+    "jobId": "job_1787769943272_758ba29e",
+    "checkoutSessionId": "cs_test_a1acisEkQ6pnkTzzGbuI6mmbhyPI94pY1qwhDJCObeIreUrX0mEbkQp2O8",
+    "ledgerEntryId": "2265ca12-2a36-4b14-8e3e-942318d6fc55",
+    "stripeEventId": "evt_evidence_evidence-1787769943198",
+    "paymentIntentId": "pi_evidence_evidence-1787769943198",
+    "artifactPaths": [
+      "C:\\Users\\Owner\\HYDI-System-v2\\artifacts\\customer-jobs\\job_1787769943272_758ba29e\\test_part.stl",
+      "C:\\Users\\Owner\\HYDI-System-v2\\artifacts\\customer-jobs\\job_1787769943272_758ba29e\\test_part.scad",
+      "C:\\Users\\Owner\\HYDI-System-v2\\artifacts\\customer-jobs\\job_1787769943272_758ba29e\\README.md"
+    ],
+    "artifactHashes": {
+      "test_part.stl": "da068338cff4d24b2e90a431f707dc0b6fcc6ef5f7364a7bf6e22f84452080c8",
+      "test_part.scad": "9f4c870c28615824eb2b1c5446fa1c7afc5c3f7433be87ba3dcd2975954e22b1",
+      "README.md": "bfdc33ad22643428dc5cd382604773ebdce51aca5d08cb46560635861848a29f"
+    },
+    "deliveryToken": "def06d8a55764989ac76595dd758b2d0",
+    "approvalActor": "human:owner"
+  },
+  "reconciliation": {
+    "state": "CONSISTENT",
+    "jobId": "job_1787769943272_758ba29e",
+    "timestamp": "2026-08-26T18:45:44.168Z",
+    "correlation": {
+      "jobId": "job_1787769943272_758ba29e",
+      "checkoutSessionId": "cs_test_a1acisEkQ6pnkTzzGbuI6mmbhyPI94pY1qwhDJCObeIreUrX0mEbkQp2O8",
+      "stripeEventId": "evt_evidence_evidence-1787769943198",
+      "paymentIntentId": "pi_evidence_evidence-1787769943198",
+      "webhookEventRecordId": null,
+      "artifactPaths": [
+        "C:\\Users\\Owner\\HYDI-System-v2\\artifacts\\customer-jobs\\job_1787769943272_758ba29e\\test_part.stl",
+        "C:\\Users\\Owner\\HYDI-System-v2\\artifacts\\customer-jobs\\job_1787769943272_758ba29e\\test_part.scad",
+        "C:\\Users\\Owner\\HYDI-System-v2\\artifacts\\customer-jobs\\job_1787769943272_758ba29e\\README.md"
+      ],
+      "artifactHashes": {
+        "README.md": "bfdc33ad22643428dc5cd382604773ebdce51aca5d08cb46560635861848a29f",
+        "test_part.stl": "da068338cff4d24b2e90a431f707dc0b6fcc6ef5f7364a7bf6e22f84452080c8",
+        "test_part.scad": "9f4c870c28615824eb2b1c5446fa1c7afc5c3f7433be87ba3dcd2975954e22b1"
+      },
+      "approvalEventId": "f7f12738-1caf-4c71-8b9f-5cec148eec26",
+      "approvalActor": "human:owner",
+      "deliveryToken": "def06d8a55764989ac76595dd758b2d0",
+      "ledgerEntryId": "2265ca12-2a36-4b14-8e3e-942318d6fc55"
+    },
+    "stages": {
+      "jobCreated": {
+        "status": "PASS",
+        "detail": "job_created event recorded"
+      },
+      "checkoutSessionLinked": {
+        "status": "PASS",
+        "detail": "Session: cs_test_a1acisEkQ6pnkTzzGbuI6mmbhyPI94pY1qwhDJCObeIreUrX0mEbkQp2O8"
+      },
+      "paymentConfirmed": {
+        "status": "PASS",
+        "detail": "Paid at Wed Aug 26 2026 13:45:43 GMT-0500 (Central Daylight Time)"
+      },
+      "webhookProcessed": {
+        "status": "PASS",
+        "detail": "Stripe event: evt_evidence_evidence-1787769943198"
+      },
+      "ledgerRecorded": {
+        "status": "PASS",
+        "detail": "Ledger entry: 2265ca12-2a36-4b14-8e3e-942318d6fc55"
+      },
+      "artifactsProduced": {
+        "status": "PASS",
+        "detail": "3 artifacts"
+      },
+      "artifactsVerified": {
+        "status": "PASS",
+        "detail": "Artifacts verified before approval"
+      },
+      "humanApproved": {
+        "status": "PASS",
+        "detail": "Approved by human:owner"
+      },
+      "delivered": {
+        "status": "PASS",
+        "detail": "Delivered at Wed Aug 26 2026 13:45:44 GMT-0500 (Central Daylight Time), token: def06d8a..."
+      }
+    },
+    "violations": [],
+    "summary": "Job job_1787769943272_758ba29e: all stages PASS, no violations. Transaction is complete and verified."
+  },
+  "failures": [],
+  "reconciliationBeforeApproval": {
+    "state": "BLOCKED",
+    "jobId": "job_1787769943272_758ba29e",
+    "timestamp": "2026-08-26T18:45:44.084Z",
+    "correlation": {
+      "jobId": "job_1787769943272_758ba29e",
+      "checkoutSessionId": "cs_test_a1acisEkQ6pnkTzzGbuI6mmbhyPI94pY1qwhDJCObeIreUrX0mEbkQp2O8",
+      "stripeEventId": "evt_evidence_evidence-1787769943198",
+      "paymentIntentId": "pi_evidence_evidence-1787769943198",
+      "webhookEventRecordId": null,
+      "artifactPaths": [
+        "C:\\Users\\Owner\\HYDI-System-v2\\artifacts\\customer-jobs\\job_1787769943272_758ba29e\\test_part.stl",
+        "C:\\Users\\Owner\\HYDI-System-v2\\artifacts\\customer-jobs\\job_1787769943272_758ba29e\\test_part.scad",
+        "C:\\Users\\Owner\\HYDI-System-v2\\artifacts\\customer-jobs\\job_1787769943272_758ba29e\\README.md"
+      ],
+      "artifactHashes": {
+        "README.md": "bfdc33ad22643428dc5cd382604773ebdce51aca5d08cb46560635861848a29f",
+        "test_part.stl": "da068338cff4d24b2e90a431f707dc0b6fcc6ef5f7364a7bf6e22f84452080c8",
+        "test_part.scad": "9f4c870c28615824eb2b1c5446fa1c7afc5c3f7433be87ba3dcd2975954e22b1"
+      },
+      "approvalEventId": null,
+      "approvalActor": null,
+      "deliveryToken": null,
+      "ledgerEntryId": "2265ca12-2a36-4b14-8e3e-942318d6fc55"
+    },
+    "stages": {
+      "jobCreated": {
+        "status": "PASS",
+        "detail": "job_created event recorded"
+      },
+      "checkoutSessionLinked": {
+        "status": "PASS",
+        "detail": "Session: cs_test_a1acisEkQ6pnkTzzGbuI6mmbhyPI94pY1qwhDJCObeIreUrX0mEbkQp2O8"
+      },
+      "paymentConfirmed": {
+        "status": "PASS",
+        "detail": "Paid at Wed Aug 26 2026 13:45:43 GMT-0500 (Central Daylight Time)"
+      },
+      "webhookProcessed": {
+        "status": "PASS",
+        "detail": "Stripe event: evt_evidence_evidence-1787769943198"
+      },
+      "ledgerRecorded": {
+        "status": "PASS",
+        "detail": "Ledger entry: 2265ca12-2a36-4b14-8e3e-942318d6fc55"
+      },
+      "artifactsProduced": {
+        "status": "PASS",
+        "detail": "3 artifacts"
+      },
+      "artifactsVerified": {
+        "status": "PENDING",
+        "detail": "pending"
+      },
+      "humanApproved": {
+        "status": "PENDING",
+        "detail": "No human approval yet"
+      },
+      "delivered": {
+        "status": "PENDING",
+        "detail": "Delivery status: pending"
+      }
+    },
+    "violations": [],
+    "summary": "Job job_1787769943272_758ba29e: awaiting human approval. Transaction is intentionally blocked."
+  },
+  "correlationComplete": true
+}

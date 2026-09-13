@@ -1,12 +1,30 @@
 /**
  * HEIDI ORCHESTRATOR - Layer 2: The Brainstem
  * CASCADE v2 Evolution - Simple, ruthless, effective
- * 
+ *
  * Core responsibilities:
  * - Route tasks
- * - Decide model (local vs API)  
+ * - Decide model (local vs API)
  * - Enforce rules (no drift, no nonsense)
  * - Trigger actions
+ *
+ * NAMING COLLISION WARNING: lib/orchestrator.ts also exports a class named
+ * `HeidiOrchestrator`, but it is NOT the same orchestrator as this one.
+ * That is a separate, unrelated TypeScript class used exclusively by
+ * pages/api/chat.ts for per-request chat routing (system-state
+ * short-circuiting for the single-user-facing /api/chat endpoint) -- it has
+ * no connection to the autonomous revenue loop. THIS class is the one
+ * HeidiCoreLoop/HYDISystem actually run their Observe->Decide->Act loop
+ * against (model selection, avoidStrategies/preferStrategies, confidence/
+ * cost thresholds). Historically, HYDISystem.js and HeidiCoreLoop.js also
+ * each constructed their own separate instance of *this* same class,
+ * independently of each other -- that duplication (not the naming
+ * collision with lib/orchestrator.ts) was the root cause of the
+ * control-plane wiring gap and "avoiding strategy unknown" bugs fixed
+ * elsewhere in this codebase's history; HeidiCoreLoop now accepts a shared
+ * instance via config.orchestrator instead of always constructing its own.
+ * If you're grepping for "HeidiOrchestrator", check the import path, not
+ * just the class name.
  */
 
 const EventEmitter = require('events');
@@ -23,7 +41,13 @@ class HeidiOrchestrator extends EventEmitter {
       confidenceThreshold: config.confidenceThreshold || 0.7,
       costThreshold: config.costThreshold || 0.10, // $0.10 per request
       maxRetries: config.maxRetries || 2,
-      timeoutMs: config.timeoutMs || 8000,
+      // Was a flat 8000ms, sized for a backend that can serve calls in parallel. The local
+      // Ollama deployment is configured for a single concurrent slot (OLLAMA_MAX_LOADED_MODELS=1,
+      // OLLAMA_NUM_PARALLEL=1), and LocalModelAdapter now serializes calls against that slot
+      // (see runLlamaInference's _ollamaQueue), so a task queued behind a couple of others can
+      // legitimately take longer than 8s to even start without anything being wrong. Raised to
+      // give real queued latency room before calling it a timeout; still overridable per caller.
+      timeoutMs: config.timeoutMs || Number(process.env.ORCHESTRATOR_TIMEOUT_MS) || 15000,
       revenuePriority: config.revenuePriority !== false, // Default to true
       ...config
     };
@@ -410,44 +434,89 @@ class HeidiOrchestrator extends EventEmitter {
   }
   
   /**
+   * Pick the best available model from a candidate list, skipping any
+   * model that adaptation has flagged as avoided (this.config.avoidStrategies)
+   * and preferring one flagged as successful (this.config.preferStrategies)
+   * when possible.
+   *
+   * Without this, HeidiCoreLoop.applyAdaptation()'s 'failure_mitigation'
+   * and 'success_amplification' adaptations pushed model IDs into
+   * config.avoidStrategies / config.preferStrategies, but nothing in this
+   * class ever read those arrays back -- the adaptation logged a message
+   * ("[CORE LOOP] Failure mitigation: avoiding strategy X") implying
+   * routing had changed, when every task handler below returned the same
+   * hardcoded model regardless. Falls back to using an avoided candidate
+   * anyway rather than returning nothing if every candidate is avoided --
+   * a degraded model beats no decision at all.
+   */
+  selectModel(candidates) {
+    const available = candidates.filter(Boolean);
+    const avoid = new Set(this.config.avoidStrategies || []);
+    const prefer = this.config.preferStrategies || [];
+
+    const preferred = available.find((c) => prefer.includes(c) && !avoid.has(c));
+    if (preferred) return preferred;
+
+    const nonAvoided = available.find((c) => !avoid.has(c));
+    if (nonAvoided) return nonAvoided;
+
+    if (available.length && avoid.size) {
+      console.log(`[ORCHESTRATOR] All candidates avoided (${available.join(', ')}) -- using ${available[0]} anyway, no safe alternative`);
+    }
+    return available[0];
+  }
+
+  /**
    * TASK HANDLERS - Specialized routing logic
    */
   async handleRevenueTask(_task) {
     console.log('[ORCHESTRATOR] Revenue task - highest priority');
-    
+
+    const model = this.selectModel(['gpt-4-local', 'gpt-35-turbo', 'local-llama']);
+    const fallback = this.selectModel(['gpt-35-turbo', 'local-llama'].filter((m) => m !== model));
+
     return {
-      model: 'gpt-4-local', // Best local model for revenue
+      model, // Best available local model for revenue (adaptation-aware)
       strategy: 'local',
-      fallback: 'gpt-35-turbo',
+      fallback,
       reasoning: 'Revenue tasks get best local model with fallback'
     };
   }
-  
+
   async handleCriticalTask(_task) {
     console.log('[ORCHESTRATOR] Critical task - high reliability');
-    
+
+    const model = this.selectModel(['gpt-4-local', 'local-llama', 'gpt-35-turbo']);
+    const fallback = this.selectModel(['local-llama', 'gpt-35-turbo'].filter((m) => m !== model));
+
     return {
-      model: 'gpt-4-local',
+      model,
       strategy: 'hybrid', // Try local, verify with external if needed
-      fallback: 'local-llama',
+      fallback,
       reasoning: 'Critical tasks use hybrid strategy for maximum reliability'
     };
   }
-  
+
   async handleStandardTask(_task) {
     console.log('[ORCHESTRATOR] Standard task - cost effective');
-    
+
+    const model = this.selectModel(['gpt-35-turbo', 'local-llama', 'gpt-4-local']);
+    const fallback = this.selectModel(['local-llama', 'gpt-4-local'].filter((m) => m !== model));
+
     return {
-      model: 'gpt-35-turbo',
+      model,
       strategy: 'local',
-      fallback: 'local-llama',
+      fallback,
       reasoning: 'Standard tasks use cost-effective local models'
     };
   }
-  
+
   async handleReflectionTask(_task) {
     console.log('[ORCHESTRATOR] Reflection task - local only');
-    
+
+    // Deliberately does not consult avoidStrategies / fall back to another
+    // model: reflection tasks stay local-only for privacy, and there is no
+    // safe non-local alternative to substitute if local-llama is avoided.
     return {
       model: 'local-llama',
       strategy: 'local',
@@ -455,14 +524,17 @@ class HeidiOrchestrator extends EventEmitter {
       reasoning: 'Reflection tasks stay local for privacy and speed'
     };
   }
-  
+
   async handleTechnicalTask(_task) {
     console.log('[ORCHESTRATOR] Technical task - specialist models');
-    
+
+    const model = this.selectModel(['code-specialist', 'gpt-4-local', 'local-llama']);
+    const fallback = this.selectModel(['gpt-4-local', 'local-llama'].filter((m) => m !== model));
+
     return {
-      model: 'code-specialist',
+      model,
       strategy: 'local',
-      fallback: 'gpt-4-local',
+      fallback,
       reasoning: 'Technical tasks use specialist models with general fallback'
     };
   }

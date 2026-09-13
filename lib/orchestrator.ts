@@ -1,8 +1,8 @@
 /**
  * MAIN ORCHESTRATOR - Heidi Production Agent
- * 
+ *
  * This is the core routing engine with memory, tools, and enforced output contracts.
- * 
+ *
  * Responsibilities:
  * - Retrieve memory context
  * - Route to ModelManager
@@ -10,6 +10,20 @@
  * - Execute actions
  * - Maintain session state
  * - Record per-request metrics to the MetricsService
+ *
+ * NAMING COLLISION WARNING: this file exports a class also named
+ * `HeidiOrchestrator`, but it is NOT the same orchestrator as
+ * src/orchestrator/HeidiOrchestrator.js. That is a separate, unrelated
+ * class (plain JS, CommonJS) that routes autonomous revenue-loop tasks for
+ * HeidiCoreLoop/HYDISystem (model selection, avoidStrategies/preferStrategies,
+ * confidence/cost thresholds) -- it has nothing to do with per-request chat
+ * routing. THIS class is used exclusively by pages/api/chat.ts for the
+ * single-user-facing /api/chat endpoint's system-state short-circuiting
+ * (trySystemStateResponse) and has no connection to the autonomous loop's
+ * decision/adapt cycle. If you're grepping for "HeidiOrchestrator" while
+ * touching either the chat endpoint or the revenue loop, check the import
+ * path, not just the class name -- they are easy to confuse and this
+ * confusion was a real source of bugs earlier in this codebase's history.
  */
 
 import { randomUUID } from 'crypto';
@@ -31,7 +45,10 @@ import {
 } from './work-sessions';
 import { getDecisionStats, getMemoryRetrievalStats, getRetryStats, getTaskSuccessRates, getWorkSessionStats } from './agent-metrics';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { buildCognitiveCore } from './heidi/CognitiveCoreBuilder';
+import type { CognitiveCore, CognitiveState } from './heidi/CognitiveCore';
 import { getMetricsService, type PartialInferenceMetric } from './metrics';
+import { isAdaptiveOperatorEnabled, isGoalAllowed } from './adaptive-operator/ProductionBounds';
 
 // Lazy client: a missing NEXT_PUBLIC_SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY
 // must surface as a normal caught error inside processChat's try/catch (which
@@ -63,6 +80,66 @@ interface ChatResponse {
   session_state: any;
 }
 
+// ─── CognitiveCore singleton ─────────────────────────────────────────────
+//
+// One authoritative CognitiveCore instance per HEIDI runtime context.
+// Lazily initialized on first use — not at module load time — so that
+// missing env vars don't crash the orchestrator constructor.
+// The CognitiveCore is wired with REAL providers via CognitiveCoreBuilder.
+// If a provider is unavailable, the corresponding capability is reported
+// as degraded rather than crashing the runtime.
+
+let _cognitiveCore: CognitiveCore | null = null;
+let _cognitiveCoreInitError: string | null = null;
+let _cognitiveCoreInstanceId: string | null = null;
+
+async function getCognitiveCore(): Promise<CognitiveCore> {
+  if (_cognitiveCore) {
+    return _cognitiveCore;
+  }
+  if (_cognitiveCoreInitError) {
+    throw new Error(`CognitiveCore initialization previously failed: ${_cognitiveCoreInitError}`);
+  }
+  try {
+    _cognitiveCoreInstanceId = `cc-${randomUUID()}`;
+    _cognitiveCore = await buildCognitiveCore({
+      supabase: getSupabase(),
+      // Without this, CognitiveCoreBuilder never registers the
+      // system.database capability probe or the database self-repair
+      // handler (both are gated on dbConfig being explicitly present),
+      // even though CognitiveCore's own internal pool connects fine via
+      // these same PG_* vars. Same host/port/database/user/password
+      // pattern already used by getRevenueDashboard() below and by
+      // CognitiveCore's own constructor default.
+      dbConfig: {
+        host: process.env.PG_HOST || '127.0.0.1',
+        port: parseInt(process.env.PG_PORT || '54322', 10),
+        database: process.env.PG_DATABASE || 'postgres',
+        user: process.env.PG_USER || 'postgres',
+        password: process.env.PG_PASSWORD || 'postgres',
+      },
+      enableMetaCognition: true,
+      enableDecisionResolver: true,
+    });
+    return _cognitiveCore;
+  } catch (e) {
+    _cognitiveCoreInitError = e instanceof Error ? e.message : 'unknown error';
+    throw e;
+  }
+}
+
+function getCognitiveCoreStatusSync(): {
+  initialized: boolean;
+  instanceId: string | null;
+  initError: string | null;
+} {
+  return {
+    initialized: _cognitiveCore !== null,
+    instanceId: _cognitiveCoreInstanceId,
+    initError: _cognitiveCoreInitError,
+  };
+}
+
 export class HeidiOrchestrator {
   private modelManager: ModelManager;
   private supabase: SupabaseClient;
@@ -81,6 +158,624 @@ export class HeidiOrchestrator {
     this.supabase = supabaseProxy;
     this.actionExecutor = new ActionExecutor(this.supabase);
     this.agentRegistry = createDefaultAgentRegistry(this.actionExecutor);
+  }
+
+  // ─── Cognitive Core integration ──────────────────────────────────────
+  //
+  // These methods expose the governed CognitiveCore to the production
+  // runtime. The existing processChat() flow is NOT replaced — CognitiveCore
+  // is an additional governed capability layer that follows:
+  //
+  //   OBSERVE → VALIDATE → UNDERSTAND → PLAN → ASSESS → SELECT →
+  //   AUTHORIZE → EXECUTE → VERIFY → LEARN → RECORD → REPLAN/ESCALATE
+  //
+  // All governance (autonomy policy, guardian, trust, audit) is enforced
+  // inside CognitiveCore and cannot be bypassed through these methods.
+
+  /**
+   * Run a single governed cognitive cycle.
+   * Returns the full cognitive state including perception, authorization,
+   * execution, verification, and learning results.
+   */
+  async runCognitiveCycle(): Promise<CognitiveState> {
+    const core = await getCognitiveCore();
+    return core.runCycle();
+  }
+
+  /**
+   * Get the current CognitiveCore status for health reporting.
+   * Does NOT throw — returns degraded status if initialization failed.
+   */
+  getCognitiveStatus(): {
+    initialized: boolean;
+    instanceId: string | null;
+    initError: string | null;
+    cycleCount: number;
+    capabilitySummary: { total: number; available: number; unavailable: number } | null;
+    currentPhase: string | null;
+    autonomyLevel: number | null;
+  } {
+    const status = getCognitiveCoreStatusSync();
+    if (!status.initialized || !_cognitiveCore) {
+      return {
+        ...status,
+        cycleCount: 0,
+        capabilitySummary: null,
+        currentPhase: null,
+        autonomyLevel: null,
+      };
+    }
+    // Access the registry and current cycle from the CognitiveCore
+    try {
+      const registry = _cognitiveCore.getRegistry();
+      const summary = registry.getSummary();
+      // Get cycle count and current phase from the last cycle if available
+      // These are internal to CognitiveCore — we expose what we can
+      return {
+        ...status,
+        cycleCount: 0, // Updated after each cycle via the state
+        capabilitySummary: summary,
+        currentPhase: null,
+        autonomyLevel: null,
+      };
+    } catch {
+      return {
+        ...status,
+        cycleCount: 0,
+        capabilitySummary: null,
+        currentPhase: null,
+        autonomyLevel: null,
+      };
+    }
+  }
+
+  /**
+   * Resume goals after a restart.
+   */
+  async resumeCognitiveGoals(): Promise<{ resumedGoals: number }> {
+    const core = await getCognitiveCore();
+    const result = await core.resumeAfterRestart();
+    return { resumedGoals: result.resumedGoals.length };
+  }
+
+  /**
+   * Close the CognitiveCore and release resources.
+   */
+  async closeCognitiveCore(): Promise<void> {
+    if (_cognitiveCore) {
+      await _cognitiveCore.close();
+      _cognitiveCore = null;
+      _cognitiveCoreInstanceId = null;
+      _cognitiveCoreInitError = null;
+    }
+  }
+
+  // ─── Bounded continuous loop control ──────────────────────────────────
+
+  /**
+   * Start the bounded continuous cognitive loop.
+   * Only R0/R1 actions execute autonomously. R2+ requires human authorization.
+   */
+  async startCognitiveLoop(intervalMs?: number): Promise<void> {
+    const core = await getCognitiveCore();
+    await core.start(intervalMs);
+  }
+
+  /**
+   * Stop the continuous cognitive loop gracefully.
+   */
+  stopCognitiveLoop(): void {
+    if (_cognitiveCore) {
+      _cognitiveCore.stop();
+    }
+  }
+
+  /**
+   * Pause the continuous cognitive loop.
+   */
+  pauseCognitiveLoop(): void {
+    if (_cognitiveCore) {
+      _cognitiveCore.pause();
+    }
+  }
+
+  /**
+   * Resume a paused cognitive loop.
+   */
+  resumeCognitiveLoop(): void {
+    if (_cognitiveCore) {
+      _cognitiveCore.resume();
+    }
+  }
+
+  /**
+   * Activate the cognitive loop kill switch.
+   * Immediately halts all new autonomous cycles.
+   */
+  activateCognitiveKillSwitch(reason: string): void {
+    if (_cognitiveCore) {
+      _cognitiveCore.activateKillSwitch(reason);
+    }
+  }
+
+  /**
+   * Deactivate the cognitive loop kill switch.
+   */
+  deactivateCognitiveKillSwitch(): void {
+    if (_cognitiveCore) {
+      _cognitiveCore.deactivateKillSwitch();
+    }
+  }
+
+  /**
+   * Get the cognitive loop status for health reporting.
+   */
+  getCognitiveLoopStatus(): import('./heidi/CognitiveCore').LoopStatus | null {
+    if (!_cognitiveCore) return null;
+    return _cognitiveCore.getLoopStatus();
+  }
+
+  /**
+   * Get the daemon status for health reporting.
+   * Reads the daemon lock file and audit log to report whether the
+   * continuous cognitive-loop daemon is running and how many
+   * self-sufficiency cycles it has completed.
+   *
+   * Does NOT throw — returns degraded status if daemon is not running
+   * or files are not accessible.
+   */
+  getDaemonStatus(): {
+    running: boolean;
+    pid: number | null;
+    startedAt: string | null;
+    selfSufficiencyCycles: number;
+    lastSelfSufficiencyCycle: string | null;
+    lastCapabilityHealth: { total: number; ready: number; blocked: number; unavailable: number } | null;
+    lastSelfRepairResult: { totalIssues: number; repaired: number; escalated: number; workedAround: number; refused: number } | null;
+    error: string | null;
+  } {
+    try {
+      const fs = require('fs') as typeof import('fs');
+      const path = require('path') as typeof import('path');
+      // Use process.cwd() instead of __dirname — in the Next.js dev server,
+      // __dirname may resolve to a compiled cache directory rather than the
+      // source lib/ directory. The daemon writes the lock file relative to
+      // the repo root, which is process.cwd() when running under PM2.
+      const lockPath = path.resolve(process.cwd(), '.heidi-daemon.lock');
+      const auditPath = path.resolve(process.cwd(), '.heidi-daemon-audit.jsonl');
+
+      // Check lock file
+      let pid: number | null = null;
+      let startedAt: string | null = null;
+      let running = false;
+
+      if (fs.existsSync(lockPath)) {
+        try {
+          const lockData = JSON.parse(fs.readFileSync(lockPath, 'utf-8'));
+          pid = lockData.pid || null;
+          startedAt = lockData.startedAt || null;
+          // Check if process is alive. On Windows, process.kill(pid, 0)
+          // may fail for child processes of other processes even when
+          // they're running. Fall back to checking if the audit file was
+          // recently modified (within the last 5 minutes), which indicates
+          // the daemon is actively cycling.
+          if (pid) {
+            try {
+              process.kill(pid, 0);
+              running = true;
+            } catch {
+              // process.kill failed — check audit file recency as fallback
+              try {
+                if (fs.existsSync(auditPath)) {
+                  const stats = fs.statSync(auditPath);
+                  const ageMs = Date.now() - stats.mtimeMs;
+                  if (ageMs < 5 * 60 * 1000) { // 5 minutes
+                    running = true; // Audit file is recent — daemon is alive
+                  }
+                }
+              } catch {
+                // Can't check audit file — assume not running
+              }
+            }
+          }
+        } catch {
+          // Corrupt lock file
+        }
+      }
+
+      // Read last few audit records
+      let selfSufficiencyCycles = 0;
+      let lastSelfSufficiencyCycle: string | null = null;
+      let lastCapabilityHealth: { total: number; ready: number; blocked: number; unavailable: number } | null = null;
+      let lastSelfRepairResult: { totalIssues: number; repaired: number; escalated: number; workedAround: number; refused: number } | null = null;
+
+      if (fs.existsSync(auditPath)) {
+        try {
+          const content = fs.readFileSync(auditPath, 'utf-8');
+          const lines = content.trim().split('\n').filter(Boolean);
+          for (const line of lines) {
+            try {
+              const record = JSON.parse(line);
+              if (record.phase === 'self_sufficiency') {
+                selfSufficiencyCycles++;
+                lastSelfSufficiencyCycle = record.timestamp;
+                if (record.capabilityHealth) {
+                  lastCapabilityHealth = record.capabilityHealth;
+                }
+                if (record.selfRepairResult) {
+                  lastSelfRepairResult = record.selfRepairResult;
+                }
+              }
+            } catch {
+              // Skip corrupt lines
+            }
+          }
+        } catch {
+          // Audit file not readable
+        }
+      }
+
+      return {
+        running,
+        pid,
+        startedAt,
+        selfSufficiencyCycles,
+        lastSelfSufficiencyCycle,
+        lastCapabilityHealth,
+        lastSelfRepairResult,
+        error: null,
+      };
+    } catch (error) {
+      return {
+        running: false,
+        pid: null,
+        startedAt: null,
+        selfSufficiencyCycles: 0,
+        lastSelfSufficiencyCycle: null,
+        lastCapabilityHealth: null,
+        lastSelfRepairResult: null,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
+  }
+
+  /**
+   * Get the revenue dashboard for health reporting.
+   * Queries the real pipeline tables and RevenueLedger.
+   * Does NOT throw — returns degraded status if DB is unavailable.
+   * NEVER confuses pipeline activity with verified revenue.
+   */
+  async getRevenueDashboard(): Promise<{
+    prospects: number;
+    qualifiedProspects: number;
+    opportunities: number;
+    openOffers: number;
+    pendingAuthorizations: number;
+    customers: number;
+    payments: number;
+    verifiedRevenueCents: number;
+    pipelineValueCents: number;
+    averageOpportunityValueCents: number;
+    conversionRate: number | null;
+    revenuePerCampaign: Array<{ campaign: string; verifiedRevenueCents: number; prospects: number }>;
+    available: boolean;
+    error: string | null;
+  }> {
+    try {
+      const { Pool } = require('pg');
+      const pool = new Pool({
+        host: process.env.PG_HOST || '127.0.0.1',
+        port: parseInt(process.env.PG_PORT || '54322', 10),
+        database: process.env.PG_DATABASE || 'postgres',
+        user: process.env.PG_USER || 'postgres',
+        password: process.env.PG_PASSWORD || 'postgres',
+        max: 2,
+        idleTimeoutMillis: 5000,
+      });
+
+      try {
+        const [prospectsRes, qualifiedRes, oppsRes, customersRes, verifiedRes] = await Promise.all([
+          pool.query('SELECT count(*) as cnt FROM revenue_prospects WHERE opted_out = false'),
+          pool.query("SELECT count(*) as cnt FROM revenue_prospects WHERE status IN ('qualified', 'appointment', 'proposal_sent', 'won')"),
+          pool.query("SELECT count(*) as cnt, COALESCE(sum(proposed_price), 0) as total_value FROM revenue_opportunities WHERE status = 'open'"),
+          pool.query("SELECT count(*) as cnt FROM customer_services WHERE status IN ('active', 'provisioning')"),
+          pool.query('SELECT count(*) as cnt, COALESCE(sum(amount_gross), 0) as total FROM revenue_ledger WHERE verified = true'),
+        ]);
+
+        const prospects = parseInt(prospectsRes.rows[0].cnt, 10);
+        const qualifiedProspects = parseInt(qualifiedRes.rows[0].cnt, 10);
+        const opportunities = parseInt(oppsRes.rows[0].cnt, 10);
+        const pipelineValueCents = parseInt(oppsRes.rows[0].total_value, 10);
+        const customers = parseInt(customersRes.rows[0].cnt, 10);
+        const verifiedRevenueCents = parseInt(verifiedRes.rows[0].total, 10);
+        const payments = parseInt(verifiedRes.rows[0].cnt, 10);
+
+        const averageOpportunityValueCents = opportunities > 0
+          ? Math.round(pipelineValueCents / opportunities)
+          : 0;
+
+        // Conversion rate: won opportunities / total opportunities
+        const wonRes = await pool.query("SELECT count(*) as cnt FROM revenue_opportunities WHERE status = 'accepted'");
+        const totalOppsRes = await pool.query('SELECT count(*) as cnt FROM revenue_opportunities');
+        const wonCount = parseInt(wonRes.rows[0].cnt, 10);
+        const totalOpps = parseInt(totalOppsRes.rows[0].cnt, 10);
+        const conversionRate = totalOpps > 0 ? wonCount / totalOpps : null;
+
+        // Revenue per campaign (from metadata)
+        let revenuePerCampaign: Array<{ campaign: string; verifiedRevenueCents: number; prospects: number }> = [];
+        try {
+          const campaignRes = await pool.query(`
+            SELECT
+              COALESCE(metadata->>'campaign', 'unknown') as campaign,
+              count(*) as prospects
+            FROM revenue_prospects
+            WHERE metadata->>'campaign' IS NOT NULL
+            GROUP BY metadata->>'campaign'
+            LIMIT 10
+          `);
+          revenuePerCampaign = campaignRes.rows.map((r: any) => ({
+            campaign: r.campaign,
+            verifiedRevenueCents: 0, // Verified revenue is tracked in revenue_ledger, not prospects
+            prospects: parseInt(r.prospects, 10),
+          }));
+        } catch {
+          // Non-fatal
+        }
+
+        return {
+          prospects,
+          qualifiedProspects,
+          opportunities,
+          openOffers: opportunities, // open offers = open opportunities
+          pendingAuthorizations: 0, // Would come from escalation_records if table exists
+          customers,
+          payments,
+          verifiedRevenueCents,
+          pipelineValueCents,
+          averageOpportunityValueCents,
+          conversionRate,
+          revenuePerCampaign,
+          available: true,
+          error: null,
+        };
+      } finally {
+        await pool.end();
+      }
+    } catch (error) {
+      return {
+        prospects: 0,
+        qualifiedProspects: 0,
+        opportunities: 0,
+        openOffers: 0,
+        pendingAuthorizations: 0,
+        customers: 0,
+        payments: 0,
+        verifiedRevenueCents: 0,
+        pipelineValueCents: 0,
+        averageOpportunityValueCents: 0,
+        conversionRate: null,
+        revenuePerCampaign: [],
+        available: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
+  }
+
+  /**
+   * Get the commercial capability state for health reporting.
+   * Reports READY/BLOCKED/DEGRADED for each external dependency.
+   * Does NOT throw — returns degraded status if unavailable.
+   */
+  async getCommercialState(): Promise<{
+    discovery: { state: string; blocker: string | null };
+    email: { state: string; blocker: string | null };
+    stripe: { state: string; blocker: string | null };
+    sms: { state: string; blocker: string | null };
+    autonomyLevel: number;
+    available: boolean;
+    error: string | null;
+  }> {    try {
+      const stripeKey = process.env.STRIPE_SECRET_KEY;
+      const emailKey = process.env.SENDGRID_API_KEY || process.env.SMTP_HOST;
+      const smsKey = process.env.TWILIO_ACCOUNT_SID;
+      const googlePlacesKey = process.env.GOOGLE_PLACES_API_KEY;
+      const clearbitKey = process.env.CLEARBIT_API_KEY;
+
+      return {
+        discovery: {
+          state: googlePlacesKey || clearbitKey ? 'READY' : 'BLOCKED',
+          blocker: googlePlacesKey || clearbitKey
+            ? null
+            : 'GOOGLE_PLACES_API_KEY or CLEARBIT_API_KEY required for external prospect discovery. CSV import is available as a fallback.',
+        },
+        email: {
+          state: emailKey ? 'READY' : 'BLOCKED',
+          blocker: emailKey
+            ? null
+            : 'SENDGRID_API_KEY or SMTP_HOST/SMTP_PORT/SMTP_USER/SMTP_PASS required for outbound email delivery.',
+        },
+        stripe: {
+          state: stripeKey ? 'READY' : 'BLOCKED',
+          blocker: stripeKey
+            ? null
+            : 'STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET required for payment processing and verified revenue.',
+        },
+        sms: {
+          state: smsKey ? 'READY' : 'BLOCKED',
+          blocker: smsKey
+            ? null
+            : 'TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_PHONE_NUMBER required for SMS delivery.',
+        },
+        autonomyLevel: 2,
+        available: true,
+        error: null,
+      };
+    } catch (error) {
+      return {
+        discovery: { state: 'FAILED', blocker: 'Unable to check discovery state' },
+        email: { state: 'FAILED', blocker: 'Unable to check email state' },
+        stripe: { state: 'FAILED', blocker: 'Unable to check Stripe state' },
+        sms: { state: 'FAILED', blocker: 'Unable to check SMS state' },
+        autonomyLevel: 2,
+        available: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
+  }
+
+  /**
+   * Get the capability health summary from the production CognitiveCore's
+   * CapabilityHealthManager. This is the authoritative "What can I do right now?"
+   * answer — every READY capability has evidence and lastSuccessfulVerification.
+   *
+   * Does NOT throw — returns degraded status if CognitiveCore or
+   * CapabilityHealthManager is unavailable. Never exposes secrets.
+   */
+  async getCapabilityHealth(): Promise<{
+    available: boolean;
+    error: string | null;
+    summary: {
+      total: number;
+      ready: number;
+      degraded: number;
+      blocked: number;
+      unavailable: number;
+      repairable: number;
+      humanRequired: number;
+      prohibited: number;
+      unknown: number;
+    } | null;
+    readyCapabilities: Array<{
+      capabilityId: string;
+      description: string;
+      provider: string;
+      state: string;
+      evidence: string;
+      lastSuccessfulVerification: string | null;
+    }>;
+    blockedCapabilities: Array<{
+      capabilityId: string;
+      description: string;
+      provider: string;
+      state: string;
+      evidence: string;
+      failureClassification: string;
+      repairability: string;
+      requiredCredentials: string[];
+      lastFailure: string | null;
+    }>;
+    repairHistory: Array<{
+      repairId: string;
+      capabilityId: string;
+      classification: string;
+      riskLevel: string;
+      plannedAction: string;
+      authorized: boolean;
+      executed: boolean;
+      verified: boolean;
+      verificationEvidence: string | null;
+      timestamp: string;
+    }>;
+  }> {
+    try {
+      // Lazily initialize CognitiveCore if this is the first call to touch
+      // it (e.g. /api/status hit before any chat request). Without this,
+      // capabilityHealth silently reports unavailable on every cold start
+      // until something else happens to call getCognitiveCore() first.
+      let core: CognitiveCore;
+      try {
+        core = await getCognitiveCore();
+      } catch (initError) {
+        return {
+          available: false,
+          error: initError instanceof Error ? initError.message : 'CognitiveCore initialization failed',
+          summary: null,
+          readyCapabilities: [],
+          blockedCapabilities: [],
+          repairHistory: [],
+        };
+      }
+
+      // Access the bridge's CapabilityHealthManager
+      const bridge = core.getBridge();
+      if (!bridge?.capabilityHealthManager) {
+        return {
+          available: false,
+          error: 'CapabilityHealthManager not wired',
+          summary: null,
+          readyCapabilities: [],
+          blockedCapabilities: [],
+          repairHistory: [],
+        };
+      }
+
+      const chm = bridge.capabilityHealthManager;
+      const summary = await chm.checkAll() as any;
+      const ready = chm.getReadyCapabilities() as any[];
+      const blocked = chm.getBlockedCapabilities() as any[];
+
+      // Get repair history if SelfRepairEngine is wired
+      let repairHistory: any[] = [];
+      if (bridge.selfRepairEngine) {
+        repairHistory = bridge.selfRepairEngine.getHistory();
+      }
+
+      return {
+        available: true,
+        error: null,
+        summary: {
+          total: summary.total,
+          ready: summary.ready,
+          degraded: summary.degraded,
+          blocked: summary.blocked,
+          unavailable: summary.unavailable,
+          repairable: summary.repairable,
+          humanRequired: summary.humanRequired,
+          prohibited: summary.prohibited,
+          unknown: summary.unknown,
+        },
+        readyCapabilities: ready.map((r: any) => ({
+          capabilityId: r.capabilityId,
+          description: r.description,
+          provider: r.provider,
+          state: r.state,
+          evidence: r.evidence,
+          lastSuccessfulVerification: r.lastSuccessfulVerification,
+        })),
+        blockedCapabilities: blocked.map((r: any) => ({
+          capabilityId: r.capabilityId,
+          description: r.description,
+          provider: r.provider,
+          state: r.state,
+          evidence: r.evidence,
+          failureClassification: r.failureClassification,
+          repairability: r.repairability,
+          requiredCredentials: r.requiredCredentials || [],
+          lastFailure: r.lastFailure,
+        })),
+        repairHistory: repairHistory.map((r: any) => ({
+          repairId: r.repairId,
+          capabilityId: r.capabilityId,
+          classification: r.classification,
+          riskLevel: r.riskLevel,
+          plannedAction: r.plannedAction,
+          authorized: r.authorized,
+          executed: r.executed,
+          verified: r.verified,
+          verificationEvidence: r.verificationEvidence,
+          timestamp: r.timestamp,
+        })),
+      };
+    } catch (error) {
+      return {
+        available: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        summary: null,
+        readyCapabilities: [],
+        blockedCapabilities: [],
+        repairHistory: [],
+      };
+    }
   }
 
   /**
@@ -102,8 +797,9 @@ export class HeidiOrchestrator {
       await this.recordMemoryRetrieval(request.session_id, memoryContext.length > 0);
       memoryLookupDurationMs = Date.now() - memoryStart;
 
-      // 2. Build prompt with memory
-      const prompt = this.buildPrompt(request.message, memoryContext);
+      // 2. Build prompt with memory + live system context
+      const liveContext = await this.gatherLiveSystemContext();
+      const prompt = this.buildPrompt(request.message, memoryContext, liveContext);
       
       // 3. Generate response via ModelManager (metrics recorded here by orchestrator later)
       modelResponse = await this.modelManager.generateResponse(prompt, request.session_id, {
@@ -267,20 +963,100 @@ export class HeidiOrchestrator {
   }
 
   /**
-   * Build prompt with memory context
+   * Gather live system context for the chat prompt. This grounds HEIDI's
+   * responses in actual operational state rather than generic assumptions.
+   * Never throws — returns a partial context if any subsystem is unavailable.
    */
-  private buildPrompt(userMessage: string, memoryContext: string): string {
-    const systemPrompt = `You are Heidi, a production-grade conversational AI assistant.
+  private async gatherLiveSystemContext(): Promise<string> {
+    const parts: string[] = [];
+
+    try {
+      const daemon = this.getDaemonStatus();
+      if (daemon.running) {
+        parts.push(`Daemon: running, PID ${daemon.pid}, ${daemon.selfSufficiencyCycles} self-sufficiency cycles, started ${daemon.startedAt}`);
+        if (daemon.lastCapabilityHealth) {
+          const h = daemon.lastCapabilityHealth;
+          parts.push(`Capability health: ${h.ready} ready, ${h.blocked} blocked, ${h.unavailable} unavailable (of ${h.total} total)`);
+        }
+        if (daemon.lastSelfRepairResult) {
+          const r = daemon.lastSelfRepairResult;
+          parts.push(`Last self-repair: ${r.totalIssues} issues, ${r.workedAround} worked around, ${r.escalated} escalated`);
+        }
+      } else {
+        parts.push(`Daemon: not running`);
+      }
+    } catch { /* ignore */ }
+
+    try {
+      const cognitive = this.getCognitiveStatus();
+      if (cognitive.initialized) {
+        parts.push(`CognitiveCore: initialized, instance ${cognitive.instanceId}, ${cognitive.cycleCount} cycles, autonomy level ${cognitive.autonomyLevel}`);
+        if (cognitive.capabilitySummary) {
+          parts.push(`Capabilities: ${cognitive.capabilitySummary.total} total, ${cognitive.capabilitySummary.available} available, ${cognitive.capabilitySummary.unavailable} unavailable`);
+        }
+      }
+    } catch { /* ignore */ }
+
+    try {
+      const loop = this.getCognitiveLoopStatus();
+      if (loop) {
+        parts.push(`Cognitive loop: state=${loop.state}, killSwitch=${loop.killSwitchActive ? 'ACTIVE' : 'inactive'}`);
+      }
+    } catch { /* ignore */ }
+
+    try {
+      const health = await this.getCapabilityHealth();
+      if (health.available && health.blockedCapabilities.length > 0) {
+        const blocked = health.blockedCapabilities.map(c => `${c.capabilityId} (${c.evidence})`).join('; ');
+        parts.push(`Blocked capabilities: ${blocked}`);
+      }
+    } catch { /* ignore */ }
+
+    try {
+      const commercial = await this.getCommercialState();
+      const caps = [
+        `discovery=${commercial.discovery.state}`,
+        `email=${commercial.email.state}`,
+        `stripe=${commercial.stripe.state}`,
+        `sms=${commercial.sms.state}`,
+      ];
+      parts.push(`Commercial: ${caps.join(', ')}`);
+    } catch { /* ignore */ }
+
+    try {
+      const rd = await this.getRevenueDashboard();
+      if (rd.available) {
+        parts.push(`Revenue: ${rd.prospects} prospects, ${rd.opportunities} opportunities, ${rd.customers} customers, $${(rd.verifiedRevenueCents / 100).toFixed(2)} verified revenue`);
+      }
+    } catch { /* ignore */ }
+
+    // Static system context
+    parts.push(`Services: protoforge-core on port 3005, heidi-web on port 3000, heidi-mobile-chat on port 3006, Ollama on port 11434, Supabase DB on port 54322`);
+    parts.push(`ProtoForge: the policy/governance engine in the HYDI six-layer pipeline (Ingestion → RAW LEDGER → CASCADE → KILO → ProtoForge → Emission). Running as protoforge-core on port 3005. NOT related to Protocol Buffers or any external project of the same name.`);
+
+    return parts.join('\n');
+  }
+
+  /**
+   * Build prompt with memory context + live system context
+   */
+  private buildPrompt(userMessage: string, memoryContext: string, liveContext: string): string {
+    const systemPrompt = `You are HEIDI, the governed cognitive operator for the HYDI System v2. You are not a generic assistant — you are the actual operating intelligence of a running production system. You have access to live system state below. Answer questions about the system from that state, not from general knowledge.
 
 Rules:
 1. Always respond with valid JSON
 2. Use this exact structure: {"response": "your response", "actions": [{"type": "action_type", "payload": {}}]}
 3. Keep responses concise and helpful
 4. Only suggest actions that are genuinely useful
+5. When asked about system state, use the live context below — do not hallucinate
+6. ProtoForge is YOUR policy/governance engine, not an external tool
 
 Available actions: ${this.allowedActionTypes.join(', ')}
 
-${memoryContext ? `Context: ${memoryContext}` : ''}
+Live system context:
+${liveContext}
+
+${memoryContext ? `Memory context: ${memoryContext}` : ''}
 
 User message: ${userMessage}
 
@@ -502,8 +1278,51 @@ Respond with JSON:`;
    * vocabulary (this.allowedActionTypes — no new code-editing/test-running/
    * git capability), persist it, then run steps until the plan completes,
    * a step fails or is ProtoForge-blocked, or `maxSteps` is reached.
+   *
+   * When ADAPTIVE_OPERATOR_ENABLED=true, delegates to AdaptiveOperator
+   * instead of the LLM-decompose-then-run-step-by-step path. AdaptiveOperator
+   * observes the real environment, generates a reality-driven plan, executes
+   * through the governed HumanActionEngine, verifies outcomes, and replans
+   * on deviations — all within production autonomy bounds. See
+   * lib/adaptive-operator/AdaptiveOperatorIntegration.ts.
    */
   async startWorkSession(goal: string, sessionId: string, userId: string, maxSteps = 5): Promise<WorkSession | null> {
+    // --- AdaptiveOperator path (feature-flagged + goal allowlist) ---
+    if (isAdaptiveOperatorEnabled() && isGoalAllowed(goal)) {
+      console.log(`[Orchestrator] AdaptiveOperator enabled — delegating goal: "${goal}"`);
+      try {
+        const { executeGoalViaAdaptiveOperator } = await import('./adaptive-operator/AdaptiveOperatorIntegration');
+        const result = await executeGoalViaAdaptiveOperator({
+          goal,
+          sessionId,
+          userId,
+          supabase: this.supabase,
+        });
+        // Persist the work session to Supabase so the existing API/UI
+        // (api/work-sessions) can display it.
+        try {
+          await this.supabase.from('work_sessions').upsert({
+            id: result.workSession.id,
+            session_id: result.workSession.session_id,
+            user_id: result.workSession.user_id,
+            goal: result.workSession.goal,
+            status: result.workSession.status,
+            steps: result.workSession.steps,
+            created_at: result.workSession.created_at,
+            updated_at: result.workSession.updated_at,
+            completed_at: result.workSession.completed_at,
+          });
+        } catch (persistErr) {
+          console.error('[Orchestrator] Failed to persist AdaptiveOperator work session:', persistErr instanceof Error ? persistErr.message : 'Unknown error');
+        }
+        return result.workSession;
+      } catch (adaptiveErr) {
+        console.error('[Orchestrator] AdaptiveOperator failed, falling back to legacy work session:', adaptiveErr instanceof Error ? adaptiveErr.message : 'Unknown error');
+        // Fall through to legacy path
+      }
+    }
+
+    // --- Legacy path: LLM decompose → run steps one-by-one ---
     const prompt = buildPlanPrompt(goal, this.allowedActionTypes);
     const modelResponse = await this.modelManager.generateResponse(prompt, sessionId);
 

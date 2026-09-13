@@ -152,13 +152,26 @@ class HYDISystem extends EventEmitter {
     });
     
     // Core Loop (connects all layers)
+    // controlPlane is passed through so the loop's task outcomes feed
+    // HeidiControlPlane's learning history (see HeidiCoreLoop.recordControlPlaneOutcome) --
+    // without it, the control plane's feedback cycle never sees any data
+    // from the autonomous loop, only from the separate handle*Request() paths.
+    //
+    // orchestrator is passed through so the live autonomous loop runs against the SAME
+    // HeidiOrchestrator instance as this.orchestrator (used by handleIntelligenceRequest/
+    // handleActionRequest, HYDIAutonomyManager below, and getStatus()'s orchestrator
+    // section) instead of HeidiCoreLoop silently constructing its own second, independent
+    // instance -- see HeidiCoreLoop's constructor comment for why that split was a bug
+    // source, not just a wart.
     this.coreLoop = new HeidiCoreLoop({
       loopInterval: this.config.loopInterval,
       observationInterval: this.config.observationInterval,
       reflectionInterval: this.config.reflectionInterval,
       enableRevenueMode: this.config.enableRevenueMode,
       enableAutoActions: this.config.enableAutoActions,
-      actionConfidenceThreshold: this.config.confidenceThreshold
+      actionConfidenceThreshold: this.config.confidenceThreshold,
+      controlPlane: this.controlPlane,
+      orchestrator: this.orchestrator
     });
 
     // V3 Autonomy Manager (reliability, mission planning, decision intelligence)
@@ -709,18 +722,35 @@ class HYDISystem extends EventEmitter {
    */
   
   handleLoopCompleted(event) {
-    console.log(`[HYDI SYSTEM] Loop completed: ${event.loopId}`);
-    
+    // Phase II: this handler used to hardcode `success: true, confidence: 0.9`
+    // for every loop that reached the end of the pipeline. Loops that were
+    // rejected by policy, or that ran with no model, or whose action handler
+    // returned nothing, all arrived here and were recorded as successful --
+    // in the same millisecond the memory layer was logging
+    // "Strategy that failed" and drift 1.000. The loop's own verdict decides.
+    const outcome = event.outcome || event.result?.outcome || 'UNVERIFIED';
+    const succeeded = outcome === 'SUCCESS';
+    const reason = event.reason || event.result?.outcomeReason || null;
+
+    console.log(
+      `[HYDI SYSTEM] Loop finished: ${event.loopId} outcome=${outcome}` +
+      (reason ? ` reason=${reason}` : '')
+    );
+
     // Track loop in self-awareness
     if (this.selfAwareness) {
       this.selfAwareness.trackAction({
         id: event.loopId,
         type: 'core_loop',
-        success: true,
-        confidence: 0.9,
+        success: succeeded,
+        // Confidence is a claim about how sure we are of the result. Asserting
+        // 0.9 for an outcome we could not verify is itself a false green.
+        confidence: succeeded ? 0.9 : 0,
         latency: event.duration,
         cost: 0,
         revenue: 0,
+        loopOutcome: outcome,
+        ...(reason ? { error: reason } : {}),
         outcome: event.result
       });
     }
@@ -836,19 +866,26 @@ class HYDISystem extends EventEmitter {
   }
   
   handleLearningRecorded(record) {
-    console.log(`[HYDI SYSTEM] Learning recorded: ${record.actionType} (success: ${record.success})`);
-    
+    // `record` is the CASCADE v3 feedbackPacket emitted by HeidiControlPlane.recordActionOutcome()
+    // (see src/control/HeidiControlPlane.js) -- its field names (task_type, success_boolean,
+    // model_used, expected_outcome.*, actual_outcome.*) never matched the actionType/success/etc.
+    // names this handler used to read, so every log line and every selfAwareness.trackAction()
+    // call here silently received all-undefined fields.
+    const actionType = record.task_type;
+    const success = record.success_boolean;
+    console.log(`[HYDI SYSTEM] Learning recorded: ${actionType} (success: ${success})`);
+
     // Update self-awareness if available
     if (this.selfAwareness) {
       this.selfAwareness.trackAction({
-        id: record.actionId,
-        type: record.actionType,
-        success: record.success,
-        confidence: record.confidence,
-        latency: record.latency,
-        cost: record.cost,
-        revenue: record.revenue,
-        model: record.model,
+        id: record.action_id,
+        type: actionType,
+        success,
+        confidence: record.expected_outcome ? record.expected_outcome.confidence : undefined,
+        latency: record.actual_outcome ? record.actual_outcome.latency : undefined,
+        cost: record.expected_outcome ? record.expected_outcome.estimated_cost : undefined,
+        revenue: record.revenue_delta,
+        model: record.model_used,
         strategy: record.strategy
       });
     }
@@ -927,28 +964,54 @@ class HYDISystem extends EventEmitter {
    */
   
   applyAdaptation(recommendation) {
-    console.log(`[HYDI SYSTEM] Applying adaptation: ${recommendation.action}`);
-    
-    switch (recommendation.action) {
+    const { normalize, isValidAction } = require('./core/adaptation-vocabulary');
+    const rec = normalize(recommendation);
+    console.log(`[HYDI SYSTEM] Applying adaptation: ${rec.action} (type: ${rec.type})`);
+
+    if (!isValidAction(rec.action)) {
+      console.log(`[HYDI SYSTEM] Unknown adaptation action: ${rec.action}`);
+      return;
+    }
+
+    switch (rec.action) {
       case 'reduce_confidence_threshold':
         this.config.confidenceThreshold = Math.max(0.5, this.config.confidenceThreshold - 0.1);
         break;
-        
+
       case 'increase_confidence_threshold':
         this.config.confidenceThreshold = Math.min(0.9, this.config.confidenceThreshold + 0.1);
         break;
-        
+
       case 'switch_primary_model':
         // This would update model stack preferences
-        console.log(`[HYDI SYSTEM] Switching primary model to: ${recommendation.target}`);
+        console.log(`[HYDI SYSTEM] Switching primary model to: ${rec.target}`);
         break;
-        
+
       case 'reduce_external_usage':
         this.config.costThreshold = Math.max(0.01, this.config.costThreshold * 0.8);
         break;
-        
+
+      case 'improve_roi':
+        console.log(`[HYDI SYSTEM] ROI improvement recommended: ${rec.reason}`);
+        break;
+
+      case 'reduce_drift':
+        // Lower confidence threshold to counteract drift
+        this.config.confidenceThreshold = Math.max(0.5, this.config.confidenceThreshold - 0.1);
+        console.log(`[HYDI SYSTEM] Drift reduction: lowered confidence threshold to ${this.config.confidenceThreshold}`);
+        break;
+
+      case 'avoid_strategy':
+        console.log(`[HYDI SYSTEM] Avoiding strategy: ${rec.target}`);
+        break;
+
+      case 'prefer_strategy':
+      case 'increase_strategy_preference':
+        console.log(`[HYDI SYSTEM] Preferring strategy: ${rec.target}`);
+        break;
+
       default:
-        console.log(`[HYDI SYSTEM] Unknown adaptation: ${recommendation.action}`);
+        console.log(`[HYDI SYSTEM] Unhandled adaptation action: ${rec.action}`);
     }
   }
   

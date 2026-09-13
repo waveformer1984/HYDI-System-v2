@@ -19,12 +19,18 @@ describe('HYDI health local-first store', () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  test('returns default dashboard when no file exists', () => {
+  test('default dashboard reports "not measured", never a fabricated OK', () => {
+    // Regression: current_status used to default to 'OK' and last_check to
+    // "now", so api/health.js reported status:"healthy" off a constant with no
+    // health run behind it. The default must mirror the Supabase branch's
+    // empty-view shape instead.
     const dash = localStore.getDashboard();
-    expect(dash.current_status).toBe('OK');
+    expect(dash.current_status).toBeNull();
+    expect(dash.current_status).not.toBe('OK');
+    expect(dash.last_check).toBeNull();
+    expect(dash.trend_status).toBe('unknown');
     expect(dash.jobs_queued).toBe(0);
     expect(dash.escalation_level).toBe('OK');
-    expect(dash.last_check).toBeDefined();
   });
 
   test('persists and re-reads dashboard', () => {
@@ -41,7 +47,9 @@ describe('HYDI health local-first store', () => {
     expect(dash.jobs_queued).toBe(3);
     expect(dash.jobs_failed).toBe(1);
     expect(dash.events_last_hour).toBe(42);
-    expect(dash.current_status).toBe('OK');
+    // setDashboard merged over the defaults; it never supplied a status, so the
+    // status must remain "unmeasured" rather than inheriting a fabricated OK.
+    expect(dash.current_status).toBeNull();
   });
 
   test('records auto-heal and counts 24h window', () => {
@@ -75,8 +83,11 @@ describe('HYDI health local-first store', () => {
 
     await handler(req, res);
 
+    // HTTP 200 (the handler ran) but NOT healthy: no health run has ever been
+    // recorded, so the local branch must say so rather than inventing an OK.
     expect(res._status).toBe(200);
-    expect(res._json.status).toBe('healthy');
+    expect(res._json.status).toBe('degraded');
+    expect(res._json.hydi_status).toBeNull();
     expect(res._json.cloud.available).toBe(false);
     expect(res._json.cloud.source).toBe('local');
     expect(res._json.metrics.jobs_queued).toBe(0);
@@ -101,8 +112,24 @@ describe('HYDI health local-first store', () => {
     const req = { method: 'GET' };
     await handler(req, res);
 
+    // Same invariant with no data dir configured at all: the absence of
+    // evidence is reported as degraded, matching what the Supabase branch
+    // returns when system_health_runs is empty.
     expect(res._status).toBe(200);
-    expect(res._json.status).toBe('healthy');
+    expect(res._json.status).toBe('degraded');
+    expect(res._json.hydi_status).toBeNull();
     expect(res._json.cloud.available).toBe(false);
+  });
+
+  test('local and Supabase branches agree on what "no evidence" means', async () => {
+    // The Supabase view yields current_status = NULL from an empty
+    // system_health_runs (scalar subquery over zero rows). The local default
+    // must produce the same verdict, so the answer to "is it healthy?" does not
+    // depend on which branch happens to be taken.
+    const dash = localStore.getDashboard();
+    expect(dash.current_status).toBeNull();
+
+    const isHealthy = dash.current_status === 'OK' && dash.escalation_level !== 'CRITICAL';
+    expect(isHealthy).toBe(false);
   });
 });

@@ -57,13 +57,24 @@
       "id": "hydi-orchestrator",
       "label": "HYDI System Orchestrator (Observe->Decide->Act core loop)",
       "type": "module",
-      "enabled": true,
+      "enabled": false,
       "required": false,
       "module": "src/HYDISystem.js",
       "construct": true,
       "config": { "enableAutoActions": false },
       "method": "start",
       "stopMethod": "shutdown",
+      "dependsOn": ["protoforge-core"]
+    },
+    {
+      "id": "job-executor-poller",
+      "label": "Revenue Job Executor Poller (advances paid/queued customer jobs to awaiting_review)",
+      "type": "process",
+      "enabled": true,
+      "required": false,
+      "command": "npx",
+      "args": ["tsx", "scripts/job-executor-poller.ts"],
+      "livenessMs": 5000,
       "dependsOn": ["protoforge-core"]
     },
     {

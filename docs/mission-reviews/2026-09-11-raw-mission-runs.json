@@ -1,0 +1,490 @@
+[
+  {
+    "id": "b67485c8-0fad-4110-b5cc-6ab1d6ac4f8e",
+    "mission": "protoforge.daily_opportunity_scan",
+    "run_at": "2026-09-10T23:09:33.988705+00:00",
+    "status": "success",
+    "sources_queried": [
+      {
+        "ok": true,
+        "error": null,
+        "query": "AI music generation",
+        "item_count": 15,
+        "source_type": "hn_algolia"
+      },
+      {
+        "ok": false,
+        "error": "HTTP 403",
+        "query": "AI music generation (r/WeAreTheMusicMakers)",
+        "item_count": 0,
+        "source_type": "reddit_public"
+      },
+      {
+        "ok": false,
+        "error": "HTTP 403",
+        "query": "AI music generation (r/musicproduction)",
+        "item_count": 0,
+        "source_type": "reddit_public"
+      },
+      {
+        "ok": false,
+        "error": "HTTP 403",
+        "query": "AI music generation (r/edmproduction)",
+        "item_count": 0,
+        "source_type": "reddit_public"
+      },
+      {
+        "ok": true,
+        "error": null,
+        "query": "stem separation tool",
+        "item_count": 4,
+        "source_type": "hn_algolia"
+      },
+      {
+        "ok": false,
+        "error": "HTTP 403",
+        "query": "stem separation tool (r/WeAreTheMusicMakers)",
+        "item_count": 0,
+        "source_type": "reddit_public"
+      },
+      {
+        "ok": false,
+        "error": "HTTP 403",
+        "query": "stem separation tool (r/musicproduction)",
+        "item_count": 0,
+        "source_type": "reddit_public"
+      },
+      {
+        "ok": false,
+        "error": "HTTP 403",
+        "query": "stem separation tool (r/edmproduction)",
+        "item_count": 0,
+        "source_type": "reddit_public"
+      },
+      {
+        "ok": true,
+        "error": null,
+        "query": "royalty free sample pack",
+        "item_count": 2,
+        "source_type": "hn_algolia"
+      },
+      {
+        "ok": false,
+        "error": "HTTP 403",
+        "query": "royalty free sample pack (r/WeAreTheMusicMakers)",
+        "item_count": 0,
+        "source_type": "reddit_public"
+      },
+      {
+        "ok": false,
+        "error": "HTTP 403",
+        "query": "royalty free sample pack (r/musicproduction)",
+        "item_count": 0,
+        "source_type": "reddit_public"
+      },
+      {
+        "ok": false,
+        "error": "HTTP 403",
+        "query": "royalty free sample pack (r/edmproduction)",
+        "item_count": 0,
+        "source_type": "reddit_public"
+      },
+      {
+        "ok": true,
+        "error": null,
+        "query": "sync licensing music",
+        "item_count": 2,
+        "source_type": "hn_algolia"
+      },
+      {
+        "ok": false,
+        "error": "HTTP 403",
+        "query": "sync licensing music (r/WeAreTheMusicMakers)",
+        "item_count": 0,
+        "source_type": "reddit_public"
+      },
+      {
+        "ok": false,
+        "error": "HTTP 403",
+        "query": "sync licensing music (r/musicproduction)",
+        "item_count": 0,
+        "source_type": "reddit_public"
+      },
+      {
+        "ok": false,
+        "error": "HTTP 403",
+        "query": "sync licensing music (r/edmproduction)",
+        "item_count": 0,
+        "source_type": "reddit_public"
+      },
+      {
+        "ok": true,
+        "error": null,
+        "query": "music production plugin",
+        "item_count": 12,
+        "source_type": "hn_algolia"
+      },
+      {
+        "ok": false,
+        "error": "HTTP 403",
+        "query": "music production plugin (r/WeAreTheMusicMakers)",
+        "item_count": 0,
+        "source_type": "reddit_public"
+      },
+      {
+        "ok": false,
+        "error": "HTTP 403",
+        "query": "music production plugin (r/musicproduction)",
+        "item_count": 0,
+        "source_type": "reddit_public"
+      },
+      {
+        "ok": false,
+        "error": "HTTP 403",
+        "query": "music production plugin (r/edmproduction)",
+        "item_count": 0,
+        "source_type": "reddit_public"
+      },
+      {
+        "ok": true,
+        "error": null,
+        "query": "AI song generator",
+        "item_count": 15,
+        "source_type": "hn_algolia"
+      },
+      {
+        "ok": false,
+        "error": "HTTP 403",
+        "query": "AI song generator (r/WeAreTheMusicMakers)",
+        "item_count": 0,
+        "source_type": "reddit_public"
+      },
+      {
+        "ok": false,
+        "error": "HTTP 403",
+        "query": "AI song generator (r/musicproduction)",
+        "item_count": 0,
+        "source_type": "reddit_public"
+      },
+      {
+        "ok": false,
+        "error": "HTTP 403",
+        "query": "AI song generator (r/edmproduction)",
+        "item_count": 0,
+        "source_type": "reddit_public"
+      }
+    ],
+    "opportunities_found": 47,
+    "duplicates_skipped": 3,
+    "high_confidence_count": 0,
+    "needs_review_count": 15,
+    "rejected_count": 32,
+    "briefing_text": "PROTOFORGE DAILY BRIEF\n────────────────────────\n\nOpportunities found: 47\nHigh-confidence:      0\nNeeds review:         15\nRejected:             32\n\nTOP OPPORTUNITIES\n\n1. [Alibaba Launches AI Music Generation Model HappyShrimp in Beta]\n   Why it matters: Matches 2 tracked term(s) for rezonate: ai music, music generation.\n   Evidence: https://www.bloomberg.com/news/articles/2026-08-17/alibaba-launches-ai-music-generation-model-happyshrimp-in-beta\n   Estimated value: unknown -- not estimated in v1 (no fabricated dollar figures)\n   Required action: Needs a human read to judge relevance before any follow-up.\n   Confidence: 40%\n\n2. [Ksumiyo – AI music generation with producer-level controls]\n   Why it matters: Matches 2 tracked term(s) for rezonate: ai music, music generation.\n   Evidence: https://www.ksumiyo.com\n   Estimated value: unknown -- not estimated in v1 (no fabricated dollar figures)\n   Required action: Needs a human read to judge relevance before any follow-up.\n   Confidence: 39%\n\n3. [Google Lyria 3.5 music generation (public preview)]\n   Why it matters: Matches 1 tracked term(s) for rezonate: music generation.\n   Evidence: https://blog.google/innovation-and-ai/models-and-research/google-labs/lyria-3-5/\n   Estimated value: unknown -- not estimated in v1 (no fabricated dollar figures)\n   Required action: Needs a human read to judge relevance before any follow-up.\n   Confidence: 33%\n\n4. [Show HN: Give your AI agent on-screen guides that show users where to click]\n   Why it matters: Surfaced by query \"AI song generator\" but did not match a tracked keyword -- review before acting on it.\n   Evidence: https://news.ycombinator.com/item?id=49627872\n   Estimated value: unknown -- not estimated in v1 (no fabricated dollar figures)\n   Required action: Needs a human read to judge relevance before any follow-up.\n   Confidence: 31%\n\n5. [(Music Production) Plug-In Capitalism]\n   Why it matters: Matches 1 tracked term(s) for rezonate: music production.\n   Evidence: https://bellonamag.com/plug-in-capitalism\n   Estimated value: unknown -- not estimated in v1 (no fabricated dollar figures)\n   Required action: Needs a human read to judge relevance before any follow-up.\n   Confidence: 31%\n\nRECOMMENDED NEXT ACTION\n→ Needs a human read to judge relevance before any follow-up. (Alibaba Launches AI Music Generation Model HappyShrimp in Beta)\n\nHuman approval required: YES",
+    "error": null,
+    "duration_ms": 5865,
+    "created_at": "2026-09-10T23:09:33.988705+00:00"
+  },
+  {
+    "id": "02fa2b65-5045-4b32-8b7e-4b1dd1f75153",
+    "mission": "protoforge.daily_opportunity_scan",
+    "run_at": "2026-09-10T23:10:24.255887+00:00",
+    "status": "success",
+    "sources_queried": [
+      {
+        "ok": true,
+        "error": null,
+        "query": "AI music generation",
+        "item_count": 15,
+        "source_type": "hn_algolia"
+      },
+      {
+        "ok": false,
+        "error": "HTTP 403",
+        "query": "AI music generation (r/WeAreTheMusicMakers)",
+        "item_count": 0,
+        "source_type": "reddit_public"
+      },
+      {
+        "ok": false,
+        "error": "HTTP 403",
+        "query": "AI music generation (r/musicproduction)",
+        "item_count": 0,
+        "source_type": "reddit_public"
+      },
+      {
+        "ok": false,
+        "error": "HTTP 403",
+        "query": "AI music generation (r/edmproduction)",
+        "item_count": 0,
+        "source_type": "reddit_public"
+      },
+      {
+        "ok": true,
+        "error": null,
+        "query": "stem separation tool",
+        "item_count": 4,
+        "source_type": "hn_algolia"
+      },
+      {
+        "ok": false,
+        "error": "HTTP 403",
+        "query": "stem separation tool (r/WeAreTheMusicMakers)",
+        "item_count": 0,
+        "source_type": "reddit_public"
+      },
+      {
+        "ok": false,
+        "error": "HTTP 403",
+        "query": "stem separation tool (r/musicproduction)",
+        "item_count": 0,
+        "source_type": "reddit_public"
+      },
+      {
+        "ok": false,
+        "error": "HTTP 403",
+        "query": "stem separation tool (r/edmproduction)",
+        "item_count": 0,
+        "source_type": "reddit_public"
+      },
+      {
+        "ok": true,
+        "error": null,
+        "query": "royalty free sample pack",
+        "item_count": 2,
+        "source_type": "hn_algolia"
+      },
+      {
+        "ok": false,
+        "error": "HTTP 403",
+        "query": "royalty free sample pack (r/WeAreTheMusicMakers)",
+        "item_count": 0,
+        "source_type": "reddit_public"
+      },
+      {
+        "ok": false,
+        "error": "HTTP 403",
+        "query": "royalty free sample pack (r/musicproduction)",
+        "item_count": 0,
+        "source_type": "reddit_public"
+      },
+      {
+        "ok": false,
+        "error": "HTTP 403",
+        "query": "royalty free sample pack (r/edmproduction)",
+        "item_count": 0,
+        "source_type": "reddit_public"
+      },
+      {
+        "ok": true,
+        "error": null,
+        "query": "sync licensing music",
+        "item_count": 2,
+        "source_type": "hn_algolia"
+      },
+      {
+        "ok": false,
+        "error": "HTTP 403",
+        "query": "sync licensing music (r/WeAreTheMusicMakers)",
+        "item_count": 0,
+        "source_type": "reddit_public"
+      },
+      {
+        "ok": false,
+        "error": "HTTP 403",
+        "query": "sync licensing music (r/musicproduction)",
+        "item_count": 0,
+        "source_type": "reddit_public"
+      },
+      {
+        "ok": false,
+        "error": "HTTP 403",
+        "query": "sync licensing music (r/edmproduction)",
+        "item_count": 0,
+        "source_type": "reddit_public"
+      },
+      {
+        "ok": true,
+        "error": null,
+        "query": "music production plugin",
+        "item_count": 12,
+        "source_type": "hn_algolia"
+      },
+      {
+        "ok": false,
+        "error": "HTTP 403",
+        "query": "music production plugin (r/WeAreTheMusicMakers)",
+        "item_count": 0,
+        "source_type": "reddit_public"
+      },
+      {
+        "ok": false,
+        "error": "HTTP 403",
+        "query": "music production plugin (r/musicproduction)",
+        "item_count": 0,
+        "source_type": "reddit_public"
+      },
+      {
+        "ok": false,
+        "error": "HTTP 403",
+        "query": "music production plugin (r/edmproduction)",
+        "item_count": 0,
+        "source_type": "reddit_public"
+      },
+      {
+        "ok": true,
+        "error": null,
+        "query": "AI song generator",
+        "item_count": 15,
+        "source_type": "hn_algolia"
+      },
+      {
+        "ok": false,
+        "error": "HTTP 403",
+        "query": "AI song generator (r/WeAreTheMusicMakers)",
+        "item_count": 0,
+        "source_type": "reddit_public"
+      },
+      {
+        "ok": false,
+        "error": "HTTP 403",
+        "query": "AI song generator (r/musicproduction)",
+        "item_count": 0,
+        "source_type": "reddit_public"
+      },
+      {
+        "ok": false,
+        "error": "HTTP 403",
+        "query": "AI song generator (r/edmproduction)",
+        "item_count": 0,
+        "source_type": "reddit_public"
+      }
+    ],
+    "opportunities_found": 0,
+    "duplicates_skipped": 50,
+    "high_confidence_count": 0,
+    "needs_review_count": 15,
+    "rejected_count": 32,
+    "briefing_text": "PROTOFORGE DAILY BRIEF\n────────────────────────\n\nOpportunities found: 47\nHigh-confidence:      0\nNeeds review:         15\nRejected:             32\n\nTOP OPPORTUNITIES\n\n1. [Alibaba Launches AI Music Generation Model HappyShrimp in Beta]\n   Why it matters: Matches 2 tracked term(s) for rezonate: ai music, music generation.\n   Evidence: https://www.bloomberg.com/news/articles/2026-08-17/alibaba-launches-ai-music-generation-model-happyshrimp-in-beta\n   Estimated value: unknown -- not estimated in v1 (no fabricated dollar figures)\n   Required action: Needs a human read to judge relevance before any follow-up.\n   Confidence: 40%\n\n2. [Ksumiyo – AI music generation with producer-level controls]\n   Why it matters: Matches 2 tracked term(s) for rezonate: ai music, music generation.\n   Evidence: https://www.ksumiyo.com\n   Estimated value: unknown -- not estimated in v1 (no fabricated dollar figures)\n   Required action: Needs a human read to judge relevance before any follow-up.\n   Confidence: 39%\n\n3. [Google Lyria 3.5 music generation (public preview)]\n   Why it matters: Matches 1 tracked term(s) for rezonate: music generation.\n   Evidence: https://blog.google/innovation-and-ai/models-and-research/google-labs/lyria-3-5/\n   Estimated value: unknown -- not estimated in v1 (no fabricated dollar figures)\n   Required action: Needs a human read to judge relevance before any follow-up.\n   Confidence: 33%\n\n4. [Show HN: Give your AI agent on-screen guides that show users where to click]\n   Why it matters: Surfaced by query \"AI song generator\" but did not match a tracked keyword -- review before acting on it.\n   Evidence: https://news.ycombinator.com/item?id=49627872\n   Estimated value: unknown -- not estimated in v1 (no fabricated dollar figures)\n   Required action: Needs a human read to judge relevance before any follow-up.\n   Confidence: 31%\n\n5. [(Music Production) Plug-In Capitalism]\n   Why it matters: Matches 1 tracked term(s) for rezonate: music production.\n   Evidence: https://bellonamag.com/plug-in-capitalism\n   Estimated value: unknown -- not estimated in v1 (no fabricated dollar figures)\n   Required action: Needs a human read to judge relevance before any follow-up.\n   Confidence: 31%\n\nRECOMMENDED NEXT ACTION\n→ Needs a human read to judge relevance before any follow-up. (Alibaba Launches AI Music Generation Model HappyShrimp in Beta)\n\nHuman approval required: YES",
+    "error": null,
+    "duration_ms": 4338,
+    "created_at": "2026-09-10T23:10:24.255887+00:00"
+  },
+  {
+    "id": "bde5ddd6-d748-46e6-94ad-56953c4d4475",
+    "mission": "protoforge.daily_opportunity_scan",
+    "run_at": "2026-09-10T23:11:31.832364+00:00",
+    "status": "success",
+    "sources_queried": [
+      {
+        "ok": true,
+        "error": null,
+        "query": "AI music generation",
+        "item_count": 15,
+        "source_type": "hn_algolia"
+      },
+      {
+        "ok": true,
+        "error": null,
+        "query": "stem separation tool",
+        "item_count": 4,
+        "source_type": "hn_algolia"
+      },
+      {
+        "ok": true,
+        "error": null,
+        "query": "royalty free sample pack",
+        "item_count": 2,
+        "source_type": "hn_algolia"
+      },
+      {
+        "ok": true,
+        "error": null,
+        "query": "sync licensing music",
+        "item_count": 2,
+        "source_type": "hn_algolia"
+      },
+      {
+        "ok": true,
+        "error": null,
+        "query": "music production plugin",
+        "item_count": 12,
+        "source_type": "hn_algolia"
+      },
+      {
+        "ok": true,
+        "error": null,
+        "query": "AI song generator",
+        "item_count": 15,
+        "source_type": "hn_algolia"
+      }
+    ],
+    "opportunities_found": 9,
+    "duplicates_skipped": 41,
+    "high_confidence_count": 0,
+    "needs_review_count": 15,
+    "rejected_count": 41,
+    "briefing_text": "PROTOFORGE DAILY BRIEF\n────────────────────────\n\nOpportunities found: 56\nHigh-confidence:      0\nNeeds review:         15\nRejected:             41\n\nTOP OPPORTUNITIES\n\n1. [Alibaba Launches AI Music Generation Model HappyShrimp in Beta]\n   Why it matters: Matches 2 tracked term(s) for rezonate: ai music, music generation.\n   Evidence: https://www.bloomberg.com/news/articles/2026-08-17/alibaba-launches-ai-music-generation-model-happyshrimp-in-beta\n   Estimated value: unknown -- not estimated in v1 (no fabricated dollar figures)\n   Required action: Needs a human read to judge relevance before any follow-up.\n   Confidence: 40%\n\n2. [Ksumiyo – AI music generation with producer-level controls]\n   Why it matters: Matches 2 tracked term(s) for rezonate: ai music, music generation.\n   Evidence: https://www.ksumiyo.com\n   Estimated value: unknown -- not estimated in v1 (no fabricated dollar figures)\n   Required action: Needs a human read to judge relevance before any follow-up.\n   Confidence: 39%\n\n3. [Google Lyria 3.5 music generation (public preview)]\n   Why it matters: Matches 1 tracked term(s) for rezonate: music generation.\n   Evidence: https://blog.google/innovation-and-ai/models-and-research/google-labs/lyria-3-5/\n   Estimated value: unknown -- not estimated in v1 (no fabricated dollar figures)\n   Required action: Needs a human read to judge relevance before any follow-up.\n   Confidence: 33%\n\n4. [Show HN: Give your AI agent on-screen guides that show users where to click]\n   Why it matters: Surfaced by query \"AI song generator\" but did not match a tracked keyword -- review before acting on it.\n   Evidence: https://news.ycombinator.com/item?id=49627872\n   Estimated value: unknown -- not estimated in v1 (no fabricated dollar figures)\n   Required action: Needs a human read to judge relevance before any follow-up.\n   Confidence: 31%\n\n5. [(Music Production) Plug-In Capitalism]\n   Why it matters: Matches 1 tracked term(s) for rezonate: music production.\n   Evidence: https://bellonamag.com/plug-in-capitalism\n   Estimated value: unknown -- not estimated in v1 (no fabricated dollar figures)\n   Required action: Needs a human read to judge relevance before any follow-up.\n   Confidence: 31%\n\nRECOMMENDED NEXT ACTION\n→ Needs a human read to judge relevance before any follow-up. (Alibaba Launches AI Music Generation Model HappyShrimp in Beta)\n\nHuman approval required: YES",
+    "error": null,
+    "duration_ms": 2904,
+    "created_at": "2026-09-10T23:11:31.832364+00:00"
+  },
+  {
+    "id": "530b9772-5596-446c-9e1e-26d699bb8e58",
+    "mission": "protoforge.daily_opportunity_scan",
+    "run_at": "2026-09-11T00:23:21.22482+00:00",
+    "status": "success",
+    "sources_queried": [
+      {
+        "ok": true,
+        "error": null,
+        "query": "AI music generation",
+        "item_count": 15,
+        "source_type": "hn_algolia"
+      },
+      {
+        "ok": true,
+        "error": null,
+        "query": "stem separation tool",
+        "item_count": 4,
+        "source_type": "hn_algolia"
+      },
+      {
+        "ok": true,
+        "error": null,
+        "query": "royalty free sample pack",
+        "item_count": 2,
+        "source_type": "hn_algolia"
+      },
+      {
+        "ok": true,
+        "error": null,
+        "query": "sync licensing music",
+        "item_count": 2,
+        "source_type": "hn_algolia"
+      },
+      {
+        "ok": true,
+        "error": null,
+        "query": "music production plugin",
+        "item_count": 12,
+        "source_type": "hn_algolia"
+      },
+      {
+        "ok": true,
+        "error": null,
+        "query": "AI song generator",
+        "item_count": 15,
+        "source_type": "hn_algolia"
+      }
+    ],
+    "opportunities_found": 5,
+    "duplicates_skipped": 45,
+    "high_confidence_count": 0,
+    "needs_review_count": 23,
+    "rejected_count": 44,
+    "briefing_text": "PROTOFORGE DAILY BRIEF\n────────────────────────\n\nOpportunities found: 67\nHigh-confidence:      0\nNeeds review:         23\nRejected:             44\n\nTOP OPPORTUNITIES\n\n1. [x]\n   Why it matters: n/a\n   Evidence: no source URL captured\n   Estimated value: unknown\n   Required action: n/a\n   Confidence: 80%\n\n2. [x]\n   Why it matters: n/a\n   Evidence: no source URL captured\n   Estimated value: unknown\n   Required action: n/a\n   Confidence: 80%\n\n3. [Test opportunity]\n   Why it matters: test\n   Evidence: https://example.com\n   Estimated value: unknown\n   Required action: test\n   Confidence: 55%\n\n4. [Test opportunity]\n   Why it matters: test\n   Evidence: https://example.com\n   Estimated value: unknown\n   Required action: test\n   Confidence: 55%\n\n5. [first]\n   Why it matters: n/a\n   Evidence: no source URL captured\n   Estimated value: unknown\n   Required action: n/a\n   Confidence: 50%\n\nRECOMMENDED NEXT ACTION\n→ undefined (x)\n\nHuman approval required: YES",
+    "error": null,
+    "duration_ms": 2768,
+    "created_at": "2026-09-11T00:23:21.22482+00:00"
+  }
+]

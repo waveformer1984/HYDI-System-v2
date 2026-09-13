@@ -1,0 +1,156 @@
+solid job_1787696805096_1dfb2caa
+  facet normal 0.000000 0.000000 1.000000
+    outer loop
+      vertex 0.000000 0.000000 0.000000
+      vertex 40.000000 0.000000 0.000000
+      vertex 40.000000 30.000000 0.000000
+    endloop
+  endfacet
+  facet normal 0.000000 0.000000 1.000000
+    outer loop
+      vertex 0.000000 0.000000 0.000000
+      vertex 40.000000 30.000000 0.000000
+      vertex 0.000000 30.000000 0.000000
+    endloop
+  endfacet
+  facet normal 0.000000 0.000000 -1.000000
+    outer loop
+      vertex 0.000000 0.000000 20.000000
+      vertex 40.000000 30.000000 20.000000
+      vertex 40.000000 0.000000 20.000000
+    endloop
+  endfacet
+  facet normal 0.000000 0.000000 -1.000000
+    outer loop
+      vertex 0.000000 0.000000 20.000000
+      vertex 0.000000 30.000000 20.000000
+      vertex 40.000000 30.000000 20.000000
+    endloop
+  endfacet
+  facet normal 0.000000 1.000000 0.000000
+    outer loop
+      vertex 0.000000 0.000000 0.000000
+      vertex 0.000000 0.000000 20.000000
+      vertex 40.000000 0.000000 20.000000
+    endloop
+  endfacet
+  facet normal 0.000000 1.000000 0.000000
+    outer loop
+      vertex 0.000000 0.000000 0.000000
+      vertex 40.000000 0.000000 20.000000
+      vertex 40.000000 0.000000 0.000000
+    endloop
+  endfacet
+  facet normal 0.000000 -1.000000 0.000000
+    outer loop
+      vertex 0.000000 30.000000 0.000000
+      vertex 40.000000 30.000000 0.000000
+      vertex 40.000000 30.000000 20.000000
+    endloop
+  endfacet
+  facet normal 0.000000 -1.000000 0.000000
+    outer loop
+      vertex 0.000000 30.000000 0.000000
+      vertex 40.000000 30.000000 20.000000
+      vertex 0.000000 30.000000 20.000000
+    endloop
+  endfacet
+  facet normal 1.000000 0.000000 0.000000
+    outer loop
+      vertex 0.000000 0.000000 0.000000
+      vertex 0.000000 30.000000 0.000000
+      vertex 0.000000 30.000000 20.000000
+    endloop
+  endfacet
+  facet normal 1.000000 0.000000 0.000000
+    outer loop
+      vertex 0.000000 0.000000 0.000000
+      vertex 0.000000 30.000000 20.000000
+      vertex 0.000000 0.000000 20.000000
+    endloop
+  endfacet
+  facet normal -1.000000 0.000000 0.000000
+    outer loop
+      vertex 40.000000 0.000000 0.000000
+      vertex 40.000000 0.000000 20.000000
+      vertex 40.000000 30.000000 20.000000
+    endloop
+  endfacet
+  facet normal -1.000000 0.000000 0.000000
+    outer loop
+      vertex 40.000000 0.000000 0.000000
+      vertex 40.000000 30.000000 20.000000
+      vertex 40.000000 30.000000 0.000000
+    endloop
+  endfacet
+  facet normal 0.000000 0.000000 -1.000000
+    outer loop
+      vertex 2.000000 2.000000 2.000000
+      vertex 38.000000 28.000000 2.000000
+      vertex 38.000000 2.000000 2.000000
+    endloop
+  endfacet
+  facet normal 0.000000 0.000000 -1.000000
+    outer loop
+      vertex 2.000000 2.000000 2.000000
+      vertex 2.000000 28.000000 2.000000
+      vertex 38.000000 28.000000 2.000000
+    endloop
+  endfacet
+  facet normal 0.000000 -1.000000 0.000000
+    outer loop
+      vertex 2.000000 2.000000 2.000000
+      vertex 38.000000 2.000000 20.000000
+      vertex 2.000000 2.000000 20.000000
+    endloop
+  endfacet
+  facet normal 0.000000 -1.000000 0.000000
+    outer loop
+      vertex 2.000000 2.000000 2.000000
+      vertex 38.000000 2.000000 2.000000
+      vertex 38.000000 2.000000 20.000000
+    endloop
+  endfacet
+  facet normal 0.000000 1.000000 0.000000
+    outer loop
+      vertex 2.000000 28.000000 2.000000
+      vertex 38.000000 28.000000 20.000000
+      vertex 38.000000 28.000000 2.000000
+    endloop
+  endfacet
+  facet normal 0.000000 1.000000 0.000000
+    outer loop
+      vertex 2.000000 28.000000 2.000000
+      vertex 2.000000 28.000000 20.000000
+      vertex 38.000000 28.000000 20.000000
+    endloop
+  endfacet
+  facet normal -1.000000 0.000000 0.000000
+    outer loop
+      vertex 2.000000 2.000000 2.000000
+      vertex 2.000000 28.000000 20.000000
+      vertex 2.000000 28.000000 2.000000
+    endloop
+  endfacet
+  facet normal -1.000000 0.000000 0.000000
+    outer loop
+      vertex 2.000000 2.000000 2.000000
+      vertex 2.000000 2.000000 20.000000
+      vertex 2.000000 28.000000 20.000000
+    endloop
+  endfacet
+  facet normal 1.000000 0.000000 0.000000
+    outer loop
+      vertex 38.000000 2.000000 2.000000
+      vertex 38.000000 28.000000 2.000000
+      vertex 38.000000 28.000000 20.000000
+    endloop
+  endfacet
+  facet normal 1.000000 0.000000 0.000000
+    outer loop
+      vertex 38.000000 2.000000 2.000000
+      vertex 38.000000 28.000000 20.000000
+      vertex 38.000000 2.000000 20.000000
+    endloop
+  endfacet
+endsolid job_1787696805096_1dfb2caa

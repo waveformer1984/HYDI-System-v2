@@ -1,0 +1,119 @@
+{
+  "phase": "11",
+  "timestamp": "2026-08-25T14:41:00.957Z",
+  "head": "8241ac028e9ca35afac361db54cc91b1eede18d1",
+  "branch": "feat/governed-autonomy",
+  "totalAssertions": 76,
+  "passed": 76,
+  "failed": 0,
+  "invariants": 15,
+  "passCount": 15,
+  "failCount": 0,
+  "results": [
+    {
+      "id": "D01",
+      "invariant": "Startup behavior",
+      "status": "PASS",
+      "detail": "Lock acquisition, CognitiveCore build, self-sufficiency wiring all present in daemon source",
+      "classification": "NONE"
+    },
+    {
+      "id": "D02",
+      "invariant": "Supabase initialization and persistence",
+      "status": "PASS",
+      "detail": "Daemon initializes Supabase persistence; queue and checkpoint manager verified",
+      "classification": "NONE"
+    },
+    {
+      "id": "D03",
+      "invariant": "Restoration of interventions and checkpoints",
+      "status": "PASS",
+      "detail": "restoreFromPersistence verified: interventions and checkpoints restored from Supabase",
+      "classification": "NONE"
+    },
+    {
+      "id": "D04",
+      "invariant": "Runtime health",
+      "status": "PASS",
+      "detail": "Self-sufficiency cycle includes capability checks, self-repair, acquisition, credential watch",
+      "classification": "NONE"
+    },
+    {
+      "id": "D05",
+      "invariant": "Recovery after failures",
+      "status": "PASS",
+      "detail": "Graceful shutdown waits for in-flight work with bounded timeout",
+      "classification": "NONE"
+    },
+    {
+      "id": "D06",
+      "invariant": "Graceful shutdown",
+      "status": "PASS",
+      "detail": "SIGINT/SIGTERM/SIGQUIT/IPC handlers all present; lock released on shutdown",
+      "classification": "NONE"
+    },
+    {
+      "id": "D07",
+      "invariant": "No duplicate workers or side effects",
+      "status": "PASS",
+      "detail": "Atomic lock with stale detection prevents duplicate daemons",
+      "classification": "NONE"
+    },
+    {
+      "id": "D08",
+      "invariant": "Accurate health metrics",
+      "status": "PASS",
+      "detail": "Audit records include cycle ID, count, capability health, repair results, duration",
+      "classification": "NONE"
+    },
+    {
+      "id": "D09",
+      "invariant": "Event and audit recording",
+      "status": "PASS",
+      "detail": "JSONL audit file with rotation and max size bounding",
+      "classification": "NONE"
+    },
+    {
+      "id": "D10",
+      "invariant": "Kill switch functionality",
+      "status": "PASS",
+      "detail": "Kill switch can be activated/deactivated via IPC; suspends self-sufficiency actions",
+      "classification": "NONE"
+    },
+    {
+      "id": "D11",
+      "invariant": "Startup cooldown window enforcement",
+      "status": "PASS",
+      "detail": "2-minute startup stabilization window enforced by default",
+      "classification": "NONE"
+    },
+    {
+      "id": "D12",
+      "invariant": "Stale lock recovery",
+      "status": "PASS",
+      "detail": "Stale locks detected via process alive check; corrupt locks handled",
+      "classification": "NONE"
+    },
+    {
+      "id": "D13",
+      "invariant": "Audit file rotation",
+      "status": "PASS",
+      "detail": "Audit file rotates at 10MB, keeping most recent half of entries",
+      "classification": "NONE"
+    },
+    {
+      "id": "D14",
+      "invariant": "No secret leakage in audit records",
+      "status": "PASS",
+      "detail": "Audit records contain metadata only; credential watch logs names, not values",
+      "classification": "NONE"
+    },
+    {
+      "id": "D15",
+      "invariant": "Bounded shutdown wait (PM2 kill_timeout margin)",
+      "status": "PASS",
+      "detail": "Shutdown wait 31000ms < PM2 kill_timeout 50000ms (margin: 19000ms)",
+      "classification": "NONE"
+    }
+  ]
+}

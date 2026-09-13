@@ -51,6 +51,58 @@ npx jest --testNamePattern="should classify events"
 | DSL policy engine | `lib/protoforge/policy-engine.js` |
 | Test files | `tests/unit/` (unit), `tests/migrations/` (one per SQL migration) |
 
+## Operational Boundary (Test Data vs Production Data)
+
+Operational detectors (`RevenueReconciliationDetector`, `FailedWebhookDetector`)
+use a **two-layer exclusion** to prevent test/qualification data from polluting
+findings:
+
+### Layer 1: Mode-based exclusion (primary, permanent)
+
+Every record created by a test/qualification run carries a permanent test-mode
+marker in its Stripe IDs. The detectors check these markers and exclude
+test-mode records automatically — no manual configuration needed.
+
+**For jobs** (`customer_jobs`):
+- A job is test-mode if its `stripe_checkout_session_id` starts with `cs_test_`
+  (vs `cs_live_` for real customer transactions).
+- A job with no checkout session ID is also treated as test-mode (defensive —
+  real live transactions always have a `cs_live_` ID).
+
+**For webhooks** (`webhook_events`):
+- A webhook is test-mode if its `event_id` starts with `evt_test_` (synthetic
+  test event), OR
+- Its payload contains a `cs_test_` checkout session ID, OR
+- The system is currently running with a test-mode Stripe key (`sk_test_`).
+  This catches real Stripe test-mode events (e.g. `evt_3U8YLcITaXOHazrh1XQMmQ0I`)
+  that have real-looking event IDs and may have empty payloads. When the system
+  has never been in live mode, all real Stripe events in the database were
+  generated in test mode.
+
+The mode check is implemented in `lib/revenue/stripe-mode.ts` (`isTestRecord`,
+`isTestCheckoutSession`, `isSyntheticTestEvent`, `getStripeMode`).
+
+**This is the primary mechanism. It works automatically. Qualification scripts
+do not need to do anything special — their test data will be excluded because
+it uses `cs_test_` checkout sessions and `evt_test_` event IDs.**
+
+### Layer 2: Timestamp boundary (secondary, historical floor)
+
+The `operational_boundary` table (single row, `id=1`) defines a `go_live_at`
+timestamp. Records created before this timestamp are also excluded. This is a
+secondary guard for old records that might not have identifiable Stripe IDs.
+
+The boundary defaults to `now()`, meaning all existing data is treated as
+pre-go-live. When the system actually goes live, update it:
+```sql
+UPDATE operational_boundary SET go_live_at = '2026-09-01T00:00:00Z', updated_at = now() WHERE id = 1;
+```
+
+**The timestamp boundary is not the primary mechanism.** The mode check is.
+The timestamp only matters for records that predate both mechanisms. Going
+forward, mode detection keeps working automatically without any timestamp
+maintenance.
+
 ## Hard Constraints — Never Violate
 
 ### Six-Layer Pipeline

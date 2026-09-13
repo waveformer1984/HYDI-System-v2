@@ -8,6 +8,8 @@ const HeidiRevenueOutreach = require('../../modules/heidi-revenue-outreach');
 const UniversalAgentBus = require('../../modules/universal-agent-bus');
 const WebhookQueueAdapter = require('../../workers/WebhookQueueAdapter');
 const { getRawBody } = require('../../lib/get-raw-body');
+const { getStripeMode } = require('../../lib/revenue/stripe-mode');
+const { getLiveTransactionAuthorizationManager } = require('../../lib/revenue/LiveTransactionAuthorization');
 
 require('dotenv').config();
 
@@ -31,27 +33,27 @@ function createOrUpdateService(input) {
     currency = "usd",
     metadata = {}
   } = input;
-  
+
   // REQUIRED VALIDATION
   if (!customer_id) throw new Error("customer_id required");
   if (!service_name) throw new Error("service_name required");
-  
+
   // ENUM VALIDATION
   const validStatus = ["active", "inactive", "suspended"];
   if (!validStatus.includes(status)) {
     throw new Error("invalid status");
   }
-  
+
   const validCurrency = ["usd", "eur", "gbp"];
   if (!validCurrency.includes(currency)) {
     throw new Error("invalid currency");
   }
-  
+
   // NUMERIC VALIDATION
   if (price !== null && price < 0) {
     throw new Error("price must be >= 0");
   }
-  
+
   // SAFE UPSERT
   return supabase
     .from("customer_services")
@@ -69,9 +71,9 @@ function createOrUpdateService(input) {
 
 // CASCADE CONFIGURATION
 const CASCADE_SETTINGS = {
-    CONFIDENCE_THRESHOLD: 0.3,
-    LOG_LOW_SIGNAL: true,
-    BYPASS_MODES: ['test_mode'] // Optional: Allow lower thresholds for dev
+  CONFIDENCE_THRESHOLD: 0.3,
+  LOG_LOW_SIGNAL: true,
+  BYPASS_MODES: ['test_mode'] // Optional: Allow lower thresholds for dev
 };
 
 /**
@@ -79,24 +81,24 @@ const CASCADE_SETTINGS = {
  * Validates the integrity and confidence of the event before processing.
  */
 const cascadeGate = (event) => {
-    // 1. Extract metadata or confidence scores sent via Stripe metadata or internal headers
-    const confidenceScore = parseFloat(event.data.object.metadata?.hydi_confidence) || 1.0; 
-    const eventSource = event.data.object.metadata?.source || 'unknown';
+  // 1. Extract metadata or confidence scores sent via Stripe metadata or internal headers
+  const confidenceScore = parseFloat(event.data.object.metadata?.hydi_confidence) || 1.0;
+  const eventSource = event.data.object.metadata?.source || 'unknown';
 
-    // 2. Threshold Validation
-    if (confidenceScore < CASCADE_SETTINGS.CONFIDENCE_THRESHOLD) {
-        if (CASCADE_SETTINGS.LOG_LOW_SIGNAL) {
-            console.warn(`[🛡️ CASCADE REJECT] Low confidence event (${confidenceScore}) for ID: ${event.id}`);
-        }
-        return { authorized: false, reason: 'LOW_SIGNAL_REJECTION' };
+  // 2. Threshold Validation
+  if (confidenceScore < CASCADE_SETTINGS.CONFIDENCE_THRESHOLD) {
+    if (CASCADE_SETTINGS.LOG_LOW_SIGNAL) {
+      console.warn(`[🛡️ CASCADE REJECT] Low confidence event (${confidenceScore}) for ID: ${event.id}`);
     }
+    return { authorized: false, reason: 'LOW_SIGNAL_REJECTION' };
+  }
 
-    // 3. Schema Integrity Check (Ensure required commercial fields exist)
-    if (event.type.startsWith('customer.subscription') && !event.data.object.customer) {
-        return { authorized: false, reason: 'DIRTY_DATA_SCHEMA_MISMATCH' };
-    }
+  // 3. Schema Integrity Check (Ensure required commercial fields exist)
+  if (event.type.startsWith('customer.subscription') && !event.data.object.customer) {
+    return { authorized: false, reason: 'DIRTY_DATA_SCHEMA_MISMATCH' };
+  }
 
-    return { authorized: true };
+  return { authorized: true };
 };
 
 // Service tier configurations
@@ -108,7 +110,7 @@ const SERVICE_TIERS = {
     limits: { requests_per_month: 1000, storage_gb: 10 }
   },
   pro: {
-    name: 'Pro', 
+    name: 'Pro',
     price: 99,
     services: ['SEO Content Generator', 'Blog Post Generator', 'Social Media Manager', 'Data Pipeline Builder', 'Analytics Dashboard'],
     limits: { requests_per_month: 5000, storage_gb: 50 }
@@ -127,10 +129,10 @@ async function handleStripeWebhook(req, res) {
     console.log('[🛑 KILL SWITCH] Webhook processing paused');
     return res.status(200).send('paused');
   }
-  
+
   const sig = req.headers['stripe-signature'];
-  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET_01;
-  
+  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET_01 || process.env.STRIPE_WEBHOOK_SECRET;
+
   let event;
 
   try {
@@ -138,7 +140,15 @@ async function handleStripeWebhook(req, res) {
     // See config export below (bodyParser: false) for why this can't just
     // read req.body directly.
     const rawBody = await getRawBody(req);
-    const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+    // Safety guard: refuse to construct a live Stripe client without explicit opt-in.
+    // This mirrors the guard in lib/revenue/StripeBridge.ts and api/checkout.js.
+    const stripeKey = process.env.STRIPE_SECRET_KEY;
+    const isLiveKey = stripeKey && (stripeKey.startsWith('sk_live_') || stripeKey.startsWith('rk_live_'));
+    if (isLiveKey && process.env.ALLOW_LIVE_STRIPE !== 'true') {
+      console.error('[webhook] Live Stripe key detected but ALLOW_LIVE_STRIPE is not "true" — refusing to process webhook');
+      return res.status(503).send('Webhook processing disabled: live mode not authorized');
+    }
+    const stripe = require('stripe')(stripeKey);
     event = stripe.webhooks.constructEvent(rawBody, sig, webhookSecret);
   } catch (err) {
     console.log('Webhook signature verification failed:', err.message);
@@ -146,11 +156,14 @@ async function handleStripeWebhook(req, res) {
   }
 
   // TRUE IDEMPOTENCY WITH RPC FUNCTION
+  // Stamp is_test_mode at insert time based on the system's current Stripe mode.
+  const stripeMode = getStripeMode();
   const { data: eventId } = await supabase.rpc('claim_webhook_event', {
     p_event_id: event.id,
-    p_type: event.type
+    p_type: event.type,
+    p_is_test_mode: stripeMode.mode === 'test'
   });
-  
+
   // Already processed
   if (!eventId) {
     console.log(`[🔄 IDEMPOTENCY] Event ${event.id} already processed`);
@@ -159,48 +172,129 @@ async function handleStripeWebhook(req, res) {
 
   // GATE 2: CASCADE (Confidence & Integrity Validation)
   const gateStatus = cascadeGate(event);
-  
+
   if (!gateStatus.authorized) {
     // Return 200 to Stripe to stop retries, but drop the data from the pipeline
     console.log(`[🛡️ CASCADE ACTION] Event ${event.id} dropped: ${gateStatus.reason}`);
-    return res.status(200).json({ 
-      status: 'dropped', 
+    return res.status(200).json({
+      status: 'dropped',
       reason: gateStatus.reason,
-      cascade_action: 'REJECT_LOW_CONFIDENCE' 
+      cascade_action: 'REJECT_LOW_CONFIDENCE'
+    });
+  }
+
+  // ─── Customer Job Bridge (synchronous) ───
+  // For checkout.session.completed events that have a linked customer job,
+  // activate the job synchronously. This is the SOLE owner of job activation
+  // and revenue_ledger writes for job-based checkouts.
+  //
+  // If the bridge processes the event (job found), we SKIP the async queue
+  // to prevent the RevenueIngestionWorker/ProvisioningWorker from also
+  // processing it (they write to different tables — revenue_tracking,
+  // customers, customer_services — but would create spurious records for
+  // job-based checkouts that don't use the tier/subscription model).
+  let jobBridgeProcessed = false;
+  if (event.type === 'checkout.session.completed') {
+    try {
+      const { processJobPaymentConfirmation } = require('../../lib/revenue/JobWebhookBridge');
+      const session = event.data.object;
+      const jobResult = await processJobPaymentConfirmation({
+        sessionId: session.id,
+        stripeEventId: event.id,
+        paymentIntentId: session.payment_intent || null,
+        amountTotal: session.amount_total || 0,
+        currency: session.currency || 'usd',
+      });
+      if (jobResult.processed) {
+        jobBridgeProcessed = true;
+        console.log(`[📦 JOB BRIDGE] Job ${jobResult.jobId} ${jobResult.idempotent ? '(idempotent skip)' : 'activated'} for event ${event.id}`);
+      }
+
+      // LIVE MODE: Consume the authorization now that payment is confirmed.
+      // The authorization was RESERVED at checkout-session-creation time.
+      // This is the correct point to consume — the customer has actually paid.
+      // The authorization ID is in the session metadata (hydi_authorization_id),
+      // set by createSetupCheckoutSession when liveAuthId was provided.
+      const sessionMetadata = session.metadata || {};
+      const authId = sessionMetadata.hydi_authorization_id;
+      if (authId) {
+        try {
+          const authManager = getLiveTransactionAuthorizationManager();
+          const consumeResult = authManager.consume(
+            authId,
+            jobResult.jobId || 'unknown',
+            session.amount_total || 0,
+            session.customer_email || session.customer_details?.email || '',
+            session.currency || 'usd'
+          );
+          if (consumeResult.success) {
+            console.log(`[🔒 LIVE AUTH] Authorization ${authId} consumed for checkout session ${session.id}`);
+          } else if (!consumeResult.error?.includes('already')) {
+            // Not already consumed — log the failure for audit
+            console.error(`[🔒 LIVE AUTH] Authorization consumption failed for session ${session.id}:`, consumeResult.error);
+          }
+        } catch (authErr) {
+          console.error('[🔒 LIVE AUTH] Error consuming authorization:', authErr instanceof Error ? authErr.message : authErr);
+        }
+      }
+    } catch (jobBridgeErr) {
+      // Log but don't fail the webhook — the async queue may still process it
+      console.error('[📦 JOB BRIDGE] Error:', jobBridgeErr instanceof Error ? jobBridgeErr.message : jobBridgeErr);
+    }
+  }
+
+  // If the job bridge handled this event, skip the async queue entirely.
+  // The synchronous bridge is the single owner of job/ledger state for
+  // checkout.session.completed. The async workers handle the old
+  // tier/subscription checkout flow and don't know about customer jobs.
+  if (jobBridgeProcessed) {
+    console.log(`[📦 JOB BRIDGE] Skipping async queue for job-linked event ${event.id}`);
+    return res.status(200).json({
+      received: true,
+      status: 'JOB_PROCESSED',
+      eventId: event.id,
     });
   }
 
   // GATE 3: URSULA (Queue for async processing)
+  // NOTE: The async-queue fallback path does NOT call consume() on the
+  // LiveTransactionAuthorization. consume() only runs in the synchronous
+  // fast path above (lines 220-238). If processJobPaymentConfirmation
+  // throws and the event falls through to this queue, the authorization
+  // stays RESERVED until it expires (15-minute safety net), at which point
+  // autoRevertAllowedStripe() reverts ALLOW_LIVE_STRIPE to false. This is
+  // an accepted gap — the async worker handles the old tier/subscription
+  // flow, not the job-based checkout flow that uses live authorizations.
   console.log(`[🚀 CASCADE PASSED] Queuing event for processing: ${event.type}`);
 
   try {
     // Queue the event for async processing
     const queueResult = await webhookQueue.handleWebhook(event);
-    
+
     // Update webhook event record with queue info
     await supabase
       .from('webhook_events')
-      .update({ 
+      .update({
         status: queueResult.status,
         task_id: queueResult.taskId
       })
       .eq('id', eventId);
 
     // Return immediately - processing happens in background
-    res.json({ 
-      received: true, 
+    res.json({
+      received: true,
       status: 'QUEUED_FOR_PROCESSING',
       eventId: queueResult.eventId,
       taskId: queueResult.taskId
     });
   } catch (err) {
     console.error(`[⚡ QUEUE FAIL] Failed to queue event: ${err.message}`);
-    
+
     // MARK EVENT AS FAILED
     try {
       await supabase
         .from('webhook_events')
-        .update({ 
+        .update({
           status: 'queue_failed',
           error: err.message
         })
@@ -208,17 +302,17 @@ async function handleStripeWebhook(req, res) {
     } catch (recordErr) {
       console.error('Failed to update event status:', recordErr.message);
     }
-    
+
     res.status(500).send('Queue Error');
   }
 }
 
 async function handleCheckoutCompleted(session) {
   console.log('Checkout completed:', session.id);
-  
+
   const customerEmail = session.customer_details?.email;
   const customerId = session.customer;
-  
+
   if (!customerEmail) {
     console.error('No customer email in session');
     return;
@@ -226,13 +320,13 @@ async function handleCheckoutCompleted(session) {
 
   // Determine service tier from metadata or price
   const tier = determineServiceTier(session);
-  
+
   // Create or update lead with payment information
   await createPaidLead(customerEmail, customerId, tier, session);
-  
+
   // Provision services through Agent Bus
   await provisionServices(customerEmail, tier, customerId);
-  
+
   // Update Heidi with successful payment
   await updateHeidiMemory(customerEmail, 'payment_completed', {
     session_id: session.id,
@@ -240,18 +334,18 @@ async function handleCheckoutCompleted(session) {
     amount: session.amount_total,
     currency: session.currency
   });
-  
+
   console.log(`Successfully provisioned ${tier} services for ${customerEmail}`);
 }
 
 async function handlePaymentSucceeded(invoice) {
   console.log('Payment succeeded:', invoice.id);
-  
+
   const customerId = invoice.customer;
-  
+
   // Update system status with revenue
   await updateRevenueMetrics(invoice.amount_paid, invoice.currency);
-  
+
   // Extend services if subscription payment
   if (invoice.subscription) {
     await extendSubscriptionServices(customerId, invoice);
@@ -260,32 +354,32 @@ async function handlePaymentSucceeded(invoice) {
 
 async function handleSubscriptionCreated(subscription) {
   console.log('Subscription created:', subscription.id);
-  
+
   const customerId = subscription.customer;
   const tier = determineTierFromPrice(subscription.items.data[0].price.id);
-  
+
   // Update customer's service tier
   await updateCustomerTier(customerId, tier, subscription);
 }
 
 async function handleSubscriptionUpdated(subscription) {
   console.log('Subscription updated:', subscription.id);
-  
+
   const customerId = subscription.customer;
   const tier = determineTierFromPrice(subscription.items.data[0].price.id);
-  
+
   // Update customer's service tier
   await updateCustomerTier(customerId, tier, subscription);
 }
 
 async function handleSubscriptionDeleted(subscription) {
   console.log('Subscription deleted:', subscription.id);
-  
+
   const customerId = subscription.customer;
-  
+
   // Deactivate services
   await deactivateServices(customerId);
-  
+
   // Update Heidi
   const customer = await getCustomerEmail(customerId);
   if (customer) {
@@ -301,7 +395,7 @@ function determineServiceTier(session) {
   if (session.metadata?.tier) {
     return session.metadata.tier.toLowerCase();
   }
-  
+
   // Determine from price amount
   const amount = session.amount_total;
   if (amount >= 19900) return 'enterprise';
@@ -332,32 +426,34 @@ async function createPaidLead(email, customerId, tier, session) {
         welcome_sent: false
       })
       .select();
-    
+
     if (error) throw error;
-    
+
     console.log(`Created paid lead for ${email} (${tier} tier)`);
     return data[0];
   } catch (err) {
-    console.error('Failed to create paid lead:', err);
+    console.error('Failed to create paid lead:', err instanceof Error ? err.message : String(err),
+      (err && typeof err === 'object' && 'type' in err) ? `type=${err.type}` : '',
+      (err && typeof err === 'object' && 'code' in err) ? `code=${err.code}` : '');
     throw err;
   }
 }
 
 async function provisionServices(email, tier, customerId) {
   const tierConfig = SERVICE_TIERS[tier];
-  
+
   console.log(`Provisioning ${tierConfig.services.length} services for ${email}`);
-  
+
   // STRIPE CUSTOMER SYNC LOGIC
   let customer;
-  
+
   // Try to find existing customer by Stripe ID
   const { data: existingCustomer } = await supabase
     .from('customers')
     .select('id')
     .eq('stripe_customer_id', customerId)
     .maybeSingle();
-    
+
   if (existingCustomer?.id) {
     customer = existingCustomer;
   } else {
@@ -367,7 +463,7 @@ async function provisionServices(email, tier, customerId) {
       .select('id')
       .eq('email', email)
       .maybeSingle();
-      
+
     if (emailCustomer?.id) {
       // Update existing customer with Stripe ID
       const { data: updatedCustomer } = await supabase
@@ -390,11 +486,11 @@ async function provisionServices(email, tier, customerId) {
       customer = newCustomer;
     }
   }
-    
+
   if (!customer?.id) {
     throw new Error(`Failed to create/find customer for ${email}`);
   }
-  
+
   // Provision each service using CASCADE contract
   for (const serviceName of tierConfig.services) {
     try {
@@ -414,7 +510,7 @@ async function provisionServices(email, tier, customerId) {
       throw err;
     }
   }
-  
+
   // Update system status
   await supabase
     .from('system_status')
@@ -436,7 +532,9 @@ async function updateHeidiMemory(email, interactionType, data) {
         interaction_data: data
       });
   } catch (err) {
-    console.error('Failed to update Heidi memory:', err);
+    console.error('Failed to update Heidi memory:', err instanceof Error ? err.message : String(err),
+      (err && typeof err === 'object' && 'type' in err) ? `type=${err.type}` : '',
+      (err && typeof err === 'object' && 'code' in err) ? `code=${err.code}` : '');
   }
 }
 
@@ -445,17 +543,26 @@ async function updateRevenueMetrics(amount, currency) {
     // This would update a revenue tracking table
     console.log(`Revenue updated: ${amount} ${currency}`);
   } catch (err) {
-    console.error('Failed to update revenue metrics:', err);
+    console.error('Failed to update revenue metrics:', err instanceof Error ? err.message : String(err),
+      (err && typeof err === 'object' && 'type' in err) ? `type=${err.type}` : '',
+      (err && typeof err === 'object' && 'code' in err) ? `code=${err.code}` : '');
   }
 }
 
 async function getCustomerEmail(customerId) {
   try {
-    const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+    const stripeKey = process.env.STRIPE_SECRET_KEY;
+    const isLiveKey = stripeKey && (stripeKey.startsWith('sk_live_') || stripeKey.startsWith('rk_live_'));
+    if (isLiveKey && process.env.ALLOW_LIVE_STRIPE !== 'true') {
+      return { error: 'Live mode not authorized' };
+    }
+    const stripe = require('stripe')(stripeKey);
     const customer = await stripe.customers.retrieve(customerId);
     return { email: customer.email };
   } catch (err) {
-    console.error('Failed to get customer:', err);
+    console.error('Failed to get customer:', err instanceof Error ? err.message : String(err),
+      (err && typeof err === 'object' && 'type' in err) ? `type=${err.type}` : '',
+      (err && typeof err === 'object' && 'code' in err) ? `code=${err.code}` : '');
     return null;
   }
 }
@@ -465,7 +572,9 @@ async function updateCustomerTier(customerId, tier, subscription) {
     // Update customer's tier in database
     console.log(`Updated customer ${customerId} to ${tier} tier`);
   } catch (err) {
-    console.error('Failed to update customer tier:', err);
+    console.error('Failed to update customer tier:', err instanceof Error ? err.message : String(err),
+      (err && typeof err === 'object' && 'type' in err) ? `type=${err.type}` : '',
+      (err && typeof err === 'object' && 'code' in err) ? `code=${err.code}` : '');
   }
 }
 
@@ -474,7 +583,9 @@ async function extendSubscriptionServices(customerId, invoice) {
     // Extend service access
     console.log(`Extended services for customer ${customerId}`);
   } catch (err) {
-    console.error('Failed to extend services:', err);
+    console.error('Failed to extend services:', err instanceof Error ? err.message : String(err),
+      (err && typeof err === 'object' && 'type' in err) ? `type=${err.type}` : '',
+      (err && typeof err === 'object' && 'code' in err) ? `code=${err.code}` : '');
   }
 }
 
@@ -483,7 +594,9 @@ async function deactivateServices(customerId) {
     // Deactivate customer's services
     console.log(`Deactivated services for customer ${customerId}`);
   } catch (err) {
-    console.error('Failed to deactivate services:', err);
+    console.error('Failed to deactivate services:', err instanceof Error ? err.message : String(err),
+      (err && typeof err === 'object' && 'type' in err) ? `type=${err.type}` : '',
+      (err && typeof err === 'object' && 'code' in err) ? `code=${err.code}` : '');
   }
 }
 

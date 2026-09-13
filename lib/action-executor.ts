@@ -58,6 +58,8 @@ export class ActionExecutor {
           return await this.scheduleEvent(action.payload, sessionId);
         case 'send_email':
           return await this.sendEmail(action.payload);
+        case 'cancel_task':
+          return await this.cancelTask(action.payload);
         default:
           return { status: 'failed', error: `Unsupported action type: ${action.type}` };
       }
@@ -76,6 +78,63 @@ export class ActionExecutor {
 
     if (error) return { status: 'failed', error: error.message };
     return { status: 'completed', result: { task_id: data?.id, task_name: taskName } };
+  }
+
+  /**
+   * The inverse of `create_task`.
+   *
+   * Deletes a task row, but ONLY while it is still `pending` — that is, only
+   * while nothing has acted on it. A task that already ran cannot be undone by
+   * deleting its record; that would erase the evidence of work that really
+   * happened while claiming to have reversed it, which is worse than admitting
+   * the action is irreversible.
+   *
+   * So the guarantee is narrow and honest: create_task is reversible up until
+   * a worker claims the task, and not after. `tool.create_task`'s contract
+   * states exactly that in its reversibility caveat.
+   *
+   * Deletion rather than a `cancelled` status because `actions_status_check`
+   * permits only pending/completed/failed. Adding a status is a state-machine
+   * change and needs a governed migration (see CLAUDE.md) — worth doing, but
+   * it is the maintainer's call, not something to slip in here.
+   */
+  private async cancelTask(payload: Record<string, unknown>): Promise<ActionResult> {
+    const taskId = (payload.task_id as string) || (payload.taskId as string);
+    if (!taskId) {
+      return { status: 'failed', error: 'cancel_task requires task_id' };
+    }
+
+    const { data: existing, error: readError } = await this.supabase
+      .from('actions')
+      .select('id, status, task_name')
+      .eq('id', taskId)
+      .maybeSingle();
+
+    if (readError) return { status: 'failed', error: readError.message };
+    if (!existing) {
+      return { status: 'failed', error: `task ${taskId} not found` };
+    }
+    if (existing.status !== 'pending') {
+      return {
+        status: 'failed',
+        error:
+          `task ${taskId} is '${existing.status}', not 'pending' — work that has ` +
+          'already run cannot be cancelled',
+      };
+    }
+
+    const { error: deleteError } = await this.supabase
+      .from('actions')
+      .delete()
+      .eq('id', taskId)
+      .eq('status', 'pending'); // re-checked at delete time: the worker may have claimed it since the read
+
+    if (deleteError) return { status: 'failed', error: deleteError.message };
+
+    return {
+      status: 'completed',
+      result: { task_id: taskId, task_name: existing.task_name, cancelled: true },
+    };
   }
 
   private async fetchData(payload: Record<string, unknown>): Promise<ActionResult> {

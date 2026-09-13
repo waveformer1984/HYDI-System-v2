@@ -27,6 +27,12 @@ export interface EventSubscription {
   handler: (event: EventSchema) => Promise<void>;
 }
 
+// NAMING COLLISION: there is a SEPARATE, unrelated class also named
+// `EventBus` at lib/event-bus/EventBus.ts. THIS one is the PAO
+// (Personal AI Orchestration) agent system's bus specifically -- Node
+// EventEmitter-based, priority queuing, agent routing. Its
+// setInterval(100ms) is the known offender documented in jest.config.js's
+// forceExit comment. Do not confuse the two "EventBus"es when importing.
 export class EventBus extends EventEmitter {
   private subscriptions: Map<string, EventSubscription[]> = new Map();
   private eventHistory: EventSchema[] = [];

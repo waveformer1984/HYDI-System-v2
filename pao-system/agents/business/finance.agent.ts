@@ -240,6 +240,12 @@ export interface AutoAdjustment {
   enabled: boolean;
 }
 
+// NAMING COLLISION: there is a SEPARATE, unrelated class also named
+// `FinanceAgent` at src/hydi-v3/FinanceAgent.js (HYDI V3 reliability
+// layer only). THIS one is the PAO (Personal AI Orchestration) business
+// agent, extending pao-system/agents/base.agent.ts's BaseAgent. Check
+// which tree a given consumer lives in before assuming which
+// "FinanceAgent" it imports.
 export class FinanceAgent extends BaseAgent {
   private financialSystems: Map<string, FinancialSystem> = new Map();
   private treasury: Treasury = {

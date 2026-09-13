@@ -1,3 +1,9 @@
+// NAMING COLLISION: there is a SEPARATE, unrelated class also named
+// `BaseAgent` at src/hydi-v3/BaseAgent.js (the HYDI V3 reliability layer's
+// base agent class). THIS one is the PAO (Personal AI Orchestration)
+// system's base agent, extended by pao-system/agents/business/*.agent.ts
+// etc. (e.g. FinanceAgent). Check which tree a given consumer lives in
+// before assuming which "BaseAgent" it extends.
 export class BaseAgent {
   id: string;
   capabilities: string[];

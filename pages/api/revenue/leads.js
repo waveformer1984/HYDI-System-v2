@@ -1,5 +1,5 @@
-const RevenueEngine = require('../../../revenue-engine');
-const { requireAuth } = require('../../../lib/auth/requireAuth.js');
+import RevenueEngine from '../../../revenue-engine';
+import { requireAuth } from '../../../lib/auth/requireAuth';
 
 const engine = new RevenueEngine();
 
@@ -10,7 +10,14 @@ export default async function handler(req, res) {
       // see ISSUES_FOUND.md.
       const auth = await requireAuth(req, res, engine.supabase, { permission: 'revenue:view', routeName: 'revenue-leads' });
       if (!auth.ok) return;
-      return await engine.getLeads(req, res);
+      try {
+        const status = req.query.status || null;
+        const leads = await engine.getLeads(status);
+        res.json({ success: true, leads });
+      } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+      }
+      return;
     }
     case 'POST': {
       // Triggers a real (potentially expensive/external) lead-scrape --

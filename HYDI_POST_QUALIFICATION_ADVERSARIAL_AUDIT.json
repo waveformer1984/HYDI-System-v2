@@ -1,0 +1,81 @@
+{
+  "POST_QUALIFICATION_AUDIT": "FAIL",
+  "EXECUTION_PATH_INTEGRITY": "PASS",
+  "AUTHORITY_BOUNDARIES": "PASS",
+  "TERMINAL_IMMUTABILITY": "PASS",
+  "IDEMPOTENCY": "PASS",
+  "OBSERVABILITY_TRUTH": "PASS",
+  "SECRET_SAFETY": "PASS",
+  "CRASH_RANDOMIZATION": "FAIL",
+  "LONG_RUN_STABILITY": "FAIL",
+  "CONTROL_PLANE_INTEGRITY": "PASS",
+  "RELEASE_GATE_INTEGRITY": "PASS",
+  "REAL_RUNTIME_DEMONSTRATION": "FAIL",
+  "CRITICAL_FINDINGS": 0,
+  "HIGH_FINDINGS": 1,
+  "MEDIUM_FINDINGS": 0,
+  "NEW_REGRESSIONS": 0,
+  "FINAL_DESIGNATION": "PRODUCTION QUALIFICATION COMPLETE — RELEASE BLOCKED",
+  "FINAL_DESIGNATION_REASON": "4 real defects found and fixed (BrowserAdapter HIGH, traces.js MEDIUM, 2 error leaks LOW). PM2 became unresponsive during audit preventing crash/restart matrix (G04) and runtime demonstration (PHASE 12) from completing. Previous gate was 15/15 PASS. Typecheck delta=0 after fixes. PM2 restart + gate re-run required to restore FULL PRODUCTION QUALIFIED.",
+  "AUDIT_DATE": "2026-08-25T15:50:00Z",
+  "BASELINE_HEAD": "fd7751b16f040919531f001d93d2f70b396c9a85",
+  "FINAL_HEAD": "56a005e",
+  "BRANCH": "feat/governed-autonomy",
+  "FIXES_APPLIED": [
+    {
+      "id": "FIX-01",
+      "severity": "HIGH",
+      "file": "lib/human-action/adapters/BrowserAdapter.ts",
+      "description": "Added restricted protocol check before page.goto() — blocks chrome://, about:, chrome-extension://, devtools:, view-source:"
+    },
+    {
+      "id": "FIX-02",
+      "severity": "MEDIUM",
+      "file": "api/traces.js",
+      "description": "Added requireAuth to all methods — POST endpoint could trigger DB writes without auth"
+    },
+    {
+      "id": "FIX-03",
+      "severity": "LOW",
+      "file": "supabase/functions/keeper-break-glass/index.ts",
+      "description": "Removed debug field containing raw error.message from HTTP response"
+    },
+    {
+      "id": "FIX-04",
+      "severity": "LOW",
+      "file": "supabase/functions/keeper-break-glass-simple/index.ts",
+      "description": "Removed error field containing raw error.message from HTTP response"
+    }
+  ],
+  "DESIGN_LIMITATIONS": [
+    "RecoveryEngine has own governance (ActionRegistry) bypassing HumanActionEngine — by design for operational recovery",
+    "SelfRepairEngine has own governance with R0/R1 auto-authorization — by design for low-risk repairs",
+    "Stripe webhooks use signature verification, not HumanActionEngine — correct auth model for external webhooks",
+    "DelegatedAuthority lacks goalId scoping — scoped by identity/session/capability/resource",
+    "Service tokens lack replay protection — 5-minute window with no seen-request tracking",
+    "Event deduplication is opt-in via idempotencyKey — mechanism exists but not enforced by default",
+    "Control plane doesn't enforce terminal state checks on event recording — governance pipeline enforces"
+  ],
+  "FALSE_POSITIVES": [
+    "api/rezonate/route.js claimed unauthenticated — has requireAuth at line 87",
+    "api/song-composer/songs.js claimed unauthenticated — has requireAuth at lines 24 and 49",
+    "Encoded traversal claimed not blocked — Next.js framework URL-decodes before code sees path",
+    "Scripts using child_process claimed as production paths — not production runtime",
+    "Stripe webhook event payload claimed as secret leak — Stripe events contain PII, not API keys"
+  ],
+  "TEST_DEFECTS": [
+    "P4 terminal-state resurrection: GoalStateMachine.transition() called with wrong args — API takes (goalId, to, reason)",
+    "P5 duplicate event: recordEvent called with eventId param — API uses idempotencyKey for dedup",
+    "P5 duplicate intervention approval: checked for exception — API returns failure result object",
+    "P6 state mismatch: state machine not initialized in test",
+    "P8 recovery rate: state machine not initialized after restart",
+    "P8 duplicates: same idempotencyKey issue as P5"
+  ],
+  "TYPECHECK_BASELINE": 115,
+  "TYPECHECK_CURRENT": 115,
+  "TYPECHECK_DELTA": 0,
+  "PRIOR_GATE_RESULT": "15/15 PASS",
+  "CURRENT_GATE_RESULT": "7/15 PASS (PM2 environmental failure)",
+  "PM2_STATUS": "UNRESPONSIVE",
+  "PM2_UPTIME_AT_BASELINE": "3D"
+}

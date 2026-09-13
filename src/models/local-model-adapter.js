@@ -7,13 +7,29 @@ const { spawn } = require('child_process');
 const fs = require('fs').promises;
 const path = require('path');
 const EventEmitter = require('events');
+const OllamaClient = require('../../heidi-core/brain/ollama-client');
 
 class LocalModelAdapter extends EventEmitter {
   constructor(options = {}) {
     super();
     this.models = new Map();
     this.modelProcesses = new Map();
-    
+
+    // Real local inference backend (Ollama) -- see runLlamaInference() below.
+    this.ollamaClient = new OllamaClient();
+
+    // LATENCY THRESHOLD: was a hardcoded 3000ms in trackLatency() below, tuned for a
+    // backend that can actually run calls in parallel. This Ollama deployment is
+    // configured with OLLAMA_MAX_LOADED_MODELS=1 / OLLAMA_NUM_PARALLEL=1 (single
+    // concurrent slot), and the heartbeat monitor alone fires ~6 concurrent health
+    // checks every 30s on top of any live orchestrator task, so normal queued-behind-
+    // one-slot latency routinely exceeds 3s even when nothing is actually wrong. Made
+    // configurable so it can be tuned per deployment instead of silently misreporting
+    // healthy queued responses as DEGRADED.
+    this.latencyDegradedThresholdMs = options.latencyDegradedThresholdMs
+      || Number(process.env.LOCAL_MODEL_LATENCY_DEGRADED_MS)
+      || 6000;
+
     // FALLBACK CIRCUIT BREAKER: Prevent cascade failure loops
     this.fallbackConfig = {
       maxDepth: 2, // Max 2 fallbacks before giving up
@@ -500,7 +516,7 @@ class LocalModelAdapter extends EventEmitter {
    * Track latency with anomaly detection (NO AUTO-FALLBACK)
    */
   trackLatency(modelId, latency, isError = false) {
-    const threshold = 3000; // 3s threshold
+    const threshold = this.latencyDegradedThresholdMs;
     
     // Log for anomaly detection
     const status = latency > threshold ? 'DEGRADED' : 'HEALTHY';
@@ -860,7 +876,7 @@ class LocalModelAdapter extends EventEmitter {
       let timeoutHandle;
       let closed = false;
 
-      const child = spawn(command, args);
+      const child = spawn(command, args, { windowsHide: true });
       this.modelProcesses.set(child.pid, child);
 
       const cleanup = () => {
@@ -920,23 +936,63 @@ class LocalModelAdapter extends EventEmitter {
 
   /**
    * Run Llama inference process
+   *
+   * NOTE: This originally spawned a llama.cpp binary at './bin/main', which
+   * was never built/shipped -- every call failed with "spawn ./bin/main
+   * ENOENT", causing the orchestrator's revenue loop (and any other caller
+   * of a 'llama'/'codellama' model) to fail every single cycle. Real local
+   * inference already works elsewhere in this codebase via Ollama (see
+   * lib/ModelManager.ts, used by the live /api/chat endpoint), so route
+   * through the same, already-verified-working backend here instead.
+   * modelPath is retained only for logging/diagnostics.
    */
   async runLlamaInference(modelPath, params) {
-    const args = [
-      '-m', modelPath,
-      '-p', params.prompt,
-      '--temp', params.temperature.toString(),
-      '-n', params.maxTokens.toString(),
-      '-c', params.contextSize.toString()
-    ];
+    // MUST resolve to the exact same model as lib/ModelManager.ts's
+    // getLocalModelName() (LOCAL_MODEL_NAME -> OLLAMA_MODEL -> 'llama3.2:3b').
+    // This deployment has OLLAMA_MAX_LOADED_MODELS=1, so if this path and the
+    // live /api/chat path ever resolve to two DIFFERENT model tags, every
+    // ~30s heartbeat sweep (which calls every one of the ~13 model aliases
+    // in modelConfigs, all of which funnel through here) evicts whatever the
+    // chat path had warm, forcing a ~30-40s cold reload on the next real
+    // chat request. Confirmed by direct measurement: a cold load of
+    // llama3.2:3b alone took 37s. Previously this defaulted to the
+    // different literal 'llama3', which is exactly this bug.
+    const model = params.ollamaModel || process.env.LOCAL_MODEL_NAME || process.env.OLLAMA_MODEL || 'llama3.2:3b';
 
-    return this.runTrackedProcess('./bin/main', args, params.timeout || 30000, (output) => ({
-      output: output.trim(),
-      tokens: output.split(' ').length,
-      confidence: 0.95
-    }));
+    // This Ollama deployment only runs one request at a time (OLLAMA_MAX_LOADED_MODELS=1,
+    // OLLAMA_NUM_PARALLEL=1). Without client-side serialization, every concurrent caller
+    // (the heartbeat monitor alone fires ~6 calls in parallel every 30s, plus whatever the
+    // orchestrator is doing) fires its own generate() request simultaneously; Ollama queues
+    // them internally anyway, but each caller's own timeout is racing against
+    // queue-wait-time + real-inference-time with no visibility into the wait, so calls near
+    // the back of the queue spuriously "time out" even though nothing failed. Chaining calls
+    // through this._ollamaQueue makes that queuing explicit and deterministic instead.
+    this._ollamaQueue = (this._ollamaQueue || Promise.resolve())
+      .catch(() => {}) // a prior call's rejection must not poison the chain for later callers
+      .then(() => this._runOllamaGenerate(model, modelPath, params));
+    return this._ollamaQueue;
   }
 
+  async _runOllamaGenerate(model, modelPath, params) {
+    try {
+      const result = await this.ollamaClient.generate(params.prompt, {
+        model,
+        temperature: params.temperature,
+        maxTokens: params.maxTokens
+      });
+
+      const text = (result && result.text) || '';
+      const completionTokens = result && result.tokens && result.tokens.completion;
+
+      return {
+        output: text.trim(),
+        tokens: typeof completionTokens === 'number' ? completionTokens : text.split(/\s+/).filter(Boolean).length,
+        confidence: 0.85
+      };
+    } catch (error) {
+      throw new Error(`Ollama inference failed for model '${model}' (config path ${modelPath}): ${error.message}`);
+    }
+  }
   /**
    * Parse code into AST
    */
@@ -1386,7 +1442,7 @@ class LocalModelAdapter extends EventEmitter {
       if (process.platform === 'win32') {
         const { execSync } = require('child_process');
         // Use WMIC for Windows
-        const output = execSync('wmic /namespace:\\\\\root\\wmi PATH MSAcpi_ThermalZoneTemperature get CurrentTemperature 2>nul', { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] });
+        const output = execSync('wmic /namespace:\\\\\root\\wmi PATH MSAcpi_ThermalZoneTemperature get CurrentTemperature 2>nul', { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'], windowsHide: true });
         const temps = output.split('\n')
           .filter(line => line.trim() && !isNaN(parseInt(line.trim())))
           .map(line => (parseInt(line.trim()) - 2732) / 10); // Kelvin*10 to Celsius

@@ -1,0 +1,50 @@
+[
+  {
+    "claim": "On April 29, 2005, the original Bugatti Veyron 16.4 became the first series-production car to exceed 400 km/h, reaching 407 km/h at Volkswagen's Ehra-Lessien test track, driven by test driver Uwe Novacki.",
+    "source": "https://newsroom.bugatti.com/en/press-releases/407-kmh-a-milestone-in-automotive-history",
+    "source_date": "2005-04-29",
+    "confidence": "high",
+    "verification_status": "verified",
+    "notes": "Confirmed via Bugatti's own official press-release archive (primary source)."
+  },
+  {
+    "claim": "On July 3, 2010, the Bugatti Veyron 16.4 Super Sport set a new production-car land speed record of 431.072 km/h (267.856 mph), driven by test driver Pierre-Henri Raphanel at the Ehra-Lessien track, witnessed by TUV officials and a Guinness World Records adjudicator.",
+    "source": "https://newsroom.bugatti.com/en/press-releases/landspeed-worldrecord-with-the-bugatti-veyron-16-4-super-sport",
+    "source_date": "2010-07-03",
+    "confidence": "high",
+    "verification_status": "verified",
+    "notes": "Confirmed via Bugatti's own official press-release archive (primary source)."
+  },
+  {
+    "claim": "In April 2013, Guinness World Records briefly stripped the Veyron Super Sport of its 'world's fastest production car' title because the record-setting car had its speed limiter disabled beyond the specification sold to customers, then reinstated the record shortly afterward.",
+    "source": "https://www.autoblog.com/2013/04/08/bugatti-veyron-super-sport-stripped-of-worlds-fastest-car-title/",
+    "source_date": "2013-04-08",
+    "confidence": "medium",
+    "verification_status": "verified",
+    "notes": "Reported contemporaneously by a reputable automotive trade outlet; corroborated by additional coverage found during research."
+  },
+  {
+    "claim": "On November 4, 2017, the Koenigsegg Agera RS recorded a two-way average speed of 447 km/h (277.9 mph) near Pahrump, Nevada -- independently verified by Racelogic -- ending the Bugatti Veyron Super Sport's run as the world's fastest verified production car.",
+    "source": "https://paultan.org/2017/11/06/koenigsegg-agera-rs-sets-new-worlds-fastest-car-record/",
+    "source_date": "2017-11-06",
+    "confidence": "high",
+    "verification_status": "verified",
+    "notes": "Corroborated by multiple contemporaneous outlets found during research (CTV News, Top Gear, dupontregistry)."
+  },
+  {
+    "claim": "The Veyron Super Sport's quad-turbocharged 8.0-liter W16 engine produces 1,200 PS (1,200 hp) and 1,106 lb-ft of torque, with a 0-100 km/h time of 2.5 seconds; customer cars are electronically limited to 415 km/h.",
+    "source": "https://borro.com/bugatti-veyron-super-sport/",
+    "source_date": "2026-09-07",
+    "confidence": "medium",
+    "verification_status": "needs_review",
+    "notes": "Figures are consistent across several secondary/aggregator sources (Borro, Netcarshow, Zeperfs) but were not cross-checked against Bugatti's own official spec sheet during this research pass -- flagging for J to confirm against a primary Bugatti source before publishing."
+  },
+  {
+    "claim": "Bugatti built only 48 Veyron Super Sport units (2010-2011), out of roughly 450 Veyron-family cars produced in total across all variants over the model's decade-long production run.",
+    "source": "https://borro.com/bugatti-veyron-super-sport/",
+    "source_date": "2026-09-07",
+    "confidence": "medium",
+    "verification_status": "needs_review",
+    "notes": "Production totals are reported consistently by secondary sources but were not independently cross-verified against a Bugatti factory production ledger during this research pass -- flagging for J to confirm before publishing."
+  }
+]

@@ -4,6 +4,7 @@ const path = require('path')
 const nextConfig = {
   reactStrictMode: true,
   outputFileTracingRoot: path.join(__dirname),
+  allowedDevOrigins: ['127.0.0.1', 'localhost'],
   env: {
     NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
     NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
@@ -17,6 +18,17 @@ const nextConfig = {
     // several pre-existing no-unused-vars warnings in agents/ and workers/
     // had never surfaced because lint never actually looked at them.
     dirs: ['pages', 'components', 'lib', 'src', 'hooks', 'workers', 'agents', 'revenue-engine', 'api', 'kilo'],
+  },
+  webpack: (config, { isServer }) => {
+    // Allow require() of .ts files from .js files in the pages/ directory.
+    // next dev resolves .ts extensions automatically, but next build's
+    // webpack production config doesn't include .ts in resolve.extensions
+    // for .js files. This ensures consistent module resolution across
+    // both dev and production builds.
+    if (!config.resolve.extensions.includes('.ts')) {
+      config.resolve.extensions.push('.ts');
+    }
+    return config;
   },
 }
 

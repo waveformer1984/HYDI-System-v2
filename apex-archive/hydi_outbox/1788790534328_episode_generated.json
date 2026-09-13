@@ -1,0 +1,11 @@
+{
+  "project_id": "apex-archive",
+  "event_type": "episode_generated",
+  "emitted_at": "2026-09-07T14:15:34Z",
+  "schema_version": "draft-2",
+  "payload": {
+    "episode_id": "2026-09-07-431-km-h-the-bugatti-veyron-super-sport-s-record-run-a155e221",
+    "episode_title": "431 KM/H: The Bugatti Veyron Super Sport's Record Run",
+    "tts_provider": "espeak-ng"
+  }
+}

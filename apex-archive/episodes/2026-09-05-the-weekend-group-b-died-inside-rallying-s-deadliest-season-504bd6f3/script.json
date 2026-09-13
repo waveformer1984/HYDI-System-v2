@@ -1,0 +1,198 @@
+{
+  "title": "The Weekend Group B Died: Inside Rallying's Deadliest Season",
+  "pillar": "wrecks",
+  "format": "longform",
+  "topic_slug": "group-b-s-1986-ban",
+  "segments": [
+    {
+      "visual": "title",
+      "kicker": "Apex Archive",
+      "headline": "The Weekend Group B Died",
+      "subhead": "How a governing body banned rallying's fastest era in 1986",
+      "narration": "In 1986, motorsport's governing body did something it had never done before: it banned an entire category of car, mid-season, after two seasons of escalating tragedy. This is the story of Group B rallying, and how it ended.",
+      "zoom": "in"
+    },
+    {
+      "visual": "plain",
+      "narration": "Group B was introduced in 1982 as a loosely regulated class for rally manufacturers. The rules required only a small number of road-going cars be built for homologation, which let engineers chase horsepower with very few limits. Within a few seasons, manufacturers including Audi, Lancia, Peugeot, and Ford were locked in an escalating arms race, each new evolution model pushing further past what the previous generation of rally cars had ever produced.",
+      "caption": "Group B, introduced 1982: minimal homologation limits, near-unlimited power ambition.",
+      "zoom": "static"
+    },
+    {
+      "visual": "stat_bars",
+      "title": "Group B: Power Without Limits",
+      "items": [["Peugeot 205 T16", 335], ["Lancia Delta S4", 500], ["Audi Sport Quattro S1", 600]],
+      "unit": " hp",
+      "narration": "By the mid-1980s, factory Group B cars were putting out anywhere from roughly three hundred thirty to over six hundred horsepower, depending on the car and its final evolution, packed into bodies that weighed close to a thousand kilograms.",
+      "zoom": "in"
+    },
+    {
+      "visual": "plain",
+      "narration": "That power-to-weight ratio was extraordinary, and it was being driven on narrow public roads, often with minimal or no barriers, and crowds of spectators standing close to the racing line. Rally stages simply weren't designed with this much speed in mind -- the roads, the run-off, and the crowd control that existed were all built around a slower era of the sport.",
+      "caption": "Narrow roads, minimal barriers, spectators close to the line.",
+      "zoom": "static"
+    },
+    {
+      "visual": "plain",
+      "narration": "On the fifth of March, 1986, at Rally Portugal near Sintra, driver Joaquim Santos swerved to avoid a spectator who had stepped into the road. His Ford RS200 spun into the crowd. Three spectators were killed and more than thirty were injured.",
+      "caption": "5 March 1986, Rally Portugal, Sintra: 3 spectators killed, 30+ injured.",
+      "zoom": "out"
+    },
+    {
+      "visual": "plain",
+      "narration": "The crash at Sintra was a turning point for how the sport's own competitors saw the risk. Several works teams pulled out of the rest of that event in its immediate aftermath, and questions about crowd safety at Group B rallies became impossible to ignore.",
+      "caption": "Works teams withdrew from the remainder of the event; crowd-safety questions intensified.",
+      "zoom": "static"
+    },
+    {
+      "visual": "timeline",
+      "title": "Two Months, Two Tragedies",
+      "events": [
+        ["5 Mar 1986", "Rally Portugal: car spins into crowd, 3 spectators killed"],
+        ["2 May 1986", "Tour de Corse: Henri Toivonen and Sergio Cresto killed"],
+        ["Hours later", "FISA announces Group B banned from 1987"]
+      ],
+      "highlight_index": 1,
+      "narration": "Less than two months after Sintra, tragedy struck again -- this time inside the competition itself.",
+      "zoom": "static"
+    },
+    {
+      "visual": "plain",
+      "narration": "On the second of May, 1986, Henri Toivonen was leading the Tour de Corse in his Lancia Delta S4. On the rally's eighteenth stage, about seven kilometres from the town of Corte, the car left the road. Its fuel tank was breached, and it caught fire. Toivonen and his co-driver, Sergio Cresto, both died.",
+      "caption": "2 May 1986, Tour de Corse, stage 18: Toivonen and Cresto killed after their car left the road and caught fire.",
+      "zoom": "out"
+    },
+    {
+      "visual": "quote",
+      "text": "This rally is insane, even though everything is going well at the moment. If there is trouble, for sure, I am completely finished.",
+      "attribution": "Henri Toivonen, during the 1986 Tour de Corse",
+      "narration": "This rally is insane, even though everything is going well at the moment. If there is trouble, for sure, I am completely finished.",
+      "zoom": "static"
+    },
+    {
+      "visual": "plain",
+      "narration": "The governing body, FISA, did not wait for a season review. Within hours of the crash, it announced that Group B cars would be banned from the World Rally Championship starting in 1987, to be replaced by the far less powerful Group A category.",
+      "caption": "FISA announces Group B banned for 1987, replaced by Group A.",
+      "zoom": "static"
+    },
+    {
+      "visual": "plain",
+      "narration": "FISA's subsequent investigation pointed to something more fundamental than any single mechanical failure: at the speeds Group B cars had reached, driver reaction times and visual processing were being outpaced by the machinery itself, especially in fast, poorly lit corners.",
+      "caption": "Investigation: driver reaction time and vision were outpaced by the cars' speed.",
+      "zoom": "in"
+    },
+    {
+      "visual": "plain",
+      "narration": "That's the real lesson of Group B. It wasn't just that the cars were fast -- it's that the sport had let engineering outrun the human beings, and the roads, meant to contain it. No single crash caused the ban on its own; it was the accumulation of Sintra, Corsica, and a growing body of evidence that the category had simply outgrown what could be safely managed.",
+      "caption": "The cars outran the drivers, the roads, and the crowd-safety margins built to contain them.",
+      "zoom": "static"
+    },
+    {
+      "visual": "plain",
+      "narration": "Group A, which replaced it, capped power and required far higher production numbers for homologation. Stages got narrower in what they allowed, and spectator control became a standard part of event planning, not an afterthought. The cars that followed were slower on paper, but the racing that resulted stayed close, competitive, and -- crucially -- survivable for the people watching from the roadside.",
+      "caption": "Group A: lower power ceilings, higher homologation numbers, formalized spectator control.",
+      "zoom": "static"
+    },
+    {
+      "visual": "plain",
+      "narration": "The Group B ban became a template. When a category outpaces the safety margins around it, the fix isn't a warning -- it's a rule change. That philosophy still shapes how motorsport's governing bodies respond to serious incidents today.",
+      "caption": "A category outpacing its safety margins gets a rule change, not a warning -- a philosophy that still holds today.",
+      "zoom": "in"
+    },
+    {
+      "visual": "outro",
+      "narration": "That's the story of the weekend Group B died. If you want more motorsport history like this, subscribe to Apex Archive.",
+      "zoom": "static"
+    }
+  ],
+  "sources": [
+    {
+      "url": "https://en.wikipedia.org/wiki/Henri_Toivonen",
+      "publisher": "Wikipedia",
+      "retrieved": "2026-09-05",
+      "supports": "Toivonen/Cresto death date, Tour de Corse stage 18 location, Delta S4, pre-crash quote"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Joaquim_Santos",
+      "publisher": "Wikipedia",
+      "retrieved": "2026-09-05",
+      "supports": "Santos crash, 3 spectator deaths, Sintra 1986, Ford RS200"
+    },
+    {
+      "url": "https://dirtfish.com/rally/wrc/the-disaster-of-rally-portugal-1986/",
+      "publisher": "DirtFish",
+      "retrieved": "2026-09-05",
+      "supports": "Rally Portugal 1986 disaster details, team withdrawals"
+    },
+    {
+      "url": "https://www.topgear.com/car-news/motorsport/corner-killed-group-b",
+      "publisher": "Top Gear",
+      "retrieved": "2026-09-05",
+      "supports": "FISA ban timeline, investigation findings on driver reaction time and tunnel vision"
+    },
+    {
+      "url": "https://www.motoringresearch.com/car-news/the-best-group-b-rally-cars/",
+      "publisher": "Motoring Research",
+      "retrieved": "2026-09-05",
+      "supports": "Group B car power figures (Audi Sport Quattro S1, Peugeot 205 T16, Lancia Delta S4)"
+    }
+  ],
+  "fact_check": [
+    {
+      "claim": "Group B rally cars of the mid-1980s reached roughly 335 to over 600 horsepower depending on car and evolution -- among them the Peugeot 205 T16, Lancia Delta S4, and Audi Sport Quattro S1 -- while weighing close to 1,000 kg.",
+      "source": "https://www.motoringresearch.com/car-news/the-best-group-b-rally-cars/",
+      "source_date": "2026-09-05",
+      "confidence": "medium",
+      "verification_status": "needs_review",
+      "notes": "Power figures vary across sources depending on year/evolution (450-500hp commonly cited, up to 600hp for the final Audi S1 evolution). Used as an approximate range attributed to the cited outlet, not a single precise homologated figure."
+    },
+    {
+      "claim": "On 5 March 1986, Joaquim Santos's Ford RS200 skidded off the road into a crowd of spectators at Rally Portugal near Sintra after a spectator stepped into its path, killing three spectators and injuring more than 30.",
+      "source": "https://dirtfish.com/rally/wrc/the-disaster-of-rally-portugal-1986/",
+      "source_date": "2020-05-24",
+      "confidence": "high",
+      "verification_status": "verified",
+      "notes": "Corroborated by Wikipedia's Joaquim Santos article, which cites the same DirtFish piece."
+    },
+    {
+      "claim": "Several works teams withdrew from the remainder of the 1986 Rally Portugal in the aftermath of the Sintra crash.",
+      "source": "https://dirtfish.com/rally/wrc/the-disaster-of-rally-portugal-1986/",
+      "source_date": "2020-05-24",
+      "confidence": "medium",
+      "verification_status": "needs_review",
+      "notes": "Based on a secondary summary of DirtFish's reporting rather than a directly quoted team-by-team withdrawal list. Recommend confirming the exact team list before treating as a precise roster."
+    },
+    {
+      "claim": "On 2 May 1986, Henri Toivonen and co-driver Sergio Cresto died when their Lancia Delta S4 left the road on the 18th stage of the Tour de Corse, about seven kilometres from Corte, and caught fire after the fuel tank was breached.",
+      "source": "https://en.wikipedia.org/wiki/Henri_Toivonen",
+      "source_date": "2026-09-05",
+      "confidence": "high",
+      "verification_status": "verified",
+      "notes": "Directly stated in the Wikipedia article body with an inline citation; consistent with Top Gear and DirtFish summaries."
+    },
+    {
+      "claim": "Before the fatal stage, Toivonen was recorded saying: 'This rally is insane, even though everything is going well at the moment. If there is trouble, for sure, I am completely finished.'",
+      "source": "https://en.wikipedia.org/wiki/Henri_Toivonen",
+      "source_date": "2026-09-05",
+      "confidence": "medium",
+      "verification_status": "needs_review",
+      "notes": "Direct quote reproduced via Wikipedia's own citation to a period source; recommend double-checking original wording/translation before treating as verbatim on screen."
+    },
+    {
+      "claim": "FISA announced within hours of the Toivonen/Cresto crash that Group B cars would be banned from the World Rally Championship starting with the 1987 season, to be replaced by the less powerful Group A category.",
+      "source": "https://www.topgear.com/car-news/motorsport/corner-killed-group-b",
+      "source_date": "2026-09-05",
+      "confidence": "medium",
+      "verification_status": "needs_review",
+      "notes": "'Within hours' timing is reported by Top Gear and echoed by other outlets, but no primary FISA announcement document was independently located to confirm the exact timestamp."
+    },
+    {
+      "claim": "FISA's investigation into the ban concluded that Group B cars had outpaced drivers' reaction times and visual processing at speed, contributing to tunnel vision in fast, poorly lit corners.",
+      "source": "https://www.topgear.com/car-news/motorsport/corner-killed-group-b",
+      "source_date": "2026-09-05",
+      "confidence": "medium",
+      "verification_status": "needs_review",
+      "notes": "Investigation conclusions summarized via secondary reporting; no primary FISA report was located to verify wording directly."
+    }
+  ]
+}

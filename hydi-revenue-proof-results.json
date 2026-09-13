@@ -1,0 +1,407 @@
+{
+  "test": "revenue-proof",
+  "timestamp": "2026-08-25T22:26:45.470Z",
+  "totalAssertions": 99,
+  "passed": 99,
+  "failed": 0,
+  "verdict": "QUALIFIED",
+  "failures": [],
+  "results": [
+    {
+      "test": "RP01: Product exists in catalog",
+      "result": "PASS"
+    },
+    {
+      "test": "RP02: Product price is $29.00 (2900¢)",
+      "result": "PASS"
+    },
+    {
+      "test": "RP03: Product is one-time payment",
+      "result": "PASS"
+    },
+    {
+      "test": "RP04: Product is active",
+      "result": "PASS"
+    },
+    {
+      "test": "RP05: Product name is correct",
+      "result": "PASS"
+    },
+    {
+      "test": "RP06: Job created successfully",
+      "result": "PASS"
+    },
+    {
+      "test": "RP07: Initial job status is \"created\"",
+      "result": "PASS"
+    },
+    {
+      "test": "RP08: Initial payment status is \"unpaid\"",
+      "result": "PASS"
+    },
+    {
+      "test": "RP09: Job price is 2900¢",
+      "result": "PASS"
+    },
+    {
+      "test": "RP10: Customer email stored",
+      "result": "PASS"
+    },
+    {
+      "test": "RP11: Product stored",
+      "result": "PASS"
+    },
+    {
+      "test": "RP12: Request text stored",
+      "result": "PASS"
+    },
+    {
+      "test": "RP13: Payment status is \"pending\" after checkout link",
+      "result": "PASS"
+    },
+    {
+      "test": "RP14: Checkout session ID stored",
+      "result": "PASS"
+    },
+    {
+      "test": "RP15: Payment confirmation processed",
+      "result": "PASS"
+    },
+    {
+      "test": "RP16: Payment linked to correct job",
+      "result": "PASS"
+    },
+    {
+      "test": "RP17: Payment status is \"paid\" after webhook",
+      "result": "PASS"
+    },
+    {
+      "test": "RP18: Job status is \"queued\" after payment",
+      "result": "PASS"
+    },
+    {
+      "test": "RP19: Stripe event ID stored",
+      "result": "PASS"
+    },
+    {
+      "test": "RP20: Paid timestamp set",
+      "result": "PASS"
+    },
+    {
+      "test": "RP21: Revenue ledger entry created",
+      "result": "PASS"
+    },
+    {
+      "test": "RP22: Revenue ledger entry exists for job",
+      "result": "PASS"
+    },
+    {
+      "test": "RP23: Ledger event type is \"setup_fee_collected\"",
+      "result": "PASS"
+    },
+    {
+      "test": "RP24: Ledger amount is 2900¢",
+      "result": "PASS"
+    },
+    {
+      "test": "RP25: Ledger entry is verified",
+      "result": "PASS"
+    },
+    {
+      "test": "RP26: Ledger source is \"stripe_webhook\"",
+      "result": "PASS"
+    },
+    {
+      "test": "RP27: Ledger offer ID is correct",
+      "result": "PASS"
+    },
+    {
+      "test": "RP28: Execution succeeded",
+      "result": "PASS"
+    },
+    {
+      "test": "RP29: Three artifacts produced",
+      "result": "PASS"
+    },
+    {
+      "test": "RP30: Execution has duration",
+      "result": "PASS"
+    },
+    {
+      "test": "RP31: Job status is \"awaiting_review\" after execution",
+      "result": "PASS"
+    },
+    {
+      "test": "RP32: Execution status is \"completed\"",
+      "result": "PASS"
+    },
+    {
+      "test": "RP33: Execution start time recorded",
+      "result": "PASS"
+    },
+    {
+      "test": "RP34: Execution completion time recorded",
+      "result": "PASS"
+    },
+    {
+      "test": "RP35: Three artifact paths stored in job",
+      "result": "PASS"
+    },
+    {
+      "test": "RP36: .scad artifact produced",
+      "result": "PASS"
+    },
+    {
+      "test": "RP37: .stl artifact produced",
+      "result": "PASS"
+    },
+    {
+      "test": "RP38: README.md artifact produced",
+      "result": "PASS"
+    },
+    {
+      "test": "RP39: .scad file exists on disk",
+      "result": "PASS"
+    },
+    {
+      "test": "RP40: .stl file exists on disk",
+      "result": "PASS"
+    },
+    {
+      "test": "RP41: README.md file exists on disk",
+      "result": "PASS"
+    },
+    {
+      "test": "RP42: STL file starts with \"solid \"",
+      "result": "PASS"
+    },
+    {
+      "test": "RP43: STL file ends with \"endsolid\"",
+      "result": "PASS"
+    },
+    {
+      "test": "RP44: STL file contains facet definitions",
+      "result": "PASS"
+    },
+    {
+      "test": "RP45: STL has at least 10 triangles",
+      "result": "PASS"
+    },
+    {
+      "test": "RP46: SCAD file has HEIDI header",
+      "result": "PASS"
+    },
+    {
+      "test": "RP47: SCAD file has width parameter",
+      "result": "PASS"
+    },
+    {
+      "test": "RP48: SCAD file has height parameter",
+      "result": "PASS"
+    },
+    {
+      "test": "RP49: README has title",
+      "result": "PASS"
+    },
+    {
+      "test": "RP50: README contains job ID",
+      "result": "PASS"
+    },
+    {
+      "test": "RP51: README has print settings",
+      "result": "PASS"
+    },
+    {
+      "test": "RP52: SCAD has SHA256 hash",
+      "result": "PASS"
+    },
+    {
+      "test": "RP53: STL has SHA256 hash",
+      "result": "PASS"
+    },
+    {
+      "test": "RP54: Artifact hashes are different",
+      "result": "PASS"
+    },
+    {
+      "test": "RP55: Job status is \"delivered\" after approval",
+      "result": "PASS"
+    },
+    {
+      "test": "RP56: Verification status is \"verified\"",
+      "result": "PASS"
+    },
+    {
+      "test": "RP57: Delivery status is \"delivered\"",
+      "result": "PASS"
+    },
+    {
+      "test": "RP58: Delivery token generated",
+      "result": "PASS"
+    },
+    {
+      "test": "RP59: Delivery timestamp set",
+      "result": "PASS"
+    },
+    {
+      "test": "RP60: At least 6 job events recorded",
+      "result": "PASS"
+    },
+    {
+      "test": "RP61: \"job_created\" event recorded",
+      "result": "PASS"
+    },
+    {
+      "test": "RP62: \"checkout_session_created\" event recorded",
+      "result": "PASS"
+    },
+    {
+      "test": "RP63: \"payment_confirmed\" event recorded",
+      "result": "PASS"
+    },
+    {
+      "test": "RP64: \"execution_started\" event recorded",
+      "result": "PASS"
+    },
+    {
+      "test": "RP65: \"execution_completed\" event recorded",
+      "result": "PASS"
+    },
+    {
+      "test": "RP66: \"delivery_approved\" event recorded",
+      "result": "PASS"
+    },
+    {
+      "test": "RP67: Duplicate webhook processed (not errored)",
+      "result": "PASS"
+    },
+    {
+      "test": "RP68: Duplicate webhook detected as idempotent",
+      "result": "PASS"
+    },
+    {
+      "test": "RP69: No duplicate revenue ledger entry",
+      "result": "PASS"
+    },
+    {
+      "test": "RP70: No duplicate payment_confirmed event",
+      "result": "PASS"
+    },
+    {
+      "test": "RP71: Second job queued after payment",
+      "result": "PASS"
+    },
+    {
+      "test": "RP72: Second job is executing (pre-restart)",
+      "result": "PASS"
+    },
+    {
+      "test": "RP73: Stale executing job failed after restart (no artifacts)",
+      "result": "PASS"
+    },
+    {
+      "test": "RP74: Job status is \"failed\" after restart without artifacts",
+      "result": "PASS"
+    },
+    {
+      "test": "RP75: Execution status is \"failed\" after restart",
+      "result": "PASS"
+    },
+    {
+      "test": "RP76: Artifact directory exists before restart",
+      "result": "PASS"
+    },
+    {
+      "test": "RP77: Artifacts generated before simulated restart",
+      "result": "PASS"
+    },
+    {
+      "test": "RP78: Stale job recovered with artifacts",
+      "result": "PASS"
+    },
+    {
+      "test": "RP79: Job recovered to \"awaiting_review\" with artifacts",
+      "result": "PASS"
+    },
+    {
+      "test": "RP80: Execution completed during recovery",
+      "result": "PASS"
+    },
+    {
+      "test": "RP81: Cancelled job status is \"cancelled\"",
+      "result": "PASS"
+    },
+    {
+      "test": "RP82: Failed job status is \"failed\"",
+      "result": "PASS"
+    },
+    {
+      "test": "RP83: Failed execution status is \"failed\"",
+      "result": "PASS"
+    },
+    {
+      "test": "RP84: Execution error message stored",
+      "result": "PASS"
+    },
+    {
+      "test": "RP85: Rejected job status is \"failed\"",
+      "result": "PASS"
+    },
+    {
+      "test": "RP86: Rejection reason stored in execution error",
+      "result": "PASS"
+    },
+    {
+      "test": "RP87: Amount mismatch rejected",
+      "result": "PASS"
+    },
+    {
+      "test": "RP88: Amount mismatch error message provided",
+      "result": "PASS"
+    },
+    {
+      "test": "RP89: Job remains unpaid after amount mismatch",
+      "result": "PASS"
+    },
+    {
+      "test": "RP90: Revenue ledger has entries from test",
+      "result": "PASS"
+    },
+    {
+      "test": "RP91: Total revenue includes all paid test jobs",
+      "result": "PASS"
+    },
+    {
+      "test": "RP92: Customer count reflects unique paying customers",
+      "result": "PASS"
+    },
+    {
+      "test": "RP93: Exactly one setup_fee_collected per job",
+      "result": "PASS"
+    },
+    {
+      "test": "RP94: Exactly 3 artifact files on disk",
+      "result": "PASS"
+    },
+    {
+      "test": "RP95: job_created and payment_confirmed events exist",
+      "result": "PASS"
+    },
+    {
+      "test": "RP96: job_created before payment_confirmed",
+      "result": "PASS"
+    },
+    {
+      "test": "RP97: payment_confirmed before execution_started",
+      "result": "PASS"
+    },
+    {
+      "test": "RP98: execution_started before execution_completed",
+      "result": "PASS"
+    },
+    {
+      "test": "RP99: execution_completed before delivery_approved",
+      "result": "PASS"
+    }
+  ]
+}

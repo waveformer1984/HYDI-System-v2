@@ -49,8 +49,25 @@ function buildResponse(dashboard, cloud) {
   const isHealthy = dashboard.current_status === 'OK' &&
                     dashboard.escalation_level !== 'CRITICAL';
 
-  const statusCode = dashboard.current_status === 'CRITICAL' ? 503 :
-                     dashboard.current_status === 'WARNING' ? 200 : 200;
+  // Transport status answers "did this handler run and produce a report?", not
+  // "is the system well?". Those are different questions and conflating them
+  // breaks the liveness machinery that reads this endpoint.
+  //
+  // This used to map current_status === 'CRITICAL' to 503. That branch was
+  // unreachable while system_health_runs was empty (current_status was always
+  // NULL). Once a real health run landed and reported CRITICAL, the endpoint
+  // started returning 503 — and scripts/boot-agent.js:189 accepts only
+  // `statusCode >= 200 && statusCode < 500` as a passing health gate. heidi-web
+  // is required:true, so a semantically-CRITICAL-but-perfectly-alive web layer
+  // would have failed its gate and aborted the entire boot.
+  //
+  // The verdict is not lost: it stays in the body as `status` and `hydi_status`
+  // (plus trend_status / escalation_level), which is where
+  // lib/operational/EndpointHealthContract.ts reads it. Same choice as
+  // protoforge-core's /health — transport 200, semantics in the payload.
+  //
+  // A genuine handler failure still returns 500 from the catch block below.
+  const statusCode = 200;
 
   return {
     statusCode,

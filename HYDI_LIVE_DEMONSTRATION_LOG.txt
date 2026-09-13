@@ -1,0 +1,86 @@
+[2026-08-21T13:24:38.667Z] 
+[2026-08-21T13:24:38.668Z] ═══ PHASE 5: CAPABILITY HEALTH ═════════════════════════════
+[2026-08-21T13:24:38.668Z] 
+[2026-08-21T13:24:39.273Z]   CognitiveCore built for capability health check
+[2026-08-21T13:24:39.273Z]   CapabilityHealthManager: wired
+[2026-08-21T13:24:39.274Z]   SelfRepairEngine: wired
+[2026-08-21T13:24:39.274Z]   BlockerResolutionEngine: wired
+[2026-08-21T13:24:39.274Z]   Registry has 42 capabilities
+[2026-08-21T13:24:39.369Z]   Health check result:
+[2026-08-21T13:24:39.370Z]     Total: 6
+[2026-08-21T13:24:39.370Z]     Ready: 2
+[2026-08-21T13:24:39.370Z]     Blocked: 4
+[2026-08-21T13:24:39.370Z]     Unavailable: 0
+[2026-08-21T13:24:39.370Z]     [unknown] system.local_model: Ollama responded at http://localhost:11434 (HTTP 200)
+[2026-08-21T13:24:39.370Z]     [unknown] system.supabase: All required credentials present: SUPABASE_URL
+[2026-08-21T13:24:39.370Z]     [unknown] commercial.stripe: Missing credentials: STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET
+[2026-08-21T13:24:39.370Z]     [unknown] commercial.email: Missing credentials: SENDGRID_API_KEY
+[2026-08-21T13:24:39.370Z]     [unknown] commercial.discovery_external: Missing credentials: GOOGLE_PLACES_API_KEY
+[2026-08-21T13:24:39.370Z]     [unknown] commercial.sms: Missing credentials: TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER
+[2026-08-21T13:24:39.370Z] 
+[2026-08-21T13:24:39.370Z] ═══ PHASE 6: BLOCKER RESOLUTION ════════════════════════════
+[2026-08-21T13:24:39.370Z] 
+[2026-08-21T13:24:39.370Z]   Resolving 0 blocked/unavailable capabilities...
+[2026-08-21T13:24:39.371Z]   Resolution result:
+[2026-08-21T13:24:39.371Z]     Total blockers: 0
+[2026-08-21T13:24:39.371Z]     Resolved: 0
+[2026-08-21T13:24:39.372Z]     Escalated: 0
+[2026-08-21T13:24:39.372Z]     Worked around: 0
+[2026-08-21T13:24:39.372Z] 
+[2026-08-21T13:24:39.372Z] ═══ PHASE 7: SELF-REPAIR ═══════════════════════════════════
+[2026-08-21T13:24:39.372Z] 
+[2026-08-21T13:24:39.375Z]   Self-repair result:
+[2026-08-21T13:24:39.375Z]     Total issues: 4
+[2026-08-21T13:24:39.376Z]     Repaired: 0
+[2026-08-21T13:24:39.376Z]     Escalated: 0
+[2026-08-21T13:24:39.376Z]     Worked around: 4
+[2026-08-21T13:24:39.376Z]     Refused: 0
+[2026-08-21T13:24:39.376Z] 
+[2026-08-21T13:24:39.376Z] ═══ PHASE 8: FAILURE INJECTION MATRIX ══════════════════════
+[2026-08-21T13:24:39.376Z] 
+[2026-08-21T13:24:39.376Z]   ── Failure Class A: Detect and recover protoforge-core (port 3005) ──
+[2026-08-21T13:24:39.430Z]     Before: protoforge-core healthy=true
+[2026-08-21T13:24:39.430Z]     protoforge-core is running — injecting failure...
+[2026-08-21T13:24:39.551Z]     PID on port 3005: 26588
+[2026-08-21T13:24:39.874Z]     Process killed
+[2026-08-21T13:24:41.891Z]     After kill: protoforge-core healthy=false (expected: false)
+[2026-08-21T13:24:41.895Z]     Capability health after failure: ready=2, blocked=4
+[2026-08-21T13:24:41.895Z]     Restarting protoforge-core...
+[2026-08-21T13:24:41.917Z]     Restart spawned (PID: 27524)
+[2026-08-21T13:25:42.203Z] 
+[2026-08-21T13:25:42.203Z]   ── Failure Class B: Simulate dependency unavailability ──
+[2026-08-21T13:25:42.216Z]     Before: Ollama healthy=true
+[2026-08-21T13:25:42.221Z]     Bad probe: status=404 (expected: 404)
+[2026-08-21T13:25:42.222Z]     Ollama still healthy: true (target is NOT misdiagnosed)
+[2026-08-21T13:25:42.231Z]     Capability health during Class B: ready=2, blocked=4
+[2026-08-21T13:25:42.231Z] 
+[2026-08-21T13:25:42.231Z]   ── Failure Class C: Observation failure / stale signal ──
+[2026-08-21T13:26:07.714Z]     Health provenance: overall=UNAVAILABLE
+[2026-08-21T13:26:07.714Z]     Components checked: 9
+[2026-08-21T13:26:07.714Z]       database: state=HEALTHY, evidence=[{"check":"rest-reachable","status":"pass","value":"HTTP 200
+[2026-08-21T13:26:07.714Z]       supabase_db: state=HEALTHY, evidence=[{"check":"docker-inspect","status":"pass","value":"running"
+[2026-08-21T13:26:07.714Z]       supabase_rest: state=HEALTHY, evidence=[{"check":"docker-inspect","status":"pass","value":"running"
+[2026-08-21T13:26:07.714Z]       ollama: state=HEALTHY, evidence=[{"check":"ollama-reachable","status":"pass","value":"HTTP 2
+[2026-08-21T13:26:07.714Z]       bridge: state=UNAVAILABLE, evidence=[{"check":"bridge-endpoint","status":"fail","value":"HTTP 0"
+[2026-08-21T13:26:07.714Z]       protoforge-core: state=UNAVAILABLE, evidence=[{"check":"port-listening","status":"fail","value":"port 300
+[2026-08-21T13:26:07.714Z]       heidi-web: state=UNAVAILABLE, evidence=[{"check":"port-listening","status":"pass","value":"port 300
+[2026-08-21T13:26:07.714Z]       heidi-mobile-chat: state=HEALTHY, evidence=[{"check":"port-listening","status":"pass","value":"port 300
+[2026-08-21T13:26:07.714Z]       hydi-orchestrator: state=UNKNOWN, evidence=[{"check":"in-process","status":"skip","value":"in-process m
+[2026-08-21T13:26:07.777Z]     DB healthy during observation test: true
+[2026-08-21T13:26:07.778Z]     Observer failure correctly distinguished from target failure: true
+[2026-08-21T13:26:07.778Z] 
+[2026-08-21T13:26:07.778Z] ═══ PHASE 9: MEMORY / AUDIT VERIFICATION ══════════════════
+[2026-08-21T13:26:07.778Z] 
+[2026-08-21T13:26:07.822Z]   heidi_events: 2093 total events
+[2026-08-21T13:26:07.844Z]   Recent events:
+[2026-08-21T13:26:07.844Z]     Fri Aug 21 2026 08:22:19 GMT-0500 (Central Daylight Time) | cognitive_cycle | {"phase":"record","errors":[],"cycleId":"cycle-1787318480146-583","outcome":"fai
+[2026-08-21T13:26:07.844Z]     Fri Aug 21 2026 08:20:35 GMT-0500 (Central Daylight Time) | cognitive_cycle | {"phase":"record","errors":[],"cycleId":"cycle-1787318382831-582","outcome":"fai
+[2026-08-21T13:26:07.844Z]     Fri Aug 21 2026 08:18:55 GMT-0500 (Central Daylight Time) | cognitive_cycle | {"phase":"record","errors":[],"cycleId":"cycle-1787318260602-581","outcome":"fai
+[2026-08-21T13:26:07.844Z]     Fri Aug 21 2026 08:12:42 GMT-0500 (Central Daylight Time) | cognitive_cycle | {"phase":"record","errors":[],"cycleId":"cycle-1787317947037-2","outcome":"succe
+[2026-08-21T13:26:07.845Z]     Fri Aug 21 2026 08:12:29 GMT-0500 (Central Daylight Time) | cognitive_cycle | {"phase":"record","errors":[],"cycleId":"cycle-1787317912757-1","outcome":"succe
+[2026-08-21T13:26:07.852Z]   actions: 27 total
+[2026-08-21T13:26:07.859Z]   memories: 0 total
+[2026-08-21T13:26:07.866Z]   daemon audit log: 756 entries
+[2026-08-21T13:26:07.866Z]   last audit: cycle=ssf-1787318712410-756, cycleCount=583, phase=self_sufficiency
+[2026-08-21T13:26:07.875Z] 
+Results written to: C:\Users\Owner\HYDI-System-v2\HYDI_LIVE_DEMONSTRATION_RESULTS.json

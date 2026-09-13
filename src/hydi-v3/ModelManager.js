@@ -14,6 +14,12 @@ const ADAPTER_CLASSES = {
   llamacpp: LlamaCppAdapter,
 };
 
+// NAMING COLLISION: there is a SEPARATE, unrelated class also named
+// `ModelManager` at lib/ModelManager.ts. That one is the real backend for
+// the live /api/chat endpoint. THIS one is scoped to the HYDI V3
+// reliability/autonomy layer only (see src/hydi-v3/RUNBOOKS.md) and is not
+// wired into the chat path. Do not confuse the two when importing
+// "ModelManager".
 class ModelManager {
   constructor(config = {}) {
     this.config = new ModelConfiguration(config);

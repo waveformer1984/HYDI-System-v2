@@ -1,0 +1,2426 @@
+[
+  {
+    "id": "ef016572-4e26-48a9-85f6-d8879d35957f",
+    "mission": "protoforge.daily_opportunity_scan",
+    "product": "rezonate",
+    "dedup_hash": "d0cb8897142476046f0642897ce547520d1b214296fbf249f94403dd9a6d4cf5",
+    "title": "Google Lyria 3.5 music generation (public preview)",
+    "why_it_matters": "Matches 1 tracked term(s) for rezonate: music generation.",
+    "required_action": "Needs a human read to judge relevance before any follow-up.",
+    "estimated_value": "unknown -- not estimated in v1 (no fabricated dollar figures)",
+    "confidence": 33,
+    "status": "needs_review",
+    "approval_status": "pending",
+    "approved_by": null,
+    "approved_at": null,
+    "source_type": "hn_algolia",
+    "evidence": [
+      {
+        "snippet": "Google Lyria 3.5 music generation (public preview)",
+        "raw_score": 3,
+        "fetched_at": "2026-09-10T23:09:28.910Z",
+        "source_url": "https://blog.google/innovation-and-ai/models-and-research/google-labs/lyria-3-5/"
+      }
+    ],
+    "scoring_detail": {
+      "query": "AI music generation",
+      "recency": 54,
+      "weights": {
+        "recency": 0.2,
+        "relevance": 0.5,
+        "engagement": 0.3
+      },
+      "relevance": 33,
+      "engagement": 20,
+      "matchedKeywords": [
+        "music generation"
+      ]
+    },
+    "discovered_at": "2026-09-10T23:09:28.91+00:00",
+    "created_at": "2026-09-10T23:09:33.226506+00:00",
+    "updated_at": "2026-09-10T23:09:33.226506+00:00"
+  },
+  {
+    "id": "2a9a015f-c7b7-4f9c-b316-2ba132711ace",
+    "mission": "protoforge.daily_opportunity_scan",
+    "product": "rezonate",
+    "dedup_hash": "c3ba4f82425413f9afb5e128b47d2c3643a3d1363116d771747ba88afaf4328d",
+    "title": "Show HN: I built an AI music generator with some harnesses",
+    "why_it_matters": "Matches 1 tracked term(s) for rezonate: ai music.",
+    "required_action": "Needs a human read to judge relevance before any follow-up.",
+    "estimated_value": "unknown -- not estimated in v1 (no fabricated dollar figures)",
+    "confidence": 25,
+    "status": "needs_review",
+    "approval_status": "pending",
+    "approved_by": null,
+    "approved_at": null,
+    "source_type": "hn_algolia",
+    "evidence": [
+      {
+        "snippet": "Show HN: I built an AI music generator with some harnesses",
+        "raw_score": 3,
+        "fetched_at": "2026-09-10T23:09:28.910Z",
+        "source_url": "https://onlymusic.ai"
+      }
+    ],
+    "scoring_detail": {
+      "query": "AI music generation",
+      "recency": 10,
+      "weights": {
+        "recency": 0.2,
+        "relevance": 0.5,
+        "engagement": 0.3
+      },
+      "relevance": 33,
+      "engagement": 20,
+      "matchedKeywords": [
+        "ai music"
+      ]
+    },
+    "discovered_at": "2026-09-10T23:09:28.91+00:00",
+    "created_at": "2026-09-10T23:09:33.248638+00:00",
+    "updated_at": "2026-09-10T23:09:33.248638+00:00"
+  },
+  {
+    "id": "00b58df1-17d8-4b6f-b7c2-aba2c568fdca",
+    "mission": "protoforge.daily_opportunity_scan",
+    "product": "rezonate",
+    "dedup_hash": "158a754735f1399a37393091c482544238c4d28af2a2ef6daa2191b03b50d7e6",
+    "title": "Ksumiyo – AI music generation with producer-level controls",
+    "why_it_matters": "Matches 2 tracked term(s) for rezonate: ai music, music generation.",
+    "required_action": "Needs a human read to judge relevance before any follow-up.",
+    "estimated_value": "unknown -- not estimated in v1 (no fabricated dollar figures)",
+    "confidence": 39,
+    "status": "needs_review",
+    "approval_status": "pending",
+    "approved_by": null,
+    "approved_at": null,
+    "source_type": "hn_algolia",
+    "evidence": [
+      {
+        "snippet": "Ksumiyo – AI music generation with producer-level controls",
+        "raw_score": 1,
+        "fetched_at": "2026-09-10T23:09:28.910Z",
+        "source_url": "https://www.ksumiyo.com"
+      }
+    ],
+    "scoring_detail": {
+      "query": "AI music generation",
+      "recency": 10,
+      "weights": {
+        "recency": 0.2,
+        "relevance": 0.5,
+        "engagement": 0.3
+      },
+      "relevance": 67,
+      "engagement": 10,
+      "matchedKeywords": [
+        "ai music",
+        "music generation"
+      ]
+    },
+    "discovered_at": "2026-09-10T23:09:28.91+00:00",
+    "created_at": "2026-09-10T23:09:33.268696+00:00",
+    "updated_at": "2026-09-10T23:09:33.268696+00:00"
+  },
+  {
+    "id": "d02e1483-3626-4e06-a1a7-89b096604cef",
+    "mission": "protoforge.daily_opportunity_scan",
+    "product": "rezonate",
+    "dedup_hash": "5a93c2cf2ae2957e3b93f68539044ba7c32ee619145fd2231d948a5f59c9d90f",
+    "title": "Show HN: Building Table Canon, an AI Campaign Memory Engine for TTRPGs",
+    "why_it_matters": "Surfaced by query \"AI music generation\" but did not match a tracked keyword -- review before acting on it.",
+    "required_action": "No action -- filed for the record, not worth follow-up as scored.",
+    "estimated_value": "unknown -- not estimated in v1 (no fabricated dollar figures)",
+    "confidence": 9,
+    "status": "rejected",
+    "approval_status": "pending",
+    "approved_by": null,
+    "approved_at": null,
+    "source_type": "hn_algolia",
+    "evidence": [
+      {
+        "snippet": "Show HN: Building Table Canon, an AI Campaign Memory Engine for TTRPGs",
+        "raw_score": 4,
+        "fetched_at": "2026-09-10T23:09:28.910Z",
+        "source_url": "https://tablecanon.app/"
+      }
+    ],
+    "scoring_detail": {
+      "query": "AI music generation",
+      "recency": 10,
+      "weights": {
+        "recency": 0.2,
+        "relevance": 0.5,
+        "engagement": 0.3
+      },
+      "relevance": 0,
+      "engagement": 23,
+      "matchedKeywords": []
+    },
+    "discovered_at": "2026-09-10T23:09:28.91+00:00",
+    "created_at": "2026-09-10T23:09:33.28767+00:00",
+    "updated_at": "2026-09-10T23:09:33.28767+00:00"
+  },
+  {
+    "id": "a292a09e-44e1-487b-9b22-e1e4cdd4884c",
+    "mission": "protoforge.daily_opportunity_scan",
+    "product": "rezonate",
+    "dedup_hash": "00718eab54021d29d965fa37dcf0981e037c560ec765e0829d8e807dc67a1055",
+    "title": "Alibaba Launches AI Music Generation Model HappyShrimp in Beta",
+    "why_it_matters": "Matches 2 tracked term(s) for rezonate: ai music, music generation.",
+    "required_action": "Needs a human read to judge relevance before any follow-up.",
+    "estimated_value": "unknown -- not estimated in v1 (no fabricated dollar figures)",
+    "confidence": 40,
+    "status": "needs_review",
+    "approval_status": "pending",
+    "approved_by": null,
+    "approved_at": null,
+    "source_type": "hn_algolia",
+    "evidence": [
+      {
+        "snippet": "Alibaba Launches AI Music Generation Model HappyShrimp in Beta",
+        "raw_score": 2,
+        "fetched_at": "2026-09-10T23:09:28.910Z",
+        "source_url": "https://www.bloomberg.com/news/articles/2026-08-17/alibaba-launches-ai-music-generation-model-happyshrimp-in-beta"
+      }
+    ],
+    "scoring_detail": {
+      "query": "AI music generation",
+      "recency": 10,
+      "weights": {
+        "recency": 0.2,
+        "relevance": 0.5,
+        "engagement": 0.3
+      },
+      "relevance": 67,
+      "engagement": 16,
+      "matchedKeywords": [
+        "ai music",
+        "music generation"
+      ]
+    },
+    "discovered_at": "2026-09-10T23:09:28.91+00:00",
+    "created_at": "2026-09-10T23:09:33.306842+00:00",
+    "updated_at": "2026-09-10T23:09:33.306842+00:00"
+  },
+  {
+    "id": "0c8b5baf-b87a-4f4a-b92b-db9c297d5185",
+    "mission": "protoforge.daily_opportunity_scan",
+    "product": "rezonate",
+    "dedup_hash": "e5e2fe0cff6e90850e3a7e168a9651baf80a3e565a09f587e7650916e9b17ff3",
+    "title": "Show HN: Velorn – an open-source desktop video editor with MCP agent control",
+    "why_it_matters": "Surfaced by query \"AI music generation\" but did not match a tracked keyword -- review before acting on it.",
+    "required_action": "No action -- filed for the record, not worth follow-up as scored.",
+    "estimated_value": "unknown -- not estimated in v1 (no fabricated dollar figures)",
+    "confidence": 7,
+    "status": "rejected",
+    "approval_status": "pending",
+    "approved_by": null,
+    "approved_at": null,
+    "source_type": "hn_algolia",
+    "evidence": [
+      {
+        "snippet": "Show HN: Velorn – an open-source desktop video editor with MCP agent control",
+        "raw_score": 2,
+        "fetched_at": "2026-09-10T23:09:28.910Z",
+        "source_url": "https://github.com/VelornLabs/velorn"
+      }
+    ],
+    "scoring_detail": {
+      "query": "AI music generation",
+      "recency": 10,
+      "weights": {
+        "recency": 0.2,
+        "relevance": 0.5,
+        "engagement": 0.3
+      },
+      "relevance": 0,
+      "engagement": 16,
+      "matchedKeywords": []
+    },
+    "discovered_at": "2026-09-10T23:09:28.91+00:00",
+    "created_at": "2026-09-10T23:09:33.323447+00:00",
+    "updated_at": "2026-09-10T23:09:33.323447+00:00"
+  },
+  {
+    "id": "b8cba178-582f-4fa0-a51a-f3ba394c9340",
+    "mission": "protoforge.daily_opportunity_scan",
+    "product": "rezonate",
+    "dedup_hash": "a2a7e4d4b5b6397e0c33c98eadb5d1e47f664a3d1917a3009ebf3bfa205eac56",
+    "title": "Show HN: Palmier Pro – Open-source macOS video editor built for AI",
+    "why_it_matters": "Surfaced by query \"AI music generation\" but did not match a tracked keyword -- review before acting on it.",
+    "required_action": "Needs a human read to judge relevance before any follow-up.",
+    "estimated_value": "unknown -- not estimated in v1 (no fabricated dollar figures)",
+    "confidence": 25,
+    "status": "needs_review",
+    "approval_status": "pending",
+    "approved_by": null,
+    "approved_at": null,
+    "source_type": "hn_algolia",
+    "evidence": [
+      {
+        "snippet": "Show HN: Palmier Pro – Open-source macOS video editor built for AI",
+        "raw_score": 191,
+        "fetched_at": "2026-09-10T23:09:28.910Z",
+        "source_url": "https://github.com/palmier-io/palmier-pro"
+      }
+    ],
+    "scoring_detail": {
+      "query": "AI music generation",
+      "recency": 10,
+      "weights": {
+        "recency": 0.2,
+        "relevance": 0.5,
+        "engagement": 0.3
+      },
+      "relevance": 0,
+      "engagement": 76,
+      "matchedKeywords": []
+    },
+    "discovered_at": "2026-09-10T23:09:28.91+00:00",
+    "created_at": "2026-09-10T23:09:33.340687+00:00",
+    "updated_at": "2026-09-10T23:09:33.340687+00:00"
+  },
+  {
+    "id": "438e4366-4162-45e5-861f-c5e32d0462c7",
+    "mission": "protoforge.daily_opportunity_scan",
+    "product": "rezonate",
+    "dedup_hash": "f38e60df29899a5a29de55fe4b2b8bedd6b149137e71d2f1ddef72a268eecbde",
+    "title": "Show HN: Melodusk – AI Music Generator and music tools in the browser",
+    "why_it_matters": "Matches 1 tracked term(s) for rezonate: ai music.",
+    "required_action": "No action -- filed for the record, not worth follow-up as scored.",
+    "estimated_value": "unknown -- not estimated in v1 (no fabricated dollar figures)",
+    "confidence": 23,
+    "status": "rejected",
+    "approval_status": "pending",
+    "approved_by": null,
+    "approved_at": null,
+    "source_type": "hn_algolia",
+    "evidence": [
+      {
+        "snippet": "Show HN: Melodusk – AI Music Generator and music tools in the browser",
+        "raw_score": 2,
+        "fetched_at": "2026-09-10T23:09:28.910Z",
+        "source_url": "https://melodusk.ai"
+      }
+    ],
+    "scoring_detail": {
+      "query": "AI music generation",
+      "recency": 10,
+      "weights": {
+        "recency": 0.2,
+        "relevance": 0.5,
+        "engagement": 0.3
+      },
+      "relevance": 33,
+      "engagement": 16,
+      "matchedKeywords": [
+        "ai music"
+      ]
+    },
+    "discovered_at": "2026-09-10T23:09:28.91+00:00",
+    "created_at": "2026-09-10T23:09:33.356943+00:00",
+    "updated_at": "2026-09-10T23:09:33.356943+00:00"
+  },
+  {
+    "id": "18841c74-bbe4-41d6-a1bd-605767fc29e9",
+    "mission": "protoforge.daily_opportunity_scan",
+    "product": "rezonate",
+    "dedup_hash": "c758a08897df9db262f1fd89d7d0bea85e1c3654c33cb50e1f034b3238a8f509",
+    "title": "Show HN: OSS Web Based AI Video Studio (Vivijure)",
+    "why_it_matters": "Matches 1 tracked term(s) for rezonate: udio.",
+    "required_action": "No action -- filed for the record, not worth follow-up as scored.",
+    "estimated_value": "unknown -- not estimated in v1 (no fabricated dollar figures)",
+    "confidence": 23,
+    "status": "rejected",
+    "approval_status": "pending",
+    "approved_by": null,
+    "approved_at": null,
+    "source_type": "hn_algolia",
+    "evidence": [
+      {
+        "snippet": "Show HN: OSS Web Based AI Video Studio (Vivijure)",
+        "raw_score": 2,
+        "fetched_at": "2026-09-10T23:09:28.910Z",
+        "source_url": "https://news.ycombinator.com/item?id=48891809"
+      }
+    ],
+    "scoring_detail": {
+      "query": "AI music generation",
+      "recency": 10,
+      "weights": {
+        "recency": 0.2,
+        "relevance": 0.5,
+        "engagement": 0.3
+      },
+      "relevance": 33,
+      "engagement": 16,
+      "matchedKeywords": [
+        "udio"
+      ]
+    },
+    "discovered_at": "2026-09-10T23:09:28.91+00:00",
+    "created_at": "2026-09-10T23:09:33.371633+00:00",
+    "updated_at": "2026-09-10T23:09:33.371633+00:00"
+  },
+  {
+    "id": "86c10908-986a-4817-a75e-79e1d9d3070d",
+    "mission": "protoforge.daily_opportunity_scan",
+    "product": "rezonate",
+    "dedup_hash": "d8f0f010d646003cb912c3aba326ff64403063ceb41d6c653742cac25f518adb",
+    "title": "Open Weight Music Generation Models Trained on Licensed Data",
+    "why_it_matters": "Matches 1 tracked term(s) for rezonate: music generation.",
+    "required_action": "No action -- filed for the record, not worth follow-up as scored.",
+    "estimated_value": "unknown -- not estimated in v1 (no fabricated dollar figures)",
+    "confidence": 23,
+    "status": "rejected",
+    "approval_status": "pending",
+    "approved_by": null,
+    "approved_at": null,
+    "source_type": "hn_algolia",
+    "evidence": [
+      {
+        "snippet": "Open Weight Music Generation Models Trained on Licensed Data",
+        "raw_score": 2,
+        "fetched_at": "2026-09-10T23:09:28.910Z",
+        "source_url": "https://stability.ai/news-updates/meet-stable-audio-3-the-model-family-built-for-artistic-experimentation-with-open-weight-models"
+      }
+    ],
+    "scoring_detail": {
+      "query": "AI music generation",
+      "recency": 10,
+      "weights": {
+        "recency": 0.2,
+        "relevance": 0.5,
+        "engagement": 0.3
+      },
+      "relevance": 33,
+      "engagement": 16,
+      "matchedKeywords": [
+        "music generation"
+      ]
+    },
+    "discovered_at": "2026-09-10T23:09:28.91+00:00",
+    "created_at": "2026-09-10T23:09:33.463635+00:00",
+    "updated_at": "2026-09-10T23:09:33.463635+00:00"
+  },
+  {
+    "id": "7cd14792-e50a-4a26-a2e4-32d8dd6e7125",
+    "mission": "protoforge.daily_opportunity_scan",
+    "product": "rezonate",
+    "dedup_hash": "4b2f63b9835388ae71da79cd01725e3f337f7781f44d1b54fe584cdfc9cd5f3a",
+    "title": "Ask HN: Best Tool for Sharing Developer Notes, Processes, etc",
+    "why_it_matters": "Surfaced by query \"stem separation tool\" but did not match a tracked keyword -- review before acting on it.",
+    "required_action": "No action -- filed for the record, not worth follow-up as scored.",
+    "estimated_value": "unknown -- not estimated in v1 (no fabricated dollar figures)",
+    "confidence": 11,
+    "status": "rejected",
+    "approval_status": "pending",
+    "approved_by": null,
+    "approved_at": null,
+    "source_type": "hn_algolia",
+    "evidence": [
+      {
+        "snippet": "Ask HN: Best Tool for Sharing Developer Notes, Processes, etc",
+        "raw_score": 7,
+        "fetched_at": "2026-09-10T23:09:29.674Z",
+        "source_url": "https://news.ycombinator.com/item?id=5350205"
+      }
+    ],
+    "scoring_detail": {
+      "query": "stem separation tool",
+      "recency": 10,
+      "weights": {
+        "recency": 0.2,
+        "relevance": 0.5,
+        "engagement": 0.3
+      },
+      "relevance": 0,
+      "engagement": 30,
+      "matchedKeywords": []
+    },
+    "discovered_at": "2026-09-10T23:09:29.674+00:00",
+    "created_at": "2026-09-10T23:09:33.558976+00:00",
+    "updated_at": "2026-09-10T23:09:33.558976+00:00"
+  },
+  {
+    "id": "8e3f6e18-6bdd-4737-8ef0-404a6683811d",
+    "mission": "protoforge.daily_opportunity_scan",
+    "product": "rezonate",
+    "dedup_hash": "126e3eefa66df4b97f2be9767a742a55e510c660bfeadc71643d74d2c1a9484e",
+    "title": "Show HN: An open-source DAW plugin built on JUCE, React, and Lyria RealTime",
+    "why_it_matters": "Matches 1 tracked term(s) for rezonate: daw.",
+    "required_action": "No action -- filed for the record, not worth follow-up as scored.",
+    "estimated_value": "unknown -- not estimated in v1 (no fabricated dollar figures)",
+    "confidence": 23,
+    "status": "rejected",
+    "approval_status": "pending",
+    "approved_by": null,
+    "approved_at": null,
+    "source_type": "hn_algolia",
+    "evidence": [
+      {
+        "snippet": "Show HN: An open-source DAW plugin built on JUCE, React, and Lyria RealTime",
+        "raw_score": 2,
+        "fetched_at": "2026-09-10T23:09:32.070Z",
+        "source_url": "https://github.com/magenta/the-infinite-crate"
+      }
+    ],
+    "scoring_detail": {
+      "query": "music production plugin",
+      "recency": 10,
+      "weights": {
+        "recency": 0.2,
+        "relevance": 0.5,
+        "engagement": 0.3
+      },
+      "relevance": 33,
+      "engagement": 16,
+      "matchedKeywords": [
+        "daw"
+      ]
+    },
+    "discovered_at": "2026-09-10T23:09:32.07+00:00",
+    "created_at": "2026-09-10T23:09:33.632066+00:00",
+    "updated_at": "2026-09-10T23:09:33.632066+00:00"
+  },
+  {
+    "id": "c447f56a-ba5c-4203-8089-eebc99a0c9e0",
+    "mission": "protoforge.daily_opportunity_scan",
+    "product": "rezonate",
+    "dedup_hash": "4a938ff780c0fe60fe9773f07f5fc3a23e1a5baedb31b1628ba683b7dfe4ab96",
+    "title": "The Death of Music Production Plugins [video]",
+    "why_it_matters": "Matches 1 tracked term(s) for rezonate: music production.",
+    "required_action": "No action -- filed for the record, not worth follow-up as scored.",
+    "estimated_value": "unknown -- not estimated in v1 (no fabricated dollar figures)",
+    "confidence": 22,
+    "status": "rejected",
+    "approval_status": "pending",
+    "approved_by": null,
+    "approved_at": null,
+    "source_type": "hn_algolia",
+    "evidence": [
+      {
+        "snippet": "The Death of Music Production Plugins [video]",
+        "raw_score": 1,
+        "fetched_at": "2026-09-10T23:09:32.070Z",
+        "source_url": "https://www.youtube.com/watch?v=0tWHFRbooCY"
+      }
+    ],
+    "scoring_detail": {
+      "query": "music production plugin",
+      "recency": 10,
+      "weights": {
+        "recency": 0.2,
+        "relevance": 0.5,
+        "engagement": 0.3
+      },
+      "relevance": 33,
+      "engagement": 10,
+      "matchedKeywords": [
+        "music production"
+      ]
+    },
+    "discovered_at": "2026-09-10T23:09:32.07+00:00",
+    "created_at": "2026-09-10T23:09:33.70705+00:00",
+    "updated_at": "2026-09-10T23:09:33.70705+00:00"
+  },
+  {
+    "id": "8bdcb6f6-765a-480a-ae0b-19075d7b0eb9",
+    "mission": "protoforge.daily_opportunity_scan",
+    "product": "rezonate",
+    "dedup_hash": "a7721abcbf555b3de88bb8cb2e17ddae6e4d119ba552d3da2ce9ae268cfe7a8c",
+    "title": "Copyrighted Songs Were Fed to AI Music Generators, Now There's Proof",
+    "why_it_matters": "Matches 1 tracked term(s) for rezonate: ai music.",
+    "required_action": "Needs a human read to judge relevance before any follow-up.",
+    "estimated_value": "unknown -- not estimated in v1 (no fabricated dollar figures)",
+    "confidence": 25,
+    "status": "needs_review",
+    "approval_status": "pending",
+    "approved_by": null,
+    "approved_at": null,
+    "source_type": "hn_algolia",
+    "evidence": [
+      {
+        "snippet": "Copyrighted Songs Were Fed to AI Music Generators, Now There's Proof",
+        "raw_score": 3,
+        "fetched_at": "2026-09-10T23:09:32.810Z",
+        "source_url": "https://www.gadgetreview.com/millions-of-copyrighted-songs-were-fed-to-ai-music-generators-now-theres-proof"
+      }
+    ],
+    "scoring_detail": {
+      "query": "AI song generator",
+      "recency": 10,
+      "weights": {
+        "recency": 0.2,
+        "relevance": 0.5,
+        "engagement": 0.3
+      },
+      "relevance": 33,
+      "engagement": 20,
+      "matchedKeywords": [
+        "ai music"
+      ]
+    },
+    "discovered_at": "2026-09-10T23:09:32.81+00:00",
+    "created_at": "2026-09-10T23:09:33.84088+00:00",
+    "updated_at": "2026-09-10T23:09:33.84088+00:00"
+  },
+  {
+    "id": "8b8e83cc-b763-4210-828d-4b2086658ab5",
+    "mission": "protoforge.daily_opportunity_scan",
+    "product": "rezonate",
+    "dedup_hash": "ad109b0c2915b575b9e3ec0f8e42355a439e84481d1b7c92d4dea4cda25ab6fa",
+    "title": "Show HN: Built AI Music Generator Using Claude 4.5 and 4.6",
+    "why_it_matters": "Matches 1 tracked term(s) for rezonate: ai music.",
+    "required_action": "No action -- filed for the record, not worth follow-up as scored.",
+    "estimated_value": "unknown -- not estimated in v1 (no fabricated dollar figures)",
+    "confidence": 22,
+    "status": "rejected",
+    "approval_status": "pending",
+    "approved_by": null,
+    "approved_at": null,
+    "source_type": "hn_algolia",
+    "evidence": [
+      {
+        "snippet": "Show HN: Built AI Music Generator Using Claude 4.5 and 4.6",
+        "raw_score": 1,
+        "fetched_at": "2026-09-10T23:09:32.810Z",
+        "source_url": "https://trymusic.ai"
+      }
+    ],
+    "scoring_detail": {
+      "query": "AI song generator",
+      "recency": 10,
+      "weights": {
+        "recency": 0.2,
+        "relevance": 0.5,
+        "engagement": 0.3
+      },
+      "relevance": 33,
+      "engagement": 10,
+      "matchedKeywords": [
+        "ai music"
+      ]
+    },
+    "discovered_at": "2026-09-10T23:09:32.81+00:00",
+    "created_at": "2026-09-10T23:09:33.906978+00:00",
+    "updated_at": "2026-09-10T23:09:33.906978+00:00"
+  },
+  {
+    "id": "7b367586-ba11-43e1-bd6c-92015cc0ad94",
+    "mission": "protoforge.daily_opportunity_scan",
+    "product": "rezonate",
+    "dedup_hash": "0ceaae87bb45a163a297406c6368c8dbd83f56e2372ef62cc1abb4832ea8f7ff",
+    "title": "Show HN: Magenta Real-Time Music Generation Locally on iPhone, Without the GPU",
+    "why_it_matters": "Matches 1 tracked term(s) for rezonate: music generation.",
+    "required_action": "Needs a human read to judge relevance before any follow-up.",
+    "estimated_value": "unknown -- not estimated in v1 (no fabricated dollar figures)",
+    "confidence": 28,
+    "status": "needs_review",
+    "approval_status": "pending",
+    "approved_by": null,
+    "approved_at": null,
+    "source_type": "hn_algolia",
+    "evidence": [
+      {
+        "snippet": "Show HN: Magenta Real-Time Music Generation Locally on iPhone, Without the GPU",
+        "raw_score": 9,
+        "fetched_at": "2026-09-10T23:09:28.910Z",
+        "source_url": "https://github.com/mattmireles/magenta-realtime-2-iphone"
+      }
+    ],
+    "scoring_detail": {
+      "query": "AI music generation",
+      "recency": 10,
+      "weights": {
+        "recency": 0.2,
+        "relevance": 0.5,
+        "engagement": 0.3
+      },
+      "relevance": 33,
+      "engagement": 33,
+      "matchedKeywords": [
+        "music generation"
+      ]
+    },
+    "discovered_at": "2026-09-10T23:09:28.91+00:00",
+    "created_at": "2026-09-10T23:09:33.385492+00:00",
+    "updated_at": "2026-09-10T23:09:33.385492+00:00"
+  },
+  {
+    "id": "d93dea4b-7922-4020-8354-0a1b50300ac2",
+    "mission": "protoforge.daily_opportunity_scan",
+    "product": "rezonate",
+    "dedup_hash": "7cfff1e4d996e34785c9b88a6c8f5c7bdc6ff8dabea6288157645663d557533c",
+    "title": "Show HN: Melogen – Generate MIDI melodies for free",
+    "why_it_matters": "Surfaced by query \"AI music generation\" but did not match a tracked keyword -- review before acting on it.",
+    "required_action": "No action -- filed for the record, not worth follow-up as scored.",
+    "estimated_value": "unknown -- not estimated in v1 (no fabricated dollar figures)",
+    "confidence": 9,
+    "status": "rejected",
+    "approval_status": "pending",
+    "approved_by": null,
+    "approved_at": null,
+    "source_type": "hn_algolia",
+    "evidence": [
+      {
+        "snippet": "Show HN: Melogen – Generate MIDI melodies for free",
+        "raw_score": 4,
+        "fetched_at": "2026-09-10T23:09:28.910Z",
+        "source_url": "https://www.melogen.ai/"
+      }
+    ],
+    "scoring_detail": {
+      "query": "AI music generation",
+      "recency": 10,
+      "weights": {
+        "recency": 0.2,
+        "relevance": 0.5,
+        "engagement": 0.3
+      },
+      "relevance": 0,
+      "engagement": 23,
+      "matchedKeywords": []
+    },
+    "discovered_at": "2026-09-10T23:09:28.91+00:00",
+    "created_at": "2026-09-10T23:09:33.48167+00:00",
+    "updated_at": "2026-09-10T23:09:33.48167+00:00"
+  },
+  {
+    "id": "a06db43e-eeeb-4970-9a9e-2dad11f48239",
+    "mission": "protoforge.daily_opportunity_scan",
+    "product": "rezonate",
+    "dedup_hash": "d9237b27fabe32fa53a08a172c2ef819737a82c96f9d94d90a58fa655d0bd2ab",
+    "title": "I automated image quotes creation for social media",
+    "why_it_matters": "Surfaced by query \"royalty free sample pack\" but did not match a tracked keyword -- review before acting on it.",
+    "required_action": "No action -- filed for the record, not worth follow-up as scored.",
+    "estimated_value": "unknown -- not estimated in v1 (no fabricated dollar figures)",
+    "confidence": 5,
+    "status": "rejected",
+    "approval_status": "pending",
+    "approved_by": null,
+    "approved_at": null,
+    "source_type": "hn_algolia",
+    "evidence": [
+      {
+        "snippet": "I automated image quotes creation for social media",
+        "raw_score": 1,
+        "fetched_at": "2026-09-10T23:09:30.404Z",
+        "source_url": "https://news.ycombinator.com/item?id=22022963"
+      }
+    ],
+    "scoring_detail": {
+      "query": "royalty free sample pack",
+      "recency": 10,
+      "weights": {
+        "recency": 0.2,
+        "relevance": 0.5,
+        "engagement": 0.3
+      },
+      "relevance": 0,
+      "engagement": 10,
+      "matchedKeywords": []
+    },
+    "discovered_at": "2026-09-10T23:09:30.404+00:00",
+    "created_at": "2026-09-10T23:09:33.572125+00:00",
+    "updated_at": "2026-09-10T23:09:33.572125+00:00"
+  },
+  {
+    "id": "263c11d2-240d-456d-bd2f-6d91c81e4804",
+    "mission": "protoforge.daily_opportunity_scan",
+    "product": "rezonate",
+    "dedup_hash": "454295fbe6df90697c86ee83bc53c8df29cfccf2f0dd8f41411d38376e8b126c",
+    "title": "Google should build a VST/AU Metadata Bridge instead of another AI generator",
+    "why_it_matters": "Surfaced by query \"music production plugin\" but did not match a tracked keyword -- review before acting on it.",
+    "required_action": "No action -- filed for the record, not worth follow-up as scored.",
+    "estimated_value": "unknown -- not estimated in v1 (no fabricated dollar figures)",
+    "confidence": 5,
+    "status": "rejected",
+    "approval_status": "pending",
+    "approved_by": null,
+    "approved_at": null,
+    "source_type": "hn_algolia",
+    "evidence": [
+      {
+        "snippet": "Google should build a VST/AU Metadata Bridge instead of another AI generator",
+        "raw_score": 1,
+        "fetched_at": "2026-09-10T23:09:32.070Z",
+        "source_url": "https://news.ycombinator.com/item?id=46657077"
+      }
+    ],
+    "scoring_detail": {
+      "query": "music production plugin",
+      "recency": 10,
+      "weights": {
+        "recency": 0.2,
+        "relevance": 0.5,
+        "engagement": 0.3
+      },
+      "relevance": 0,
+      "engagement": 10,
+      "matchedKeywords": []
+    },
+    "discovered_at": "2026-09-10T23:09:32.07+00:00",
+    "created_at": "2026-09-10T23:09:33.648673+00:00",
+    "updated_at": "2026-09-10T23:09:33.648673+00:00"
+  },
+  {
+    "id": "7939e7c0-0192-46dd-8641-3726ee777a44",
+    "mission": "protoforge.daily_opportunity_scan",
+    "product": "rezonate",
+    "dedup_hash": "a6ec52979df3daf8e7559187aed1bf390088723fcce814ee6d8a73f739fe8ce4",
+    "title": "Show HN: I Built Presync.io – A macOS Music Production Tools AppStore",
+    "why_it_matters": "Matches 1 tracked term(s) for rezonate: music production.",
+    "required_action": "Needs a human read to judge relevance before any follow-up.",
+    "estimated_value": "unknown -- not estimated in v1 (no fabricated dollar figures)",
+    "confidence": 28,
+    "status": "needs_review",
+    "approval_status": "pending",
+    "approved_by": null,
+    "approved_at": null,
+    "source_type": "hn_algolia",
+    "evidence": [
+      {
+        "snippet": "Show HN: I Built Presync.io – A macOS Music Production Tools AppStore",
+        "raw_score": 7,
+        "fetched_at": "2026-09-10T23:09:32.070Z",
+        "source_url": "https://presync.io"
+      }
+    ],
+    "scoring_detail": {
+      "query": "music production plugin",
+      "recency": 10,
+      "weights": {
+        "recency": 0.2,
+        "relevance": 0.5,
+        "engagement": 0.3
+      },
+      "relevance": 33,
+      "engagement": 30,
+      "matchedKeywords": [
+        "music production"
+      ]
+    },
+    "discovered_at": "2026-09-10T23:09:32.07+00:00",
+    "created_at": "2026-09-10T23:09:33.72234+00:00",
+    "updated_at": "2026-09-10T23:09:33.72234+00:00"
+  },
+  {
+    "id": "b54fb4d8-2614-4b43-a2f0-5fd99e5402ae",
+    "mission": "protoforge.daily_opportunity_scan",
+    "product": "rezonate",
+    "dedup_hash": "0bf7171e4b17e19f0c54dec8c9953ce60f67bf6e43899329c3379678fa4005ee",
+    "title": "The Millions of Songs Mashed into AI-Generated Music",
+    "why_it_matters": "Surfaced by query \"AI song generator\" but did not match a tracked keyword -- review before acting on it.",
+    "required_action": "No action -- filed for the record, not worth follow-up as scored.",
+    "estimated_value": "unknown -- not estimated in v1 (no fabricated dollar figures)",
+    "confidence": 9,
+    "status": "rejected",
+    "approval_status": "pending",
+    "approved_by": null,
+    "approved_at": null,
+    "source_type": "hn_algolia",
+    "evidence": [
+      {
+        "snippet": "The Millions of Songs Mashed into AI-Generated Music",
+        "raw_score": 4,
+        "fetched_at": "2026-09-10T23:09:32.810Z",
+        "source_url": "https://www.theatlantic.com/technology/2026/06/ai-music-generators-suno-google-udio/687485/"
+      }
+    ],
+    "scoring_detail": {
+      "query": "AI song generator",
+      "recency": 10,
+      "weights": {
+        "recency": 0.2,
+        "relevance": 0.5,
+        "engagement": 0.3
+      },
+      "relevance": 0,
+      "engagement": 23,
+      "matchedKeywords": []
+    },
+    "discovered_at": "2026-09-10T23:09:32.81+00:00",
+    "created_at": "2026-09-10T23:09:33.853801+00:00",
+    "updated_at": "2026-09-10T23:09:33.853801+00:00"
+  },
+  {
+    "id": "a20f4595-b613-4309-813c-b074c321b490",
+    "mission": "protoforge.daily_opportunity_scan",
+    "product": "rezonate",
+    "dedup_hash": "018e0c4b6ab5d9393992056b53e6f6318d8f81cdc70353aa938145e756541bab",
+    "title": "Ask HN: Are we as society going to let LLM companies take all the values?",
+    "why_it_matters": "Surfaced by query \"AI music generation\" but did not match a tracked keyword -- review before acting on it.",
+    "required_action": "No action -- filed for the record, not worth follow-up as scored.",
+    "estimated_value": "unknown -- not estimated in v1 (no fabricated dollar figures)",
+    "confidence": 17,
+    "status": "rejected",
+    "approval_status": "pending",
+    "approved_by": null,
+    "approved_at": null,
+    "source_type": "hn_algolia",
+    "evidence": [
+      {
+        "snippet": "Ask HN: Are we as society going to let LLM companies take all the values?",
+        "raw_score": 31,
+        "fetched_at": "2026-09-10T23:09:28.910Z",
+        "source_url": "https://news.ycombinator.com/item?id=48439240"
+      }
+    ],
+    "scoring_detail": {
+      "query": "AI music generation",
+      "recency": 10,
+      "weights": {
+        "recency": 0.2,
+        "relevance": 0.5,
+        "engagement": 0.3
+      },
+      "relevance": 0,
+      "engagement": 50,
+      "matchedKeywords": []
+    },
+    "discovered_at": "2026-09-10T23:09:28.91+00:00",
+    "created_at": "2026-09-10T23:09:33.399099+00:00",
+    "updated_at": "2026-09-10T23:09:33.399099+00:00"
+  },
+  {
+    "id": "2f2ec737-9587-47f9-9a1d-718b875ed76e",
+    "mission": "protoforge.daily_opportunity_scan",
+    "product": "rezonate",
+    "dedup_hash": "482681a5ad64febcef34fdbaef2b8685a22d8e580703aa97c2d1c83243573de4",
+    "title": "Show HN: Agent-desktop – Native desktop automation CLI for AI agents",
+    "why_it_matters": "Surfaced by query \"stem separation tool\" but did not match a tracked keyword -- review before acting on it.",
+    "required_action": "No action -- filed for the record, not worth follow-up as scored.",
+    "estimated_value": "unknown -- not estimated in v1 (no fabricated dollar figures)",
+    "confidence": 22,
+    "status": "rejected",
+    "approval_status": "pending",
+    "approved_by": null,
+    "approved_at": null,
+    "source_type": "hn_algolia",
+    "evidence": [
+      {
+        "snippet": "Show HN: Agent-desktop – Native desktop automation CLI for AI agents",
+        "raw_score": 99,
+        "fetched_at": "2026-09-10T23:09:29.674Z",
+        "source_url": "https://github.com/lahfir/agent-desktop"
+      }
+    ],
+    "scoring_detail": {
+      "query": "stem separation tool",
+      "recency": 10,
+      "weights": {
+        "recency": 0.2,
+        "relevance": 0.5,
+        "engagement": 0.3
+      },
+      "relevance": 0,
+      "engagement": 67,
+      "matchedKeywords": []
+    },
+    "discovered_at": "2026-09-10T23:09:29.674+00:00",
+    "created_at": "2026-09-10T23:09:33.497526+00:00",
+    "updated_at": "2026-09-10T23:09:33.497526+00:00"
+  },
+  {
+    "id": "58395fe2-128b-41c7-b799-fcd4a8926d2c",
+    "mission": "protoforge.daily_opportunity_scan",
+    "product": "rezonate",
+    "dedup_hash": "73660b6909b8c40c32bad8e1322520ab1a392287037091d33c82dafb00b3cfef",
+    "title": "Tell HN: Dealing with VCs, my experience",
+    "why_it_matters": "Surfaced by query \"royalty free sample pack\" but did not match a tracked keyword -- review before acting on it.",
+    "required_action": "Needs a human read to judge relevance before any follow-up.",
+    "estimated_value": "unknown -- not estimated in v1 (no fabricated dollar figures)",
+    "confidence": 25,
+    "status": "needs_review",
+    "approval_status": "pending",
+    "approved_by": null,
+    "approved_at": null,
+    "source_type": "hn_algolia",
+    "evidence": [
+      {
+        "snippet": "Tell HN: Dealing with VCs, my experience",
+        "raw_score": 183,
+        "fetched_at": "2026-09-10T23:09:30.404Z",
+        "source_url": "https://news.ycombinator.com/item?id=866299"
+      }
+    ],
+    "scoring_detail": {
+      "query": "royalty free sample pack",
+      "recency": 10,
+      "weights": {
+        "recency": 0.2,
+        "relevance": 0.5,
+        "engagement": 0.3
+      },
+      "relevance": 0,
+      "engagement": 75,
+      "matchedKeywords": []
+    },
+    "discovered_at": "2026-09-10T23:09:30.404+00:00",
+    "created_at": "2026-09-10T23:09:33.584698+00:00",
+    "updated_at": "2026-09-10T23:09:33.584698+00:00"
+  },
+  {
+    "id": "070b1f16-de21-4275-8caa-f1242dac732b",
+    "mission": "protoforge.daily_opportunity_scan",
+    "product": "rezonate",
+    "dedup_hash": "a02e722c7bf8a2dbdf1c8e1f4ff3a9b50b4ea1c816d794cddbbe0a2565ec197f",
+    "title": "Show HN: PowerKit for Tmux – 32 Plugins",
+    "why_it_matters": "Surfaced by query \"music production plugin\" but did not match a tracked keyword -- review before acting on it.",
+    "required_action": "No action -- filed for the record, not worth follow-up as scored.",
+    "estimated_value": "unknown -- not estimated in v1 (no fabricated dollar figures)",
+    "confidence": 8,
+    "status": "rejected",
+    "approval_status": "pending",
+    "approved_by": null,
+    "approved_at": null,
+    "source_type": "hn_algolia",
+    "evidence": [
+      {
+        "snippet": "Show HN: PowerKit for Tmux – 32 Plugins",
+        "raw_score": 3,
+        "fetched_at": "2026-09-10T23:09:32.070Z",
+        "source_url": "https://github.com/fabioluciano/tmux-powerkit"
+      }
+    ],
+    "scoring_detail": {
+      "query": "music production plugin",
+      "recency": 10,
+      "weights": {
+        "recency": 0.2,
+        "relevance": 0.5,
+        "engagement": 0.3
+      },
+      "relevance": 0,
+      "engagement": 20,
+      "matchedKeywords": []
+    },
+    "discovered_at": "2026-09-10T23:09:32.07+00:00",
+    "created_at": "2026-09-10T23:09:33.663372+00:00",
+    "updated_at": "2026-09-10T23:09:33.663372+00:00"
+  },
+  {
+    "id": "4a54acac-5e4a-4d53-8e01-a68c932b3ab5",
+    "mission": "protoforge.daily_opportunity_scan",
+    "product": "rezonate",
+    "dedup_hash": "949e2c9167347afeeb26306b21fb6a65ecc6a2145f801dbe6e01e3013e7acc9b",
+    "title": "Show HN: Anyma V, a hybrid physical modelling virtual instrument",
+    "why_it_matters": "Surfaced by query \"music production plugin\" but did not match a tracked keyword -- review before acting on it.",
+    "required_action": "No action -- filed for the record, not worth follow-up as scored.",
+    "estimated_value": "unknown -- not estimated in v1 (no fabricated dollar figures)",
+    "confidence": 21,
+    "status": "rejected",
+    "approval_status": "pending",
+    "approved_by": null,
+    "approved_at": null,
+    "source_type": "hn_algolia",
+    "evidence": [
+      {
+        "snippet": "Show HN: Anyma V, a hybrid physical modelling virtual instrument",
+        "raw_score": 79,
+        "fetched_at": "2026-09-10T23:09:32.070Z",
+        "source_url": "https://aodyo.com/anyma-v/"
+      }
+    ],
+    "scoring_detail": {
+      "query": "music production plugin",
+      "recency": 10,
+      "weights": {
+        "recency": 0.2,
+        "relevance": 0.5,
+        "engagement": 0.3
+      },
+      "relevance": 0,
+      "engagement": 63,
+      "matchedKeywords": []
+    },
+    "discovered_at": "2026-09-10T23:09:32.07+00:00",
+    "created_at": "2026-09-10T23:09:33.73683+00:00",
+    "updated_at": "2026-09-10T23:09:33.73683+00:00"
+  },
+  {
+    "id": "ed27ee84-3292-4fc9-a0d8-3d9e8db6f683",
+    "mission": "protoforge.daily_opportunity_scan",
+    "product": "rezonate",
+    "dedup_hash": "03b3b7b52900836b89ae024202ef7cb2bd7b62463d3a813b638a7b0b4edb2f28",
+    "title": "Show HN: Free AI Lyrics Generator",
+    "why_it_matters": "Surfaced by query \"AI song generator\" but did not match a tracked keyword -- review before acting on it.",
+    "required_action": "No action -- filed for the record, not worth follow-up as scored.",
+    "estimated_value": "unknown -- not estimated in v1 (no fabricated dollar figures)",
+    "confidence": 5,
+    "status": "rejected",
+    "approval_status": "pending",
+    "approved_by": null,
+    "approved_at": null,
+    "source_type": "hn_algolia",
+    "evidence": [
+      {
+        "snippet": "Show HN: Free AI Lyrics Generator",
+        "raw_score": 1,
+        "fetched_at": "2026-09-10T23:09:32.810Z",
+        "source_url": "https://tinymusic.ai/ai-lyrics-generator"
+      }
+    ],
+    "scoring_detail": {
+      "query": "AI song generator",
+      "recency": 10,
+      "weights": {
+        "recency": 0.2,
+        "relevance": 0.5,
+        "engagement": 0.3
+      },
+      "relevance": 0,
+      "engagement": 10,
+      "matchedKeywords": []
+    },
+    "discovered_at": "2026-09-10T23:09:32.81+00:00",
+    "created_at": "2026-09-10T23:09:33.86676+00:00",
+    "updated_at": "2026-09-10T23:09:33.86676+00:00"
+  },
+  {
+    "id": "e5345713-fb08-4b4f-ae29-513a2f4ea3f3",
+    "mission": "protoforge.daily_opportunity_scan",
+    "product": "rezonate",
+    "dedup_hash": "b628ad8117108fbf7b11c4b106ce631495ca99cf69fa18199291900c1cadc233",
+    "title": "The Importance of Personal Archiving",
+    "why_it_matters": "Surfaced by query \"AI song generator\" but did not match a tracked keyword -- review before acting on it.",
+    "required_action": "No action -- filed for the record, not worth follow-up as scored.",
+    "estimated_value": "unknown -- not estimated in v1 (no fabricated dollar figures)",
+    "confidence": 18,
+    "status": "rejected",
+    "approval_status": "pending",
+    "approved_by": null,
+    "approved_at": null,
+    "source_type": "hn_algolia",
+    "evidence": [
+      {
+        "snippet": "The Importance of Personal Archiving",
+        "raw_score": 4,
+        "fetched_at": "2026-09-10T23:10:59.795Z",
+        "source_url": "https://news.ycombinator.com/item?id=49552636"
+      }
+    ],
+    "scoring_detail": {
+      "query": "AI song generator",
+      "recency": 53,
+      "weights": {
+        "recency": 0.2,
+        "relevance": 0.5,
+        "engagement": 0.3
+      },
+      "relevance": 0,
+      "engagement": 23,
+      "matchedKeywords": []
+    },
+    "discovered_at": "2026-09-10T23:10:59.795+00:00",
+    "created_at": "2026-09-10T23:11:31.609429+00:00",
+    "updated_at": "2026-09-10T23:11:31.609429+00:00"
+  },
+  {
+    "id": "ef325e04-8025-4fd0-87e5-d74358bab7a7",
+    "mission": "protoforge.daily_opportunity_scan",
+    "product": "rezonate",
+    "dedup_hash": "2490e4605b3ad1dbd4f328b24517429357f036f0ed70490054eb2b333bbc6566",
+    "title": "Show HN: I built one of the most advanced web-based drum/beat sequencers",
+    "why_it_matters": "Surfaced by query \"AI song generator\" but did not match a tracked keyword -- review before acting on it.",
+    "required_action": "No action -- filed for the record, not worth follow-up as scored.",
+    "estimated_value": "unknown -- not estimated in v1 (no fabricated dollar figures)",
+    "confidence": 9,
+    "status": "rejected",
+    "approval_status": "pending",
+    "approved_by": null,
+    "approved_at": null,
+    "source_type": "hn_algolia",
+    "evidence": [
+      {
+        "snippet": "Show HN: I built one of the most advanced web-based drum/beat sequencers",
+        "raw_score": 4,
+        "fetched_at": "2026-09-10T23:10:59.795Z",
+        "source_url": "https://maximecb.github.io/groovie/#a_96_bar_berlin_techno_arrangement/FdAnck8QxEjUoejHv1EvwfEK6CeBmwopEcII9JpEroPEWkq1BNYCSCCGuJfjJXg-IlIsCRaIxHSJy3kypqJbIWInFCJnoAKRACYV6k66nWHiLAkKcUOiNHoJYx8spdj6AiiApQ4MYQYiORhGkyyR7YlJspwJJsWUzW0gmxi1h5BQCgiABSWcUtGvoirKXQx6x8gkTVroJyQDVpJIPpIGD0lvoyQHMeHgCKIFK8SfJ5dlnnng"
+      }
+    ],
+    "scoring_detail": {
+      "query": "AI song generator",
+      "recency": 10,
+      "weights": {
+        "recency": 0.2,
+        "relevance": 0.5,
+        "engagement": 0.3
+      },
+      "relevance": 0,
+      "engagement": 23,
+      "matchedKeywords": []
+    },
+    "discovered_at": "2026-09-10T23:10:59.795+00:00",
+    "created_at": "2026-09-10T23:11:31.698646+00:00",
+    "updated_at": "2026-09-10T23:11:31.698646+00:00"
+  },
+  {
+    "id": "1e8bb7f2-2ea7-45f5-a34e-0b94bacd87d0",
+    "mission": "protoforge.daily_opportunity_scan",
+    "product": "rezonate",
+    "dedup_hash": "fcace750afcd55f3d33c7838fe45a0af25532e7a19931248e58e26f62c9a9fd1",
+    "title": "Show HN: an AI app that settles small couple arguments",
+    "why_it_matters": "Surfaced by query \"AI music generation\" but did not match a tracked keyword -- review before acting on it.",
+    "required_action": "No action -- filed for the record, not worth follow-up as scored.",
+    "estimated_value": "unknown -- not estimated in v1 (no fabricated dollar figures)",
+    "confidence": 11,
+    "status": "rejected",
+    "approval_status": "pending",
+    "approved_by": null,
+    "approved_at": null,
+    "source_type": "hn_algolia",
+    "evidence": [
+      {
+        "snippet": "Show HN: an AI app that settles small couple arguments",
+        "raw_score": 7,
+        "fetched_at": "2026-09-10T23:09:28.910Z",
+        "source_url": "https://thepiece.app/en"
+      }
+    ],
+    "scoring_detail": {
+      "query": "AI music generation",
+      "recency": 10,
+      "weights": {
+        "recency": 0.2,
+        "relevance": 0.5,
+        "engagement": 0.3
+      },
+      "relevance": 0,
+      "engagement": 30,
+      "matchedKeywords": []
+    },
+    "discovered_at": "2026-09-10T23:09:28.91+00:00",
+    "created_at": "2026-09-10T23:09:33.41296+00:00",
+    "updated_at": "2026-09-10T23:09:33.41296+00:00"
+  },
+  {
+    "id": "ac6d7373-6250-4816-809b-07379a6fc754",
+    "mission": "protoforge.daily_opportunity_scan",
+    "product": "rezonate",
+    "dedup_hash": "c20f99677de165d27dbf54096373df68efa008bbf8116866402a5bc2eec64717",
+    "title": "Ask HN: MicroVM setup for VS Code Dev Container-like experience?",
+    "why_it_matters": "Surfaced by query \"stem separation tool\" but did not match a tracked keyword -- review before acting on it.",
+    "required_action": "No action -- filed for the record, not worth follow-up as scored.",
+    "estimated_value": "unknown -- not estimated in v1 (no fabricated dollar figures)",
+    "confidence": 13,
+    "status": "rejected",
+    "approval_status": "pending",
+    "approved_by": null,
+    "approved_at": null,
+    "source_type": "hn_algolia",
+    "evidence": [
+      {
+        "snippet": "Ask HN: MicroVM setup for VS Code Dev Container-like experience?",
+        "raw_score": 11,
+        "fetched_at": "2026-09-10T23:09:29.674Z",
+        "source_url": "https://news.ycombinator.com/item?id=47898711"
+      }
+    ],
+    "scoring_detail": {
+      "query": "stem separation tool",
+      "recency": 10,
+      "weights": {
+        "recency": 0.2,
+        "relevance": 0.5,
+        "engagement": 0.3
+      },
+      "relevance": 0,
+      "engagement": 36,
+      "matchedKeywords": []
+    },
+    "discovered_at": "2026-09-10T23:09:29.674+00:00",
+    "created_at": "2026-09-10T23:09:33.530307+00:00",
+    "updated_at": "2026-09-10T23:09:33.530307+00:00"
+  },
+  {
+    "id": "2c7b1d94-2316-43fd-a350-9a4825a1aeb6",
+    "mission": "protoforge.daily_opportunity_scan",
+    "product": "rezonate",
+    "dedup_hash": "e79a722d92ca803d3584623e91cc82dcc90979ef806a41f914edd8cd753f9316",
+    "title": "Best Music Distributors in 2026",
+    "why_it_matters": "Surfaced by query \"sync licensing music\" but did not match a tracked keyword -- review before acting on it.",
+    "required_action": "No action -- filed for the record, not worth follow-up as scored.",
+    "estimated_value": "unknown -- not estimated in v1 (no fabricated dollar figures)",
+    "confidence": 5,
+    "status": "rejected",
+    "approval_status": "pending",
+    "approved_by": null,
+    "approved_at": null,
+    "source_type": "hn_algolia",
+    "evidence": [
+      {
+        "snippet": "Best Music Distributors in 2026",
+        "raw_score": 1,
+        "fetched_at": "2026-09-10T23:09:31.286Z",
+        "source_url": "https://news.ycombinator.com/item?id=47293234"
+      }
+    ],
+    "scoring_detail": {
+      "query": "sync licensing music",
+      "recency": 10,
+      "weights": {
+        "recency": 0.2,
+        "relevance": 0.5,
+        "engagement": 0.3
+      },
+      "relevance": 0,
+      "engagement": 10,
+      "matchedKeywords": []
+    },
+    "discovered_at": "2026-09-10T23:09:31.286+00:00",
+    "created_at": "2026-09-10T23:09:33.598218+00:00",
+    "updated_at": "2026-09-10T23:09:33.598218+00:00"
+  },
+  {
+    "id": "e11b8ba3-0037-4119-b310-d460fb989b6e",
+    "mission": "protoforge.daily_opportunity_scan",
+    "product": "rezonate",
+    "dedup_hash": "ddb5a4f0d1630b60257310e8ec46018f6cd72839f03810acc38f5beaea82aea9",
+    "title": "Show HN: A generative audio VST plugin using Gemini API, JUCE, and React",
+    "why_it_matters": "Matches 1 tracked term(s) for rezonate: udio.",
+    "required_action": "Needs a human read to judge relevance before any follow-up.",
+    "estimated_value": "unknown -- not estimated in v1 (no fabricated dollar figures)",
+    "confidence": 26,
+    "status": "needs_review",
+    "approval_status": "pending",
+    "approved_by": null,
+    "approved_at": null,
+    "source_type": "hn_algolia",
+    "evidence": [
+      {
+        "snippet": "Show HN: A generative audio VST plugin using Gemini API, JUCE, and React",
+        "raw_score": 5,
+        "fetched_at": "2026-09-10T23:09:32.070Z",
+        "source_url": "https://news.ycombinator.com/item?id=44515999"
+      }
+    ],
+    "scoring_detail": {
+      "query": "music production plugin",
+      "recency": 10,
+      "weights": {
+        "recency": 0.2,
+        "relevance": 0.5,
+        "engagement": 0.3
+      },
+      "relevance": 33,
+      "engagement": 26,
+      "matchedKeywords": [
+        "udio"
+      ]
+    },
+    "discovered_at": "2026-09-10T23:09:32.07+00:00",
+    "created_at": "2026-09-10T23:09:33.677093+00:00",
+    "updated_at": "2026-09-10T23:09:33.677093+00:00"
+  },
+  {
+    "id": "76c61120-43f1-46bc-9661-b8e219ac9486",
+    "mission": "protoforge.daily_opportunity_scan",
+    "product": "rezonate",
+    "dedup_hash": "a1300e364db6e9b0b2b90a391dd2a8684989915dd865681904147b1989a8b767",
+    "title": "Show HN: Hallucinote, integrating Ableton and Claude Code",
+    "why_it_matters": "Surfaced by query \"AI song generator\" but did not match a tracked keyword -- review before acting on it.",
+    "required_action": "No action -- filed for the record, not worth follow-up as scored.",
+    "estimated_value": "unknown -- not estimated in v1 (no fabricated dollar figures)",
+    "confidence": 8,
+    "status": "rejected",
+    "approval_status": "pending",
+    "approved_by": null,
+    "approved_at": null,
+    "source_type": "hn_algolia",
+    "evidence": [
+      {
+        "snippet": "Show HN: Hallucinote, integrating Ableton and Claude Code",
+        "raw_score": 3,
+        "fetched_at": "2026-09-10T23:09:32.810Z",
+        "source_url": "https://github.com/brookstalley/hallucinote"
+      }
+    ],
+    "scoring_detail": {
+      "query": "AI song generator",
+      "recency": 10,
+      "weights": {
+        "recency": 0.2,
+        "relevance": 0.5,
+        "engagement": 0.3
+      },
+      "relevance": 0,
+      "engagement": 20,
+      "matchedKeywords": []
+    },
+    "discovered_at": "2026-09-10T23:09:32.81+00:00",
+    "created_at": "2026-09-10T23:09:33.814898+00:00",
+    "updated_at": "2026-09-10T23:09:33.814898+00:00"
+  },
+  {
+    "id": "061f451c-a977-4aa7-b148-127594dcc9a0",
+    "mission": "protoforge.daily_opportunity_scan",
+    "product": "rezonate",
+    "dedup_hash": "e49d8e257cfa12369ab201d33dcb53c68dc834d7aa5d4f8f38fee0cf0b879074",
+    "title": "Show HN: Staccato – Generate multi-track MIDI from text prompts [video]",
+    "why_it_matters": "Surfaced by query \"AI song generator\" but did not match a tracked keyword -- review before acting on it.",
+    "required_action": "No action -- filed for the record, not worth follow-up as scored.",
+    "estimated_value": "unknown -- not estimated in v1 (no fabricated dollar figures)",
+    "confidence": 7,
+    "status": "rejected",
+    "approval_status": "pending",
+    "approved_by": null,
+    "approved_at": null,
+    "source_type": "hn_algolia",
+    "evidence": [
+      {
+        "snippet": "Show HN: Staccato – Generate multi-track MIDI from text prompts [video]",
+        "raw_score": 2,
+        "fetched_at": "2026-09-10T23:09:32.810Z",
+        "source_url": "https://www.youtube.com/watch?v=NfvoLx6FL78"
+      }
+    ],
+    "scoring_detail": {
+      "query": "AI song generator",
+      "recency": 10,
+      "weights": {
+        "recency": 0.2,
+        "relevance": 0.5,
+        "engagement": 0.3
+      },
+      "relevance": 0,
+      "engagement": 16,
+      "matchedKeywords": []
+    },
+    "discovered_at": "2026-09-10T23:09:32.81+00:00",
+    "created_at": "2026-09-10T23:09:33.880862+00:00",
+    "updated_at": "2026-09-10T23:09:33.880862+00:00"
+  },
+  {
+    "id": "695c0744-7d44-462a-823b-289476066b88",
+    "mission": "protoforge.daily_opportunity_scan",
+    "product": "rezonate",
+    "dedup_hash": "e17a24d8dc3ec155ef493673b9802d2b7af2c1ca5c133fa66533f3504cc05443",
+    "title": "Australia's music industry bans AI songs from charts",
+    "why_it_matters": "Surfaced by query \"AI song generator\" but did not match a tracked keyword -- review before acting on it.",
+    "required_action": "No action -- filed for the record, not worth follow-up as scored.",
+    "estimated_value": "unknown -- not estimated in v1 (no fabricated dollar figures)",
+    "confidence": 9,
+    "status": "rejected",
+    "approval_status": "pending",
+    "approved_by": null,
+    "approved_at": null,
+    "source_type": "hn_algolia",
+    "evidence": [
+      {
+        "snippet": "Australia's music industry bans AI songs from charts",
+        "raw_score": 4,
+        "fetched_at": "2026-09-10T23:10:59.795Z",
+        "source_url": "https://apnews.com/article/australia-ai-generated-music-charts-ban-aria-9bfb0c91166ae4405a6df1a3c4891687"
+      }
+    ],
+    "scoring_detail": {
+      "query": "AI song generator",
+      "recency": 10,
+      "weights": {
+        "recency": 0.2,
+        "relevance": 0.5,
+        "engagement": 0.3
+      },
+      "relevance": 0,
+      "engagement": 23,
+      "matchedKeywords": []
+    },
+    "discovered_at": "2026-09-10T23:10:59.795+00:00",
+    "created_at": "2026-09-10T23:11:31.63178+00:00",
+    "updated_at": "2026-09-10T23:11:31.63178+00:00"
+  },
+  {
+    "id": "07dc85c5-60eb-4f03-b7fa-92f02cc0561a",
+    "mission": "protoforge.daily_opportunity_scan",
+    "product": "rezonate",
+    "dedup_hash": "6b0129bbfe50b1a2145ac14d65374ee3bca1bc7d7ac5e4741d53b09e4a48b5ff",
+    "title": "Show HN: Simple Sprite Sheet Generation",
+    "why_it_matters": "Surfaced by query \"AI music generation\" but did not match a tracked keyword -- review before acting on it.",
+    "required_action": "No action -- filed for the record, not worth follow-up as scored.",
+    "estimated_value": "unknown -- not estimated in v1 (no fabricated dollar figures)",
+    "confidence": 8,
+    "status": "rejected",
+    "approval_status": "pending",
+    "approved_by": null,
+    "approved_at": null,
+    "source_type": "hn_algolia",
+    "evidence": [
+      {
+        "snippet": "Show HN: Simple Sprite Sheet Generation",
+        "raw_score": 3,
+        "fetched_at": "2026-09-10T23:09:28.910Z",
+        "source_url": "https://github.com/acatovic/ai-game-studio"
+      }
+    ],
+    "scoring_detail": {
+      "query": "AI music generation",
+      "recency": 10,
+      "weights": {
+        "recency": 0.2,
+        "relevance": 0.5,
+        "engagement": 0.3
+      },
+      "relevance": 0,
+      "engagement": 20,
+      "matchedKeywords": []
+    },
+    "discovered_at": "2026-09-10T23:09:28.91+00:00",
+    "created_at": "2026-09-10T23:09:33.437797+00:00",
+    "updated_at": "2026-09-10T23:09:33.437797+00:00"
+  },
+  {
+    "id": "214f529a-5fa3-4dd2-a225-6b6d2979fe0b",
+    "mission": "protoforge.daily_opportunity_scan",
+    "product": "rezonate",
+    "dedup_hash": "d27b67777cc7a60a849c26e89a7c5552e6043b77ebc0558854c9e26dd6aa4eca",
+    "title": "Voice to Instrument",
+    "why_it_matters": "Surfaced by query \"stem separation tool\" but did not match a tracked keyword -- review before acting on it.",
+    "required_action": "No action -- filed for the record, not worth follow-up as scored.",
+    "estimated_value": "unknown -- not estimated in v1 (no fabricated dollar figures)",
+    "confidence": 5,
+    "status": "rejected",
+    "approval_status": "pending",
+    "approved_by": null,
+    "approved_at": null,
+    "source_type": "hn_algolia",
+    "evidence": [
+      {
+        "snippet": "Voice to Instrument",
+        "raw_score": 1,
+        "fetched_at": "2026-09-10T23:09:29.674Z",
+        "source_url": "https://news.ycombinator.com/item?id=47844080"
+      }
+    ],
+    "scoring_detail": {
+      "query": "stem separation tool",
+      "recency": 10,
+      "weights": {
+        "recency": 0.2,
+        "relevance": 0.5,
+        "engagement": 0.3
+      },
+      "relevance": 0,
+      "engagement": 10,
+      "matchedKeywords": []
+    },
+    "discovered_at": "2026-09-10T23:09:29.674+00:00",
+    "created_at": "2026-09-10T23:09:33.545323+00:00",
+    "updated_at": "2026-09-10T23:09:33.545323+00:00"
+  },
+  {
+    "id": "c242fd6f-6189-4964-8d12-3b48d79f1573",
+    "mission": "protoforge.daily_opportunity_scan",
+    "product": "rezonate",
+    "dedup_hash": "8501bcfbd155f8fb6d16163eea5414e942a0a1333ea6a1a1d82cc24311285df0",
+    "title": "Show HN: I built SyncForge to connect indie artists with sync deals",
+    "why_it_matters": "Surfaced by query \"sync licensing music\" but did not match a tracked keyword -- review before acting on it.",
+    "required_action": "No action -- filed for the record, not worth follow-up as scored.",
+    "estimated_value": "unknown -- not estimated in v1 (no fabricated dollar figures)",
+    "confidence": 7,
+    "status": "rejected",
+    "approval_status": "pending",
+    "approved_by": null,
+    "approved_at": null,
+    "source_type": "hn_algolia",
+    "evidence": [
+      {
+        "snippet": "Show HN: I built SyncForge to connect indie artists with sync deals",
+        "raw_score": 2,
+        "fetched_at": "2026-09-10T23:09:31.286Z",
+        "source_url": "https://trysyncforge.xyz"
+      }
+    ],
+    "scoring_detail": {
+      "query": "sync licensing music",
+      "recency": 10,
+      "weights": {
+        "recency": 0.2,
+        "relevance": 0.5,
+        "engagement": 0.3
+      },
+      "relevance": 0,
+      "engagement": 16,
+      "matchedKeywords": []
+    },
+    "discovered_at": "2026-09-10T23:09:31.286+00:00",
+    "created_at": "2026-09-10T23:09:33.615229+00:00",
+    "updated_at": "2026-09-10T23:09:33.615229+00:00"
+  },
+  {
+    "id": "111e7d3e-2943-4ec7-b72a-14b1d3178098",
+    "mission": "protoforge.daily_opportunity_scan",
+    "product": "rezonate",
+    "dedup_hash": "3175096b43c64415f52adfdc64336cafb41f3a341a04584eb5896a65a4c91267",
+    "title": "Show HN: AI-Powered Audio Sample Generator (VST/AU)",
+    "why_it_matters": "Matches 1 tracked term(s) for rezonate: udio.",
+    "required_action": "Needs a human read to judge relevance before any follow-up.",
+    "estimated_value": "unknown -- not estimated in v1 (no fabricated dollar figures)",
+    "confidence": 25,
+    "status": "needs_review",
+    "approval_status": "pending",
+    "approved_by": null,
+    "approved_at": null,
+    "source_type": "hn_algolia",
+    "evidence": [
+      {
+        "snippet": "Show HN: AI-Powered Audio Sample Generator (VST/AU)",
+        "raw_score": 3,
+        "fetched_at": "2026-09-10T23:09:32.070Z",
+        "source_url": "https://www.text-to-sample.com/"
+      }
+    ],
+    "scoring_detail": {
+      "query": "music production plugin",
+      "recency": 10,
+      "weights": {
+        "recency": 0.2,
+        "relevance": 0.5,
+        "engagement": 0.3
+      },
+      "relevance": 33,
+      "engagement": 20,
+      "matchedKeywords": [
+        "udio"
+      ]
+    },
+    "discovered_at": "2026-09-10T23:09:32.07+00:00",
+    "created_at": "2026-09-10T23:09:33.692513+00:00",
+    "updated_at": "2026-09-10T23:09:33.692513+00:00"
+  },
+  {
+    "id": "ec32d962-2269-463a-97f5-11f40ba86d15",
+    "mission": "protoforge.daily_opportunity_scan",
+    "product": "rezonate",
+    "dedup_hash": "9d0253eca1a3ef58115048daac01cad3088f0de861e901fed3547d6d53621c1f",
+    "title": "Ask HN: Is there any Linux distro dedicated to music performance?",
+    "why_it_matters": "Surfaced by query \"music production plugin\" but did not match a tracked keyword -- review before acting on it.",
+    "required_action": "No action -- filed for the record, not worth follow-up as scored.",
+    "estimated_value": "unknown -- not estimated in v1 (no fabricated dollar figures)",
+    "confidence": 22,
+    "status": "rejected",
+    "approval_status": "pending",
+    "approved_by": null,
+    "approved_at": null,
+    "source_type": "hn_algolia",
+    "evidence": [
+      {
+        "snippet": "Ask HN: Is there any Linux distro dedicated to music performance?",
+        "raw_score": 107,
+        "fetched_at": "2026-09-10T23:09:32.070Z",
+        "source_url": "https://news.ycombinator.com/item?id=31549303"
+      }
+    ],
+    "scoring_detail": {
+      "query": "music production plugin",
+      "recency": 10,
+      "weights": {
+        "recency": 0.2,
+        "relevance": 0.5,
+        "engagement": 0.3
+      },
+      "relevance": 0,
+      "engagement": 68,
+      "matchedKeywords": []
+    },
+    "discovered_at": "2026-09-10T23:09:32.07+00:00",
+    "created_at": "2026-09-10T23:09:33.758559+00:00",
+    "updated_at": "2026-09-10T23:09:33.758559+00:00"
+  },
+  {
+    "id": "4678a0dc-ce8f-494b-9e06-b2c9f7fd26bb",
+    "mission": "protoforge.daily_opportunity_scan",
+    "product": "rezonate",
+    "dedup_hash": "2df1462656cdac1a7e63fe07e002da950073474d3b72aac94576c7cb95fdcb68",
+    "title": "(Music Production) Plug-In Capitalism",
+    "why_it_matters": "Matches 1 tracked term(s) for rezonate: music production.",
+    "required_action": "Needs a human read to judge relevance before any follow-up.",
+    "estimated_value": "unknown -- not estimated in v1 (no fabricated dollar figures)",
+    "confidence": 31,
+    "status": "needs_review",
+    "approval_status": "pending",
+    "approved_by": null,
+    "approved_at": null,
+    "source_type": "hn_algolia",
+    "evidence": [
+      {
+        "snippet": "(Music Production) Plug-In Capitalism",
+        "raw_score": 15,
+        "fetched_at": "2026-09-10T23:09:32.070Z",
+        "source_url": "https://bellonamag.com/plug-in-capitalism"
+      }
+    ],
+    "scoring_detail": {
+      "query": "music production plugin",
+      "recency": 10,
+      "weights": {
+        "recency": 0.2,
+        "relevance": 0.5,
+        "engagement": 0.3
+      },
+      "relevance": 33,
+      "engagement": 40,
+      "matchedKeywords": [
+        "music production"
+      ]
+    },
+    "discovered_at": "2026-09-10T23:09:32.07+00:00",
+    "created_at": "2026-09-10T23:09:33.772462+00:00",
+    "updated_at": "2026-09-10T23:09:33.772462+00:00"
+  },
+  {
+    "id": "23f6c712-42a6-4019-8762-6a3b64b7f861",
+    "mission": "protoforge.daily_opportunity_scan",
+    "product": "rezonate",
+    "dedup_hash": "e0d00b519024c8f36f369df24c5c5bd324d156fc3a0a6c7c26f23847be05db8a",
+    "title": "Show HN: I just released my first commercial audio plugin",
+    "why_it_matters": "Matches 1 tracked term(s) for rezonate: udio.",
+    "required_action": "Needs a human read to judge relevance before any follow-up.",
+    "estimated_value": "unknown -- not estimated in v1 (no fabricated dollar figures)",
+    "confidence": 28,
+    "status": "needs_review",
+    "approval_status": "pending",
+    "approved_by": null,
+    "approved_at": null,
+    "source_type": "hn_algolia",
+    "evidence": [
+      {
+        "snippet": "Show HN: I just released my first commercial audio plugin",
+        "raw_score": 7,
+        "fetched_at": "2026-09-10T23:09:32.070Z",
+        "source_url": "https://news.ycombinator.com/item?id=18293619"
+      }
+    ],
+    "scoring_detail": {
+      "query": "music production plugin",
+      "recency": 10,
+      "weights": {
+        "recency": 0.2,
+        "relevance": 0.5,
+        "engagement": 0.3
+      },
+      "relevance": 33,
+      "engagement": 30,
+      "matchedKeywords": [
+        "udio"
+      ]
+    },
+    "discovered_at": "2026-09-10T23:09:32.07+00:00",
+    "created_at": "2026-09-10T23:09:33.784785+00:00",
+    "updated_at": "2026-09-10T23:09:33.784785+00:00"
+  },
+  {
+    "id": "df6a85e0-bb4a-4e4f-921f-1b3150c3e317",
+    "mission": "protoforge.daily_opportunity_scan",
+    "product": "rezonate",
+    "dedup_hash": "ebe18a8d779f7eba3005fcecb317c36e7541835540cea175e3d29cce44259e0a",
+    "title": "Show HN: Give your AI agent on-screen guides that show users where to click",
+    "why_it_matters": "Surfaced by query \"AI song generator\" but did not match a tracked keyword -- review before acting on it.",
+    "required_action": "Needs a human read to judge relevance before any follow-up.",
+    "estimated_value": "unknown -- not estimated in v1 (no fabricated dollar figures)",
+    "confidence": 31,
+    "status": "needs_review",
+    "approval_status": "pending",
+    "approved_by": null,
+    "approved_at": null,
+    "source_type": "hn_algolia",
+    "evidence": [
+      {
+        "snippet": "Show HN: Give your AI agent on-screen guides that show users where to click",
+        "raw_score": 19,
+        "fetched_at": "2026-09-10T23:09:32.810Z",
+        "source_url": "https://news.ycombinator.com/item?id=49627872"
+      }
+    ],
+    "scoring_detail": {
+      "query": "AI song generator",
+      "recency": 91,
+      "weights": {
+        "recency": 0.2,
+        "relevance": 0.5,
+        "engagement": 0.3
+      },
+      "relevance": 0,
+      "engagement": 43,
+      "matchedKeywords": []
+    },
+    "discovered_at": "2026-09-10T23:09:32.81+00:00",
+    "created_at": "2026-09-10T23:09:33.797531+00:00",
+    "updated_at": "2026-09-10T23:09:33.797531+00:00"
+  },
+  {
+    "id": "f91705fd-b3f5-41a9-ba53-37496b80932c",
+    "mission": "protoforge.daily_opportunity_scan",
+    "product": "rezonate",
+    "dedup_hash": "baac87ceb68347ded82ba03d4adb2ee12ab1bef32e2a7b19376b3718f4539c84",
+    "title": "Show HN: Turn a Suno song into a music video with beat-synced auto-editing",
+    "why_it_matters": "Matches 1 tracked term(s) for rezonate: suno.",
+    "required_action": "No action -- filed for the record, not worth follow-up as scored.",
+    "estimated_value": "unknown -- not estimated in v1 (no fabricated dollar figures)",
+    "confidence": 22,
+    "status": "rejected",
+    "approval_status": "pending",
+    "approved_by": null,
+    "approved_at": null,
+    "source_type": "hn_algolia",
+    "evidence": [
+      {
+        "snippet": "Show HN: Turn a Suno song into a music video with beat-synced auto-editing",
+        "raw_score": 1,
+        "fetched_at": "2026-09-10T23:09:32.810Z",
+        "source_url": "https://aivideogenerator.so/"
+      }
+    ],
+    "scoring_detail": {
+      "query": "AI song generator",
+      "recency": 10,
+      "weights": {
+        "recency": 0.2,
+        "relevance": 0.5,
+        "engagement": 0.3
+      },
+      "relevance": 33,
+      "engagement": 10,
+      "matchedKeywords": [
+        "suno"
+      ]
+    },
+    "discovered_at": "2026-09-10T23:09:32.81+00:00",
+    "created_at": "2026-09-10T23:09:33.827125+00:00",
+    "updated_at": "2026-09-10T23:09:33.827125+00:00"
+  },
+  {
+    "id": "1c6e4587-294f-491f-a67b-805665206f7e",
+    "mission": "protoforge.daily_opportunity_scan",
+    "product": "rezonate",
+    "dedup_hash": "a310482d95697016b68f9b41e4fda1087e64a9436a8b9ac3030b5f4f5a018e34",
+    "title": "The internet is being flooded with AI content. How can we tell what is human?",
+    "why_it_matters": "Surfaced by query \"AI song generator\" but did not match a tracked keyword -- review before acting on it.",
+    "required_action": "No action -- filed for the record, not worth follow-up as scored.",
+    "estimated_value": "unknown -- not estimated in v1 (no fabricated dollar figures)",
+    "confidence": 9,
+    "status": "rejected",
+    "approval_status": "pending",
+    "approved_by": null,
+    "approved_at": null,
+    "source_type": "hn_algolia",
+    "evidence": [
+      {
+        "snippet": "The internet is being flooded with AI content. How can we tell what is human?",
+        "raw_score": 4,
+        "fetched_at": "2026-09-10T23:09:32.810Z",
+        "source_url": "https://news.ycombinator.com/item?id=47312559"
+      }
+    ],
+    "scoring_detail": {
+      "query": "AI song generator",
+      "recency": 10,
+      "weights": {
+        "recency": 0.2,
+        "relevance": 0.5,
+        "engagement": 0.3
+      },
+      "relevance": 0,
+      "engagement": 23,
+      "matchedKeywords": []
+    },
+    "discovered_at": "2026-09-10T23:09:32.81+00:00",
+    "created_at": "2026-09-10T23:09:33.893996+00:00",
+    "updated_at": "2026-09-10T23:09:33.893996+00:00"
+  },
+  {
+    "id": "f715683f-73ee-49e1-b964-859985a9b418",
+    "mission": "protoforge.daily_opportunity_scan",
+    "product": "rezonate",
+    "dedup_hash": "d7a02a547cdb239776b33ba1dca9df780e305def77d56d8ed17aec8ade01abde",
+    "title": "AI generated song about my son who has autism",
+    "why_it_matters": "Surfaced by query \"AI song generator\" but did not match a tracked keyword -- review before acting on it.",
+    "required_action": "No action -- filed for the record, not worth follow-up as scored.",
+    "estimated_value": "unknown -- not estimated in v1 (no fabricated dollar figures)",
+    "confidence": 5,
+    "status": "rejected",
+    "approval_status": "pending",
+    "approved_by": null,
+    "approved_at": null,
+    "source_type": "hn_algolia",
+    "evidence": [
+      {
+        "snippet": "AI generated song about my son who has autism",
+        "raw_score": 1,
+        "fetched_at": "2026-09-10T23:09:32.810Z",
+        "source_url": "https://open.spotify.com/album/1BGfJSTjSQJkkxv4gJEK2z"
+      }
+    ],
+    "scoring_detail": {
+      "query": "AI song generator",
+      "recency": 10,
+      "weights": {
+        "recency": 0.2,
+        "relevance": 0.5,
+        "engagement": 0.3
+      },
+      "relevance": 0,
+      "engagement": 10,
+      "matchedKeywords": []
+    },
+    "discovered_at": "2026-09-10T23:09:32.81+00:00",
+    "created_at": "2026-09-10T23:09:33.925577+00:00",
+    "updated_at": "2026-09-10T23:09:33.925577+00:00"
+  },
+  {
+    "id": "1c84e281-12d9-4be4-b035-692c8a2f5ceb",
+    "mission": "protoforge.daily_opportunity_scan",
+    "product": "rezonate",
+    "dedup_hash": "9666110fa007226e119cdc69091c062623b6e68405b41347d4e69c1e7c96a4de",
+    "title": "Show HN: Flipper Zero MCP – Control Your Flipper Using AI via USB or WiFi",
+    "why_it_matters": "Surfaced by query \"AI song generator\" but did not match a tracked keyword -- review before acting on it.",
+    "required_action": "No action -- filed for the record, not worth follow-up as scored.",
+    "estimated_value": "unknown -- not estimated in v1 (no fabricated dollar figures)",
+    "confidence": 8,
+    "status": "rejected",
+    "approval_status": "pending",
+    "approved_by": null,
+    "approved_at": null,
+    "source_type": "hn_algolia",
+    "evidence": [
+      {
+        "snippet": "Show HN: Flipper Zero MCP – Control Your Flipper Using AI via USB or WiFi",
+        "raw_score": 3,
+        "fetched_at": "2026-09-10T23:09:32.810Z",
+        "source_url": "https://github.com/busse/flipperzero-mcp"
+      }
+    ],
+    "scoring_detail": {
+      "query": "AI song generator",
+      "recency": 10,
+      "weights": {
+        "recency": 0.2,
+        "relevance": 0.5,
+        "engagement": 0.3
+      },
+      "relevance": 0,
+      "engagement": 20,
+      "matchedKeywords": []
+    },
+    "discovered_at": "2026-09-10T23:09:32.81+00:00",
+    "created_at": "2026-09-10T23:09:33.941169+00:00",
+    "updated_at": "2026-09-10T23:09:33.941169+00:00"
+  },
+  {
+    "id": "deb63a7c-32a0-453f-afcb-3c120c8b87a6",
+    "mission": "protoforge.daily_opportunity_scan",
+    "product": "rezonate",
+    "dedup_hash": "9c91dc076e7a365ec69f97f5e493daa535430a5cd6a839912480d0cc3590051d",
+    "title": "Show HN: OpenFret – Guitar inventory, AI practice, and a note-detection RPG",
+    "why_it_matters": "Surfaced by query \"AI song generator\" but did not match a tracked keyword -- review before acting on it.",
+    "required_action": "No action -- filed for the record, not worth follow-up as scored.",
+    "estimated_value": "unknown -- not estimated in v1 (no fabricated dollar figures)",
+    "confidence": 8,
+    "status": "rejected",
+    "approval_status": "pending",
+    "approved_by": null,
+    "approved_at": null,
+    "source_type": "hn_algolia",
+    "evidence": [
+      {
+        "snippet": "Show HN: OpenFret – Guitar inventory, AI practice, and a note-detection RPG",
+        "raw_score": 3,
+        "fetched_at": "2026-09-10T23:09:32.810Z",
+        "source_url": "https://openfret.com?referral=showhn"
+      }
+    ],
+    "scoring_detail": {
+      "query": "AI song generator",
+      "recency": 10,
+      "weights": {
+        "recency": 0.2,
+        "relevance": 0.5,
+        "engagement": 0.3
+      },
+      "relevance": 0,
+      "engagement": 20,
+      "matchedKeywords": []
+    },
+    "discovered_at": "2026-09-10T23:09:32.81+00:00",
+    "created_at": "2026-09-10T23:09:33.954774+00:00",
+    "updated_at": "2026-09-10T23:09:33.954774+00:00"
+  },
+  {
+    "id": "0bac0221-cf4b-486a-a53c-0a73fc85fcfd",
+    "mission": "protoforge.daily_opportunity_scan",
+    "product": "rezonate",
+    "dedup_hash": "d68bf9cc991a07dfaf3262771f25d38cc80a394382802cbe461e56336d43a599",
+    "title": "Show HN: AnyMusic – AI music generator (royalty‑free, songs，stems, lyrics)",
+    "why_it_matters": "Matches 1 tracked term(s) for rezonate: ai music.",
+    "required_action": "Needs a human read to judge relevance before any follow-up.",
+    "estimated_value": "unknown -- not estimated in v1 (no fabricated dollar figures)",
+    "confidence": 26,
+    "status": "needs_review",
+    "approval_status": "pending",
+    "approved_by": null,
+    "approved_at": null,
+    "source_type": "hn_algolia",
+    "evidence": [
+      {
+        "snippet": "Show HN: AnyMusic – AI music generator (royalty‑free, songs，stems, lyrics)",
+        "raw_score": 5,
+        "fetched_at": "2026-09-10T23:09:32.810Z",
+        "source_url": "https://anymusic.ai"
+      }
+    ],
+    "scoring_detail": {
+      "query": "AI song generator",
+      "recency": 10,
+      "weights": {
+        "recency": 0.2,
+        "relevance": 0.5,
+        "engagement": 0.3
+      },
+      "relevance": 33,
+      "engagement": 26,
+      "matchedKeywords": [
+        "ai music"
+      ]
+    },
+    "discovered_at": "2026-09-10T23:09:32.81+00:00",
+    "created_at": "2026-09-10T23:09:33.968334+00:00",
+    "updated_at": "2026-09-10T23:09:33.968334+00:00"
+  },
+  {
+    "id": "d253605c-43a6-496c-b83b-06bb1bde48b5",
+    "mission": "protoforge.daily_opportunity_scan",
+    "product": "rezonate",
+    "dedup_hash": "6da6d2a701732c16ab91a90c9764a11f556ddc581e2286f81b3a8fad8f8cdae2",
+    "title": "Apple Music to Label AI-Generated Songs",
+    "why_it_matters": "Surfaced by query \"AI song generator\" but did not match a tracked keyword -- review before acting on it.",
+    "required_action": "No action -- filed for the record, not worth follow-up as scored.",
+    "estimated_value": "unknown -- not estimated in v1 (no fabricated dollar figures)",
+    "confidence": 10,
+    "status": "rejected",
+    "approval_status": "pending",
+    "approved_by": null,
+    "approved_at": null,
+    "source_type": "hn_algolia",
+    "evidence": [
+      {
+        "snippet": "Apple Music to Label AI-Generated Songs",
+        "raw_score": 6,
+        "fetched_at": "2026-09-10T23:10:59.795Z",
+        "source_url": "https://www.macrumors.com/2026/08/20/apple-music-to-label-ai-generated-songs/"
+      }
+    ],
+    "scoring_detail": {
+      "query": "AI song generator",
+      "recency": 10,
+      "weights": {
+        "recency": 0.2,
+        "relevance": 0.5,
+        "engagement": 0.3
+      },
+      "relevance": 0,
+      "engagement": 28,
+      "matchedKeywords": []
+    },
+    "discovered_at": "2026-09-10T23:10:59.795+00:00",
+    "created_at": "2026-09-10T23:11:31.655356+00:00",
+    "updated_at": "2026-09-10T23:11:31.655356+00:00"
+  },
+  {
+    "id": "faff05fa-839c-4200-b896-714d6d58ab12",
+    "mission": "protoforge.daily_opportunity_scan",
+    "product": "rezonate",
+    "dedup_hash": "45f9495b332c05930854970afed9cc226ebbda406d73622e4dc4974544dc437f",
+    "title": "Show HN: AI-generated music box version of any song (for baby)",
+    "why_it_matters": "Surfaced by query \"AI song generator\" but did not match a tracked keyword -- review before acting on it.",
+    "required_action": "No action -- filed for the record, not worth follow-up as scored.",
+    "estimated_value": "unknown -- not estimated in v1 (no fabricated dollar figures)",
+    "confidence": 10,
+    "status": "rejected",
+    "approval_status": "pending",
+    "approved_by": null,
+    "approved_at": null,
+    "source_type": "hn_algolia",
+    "evidence": [
+      {
+        "snippet": "Show HN: AI-generated music box version of any song (for baby)",
+        "raw_score": 5,
+        "fetched_at": "2026-09-10T23:10:59.795Z",
+        "source_url": "https://lullabyconverter.com"
+      }
+    ],
+    "scoring_detail": {
+      "query": "AI song generator",
+      "recency": 10,
+      "weights": {
+        "recency": 0.2,
+        "relevance": 0.5,
+        "engagement": 0.3
+      },
+      "relevance": 0,
+      "engagement": 26,
+      "matchedKeywords": []
+    },
+    "discovered_at": "2026-09-10T23:10:59.795+00:00",
+    "created_at": "2026-09-10T23:11:31.673443+00:00",
+    "updated_at": "2026-09-10T23:11:31.673443+00:00"
+  },
+  {
+    "id": "12d789fe-32d1-4181-82de-2ac2035b25a4",
+    "mission": "protoforge.daily_opportunity_scan",
+    "product": "rezonate",
+    "dedup_hash": "8242fec48d6635f8f26141d2c26bcc5eba510357b0db053d8000c1f6f0322fd5",
+    "title": "Is the top song on Australian radio AI-generated?",
+    "why_it_matters": "Surfaced by query \"AI song generator\" but did not match a tracked keyword -- review before acting on it.",
+    "required_action": "No action -- filed for the record, not worth follow-up as scored.",
+    "estimated_value": "unknown -- not estimated in v1 (no fabricated dollar figures)",
+    "confidence": 10,
+    "status": "rejected",
+    "approval_status": "pending",
+    "approved_by": null,
+    "approved_at": null,
+    "source_type": "hn_algolia",
+    "evidence": [
+      {
+        "snippet": "Is the top song on Australian radio AI-generated?",
+        "raw_score": 5,
+        "fetched_at": "2026-09-10T23:10:59.795Z",
+        "source_url": "https://www.theguardian.com/music/2026/jul/13/josh-fawaz-like-a-prayer-song-is-it-ai-radio"
+      }
+    ],
+    "scoring_detail": {
+      "query": "AI song generator",
+      "recency": 10,
+      "weights": {
+        "recency": 0.2,
+        "relevance": 0.5,
+        "engagement": 0.3
+      },
+      "relevance": 0,
+      "engagement": 26,
+      "matchedKeywords": []
+    },
+    "discovered_at": "2026-09-10T23:10:59.795+00:00",
+    "created_at": "2026-09-10T23:11:31.721377+00:00",
+    "updated_at": "2026-09-10T23:11:31.721377+00:00"
+  },
+  {
+    "id": "99b392c1-1f83-4016-b420-c77932bff77d",
+    "mission": "protoforge.daily_opportunity_scan",
+    "product": "rezonate",
+    "dedup_hash": "cf39552b7589d8f958acc11374ed2994afdc303ffffd4cdaa4cd86634dc93e79",
+    "title": "Show HN: Lofinity – an endless lo-fi track, tuned to you",
+    "why_it_matters": "Surfaced by query \"AI song generator\" but did not match a tracked keyword -- review before acting on it.",
+    "required_action": "No action -- filed for the record, not worth follow-up as scored.",
+    "estimated_value": "unknown -- not estimated in v1 (no fabricated dollar figures)",
+    "confidence": 7,
+    "status": "rejected",
+    "approval_status": "pending",
+    "approved_by": null,
+    "approved_at": null,
+    "source_type": "hn_algolia",
+    "evidence": [
+      {
+        "snippet": "Show HN: Lofinity – an endless lo-fi track, tuned to you",
+        "raw_score": 2,
+        "fetched_at": "2026-09-10T23:10:59.795Z",
+        "source_url": "https://lofinity.ai"
+      }
+    ],
+    "scoring_detail": {
+      "query": "AI song generator",
+      "recency": 10,
+      "weights": {
+        "recency": 0.2,
+        "relevance": 0.5,
+        "engagement": 0.3
+      },
+      "relevance": 0,
+      "engagement": 16,
+      "matchedKeywords": []
+    },
+    "discovered_at": "2026-09-10T23:10:59.795+00:00",
+    "created_at": "2026-09-10T23:11:31.737563+00:00",
+    "updated_at": "2026-09-10T23:11:31.737563+00:00"
+  },
+  {
+    "id": "819fd58b-94af-4a06-9dea-50360d460ef4",
+    "mission": "protoforge.daily_opportunity_scan",
+    "product": "rezonate",
+    "dedup_hash": "83755b6f939c71bc7dffd422a69eeba18933bc5816a06394302d9c7ff0dc3a62",
+    "title": "Show HN: OceanEye – an open-source interactive 3D atlas of ocean life",
+    "why_it_matters": "Surfaced by query \"AI song generator\" but did not match a tracked keyword -- review before acting on it.",
+    "required_action": "No action -- filed for the record, not worth follow-up as scored.",
+    "estimated_value": "unknown -- not estimated in v1 (no fabricated dollar figures)",
+    "confidence": 7,
+    "status": "rejected",
+    "approval_status": "pending",
+    "approved_by": null,
+    "approved_at": null,
+    "source_type": "hn_algolia",
+    "evidence": [
+      {
+        "snippet": "Show HN: OceanEye – an open-source interactive 3D atlas of ocean life",
+        "raw_score": 2,
+        "fetched_at": "2026-09-10T23:10:59.795Z",
+        "source_url": "https://oceaneye.woodydesign.io/en/"
+      }
+    ],
+    "scoring_detail": {
+      "query": "AI song generator",
+      "recency": 10,
+      "weights": {
+        "recency": 0.2,
+        "relevance": 0.5,
+        "engagement": 0.3
+      },
+      "relevance": 0,
+      "engagement": 16,
+      "matchedKeywords": []
+    },
+    "discovered_at": "2026-09-10T23:10:59.795+00:00",
+    "created_at": "2026-09-10T23:11:31.763359+00:00",
+    "updated_at": "2026-09-10T23:11:31.763359+00:00"
+  },
+  {
+    "id": "f4b98b8c-dcd8-4f41-a8ff-50ff2ab1d134",
+    "mission": "protoforge.daily_opportunity_scan",
+    "product": "rezonate",
+    "dedup_hash": "3fcc1d8af4d20a9646d3cdb3bc20f0c62b44b28bc021b8da18fa551686ec849a",
+    "title": "Is that song AI-generated? UChicago scientists create tool to check",
+    "why_it_matters": "Surfaced by query \"AI song generator\" but did not match a tracked keyword -- review before acting on it.",
+    "required_action": "No action -- filed for the record, not worth follow-up as scored.",
+    "estimated_value": "unknown -- not estimated in v1 (no fabricated dollar figures)",
+    "confidence": 12,
+    "status": "rejected",
+    "approval_status": "pending",
+    "approved_by": null,
+    "approved_at": null,
+    "source_type": "hn_algolia",
+    "evidence": [
+      {
+        "snippet": "Is that song AI-generated? UChicago scientists create tool to check",
+        "raw_score": 9,
+        "fetched_at": "2026-09-10T23:10:59.795Z",
+        "source_url": "https://news.uchicago.edu/story/song-ai-generated-uchicago-scientists-create-browser-extension-check"
+      }
+    ],
+    "scoring_detail": {
+      "query": "AI song generator",
+      "recency": 10,
+      "weights": {
+        "recency": 0.2,
+        "relevance": 0.5,
+        "engagement": 0.3
+      },
+      "relevance": 0,
+      "engagement": 33,
+      "matchedKeywords": []
+    },
+    "discovered_at": "2026-09-10T23:10:59.795+00:00",
+    "created_at": "2026-09-10T23:11:31.780114+00:00",
+    "updated_at": "2026-09-10T23:11:31.780114+00:00"
+  },
+  {
+    "id": "6c7c3abe-3e8e-4a11-9d2c-b17fe0739543",
+    "mission": "protoforge.daily_opportunity_scan",
+    "product": "rezonate",
+    "dedup_hash": "2b54df97ed6bc6d6d296f5f30494a89218d61eb1abb763ad6c27d582367fc350",
+    "title": "Deezer says 44% of songs uploaded to its platform daily are AI-generated",
+    "why_it_matters": "Surfaced by query \"AI song generator\" but did not match a tracked keyword -- review before acting on it.",
+    "required_action": "Needs a human read to judge relevance before any follow-up.",
+    "estimated_value": "unknown -- not estimated in v1 (no fabricated dollar figures)",
+    "confidence": 28,
+    "status": "needs_review",
+    "approval_status": "pending",
+    "approved_by": null,
+    "approved_at": null,
+    "source_type": "hn_algolia",
+    "evidence": [
+      {
+        "snippet": "Deezer says 44% of songs uploaded to its platform daily are AI-generated",
+        "raw_score": 367,
+        "fetched_at": "2026-09-11T00:22:49.073Z",
+        "source_url": "https://techcrunch.com/2026/04/20/deezer-says-44-of-songs-uploaded-to-its-platform-daily-are-ai-generated/"
+      }
+    ],
+    "scoring_detail": {
+      "query": "AI song generator",
+      "recency": 10,
+      "weights": {
+        "recency": 0.2,
+        "relevance": 0.5,
+        "engagement": 0.3
+      },
+      "relevance": 0,
+      "engagement": 86,
+      "matchedKeywords": []
+    },
+    "discovered_at": "2026-09-11T00:22:49.073+00:00",
+    "created_at": "2026-09-11T00:23:21.012167+00:00",
+    "updated_at": "2026-09-11T00:23:21.012167+00:00"
+  },
+  {
+    "id": "c6cdf71b-2d50-4908-8820-49fec6b84cd0",
+    "mission": "protoforge.daily_opportunity_scan",
+    "product": "rezonate",
+    "dedup_hash": "935361a0e58f236b727c6a41feb97dccf032abc4278e825cda6fb247386b9d06",
+    "title": "AI song tops iTunes global charts",
+    "why_it_matters": "Surfaced by query \"AI song generator\" but did not match a tracked keyword -- review before acting on it.",
+    "required_action": "No action -- filed for the record, not worth follow-up as scored.",
+    "estimated_value": "unknown -- not estimated in v1 (no fabricated dollar figures)",
+    "confidence": 5,
+    "status": "rejected",
+    "approval_status": "pending",
+    "approved_by": null,
+    "approved_at": null,
+    "source_type": "hn_algolia",
+    "evidence": [
+      {
+        "snippet": "AI song tops iTunes global charts",
+        "raw_score": 1,
+        "fetched_at": "2026-09-11T00:22:49.073Z",
+        "source_url": "https://www.dexerto.com/entertainment/ai-generated-song-takes-1-spot-on-itunes-global-charts-3353485/"
+      }
+    ],
+    "scoring_detail": {
+      "query": "AI song generator",
+      "recency": 10,
+      "weights": {
+        "recency": 0.2,
+        "relevance": 0.5,
+        "engagement": 0.3
+      },
+      "relevance": 0,
+      "engagement": 10,
+      "matchedKeywords": []
+    },
+    "discovered_at": "2026-09-11T00:22:49.073+00:00",
+    "created_at": "2026-09-11T00:23:21.044149+00:00",
+    "updated_at": "2026-09-11T00:23:21.044149+00:00"
+  },
+  {
+    "id": "86f47783-8205-4ff6-b899-960fa82ca54a",
+    "mission": "protoforge.daily_opportunity_scan",
+    "product": "rezonate",
+    "dedup_hash": "831d84d60c7f9bfd8eae0b6cf75d9bf864b93294064b43181c2ae610388fc8dc",
+    "title": "Man generated songs with AI then had bots stream them to make over $8M",
+    "why_it_matters": "Surfaced by query \"AI song generator\" but did not match a tracked keyword -- review before acting on it.",
+    "required_action": "No action -- filed for the record, not worth follow-up as scored.",
+    "estimated_value": "unknown -- not estimated in v1 (no fabricated dollar figures)",
+    "confidence": 8,
+    "status": "rejected",
+    "approval_status": "pending",
+    "approved_by": null,
+    "approved_at": null,
+    "source_type": "hn_algolia",
+    "evidence": [
+      {
+        "snippet": "Man generated songs with AI then had bots stream them to make over $8M",
+        "raw_score": 3,
+        "fetched_at": "2026-09-11T00:22:49.073Z",
+        "source_url": "https://www.pcgamer.com/software/ai/man-pleads-guilty-to-generating-songs-with-ai-then-having-bots-stream-them-billions-of-times-to-make-over-usd8-million-in-royalties/"
+      }
+    ],
+    "scoring_detail": {
+      "query": "AI song generator",
+      "recency": 10,
+      "weights": {
+        "recency": 0.2,
+        "relevance": 0.5,
+        "engagement": 0.3
+      },
+      "relevance": 0,
+      "engagement": 20,
+      "matchedKeywords": []
+    },
+    "discovered_at": "2026-09-11T00:22:49.073+00:00",
+    "created_at": "2026-09-11T00:23:21.122584+00:00",
+    "updated_at": "2026-09-11T00:23:21.122584+00:00"
+  },
+  {
+    "id": "4c4b9ee2-62d7-44e8-a82b-06aa196b88e0",
+    "mission": "protoforge.daily_opportunity_scan",
+    "product": "rezonate",
+    "dedup_hash": "430989f59968574a66c364d2dd5e67e3894981757fa72c048bd47bcc45ad3f79",
+    "title": "MiniMax Music 2.5 – AI Music Generation Model for Fast Song Creation",
+    "why_it_matters": "Matches 2 tracked term(s) for rezonate: ai music, music generation.",
+    "required_action": "Needs a human read to judge relevance before any follow-up.",
+    "estimated_value": "unknown -- not estimated in v1 (no fabricated dollar figures)",
+    "confidence": 48,
+    "status": "needs_review",
+    "approval_status": "pending",
+    "approved_by": null,
+    "approved_at": null,
+    "source_type": "hn_algolia",
+    "evidence": [
+      {
+        "snippet": "MiniMax Music 2.5 – AI Music Generation Model for Fast Song Creation",
+        "raw_score": 15,
+        "fetched_at": "2026-09-11T00:22:49.073Z",
+        "source_url": "https://www.minimax-music.com/minimax-music-2-5"
+      }
+    ],
+    "scoring_detail": {
+      "query": "AI song generator",
+      "recency": 10,
+      "weights": {
+        "recency": 0.2,
+        "relevance": 0.5,
+        "engagement": 0.3
+      },
+      "relevance": 67,
+      "engagement": 40,
+      "matchedKeywords": [
+        "ai music",
+        "music generation"
+      ]
+    },
+    "discovered_at": "2026-09-11T00:22:49.073+00:00",
+    "created_at": "2026-09-11T00:23:21.166407+00:00",
+    "updated_at": "2026-09-11T00:23:21.166407+00:00"
+  },
+  {
+    "id": "dcf1a30c-0b3c-48ea-aa43-d224d8cfe7d1",
+    "mission": "protoforge.daily_opportunity_scan",
+    "product": "rezonate",
+    "dedup_hash": "0a03de9729af94c74aeaa2102fe3fd1eed7fe1644eadf9b7e299b51743f52b2d",
+    "title": "Ask HN: OpenClaw for Music Production",
+    "why_it_matters": "Matches 1 tracked term(s) for rezonate: music production.",
+    "required_action": "No action -- filed for the record, not worth follow-up as scored.",
+    "estimated_value": "unknown -- not estimated in v1 (no fabricated dollar figures)",
+    "confidence": 22,
+    "status": "rejected",
+    "approval_status": "pending",
+    "approved_by": null,
+    "approved_at": null,
+    "source_type": "hn_algolia",
+    "evidence": [
+      {
+        "snippet": "Ask HN: OpenClaw for Music Production",
+        "raw_score": 1,
+        "fetched_at": "2026-09-11T00:22:49.073Z",
+        "source_url": "https://news.ycombinator.com/item?id=47289083"
+      }
+    ],
+    "scoring_detail": {
+      "query": "AI song generator",
+      "recency": 10,
+      "weights": {
+        "recency": 0.2,
+        "relevance": 0.5,
+        "engagement": 0.3
+      },
+      "relevance": 33,
+      "engagement": 10,
+      "matchedKeywords": [
+        "music production"
+      ]
+    },
+    "discovered_at": "2026-09-11T00:22:49.073+00:00",
+    "created_at": "2026-09-11T00:23:21.195673+00:00",
+    "updated_at": "2026-09-11T00:23:21.195673+00:00"
+  }
+]

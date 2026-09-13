@@ -1,6 +1,25 @@
+# Repo-wide default: normalize line endings to LF in the repository and on
+# checkout, for any path git detects as text. This is the actual fix for a
+# long-standing issue where working-tree files on Windows checkouts are
+# CRLF while everything committed to git history is LF -- every edit to an
+# existing file showed as a full-file rewrite in `git diff`/`git status`
+# (confirmed via a zero-edit control file, package.json, showing the same
+# pattern), which repeatedly inflated unrelated diffs during otherwise
+# narrowly-scoped fixes. `text=auto` lets git's own text/binary detection
+# decide what to normalize, so binary assets are left untouched.
+#
+# This rule does not, by itself, rewrite any already-committed file or
+# already-checked-out working tree copy -- git only applies it going
+# forward, to files staged after this takes effect (or via an explicit
+# `git add --renormalize .` pass, which should be run once, separately, as
+# its own repo-wide commit rather than folded into an unrelated change).
+* text=auto eol=lf
+
 # Shell scripts must keep LF line endings regardless of platform -- a
 # CRLF-corrupted shebang line breaks execution on strict interpreters, and
 # .githooks/pre-push specifically needs to run reliably via git's own hook
-# runner on every push.
+# runner on every push. Redundant with the repo-wide rule above once that
+# takes effect, kept explicit here since it documents a hard requirement,
+# not just a preference.
 .githooks/* text eol=lf
 *.sh text eol=lf

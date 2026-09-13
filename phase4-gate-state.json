@@ -1,0 +1,153 @@
+{
+  "phase": 4,
+  "title": "GOVERNED AUTONOMY, POLICY, AND OPERATIONAL ORCHESTRATION",
+  "overallStatus": "PHASE 4 PASS",
+  "timestamp": "2026-08-18T17:55:00.000Z",
+  "gates": {
+    "P4-G0_BASELINE": {
+      "status": "PASS",
+      "commit": "9d33bfe",
+      "command": "npm run typecheck && npm run lint && npm test",
+      "timestamp": "2026-08-18T17:10:00.000Z",
+      "evidence": "Phase 3 baseline verified: 268 suites, 2549 passed, 1 skipped, 0 failed. No Phase 3 regression.",
+      "artifact": "phase3-gate-state.json",
+      "limitations": []
+    },
+    "P4-G1_POLICY_MODEL": {
+      "status": "PASS",
+      "commit": "9d33bfe",
+      "command": "npx jest tests/unit/operational-phase4-policy.test.ts",
+      "timestamp": "2026-08-18T17:30:00.000Z",
+      "evidence": "AutonomyPolicyModel with 9 policy rules covering OBSERVE, RECOVER, RESTART, ESCALATE. Each policy has capability, target, conditions, authorization, risk, max_attempts, cooldown, required_evidence, escalation. No arbitrary shell execution.",
+      "artifact": "lib/operational/AutonomyPolicyModel.ts",
+      "limitations": []
+    },
+    "P4-G2_RISK_MODEL": {
+      "status": "PASS",
+      "commit": "9d33bfe",
+      "command": "npx jest tests/unit/operational-phase4-policy.test.ts",
+      "timestamp": "2026-08-18T17:30:00.000Z",
+      "evidence": "RiskClassifier with R0-R5 levels. R0=autonomous, R1=autonomous, R2=policy_authorized, R3=human_required, R4=human_required, R5=prohibited. Confidence ≠ authorization enforced.",
+      "artifact": "lib/operational/RiskClassifier.ts",
+      "limitations": []
+    },
+    "P4-G3_ACTION_SELECTION": {
+      "status": "PASS",
+      "commit": "9d33bfe",
+      "command": "npx jest tests/unit/operational-phase4-action-budget.test.ts",
+      "timestamp": "2026-08-18T17:35:00.000Z",
+      "evidence": "ActionSelector: deterministic selection from state + graph + policy + risk. LLM may propose hypothesis, deterministic selector decides. Never LLM → shell. Idempotent: HEALTHY → NO_ACTION.",
+      "artifact": "lib/operational/ActionSelector.ts",
+      "limitations": []
+    },
+    "P4-G4_AUTHORIZATION": {
+      "status": "PASS",
+      "commit": "9d33bfe",
+      "command": "npx jest tests/unit/operational-phase4-policy.test.ts",
+      "timestamp": "2026-08-18T17:30:00.000Z",
+      "evidence": "CapabilityAuthorizer integrated with ActionSelector. confidence ≠ authorization: high confidence does not authorize prohibited actions. Low confidence may allow safe reversible recovery.",
+      "artifact": "lib/operational/ActionSelector.ts",
+      "limitations": []
+    },
+    "P4-G5_INCIDENT_CORRELATION": {
+      "status": "PASS",
+      "commit": "9d33bfe",
+      "command": "npx jest tests/unit/operational-phase4-decisions.test.ts",
+      "timestamp": "2026-08-18T17:40:00.000Z",
+      "evidence": "IncidentCorrelator enhanced with correlation IDs, timeline, actions, probableCause, confidence. Downstream failures correlated with root cause. escalateIncident and recordAction methods added.",
+      "artifact": "lib/operational/IncidentCorrelator.ts",
+      "limitations": []
+    },
+    "P4-G6_RECOVERY_BUDGETS": {
+      "status": "PASS",
+      "commit": "9d33bfe",
+      "command": "npx jest tests/unit/operational-phase4-action-budget.test.ts",
+      "timestamp": "2026-08-18T17:35:00.000Z",
+      "evidence": "RecoveryBudgetManager: per-component retry budget, per-incident action budget, circuit breaker (trips after N consecutive failures, cooldown period). No infinite recovery loops.",
+      "artifact": "lib/operational/RecoveryBudget.ts",
+      "limitations": []
+    },
+    "P4-G7_DECISION_RECORDS": {
+      "status": "PASS",
+      "commit": "9d33bfe",
+      "command": "npx jest tests/unit/operational-phase4-decisions.test.ts",
+      "timestamp": "2026-08-18T17:40:00.000Z",
+      "evidence": "PolicyDecisionRecordStore: durable JSONL records with decisionId, incidentId, correlationId, component, observedState, evidence, candidateActions, selectedAction, risk, policy, authorization, executor, result, reason, verification, timestamp. Persisted to .hydi-operational/policy-decisions.jsonl.",
+      "artifact": "lib/operational/PolicyDecisionRecord.ts",
+      "limitations": []
+    },
+    "P4-G8_ESCALATION": {
+      "status": "PASS",
+      "commit": "9d33bfe",
+      "command": "npx jest tests/unit/operational-phase4-decisions.test.ts",
+      "timestamp": "2026-08-18T17:40:00.000Z",
+      "evidence": "EscalationManager: ESCALATION_REQUIRED state, operator-readable packages with evidence, attempted actions, policy stopped reason, recommended next action, risk, affected components. Live demo: circuit breaker tripped → escalation package produced.",
+      "artifact": "lib/operational/EscalationManager.ts",
+      "limitations": []
+    },
+    "P4-G9_CONCURRENCY": {
+      "status": "PASS",
+      "commit": "9d33bfe",
+      "command": "npx jest tests/unit/operational-phase4-action-budget.test.ts",
+      "timestamp": "2026-08-18T17:35:00.000Z",
+      "evidence": "RecoveryLockManager: recovery lease with holderId, acquire/release, timeout. Second acquire for same component returns null. Prevents competing autonomous recovery loops.",
+      "artifact": "lib/operational/RecoveryLock.ts",
+      "limitations": ["Lock holderId not stored in RecoveryEngine for explicit release — relies on lease timeout"]
+    },
+    "P4-G10_SECURITY": {
+      "status": "PASS",
+      "commit": "9d33bfe",
+      "command": "npx jest tests/unit/operational-phase4-security.test.ts",
+      "timestamp": "2026-08-18T17:45:00.000Z",
+      "evidence": "12 security tests: R5 prohibited, R3/R4 human_required, no arbitrary shell execution, command allowlisting, idempotent policy, dry-run no side effects, no scope creep, state machine boundaries. No policy bypass detected.",
+      "artifact": "tests/unit/operational-phase4-security.test.ts",
+      "limitations": []
+    },
+    "P4-G11_DRY_RUN": {
+      "status": "PASS",
+      "commit": "9d33bfe",
+      "command": "node scripts/hydi-recover.js --dry-run",
+      "timestamp": "2026-08-18T17:49:00.000Z",
+      "evidence": "Dry-run mode shows full decision chain: observe → diagnose → policy → authorize → (no execute). Live demo: protoforge-core killed, dry-run correctly showed policy would allow recovery without executing.",
+      "artifact": "lib/operational/OperationalIntelligence.ts (dryRun method)",
+      "limitations": []
+    },
+    "P4-G12_LIVE_GOVERNED_AUTONOMY": {
+      "status": "PASS",
+      "commit": "9d33bfe",
+      "command": "node scripts/hydi-recover.js --governed --component=protoforge-core",
+      "timestamp": "2026-08-18T17:50:00.000Z",
+      "evidence": "Live end-to-end demo: real protoforge-core kill → failure detected → policy evaluated (policy.recover.protoforge-core) → risk R1 → authorization ALLOWED → restart_process executed → postcondition verified HEALTHY → decision recorded durably. Also demonstrated: circuit breaker tripped → ESCALATION_REQUIRED → operator-readable escalation package.",
+      "artifact": ".hydi-operational/policy-decisions.jsonl",
+      "limitations": ["DEP0190 child_process shell warning (pre-existing from Phase 3)"]
+    },
+    "P4-G13_REGRESSION": {
+      "status": "PASS",
+      "commit": "9d33bfe",
+      "command": "npm run typecheck && npm run lint && npm test",
+      "timestamp": "2026-08-18T17:55:00.000Z",
+      "evidence": "Typecheck: PASS. Lint: 0 errors, 791 warnings. Full regression: 272 suites, 2615 passed, 1 skipped, 0 failed. Phase 3 tests: 51 passed. Phase 4 tests: 66 passed. No Phase 3 regression.",
+      "artifact": "phase4-gate-state.json",
+      "limitations": ["791 lint warnings (pre-existing 768 + 23 new from Phase 4 modules, all warnings not errors)"]
+    }
+  },
+  "summary": {
+    "phase3Preserved": true,
+    "phase3Regression": false,
+    "newSuites": 4,
+    "newTests": 66,
+    "totalSuites": 272,
+    "totalTests": 2615,
+    "skipped": 1,
+    "failed": 0,
+    "typecheck": "PASS",
+    "lintErrors": 0,
+    "lintWarnings": 791,
+    "liveDemonstrations": [
+      "Governed recovery: protoforge-core kill → policy → auth → recovery → verify → decision record",
+      "Circuit breaker denial: tripped breaker → ESCALATION_REQUIRED → operator-readable package",
+      "Dry-run: policy evaluation without execution",
+      "Operator view: canonical operator experience"
+    ]
+  }
+}

@@ -20,7 +20,7 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY
 );
 
-const stripe = process.env.STRIPE_SECRET_KEY 
+const stripe = process.env.STRIPE_SECRET_KEY
   ? new Stripe(process.env.STRIPE_SECRET_KEY)
   : null;
 
@@ -43,10 +43,10 @@ class RevenueEngine {
    */
   async scrapeLeads(niche = '3d_printing', location = 'local') {
     logger.info('Scraping leads', { niche, location });
-    
+
     // Simulated lead scraping (replace with actual scraping logic)
     const mockLeads = [
-      { 
+      {
         id: `lead_${Date.now()}_1`,
         company: 'Local Makerspace',
         contact: 'john@makerspace.com',
@@ -59,7 +59,7 @@ class RevenueEngine {
       {
         id: `lead_${Date.now()}_2`,
         company: 'Tech Startup Inc',
-        contact: 'sarah@techstartup.com', 
+        contact: 'sarah@techstartup.com',
         niche: 'product_development',
         source: 'linkedin',
         score: 92,
@@ -84,9 +84,27 @@ class RevenueEngine {
     }
 
     this.metrics.leadsScraped += mockLeads.length;
-    
+
     logger.info('Leads scraped', { count: mockLeads.length });
     return mockLeads;
+  }
+
+  /**
+   * Get leads from the database, optionally filtered by status.
+   * @param {string} status - Filter by lead status (e.g. 'new', 'contacted', 'converted')
+   * @param {number} limit - Max leads to return (default 100)
+   * @returns {Promise<Array>} Array of lead records
+   */
+  async getLeads(status = null, limit = 100) {
+    let query = this.supabase.from('leads').select('*');
+    if (status) query = query.eq('status', status);
+    query = query.order('created_at', { ascending: false }).limit(limit);
+    const { data, error } = await query;
+    if (error) {
+      logger.error('Failed to fetch leads', { error: error.message });
+      throw new Error(`Failed to fetch leads: ${error.message}`);
+    }
+    return data || [];
   }
 
   /**
@@ -94,11 +112,11 @@ class RevenueEngine {
    */
   async sendOutreach(leadIds = null) {
     logger.info('Sending outreach emails');
-    
+
     // Get leads that haven't been contacted
     let query = this.supabase.from('leads').select('*').eq('status', 'new');
     if (leadIds) query = query.in('id', leadIds);
-    
+
     const { data: leads, error } = await query.limit(10);
     if (error || !leads?.length) {
       logger.info('No new leads to contact');
@@ -106,11 +124,11 @@ class RevenueEngine {
     }
 
     const outreachResults = [];
-    
+
     for (const lead of leads) {
       // Generate personalized email
       const email = this.generateOutreachEmail(lead);
-      
+
       // Store outreach record
       const outreach = {
         id: `outreach_${Date.now()}_${lead.id}`,
@@ -120,15 +138,15 @@ class RevenueEngine {
         status: 'sent',
         sent_at: new Date().toISOString()
       };
-      
+
       await this.supabase.from('outreach').insert(outreach);
-      
+
       // Update lead status
-      await this.supabase.from('leads').update({ 
+      await this.supabase.from('leads').update({
         status: 'contacted',
         contacted_at: new Date().toISOString()
       }).eq('id', lead.id);
-      
+
       outreachResults.push({ lead: lead.company, email: email.subject });
 
       logger.info('Outreach sent', { company: lead.company });
@@ -184,14 +202,14 @@ HYDI Auto-Systems`
    */
   async generateProposal(leadId, projectType = 'custom_print') {
     logger.info('Generating proposal', { leadId });
-    
+
     // Get lead data
     const { data: lead } = await this.supabase.from('leads').select('*').eq('id', leadId).single();
     if (!lead) throw new Error('Lead not found');
 
     // Calculate pricing based on project type
     const pricing = this.calculatePricing(projectType);
-    
+
     // Generate proposal
     const proposal = {
       id: `prop_${Date.now()}`,
@@ -207,9 +225,9 @@ HYDI Auto-Systems`
     };
 
     await this.supabase.from('proposals').insert(proposal);
-    
+
     this.metrics.proposalsGenerated++;
-    
+
     logger.info('Proposal generated', { proposalId: proposal.id });
     return proposal;
   }
@@ -248,20 +266,20 @@ HYDI Auto-Systems`
    */
   async createInstantQuote(params) {
     logger.info('Creating instant quote');
-    
+
     const { projectType, quantity, complexity, rushOrder } = params;
-    
+
     // Calculate quote
     const pricing = this.calculatePricing(projectType);
     let total = pricing.base + (quantity * pricing.rate);
-    
+
     // Complexity multiplier
     if (complexity === 'high') total *= 1.5;
     if (complexity === 'medium') total *= 1.2;
-    
+
     // Rush order
     if (rushOrder) total *= 1.3;
-    
+
     const quote = {
       id: `quote_${Date.now()}`,
       project_type: projectType,
@@ -278,7 +296,7 @@ HYDI Auto-Systems`
     };
 
     await this.supabase.from('quotes').insert(quote);
-    
+
     logger.info('Quote created', { total: quote.total });
     return quote;
   }
@@ -290,7 +308,7 @@ HYDI Auto-Systems`
     }
 
     logger.info('Creating Stripe checkout', { quoteId });
-    
+
     // Get quote
     const { data: quote } = await this.supabase.from('quotes').select('*').eq('id', quoteId).single();
     if (!quote) throw new Error('Quote not found');
@@ -328,7 +346,7 @@ HYDI Auto-Systems`
     });
 
     this.metrics.checkoutsCreated++;
-    
+
     logger.info('Checkout created', { url: session.url });
     return { sessionId: session.id, url: session.url };
   }
@@ -339,10 +357,10 @@ HYDI Auto-Systems`
    */
   async generateProductIdeas(count = 5) {
     logger.info('Generating product ideas', { count });
-    
+
     const trends = await this.scrapeTrends();
     const ideas = [];
-    
+
     for (let i = 0; i < count; i++) {
       const idea = {
         id: `idea_${Date.now()}_${i}`,
@@ -355,7 +373,7 @@ HYDI Auto-Systems`
         status: 'idea',
         created_at: new Date().toISOString()
       };
-      
+
       await this.supabase.from('product_ideas').insert(idea);
       ideas.push(idea);
     }
@@ -372,11 +390,11 @@ HYDI Auto-Systems`
   generateProductName(trends) {
     const adjectives = ['Modular', 'Minimalist', 'Smart', 'Eco', 'Pro'];
     const nouns = ['Holder', 'Stand', 'Organizer', 'Case', 'Mount'];
-    
+
     const adj = adjectives[Math.floor(Math.random() * adjectives.length)];
     const noun = nouns[Math.floor(Math.random() * nouns.length)];
     const trend = trends[Math.floor(Math.random() * trends.length)];
-    
+
     return `${adj} ${trend} ${noun}`;
   }
 
@@ -386,7 +404,7 @@ HYDI Auto-Systems`
 
   async createProductListing(ideaId, platform = 'etsy') {
     logger.info('Creating product listing', { platform, ideaId });
-    
+
     // Get idea
     const { data: idea } = await this.supabase.from('product_ideas').select('*').eq('id', ideaId).single();
     if (!idea) throw new Error('Product idea not found');
@@ -406,12 +424,12 @@ HYDI Auto-Systems`
     };
 
     await this.supabase.from('product_listings').insert(listing);
-    
+
     // Update idea status
     await this.supabase.from('product_ideas').update({ status: 'listed' }).eq('id', ideaId);
-    
+
     this.metrics.productsListed++;
-    
+
     logger.info('Listing created', { title: listing.title });
     return listing;
   }
@@ -435,13 +453,13 @@ Ships within 2-3 business days.`;
    */
   async getRevenueReport(period = 'today') {
     logger.info('Generating revenue report', { period });
-    
+
     const now = new Date();
     let startDate;
-    
-    switch(period) {
+
+    switch (period) {
       case 'today':
-        startDate = new Date(now.setHours(0,0,0,0));
+        startDate = new Date(now.setHours(0, 0, 0, 0));
         break;
       case 'week':
         startDate = new Date(now - 7 * 24 * 60 * 60 * 1000);
@@ -450,7 +468,7 @@ Ships within 2-3 business days.`;
         startDate = new Date(now.getFullYear(), now.getMonth(), 1);
         break;
       default:
-        startDate = new Date(now.setHours(0,0,0,0));
+        startDate = new Date(now.setHours(0, 0, 0, 0));
     }
 
     // Get completed payments
@@ -536,7 +554,7 @@ Ships within 2-3 business days.`;
       checkout: metrics.conversionRate > 0.05 ? 0.9 : 0.2,
       product: metrics.salesCount > 0 ? 0.8 : 0.3
     };
-    
+
     return scores[taskType] || 0.5;
   }
 
@@ -548,7 +566,7 @@ Ships within 2-3 business days.`;
       checkout: 0.2,
       product: 0.3
     };
-    
+
     return score < (thresholds[taskType] || 0.3);
   }
 
@@ -568,7 +586,7 @@ Ships within 2-3 business days.`;
 
     // 2. Send outreach
     const outreach = await this.sendOutreach();
-    
+
     // 3. Generate proposals for high-score leads
     for (const lead of leads.filter(l => l.score > 80).slice(0, 2)) {
       await this.generateProposal(lead.id);
@@ -606,7 +624,7 @@ async function main() {
   const engine = new RevenueEngine();
   const command = process.argv[2];
 
-  switch(command) {
+  switch (command) {
     case 'cycle':
       await engine.runRevenueCycle();
       break;

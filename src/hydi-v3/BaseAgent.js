@@ -1,5 +1,11 @@
 'use strict';
 
+// NAMING COLLISION: there is a SEPARATE, unrelated class also named
+// `BaseAgent` at pao-system/agents/base.agent.ts (the PAO business/
+// operations agent base class, extended by FinanceAgent etc.). THIS one
+// is scoped to the HYDI V3 reliability/autonomy layer only (see
+// src/hydi-v3/RUNBOOKS.md). Check which tree a given consumer lives in
+// before assuming which "BaseAgent" it extends.
 class BaseAgent {
   constructor(config = {}) {
     this.name = config.name || 'agent';

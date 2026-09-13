@@ -73,6 +73,15 @@ tests/soak-test-report.json
 # TypeScript incremental build info
 tsconfig.tsbuildinfo
 
+# Temporary/ad-hoc output files
+tmp-*.txt
+_boot2.txt
+
+# Qualification transient artifacts (canonical evidence is in committed phase result JSONs and reports)
+hydi-phase1-worktree-audit.json
+hydi-phase7-restart-results.json
+hydi-preflight-smoke-results.json
+
 # Misc runtime/dev artifacts
 actions-runner/
 heidi_snapshot.json
@@ -86,3 +95,17 @@ hydi.db
 
 # Cloud-bootstrap state describes THIS machine's view of cloud infra — never commit
 .cloud-bootstrap-state.json
+
+# HYDI operational runtime data — durable event logs and decision records (local-only)
+.hydi-operational/
+
+# Daemon runtime artifacts
+.heidi-daemon.lock
+.heidi-daemon-audit.jsonl
+# Single-instance lease for the boot runtime (scripts/boot-instance-lease.js).
+# Machine-local runtime state — committing it would hand one machine's boot
+# identity to every other checkout.
+.hydi-boot.lock
+.commit-msg-*.txt
+.endurance-report.json
+pm2-state.json

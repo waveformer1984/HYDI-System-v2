@@ -125,6 +125,19 @@ class HealthObserver {
       return;
     }
 
+    // Phase 6: Control-plane convergence — when the governed control plane
+    // (watchdog + RecoveryEngine + PolicyEngine) is active, this observer
+    // MUST NOT create recovery missions. It is classified as OBSERVE-ONLY.
+    // The governed path has observation confidence, hysteresis, PDR creation,
+    // and policy authorization. This path has none of those.
+    // Only when the governed plane is NOT active may this fallback propose
+    // missions (and even then, HEIDI_AUTONOMOUS_ACTIONS must be true for
+    // the MissionWorker to actually execute them).
+    if (process.env.HYDI_DELEGATE_RECOVERY === 'true') {
+      this.log(`[HEALTH OBSERVER] ${mod.id} down (${failures} consecutive) — OBSERVE-ONLY: governed control plane is active (HYDI_DELEGATE_RECOVERY=true), not creating mission`);
+      return;
+    }
+
     const lastProposed = this.lastProposedAt.get(mod.id) || 0;
     if (Date.now() - lastProposed < this.cooldownMs) {
       this.log(`[HEALTH OBSERVER] ${mod.id} still down but a restart was already proposed within the cooldown window -- not proposing another`);

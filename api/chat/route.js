@@ -10,6 +10,8 @@ import { getSystemStatus, isReachable } from '../../lib/termux/termuxClient.js';
 import { callAgent, isClaudeAvailable } from '../../lib/claude';
 import { rateLimit } from '../../lib/rate-limit.js';
 import { verifyServiceToken } from '../../lib/auth/verifyServiceToken.js';
+import { listOpportunities, getLatestMissionRun } from '../../lib/missions/opportunity-store.js';
+import { buildBriefing } from '../../lib/missions/briefing.js';
 import {
   getRezonateProjectStatus,
   getRezonateTrackStatus,
@@ -229,7 +231,7 @@ async function legacyHandleKiloMessage(message, request) {
 /** @deprecated Chat stub. Replace with lib/protoforge/policy-engine.js. */
 async function legacyHandleProtoForgeMessage(message, request) {
   const lowerMessage = message.toLowerCase();
-  
+
   if (lowerMessage.includes('status')) {
     return `🌐 ProtoForge: Core system status - ${await getProtoForgeStatus()}`;
   }
@@ -241,8 +243,26 @@ async function legacyHandleProtoForgeMessage(message, request) {
   if (lowerMessage.includes('govern')) {
     return `🌐 ProtoForge: Governance status - ${await getGovernanceStatus()}`;
   }
-  
-  return `🌐 ProtoForge: Core system coordination. Try 'status', 'modules', or 'govern'.`;
+
+  // HYDI Mission Runner v1 -- protoforge.daily_opportunity_scan.
+  // Reads the already-persisted queue; does not trigger a new mission run
+  // inline (a live scan involves real outbound network calls and would
+  // make a chat response slow/unpredictable -- trigger via
+  // POST /api/missions/protoforge-opportunities instead).
+  if (lowerMessage.includes('brief') || lowerMessage.includes('opportunit') || lowerMessage.includes('queue')) {
+    try {
+      const opportunities = await listOpportunities({ limit: 100 });
+      const latestRun = await getLatestMissionRun();
+      if (!latestRun) {
+        return '🌐 ProtoForge: No opportunity scan has run yet. Trigger one via POST /api/missions/protoforge-opportunities {"action":"trigger"}.';
+      }
+      return buildBriefing(opportunities);
+    } catch (e) {
+      return `🌐 ProtoForge: could not read the opportunity queue -- ${e.message}`;
+    }
+  }
+
+  return `🌐 ProtoForge: Core system coordination. Try 'status', 'modules', 'govern', or 'brief'.`;
 }
 
 async function handleHyveMessage(message, request) {
