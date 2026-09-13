@@ -67,6 +67,22 @@ drop-everything, P1 is next up, P2 is scheduled but not urgent.
     check out clean, this may warrant a GitHub support ticket — instant
     failure with zero billable time and no runner assignment isn't a normal
     "ran out of minutes" pattern.
+2c. **2026-09-12: reconfirmed, ~2 months in, on a real merge to `clean-main`.**
+    PR #267 (the Next.js critical-RCE + dependency security patch below)
+    got three check-run webhooks — `Jest Unit Tests`, `HYDI V3 Operational
+    Integration Suite`, `Analyze (javascript-typescript)` (CodeQL) — all
+    `conclusion: failure`. Checked each job directly: all three show
+    `runner_id: 0`, complete in 2-4 seconds, log download 404s (no runner
+    ever produced output). Same exact symptom as 2b, now reconfirmed
+    against a live, just-merged commit rather than a scheduled run. This
+    means every push/PR to `clean-main` since 2026-07-17 — roughly two
+    months, well over 150 commits — has had **zero real CI signal** on
+    `unit-tests.yml`, `integration-tests.yml`, or `codeql.yml`. The PR
+    still merged (GitHub's branch protection evidently doesn't hard-block
+    on these particular required checks, or an admin override applied) —
+    worth confirming that's the intended posture, since it means red/
+    green on these three checks currently carries no information at all.
+    Still requires the same dashboard access as 2b/2c to actually fix.
 
 **P1 — high impact/risk, not yet started:**
 3. Cryptographic identity verification to replace the `x-user-id`
