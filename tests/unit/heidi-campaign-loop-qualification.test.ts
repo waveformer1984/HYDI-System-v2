@@ -112,7 +112,7 @@ describe('HEIDI Commercial Campaign Loop Qualification', () => {
   let workflow: CommercialWorkflow;
   let goals: GoalSystem;
   let discovery: ProspectDiscoveryAdapter;
-  let createdProspectIds: string[] = [];
+  const createdProspectIds: string[] = [];
 
   beforeAll(async () => {
     pool = new Pool({ ...DB_CONFIG, max: 5 });

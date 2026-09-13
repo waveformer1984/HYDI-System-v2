@@ -125,8 +125,8 @@ describe('HEIDI Commercial Workflow Qualification', () => {
   let workflow: CommercialWorkflow;
   let goals: GoalSystem;
   let missionGoalId: string;
-  let createdProspectIds: string[] = [];
-  let createdOpportunityIds: string[] = [];
+  const createdProspectIds: string[] = [];
+  const createdOpportunityIds: string[] = [];
 
   beforeAll(async () => {
     pool = new Pool({ ...DB_CONFIG, max: 5 });

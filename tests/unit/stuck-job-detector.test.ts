@@ -45,7 +45,7 @@ function makeMockSupabase(jobs: MockJob[], events: MockEvent[] = []) {
   const escalationInserts: any[] = [];
 
   function makeChain(table: any[], tableName: string) {
-    let query: any = {
+    const query: any = {
       _filters: [] as Array<{ column: string; operator: string; value: any }>,
       _order: null as { column: string; ascending: boolean } | null,
       _limit: null as number | null,

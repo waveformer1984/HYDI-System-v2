@@ -36,8 +36,8 @@ const TEST_INTERVAL_MS = 5000;
 
 describe('REAL graceful shutdown via IPC (not source-text check)', () => {
   let child: ChildProcess | null = null;
-  let testLockFile: string | null = null;
-  let testAuditFile: string | null = null;
+  const testLockFile: string | null = null;
+  const testAuditFile: string | null = null;
 
   // Use a separate lock/audit file for each test to avoid interference
   // with the real daemon. We do this by setting env vars before spawning.

@@ -166,7 +166,7 @@ describe('HEIDI Autonomous Revenue Campaign Qualification', () => {
   let ledger: RevenueLedger;
   let goals: GoalSystem;
   let missionGoalId: string;
-  let createdProspectIds: string[] = [];
+  const createdProspectIds: string[] = [];
 
   beforeAll(async () => {
     pool = new Pool({ ...DB_CONFIG, max: 5 });
