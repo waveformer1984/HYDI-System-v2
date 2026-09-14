@@ -253,7 +253,13 @@ describe('event-flow truth: self-generated events are not evidence of flow', () 
     const fs = require('fs');
     const path = require('path');
     const src = fs.readFileSync(path.resolve(__dirname, '../../true-system-health.js'), 'utf8');
-    expect(src).toContain("SELF_GENERATED_TOPICS = ['system:escalation', 'system:auto_heal']");
+    // 2026-09-14: event-flow evidence moved from event_bus_events (a table no
+    // currently-running code writes to -- see the file's own comment) to
+    // heidi_events, the table the live system actually writes to. The
+    // self-generated exclusion still applies to both queries; it now
+    // excludes cognitive_cycle (hydi-daemon's own heartbeat) instead of the
+    // old system:escalation/auto_heal topics.
+    expect(src).toContain("SELF_GENERATED_EVENT_TYPES = ['cognitive_cycle']");
     // Both the recent-events query and the last-event query must filter.
     expect(src.match(/\.or\(excludeSelfGenerated\)/g) || []).toHaveLength(2);
   });
