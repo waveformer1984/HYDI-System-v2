@@ -61,6 +61,12 @@ describe('protoforge_opportunities schema', () => {
     expect(data.status).toBe('needs_review'); // default
     expect(data.approval_status).toBe('pending'); // default -- the whole point of the R2+ boundary
     expect(data.id).toBeDefined();
+
+    // Same live-instance leak risk as protoforge_mission_runs below -- this
+    // row lands in the table the real briefing generator ranks by
+    // confidence, so an uncleaned fixture can outrank and displace genuine
+    // opportunities in production briefings.
+    await supabase.from('protoforge_opportunities').delete().eq('dedup_hash', dedup_hash);
   });
 
   it('rejects an invalid status value', async () => {
@@ -90,6 +96,8 @@ describe('protoforge_opportunities schema', () => {
       product: 'rezonate', dedup_hash, title: 'second (duplicate hash)', confidence: 50, source_type: 'hn_algolia',
     });
     expect(second.error).not.toBeNull();
+
+    await supabase.from('protoforge_opportunities').delete().eq('dedup_hash', dedup_hash);
   });
 
   it('updated_at advances on approve/reject', async () => {
@@ -109,6 +117,8 @@ describe('protoforge_opportunities schema', () => {
     expect(updated.data.approval_status).toBe('approved');
     expect(updated.data.approved_by).toBe('test-human');
     expect(new Date(updated.data.updated_at).getTime()).toBeGreaterThan(new Date(before).getTime());
+
+    await supabase.from('protoforge_opportunities').delete().eq('dedup_hash', dedup_hash);
   });
 
   it('records a mission run with the required status CHECK', async () => {
@@ -122,6 +132,12 @@ describe('protoforge_opportunities schema', () => {
     }).select('*').single();
     expect(error).toBeNull();
     expect(data.run_at).toBeDefined();
+
+    // This runs against the real local Supabase instance, not a hermetic
+    // fixture DB -- without cleanup this row leaks into the same table the
+    // live protoforge-opportunity-scheduler PM2 process reads/writes,
+    // corrupting the genuine mission-run history on every test run.
+    await supabase.from('protoforge_mission_runs').delete().eq('id', data.id);
   });
 
   it('RLS matches the existing leads table convention: service_role only', async () => {
