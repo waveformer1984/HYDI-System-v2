@@ -98,49 +98,56 @@ async function getSystemHealth() {
         // Event-flow evidence must exclude the events this health check itself
         // causes to be written, or the metric measures its own output:
         //
-        //   event flow CRITICAL -> escalation recorded -> event_bus_events gains
+        //   event flow CRITICAL -> escalation recorded -> event bus gains
         //   a row -> next evaluation sees recent activity -> event flow looks
         //   healthy
         //
         // That happened: after escalation recording started working, this metric
         // moved CRITICAL -> WARNING with no change in real event flow.
         //
-        // The exclusion is exactly the two topics the health evaluation emits:
-        //   system:escalation  (record_system_escalation)
-        //   system:auto_heal   (auto_heal_from_trends)
-        // and no others. system:healing, for instance, is written by
-        // business-intelligence-layer.sql -- a different subsystem -- and is
-        // genuine operational evidence, so it is deliberately NOT excluded.
+        // 2026-09-14: this check was found to be reading `event_bus_events`, a
+        // table no currently-running code writes to (its only writers are a
+        // dormant Supabase Edge Function, an on-demand API route, and a script
+        // not referenced by ecosystem.config.js/boot.config.json) -- so it had
+        // been permanently CRITICAL since 2026-08-17 regardless of real system
+        // health, while the live system (src/server.js, CognitiveCore) has been
+        // writing continuously to `heidi_events` the whole time. Repointed here.
         //
-        // The filter is null-safe on purpose. `topic` was added to
-        // event_bus_events after the table already had rows, so legacy rows have
-        // topic IS NULL, and both `not.in` and `neq` drop NULLs in SQL. Verified
-        // against the live table: the naive filter returned 0 rows where this
-        // one correctly returns the legacy row.
-        const SELF_GENERATED_TOPICS = ['system:escalation', 'system:auto_heal'];
-        const excludeSelfGenerated = `topic.is.null,topic.not.in.(${SELF_GENERATED_TOPICS.map((t) => `"${t}"`).join(',')})`;
+        // `heidi_events` has no `cognitive_cycle`-analog problem from the old
+        // table -- except `cognitive_cycle` itself: hydi-daemon's own R0
+        // self-observation loop inserts one roughly every 60s (8760 of ~9500
+        // rows at time of investigation), which is exactly the same "measures
+        // its own background loop" failure mode as before, just from a
+        // different source. `authorization_escalation` is NOT excluded --
+        // unlike the old system:escalation/auto_heal topics (which this health
+        // check's own evaluation writes about itself), authorization_escalation
+        // is written by CognitiveCore.recordEscalation() as part of its normal
+        // R2+ authorization-gate decision path -- a different subsystem's
+        // genuine operational evidence, same reasoning as system:healing above.
+        const SELF_GENERATED_EVENT_TYPES = ['cognitive_cycle'];
+        const excludeSelfGenerated = `event_type.not.in.(${SELF_GENERATED_EVENT_TYPES.map((t) => `"${t}"`).join(',')})`;
 
         // Recent event activity
         const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
         const { data: recentEvents, error: recentError } = await supabase
-            .from('event_bus_events')
-            .select('topic, event_name, occurred_at')
-            .gte('occurred_at', oneHourAgo)
+            .from('heidi_events')
+            .select('event_type, created_at')
+            .gte('created_at', oneHourAgo)
             .or(excludeSelfGenerated)
-            .order('occurred_at', { ascending: false })
+            .order('created_at', { ascending: false })
             .limit(20);
 
         // Last event timestamp
         const { data: lastEvent, error: lastError } = await supabase
-            .from('event_bus_events')
-            .select('occurred_at')
+            .from('heidi_events')
+            .select('created_at')
             .or(excludeSelfGenerated)
-            .order('occurred_at', { ascending: false })
+            .order('created_at', { ascending: false })
             .limit(1)
             .maybeSingle();
-            
+
         if (!recentError && !lastError) {
-            const lastEventTime = lastEvent ? new Date(lastEvent.occurred_at) : null;
+            const lastEventTime = lastEvent ? new Date(lastEvent.created_at) : null;
             const now = new Date();
             const minutesSinceLastEvent = lastEventTime ? 
                 Math.floor((now - lastEventTime) / (1000 * 60)) : null;
@@ -157,8 +164,8 @@ async function getSystemHealth() {
                 status: eventFlowStatus,
                 recentEventsCount: recentEvents?.length || 0,
                 lastEventMinutesAgo: minutesSinceLastEvent,
-                lastEventTime: lastEvent?.occurred_at ?? null,
-                excludesSelfGeneratedTopics: SELF_GENERATED_TOPICS
+                lastEventTime: lastEvent?.created_at ?? null,
+                excludesSelfGeneratedEventTypes: SELF_GENERATED_EVENT_TYPES
             };
             
             console.log(`  Recent events (1h): ${recentEvents?.length || 0}`);
@@ -167,12 +174,12 @@ async function getSystemHealth() {
             // Show sample of recent events
             if (recentEvents && recentEvents.length > 0) {
                 console.log('  Recent event types:');
-                const topicCounts = recentEvents.reduce((acc, evt) => {
-                    acc[evt.topic] = (acc[evt.topic] || 0) + 1;
+                const eventTypeCounts = recentEvents.reduce((acc, evt) => {
+                    acc[evt.event_type] = (acc[evt.event_type] || 0) + 1;
                     return acc;
                 }, {});
-                Object.entries(topicCounts).slice(0, 5).forEach(([topic, count]) => {
-                    console.log(`    - ${topic}: ${count}`);
+                Object.entries(eventTypeCounts).slice(0, 5).forEach(([eventType, count]) => {
+                    console.log(`    - ${eventType}: ${count}`);
                 });
             }
             
@@ -269,22 +276,28 @@ async function getSystemHealth() {
     console.log('\n🤖 AUTOMATION STATUS');
     console.log('-'.repeat(70));
     try {
-        // Check for recent heartbeat events
+        // Same dead-table bug as event flow above (see 2026-09-14 note): this
+        // looked for topic='system:heartbeat' in event_bus_events, which no
+        // current writer has ever emitted. hydi-daemon's own R0 self-observation
+        // loop (event_type='cognitive_cycle' in heidi_events, ~once/60s) IS a
+        // genuine automation heartbeat -- unlike the event-flow check above,
+        // this check's entire purpose is "is some automation loop ticking",
+        // so cognitive_cycle is deliberately NOT excluded here.
         const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
         const { data: heartbeats, error: hbError } = await supabase
-            .from('event_bus_events')
-            .select('occurred_at')
-            .eq('topic', 'system:heartbeat')
-            .gte('occurred_at', fiveMinutesAgo)
-            .order('occurred_at', { ascending: false });
-            
+            .from('heidi_events')
+            .select('created_at')
+            .eq('event_type', 'cognitive_cycle')
+            .gte('created_at', fiveMinutesAgo)
+            .order('created_at', { ascending: false });
+
         if (!hbError) {
             const hasHeartbeats = heartbeats && heartbeats.length > 0;
-            
+
             health.components.automation = {
                 status: hasHeartbeats ? 'OK' : 'WARNING',
                 heartbeats5min: heartbeats?.length || 0,
-                lastHeartbeat: heartbeats?.[0]?.occurred_at
+                lastHeartbeat: heartbeats?.[0]?.created_at
             };
             
             console.log(`  Heartbeats (5min): ${heartbeats?.length || 0}`);
