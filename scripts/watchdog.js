@@ -565,13 +565,22 @@ async function runCheck() {
           const child = exec(
             `node scripts/hydi-recover.js --governed --component=${f.name}`,
             { cwd: root, timeout: 120000, stdio: 'pipe', windowsHide: true },
-            (err) => {
+            (err, stdout, stderr) => {
+              // hydi-recover.js prints its governedRecover() result (the exact
+              // decision/denial reason) to stdout via console.log — previously
+              // discarded here, leaving `err.message`'s generic "Command
+              // failed: <cmd>" wrapper as the only visible detail on failure.
+              const out = (stdout || '').trim();
+              const errOut = (stderr || '').trim();
               if (err) {
                 log(`DELEGATE  RecoveryEngine failed for ${f.name}: ${err.message}`);
+                if (out) log(`DELEGATE  ${f.name} stdout: ${out.slice(0, 2000)}`);
+                if (errOut) log(`DELEGATE  ${f.name} stderr: ${errOut.slice(0, 2000)}`);
                 observationHysteresis.markRecovered(f.name, false);
                 observationMetrics.recordRecoveryAttempt(false);
               } else {
                 log(`DELEGATE  RecoveryEngine completed for ${f.name}`);
+                if (out) log(`DELEGATE  ${f.name} stdout: ${out.slice(0, 2000)}`);
                 observationHysteresis.markRecovered(f.name, true);
                 observationMetrics.recordRecoveryAttempt(true);
               }
