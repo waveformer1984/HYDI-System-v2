@@ -1,0 +1,59 @@
+{
+  "suiteName": "hydi-qualify",
+  "timestamp": "2026-09-15T19:43:51.024Z",
+  "scenarios": [
+    {
+      "scenarioId": "A2-heidi-web-kill",
+      "name": "Kill Heidi Web process",
+      "failureClass": "A",
+      "injected": true,
+      "detected": true,
+      "diagnosed": false,
+      "actionSelected": "restart_process",
+      "actionExecuted": true,
+      "recovered": true,
+      "verified": true,
+      "escalated": false,
+      "durationMs": 83215,
+      "evidence": [
+        {
+          "check": "pre-injection-health",
+          "status": "pass",
+          "value": "PID 19804 on port 3000",
+          "checkedAt": "2026-09-15T19:42:27.810Z"
+        },
+        {
+          "check": "process-killed",
+          "status": "pass",
+          "value": "Killed PID 19804",
+          "checkedAt": "2026-09-15T19:42:28.509Z"
+        },
+        {
+          "check": "post-injection-health",
+          "status": "fail",
+          "value": "HTTP 0",
+          "checkedAt": "2026-09-15T19:42:35.613Z"
+        },
+        {
+          "check": "health-endpoint",
+          "status": "pass",
+          "value": "HTTP 200",
+          "detail": "{\"status\":\"degraded\",\"hydi_status\":\"CRITICAL\",\"trend_status\":\"degrading\",\"escalation_level\":\"WARNING\",\"timestamp\":\"2026-09-15T19:43:50.876Z\",\"last_check\":\"2026-09-15T19:42:16.526+00:00\",\"version\":\"2.0",
+          "checkedAt": "2026-09-15T19:43:46.151Z"
+        }
+      ]
+    }
+  ],
+  "totalScenarios": 1,
+  "passed": 1,
+  "failed": 0,
+  "escalated": 0,
+  "durationMs": 83559,
+  "overallVerdict": "OPERATIONAL",
+  "evidence": {
+    "baselineHealthy": true,
+    "allScenariosCompleted": true,
+    "recoverySuccessRate": 100,
+    "escalationRate": 0
+  }
+}
