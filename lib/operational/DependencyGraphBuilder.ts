@@ -172,7 +172,7 @@ export class DependencyGraphBuilder {
       category: 'bridge',
       criticality: 'critical',
       dependencies: ['protoforge-core'],
-      dependents: ['heidi-web'],
+      dependents: [],
       recoveryOrder: 0,
       recoveryPolicy: 'restart_bridge',
     });
@@ -199,7 +199,14 @@ export class DependencyGraphBuilder {
       implicit.push('database');
     }
     if (id === 'heidi-web') {
-      implicit.push('database', 'ollama', 'bridge');
+      // 'bridge' deliberately excluded: its health check (checkBridge) probes
+      // heidi-web's own port, so it can never be HEALTHY while heidi-web is
+      // down, and it isn't a boot.config.json process RecoveryEngine can
+      // restart independently (restartBridge() throws for exactly this
+      // reason). Listing it as a blocking dependency made heidi-web's
+      // recovery permanently unreachable (RECOVERY_DEPENDENCY_BLOCKED,
+      // Attempts: 0) — a circular dependency, not a real precondition.
+      implicit.push('database', 'ollama');
     }
     return implicit;
   }
