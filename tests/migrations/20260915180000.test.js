@@ -249,19 +249,33 @@ describe('event-flow truth: self-generated events are not evidence of flow', () 
     expect(SELF).toHaveLength(2);
   });
 
-  it('true-system-health.js applies the exclusion to both event-flow queries', () => {
+  it('true-system-health.js no longer excludes cognitive_cycle from event-flow evidence', () => {
     const fs = require('fs');
     const path = require('path');
     const src = fs.readFileSync(path.resolve(__dirname, '../../true-system-health.js'), 'utf8');
-    // 2026-09-14: event-flow evidence moved from event_bus_events (a table no
-    // currently-running code writes to -- see the file's own comment) to
-    // heidi_events, the table the live system actually writes to. The
-    // self-generated exclusion still applies to both queries; it now
-    // excludes cognitive_cycle (hydi-daemon's own heartbeat) instead of the
-    // old system:escalation/auto_heal topics.
-    expect(src).toContain("SELF_GENERATED_EVENT_TYPES = ['cognitive_cycle']");
-    // Both the recent-events query and the last-event query must filter.
-    expect(src.match(/\.or\(excludeSelfGenerated\)/g) || []).toHaveLength(2);
+    // 2026-09-14: event-flow evidence moved from event_bus_events to
+    // heidi_events, and (at the time) carried the same self-generated
+    // exclusion forward onto cognitive_cycle, by analogy with
+    // event_bus_events' genuinely self-referential system:escalation/
+    // system:auto_heal topics above.
+    //
+    // 2026-09-17: that analogy was wrong. cognitive_cycle is written by
+    // lib/heidi/CognitiveCore.ts's recordCycle() through the same
+    // this.pool.query() call, into the same heidi_events table, as
+    // authorization_escalation -- not a weaker or self-referential signal,
+    // just a far more frequent one (hydi-daemon's ~60s heartbeat). Excluding
+    // it produced 20/20 consecutive CRITICAL system_health_runs while every
+    // other signal (process liveness, watchdog's independent classifier)
+    // confirmed the system was healthy -- the only thing that had actually
+    // stopped for 21+ hours was authorization_escalation, a rare,
+    // request-driven event type this deployment can legitimately go many
+    // hours without needing. See checkEventFlow() and
+    // tests/unit/true-system-health-eventflow.test.js.
+    expect(src).toContain('async function checkEventFlow(');
+    // The load-bearing behavioral check: neither event-flow query filters
+    // cognitive_cycle out anymore. (The old variable name may still appear
+    // in comments explaining this history -- that's prose, not behavior.)
+    expect(src.match(/\.or\(excludeSelfGenerated\)/g) || []).toHaveLength(0);
   });
 
   it('a dead event bus is CRITICAL, not OK (null must not compare as small)', () => {

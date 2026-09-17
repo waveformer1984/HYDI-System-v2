@@ -15,6 +15,81 @@ const supabase = createClient(
     process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
+/**
+ * Event Flow liveness check, extracted so it can be unit tested against a
+ * fixture Supabase client without a live database (see
+ * tests/unit/true-system-health-eventflow.test.js).
+ *
+ * What counts as evidence of event-system liveness, and why:
+ *
+ * This used to exclude event_type='cognitive_cycle' from the "last event"
+ * query (SELF_GENERATED_EVENT_TYPES). That exclusion was correct for a
+ * DIFFERENT, now-fixed problem: evaluate_system_escalation() (a different
+ * mechanism, in a different table -- event_bus_events) used to write a row
+ * every time this health check ran, so the check was measuring its own
+ * output. That write path was removed entirely in migration
+ * 20260915180000_dashboard_read_purity.sql.
+ *
+ * cognitive_cycle never had that problem. It is written by
+ * lib/heidi/CognitiveCore.ts's recordCycle() through the same
+ * this.pool.query() call, into the same heidi_events table, as
+ * authorization_escalation -- not a weaker or self-referential signal, just
+ * a much more frequent one (hydi-daemon's own ~60s self-observation loop).
+ * If that write path broke, cognitive_cycle would stop landing too, so its
+ * presence is direct evidence the event system can currently write -- which
+ * is exactly what this check exists to answer. Verified 2026-09-17:
+ * excluding it produced 20/20 consecutive CRITICAL system_health_runs while
+ * every other signal (process liveness, watchdog's independent classifier,
+ * protoforge-core's own event counter) confirmed the system was healthy --
+ * the only thing that had actually stopped for 21+ hours was
+ * authorization_escalation, a rare, request-driven event type that HYDI can
+ * legitimately go many hours without needing in a low-traffic deployment.
+ *
+ * A genuine total stall (no heidi_events row of ANY type, including
+ * cognitive_cycle) still reports CRITICAL, unchanged.
+ */
+async function checkEventFlow(supabaseClient, now = new Date()) {
+    const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000).toISOString();
+
+    const { data: recentEvents, error: recentError } = await supabaseClient
+        .from('heidi_events')
+        .select('event_type, created_at')
+        .gte('created_at', oneHourAgo)
+        .order('created_at', { ascending: false })
+        .limit(20);
+
+    const { data: lastEvent, error: lastError } = await supabaseClient
+        .from('heidi_events')
+        .select('created_at,event_type')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+    if (recentError || lastError) {
+        return { status: 'UNKNOWN', error: (recentError || lastError).message, recentEvents: null, minutesSinceLastEvent: null, lastEventTime: null };
+    }
+
+    const lastEventTime = lastEvent ? new Date(lastEvent.created_at) : null;
+    const minutesSinceLastEvent = lastEventTime
+        ? Math.floor((now - lastEventTime) / (1000 * 60))
+        : null;
+
+    // No event at all is the WORST case, not the best. Guarded explicitly
+    // because `null < 10` is true in JS, so a naive comparison chain would
+    // report a completely dead event bus as OK.
+    const status =
+        minutesSinceLastEvent === null ? 'CRITICAL' :
+        minutesSinceLastEvent < 10 ? 'OK' :
+        minutesSinceLastEvent < 30 ? 'WARNING' : 'CRITICAL';
+
+    return {
+        status,
+        recentEvents: recentEvents || [],
+        minutesSinceLastEvent,
+        lastEventTime: lastEvent?.created_at ?? null,
+    };
+}
+
 async function getSystemHealth() {
     if (!JSON_MODE) {
         console.log('🔍 TRUE SYSTEM HEALTH CHECK\n');
@@ -95,86 +170,23 @@ async function getSystemHealth() {
     console.log('\n📡 EVENT FLOW HEALTH');
     console.log('-'.repeat(70));
     try {
-        // Event-flow evidence must exclude the events this health check itself
-        // causes to be written, or the metric measures its own output:
-        //
-        //   event flow CRITICAL -> escalation recorded -> event bus gains
-        //   a row -> next evaluation sees recent activity -> event flow looks
-        //   healthy
-        //
-        // That happened: after escalation recording started working, this metric
-        // moved CRITICAL -> WARNING with no change in real event flow.
-        //
-        // 2026-09-14: this check was found to be reading `event_bus_events`, a
-        // table no currently-running code writes to (its only writers are a
-        // dormant Supabase Edge Function, an on-demand API route, and a script
-        // not referenced by ecosystem.config.js/boot.config.json) -- so it had
-        // been permanently CRITICAL since 2026-08-17 regardless of real system
-        // health, while the live system (src/server.js, CognitiveCore) has been
-        // writing continuously to `heidi_events` the whole time. Repointed here.
-        //
-        // `heidi_events` has no `cognitive_cycle`-analog problem from the old
-        // table -- except `cognitive_cycle` itself: hydi-daemon's own R0
-        // self-observation loop inserts one roughly every 60s (8760 of ~9500
-        // rows at time of investigation), which is exactly the same "measures
-        // its own background loop" failure mode as before, just from a
-        // different source. `authorization_escalation` is NOT excluded --
-        // unlike the old system:escalation/auto_heal topics (which this health
-        // check's own evaluation writes about itself), authorization_escalation
-        // is written by CognitiveCore.recordEscalation() as part of its normal
-        // R2+ authorization-gate decision path -- a different subsystem's
-        // genuine operational evidence, same reasoning as system:healing above.
-        const SELF_GENERATED_EVENT_TYPES = ['cognitive_cycle'];
-        const excludeSelfGenerated = `event_type.not.in.(${SELF_GENERATED_EVENT_TYPES.map((t) => `"${t}"`).join(',')})`;
+        const flow = await checkEventFlow(supabase);
 
-        // Recent event activity
-        const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
-        const { data: recentEvents, error: recentError } = await supabase
-            .from('heidi_events')
-            .select('event_type, created_at')
-            .gte('created_at', oneHourAgo)
-            .or(excludeSelfGenerated)
-            .order('created_at', { ascending: false })
-            .limit(20);
-
-        // Last event timestamp
-        const { data: lastEvent, error: lastError } = await supabase
-            .from('heidi_events')
-            .select('created_at')
-            .or(excludeSelfGenerated)
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .maybeSingle();
-
-        if (!recentError && !lastError) {
-            const lastEventTime = lastEvent ? new Date(lastEvent.created_at) : null;
-            const now = new Date();
-            const minutesSinceLastEvent = lastEventTime ? 
-                Math.floor((now - lastEventTime) / (1000 * 60)) : null;
-            
-            // No qualifying event at all is the WORST case, not the best.
-            // Guarded explicitly because `null < 10` is true in JS, so a naive
-            // comparison chain would report a completely dead event bus as OK.
-            const eventFlowStatus =
-                minutesSinceLastEvent === null ? 'CRITICAL' :
-                minutesSinceLastEvent < 10 ? 'OK' :
-                minutesSinceLastEvent < 30 ? 'WARNING' : 'CRITICAL';
-
+        if (flow.status !== 'UNKNOWN') {
             health.components.eventFlow = {
-                status: eventFlowStatus,
-                recentEventsCount: recentEvents?.length || 0,
-                lastEventMinutesAgo: minutesSinceLastEvent,
-                lastEventTime: lastEvent?.created_at ?? null,
-                excludesSelfGeneratedEventTypes: SELF_GENERATED_EVENT_TYPES
+                status: flow.status,
+                recentEventsCount: flow.recentEvents?.length || 0,
+                lastEventMinutesAgo: flow.minutesSinceLastEvent,
+                lastEventTime: flow.lastEventTime,
             };
-            
-            console.log(`  Recent events (1h): ${recentEvents?.length || 0}`);
-            console.log(`  Last event: ${minutesSinceLastEvent !== null ? minutesSinceLastEvent + ' minutes ago' : 'never'}`);
-            
+
+            console.log(`  Recent events (1h): ${flow.recentEvents?.length || 0}`);
+            console.log(`  Last event: ${flow.minutesSinceLastEvent !== null ? flow.minutesSinceLastEvent + ' minutes ago' : 'never'}`);
+
             // Show sample of recent events
-            if (recentEvents && recentEvents.length > 0) {
+            if (flow.recentEvents && flow.recentEvents.length > 0) {
                 console.log('  Recent event types:');
-                const eventTypeCounts = recentEvents.reduce((acc, evt) => {
+                const eventTypeCounts = flow.recentEvents.reduce((acc, evt) => {
                     acc[evt.event_type] = (acc[evt.event_type] || 0) + 1;
                     return acc;
                 }, {});
@@ -182,15 +194,15 @@ async function getSystemHealth() {
                     console.log(`    - ${eventType}: ${count}`);
                 });
             }
-            
-            if (minutesSinceLastEvent === null) {
-                health.issues.push('CRITICAL: No operational events have ever been recorded (excluding health-generated events)');
+
+            if (flow.minutesSinceLastEvent === null) {
+                health.issues.push('CRITICAL: No operational events have ever been recorded');
                 health.status = 'CRITICAL';
-            } else if (minutesSinceLastEvent >= 30) {
-                health.issues.push(`CRITICAL: No events for ${minutesSinceLastEvent} minutes`);
+            } else if (flow.minutesSinceLastEvent >= 30) {
+                health.issues.push(`CRITICAL: No events for ${flow.minutesSinceLastEvent} minutes`);
                 health.status = 'CRITICAL';
-            } else if (minutesSinceLastEvent >= 10) {
-                health.warnings.push(`WARNING: No events for ${minutesSinceLastEvent} minutes`);
+            } else if (flow.minutesSinceLastEvent >= 10) {
+                health.warnings.push(`WARNING: No events for ${flow.minutesSinceLastEvent} minutes`);
                 if (health.status === 'OK') health.status = 'WARNING';
             }
         } else {
@@ -379,20 +391,29 @@ async function getSystemHealth() {
     return health;
 }
 
-// Run the check
-getSystemHealth().then(health => {
-    if (JSON_MODE) {
-        console.log(JSON.stringify(health, null, 2));
-    }
-    
-    // Exit codes: 0 = OK/WARNING (operational), 1 = CRITICAL (action required)
-    const exitCode = health.status === 'CRITICAL' ? 1 : 0;
-    process.exit(exitCode);
-}).catch(err => {
-    if (JSON_MODE) {
-        console.error(JSON.stringify({ error: err.message, fatal: true }));
-    } else {
-        console.error('Fatal error:', err);
-    }
-    process.exit(1);
-});
+module.exports = { getSystemHealth, checkEventFlow };
+
+// Run the check only when invoked directly (node true-system-health.js), not
+// when required by a test -- matches scripts/system-health-scheduler.js's
+// same require.main guard, added here for the same reason: this file has
+// exported, independently-testable functions now (see
+// tests/unit/true-system-health-eventflow.test.js) and must not execute for
+// real, including calling process.exit(), just by being required.
+if (require.main === module) {
+    getSystemHealth().then(health => {
+        if (JSON_MODE) {
+            console.log(JSON.stringify(health, null, 2));
+        }
+
+        // Exit codes: 0 = OK/WARNING (operational), 1 = CRITICAL (action required)
+        const exitCode = health.status === 'CRITICAL' ? 1 : 0;
+        process.exit(exitCode);
+    }).catch(err => {
+        if (JSON_MODE) {
+            console.error(JSON.stringify({ error: err.message, fatal: true }));
+        } else {
+            console.error('Fatal error:', err);
+        }
+        process.exit(1);
+    });
+}
