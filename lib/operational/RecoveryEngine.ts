@@ -1090,19 +1090,69 @@ export class RecoveryEngine {
 
   /**
    * Restart a bridge component.
-   * Bridges are typically processes that connect HEIDI to external systems.
-   * If the bridge is a boot.config.json process, use restartProcess.
-   * Otherwise, log and escalate.
+   *
+   * 'bridge' has no independent process of its own: its functional health
+   * check (HealthProvenanceChecker.checkBridge) probes heidi-web's own
+   * endpoint directly — http://127.0.0.1:3000/api/chat — so heidi-web IS
+   * the process that actually serves it. See DependencyGraphBuilder.ts's
+   * bridge node and HealthProvenanceChecker.ts's checkBridge().
+   *
+   * checkBridge's early UNAVAILABLE return (404 / connection-refused)
+   * does not populate `dependencies`, so AutonomyPolicyModel's
+   * `dependency_state != UNAVAILABLE` gate can pass vacuously even when
+   * heidi-web itself is the thing that's down — that policy is left
+   * unchanged (Phase 5, R2/policy_authorized), but this method re-checks
+   * heidi-web's own tracked state directly before acting, so a bridge
+   * recovery can never redundantly (and possibly racingly) restart
+   * heidi-web while heidi-web's own recovery path is the one that should
+   * handle it. Restart is only attempted when heidi-web's own state is
+   * confirmed HEALTHY — i.e. the failure is specific to the /api/chat
+   * route itself (e.g. a broken build), not heidi-web being down.
    */
   private async restartBridge(component: string): Promise<void> {
-    // Check if the bridge is a registered process module
-    const mod = this.bootConfig.modules.find((m) => m.id === component);
-    if (mod && mod.type === 'process') {
-      await this.restartProcess(component);
+    const heidiWebState = this.stateModel.getState('heidi-web').state;
+    if (heidiWebState !== 'HEALTHY') {
+      this.stateModel.logEvent({
+        id: randomUUID(),
+        timestamp: new Date().toISOString(),
+        type: 'recovery_step',
+        component,
+        action: 'bridge_restart',
+        actionResult: 'failure',
+        detail: {
+          reason: "bridge is unavailable because heidi-web itself is not HEALTHY — heidi-web's own recovery handles this, not a redundant bridge-triggered restart",
+          heidiWebState,
+        },
+      });
+      throw new Error(`Bridge ${component} is blocked by heidi-web being ${heidiWebState} — heidi-web's own recovery will resolve this`);
+    }
+
+    // heidi-web's own process is otherwise healthy — the bridge failure is
+    // specific to the /api/chat route itself. The only real remediation is
+    // restarting the process that serves it, via the exact same mechanism
+    // already used (and qualified, see HYDI_HEIDI_WEB_RECOVERY_QUALIFICATION.md)
+    // for heidi-web's own recovery.
+    const heidiWebModule = this.bootConfig.modules.find((m) => m.id === 'heidi-web');
+    if (heidiWebModule && heidiWebModule.type === 'process') {
+      this.stateModel.logEvent({
+        id: randomUUID(),
+        timestamp: new Date().toISOString(),
+        type: 'recovery_step',
+        component,
+        action: 'bridge_restart',
+        actionResult: 'in_progress',
+        detail: {
+          reason: 'bridge has no independent process; restarting heidi-web, the process that serves the bridge endpoint',
+          delegatedTo: 'heidi-web',
+        },
+      });
+      await this.restartProcess('heidi-web');
       return;
     }
 
-    // If not a process module, we can't restart it autonomously
+    // Unreachable given the current boot.config.json (heidi-web is always a
+    // registered process module), kept as a safe fallback rather than
+    // silently doing nothing if that ever changes.
     this.stateModel.logEvent({
       id: randomUUID(),
       timestamp: new Date().toISOString(),
@@ -1110,7 +1160,7 @@ export class RecoveryEngine {
       component,
       action: 'bridge_restart',
       actionResult: 'failure',
-      detail: { reason: 'bridge is not a restartable process module — escalation required' },
+      detail: { reason: 'heidi-web is not a registered process module — escalation required' },
     });
     throw new Error(`Bridge ${component} is not a restartable process — requires manual intervention`);
   }

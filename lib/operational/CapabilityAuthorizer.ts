@@ -47,6 +47,11 @@ const RESTARTABLE_MODULES = new Set([
   'supabase_kong',
   'supabase_studio',
   'ollama',
+  // Phase 5: bridge has no independent process (RecoveryEngine.restartBridge
+  // restarts heidi-web, the process that actually serves it) but is a real,
+  // policy-authorized recovery target (policy.recover.bridge, R2) and must
+  // be authorizable like any other restartable component.
+  'bridge',
 ]);
 
 /**
