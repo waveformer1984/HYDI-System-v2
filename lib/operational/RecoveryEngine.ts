@@ -1140,7 +1140,11 @@ export class RecoveryEngine {
         type: 'recovery_step',
         component,
         action: 'bridge_restart',
-        actionResult: 'in_progress',
+        // No actionResult here -- the outcome isn't known yet at this point
+        // (restartProcess() below records its own 'success' process_spawned
+        // event once the spawn actually happens). actionResult's type only
+        // allows 'success' | 'failure' | 'denied' | 'skipped' | 'stopped',
+        // none of which describes an in-flight step.
         detail: {
           reason: 'bridge has no independent process; restarting heidi-web, the process that serves the bridge endpoint',
           delegatedTo: 'heidi-web',
