@@ -45,6 +45,10 @@ function buildChecker() {
   // no real DependencyGraphBuilder pass over the repo is needed here.
   const emptyGraph = { nodes: new Map() } as unknown as DependencyGraph;
   const checker = new HealthProvenanceChecker(root, model, emptyGraph);
+  // Force the per-node probe path: these tests mock getProcessInfo/
+  // getParentPid, so the bulk process-table load must be "unavailable" or
+  // the fixtures' fake pids would be absent from a real snapshot.
+  (checker as any).getProcessTable = jest.fn().mockReturnValue(null);
   return checker as any; // access to TS-private test seams below is intentional
 }
 

@@ -12,6 +12,9 @@ node_modules/
 # Local Netlify folder
 .netlify
 
+# tools/verify.ps1 output — evidence for the operator, not project history
+.hydi/verification/
+
 # Heidi runtime secrets
 .vapid-keys.json
 **/.vapid-keys.json
@@ -106,6 +109,9 @@ hydi.db
 # Machine-local runtime state — committing it would hand one machine's boot
 # identity to every other checkout.
 .hydi-boot.lock
+# Restart request/ack queue between RecoveryEngine and boot-agent
+# (scripts/boot-control.js). In-flight machine-local orders, never history.
+.hydi-boot-control/
 .commit-msg-*.txt
 .endurance-report.json
 pm2-state.json

@@ -19,10 +19,11 @@
 
 import fs from 'fs';
 import path from 'path';
-import { exec as execCb } from 'child_process';
+import { exec as execCb, execFile as execFileCb } from 'child_process';
 import { promisify } from 'util';
 
 const exec = promisify(execCb);
+const execFile = promisify(execFileCb);
 
 export interface RestartResult {
   target: string;
@@ -199,9 +200,11 @@ export class DependencyAwareRestartExecutor {
       }
     }
 
-    // Full restart via PM2 (if available)
+    // Full restart via PM2 (if available). argv form — target is already
+    // allowlisted to RESTARTABLE_MODULES, but the shell is removed entirely
+    // so no future code path can interpolate an unchecked value.
     try {
-      const { stdout, stderr } = await exec(`pm2 restart ${target} --update-env`, { timeout: 30000 });
+      const { stdout, stderr } = await execFile('pm2', ['restart', target, '--update-env'], { timeout: 30000 });
 
       // Wait for health check to pass
       const healthy = await this.waitForHealth(target, 30000);
