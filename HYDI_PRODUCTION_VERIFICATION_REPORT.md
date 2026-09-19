@@ -21,9 +21,11 @@ internet. That step must not be run until §3 is resolved.
 The gated contract the report describes is real and independently verified here
 (§4). The exposure finding is about a *different* endpoint on the same port.
 
-A second finding, outside the source report's scope: **neither CI workflow has
-passed on `clean-main` in its last six runs** — both fail within seconds, before any
-test executes (§6b). The project currently has no working automated gate.
+A second finding, outside the source report's scope: **the repository has no
+working CI at all.** Neither workflow has passed on `clean-main` in its last six
+runs; jobs fail in ~2 seconds because **no runner is ever assigned** — an
+account-level billing or policy condition, not a code defect, and not fixable from
+inside the repo (§6b).
 
 ## 2. What This Report Is, and What It Is Not
 
@@ -228,10 +230,39 @@ Two candidate causes were checked and **ruled out**:
   both resolve to published releases (v7.0.1).
 - Not the DB failures — the timing rules that out, as above.
 
-The cause remains open. The PR carrying this report will trigger a fresh run of
-both workflows whose logs *will* be readable; that is the cheapest way to identify
-the failing step, and it should be done before any further "verified" claim rests
-on CI.
+### Root cause: no runner is ever assigned
+
+The PR carrying this report triggered a fresh run, which resolved it. Both
+`Analyze (javascript-typescript)` and `HYDI V3 Operational Integration Suite`
+failed in **2 seconds** (`21:41:24` → `21:41:26`) on a documentation-only change,
+and `Jest Unit Tests` sat in `queued`. The job record is conclusive:
+
+```
+"conclusion":    "failure",
+"runner_id":      0,
+"runner_name":    "",
+"runner_group_id": 0,
+"runner_group_name": "",
+"started_at":  "2026-09-19T21:41:24Z",
+"completed_at":"2026-09-19T21:41:26Z"
+```
+
+There is no `steps` array, no runner was ever assigned, and log download returns
+HTTP 404 even seconds after the run — because no step ever produced output. **The
+jobs are failing before the runner is allocated**, which is why the workflow
+contents, the action versions and the test failures are all irrelevant to it.
+
+That is an account- or repository-level condition, not a code defect: exhausted
+Actions minutes or a billing/spending limit, or an Actions policy blocking the
+runner. It is consistent with the source report's own "Vercel account deployment
+blocked", which points at the same account-level billing problem affecting both
+services, and with the repo-wide 24-hour `queued` stall recorded in `CLAUDE.md`
+for 2026-07-08.
+
+**This is not fixable from inside the repository** — no workflow edit will help.
+The owner needs to check GitHub billing → Actions minutes / spending limit for the
+account. Until then the branch-protection checks `clean-main` requires can never
+turn green, and no PR can be gated on CI.
 
 Meanwhile, per `CLAUDE.md`, the pre-push hook (`.githooks/pre-push`, typecheck +
 full Jest) is the only gate actually running — and it runs the same suite that is
@@ -279,13 +310,16 @@ Ordered so that nothing is exposed before it is safe.
    `src/hydi-v3/localAccessGuard.js`, as `pages/api/cockpit/*` and
    `pages/api/console/*` already do — or commit to blocking the path at the
    tunnel. **Blocks everything below.** (§3)
-2. **Merge PR #272** (mark ready for review first) so the connectivity checker is
+2. **Restore CI** — check GitHub billing → Actions minutes / spending limit for the
+   account (§6b). Nothing in the repository can fix this, and until it is fixed no
+   change to `clean-main` is gated by anything.
+3. **Merge PR #272** (mark ready for review first) so the connectivity checker is
    available on `clean-main`.
-3. **Push `fix/production-hydi-contract-63ea`** from an account with write access,
+4. **Push `fix/production-hydi-contract-63ea`** from an account with write access,
    and open a PR **against `clean-main`**. Needed to establish whether it carries
    anything beyond what already landed in `52cd389` — including the host gate its
    403 probe implies (§3).
-4. **Tailscale:** on the HYDI host, `tailscale funnel 3000`; note the HTTPS URL.
+5. **Tailscale:** on the HYDI host, `tailscale funnel 3000`; note the HTTPS URL.
    Then re-verify from outside:
    ```bash
    export HYDI_SERVICE_SECRET=...   # never as an argument
@@ -293,11 +327,11 @@ Ordered so that nothing is exposed before it is safe.
    ```
    With `--public-url` set, the checker treats an ungated `/api/chat` as a failure —
    so this is the gate on step 1 actually being done, not merely believed.
-5. **Vercel (`hydi-heidi`):** unblock the account, then set **server-side only**
+6. **Vercel (`hydi-heidi`):** unblock the account, then set **server-side only**
    (never `NEXT_PUBLIC_*`): `HYDI_API_URL` (the funnel URL, no trailing slash) and
    `HYDI_SERVICE_SECRET` (identical to the HYDI process's value). Deploy after the
    portal repo's PR #146 merges.
-6. **Re-run the full check** with both URLs to confirm the path end to end:
+7. **Re-run the full check** with both URLs to confirm the path end to end:
    ```bash
    bash termux/hydi-production-connect.sh \
      --public-url https://<host>.<tailnet>.ts.net \
@@ -332,8 +366,9 @@ PASS — they may well be true of that VM; they are not evidence about this bran
 | Heidi → HYDI → Heidi E2E | **UNVERIFIED** — portal repo, VM-local |
 | `npm run build` incl. `/push-setup` | **UNVERIFIED** here — `pages/push-setup.tsx` present; typecheck passes |
 | Full `npm test` | **251 failed / 4090 passed** — all DB-refusal; reproduces the source report exactly (§6) |
-| `unit-tests.yml` green on `clean-main` | **FAIL** — red on the last 6 pushes, fails in 4–7 s before tests run (§6b) |
+| `unit-tests.yml` green on `clean-main` | **FAIL** — no runner assigned; fails in ~2 s before any step (§6b) |
 | `integration-tests.yml` green on `clean-main` | **FAIL** — same (§6b) |
+| Any working CI gate on this repository | **FAIL** — account-level; owner action required (§6b) |
 
 ## 10. Bottom Line
 
@@ -345,10 +380,12 @@ Two findings change the plan:
 
 1. **Do not open the funnel until `/api/chat` is gated.** (§3) The fix is already in
    the tree and tested — it needs wiring, not design.
-2. **Neither CI workflow has passed on `clean-main` in its last six runs**, failing
-   in seconds before any test runs. (§6b) Until that is diagnosed, "verified" rests
-   on local runs and the pre-push hook alone — and the suite that hook runs is
-   251-red for want of a database.
+2. **The repository has no working CI**, and the cause is now identified: jobs
+   fail in ~2 seconds because no runner is ever assigned — GitHub billing or an
+   Actions policy, fixable only by the account owner. (§6b) So "verified" currently
+   rests on local runs and the pre-push hook alone — and that hook runs the suite
+   that is 251-red for want of a database, so in practice every push uses
+   `--no-verify`.
 
 Everything else in the handoff stands, with the four corrections in §7. The
 service-token contract it set out to prove is genuinely proven (§4); what is not
