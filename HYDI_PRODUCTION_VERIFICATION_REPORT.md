@@ -259,6 +259,13 @@ blocked", which points at the same account-level billing problem affecting both
 services, and with the repo-wide 24-hour `queued` stall recorded in `CLAUDE.md`
 for 2026-07-08.
 
+The condition is persistent, not transient: all three checks
+(`Jest Unit Tests`, `Analyze (javascript-typescript)`,
+`HYDI V3 Operational Integration Suite`) fail this way on both pushed heads, and a
+re-run is not available as a workaround —
+`POST /actions/runs/35471212175/rerun-failed-jobs` returns
+`403 Resource not accessible by integration`.
+
 **This is not fixable from inside the repository** — no workflow edit will help.
 The owner needs to check GitHub billing → Actions minutes / spending limit for the
 account. Until then the branch-protection checks `clean-main` requires can never
