@@ -81,11 +81,13 @@ function loadEndpointsFromBootConfig() {
         name: mod.id,
         url: mod.health.url,
         required: mod.required !== false,
+        graceMs: mod.health.graceMs ?? config.defaultGraceMs,
       });
     }
   }
   return endpoints;
 }
+const { delegateTimeoutMs } = require('./delegate-timeout');
 const ENDPOINTS = loadEndpointsFromBootConfig();
 
 const INTERVAL_MS = parseInt(process.env.WATCHDOG_INTERVAL_MS || '30000', 10);
@@ -564,7 +566,7 @@ async function runCheck() {
         recoveryPromises.push(new Promise((resolve) => {
           const child = exec(
             `node scripts/hydi-recover.js --governed --component=${f.name}`,
-            { cwd: root, timeout: 120000, stdio: 'pipe', windowsHide: true },
+            { cwd: root, timeout: delegateTimeoutMs(f), stdio: 'pipe', windowsHide: true },
             (err, stdout, stderr) => {
               // hydi-recover.js prints its governedRecover() result (the exact
               // decision/denial reason) to stdout via console.log — previously
