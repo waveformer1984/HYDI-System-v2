@@ -110,16 +110,27 @@ export class EscalationNotifier {
         const incidentKey =
           (notification.metadata?.dedupeKey as string | undefined) ??
           (notification.metadata?.jobId as string | undefined) ??
+          (notification.metadata?.eventId as string | undefined) ??
           null;
 
         let existingId: string | null = null;
         if (incidentKey) {
+          // The identity may be stored under ANY of the incident-key field
+          // names — legacy webhook_retry rows carry metadata.eventId, stuck
+          // jobs carry jobId. Match all of them so a re-fired incident finds
+          // its canonical row regardless of which field the original
+          // detector used. (Census 2026-09-21: 439 webhook_retry rows used
+          // eventId and would have kept duplicating post-d9740f7.)
           const { data: existing } = await this.supabase
             .from('operator_escalations')
             .select('id')
             .eq('category', notification.category)
             .eq('resolved', false)
-            .or(`metadata->>jobId.eq.${incidentKey},metadata->>dedupeKey.eq.${incidentKey}`)
+            .or(
+              `metadata->>jobId.eq.${incidentKey},` +
+              `metadata->>dedupeKey.eq.${incidentKey},` +
+              `metadata->>eventId.eq.${incidentKey}`
+            )
             .order('created_at', { ascending: false })
             .limit(1);
           existingId = existing?.[0]?.id ?? null;

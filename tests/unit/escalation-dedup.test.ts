@@ -146,4 +146,26 @@ describe('EscalationNotifier dedup', () => {
     await n.notify(n1);
     expect(supa.rows).toHaveLength(2);
   });
+
+  test('D6: webhook_retry incidents key on metadata.eventId — dedupes like jobId', async () => {
+    // Census 2026-09-21: 439 webhook_retry rows all keyed on
+    // metadata.eventId — the original dedup only checked jobId/dedupeKey,
+    // so webhook incidents would have kept inserting after d9740f7.
+    const supa = makeMockSupabase();
+    const n = new EscalationNotifier(supa);
+    const webhook = (id: string) => ({
+      category: 'webhook_retry',
+      severity: 'warning' as const,
+      title: `Webhook stuck in processing: ${id}`,
+      body: `Event ${id} stuck.`,
+      metadata: { eventId: id, eventType: 'checkout.session.completed', webhookId: 'wh-1' },
+    });
+    await n.notify(webhook('evt_abc'));
+    await n.notify(webhook('evt_abc'));
+    await n.notify(webhook('evt_xyz'));
+
+    expect(supa.rows).toHaveLength(2); // evt_abc deduped, evt_xyz separate
+    expect(supa.rows[0].metadata.eventId).toBe('evt_abc');
+    expect(supa.rows[0].metadata.last_seen_at).toBeTruthy();
+  });
 });
