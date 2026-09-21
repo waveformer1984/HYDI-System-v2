@@ -94,7 +94,7 @@ export class GoalSystem {
       const parent = await this.getGoal(input.parentId);
       if (!parent) throw new Error(`Parent goal ${input.parentId} not found`);
       const parentIdx = HIERARCHY.indexOf(parent.goalType);
-    const childIdx = HIERARCHY.indexOf(input.goalType);
+      const childIdx = HIERARCHY.indexOf(input.goalType);
       if (childIdx <= parentIdx) {
         throw new Error(`Goal type ${input.goalType} cannot be child of ${parent.goalType} — must be lower in hierarchy`);
       }
@@ -263,6 +263,22 @@ export class GoalSystem {
     }
 
     return { resumed, blocked };
+  }
+
+  /**
+   * Most recent goal carrying a given context key (e.g. a MissionProducer
+   * `producerKey`), regardless of status. Used for dedupe and cooldown —
+   * completed/failed goals still count toward the rate limit.
+   */
+  async getLatestByProducerKey(producerKey: string): Promise<Goal | null> {
+    const row = await this.queryOne<QueryResultRow>(
+      `SELECT * FROM heidi_goals
+       WHERE context->>'producerKey' = $1
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [producerKey],
+    );
+    return row ? this.mapGoal(row) : null;
   }
 
   async checkDependencies(goal: Goal): Promise<boolean> {

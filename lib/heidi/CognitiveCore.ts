@@ -53,6 +53,7 @@ import { createHeidiVerificationRunner, heidiObservers } from './ContractVerific
 import { ALL_CONTRACTS } from './contracts';
 import type { ProspectRecord, OpportunityRecord } from '../revenue/types';
 import { getOfferCatalog } from '../revenue/OfferCatalog';
+import { MissionProducer, type ProductionResult } from './MissionProducer';
 
 export type CognitivePhase =
   | 'perceive' | 'validate' | 'understand' | 'update_world_model'
@@ -117,6 +118,7 @@ export interface CognitiveState {
   worldModelSummary: { total: number; healthy: number; degraded: number; failed: number; unknown: number } | null;
   activeGoals: Goal[];
   pendingWork: Goal[];
+  producedMissions: ProductionResult | null;
   retrievedMemory: string | null;
   trustClassification: TrustClassification | null;
   threatAssessments: ThreatAssessment[];
@@ -328,7 +330,7 @@ export interface ExecutionBridge {
   } | null;
   memory?: {
     retrieve: (query: string, userId: string, sessionId?: string) => Promise<string>;
-    storeExperience: (sessionId: string, userId: string, experience: { problem: string; actionsTaken: unknown[]; outcome: string; lesson: string }) => Promise<boolean>;
+    storeExperience: (sessionId: string, userId: string, experience: { problem: string; actionsTaken: unknown[]; outcome: string; lesson: string }) => Promise<string | null>;
   } | null;
   metaCognition?: {
     evaluate: (thinkResult: { query: string; thinkingProcess: unknown[]; response: string; confidence: number }) => Promise<{ overallQualityScore: number; qualityClassification: string; improvementAreas: string[] }>;
@@ -433,6 +435,7 @@ export class CognitiveCore {
    * disagreements, then flip HEIDI_CONTRACT_AUTHORITY=enforcing.
    */
   private contractAuthorityMode: 'advisory' | 'enforcing';
+  private missionProducer: MissionProducer | null;
   private bridge: ExecutionBridge;
   private currentCycle: CognitiveState | null = null;
   private cycleCount = 0;
@@ -452,7 +455,7 @@ export class CognitiveCore {
   private lastError: string | null = null;
   private startedAt: number | null = null;
 
-  constructor(config?: DBConfig, bridge?: ExecutionBridge) {
+  constructor(config?: DBConfig, bridge?: ExecutionBridge, opts?: { missionProducer?: MissionProducer | null }) {
     this.pool = new Pool({
       host: config?.host || process.env.PG_HOST || '127.0.0.1',
       port: config?.port || parseInt(process.env.PG_PORT || '54322', 10),
@@ -497,6 +500,15 @@ export class CognitiveCore {
 
     // Wire capability executors if bridge components are available
     this.wireCapabilityExecutors();
+
+    // The governed goal producer. It runs inside the cycle's
+    // identify_goals phase and can only emit missions bound to
+    // capabilities the registry already reports as executable — it
+    // narrows the loop's work, never widens its authority. Injectable
+    // (and nullable) so tests can substitute a bounded catalog.
+    this.missionProducer = opts && 'missionProducer' in opts
+      ? (opts.missionProducer as MissionProducer)
+      : new MissionProducer({ goals: this.goals, registry: this.registry });
   }
 
   // ─── Bounded external calls ───────────────────────────────────────────
@@ -1423,6 +1435,7 @@ export class CognitiveCore {
       worldModelSummary: null,
       activeGoals: [],
       pendingWork: [],
+      producedMissions: null,
       retrievedMemory: null,
       trustClassification: null,
       threatAssessments: [],
@@ -1494,8 +1507,21 @@ export class CognitiveCore {
       errors.push(`retrieve_memory: ${e instanceof Error ? e.message : 'unknown'}`);
     }
 
-    // PHASE 6: IDENTIFY GOALS — check for goals that need attention
+    // PHASE 6: IDENTIFY GOALS — produce governed missions, then plan over
+    // the refreshed work set. Production is bounded (open-goal cap, per-key
+    // dedupe, per-key cooldown) and can only emit capabilities the registry
+    // reports as executable at the current autonomy level.
     try {
+      state.producedMissions = this.missionProducer
+        ? await this.missionProducer.produce(
+          state.pendingWork,
+          state.identity?.autonomyLevel ?? 0,
+        )
+        : null;
+      if (state.producedMissions && state.producedMissions.created.length > 0) {
+        state.pendingWork = await this.goals.getPendingWork();
+        state.activeGoals = await this.goals.getActiveMissions();
+      }
       state.phase = 'plan';
     } catch (e) {
       errors.push(`identify_goals: ${e instanceof Error ? e.message : 'unknown'}`);
@@ -2225,7 +2251,9 @@ export class CognitiveCore {
     let memoryStored = false;
     let memoryId: string | null = null;
 
-    // Store experience in episodic memory if bridge is available
+    // Store experience in episodic memory if bridge is available. The
+    // bridge returns the real `memories` row id — memoryStored means a
+    // row exists with that id, not that a call returned without throwing.
     if (this.bridge.memory && lesson && state.executionResult?.executed) {
       try {
         const experience = {
@@ -2238,15 +2266,13 @@ export class CognitiveCore {
           outcome: outcomeClassification,
           lesson,
         };
-        memoryStored = await this.withDeadline(
+        memoryId = await this.withDeadline(
           this.bridge.memory.storeExperience(this.sessionId, 'heidi', experience),
-          false,
+          null,
           'storeExperience',
           (message) => lessons.push(message),
         );
-        if (memoryStored) {
-          memoryId = `mem-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-        }
+        memoryStored = memoryId !== null;
       } catch {
         // Memory storage failure is not fatal
       }
@@ -2267,6 +2293,36 @@ export class CognitiveCore {
         goalUpdated = true;
       } catch {
         // Goal update failure is not fatal
+      }
+    }
+
+    // Complete a capability-bound goal once its bound capability executed
+    // and verified. A goal carrying context.capabilityId means "run this
+    // capability"; doing so successfully IS the work — leaving it open
+    // would re-run it forever and wedge the producer's open-goal dedupe.
+    if (goalUpdated && state.selectedAction) {
+      try {
+        const goal =
+          state.pendingWork.find((g) => g.goalId === state.selectedAction!.targetGoalId)
+          ?? await this.goals.getGoal(state.selectedAction.targetGoalId as string);
+        const boundCapability = goal?.context?.capabilityId;
+        if (
+          goal
+          && boundCapability === state.selectedAction.capabilityId
+          && goal.context?.completeOnVerify !== false
+          && goal.status !== 'completed'
+        ) {
+          const completed = await this.goals.updateGoal(goal.goalId, {
+            status: 'completed',
+            result: state.executionResult?.details || 'Capability executed and verified',
+            progress: 1.0,
+          });
+          if (completed && goal.parentId) {
+            await this.goals.propagateCompletion(goal.parentId);
+          }
+        }
+      } catch {
+        // Completion bookkeeping is not fatal to the cycle
       }
     }
 
@@ -2410,6 +2466,13 @@ export class CognitiveCore {
             verificationStrategy: state.verificationResult?.verificationStrategy,
             lessonLearned: state.learningResult?.lessonLearned,
             memoryStored: state.learningResult?.memoryStored,
+            memoryId: state.learningResult?.memoryId ?? null,
+            producedMissions: state.producedMissions
+              ? {
+                created: state.producedMissions.created.map((g) => g.goalId),
+                skipped: state.producedMissions.skipped,
+              }
+              : null,
             outcomeClassification: state.learningResult?.outcomeClassification,
             replanned: state.replanResult?.replanned,
             errors: state.errors,

@@ -445,9 +445,22 @@ async function main(): Promise<void> {
   }
   console.log(`[daemon] Lock acquired: ${LOCK_FILE}`);
 
+  // 1b. Shared Supabase client — wires the memory bridge (episodic
+  //     experience storage with real row ids) and ActionExecutor in the
+  //     cognitive core, and is reused below for delegated-operator
+  //     persistence restore. Absent env vars leave those bridges unwired,
+  //     which the core reports honestly rather than failing.
+  let supabase: import('@supabase/supabase-js').SupabaseClient | undefined;
+  if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    const { createClient } = await import('@supabase/supabase-js');
+    supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+  } else {
+    console.warn('[daemon] Supabase not configured — memory/actionExecutor bridges unwired');
+  }
+
   // 2. Build production CognitiveCore with self-sufficiency wired
   console.log('[daemon] Building production CognitiveCore...');
-  const core = await buildCognitiveCore({ dbConfig: DB_CONFIG });
+  const core = await buildCognitiveCore({ dbConfig: DB_CONFIG, supabase });
   const bridge = core.getBridge();
 
   // Verify self-sufficiency services are wired
@@ -623,9 +636,7 @@ async function main(): Promise<void> {
   //     from Supabase persistence so they survive daemon restart.
   try {
     const { initializePersistence, restoreFromPersistence } = await import('../lib/delegated-operator');
-    if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
-      const { createClient } = await import('@supabase/supabase-js');
-      const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+    if (supabase) {
       initializePersistence(supabase);
       const restored = await restoreFromPersistence();
       if (restored.interventionsRestored > 0) {

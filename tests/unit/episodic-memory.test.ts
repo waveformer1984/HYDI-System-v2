@@ -67,20 +67,25 @@ describe('storeExperience', () => {
     (generateEmbedding as jest.Mock).mockClear();
   });
 
-  test('inserts a memories row with kind=episodic and structured metadata', async () => {
+  test('inserts a memories row with kind=episodic and structured metadata, returns real id', async () => {
     const inserted: any[] = [];
     const supabase: any = {
       from: () => ({
-        insert: async (row: any) => {
+        insert: (row: any) => {
           inserted.push(row);
-          return { error: null };
+          return {
+            select: () => ({
+              single: async () => ({ data: { id: 'mem-real-id-1' }, error: null }),
+            }),
+          };
         },
       }),
     };
 
     const experience = buildExperience('problem X', [{ type: 'create_task', status: 'completed' }]);
-    await storeExperience(supabase, 'session-1', 'user-1', experience);
+    const memoryId = await storeExperience(supabase, 'session-1', 'user-1', experience);
 
+    expect(memoryId).toBe('mem-real-id-1');
     expect(inserted).toHaveLength(1);
     expect(inserted[0].kind).toBe('episodic');
     expect(inserted[0].session_id).toBe('session-1');
@@ -95,23 +100,27 @@ describe('storeExperience', () => {
     expect(inserted[0].embedding).toEqual([0.1, 0.2, 0.3]);
   });
 
-  test('logs and does not throw when the insert errors', async () => {
-    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+  test('logs and returns null when the insert errors', async () => {
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => { });
     const supabase: any = {
-      from: () => ({ insert: async () => ({ error: { message: 'db down' } }) }),
+      from: () => ({
+        insert: () => ({
+          select: () => ({ single: async () => ({ data: null, error: { message: 'db down' } }) }),
+        }),
+      }),
     };
-    await expect(storeExperience(supabase, 's', 'u', buildExperience('p', []))).resolves.toBeUndefined();
+    await expect(storeExperience(supabase, 's', 'u', buildExperience('p', []))).resolves.toBeNull();
     expect(errorSpy).toHaveBeenCalled();
   });
 
   test('logs and does not throw when the client itself throws', async () => {
-    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => { });
     const supabase: any = {
       from: () => {
         throw new Error('boom');
       },
     };
-    await expect(storeExperience(supabase, 's', 'u', buildExperience('p', []))).resolves.toBeUndefined();
+    await expect(storeExperience(supabase, 's', 'u', buildExperience('p', []))).resolves.toBeNull();
     expect(errorSpy).toHaveBeenCalled();
   });
 });

@@ -290,7 +290,7 @@ function makeMockBridge(): ExecutionBridge {
         return 'Previous relevant context: cognitive core qualification test memory';
       },
       async storeExperience(_sessionId, _userId, _experience) {
-        return true;
+        return 'mem-qualification-test';
       },
     },
   };

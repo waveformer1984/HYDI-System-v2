@@ -51,13 +51,16 @@ export function buildExperience(problem: string, results: ActionOutcome[]): Expe
  * Persist an experience as a `memories` row with kind='episodic'. Degrades
  * gracefully like lib/heidi-memory.ts — never throws, logs and returns on
  * failure so a storage hiccup can't fail chat processing.
+ *
+ * Returns the inserted row's id so callers can record a real identifier
+ * (null when storage failed or no id came back).
  */
 export async function storeExperience(
   supabase: SupabaseClient,
   sessionId: string,
   userId: string,
   experience: Experience,
-): Promise<void> {
+): Promise<string | null> {
   try {
     const content = [
       `Experience: ${experience.problem}`,
@@ -68,7 +71,7 @@ export async function storeExperience(
 
     const embedding = await generateEmbedding(content);
 
-    const { error } = await supabase.from('memories').insert({
+    const { data, error } = await supabase.from('memories').insert({
       user_id: userId,
       session_id: sessionId,
       content,
@@ -80,12 +83,15 @@ export async function storeExperience(
         outcome: experience.outcome,
         lesson: experience.lesson,
       },
-    });
+    }).select('id').single();
 
     if (error) {
       console.error('[EpisodicMemory] insert failed:', error.message);
+      return null;
     }
+    return (data?.id as string | undefined) ?? null;
   } catch (error) {
     console.error('[EpisodicMemory] storage failed:', error instanceof Error ? error.message : 'Unknown error');
+    return null;
   }
 }

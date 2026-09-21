@@ -129,9 +129,9 @@ describe('a cycle survives a memory subsystem that never returns', () => {
         retrieveCalled = true;
         return new Promise<string>(() => undefined);
       },
-      storeExperience: (): Promise<boolean> => {
+      storeExperience: (): Promise<string | null> => {
         storeCalled = true;
-        return new Promise<boolean>(() => undefined);
+        return new Promise<string | null>(() => undefined);
       },
     };
 

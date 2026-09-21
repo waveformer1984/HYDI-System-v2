@@ -59,10 +59,9 @@ export function createMemoryBridge(supabase: SupabaseClient): NonNullable<Execut
         outcome: string;
         lesson: string;
       },
-    ): Promise<boolean> {
+    ): Promise<string | null> {
       const { storeExperience: store } = await import('../episodic-memory');
-      await store(supabase, sessionId, userId, experience as never);
-      return true;
+      return store(supabase, sessionId, userId, experience as never);
     },
   };
 }
@@ -232,7 +231,7 @@ export function createRevenuePipelineBridge(
     },
     async createOpportunity(input) {
       return pipeline.createOpportunity(input as never);
-    },    async getPipelineMetrics() {
+    }, async getPipelineMetrics() {
       return pipeline.getPipelineMetrics();
     },
     async getProspect(prospectId) {
