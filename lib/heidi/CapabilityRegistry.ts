@@ -573,6 +573,19 @@ export const DEFAULT_CAPABILITIES: Array<Omit<CapabilityDescriptor, 'status' | '
     timeoutMs: 45000,
     metadata: { actionType: 'executive_diagnostic' },
   },
+  {
+    capabilityId: 'ops.diagnostic_followup',
+    capabilityName: 'Diagnostic Follow-up',
+    description: 'Investigate non-HEALTHY dimensions from the latest executive diagnostic and persist evidence-backed findings',
+    provider: 'cognitive_core',
+    riskLevel: 'R0',
+    autonomyRequirement: 0,
+    dependencies: ['ops.executive_diagnostic'],
+    verificationStrategy: 'The diagnostic_followup event row exists in heidi_events with a verdict',
+    reversible: true,
+    timeoutMs: 45000,
+    metadata: { actionType: 'diagnostic_followup' },
+  },
 
   // Revenue pipeline capabilities (ProspectPipeline)
   {

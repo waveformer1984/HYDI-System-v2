@@ -633,6 +633,45 @@ export const OPS_EXECUTIVE_DIAGNOSTIC = defineContract({
   },
 });
 
+export const OPS_DIAGNOSTIC_FOLLOWUP = defineContract({
+  identity: {
+    id: 'ops.diagnostic_followup',
+    version: '1.0.0',
+    owner: OWNER,
+    provider: 'cognitive_core',
+    description: 'Investigate non-HEALTHY diagnostic dimensions and persist a findings report',
+  },
+  effects: [dbEffect('heidi_events', 'create')],
+  reversibility: {
+    kind: 'none',
+    windowMs: 0,
+    caveat:
+      'The findings row is an append-only ledger entry. A wrong finding is ' +
+      'corrected by a later truthful investigation, never by rewriting the ' +
+      'record.',
+  },
+  cost: { estimatedMs: 8_000, timeoutMs: 45_000 },
+  verification: {
+    description:
+      'The follow-up report row exists in heidi_events and carries a verdict ' +
+      'in the 5-state diagnostic vocabulary — re-read by id, not trusted from ' +
+      'the executor.',
+    observation: dbObservation('sql:heidi_events:id={reportId}', ['id', 'event_type', 'verdict']),
+    conditions: [
+      { field: 'found', operator: 'eq', expected: true },
+      { field: 'event_type', operator: 'eq', expected: 'diagnostic_followup' },
+      {
+        field: 'verdict',
+        operator: 'matches',
+        expected: '^(HEALTHY|DEGRADED|BLOCKED|FAILED|UNKNOWN)$',
+      },
+    ],
+    onFailure: 'escalate',
+    maxRetries: 1,
+    requiresHumanConfirmation: false,
+  },
+});
+
 // ---------------------------------------------------------------------------
 // Writes reached only from inside revenue.run_cycle
 // ---------------------------------------------------------------------------
@@ -891,6 +930,7 @@ export const EXTENDED_CONTRACTS: CapabilityContract[] = [
   REVENUE_UPDATE_HEALTH_STATUS,
   WORLD_SYNC,
   OPS_EXECUTIVE_DIAGNOSTIC,
+  OPS_DIAGNOSTIC_FOLLOWUP,
   // external / system-affecting
   TOOL_SEND_EMAIL,
   SELF_RUN_SELF_REPAIR,

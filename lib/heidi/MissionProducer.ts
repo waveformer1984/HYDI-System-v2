@@ -96,6 +96,16 @@ export const DEFAULT_MISSION_TEMPLATES: MissionTemplate[] = [
     minIntervalMs: 24 * HOUR,
     reason: 'Self-observation is only real if it runs on a cadence; a daily persisted diagnostic is the executive feedback loop\'s evidence stream.',
   },
+  {
+    producerKey: 'ops.diagnostic_followup',
+    title: 'Investigate diagnostic findings',
+    description: 'Read the latest executive diagnostic and produce bounded, evidence-backed investigation findings for each non-HEALTHY dimension. Investigates; never repairs.',
+    purpose: 'Close the observe→diagnose→prioritize loop: verified findings become the input for the next bounded mission decision.',
+    capabilityId: 'ops.diagnostic_followup',
+    priority: 6,
+    minIntervalMs: 24 * HOUR,
+    reason: 'A diagnostic nobody investigates is telemetry, not self-maintenance; follow-up turns findings into evidence-backed next-step proposals.',
+  },
 ];
 
 export class MissionProducer {

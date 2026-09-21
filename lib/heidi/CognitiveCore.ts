@@ -55,6 +55,7 @@ import type { ProspectRecord, OpportunityRecord } from '../revenue/types';
 import { getOfferCatalog } from '../revenue/OfferCatalog';
 import { MissionProducer, type ProductionResult } from './MissionProducer';
 import { collectExecutiveDiagnostic } from './ExecutiveDiagnostic';
+import { collectDiagnosticFollowup } from './DiagnosticFollowup';
 
 export type CognitivePhase =
   | 'perceive' | 'validate' | 'understand' | 'update_world_model'
@@ -1391,6 +1392,37 @@ export class CognitiveCore {
         evidence: [{ overall: report.overall, generatedAt: report.generatedAt }],
         verified: false, // contract verification re-reads the row
         verificationDetails: 'Pending contract verification of persisted diagnostic row',
+      };
+    });
+
+    // Diagnostic follow-up — investigates the findings the executive
+    // diagnostic surfaced. Investigates, never repairs.
+    this.wireExecutor('ops.diagnostic_followup', async () => {
+      const report = await collectDiagnosticFollowup({
+        pool: this.pool,
+        repoDir: process.cwd(),
+      });
+      const inserted = await this.pool.query<{ id: string }>(
+        `INSERT INTO heidi_events (event_type, division, payload, verdict, created_at)
+         VALUES ($1, $2, $3, $4, now()) RETURNING id`,
+        ['diagnostic_followup', 'heidi', JSON.stringify(report), report.verdict],
+      );
+      const reportId = inserted.rows[0]?.id ?? null;
+      return {
+        capabilityId: 'ops.diagnostic_followup',
+        executed: reportId !== null,
+        outcome: reportId !== null ? 'success' as const : 'failure' as const,
+        result: {
+          reportId,
+          verdict: report.verdict,
+          findings: report.findings.length,
+          humanRequired: report.findings.filter((f) => f.humanRequired).length,
+          diagnosticEventId: report.diagnosticEventId,
+        },
+        error: reportId === null ? 'heidi_events insert returned no id' : null,
+        evidence: [{ verdict: report.verdict, findingCount: report.findings.length }],
+        verified: false, // contract verification re-reads the row
+        verificationDetails: 'Pending contract verification of persisted follow-up row',
       };
     });
   }
