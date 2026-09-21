@@ -180,6 +180,30 @@ describe('D — Kong gateway is a first-class observed component', () => {
   });
 });
 
+describe('E — supabase_db votes on its host data-plane, not container liveness', () => {
+  // Same incident: the Docker host port-forward for :54322 died while the
+  // container was healthy (pg_isready OK inside, 42 conns) — daemon writes
+  // starved 13.5h with zero watchdog signal. The probe must speak the pg
+  // protocol, not just open TCP (the wedged forward accepted sockets).
+  const wsrc = fs.readFileSync(path.join(ROOT, 'scripts/watchdog.js'), 'utf8');
+
+  it('watchdog has a host-side Postgres protocol probe', () => {
+    expect(wsrc).toContain('checkPostgresHost');
+    expect(wsrc).toContain('80877103'); // SSLRequest code — protocol answer required
+    expect(wsrc).toContain("'pg-host-probe'");
+  });
+
+  it('pg probe is the sole voting source for supabase_db (docker cannot mask it)', () => {
+    const dbStart = wsrc.indexOf("name: 'supabase_db'");
+    expect(dbStart).toBeGreaterThan(-1);
+    const block = wsrc.slice(Math.max(0, dbStart - 5000), dbStart);
+    expect(block).toContain("name: 'pg-host-probe'");
+    // No docker-inspect or rest-probe push between the probe source and the result
+    const afterProbe = block.slice(block.indexOf("name: 'pg-host-probe'"));
+    expect(afterProbe).not.toContain('dbSources.push');
+  });
+});
+
 describe('B — delegate timeout contract', () => {
   const bootConfig = JSON.parse(fs.readFileSync(path.join(ROOT, 'boot.config.json'), 'utf8'));
 

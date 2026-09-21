@@ -220,12 +220,50 @@ function checkSupabaseServiceLevel() {
   return { ok: false, error: 'check failed' };
 }
 
+// Host-side Postgres data-plane probe.
+// Live incident 2026-09-21: Docker Desktop's host port-forward for :54322
+// died while the container stayed healthy — pg_isready inside the container
+// passed, docker inspect said 'running', yet every host-side connection was
+// terminated. The daemon's pg pool (heidi_events writer) starved silently for
+// 13.5h. A bare TCP connect is INSUFFICIENT — the wedged forward still
+// accepted sockets. The probe must prove Postgres answers the protocol:
+// send an SSLRequest and require the 'S'/'N' response byte.
+function checkPostgresHost() {
+  const net = require('net');
+  return new Promise((resolve) => {
+    let settled = false;
+    const sock = new net.Socket();
+    const done = (ok, error) => {
+      if (settled) return;
+      settled = true;
+      try { sock.destroy(); } catch { /* already gone */ }
+      resolve({ ok, error });
+    };
+    sock.setTimeout(5000);
+    sock.once('timeout', () => done(false, 'pg probe timeout'));
+    sock.once('error', (e) => done(false, (e && e.message) || 'connect error'));
+    sock.connect(54322, '127.0.0.1', () => {
+      // SSLRequest: int32 length=8, int32 code=80877103. Postgres replies
+      // a single byte 'S' (SSL ok) or 'N' (no SSL). Any answer proves the
+      // forward is forwarding protocol, not just accepting sockets.
+      const buf = Buffer.alloc(8);
+      buf.writeUInt32BE(8, 0);
+      buf.writeUInt32BE(80877103, 4);
+      sock.once('data', (d) => {
+        const b = d.length > 0 ? d[0] : 0;
+        done(b === 0x53 || b === 0x4e, b ? `pg reply '${String.fromCharCode(b)}'` : 'empty reply');
+      });
+      sock.write(buf);
+    });
+  });
+}
+
 // Phase 6: Infrastructure health checks with observation confidence
 //
 // KEY CHANGE: Service-level checks now run INDEPENDENTLY of docker inspect.
 // If docker inspect fails but the REST API responds, the container is healthy
 // and the observer (docker CLI) is broken. Recovery is NOT authorized.
-function checkInfrastructure() {
+async function checkInfrastructure() {
   const results = [];
   const { execSync } = require('child_process');
 
@@ -233,62 +271,41 @@ function checkInfrastructure() {
   const { getDockerCmd } = require('./resolve-docker');
   const DOCKER_CMD = getDockerCmd();
 
-  // --- Supabase DB: gather independent observation sources ---
-  const dbSources = [];
-
-  // Source 1: Docker container state (observer — can fail independently)
+  // --- Supabase DB ---
+  // Sole voting source: the host-side pg protocol probe (:54322). The
+  // component's function is serving Postgres to host consumers (daemon pool,
+  // migrations, verify scripts); a "running" container with a dead host
+  // forward is DOWN — the 2026-09-21 wedge proved docker liveness and the
+  // Kong-path REST probe both stayed green while :54322 was dead for 13.5h.
+  // docker inspect is kept as corroborating evidence text only.
   let dbDockerStatus = 'unknown';
-  let dbDockerOk = false;
-  let dbDockerObserverFailed = false;
   if (DOCKER_CMD) {
-    for (let attempt = 0; attempt < 2; attempt++) {
-      try {
-        const out = execSync(`${DOCKER_CMD} inspect --format "{{.State.Status}}" supabase_db_HYDI-System-v2`, {
-          encoding: 'utf8', timeout: 8000, stdio: 'pipe', windowsHide: true,
-        });
-        dbDockerStatus = out.trim();
-        dbDockerOk = dbDockerStatus === 'running';
-        break;
-      } catch (e) {
-        if (attempt === 0) continue;
-        dbDockerStatus = 'docker inspect failed';
-        dbDockerObserverFailed = true; // observer failure, not target failure
-      }
+    try {
+      dbDockerStatus = execSync(`${DOCKER_CMD} inspect --format "{{.State.Status}}" supabase_db_HYDI-System-v2`, {
+        encoding: 'utf8', timeout: 8000, stdio: 'pipe', windowsHide: true,
+      }).trim();
+    } catch {
+      dbDockerStatus = 'docker inspect failed';
     }
   } else {
     dbDockerStatus = 'docker not available';
-    dbDockerObserverFailed = true;
   }
+
+  const dbSources = [];
+  const pgCheck = await checkPostgresHost();
   dbSources.push({
-    name: 'docker-inspect',
-    ok: dbDockerOk,
-    value: dbDockerStatus,
-    isObserverFailure: dbDockerObserverFailed,
+    name: 'pg-host-probe',
+    ok: pgCheck.ok,
+    value: pgCheck.ok ? 'Postgres :54322 answering protocol' : `pg probe fail: ${pgCheck.error}`,
+    isObserverFailure: false, // a dead data-plane is a target failure, not observer blindness
     checkedAt: new Date().toISOString(),
   });
 
-  // Source 2: Service-level REST API probe (independent of docker inspect)
-  const dbSvcCheck = checkSupabaseServiceLevel();
-  dbSources.push({
-    name: 'rest-probe',
-    ok: dbSvcCheck.ok,
-    value: dbSvcCheck.ok ? 'REST API responding' : `REST API fail: ${dbSvcCheck.error}`,
-    isObserverFailure: false, // this is a real target check
-    checkedAt: new Date().toISOString(),
-  });
-
-  // Classify the observation
   const dbAssessment = classifyObservation('supabase_db', dbSources);
   observationMetrics.recordObservation(dbAssessment);
   const dbHysteresisState = observationHysteresis.record('supabase_db', dbAssessment);
 
-  // Determine final ok state: target is healthy if ANY independent source confirms it
-  // AND the failure classification is not CONFIRMED_FAILURE
-  const dbOk = dbAssessment.classification === 'OBSERVER_FAILURE'
-    ? true // observer failed but service is healthy — do NOT report as down
-    : dbAssessment.recoveryAuthorized
-      ? false // confirmed failure
-      : dbSources.some((s) => s.ok); // at least one source says ok
+  const dbOk = dbAssessment.classification === 'OBSERVER_FAILURE' ? true : pgCheck.ok;
 
   results.push({
     name: 'supabase_db',
@@ -296,7 +313,7 @@ function checkInfrastructure() {
     required: true,
     ok: dbOk,
     statusCode: dbOk ? 200 : 503,
-    body: `${dbDockerStatus} + ${dbSvcCheck.ok ? 'service-ok' : 'service-fail'} | ${dbAssessment.classification} (${dbAssessment.confidence}) hysteresis=${dbHysteresisState}`,
+    body: `${dbDockerStatus} + ${pgCheck.ok ? 'pg-ok' : 'pg-fail'} | ${dbAssessment.classification} (${dbAssessment.confidence}) hysteresis=${dbHysteresisState}`,
     _assessment: dbAssessment,
     _hysteresisState: dbHysteresisState,
   });
@@ -546,7 +563,7 @@ async function runCheck() {
   const endpointResults = await Promise.all(ENDPOINTS.map(checkEndpoint));
 
   // Phase 5: Check infrastructure (Docker containers, Ollama)
-  const infraResults = checkInfrastructure().filter((r) => !r._checkOllama);
+  const infraResults = (await checkInfrastructure()).filter((r) => !r._checkOllama);
   const ollamaResult = await checkOllama();
   infraResults.push(ollamaResult);
 
