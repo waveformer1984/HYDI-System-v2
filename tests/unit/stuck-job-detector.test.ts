@@ -83,6 +83,11 @@ function makeMockSupabase(jobs: MockJob[], events: MockEvent[] = []) {
         query._updateData = data;
         return chain;
       },
+      or(expr: string) {
+        // Supports PostgREST-style: metadata->>k.eq.v,metadata->>k2.eq.v2
+        query._orExpr = expr;
+        return chain;
+      },
       insert(data: any) {
         query._insertData = data;
         return chain;
@@ -146,6 +151,15 @@ function makeMockSupabase(jobs: MockJob[], events: MockEvent[] = []) {
               return new Date(val).getTime() < new Date(f.value).getTime();
             });
           }
+        }
+
+        // Apply OR filter (metadata->>key.eq.value clauses)
+        if (query._orExpr) {
+          const clauses = query._orExpr.split(',').map((c: string) => {
+            const m = c.match(/^metadata->>(\w+)\.eq\.(.+)$/);
+            return m ? (row: any) => String(row.metadata?.[m[1]]) === m[2] : () => false;
+          });
+          result = result.filter((row: any) => clauses.some((f: any) => f(row)));
         }
 
         // Apply ordering

@@ -100,28 +100,74 @@ export class EscalationNotifier {
     channels.push('console');
 
     // 2. Write to Supabase operator_escalations table (durable fallback)
+    // Idempotent per incident: a logical incident (category + incident key)
+    // produces ONE open escalation row. Repeated detections refresh it;
+    // a new incident (or re-incident after resolution) creates a new row.
+    // Without this, every scheduler cycle inserts a duplicate — observed
+    // live 2026-09-21: identical stuck_job rows accumulating every cycle.
     if (this.supabase) {
       try {
-        const { error } = await this.supabase
-          .from('operator_escalations')
-          .insert({
-            category: notification.category,
-            severity: notification.severity,
-            title: notification.title,
-            body: notification.body,
-            action_taken: notification.actionTaken || null,
-            action_required: notification.actionRequired || null,
-            metadata: notification.metadata || {},
-            created_at: new Date().toISOString(),
-            resolved: false,
-          });
-        if (error) {
-          lastError = `Supabase insert failed: ${error.message}`;
+        const incidentKey =
+          (notification.metadata?.dedupeKey as string | undefined) ??
+          (notification.metadata?.jobId as string | undefined) ??
+          null;
+
+        let existingId: string | null = null;
+        if (incidentKey) {
+          const { data: existing } = await this.supabase
+            .from('operator_escalations')
+            .select('id')
+            .eq('category', notification.category)
+            .eq('resolved', false)
+            .or(`metadata->>jobId.eq.${incidentKey},metadata->>dedupeKey.eq.${incidentKey}`)
+            .order('created_at', { ascending: false })
+            .limit(1);
+          existingId = existing?.[0]?.id ?? null;
+        }
+
+        if (existingId) {
+          const { error } = await this.supabase
+            .from('operator_escalations')
+            .update({
+              severity: notification.severity,
+              title: notification.title,
+              body: notification.body,
+              action_taken: notification.actionTaken || null,
+              action_required: notification.actionRequired || null,
+              metadata: {
+                ...(notification.metadata || {}),
+                last_seen_at: new Date().toISOString(),
+              },
+            })
+            .eq('id', existingId)
+            .eq('resolved', false); // never resurrect a resolved incident
+          if (error) {
+            lastError = `Supabase dedupe update failed: ${error.message}`;
+          } else {
+            channels.push('supabase');
+          }
         } else {
-          channels.push('supabase');
+          const { error } = await this.supabase
+            .from('operator_escalations')
+            .insert({
+              category: notification.category,
+              severity: notification.severity,
+              title: notification.title,
+              body: notification.body,
+              action_taken: notification.actionTaken || null,
+              action_required: notification.actionRequired || null,
+              metadata: notification.metadata || {},
+              created_at: new Date().toISOString(),
+              resolved: false,
+            });
+          if (error) {
+            lastError = `Supabase insert failed: ${error.message}`;
+          } else {
+            channels.push('supabase');
+          }
         }
       } catch (err) {
-        lastError = `Supabase insert threw: ${err instanceof Error ? err.message : 'Unknown error'}`;
+        lastError = `Supabase write threw: ${err instanceof Error ? err.message : 'Unknown error'}`;
       }
     }
 
