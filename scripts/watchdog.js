@@ -367,6 +367,74 @@ function checkInfrastructure() {
     _hysteresisState: restHysteresisState,
   });
 
+  // --- Supabase Kong gateway ---
+  // Live incident 2026-09-21: Kong wedged (listening on :54321 but not
+  // completing HTTP) while every docker inspect reported 'running'. The
+  // failure dissolved into supabase_db's multi-source 'any source ok' rule —
+  // no component owned the gateway, so nothing ever delegated its restart
+  // and protoforge-core recovery deadlocked on the 'database' dependency.
+  // For Kong the service-level probe IS the component's function: a running
+  // container that cannot serve REST is DOWN, not corroborated-healthy.
+  const kongSources = [];
+
+  // Source 1: Docker container state (corroborating evidence only)
+  let kongDockerStatus = 'unknown';
+  let kongDockerObserverFailed = false;
+  if (DOCKER_CMD) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const out = execSync(`${DOCKER_CMD} inspect --format "{{.State.Status}}" supabase_kong_HYDI-System-v2`, {
+          encoding: 'utf8', timeout: 8000, stdio: 'pipe', windowsHide: true,
+        });
+        kongDockerStatus = out.trim();
+        break;
+      } catch (e) {
+        if (attempt === 0) continue;
+        kongDockerStatus = 'docker inspect failed';
+        kongDockerObserverFailed = true;
+      }
+    }
+  } else {
+    kongDockerStatus = 'docker not available';
+    kongDockerObserverFailed = true;
+  }
+  // Source: REST probe through the gateway — the ONLY voting source.
+  // For Kong, "container running" is liveness evidence, not service
+  // evidence: including docker-inspect as an ok-source would classify a
+  // wedged-but-running gateway as OBSERVATION_UNCERTAIN (conflicting
+  // evidence) and silently mask exactly the failure this check exists to
+  // catch. Docker status is retained in the result body for diagnostics.
+  const kongSvcCheck = checkSupabaseServiceLevel();
+  kongSources.push({
+    name: 'rest-probe',
+    ok: kongSvcCheck.ok,
+    value: kongSvcCheck.ok ? 'Kong REST responding' : `Kong REST fail: ${kongSvcCheck.error}`,
+    isObserverFailure: false,
+    checkedAt: new Date().toISOString(),
+  });
+
+  const kongAssessment = classifyObservation('supabase_kong', kongSources);
+  observationMetrics.recordObservation(kongAssessment);
+  const kongHysteresisState = observationHysteresis.record('supabase_kong', kongAssessment);
+
+  // The probe IS the measured layer: if REST through Kong fails, the gateway
+  // is down regardless of container state (wedged or exited — restart_container
+  // is the remedy for both). docker-inspect remains as corroborating evidence
+  // in the assessment, but cannot mask a failed data-plane probe.
+  const kongOk = kongSvcCheck.ok;
+
+  results.push({
+    name: 'supabase_kong',
+    url: 'http://127.0.0.1:54321/rest/v1/',
+    required: true,
+    ok: kongOk,
+    statusCode: kongOk ? 200 : 503,
+    body: `${kongDockerStatus} + ${kongSvcCheck.ok ? 'gateway-ok' : 'gateway-fail'} | ${kongAssessment.classification} (${kongAssessment.confidence}) hysteresis=${kongHysteresisState}`,
+    graceMs: 60000,
+    _assessment: kongAssessment,
+    _hysteresisState: kongHysteresisState,
+  });
+
   // Check Ollama
   results.push({
     name: 'ollama',

@@ -132,6 +132,54 @@ describe('C — database recovery targets the probed layer', () => {
   });
 });
 
+describe('D — Kong gateway is a first-class observed component', () => {
+  // Live incident 2026-09-21: Kong wedged (accepting TCP on :54321, never
+  // completing HTTP) while docker inspect reported 'running'. The rest-probe
+  // failure dissolved into supabase_db's multi-source 'any ok' rule — no
+  // component owned the gateway, nothing delegated its restart, and
+  // protoforge-core recovery deadlocked on the 'database' dependency.
+  const wsrc = fs.readFileSync(path.join(ROOT, 'scripts/watchdog.js'), 'utf8');
+
+  it('watchdog observes supabase_kong with a REST-probe health verdict', () => {
+    expect(wsrc).toContain("name: 'supabase_kong'");
+    expect(wsrc).toContain('supabase_kong_HYDI-System-v2');
+    expect(wsrc).toContain('checkSupabaseServiceLevel');
+  });
+
+  it('the gateway verdict cannot be masked by container liveness', () => {
+    // Within the kong block, docker-inspect must not be a voting source —
+    // "running" is not "serving". Only the data-plane probe votes.
+    const blockStart = wsrc.indexOf("name: 'supabase_kong'");
+    expect(blockStart).toBeGreaterThan(-1);
+    const block = wsrc.slice(Math.max(0, blockStart - 4000), blockStart);
+    const kongSourcesIdx = block.indexOf('kongSources.push');
+    const dockerPush = block.slice(kongSourcesIdx);
+    expect(dockerPush).not.toContain("name: 'docker-inspect'");
+    expect(dockerPush).toContain("name: 'rest-probe'");
+  });
+
+  it('probe-fail on the single voting source yields CONFIRMED_FAILURE + recovery authorized', () => {
+    const { classifyObservation } = require('../../lib/operational/ObservationConfidence');
+    const a = classifyObservation('supabase_kong', [{
+      name: 'rest-probe', ok: false, value: 'Kong REST fail: timeout',
+      isObserverFailure: false, checkedAt: new Date().toISOString(),
+    }]);
+    expect(a.classification).toBe('CONFIRMED_FAILURE');
+    expect(a.recoveryAuthorized).toBe(true);
+  });
+
+  it('a wedged gateway (docker says running, probe fails) still authorizes recovery', () => {
+    // This is the exact incident signature: probe fail is a target failure;
+    // with docker excluded from voting, no ok-source exists to conflict.
+    const { classifyObservation } = require('../../lib/operational/ObservationConfidence');
+    const a = classifyObservation('supabase_kong', [{
+      name: 'rest-probe', ok: false, value: 'ECONNRESET',
+      isObserverFailure: false, checkedAt: new Date().toISOString(),
+    }]);
+    expect(a.recoveryAuthorized).toBe(true);
+  });
+});
+
 describe('B — delegate timeout contract', () => {
   const bootConfig = JSON.parse(fs.readFileSync(path.join(ROOT, 'boot.config.json'), 'utf8'));
 

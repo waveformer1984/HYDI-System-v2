@@ -31,6 +31,18 @@ describe('Phase 3 — DependencyGraphBuilder', () => {
     expect(graph.nodes.has('database')).toBe(true);
     expect(graph.nodes.has('ollama')).toBe(true);
     expect(graph.nodes.has('bridge')).toBe(true);
+    expect(graph.nodes.has('supabase_kong')).toBe(true);
+  });
+
+  it('routes database dependency through the Kong gateway layer', () => {
+    // Live incident 2026-09-21: wedged Kong made 'database' probe fail while
+    // Postgres was healthy; database must depend on the gateway so recovery
+    // routes to the failing layer, not the data layer.
+    expect(graph.nodes.get('database')!.dependencies).toContain('supabase_kong');
+    const kong = graph.nodes.get('supabase_kong')!;
+    expect(kong.recoveryPolicy).toBe('restart_container');
+    expect(kong.dependents).toContain('database');
+    expect(kong.dependencies).toContain('supabase_rest');
   });
 
   it('includes boot.config.json modules', () => {

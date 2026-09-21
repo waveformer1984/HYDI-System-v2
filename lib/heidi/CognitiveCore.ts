@@ -2348,6 +2348,33 @@ export class CognitiveCore {
 
   // ─── Recording ────────────────────────────────────────────────────────
 
+  /**
+   * Minimal heartbeat for a timed-out cycle. recordCycle() only runs when a
+   * cycle completes; this writes a single cognitive_cycle row marked
+   * outcome='timeout' so event-flow monitoring sees the truth (loop alive,
+   * cycle over budget) rather than silence. Bounded by its own short timeout
+   * so a dead pool cannot hang the scheduler's catch path.
+   */
+  private async recordTimeoutHeartbeat(): Promise<void> {
+    if (!this.pool) return;
+    const write = this.pool.query(
+      `INSERT INTO heidi_events (event_type, payload, created_at)
+       VALUES ($1, $2, now())`,
+      [
+        'cognitive_cycle',
+        JSON.stringify({
+          outcome: 'timeout',
+          cycleTimeoutMs: this.loopConfig.cycleTimeoutMs,
+          consecutiveFailures: this.consecutiveFailures,
+        }),
+      ],
+    );
+    await Promise.race([
+      write,
+      new Promise((_, reject) => setTimeout(() => reject(new Error('heartbeat write timeout')), 5000)),
+    ]);
+  }
+
   private async recordCycle(state: CognitiveState): Promise<void> {
     try {
       await this.pool.query(
@@ -2701,6 +2728,17 @@ export class CognitiveCore {
       this.lastFailureAt = new Date().toISOString();
       this.lastError = e instanceof Error ? e.message : 'unknown';
       this.consecutiveFailures++;
+
+      // Event-flow starvation guard: recordCycle() runs at phase 14 of
+      // runCycle(); a timed-out cycle never reaches it, so heidi_events
+      // goes silent while the daemon is still alive — which the system
+      // health check reads as a CRITICAL event-flow failure. Record a
+      // minimal truthful timeout heartbeat instead of silence.
+      // (Observed live 2026-09-21: 13.5h of event starvation while the
+      // daemon kept cycling — every cycle timed out before phase 14.)
+      if (e instanceof Error && e.message.includes('timed out')) {
+        await this.recordTimeoutHeartbeat().catch(() => { });
+      }
 
       // Check if we need to enter cooldown
       if (this.consecutiveFailures >= this.loopConfig.maxConsecutiveFailures) {
