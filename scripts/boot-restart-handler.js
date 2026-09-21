@@ -75,25 +75,36 @@ async function handleRestartRequest(req, deps) {
   // child it spawned -- it has no handle to stop, so "restarting" it would
   // mean spawning a duplicate alongside whatever is already bound to the port.
   if (entry.external || !entry.child) {
-    return {
-      status: 'failed',
-      error: `${component} is not owned by this boot agent (external/unsupervised occupant); cannot restart what it did not spawn`,
-    };
-  }
+    // Exception: if the module's port is now FREE, the foreign occupant is
+    // gone and respawning cannot collide with anything — adopt the module
+    // into supervision by spawning it as a normal owned child.
+    // (Live incident 2026-09-21: PM2 restarted hydi-boot while its children
+    // kept running; they were classified 'unsupervised', later died, and no
+    // policy could ever restart them — a permanent escalation loop. Refusing
+    // is only correct while a live foreign occupant still owns the port.)
+    const portFree = deps.isPortFree ? await deps.isPortFree(entry.mod) : false;
+    if (!portFree) {
+      return {
+        status: 'failed',
+        error: `${component} is not owned by this boot agent (external/unsupervised occupant); cannot restart what it did not spawn`,
+      };
+    }
+    log(component, 'external occupant gone (port free) -- adopting module by supervised respawn');
+  } else {
+    // Mark before stopping. spawnProcess()'s exit handler treats every exit as
+    // unexpected; without this an intentional restart is logged as a crash and,
+    // outside DELEGATE_RECOVERY mode, triggers a full system shutdown.
+    entry.child.intentionalStop = true;
 
-  // Mark before stopping. spawnProcess()'s exit handler treats every exit as
-  // unexpected; without this an intentional restart is logged as a crash and,
-  // outside DELEGATE_RECOVERY mode, triggers a full system shutdown.
-  entry.child.intentionalStop = true;
-
-  try {
-    log(component, 'restart requested by RecoveryEngine -- stopping owned child');
-    await stopChild(entry);
-  } catch (e) {
-    // Spawning on top of a process we failed to stop would duplicate the
-    // service and collide on its port.
-    entry.child.intentionalStop = false;
-    return { status: 'failed', error: `failed to stop ${component}: ${e.message}` };
+    try {
+      log(component, 'restart requested by RecoveryEngine -- stopping owned child');
+      await stopChild(entry);
+    } catch (e) {
+      // Spawning on top of a process we failed to stop would duplicate the
+      // service and collide on its port.
+      entry.child.intentionalStop = false;
+      return { status: 'failed', error: `failed to stop ${component}: ${e.message}` };
+    }
   }
 
   let child;
@@ -107,6 +118,11 @@ async function handleRestartRequest(req, deps) {
   // dead one, shutdown would stop nothing and leave the replacement running --
   // an orphan created by the very change meant to prevent them.
   entry.child = child;
+  // Adoption-by-respawn: the module is now this boot agent's child — clear
+  // the external marker and record the real pid so subsequent restarts,
+  // shutdown, and supervision all treat it as owned.
+  entry.external = false;
+  entry.pid = child.pid;
 
   let healthy = false;
   try {

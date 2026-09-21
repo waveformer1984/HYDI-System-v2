@@ -148,10 +148,11 @@ describe('boot-restart-handler', () => {
     expect(ack.status).toBe('completed');
   });
 
-  test('H8: an externally-owned entry is refused — boot-agent can only restart what it owns', async () => {
+  test('H8: an externally-owned entry is refused while its port is still bound — a live foreign occupant may own it', async () => {
     const { deps } = makeDeps({
+      isPortFree: jest.fn(async () => false), // port still bound -> occupant may be alive
       findEntry: jest.fn(() => ({
-        mod: { id: 'protoforge-core', type: 'process' },
+        mod: { id: 'protoforge-core', type: 'process', port: 3005 },
         child: null,
         type: 'process',
         external: true,
@@ -163,5 +164,58 @@ describe('boot-restart-handler', () => {
     expect(ack.status).toBe('failed');
     expect(ack.error).toMatch(/not owned|external|unsupervis/i);
     expect(deps.spawnProcess).not.toHaveBeenCalled();
+  });
+
+  test('H8b: without an isPortFree dep, an external entry is refused — absence of proof is not proof of absence', async () => {
+    const { deps } = makeDeps({
+      // no isPortFree injected -> handler cannot prove the port is free -> refuse
+      findEntry: jest.fn(() => ({
+        mod: { id: 'protoforge-core', type: 'process', port: 3005 },
+        child: null,
+        type: 'process',
+        external: true,
+        ownership: 'unsupervised',
+      })),
+    });
+    const ack = await handleRestartRequest({ id: 'r8b', component: 'protoforge-core' }, deps);
+
+    expect(ack.status).toBe('failed');
+    expect(deps.spawnProcess).not.toHaveBeenCalled();
+  });
+
+  test('H11: an external entry whose occupant is GONE (port free) is adopted by supervised respawn', async () => {
+    // Live incident 2026-09-21: PM2 restarted hydi-boot while its children ran;
+    // they became 'unsupervised' occupants, later died, and unconditional
+    // refusal made recovery impossible forever (escalation loop). With the
+    // port free, respawning collides with nothing and converts the module to
+    // owned supervision.
+    const { deps, calls } = makeDeps({
+      isPortFree: jest.fn(async () => true),
+      findEntry: jest.fn(() => ({
+        mod: { id: 'protoforge-core', type: 'process', port: 3005 },
+        child: null,
+        type: 'process',
+        external: true,
+        ownership: 'unsupervised',
+        pid: 9999, // the dead foreign occupant
+      })),
+    });
+    // findEntry returns a fresh object each call — capture it for post-assertions
+    const entry = deps.findEntry('protoforge-core');
+    deps.findEntry = jest.fn(() => entry);
+
+    const ack = await handleRestartRequest({ id: 'r11', component: 'protoforge-core' }, deps);
+
+    expect(deps.isPortFree).toHaveBeenCalled();
+    // No stop attempt — nothing of ours to stop.
+    expect(calls.stopped).toEqual([]);
+    expect(calls.spawned).toEqual(['protoforge-core']);
+    expect(ack.status).toBe('completed');
+    // The entry is now owned: external flag cleared, child + pid point at the
+    // new supervised process so subsequent restarts take the owned path.
+    expect(entry.external).toBe(false);
+    expect(entry.child.pid).toBe(5150);
+    expect(entry.pid).toBe(5150);
+    expect(calls.logs.join('\n')).toMatch(/port free|adopt/i);
   });
 });

@@ -625,6 +625,18 @@ async function pollControlRequests(settings) {
         findEntry: (id) => running.find((r) => r.mod.id === id) || null,
         stopChild: stopOwnedChild,
         spawnProcess,
+        // Adoption-by-respawn gate: only a module with a FREE port may be
+        // adopted — a bound port means a foreign occupant may still be alive.
+        isPortFree: (mod) => new Promise((resolve) => {
+          if (!mod.port) return resolve(false);
+          const net = require('net');
+          const sock = new net.Socket();
+          const done = (free) => { try { sock.destroy(); } catch (_) { } resolve(free); };
+          const timer = setTimeout(() => done(false), 2000);
+          sock.once('connect', () => { clearTimeout(timer); done(false); });
+          sock.once('error', () => { clearTimeout(timer); done(true); });
+          try { sock.connect(mod.port, '127.0.0.1'); } catch (_) { clearTimeout(timer); done(true); }
+        }),
         waitForHealth: (mod) => (mod.health ? waitForHealth(mod, settings, null) : Promise.resolve(true)),
         verifyRestarted: (mod, child) => {
           // A completed restart must prove itself: the new child is a live
