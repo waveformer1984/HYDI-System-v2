@@ -99,6 +99,39 @@ describe('A — restore-time expiry audit ordering', () => {
   });
 });
 
+describe('C — database recovery targets the probed layer', () => {
+  // Live incident 2026-09-21: Kong (:54321) wedged while Postgres stayed
+  // healthy. recoverDatabase() restarted supabase_db (the layer the probe
+  // does NOT measure), so the :54321 probe kept failing → every protoforge
+  // recovery was stuck in RECOVERY_DEPENDENCY_BLOCKED until Kong was
+  // restarted manually. The remediation must target the gateway first.
+  const src = fs.readFileSync(path.join(ROOT, 'lib/operational/RecoveryEngine.ts'), 'utf8');
+  const fnStart = src.indexOf('private async recoverDatabase');
+  const fnEnd = src.indexOf('private async', fnStart + 20);
+  const fn = src.slice(fnStart, fnEnd > fnStart ? fnEnd : src.length);
+
+  it('recoverDatabase exists and restarts the Kong gateway, not only Postgres', () => {
+    expect(fnStart).toBeGreaterThan(-1);
+    expect(fn).toContain('supabase_kong_HYDI-System-v2');
+  });
+
+  it('Kong restart is attempted before the Postgres container restart', () => {
+    const kongIdx = fn.indexOf('supabase_kong_HYDI-System-v2');
+    const dbIdx = fn.indexOf('supabase_db_HYDI-System-v2');
+    expect(kongIdx).toBeGreaterThan(-1);
+    expect(dbIdx).toBeGreaterThan(-1);
+    expect(kongIdx).toBeLessThan(dbIdx);
+  });
+
+  it('Postgres restart is conditional on the gateway still failing (layered remediation)', () => {
+    // db restart must be guarded by a probe re-check, not unconditional
+    const dbIdx = fn.indexOf('supabase_db_HYDI-System-v2');
+    const guardIdx = fn.lastIndexOf('kongProbeOk', dbIdx);
+    expect(guardIdx).toBeGreaterThan(-1);
+    expect(guardIdx).toBeLessThan(dbIdx);
+  });
+});
+
 describe('B — delegate timeout contract', () => {
   const bootConfig = JSON.parse(fs.readFileSync(path.join(ROOT, 'boot.config.json'), 'utf8'));
 

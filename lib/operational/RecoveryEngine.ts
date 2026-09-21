@@ -1060,17 +1060,48 @@ export class RecoveryEngine {
       detail: { strategy: 'local container restart' },
     });
 
-    // Try restarting the local Supabase DB container
+    // The 'database' health probe measures the Kong REST gateway on :54321
+    // (rest-reachable + service-role write/read/delete). A wedged Kong with a
+    // healthy Postgres previously produced a permanent deadlock: this function
+    // restarted supabase_db while the probe kept failing at the gateway —
+    // observed live 2026-09-21 (protoforge-core recovery stuck in
+    // RECOVERY_DEPENDENCY_BLOCKED until Kong was restarted manually).
+    // Remediate the layer the probe measures first, then Postgres only if
+    // the gateway is still unreachable.
+    const kongProbeOk = async () => {
+      try {
+        const res = await fetch('http://127.0.0.1:54321/rest/v1/', {
+          signal: AbortSignal.timeout(5000),
+        });
+        return res.status > 0; // Kong answered — any HTTP status means the gateway serves requests
+      } catch {
+        return false;
+      }
+    };
+
     try {
       const dockerCmd = this.resolveDockerCmd();
       if (!dockerCmd) {
         throw new Error('Docker CLI not available — cannot restart DB container');
       }
-      const containerName = 'supabase_db_HYDI-System-v2';
-      execFileSync(dockerCmd, ['restart', containerName], { timeout: 30000, stdio: 'pipe', windowsHide: true } as any);
 
-      // Wait for the DB to accept connections (max 20s)
+      // 1. Gateway first — the probe's own layer.
+      execFileSync(dockerCmd, ['restart', 'supabase_kong_HYDI-System-v2'], { timeout: 30000, stdio: 'pipe', windowsHide: true } as any);
       await this.waitForService('http://127.0.0.1:54321', 20000);
+
+      // 2. Postgres only if the gateway still cannot serve the REST path.
+      if (!(await kongProbeOk())) {
+        this.stateModel.logEvent({
+          id: randomUUID(),
+          timestamp: new Date().toISOString(),
+          type: 'recovery_step',
+          component,
+          action: 'database_recovery_kong_insufficient',
+          detail: { strategy: 'escalating to db container restart' },
+        });
+        execFileSync(dockerCmd, ['restart', 'supabase_db_HYDI-System-v2'], { timeout: 30000, stdio: 'pipe', windowsHide: true } as any);
+        await this.waitForService('http://127.0.0.1:54321', 20000);
+      }
 
       this.stateModel.logEvent({
         id: randomUUID(),
