@@ -116,7 +116,15 @@ async function runMission() {
     return { status: 'partial', error: e.message };
   }
 
-  const briefingText = buildBriefing(opportunities);
+  const briefingText = buildBriefing(opportunities, {
+    runStats: {
+      newThisRun: inserted,
+      duplicatesThisRun: duplicates,
+      sourcesQueried: sourcesQueried.length,
+      sourcesFailed: sourcesQueried.filter((s) => !s.ok).length,
+      failedSources: sourcesQueried.filter((s) => !s.ok).map((s) => `${s.source_type} "${s.query}": ${s.error || 'failed'}`),
+    },
+  });
   const highConfidenceCount = opportunities.filter((o) => o.status === 'high_confidence').length;
   const needsReviewCount = opportunities.filter((o) => o.status === 'needs_review').length;
   const rejectedCount = opportunities.filter((o) => o.status === 'rejected').length;

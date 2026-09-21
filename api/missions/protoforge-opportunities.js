@@ -39,7 +39,22 @@ module.exports = async function handler(req, res) {
 
       if (req.query.format === 'briefing') {
         res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-        return res.status(200).send(buildBriefing(opportunities));
+        // Serve the persisted run's own briefing if present; otherwise render
+        // the queue with the latest run's this-run stats attached so the
+        // header never confuses cumulative queue size with new discoveries.
+        if (latestRun && latestRun.briefing_text) {
+          return res.status(200).send(latestRun.briefing_text);
+        }
+        const sq = (latestRun && Array.isArray(latestRun.sources_queried)) ? latestRun.sources_queried : [];
+        return res.status(200).send(buildBriefing(opportunities, {
+          runStats: latestRun ? {
+            newThisRun: latestRun.opportunities_found,
+            duplicatesThisRun: latestRun.duplicates_skipped,
+            sourcesQueried: sq.length,
+            sourcesFailed: sq.filter((s) => !s.ok).length,
+            failedSources: sq.filter((s) => !s.ok).map((s) => `${s.source_type} "${s.query}": ${s.error || 'failed'}`),
+          } : undefined,
+        }));
       }
       return res.status(200).json({ latestRun, opportunities, count: opportunities.length });
     }
