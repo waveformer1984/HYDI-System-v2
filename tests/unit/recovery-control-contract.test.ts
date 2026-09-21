@@ -204,6 +204,25 @@ describe('E — supabase_db votes on its host data-plane, not container liveness
   });
 });
 
+describe('F — daemon orphan guard', () => {
+  // 2026-09-21: every `pm2 restart hydi-daemon` orphaned the tsx daemon —
+  // launcher killed, child kept running holding .heidi-daemon.lock, PM2's
+  // respawn failed 'another daemon is already running' forever. The daemon
+  // must treat IPC disconnect as a shutdown signal.
+  const dsrc = fs.readFileSync(path.join(ROOT, 'scripts/heidi-daemon.ts'), 'utf8');
+
+  it('daemon shuts down when the launcher IPC channel disconnects', () => {
+    expect(dsrc).toContain("process.on('disconnect'");
+    const idx = dsrc.indexOf("process.on('disconnect'");
+    const block = dsrc.slice(idx, idx + 600);
+    expect(block).toContain('gracefulShutdown');
+  });
+
+  it('disconnect shutdown uses a distinct, auditable reason', () => {
+    expect(dsrc).toContain("gracefulShutdown('IPC_DISCONNECT')");
+  });
+});
+
 describe('B — delegate timeout contract', () => {
   const bootConfig = JSON.parse(fs.readFileSync(path.join(ROOT, 'boot.config.json'), 'utf8'));
 

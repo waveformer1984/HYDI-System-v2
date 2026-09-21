@@ -168,9 +168,9 @@ function acquireLock(): boolean {
  */
 function isNodeError(error: unknown, code: string): boolean {
   return error !== null &&
-         typeof error === 'object' &&
-         'code' in error &&
-         (error as { code: string }).code === code;
+    typeof error === 'object' &&
+    'code' in error &&
+    (error as { code: string }).code === code;
 }
 
 function releaseLock(): void {
@@ -534,7 +534,7 @@ async function main(): Promise<void> {
     const waitStart = Date.now();
     let cognitiveInFlight = core.getLoopStatus().cycleInFlight;
     while ((cognitiveInFlight || ssfInFlight) &&
-           (Date.now() - waitStart) < SHUTDOWN_WAIT_TIMEOUT_MS) {
+      (Date.now() - waitStart) < SHUTDOWN_WAIT_TIMEOUT_MS) {
       console.log(`[daemon] Waiting for in-flight work to complete (cognitive=${cognitiveInFlight}, ssf=${ssfInFlight})... elapsed=${Date.now() - waitStart}ms`);
       await sleep(POLL_INTERVAL_MS);
       cognitiveInFlight = core.getLoopStatus().cycleInFlight;
@@ -594,6 +594,18 @@ async function main(): Promise<void> {
         core.deactivateKillSwitch();
       }
     }
+  });
+
+  // Orphan guard: if the launcher dies without relaying a shutdown (PM2
+  // fell back to taskkill /F after kill_timeout, or the launcher itself
+  // crashed), the fork() IPC channel closes. Without this handler the
+  // daemon keeps running while holding .heidi-daemon.lock, and every PM2
+  // respawn fails 'another daemon is already running' forever — observed
+  // live 2026-09-21 (4 orphan lineages in one session, PM2 slot churning
+  // waiting_restart). IPC disconnect = launcher gone = shut down cleanly.
+  process.on('disconnect', () => {
+    console.log(`[daemon] IPC channel closed — launcher gone, shutting down as orphan at ${new Date().toISOString()}`);
+    gracefulShutdown('IPC_DISCONNECT');
   });
 
   // 4. Run initial self-sufficiency observation

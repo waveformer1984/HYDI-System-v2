@@ -482,7 +482,7 @@ function checkOllama() {
         state: verdict.state,
         reason: verdict.reason,
         observerFailure: verdict.observerFailure,
-        body: (observation.transportError || observation.bodyText || '').slice(0, 200),
+        body: ((observation.annotation || '') + ' ' + (observation.transportError || observation.bodyText || '')).trim().slice(0, 200),
         _assessment: assessment,
         _hysteresisState: hysteresisState,
       });
@@ -492,7 +492,29 @@ function checkOllama() {
       let body = '';
       res.on('data', (chunk) => { body += chunk; });
       res.on('end', () => {
-        settle({ statusCode: res.statusCode, bodyText: body });
+        // LLM health is more than "service responds": annotate whether any
+        // generative model fits the memory budget, so a memory-starved Ollama
+        // reports MEMORY_PRESSURED rather than silently healthy.
+        // (Live evidence 2026-09-21: /api/tags=200 while every model load
+        // thrashed >30s on a 1.4GB-free box.)
+        let annotation = '';
+        try {
+          const tags = JSON.parse(body);
+          const generative = (tags.models || []).filter((m) => !/embed/i.test(m.name) && m.size > 0);
+          const freeMB = Math.round(require('os').freemem() / 1048576);
+          const budgetMB = Math.max(0, freeMB - 768);
+          const smallest = generative.sort((a, b) => a.size - b.size)[0];
+          if (!smallest) {
+            annotation = ` | llm=NO_MODELS freeMB=${freeMB}`;
+          } else if (smallest.size * 1.5 > budgetMB * 1048576) {
+            annotation = ` | llm=MEMORY_PRESSURED freeMB=${freeMB} smallest=${smallest.name}`;
+          } else {
+            annotation = ` | llm=MODEL_AFFORDABLE freeMB=${freeMB} smallest=${smallest.name}`;
+          }
+        } catch { /* body not JSON — verdict handles it */ }
+        // bodyText stays pure JSON (evaluateEndpointHealth parses it);
+        // the annotation rides on the display path instead.
+        settle({ statusCode: res.statusCode, bodyText: body, annotation });
       });
     });
     req.on('timeout', () => {
