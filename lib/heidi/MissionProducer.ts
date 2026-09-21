@@ -86,6 +86,16 @@ export const DEFAULT_MISSION_TEMPLATES: MissionTemplate[] = [
     minIntervalMs: 4 * HOUR,
     reason: 'Capability readiness changes over time; periodic probing catches silent degradation before it blocks work.',
   },
+  {
+    producerKey: 'ops.executive_diagnostic',
+    title: 'Run executive self-diagnostic',
+    description: 'Collect a multi-dimension diagnostic (loop liveness, goal staleness, mission cadence, memory, authorizations, escalations, deployment drift, capability posture) and persist it as a heidi_events row.',
+    purpose: 'Produce a periodic, evidence-backed executive assessment instead of relying on on-demand status endpoints.',
+    capabilityId: 'ops.executive_diagnostic',
+    priority: 7,
+    minIntervalMs: 24 * HOUR,
+    reason: 'Self-observation is only real if it runs on a cadence; a daily persisted diagnostic is the executive feedback loop\'s evidence stream.',
+  },
 ];
 
 export class MissionProducer {

@@ -54,6 +54,7 @@ import { ALL_CONTRACTS } from './contracts';
 import type { ProspectRecord, OpportunityRecord } from '../revenue/types';
 import { getOfferCatalog } from '../revenue/OfferCatalog';
 import { MissionProducer, type ProductionResult } from './MissionProducer';
+import { collectExecutiveDiagnostic } from './ExecutiveDiagnostic';
 
 export type CognitivePhase =
   | 'perceive' | 'validate' | 'understand' | 'update_world_model'
@@ -1362,6 +1363,34 @@ export class CognitiveCore {
         evidence: [{ cycleId: ctx.sessionId, perception }],
         verified: true,
         verificationDetails: 'Perception result contains system health',
+      };
+    });
+
+    // Executive self-diagnostic — always wired: it reads durable state via
+    // this.pool/goals/registry, so it works even when optional subsystems
+    // (OperationalIntelligence, comms) are absent.
+    this.wireExecutor('ops.executive_diagnostic', async () => {
+      const report = await collectExecutiveDiagnostic({
+        pool: this.pool,
+        goals: this.goals,
+        registry: this.registry,
+        repoDir: process.cwd(),
+      });
+      const inserted = await this.pool.query<{ id: string }>(
+        `INSERT INTO heidi_events (event_type, division, payload, verdict, created_at)
+         VALUES ($1, $2, $3, $4, now()) RETURNING id`,
+        ['executive_diagnostic', 'heidi', JSON.stringify(report), report.overall],
+      );
+      const reportId = inserted.rows[0]?.id ?? null;
+      return {
+        capabilityId: 'ops.executive_diagnostic',
+        executed: reportId !== null,
+        outcome: reportId !== null ? 'success' as const : 'failure' as const,
+        result: { reportId, overall: report.overall, dimensions: report.dimensions.length, generatedAt: report.generatedAt },
+        error: reportId === null ? 'heidi_events insert returned no id' : null,
+        evidence: [{ overall: report.overall, generatedAt: report.generatedAt }],
+        verified: false, // contract verification re-reads the row
+        verificationDetails: 'Pending contract verification of persisted diagnostic row',
       };
     });
   }

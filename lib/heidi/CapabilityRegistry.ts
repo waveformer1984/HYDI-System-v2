@@ -560,6 +560,19 @@ export const DEFAULT_CAPABILITIES: Array<Omit<CapabilityDescriptor, 'status' | '
     timeoutMs: 30000,
     metadata: { actionType: 'observe' },
   },
+  {
+    capabilityId: 'ops.executive_diagnostic',
+    capabilityName: 'Executive Diagnostic',
+    description: 'Collect a multi-dimension self-diagnostic and persist it as a heidi_events executive_diagnostic row',
+    provider: 'cognitive_core',
+    riskLevel: 'R0',
+    autonomyRequirement: 0,
+    dependencies: [],
+    verificationStrategy: 'The executive_diagnostic event row exists in heidi_events with a verdict',
+    reversible: true,
+    timeoutMs: 45000,
+    metadata: { actionType: 'executive_diagnostic' },
+  },
 
   // Revenue pipeline capabilities (ProspectPipeline)
   {

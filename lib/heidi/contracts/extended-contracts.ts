@@ -598,6 +598,41 @@ export const WORLD_SYNC = defineContract({
   },
 });
 
+export const OPS_EXECUTIVE_DIAGNOSTIC = defineContract({
+  identity: {
+    id: 'ops.executive_diagnostic',
+    version: '1.0.0',
+    owner: OWNER,
+    provider: 'cognitive_core',
+    description: 'Collect the multi-dimension self-diagnostic and persist it as an executive_diagnostic event',
+  },
+  effects: [dbEffect('heidi_events', 'create')],
+  reversibility: {
+    kind: 'none',
+    windowMs: 0,
+    caveat:
+      'The diagnostic row is an append-only ledger entry. The correct ' +
+      'retraction for a bad report is a later, truthful report — the record ' +
+      'itself must not be rewritten.',
+  },
+  cost: { estimatedMs: 8_000, timeoutMs: 45_000 },
+  verification: {
+    description:
+      'The diagnostic event row exists in heidi_events and carries a verdict. ' +
+      'The report contents are deliberately NOT trusted from the executor — ' +
+      'the row is re-read by id.',
+    observation: dbObservation('sql:heidi_events:id={reportId}', ['id', 'event_type', 'verdict']),
+    conditions: [
+      { field: 'found', operator: 'eq', expected: true },
+      { field: 'event_type', operator: 'eq', expected: 'executive_diagnostic' },
+      { field: 'verdict', operator: 'not_null', expected: null },
+    ],
+    onFailure: 'escalate',
+    maxRetries: 1,
+    requiresHumanConfirmation: false,
+  },
+});
+
 // ---------------------------------------------------------------------------
 // Writes reached only from inside revenue.run_cycle
 // ---------------------------------------------------------------------------
@@ -855,6 +890,7 @@ export const EXTENDED_CONTRACTS: CapabilityContract[] = [
   REVENUE_START_PROVISIONING,
   REVENUE_UPDATE_HEALTH_STATUS,
   WORLD_SYNC,
+  OPS_EXECUTIVE_DIAGNOSTIC,
   // external / system-affecting
   TOOL_SEND_EMAIL,
   SELF_RUN_SELF_REPAIR,
