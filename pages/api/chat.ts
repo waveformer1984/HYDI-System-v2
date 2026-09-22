@@ -17,6 +17,13 @@ import {
   answerFromCooState,
   COO_STALENESS_MS,
 } from '../../lib/heidi/CooBriefing';
+import {
+  classifyLifeIntent,
+  getLifeContext,
+  setFocus,
+  remember,
+  recallAnswer,
+} from '../../lib/heidi/ConversationContext';
 import type { CooState } from '../../lib/heidi/CooState';
 
 // Lazy Supabase client — same pattern as lib/orchestrator.ts; a missing env
@@ -242,6 +249,57 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     // Operational questions resolve against the persisted COO state first
+    // Life-context intents — the world model layer. Focus switching,
+    // remembering, recall, and the bounded 'investigate <target>'
+    // translation into a governed agent mission. Deterministic; anything
+    // unrecognized falls through to COO/LLM paths and cannot act.
+    const lifeIntent = classifyLifeIntent(message);
+    if (lifeIntent) {
+      try {
+        const sb = getCooSupabase();
+        let text: string;
+        if (lifeIntent.kind === 'focus') {
+          const { project, created } = await setFocus(sb, user_id, lifeIntent.project);
+          text = `Focus set: ${project.name}${created ? ' (new project — recorded)' : ''}.`;
+        } else if (lifeIntent.kind === 'remember') {
+          await remember(sb, user_id, lifeIntent.text);
+          text = `Noted: "${lifeIntent.text.slice(0, 120)}"`;
+        } else if (lifeIntent.kind === 'recall') {
+          text = recallAnswer(await getLifeContext(sb, user_id));
+        } else {
+          // investigate — translate into a governed goal only when the
+          // target is an explicit opportunity reference.
+          const { data: goalRow, error } = await sb.from('heidi_goals').insert({
+            goal_type: 'mission',
+            title: `Investigate ${lifeIntent.target}`,
+            description: `Operator-requested investigation of ${lifeIntent.target}`,
+            purpose: 'operator command via chat',
+            priority: 5,
+            status: 'pending',
+            owner: 'operator',
+            confidence: 0.9,
+            context: {
+              producerKey: `cmd:investigate:${lifeIntent.target}:${Date.now()}`,
+              producedBy: 'human-operator',
+              capabilityId: 'ops.agent_mission',
+              capabilityParams: { opportunityId: lifeIntent.target },
+              completeOnVerify: true,
+            },
+          }).select('id').single();
+          if (error) throw new Error(error.message);
+          text = `I'll investigate that — three bounded agents (two independent research, one analyst), governed goal ${goalRow.id.slice(0, 8)}. Results land in the agent board; the supervisor watches them.`;
+        }
+        sse(res, { type: 'metadata', model_used: 'heidi-context', latency: 0 });
+        sse(res, { type: 'content', content: text });
+        res.write('data: [DONE]\n\n');
+        return res.end();
+      } catch (e) {
+        sse(res, { type: 'content', content: `Context operation failed — ${e instanceof Error ? e.message : 'unknown'}` });
+        res.write('data: [DONE]\n\n');
+        return res.end();
+      }
+    }
+
     // (the daemon's authoritative snapshot). Non-operational or unreadable
     // falls through to the existing runtime-state + LLM paths.
     const cooResponse = await tryCooResponse(message);
