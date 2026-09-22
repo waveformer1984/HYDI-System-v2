@@ -570,9 +570,18 @@ export async function runTopOpportunityInvestigation(
   reconcileDeps?: ReconcileDeps,
 ): Promise<{ parents: Array<{ parentMissionId: string; missionEventId: string | null; spawned: string[]; refused?: string; opportunityId: string; title: string }>; selected: number }> {
   const n = Math.max(1, Math.min(limit, 2)); // hard cap: 2 investigations per call
+  // Skip opportunities that already have an investigation parent —
+  // mission targetKeys are deterministic, so a re-pick would collapse
+  // idempotently and leave the governing goal unverifiable (pending).
   const { rows } = await pool.query(
-    `SELECT id, title, confidence FROM protoforge_opportunities
-     WHERE status = 'needs_review' ORDER BY confidence DESC NULLS LAST LIMIT $1`,
+    `SELECT o.id, o.title, o.confidence FROM protoforge_opportunities o
+     WHERE o.status = 'needs_review'
+       AND NOT EXISTS (
+         SELECT 1 FROM heidi_events e
+         WHERE e.event_type = 'agent_mission'
+           AND e.payload->>'targetKey' = 'parent:' || o.id::text
+       )
+     ORDER BY o.confidence DESC NULLS LAST LIMIT $1`,
     [n],
   );
   const parents = [] as Array<{ parentMissionId: string; missionEventId: string | null; spawned: string[]; refused?: string; opportunityId: string; title: string }>;
