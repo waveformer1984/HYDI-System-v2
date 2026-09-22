@@ -586,6 +586,19 @@ export const DEFAULT_CAPABILITIES: Array<Omit<CapabilityDescriptor, 'status' | '
     timeoutMs: 45000,
     metadata: { actionType: 'diagnostic_followup' },
   },
+  {
+    capabilityId: 'ops.investigate_finding',
+    capabilityName: 'Investigate Finding',
+    description: 'Run a bounded investigation of one diagnostic dimension and persist an evidence-backed finding row',
+    provider: 'cognitive_core',
+    riskLevel: 'R0',
+    autonomyRequirement: 0,
+    dependencies: ['ops.diagnostic_followup'],
+    verificationStrategy: 'The investigation event row exists in heidi_events with a verdict',
+    reversible: true,
+    timeoutMs: 45000,
+    metadata: { actionType: 'investigate_finding' },
+  },
 
   // Revenue pipeline capabilities (ProspectPipeline)
   {

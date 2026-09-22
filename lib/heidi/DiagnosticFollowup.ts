@@ -288,6 +288,38 @@ const INVESTIGATORS: Record<
 };
 
 /**
+ * Run a single dimension's investigator — the executor path for
+ * `ops.investigate_finding`. An unknown dimension is an UNKNOWN finding,
+ * never a crash and never a fabricated result.
+ */
+export async function investigateDimension(
+  deps: FollowupDeps,
+  dimensionName: string,
+): Promise<DiagnosticFinding> {
+  const investigator = INVESTIGATORS[dimensionName];
+  if (!investigator) {
+    return {
+      dimension: dimensionName,
+      severity: 'UNKNOWN',
+      summary: `no investigator registered for dimension "${dimensionName}"`,
+      evidence: { dimension: dimensionName },
+      suggestedFollowup: 'human_review',
+      humanRequired: true,
+    };
+  }
+  const synthetic: DiagnosticDimension = {
+    name: dimensionName,
+    status: 'DEGRADED',
+    detail: 'investigation target',
+  };
+  try {
+    return await investigator(deps, synthetic);
+  } catch {
+    return unknownFinding(dimensionName, 'investigator threw');
+  }
+}
+
+/**
  * Collect a follow-up report from the most recent executive diagnostic.
  * A missing diagnostic is itself a finding — the follow-up cannot invent
  * a baseline it never observed.

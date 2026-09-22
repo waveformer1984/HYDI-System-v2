@@ -55,7 +55,7 @@ import type { ProspectRecord, OpportunityRecord } from '../revenue/types';
 import { getOfferCatalog } from '../revenue/OfferCatalog';
 import { MissionProducer, type ProductionResult } from './MissionProducer';
 import { collectExecutiveDiagnostic } from './ExecutiveDiagnostic';
-import { collectDiagnosticFollowup } from './DiagnosticFollowup';
+import { collectDiagnosticFollowup, investigateDimension } from './DiagnosticFollowup';
 
 export type CognitivePhase =
   | 'perceive' | 'validate' | 'understand' | 'update_world_model'
@@ -510,7 +510,40 @@ export class CognitiveCore {
     // (and nullable) so tests can substitute a bounded catalog.
     this.missionProducer = opts && 'missionProducer' in opts
       ? (opts.missionProducer as MissionProducer)
-      : new MissionProducer({ goals: this.goals, registry: this.registry });
+      : new MissionProducer({
+        goals: this.goals,
+        registry: this.registry,
+        findingSource: () => this.latestFindings(),
+      });
+  }
+
+  /**
+   * Read the persisted findings from the most recent diagnostic_followup
+   * event. Returns [] when none exists or the row is unreadable — the
+   * producer treats that as "no findings", never as an error.
+   */
+  private async latestFindings(): Promise<import('./MissionProducer').FindingRef[]> {
+    try {
+      const rows = await this.pool.query<QueryResultRow>(
+        `SELECT id, payload FROM heidi_events
+         WHERE event_type = 'diagnostic_followup' ORDER BY created_at DESC LIMIT 1`,
+      );
+      const row = rows.rows[0];
+      if (!row) return [];
+      const findings = (row.payload as { findings?: Array<Record<string, unknown>> })?.findings ?? [];
+      return findings
+        .filter((f) => f && typeof f === 'object')
+        .map((f) => ({
+          diagnosticEventId: row.id as string,
+          taskTemplate: f.taskTemplate as string,
+          dimension: f.dimension as string | undefined,
+          severity: f.severity as string | undefined,
+          summary: f.summary as string | undefined,
+          humanRequired: f.humanRequired === true,
+        }));
+    } catch {
+      return [];
+    }
   }
 
   // ─── Bounded external calls ───────────────────────────────────────────
@@ -1423,6 +1456,54 @@ export class CognitiveCore {
         evidence: [{ verdict: report.verdict, findingCount: report.findings.length }],
         verified: false, // contract verification re-reads the row
         verificationDetails: 'Pending contract verification of persisted follow-up row',
+      };
+    });
+
+    // Bounded investigation of one diagnostic dimension — the execution
+    // target for finding-generated missions. Investigates; never repairs.
+    this.wireExecutor('ops.investigate_finding', async (params) => {
+      const dimension = params.dimension as string | undefined;
+      const taskTemplate = params.taskTemplate as string | undefined;
+      if (!dimension || !taskTemplate) {
+        return this.failResult('ops.investigate_finding', 'Missing required param: dimension/taskTemplate');
+      }
+      const finding = await investigateDimension(
+        { pool: this.pool, repoDir: process.cwd() },
+        dimension,
+      );
+      const inserted = await this.pool.query<{ id: string }>(
+        `INSERT INTO heidi_events (event_type, division, payload, verdict, created_at)
+         VALUES ($1, $2, $3, $4, now()) RETURNING id`,
+        [
+          'investigation',
+          'heidi',
+          JSON.stringify({
+            dimension,
+            taskTemplate,
+            diagnosticEventId: params.diagnosticEventId ?? null,
+            investigationOnly: true,
+            noRepairAuthorized: true,
+            finding,
+          }),
+          finding.severity,
+        ],
+      );
+      const reportId = inserted.rows[0]?.id ?? null;
+      return {
+        capabilityId: 'ops.investigate_finding',
+        executed: reportId !== null,
+        outcome: reportId !== null ? 'success' as const : 'failure' as const,
+        result: {
+          reportId,
+          dimension,
+          severity: finding.severity,
+          suggestedFollowup: finding.suggestedFollowup,
+          humanRequired: finding.humanRequired,
+        },
+        error: reportId === null ? 'heidi_events insert returned no id' : null,
+        evidence: [{ dimension, severity: finding.severity }],
+        verified: false, // contract verification re-reads the row
+        verificationDetails: 'Pending contract verification of persisted investigation row',
       };
     });
   }

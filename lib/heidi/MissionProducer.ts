@@ -47,6 +47,39 @@ export interface ProductionResult {
   skipped: Array<{ producerKey: string; reason: string }>;
 }
 
+/**
+ * A verified diagnostic finding, as persisted in the latest
+ * `diagnostic_followup` heidi_events row. The producer consumes these;
+ * it never trusts diagnostic text as a capability name — the allowlist
+ * below is the only mapping.
+ */
+export interface FindingRef {
+  diagnosticEventId: string;
+  taskTemplate: string;
+  dimension?: string;
+  severity?: string;
+  summary?: string;
+  humanRequired?: boolean;
+}
+
+/**
+ * THE authoritative taskTemplate allowlist (E3). A finding's
+ * `taskTemplate` string is an identity, never an instruction: it is
+ * looked up here and mapped to a fixed capability + dimension. Anything
+ * not in this table produces `unknown_template` and no mission.
+ */
+export const FINDING_TASK_ALLOWLIST: Record<
+  string,
+  { capabilityId: string; dimension: string }
+> = {
+  'ops.investigate_cognitive_timeouts': { capabilityId: 'ops.investigate_finding', dimension: 'cognitive_loop' },
+  'ops.investigate_escalation_growth': { capabilityId: 'ops.investigate_finding', dimension: 'escalations' },
+  'ops.investigate_runtime_drift': { capabilityId: 'ops.investigate_finding', dimension: 'runtime_drift' },
+  'ops.investigate_stale_goals': { capabilityId: 'ops.investigate_finding', dimension: 'goals' },
+};
+
+const FINDING_MISSION_INTERVAL_MS = 20 * 60 * 60 * 1000;
+
 export interface MissionProducerOptions {
   goals: GoalSystem;
   registry: CapabilityRegistry;
@@ -54,6 +87,12 @@ export interface MissionProducerOptions {
   maxOpen?: number;
   /** Override the catalog (tests). Default: DEFAULT_MISSION_TEMPLATES. */
   templates?: MissionTemplate[];
+  /**
+   * Source of persisted, verified diagnostic findings (the latest
+   * diagnostic_followup event). Injected so the producer stays hermetic
+   * under test. Absent → the findings stage is skipped entirely.
+   */
+  findingSource?: () => Promise<FindingRef[]>;
 }
 
 const HOUR = 60 * 60 * 1000;
@@ -113,12 +152,14 @@ export class MissionProducer {
   private registry: CapabilityRegistry;
   private maxOpen: number;
   private templates: MissionTemplate[];
+  private findingSource: (() => Promise<FindingRef[]>) | null;
 
   constructor(opts: MissionProducerOptions) {
     this.goals = opts.goals;
     this.registry = opts.registry;
     this.maxOpen = opts.maxOpen ?? 2;
     this.templates = opts.templates ?? DEFAULT_MISSION_TEMPLATES;
+    this.findingSource = opts.findingSource ?? null;
   }
 
   /**
@@ -194,6 +235,112 @@ export class MissionProducer {
       result.created.push(goal);
     }
 
+    if (this.findingSource) {
+      await this.produceFromFindings(result, openByKey, autonomyLevel);
+    }
+
     return result;
+  }
+
+  /**
+   * E3: verified diagnostic finding → bounded investigation mission.
+   *
+   * Findings arrive already persisted (diagnostic_followup rows). Every
+   * gate the fixed templates pass through applies here too — dedupe by
+   * producerKey, cooldown, open cap, executability, R0/R1 risk ceiling.
+   * A finding whose taskTemplate is not allowlisted, whose mapped
+   * capability is not executable, or that is marked humanRequired
+   * produces a skip record and nothing else.
+   */
+  private async produceFromFindings(
+    result: ProductionResult,
+    openByKey: Set<string>,
+    autonomyLevel: number,
+  ): Promise<void> {
+    let findings: FindingRef[];
+    try {
+      findings = (await this.findingSource!()) ?? [];
+    } catch {
+      return; // A finding source that fails produces nothing — never invent findings.
+    }
+
+    for (const finding of findings) {
+      // Malformed findings are rejected before they can name work.
+      if (!finding || typeof finding.taskTemplate !== 'string' || finding.taskTemplate.length === 0) {
+        result.skipped.push({ producerKey: 'finding:malformed', reason: 'malformed_finding' });
+        continue;
+      }
+
+      const producerKey = `finding:${finding.taskTemplate}`;
+
+      if (finding.humanRequired) {
+        result.skipped.push({ producerKey, reason: 'human_required' });
+        continue;
+      }
+
+      const binding = FINDING_TASK_ALLOWLIST[finding.taskTemplate];
+      if (!binding) {
+        result.skipped.push({ producerKey, reason: 'unknown_template' });
+        continue;
+      }
+
+      if (openByKey.size >= this.maxOpen) {
+        result.skipped.push({ producerKey, reason: `open_cap:${this.maxOpen}` });
+        continue;
+      }
+      if (openByKey.has(producerKey)) {
+        result.skipped.push({ producerKey, reason: 'already_open' });
+        continue;
+      }
+
+      const exec = this.registry.isExecutable(binding.capabilityId, autonomyLevel);
+      if (!exec.executable) {
+        result.skipped.push({ producerKey, reason: `not_executable:${exec.reason}` });
+        continue;
+      }
+      const cap = this.registry.get(binding.capabilityId);
+      if (!cap || (cap.riskLevel !== 'R0' && cap.riskLevel !== 'R1')) {
+        result.skipped.push({ producerKey, reason: `risk_level:${cap?.riskLevel ?? 'unknown'}` });
+        continue;
+      }
+
+      const latest = await this.goals.getLatestByProducerKey(producerKey);
+      if (latest && Date.now() - new Date(latest.createdAt).getTime() < FINDING_MISSION_INTERVAL_MS) {
+        result.skipped.push({ producerKey, reason: 'cooldown' });
+        continue;
+      }
+
+      const goal = await this.goals.createGoal({
+        goalType: 'mission',
+        title: `Investigate ${binding.dimension}`,
+        description:
+          `Bounded investigation of diagnostic finding "${finding.taskTemplate}". ` +
+          'INVESTIGATION ONLY — no repair authorized.',
+        purpose: finding.summary ?? `Diagnostic finding ${finding.taskTemplate}`,
+        priority: 6,
+        context: {
+          producerKey,
+          producedBy: PRODUCER_ID,
+          producedAt: new Date().toISOString(),
+          reason:
+            `Verified diagnostic finding ${finding.taskTemplate} (severity ${finding.severity ?? 'unknown'}) ` +
+            'requires bounded investigation. Investigation only; no repair authorized.',
+          capabilityId: binding.capabilityId,
+          capabilityParams: {
+            dimension: binding.dimension,
+            taskTemplate: finding.taskTemplate,
+            diagnosticEventId: finding.diagnosticEventId,
+          },
+          diagnosticEventId: finding.diagnosticEventId,
+          findingSummary: finding.summary ?? null,
+          investigationOnly: true,
+          noRepairAuthorized: true,
+          completeOnVerify: true,
+        },
+      });
+
+      openByKey.add(producerKey);
+      result.created.push(goal);
+    }
   }
 }
