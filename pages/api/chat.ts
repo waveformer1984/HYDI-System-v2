@@ -280,7 +280,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
               .eq('event_type', 'coo_state').order('created_at', { ascending: false }).limit(1).maybeSingle(),
           ]);
           const s = (cooRow.data?.payload ?? null) as {
-            generatedAt?: string; verdict?: string; applicationHealth?: string;
+            generatedAt?: string; applicationHealth?: string;
             deployment?: { actualCommit?: string; verdict?: string };
             work?: { goalsOpen?: number; escalationsOpen?: number; escalationsNew24h?: number };
             protoforge?: { opportunitiesTotal?: number; pendingReview?: number };
@@ -291,7 +291,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           if (life.focus) lines.push(`Focus: ${life.focus.project}.`);
           if (s) {
             const stale = Date.now() - new Date(String(s.generatedAt)).getTime() > 45 * 60 * 1000;
-            lines.push(`System: ${s.verdict} · health ${s.applicationHealth} · commit ${s.deployment?.actualCommit ?? '?'}${stale ? ' (snapshot stale)' : ''}.`);
+            lines.push(`System: deployment ${s.deployment?.verdict ?? 'UNKNOWN'} · health ${s.applicationHealth} · commit ${s.deployment?.actualCommit ?? '?'}${stale ? ' (snapshot stale)' : ''}.`);
             lines.push(`Work: ${s.work?.goalsOpen ?? 0} open goals · ProtoForge: ${s.protoforge?.opportunitiesTotal ?? 0} opportunities (${s.protoforge?.pendingReview ?? 0} pending review).`);
             const open = (s.humanActions?.items ?? []).filter((i) => i.status === 'OPEN' && !i.backlog);
             lines.push(open.length > 0

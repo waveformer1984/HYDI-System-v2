@@ -170,7 +170,11 @@ export type LifeIntent =
 
 export function classifyLifeIntent(message: string): LifeIntent | null {
   // Strip a leading vocative — "Heidi, investigate…" is natural speech.
-  const m = message.trim().replace(/^(?:hey|ok(?:ay)?|so|please)[,.\s]*/i, '').replace(/^heidi[,.\s]*/i, '').trim();
+  const m = message.trim()
+    .replace(/^(?:hey|ok(?:ay)?|so|please)[,.\s]*/i, '')
+    .replace(/^heidi[,.\s]*/i, '')
+    .replace(/[.?!]+\s*$/, '')   // trailing punctuation is speech, not syntax
+    .trim();
   const focus = m.match(/^(?:focus|work on|let'?s work on|i (?:want to|wanna) work on|switch to|back to|get back to)\s+(.+?)(?:[.?!]|$)/i);
   if (focus) {
     // strip trailing temporal fillers: "work on protoforge today" → protoforge
