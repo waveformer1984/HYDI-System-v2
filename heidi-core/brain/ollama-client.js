@@ -64,6 +64,50 @@ class OllamaClient {
   }
 
   /**
+   * Resolve which model to use. Mirrors lib/ModelManager.ts: smallest
+   * installed generative model whose on-disk size * 1.5 fits in
+   * (free RAM - reserve). Throws MEMORY_PRESSURED when nothing fits —
+   * the truthful answer on a starved box, instead of a doomed 30s load.
+   */
+  async resolveModel() {
+    const budget = Math.max(0, os.freemem() - 768 * 1024 * 1024);
+    const now = Date.now();
+    // Failure backoff: after repeated inference timeouts, report
+    // MEMORY_PRESSURED for a cooldown instead of churning a doomed
+    // model load every probe tick (~30s spawn/thrash/unload cycle).
+    if (now < (OllamaClient._backoffUntil || 0)) {
+      throw new Error(`MEMORY_PRESSURED: inference cooldown after ${OllamaClient._consecFails} consecutive failures`);
+    }
+    if (this._selectionCache.name && now - this._selectionCache.at < 60000) {
+      return this._selectionCache.name;
+    }
+    const res = await this.client.get('/api/tags', { timeout: 3000 });
+    const models = (res.data.models || []).filter(m => m.size > 0 && !/embed/i.test(m.name));
+    const fits = m => m.size * 1.5 <= budget;
+    let pick = null;
+    if (this.model) {
+      const req = models.find(m => m.name === this.model);
+      pick = (req && fits(req)) ? req : (models.filter(fits).sort((a, b) => a.size - b.size)[0] || null);
+    } else {
+      pick = models.filter(fits).sort((a, b) => a.size - b.size)[0] || null;
+    }
+    if (!pick) {
+      throw new Error(`MEMORY_PRESSURED: free RAM ${(os.freemem() / 1073741824).toFixed(1)}GB below budget for any installed model`);
+    }
+    this._selectionCache = { at: now, name: pick.name };
+    return pick.name;
+  }
+
+  /** Best-effort unload so a failed call doesn't leak residency. */
+  async unload(model) {
+    try {
+      await this.client.post('/api/generate',
+        { model, prompt: '', keep_alive: 0, stream: false },
+        { timeout: 5000 });
+    } catch { }
+  }
+
+  /**
    * Stream a generation token-by-token. Calls onToken(text) for each chunk,
    * resolves with the same shape as generate() once complete.
    */
@@ -130,6 +174,7 @@ class OllamaClient {
       };
 
       const response = await this.client.post('/api/generate', payload);
+      OllamaClient._noteSuccess();
 
       return {
         text: response.data.response,
@@ -143,9 +188,21 @@ class OllamaClient {
       };
     } catch (error) {
       console.error('[HEIDI Brain] Generation failed:', error.message);
+      OllamaClient._noteFailure();
       void this.unload(model);
       throw error;
     }
+  }
+
+  static _noteFailure() {
+    OllamaClient._consecFails = (OllamaClient._consecFails || 0) + 1;
+    if (OllamaClient._consecFails >= 3) {
+      OllamaClient._backoffUntil = Date.now() + 5 * 60 * 1000;
+    }
+  }
+  static _noteSuccess() {
+    OllamaClient._consecFails = 0;
+    OllamaClient._backoffUntil = 0;
   }
 
   async chat(messages, options = {}) {
@@ -165,6 +222,7 @@ class OllamaClient {
       };
 
       const response = await this.client.post('/api/chat', payload);
+      OllamaClient._noteSuccess();
 
       return {
         text: response.data.message?.content || '',
@@ -178,6 +236,7 @@ class OllamaClient {
       };
     } catch (error) {
       console.error('[HEIDI Brain] Chat failed:', error.message);
+      OllamaClient._noteFailure();
       void this.unload(model);
       throw error;
     }
