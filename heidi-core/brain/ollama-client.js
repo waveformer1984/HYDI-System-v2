@@ -1,14 +1,27 @@
 /**
  * HEIDI Brain - Ollama Client
  * Simple, fast, doesn't fight you
+ *
+ * SINGLE-LIFECYCLE POLICY (shared with lib/ModelManager.ts):
+ * This client is the model path for every protoforge-core caller
+ * (LocalModelAdapter health probes, HeidiOrchestrator, reflection).
+ * It MUST obey the same RAM rules as the governed chat path:
+ *   - smallest-installed model that fits the free-RAM budget
+ *   - fail fast with MEMORY_PRESSURED instead of a doomed load
+ *   - bounded residency (keep_alive '5m', not 30m/1h)
+ *   - best-effort unload after a failed call
+ * Without this, periodic probes re-warm a large model right after the
+ * governed manager unloads it — the RAM leak returns.
  */
 
 const axios = require('axios');
+const os = require('os');
 
 class OllamaClient {
   constructor(config = {}) {
     this.baseURL = config.baseURL || process.env.OLLAMA_URL || 'http://localhost:11434';
-    this.model = config.model || process.env.OLLAMA_MODEL || 'llama3';
+    this.model = config.model || process.env.OLLAMA_MODEL || process.env.LOCAL_MODEL_NAME || null;
+    this._selectionCache = { at: 0, name: null };
     // This axios instance's timeout is the ACTUAL binding constraint on every
     // generate()/chat() call - it fires (as "timeout of Nms exceeded") before
     // any outer Promise.race timeout in src/models/local-model-adapter.js or
@@ -23,7 +36,7 @@ class OllamaClient {
     // callers that want a tighter/looser bound than the documented default.
     this.timeout = config.timeout
       || parseInt(process.env.OLLAMA_TIMEOUT_MS || process.env.LOCAL_MODEL_TIMEOUT_MS || '20000', 10);
-    
+
     this.client = axios.create({
       baseURL: this.baseURL,
       timeout: this.timeout,
@@ -55,7 +68,7 @@ class OllamaClient {
    * resolves with the same shape as generate() once complete.
    */
   async generateStream(prompt, onToken, options = {}) {
-    const model = options.model || this.model;
+    const model = options.model || await this.resolveModel();
     const response = await fetch(`${this.baseURL}/api/generate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -94,7 +107,7 @@ class OllamaClient {
               tokens: { prompt: d.prompt_eval_count || 0, completion: d.eval_count || 0 }
             };
           }
-        } catch {}
+        } catch { }
       }
     }
     return { text: full, model, tokens: { prompt: 0, completion: 0 } };
@@ -102,13 +115,14 @@ class OllamaClient {
 
   async generate(prompt, options = {}) {
     const startTime = Date.now();
-    
+    const model = options.model || await this.resolveModel();
+
     try {
       const payload = {
-        model: options.model || this.model,
+        model,
         prompt: prompt,
         stream: false,
-        keep_alive: options.keepAlive || '30m',
+        keep_alive: options.keepAlive || '5m',
         options: {
           temperature: options.temperature || 0.7,
           num_predict: options.maxTokens || 1000
@@ -116,7 +130,7 @@ class OllamaClient {
       };
 
       const response = await this.client.post('/api/generate', payload);
-      
+
       return {
         text: response.data.response,
         model: response.data.model,
@@ -129,19 +143,21 @@ class OllamaClient {
       };
     } catch (error) {
       console.error('[HEIDI Brain] Generation failed:', error.message);
+      void this.unload(model);
       throw error;
     }
   }
 
   async chat(messages, options = {}) {
     const startTime = Date.now();
-    
+    const model = options.model || await this.resolveModel();
+
     try {
       const payload = {
-        model: options.model || this.model,
+        model,
         messages: messages,
         stream: false,
-        keep_alive: options.keepAlive || '30m',
+        keep_alive: options.keepAlive || '5m',
         options: {
           temperature: options.temperature || 0.7,
           num_predict: options.maxTokens || 1000
@@ -149,7 +165,7 @@ class OllamaClient {
       };
 
       const response = await this.client.post('/api/chat', payload);
-      
+
       return {
         text: response.data.message?.content || '',
         model: response.data.model,
@@ -162,6 +178,7 @@ class OllamaClient {
       };
     } catch (error) {
       console.error('[HEIDI Brain] Chat failed:', error.message);
+      void this.unload(model);
       throw error;
     }
   }
@@ -174,15 +191,16 @@ class OllamaClient {
    */
   async chatWithTools(messages, tools, options = {}) {
     const startTime = Date.now();
+    const model = options.model || await this.resolveModel();
     const payload = {
-      model: options.model || this.model,
+      model,
       messages,
       tools,
       stream: false,
-      // Keep the tool model resident between rounds AND between messages. On a
-      // RAM-tight box the model otherwise unloads after Ollama's 5min default
-      // and the next call pays a full reload (~90s), blowing the timeout.
-      keep_alive: options.keepAlive || '1h',
+      // Residency between tool rounds still matters, but 1h turned into a
+      // permanent RAM reservation on this box — 10m bounds it while still
+      // covering multi-round tool use.
+      keep_alive: options.keepAlive || '10m',
       options: {
         temperature: options.temperature ?? 0.2,
         num_predict: options.maxTokens || 1000
