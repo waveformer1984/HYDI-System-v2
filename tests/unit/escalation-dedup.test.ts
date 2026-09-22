@@ -23,6 +23,9 @@ interface Row {
 function makeMockSupabase() {
   const rows: Row[] = [];
   let nextId = 1;
+  // Test hook: when set, every select on operator_escalations fails —
+  // simulating a PostgREST/filter error at the dedupe lookup.
+  let selectError: { message: string } | null = null;
 
   function matchOr(row: Row, expr: string): boolean {
     // supports: metadata->>k.eq.v,metadata->>k2.eq.v2
@@ -67,6 +70,7 @@ function makeMockSupabase() {
           matched.forEach((r) => Object.assign(r, state.payload));
           return resolve({ data: matched, error: null });
         }
+        if (selectError) return resolve({ data: null, error: selectError });
         if (state.orderCol) {
           matched = [...matched].sort((a, b) => String(b[state.orderCol!]).localeCompare(String(a[state.orderCol!])));
         }
@@ -80,6 +84,7 @@ function makeMockSupabase() {
   return {
     rows,
     from: (t: string) => makeQuery(t),
+    setSelectError: (e: { message: string } | null) => { selectError = e; },
   };
 }
 
@@ -167,5 +172,30 @@ describe('EscalationNotifier dedup', () => {
     expect(supa.rows).toHaveLength(2); // evt_abc deduped, evt_xyz separate
     expect(supa.rows[0].metadata.eventId).toBe('evt_abc');
     expect(supa.rows[0].metadata.last_seen_at).toBeTruthy();
+  });
+
+  test('D7: dedupe lookup error fails CLOSED — no duplicate row inserted', async () => {
+    const supa = makeMockSupabase();
+    const n = new EscalationNotifier(supa);
+    await n.notify(stuckJobNotification('job-1')); // canonical row exists
+    expect(supa.rows).toHaveLength(1);
+
+    // Simulate a PostgREST failure at the lookup: the old code fell through
+    // to insert — the mechanism behind hourly duplicate floods.
+    supa.setSelectError({ message: 'failed to parse logic tree' });
+    const r = await n.notify(stuckJobNotification('job-1', 999));
+    const r2 = await n.notify(stuckJobNotification('job-2', 10)); // even a NEW incident
+    supa.setSelectError(null);
+
+    expect(supa.rows).toHaveLength(1); // no duplicate, no new row while lookup is broken
+    expect(r.error).toMatch(/dedupe lookup failed/i);
+    expect(r2.error).toMatch(/dedupe lookup failed/i);
+    expect(r.sent).toBe(true); // console channel still carried the escalation
+
+    // Lookup healthy again → dedupe resumes, still one row for job-1.
+    await n.notify(stuckJobNotification('job-1', 1000));
+    expect(supa.rows).toHaveLength(1);
+    await n.notify(stuckJobNotification('job-2', 11));
+    expect(supa.rows).toHaveLength(2); // job-2 lands once, not per attempt
   });
 });

@@ -114,6 +114,7 @@ export class EscalationNotifier {
           null;
 
         let existingId: string | null = null;
+        let lookupFailed = false;
         if (incidentKey) {
           // The identity may be stored under ANY of the incident-key field
           // names — legacy webhook_retry rows carry metadata.eventId, stuck
@@ -121,7 +122,7 @@ export class EscalationNotifier {
           // its canonical row regardless of which field the original
           // detector used. (Census 2026-09-21: 439 webhook_retry rows used
           // eventId and would have kept duplicating post-d9740f7.)
-          const { data: existing } = await this.supabase
+          const { data: existing, error: lookupError } = await this.supabase
             .from('operator_escalations')
             .select('id')
             .eq('category', notification.category)
@@ -133,10 +134,25 @@ export class EscalationNotifier {
             )
             .order('created_at', { ascending: false })
             .limit(1);
-          existingId = existing?.[0]?.id ?? null;
+
+          if (lookupError) {
+            // FAIL CLOSED: a dedupe lookup that cannot run must not fall
+            // through to insert. Fail-open here is how a persistent
+            // PostgREST/filter error silently becomes a duplicate flood —
+            // the failure mode this table's 7,222-row backlog came from.
+            // The escalation is still logged to console + other channels;
+            // it is only the durable row that is withheld.
+            lookupFailed = true;
+            lastError = `Supabase dedupe lookup failed: ${lookupError.message}`;
+          } else {
+            existingId = existing?.[0]?.id ?? null;
+          }
         }
 
-        if (existingId) {
+        if (lookupFailed) {
+          // identity could not be resolved — refuse to write a row we
+          // cannot deduplicate
+        } else if (existingId) {
           const { error } = await this.supabase
             .from('operator_escalations')
             .update({
