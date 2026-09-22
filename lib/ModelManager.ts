@@ -242,7 +242,7 @@ export class ModelManager {
       const response = await fetch(`${this.getLocalBaseURL()}/api/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: modelName, keep_alive: '10m' }),
+        body: JSON.stringify({ model: modelName, keep_alive: '5m' }),
         signal: controller.signal,
       });
       clearTimeout(timer);
@@ -450,7 +450,7 @@ export class ModelManager {
           model: modelName,
           prompt,
           stream: false,
-          keep_alive: '30m',
+          keep_alive: '5m',
           format: 'json',
           options: {
             temperature: 0.1,
