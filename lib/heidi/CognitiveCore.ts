@@ -60,7 +60,7 @@ import { collectReconciliation, resolveGitHead } from './DeploymentReconciliatio
 import { runR0Recovery } from './SelfRepairR0';
 import { collectCooState } from './CooState';
 import { acknowledgeHumanAction } from './HumanActionQueue';
-import { runInvestigateMission, collectAgentState, superviseAgents } from './AgentControlPlane';
+import { runInvestigateMission, collectAgentState, superviseAgents, stopAgent, retryMission, resolveHumanAction } from './AgentControlPlane';
 
 export type CognitivePhase =
   | 'perceive' | 'validate' | 'understand' | 'update_world_model'
@@ -1707,6 +1707,63 @@ export class CognitiveCore {
         evidence: [report],
         verified: false,
         verificationDetails: 'Pending contract verification of persisted agent_supervision row',
+      };
+    });
+
+    // Governed agent lifecycle control: stop <agentId> | retry <missionId>.
+    // Emits a durable agent_control audit event; never grants authority.
+    this.wireExecutor('ops.agent_control', async (params) => {
+      const action = params?.action === 'stop' || params?.action === 'retry' ? params.action : null;
+      const target = typeof params?.target === 'string' ? params.target : null;
+      const actor = typeof params?.actor === 'string' ? params.actor : 'operator';
+      if (!action || !target) {
+        return {
+          capabilityId: 'ops.agent_control', executed: false, outcome: 'failure' as const,
+          result: null, error: "params require {action:'stop'|'retry', target}", evidence: [],
+          verified: false, verificationDetails: 'Missing action/target',
+        };
+      }
+      const res = action === 'stop'
+        ? await stopAgent(this.pool, target, actor)
+        : await retryMission(this.pool, target, actor, { pool: this.pool, repoDir: process.cwd() });
+      const controlEventId = await this.pool.query(
+        `INSERT INTO heidi_events (event_type, division, payload, verdict, created_at)
+         VALUES ('agent_control', 'agents', $1, $2, now()) RETURNING id`,
+        [JSON.stringify({ action, target, actor, outcome: res.outcome, detail: res.detail }), res.ok ? 'APPLIED' : 'REFUSED'],
+      ).then((r) => r.rows[0]?.id as string).catch(() => null);
+      return {
+        capabilityId: 'ops.agent_control', executed: res.ok,
+        outcome: res.ok ? 'success' as const : 'failure' as const,
+        result: { controlEventId, ...res },
+        error: res.ok ? null : (res.detail ?? 'control refused'),
+        evidence: [{ action, target, outcome: res.outcome }],
+        verified: false,
+        verificationDetails: res.ok ? 'Pending contract verification of persisted agent_control row' : 'Refused before effect — nothing to verify',
+      };
+    });
+
+    // Governed approve/reject of queue items — durable resolution. authz:*
+    // items are fail-closed (capability grants need the explicit policy path).
+    this.wireExecutor('ops.resolve_human_action', async (params) => {
+      const queueItemId = typeof params?.queueItemId === 'string' ? params.queueItemId : null;
+      const decision = params?.decision === 'approve' || params?.decision === 'reject' ? params.decision : null;
+      const actor = typeof params?.actor === 'string' ? params.actor : 'operator';
+      if (!queueItemId || !decision) {
+        return {
+          capabilityId: 'ops.resolve_human_action', executed: false, outcome: 'failure' as const,
+          result: null, error: "params require {queueItemId, decision:'approve'|'reject'}", evidence: [],
+          verified: false, verificationDetails: 'Missing queueItemId/decision',
+        };
+      }
+      const res = await resolveHumanAction(this.pool, queueItemId, decision, actor);
+      return {
+        capabilityId: 'ops.resolve_human_action', executed: res.ok,
+        outcome: res.ok ? 'success' as const : 'failure' as const,
+        result: { resolutionEventId: res.resolutionEventId ?? null, outcome: res.outcome, detail: res.detail },
+        error: res.ok ? null : (res.detail ?? 'resolution refused'),
+        evidence: [{ queueItemId, decision, outcome: res.outcome }],
+        verified: false,
+        verificationDetails: res.ok ? 'Pending contract verification of persisted resolution row' : 'Refused before write — nothing to verify',
       };
     });
   }

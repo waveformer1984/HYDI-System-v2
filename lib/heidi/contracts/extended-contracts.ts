@@ -868,6 +868,45 @@ export const OPS_ACK_HUMAN_ACTION = defineContract({
   },
 });
 
+export const OPS_AGENT_CONTROL = defineContract({
+  identity: {
+    id: 'ops.agent_control', version: '1.0.0', owner: OWNER, provider: 'cognitive_core',
+    description: 'Governed agent lifecycle control (stop/retry) with durable audit',
+  },
+  effects: [dbEffect('heidi_events', 'create')],
+  reversibility: { kind: 'none', windowMs: 0, caveat: 'Append-only audit record; stop is a durable flag, retry re-runs a bounded worker.' },
+  cost: { estimatedMs: 5_000, timeoutMs: 30_000 },
+  verification: {
+    description: 'The agent_control audit row exists — re-read by event id.',
+    observation: dbObservation('sql:heidi_events:id={controlEventId}', ['id', 'event_type', 'payload']),
+    conditions: [
+      { field: 'found', operator: 'eq', expected: true },
+      { field: 'event_type', operator: 'eq', expected: 'agent_control' },
+    ],
+    onFailure: 'escalate', maxRetries: 1, requiresHumanConfirmation: false,
+  },
+});
+
+export const OPS_RESOLVE_HUMAN_ACTION = defineContract({
+  identity: {
+    id: 'ops.resolve_human_action', version: '1.0.0', owner: OWNER, provider: 'cognitive_core',
+    description: 'Governed approve/reject of a queue item — durable resolution record',
+  },
+  effects: [dbEffect('heidi_events', 'create'), dbEffect('operator_escalations', 'update'), dbEffect('human_intervention_requests', 'update')],
+  reversibility: { kind: 'none', windowMs: 0, caveat: 'Resolution is durable and recorded; not a deletion.' },
+  cost: { estimatedMs: 5_000, timeoutMs: 30_000 },
+  verification: {
+    description: 'The human_action_resolution row exists — re-read by event id.',
+    observation: dbObservation('sql:heidi_events:id={resolutionEventId}', ['id', 'event_type', 'verdict']),
+    conditions: [
+      { field: 'found', operator: 'eq', expected: true },
+      { field: 'event_type', operator: 'eq', expected: 'human_action_resolution' },
+      { field: 'verdict', operator: 'eq', expected: 'RESOLVED' },
+    ],
+    onFailure: 'escalate', maxRetries: 1, requiresHumanConfirmation: false,
+  },
+});
+
 export const OPS_AGENT_MISSION = defineContract({
   identity: {
     id: 'ops.agent_mission',
@@ -1192,6 +1231,8 @@ export const EXTENDED_CONTRACTS: CapabilityContract[] = [
   OPS_ACK_HUMAN_ACTION,
   OPS_AGENT_MISSION,
   OPS_AGENT_SUPERVISE,
+  OPS_AGENT_CONTROL,
+  OPS_RESOLVE_HUMAN_ACTION,
   // external / system-affecting
   TOOL_SEND_EMAIL,
   SELF_RUN_SELF_REPAIR,

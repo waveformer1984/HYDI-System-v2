@@ -677,6 +677,32 @@ export const DEFAULT_CAPABILITIES: Array<Omit<CapabilityDescriptor, 'status' | '
     timeoutMs: 60000,
     metadata: { actionType: 'agent_supervise' },
   },
+  {
+    capabilityId: 'ops.agent_control',
+    capabilityName: 'Agent Control',
+    description: 'Governed lifecycle control: stop <agentId> marks the agent STOPPED; retry <missionId> re-runs a terminal mission. Emits a durable agent_control audit event. Never grants authority.',
+    provider: 'cognitive_core',
+    riskLevel: 'R1',
+    autonomyRequirement: 1,
+    dependencies: [],
+    verificationStrategy: 'The agent_control audit event exists in heidi_events',
+    reversible: false,
+    timeoutMs: 30000,
+    metadata: { actionType: 'agent_control' },
+  },
+  {
+    capabilityId: 'ops.resolve_human_action',
+    capabilityName: 'Resolve Human Action',
+    description: 'Governed approve/reject of a queue item: resolves operator_escalations rows and pending interventions durably. authz:* items are fail-closed — capability authorization requires the explicit policy path.',
+    provider: 'cognitive_core',
+    riskLevel: 'R1',
+    autonomyRequirement: 1,
+    dependencies: [],
+    verificationStrategy: 'The human_action_resolution event exists in heidi_events',
+    reversible: false,
+    timeoutMs: 30000,
+    metadata: { actionType: 'resolve_human_action' },
+  },
 
   // Revenue pipeline capabilities (ProspectPipeline)
   {

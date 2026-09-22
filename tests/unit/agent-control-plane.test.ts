@@ -12,6 +12,10 @@ import {
   maxActiveAgents,
   runInvestigateMission,
   superviseAgents,
+  stopAgent,
+  retryMission,
+  resolveHumanAction,
+  postMessage,
 } from '../../lib/heidi/AgentControlPlane';
 
 interface Row { event_type: string; payload: Record<string, unknown>; created_at: string }
@@ -230,6 +234,82 @@ describe('supervisor pass (Phase B)', () => {
     const s = await collectAgentState(pool as any);
     const parent = s.missions.find((m) => m.missionId === 'mission-p2')!;
     expect(parent.status).toBe('NEEDS_HUMAN');
+  });
+});
+
+describe('governed controls (Phase D)', () => {
+  const now = new Date().toISOString();
+  const runningAgent = (mid: string, aid: string): Row[] => ([
+    { event_type: 'agent_mission', payload: { missionId: mid, agentId: aid, role: 'research', status: 'PENDING', maxRetries: 0 }, created_at: now },
+    { event_type: 'agent_registered', payload: { agentId: aid, missionId: mid, status: 'REGISTERED' }, created_at: now },
+    { event_type: 'agent_status', payload: { agentId: aid, missionId: mid, status: 'RUNNING', attempt: 1 }, created_at: now },
+    { event_type: 'agent_heartbeat', payload: { agentId: aid, missionId: mid, step: 'w' }, created_at: now },
+  ]);
+
+  test('stop marks a running agent STOPPED durably', async () => {
+    const events = runningAgent('mission-st', 'agent-research-st');
+    const { pool } = poolWith(events);
+    const r = await stopAgent(pool as any, 'agent-research-st', 'operator');
+    expect(r.ok).toBe(true);
+    const s = await collectAgentState(pool as any);
+    expect(s.agents[0].status).toBe('STOPPED');
+  });
+
+  test('stop fails closed on nonexistent and terminal agents', async () => {
+    const { pool } = poolWith([]);
+    expect((await stopAgent(pool as any, 'agent-ghost', 'op')).outcome).toBe('not_found');
+    const events: Row[] = [
+      { event_type: 'agent_mission', payload: { missionId: 'mission-dd', agentId: 'agent-research-dd', role: 'research' }, created_at: now },
+      { event_type: 'agent_registered', payload: { agentId: 'agent-research-dd', missionId: 'mission-dd', status: 'REGISTERED' }, created_at: now },
+      { event_type: 'agent_status', payload: { agentId: 'agent-research-dd', missionId: 'mission-dd', status: 'COMPLETED' }, created_at: now },
+    ];
+    const { pool: p2 } = poolWith(events);
+    expect((await stopAgent(p2 as any, 'agent-research-dd', 'op')).outcome).toBe('already_terminal');
+  });
+
+  test('retry refuses while agent is RUNNING; retries terminal mission', async () => {
+    const events = runningAgent('mission-rt', 'agent-research-rt');
+    const { pool } = poolWith(events);
+    expect((await retryMission(pool as any, 'mission-rt', 'op')).outcome).toBe('running');
+    events.push({ event_type: 'agent_status', payload: { agentId: 'agent-research-rt', missionId: 'mission-rt', status: 'FAILED', failure: 'x' }, created_at: now });
+    const r = await retryMission(pool as any, 'mission-rt', 'op');
+    expect(r.outcome).toBe('retried');
+    expect((await retryMission(pool as any, 'mission-ghost', 'op')).outcome).toBe('not_found');
+  });
+
+  test('resolveHumanAction: authz items fail closed; escalation resolves', async () => {
+    const events: Row[] = [];
+    const escRow = { id: 'esc-1', resolved: false };
+    const pool = {
+      query: async (sql: string, params?: unknown[]) => {
+        if (/INSERT INTO heidi_events/.test(sql)) { events.push({ event_type: String(params![0]), payload: JSON.parse(String(params![1])), created_at: now }); return { rows: [{ id: 'ev-1' }] }; }
+        if (/UPDATE operator_escalations/.test(sql)) {
+          if (escRow.resolved) return { rows: [], rowCount: 0 }; // WHERE resolved=false
+          escRow.resolved = true;
+          return { rows: [{ id: 'esc-1' }], rowCount: 1 };
+        }
+        return { rows: [], rowCount: 0 };
+      },
+    };
+    const refused = await resolveHumanAction(pool as any, 'authz:cap.x:reason', 'approve', 'op');
+    expect(refused.ok).toBe(false);
+    expect(refused.outcome).toBe('refused');
+    const ok = await resolveHumanAction(pool as any, 'escalation:esc-1', 'approve', 'op');
+    expect(ok.ok).toBe(true);
+    expect(ok.resolutionEventId).toBe('ev-1');
+    expect(escRow.resolved).toBe(true);
+    const nf = await resolveHumanAction(pool as any, 'escalation:esc-1', 'reject', 'op');
+    expect(nf.outcome).toBe('not_found'); // already resolved
+  });
+
+  test('agent→agent messages require mission scope', async () => {
+    const { pool } = poolWith([]);
+    await expect(postMessage(pool as any, {
+      from: 'agent-a', to: 'agent-b', missionId: null, type: 'STATUS', content: 'hi',
+    })).rejects.toThrow(/missionId/);
+    await expect(postMessage(pool as any, {
+      from: 'agent-a', to: 'agent-b', missionId: 'mission-x', type: 'STATUS', content: 'hi',
+    })).resolves.toBeUndefined();
   });
 });
 

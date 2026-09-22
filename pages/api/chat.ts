@@ -164,31 +164,66 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Intercept system-state questions and answer from live runtime state
     // rather than LLM inference. This prevents hallucination about the
     // system's own status and provides instant, accurate responses.
-    // Explicit governed command: "acknowledge <queueItemId>" — submits a
-    // governed goal for ops.acknowledge_human_action; the daemon executes
-    // and contract-verifies. Only this exact syntax acknowledges; vague
-    // phrasing ("do it", "handle that") falls through to normal chat and
-    // cannot acknowledge anything.
-    const ackMatch = message.trim().match(/^acknowledge\s+(\S+)$/i);
-    if (ackMatch) {
+    // Explicit governed commands — only exact `verb <target>` syntax acts;
+    // vague phrasing ("do it", "handle that") falls through to normal chat
+    // and cannot acknowledge, stop, retry, approve, or reject anything.
+    // Every mutating command becomes a governed goal: the daemon executes
+    // and contract-verifies; chat never writes state directly.
+    const cmdMatch = message.trim().match(/^(acknowledge|stop|retry|approve|reject|inspect)\s+(\S+)$/i);
+    if (cmdMatch) {
+      const verb = cmdMatch[1].toLowerCase();
+      const target = cmdMatch[2];
       try {
-        const queueItemId = ackMatch[1];
+        // inspect is read-only — answer directly from durable agent events.
+        if (verb === 'inspect') {
+          const { data: rows } = await getCooSupabase()
+            .from('heidi_events')
+            .select('event_type, payload, created_at')
+            .eq('division', 'agents')
+            .order('created_at', { ascending: true })
+            .limit(2000);
+          const relevant = (rows ?? []).filter((r: any) =>
+            r.payload?.agentId === target || r.payload?.missionId === target);
+          const lastStatus = [...relevant].reverse().find((r: any) => r.event_type === 'agent_status');
+          const mission = relevant.find((r: any) => r.event_type === 'agent_mission');
+          const msgs = relevant.filter((r: any) => r.event_type === 'agent_message').slice(-5);
+          const lines = [
+            relevant.length === 0 ? `No agent or mission '${target}' found.` : null,
+            mission ? `MISSION ${mission.payload.missionId} (${mission.payload.role}): ${mission.payload.objective}` : null,
+            lastStatus ? `STATUS: ${lastStatus.payload.status} @ ${lastStatus.created_at}` : null,
+            msgs.length ? `MESSAGES:` : null,
+            ...msgs.map((m: any) => `  [${m.payload.type}] ${String(m.payload.content).slice(0, 90)}`),
+          ].filter(Boolean).join('\n');
+          sse(res, { type: 'metadata', model_used: 'coo-command', latency: 0 });
+          sse(res, { type: 'content', content: lines });
+          res.write('data: [DONE]\n\n');
+          return res.end();
+        }
+
+        const spec: Record<string, { capabilityId: string; params: Record<string, string>; label: string }> = {
+          acknowledge: { capabilityId: 'ops.acknowledge_human_action', params: { queueItemId: target, actor: 'chat-operator' }, label: `Acknowledge ${target}` },
+          stop: { capabilityId: 'ops.agent_control', params: { action: 'stop', target, actor: 'chat-operator' }, label: `Stop agent ${target}` },
+          retry: { capabilityId: 'ops.agent_control', params: { action: 'retry', target, actor: 'chat-operator' }, label: `Retry mission ${target}` },
+          approve: { capabilityId: 'ops.resolve_human_action', params: { queueItemId: target, decision: 'approve', actor: 'chat-operator' }, label: `Approve ${target}` },
+          reject: { capabilityId: 'ops.resolve_human_action', params: { queueItemId: target, decision: 'reject', actor: 'chat-operator' }, label: `Reject ${target}` },
+        };
+        const cmd = spec[verb];
         const { data: goalRow, error } = await getCooSupabase()
           .from('heidi_goals')
           .insert({
             goal_type: 'task',
-            title: `Acknowledge ${queueItemId}`,
-            description: `Human acknowledgement of queue item ${queueItemId}`,
-            purpose: 'operator acknowledgement via chat command',
+            title: cmd.label,
+            description: `Operator command '${verb}' on ${target}`,
+            purpose: 'operator command via chat',
             priority: 4,
             status: 'pending',
             owner: 'operator',
             confidence: 0.9,
             context: {
-              producerKey: `ack:${queueItemId}`,
+              producerKey: `cmd:${verb}:${target}:${Date.now()}`,
               producedBy: 'human-operator',
-              capabilityId: 'ops.acknowledge_human_action',
-              capabilityParams: { queueItemId, actor: 'chat-operator' },
+              capabilityId: cmd.capabilityId,
+              capabilityParams: cmd.params,
               completeOnVerify: true,
             },
           })
@@ -196,11 +231,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           .single();
         if (error) throw new Error(error.message);
         sse(res, { type: 'metadata', model_used: 'coo-command', latency: 0 });
-        sse(res, { type: 'content', content: `Acknowledgement of '${queueItemId}' submitted as governed action (goal ${goalRow.id.slice(0, 8)}). The daemon will execute and contract-verify it within ~2 cycles; 'what needs my attention?' will reflect it once ACKNOWLEDGED.` });
+        sse(res, { type: 'content', content: `'${verb} ${target}' submitted as governed action (goal ${goalRow.id.slice(0, 8)}). The daemon will execute and contract-verify it within ~2 cycles; the result lands in the audit log and the queue.` });
         res.write('data: [DONE]\n\n');
         return res.end();
       } catch (e) {
-        sse(res, { type: 'content', content: `Acknowledgement failed to submit — ${e instanceof Error ? e.message : 'unknown error'}` });
+        sse(res, { type: 'content', content: `Command failed to submit — ${e instanceof Error ? e.message : 'unknown error'}` });
         res.write('data: [DONE]\n\n');
         return res.end();
       }

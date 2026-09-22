@@ -184,11 +184,16 @@ export async function createMission(
 
 export async function postMessage(
   pool: Pick<Pool, 'query'>,
-  m: { from: string; to: string; missionId: string | null; type: AgentMessageType; content: string; evidence?: unknown },
+  m: { from: string; to: string; missionId: string | null; type: AgentMessageType; content: string; evidence?: unknown; requiresResponse?: boolean },
 ): Promise<void> {
+  // Agent→agent traffic must be mission-scoped — an agent cannot message
+  // another agent outside its own mission family.
+  if (m.from.startsWith('agent-') && m.to.startsWith('agent-') && !m.missionId) {
+    throw new Error('agent→agent messages require a missionId scope');
+  }
   await emit(pool, 'agent_message', {
     messageId: `msg-${createHash('sha256').update(`${m.from}${m.to}${m.content}${Date.now()}`).digest('hex').slice(0, 12)}`,
-    ...m, evidence: m.evidence ?? null,
+    ...m, evidence: m.evidence ?? null, requiresResponse: m.requiresResponse ?? false,
   });
 }
 
@@ -550,6 +555,97 @@ export async function runInvestigateMission(
   })();
 
   return { parentMissionId: parent.missionId, missionEventId: parent.missionEventId, spawned };
+}
+
+// ── Governed agent controls (Phase D) ───────────────────────────────────
+
+export interface ControlResult {
+  ok: boolean;
+  outcome: 'stopped' | 'retried' | 'not_found' | 'not_terminal' | 'already_terminal' | 'running';
+  detail?: string;
+}
+
+/** Stop an agent/mission — durable STOPPED flag; in-flight workers abort at their next heartbeat check. */
+export async function stopAgent(pool: Pick<Pool, 'query'>, agentId: string, actor: string): Promise<ControlResult> {
+  const state = await collectAgentState(pool);
+  const agent = state.agents.find((a) => a.agentId === agentId);
+  if (!agent) return { ok: false, outcome: 'not_found', detail: `no agent '${agentId}'` };
+  if (agent.status === 'COMPLETED' || agent.status === 'FAILED' || agent.status === 'STOPPED') {
+    return { ok: false, outcome: 'already_terminal', detail: `agent is ${agent.status}` };
+  }
+  await setStatus(pool, agentId, agent.missionId, 'STOPPED', { stoppedBy: actor });
+  await postMessage(pool, { from: 'heidi', to: agentId, missionId: agent.missionId, type: 'STATUS', content: `stopped by ${actor}`, requiresResponse: false });
+  return { ok: true, outcome: 'stopped', detail: `agent ${agentId} marked STOPPED` };
+}
+
+/**
+ * Operator-initiated retry of a terminal mission. Human decision —
+ * allowed once per call regardless of maxRetries (the operator is the
+ * authority), but refused while the agent is RUNNING.
+ */
+export async function retryMission(pool: Pick<Pool, 'query'>, missionId: string, actor: string, reconcileDeps?: ReconcileDeps): Promise<ControlResult> {
+  const state = await collectAgentState(pool);
+  const mission = state.missions.find((m) => m.missionId === missionId);
+  if (!mission) return { ok: false, outcome: 'not_found', detail: `no mission '${missionId}'` };
+  const agent = state.agents.find((a) => a.missionId === missionId);
+  if (agent && (agent.status === 'RUNNING' || agent.status === 'STARTING')) {
+    return { ok: false, outcome: 'running', detail: 'agent is currently running — refusing duplicate worker' };
+  }
+  if (mission.status !== 'FAILED' && mission.status !== 'NEEDS_HUMAN' && mission.status !== 'STOPPED') {
+    return { ok: false, outcome: 'not_terminal', detail: `mission is ${mission.status} — retry applies to terminal states` };
+  }
+  void runAgent(pool, missionId, ROLE_HANDLERS, reconcileDeps);
+  await postMessage(pool, { from: 'heidi', to: 'supervisor', missionId, type: 'STATUS', content: `manual retry initiated by ${actor}` });
+  return { ok: true, outcome: 'retried', detail: `mission ${missionId} retried by ${actor}` };
+}
+
+/** Read-only agent inspection — agent view + mission + messages. */
+export async function inspectAgent(pool: Pick<Pool, 'query'>, agentId: string): Promise<{ agent: AgentView | null; mission: MissionView | null; messages: AgentMessage[] }> {
+  const state = await collectAgentState(pool);
+  const agent = state.agents.find((a) => a.agentId === agentId) ?? null;
+  const mission = agent ? state.missions.find((m) => m.missionId === agent.missionId) ?? null : null;
+  const messages = agent ? state.messages.filter((m) => m.from === agentId || m.to === agentId || m.missionId === agent.missionId) : [];
+  return { agent, mission, messages };
+}
+
+/**
+ * Governed resolution of a queue item — records the human's decision
+ * durably. Authorization-grant items (authz:*) are fail-closed here:
+ * granting capability authority requires the explicit authorization
+ * policy path, never a chat command.
+ */
+export async function resolveHumanAction(
+  pool: Pick<Pool, 'query'>,
+  queueItemId: string,
+  decision: 'approve' | 'reject',
+  actor: string,
+): Promise<{ ok: boolean; outcome: string; detail?: string; resolutionEventId?: string | null }> {
+  if (queueItemId.startsWith('authz:')) {
+    return { ok: false, outcome: 'refused', detail: 'capability authorization cannot be granted via this surface — it requires the explicit authorization policy path' };
+  }
+  if (queueItemId.startsWith('escalation:')) {
+    const escId = queueItemId.slice('escalation:'.length);
+    const r = await pool.query(
+      `UPDATE operator_escalations SET resolved = true, resolved_at = now(), resolved_by = $2, action_taken = $3
+       WHERE id = $1 AND resolved = false RETURNING id`,
+      [escId, actor, `operator decision: ${decision}`],
+    );
+    if (r.rowCount === 0) return { ok: false, outcome: 'not_found', detail: 'no unresolved escalation with that id' };
+    const eid = await emit(pool, 'human_action_resolution', { queueItemId, decision, actor, resolvedEscalationId: escId }, 'RESOLVED');
+    return { ok: true, outcome: 'resolved', detail: `escalation ${escId.slice(0, 8)} ${decision}d`, resolutionEventId: eid };
+  }
+  if (queueItemId.startsWith('intervention:')) {
+    const reqId = queueItemId.slice('intervention:'.length);
+    const r = await pool.query(
+      `UPDATE human_intervention_requests SET status = $2, updated_at = now()
+       WHERE request_id = $1 AND status = 'pending' RETURNING id`,
+      [reqId, decision === 'approve' ? 'approved' : 'rejected'],
+    );
+    if (r.rowCount === 0) return { ok: false, outcome: 'not_found', detail: 'no pending intervention with that id' };
+    const eid = await emit(pool, 'human_action_resolution', { queueItemId, decision, actor, resolvedInterventionId: r.rows[0].id }, 'RESOLVED');
+    return { ok: true, outcome: 'resolved', detail: `intervention ${reqId.slice(0, 20)} ${decision}d`, resolutionEventId: eid };
+  }
+  return { ok: false, outcome: 'not_actionable', detail: `item class '${queueItemId.split(':')[0]}' is not resolvable via this command` };
 }
 
 // ── Supervisor pass (Phase B) ───────────────────────────────────────────
