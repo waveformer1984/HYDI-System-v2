@@ -361,6 +361,12 @@ export class ModelManager {
     const totalLatency = Date.now() - startTime;
     response.latency = totalLatency;
 
+    // When the fallback also failed, the user-facing error should name the
+    // PRIMARY cause (why local inference failed — e.g. MEMORY_PRESSURED),
+    // not the secondary fallback failure ('no cloud API key'), which
+    // misleadingly implies a cloud dependency was expected.
+    if (!response.success && fallbackReason) response.error = fallbackReason;
+
     await this.updateSessionState(
       sessionId,
       response.model === 'local' ? 'local' : 'api',
