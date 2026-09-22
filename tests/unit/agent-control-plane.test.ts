@@ -11,12 +11,14 @@ import {
   agentIdFor,
   maxActiveAgents,
   runInvestigateMission,
+  superviseAgents,
 } from '../../lib/heidi/AgentControlPlane';
 
 interface Row { event_type: string; payload: Record<string, unknown>; created_at: string }
 
 function poolWith(events: Row[], extra?: (sql: string, params?: unknown[]) => { rows: unknown[] }) {
   const inserted: Row[] = [];
+  const escRows: Record<string, unknown>[] = [];
   const pool = {
     query: async (sql: string, params?: unknown[]) => {
       if (/INSERT INTO heidi_events/.test(sql)) {
@@ -29,6 +31,8 @@ function poolWith(events: Row[], extra?: (sql: string, params?: unknown[]) => { 
         return { rows: hit ? [hit] : [] };
       }
       if (/division = 'agents'/.test(sql)) return { rows: events };
+      if (/FROM operator_escalations/.test(sql)) return { rows: escRows };
+      if (/INSERT INTO operator_escalations/.test(sql)) { escRows.push({ id: 'esc-1' }); return { rows: [{ id: 'esc-1' }] }; }
       if (extra) return extra(sql, params);
       return { rows: [] };
     },
@@ -116,11 +120,12 @@ describe('supervisor fold', () => {
 
 describe('concurrency budget', () => {
   test('spawn refused when active agents ≥ budget', async () => {
+    const now = new Date().toISOString(); // real-now: supervisor classifies with wall clock
     const events: Row[] = [0, 1, 2].flatMap((i) => ([
-      { event_type: 'agent_mission', payload: { missionId: `mission-r${i}`, agentId: `agent-r${i}`, role: 'research', status: 'PENDING' }, created_at: T },
-      { event_type: 'agent_registered', payload: { agentId: `agent-r${i}`, missionId: `mission-r${i}`, status: 'REGISTERED' }, created_at: T },
-      { event_type: 'agent_status', payload: { agentId: `agent-r${i}`, missionId: `mission-r${i}`, status: 'RUNNING' }, created_at: T },
-      { event_type: 'agent_heartbeat', payload: { agentId: `agent-r${i}`, missionId: `mission-r${i}`, step: 'w' }, created_at: T },
+      { event_type: 'agent_mission', payload: { missionId: `mission-r${i}`, agentId: `agent-r${i}`, role: 'research', status: 'PENDING' }, created_at: now },
+      { event_type: 'agent_registered', payload: { agentId: `agent-r${i}`, missionId: `mission-r${i}`, status: 'REGISTERED' }, created_at: now },
+      { event_type: 'agent_status', payload: { agentId: `agent-r${i}`, missionId: `mission-r${i}`, status: 'RUNNING' }, created_at: now },
+      { event_type: 'agent_heartbeat', payload: { agentId: `agent-r${i}`, missionId: `mission-r${i}`, step: 'w' }, created_at: now },
     ]));
     const { pool } = poolWith(events);
     const res = await runInvestigateMission(pool as any, 'opp-x');
@@ -133,6 +138,98 @@ describe('concurrency budget', () => {
     process.env.HYDI_MAX_ACTIVE_AGENTS = '7';
     expect(maxActiveAgents()).toBe(7);
     delete process.env.HYDI_MAX_ACTIVE_AGENTS;
+  });
+});
+
+describe('supervisor pass (Phase B)', () => {
+  const missionRow = (mid: string, role = 'research', extra: Record<string, unknown> = {}): Row => ({
+    event_type: 'agent_mission',
+    payload: { missionId: mid, agentId: `agent-${role}-${mid.slice(8)}`, role, objective: 'x', status: 'PENDING', authorizationLevel: 'R1', maxRetries: 0, ...extra },
+    created_at: T,
+  });
+  const agentRow = (aid: string, mid: string, st: string, extra: Record<string, unknown> = {}): Row => ({
+    event_type: 'agent_status',
+    payload: { agentId: aid, missionId: mid, status: st, ...extra },
+    created_at: T,
+  });
+
+  test('persists read-time STALE as a durable transition, once', async () => {
+    const staleTs = new Date(Date.now() - 90_000).toISOString(); // 90s ago: > staleMs(60s), < maxRuntimeMs(120s)
+    const events: Row[] = [
+      missionRow('mission-s1', 'research', { maxRuntimeMs: 120000 }),
+      { event_type: 'agent_registered', payload: { agentId: 'agent-research-s1', missionId: 'mission-s1', status: 'REGISTERED' }, created_at: staleTs },
+      { event_type: 'agent_status', payload: { agentId: 'agent-research-s1', missionId: 'mission-s1', status: 'RUNNING' }, created_at: staleTs },
+      { event_type: 'agent_heartbeat', payload: { agentId: 'agent-research-s1', missionId: 'mission-s1', step: 'w' }, created_at: staleTs },
+    ];
+    const { pool } = poolWith(events);
+    const r = await superviseAgents(pool as any);
+    expect(r.transitions.some((t) => t.agentId === 'agent-research-s1' && t.to === 'STALE')).toBe(true);
+    // second pass — persisted STALE already, no duplicate transition
+    const r2 = await superviseAgents(pool as any);
+    expect(r2.transitions.filter((t) => t.agentId === 'agent-research-s1')).toHaveLength(0);
+    expect(r.supervisionEventId).toBeTruthy();
+  });
+
+  test('retries a failed R1 mission within maxRetries; escalates when exhausted', async () => {
+    const retryable: Row[] = [
+      missionRow('mission-r1', 'analyst', { maxRetries: 1 }),
+      { event_type: 'agent_registered', payload: { agentId: 'agent-analyst-r1', missionId: 'mission-r1', status: 'REGISTERED' }, created_at: T },
+      agentRow('agent-analyst-r1', 'mission-r1', 'RUNNING', { attempt: 1 }),
+      agentRow('agent-analyst-r1', 'mission-r1', 'FAILED', { failure: 'boom' }),
+    ];
+    const { pool } = poolWith(retryable);
+    const r = await superviseAgents(pool as any);
+    expect(r.retries).toContain('mission-r1');
+    await new Promise((res) => setTimeout(res, 150)); // let the void'd runAgent emit
+    const running = retryable.filter((e) => e.event_type === 'agent_status' && e.payload.status === 'RUNNING' && e.payload.attempt === 2);
+    expect(running.length).toBeGreaterThan(0);
+  });
+
+  test('non-retryable failure escalates to human queue — deduped', async () => {
+    const events: Row[] = [
+      missionRow('mission-e1', 'research', { maxRetries: 0 }),
+      { event_type: 'agent_registered', payload: { agentId: 'agent-research-e1', missionId: 'mission-e1', status: 'REGISTERED' }, created_at: T },
+      agentRow('agent-research-e1', 'mission-e1', 'RUNNING', { attempt: 1 }),
+      agentRow('agent-research-e1', 'mission-e1', 'FAILED', { failure: 'dead' }),
+    ];
+    const { pool } = poolWith(events);
+    const r = await superviseAgents(pool as any);
+    expect(r.escalations).toContain('mission-e1');
+    const r2 = await superviseAgents(pool as any);
+    expect(r2.escalations).not.toContain('mission-e1'); // NEEDS_HUMAN + escalation row → no repeat
+  });
+
+  test('parent reconciles: completes only when all children complete', async () => {
+    const events: Row[] = [
+      missionRow('mission-p1', 'analyst'),
+      { event_type: 'agent_registered', payload: { agentId: 'agent-analyst-p1', missionId: 'mission-p1', status: 'REGISTERED' }, created_at: T },
+      missionRow('mission-c1', 'research', { parentMissionId: 'mission-p1' }),
+      missionRow('mission-c2', 'research', { parentMissionId: 'mission-p1' }),
+      agentRow('agent-research-c1', 'mission-c1', 'COMPLETED'),
+      agentRow('agent-research-c2', 'mission-c2', 'COMPLETED'),
+    ];
+    const { pool } = poolWith(events);
+    const r = await superviseAgents(pool as any);
+    expect(r.parentsReconciled).toContain('mission-p1');
+    const s = await collectAgentState(pool as any);
+    expect(s.missions.find((m) => m.missionId === 'mission-p1')!.status).toBe('COMPLETED');
+  });
+
+  test('parent goes NEEDS_HUMAN when a child fails terminally', async () => {
+    const events: Row[] = [
+      missionRow('mission-p2', 'analyst'),
+      { event_type: 'agent_registered', payload: { agentId: 'agent-analyst-p2', missionId: 'mission-p2', status: 'REGISTERED' }, created_at: T },
+      missionRow('mission-c3', 'research', { parentMissionId: 'mission-p2' }),
+      { event_type: 'agent_registered', payload: { agentId: 'agent-research-c3', missionId: 'mission-c3', status: 'REGISTERED' }, created_at: T },
+      agentRow('agent-research-c3', 'mission-c3', 'RUNNING', { attempt: 1 }),
+      agentRow('agent-research-c3', 'mission-c3', 'FAILED', { failure: 'dead' }),
+    ];
+    const { pool } = poolWith(events);
+    const r = await superviseAgents(pool as any);
+    expect(r.escalations).toContain('mission-c3');
+    const s = await collectAgentState(pool as any);
+    const parent = s.missions.find((m) => m.missionId === 'mission-p2')!;
+    expect(parent.status).toBe('NEEDS_HUMAN');
   });
 });
 

@@ -898,6 +898,34 @@ export const OPS_AGENT_MISSION = defineContract({
   },
 });
 
+export const OPS_AGENT_SUPERVISE = defineContract({
+  identity: {
+    id: 'ops.agent_supervise',
+    version: '1.0.0',
+    owner: OWNER,
+    provider: 'cognitive_core',
+    description: 'One bounded supervisor pass over the agent control plane — transitions, retries, escalation, reconciliation',
+  },
+  effects: [dbEffect('heidi_events', 'create'), dbEffect('operator_escalations', 'create')],
+  reversibility: {
+    kind: 'none',
+    windowMs: 0,
+    caveat: 'Append-only supervision record; escalations are human-queue items, not actions.',
+  },
+  cost: { estimatedMs: 10_000, timeoutMs: 60_000 },
+  verification: {
+    description: 'The agent_supervision summary row exists in heidi_events — re-read by event id.',
+    observation: dbObservation('sql:heidi_events:id={supervisionEventId}', ['id', 'event_type', 'payload']),
+    conditions: [
+      { field: 'found', operator: 'eq', expected: true },
+      { field: 'event_type', operator: 'eq', expected: 'agent_supervision' },
+    ],
+    onFailure: 'escalate',
+    maxRetries: 1,
+    requiresHumanConfirmation: false,
+  },
+});
+
 // ---------------------------------------------------------------------------
 // Writes reached only from inside revenue.run_cycle
 // ---------------------------------------------------------------------------
@@ -1163,6 +1191,7 @@ export const EXTENDED_CONTRACTS: CapabilityContract[] = [
   OPS_COO_STATE,
   OPS_ACK_HUMAN_ACTION,
   OPS_AGENT_MISSION,
+  OPS_AGENT_SUPERVISE,
   // external / system-affecting
   TOOL_SEND_EMAIL,
   SELF_RUN_SELF_REPAIR,

@@ -664,6 +664,19 @@ export const DEFAULT_CAPABILITIES: Array<Omit<CapabilityDescriptor, 'status' | '
     timeoutMs: 60000,
     metadata: { actionType: 'agent_mission' },
   },
+  {
+    capabilityId: 'ops.agent_supervise',
+    capabilityName: 'Supervise Agents',
+    description: 'Supervisor pass over the agent control plane: persist stale/failed classifications, bounded-retry R0/R1 missions, reconcile parent missions, escalate terminal failures to the human queue, emit a durable supervision record. Controls lifecycle; invents no authority.',
+    provider: 'cognitive_core',
+    riskLevel: 'R0',
+    autonomyRequirement: 0,
+    dependencies: [],
+    verificationStrategy: 'The agent_supervision summary row exists in heidi_events',
+    reversible: false,
+    timeoutMs: 60000,
+    metadata: { actionType: 'agent_supervise' },
+  },
 
   // Revenue pipeline capabilities (ProspectPipeline)
   {

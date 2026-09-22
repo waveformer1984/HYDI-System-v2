@@ -60,7 +60,7 @@ import { collectReconciliation, resolveGitHead } from './DeploymentReconciliatio
 import { runR0Recovery } from './SelfRepairR0';
 import { collectCooState } from './CooState';
 import { acknowledgeHumanAction } from './HumanActionQueue';
-import { runInvestigateMission, collectAgentState } from './AgentControlPlane';
+import { runInvestigateMission, collectAgentState, superviseAgents } from './AgentControlPlane';
 
 export type CognitivePhase =
   | 'perceive' | 'validate' | 'understand' | 'update_world_model'
@@ -1682,6 +1682,31 @@ export class CognitiveCore {
         verificationDetails: res.missionEventId
           ? 'Pending contract verification of persisted agent_mission row'
           : 'Mission already existed (idempotent collapse) — nothing new to verify',
+      };
+    });
+
+    // Agent supervisor pass — R0 observation/lifecycle control. Persists
+    // stale/failed transitions, bounded-retries R0/R1 missions, escalates
+    // terminal failures to the human queue, reconciles parent missions.
+    // Controls lifecycle; invents no authority.
+    this.wireExecutor('ops.agent_supervise', async () => {
+      const report = await superviseAgents(this.pool, { pool: this.pool, repoDir: process.cwd() });
+      return {
+        capabilityId: 'ops.agent_supervise',
+        executed: true,
+        outcome: 'success' as const,
+        result: {
+          supervisionEventId: report.supervisionEventId,
+          agentsChecked: report.agentsChecked,
+          transitions: report.transitions.length,
+          retries: report.retries,
+          escalations: report.escalations,
+          parentsReconciled: report.parentsReconciled,
+        },
+        error: null,
+        evidence: [report],
+        verified: false,
+        verificationDetails: 'Pending contract verification of persisted agent_supervision row',
       };
     });
   }

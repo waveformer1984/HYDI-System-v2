@@ -36,7 +36,7 @@ export type AgentStatus =
   | 'NEEDS_HUMAN' | 'COMPLETING' | 'COMPLETED' | 'FAILED' | 'STOPPED'
   | 'STALE' | 'EXPIRED';
 
-export type MissionStatus = 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'ESCALATED' | 'STOPPED';
+export type MissionStatus = 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'NEEDS_HUMAN' | 'ESCALATED' | 'STOPPED';
 
 export type AgentMessageType =
   | 'STATUS' | 'PROGRESS' | 'RESULT' | 'QUESTION' | 'BLOCKED'
@@ -46,7 +46,10 @@ export interface AgentView {
   agentId: string;
   name: string;
   role: AgentRole;
+  /** Effective status: last persisted transition + read-time stale/fail classification. */
   status: AgentStatus;
+  /** Last status actually persisted as an event (before classification). */
+  persistedStatus: AgentStatus;
   authorizationLevel: string;
   missionId: string;
   runtimeIdentity: string | null;
@@ -73,6 +76,7 @@ export interface MissionView {
   failure: string | null;
   params: Record<string, unknown>;
   targetKey: string;
+  authorizationLevel: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -221,12 +225,14 @@ export async function collectAgentState(
           authorizationLevel: String(p.authorizationLevel ?? 'R1'),
           missionId: String(p.missionId ?? ''), runtimeIdentity: null, pid: null,
           startedAt: null, lastHeartbeatAt: null, lastStep: null, createdAt: at,
+          persistedStatus: (p.status as AgentStatus) ?? 'REGISTERED',
         });
         break;
       case 'agent_status': {
         const a = agents.get(String(p.agentId));
         if (a) {
           a.status = p.status as AgentStatus;
+          a.persistedStatus = p.status as AgentStatus;
           if (p.runtimeIdentity) a.runtimeIdentity = String(p.runtimeIdentity);
           if (p.pid) a.pid = Number(p.pid);
           if (!a.startedAt && p.status === 'RUNNING') a.startedAt = at;
@@ -263,6 +269,7 @@ export async function collectAgentState(
           result: null, evidence: [], failure: null,
           params: (p.params as Record<string, unknown>) ?? {},
           targetKey: String(p.targetKey ?? ''),
+          authorizationLevel: String(p.authorizationLevel ?? 'R1'),
           createdAt: at, updatedAt: at,
         });
         break;
@@ -537,11 +544,137 @@ export async function runInvestigateMission(
       [a, b].filter((m) => m.created).map((m) => runAgent(pool, m.missionId, ROLE_HANDLERS, reconcileDeps)),
     );
     if (analyst.created) await runAgent(pool, analyst.missionId, ROLE_HANDLERS, reconcileDeps);
-    await emit(pool, 'agent_status', {
-      agentId: null, missionId: parent.missionId, status: 'COMPLETED',
-      result: { children: [a.missionId, b.missionId, analyst.missionId] },
-    });
+    // Parent status is reconciled by the supervisor — no unconditional
+    // COMPLETED claim here; a parent cannot complete while a required
+    // child is unresolved.
   })();
 
   return { parentMissionId: parent.missionId, missionEventId: parent.missionEventId, spawned };
+}
+
+// ── Supervisor pass (Phase B) ───────────────────────────────────────────
+
+export interface SupervisionReport {
+  supervisionEventId: string | null;
+  agentsChecked: number;
+  transitions: Array<{ agentId: string; to: AgentStatus }>;
+  retries: string[];
+  escalations: string[];
+  parentsReconciled: string[];
+}
+
+const RETRYABLE_LEVELS = new Set(['R0', 'R1']);
+
+/**
+ * One supervisor pass — deterministic, evidence-driven, no authority:
+ *
+ *   1. Persist read-time STALE/FAILED classifications as durable events.
+ *   2. Retry FAILED missions bounded by maxRetries — only R0/R1, only
+ *      when the failure is persisted (not just a read-time gap), one
+ *      attempt at a time (attempt counter prevents storms across
+ *      restarts — the fold is authoritative).
+ *   3. Terminal failures escalate: mission → NEEDS_HUMAN + an
+ *      operator_escalations row + a HUMAN_REQUIRED message. Nothing is
+ *      authorized or executed on the human's behalf.
+ *   4. Parent reconciliation: a parent mission completes only when ALL
+ *      children are COMPLETED; a terminal child failure fails/escalates
+ *      the parent. No orphaned parent claims.
+ *   5. Emit a durable 'agent_supervision' summary — the audit record.
+ */
+export async function superviseAgents(
+  pool: Pick<Pool, 'query'>,
+  reconcileDeps?: ReconcileDeps,
+): Promise<SupervisionReport> {
+  const state = await collectAgentState(pool);
+  const report: SupervisionReport = {
+    supervisionEventId: null, agentsChecked: state.agents.length,
+    transitions: [], retries: [], escalations: [], parentsReconciled: [],
+  };
+
+  // 1. Persist classifications as durable transitions (idempotent —
+  //    only when the persisted status differs).
+  for (const a of state.agents) {
+    if (a.status !== a.persistedStatus && (a.status === 'STALE' || a.status === 'FAILED')) {
+      await setStatus(pool, a.agentId, a.missionId, a.status, {
+        classifiedBy: 'supervisor',
+        lastHeartbeatAt: a.lastHeartbeatAt,
+      });
+      report.transitions.push({ agentId: a.agentId, to: a.status });
+    }
+  }
+
+  // 2/3. Failed missions: bounded retry for R0/R1, else escalate.
+  const failed = state.missions.filter((m) => m.status === 'FAILED');
+  for (const m of failed) {
+    // attempt is 1-based (RUNNING events carry attempt n); maxRetries is
+    // the number of retries permitted beyond the first attempt.
+    if (m.attempt <= m.maxRetries && RETRYABLE_LEVELS.has(m.authorizationLevel)) {
+      report.retries.push(m.missionId);
+      void runAgent(pool, m.missionId, ROLE_HANDLERS, reconcileDeps); // emits RUNNING attempt+1 — next pass sees it running
+    } else {
+      // Terminal: escalate once (dedup on unresolved escalation rows).
+      const esc = await pool.query(
+        `SELECT id FROM operator_escalations
+         WHERE resolved = false AND metadata->>'missionId' = $1 LIMIT 1`,
+        [m.missionId],
+      ).catch(() => ({ rows: [] }));
+      if (esc.rows.length === 0 && m.status !== 'NEEDS_HUMAN') {
+        await pool.query(
+          `INSERT INTO operator_escalations (category, severity, title, body, action_required, metadata, resolved, created_at)
+           VALUES ('agent_mission', 'medium', $1, $2, $3, $4, false, now())`,
+          [
+            `Agent mission failed: ${m.objective.slice(0, 80)}`,
+            `Mission ${m.missionId} (${m.role}) failed after ${m.attempt + 1} attempt(s). Failure: ${(m.failure ?? 'unknown').slice(0, 300)}`,
+            'Review the mission evidence and decide: retry, redirect, or abandon.',
+            JSON.stringify({ missionId: m.missionId, role: m.role, attempt: m.attempt, failure: m.failure }),
+          ],
+        ).catch(() => undefined);
+        const parentAgent = state.agents.find((a) => a.missionId === m.missionId);
+        await setStatus(pool, parentAgent?.agentId ?? `agent-${m.role}-${m.missionId.slice(8)}`, m.missionId, 'NEEDS_HUMAN', { failure: m.failure });
+        await postMessage(pool, {
+          from: 'supervisor', to: 'heidi', missionId: m.missionId,
+          type: 'HUMAN_REQUIRED', content: `mission ${m.missionId} exhausted retries — escalated`, evidence: { failure: m.failure },
+        });
+        report.escalations.push(m.missionId);
+      }
+    }
+  }
+
+  // 4. Parent reconciliation — deterministic child roll-up.
+  const byParent = new Map<string, MissionView[]>();
+  for (const m of state.missions) {
+    if (!m.parentMissionId) continue;
+    const list = byParent.get(m.parentMissionId) ?? [];
+    list.push(m);
+    byParent.set(m.parentMissionId, list);
+  }
+  const postEscalated = new Set(report.escalations);
+  for (const [parentId, children] of byParent) {
+    const parent = state.missions.find((m) => m.missionId === parentId);
+    if (!parent || parent.status === 'COMPLETED' || parent.status === 'NEEDS_HUMAN') continue;
+    const anyFailed = children.some((c) => c.status === 'FAILED' || c.status === 'NEEDS_HUMAN' || postEscalated.has(c.missionId));
+    const allDone = children.length > 0 && children.every((c) => c.status === 'COMPLETED');
+    if (allDone) {
+      await setStatus(pool, parent.agentId ?? `agent-${parent.role}-${parentId.slice(8)}`, parentId, 'COMPLETED', {
+        result: { children: children.map((c) => c.missionId) },
+      });
+      report.parentsReconciled.push(parentId);
+    } else if (anyFailed) {
+      await setStatus(pool, parent.agentId ?? `agent-${parent.role}-${parentId.slice(8)}`, parentId, 'NEEDS_HUMAN', {
+        failure: 'one or more child missions failed terminally',
+      });
+      report.parentsReconciled.push(parentId);
+    }
+  }
+
+  // 5. Durable audit record of this pass.
+  report.supervisionEventId = await emit(pool, 'agent_supervision', {
+    agentsChecked: report.agentsChecked,
+    transitions: report.transitions,
+    retries: report.retries,
+    escalations: report.escalations,
+    parentsReconciled: report.parentsReconciled,
+    supervisedAt: new Date().toISOString(),
+  });
+  return report;
 }

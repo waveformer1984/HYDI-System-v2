@@ -155,6 +155,16 @@ export const DEFAULT_MISSION_TEMPLATES: MissionTemplate[] = [
     minIntervalMs: 30 * 60 * 1000,
     reason: 'The COO state is only an operating state if it is continuously refreshed; each snapshot also embeds a full deployment reconciliation, giving periodic drift detection for free.',
   },
+  {
+    producerKey: 'ops.agent_supervise',
+    title: 'Supervise agent control plane',
+    description: 'Run one supervisor pass: persist stale/failed classifications, bounded-retry eligible missions, reconcile parent missions, escalate terminal failures to the human queue.',
+    purpose: 'Keep multi-agent work honest — dead agents must not masquerade as running, terminal failures must reach the human, and parents must not complete over unresolved children.',
+    capabilityId: 'ops.agent_supervise',
+    priority: 5,
+    minIntervalMs: 5 * 60 * 1000,
+    reason: 'Supervision is only real on a cadence; between passes a crashed worker is an undetected ghost.',
+  },
 ];
 
 export class MissionProducer {
