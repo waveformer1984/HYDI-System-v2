@@ -56,6 +56,7 @@ import { getOfferCatalog } from '../revenue/OfferCatalog';
 import { MissionProducer, type ProductionResult } from './MissionProducer';
 import { collectExecutiveDiagnostic } from './ExecutiveDiagnostic';
 import { collectDiagnosticFollowup, investigateDimension } from './DiagnosticFollowup';
+import { collectReconciliation, resolveGitHead } from './DeploymentReconciliation';
 
 export type CognitivePhase =
   | 'perceive' | 'validate' | 'understand' | 'update_world_model'
@@ -456,6 +457,7 @@ export class CognitiveCore {
   private cooldownUntil: string | null = null;
   private lastError: string | null = null;
   private startedAt: number | null = null;
+  private runtimeCommit: string | null | undefined; // undefined = not yet resolved
 
   constructor(config?: DBConfig, bridge?: ExecutionBridge, opts?: { missionProducer?: MissionProducer | null }) {
     this.pool = new Pool({
@@ -1504,6 +1506,43 @@ export class CognitiveCore {
         evidence: [{ dimension, severity: finding.severity }],
         verified: false, // contract verification re-reads the row
         verificationDetails: 'Pending contract verification of persisted investigation row',
+      };
+    });
+
+    // Deployment reconciliation — observational only. Proves whether the
+    // PM2-tracked process is the same process actually executing cycles.
+    // Never kills, never steals the lock, never writes qualified-deployment.
+    this.wireExecutor('ops.reconcile_deployment', async () => {
+      const report = await collectReconciliation({
+        pool: this.pool,
+        repoDir: process.cwd(),
+      });
+      const verdictMap: Record<string, string> = {
+        QUALIFIED: 'HEALTHY',
+        DEPLOYMENT_DRIFT: 'DEGRADED',
+        UNKNOWN: 'UNKNOWN',
+      };
+      const inserted = await this.pool.query<{ id: string }>(
+        `INSERT INTO heidi_events (event_type, division, payload, verdict, created_at)
+         VALUES ($1, $2, $3, $4, now()) RETURNING id`,
+        ['deployment_reconciliation', 'heidi', JSON.stringify(report), verdictMap[report.verdict] ?? 'UNKNOWN'],
+      );
+      const reportId = inserted.rows[0]?.id ?? null;
+      return {
+        capabilityId: 'ops.reconcile_deployment',
+        executed: reportId !== null,
+        outcome: reportId !== null ? 'success' as const : 'failure' as const,
+        result: {
+          reportId,
+          verdict: report.verdict,
+          deploymentIdentity: report.deploymentIdentity,
+          applicationHealth: report.applicationHealth,
+          failures: report.failures,
+        },
+        error: reportId === null ? 'heidi_events insert returned no id' : null,
+        evidence: [{ verdict: report.verdict, failures: report.failures }],
+        verified: false, // contract verification re-reads the row
+        verificationDetails: 'Pending contract verification of persisted reconciliation row',
       };
     });
   }
@@ -2561,6 +2600,7 @@ export class CognitiveCore {
       [
         'cognitive_cycle',
         JSON.stringify({
+          runtimeIdentity: this.runtimeIdentity(),
           outcome: 'timeout',
           cycleTimeoutMs: this.loopConfig.cycleTimeoutMs,
           consecutiveFailures: this.consecutiveFailures,
@@ -2573,6 +2613,18 @@ export class CognitiveCore {
     ]);
   }
 
+  /**
+   * The durable proof that the process writing this row is the one that
+   * executed the cycle — the anchor deployment reconciliation uses to
+   * distinguish "PM2 says online" from "this process actually executes".
+   */
+  private runtimeIdentity(): { pid: number; commit: string | null; cwd: string } {
+    if (this.runtimeCommit === undefined) {
+      this.runtimeCommit = resolveGitHead(process.cwd());
+    }
+    return { pid: process.pid, commit: this.runtimeCommit, cwd: process.cwd() };
+  }
+
   private async recordCycle(state: CognitiveState): Promise<void> {
     try {
       await this.pool.query(
@@ -2581,6 +2633,7 @@ export class CognitiveCore {
         [
           'cognitive_cycle',
           JSON.stringify({
+            runtimeIdentity: this.runtimeIdentity(),
             cycleId: state.cycleId,
             phase: state.phase,
             systemHealth: state.perception?.systemHealth,

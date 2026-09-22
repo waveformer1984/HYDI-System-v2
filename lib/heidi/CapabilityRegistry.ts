@@ -599,6 +599,19 @@ export const DEFAULT_CAPABILITIES: Array<Omit<CapabilityDescriptor, 'status' | '
     timeoutMs: 45000,
     metadata: { actionType: 'investigate_finding' },
   },
+  {
+    capabilityId: 'ops.reconcile_deployment',
+    capabilityName: 'Reconcile Deployment',
+    description: 'Verify the PM2-believed daemon is the same process actually executing cycles — pid ancestry, canonical cwd, commit, singleton lock, live cycle identity. Observational only; never kills processes or steals locks.',
+    provider: 'cognitive_core',
+    riskLevel: 'R0',
+    autonomyRequirement: 0,
+    dependencies: [],
+    verificationStrategy: 'The reconciliation row exists in heidi_events with a verdict',
+    reversible: true,
+    timeoutMs: 45000,
+    metadata: { actionType: 'reconcile_deployment' },
+  },
 
   // Revenue pipeline capabilities (ProspectPipeline)
   {

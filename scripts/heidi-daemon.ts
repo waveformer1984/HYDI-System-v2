@@ -25,6 +25,7 @@
 
 import fs from 'fs';
 import path from 'path';
+import { execSync } from 'child_process';
 import dotenv from 'dotenv';
 
 dotenv.config({ path: path.resolve(__dirname, '../.env.local') });
@@ -89,10 +90,31 @@ function parseArgs(): DaemonConfig {
  * alive. If it's stale (process died without releasing), we remove it and
  * retry the atomic create. If the process IS alive, we refuse to start.
  */
+/**
+ * Resolve the commit this daemon was launched from by inspecting the
+ * working tree — never an env var. Deployment reconciliation compares
+ * this against qualified-deployment.json; an orphan running old code
+ * will carry the OLD commit, making stale execution visible.
+ */
+function resolveRuntimeCommit(): string | null {
+  try {
+    const head = execSync('git rev-parse --short HEAD', {
+      cwd: path.resolve(__dirname, '..'),
+      timeout: 10000,
+      encoding: 'utf8',
+    }).trim();
+    return head || null;
+  } catch {
+    return null;
+  }
+}
+
 function acquireLock(): boolean {
   const lockData = JSON.stringify({
     pid: process.pid,
     startedAt: new Date().toISOString(),
+    cwd: process.cwd(),
+    commit: resolveRuntimeCommit(),
   });
 
   // First attempt: atomic exclusive create

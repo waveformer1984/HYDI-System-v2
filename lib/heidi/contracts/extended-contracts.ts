@@ -710,6 +710,46 @@ export const OPS_INVESTIGATE_FINDING = defineContract({
   },
 });
 
+export const OPS_RECONCILE_DEPLOYMENT = defineContract({
+  identity: {
+    id: 'ops.reconcile_deployment',
+    version: '1.0.0',
+    owner: OWNER,
+    provider: 'cognitive_core',
+    description: 'Verify the PM2-believed daemon is the process actually executing cycles',
+  },
+  effects: [dbEffect('heidi_events', 'create')],
+  reversibility: {
+    kind: 'none',
+    windowMs: 0,
+    caveat: 'Append-only observation record; observational capability.',
+  },
+  cost: { estimatedMs: 10_000, timeoutMs: 45_000 },
+  verification: {
+    description:
+      'The reconciliation row exists in heidi_events with a 5-state ' +
+      'verdict and a deploymentIdentity field — re-read by id.',
+    observation: dbObservation('sql:heidi_events:id={reportId}', ['id', 'event_type', 'verdict', 'payload']),
+    conditions: [
+      { field: 'found', operator: 'eq', expected: true },
+      { field: 'event_type', operator: 'eq', expected: 'deployment_reconciliation' },
+      {
+        field: 'verdict',
+        operator: 'matches',
+        expected: '^(HEALTHY|DEGRADED|BLOCKED|FAILED|UNKNOWN)$',
+      },
+      {
+        field: 'payload.deploymentIdentity',
+        operator: 'matches',
+        expected: '^(VALID|INVALID|UNPROVEN)$',
+      },
+    ],
+    onFailure: 'escalate',
+    maxRetries: 1,
+    requiresHumanConfirmation: false,
+  },
+});
+
 // ---------------------------------------------------------------------------
 // Writes reached only from inside revenue.run_cycle
 // ---------------------------------------------------------------------------
@@ -970,6 +1010,7 @@ export const EXTENDED_CONTRACTS: CapabilityContract[] = [
   OPS_EXECUTIVE_DIAGNOSTIC,
   OPS_DIAGNOSTIC_FOLLOWUP,
   OPS_INVESTIGATE_FINDING,
+  OPS_RECONCILE_DEPLOYMENT,
   // external / system-affecting
   TOOL_SEND_EMAIL,
   SELF_RUN_SELF_REPAIR,
