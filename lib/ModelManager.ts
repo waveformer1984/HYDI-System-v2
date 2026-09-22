@@ -211,15 +211,19 @@ export class ModelManager {
       if (fits(requestedEntry)) {
         result = { choice: { name: requestedEntry.name, sizeBytes: requestedEntry.size }, reason: 'requested model fits budget' };
       } else {
-        const smaller = generative.filter(fits).sort((a, b) => b.size - a.size)[0];
+        const smaller = generative.filter(fits).sort((a, b) => a.size - b.size)[0];
         result = smaller
           ? { choice: { name: smaller.name, sizeBytes: smaller.size }, reason: `requested ${requested} exceeds memory budget; downgraded to ${smaller.name}` }
           : { choice: null, reason: `requested ${requested} exceeds memory budget and no smaller model fits` };
       }
     } else {
-      const best = generative.filter(fits).sort((a, b) => b.size - a.size)[0];
+      // Prefer the SMALLEST model that fits — on a RAM-constrained box the
+      // largest-fitting model leaves no headroom for inference's working
+      // set beyond the load estimate, so it thrashes into a timeout while
+      // a small model actually answers.
+      const best = generative.filter(fits).sort((a, b) => a.size - b.size)[0];
       result = best
-        ? { choice: { name: best.name, sizeBytes: best.size }, reason: `largest model fitting memory budget` }
+        ? { choice: { name: best.name, sizeBytes: best.size }, reason: `smallest model fitting memory budget (headroom-first)` }
         : { choice: null, reason: 'no installed generative model fits the memory budget' };
     }
 
@@ -491,12 +495,34 @@ export class ModelManager {
         ? ModelManager.LLM_FAILURE.INFERENCE_TIMEOUT
         : error instanceof Error ? error.message : 'Unknown error';
       console.error('[ModelManager] Local model error:', message);
+      // A timed-out or wedged inference can leave the model runner holding
+      // RAM while serving nothing. Ask Ollama to unload it (keep_alive: 0)
+      // so a failed request does not make the NEXT request less likely to
+      // succeed. Best-effort, bounded, no process killing.
+      void this.unloadLocalModel(modelName);
       return {
         content: '',
         success: false,
         error: message,
         metadata: { provider: 'local', selectedModel: modelName, loadDurationMs: warm.loadDurationMs },
       };
+    }
+  }
+
+  /** Ask Ollama to unload a model after failure — frees the runner's RAM. */
+  private async unloadLocalModel(modelName: string): Promise<void> {
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 5000);
+      await fetch(`${this.getLocalBaseURL()}/api/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: modelName, prompt: '', keep_alive: 0, stream: false }),
+        signal: controller.signal,
+      });
+      clearTimeout(timer);
+    } catch {
+      // unload is best-effort — ignore
     }
   }
 
