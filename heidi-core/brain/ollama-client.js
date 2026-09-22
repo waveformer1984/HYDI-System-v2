@@ -112,6 +112,7 @@ class OllamaClient {
    * resolves with the same shape as generate() once complete.
    */
   async generateStream(prompt, onToken, options = {}) {
+    this._backoffActive();
     const model = options.model || await this.resolveModel();
     const response = await fetch(`${this.baseURL}/api/generate`, {
       method: 'POST',
@@ -157,8 +158,18 @@ class OllamaClient {
     return { text: full, model, tokens: { prompt: 0, completion: 0 } };
   }
 
+  // Backoff gate — shared by all entry points including explicit-model
+  // calls (health probes pass their own model names and would otherwise
+  // bypass resolveModel entirely).
+  _backoffActive() {
+    if (Date.now() < (OllamaClient._backoffUntil || 0)) {
+      throw new Error(`MEMORY_PRESSURED: inference cooldown after ${OllamaClient._consecFails} consecutive failures`);
+    }
+  }
+
   async generate(prompt, options = {}) {
     const startTime = Date.now();
+    this._backoffActive();
     const model = options.model || await this.resolveModel();
 
     try {
@@ -207,6 +218,7 @@ class OllamaClient {
 
   async chat(messages, options = {}) {
     const startTime = Date.now();
+    this._backoffActive();
     const model = options.model || await this.resolveModel();
 
     try {
@@ -250,6 +262,7 @@ class OllamaClient {
    */
   async chatWithTools(messages, tools, options = {}) {
     const startTime = Date.now();
+    this._backoffActive();
     const model = options.model || await this.resolveModel();
     const payload = {
       model,
