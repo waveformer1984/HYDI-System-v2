@@ -145,6 +145,16 @@ export const DEFAULT_MISSION_TEMPLATES: MissionTemplate[] = [
     minIntervalMs: 24 * HOUR,
     reason: 'A diagnostic nobody investigates is telemetry, not self-maintenance; follow-up turns findings into evidence-backed next-step proposals.',
   },
+  {
+    producerKey: 'ops.coo_state',
+    title: 'Refresh COO state',
+    description: 'Collect the authoritative cross-domain COO state (deployment identity, work queues, escalations, ProtoForge, revenue counts) and derive the next authorized action.',
+    purpose: 'Keep the executive operating state current so observations and next-action selection are evidence-based rather than stale.',
+    capabilityId: 'ops.coo_state',
+    priority: 5,
+    minIntervalMs: 30 * 60 * 1000,
+    reason: 'The COO state is only an operating state if it is continuously refreshed; each snapshot also embeds a full deployment reconciliation, giving periodic drift detection for free.',
+  },
 ];
 
 export class MissionProducer {

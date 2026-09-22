@@ -238,4 +238,17 @@ describe('MissionProducer', () => {
     expect(result.created).toHaveLength(0);
     expect(result.skipped.every((s) => s.reason === 'open_cap:1')).toBe(true);
   });
+
+  test('default catalog includes the coo_state cadence template', async () => {
+    const { DEFAULT_MISSION_TEMPLATES } = await import('../../lib/heidi/MissionProducer');
+    const tpl = DEFAULT_MISSION_TEMPLATES.find((t) => t.producerKey === 'ops.coo_state');
+    expect(tpl).toBeDefined();
+    expect(tpl!.capabilityId).toBe('ops.coo_state');
+    expect(tpl!.minIntervalMs).toBeGreaterThanOrEqual(30 * 60 * 1000);
+    // every default template must target a real catalog capability id
+    for (const t of DEFAULT_MISSION_TEMPLATES) {
+      expect(typeof t.capabilityId).toBe('string');
+      expect(t.capabilityId.length).toBeGreaterThan(0);
+    }
+  });
 });
