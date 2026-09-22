@@ -80,6 +80,7 @@ export interface ReconciliationReport {
     lockCommit: string | null;
     lockCwd: string | null;
     lockStartedAt: string | null;
+    lockAlive: boolean | null;
     cyclePid: number | null;
     cycleCommit: string | null;
     cycleAt: string | null;
@@ -187,7 +188,7 @@ export async function collectReconciliation(deps: ReconcileDeps): Promise<Reconc
     predicates: {},
     failures: [],
     expected: { commit: null, pm2Pid: null, pm2Status: null, pm2Cwd: null, pm2Restarts: null },
-    actual: { lockPid: null, lockCommit: null, lockCwd: null, lockStartedAt: null, cyclePid: null, cycleCommit: null, cycleAt: null },
+    actual: { lockPid: null, lockCommit: null, lockCwd: null, lockStartedAt: null, lockAlive: null, cyclePid: null, cycleCommit: null, cycleAt: null },
   };
   const P = report.predicates;
 
@@ -264,6 +265,7 @@ export async function collectReconciliation(deps: ReconcileDeps): Promise<Reconc
   // ── Predicates ─────────────────────────────────────────────────────────
   const pm2Alive = pm2Proc ? processAlive(pm2Proc.pid) : false;
   const lockAlive = lock?.pid ? processAlive(lock.pid) : false;
+  report.actual.lockAlive = lock?.pid ? lockAlive : null;
   P.PROCESS_EXISTS = pm2Proc === null || lock === null ? null : pm2Alive && lockAlive;
 
   // PM2's pid is an ANCESTOR of the daemon (fork chain), not the daemon

@@ -612,6 +612,19 @@ export const DEFAULT_CAPABILITIES: Array<Omit<CapabilityDescriptor, 'status' | '
     timeoutMs: 45000,
     metadata: { actionType: 'reconcile_deployment' },
   },
+  {
+    capabilityId: 'ops.recover_daemon_r0',
+    capabilityName: 'Recover Daemon (R0)',
+    description: 'Bounded R0 self-repair: when reconciliation proves the daemon is unavailable (PM2 offline + no live lock owner), invoke the canonical pm2 restart exactly once, then prove the recovered runtime via post-recovery reconciliation. Never kills processes, never steals locks; anything else is HUMAN_REQUIRED.',
+    provider: 'cognitive_core',
+    riskLevel: 'R0',
+    autonomyRequirement: 0,
+    dependencies: ['ops.reconcile_deployment'],
+    verificationStrategy: 'The recovery_attempt row exists in heidi_events with a verdict',
+    reversible: true,
+    timeoutMs: 120000, // restart + settle + reconcile
+    metadata: { actionType: 'recover_daemon_r0' },
+  },
 
   // Revenue pipeline capabilities (ProspectPipeline)
   {

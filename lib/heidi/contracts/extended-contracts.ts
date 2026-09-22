@@ -750,6 +750,57 @@ export const OPS_RECONCILE_DEPLOYMENT = defineContract({
   },
 });
 
+export const OPS_RECOVER_DAEMON_R0 = defineContract({
+  identity: {
+    id: 'ops.recover_daemon_r0',
+    version: '1.0.0',
+    owner: OWNER,
+    provider: 'cognitive_core',
+    description: 'Bounded R0 self-repair: restart an unavailable daemon via PM2, then prove identity via reconciliation',
+  },
+  effects: [
+    dbEffect('heidi_events', 'create'),
+    {
+      verb: 'restart',
+      resourceKind: 'process',
+      resourcePatterns: ['pm2:hydi-daemon'],
+      worstCaseScope: 'single_resource',
+      crossesTrustBoundary: false,
+    },
+  ],
+  reversibility: {
+    kind: 'none',
+    windowMs: 0,
+    caveat:
+      'A restart is not undoable. The R0 class is limited to "daemon ' +
+      'unavailable" — restarting a dead runtime cannot damage a live one.',
+  },
+  cost: { estimatedMs: 60_000, timeoutMs: 120_000 },
+  verification: {
+    description:
+      'The recovery_attempt row exists in heidi_events carrying the ' +
+      'recovery state — re-read by id.',
+    observation: dbObservation('sql:heidi_events:id={reportId}', ['id', 'event_type', 'verdict', 'payload']),
+    conditions: [
+      { field: 'found', operator: 'eq', expected: true },
+      { field: 'event_type', operator: 'eq', expected: 'recovery_attempt' },
+      {
+        field: 'verdict',
+        operator: 'matches',
+        expected: '^(HEALTHY|DEGRADED|BLOCKED|FAILED|UNKNOWN)$',
+      },
+      {
+        field: 'payload.recoveryId',
+        operator: 'not_null',
+        expected: null,
+      },
+    ],
+    onFailure: 'escalate',
+    maxRetries: 1,
+    requiresHumanConfirmation: false,
+  },
+});
+
 // ---------------------------------------------------------------------------
 // Writes reached only from inside revenue.run_cycle
 // ---------------------------------------------------------------------------
@@ -1011,6 +1062,7 @@ export const EXTENDED_CONTRACTS: CapabilityContract[] = [
   OPS_DIAGNOSTIC_FOLLOWUP,
   OPS_INVESTIGATE_FINDING,
   OPS_RECONCILE_DEPLOYMENT,
+  OPS_RECOVER_DAEMON_R0,
   // external / system-affecting
   TOOL_SEND_EMAIL,
   SELF_RUN_SELF_REPAIR,

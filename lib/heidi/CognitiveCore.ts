@@ -57,6 +57,7 @@ import { MissionProducer, type ProductionResult } from './MissionProducer';
 import { collectExecutiveDiagnostic } from './ExecutiveDiagnostic';
 import { collectDiagnosticFollowup, investigateDimension } from './DiagnosticFollowup';
 import { collectReconciliation, resolveGitHead } from './DeploymentReconciliation';
+import { runR0Recovery } from './SelfRepairR0';
 
 export type CognitivePhase =
   | 'perceive' | 'validate' | 'understand' | 'update_world_model'
@@ -1543,6 +1544,31 @@ export class CognitiveCore {
         evidence: [{ verdict: report.verdict, failures: report.failures }],
         verified: false, // contract verification re-reads the row
         verificationDetails: 'Pending contract verification of persisted reconciliation row',
+      };
+    });
+
+    // R0 self-repair: daemon-unavailable → canonical pm2 restart →
+    // post-recovery reconciliation. Observational refusals dominate:
+    // anything that is not a proven dead daemon is NO_ACTION or
+    // HUMAN_REQUIRED. Never kills, never steals the lock.
+    this.wireExecutor('ops.recover_daemon_r0', async () => {
+      const report = await runR0Recovery({ pool: this.pool, repoDir: process.cwd() });
+      return {
+        capabilityId: 'ops.recover_daemon_r0',
+        executed: report.attemptRowId !== null,
+        outcome: report.attemptRowId !== null ? 'success' as const : 'failure' as const,
+        result: {
+          reportId: report.attemptRowId,
+          recoveryId: report.recoveryId,
+          state: report.state,
+          failureClass: report.failureClass,
+          action: report.action,
+          detail: report.detail,
+        },
+        error: report.attemptRowId === null ? 'recovery attempt row not persisted' : null,
+        evidence: [{ state: report.state, detail: report.detail }],
+        verified: false, // contract verification re-reads the row
+        verificationDetails: 'Pending contract verification of persisted recovery attempt',
       };
     });
   }
