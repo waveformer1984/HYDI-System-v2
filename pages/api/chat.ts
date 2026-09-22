@@ -259,7 +259,109 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       try {
         const sb = getCooSupabase();
         let text: string;
-        if (lifeIntent.kind === 'focus') {
+        if (lifeIntent.kind === 'greeting' || lifeIntent.kind === 'briefing') {
+          // Presence/opening → companion briefing from durable state.
+          const [life, cooRow] = await Promise.all([
+            getLifeContext(sb, user_id),
+            sb.from('heidi_events').select('payload, created_at')
+              .eq('event_type', 'coo_state').order('created_at', { ascending: false }).limit(1).maybeSingle(),
+          ]);
+          const s = (cooRow.data?.payload ?? null) as Record<string, never> & {
+            generatedAt?: string; applicationHealth?: string;
+            deployment?: { verdict?: string; actualCommit?: string };
+            work?: { goalsOpen?: number };
+            protoforge?: { opportunitiesTotal?: number; pendingReview?: number };
+            nextAction?: { kind: string; reason?: string; capabilityId?: string };
+            humanActions?: { items?: Array<{ status: string; reason: string; backlog?: boolean }> };
+          } | null;
+          const lines: string[] = lifeIntent.kind === 'greeting' ? ["Hey — good to see you. Here's where things stand:"] : [];
+          if (life.focus) lines.push(`Focus: ${life.focus.project}.`);
+          if (s) {
+            const stale = Date.now() - new Date(String(s.generatedAt)).getTime() > 45 * 60 * 1000;
+            lines.push(`System: deployment ${s.deployment?.verdict ?? 'UNKNOWN'} · health ${s.applicationHealth} · commit ${s.deployment?.actualCommit ?? '?'}${stale ? ' (snapshot stale)' : ''}.`);
+            lines.push(`Work: ${s.work?.goalsOpen ?? 0} open goals · ProtoForge: ${s.protoforge?.opportunitiesTotal ?? 0} opportunities (${s.protoforge?.pendingReview ?? 0} pending review).`);
+            const open = (s.humanActions?.items ?? []).filter((i) => i.status === 'OPEN' && !i.backlog);
+            lines.push(open.length > 0
+              ? `Needs you: ${open.slice(0, 3).map((i) => i.reason.slice(0, 60)).join(' | ')}`
+              : 'Nothing currently needs your attention.');
+            const na = s.nextAction;
+            lines.push(`Next: ${na?.kind === 'capability' ? na.capabilityId : na?.kind === 'human' ? `HUMAN — ${na.reason}` : 'NO_ACTION_REQUIRED'}`);
+          } else {
+            lines.push('System state UNKNOWN — no coo_state snapshot readable.');
+          }
+          text = lines.join('\n');
+        } else if (lifeIntent.kind === 'plate') {
+          // "What's on my plate" — focus + the top actionable items,
+          // spoken naturally. Read-only; never invents work.
+          const life = await getLifeContext(sb, user_id);
+          const lines: string[] = [];
+          lines.push(life.focus ? `You're focused on ${life.focus.project}.` : 'No focus is set — tell me what to work on.');
+          const { data: opps } = await sb.from('protoforge_opportunities')
+            .select('title, confidence')
+            .eq('status', 'needs_review')
+            .order('confidence', { ascending: false })
+            .limit(3);
+          if (opps && opps.length > 0) {
+            lines.push(`Highest-confidence leads awaiting review: ${opps.map((o: { title: string }) => o.title.slice(0, 60)).join(' · ')}.`);
+          }
+          const { data: acts } = await sb.from('heidi_events')
+            .select('payload')
+            .eq('event_type', 'human_action_queue')
+            .order('created_at', { ascending: false })
+            .limit(1);
+          const items = ((acts?.[0]?.payload as { items?: Array<{ status: string; reason: string; backlog?: boolean }> })?.items ?? [])
+            .filter((i) => i.status === 'OPEN' && !i.backlog);
+          lines.push(items.length > 0
+            ? `Waiting on you: ${items.slice(0, 2).map((i) => i.reason.slice(0, 60)).join(' | ')}`
+            : 'Nothing is waiting on your approval.');
+          if (life.notes.length > 0) lines.push(`Recent note: "${life.notes[0].slice(0, 80)}"`);
+          text = lines.join('\n');
+        } else if (lifeIntent.kind === 'remember_last') {
+          const life = await getLifeContext(sb, user_id);
+          if (life.focus) {
+            await remember(sb, user_id, `${life.focus.project} is a priority`, session_id);
+            text = `Noted — ${life.focus.project} is a priority.`;
+          } else {
+            text = 'Remember what, exactly? Nothing is currently in focus — say "remember <thing>" and I\'ll keep it.';
+          }
+        } else if (lifeIntent.kind === 'control_last') {
+          // Resolve "stop that"/"retry that" to the most recent mission.
+          const { data: ev } = await sb.from('heidi_events')
+            .select('payload, created_at')
+            .in('event_type', ['agent_mission', 'agent_status'])
+            .order('created_at', { ascending: false })
+            .limit(40);
+          type Ev = { payload: { missionId?: string; status?: string; role?: string }; created_at: string };
+          const latest = new Map<string, string>();
+          for (const e of (ev ?? []) as Ev[]) {
+            const mid = e.payload.missionId;
+            if (!mid) continue;
+            if (!latest.has(mid) && e.payload.status) latest.set(mid, e.payload.status);
+          }
+          const target = lifeIntent.action === 'stop'
+            ? [...latest.entries()].find(([, s]) => s === 'RUNNING' || s === 'PENDING')
+            : [...latest.entries()].find(([, s]) => s === 'FAILED');
+          if (!target) {
+            text = lifeIntent.action === 'stop' ? 'Nothing is running right now.' : 'Nothing failed recently that can be retried.';
+          } else {
+            const { error } = await sb.from('heidi_goals').insert({
+              goal_type: 'mission',
+              title: `${lifeIntent.action === 'stop' ? 'Stop' : 'Retry'} ${target[0]}`,
+              description: `operator "${lifeIntent.action} that" via chat`,
+              purpose: 'operator command via chat',
+              priority: 5, status: 'pending', owner: 'operator', confidence: 0.9,
+              context: {
+                producerKey: `cmd:${lifeIntent.action}:${Date.now()}`,
+                producedBy: 'human-operator',
+                capabilityId: 'ops.agent_control',
+                capabilityParams: { action: lifeIntent.action, target: target[0], actor: 'chat-operator' },
+                completeOnVerify: true,
+              },
+            });
+            if (error) throw new Error(error.message);
+            text = `Got it — submitted a governed ${lifeIntent.action} for the most recent mission (${target[0].slice(0, 20)}…). The daemon picks it up next cycle; it'll be refused if that mission already finished.`;
+          }
+        } else if (lifeIntent.kind === 'focus') {
           const { project, created } = await setFocus(sb, user_id, lifeIntent.project, session_id);
           text = `Focus set: ${project.name}${created ? ' (new project — recorded)' : ''}.`;
         } else if (lifeIntent.kind === 'remember') {
@@ -270,7 +372,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         } else if (lifeIntent.kind === 'forget') {
           const had = await clearFocus(sb, user_id);
           text = had ? 'Dropped it — focus cleared. The history stays in memory if we come back.' : 'Nothing is currently focused.';
-        } else if (lifeIntent.kind === 'briefing' || lifeIntent.kind === 'next_steps') {
+        } else if (lifeIntent.kind === 'next_steps') {
           // Unified read: life context + latest persisted coo_state —
           // the "real picture" is both what you're working on and what
           // the system is actually doing. Never merged into one claim.

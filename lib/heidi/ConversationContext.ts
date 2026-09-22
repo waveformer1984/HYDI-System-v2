@@ -161,10 +161,14 @@ export type LifeIntent =
   | { kind: 'focus'; project: string }
   | { kind: 'forget' }
   | { kind: 'remember'; text: string }
+  | { kind: 'remember_last' }
   | { kind: 'recall' }
   | { kind: 'briefing' }
+  | { kind: 'greeting' }
+  | { kind: 'plate' }
   | { kind: 'next_steps' }
   | { kind: 'findings' }
+  | { kind: 'control_last'; action: 'stop' | 'retry' }
   | { kind: 'investigate'; target: string }
   | { kind: 'investigate_top' };
 
@@ -183,6 +187,20 @@ export function classifyLifeIntent(message: string): LifeIntent | null {
   }
   const rem = m.match(/^remember\s+(?:that\s+)?(.+)$/i);
   if (rem) return { kind: 'remember', text: rem[1].trim() };
+  // Bare "remember that" — store the current focus as a priority note;
+  // handler decides what 'that' resolves to from durable state.
+  if (/^remember\s+(?:that|it|this)$/i.test(m)) return { kind: 'remember_last' };
+  // Greeting / presence — "I'm here", "hi heidi", bare "heidi"
+  if (/^(?:i'?m (?:here|back)|hi|hello|hey|good (?:morning|afternoon|evening)|morning|evening|heidi)$/i.test(m)) {
+    return { kind: 'greeting' };
+  }
+  // "What's on my plate", "what matters today/there", "what's important"
+  if (/what'?s on my plate|what (matters|is important)( today| there| now)?|what should i (look at|care about)/i.test(m)) {
+    return { kind: 'plate' };
+  }
+  // Governed last-thing control — resolves to the most recent mission.
+  if (/^(?:stop|kill|cancel|halt)\s+(?:that|it|this)$/i.test(m)) return { kind: 'control_last', action: 'stop' };
+  if (/^(?:retry|rerun|try again|redo)\s+(?:that|it|this)?$/i.test(m)) return { kind: 'control_last', action: 'retry' };
   if (/^(?:forget (?:that|it|this)|never ?mind|drop it|leave it)(?:\s+for now)?$/i.test(m)) {
     return { kind: 'forget' };
   }
@@ -211,6 +229,13 @@ export function classifyLifeIntent(message: string): LifeIntent | null {
   if (/^(?:investigate|research|find|look for|scout|dig into|check)\b.*\b(?:opportunit|protoforge|market)\b/i.test(m)) {
     return { kind: 'investigate_top' };
   }
+  // "Go investigate the most useful thing", "go ahead with the next
+  // useful investigation" — imperative investigation where the target is
+  // 'the useful thing' → governed top-opportunity selection.
+  if (/^(?:go )?investigate\b.*\b(?:most useful|best|top|important|worth|next)\b/i.test(m)
+    || /^(?:go ahead|proceed|continue)\b.*\binvestigat/i.test(m)) {
+    return { kind: 'investigate_top' };
+  }
   // Anaphoric investigation — "go investigate it", "dig into that" —
   // resolves to the current top unreviewed opportunity; if there is no
   // topical anchor the caller still gets a governed selection.
@@ -220,9 +245,13 @@ export function classifyLifeIntent(message: string): LifeIntent | null {
     return { kind: 'investigate_top' };
   }
   // Read-only result recall: "what did the agents find", "do they agree"
-  if (/\b(?:what did (the agents?|you) (find|say|discover)|do (the agents?|they) agree|agent results?|latest (findings|results))\b/i.test(m)) {
+  if (/\b(?:what did (the agents?|you|we) (find|say|discover)|do (the agents?|they) agree|agent results?|latest (findings|results)|check what happened|what happened (there|with it|with that))\b/i.test(m)) {
     return { kind: 'findings' };
   }
+  // "What do you remember about X" — full recall is honest (notes are
+  // user-visible anyway); a scoped filter would pretend precision we
+  // don't have.
+  if (/what do you remember/i.test(m)) return { kind: 'recall' };
   return null;
 }
 
