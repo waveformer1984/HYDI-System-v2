@@ -166,7 +166,8 @@ export type LifeIntent =
   | { kind: 'investigate_top' };
 
 export function classifyLifeIntent(message: string): LifeIntent | null {
-  const m = message.trim();
+  // Strip a leading vocative — "Heidi, investigate…" is natural speech.
+  const m = message.trim().replace(/^(?:hey|ok(?:ay)?|so|please)[,.\s]*/i, '').replace(/^heidi[,.\s]*/i, '').trim();
   const focus = m.match(/^(?:focus|work on|let'?s work on|switch to|back to|get back to)\s+(.+)$/i);
   if (focus) return { kind: 'focus', project: focus[1].replace(/[.?!]+$/, '').trim() };
   const rem = m.match(/^remember\s+(?:that\s+)?(.+)$/i);

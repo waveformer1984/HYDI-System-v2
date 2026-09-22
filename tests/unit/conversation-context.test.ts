@@ -76,6 +76,7 @@ describe('classifyLifeIntent', () => {
 
   test('investigate_top requires imperative verb + opportunity scope', () => {
     expect(classifyLifeIntent('investigate whether there are worthwhile ProtoForge opportunities today')).toEqual({ kind: 'investigate_top' });
+    expect(classifyLifeIntent('Heidi, investigate whether there are worthwhile ProtoForge opportunities today and bring me the ones with evidence')).toEqual({ kind: 'investigate_top' });
     expect(classifyLifeIntent('find the best protoforge opportunities')).toEqual({ kind: 'investigate_top' });
     // Questions are never actions
     expect(classifyLifeIntent('what opportunities did protoforge find')).toBeNull();
