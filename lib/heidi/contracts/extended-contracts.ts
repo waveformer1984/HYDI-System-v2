@@ -801,6 +801,43 @@ export const OPS_RECOVER_DAEMON_R0 = defineContract({
   },
 });
 
+export const OPS_COO_STATE = defineContract({
+  identity: {
+    id: 'ops.coo_state',
+    version: '1.0.0',
+    owner: OWNER,
+    provider: 'cognitive_core',
+    description: 'Collect the authoritative cross-domain COO state and derive the next authorized action',
+  },
+  effects: [dbEffect('heidi_events', 'create')],
+  reversibility: {
+    kind: 'none',
+    windowMs: 0,
+    caveat: 'Append-only state snapshot; observational capability.',
+  },
+  cost: { estimatedMs: 15_000, timeoutMs: 60_000 },
+  verification: {
+    description:
+      'The coo_state row exists in heidi_events carrying a 5-state ' +
+      'verdict and a nextAction — re-read by id.',
+    observation: dbObservation('sql:heidi_events:id={reportId}', ['id', 'event_type', 'verdict', 'payload']),
+    conditions: [
+      { field: 'found', operator: 'eq', expected: true },
+      { field: 'event_type', operator: 'eq', expected: 'coo_state' },
+      {
+        field: 'verdict',
+        operator: 'matches',
+        expected: '^(HEALTHY|DEGRADED|BLOCKED|FAILED|UNKNOWN)$',
+      },
+      { field: 'payload.nextAction.kind', operator: 'matches', expected: '^(capability|human|none)$' },
+      { field: 'payload.deployment.identity', operator: 'matches', expected: '^(VALID|INVALID|UNPROVEN)$' },
+    ],
+    onFailure: 'escalate',
+    maxRetries: 1,
+    requiresHumanConfirmation: false,
+  },
+});
+
 // ---------------------------------------------------------------------------
 // Writes reached only from inside revenue.run_cycle
 // ---------------------------------------------------------------------------
@@ -1063,6 +1100,7 @@ export const EXTENDED_CONTRACTS: CapabilityContract[] = [
   OPS_INVESTIGATE_FINDING,
   OPS_RECONCILE_DEPLOYMENT,
   OPS_RECOVER_DAEMON_R0,
+  OPS_COO_STATE,
   // external / system-affecting
   TOOL_SEND_EMAIL,
   SELF_RUN_SELF_REPAIR,

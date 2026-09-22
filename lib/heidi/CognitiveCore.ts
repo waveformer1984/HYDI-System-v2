@@ -58,6 +58,7 @@ import { collectExecutiveDiagnostic } from './ExecutiveDiagnostic';
 import { collectDiagnosticFollowup, investigateDimension } from './DiagnosticFollowup';
 import { collectReconciliation, resolveGitHead } from './DeploymentReconciliation';
 import { runR0Recovery } from './SelfRepairR0';
+import { collectCooState } from './CooState';
 
 export type CognitivePhase =
   | 'perceive' | 'validate' | 'understand' | 'update_world_model'
@@ -1569,6 +1570,39 @@ export class CognitiveCore {
         evidence: [{ state: report.state, detail: report.detail }],
         verified: false, // contract verification re-reads the row
         verificationDetails: 'Pending contract verification of persisted recovery attempt',
+      };
+    });
+
+    // COO state — the authoritative cross-domain snapshot. Read-only;
+    // derives the next authorized action deterministically from collected
+    // state. Never repairs, never approves, never manufactures work.
+    this.wireExecutor('ops.coo_state', async () => {
+      const state = await collectCooState({ pool: this.pool, repoDir: process.cwd() });
+      const verdict =
+        state.deployment.identity === 'VALID' && state.applicationHealth === 'HEALTHY' ? 'HEALTHY'
+          : state.deployment.identity === 'INVALID' ? 'DEGRADED'
+            : state.deployment.identity === 'UNPROVEN' ? 'UNKNOWN'
+              : 'DEGRADED';
+      const inserted = await this.pool.query<{ id: string }>(
+        `INSERT INTO heidi_events (event_type, division, payload, verdict, created_at)
+         VALUES ($1, $2, $3, $4, now()) RETURNING id`,
+        ['coo_state', 'heidi', JSON.stringify(state), verdict],
+      );
+      const reportId = inserted.rows[0]?.id ?? null;
+      return {
+        capabilityId: 'ops.coo_state',
+        executed: reportId !== null,
+        outcome: reportId !== null ? 'success' as const : 'failure' as const,
+        result: {
+          reportId,
+          verdict,
+          nextAction: state.nextAction,
+          briefing: state.briefing,
+        },
+        error: reportId === null ? 'heidi_events insert returned no id' : null,
+        evidence: [{ verdict, nextAction: state.nextAction }],
+        verified: false, // contract verification re-reads the row
+        verificationDetails: 'Pending contract verification of persisted coo_state row',
       };
     });
   }

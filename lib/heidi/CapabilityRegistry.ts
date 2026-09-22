@@ -625,6 +625,19 @@ export const DEFAULT_CAPABILITIES: Array<Omit<CapabilityDescriptor, 'status' | '
     timeoutMs: 120000, // restart + settle + reconcile
     metadata: { actionType: 'recover_daemon_r0' },
   },
+  {
+    capabilityId: 'ops.coo_state',
+    capabilityName: 'COO State Snapshot',
+    description: 'Collect the authoritative COO state across all domains (deployment identity, work queues, escalations, ProtoForge, revenue counts, event volume), derive the highest-priority authorized next action deterministically, and persist the snapshot + briefing. Read-only; never repairs or approves.',
+    provider: 'cognitive_core',
+    riskLevel: 'R0',
+    autonomyRequirement: 0,
+    dependencies: [],
+    verificationStrategy: 'The coo_state row exists in heidi_events with a verdict',
+    reversible: true,
+    timeoutMs: 60000,
+    metadata: { actionType: 'coo_state' },
+  },
 
   // Revenue pipeline capabilities (ProspectPipeline)
   {
