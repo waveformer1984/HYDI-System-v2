@@ -86,6 +86,17 @@ describe('classifyLifeIntent', () => {
   test('findings intent is read-only recall', () => {
     expect(classifyLifeIntent('what did the agents find')).toEqual({ kind: 'findings' });
     expect(classifyLifeIntent('do the agents agree')).toEqual({ kind: 'findings' });
+    expect(classifyLifeIntent('what did you find')).toEqual({ kind: 'findings' });
+  });
+
+  test('companion intents: briefing, next, recall variants, forget', () => {
+    expect(classifyLifeIntent("Heidi, I'm here. Give me the real picture")).toEqual({ kind: 'briefing' });
+    expect(classifyLifeIntent('where were we')).toEqual({ kind: 'recall' });
+    expect(classifyLifeIntent('what should happen next')).toEqual({ kind: 'next_steps' });
+    expect(classifyLifeIntent('forget that for now')).toEqual({ kind: 'forget' });
+    expect(classifyLifeIntent('I want to work on ProtoForge today')).toEqual({ kind: 'focus', project: 'ProtoForge' });
+    expect(classifyLifeIntent('go investigate it')).toEqual({ kind: 'investigate_top' });
+    expect(classifyLifeIntent('dig into that')).toEqual({ kind: 'investigate_top' });
   });
 
   test('casual chat is not an intent', () => {

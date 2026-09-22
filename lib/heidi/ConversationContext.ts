@@ -159,8 +159,11 @@ export function recallAnswer(ctx: LifeContext): string {
  */
 export type LifeIntent =
   | { kind: 'focus'; project: string }
+  | { kind: 'forget' }
   | { kind: 'remember'; text: string }
   | { kind: 'recall' }
+  | { kind: 'briefing' }
+  | { kind: 'next_steps' }
   | { kind: 'findings' }
   | { kind: 'investigate'; target: string }
   | { kind: 'investigate_top' };
@@ -168,12 +171,27 @@ export type LifeIntent =
 export function classifyLifeIntent(message: string): LifeIntent | null {
   // Strip a leading vocative — "Heidi, investigate…" is natural speech.
   const m = message.trim().replace(/^(?:hey|ok(?:ay)?|so|please)[,.\s]*/i, '').replace(/^heidi[,.\s]*/i, '').trim();
-  const focus = m.match(/^(?:focus|work on|let'?s work on|switch to|back to|get back to)\s+(.+)$/i);
-  if (focus) return { kind: 'focus', project: focus[1].replace(/[.?!]+$/, '').trim() };
+  const focus = m.match(/^(?:focus|work on|let'?s work on|i (?:want to|wanna) work on|switch to|back to|get back to)\s+(.+?)(?:[.?!]|$)/i);
+  if (focus) {
+    // strip trailing temporal fillers: "work on protoforge today" → protoforge
+    const project = focus[1].replace(/\s+(?:today|now|for now|this week|tonight)$/i, '').trim();
+    return { kind: 'focus', project };
+  }
   const rem = m.match(/^remember\s+(?:that\s+)?(.+)$/i);
   if (rem) return { kind: 'remember', text: rem[1].trim() };
-  if (/what (are|were) we working on|what'?s the focus|where did we leave off|what was i (doing|working on)/i.test(m)) {
+  if (/^(?:forget (?:that|it|this)|never ?mind|drop it|leave it)(?:\s+for now)?$/i.test(m)) {
+    return { kind: 'forget' };
+  }
+  if (/what (are|were) we working on|what'?s the focus|where did we leave off|where were we|what was i (doing|working on)/i.test(m)) {
     return { kind: 'recall' };
+  }
+  // Unified briefing — "give me the real picture", "I'm here, what's up"
+  if (/real picture|big picture|full briefing|catch me up|bring me up to speed|what'?s up|give me (the )?(rundown|briefing|summary)/i.test(m)) {
+    return { kind: 'briefing' };
+  }
+  // Forward-looking: "what should happen next", "what do we do now"
+  if (/what should (happen|we do|i do) next|what'?s next|next steps?|what now/i.test(m)) {
+    return { kind: 'next_steps' };
   }
   // Bounded operational translation: "investigate <uuid-or-opportunity-ref>"
   // → governed agent mission. Requires an explicit target — no inference.
@@ -189,9 +207,27 @@ export function classifyLifeIntent(message: string): LifeIntent | null {
   if (/^(?:investigate|research|find|look for|scout|dig into|check)\b.*\b(?:opportunit|protoforge|market)\b/i.test(m)) {
     return { kind: 'investigate_top' };
   }
+  // Anaphoric investigation — "go investigate it", "dig into that" —
+  // resolves to the current top unreviewed opportunity; if there is no
+  // topical anchor the caller still gets a governed selection.
+  // "look into it" deliberately excluded — the spec treats it as the
+  // canonical ambiguous request (UNKNOWN/ask), not an action.
+  if (/^(?:go )?(?:investigate|dig into|check out|research)\s+(?:it|that|this|them)(?:\s+further)?$/i.test(m)) {
+    return { kind: 'investigate_top' };
+  }
   // Read-only result recall: "what did the agents find", "do they agree"
-  if (/\b(?:what did the agents? (find|say)|do the agents? agree|agent results?|latest (findings|results))\b/i.test(m)) {
+  if (/\b(?:what did (the agents?|you) (find|say|discover)|do (the agents?|they) agree|agent results?|latest (findings|results))\b/i.test(m)) {
     return { kind: 'findings' };
   }
   return null;
+}
+
+/** Clear the current focus (supersede, durable). */
+export async function clearFocus(sb: Sb, userId: string): Promise<boolean> {
+  const ctx = await getLifeContext(sb, userId);
+  if (!ctx.focus) return false;
+  await sb.from('memories')
+    .update({ importance_score: 0, metadata: { superseded: true, project: ctx.focus.project } })
+    .eq('user_id', userId).eq('kind', 'focus');
+  return true;
 }

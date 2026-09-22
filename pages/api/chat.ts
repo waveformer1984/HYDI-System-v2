@@ -23,6 +23,7 @@ import {
   setFocus,
   remember,
   recallAnswer,
+  clearFocus,
 } from '../../lib/heidi/ConversationContext';
 import type { CooState } from '../../lib/heidi/CooState';
 
@@ -266,6 +267,45 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           text = `Noted: "${lifeIntent.text.slice(0, 120)}"`;
         } else if (lifeIntent.kind === 'recall') {
           text = recallAnswer(await getLifeContext(sb, user_id));
+        } else if (lifeIntent.kind === 'forget') {
+          const had = await clearFocus(sb, user_id);
+          text = had ? 'Dropped it — focus cleared. The history stays in memory if we come back.' : 'Nothing is currently focused.';
+        } else if (lifeIntent.kind === 'briefing' || lifeIntent.kind === 'next_steps') {
+          // Unified read: life context + latest persisted coo_state —
+          // the "real picture" is both what you're working on and what
+          // the system is actually doing. Never merged into one claim.
+          const [life, cooRow] = await Promise.all([
+            getLifeContext(sb, user_id),
+            sb.from('heidi_events').select('payload, created_at')
+              .eq('event_type', 'coo_state').order('created_at', { ascending: false }).limit(1).maybeSingle(),
+          ]);
+          const s = (cooRow.data?.payload ?? null) as {
+            generatedAt?: string; verdict?: string; applicationHealth?: string;
+            deployment?: { actualCommit?: string; verdict?: string };
+            work?: { goalsOpen?: number; escalationsOpen?: number; escalationsNew24h?: number };
+            protoforge?: { opportunitiesTotal?: number; pendingReview?: number };
+            nextAction?: { kind: string; reason?: string; capabilityId?: string };
+            humanActions?: { open?: number; items?: Array<{ id: string; status: string; reason: string; backlog?: boolean }> };
+          } | null;
+          const lines: string[] = [];
+          if (life.focus) lines.push(`Focus: ${life.focus.project}.`);
+          if (s) {
+            const stale = Date.now() - new Date(String(s.generatedAt)).getTime() > 45 * 60 * 1000;
+            lines.push(`System: ${s.verdict} · health ${s.applicationHealth} · commit ${s.deployment?.actualCommit ?? '?'}${stale ? ' (snapshot stale)' : ''}.`);
+            lines.push(`Work: ${s.work?.goalsOpen ?? 0} open goals · ProtoForge: ${s.protoforge?.opportunitiesTotal ?? 0} opportunities (${s.protoforge?.pendingReview ?? 0} pending review).`);
+            const open = (s.humanActions?.items ?? []).filter((i) => i.status === 'OPEN' && !i.backlog);
+            lines.push(open.length > 0
+              ? `Needs you: ${open.slice(0, 3).map((i) => i.reason.slice(0, 60)).join(' | ')}`
+              : 'Nothing currently needs your attention.');
+            const na = s.nextAction;
+            lines.push(`Next: ${na?.kind === 'capability' ? na.capabilityId : na?.kind === 'human' ? `HUMAN — ${na.reason}` : 'NO_ACTION_REQUIRED'}`);
+            if (lifeIntent.kind === 'next_steps' && open.length === 0) {
+              lines.push('Everything authorized is proceeding — the blockers that exist are human-side.');
+            }
+          } else {
+            lines.push('System state UNKNOWN — no coo_state snapshot readable.');
+          }
+          text = lines.join('\n');
         } else if (lifeIntent.kind === 'findings') {
           // Read-only: summarize the latest agent RESULT messages.
           const { data: rows } = await sb.from('heidi_events')
