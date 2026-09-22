@@ -84,7 +84,7 @@ describe('classifyLifeIntent', () => {
 describe('world model', () => {
   test('setFocus creates project + focus; recall reports it', async () => {
     const sb = stubSupabase();
-    const { project, created } = await setFocus(sb as any, 'u1', 'rezonate', 'music platform');
+    const { project, created } = await setFocus(sb as any, 'u1', 'rezonate', 's1', 'music platform');
     expect(created).toBe(true);
     const ctx = await getLifeContext(sb as any, 'u1');
     expect(ctx.focus?.project).toBe('rezonate');
@@ -96,9 +96,9 @@ describe('world model', () => {
 
   test('switching focus supersedes the old one; remember stores notes', async () => {
     const sb = stubSupabase();
-    await setFocus(sb as any, 'u1', 'rezonate');
-    await setFocus(sb as any, 'u1', 'hydi');
-    await remember(sb as any, 'u1', 'thinking about making rezonate the revenue experiment');
+    await setFocus(sb as any, 'u1', 'rezonate', 's1');
+    await setFocus(sb as any, 'u1', 'hydi', 's1');
+    await remember(sb as any, 'u1', 'thinking about making rezonate the revenue experiment', 's1');
     const ctx = await getLifeContext(sb as any, 'u1');
     expect(ctx.focus?.project).toBe('hydi');
     expect(ctx.notes.some((n) => n.includes('rezonate'))).toBe(true);

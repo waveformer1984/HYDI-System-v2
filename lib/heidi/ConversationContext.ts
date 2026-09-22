@@ -42,16 +42,16 @@ function rowToProject(r: Record<string, unknown>): ProjectRow {
     name: String(meta.name ?? r.content ?? 'unnamed'),
     summary: String(meta.summary ?? r.content ?? ''),
     status: String(meta.status ?? 'active'),
-    updatedAt: String(r.updated_at ?? r.created_at ?? ''),
+    updatedAt: String(r.created_at ?? ''),
   };
 }
 
 export async function getLifeContext(sb: Sb, userId: string): Promise<LifeContext> {
   const { data, error } = await sb.from('memories')
-    .select('id, content, kind, metadata, created_at, updated_at, importance_score')
+    .select('id, content, kind, metadata, created_at, importance_score')
     .eq('user_id', userId)
     .in('kind', ['project', 'focus', 'note'])
-    .order('updated_at', { ascending: false })
+    .order('created_at', { ascending: false })
     .limit(100);
   if (error || !data) return { focus: null, projects: [], notes: [] };
 
@@ -64,7 +64,7 @@ export async function getLifeContext(sb: Sb, userId: string): Promise<LifeContex
     else if (r.kind === 'focus' && !focus) {
       const meta = (r.metadata ?? {}) as Record<string, unknown>;
       if (meta.superseded !== true) {
-        focus = { project: String(meta.project ?? r.content), since: String(r.updated_at ?? r.created_at) };
+        focus = { project: String(meta.project ?? r.content), since: String(r.created_at) };
       }
     }
   }
@@ -85,7 +85,7 @@ export function findProject(ctx: LifeContext, name: string): ProjectRow | null {
  * stays as history via created_at ordering).
  */
 export async function setFocus(
-  sb: Sb, userId: string, projectName: string, summary?: string,
+  sb: Sb, userId: string, projectName: string, sessionId: string, summary?: string,
 ): Promise<{ project: ProjectRow; created: boolean }> {
   const ctx = await getLifeContext(sb, userId);
   let project = findProject(ctx, projectName);
@@ -93,11 +93,11 @@ export async function setFocus(
   if (!project) {
     const { data, error } = await sb.from('memories')
       .insert({
-        user_id: userId, content: `project: ${projectName}${summary ? ` — ${summary}` : ''}`,
+        user_id: userId, session_id: sessionId, content: `project: ${projectName}${summary ? ` — ${summary}` : ''}`,
         kind: 'project', tags: ['project'], importance_score: 0.8,
         metadata: { name: projectName, summary: summary ?? '', status: 'active' },
       })
-      .select('id, content, metadata, updated_at')
+      .select('id, content, metadata')
       .single();
     if (error) throw new Error(`project create failed: ${error.message}`);
     project = rowToProject(data);
@@ -108,7 +108,7 @@ export async function setFocus(
     .update({ importance_score: 0, metadata: { superseded: true, project: 'previous' } })
     .eq('user_id', userId).eq('kind', 'focus');
   const { error } = await sb.from('memories').insert({
-    user_id: userId, content: `current focus: ${project.name}`,
+    user_id: userId, session_id: sessionId, content: `current focus: ${project.name}`,
     kind: 'focus', tags: ['focus'], importance_score: 1.0,
     metadata: { project: project.name },
   });
@@ -124,9 +124,9 @@ export async function setFocus(
 }
 
 /** Store a conversational note. */
-export async function remember(sb: Sb, userId: string, text: string): Promise<void> {
+export async function remember(sb: Sb, userId: string, text: string, sessionId: string): Promise<void> {
   const { error } = await sb.from('memories').insert({
-    user_id: userId, content: text,
+    user_id: userId, session_id: sessionId, content: text,
     kind: 'note', tags: ['note'], importance_score: 0.6,
     metadata: { source: 'chat' },
   });

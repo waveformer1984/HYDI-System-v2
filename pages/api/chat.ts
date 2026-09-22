@@ -259,10 +259,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         const sb = getCooSupabase();
         let text: string;
         if (lifeIntent.kind === 'focus') {
-          const { project, created } = await setFocus(sb, user_id, lifeIntent.project);
+          const { project, created } = await setFocus(sb, user_id, lifeIntent.project, session_id);
           text = `Focus set: ${project.name}${created ? ' (new project — recorded)' : ''}.`;
         } else if (lifeIntent.kind === 'remember') {
-          await remember(sb, user_id, lifeIntent.text);
+          await remember(sb, user_id, lifeIntent.text, session_id);
           text = `Noted: "${lifeIntent.text.slice(0, 120)}"`;
         } else if (lifeIntent.kind === 'recall') {
           text = recallAnswer(await getLifeContext(sb, user_id));
