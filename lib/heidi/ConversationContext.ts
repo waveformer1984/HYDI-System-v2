@@ -195,7 +195,7 @@ export function classifyLifeIntent(message: string): LifeIntent | null {
     return { kind: 'greeting' };
   }
   // "What's on my plate", "what matters today/there", "what's important"
-  if (/what'?s on my plate|what (matters|is important)( today| there| now)?|what should i (look at|care about)/i.test(m)) {
+  if (/what'?s on my plate|what'?s (important|the priority)|what (matters|is important)( today| there| now)?|what should i (look at|care about)/i.test(m)) {
     return { kind: 'plate' };
   }
   // Governed last-thing control — resolves to the most recent mission.
