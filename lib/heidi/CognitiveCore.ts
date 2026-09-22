@@ -2748,7 +2748,7 @@ export class CognitiveCore {
         ) {
           await this.goals.updateGoal(goal.goalId, {
             status: 'failed',
-            result: state.executionResult.error ?? 'capability refused or failed',
+            result: state.executionResult.details || 'capability refused or failed',
           });
         }
       } catch {
