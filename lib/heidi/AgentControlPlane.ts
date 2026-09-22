@@ -560,6 +560,7 @@ export interface SupervisionReport {
   transitions: Array<{ agentId: string; to: AgentStatus }>;
   retries: string[];
   escalations: string[];
+  escalationErrors: string[];
   parentsReconciled: string[];
 }
 
@@ -588,7 +589,7 @@ export async function superviseAgents(
   const state = await collectAgentState(pool);
   const report: SupervisionReport = {
     supervisionEventId: null, agentsChecked: state.agents.length,
-    transitions: [], retries: [], escalations: [], parentsReconciled: [],
+    transitions: [], retries: [], escalations: [], escalationErrors: [], parentsReconciled: [],
   };
 
   // 1. Persist classifications as durable transitions (idempotent —
@@ -603,32 +604,39 @@ export async function superviseAgents(
     }
   }
 
-  // 2/3. Failed missions: bounded retry for R0/R1, else escalate.
-  const failed = state.missions.filter((m) => m.status === 'FAILED');
+  // 2/3. Failed/needs-human missions: bounded retry for R0/R1, else ensure
+  //      a durable human escalation exists. NEEDS_HUMAN status alone is not
+  //      proof the escalation row was written — backfill is idempotent.
+  const failed = state.missions.filter((m) => m.status === 'FAILED' || m.status === 'NEEDS_HUMAN');
   for (const m of failed) {
     // attempt is 1-based (RUNNING events carry attempt n); maxRetries is
     // the number of retries permitted beyond the first attempt.
-    if (m.attempt <= m.maxRetries && RETRYABLE_LEVELS.has(m.authorizationLevel)) {
+    if (m.status === 'FAILED' && m.attempt <= m.maxRetries && RETRYABLE_LEVELS.has(m.authorizationLevel)) {
       report.retries.push(m.missionId);
       void runAgent(pool, m.missionId, ROLE_HANDLERS, reconcileDeps); // emits RUNNING attempt+1 — next pass sees it running
     } else {
-      // Terminal: escalate once (dedup on unresolved escalation rows).
+      // Terminal: ensure the durable escalation exists (dedup on
+      // unresolved rows keyed by metadata.missionId).
       const esc = await pool.query(
         `SELECT id FROM operator_escalations
          WHERE resolved = false AND metadata->>'missionId' = $1 LIMIT 1`,
         [m.missionId],
       ).catch(() => ({ rows: [] }));
-      if (esc.rows.length === 0 && m.status !== 'NEEDS_HUMAN') {
-        await pool.query(
-          `INSERT INTO operator_escalations (category, severity, title, body, action_required, metadata, resolved, created_at)
-           VALUES ('agent_mission', 'medium', $1, $2, $3, $4, false, now())`,
-          [
-            `Agent mission failed: ${m.objective.slice(0, 80)}`,
-            `Mission ${m.missionId} (${m.role}) failed after ${m.attempt + 1} attempt(s). Failure: ${(m.failure ?? 'unknown').slice(0, 300)}`,
-            'Review the mission evidence and decide: retry, redirect, or abandon.',
-            JSON.stringify({ missionId: m.missionId, role: m.role, attempt: m.attempt, failure: m.failure }),
-          ],
-        ).catch(() => undefined);
+      if (esc.rows.length === 0) {
+        try {
+          await pool.query(
+            `INSERT INTO operator_escalations (category, severity, title, body, action_required, metadata, resolved, created_at)
+             VALUES ('agent_mission', 'warning', $1, $2, $3, $4, false, now())`,
+            [
+              `Agent mission failed: ${m.objective.slice(0, 80)}`,
+              `Mission ${m.missionId} (${m.role}) failed after ${m.attempt + 1} attempt(s). Failure: ${(m.failure ?? 'unknown').slice(0, 300)}`,
+              'Review the mission evidence and decide: retry, redirect, or abandon.',
+              JSON.stringify({ missionId: m.missionId, role: m.role, attempt: m.attempt, failure: m.failure }),
+            ],
+          );
+        } catch (e) {
+          report.escalationErrors.push(`${m.missionId}: ${e instanceof Error ? e.message : 'insert failed'}`);
+        }
         const parentAgent = state.agents.find((a) => a.missionId === m.missionId);
         await setStatus(pool, parentAgent?.agentId ?? `agent-${m.role}-${m.missionId.slice(8)}`, m.missionId, 'NEEDS_HUMAN', { failure: m.failure });
         await postMessage(pool, {
@@ -673,6 +681,7 @@ export async function superviseAgents(
     transitions: report.transitions,
     retries: report.retries,
     escalations: report.escalations,
+    escalationErrors: report.escalationErrors,
     parentsReconciled: report.parentsReconciled,
     supervisedAt: new Date().toISOString(),
   });
