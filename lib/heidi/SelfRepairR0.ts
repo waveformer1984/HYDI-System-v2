@@ -85,12 +85,20 @@ export interface RecoveryDeps extends ReconcileDeps {
   recoveryLockFile?: string;
   /** Cooldown between attempts for the same failure class. Default 15 min. */
   cooldownMs?: number;
-  /** Settle delay after restart before reconciling. Default 45s; tests: 0. */
+  /** Delay between post-restart reconciliation polls. Default 45s; tests: small. */
   settleMs?: number;
+  /**
+   * Bounded window for post-recovery reconciliation polling. A fresh cycle
+   * lands on the next daemon interval (~90s) after startup, so a single
+   * early sample cannot distinguish "runtime still booting" from "recovery
+   * failed". Default 4 min; tests use a small window.
+   */
+  postReconcileWindowMs?: number;
 }
 
 const DEFAULT_COOLDOWN_MS = 15 * 60 * 1000;
 const DEFAULT_SETTLE_MS = 45 * 1000;
+const DEFAULT_POST_WINDOW_MS = 4 * 60 * 1000;
 
 // ─── Recovery lease (single-flight) ──────────────────────────────────────
 
@@ -168,6 +176,7 @@ export async function runR0Recovery(deps: RecoveryDeps): Promise<RecoveryReport>
   const leaseFile = deps.recoveryLockFile ?? path.join(deps.repoDir, '.heidi-recovery.lock');
   const cooldownMs = deps.cooldownMs ?? DEFAULT_COOLDOWN_MS;
   const settleMs = deps.settleMs ?? DEFAULT_SETTLE_MS;
+  const postWindowMs = deps.postReconcileWindowMs ?? DEFAULT_POST_WINDOW_MS;
   const reconcile = deps.reconcile ?? (() => collectReconciliation(deps));
   const restart = deps.restartDaemon ?? (() => {
     try {
@@ -257,22 +266,33 @@ export async function runR0Recovery(deps: RecoveryDeps): Promise<RecoveryReport>
     }
     report.state = 'RECOVERY_COMPLETED';
 
-    // ── RECONCILE (post) ───────────────────────────────────────────────
-    if (settleMs > 0) await new Promise((r) => setTimeout(r, settleMs));
+    // ── RECONCILE (post) — bounded poll ────────────────────────────────
+    // The new daemon proves itself on its NEXT cycle (~90s cadence), so a
+    // single early sample cannot distinguish "still booting" from
+    // "recovery failed". Poll until QUALIFIED, a foreign owner appears
+    // (stop immediately — never kill), or the bounded window expires.
     report.state = 'RECONCILING';
-    const post = await reconcile();
-    report.postRecovery = post;
+    const deadline = Date.now() + postWindowMs;
+    let post: ReconciliationReport;
+    for (; ;) {
+      if (settleMs > 0) await new Promise((r) => setTimeout(r, settleMs));
+      post = await reconcile();
+      report.postRecovery = post;
+      if (post.verdict === 'QUALIFIED') break;
+      if (post.actual.lockAlive === true && post.predicates.PID_MATCHES === false) break;
+      if (Date.now() >= deadline) break;
+    }
 
-    if (post.verdict === 'QUALIFIED') {
+    if (post!.verdict === 'QUALIFIED') {
       report.state = 'VERIFIED';
       report.detail = 'post-recovery reconciliation QUALIFIED';
-    } else if (post.actual.lockAlive === true && post.predicates.PID_MATCHES === false) {
+    } else if (post!.actual.lockAlive === true && post!.predicates.PID_MATCHES === false) {
       // Restart produced a stale/foreign runtime owner — do not kill it.
       report.state = 'HUMAN_REQUIRED';
       report.detail = 'post-recovery runtime has a non-PM2 lock owner';
     } else {
       report.state = 'FAILED';
-      report.detail = `post-recovery reconciliation: ${post.verdict} (${post.failures.join(', ') || 'unobservable predicates'})`;
+      report.detail = `post-recovery reconciliation: ${post!.verdict} (${post!.failures.join(', ') || 'unobservable predicates'})`;
     }
 
     report.completedAt = new Date().toISOString();
@@ -291,7 +311,7 @@ async function lastAttemptAt(deps: RecoveryDeps, failureClass: string): Promise<
       `SELECT created_at FROM heidi_events
        WHERE event_type = 'recovery_attempt'
          AND payload->>'failureClass' = $1
-         AND payload->>'state' IN ('VERIFIED','FAILED','RECOVERY_STARTED','HUMAN_REQUIRED')
+         AND payload->>'state' IN ('VERIFIED','FAILED','RECOVERY_STARTED')
        ORDER BY created_at DESC LIMIT 1`,
       [failureClass],
     );

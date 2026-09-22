@@ -90,8 +90,16 @@ export interface ReconciliationReport {
 // ─── Default OS-backed providers ─────────────────────────────────────────
 
 function defaultPm2List(): Promise<Pm2Proc[]> {
-  const out = execSync('pm2 jlist', { timeout: 30000, encoding: 'utf8' });
-  const list = JSON.parse(out) as Array<{
+  // pm2's daemon bus is occasionally slow during transitions; one retry.
+  let out: string | null = null;
+  for (let i = 0; i < 2 && out === null; i++) {
+    try {
+      out = execSync('pm2 jlist', { timeout: 30000, encoding: 'utf8' });
+    } catch {
+      if (i === 1) throw new Error('pm2 jlist unavailable');
+    }
+  }
+  const list = JSON.parse(out!) as Array<{
     name: string; pid: number;
     pm2_env?: { status?: string; pm_cwd?: string; restart_time?: number };
   }>;

@@ -87,11 +87,12 @@ function makePool(lastAttemptIso: string | null = null) {
   };
 }
 
-function deps(over: Partial<RecoveryDeps> & { pool: ReturnType<typeof makePool> } ): RecoveryDeps {
+function deps(over: Partial<RecoveryDeps> & { pool: ReturnType<typeof makePool> }): RecoveryDeps {
   return {
     repoDir: tmpDir(),
     cooldownMs: 15 * 60 * 1000,
-    settleMs: 0,
+    settleMs: 2,
+    postReconcileWindowMs: 400,
     reconcile: async () => recon(),
     restartDaemon: () => ({ ok: true }),
     ...over,
@@ -238,6 +239,22 @@ describe('ops.recover_daemon_r0', () => {
     }));
     expect(r.state).toBe('HUMAN_REQUIRED');
     expect(r.postRecovery?.actual.lockAlive).toBe(true);
+  });
+
+  test('poll loop: QUALIFIED on a later sample → VERIFIED', async () => {
+    let post = false;
+    let samples = 0;
+    const r = await runR0Recovery(deps({
+      pool: makePool(),
+      reconcile: async () => {
+        if (!post) return DEAD_DAEMON;
+        samples++;
+        return samples >= 2 ? recon() : DEAD_DAEMON; // healthy on 2nd poll
+      },
+      restartDaemon: () => { post = true; return { ok: true }; },
+    }));
+    expect(r.state).toBe('VERIFIED');
+    expect(samples).toBeGreaterThanOrEqual(2);
   });
 
   test('restart command error → FAILED, never VERIFIED', async () => {
