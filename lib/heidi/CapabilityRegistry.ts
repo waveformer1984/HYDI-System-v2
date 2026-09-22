@@ -638,6 +638,19 @@ export const DEFAULT_CAPABILITIES: Array<Omit<CapabilityDescriptor, 'status' | '
     timeoutMs: 60000,
     metadata: { actionType: 'coo_state' },
   },
+  {
+    capabilityId: 'ops.acknowledge_human_action',
+    capabilityName: 'Acknowledge Human Action',
+    description: 'Record a durable acknowledgement for one normalized human-action queue item. Read/write of the acknowledgement record only — never executes, authorizes, or resolves the underlying request.',
+    provider: 'cognitive_core',
+    riskLevel: 'R1',
+    autonomyRequirement: 1,
+    dependencies: [],
+    verificationStrategy: 'The human_action_ack row exists in heidi_events for the queueItemId',
+    reversible: false,
+    timeoutMs: 30000,
+    metadata: { actionType: 'acknowledge_human_action' },
+  },
 
   // Revenue pipeline capabilities (ProspectPipeline)
   {

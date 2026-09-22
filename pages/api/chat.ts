@@ -164,6 +164,48 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Intercept system-state questions and answer from live runtime state
     // rather than LLM inference. This prevents hallucination about the
     // system's own status and provides instant, accurate responses.
+    // Explicit governed command: "acknowledge <queueItemId>" — submits a
+    // governed goal for ops.acknowledge_human_action; the daemon executes
+    // and contract-verifies. Only this exact syntax acknowledges; vague
+    // phrasing ("do it", "handle that") falls through to normal chat and
+    // cannot acknowledge anything.
+    const ackMatch = message.trim().match(/^acknowledge\s+(\S+)$/i);
+    if (ackMatch) {
+      try {
+        const queueItemId = ackMatch[1];
+        const { data: goalRow, error } = await getCooSupabase()
+          .from('heidi_goals')
+          .insert({
+            goal_type: 'task',
+            title: `Acknowledge ${queueItemId}`,
+            description: `Human acknowledgement of queue item ${queueItemId}`,
+            purpose: 'operator acknowledgement via chat command',
+            priority: 4,
+            status: 'pending',
+            owner: 'operator',
+            confidence: 0.9,
+            context: {
+              producerKey: `ack:${queueItemId}`,
+              producedBy: 'human-operator',
+              capabilityId: 'ops.acknowledge_human_action',
+              capabilityParams: { queueItemId, actor: 'chat-operator' },
+              completeOnVerify: true,
+            },
+          })
+          .select('id')
+          .single();
+        if (error) throw new Error(error.message);
+        sse(res, { type: 'metadata', model_used: 'coo-command', latency: 0 });
+        sse(res, { type: 'content', content: `Acknowledgement of '${queueItemId}' submitted as governed action (goal ${goalRow.id.slice(0, 8)}). The daemon will execute and contract-verify it within ~2 cycles; 'what needs my attention?' will reflect it once ACKNOWLEDGED.` });
+        res.write('data: [DONE]\n\n');
+        return res.end();
+      } catch (e) {
+        sse(res, { type: 'content', content: `Acknowledgement failed to submit — ${e instanceof Error ? e.message : 'unknown error'}` });
+        res.write('data: [DONE]\n\n');
+        return res.end();
+      }
+    }
+
     // Operational questions resolve against the persisted COO state first
     // (the daemon's authoritative snapshot). Non-operational or unreadable
     // falls through to the existing runtime-state + LLM paths.

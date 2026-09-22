@@ -59,6 +59,7 @@ import { collectDiagnosticFollowup, investigateDimension } from './DiagnosticFol
 import { collectReconciliation, resolveGitHead } from './DeploymentReconciliation';
 import { runR0Recovery } from './SelfRepairR0';
 import { collectCooState } from './CooState';
+import { acknowledgeHumanAction } from './HumanActionQueue';
 
 export type CognitivePhase =
   | 'perceive' | 'validate' | 'understand' | 'update_world_model'
@@ -1603,6 +1604,45 @@ export class CognitiveCore {
         evidence: [{ verdict, nextAction: state.nextAction }],
         verified: false, // contract verification re-reads the row
         verificationDetails: 'Pending contract verification of persisted coo_state row',
+      };
+    });
+
+    // Governed human-action acknowledgement — records a durable ack for
+    // one normalized queue item. Write of the ack record only: never
+    // executes, never authorizes, never mutates the underlying source.
+    // Idempotent on repeat; fail-closed on missing/expired items.
+    this.wireExecutor('ops.acknowledge_human_action', async (params) => {
+      const queueItemId = typeof params?.queueItemId === 'string' ? params.queueItemId : null;
+      const actor = typeof params?.actor === 'string' ? params.actor : 'operator';
+      if (!queueItemId) {
+        return {
+          capabilityId: 'ops.acknowledge_human_action',
+          executed: false,
+          outcome: 'failure' as const,
+          result: null,
+          error: 'capabilityParams.queueItemId required',
+          evidence: [],
+          verified: false,
+          verificationDetails: 'Missing queueItemId',
+        };
+      }
+      const res = await acknowledgeHumanAction(this.pool, queueItemId, actor);
+      return {
+        capabilityId: 'ops.acknowledge_human_action',
+        executed: res.ok,
+        outcome: res.ok ? 'success' as const : 'failure' as const,
+        result: {
+          acknowledgementId: res.acknowledgementId ?? null,
+          queueItemId: res.queueItemId ?? queueItemId,
+          outcome: res.outcome,
+          reason: res.reason ?? null,
+        },
+        error: res.ok ? null : (res.reason ?? 'acknowledgement refused'),
+        evidence: [{ outcome: res.outcome, queueItemId }],
+        verified: false,
+        verificationDetails: res.ok
+          ? 'Pending contract verification of persisted human_action_ack row'
+          : 'Refused before write — nothing to verify',
       };
     });
   }

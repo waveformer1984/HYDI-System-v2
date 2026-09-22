@@ -53,12 +53,91 @@ export interface HumanActionQueue {
 
 const FRESH_WINDOW_SQL = `now() - interval '24 hours'`;
 
-async function q(pool: Pick<Pool, 'query'>, sql: string): Promise<Record<string, unknown>[]> {
+async function q(pool: Pick<Pool, 'query'>, sql: string, params: unknown[] = []): Promise<Record<string, unknown>[]> {
   try {
-    return (await pool.query(sql)).rows;
+    return (await pool.query(sql, params)).rows;
   } catch {
     return []; // missing table/permission → that source contributes nothing, never fabricates
   }
+}
+
+const ACK_EVENT = 'human_action_ack';
+
+/** Durable acknowledgement overlay — applied after item collection. */
+async function loadAcknowledgements(
+  pool: Pick<Pool, 'query'>,
+): Promise<Map<string, { id: string; actor: string; createdAt: string }>> {
+  const rows = await q(pool, `
+    SELECT payload->>'queueItemId' AS qid, max(created_at) AS latest
+    FROM heidi_events
+    WHERE event_type = '${ACK_EVENT}'
+    GROUP BY 1`);
+  const map = new Map<string, { id: string; actor: string; createdAt: string }>();
+  for (const r of rows) {
+    if (r.qid) map.set(String(r.qid), { id: String(r.qid), actor: '', createdAt: new Date(r.latest as string).toISOString() });
+  }
+  return map;
+}
+
+export interface AckResult {
+  ok: boolean;
+  outcome: 'acknowledged' | 'already_acknowledged' | 'not_found' | 'expired' | 'not_open';
+  acknowledgementId?: string;
+  queueItemId?: string;
+  reason?: string;
+}
+
+/**
+ * Governed acknowledgement of one queue item. Read/write ONLY — records
+ * the human's "I've seen this"; never executes, never authorizes, never
+ * mutates the underlying source record.
+ *
+ *   - item must exist in the current normalized queue (fail-closed)
+ *   - EXPIRED items refuse with 'expired'
+ *   - repeat ack is idempotent (returns the existing record)
+ */
+export async function acknowledgeHumanAction(
+  pool: Pick<Pool, 'query'>,
+  queueItemId: string,
+  actor: string,
+): Promise<AckResult> {
+  if (!queueItemId || typeof queueItemId !== 'string') {
+    return { ok: false, outcome: 'not_found', reason: 'queue item id required' };
+  }
+  const queue = await collectHumanActionQueue(pool);
+  const item = queue.items.find((i) => i.id === queueItemId);
+  if (!item) {
+    return { ok: false, outcome: 'not_found', reason: `no queue item '${queueItemId}'` };
+  }
+  if (item.status === 'EXPIRED') {
+    return { ok: false, outcome: 'expired', queueItemId, reason: 'item is expired — acknowledge is fail-closed' };
+  }
+  if (item.status === 'ACKNOWLEDGED') {
+    const existing = await q(pool, `
+      SELECT id FROM heidi_events
+      WHERE event_type = '${ACK_EVENT}' AND payload->>'queueItemId' = $1
+      ORDER BY created_at DESC LIMIT 1`, [queueItemId]);
+    return {
+      ok: true, outcome: 'already_acknowledged', queueItemId,
+      acknowledgementId: existing[0]?.id as string | undefined,
+      reason: 'idempotent — existing acknowledgement returned',
+    };
+  }
+
+  const inserted = await pool.query(
+    `INSERT INTO heidi_events (event_type, division, payload, verdict, created_at)
+     VALUES ($1, 'heidi', $2, 'ACKNOWLEDGED', now()) RETURNING id`,
+    [ACK_EVENT, JSON.stringify({
+      queueItemId,
+      actor,
+      status: 'ACKNOWLEDGED',
+      evidence: { source: item.source, category: item.category, reason: item.reason },
+    })],
+  );
+  return {
+    ok: true, outcome: 'acknowledged', queueItemId,
+    acknowledgementId: inserted.rows[0]?.id as string | undefined,
+  };
 }
 
 export async function collectHumanActionQueue(
@@ -163,6 +242,16 @@ export async function collectHumanActionQueue(
       createdAt: new Date(r.oldest as string).toISOString(),
       updatedAt: new Date(r.newest as string).toISOString(),
     });
+  }
+
+  // Overlay durable acknowledgements — acknowledged items keep their
+  // provenance but no longer count as open.
+  const acks = await loadAcknowledgements(pool);
+  for (const item of items) {
+    if (item.status === 'OPEN' && acks.has(item.id)) {
+      item.status = 'ACKNOWLEDGED';
+      item.evidence = { ...item.evidence, acknowledgedAt: acks.get(item.id)!.createdAt };
+    }
   }
 
   items.sort((a, b) => a.priority - b.priority || b.updatedAt.localeCompare(a.updatedAt));

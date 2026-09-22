@@ -4,18 +4,28 @@
  * actionable items, and produce a truthful empty state.
  */
 
-import { collectHumanActionQueue } from '../../lib/heidi/HumanActionQueue';
+import { collectHumanActionQueue, acknowledgeHumanAction } from '../../lib/heidi/HumanActionQueue';
 
 interface Fixture {
   interventions?: Record<string, unknown>[];
   authz?: Record<string, unknown>[];
   freshEsc?: Record<string, unknown>[];
   backlog?: Record<string, unknown>[];
+  acks?: string[]; // queueItemIds already acknowledged
 }
 
-function pool(f: Fixture) {
+function pool(f: Fixture, inserted: string[] = []) {
   return {
-    query: async (sql: string) => {
+    query: async (sql: string, params?: unknown[]) => {
+      if (/INSERT INTO heidi_events/.test(sql)) {
+        inserted.push(String(params?.[0]));
+        const payload = JSON.parse(String(params?.[1]));
+        return { rows: [{ id: `ack-${inserted.length}` }], payload };
+      }
+      if (/human_action_ack/.test(sql) && /queueItemId/.test(sql) && /= \$1/.test(sql))
+        return { rows: (f.acks ?? []).includes(String(params?.[0])) ? [{ id: 'ack-1' }] : [] };
+      if (/human_action_ack/.test(sql))
+        return { rows: (f.acks ?? []).map((qid) => ({ qid, latest: '2026-09-22T18:00:00Z' })) };
       if (/FROM human_intervention_requests/.test(sql)) return { rows: f.interventions ?? [] };
       if (/authorization_escalation/.test(sql)) return { rows: f.authz ?? [] };
       if (/GROUP BY category/.test(sql)) return { rows: f.backlog ?? [] };
@@ -118,5 +128,62 @@ describe('collectHumanActionQueue', () => {
       'authorizationLevel', 'backlog', 'category', 'createdAt', 'evidence',
       'id', 'priority', 'reason', 'requestedAction', 'source', 'status', 'updatedAt',
     ]);
+  });
+});
+
+describe('acknowledgeHumanAction — governed write', () => {
+  const intervention = {
+    id: 'x1', request_id: 'req-a', blocker: 'missing key', required_action: 'provision',
+    intervention_type: 'credential', status: 'pending',
+    created_at: '2026-09-22T10:00:00Z', updated_at: '2026-09-22T10:00:00Z',
+  };
+
+  test('acknowledges an OPEN item and the overlay flips it to ACKNOWLEDGED', async () => {
+    const inserted: string[] = [];
+    // after insert, the fixture reports the item as acked
+    const f: Fixture = { interventions: [intervention], acks: [] };
+    const p = pool(f, inserted);
+    const res = await acknowledgeHumanAction(p as any, 'intervention:req-a', 'operator');
+    expect(res.ok).toBe(true);
+    expect(res.outcome).toBe('acknowledged');
+    expect(res.acknowledgementId).toBeDefined();
+    expect(inserted).toHaveLength(1);
+    // overlay: same queue now shows ACKNOWLEDGED
+    f.acks = ['intervention:req-a'];
+    const q = await collectHumanActionQueue(p as any);
+    expect(q.items.find((i) => i.id === 'intervention:req-a')!.status).toBe('ACKNOWLEDGED');
+    expect(q.open).toBe(0); // no longer counts as open work
+  });
+
+  test('repeat acknowledgement is idempotent — no second write', async () => {
+    const inserted: string[] = [];
+    const p = pool({ interventions: [intervention], acks: ['intervention:req-a'] }, inserted);
+    const res = await acknowledgeHumanAction(p as any, 'intervention:req-a', 'operator');
+    expect(res.ok).toBe(true);
+    expect(res.outcome).toBe('already_acknowledged');
+    expect(inserted).toHaveLength(0);
+  });
+
+  test('nonexistent item fails closed', async () => {
+    const p = pool({});
+    const res = await acknowledgeHumanAction(p as any, 'intervention:nope', 'operator');
+    expect(res.ok).toBe(false);
+    expect(res.outcome).toBe('not_found');
+  });
+
+  test('expired item refuses with defined outcome', async () => {
+    const p = pool({
+      interventions: [{ ...intervention, status: 'expired', request_id: 'req-old' }],
+    });
+    const res = await acknowledgeHumanAction(p as any, 'intervention:req-old', 'operator');
+    expect(res.ok).toBe(false);
+    expect(res.outcome).toBe('expired');
+  });
+
+  test('missing/empty id fails closed before any query', async () => {
+    const p = pool({});
+    const res = await acknowledgeHumanAction(p as any, '', 'operator');
+    expect(res.ok).toBe(false);
+    expect(res.outcome).toBe('not_found');
   });
 });

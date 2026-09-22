@@ -838,6 +838,36 @@ export const OPS_COO_STATE = defineContract({
   },
 });
 
+export const OPS_ACK_HUMAN_ACTION = defineContract({
+  identity: {
+    id: 'ops.acknowledge_human_action',
+    version: '1.0.0',
+    owner: OWNER,
+    provider: 'cognitive_core',
+    description: 'Durably record a human acknowledgement for one queue item — no execution, no authorization',
+  },
+  effects: [dbEffect('heidi_events', 'create')],
+  reversibility: {
+    kind: 'none',
+    windowMs: 0,
+    caveat: 'Append-only acknowledgement record; does not mutate the source item.',
+  },
+  cost: { estimatedMs: 5_000, timeoutMs: 30_000 },
+  verification: {
+    description:
+      'The human_action_ack row exists in heidi_events — re-read by id.',
+    observation: dbObservation('sql:heidi_events:id={acknowledgementId}', ['id', 'event_type', 'verdict', 'payload']),
+    conditions: [
+      { field: 'found', operator: 'eq', expected: true },
+      { field: 'event_type', operator: 'eq', expected: 'human_action_ack' },
+      { field: 'verdict', operator: 'eq', expected: 'ACKNOWLEDGED' },
+    ],
+    onFailure: 'escalate',
+    maxRetries: 1,
+    requiresHumanConfirmation: false,
+  },
+});
+
 // ---------------------------------------------------------------------------
 // Writes reached only from inside revenue.run_cycle
 // ---------------------------------------------------------------------------
@@ -1101,6 +1131,7 @@ export const EXTENDED_CONTRACTS: CapabilityContract[] = [
   OPS_RECONCILE_DEPLOYMENT,
   OPS_RECOVER_DAEMON_R0,
   OPS_COO_STATE,
+  OPS_ACK_HUMAN_ACTION,
   // external / system-affecting
   TOOL_SEND_EMAIL,
   SELF_RUN_SELF_REPAIR,
