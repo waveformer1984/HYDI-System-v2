@@ -19,6 +19,7 @@
 
 import type { Pool } from 'pg';
 import { collectReconciliation, type ReconcileDeps, type ReconciliationReport } from './DeploymentReconciliation';
+import { collectHumanActionQueue, type HumanActionQueue, type HumanAction } from './HumanActionQueue';
 
 export interface CooNextAction {
   kind: 'capability' | 'human' | 'none';
@@ -45,6 +46,12 @@ export interface CooState {
     escalationsNew24h: number;
     interventionsPending: number;
     authEscalations24h: number;
+  };
+  /** Normalized cross-channel human-action read model. */
+  humanActions: {
+    open: number;
+    backlogRowCount: number;
+    items: HumanAction[];
   };
   protoforge: {
     lastRunAt: string | null;
@@ -81,6 +88,10 @@ async function safe<T>(fn: () => Promise<T>, fallback: T): Promise<T> {
  * Every selection carries a machine-checkable reason.
  */
 export function selectNextAction(s: Omit<CooState, 'nextAction' | 'briefing'>): CooNextAction {
+  // The normalized human-action queue is authoritative for human gates:
+  // interventions, pending authorization decisions, and fresh escalations
+  // are real pending actions; backlog aggregates never select work.
+  const firstOpen = s.humanActions.items.find((i) => i.status === 'OPEN' && !i.backlog);
   // 1. Deployment drift outranks everything — runtime truth first.
   if (s.deployment.verdict === 'DEPLOYMENT_DRIFT') {
     return {
@@ -96,29 +107,23 @@ export function selectNextAction(s: Omit<CooState, 'nextAction' | 'briefing'>): 
       reason: 'deployment identity unobservable — re-reconcile before any other work',
     };
   }
-  // 2. Pending human interventions outrank routine work — they block goals.
-  if (s.work.interventionsPending > 0) {
+  // 2. The human-action queue: any non-backlog OPEN item is a pending
+  //    human decision — report it, never execute it.
+  if (firstOpen) {
+    const total = s.humanActions.open;
     return {
       kind: 'human',
-      reason: `${s.work.interventionsPending} pending intervention request(s) block goal execution`,
+      reason: `${total} pending human action(s) — first: [${firstOpen.source}] ${firstOpen.reason} → ${firstOpen.requestedAction}`,
     };
   }
-  // 3. New escalations in the last 24h are fresh incidents (the historical
-  //    backlog is reported but does not select work).
-  if (s.work.escalationsNew24h > 0) {
-    return {
-      kind: 'human',
-      reason: `${s.work.escalationsNew24h} new operator escalation(s) in the last 24h require review`,
-    };
-  }
-  // 4. Routine diagnostics keep the picture fresh.
+  // 3. Routine diagnostics keep the picture fresh.
   return { kind: 'none', reason: 'no authorized work required' };
 }
 
 export async function collectCooState(deps: CooDeps): Promise<CooState> {
   const now = deps.now ?? (() => Date.now());
   const reconcile = deps.reconcile ?? (() => collectReconciliation(deps));
-  const recon = await reconcile();
+  const [recon, queue] = await Promise.all([reconcile(), collectHumanActionQueue(deps.pool)]);
 
   const [goalsOpen, goalsInProgress, escalationsOpen, escalationsNew24h, interventionsPending, authEscalations24h] =
     await Promise.all([
@@ -179,6 +184,11 @@ export async function collectCooState(deps: CooDeps): Promise<CooState> {
     },
     applicationHealth: recon.applicationHealth,
     work: { goalsOpen, goalsInProgress, escalationsOpen, escalationsNew24h, interventionsPending, authEscalations24h },
+    humanActions: {
+      open: queue.open,
+      backlogRowCount: queue.backlogRowCount,
+      items: queue.items.slice(0, 10),
+    },
     protoforge: proto,
     revenue: { opportunitiesOpen: revenueOpps },
     events24h,
@@ -192,6 +202,7 @@ export async function collectCooState(deps: CooDeps): Promise<CooState> {
     `  Health:      ${recon.applicationHealth}`,
     `  Work:        ${goalsOpen} open goals, ${goalsInProgress} in progress, ${interventionsPending} interventions pending`,
     `  Escalations: ${escalationsOpen} open (${escalationsNew24h} new/24h) — historical backlog human-owned`,
+    `  Human queue: ${queue.open} pending action(s), ${queue.backlogRowCount} backlog row(s)`,
     `  ProtoForge:  last run ${proto.lastRunStatus ?? 'none'} at ${proto.lastRunAt ?? 'never'}; ${proto.opportunitiesTotal} opportunities (${proto.pendingReview} pending review, ${proto.approved} approved)`,
     `  Revenue:     ${revenueOpps} open opportunities (read-only; no reconciled-revenue claim)`,
     `  Next:        ${nextAction.kind === 'capability' ? nextAction.capabilityId : nextAction.kind === 'human' ? 'HUMAN ACTION REQUIRED' : 'NO_ACTION_REQUIRED'} — ${nextAction.reason}`,

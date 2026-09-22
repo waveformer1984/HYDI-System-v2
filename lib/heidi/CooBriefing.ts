@@ -78,8 +78,8 @@ export function formatCooBrief(s: CooState, stale: boolean): string {
     `STATUS:      deployment ${s.deployment.verdict} · health ${s.applicationHealth}`,
     `DEPLOYMENT:  commit ${s.deployment.actualCommit ?? 'unknown'} · pm2 ${s.deployment.pm2Pid ?? '?'} → daemon ${s.deployment.daemonPid ?? '?'}`,
     `WORK:        ${workLine(s)}`,
-    `ATTENTION:   ${s.work.interventionsPending + s.work.escalationsNew24h > 0
-      ? `${s.work.interventionsPending} intervention(s) + ${s.work.escalationsNew24h} new escalation(s)`
+    `ATTENTION:   ${s.humanActions.open > 0
+      ? `${s.humanActions.open} pending human action(s): ${s.humanActions.items.filter((i) => i.status === 'OPEN' && !i.backlog).slice(0, 3).map((i) => `[${i.source}] ${i.reason}`).join(' | ')}`
       : 'none pending'}`,
     `PROTOFORGE:  ${protoLine(s)}`,
     `REVENUE:     ${s.revenue.opportunitiesOpen} open opportunities (read-only — no reconciled-revenue claim)`,
@@ -98,11 +98,18 @@ export function answerFromCooState(s: CooState, intent: CooIntent, stale: boolea
     case 'status':
       return formatCooBrief(s, stale);
     case 'attention': {
-      const pending = s.work.interventionsPending + s.work.escalationsNew24h;
-      if (s.nextAction.kind === 'human') return `Needs your attention: ${s.nextAction.reason}${staleness}`;
-      return pending > 0
-        ? `Needs your attention: ${s.work.interventionsPending} intervention(s), ${s.work.escalationsNew24h} new escalation(s). The ${s.work.escalationsOpen} historical escalations are human-owned backlog, not current work.${staleness}`
-        : `Nothing needs your attention right now. ${s.work.escalationsOpen} historical escalations remain human-owned backlog.${staleness}`;
+      const open = s.humanActions.items.filter((i) => i.status === 'OPEN' && !i.backlog);
+      if (open.length > 0) {
+        const list = open
+          .slice(0, 5)
+          .map((i) => `  [${i.source}/${i.category}] ${i.reason} → ${i.requestedAction}`)
+          .join('\n');
+        const backlogNote = s.humanActions.backlogRowCount > 0
+          ? `\n  (${s.humanActions.backlogRowCount} historical backlog rows remain human-owned — not listed individually)`
+          : '';
+        return `Needs your attention — ${open.length} pending human action(s):\n${list}${backlogNote}${staleness}`;
+      }
+      return `Nothing needs your attention right now.${s.humanActions.backlogRowCount > 0 ? ` ${s.humanActions.backlogRowCount} historical backlog rows remain human-owned.` : ''}${staleness}`;
     }
     case 'activity':
       return `Next action: ${fmtNextAction(s.nextAction)}. Work: ${workLine(s)}.${staleness}`;

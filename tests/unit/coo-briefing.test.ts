@@ -21,6 +21,7 @@ function state(over: Partial<CooState> = {}): CooState {
     },
     applicationHealth: 'HEALTHY',
     work: { goalsOpen: 1, goalsInProgress: 1, escalationsOpen: 7222, escalationsNew24h: 0, interventionsPending: 0, authEscalations24h: 0 },
+    humanActions: { open: 0, backlogRowCount: 7222, items: [] },
     protoforge: { lastRunAt: '2026-09-22T14:10:08Z', lastRunStatus: 'success', opportunitiesTotal: 81, pendingReview: 81, approved: 0 },
     revenue: { opportunitiesOpen: 2 },
     events24h: { cognitive_cycle: 40 },
@@ -72,9 +73,23 @@ describe('answerFromCooState', () => {
     expect(out).toContain('7222');
   });
 
-  test('attention surfaces human-required nextAction first', () => {
-    const s = state({ nextAction: { kind: 'human', reason: '2 pending intervention(s) block goal execution' } });
-    expect(answerFromCooState(s, 'attention', false)).toContain('intervention');
+  test('attention lists real queue items with source and reason', () => {
+    const s = state({
+      humanActions: {
+        open: 1,
+        backlogRowCount: 7222,
+        items: [{
+          id: 'intervention:req-1', source: 'intervention', category: 'credential', priority: 1,
+          status: 'OPEN', reason: 'missing Stripe key', requestedAction: 'provision key',
+          evidence: {}, authorizationLevel: 'R3', backlog: false,
+          createdAt: 't', updatedAt: 't',
+        }],
+      },
+    });
+    const out = answerFromCooState(s, 'attention', false);
+    expect(out).toContain('1 pending human action');
+    expect(out).toContain('missing Stripe key');
+    expect(out).toContain('7222');
   });
 
   test('stale snapshot is disclosed, never presented as current', () => {

@@ -28,6 +28,10 @@ interface Counts {
   goalsOpen?: number; goalsInProgress?: number;
   escalationsOpen?: number; escalationsNew24h?: number;
   interventionsPending?: number; authEscalations24h?: number;
+  interventionRows?: Record<string, unknown>[];
+  authzRows?: Record<string, unknown>[];
+  freshEscalationRows?: Record<string, unknown>[];
+  backlogRows?: Record<string, unknown>[];
   protoRun?: { run_at: Date; status: string } | null;
   protoOpps?: { pending: number; approved: number; total: number };
   revenueOpps?: number;
@@ -40,6 +44,15 @@ function makePool(c: Counts) {
     calls,
     query: async (sql: string) => {
       calls.push(sql.slice(0, 80));
+      // Human-action queue queries (run before the scalar counts)
+      if (/FROM human_intervention_requests/.test(sql) && /request_id/.test(sql))
+        return { rows: c.interventionRows ?? [] };
+      if (/authorization_escalation/.test(sql) && /GROUP BY 1, 2, 3/.test(sql))
+        return { rows: c.authzRows ?? [] };
+      if (/FROM operator_escalations/.test(sql) && /action_required/.test(sql))
+        return { rows: c.freshEscalationRows ?? [] };
+      if (/FROM operator_escalations/.test(sql) && /GROUP BY category/.test(sql))
+        return { rows: c.backlogRows ?? [] };
       if (/heidi_goals/.test(sql) && /in_progress/.test(sql)) return { rows: [{ n: c.goalsInProgress ?? 0 }] };
       if (/heidi_goals/.test(sql)) return { rows: [{ n: c.goalsOpen ?? 0 }] };
       if (/operator_escalations/.test(sql) && /24 hours/.test(sql)) return { rows: [{ n: c.escalationsNew24h ?? 0 }] };
@@ -87,20 +100,45 @@ describe('ops.coo_state collection + selection', () => {
   });
 
   test('pending interventions → human action, not autonomous work', async () => {
-    const s = await collect({ interventionsPending: 2 });
+    const s = await collect({
+      interventionRows: [
+        { id: 'i1', request_id: 'req-1', objective: 'do X', blocker: 'missing cred', required_action: 'provision key', intervention_type: 'credential', status: 'pending', created_at: new Date(), updated_at: new Date() },
+        { id: 'i2', request_id: 'req-2', objective: 'do Y', blocker: 'needs ok', required_action: 'approve', intervention_type: 'approval', status: 'pending', created_at: new Date(), updated_at: new Date() },
+      ],
+    });
     expect(s.nextAction.kind).toBe('human');
-    expect(s.nextAction.reason).toMatch(/2 pending intervention/);
+    expect(s.nextAction.reason).toMatch(/2 pending human action/);
+    expect(s.humanActions.open).toBe(2);
   });
 
   test('fresh escalations → human; historical backlog alone does not select work', async () => {
-    const stale = await collect({ escalationsOpen: 7222, escalationsNew24h: 0 });
-    expect(stale.nextAction.kind).toBe('none'); // known human-owned backlog reported, not selected
-    const fresh = await collect({ escalationsOpen: 7224, escalationsNew24h: 2 });
+    const stale = await collect({
+      backlogRows: [{ category: 'stuck_job', n: '6721', oldest: new Date('2026-08-01'), newest: new Date('2026-09-21') }],
+    });
+    expect(stale.nextAction.kind).toBe('none'); // backlog reported, never selected
+    expect(stale.humanActions.backlogRowCount).toBe(6721);
+    const fresh = await collect({
+      freshEscalationRows: [
+        { id: 'e1', category: 'stuck_job', severity: 'high', title: 'job stuck 5h', action_required: 'inspect', created_at: new Date() },
+      ],
+    });
     expect(fresh.nextAction.kind).toBe('human');
   });
 
+  test('authorization escalations aggregate into pending capability decisions', async () => {
+    const s = await collect({
+      authzRows: [{ cap: 'revenue.start_onboarding', reason: 'requires autonomy 3', risk: 'R2', n: '421', earliest: new Date('2026-09-20'), latest: new Date('2026-09-21') }],
+    });
+    expect(s.humanActions.open).toBe(1);
+    expect(s.humanActions.items[0].id).toContain('authz:revenue.start_onboarding');
+    expect(s.humanActions.items[0].evidence.occurrences).toBe(421);
+    expect(s.nextAction.kind).toBe('human');
+  });
+
   test('drift outranks interventions (runtime truth first)', async () => {
-    const s = await collect({ interventionsPending: 5 }, recon('DEPLOYMENT_DRIFT'));
+    const s = await collect({
+      interventionRows: [{ id: 'i1', request_id: 'req-1', blocker: 'x', required_action: 'y', intervention_type: 't', status: 'pending', created_at: new Date(), updated_at: new Date() }],
+    }, recon('DEPLOYMENT_DRIFT'));
     expect(s.nextAction.kind).toBe('capability');
   });
 
@@ -122,6 +160,7 @@ describe('ops.coo_state collection + selection', () => {
       deployment: { verdict: 'QUALIFIED', identity: 'VALID', expectedCommit: 'a', actualCommit: 'a', pm2Pid: 1, daemonPid: 2, failures: [] },
       applicationHealth: 'HEALTHY',
       work: { goalsOpen: 0, goalsInProgress: 0, escalationsOpen: 0, escalationsNew24h: 0, interventionsPending: 0, authEscalations24h: 0 },
+      humanActions: { open: 0, backlogRowCount: 0, items: [] },
       protoforge: { lastRunAt: null, lastRunStatus: null, opportunitiesTotal: 0, pendingReview: 0, approved: 0 },
       revenue: { opportunitiesOpen: 0 },
       events24h: {},
