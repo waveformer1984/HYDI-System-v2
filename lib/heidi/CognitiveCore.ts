@@ -60,7 +60,7 @@ import { collectReconciliation, resolveGitHead } from './DeploymentReconciliatio
 import { runR0Recovery } from './SelfRepairR0';
 import { collectCooState } from './CooState';
 import { acknowledgeHumanAction } from './HumanActionQueue';
-import { runInvestigateMission, collectAgentState, superviseAgents, stopAgent, retryMission, resolveHumanAction } from './AgentControlPlane';
+import { runInvestigateMission, runTopOpportunityInvestigation, collectAgentState, superviseAgents, stopAgent, retryMission, resolveHumanAction } from './AgentControlPlane';
 
 export type CognitivePhase =
   | 'perceive' | 'validate' | 'understand' | 'update_world_model'
@@ -1652,16 +1652,37 @@ export class CognitiveCore {
     // Agents are in-process bounded workers; all state is event-sourced.
     this.wireExecutor('ops.agent_mission', async (params) => {
       const opportunityId = typeof params?.opportunityId === 'string' ? params.opportunityId : null;
+      const selectTop = typeof params?.selectTop === 'number' ? params.selectTop : null;
+      if (selectTop !== null) {
+        // Natural-objective path: investigate the top-ranked unreviewed
+        // opportunities — deterministic selection, bounded count.
+        const r = await runTopOpportunityInvestigation(this.pool, selectTop, { pool: this.pool, repoDir: process.cwd() });
+        const last = r.parents[r.parents.length - 1];
+        return {
+          capabilityId: 'ops.agent_mission',
+          executed: true,
+          outcome: r.parents.length === 0 || r.parents.every((p) => p.refused) ? 'failure' as const : 'success' as const,
+          result: {
+            missionEventId: last?.missionEventId ?? null,
+            parents: r.parents.map((p) => ({ missionId: p.parentMissionId, opportunity: p.title.slice(0, 60), spawned: p.spawned.length, refused: p.refused ?? null })),
+            selected: r.selected,
+          },
+          error: r.parents.length === 0 ? 'no needs_review opportunities' : (r.parents.every((p) => p.refused) ? 'all investigations refused' : null),
+          evidence: [{ parents: r.parents.map((p) => p.parentMissionId) }],
+          verified: false,
+          verificationDetails: last?.missionEventId ? 'Pending contract verification of persisted agent_mission row' : 'Nothing new persisted',
+        };
+      }
       if (!opportunityId) {
         return {
           capabilityId: 'ops.agent_mission',
           executed: false,
           outcome: 'failure' as const,
           result: null,
-          error: 'capabilityParams.opportunityId required',
+          error: 'capabilityParams.opportunityId or capabilityParams.selectTop required',
           evidence: [],
           verified: false,
-          verificationDetails: 'Missing opportunityId',
+          verificationDetails: 'Missing opportunityId/selectTop',
         };
       }
       const res = await runInvestigateMission(this.pool, opportunityId, { pool: this.pool, repoDir: process.cwd() });

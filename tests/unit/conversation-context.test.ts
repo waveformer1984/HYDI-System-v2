@@ -74,6 +74,19 @@ describe('classifyLifeIntent', () => {
     expect(classifyLifeIntent('look into it')).toBeNull();      // ambiguous — no action
   });
 
+  test('investigate_top requires imperative verb + opportunity scope', () => {
+    expect(classifyLifeIntent('investigate whether there are worthwhile ProtoForge opportunities today')).toEqual({ kind: 'investigate_top' });
+    expect(classifyLifeIntent('find the best protoforge opportunities')).toEqual({ kind: 'investigate_top' });
+    // Questions are never actions
+    expect(classifyLifeIntent('what opportunities did protoforge find')).toBeNull();
+    expect(classifyLifeIntent('are there worthwhile opportunities')).toBeNull();
+  });
+
+  test('findings intent is read-only recall', () => {
+    expect(classifyLifeIntent('what did the agents find')).toEqual({ kind: 'findings' });
+    expect(classifyLifeIntent('do the agents agree')).toEqual({ kind: 'findings' });
+  });
+
   test('casual chat is not an intent', () => {
     expect(classifyLifeIntent("I'm burned out today")).toBeNull();
     expect(classifyLifeIntent('how are you')).toBeNull();

@@ -161,7 +161,9 @@ export type LifeIntent =
   | { kind: 'focus'; project: string }
   | { kind: 'remember'; text: string }
   | { kind: 'recall' }
-  | { kind: 'investigate'; target: string };
+  | { kind: 'findings' }
+  | { kind: 'investigate'; target: string }
+  | { kind: 'investigate_top' };
 
 export function classifyLifeIntent(message: string): LifeIntent | null {
   const m = message.trim();
@@ -178,6 +180,17 @@ export function classifyLifeIntent(message: string): LifeIntent | null {
   if (inv) {
     const target = inv[1].replace(/^['"]|['"]$/g, '');
     return { kind: 'investigate', target };
+  }
+  // Natural objective without a target: "investigate whether there are
+  // worthwhile opportunities", "find the best protoforge opportunities".
+  // IMPERATIVE ONLY — the message must start with a verb; questions like
+  // "what did protoforge find" are never turned into actions.
+  if (/^(?:investigate|research|find|look for|scout|dig into|check)\b.*\b(?:opportunit|protoforge|market)\b/i.test(m)) {
+    return { kind: 'investigate_top' };
+  }
+  // Read-only result recall: "what did the agents find", "do they agree"
+  if (/\b(?:what did the agents? (find|say)|do the agents? agree|agent results?|latest (findings|results))\b/i.test(m)) {
+    return { kind: 'findings' };
   }
   return null;
 }

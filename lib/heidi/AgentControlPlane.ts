@@ -557,6 +557,33 @@ export async function runInvestigateMission(
   return { parentMissionId: parent.missionId, missionEventId: parent.missionEventId, spawned };
 }
 
+/**
+ * Investigate the top-ranked unreviewed ProtoForge opportunities — the
+ * natural-language entry point ("investigate worthwhile opportunities").
+ * Selection is deterministic (confidence desc) and bounded: at most
+ * `limit` investigations, each subject to the concurrency budget.
+ * Returns every parent so the caller can report truthfully.
+ */
+export async function runTopOpportunityInvestigation(
+  pool: Pick<Pool, 'query'>,
+  limit = 1,
+  reconcileDeps?: ReconcileDeps,
+): Promise<{ parents: Array<{ parentMissionId: string; missionEventId: string | null; spawned: string[]; refused?: string; opportunityId: string; title: string }>; selected: number }> {
+  const n = Math.max(1, Math.min(limit, 2)); // hard cap: 2 investigations per call
+  const { rows } = await pool.query(
+    `SELECT id, title, confidence FROM protoforge_opportunities
+     WHERE status = 'needs_review' ORDER BY confidence DESC NULLS LAST LIMIT $1`,
+    [n],
+  );
+  const parents = [] as Array<{ parentMissionId: string; missionEventId: string | null; spawned: string[]; refused?: string; opportunityId: string; title: string }>;
+  for (const opp of rows) {
+    const r = await runInvestigateMission(pool, String(opp.id), reconcileDeps);
+    parents.push({ ...r, opportunityId: String(opp.id), title: String(opp.title) });
+    if (r.refused) break; // budget exhausted — don't keep creating parents
+  }
+  return { parents, selected: parents.length };
+}
+
 // ── Governed agent controls (Phase D) ───────────────────────────────────
 
 export interface ControlResult {

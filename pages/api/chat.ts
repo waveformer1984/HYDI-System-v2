@@ -266,6 +266,44 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           text = `Noted: "${lifeIntent.text.slice(0, 120)}"`;
         } else if (lifeIntent.kind === 'recall') {
           text = recallAnswer(await getLifeContext(sb, user_id));
+        } else if (lifeIntent.kind === 'findings') {
+          // Read-only: summarize the latest agent RESULT messages.
+          const { data: rows } = await sb.from('heidi_events')
+            .select('payload, created_at')
+            .eq('event_type', 'agent_message')
+            .eq('payload->>type', 'RESULT')
+            .order('created_at', { ascending: false })
+            .limit(8);
+          const results = (rows ?? []) as Array<{ payload: Record<string, unknown>; created_at: string }>;
+          if (results.length === 0) {
+            text = 'No agent results yet — ask me to investigate something first.';
+          } else {
+            const lines = results.map((r) => {
+              const p = r.payload as { from?: string; content?: string; evidence?: unknown };
+              return `  [${String(p.from ?? 'agent').replace(/^agent-/, '')}] ${String(p.content ?? '').slice(0, 110)}`;
+            });
+            text = `Latest agent findings:\n${lines.join('\n')}\n(full evidence is on the /coo board — click an agent)`;
+          }
+        } else if (lifeIntent.kind === 'investigate_top') {
+          const { data: goalRow, error } = await sb.from('heidi_goals').insert({
+            goal_type: 'mission',
+            title: 'Investigate top ProtoForge opportunities',
+            description: 'Operator-requested investigation of the highest-confidence unreviewed opportunities',
+            purpose: 'operator command via chat',
+            priority: 5,
+            status: 'pending',
+            owner: 'operator',
+            confidence: 0.9,
+            context: {
+              producerKey: `cmd:investigate-top:${Date.now()}`,
+              producedBy: 'human-operator',
+              capabilityId: 'ops.agent_mission',
+              capabilityParams: { selectTop: 1 },
+              completeOnVerify: true,
+            },
+          }).select('id').single();
+          if (error) throw new Error(error.message);
+          text = `On it — I'll investigate the highest-confidence unreviewed opportunity: two independent research agents plus an analyst (governed goal ${goalRow.id.slice(0, 8)}). Ask "what did the agents find" in a few minutes.`;
         } else {
           // investigate — translate into a governed goal only when the
           // target is an explicit opportunity reference.
