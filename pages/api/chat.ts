@@ -8,9 +8,57 @@
  */
 
 import { NextApiRequest, NextApiResponse } from 'next';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { isClaudeAvailable } from '../../lib/claude';
 import { runHeidiAgentStream } from '../../lib/heidi-agent';
 import { HeidiOrchestrator } from '../../lib/orchestrator';
+import {
+  classifyCooIntent,
+  answerFromCooState,
+  COO_STALENESS_MS,
+} from '../../lib/heidi/CooBriefing';
+import type { CooState } from '../../lib/heidi/CooState';
+
+// Lazy Supabase client — same pattern as lib/orchestrator.ts; a missing env
+// must degrade the COO path, not crash the route.
+let _cooSupabase: SupabaseClient | null = null;
+function getCooSupabase(): SupabaseClient {
+  if (!_cooSupabase) {
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      throw new Error('Supabase env vars not configured');
+    }
+    _cooSupabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+  }
+  return _cooSupabase;
+}
+
+/**
+ * Answer operational questions from the latest persisted coo_state row —
+ * the daemon's authoritative executive snapshot — rather than the web
+ * process's in-memory orchestrator. Returns null for non-operational
+ * messages so they fall through to the normal chat path.
+ */
+async function tryCooResponse(message: string): Promise<string | null> {
+  const intent = classifyCooIntent(message);
+  if (!intent) return null;
+  try {
+    const { data, error } = await getCooSupabase()
+      .from('heidi_events')
+      .select('payload, created_at')
+      .eq('event_type', 'coo_state')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error || !data?.payload) {
+      return `COO state unavailable — no persisted coo_state snapshot could be read (${error?.message ?? 'no rows'}).`;
+    }
+    const state = data.payload as CooState;
+    const stale = Date.now() - new Date(data.created_at as string).getTime() > COO_STALENESS_MS;
+    return answerFromCooState(state, intent, stale);
+  } catch (e) {
+    return `COO state unavailable — ${e instanceof Error ? e.message : 'unknown error'}.`;
+  }
+}
 
 /**
  * Detect system-state questions that HEIDI should answer from live runtime
@@ -116,6 +164,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Intercept system-state questions and answer from live runtime state
     // rather than LLM inference. This prevents hallucination about the
     // system's own status and provides instant, accurate responses.
+    // Operational questions resolve against the persisted COO state first
+    // (the daemon's authoritative snapshot). Non-operational or unreadable
+    // falls through to the existing runtime-state + LLM paths.
+    const cooResponse = await tryCooResponse(message);
+    if (cooResponse) {
+      sse(res, { type: 'metadata', model_used: 'coo-state', latency: 0 });
+      sse(res, { type: 'content', content: cooResponse });
+      res.write('data: [DONE]\n\n');
+      return res.end();
+    }
+
     const orchestrator = new HeidiOrchestrator();
     const stateResponse = trySystemStateResponse(message, orchestrator);
     if (stateResponse) {
