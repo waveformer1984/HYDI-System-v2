@@ -2728,6 +2728,34 @@ export class CognitiveCore {
       }
     }
 
+    // Terminal failure: a capability-bound goal whose capability executed
+    // and failed (or refused) must not re-pend — otherwise the same refusal
+    // replays every cycle and starves real work. Failure is evidence.
+    if (
+      state.selectedAction?.targetGoalId
+      && state.executionResult?.outcome === 'failure'
+      && !goalUpdated
+    ) {
+      try {
+        const goal =
+          state.pendingWork.find((g) => g.goalId === state.selectedAction!.targetGoalId)
+          ?? await this.goals.getGoal(state.selectedAction.targetGoalId as string);
+        if (
+          goal
+          && goal.context?.capabilityId === state.selectedAction.capabilityId
+          && goal.status !== 'completed'
+          && goal.status !== 'failed'
+        ) {
+          await this.goals.updateGoal(goal.goalId, {
+            status: 'failed',
+            result: state.executionResult.error ?? 'capability refused or failed',
+          });
+        }
+      } catch {
+        // Failure bookkeeping is not fatal to the cycle
+      }
+    }
+
     return {
       lessonLearned: lessons.length > 0,
       lesson,
