@@ -868,6 +868,36 @@ export const OPS_ACK_HUMAN_ACTION = defineContract({
   },
 });
 
+export const OPS_AGENT_MISSION = defineContract({
+  identity: {
+    id: 'ops.agent_mission',
+    version: '1.0.0',
+    owner: OWNER,
+    provider: 'cognitive_core',
+    description: 'Create a bounded multi-agent mission and spawn governed in-process workers',
+  },
+  effects: [dbEffect('heidi_events', 'create')],
+  reversibility: {
+    kind: 'none',
+    windowMs: 0,
+    caveat: 'Append-only mission/agent event records; agents run bounded in-process work.',
+  },
+  cost: { estimatedMs: 10_000, timeoutMs: 60_000 },
+  verification: {
+    description:
+      'The agent_mission row exists in heidi_events carrying the parent missionId — re-read by event id.',
+    observation: dbObservation('sql:heidi_events:id={missionEventId}', ['id', 'event_type', 'payload']),
+    conditions: [
+      { field: 'found', operator: 'eq', expected: true },
+      { field: 'event_type', operator: 'eq', expected: 'agent_mission' },
+      { field: 'payload.status', operator: 'eq', expected: 'PENDING' },
+    ],
+    onFailure: 'escalate',
+    maxRetries: 1,
+    requiresHumanConfirmation: false,
+  },
+});
+
 // ---------------------------------------------------------------------------
 // Writes reached only from inside revenue.run_cycle
 // ---------------------------------------------------------------------------
@@ -1132,6 +1162,7 @@ export const EXTENDED_CONTRACTS: CapabilityContract[] = [
   OPS_RECOVER_DAEMON_R0,
   OPS_COO_STATE,
   OPS_ACK_HUMAN_ACTION,
+  OPS_AGENT_MISSION,
   // external / system-affecting
   TOOL_SEND_EMAIL,
   SELF_RUN_SELF_REPAIR,

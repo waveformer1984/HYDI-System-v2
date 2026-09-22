@@ -161,6 +161,7 @@ describe('ops.coo_state collection + selection', () => {
       applicationHealth: 'HEALTHY',
       work: { goalsOpen: 0, goalsInProgress: 0, escalationsOpen: 0, escalationsNew24h: 0, interventionsPending: 0, authEscalations24h: 0 },
       humanActions: { open: 0, backlogRowCount: 0, items: [] },
+      agents: { active: 0, stale: 0, missionsByStatus: {}, recent: [] },
       protoforge: { lastRunAt: null, lastRunStatus: null, opportunitiesTotal: 0, pendingReview: 0, approved: 0 },
       revenue: { opportunitiesOpen: 0 },
       events24h: {},

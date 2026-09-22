@@ -60,6 +60,7 @@ import { collectReconciliation, resolveGitHead } from './DeploymentReconciliatio
 import { runR0Recovery } from './SelfRepairR0';
 import { collectCooState } from './CooState';
 import { acknowledgeHumanAction } from './HumanActionQueue';
+import { runInvestigateMission, collectAgentState } from './AgentControlPlane';
 
 export type CognitivePhase =
   | 'perceive' | 'validate' | 'understand' | 'update_world_model'
@@ -1643,6 +1644,44 @@ export class CognitiveCore {
         verificationDetails: res.ok
           ? 'Pending contract verification of persisted human_action_ack row'
           : 'Refused before write — nothing to verify',
+      };
+    });
+
+    // Bounded multi-agent mission — currently one governed workload:
+    // protoforge.investigate (research A ∥ research B → analyst C).
+    // Agents are in-process bounded workers; all state is event-sourced.
+    this.wireExecutor('ops.agent_mission', async (params) => {
+      const opportunityId = typeof params?.opportunityId === 'string' ? params.opportunityId : null;
+      if (!opportunityId) {
+        return {
+          capabilityId: 'ops.agent_mission',
+          executed: false,
+          outcome: 'failure' as const,
+          result: null,
+          error: 'capabilityParams.opportunityId required',
+          evidence: [],
+          verified: false,
+          verificationDetails: 'Missing opportunityId',
+        };
+      }
+      const res = await runInvestigateMission(this.pool, opportunityId, { pool: this.pool, repoDir: process.cwd() });
+      const spawned = res.spawned.length > 0;
+      return {
+        capabilityId: 'ops.agent_mission',
+        executed: true,
+        outcome: res.refused ? 'failure' as const : 'success' as const,
+        result: {
+          parentMissionId: res.parentMissionId,
+          missionEventId: res.missionEventId,
+          spawned: res.spawned,
+          refused: res.refused ?? null,
+        },
+        error: res.refused ?? null,
+        evidence: [{ parentMissionId: res.parentMissionId, spawned: res.spawned }],
+        verified: false,
+        verificationDetails: res.missionEventId
+          ? 'Pending contract verification of persisted agent_mission row'
+          : 'Mission already existed (idempotent collapse) — nothing new to verify',
       };
     });
   }

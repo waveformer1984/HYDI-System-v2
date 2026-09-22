@@ -22,6 +22,7 @@ function state(over: Partial<CooState> = {}): CooState {
     applicationHealth: 'HEALTHY',
     work: { goalsOpen: 1, goalsInProgress: 1, escalationsOpen: 7222, escalationsNew24h: 0, interventionsPending: 0, authEscalations24h: 0 },
     humanActions: { open: 0, backlogRowCount: 7222, items: [] },
+    agents: { active: 0, stale: 0, missionsByStatus: {}, recent: [] },
     protoforge: { lastRunAt: '2026-09-22T14:10:08Z', lastRunStatus: 'success', opportunitiesTotal: 81, pendingReview: 81, approved: 0 },
     revenue: { opportunitiesOpen: 2 },
     events24h: { cognitive_cycle: 40 },

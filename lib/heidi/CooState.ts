@@ -20,6 +20,7 @@
 import type { Pool } from 'pg';
 import { collectReconciliation, type ReconcileDeps, type ReconciliationReport } from './DeploymentReconciliation';
 import { collectHumanActionQueue, type HumanActionQueue, type HumanAction } from './HumanActionQueue';
+import { collectAgentState, type MissionStatus } from './AgentControlPlane';
 
 export interface CooNextAction {
   kind: 'capability' | 'human' | 'none';
@@ -63,6 +64,13 @@ export interface CooState {
   revenue: {
     opportunitiesOpen: number;
   };
+  /** Multi-agent control plane (event-sourced, survives restart). */
+  agents: {
+    active: number;
+    stale: number;
+    missionsByStatus: Partial<Record<MissionStatus, number>>;
+    recent: Array<{ missionId: string; role: string; status: MissionStatus; objective: string }>;
+  };
   events24h: Record<string, number>;
   nextAction: CooNextAction;
   briefing: string;
@@ -92,6 +100,13 @@ export function selectNextAction(s: Omit<CooState, 'nextAction' | 'briefing'>): 
   // interventions, pending authorization decisions, and fresh escalations
   // are real pending actions; backlog aggregates never select work.
   const firstOpen = s.humanActions.items.find((i) => i.status === 'OPEN' && !i.backlog);
+  // Agent-safety failure outranks the human queue but not drift.
+  if (s.agents.stale > 0 || (s.agents.missionsByStatus.FAILED ?? 0) > 0) {
+    return {
+      kind: 'human',
+      reason: `${s.agents.stale} stale agent(s), ${s.agents.missionsByStatus.FAILED ?? 0} failed mission(s) — supervision anomaly requires review`,
+    };
+  }
   // 1. Deployment drift outranks everything — runtime truth first.
   if (s.deployment.verdict === 'DEPLOYMENT_DRIFT') {
     return {
@@ -123,7 +138,9 @@ export function selectNextAction(s: Omit<CooState, 'nextAction' | 'briefing'>): 
 export async function collectCooState(deps: CooDeps): Promise<CooState> {
   const now = deps.now ?? (() => Date.now());
   const reconcile = deps.reconcile ?? (() => collectReconciliation(deps));
-  const [recon, queue] = await Promise.all([reconcile(), collectHumanActionQueue(deps.pool)]);
+  const [recon, queue, agentPlane] = await Promise.all([
+    reconcile(), collectHumanActionQueue(deps.pool), collectAgentState(deps.pool),
+  ]);
 
   const [goalsOpen, goalsInProgress, escalationsOpen, escalationsNew24h, interventionsPending, authEscalations24h] =
     await Promise.all([
@@ -191,6 +208,18 @@ export async function collectCooState(deps: CooDeps): Promise<CooState> {
     },
     protoforge: proto,
     revenue: { opportunitiesOpen: revenueOpps },
+    agents: {
+      active: agentPlane.activeCount,
+      stale: agentPlane.staleCount,
+      missionsByStatus: agentPlane.missions.reduce<Partial<Record<MissionStatus, number>>>((acc, m) => {
+        acc[m.status] = (acc[m.status] ?? 0) + 1;
+        return acc;
+      }, {}),
+      recent: agentPlane.missions.slice(-5).map((m) => ({
+        missionId: m.missionId, role: m.role, status: m.status,
+        objective: m.objective.slice(0, 80),
+      })),
+    },
     events24h,
   };
 
@@ -203,6 +232,7 @@ export async function collectCooState(deps: CooDeps): Promise<CooState> {
     `  Work:        ${goalsOpen} open goals, ${goalsInProgress} in progress, ${interventionsPending} interventions pending`,
     `  Escalations: ${escalationsOpen} open (${escalationsNew24h} new/24h) — historical backlog human-owned`,
     `  Human queue: ${queue.open} pending action(s), ${queue.backlogRowCount} backlog row(s)`,
+    `  Agents:      ${agentPlane.activeCount} active, ${agentPlane.staleCount} stale, ${agentPlane.missions.length} mission(s) total`,
     `  ProtoForge:  last run ${proto.lastRunStatus ?? 'none'} at ${proto.lastRunAt ?? 'never'}; ${proto.opportunitiesTotal} opportunities (${proto.pendingReview} pending review, ${proto.approved} approved)`,
     `  Revenue:     ${revenueOpps} open opportunities (read-only; no reconciled-revenue claim)`,
     `  Next:        ${nextAction.kind === 'capability' ? nextAction.capabilityId : nextAction.kind === 'human' ? 'HUMAN ACTION REQUIRED' : 'NO_ACTION_REQUIRED'} — ${nextAction.reason}`,

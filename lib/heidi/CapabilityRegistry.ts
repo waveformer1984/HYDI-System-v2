@@ -651,6 +651,19 @@ export const DEFAULT_CAPABILITIES: Array<Omit<CapabilityDescriptor, 'status' | '
     timeoutMs: 30000,
     metadata: { actionType: 'acknowledge_human_action' },
   },
+  {
+    capabilityId: 'ops.agent_mission',
+    capabilityName: 'Bounded Agent Mission',
+    description: 'Create and run a bounded multi-agent mission (protoforge.investigate): registers agents, runs research + analyst workers in-process with durable heartbeats/status, persists results as events. Concurrency-budgeted; agents cannot spawn agents.',
+    provider: 'cognitive_core',
+    riskLevel: 'R2',
+    autonomyRequirement: 2,
+    dependencies: [],
+    verificationStrategy: 'The agent_mission event row exists in heidi_events for the returned parentMissionId',
+    reversible: false,
+    timeoutMs: 60000,
+    metadata: { actionType: 'agent_mission' },
+  },
 
   // Revenue pipeline capabilities (ProspectPipeline)
   {
