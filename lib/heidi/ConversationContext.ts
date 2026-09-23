@@ -168,6 +168,8 @@ export type LifeIntent =
   | { kind: 'plate' }
   | { kind: 'next_steps' }
   | { kind: 'findings' }
+  | { kind: 'revenue_path' }
+  | { kind: 'business_decision'; path: 'model_prep' | 'rezonate_music' | 'separate_products' }
   | { kind: 'control_last'; action: 'stop' | 'retry' }
   | { kind: 'investigate'; target: string }
   | { kind: 'investigate_top' };
@@ -247,6 +249,22 @@ export function classifyLifeIntent(message: string): LifeIntent | null {
   // Read-only result recall: "what did the agents find", "do they agree"
   if (/\b(?:what did (the agents?|you|we) (find|say|discover)|do (the agents?|they) agree|agent results?|latest (findings|results)|check what happened|what happened (there|with it|with that))\b/i.test(m)) {
     return { kind: 'findings' };
+  }
+  // Commercial truth — "what are we selling", "revenue path", "business
+  // path". Must never conflate market intel with customers/revenue.
+  if (/revenue path|what are we (selling|offering)|what do we sell|business path|what'?s our (offer|product)|commercial (state|path|picture)/i.test(m)) {
+    return { kind: 'revenue_path' };
+  }
+  // Human business-path selection — "the business path is model_prep".
+  // Only an explicit human sentence may record this; never inferred.
+  const bp = m.match(/(?:business path|revenue path|commercial path) is (model_?prep|rezonate(?:_music)?|separate_?products|both)/i);
+  if (bp) {
+    const v = bp[1].toLowerCase().replace(/ /g, '_');
+    const path = v === 'both' ? 'separate_products'
+      : v.startsWith('rezonate') ? 'rezonate_music'
+        : v === 'model_prep' || v === 'modelprep' ? 'model_prep'
+          : 'separate_products';
+    return { kind: 'business_decision', path };
   }
   // "What do you remember about X" — full recall is honest (notes are
   // user-visible anyway); a scoped filter would pretend precision we

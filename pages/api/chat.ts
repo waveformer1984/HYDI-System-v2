@@ -361,6 +361,48 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             if (error) throw new Error(error.message);
             text = `Got it — submitted a governed ${lifeIntent.action} for the most recent mission (${target[0].slice(0, 20)}…). The daemon picks it up next cycle; it'll be refused if that mission already finished.`;
           }
+        } else if (lifeIntent.kind === 'revenue_path') {
+          // Commercial truth — strictly separated categories. Never
+          // conflate scouting with customers or test payments with revenue.
+          const { getOfferCatalog } = await import('../../lib/revenue/OfferCatalog');
+          const offer = getOfferCatalog().get('protoforge_model_prep') as {
+            name?: string; setupPrice?: number; description?: string;
+          } | undefined;
+          const [{ data: oppRows }, { data: decRows }, { data: jobRows }] = await Promise.all([
+            sb.from('protoforge_opportunities').select('status'),
+            sb.from('human_intervention_requests').select('status, resolution_note')
+              .eq('request_id', 'decision:business-path').order('created_at', { ascending: false }).limit(1),
+            sb.from('customer_jobs').select('payment_status, stripe_checkout_session_id').limit(200),
+          ]);
+          const pending = (oppRows ?? []).filter((o: { status: string }) => o.status === 'needs_review').length;
+          const decision = decRows?.[0];
+          const realPaid = (jobRows ?? []).filter((j: { payment_status: string; stripe_checkout_session_id: string | null }) =>
+            j.payment_status === 'paid' && typeof j.stripe_checkout_session_id === 'string' && j.stripe_checkout_session_id.startsWith('cs_live_'));
+          const lines: string[] = [
+            `Sellable offer: ${offer?.name ?? 'ProtoForge Model Prep'} — $${((offer?.setupPrice ?? 2900) / 100).toFixed(0)} one-time. ${offer?.description ?? ''}`,
+            `Scouting pipeline: ${pending} opportunities pending review — currently AI/music market intelligence. That's market research, not customers.`,
+            'Customer evidence: none. No identified prospect has expressed need or evaluated the offer.',
+            'Payments: Stripe test checkout works (a real test session exists). Verified revenue: $0 — no live transaction has ever been reconciled.',
+            decision?.status === 'completed'
+              ? `Business path: ${decision.resolution_note ?? 'selected (see decision record)'}.`
+              : 'Business path: UNSELECTED — the offer targets 3D-print fabrication while scouting tracks AI/music. That choice is yours: tell me "the business path is model_prep", "rezonate_music", or "separate_products".',
+          ];
+          text = lines.join('\n');
+        } else if (lifeIntent.kind === 'business_decision') {
+          // Record the human's explicit business-path choice — completes the
+          // pending decision intervention and stores a durable note.
+          const { error: decErr } = await sb.from('human_intervention_requests')
+            .update({
+              status: 'completed',
+              resolution_note: `HUMAN_SELECTED: ${lifeIntent.path}`,
+              completed_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            })
+            .eq('request_id', 'decision:business-path')
+            .eq('status', 'pending');
+          if (decErr) throw new Error(decErr.message);
+          await remember(sb, user_id, `Business path selected: ${lifeIntent.path}`, session_id);
+          text = `Recorded — the business path is now ${lifeIntent.path}. I'll treat that as the commercial direction going forward.`;
         } else if (lifeIntent.kind === 'focus') {
           const { project, created } = await setFocus(sb, user_id, lifeIntent.project, session_id);
           text = `Focus set: ${project.name}${created ? ' (new project — recorded)' : ''}.`;
