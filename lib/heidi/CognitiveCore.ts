@@ -60,7 +60,7 @@ import { collectReconciliation, resolveGitHead } from './DeploymentReconciliatio
 import { runR0Recovery } from './SelfRepairR0';
 import { collectCooState } from './CooState';
 import { acknowledgeHumanAction } from './HumanActionQueue';
-import { runInvestigateMission, runTopOpportunityInvestigation, collectAgentState, superviseAgents, stopAgent, retryMission, resolveHumanAction } from './AgentControlPlane';
+import { runInvestigateMission, runTopicInvestigation, runTopOpportunityInvestigation, collectAgentState, superviseAgents, stopAgent, retryMission, resolveHumanAction } from './AgentControlPlane';
 
 export type CognitivePhase =
   | 'perceive' | 'validate' | 'understand' | 'update_world_model'
@@ -1652,7 +1652,23 @@ export class CognitiveCore {
     // Agents are in-process bounded workers; all state is event-sourced.
     this.wireExecutor('ops.agent_mission', async (params) => {
       const opportunityId = typeof params?.opportunityId === 'string' ? params.opportunityId : null;
-      const selectTop = typeof params?.selectTop === 'number' ? params.selectTop : null;
+      const topic = typeof params?.topic === 'string' && params.topic.trim() ? params.topic.trim() : null;
+      const selectTop = typeof params?.selectTop === 'number' && params.selectTop > 0 ? params.selectTop : null;
+      if (topic) {
+        // Free-form topic mission — the executive-loop path for
+        // "investigate X" where X isn't a scouted opportunity.
+        const res = await runTopicInvestigation(this.pool, topic, { pool: this.pool, repoDir: process.cwd() });
+        return {
+          capabilityId: 'ops.agent_mission',
+          executed: true,
+          outcome: res.refused ? 'failure' as const : 'success' as const,
+          result: { parentMissionId: res.parentMissionId, missionEventId: res.missionEventId, spawned: res.spawned, topic },
+          error: res.refused ?? null,
+          evidence: [{ parentMissionId: res.parentMissionId }],
+          verified: false,
+          verificationDetails: 'Pending contract verification of persisted agent_mission row',
+        };
+      }
       if (selectTop !== null) {
         // Natural-objective path: investigate the top-ranked unreviewed
         // opportunities — deterministic selection, bounded count.

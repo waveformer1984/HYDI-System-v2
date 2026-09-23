@@ -395,14 +395,24 @@ export const ROLE_HANDLERS: Record<AgentRole, RoleHandler> = {
   // sources for the title terms, return evidence. Real outbound fetch —
   // same source class as the existing scout.
   research: async ({ pool, mission, heartbeat, post }) => {
+    const topicParam = typeof mission.params?.topic === 'string' ? mission.params.topic : null;
     const oppId = String(mission.targetKey ?? '').replace(/:[AB]$/, '');
-    const opp = (await pool.query(
-      `SELECT id, title, why_it_matters, confidence, evidence, source_type FROM protoforge_opportunities WHERE id = $1`,
-      [oppId],
-    )).rows[0];
-    if (!opp) throw new Error(`opportunity ${oppId} not found`);
-    await heartbeat('opportunity loaded');
-    const baseTerms = String(opp.title).split(/\s+/).filter((w) => w.length > 3);
+    let subjectTitle: string;
+    let oppRow: unknown = null;
+    if (topicParam) {
+      // Topic mission — no opportunity row; the topic IS the subject.
+      subjectTitle = topicParam;
+    } else {
+      const opp = (await pool.query(
+        `SELECT id, title, why_it_matters, confidence, evidence, source_type FROM protoforge_opportunities WHERE id = $1`,
+        [oppId],
+      )).rows[0];
+      if (!opp) throw new Error(`opportunity ${oppId} not found`);
+      oppRow = opp;
+      subjectTitle = String(opp.title);
+    }
+    await heartbeat(topicParam ? 'topic loaded' : 'opportunity loaded');
+    const baseTerms = subjectTitle.split(/\s+/).filter((w) => w.length > 3);
     const variant = String(mission.params?.variant ?? 'a');
     // Variant B uses a different term window so the two research agents
     // gather genuinely independent source sets.
@@ -418,10 +428,10 @@ export const ROLE_HANDLERS: Record<AgentRole, RoleHandler> = {
     } catch (e) {
       sources = [{ error: e instanceof Error ? e.message : 'fetch failed' }];
     }
-    await post('heidi', 'EVIDENCE', `${sources.length} sources gathered for "${String(opp.title).slice(0, 60)}"`, sources);
+    await post('heidi', 'EVIDENCE', `${sources.length} sources gathered for "${subjectTitle.slice(0, 60)}"`, sources);
     return {
-      result: { opportunityTitle: opp.title, confidence: opp.confidence, sourceCount: sources.length },
-      evidence: [{ opportunity: opp }, { sources }],
+      result: { subjectTitle, topic: topicParam, confidence: oppRow ? (oppRow as { confidence?: number }).confidence : null, sourceCount: sources.length },
+      evidence: [oppRow ? { opportunity: oppRow } : { topic: topicParam }, { sources }],
     };
   },
 
@@ -502,12 +512,39 @@ export async function runInvestigateMission(
   opportunityId: string,
   reconcileDeps?: ReconcileDeps,
 ): Promise<{ parentMissionId: string; missionEventId: string | null; spawned: string[]; refused?: string }> {
+  return runInvestigateMissionForSubject(pool, { opportunityId }, reconcileDeps);
+}
+
+/**
+ * Free-form topic investigation — same governed mission shape (parent +
+ * 2 research + analyst) but the subject is a natural-language topic
+ * instead of a protoforge_opportunities row. Used by the executive loop
+ * when the human approves "investigate X" for something that isn't a
+ * scouted opportunity (e.g. "the model_prep market").
+ */
+export async function runTopicInvestigation(
+  pool: Pick<Pool, 'query'>,
+  topic: string,
+  reconcileDeps?: ReconcileDeps,
+): Promise<{ parentMissionId: string; missionEventId: string | null; spawned: string[]; refused?: string }> {
+  return runInvestigateMissionForSubject(pool, { topic }, reconcileDeps);
+}
+
+async function runInvestigateMissionForSubject(
+  pool: Pick<Pool, 'query'>,
+  subject: { opportunityId: string } | { topic: string },
+  reconcileDeps?: ReconcileDeps,
+): Promise<{ parentMissionId: string; missionEventId: string | null; spawned: string[]; refused?: string }> {
+  const isTopic = 'topic' in subject;
+  const key = isTopic ? `topic:${subject.topic.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 60)}` : subject.opportunityId;
+  const label = isTopic ? `topic "${subject.topic}"` : `ProtoForge opportunity ${subject.opportunityId}`;
   const parent = await createMission(pool, {
     role: 'analyst',
-    objective: `investigate ProtoForge opportunity ${opportunityId}`,
+    objective: `investigate ${label}`,
     scope: 'protoforge-opportunity',
-    targetKey: `parent:${opportunityId}`,
+    targetKey: `parent:${key}`,
     authorizationLevel: 'R2',
+    params: isTopic ? { topic: subject.topic } : undefined,
   });
   const spawned: string[] = [];
 
@@ -522,11 +559,11 @@ export async function runInvestigateMission(
 
   const mk = (variant: 'a' | 'b') => createMission(pool, {
     role: 'research',
-    objective: `research opportunity ${opportunityId} (variant ${variant})`,
+    objective: `research ${label} (variant ${variant})`,
     scope: 'protoforge-opportunity',
-    targetKey: `${opportunityId}:${variant.toUpperCase()}`,
+    targetKey: `${key}:${variant.toUpperCase()}`,
     parentMissionId: parent.missionId,
-    params: { variant },
+    params: isTopic ? { variant, topic: subject.topic } : { variant },
     authorizationLevel: 'R1',
     maxRuntimeMs: 3 * 60 * 1000,
   });
@@ -534,9 +571,9 @@ export async function runInvestigateMission(
   const b = await mk('b');
   const analyst = await createMission(pool, {
     role: 'analyst',
-    objective: `synthesize investigation of ${opportunityId}`,
+    objective: `synthesize investigation of ${label}`,
     scope: 'protoforge-opportunity',
-    targetKey: `${opportunityId}:analyst`,
+    targetKey: `${key}:analyst`,
     parentMissionId: parent.missionId,
     authorizationLevel: 'R1',
   });
