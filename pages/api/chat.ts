@@ -515,7 +515,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             `Scouting pipeline: ${pending} opportunities pending review — currently AI/music market intelligence. That's market research, not customers.`,
             'Customer evidence: none. No identified prospect has expressed need or evaluated the offer.',
             'Payments: Stripe test checkout works (a real test session exists). Verified revenue: $0 — no live transaction has ever been reconciled.',
-            decision?.status === 'completed'
+            decision?.status === 'resolved' || decision?.status === 'completed'
               ? `Business path: ${decision.resolution_note ?? 'selected (see decision record)'}.`
               : 'Business path: UNSELECTED — the offer targets 3D-print fabrication while scouting tracks AI/music. That choice is yours: tell me "the business path is model_prep", "rezonate_music", or "separate_products".',
           ];
