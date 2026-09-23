@@ -335,6 +335,33 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             .order('created_at', { ascending: true }).limit(5);
           let proposals = pendingProps ?? [];
           if (!proposals.length) {
+            // Model Prep path selected: if the deliverable pipeline has
+            // never produced a verified artifact, propose the labeled
+            // test job — the smallest revenue-loop proof available.
+            const { data: dec } = await sb.from('human_intervention_requests')
+              .select('status, resolution_note')
+              .eq('request_id', 'decision:business-path').limit(1);
+            const modelPrepSelected = dec?.[0]?.status === 'resolved'
+              && String(dec[0].resolution_note ?? '').includes('model_prep');
+            if (modelPrepSelected) {
+              const { data: prevTest } = await sb.from('heidi_events').select('id')
+                .eq('event_type', 'companion_proposal')
+                .eq('payload->>kind', 'model_prep_test').limit(1);
+              if (!prevTest?.length) {
+                const { data: prop } = await sb.from('heidi_events').insert({
+                  event_type: 'companion_proposal', division: 'companion',
+                  payload: {
+                    status: 'pending', kind: 'model_prep_test',
+                    description: 'Run one labeled test job through the Model Prep pipeline',
+                    reason: 'business path is model_prep and no verified artifact exists yet — this proves generate→verify→awaiting_review with payment staying unpaid',
+                    requestText: 'a simple 40mm x 30mm x 20mm box enclosure with a lid',
+                  },
+                }).select('id, payload').single();
+                if (prop) proposals = [prop];
+              }
+            }
+          }
+          if (!proposals.length) {
             const { data: topOpp } = await sb.from('protoforge_opportunities')
               .select('id, title, confidence')
               .eq('status', 'needs_review')
@@ -401,7 +428,30 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             await sb.from('heidi_events')
               .update({ payload: { ...p.payload, status: 'approved', resolvedAt: new Date().toISOString() } })
               .eq('id', p.id);
-            if (p.payload.kind === 'investigate') {
+            if (p.payload.kind === 'model_prep_test') {
+              // Labeled TEST harness — proves the internal deliverable
+              // path (generate → verify → awaiting_review). payment_status
+              // stays 'unpaid'; no checkout, no revenue claim.
+              const { getJobManager } = await import('../../lib/revenue/JobManager');
+              const { executeJob } = await import('../../lib/revenue/JobExecutor');
+              const jm = getJobManager();
+              const job = await jm.createJob({
+                customerEmail: 'pipeline-test@hydi-test.local',
+                customerName: 'Pipeline Test (not a customer)',
+                product: 'protoforge_model_prep',
+                requestText: String(p.payload.requestText ?? 'a simple 40mm x 30mm x 20mm box enclosure with a lid'),
+                requirements: { objectType: 'box', width: 40, height: 30, depth: 20 },
+                priceCents: 2900,
+              });
+              // created -> queued is a valid transition; payment gate is
+              // intentionally bypassed for this labeled test job (unpaid).
+              await sb.from('customer_jobs').update({ job_status: 'queued', updated_at: new Date().toISOString() }).eq('job_id', job.jobId);
+              const res = await executeJob(job.jobId);
+              const after = await jm.getJob(job.jobId);
+              text = res.success
+                ? `Approved — executed. Job ${job.jobId.slice(0, 20)}: artifacts generated and verified (${res.artifacts.length} files: .scad + .stl + spec). Job is now '${after?.jobStatus}' — awaiting YOUR review for delivery. Payment: unpaid (labeled test — not revenue).`
+                : `Approved — execution attempted but FAILED: ${res.error}. Nothing was delivered or charged.`;
+            } else if (p.payload.kind === 'investigate') {
               const { data: goalRow, error } = await sb.from('heidi_goals').insert({
                 goal_type: 'mission',
                 title: String(p.payload.description),
