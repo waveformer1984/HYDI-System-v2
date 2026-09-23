@@ -173,6 +173,7 @@ export type LifeIntent =
   | { kind: 'last_action' }
   | { kind: 'autonomy' }
   | { kind: 'business_decision'; path: 'model_prep' | 'rezonate_music' | 'separate_products' }
+  | { kind: 'topic'; topic: string }
   | { kind: 'control_last'; action: 'stop' | 'retry' }
   | { kind: 'investigate'; target: string }
   | { kind: 'investigate_top' };
@@ -203,6 +204,11 @@ export function classifyLifeIntent(message: string): LifeIntent | null {
   if (/what('?s| is) on my plate|what'?s (important|the priority)|what (matters|is important)( today| there| now)?|what should i (look at|care about)/i.test(m)) {
     return { kind: 'plate' };
   }
+  // Conversational topic anchor — "thinking about X", "the 3D printing
+  // offer", "looking at Rezonate". Stores the referent so "it"/"that"
+  // resolves to what the human actually meant.
+  const topic = m.match(/(?:thinking about|looking at|considering|regarding) (?:the )?([a-z0-9][a-z0-9 _\-]{2,60}?)(?:\s+again)?$/i);
+  if (topic) return { kind: 'topic', topic: topic[1].trim() };
   // Governed last-thing control — resolves to the most recent mission.
   if (/^(?:stop|kill|cancel|halt)\s+(?:that|it|this)$/i.test(m)) return { kind: 'control_last', action: 'stop' };
   if (/^(?:retry|rerun|try again|redo)\s+(?:that|it|this)?$/i.test(m)) return { kind: 'control_last', action: 'retry' };

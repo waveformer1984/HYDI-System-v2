@@ -566,11 +566,28 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             });
             text = `Latest agent findings:\n${lines.join('\n')}\n(full evidence is on the /coo board — click an agent)`;
           }
+        } else if (lifeIntent.kind === 'topic') {
+          await remember(sb, user_id, `Current topic: ${lifeIntent.topic}`, session_id);
+          text = `Noted — ${lifeIntent.topic}. When you say "investigate that" or "that", I'll take it to mean this.`;
         } else if (lifeIntent.kind === 'investigate_top') {
+          // Resolve the referent: if the human anchored a topic this
+          // session ("thinking about X"), "investigate that" means X —
+          // not the generic top-opportunity default.
+          const { data: topicNote } = await sb.from('memories')
+            .select('content, created_at')
+            .eq('user_id', user_id)
+            .ilike('content', 'Current topic:%')
+            .order('created_at', { ascending: false }).limit(1).maybeSingle();
+          const topicFresh = topicNote && (Date.now() - new Date(topicNote.created_at as string).getTime()) < 24 * 60 * 60 * 1000
+            ? String(topicNote.content).replace(/^Current topic:\s*/i, '')
+            : null;
+          const target = topicFresh ?? 'top ProtoForge opportunities';
           const { data: goalRow, error } = await sb.from('heidi_goals').insert({
             goal_type: 'mission',
-            title: 'Investigate top ProtoForge opportunities',
-            description: 'Operator-requested investigation of the highest-confidence unreviewed opportunities',
+            title: `Investigate ${target}`,
+            description: topicFresh
+              ? `Operator-requested investigation of the current topic: ${topicFresh}`
+              : 'Operator-requested investigation of the highest-confidence unreviewed opportunities',
             purpose: 'operator command via chat',
             priority: 5,
             status: 'pending',
@@ -580,12 +597,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
               producerKey: `cmd:investigate-top:${Date.now()}`,
               producedBy: 'human-operator',
               capabilityId: 'ops.agent_mission',
-              capabilityParams: { selectTop: 1 },
+              capabilityParams: topicFresh ? { selectTop: 1, topic: topicFresh } : { selectTop: 1 },
               completeOnVerify: true,
             },
           }).select('id').single();
           if (error) throw new Error(error.message);
-          text = `On it — I'll investigate the highest-confidence unreviewed opportunity: two independent research agents plus an analyst (governed goal ${goalRow.id.slice(0, 8)}). Ask "what did the agents find" in a few minutes.`;
+          text = topicFresh
+            ? `On it — investigating "${topicFresh}" (your current topic): two independent research agents plus an analyst (governed goal ${goalRow.id.slice(0, 8)}). Ask "what did the agents find" in a few minutes.`
+            : `On it — I'll investigate the highest-confidence unreviewed opportunity: two independent research agents plus an analyst (governed goal ${goalRow.id.slice(0, 8)}). Ask "what did the agents find" in a few minutes.`;
         } else {
           // investigate — translate into a governed goal only when the
           // target is an explicit opportunity reference.
