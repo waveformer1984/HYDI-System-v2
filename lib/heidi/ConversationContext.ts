@@ -177,6 +177,7 @@ export type LifeIntent =
   | { kind: 'self_development' }
   | { kind: 'approve'; ordinal: number | null }
   | { kind: 'decline' }
+  | { kind: 'roadmap' }
   | { kind: 'control_last'; action: 'stop' | 'retry' }
   | { kind: 'investigate'; target: string }
   | { kind: 'investigate_top' };
@@ -207,6 +208,11 @@ export function classifyLifeIntent(message: string): LifeIntent | null {
     return { kind: 'approve', ordinal: ord && !isNaN(ord) ? ord : null };
   }
   if (/^(?:not yet|no|nope|decline|skip (?:it|that)|don'?t|later|hold off)\.?!?$/i.test(m)) return { kind: 'decline' };
+  // Roadmap — current open work + pending decision, in order. Real
+  // persisted state only, never an invented plan.
+  if (/roadmap|plan (for|of) (today|the week|action)|what'?s the plan|sequence|order of operations/i.test(m)) {
+    return { kind: 'roadmap' };
+  }
   // Self-development requests — answered truthfully, never silently
   // accepted: I can investigate and propose, not self-modify.
   if (/(further|advance|improve|develop|work on) (your|my|its) (development|self|capabilities|improvement)|improve yourself|self[- ]?improve|take action to (further|improve|develop)/i.test(m)) {

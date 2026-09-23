@@ -372,7 +372,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             .order('created_at', { ascending: true }).limit(10);
           const list = (props ?? []) as Array<{ id: string; payload: Record<string, unknown> }>;
           if (!list.length) {
-            text = 'Nothing is waiting for approval.';
+            // No pending proposal — but if a human decision is open,
+            // name it; an approval-shaped reply deserves a real pointer
+            // rather than a dead end.
+            const { data: dec } = await sb.from('human_intervention_requests')
+              .select('objective')
+              .eq('request_id', 'decision:business-path')
+              .eq('status', 'pending').limit(1);
+            text = dec?.length
+              ? 'Nothing needs approval right now — but a decision does: the business path is still unselected. Say "the business path is model_prep", "rezonate_music", or "separate_products".'
+              : 'Nothing is waiting for approval. Ask "what should we do next" and I\'ll propose something bounded.';
           } else if (lifeIntent.kind === 'decline') {
             if (list.length > 1) {
               text = `There are ${list.length} proposals pending — say "approve" and I'll list them so you can pick which to decline.`;
@@ -588,6 +597,29 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             'Only you can: approve payments or live transactions, contact anyone outside this system, choose the business direction, or grant new authorizations.',
             'Anything outside my envelope becomes an explicit human action item — I surface it, I never pretend to have done it.',
           ].join('\n');
+        } else if (lifeIntent.kind === 'roadmap') {
+          // Ordered view of real persisted state — not an invented plan.
+          const [{ data: openGoals }, { data: dec }, { data: pendProps }] = await Promise.all([
+            sb.from('heidi_goals').select('title, status, created_at')
+              .in('status', ['pending', 'in_progress'])
+              .order('created_at', { ascending: false }).limit(5),
+            sb.from('human_intervention_requests').select('objective')
+              .eq('request_id', 'decision:business-path').eq('status', 'pending').limit(1),
+            sb.from('heidi_events').select('payload')
+              .eq('event_type', 'companion_proposal').eq('payload->>status', 'pending')
+              .order('created_at', { ascending: true }).limit(5),
+          ]);
+          const lines = ['Current roadmap (from persisted state — not a plan I invented):'];
+          let n = 0;
+          if (dec?.length) lines.push(`${++n}. HUMAN DECISION — business path unselected (gates what scouting/investigations are even for).`);
+          for (const g of (openGoals ?? []) as Array<{ title: string; status: string }>) {
+            lines.push(`${++n}. ${g.status === 'in_progress' ? 'IN PROGRESS' : 'PENDING'} — ${g.title.slice(0, 70)}`);
+          }
+          for (const p of (pendProps ?? []) as Array<{ payload: Record<string, unknown> }>) {
+            lines.push(`${++n}. AWAITING YOUR APPROVAL — ${String(p.payload.description).slice(0, 70)}`);
+          }
+          if (!n) lines.push('Nothing queued — tell me what to focus on.');
+          text = lines.join('\n');
         } else if (lifeIntent.kind === 'self_development') {
           text = [
             "I can't act on my own development — that's deliberately outside my envelope. What I can do:",
