@@ -151,7 +151,7 @@ export default function HeidiChat() {
         body: JSON.stringify({
           message: text.trim(),
           session_id: sessionId,
-          user_id: 'heidi-user',
+          user_id: 'operator',
         }),
         signal: abortRef.current.signal,
       })

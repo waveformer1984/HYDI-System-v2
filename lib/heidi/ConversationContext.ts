@@ -213,7 +213,7 @@ export function classifyLifeIntent(message: string): LifeIntent | null {
     return { kind: 'recall' };
   }
   // Unified briefing — "give me the real picture", "I'm here, what's up"
-  if (/real picture|big picture|full briefing|catch me up|bring me up to speed|what'?s up|give me (the )?(rundown|briefing|summary)/i.test(m)) {
+  if (/real picture|big picture|full briefing|catch me up|bring me up to speed|what'?s up|give me (the )?(rundown|briefing|summary)|what'?s? going on|look at everything|where do we stand|how'?s it going|status|health/i.test(m)) {
     return { kind: 'briefing' };
   }
   // Forward-looking: "what should happen next", "what do we do now"
