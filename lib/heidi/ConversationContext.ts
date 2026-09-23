@@ -175,6 +175,8 @@ export type LifeIntent =
   | { kind: 'business_decision'; path: 'model_prep' | 'rezonate_music' | 'separate_products' }
   | { kind: 'topic'; topic: string }
   | { kind: 'self_development' }
+  | { kind: 'approve'; ordinal: number | null }
+  | { kind: 'decline' }
   | { kind: 'control_last'; action: 'stop' | 'retry' }
   | { kind: 'investigate'; target: string }
   | { kind: 'investigate_top' };
@@ -197,6 +199,14 @@ export function classifyLifeIntent(message: string): LifeIntent | null {
   // Bare "remember that" — store the current focus as a priority note;
   // handler decides what 'that' resolves to from durable state.
   if (/^remember\s+(?:that|it|this)$/i.test(m)) return { kind: 'remember_last' };
+  // Approval / decline of a pending proposal. Bare "yes" resolves ONLY
+  // against the pending-proposal store — ambiguity handled downstream.
+  const ap = m.match(/^(?:approve|approved|yes|yeah|yep|ok(?:ay)?|do (?:it|that)|go ahead|sounds good|ship it)(?:\s+(?:the\s+)?(first|second|third|\d+)(?:\s+one)?)?\.?!?$/i);
+  if (ap) {
+    const ord = ap[1] ? ({ first: 1, second: 2, third: 3 }[ap[1].toLowerCase()] ?? parseInt(ap[1], 10)) : null;
+    return { kind: 'approve', ordinal: ord && !isNaN(ord) ? ord : null };
+  }
+  if (/^(?:not yet|no|nope|decline|skip (?:it|that)|don'?t|later|hold off)\.?!?$/i.test(m)) return { kind: 'decline' };
   // Self-development requests — answered truthfully, never silently
   // accepted: I can investigate and propose, not self-modify.
   if (/(further|advance|improve|develop|work on) (your|my|its) (development|self|capabilities|improvement)|improve yourself|self[- ]?improve|take action to (further|improve|develop)/i.test(m)) {

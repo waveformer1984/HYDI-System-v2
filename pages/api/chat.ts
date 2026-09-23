@@ -325,7 +325,94 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           if (unsurfacedLines.length) {
             lines.push('', 'While you were away:', ...unsurfacedLines);
           }
+          // Executive recommendation — one durable proposal awaiting
+          // approval. Dedup by target so a declined proposal is not
+          // silently re-created on the next greeting.
+          const { data: pendingProps } = await sb.from('heidi_events')
+            .select('id, payload')
+            .eq('event_type', 'companion_proposal')
+            .eq('payload->>status', 'pending')
+            .order('created_at', { ascending: true }).limit(5);
+          let proposals = pendingProps ?? [];
+          if (!proposals.length) {
+            const { data: topOpp } = await sb.from('protoforge_opportunities')
+              .select('id, title, confidence')
+              .eq('status', 'needs_review')
+              .order('confidence', { ascending: false }).limit(1).maybeSingle();
+            if (topOpp) {
+              const { data: existing } = await sb.from('heidi_events').select('id')
+                .eq('event_type', 'companion_proposal')
+                .eq('payload->>target', String(topOpp.id)).limit(1);
+              if (!existing?.length) {
+                const { data: prop } = await sb.from('heidi_events').insert({
+                  event_type: 'companion_proposal', division: 'companion',
+                  payload: {
+                    status: 'pending', kind: 'investigate', target: String(topOpp.id),
+                    description: `Investigate "${String(topOpp.title).slice(0, 80)}"`,
+                    reason: `highest-confidence unreviewed opportunity (score ${topOpp.confidence ?? 'n/a'})`,
+                  },
+                }).select('id, payload').single();
+                if (prop) proposals = [prop];
+              }
+            }
+          }
+          if (proposals.length === 1) {
+            const p = proposals[0].payload as { description?: string; reason?: string };
+            lines.push(`Recommended: ${p.description} — ${p.reason}. Say "approve" to start it, or "not yet" to defer.`);
+          } else if (proposals.length > 1) {
+            lines.push(`${proposals.length} proposals await a decision — say "approve" and I'll list them.`);
+          }
           text = lines.join('\n');
+        } else if (lifeIntent.kind === 'approve' || lifeIntent.kind === 'decline') {
+          // Resolve a pending proposal — never guess when ambiguous.
+          const { data: props } = await sb.from('heidi_events')
+            .select('id, payload')
+            .eq('event_type', 'companion_proposal')
+            .eq('payload->>status', 'pending')
+            .order('created_at', { ascending: true }).limit(10);
+          const list = (props ?? []) as Array<{ id: string; payload: Record<string, unknown> }>;
+          if (!list.length) {
+            text = 'Nothing is waiting for approval.';
+          } else if (lifeIntent.kind === 'decline') {
+            if (list.length > 1) {
+              text = `There are ${list.length} proposals pending — say "approve" and I'll list them so you can pick which to decline.`;
+            } else {
+              await sb.from('heidi_events')
+                .update({ payload: { ...list[0].payload, status: 'declined', resolvedAt: new Date().toISOString() } })
+                .eq('id', list[0].id);
+              text = `Deferred: ${list[0].payload.description}.`;
+            }
+          } else if (list.length > 1 && lifeIntent.ordinal === null) {
+            text = `There are ${list.length} proposed actions:\n` +
+              list.map((p, i) => `${i + 1}. ${p.payload.description}`).join('\n') +
+              `\nWhich one should I approve? ("approve the second one")`;
+          } else {
+            const idx = lifeIntent.ordinal ? Math.min(lifeIntent.ordinal, list.length) - 1 : 0;
+            const p = list[idx];
+            await sb.from('heidi_events')
+              .update({ payload: { ...p.payload, status: 'approved', resolvedAt: new Date().toISOString() } })
+              .eq('id', p.id);
+            if (p.payload.kind === 'investigate') {
+              const { data: goalRow, error } = await sb.from('heidi_goals').insert({
+                goal_type: 'mission',
+                title: String(p.payload.description),
+                description: `Approved via chat. ${String(p.payload.reason ?? '')}`,
+                purpose: 'operator approval via chat',
+                priority: 5, status: 'pending', owner: 'operator', confidence: 0.9,
+                context: {
+                  producerKey: `cmd:approved:${p.id}`,
+                  producedBy: 'human-operator',
+                  capabilityId: 'ops.agent_mission',
+                  capabilityParams: { opportunityId: p.payload.target },
+                  completeOnVerify: true,
+                },
+              }).select('id').single();
+              if (error) throw new Error(error.message);
+              text = `Approved. Starting: ${p.payload.description} — governed goal ${goalRow.id.slice(0, 8)}. I'll report when it completes.`;
+            } else {
+              text = `Approved: ${p.payload.description}. No governed executor exists for this proposal type yet — I've recorded your decision.`;
+            }
+          }
         } else if (lifeIntent.kind === 'plate') {
           // "What's on my plate" — focus + the top actionable items,
           // spoken naturally. Read-only; never invents work.
