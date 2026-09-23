@@ -260,6 +260,39 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         const sb = getCooSupabase();
         let text: string;
         if (lifeIntent.kind === 'greeting' || lifeIntent.kind === 'briefing') {
+          // Completion awareness: consequential outcomes since the last
+          // surfaced marker, once — then mark. Only greeting surfaces it
+          // (briefing is on-demand inspection, not a welcome-back).
+          let unsurfacedLines: string[] = [];
+          if (lifeIntent.kind === 'greeting') {
+            const { data: marker } = await sb.from('heidi_events')
+              .select('payload')
+              .eq('event_type', 'companion_surface')
+              .order('created_at', { ascending: false }).limit(1).maybeSingle();
+            const sinceTs = (marker?.payload as { upto?: string } | undefined)?.upto
+              ?? new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+            const q = sb.from('heidi_events')
+              .select('event_type, payload, created_at')
+              .in('event_type', ['agent_status', 'investigation'])
+              .gt('created_at', sinceTs)
+              .order('created_at', { ascending: false }).limit(200);
+            const { data: newEv } = await q;
+            const done = new Set<string>(); const failed = new Set<string>();
+            for (const e of (newEv ?? []) as Array<{ payload: Record<string, unknown> }>) {
+              const mid = String(e.payload?.missionId ?? e.payload?.id ?? '');
+              if (!mid) continue;
+              if (e.payload?.status === 'COMPLETED') done.add(mid);
+              if (e.payload?.status === 'FAILED') failed.add(mid);
+            }
+            if (done.size) unsurfacedLines.push(`${done.size} mission(s) completed — "what did you find" for the results.`);
+            if (failed.size) unsurfacedLines.push(`${failed.size} mission(s) failed — "what should happen next" covers it.`);
+            if (unsurfacedLines.length) {
+              await sb.from('heidi_events').insert({
+                event_type: 'companion_surface', division: 'companion',
+                payload: { user_id, upto: new Date().toISOString(), surfaced: { done: done.size, failed: failed.size } },
+              });
+            }
+          }
           // Presence/opening → companion briefing from durable state.
           const [life, cooRow] = await Promise.all([
             getLifeContext(sb, user_id),
@@ -288,6 +321,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             lines.push(`Next: ${na?.kind === 'capability' ? na.capabilityId : na?.kind === 'human' ? `HUMAN — ${na.reason}` : 'NO_ACTION_REQUIRED'}`);
           } else {
             lines.push('System state UNKNOWN — no coo_state snapshot readable.');
+          }
+          if (unsurfacedLines.length) {
+            lines.push('', 'While you were away:', ...unsurfacedLines);
           }
           text = lines.join('\n');
         } else if (lifeIntent.kind === 'plate') {

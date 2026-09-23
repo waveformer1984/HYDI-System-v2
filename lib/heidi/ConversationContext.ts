@@ -196,7 +196,7 @@ export function classifyLifeIntent(message: string): LifeIntent | null {
   // handler decides what 'that' resolves to from durable state.
   if (/^remember\s+(?:that|it|this)$/i.test(m)) return { kind: 'remember_last' };
   // Greeting / presence — "I'm here", "hi heidi", bare "heidi"
-  if (/^(?:i'?m (?:here|back)|hi|hello|hey|good (?:morning|afternoon|evening)|morning|evening|heidi)$/i.test(m)) {
+  if (/^(?:(?:i'?m|i am) (?:here|back)|hi|hello|hey|good (?:morning|afternoon|evening)|morning|evening|heidi)$/i.test(m)) {
     return { kind: 'greeting' };
   }
   // "What's on my plate", "what matters today/there", "what's important"
