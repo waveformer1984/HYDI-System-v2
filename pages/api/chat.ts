@@ -501,6 +501,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             'Only you can: approve payments or live transactions, contact anyone outside this system, choose the business direction, or grant new authorizations.',
             'Anything outside my envelope becomes an explicit human action item — I surface it, I never pretend to have done it.',
           ].join('\n');
+        } else if (lifeIntent.kind === 'self_development') {
+          text = [
+            "I can't act on my own development — that's deliberately outside my envelope. What I can do:",
+            '• investigate a bounded improvement and bring you a proposal (e.g. "investigate the web-server memory problem")',
+            '• tell you my current known gaps honestly',
+            '',
+            'Current gaps I know about: local conversational model is RAM-limited, the web process dies under memory pressure, I handle one intent per message, and the business path is still UNSELECTED (your call).',
+            'Actual changes to my machinery go through you — via Devin or your own commits.',
+          ].join('\n');
         } else if (lifeIntent.kind === 'focus') {
           const { project, created } = await setFocus(sb, user_id, lifeIntent.project, session_id);
           text = `Focus set: ${project.name}${created ? ' (new project — recorded)' : ''}.`;

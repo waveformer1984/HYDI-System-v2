@@ -174,6 +174,7 @@ export type LifeIntent =
   | { kind: 'autonomy' }
   | { kind: 'business_decision'; path: 'model_prep' | 'rezonate_music' | 'separate_products' }
   | { kind: 'topic'; topic: string }
+  | { kind: 'self_development' }
   | { kind: 'control_last'; action: 'stop' | 'retry' }
   | { kind: 'investigate'; target: string }
   | { kind: 'investigate_top' };
@@ -196,6 +197,11 @@ export function classifyLifeIntent(message: string): LifeIntent | null {
   // Bare "remember that" — store the current focus as a priority note;
   // handler decides what 'that' resolves to from durable state.
   if (/^remember\s+(?:that|it|this)$/i.test(m)) return { kind: 'remember_last' };
+  // Self-development requests — answered truthfully, never silently
+  // accepted: I can investigate and propose, not self-modify.
+  if (/(further|advance|improve|develop|work on) (your|my|its) (development|self|capabilities|improvement)|improve yourself|self[- ]?improve|take action to (further|improve|develop)/i.test(m)) {
+    return { kind: 'self_development' };
+  }
   // Greeting / presence — "I'm here", "hi heidi", bare "heidi"
   if (/^(?:(?:i'?m|i am) (?:here|back)|hi|hello|hey|good (?:morning|afternoon|evening)|morning|evening|heidi)$/i.test(m)) {
     return { kind: 'greeting' };
