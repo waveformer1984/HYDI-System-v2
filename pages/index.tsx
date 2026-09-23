@@ -233,7 +233,7 @@ export default function HeidiChat() {
           m.id === assistantId
             ? {
               ...m,
-              content: m.content || 'Sorry, something went wrong.',
+              content: m.content || "I couldn't complete that response — the connection to my reasoning service failed. Your message wasn't treated as completed work.",
               isStreaming: false,
             }
             : m
@@ -333,9 +333,9 @@ export default function HeidiChat() {
             H
           </div>
           <div>
-            <h1 className="text-sm font-semibold tracking-tight">Heidi</h1>
+            <h1 className="text-sm font-semibold tracking-widest">HEIDI</h1>
             <p className="text-[11px] text-gray-500">
-              {model ? model : 'connecting...'}
+              {model ? model : 'HYDI companion'}
             </p>
           </div>
         </div>
@@ -350,10 +350,10 @@ export default function HeidiChat() {
             </span>
           )}
           <Link
-            href="/funding"
-            className="text-[11px] text-gray-500 hover:text-gray-300 transition-colors"
+            href="/coo"
+            className="text-[11px] text-gray-500 hover:text-gray-300 transition-colors border border-white/[0.08] rounded-md px-2 py-1"
           >
-            Z-Labs
+            COO
           </Link>
           <button
             onClick={() => {
@@ -421,18 +421,19 @@ export default function HeidiChat() {
               </div>
               <div className="text-center">
                 <h2 className="text-lg font-medium text-gray-300">
-                  What can I help with?
+                  HEIDI
                 </h2>
                 <p className="text-sm text-gray-600 mt-1 max-w-md">
-                  Ask me about system status, run tasks, manage revenue streams, or just chat.
+                  Your companion for HYDI, ProtoForge, and the work around them.
+                  Talk naturally — I keep track of what we&apos;re doing.
                 </p>
               </div>
               <div className="flex flex-wrap gap-2 mt-4 justify-center">
                 {[
-                  'System status',
-                  'Show revenue streams',
-                  'Run health check',
-                  'What can you do?',
+                  'What are we working on?',
+                  "What's on my plate?",
+                  'Where were we?',
+                  'What did you find?',
                 ].map(q => (
                   <button
                     key={q}
@@ -601,10 +602,10 @@ function AssistantBubble({
               <div
                 key={action.actionId || i}
                 className={`text-[11px] rounded-lg px-2.5 py-2 border ${action.status === 'pending_approval'
-                    ? 'bg-amber-400/[0.06] border-amber-400/20'
-                    : action.status === 'failed'
-                      ? 'bg-red-400/[0.04] border-red-400/10'
-                      : 'bg-white/[0.02] border-white/[0.04]'
+                  ? 'bg-amber-400/[0.06] border-amber-400/20'
+                  : action.status === 'failed'
+                    ? 'bg-red-400/[0.04] border-red-400/10'
+                    : 'bg-white/[0.02] border-white/[0.04]'
                   }`}
               >
                 <div className="flex items-center gap-2 text-gray-400">
