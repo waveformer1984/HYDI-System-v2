@@ -169,6 +169,9 @@ export type LifeIntent =
   | { kind: 'next_steps' }
   | { kind: 'findings' }
   | { kind: 'revenue_path' }
+  | { kind: 'whats_changed' }
+  | { kind: 'last_action' }
+  | { kind: 'autonomy' }
   | { kind: 'business_decision'; path: 'model_prep' | 'rezonate_music' | 'separate_products' }
   | { kind: 'control_last'; action: 'stop' | 'retry' }
   | { kind: 'investigate'; target: string }
@@ -265,6 +268,17 @@ export function classifyLifeIntent(message: string): LifeIntent | null {
         : v === 'model_prep' || v === 'modelprep' ? 'model_prep'
           : 'separate_products';
     return { kind: 'business_decision', path };
+  }
+  // Daily-loop questions — delta vs last contact, last governed
+  // outcome, and honest capability boundaries.
+  if (/what'?s? (changed|new|happened) (since|while|overnight|today|lately)|catch me up|what did i miss|anything (change|new|happen)/i.test(m)) {
+    return { kind: 'whats_changed' };
+  }
+  if (/what happened (with|to|from) (the last|that|it)|what did you (do|find) last|last (thing|mission|task|investigation) you did|result of the last/i.test(m)) {
+    return { kind: 'last_action' };
+  }
+  if (/what can you do (without me|on your own|by yourself|autonomously)|what are you (allowed|able) to do|what'?s (within|inside) your (authority|remit)/i.test(m)) {
+    return { kind: 'autonomy' };
   }
   // "What do you remember about X" — full recall is honest (notes are
   // user-visible anyway); a scoped filter would pretend precision we

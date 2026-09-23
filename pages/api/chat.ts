@@ -403,6 +403,68 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           if (decErr) throw new Error(decErr.message);
           await remember(sb, user_id, `Business path selected: ${lifeIntent.path}`, session_id);
           text = `Recorded — the business path is now ${lifeIntent.path}. I'll treat that as the commercial direction going forward.`;
+        } else if (lifeIntent.kind === 'whats_changed') {
+          // Delta vs last contact — sessions.updated_at is the previous
+          // touch timestamp (this request hasn't written yet).
+          const { data: sess } = await sb.from('sessions').select('updated_at')
+            .eq('session_id', session_id).maybeSingle();
+          const since = sess?.updated_at ? new Date(sess.updated_at as string) : null;
+          if (!since || Date.now() - since.getTime() < 90 * 1000) {
+            text = "You just talked to me — nothing has happened since. Ask 'what's going on' for the current picture.";
+          } else {
+            const { data: evs } = await sb.from('heidi_events')
+              .select('event_type, payload, created_at')
+              .gt('created_at', since.toISOString())
+              .order('created_at', { ascending: false })
+              .limit(200);
+            const counts = new Map<string, number>();
+            const notable: string[] = [];
+            for (const e of (evs ?? []) as Array<{ event_type: string; payload: Record<string, unknown> }>) {
+              counts.set(e.event_type, (counts.get(e.event_type) ?? 0) + 1);
+              if (e.event_type === 'agent_status' && e.payload?.status === 'COMPLETED') {
+                notable.push(`mission ${String(e.payload.missionId ?? '').slice(0, 20)} finished`);
+              }
+              if (e.event_type === 'agent_status' && e.payload?.status === 'FAILED') {
+                notable.push(`mission ${String(e.payload.missionId ?? '').slice(0, 20)} failed`);
+              }
+            }
+            const lines: string[] = [`Since we last spoke (${Math.round((Date.now() - since.getTime()) / 60000)} min ago):`];
+            const uniq = [...new Set(notable)].slice(0, 5);
+            if (uniq.length) lines.push(...uniq.map((n) => `• ${n}`));
+            const cycles = counts.get('cognitive_cycle') ?? 0;
+            const missions = counts.get('agent_mission') ?? 0;
+            const escalations = counts.get('authorization_escalation') ?? 0;
+            if (missions) lines.push(`• ${missions} new mission event(s)`);
+            if (escalations) lines.push(`• ${escalations} authorization escalation(s)`);
+            if (!uniq.length && !missions && !escalations) lines.push('• routine background work only — nothing needs you.');
+            if (cycles) lines.push(`(${cycles} background cycles ran)`);
+            text = lines.join('\n');
+          }
+        } else if (lifeIntent.kind === 'last_action') {
+          const { data: goal } = await sb.from('heidi_goals')
+            .select('id, title, status, created_at')
+            .order('created_at', { ascending: false }).limit(1).maybeSingle();
+          if (!goal) {
+            text = 'No governed work has been recorded yet.';
+          } else {
+            const { data: missions } = await sb.from('heidi_events')
+              .select('payload')
+              .in('event_type', ['agent_status'])
+              .order('created_at', { ascending: false }).limit(30);
+            const family = (missions ?? []).map((e: { payload: Record<string, unknown> }) => e.payload)
+              .filter((p) => String(p.goalId ?? '') === String(goal.id));
+            const done = family.filter((p) => p.status === 'COMPLETED').length;
+            const failed = family.filter((p) => p.status === 'FAILED').length;
+            text = `Last thing I did: "${goal.title}" — ${String(goal.status).toUpperCase()}` +
+              (family.length ? ` (${done} missions completed, ${failed} failed).` : '.') +
+              (goal.status === 'completed' ? ' Ask "what did you find" for the results.' : '');
+          }
+        } else if (lifeIntent.kind === 'autonomy') {
+          text = [
+            'Without you, I can: brief you on real state, remember things, track our projects, run bounded investigations (research agents + analyst), and recover routine failures.',
+            'Only you can: approve payments or live transactions, contact anyone outside this system, choose the business direction, or grant new authorizations.',
+            'Anything outside my envelope becomes an explicit human action item — I surface it, I never pretend to have done it.',
+          ].join('\n');
         } else if (lifeIntent.kind === 'focus') {
           const { project, created } = await setFocus(sb, user_id, lifeIntent.project, session_id);
           text = `Focus set: ${project.name}${created ? ' (new project — recorded)' : ''}.`;
