@@ -385,5 +385,37 @@ module.exports = {
       merge_logs: true,
       kill_timeout: 10000,
     },
+    {
+      // Model Prep Executor: drains customer_jobs 'queued' into the
+      // artifact pipeline (generate -> verify -> awaiting_review).
+      // Never touches payment, approval, or delivery — those remain
+      // webhook/human gated. Single instance; the claim SQL is
+      // FOR UPDATE SKIP LOCKED so the queued->executing grab is atomic.
+      name: 'hydi-model-prep-executor',
+      script: 'scripts/model-prep-executor-scheduler.js',
+      cwd: __dirname,
+      instances: 1,
+      exec_mode: 'fork',
+      args: '',
+      env: {
+        NODE_ENV: 'development',
+        MODEL_PREP_INTERVAL_MS: '30000',
+      },
+      env_production: {
+        NODE_ENV: 'production',
+        MODEL_PREP_INTERVAL_MS: '30000',
+      },
+      autorestart: true,
+      watch: false,
+      max_memory_restart: '200M',
+      min_uptime: '10s',
+      max_restarts: 10,
+      restart_delay: 5000,
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+      error_file: './logs/pm2-model-prep-executor.err.log',
+      out_file: './logs/pm2-model-prep-executor.out.log',
+      merge_logs: true,
+      kill_timeout: 10000,
+    },
   ],
 };
