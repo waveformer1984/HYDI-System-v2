@@ -342,9 +342,31 @@ something executable.
   reasoning.
 
 ### Pipeline observability
-- Structured trace IDs flowing through all six layers end-to-end
-- Per-layer latency metrics surfaced in `api/mobile-status.js`
-- Replay Engine automated regression suite running on every PR
+**Done 2026-09-24**, with one step left:
+- ~~Structured trace IDs flowing through all six layers end-to-end~~ —
+  no code ran all six layers in sequence before this: the gateway wrote
+  the ledger but never classified, `protoforge-core`'s CASCADE never read
+  the ledger or called KILO, and the only KILO → ProtoForge chain was the
+  deprecated `lib/protoforge/replay-engine.ts`. `lib/pipeline/` now
+  composes the existing stage implementations into one run, and every run
+  returns a trace (one `trace_id`, per-stage status, duration and outputs,
+  linked to the ledger fingerprint and the policy decision id).
+- ~~Per-layer latency metrics surfaced in `api/mobile-status.js`~~ — its
+  response now has a `pipeline` field (n / errors / skipped / last, avg,
+  p95 ms per stage, plus outcome counts).
+- ~~Replay Engine automated regression suite running on every PR~~ —
+  `tests/unit/pipeline-replay.test.js` replays
+  `tests/fixtures/pipeline/recorded-events.json` through the real stages
+  and fails on any difference from `golden-traces.json`. It runs in
+  `npm test` / `unit-tests.yml` and `local-ci/unit-tests`.
+- **Still open: route live traffic through it.** `protoforge-core`'s
+  `POST /cascade/event` still uses `modules/cascade-complete-v2`, so
+  `mobile-status`'s `pipeline` field stays at zero until that route (or
+  the gateway's `POST /events`) calls `lib/pipeline`. Deliberately a
+  separate step: switching it makes live events write the RAW LEDGER and
+  go through KILO and the policy engine. `ISSUES_FOUND.md` #80 (CASCADE
+  quarantines nearly everything) should be decided first, or most live
+  events will stop at stage 3.
 
 ### PolicyEngine expansion
 - Additional DSL operators (`contains`, `startsWith`, `regex`)

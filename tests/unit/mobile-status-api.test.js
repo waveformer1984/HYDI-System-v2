@@ -82,6 +82,26 @@ describe('api/mobile-status.js', () => {
     expect(payload.streams).toHaveProperty('galactic_bytes');
   });
 
+  it('reports per-stage pipeline latency from the process-wide metrics', async () => {
+    const { defaultMetrics } = require('../../lib/pipeline/metrics');
+    defaultMetrics.reset();
+    defaultMetrics.recordStage('ledger', 'ok', 12);
+    defaultMetrics.recordStage('protoforge', 'error', 30);
+    defaultMetrics.recordRun('error', '2026-09-24T00:00:00.000Z');
+    mockDashboard = { current_status: 'OK', escalation_level: 'NONE', trend_status: 'stable', jobs_failed: 0, auto_heals_24h: 0 };
+
+    const res = makeRes();
+    await handler({ method: 'GET', headers: { 'x-hydi-service-token': makeServiceToken() } }, res);
+
+    const { pipeline } = res.json.mock.calls[0][0];
+    expect(pipeline.runs).toBe(1);
+    expect(pipeline.outcomes).toEqual({ error: 1 });
+    expect(pipeline.stages.ledger).toMatchObject({ n: 1, errors: 0, last_ms: 12 });
+    expect(pipeline.stages.protoforge).toMatchObject({ n: 1, errors: 1, p95_ms: 30 });
+    expect(Object.keys(pipeline.stages)).toEqual(['ingestion', 'ledger', 'cascade', 'kilo', 'protoforge', 'emission']);
+    defaultMetrics.reset();
+  });
+
   it('handles preflight requests without requiring auth', async () => {
     const res = makeRes();
     await handler({ method: 'OPTIONS', headers: {} }, res);

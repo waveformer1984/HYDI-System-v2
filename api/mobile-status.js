@@ -5,6 +5,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { requireAuth } from '../lib/auth/requireAuth.js';
+import { defaultMetrics as pipelineMetrics } from '../lib/pipeline/metrics.js';
 
 // Constructed lazily (not at module load) so a missing env var surfaces as
 // a graceful 503 from the handler's own try/catch below, instead of
@@ -90,6 +91,10 @@ export default async function handler(req, res) {
       heals_24h: dash.auto_heals_24h || 0,
       streams,
       silent,
+      // Per-stage latency of the six-layer pipeline (lib/pipeline) in this
+      // process: n, errors, skipped, last/avg/p95 ms per stage. All zero
+      // until something in this process runs the pipeline.
+      pipeline: pipelineMetrics.snapshot(),
       ms: Date.now() - started,
       ts: new Date().toISOString(),
     });
@@ -97,6 +102,7 @@ export default async function handler(req, res) {
     return res.status(503).json({
       ok: false,
       alert: err instanceof Error ? err.message : 'unknown error',
+      pipeline: pipelineMetrics.snapshot(),
       ms: Date.now() - started,
       ts: new Date().toISOString(),
     });
