@@ -233,17 +233,27 @@ async function deriveSelfImprovementProposal(
     .order('created_at', { ascending: false }).limit(1);
   if (priorDismiss?.length) {
     const since = new Date(priorDismiss[0].created_at).toISOString();
-    const { data: regen } = await sb.from('heidi_events')
-      .select('payload')
-      .eq('event_type', 'agent_status')
-      .eq('payload->>status', 'FAILED')
-      .ilike('payload->>failure', '%not found%')
+    // Regeneration signal: NEW escalations created after dismissal whose
+    // target still doesn't exist (supervision re-transitioned NEEDS_HUMAN).
+    const { data: regen } = await sb.from('operator_escalations')
+      .select('title, body, created_at')
+      .eq('category', 'agent_mission')
       .gte('created_at', since)
-      .order('created_at', { ascending: false }).limit(20);
-    const missions = [...new Set((regen ?? []).map((r: { payload: Record<string, unknown> }) => String(r.payload.missionId)))];
-    const fresh = missions.length > 0 ? missions : [];
-    if (fresh.length > 0) {
-      const key = `stop_regenerating_mission_${String(fresh[0]).slice(-8)}`;
+      .order('created_at', { ascending: false }).limit(50);
+    const missionIds = new Set<string>();
+    let voidTarget: string | null = null;
+    for (const e of (regen ?? []) as Array<{ title: string; body: string | null }>) {
+      const opp = (e.title + ' ' + (e.body ?? '')).match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i)?.[1];
+      if (!opp) continue;
+      const { data: exists } = await sb.from('protoforge_opportunities').select('id').eq('id', opp).limit(1);
+      if (exists?.length) continue;
+      voidTarget = opp;
+      for (const m of (e.body ?? '').matchAll(/mission-[0-9a-f]+/g)) missionIds.add(m[0]);
+      for (const m of e.title.matchAll(/mission-[0-9a-f]+/g)) missionIds.add(m[0]);
+    }
+    const fresh = voidTarget ? [...missionIds] : [];
+    if (fresh.length > 0 && voidTarget) {
+      const key = `stop_regenerating_mission_${voidTarget.slice(0, 8)}`;
       const { data: prior } = await sb.from('heidi_events').select('id')
         .eq('event_type', 'companion_proposal')
         .eq('payload->>improvementKey', key).limit(1);
@@ -253,9 +263,9 @@ async function deriveSelfImprovementProposal(
           payload: {
             status: 'pending', kind: 'self_improvement',
             improvementKey: key,
-            description: `Stop the regenerating void-premise mission tree (${fresh[0]})`,
-            reason: `Observed: the mission kept FAILING against a deleted target even after its escalations were dismissed (cycle 2) — new failures + new escalations today. Cycle 2 fixed the symptom; the source is still live. Change: mark ${fresh.length} mission(s) STOPPED via the existing event path — supervisor won't retry terminal missions. Risk: low; reversible via manual retry. Verify: next supervision pass produces no new a292a09e failures.`,
-            changeSpec: { type: 'stop_mission', missionIds: fresh.slice(0, 4), target: 'a292a09e-4d0d-4d29-bb0c-e96bf255b51a' },
+            description: `Stop the regenerating void-premise mission tree (target ${voidTarget.slice(0, 8)})`,
+            reason: `Observed: new escalations were created AFTER the cycle-2 dismissal — supervision keeps re-transitioning the same dead missions (NEEDS_HUMAN at 13:06 and again 13:51). Cycle 2 fixed the symptom; the source is still live. Change: mark ${fresh.length} mission(s) STOPPED via the existing event path — supervisor won't retry terminal missions. Risk: low; reversible via manual retry. Verify: next supervision pass produces no new escalations for that target.`,
+            changeSpec: { type: 'stop_mission', missionIds: fresh.slice(0, 4), target: voidTarget },
           },
         }).select('id, payload').single();
         if (prop) return prop;
