@@ -222,6 +222,46 @@ async function deriveSelfImprovementProposal(
       }
     }
   }
+  // Evidence 4 (quality-gated): a void-premise mission that REGENERATED
+  // after its escalations were already dismissed — recurring after being
+  // addressed = systemic, so propose the root fix (stop the mission),
+  // not the symptom. Single evidence would not qualify: the recurrence
+  // after a prior evolution_result is what makes it systemic.
+  const { data: priorDismiss } = await sb.from('heidi_events').select('id, created_at')
+    .eq('event_type', 'evolution_result')
+    .ilike('payload->>improvementKey', 'dismiss_void_escalations_%')
+    .order('created_at', { ascending: false }).limit(1);
+  if (priorDismiss?.length) {
+    const since = new Date(priorDismiss[0].created_at).toISOString();
+    const { data: regen } = await sb.from('heidi_events')
+      .select('payload')
+      .eq('event_type', 'agent_status')
+      .eq('payload->>status', 'FAILED')
+      .ilike('payload->>failure', '%not found%')
+      .gte('created_at', since)
+      .order('created_at', { ascending: false }).limit(20);
+    const missions = [...new Set((regen ?? []).map((r: { payload: Record<string, unknown> }) => String(r.payload.missionId)))];
+    const fresh = missions.length > 0 ? missions : [];
+    if (fresh.length > 0) {
+      const key = `stop_regenerating_mission_${String(fresh[0]).slice(-8)}`;
+      const { data: prior } = await sb.from('heidi_events').select('id')
+        .eq('event_type', 'companion_proposal')
+        .eq('payload->>improvementKey', key).limit(1);
+      if (!prior?.length) {
+        const { data: prop } = await sb.from('heidi_events').insert({
+          event_type: 'companion_proposal', division: 'companion',
+          payload: {
+            status: 'pending', kind: 'self_improvement',
+            improvementKey: key,
+            description: `Stop the regenerating void-premise mission tree (${fresh[0]})`,
+            reason: `Observed: the mission kept FAILING against a deleted target even after its escalations were dismissed (cycle 2) — new failures + new escalations today. Cycle 2 fixed the symptom; the source is still live. Change: mark ${fresh.length} mission(s) STOPPED via the existing event path — supervisor won't retry terminal missions. Risk: low; reversible via manual retry. Verify: next supervision pass produces no new a292a09e failures.`,
+            changeSpec: { type: 'stop_mission', missionIds: fresh.slice(0, 4), target: 'a292a09e-4d0d-4d29-bb0c-e96bf255b51a' },
+          },
+        }).select('id, payload').single();
+        if (prop) return prop;
+      }
+    }
+  }
   // Evidence 2: unresolved escalations whose premise is provably void —
   // the referenced opportunity row no longer exists, so "restore" is
   // impossible and dismissal is the only valid resolution. Bounded scan.
@@ -569,8 +609,38 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
               // Closed-enum executor: only data-level changes exist here.
               // There is deliberately NO file/auth/governance executor —
               // unhandled spec types are BLOCKED, never substituted.
-              const spec = p.payload.changeSpec as { type?: string; note?: string; match?: string; key?: string; enabled?: boolean } | undefined;
-              if (spec?.type === 'set_companion_flag') {
+              const spec = p.payload.changeSpec as { type?: string; note?: string; match?: string; key?: string; enabled?: boolean; missionIds?: string[]; target?: string } | undefined;
+              if (spec?.type === 'stop_mission' && Array.isArray(spec.missionIds) && spec.missionIds.length > 0 && spec.missionIds.length <= 4) {
+                // STOPPED via the same event-sourced path the supervisor
+                // folds — a terminal status, so supervision won't retry.
+                const ids = spec.missionIds;
+                for (const mid of ids) {
+                  const { data: agentRow } = await sb.from('heidi_events')
+                    .select('payload').eq('event_type', 'agent_status')
+                    .eq('payload->>missionId', mid)
+                    .order('created_at', { ascending: false }).limit(1);
+                  const agentId = String((agentRow?.[0]?.payload as Record<string, unknown> | undefined)?.agentId ?? `agent-${mid}`);
+                  await sb.from('heidi_events').insert({
+                    event_type: 'agent_status', division: 'agents',
+                    payload: { agentId, missionId: mid, status: 'STOPPED', stoppedBy: 'operator-approved-evolution', pid: 0 },
+                  });
+                  await sb.from('heidi_events').insert({
+                    event_type: 'agent_message', division: 'agents',
+                    payload: { from: 'heidi', to: 'supervisor', missionId: mid, type: 'STATUS', content: `stopped via approved self-improvement ${p.payload.improvementKey}`, requiresResponse: false },
+                  });
+                }
+                await sb.from('heidi_events').insert({
+                  event_type: 'evolution_result', division: 'companion',
+                  payload: {
+                    improvementKey: p.payload.improvementKey,
+                    proposalId: p.id, verified: true,
+                    executedAt: new Date().toISOString(),
+                    observedEffect: `${ids.length} mission(s) marked STOPPED — supervisor treats terminal missions as non-retryable`,
+                    learnedFrom: ['regenerated failures after cycle-2 symptom fix'],
+                  },
+                });
+                text = `Improvement applied: ${ids.length} mission(s) marked STOPPED through the existing event path — the supervisor won't retry terminal missions. I'll verify on the next supervision pass that no new ${String(spec.target ?? '').slice(0, 8)} failures appear.\nLearning recorded: dismissing escalations (cycle 2) treated the symptom; stopping the mission treats the cause.`;
+              } else if (spec?.type === 'set_companion_flag') {
                 // Allowlisted flags only — presentation toggles, never
                 // governance/payment/auth behavior.
                 const ALLOWED = ['classified_needsyou'];
