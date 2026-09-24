@@ -265,7 +265,7 @@ Standalone implementation of the KILO hypothesis generator:
 
 ### Composed pipeline (`lib/pipeline/`)
 
-The only code that runs all six layers in sequence, reusing each layer's existing implementation (gateway `validateEvent` → RAW LEDGER append → `CascadeClassificationV2` → `KiloEngine` → `autoGate`/`PolicyEngine` → event bus). `createPipeline(deps).run(envelope)` never throws and returns a trace: one `trace_id`, per-stage status, `duration_ms` and key outputs. The `trace_id` is deliberately kept out of the ledger payload so replay hashes stay deterministic. `lib/pipeline/metrics.js` keeps per-stage latency, which `api/mobile-status.js` reports as `pipeline`. `tests/unit/pipeline-replay.test.js` is the replay determinism gate: after an intended behaviour change, regenerate `tests/fixtures/pipeline/golden-traces.json` with `UPDATE_PIPELINE_GOLDEN=1 npm run test:replay` and review its diff. Not yet wired into live ingress (see `ROADMAP.md`).
+The only code that runs all six layers in sequence, reusing each layer's existing implementation (gateway `validateEvent` → RAW LEDGER append → `CascadeClassificationV2` → `KiloEngine` → `autoGate`/`PolicyEngine` → event bus). `createPipeline(deps).run(envelope)` never throws and returns a trace: one `trace_id`, per-stage status, `duration_ms` and key outputs. The `trace_id` is deliberately kept out of the ledger payload so replay hashes stay deterministic. `lib/pipeline/metrics.js` keeps per-stage latency, which `api/mobile-status.js` reports as `pipeline`. `tests/unit/pipeline-replay.test.js` is the replay determinism gate: after an intended behaviour change, regenerate `tests/fixtures/pipeline/golden-traces.json` with `UPDATE_PIPELINE_GOLDEN=1 npm run test:replay` and review its diff. **Live:** protoforge-core's `POST /cascade/event` runs it through `CascadeCompleteV2.processEvent` (CASCADE's adapters and schema lock plug in as the `ingest` hook, its classifier instance as `classifier`); protoforge-core serves the timings at `GET /pipeline/metrics`, which `/api/mobile-status` reads. CASCADE's matching rule (any indicator group per category, first category wins) is documented in `modules/cascade-classification-v2.js` and `ISSUES_FOUND.md` #80.
 
 ### DSL Policy Engine (`lib/protoforge/`)
 
@@ -353,6 +353,7 @@ Key DB features: RLS enabled on all tables, `system_dashboard` view drives healt
 | `EMBEDDING_PROVIDER` | `openai` \| `ollama` — forces the embeddings backend; auto-selected otherwise (OpenAI if its key is set, else Ollama when a local model is enabled) |
 | `OLLAMA_EMBEDDING_MODEL` | Local embeddings model (default `nomic-embed-text`); vectors are zero-padded to 1536 dims |
 | `ENABLE_LOCAL_MODEL` / `LOCAL_MODEL_URL` / `LOCAL_MODEL_NAME` | Enable + locate the local Ollama model for inference |
+| `PROTOFORGE_CORE_URL` | Where heidi-web's `/api/mobile-status` reads live pipeline metrics (`GET /pipeline/metrics`); default `http://127.0.0.1:3005` |
 | `LOCAL_MODEL_TIMEOUT_MS` | Local inference budget in ms (default `5000`); governs both the abort timeout and the success-routing latency gate in `lib/ModelManager.ts` |
 
 Use `SUPABASE_SERVICE_ROLE_KEY` server-side only. Never expose it to the client.
@@ -362,7 +363,7 @@ Use `SUPABASE_SERVICE_ROLE_KEY` server-side only. Never expose it to the client.
 | Workflow | Trigger | What it does |
 |----------|---------|---------------|
 | `unit-tests.yml` | push to `clean-main`, all PRs | `npm run lint`, `npm test -- --coverage --forceExit`, uploads to Codecov |
-| `integration-tests.yml` | push to `clean-main`, all PRs | `npm run typecheck:hydi-v3`, `npm run lint:hydi-v3`, `npm run test:integration:jest` — the full hermetic operational integration suite (12 suites / 62 tests, ~25s), no credentials or local environment state required |
+| `integration-tests.yml` | push to `clean-main`, all PRs | `npm run typecheck:hydi-v3`, `npm run lint:hydi-v3`, `npm run test:integration:jest` — the full hermetic operational integration suite (13 suites / 74 tests, ~25s), no credentials or local environment state required |
 | `hdi-governance-gate.yml` | PRs touching `supabase/migrations/**` | 7-gate schema review: change detection, transformer tests, state machine approval, adversarial tests, replay fidelity, performance regression, blueprint sync |
 | `health-monitor.yml` | Scheduled | Pings health endpoint |
 | `codeql.yml` | Scheduled | Static security analysis |
@@ -390,6 +391,7 @@ tests/
     hydi-v3/                     # HYDI V3 unit tests (still under `npm test`; also linted/typechecked via *:hydi-v3 scripts)
   migrations/                    # SQL migration tests — discovered by jest.config.js, run via `npm test`
   integration/                   # NOT discovered by jest.config.js's default testMatch — run via `npm run test:integration:jest`
+    cascade-live-pipeline.test.js  # protoforge-core's live CASCADE path through lib/pipeline (six stages end to end)
     hydi-live-recovery.test.js
     hydi-live-operation-failures.test.js
     hydi-morning-executive-simulation.test.js
@@ -408,7 +410,7 @@ tests/
 
 **Unit tests** (`tests/unit/**`, `tests/migrations/**`, `__tests__/**`): fast, hermetic, run automatically by `npm test` locally and by `unit-tests.yml` in CI on every push/PR to `clean-main`.
 
-**Integration tests** (`tests/integration/**`, 12 suites / 62 tests as of Phase 27A): real `OperatorSession`/`HYDIContinuousRuntime` instances exercising the full executive stack end-to-end (temp data directories, no mocked internals). Deliberately excluded from `jest.config.js`'s `testMatch` so they never silently inflate `npm test`'s runtime — run them explicitly:
+**Integration tests** (`tests/integration/**`, 13 suites / 74 tests as of 2026-09-24): real `OperatorSession`/`HYDIContinuousRuntime` instances exercising the full executive stack end-to-end (temp data directories, no mocked internals). Deliberately excluded from `jest.config.js`'s `testMatch` so they never silently inflate `npm test`'s runtime — run them explicitly:
 ```bash
 npm run test:integration:jest      # the full suite (what CI runs)
 npx jest tests/integration/<file>  --testMatch="**/*.test.js" --runInBand --forceExit  # a single file
