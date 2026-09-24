@@ -152,6 +152,48 @@ function sse(res: NextApiResponse, payload: Record<string, unknown>): void {
   res.write(`data: ${JSON.stringify(payload)}\n\n`);
 }
 
+// Derive at most one self-improvement proposal from real evidence.
+// Each check is evidence-gated and deduped by improvementKey across ALL
+// proposal statuses — a declined improvement never resurrects on its own.
+async function deriveSelfImprovementProposal(
+  sb: SupabaseClient,
+  user_id: string,
+): Promise<{ id: string; payload: Record<string, unknown> } | null> {
+  // Evidence 1: resolved business decision absent from durable memory —
+  // recall paths can't see it even though the decision exists as an event.
+  const { data: dec } = await sb.from('human_intervention_requests')
+    .select('resolution_note, completed_at')
+    .eq('request_id', 'decision:business-path')
+    .eq('status', 'resolved').limit(1) as { data: Array<{ resolution_note: string | null; completed_at: string }> | null };
+  if (dec?.length) {
+    const selected = String(dec[0].resolution_note ?? '').replace('HUMAN_SELECTED:', '').trim();
+    const { data: prior } = await sb.from('heidi_events').select('id')
+      .eq('event_type', 'companion_proposal')
+      .eq('payload->>improvementKey', 'persist_decision_to_memory').limit(1);
+    if (!prior?.length) {
+      const life = await getLifeContext(sb, user_id);
+      const inMemory = life.notes.some((n: string) => n.toLowerCase().includes('business path'));
+      if (!inMemory) {
+        const { data: prop } = await sb.from('heidi_events').insert({
+          event_type: 'companion_proposal', division: 'companion',
+          payload: {
+            status: 'pending', kind: 'self_improvement',
+            improvementKey: 'persist_decision_to_memory',
+            description: 'Persist the business-path decision into durable memory',
+            reason: `Observed: decision resolved ${dec[0].completed_at} as an event, but operator memory holds no note — recall misses it. Change: one memory write (append-only). Risk: none. Verify: memory read-back.`,
+            changeSpec: {
+              type: 'persist_context_note',
+              note: `Business path: ${selected} (HUMAN_SELECTED ${dec[0].completed_at}) — AI/music scouting intel is off-axis for this path.`,
+            },
+          },
+        }).select('id, payload').single();
+        if (prop) return prop;
+      }
+    }
+  }
+  return null;
+}
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -362,6 +404,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             }
           }
           if (!proposals.length) {
+            // Self-improvement scan — derive at most ONE proposal from
+            // real observed evidence. Declined/completed keys never
+            // resurrect (dedup by improvementKey across all statuses).
+            const imp = await deriveSelfImprovementProposal(sb, user_id);
+            if (imp) proposals = [imp];
+          }
+          if (!proposals.length) {
             const { data: topOpp } = await sb.from('protoforge_opportunities')
               .select('id, title, confidence')
               .eq('status', 'needs_review')
@@ -428,7 +477,32 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             await sb.from('heidi_events')
               .update({ payload: { ...p.payload, status: 'approved', resolvedAt: new Date().toISOString() } })
               .eq('id', p.id);
-            if (p.payload.kind === 'model_prep_test') {
+            if (p.payload.kind === 'self_improvement') {
+              // Closed-enum executor: only data-level changes exist here.
+              // There is deliberately NO file/auth/governance executor —
+              // unhandled spec types are BLOCKED, never substituted.
+              const spec = p.payload.changeSpec as { type?: string; note?: string } | undefined;
+              if (spec?.type === 'persist_context_note' && spec.note) {
+                await remember(sb, user_id, spec.note, session_id);
+                const life = await getLifeContext(sb, user_id);
+                const ok = life.notes.some((n: string) => n.toLowerCase().includes('business path'));
+                await sb.from('heidi_events').insert({
+                  event_type: 'evolution_result', division: 'companion',
+                  payload: {
+                    improvementKey: p.payload.improvementKey,
+                    proposalId: p.id, verified: ok,
+                    executedAt: new Date().toISOString(),
+                    observedEffect: ok ? 'business-path decision now recallable from durable memory' : 'note write did not appear in memory read-back',
+                    learnedFrom: ['human_intervention_requests:decision:business-path', 'life_context notes absence'],
+                  },
+                });
+                text = ok
+                  ? `Improvement applied and verified: the business-path decision is now in durable memory — future sessions and briefings recall it without re-querying. Recorded as an evolution result so the next proposal learns from it.\nNext candidate I can see: the recurring failed mission against deleted opportunity a292a09e — resolving that needs YOUR decision (cancel vs restore), not mine.`
+                  : `Approved, but execution FAILED verification — the note was written yet didn't appear in memory read-back. Marked as a failed evolution result; no retry without your approval.`;
+              } else {
+                text = `BLOCKED — no bounded executor exists for improvement type '${spec?.type ?? 'none'}'. Your approval is recorded; execution refused rather than substituted.`;
+              }
+            } else if (p.payload.kind === 'model_prep_test') {
               // Labeled TEST harness — proves the internal deliverable
               // path (generate → verify → awaiting_review). payment_status
               // stays 'unpaid'; no checkout, no revenue claim.
