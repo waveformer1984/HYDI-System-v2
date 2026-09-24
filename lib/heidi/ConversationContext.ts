@@ -305,7 +305,7 @@ export function classifyLifeIntent(message: string): LifeIntent | null {
   if (/what happened (with|to|from) (the last|that|it)|what did you (do|find) last|last (thing|mission|task|investigation) you did|result of the last/i.test(m)) {
     return { kind: 'last_action' };
   }
-  if (/what can you do (without me|on your own|by yourself|autonomously)|what are you (allowed|able) to do|what'?s (within|inside) your (authority|remit)/i.test(m)) {
+  if (/what can you (?:actually )?(?:do|get done)( (?:without me|on your own|by yourself|autonomously|right now))?|what are you (allowed|able) to do|what'?s (within|inside) your (authority|remit)|what can you handle/i.test(m)) {
     return { kind: 'autonomy' };
   }
   // "What do you remember about X" — full recall is honest (notes are
