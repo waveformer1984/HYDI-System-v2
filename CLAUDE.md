@@ -363,6 +363,8 @@ Use `SUPABASE_SERVICE_ROLE_KEY` server-side only. Never expose it to the client.
 | `health-monitor.yml` | Scheduled | Pings health endpoint |
 | `codeql.yml` | Scheduled | Static security analysis |
 
+**Local CI** (`npm run ci:local`, `scripts/local-ci.js`): while GitHub-hosted runners are down (`ROADMAP.md` P0 #2), this runs the unit, integration and typecheck checks on a machine you control, in a clean worktree, and posts them to the commit as `local-ci/*` statuses. `--watch` covers open same-repo PRs and never runs fork code. See `LOCAL_CI.md`.
+
 **Governance gate rule**: every new `.sql` migration must have a corresponding test in `tests/migrations/<version>.test.js`. State machine changes (enums, allowed transitions) require `STATE_MACHINE_APPROVED` in the PR description.
 
 **Why unit and integration tests run as two separate CI workflows, not one**: `jest.config.js`'s `testMatch` intentionally excludes `tests/integration/**` from the default `npm test` run (see Testing Layout below) so the fast unit gate stays fast and every developer's default `npm test` runtime doesn't silently grow. `integration-tests.yml` exists specifically so that exclusion doesn't become a verification blind spot — a green `unit-tests.yml` run was never evidence that the operational integration suite passed, only that it wasn't broken by whatever change last touched it. Do not fold integration discovery into `jest.config.js`'s default `testMatch` to "simplify" this — that reintroduces the blind spot for local development, just less visibly.
