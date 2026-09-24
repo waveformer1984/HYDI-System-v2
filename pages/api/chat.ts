@@ -191,6 +191,46 @@ async function deriveSelfImprovementProposal(
       }
     }
   }
+  // Evidence 2: unresolved escalations whose premise is provably void —
+  // the referenced opportunity row no longer exists, so "restore" is
+  // impossible and dismissal is the only valid resolution. Bounded scan.
+  const { data: staleEsc } = await sb.from('operator_escalations')
+    .select('id, title')
+    .eq('category', 'agent_mission')
+    .eq('resolved', false)
+    .order('created_at', { ascending: false }).limit(200);
+  const zombieId = await (async () => {
+    const ids = new Set<string>();
+    for (const e of (staleEsc ?? []) as Array<{ title: string }>) {
+      const m = e.title.match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i);
+      if (m) ids.add(m[1]);
+    }
+    for (const id of ids) {
+      const { data: opp } = await sb.from('protoforge_opportunities').select('id').eq('id', id).limit(1);
+      if (!opp?.length) return id;
+    }
+    return null;
+  })();
+  if (zombieId) {
+    const key = `dismiss_void_escalations_${zombieId.slice(0, 8)}`;
+    const { data: prior } = await sb.from('heidi_events').select('id')
+      .eq('event_type', 'companion_proposal')
+      .eq('payload->>improvementKey', key).limit(1);
+    if (!prior?.length) {
+      const count = (staleEsc ?? []).filter((e: { title: string }) => e.title.includes(zombieId)).length;
+      const { data: prop } = await sb.from('heidi_events').insert({
+        event_type: 'companion_proposal', division: 'companion',
+        payload: {
+          status: 'pending', kind: 'self_improvement',
+          improvementKey: key,
+          description: `Dismiss ${count} unresolved escalation(s) for deleted target ${zombieId.slice(0, 8)}`,
+          reason: `Observed: ${count} unresolved agent-mission escalations reference opportunity ${zombieId.slice(0, 8)}, which no longer exists — restore is impossible, so dismissal is the only valid resolution. They keep polluting "Needs you". Change: mark those rows resolved. Risk: none (flag flip, reversible). Verify: zero unresolved rows for that target.`,
+          changeSpec: { type: 'resolve_escalations', match: zombieId },
+        },
+      }).select('id, payload').single();
+      if (prop) return prop;
+    }
+  }
   return null;
 }
 
@@ -481,8 +521,28 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
               // Closed-enum executor: only data-level changes exist here.
               // There is deliberately NO file/auth/governance executor —
               // unhandled spec types are BLOCKED, never substituted.
-              const spec = p.payload.changeSpec as { type?: string; note?: string } | undefined;
-              if (spec?.type === 'persist_context_note' && spec.note) {
+              const spec = p.payload.changeSpec as { type?: string; note?: string; match?: string } | undefined;
+              if (spec?.type === 'resolve_escalations' && spec.match) {
+                const { data: updated } = await sb.from('operator_escalations')
+                  .update({ resolved: true, resolved_at: new Date().toISOString(), resolved_by: 'operator-approved-evolution' })
+                  .eq('resolved', false).ilike('title', `%${spec.match}%`).select('id');
+                const { data: remaining } = await sb.from('operator_escalations')
+                  .select('id').eq('resolved', false).ilike('title', `%${spec.match}%`);
+                const ok = (remaining ?? []).length === 0 && (updated ?? []).length > 0;
+                await sb.from('heidi_events').insert({
+                  event_type: 'evolution_result', division: 'companion',
+                  payload: {
+                    improvementKey: p.payload.improvementKey,
+                    proposalId: p.id, verified: ok,
+                    executedAt: new Date().toISOString(),
+                    observedEffect: ok ? `${(updated ?? []).length} void escalations resolved; briefing no longer lists them` : 'escalations still unresolved',
+                    learnedFrom: ['operator_escalations void-premise scan'],
+                  },
+                });
+                text = ok
+                  ? `Improvement applied and verified: ${(updated ?? []).length} escalation(s) resolved — the failed mission's target no longer exists, so dismissal was the only valid resolution. "Needs you" now shows only real items.\nNext candidate I can see: ${'operator_escalations has a large aged backlog overall — clearing it would need a broader proposal and a separate approval.'}`
+                  : `Approved, but FAILED verification — ${(remaining ?? []).length} rows still unresolved. Recorded as failed; no retry without your approval.`;
+              } else if (spec?.type === 'persist_context_note' && spec.note) {
                 await remember(sb, user_id, spec.note, session_id);
                 const life = await getLifeContext(sb, user_id);
                 const ok = life.notes.some((n: string) => n.toLowerCase().includes('business path'));
