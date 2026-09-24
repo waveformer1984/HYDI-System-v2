@@ -195,6 +195,8 @@ All files under `api/` are **Vercel serverless functions** (Next.js API routes).
 | `api/hydi/sync.js` | HYDI state sync |
 | `api/ursula/status.js` | Ursula system status |
 | `api/mobile-status.js` | Compact, 3G-safe system snapshot: health + per-stream revenue in a single round-trip |
+| `pages/api/heidi-mobile/*` | Heidi Mobile BFF for `/heidi` (phone PWA): session/pairing, status, tasks, activity, control, chat + events SSE relays. Signs upstream calls with the paired device's HMAC key held in a sealed HttpOnly cookie — see `docs/HEIDI_MOBILE.md` |
+| `pages/api/actions/index.ts` | `GET` lists ProtoForge-escalated actions awaiting approval (`actions:view`); `POST /api/actions/[id]` resolves one |
 | `api/life-flow/route.js` | Life-flow module |
 | `api/events/stream.js` | SSE stream for real-time events |
 | `api/revenue.js` | Revenue engine: leads, quotes, proposals, Stripe checkout, reports |
@@ -339,6 +341,8 @@ Key DB features: RLS enabled on all tables, `system_dashboard` view drives healt
 | `STRIPE_CONNECT_WEBHOOK_SECRET` | Stripe Connect webhook signing secret |
 | `STRIPE_ACCOUNT_GALACTIC_BYTES` et al. | Connect sub-account IDs per revenue stream |
 | `NODE_ENV` | `production` / `development` |
+| `HYDI_SERVICE_SECRET` | HMAC secret for `x-hydi-service-token`; also derives Heidi Mobile's session-sealing key. Server-side only |
+| `HYDI_API_URL` | HYDI base URL used by the Heidi Mobile BFF (default: this process, `http://127.0.0.1:$PORT`) |
 | `ANTHROPIC_API_KEY` | Enables the native streaming/tool-calling agent (`lib/heidi-agent.ts`); when unset Heidi uses the fallback orchestrator |
 | `ANTHROPIC_BASE_URL` | Optional override of the Anthropic SDK base URL (e.g. a compatible proxy) |
 | `OPENAI_API_KEY` | Hosted memory embeddings (1536-dim) |

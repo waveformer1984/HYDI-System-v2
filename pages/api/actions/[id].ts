@@ -41,6 +41,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (typeof id !== 'string') {
     return res.status(400).json({ error: 'Missing action id' });
   }
+  // actions.id is a uuid column; reject anything else before it reaches
+  // the query so malformed ids get a clear 400 instead of a Postgres cast
+  // error surfacing as "Action not found".
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+    return res.status(400).json({ error: 'Invalid action id' });
+  }
 
   const { decision } = req.body as { decision?: string };
   if (decision !== 'approve' && decision !== 'reject') {

@@ -1,0 +1,17 @@
+{
+  "id": "/heidi",
+  "name": "Heidi — HYDI Mobile",
+  "short_name": "Heidi",
+  "description": "Mobile chat, status, approvals and safe controls for the HYDI system.",
+  "start_url": "/heidi",
+  "scope": "/heidi",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0a0a0f",
+  "theme_color": "#0a0a0f",
+  "categories": ["productivity", "utilities"],
+  "icons": [
+    { "src": "/heidi-icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/heidi-icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}
