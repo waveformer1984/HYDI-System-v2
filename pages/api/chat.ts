@@ -22,6 +22,9 @@ import {
   getLifeContext,
   setFocus,
   remember,
+} from '../../lib/heidi/ConversationContext';
+import { classifyEscalation } from '../../lib/heidi/EscalationLifecycle';
+import {
   recallAnswer,
   clearFocus,
 } from '../../lib/heidi/ConversationContext';
@@ -165,6 +168,34 @@ async function deriveSelfImprovementProposal(
     .select('resolution_note, completed_at')
     .eq('request_id', 'decision:business-path')
     .eq('status', 'resolved').limit(1) as { data: Array<{ resolution_note: string | null; completed_at: string }> | null };
+  // Evidence 3: undifferentiated unresolved backlog — no lifecycle
+  // classification exists, so standing-policy noise and real work merge
+  // into one "Needs you" line. Propose enabling the classified view.
+  const { data: flagRow } = await sb.from('heidi_events').select('id')
+    .eq('event_type', 'companion_flag')
+    .eq('payload->>key', 'classified_needsyou').limit(1);
+  if (!flagRow?.length) {
+    const { count: escCount } = await sb.from('operator_escalations')
+      .select('id', { count: 'exact', head: true }).eq('resolved', false);
+    if ((escCount ?? 0) > 50) {
+      const { data: prior } = await sb.from('heidi_events').select('id')
+        .eq('event_type', 'companion_proposal')
+        .eq('payload->>improvementKey', 'enable_escalation_lifecycle').limit(1);
+      if (!prior?.length) {
+        const { data: prop } = await sb.from('heidi_events').insert({
+          event_type: 'companion_proposal', division: 'companion',
+          payload: {
+            status: 'pending', kind: 'self_improvement',
+            improvementKey: 'enable_escalation_lifecycle',
+            description: 'Classify "Needs you" items by lifecycle so standing noise stops hiding real work',
+            reason: `Observed: ${escCount} unresolved escalations with no lifecycle — actionable items, human decisions, standing-policy constraints, and void premises all flatten into one list. Change: enable the read-only classifier in the briefing (flag). Resolves nothing automatically. Risk: none (presentation only, flag reversible). Verify: briefing shows classified counts.`,
+            changeSpec: { type: 'set_companion_flag', key: 'classified_needsyou', enabled: true },
+          },
+        }).select('id, payload').single();
+        if (prop) return prop;
+      }
+    }
+  }
   if (dec?.length) {
     const selected = String(dec[0].resolution_note ?? '').replace('HUMAN_SELECTED:', '').trim();
     const { data: prior } = await sb.from('heidi_events').select('id')
@@ -396,9 +427,26 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             lines.push(`System: deployment ${s.deployment?.verdict ?? 'UNKNOWN'} · health ${s.applicationHealth} · commit ${s.deployment?.actualCommit ?? '?'}${stale ? ' (snapshot stale)' : ''}.`);
             lines.push(`Work: ${s.work?.goalsOpen ?? 0} open goals · ProtoForge: ${s.protoforge?.opportunitiesTotal ?? 0} opportunities (${s.protoforge?.pendingReview ?? 0} pending review).`);
             const open = (s.humanActions?.items ?? []).filter((i) => i.status === 'OPEN' && !i.backlog);
-            lines.push(open.length > 0
-              ? `Needs you: ${open.slice(0, 3).map((i) => i.reason.slice(0, 60)).join(' | ')}`
-              : 'Nothing currently needs your attention.');
+            // Lifecycle-classified view — enabled only via approved
+            // evolution flag; read-only, never resolves anything.
+            const { data: flagRow } = await sb.from('heidi_events').select('id')
+              .eq('event_type', 'companion_flag')
+              .eq('payload->>key', 'classified_needsyou').limit(1);
+            if (flagRow?.length) {
+              const classified = open.map((i) => ({ item: i, cls: classifyEscalation({ title: i.reason }) }));
+              const actionable = classified.filter((c) => c.cls === 'ACTIONABLE' || c.cls === 'UNKNOWN');
+              const decisions = classified.filter((c) => c.cls === 'HUMAN_DECISION');
+              const muted = classified.length - actionable.length - decisions.length;
+              if (actionable.length + decisions.length === 0) {
+                lines.push(`Nothing actionable needs you${muted ? ` (${muted} standing-policy item(s) muted)` : ''}.`);
+              } else {
+                lines.push(`Needs you: ${[...actionable, ...decisions].slice(0, 3).map((c) => c.item.reason.slice(0, 60)).join(' | ')}${muted ? `  (+${muted} standing-policy muted)` : ''}`);
+              }
+            } else {
+              lines.push(open.length > 0
+                ? `Needs you: ${open.slice(0, 3).map((i) => i.reason.slice(0, 60)).join(' | ')}`
+                : 'Nothing currently needs your attention.');
+            }
             const na = s.nextAction;
             lines.push(`Next: ${na?.kind === 'capability' ? na.capabilityId : na?.kind === 'human' ? `HUMAN — ${na.reason}` : 'NO_ACTION_REQUIRED'}`);
           } else {
@@ -521,8 +569,37 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
               // Closed-enum executor: only data-level changes exist here.
               // There is deliberately NO file/auth/governance executor —
               // unhandled spec types are BLOCKED, never substituted.
-              const spec = p.payload.changeSpec as { type?: string; note?: string; match?: string } | undefined;
-              if (spec?.type === 'resolve_escalations' && spec.match) {
+              const spec = p.payload.changeSpec as { type?: string; note?: string; match?: string; key?: string; enabled?: boolean } | undefined;
+              if (spec?.type === 'set_companion_flag') {
+                // Allowlisted flags only — presentation toggles, never
+                // governance/payment/auth behavior.
+                const ALLOWED = ['classified_needsyou'];
+                if (!spec.key || !ALLOWED.includes(spec.key)) {
+                  text = `BLOCKED — flag '${spec?.key ?? 'none'}' is not on the approved list. Execution refused.`;
+                } else {
+                  await sb.from('heidi_events').insert({
+                    event_type: 'companion_flag', division: 'companion',
+                    payload: { key: spec.key, enabled: spec.enabled !== false, setBy: 'operator-approved-evolution', at: new Date().toISOString() },
+                  });
+                  const { data: chk } = await sb.from('heidi_events').select('payload')
+                    .eq('event_type', 'companion_flag').eq('payload->>key', spec.key)
+                    .order('created_at', { ascending: false }).limit(1);
+                  const ok = (chk?.[0]?.payload as { enabled?: boolean } | undefined)?.enabled === true;
+                  await sb.from('heidi_events').insert({
+                    event_type: 'evolution_result', division: 'companion',
+                    payload: {
+                      improvementKey: p.payload.improvementKey,
+                      proposalId: p.id, verified: ok,
+                      executedAt: new Date().toISOString(),
+                      observedEffect: ok ? `flag ${spec.key} enabled — briefing now classifies Needs-you items` : 'flag write not confirmed',
+                      learnedFrom: ['operator_escalations backlog scan'],
+                    },
+                  });
+                  text = ok
+                    ? `Improvement applied and verified: "Needs you" is now lifecycle-classified — real work, human decisions, and standing-policy noise are distinguished. Next greeting shows the classified view.\nNext candidate I can see: none yet — I'll watch whether classification actually improves your read of the queue.`
+                    : `Approved, but FAILED verification — flag didn't persist. Recorded as failed; no retry without approval.`;
+                }
+              } else if (spec?.type === 'resolve_escalations' && spec.match) {
                 const { data: updated } = await sb.from('operator_escalations')
                   .update({ resolved: true, resolved_at: new Date().toISOString(), resolved_by: 'operator-approved-evolution' })
                   .eq('resolved', false).ilike('title', `%${spec.match}%`).select('id');
@@ -848,9 +925,26 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             lines.push(`System: deployment ${s.deployment?.verdict ?? 'UNKNOWN'} · health ${s.applicationHealth} · commit ${s.deployment?.actualCommit ?? '?'}${stale ? ' (snapshot stale)' : ''}.`);
             lines.push(`Work: ${s.work?.goalsOpen ?? 0} open goals · ProtoForge: ${s.protoforge?.opportunitiesTotal ?? 0} opportunities (${s.protoforge?.pendingReview ?? 0} pending review).`);
             const open = (s.humanActions?.items ?? []).filter((i) => i.status === 'OPEN' && !i.backlog);
-            lines.push(open.length > 0
-              ? `Needs you: ${open.slice(0, 3).map((i) => i.reason.slice(0, 60)).join(' | ')}`
-              : 'Nothing currently needs your attention.');
+            // Lifecycle-classified view — enabled only via approved
+            // evolution flag; read-only, never resolves anything.
+            const { data: flagRow } = await sb.from('heidi_events').select('id')
+              .eq('event_type', 'companion_flag')
+              .eq('payload->>key', 'classified_needsyou').limit(1);
+            if (flagRow?.length) {
+              const classified = open.map((i) => ({ item: i, cls: classifyEscalation({ title: i.reason }) }));
+              const actionable = classified.filter((c) => c.cls === 'ACTIONABLE' || c.cls === 'UNKNOWN');
+              const decisions = classified.filter((c) => c.cls === 'HUMAN_DECISION');
+              const muted = classified.length - actionable.length - decisions.length;
+              if (actionable.length + decisions.length === 0) {
+                lines.push(`Nothing actionable needs you${muted ? ` (${muted} standing-policy item(s) muted)` : ''}.`);
+              } else {
+                lines.push(`Needs you: ${[...actionable, ...decisions].slice(0, 3).map((c) => c.item.reason.slice(0, 60)).join(' | ')}${muted ? `  (+${muted} standing-policy muted)` : ''}`);
+              }
+            } else {
+              lines.push(open.length > 0
+                ? `Needs you: ${open.slice(0, 3).map((i) => i.reason.slice(0, 60)).join(' | ')}`
+                : 'Nothing currently needs your attention.');
+            }
             const na = s.nextAction;
             lines.push(`Next: ${na?.kind === 'capability' ? na.capabilityId : na?.kind === 'human' ? `HUMAN — ${na.reason}` : 'NO_ACTION_REQUIRED'}`);
             if (lifeIntent.kind === 'next_steps' && open.length === 0) {
