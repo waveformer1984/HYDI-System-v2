@@ -55,6 +55,8 @@ beforeEach(() => {
   require('../../lib/rate-limit').__reset();
 });
 
+const ACTION_ID = '3f1c2a9e-8b7d-4c6e-9f0a-1b2c3d4e5f60';
+
 describe('pages/api/actions/[id].ts', () => {
   it('rejects an unauthenticated approval attempt with 401 and never resolves the action', async () => {
     const res = makeRes();
@@ -88,13 +90,28 @@ describe('pages/api/actions/[id].ts', () => {
       {
         method: 'POST',
         headers: { 'x-hydi-service-token': makeServiceToken() },
-        query: { id: 'action-1' },
+        query: { id: ACTION_ID },
         body: { decision: 'approve' },
       },
       res
     );
-    expect(mockResolvePendingAction).toHaveBeenCalledWith('action-1', 'approve');
+    expect(mockResolvePendingAction).toHaveBeenCalledWith(ACTION_ID, 'approve');
     expect(res.status).toHaveBeenCalledWith(200);
+  });
+
+  it('rejects a malformed (non-uuid) action id with 400 before resolving anything', async () => {
+    const res = makeRes();
+    await handler(
+      {
+        method: 'POST',
+        headers: { 'x-hydi-service-token': makeServiceToken() },
+        query: { id: "1' OR '1'='1" },
+        body: { decision: 'approve' },
+      },
+      res
+    );
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(mockResolvePendingAction).not.toHaveBeenCalled();
   });
 
   it('still returns 405 for non-POST methods even when authenticated', async () => {
