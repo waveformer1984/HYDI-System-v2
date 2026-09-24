@@ -263,6 +263,10 @@ Standalone implementation of the KILO hypothesis generator:
 - `kilo/modules/repair-manifest-validator.js` — validates repair manifests before KILO processes them
 - `kilo/modules/truth-filter-gate.js` — gates hypotheses against ground truth before emission
 
+### Composed pipeline (`lib/pipeline/`)
+
+The only code that runs all six layers in sequence, reusing each layer's existing implementation (gateway `validateEvent` → RAW LEDGER append → `CascadeClassificationV2` → `KiloEngine` → `autoGate`/`PolicyEngine` → event bus). `createPipeline(deps).run(envelope)` never throws and returns a trace: one `trace_id`, per-stage status, `duration_ms` and key outputs. The `trace_id` is deliberately kept out of the ledger payload so replay hashes stay deterministic. `lib/pipeline/metrics.js` keeps per-stage latency, which `api/mobile-status.js` reports as `pipeline`. `tests/unit/pipeline-replay.test.js` is the replay determinism gate: after an intended behaviour change, regenerate `tests/fixtures/pipeline/golden-traces.json` with `UPDATE_PIPELINE_GOLDEN=1 npm run test:replay` and review its diff. Not yet wired into live ingress (see `ROADMAP.md`).
+
 ### DSL Policy Engine (`lib/protoforge/`)
 
 Implements ProtoForge's policy layer (pipeline layer [5]) with a runtime-configurable rule DSL:

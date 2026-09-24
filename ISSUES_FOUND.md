@@ -5,6 +5,14 @@ the narrative of what was fixed and why; this file is the flat list.
 
 ---
 
+## 2026-09-24 (pipeline observability)
+
+| # | Issue | File(s) | Status |
+|---|-------|---------|--------|
+| 80 | CASCADE's classifier requires **every** pattern in a category to match (`checkPatterns` → `results.every(...)`). `INFRA_FAILURE` and `ROUTE_FAILURE` list mutually exclusive values for the same field (e.g. `error_code` must equal `MODULE_NOT_FOUND` *and* `ECONNREFUSED` *and* `ENOTFOUND`), so no event can ever get either label. The other three categories need all five of their fields present at once, so a normal `{ stream_disconnected: true }` event is not a `STREAM_BREAK`. Net effect: nearly every real event is classified `UNKNOWN_ANOMALY` (confidence 0.3) and quarantined, in the live `modules/cascade-complete-v2` path (`protoforge-core` `POST /cascade/event`) and in `lib/pipeline`. | `modules/cascade-classification-v2.js` | **Open — needs a maintainer decision.** The fix changes live classification, and the intended rule (any field matches? a minimum count per category? per-field weights?) isn't recorded anywhere. `tests/fixtures/pipeline/recorded-events.json` pins the current behaviour with two quarantined events, so whichever fix lands will show up as a reviewed change to `golden-traces.json`. |
+
+---
+
 ## 2026-09-12 (dependency audit re-run + CI script regression)
 
 | # | Issue | File(s) | Status |
