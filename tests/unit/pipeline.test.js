@@ -119,6 +119,81 @@ describe('lib/pipeline failure handling', () => {
   });
 });
 
+describe('lib/pipeline options used by the live CASCADE path', () => {
+  it('runs a source-specific ingest hook inside stage [1], then the gateway validation', async () => {
+    const ingest = jest.fn((input) => ({ ok: true, envelope: { ...STREAM_BREAK, eventId: input.id }, sourceConfidence: 0.95 }));
+    const { pipeline } = makePipeline({ ingest });
+    const trace = await pipeline.run({ id: 'raw-1' });
+    expect(ingest).toHaveBeenCalledWith({ id: 'raw-1' });
+    expect(trace.stages.ingestion).toMatchObject({ status: 'ok', event_type: 'stream.disconnected', source_confidence: 0.95 });
+    expect(trace.outcome).toBe('reject');
+  });
+
+  it('rejects cleanly when the ingest hook refuses the event, carrying its violations', async () => {
+    const ingest = () => ({ ok: false, reason: 'schema_violation', violations: ['Unexpected field: x'] });
+    const { pipeline, emitted } = makePipeline({ ingest });
+    const trace = await pipeline.run({});
+    expect(trace.outcome).toBe('invalid');
+    expect(trace.stages.ingestion).toMatchObject({ status: 'rejected', reason: 'schema_violation', violations: ['Unexpected field: x'] });
+    expect(trace.stages.ledger.status).toBe('skipped');
+    expect(emitted[0].outcome).toBe('invalid');
+  });
+
+  it('still applies the gateway validation to what the ingest hook produces', async () => {
+    const { pipeline } = makePipeline({ ingest: () => ({ ok: true, envelope: { eventId: 'x', payload: {} } }) });
+    const trace = await pipeline.run({});
+    expect(trace.outcome).toBe('invalid');
+    expect(trace.stages.ingestion.reason).toMatch(/eventType/);
+  });
+
+  it('records an ingest hook that throws as an error outcome', async () => {
+    const { pipeline } = makePipeline({ ingest: () => { throw new Error('Unknown adapter type: bogus'); } });
+    const trace = await pipeline.run({});
+    expect(trace.outcome).toBe('error');
+    expect(trace.stages.ingestion).toMatchObject({ status: 'error', error: 'Unknown adapter type: bogus' });
+  });
+
+  it('quarantines below the source-confidence gate before classifying, after the ledger append', async () => {
+    const classifier = { classify: jest.fn() };
+    const ledger = new MemoryLedger();
+    const { pipeline } = makePipeline({
+      ledger,
+      classifier,
+      minSourceConfidence: 0.75,
+      ingest: () => ({ ok: true, envelope: STREAM_BREAK, sourceConfidence: 0.5 }),
+    });
+    const trace = await pipeline.run({});
+    expect(trace.outcome).toBe('quarantined');
+    expect(trace.stages.cascade).toMatchObject({ status: 'rejected', reason: 'low_confidence', source_confidence: 0.5, threshold: 0.75 });
+    expect(classifier.classify).not.toHaveBeenCalled();
+    expect(ledger.size()).toBe(1);
+  });
+
+  it('passes events at or above the gate through to classification', async () => {
+    const { pipeline } = makePipeline({ minSourceConfidence: 0.75, ingest: () => ({ ok: true, envelope: STREAM_BREAK, sourceConfidence: 0.75 }) });
+    expect((await pipeline.run({})).stages.cascade.classification).toBe('STREAM_BREAK');
+  });
+
+  it('uses the injected classifier instance and records its matched rules', async () => {
+    const classifier = {
+      classify: jest.fn(() => ({ classification: 'STREAM_BREAK', confidence: 0.9, quarantine: false, matched_rules: ['STREAM_BREAK:disconnect'] })),
+    };
+    const { pipeline } = makePipeline({ classifier });
+    const trace = await pipeline.run(STREAM_BREAK);
+    expect(classifier.classify).toHaveBeenCalledWith({ payload: STREAM_BREAK.payload });
+    expect(trace.stages.cascade.matched_rules).toEqual(['STREAM_BREAK:disconnect']);
+  });
+
+  it('never adds a ledger row for a duplicate', async () => {
+    const ledger = new MemoryLedger();
+    const { pipeline } = makePipeline({ ledger });
+    await pipeline.run(STREAM_BREAK);
+    const dup = await pipeline.run(STREAM_BREAK);
+    expect(dup.outcome).toBe('duplicate');
+    expect(ledger.size()).toBe(1);
+  });
+});
+
 describe('lib/pipeline/metrics', () => {
   it('reports per-stage counts, errors, skips and latency', () => {
     const m = createMetrics();

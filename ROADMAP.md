@@ -359,14 +359,24 @@ something executable.
   `tests/fixtures/pipeline/recorded-events.json` through the real stages
   and fails on any difference from `golden-traces.json`. It runs in
   `npm test` / `unit-tests.yml` and `local-ci/unit-tests`.
-- **Still open: route live traffic through it.** `protoforge-core`'s
-  `POST /cascade/event` still uses `modules/cascade-complete-v2`, so
-  `mobile-status`'s `pipeline` field stays at zero until that route (or
-  the gateway's `POST /events`) calls `lib/pipeline`. Deliberately a
-  separate step: switching it makes live events write the RAW LEDGER and
-  go through KILO and the policy engine. `ISSUES_FOUND.md` #80 (CASCADE
-  quarantines nearly everything) should be decided first, or most live
-  events will stop at stage 3.
+- ~~Route live traffic through it~~ **Done 2026-09-24.**
+  `CascadeCompleteV2.processEvent`, which protoforge-core's
+  `POST /cascade/event` and its infrastructure-alert handler both call, now
+  runs `lib/pipeline`. It is the single execution path: CASCADE's adapters
+  and schema lock are stage [1]'s normalization, its classifier instance is
+  stage [3]'s, and its 0.75 source-confidence gate is unchanged. Request
+  and response shapes are kept, plus `trace_id` and `trace`. Two deliberate
+  changes: duplicates are now decided by the RAW LEDGER fingerprint
+  (permanent) instead of the 15-second in-memory window, and `decision` is
+  now ProtoForge's policy decision instead of CASCADE's own action routing.
+  protoforge-core serves `GET /pipeline/metrics`, which `/api/mobile-status`
+  reads (`PROTOFORGE_CORE_URL`, default `http://127.0.0.1:3005`). This
+  depended on `ISSUES_FOUND.md` #80 (classifier rule, fixed) and uncovered
+  #81 (the live path rejected every event at the schema lock, fixed).
+  Remaining gaps: the default Supabase ledger adapter has no outbox, so a
+  failed append is a `ledger_error` rather than `queued`, and
+  `CascadeCompleteV2.processQuarantineRetries()` (never called) would now
+  see retried events as duplicates.
 
 ### PolicyEngine expansion
 - Additional DSL operators (`contains`, `startsWith`, `regex`)
