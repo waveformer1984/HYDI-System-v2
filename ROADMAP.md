@@ -84,6 +84,18 @@ drop-everything, P1 is next up, P2 is scheduled but not urgent.
     green on these three checks currently carries no information at all.
     Still requires the same dashboard access as 2b/2c to actually fix.
 
+2d. **2026-09-24: the repo is public, which rules out the spending-limit
+    theory.** Public repositories get GitHub-hosted runner minutes free,
+    so neither exhausted minutes nor a $0 spending limit can cause 2b/2c.
+    Instant failure with no runner assigned on a public repo points at an
+    account-level lock, typically a failed payment or unpaid invoice.
+    Check `github.com/settings/billing` for a payment-failure banner.
+    **Workaround in place:** `npm run ci:local` (`scripts/local-ci.js`, see
+    `LOCAL_CI.md`) runs the CI checks on heidi-pc and posts `local-ci/*`
+    commit statuses to PRs, so they get a real signal without Actions. A
+    self-hosted Actions runner was rejected as the workaround: on a public
+    repo it would run fork PRs' code on the host.
+
 **P1 — high impact/risk, not yet started:**
 3. Cryptographic identity verification to replace the `x-user-id`
    header-trust model (unchanged top priority — see below). **Reviewed

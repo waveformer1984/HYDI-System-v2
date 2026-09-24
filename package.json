@@ -13,6 +13,7 @@
     "lint": "eslint api pages components lib src apps/ursula-frontend/src tests/unit --ext .js,.jsx,.ts,.tsx",
     "lint:hydi-v3": "eslint src/hydi-v3 tests/unit/hydi-v3 scripts/performance-benchmark.js scripts/security-audit.js scripts/soak-test-v3.js",
     "test": "jest",
+    "ci:local": "node scripts/local-ci.js",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "test:integration": "node tests/hdi-adversarial.test.js",
