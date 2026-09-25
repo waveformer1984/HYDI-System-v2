@@ -5,7 +5,6 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { requireAuth } from '../lib/auth/requireAuth.js';
-import { defaultMetrics as pipelineMetrics } from '../lib/pipeline/metrics.js';
 
 // Constructed lazily (not at module load) so a missing env var surfaces as
 // a graceful 503 from the handler's own try/catch below, instead of
@@ -21,36 +20,6 @@ function getSupabase() {
   return _supabase;
 }
 const supabase = new Proxy({}, { get: (_, prop) => getSupabase()[prop] });
-
-// The six-layer pipeline runs inside protoforge-core (POST /cascade/event),
-// a different process from this one, so its per-stage timings are read
-// from protoforge-core's GET /pipeline/metrics. Short timeout: this
-// endpoint is meant to stay fast on 3G.
-const PIPELINE_METRICS_TIMEOUT_MS = 800;
-
-async function readPipelineMetrics() {
-  const base = process.env.PROTOFORGE_CORE_URL || 'http://127.0.0.1:3005';
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), PIPELINE_METRICS_TIMEOUT_MS);
-  try {
-    const response = await fetch(`${base}/pipeline/metrics`, { signal: controller.signal });
-    if (response.ok) {
-      const body = await response.json();
-      if (body && body.pipeline) return { ...body.pipeline, source: 'protoforge-core' };
-    }
-    return { ...pipelineMetrics.snapshot(), source: 'local', error: `protoforge-core returned ${response.status}` };
-  } catch (err) {
-    // protoforge-core down or unreachable: say so rather than report zeros
-    // as if nothing had run.
-    return {
-      ...pipelineMetrics.snapshot(),
-      source: 'local',
-      error: err instanceof Error && err.name === 'AbortError' ? 'protoforge-core timed out' : 'protoforge-core unreachable',
-    };
-  } finally {
-    clearTimeout(timer);
-  }
-}
 
 const STREAMS = [
   'galactic_bytes',
@@ -74,7 +43,6 @@ export default async function handler(req, res) {
   if (!auth.ok) return;
 
   const started = Date.now();
-  const pipelinePromise = readPipelineMetrics();
 
   try {
     const [dashResult, ledgerResult] = await Promise.all([
@@ -122,10 +90,6 @@ export default async function handler(req, res) {
       heals_24h: dash.auto_heals_24h || 0,
       streams,
       silent,
-      // Per-stage latency of the six-layer pipeline: n, errors, skipped,
-      // last/avg/p95 ms per stage, outcome counts, and `source` saying
-      // whether it came from protoforge-core's live runs.
-      pipeline: await pipelinePromise,
       ms: Date.now() - started,
       ts: new Date().toISOString(),
     });
@@ -133,7 +97,6 @@ export default async function handler(req, res) {
     return res.status(503).json({
       ok: false,
       alert: err instanceof Error ? err.message : 'unknown error',
-      pipeline: await pipelinePromise,
       ms: Date.now() - started,
       ts: new Date().toISOString(),
     });

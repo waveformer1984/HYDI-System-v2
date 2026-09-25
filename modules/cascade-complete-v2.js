@@ -10,12 +10,9 @@ const CascadeEmissionV2 = require('./cascade-emission-v2');
 const CascadeQuarantineV2 = require('./cascade-quarantine-v2');
 const CascadeHealthSnapshot = require('./cascade-health-snapshot');
 const { EventEmitter } = require('events');
-const { createPipeline } = require('../lib/pipeline');
 
 class CascadeCompleteV2 extends EventEmitter {
-  // options.pipeline: extra createPipeline() options (tests inject an
-  // in-memory ledger, a fixed policy engine and their own metrics).
-  constructor(options = {}) {
+  constructor() {
     super();
     
     // Core components
@@ -43,17 +40,6 @@ class CascadeCompleteV2 extends EventEmitter {
     };
     
     this.setupIntegrations();
-
-    // The canonical six-layer pipeline; see processEvent().
-    this.pipeline = createPipeline({
-      ingest: (input) => this.ingestRawEvent(input),
-      classifier: this.classification,
-      minSourceConfidence: 0.75,
-      // Emission layer [6]: publish on this emitter; protoforge-core
-      // forwards 'pipeline_trace' to Ursula's SSE subscribers.
-      emit: (type, data) => this.emit(type, data),
-      ...(options.pipeline || {})
-    });
   }
 
   setupIntegrations() {
@@ -160,24 +146,7 @@ class CascadeCompleteV2 extends EventEmitter {
     };
   }
 
-  // Process one raw source event through the canonical six-layer pipeline
-  // (lib/pipeline): ingestion -> RAW LEDGER -> CASCADE -> KILO -> ProtoForge
-  // -> emission. This used to classify and route in isolation, never
-  // touching the ledger, KILO or the policy engine; it is now the single
-  // execution path for every caller (POST /cascade/event and
-  // protoforge-core's infrastructure alerts alike).
-  //
-  // CASCADE keeps its own pieces inside that pipeline: the source adapters
-  // and schema lock are stage [1]'s normalization, this.classification is
-  // stage [3]'s classifier, and the 0.75 source-confidence gate still
-  // quarantines before classification. What changed, on purpose:
-  //   - duplicates are decided by the RAW LEDGER's fingerprint
-  //     (source + event_id + type, permanent) instead of the in-memory
-  //     15-second content-fingerprint window;
-  //   - `decision` in the result is ProtoForge's policy decision, not
-  //     CascadeCore.routeDecision()'s action routing: CASCADE classifies
-  //     only (HEIDI_V2_ARCHITECTURE.md), so it no longer picks actions;
-  //   - the result also carries `trace_id` and the full `trace`.
+  // Process events with all V2 enhancements
   async processEvent(rawEvent, sourceType) {
     if (!this.isRunning) {
       return {
@@ -186,161 +155,129 @@ class CascadeCompleteV2 extends EventEmitter {
       };
     }
 
-    const input = { rawEvent, sourceType, normalized: null };
-    const trace = await this.pipeline.run(input);
-    return this.toResult(trace, input.normalized);
-  }
-
-  // Stage [1] normalization for raw source events: adapter + schema lock,
-  // then the gateway envelope the RAW LEDGER stores. Throws for an unknown
-  // source type, which the pipeline records as an ingestion error.
-  ingestRawEvent(input) {
-    const adapter = AdapterFactory.getAdapter(input.sourceType);
-    const normalized = adapter.normalize(input.rawEvent);
-
-    // The schema lock validates the canonical event (event_id, source,
-    // type, payload, timestamp). The adapter's confidence and version are
-    // metadata about the event, not event fields; validating them as
-    // fields made every event fail with "Unexpected field: confidence"
-    // (ISSUES_FOUND.md #81), so they are carried alongside instead.
-    // eslint-disable-next-line no-unused-vars -- destructured to separate adapter metadata from the canonical event
-    const { confidence, adapter_version: _adapterVersion, ...canonical } = normalized;
-    const schemaValidation = this.schemaLock.validateEvent(canonical);
-    if (!schemaValidation.valid) {
-      this.emit('schema_violation', { event: normalized, violations: schemaValidation.errors });
-      return { ok: false, reason: 'schema_violation', violations: schemaValidation.errors };
-    }
-
-    input.normalized = { ...this.schemaLock.addSchemaHash(canonical), confidence };
-    return {
-      ok: true,
-      sourceConfidence: confidence,
-      envelope: {
-        eventId: canonical.event_id,
-        eventType: canonical.type,
-        source: canonical.source,
-        version: '1',
-        timestamp: canonical.timestamp,
-        payload: canonical.payload
-      }
-    };
-  }
-
-  // Map a pipeline trace back onto processEvent's long-standing result
-  // shapes, and keep stats and the quarantine store in step.
-  toResult(trace, event) {
-    const base = { trace_id: trace.trace_id, trace };
-    const stages = trace.stages;
-
-    switch (trace.outcome) {
-      case 'invalid': {
+    try {
+      // STEP 1: Get adapter with confidence scoring
+      const adapter = AdapterFactory.getAdapter(sourceType);
+      
+      // STEP 2: Normalize with adapter
+      const normalized = adapter.normalize(rawEvent);
+      
+      // STEP 3: Schema lock validation
+      const schemaValidation = this.schemaLock.validateEvent(normalized);
+      if (!schemaValidation.valid) {
+        this.stats.schema_violations++;
         this.stats.events_rejected++;
-        const ingestion = stages.ingestion;
-        if (ingestion.reason === 'schema_violation') this.stats.schema_violations++;
-        return {
+        
+        const rejection = {
           event: 'cascade_event_rejected',
           reason: 'schema_violation',
-          violations: ingestion.violations || [ingestion.reason],
-          action: 'discard',
-          ...base
+          violations: schemaValidation.errors,
+          action: 'discard'
         };
+        
+        this.emit('schema_violation', {
+          event: normalized,
+          violations: schemaValidation.errors
+        });
+        
+        return rejection;
       }
-
-      case 'duplicate':
+      
+      // STEP 4: Add schema hash
+      const schemaValidated = this.schemaLock.addSchemaHash(normalized);
+      
+      // STEP 5: Fingerprint duplicate detection
+      const fingerprintResult = this.fingerprint.processEvent(schemaValidated);
+      if (fingerprintResult.isDuplicate) {
         this.stats.duplicate_blocks++;
         this.stats.events_rejected++;
+        
         return {
           event: 'cascade_event_rejected',
           reason: 'duplicate_event',
-          fingerprint: trace.fingerprint,
-          action: 'discard',
-          ...base
+          fingerprint: fingerprintResult.fingerprint,
+          action: 'discard'
         };
-
-      case 'queued':
-        return {
-          status: 'queued',
-          reason: 'ledger_queued',
-          event_id: event && event.event_id,
-          fingerprint: trace.fingerprint,
-          action: 'retry',
-          ...base
-        };
-
-      case 'quarantined': {
-        const cascadeStage = stages.cascade;
+      }
+      
+      // STEP 6: Confidence check (< 0.75 = quarantine)
+      if (schemaValidated.confidence < 0.75) {
+        this.stats.low_confidence_blocks++;
         this.stats.events_quarantined++;
-        if (cascadeStage.reason === 'low_confidence') {
-          this.stats.low_confidence_blocks++;
-          this.quarantine.quarantine(event, 'low_confidence', {
-            confidence: cascadeStage.source_confidence,
-            threshold: cascadeStage.threshold
-          });
-          return {
-            event: 'cascade_event_rejected',
-            reason: 'low_confidence',
-            confidence: cascadeStage.source_confidence,
-            action: 'quarantine',
-            ...base
-          };
-        }
-        this.quarantine.quarantine(event, 'unknown_anomaly', {
-          classification: cascadeStage.classification,
-          confidence: cascadeStage.confidence
+        
+        this.quarantine.quarantine(schemaValidated, 'low_confidence', {
+          confidence: schemaValidated.confidence,
+          threshold: 0.75
         });
+        
+        return {
+          event: 'cascade_event_rejected',
+          reason: 'low_confidence',
+          confidence: schemaValidated.confidence,
+          action: 'quarantine'
+        };
+      }
+      
+      // STEP 7: Hard classification (enum only)
+      const classification = this.classification.classify(schemaValidated);
+      
+      // STEP 8: Auto-quarantine unknown anomalies
+      if (classification.quarantine) {
+        this.stats.events_quarantined++;
+        this.quarantine.quarantine(schemaValidated, 'unknown_anomaly', {
+          classification: classification.classification,
+          confidence: classification.confidence
+        });
+        
         return {
           event: 'cascade_event_rejected',
           reason: 'unknown_anomaly',
-          classification: cascadeStage.classification,
-          action: 'quarantine',
-          ...base
+          classification: classification.classification,
+          action: 'quarantine'
         };
       }
-
-      case 'approve':
-      case 'reject':
-      case 'escalate': {
-        this.stats.events_processed++;
-        const classification = {
-          event: 'hyve_opportunity_detected',
-          classification: stages.cascade.classification,
-          confidence: stages.cascade.confidence,
-          matched_rules: stages.cascade.matched_rules,
-          quarantine: false,
-          enum_locked: true,
-          version: 'v2'
-        };
-        const decision = {
-          decision: stages.protoforge.decision,
-          matched_rule_id: stages.protoforge.matched_rule_id,
-          decision_id: stages.protoforge.decision_id
-        };
-        this.logState(event, classification, decision);
-        return {
-          status: 'processed',
-          event_id: event.event_id,
-          fingerprint: trace.fingerprint,
-          confidence: event.confidence,
-          classification,
-          decision,
-          schema_hash: event.schema_hash,
-          ...base
-        };
+      
+      // STEP 9: Route decision (repair manifest or action)
+      const decision = this.core.routeDecision(classification, schemaValidated);
+      
+      // STEP 10: Emit with acknowledgment tracking
+      if (decision) {
+        const trackingId = await this.emission.emit(decision);
+        this.components.totalEmissions++;
+        decision.tracking_id = trackingId;
       }
-
-      default: {
-        // 'ledger_error' or 'error': an internal failure in some stage.
-        this.stats.events_rejected++;
-        const failed = Object.entries(stages).find(([, st]) => st.status === 'error');
-        const error = failed ? `${failed[0]}: ${failed[1].error}` : 'pipeline failed';
-        this.emit('cascade_error', { error, timestamp: new Date().toISOString() });
-        return {
-          event: 'cascade_processing_error',
-          reason: trace.outcome === 'ledger_error' ? 'ledger_error' : 'internal_error',
-          error,
-          ...base
-        };
+      
+      // STEP 11: Update statistics
+      this.stats.events_processed++;
+      if (decision && decision.event === 'repair_manifest_generated') {
+        this.stats.repair_manifests_generated++;
       }
+      
+      // STEP 12: Log state
+      this.logState(schemaValidated, classification, decision);
+      
+      return {
+        status: 'processed',
+        event_id: schemaValidated.event_id,
+        fingerprint: fingerprintResult.fingerprint,
+        confidence: schemaValidated.confidence,
+        classification: classification,
+        decision: decision,
+        schema_hash: schemaValidated.schema_hash
+      };
+      
+    } catch (error) {
+      this.stats.events_rejected++;
+      this.emit('cascade_error', {
+        error: error.message,
+        timestamp: new Date().toISOString()
+      });
+      
+      return {
+        event: 'cascade_processing_error',
+        reason: 'internal_error',
+        error: error.message
+      };
     }
   }
 
@@ -435,9 +372,6 @@ class CascadeCompleteV2 extends EventEmitter {
         const result = await this.quarantine.attemptRelease(record.event_id);
         
         if (result.status === 'retrying') {
-          // Since processEvent runs through the RAW LEDGER, a retried event
-          // whose fingerprint is already there comes back as a duplicate.
-          // Nothing calls this method today.
           // Re-process the event
           await this.processEvent(record.event, record.event.source);
         }

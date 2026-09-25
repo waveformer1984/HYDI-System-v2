@@ -13,76 +13,50 @@ class CascadeClassificationV2 {
       UNKNOWN_ANOMALY: 'UNKNOWN_ANOMALY'
     };
     
-    // Exact match patterns - NO fuzzy matching.
-    //
-    // Matching rule (ISSUES_FOUND.md #80): a category matches when ANY ONE
-    // of its indicator groups matches, and a group matches when ALL of its
-    // conditions match. Categories are tried in the order below and the
-    // first match wins. This is the rule modules/cascade-core.js's V1
-    // classifyEvent() implements (`||` between indicators, the same order),
-    // the rule CASCADE_README.md describes ("INFRA_FAILURE - Module not
-    // found, connection refused"), and what V2's own scripts expect
-    // (test-cascade-v2.js labels an event carrying only
-    // error_code: 'MODULE_NOT_FOUND' as "Valid INFRA_FAILURE").
-    //
-    // Two groups combine conditions, both taken from V1:
-    //   - database down: service === 'database' AND status === 'down'
-    //   - route failure: a route or endpoint AND an HTTP error signal
-    //     (V1: `(payload.route || payload.endpoint) && status_code >= 400`)
-    // Every other indicator names a failure on its own and is its own group.
-    //
-    // Field-level checks (exact / contains / exists / range) are unchanged:
-    // `exists` still means "present", so `build_failed: false` counts as a
-    // DEPLOYMENT_MISMATCH indicator exactly as it did before.
-    const P = (field, spec) => ({ field, ...spec });
-    const one = (pattern) => [pattern];
-    const ROUTE_CONTEXT = { anyOf: [P('route', { exists: true }), P('endpoint', { exists: true })] };
-    const HTTP_ERROR = {
-      anyOf: [
-        P('status_code', { min: 400, max: 599 }),
-        P('http_error', { exists: true }),
-        P('error', { contains: '404', exact: false }),
-        P('error', { contains: '500', exact: false })
-      ]
-    };
-
+    // Exact match patterns - NO fuzzy matching
     this.patterns = {
       [this.CLASSIFICATIONS.INFRA_FAILURE]: [
-        one(P('error_code', { value: 'MODULE_NOT_FOUND', exact: true })),
-        one(P('error_code', { value: 'ECONNREFUSED', exact: true })),
-        one(P('error_code', { value: 'ENOTFOUND', exact: true })),
-        one(P('error', { contains: 'Cannot resolve module', exact: false })),
-        [P('service', { value: 'database', exact: true }), P('status', { value: 'down', exact: true })],
-        one(P('error', { contains: 'Connection refused', exact: false })),
-        one(P('error', { contains: 'Service unavailable', exact: false }))
+        { field: 'error_code', value: 'MODULE_NOT_FOUND', exact: true },
+        { field: 'error_code', value: 'ECONNREFUSED', exact: true },
+        { field: 'error_code', value: 'ENOTFOUND', exact: true },
+        { field: 'error', contains: 'Cannot resolve module', exact: false },
+        { field: 'service', value: 'database', exact: true },
+        { field: 'status', value: 'down', exact: true },
+        { field: 'error', contains: 'Connection refused', exact: false },
+        { field: 'error', contains: 'Service unavailable', exact: false }
       ],
-
+      
       [this.CLASSIFICATIONS.ROUTE_FAILURE]: [
-        [ROUTE_CONTEXT, HTTP_ERROR]
+        { field: 'route', exists: true },
+        { field: 'endpoint', exists: true },
+        { field: 'status_code', min: 400, max: 599 },
+        { field: 'http_error', exists: true },
+        { field: 'error', contains: '404', exact: false },
+        { field: 'error', contains: '500', exact: false }
       ],
-
+      
       [this.CLASSIFICATIONS.DEPLOYMENT_MISMATCH]: [
-        one(P('env_var_missing', { exists: true })),
-        one(P('version_mismatch', { exists: true })),
-        one(P('config_diff', { exists: true })),
-        one(P('deployment_error', { exists: true })),
-        one(P('build_failed', { exists: true }))
+        { field: 'env_var_missing', exists: true },
+        { field: 'version_mismatch', exists: true },
+        { field: 'config_diff', exists: true },
+        { field: 'deployment_error', exists: true },
+        { field: 'build_failed', exists: true }
       ],
-
+      
       [this.CLASSIFICATIONS.DATA_INTEGRITY_RISK]: [
-        one(P('corruption_detected', { exists: true })),
-        one(P('checksum_mismatch', { exists: true })),
-        one(P('data_validation_failed', { exists: true })),
-        one(P('integrity_check_failed', { exists: true })),
-        one(P('data_loss', { exists: true }))
+        { field: 'corruption_detected', exists: true },
+        { field: 'checksum_mismatch', exists: true },
+        { field: 'data_validation_failed', exists: true },
+        { field: 'integrity_check_failed', exists: true },
+        { field: 'data_loss', exists: true }
       ],
-
+      
       [this.CLASSIFICATIONS.STREAM_BREAK]: [
-        one(P('stream_disconnected', { exists: true })),
-        one(P('connection_lost', { exists: true })),
-        one(P('websocket_error', { exists: true })),
-        one(P('stream_error', { exists: true })),
-        one(P('disconnect', { exists: true }))
+        { field: 'stream_disconnected', exists: true },
+        { field: 'connection_lost', exists: true },
+        { field: 'websocket_error', exists: true },
+        { field: 'stream_error', exists: true },
+        { field: 'disconnect', exists: true }
       ]
     };
     
@@ -114,23 +88,19 @@ class CascadeClassificationV2 {
       );
     }
     
-    // Check each category in order; the first one with a matching group wins
-    for (const [classification, groups] of Object.entries(this.patterns)) {
-      const matchedRules = [];
-      for (const group of groups) {
-        const matches = this.checkPatterns(event.payload, group);
-        if (matches.allMatch) matchedRules.push(this.describeGroup(classification, matches.results));
-      }
-
-      if (matchedRules.length > 0) {
+    // Check each classification pattern
+    for (const [classification, patterns] of Object.entries(this.patterns)) {
+      const matches = this.checkPatterns(event.payload, patterns);
+      
+      // ALL patterns must match for classification
+      if (matches.allMatch) {
         this.stats.classificationCounts[classification]++;
         
         return this.createClassificationResult(
           classification,
           0.9, // High confidence for exact matches
           [],
-          false,
-          matchedRules
+          false
         );
       }
     }
@@ -147,15 +117,12 @@ class CascadeClassificationV2 {
     );
   }
 
-  // Check if payload matches ALL conditions of one group. A condition is a
-  // single pattern, or { anyOf: [patterns] } which matches when any does.
+  // Check if payload matches ALL patterns
   checkPatterns(payload, patterns) {
     const results = [];
     
     for (const pattern of patterns) {
-      const match = pattern.anyOf
-        ? this.checkAnyOf(payload, pattern.anyOf)
-        : this.checkPattern(payload, pattern);
+      const match = this.checkPattern(payload, pattern);
       results.push(match);
     }
     
@@ -231,26 +198,8 @@ class CascadeClassificationV2 {
     };
   }
 
-  checkAnyOf(payload, alternatives) {
-    const results = alternatives.map(p => this.checkPattern(payload, p));
-    const hit = results.find(r => r.matched);
-    return hit || { field: alternatives.map(p => p.field).join('|'), matched: false, expected: 'any of', actual: undefined };
-  }
-
-  // Stable, human-readable id for a matched group, e.g.
-  // "INFRA_FAILURE:service=database+status=down"
-  describeGroup(classification, results) {
-    const parts = results.map(r => {
-      if (r.expected === 'exists') return `${r.field}`;
-      if (typeof r.expected === 'string' && r.expected.startsWith('contains')) return `${r.field}~${r.expected.slice(10, -1)}`;
-      if (typeof r.expected === 'string' && r.expected.startsWith('between')) return `${r.field}:${r.expected.slice(8).replace(' and ', '-')}`;
-      return `${r.field}=${r.expected}`;
-    });
-    return `${classification}:${parts.join('+')}`;
-  }
-
   // Create standardized classification result
-  createClassificationResult(classification, confidence, reasons, quarantine, matchedRules = []) {
+  createClassificationResult(classification, confidence, reasons, quarantine) {
     // Validate classification is one of the allowed enums
     if (!Object.values(this.CLASSIFICATIONS).includes(classification)) {
       throw new Error(`Invalid classification: ${classification}`);
@@ -261,7 +210,6 @@ class CascadeClassificationV2 {
       classification: classification,
       confidence: confidence,
       reasons: reasons || [],
-      matched_rules: matchedRules,
       quarantine: quarantine,
       enum_locked: true,
       version: 'v2'
