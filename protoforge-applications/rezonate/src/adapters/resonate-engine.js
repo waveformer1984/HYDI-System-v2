@@ -16,11 +16,17 @@ function createDefaultStemRunner() {
 }
 
 function createDefaultAudioProvider(runner) {
+  // Default to the bundled deterministic tone-synth when no external model
+  // is configured — honest local-first generation, labeled 'tone-synth' in
+  // asset metadata. Override with AUDIO_MODEL_RUNTIME/AUDIO_MODEL_PATH.
+  const synthPath = require('path').join(__dirname, '..', '..', 'scripts', 'tone-synth.js');
   const runtime = new LocalModelRuntime({
+    command: process.env.AUDIO_MODEL_RUNTIME || 'node',
+    modelPath: process.env.AUDIO_MODEL_PATH || synthPath,
     outputDir: path.join(defaultEnginePath, 'generated'),
     runner
   });
-  return new LocalAudioProvider({ runtime, logger: { info: () => {}, warn: () => {} } });
+  return new LocalAudioProvider({ runtime, logger: { info: () => { }, warn: () => { } } });
 }
 
 class ResonateEngineAdapter {
@@ -28,7 +34,7 @@ class ResonateEngineAdapter {
     this.enginePath = options.enginePath || defaultEnginePath;
     this.stemRunner = options.stemRunner || options.runner || null;
     this.eventBus = options.eventBus || null;
-    this.logger = options.logger || { warn: () => {}, info: () => {}, debug: () => {} };
+    this.logger = options.logger || { warn: () => { }, info: () => { }, debug: () => { } };
     this.jobs = new Map();
     this.audioProvider = options.audioProvider || createDefaultAudioProvider(this.stemRunner);
   }

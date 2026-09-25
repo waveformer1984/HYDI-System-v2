@@ -148,6 +148,50 @@ class ResonateRepository {
     return job.toJSON();
   }
 
+  // ── Customer orders (the product journey) ─────────────────────────
+  // created → awaiting_payment → paid → generating → ready | failed
+  createOrder(input) {
+    if (!input || !input.customer_email || !input.customer_email.includes('@')) {
+      throw new ValidationError('customer_email is required');
+    }
+    if (!input.prompt || !String(input.prompt).trim()) {
+      throw new ValidationError('prompt is required');
+    }
+    const duration = Math.max(10, Math.min(300, parseInt(input.duration, 10) || 60));
+    const order = {
+      id: id(),
+      customer_email: input.customer_email,
+      customer_name: input.customer_name || null,
+      prompt: String(input.prompt).trim(),
+      duration,
+      mood: input.mood || null,
+      status: 'awaiting_payment',
+      payment_job_id: null,
+      payment_status: 'unpaid',
+      processing_job_id: null,
+      asset_id: null,
+      error: null,
+      created_at: now(),
+      updated_at: now()
+    };
+    this.store.create('orders', order);
+    this.eventBus.emit('order.created', { entityId: order.id, status: order.status });
+    this.logger.info('repository', 'order.created', `Order ${order.id} created`, { orderId: order.id });
+    return { ...order };
+  }
+
+  getOrder(id) {
+    return ensureFound(this.store.getById('orders', id), 'Order not found');
+  }
+
+  updateOrder(id, patch) {
+    const raw = ensureFound(this.store.getById('orders', id), 'Order not found');
+    const merged = { ...raw, ...patch, id: raw.id, updated_at: now() };
+    this.store.update('orders', id, merged);
+    this.eventBus.emit('order.updated', { entityId: id, status: merged.status });
+    return merged;
+  }
+
   createOwnershipRecord(assetId, input) {
     this.getAsset(assetId);
     const record = new OwnershipRecord({
@@ -233,7 +277,7 @@ function createRepository(options = {}) {
       logger
     }));
   }
-  const store = options.store || createStore({ type: 'memory' });
+  const store = options.store || createStore({ filePath: config.dbPath, dataDir: config.dataDir, logger });
   const eventBus = options.eventBus || new EventBus(transports);
   const repo = new ResonateRepository(store, eventBus, logger);
   return repo;

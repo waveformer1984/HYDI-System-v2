@@ -1,28 +1,156 @@
 :root {
-  --bg: #f5f6f7;
-  --card: #ffffff;
-  --text: #1a1a1a;
-  --primary: #2563eb;
+  --bg: #0f1115;
+  --card: #1a1d26;
+  --text: #e8eaf0;
+  --muted: #9aa3b5;
+  --primary: #7c5cff;
+  --primary-hi: #9d85ff;
+  --error: #ff6b6b;
 }
 
-* { box-sizing: border-box; }
+* {
+  box-sizing: border-box;
+}
 
 body {
   margin: 0;
-  padding: 1rem;
-  font-family: system-ui, sans-serif;
+  padding: 0 1rem 3rem;
+  font-family: system-ui, -apple-system, sans-serif;
   background: var(--bg);
   color: var(--text);
 }
 
-header h1 {
-  margin: 0 0 1rem 0;
-  font-size: 1.5rem;
+.hero {
+  text-align: center;
+  padding: 3rem 1rem 2rem;
+}
+
+.hero h1 {
+  margin: 0;
+  font-size: 2.6rem;
+  letter-spacing: .02em;
+}
+
+.tagline {
+  color: var(--muted);
+  font-size: 1.1rem;
+  margin: .5rem 0 .25rem;
+}
+
+.price {
+  color: var(--primary-hi);
+  font-weight: 600;
+}
+
+main {
+  max-width: 520px;
+  margin: 0 auto;
 }
 
 .card {
   background: var(--card);
-  padding: 1rem;
+  padding: 1.5rem;
+  border-radius: 12px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, .35);
+}
+
+.card h2 {
+  margin-top: 0;
+}
+
+label {
+  display: block;
+  font-size: .85rem;
+  color: var(--muted);
+  margin-bottom: .9rem;
+}
+
+input,
+textarea,
+select {
+  display: block;
+  width: 100%;
+  margin-top: .3rem;
+  padding: .6rem .7rem;
   border-radius: 8px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  border: 1px solid #2c3140;
+  background: #12141c;
+  color: var(--text);
+  font: inherit;
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
+.row {
+  display: flex;
+  gap: 1rem;
+}
+
+.row label {
+  flex: 1;
+}
+
+button,
+.button {
+  display: block;
+  width: 100%;
+  padding: .8rem;
+  border: 0;
+  border-radius: 8px;
+  background: var(--primary);
+  color: #fff;
+  font: inherit;
+  font-weight: 600;
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: .6;
+  cursor: default;
+}
+
+.button {
+  background: var(--primary);
+  margin-top: .5rem;
+}
+
+.error {
+  color: var(--error);
+  font-size: .85rem;
+  margin-bottom: .8rem;
+}
+
+.note {
+  color: var(--muted);
+  font-size: .85rem;
+  margin-top: .8rem;
+}
+
+dl {
+  display: grid;
+  grid-template-columns: 90px 1fr;
+  gap: .4rem .8rem;
+  margin: 0 0 1rem;
+}
+
+dt {
+  color: var(--muted);
+}
+
+dd {
+  margin: 0;
+  word-break: break-word;
+}
+
+footer {
+  text-align: center;
+  color: var(--muted);
+  margin-top: 2.5rem;
 }

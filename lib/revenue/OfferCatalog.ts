@@ -202,6 +202,33 @@ const DEFAULT_OFFERS: Record<OfferId, CommercialOffer> = {
     active: true,
   },
 
+  // Rezonate: Productized generated-song package
+  rezonate_song: {
+    offerId: 'rezonate_song',
+    name: 'Custom Song Preparation Package',
+    description: 'Describe the track you want — mood, style, and what it is for. We produce a generated audio file with source metadata, delivered as a downloadable package.',
+    category: 'rezonate',
+    setupPrice: 2900,        // $29.00 in cents
+    recurringPrice: 0,
+    billingInterval: 'one_time',
+    includedCapabilities: [
+      'song_generation',
+      'downloadable_audio',
+      'prompt_metadata',
+    ],
+    usageLimits: {
+      maxDurationSeconds: 300,
+    },
+    implementationRequirements: [
+      'prompt',
+      'customer_email',
+    ],
+    marginTarget: 0.9,
+    upgradePath: null,
+    cancellationBehavior: 'Full refund if generation fails. One free regeneration if the track does not match the description.',
+    active: true,
+  },
+
   // ProtoForge: Productized 3D model preparation
   protoforge_model_prep: {
     offerId: 'protoforge_model_prep',

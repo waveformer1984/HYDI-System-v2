@@ -18,10 +18,10 @@ describe('ResonateEngineAdapter', () => {
     bus.on('audio.asset.created', e => events.push(e));
   });
 
-  it('reports engine unavailable when no runner is configured', async () => {
+  it('reports engine available via the bundled tone-synth default', async () => {
     const adapter = new ResonateEngineAdapter({ eventBus: bus });
     const available = await adapter.isAvailable();
-    assert.strictEqual(available, false);
+    assert.strictEqual(available, true);
   });
 
   it('handles successful song generation', async () => {

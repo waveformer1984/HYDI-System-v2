@@ -21,11 +21,12 @@ export type OfferId =
   | 'ai_website_monthly'
   | 'lead_gen_setup'
   | 'lead_gen_monthly'
-  | 'protoforge_model_prep';
+  | 'protoforge_model_prep'
+  | 'rezonate_song';
 
 export type BillingInterval = 'one_time' | 'monthly' | 'annual';
 
-export type OfferCategory = 'ai_operations' | 'website_deployment' | 'lead_generation' | 'protoforge';
+export type OfferCategory = 'ai_operations' | 'website_deployment' | 'lead_generation' | 'protoforge' | 'rezonate';
 
 export interface CommercialOffer {
   offerId: OfferId;

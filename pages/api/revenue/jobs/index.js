@@ -165,8 +165,12 @@ export default async function handler(req, res) {
       customerName,
       prospectId: null,
       opportunityId: null,
-      successUrl: `${origin}/services/model-prep/success?jobId=${job.jobId}&session_id={CHECKOUT_SESSION_ID}`,
-      cancelUrl: `${origin}/services/model-prep/cancel?jobId=${job.jobId}`,
+      successUrl: typeof req.body.successUrl === 'string' && req.body.successUrl.startsWith('http')
+        ? req.body.successUrl.replace('{jobId}', job.jobId)
+        : `${origin}/services/model-prep/success?jobId=${job.jobId}&session_id={CHECKOUT_SESSION_ID}`,
+      cancelUrl: typeof req.body.cancelUrl === 'string' && req.body.cancelUrl.startsWith('http')
+        ? req.body.cancelUrl.replace('{jobId}', job.jobId)
+        : `${origin}/services/model-prep/cancel?jobId=${job.jobId}`,
       authorizationId: liveAuthId || undefined,
     });
 

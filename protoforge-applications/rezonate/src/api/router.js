@@ -34,6 +34,85 @@ function createApi(repository, config = {}) {
 
   const sampleLibrary = new SampleLibraryAdapter({ logger: repository ? repository.logger : undefined });
 
+  // ── Static product UI ─────────────────────────────────────────────
+  app.use(express.static(require('path').join(__dirname, '..', '..', 'public')));
+
+  // ── Customer orders — the canonical product journey ───────────────
+  // Payment truth lives ONLY in the main app's customer_jobs + webhook
+  // path. Rezonate never marks itself paid; it reads the real job state.
+  const MAIN_APP = process.env.MAIN_APP_URL || 'http://localhost:3000';
+
+  app.post('/orders', h(async (req, res) => {
+    const order = repository.createOrder(req.body || {});
+    // Mint a real checkout through the qualified payment path.
+    const jr = await fetch(`${MAIN_APP}/api/revenue/jobs`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        customerEmail: order.customer_email,
+        customerName: order.customer_name || 'Rezonate customer',
+        product: 'rezonate_song',
+        requestText: order.prompt,
+        requirements: { duration: order.duration, mood: order.mood, rezonate_order_id: order.id },
+        successUrl: `http://localhost:${config.port || 3001}/?order=${order.id}`,
+        cancelUrl: `http://localhost:${config.port || 3001}/?order=${order.id}`
+      })
+    }).then(r => r.json()).catch(() => null);
+    if (!jr || !jr.checkoutUrl || !jr.jobId) {
+      const failed = repository.updateOrder(order.id, { status: 'failed', error: jr?.error || 'checkout unavailable' });
+      return res.status(502).json({ ok: false, error: failed.error, order: failed });
+    }
+    const updated = repository.updateOrder(order.id, { payment_job_id: jr.jobId, checkout_url: jr.checkoutUrl });
+    send(res, { order: updated }, 201);
+  }));
+
+  app.get('/orders/:id', h(async (req, res) => {
+    const order = repository.getOrder(req.params.id);
+    // Payment sync: read the authoritative job state from the main app.
+    if (order.status === 'awaiting_payment' && order.payment_job_id) {
+      const jr = await fetch(`${MAIN_APP}/api/revenue/jobs/${order.payment_job_id}`)
+        .then(r => (r.ok ? r.json() : null)).catch(() => null);
+      const pay = jr?.job?.paymentStatus ?? jr?.job?.payment_status ?? null;
+      if (pay === 'paid') {
+        repository.updateOrder(order.id, { status: 'paid', payment_status: 'paid' });
+        // Generation begins only after the real webhook-confirmed payment.
+        const pjob = repository.createProcessingJob({ task_type: 'generate', prompt: order.prompt, clip: order.duration < 60 });
+        repository.updateOrder(order.id, { status: 'generating', processing_job_id: pjob.id });
+        try {
+          repository.startProcessingJob(pjob.id);
+          const result = await engine.generateSong({ prompt: order.prompt, duration: order.duration, clip: order.duration < 60, projectId: null });
+          if (!result.ok) {
+            repository.failProcessingJob(pjob.id, result.error);
+            repository.updateOrder(order.id, { status: 'failed', error: result.error });
+          } else {
+            const asset = repository.registerAsset(null, {
+              type: 'generated_song', file_path: result.audioPath,
+              metadata: { source: 'order', orderId: order.id, prompt: order.prompt, provider: result.provider, model: result.model }
+            });
+            repository.completeProcessingJob(pjob.id, { audioPath: result.audioPath, assetId: asset.id });
+            repository.updateOrder(order.id, { status: 'ready', asset_id: asset.id });
+          }
+        } catch (e) {
+          repository.failProcessingJob(pjob.id, e instanceof Error ? e.message : String(e));
+          repository.updateOrder(order.id, { status: 'failed', error: 'generation failed' });
+        }
+      }
+    }
+    send(res, { order: repository.getOrder(req.params.id) });
+  }));
+
+  app.get('/orders/:id/download', h(async (req, res) => {
+    const order = repository.getOrder(req.params.id);
+    if (order.status !== 'ready' || !order.asset_id) {
+      return res.status(409).json({ ok: false, error: `order is '${order.status}' — not ready for download`, order });
+    }
+    const asset = repository.getAsset(order.asset_id);
+    if (!asset.file_path || !fs.existsSync(asset.file_path)) {
+      return res.status(404).json({ ok: false, error: 'audio file missing' });
+    }
+    res.sendFile(require('path').resolve(asset.file_path));
+  }));
+
   app.get('/health', h(async (req, res) => {
     const diag = await collectDiagnostics(repository);
     send(res, { ...diag, requestId: req.requestId });

@@ -62,6 +62,12 @@ const FULFILLMENT_TEMPLATES: Record<OfferId, { stepId: string; name: string }[]>
     { stepId: 'human_review', name: 'Human review and approval' },
     { stepId: 'delivery', name: 'Artifact delivery to customer' },
   ],
+  rezonate_song: [
+    { stepId: 'order_linked', name: 'Rezonate order linked to payment' },
+    { stepId: 'song_generation', name: 'Song generation via local provider' },
+    { stepId: 'asset_registered', name: 'Audio asset registered' },
+    { stepId: 'download_ready', name: 'Download link available to customer' },
+  ],
 };
 
 export class CustomerLifecycle {

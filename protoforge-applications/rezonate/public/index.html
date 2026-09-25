@@ -3,17 +3,61 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Resonate</title>
+  <title>Resonate — Custom Generated Tracks</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <header>
+  <header class="hero">
     <h1>Resonate</h1>
+    <p class="tagline">Describe the track you want. We generate it and deliver the audio.</p>
+    <p class="price">$29 &middot; one song package &middot; delivered same day</p>
   </header>
+
   <main>
-    <div class="card">
-      <p>Resonate ProtoForge application wrapper is running.</p>
-    </div>
+    <!-- STEP: order form -->
+    <section id="step-order" class="card">
+      <h2>Order your track</h2>
+      <form id="order-form">
+        <label>Email
+          <input id="f-email" type="email" required placeholder="you@example.com" />
+        </label>
+        <label>Name (optional)
+          <input id="f-name" type="text" placeholder="Your name" />
+        </label>
+        <label>Describe the track
+          <textarea id="f-prompt" required minlength="10" rows="3"
+            placeholder="e.g. Upbeat lo-fi background track for a coffee-shop video, warm and relaxed"></textarea>
+        </label>
+        <div class="row">
+          <label>Mood
+            <select id="f-mood">
+              <option value="">—</option><option>calm</option><option>energetic</option>
+              <option>melancholy</option><option>triumphant</option>
+            </select>
+          </label>
+          <label>Length
+            <select id="f-duration">
+              <option value="30">30 sec clip</option>
+              <option value="60" selected>60 sec</option>
+              <option value="120">2 min</option>
+            </select>
+          </label>
+        </div>
+        <div id="order-error" class="error" hidden></div>
+        <button id="order-btn" type="submit">Continue to secure checkout — $29</button>
+      </form>
+    </section>
+
+    <!-- STEP: status -->
+    <section id="step-status" class="card" hidden>
+      <h2>Your order</h2>
+      <dl id="status-fields"></dl>
+      <div id="status-actions"></div>
+      <div id="status-note" class="note"></div>
+    </section>
   </main>
+
+  <footer><small>Resonate · ProtoForge · local-first generation</small></footer>
+  <script src="ui.js"></script>
 </body>
 </html>
