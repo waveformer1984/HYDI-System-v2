@@ -245,7 +245,7 @@ export function classifyLifeIntent(message: string): LifeIntent | null {
     return { kind: 'briefing' };
   }
   // Forward-looking: "what should happen next", "what do we do now"
-  if (/what should (happen|we do|i do) next|what'?s next|next steps?|what now/i.test(m)) {
+  if (/what should (happen|we do|i do|we work on|we focus on)|what should we work on|what'?s next|next steps?|what now/i.test(m)) {
     return { kind: 'next_steps' };
   }
   // Bounded operational translation: "investigate <uuid-or-opportunity-ref>"
