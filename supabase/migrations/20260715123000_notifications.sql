@@ -26,6 +26,19 @@ create table if not exists public.notifications (
   created_at   timestamptz not null default now()
 );
 
+-- 20260426122500_notifications_table.sql already created public.notifications
+-- with the April columns, so the create above is a no-op there and the
+-- indexes below would fail on the missing July columns. Add them first; they
+-- are the same additions 20260818120000_reconcile_notifications_schema.sql
+-- makes, which then becomes a no-op.
+alter table public.notifications add column if not exists category     text;
+alter table public.notifications add column if not exists severity     text default 'info';
+alter table public.notifications add column if not exists title        text;
+alter table public.notifications add column if not exists body         text;
+alter table public.notifications add column if not exists device_id    text;
+alter table public.notifications add column if not exists read_at      timestamptz;
+alter table public.notifications add column if not exists delivered_at timestamptz;
+
 create index if not exists idx_notifications_created_at on public.notifications (created_at desc);
 create index if not exists idx_notifications_unread      on public.notifications (device_id, read_at);
 create index if not exists idx_notifications_category    on public.notifications (category);

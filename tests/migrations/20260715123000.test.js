@@ -48,6 +48,20 @@ describe('Migration 20260715123000 – Notifications', () => {
     createTableStatements.forEach((stmt) => expect(stmt).toMatch(/IF NOT EXISTS/i));
   });
 
+  it('adds the July columns before indexing them, since the April table already exists', () => {
+    // 20260426122500 creates public.notifications first, so the CREATE TABLE
+    // above is a no-op on every database and only these ALTERs add the columns.
+    ['category', 'severity', 'title', 'body', 'device_id', 'read_at', 'delivered_at'].forEach((col) => {
+      expect(sql).toMatch(new RegExp(`alter table public\\.notifications add column if not exists ${col}\\b`, 'i'));
+    });
+    const addDeviceId = sql.search(/add column if not exists device_id/i);
+    const unreadIndex = sql.search(/create index if not exists idx_notifications_unread/i);
+    const categoryIndex = sql.search(/create index if not exists idx_notifications_category/i);
+    expect(addDeviceId).toBeGreaterThan(-1);
+    expect(addDeviceId).toBeLessThan(unreadIndex);
+    expect(sql.search(/add column if not exists category/i)).toBeLessThan(categoryIndex);
+  });
+
   it('enables RLS and restricts both tables to service_role', () => {
     expect(sql).toMatch(/ALTER TABLE public\.notifications ENABLE ROW LEVEL SECURITY/i);
     expect(sql).toMatch(/ALTER TABLE public\.notification_preferences ENABLE ROW LEVEL SECURITY/i);
