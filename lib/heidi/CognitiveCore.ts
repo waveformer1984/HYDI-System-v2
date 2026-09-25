@@ -460,6 +460,7 @@ export class CognitiveCore {
   private lastFailureAt: string | null = null;
   private cooldownUntil: string | null = null;
   private lastError: string | null = null;
+  private lastDevScanAt = 0;
   private startedAt: number | null = null;
   private runtimeCommit: string | null | undefined; // undefined = not yet resolved
 
@@ -1759,7 +1760,7 @@ export class CognitiveCore {
             `INSERT INTO heidi_goals (title, goal_type, description, status, priority, success_criteria, context, created_at, updated_at)
              VALUES ($1, 'investigate', $1, 'active', 5, 'investigation reaches a persisted conclusion', $2, now(), now())`,
             [`Investigate: ${f.question.slice(0, 140)}`,
-            JSON.stringify({ capabilityId: 'ops.dev_investigate', findingType: f.findingType === 'tree_pollution' ? 'generic' : 'generic', target: f.target, question: f.question, initialObservation: f.initialObservation, suspectedFiles: f.suspectedFiles, severity: f.severity })],
+            JSON.stringify({ capabilityId: 'ops.dev_investigate', findingType: f.findingType, target: f.target, question: f.question, initialObservation: f.initialObservation, suspectedFiles: f.suspectedFiles, severity: f.severity })],
           );
           goalsCreated++;
         } catch { /* duplicate/pool issue — skip */ }
@@ -3407,6 +3408,16 @@ export class CognitiveCore {
         this.lastSuccessfulCycleAt = new Date().toISOString();
         // Don't reset consecutiveFailures, but don't increment either
         // This prevents cooldown from triggering on recoverable errors
+      }
+
+      // Autonomous dev-scan cadence — every 30 min, R0, never blocks the
+      // cycle. The observer emits findings as goals; the governed chain
+      // (investigate → author → patch) picks them up on future cycles.
+      if (Date.now() - this.lastDevScanAt > 30 * 60 * 1000) {
+        this.lastDevScanAt = Date.now();
+        try {
+          await this.registry.execute('ops.dev_observe', {}, { sessionId: this.sessionId } as CapabilityExecutionContext);
+        } catch { /* scan failure must not break the cycle */ }
       }
       // HARD_FAILURE falls through to the catch block via re-throw
       if (outcome === 'HARD_FAILURE') {

@@ -34,10 +34,12 @@ export async function observeDevelopmentSignals(pool: Pool): Promise<ObservedFin
   const findings: ObservedFinding[] = [];
 
   // Repeated capability failures — a capability failing ≥3 times in 24h
-  // is a defect candidate, not a retry problem.
+  // is a defect candidate, not a retry problem. Attach the dominant
+  // error text so the investigator can classify deterministically.
   try {
     const fails = await pool.query(
-      `SELECT detail->>'capabilityId' AS cap, COUNT(*)::int AS c
+      `SELECT detail->>'capabilityId' AS cap, COUNT(*)::int AS c,
+              MODE() WITHIN GROUP (ORDER BY detail->>'error') AS top_error
        FROM heidi_events
        WHERE event_type = 'action_execution' AND detail->>'outcome' = 'failure'
          AND created_at > now() - interval '24 hours'
@@ -48,25 +50,33 @@ export async function observeDevelopmentSignals(pool: Pool): Promise<ObservedFin
         findingType: 'repeated_capability_failure',
         target: String(r.cap),
         question: `capability ${r.cap} failed ${r.c}× in 24h — transient or defective?`,
-        initialObservation: `${r.c} failures of ${r.cap} in the last 24h`,
+        initialObservation: `${r.c} failures of ${r.cap} in 24h; dominant error: ${String(r.top_error ?? 'n/a').slice(0, 200)}`,
         suspectedFiles: ['lib/heidi/CognitiveCore.ts'],
         severity: r.c >= 8 ? 'high' : 'medium',
       });
     }
   } catch { /* table shape may differ — skip rather than fabricate */ }
 
-  // Unresolved paid delivery escalations — real money waiting on a human.
+  // Unresolved paid delivery escalations — attach the reason histogram;
+  // a single dominant cause is a systemic defect, a diverse mix is a
+  // legitimate human workload.
   try {
+    // Reasons live in the intervention_requested event detail — the
+    // intervention_id is per-job (delivery-<jobId>) and would make every
+    // bucket look unique even when the cause is systemic.
     const esc = await pool.query(
-      `SELECT COUNT(*)::int c FROM customer_jobs
-       WHERE intervention_status = 'requested' AND payment_status = 'paid'`);
-    const c = esc.rows[0]?.c ?? 0;
-    if (c > 0) {
+      `SELECT TRIM(split_part(COALESCE(e.details->>'reason', e.details->>'interventionId'), ':', 3)) AS reason, COUNT(DISTINCT j.job_id)::int c
+       FROM customer_jobs j
+       JOIN customer_job_events e ON e.job_id = j.job_id AND e.event_type = 'intervention_requested'
+       WHERE j.intervention_status = 'requested' AND j.payment_status = 'paid'
+       GROUP BY 1 ORDER BY c DESC`);
+    const total = esc.rows.reduce((s, r) => s + r.c, 0);
+    if (total > 0) {
       findings.push({
         findingType: 'unresolved_delivery_escalation',
         target: 'customer_jobs',
-        question: `${c} paid jobs escalated to human — do the failures share a fixable cause?`,
-        initialObservation: `${c} paid jobs with intervention_status='requested'`,
+        question: `${total} paid jobs escalated to human — shared fixable cause or legitimate exceptions?`,
+        initialObservation: `${total} paid escalations; reasons: ${esc.rows.map(r => `${r.c}× ${String(r.reason ?? 'unknown').slice(0, 60)}`).join(' | ')}`,
         suspectedFiles: ['lib/revenue/JobExecutor.ts', 'lib/revenue/DeliveryVerifier.ts'],
         severity: 'high',
       });

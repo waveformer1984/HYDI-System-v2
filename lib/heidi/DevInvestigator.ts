@@ -32,7 +32,9 @@ const BUDGET_MS = 10 * 60 * 1000;
 /** Investigation commands must be read-only. Anything else is refused. */
 const READ_ONLY_CMD = /^(npx\s+(tsc|jest)|node\s+(--test\s+\S+|scripts\/|check-)|git\s+(status|diff|log|ls-files|rev-parse)\b)/;
 
-export type FindingType = 'test_framework_mismatch' | 'escalation_asymmetry' | 'generic';
+export type FindingType = 'test_framework_mismatch' | 'escalation_asymmetry'
+  | 'repeated_capability_failure' | 'unresolved_delivery_escalation'
+  | 'stale_goal' | 'tree_pollution' | 'generic';
 
 export interface DevInvestigationInput {
   findingType: FindingType;
@@ -226,6 +228,62 @@ export async function investigateFinding(input: DevInvestigationInput): Promise<
         return finish('CONFIRMED_DEFECT', 'MEDIUM', 'align executeJob escalation with the sweep paid-only policy');
       }
       return finish('INSUFFICIENT_EVIDENCE', 'MEDIUM', 'asymmetry not confirmed in code');
+    }
+
+    case 'repeated_capability_failure': {
+      // The observer attached the dominant error. A single repeating
+      // error text = deterministic defect candidate; varied errors =
+      // transient/environmental.
+      hypotheses.push({ statement: input.question, supporting: [input.initialObservation], counterexamples: [] });
+      const m = input.initialObservation.match(/dominant error: (.+)/);
+      const dominant = m?.[1] ?? '';
+      evidence.dominantError = dominant || null;
+      if (!dominant || dominant === 'n/a') {
+        return finish('INSUFFICIENT_EVIDENCE', 'LOW', 'no error text — cannot classify the failure pattern');
+      }
+      // Same error ≥3× is a code-level repeat, not noise
+      const count = parseInt(input.initialObservation.match(/^(\d+) failures/)?.[1] ?? '0', 10);
+      if (count >= 3) {
+        hypotheses[0].supporting.push(`${count} identical-capability failures sharing error '${dominant.slice(0, 80)}'`);
+        hypotheses[0].counterexamples.push('failures may be external (DB/LLM down) — flagged for bounded diagnosis, not blind patching');
+        return finish('CONFIRMED_DEFECT', 'MEDIUM', `investigate root cause of repeated '${dominant.slice(0, 80)}' — bounded fix only if code-level`);
+      }
+      return finish('INSUFFICIENT_EVIDENCE', 'MEDIUM', 'failure count below repeat threshold');
+    }
+
+    case 'unresolved_delivery_escalation': {
+      // Reasons histogram is in the observation. One dominant cause =
+      // systemic (possible fix); diverse causes = legitimate human queue.
+      hypotheses.push({ statement: input.question, supporting: [input.initialObservation], counterexamples: [] });
+      const reasons = [...input.initialObservation.matchAll(/(\d+)× ([^|]+)/g)]
+        .map(x => ({ n: parseInt(x[1], 10), reason: x[2].trim() }));
+      evidence.reasonHistogram = reasons;
+      if (reasons.length === 0) return finish('INSUFFICIENT_EVIDENCE', 'LOW', 'no reason histogram');
+      const total = reasons.reduce((s, r) => s + r.n, 0);
+      const top = reasons[0];
+      if (reasons.length === 1 || top.n / total >= 0.7) {
+        hypotheses[0].supporting.push(`${top.n}/${total} escalations share cause '${top.reason.slice(0, 80)}' — systemic`);
+        hypotheses[0].counterexamples.push('jobs may be genuinely undeliverable (missing artifacts) — the fix may be data, not code');
+        return finish('CONFIRMED_DEFECT', 'MEDIUM', `systemic escalation cause '${top.reason.slice(0, 80)}' — fix root cause or adjust QA calibration`);
+      }
+      hypotheses[0].counterexamples.push(`${reasons.length} distinct causes — this is a legitimate human review queue, not a defect`);
+      return finish('NOT_A_DEFECT', 'HIGH', 'diverse escalations are the intended human boundary — no code change');
+    }
+
+    case 'stale_goal': {
+      // A goal stuck >24h is a process concern, not a code defect —
+      // unless the goal references a capability that no longer exists.
+      hypotheses.push({ statement: input.question, supporting: [input.initialObservation], counterexamples: [] });
+      return finish('NOT_A_DEFECT', 'HIGH', 'stale goal is an ops concern — requeue or cancel; not a code defect');
+    }
+
+    case 'tree_pollution': {
+      // Pollution means accumulator files lack ignore rules — a config
+      // fix, outside the patch allowlist. Report it, don't patch.
+      hypotheses.push({ statement: input.question, supporting: [input.initialObservation], counterexamples: [] });
+      const gs = run('git status --porcelain', budget, commandsRun);
+      evidence.untrackedSample = gs.out.split('\n').filter(l => l.startsWith('??')).slice(0, 10);
+      return finish('INSUFFICIENT_EVIDENCE', 'MEDIUM', 'ignore-rule change touches repo config — human decision');
     }
 
     default: {
