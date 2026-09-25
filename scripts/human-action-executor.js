@@ -115,6 +115,12 @@ async function stripeTestCheckout(spec) {
   let result;
   if (spec.type === 'stripe_test_checkout') {
     result = await stripeTestCheckout(spec);
+  } else if (spec.type === 'browser_post_reply') {
+    const bpr = require('../lib/human-action/browser-post-reply');
+    result = await bpr.execute(spec);
+    // Only real attempts (past authorization) enter the dedup log —
+    // a REJECTED spec was never a submission attempt.
+    if (result.status !== 'REJECTED') bpr.recordSubmission(spec, result);
   } else {
     result = { ok: false, status: 'BLOCKED', reason: `unknown action type '${spec.type}' — closed action set` };
   }

@@ -744,6 +744,47 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
               } else {
                 text = `BLOCKED — no bounded executor exists for improvement type '${spec?.type ?? 'none'}'. Your approval is recorded; execution refused rather than substituted.`;
               }
+            } else if (p.payload.kind === 'human_action' && (p.payload.actionSpec as { type?: string } | undefined)?.type === 'browser_post_reply') {
+              // External communication — the most consequential boundary.
+              // Approval binds an authorization to the EXACT action
+              // (channel + destination + message hash + opportunity);
+              // the executor rejects any drift, and an ambiguous post is
+              // reported UNKNOWN, never claimed.
+              const spec0 = p.payload.actionSpec as { opportunityId?: string; channel?: string; permalink?: string; message?: string };
+              const actionId = `ha_${Date.now()}`;
+              const bpr = await import('../../lib/human-action/browser-post-reply') as { createAuthorization: (s: Record<string, unknown>, by: string) => unknown };
+              const spec: Record<string, unknown> = { ...spec0, type: 'browser_post_reply', actionId, requestedAt: new Date().toISOString() };
+              spec.authorization = bpr.createAuthorization(spec, 'operator');
+              await sb.from('heidi_events').insert({
+                event_type: 'human_action', division: 'companion',
+                payload: { actionId, type: 'browser_post_reply', status: 'AUTHORIZED', authorizedBy: 'operator', proposalId: p.id, authorization: spec.authorization, at: new Date().toISOString() },
+              });
+              const { execFile } = await import('node:child_process');
+              const run = await new Promise<{ code: number | null; out: string }>((res) => {
+                execFile('node', ['scripts/human-action-executor.js', '--spec', JSON.stringify(spec)],
+                  { cwd: process.cwd(), timeout: 300000 }, (err, stdout) => res({ code: err ? (err.code as number ?? 1) : 0, out: String(stdout) }));
+              });
+              let result: { ok?: boolean; status?: string; reason?: string; screenshots?: string[] } = {};
+              try { result = JSON.parse(run.out.trim().split('\n').pop() ?? '{}'); } catch { /* malformed */ }
+              await sb.from('heidi_events').insert({
+                event_type: 'human_action', division: 'companion',
+                payload: {
+                  actionId, type: 'browser_post_reply', proposalId: p.id,
+                  status: result.status === 'VERIFIED' ? 'COMPLETED' : result.status ?? 'FAILED',
+                  destination: spec.permalink, channel: spec.channel,
+                  reason: result.reason ?? null, evidence: result.screenshots ?? [],
+                  finishedAt: new Date().toISOString(),
+                },
+              });
+              if (result.status === 'VERIFIED') {
+                text = `Submitted and verified — the reply is visible on the destination page.\nDestination: ${spec.permalink}\nMessage: "${String(spec.message ?? '').slice(0, 140)}"\nVerification: posted text observed on-page; screenshots captured.`;
+              } else if (result.status === 'WAITING_FOR_HUMAN') {
+                text = `NOT SENT — the channel needs you first: ${result.reason}. Nothing was posted, and I have not treated it as submitted. Log in once and I'll retry on your approval.`;
+              } else if (result.status === 'EXTERNAL_BLOCK') {
+                text = `NOT SENT — the platform is blocking this access: ${result.reason}. The action stays authorized but unexecuted.`;
+              } else {
+                text = `I could not verify that the reply was submitted (${result.status ?? 'UNKNOWN'}${result.reason ? `: ${result.reason}` : ''}). I have NOT treated it as successful — no claim, no retry without your approval.`;
+              }
             } else if (p.payload.kind === 'human_action' && (p.payload.actionSpec as { type?: string } | undefined)?.type === 'stripe_test_checkout') {
               // Human Action Executor — drives the real browser through the
               // hosted TEST checkout. Verification is independent: the job
