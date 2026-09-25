@@ -235,6 +235,30 @@ describe('live CASCADE entry point runs the six-layer pipeline', () => {
     expect(cascade.getQuarantineReport().summary.total_quarantined).toBe(1);
   });
 
+  it('processes well-formed events that carry no raw `payload` field instead of quarantining them for low confidence', async () => {
+    // The system and local adapters read `data` and named fields; the raw
+    // event has no `payload`. These used to score 0.5 and ~0.13.
+    const { cascade } = track(liveCascade(new RawLedgerAdapter({ client: fakeLedgerClient() })));
+    const system = await cascade.processEvent(
+      { id: randomUUID(), type: 'error', data: { service: 'database', status: 'down' } }, 'system');
+    expect(system.status).toBe('processed');
+    expect(system.confidence).toBe(1);
+    expect(system.classification.classification).toBe('INFRA_FAILURE');
+
+    const local = await cascade.processEvent(
+      { id: randomUUID(), level: 'error', module: 'api', data: { error_code: 'MODULE_NOT_FOUND' } }, 'local');
+    expect(local.status).toBe('processed');
+    expect(local.confidence).toBeCloseTo(0.85, 10);
+    expect(local.classification.classification).toBe('INFRA_FAILURE');
+  });
+
+  it('still quarantines an event the adapter could extract nothing from', async () => {
+    const { cascade } = track(liveCascade(new RawLedgerAdapter({ client: fakeLedgerClient() })));
+    const result = await cascade.processEvent({ id: randomUUID(), type: 'error' }, 'system');
+    expect(result).toMatchObject({ reason: 'low_confidence', action: 'quarantine' });
+    expect(result.confidence).toBeCloseTo(0.7, 10);
+  });
+
   it('keeps CASCADE\'s low-confidence quarantine for weak sources', async () => {
     const { cascade } = track(liveCascade(new RawLedgerAdapter({ client: fakeLedgerClient() })));
     // UserAdapter: base confidence 0.7, below the 0.75 gate.

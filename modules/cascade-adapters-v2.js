@@ -17,35 +17,50 @@ class BaseAdapter {
     };
   }
 
-  // Calculate confidence based on event completeness and source reliability
-  calculateConfidence(rawEvent, baseConfidence = 1.0) {
-    let confidence = baseConfidence;
-    
+  // Calculate confidence based on event completeness and source reliability.
+  //
+  // Completeness is judged on the event this adapter produced, not on raw
+  // field names: each adapter reads its content from a different place
+  // (system/local/user from `data` and named fields, vercel/supabase from
+  // top-level fields), so checking the raw event for `payload` scored
+  // well-formed events as empty and quarantined them. Source reliability is
+  // the starting value and is applied once; it used to be both the base and
+  // a multiplier, so a complete local event scored 0.85 * 0.85 = 0.72.
+  calculateConfidence(rawEvent, normalized) {
+    let confidence = this.getSourceReliability();
+
     // Deduct for missing fields
     const requiredFields = ['type', 'payload'];
-    const missingFields = requiredFields.filter(field => !rawEvent[field]);
+    const missingFields = requiredFields.filter(field => !normalized[field]);
     confidence -= missingFields.length * 0.2;
-    
-    // Deduct for empty payload
-    if (!rawEvent.payload || Object.keys(rawEvent.payload).length === 0) {
+
+    // Deduct for an empty payload: nothing the adapter could extract
+    const values = Object.values(normalized.payload || {});
+    if (!values.some(v => v !== undefined && v !== null && v !== '')) {
       confidence -= 0.3;
     }
-    
+
     // Deduct for malformed data
     if (rawEvent.timestamp && !this.isValidTimestamp(rawEvent.timestamp)) {
       confidence -= 0.2;
     }
-    
-    // Source-specific adjustments
-    confidence *= this.getSourceReliability();
-    
+
     // Ensure within bounds
     confidence = Math.max(0, Math.min(1, confidence));
-    
+
     // Track distribution
     this.trackConfidence(confidence);
-    
+
     return confidence;
+  }
+
+  // Attach adapter metadata and the confidence computed from the result.
+  finalize(rawEvent, normalized) {
+    return {
+      ...normalized,
+      confidence: this.calculateConfidence(rawEvent, normalized),
+      adapter_version: 'v2'
+    };
   }
 
   getSourceReliability() {
@@ -90,9 +105,7 @@ class VercelAdapter extends BaseAdapter {
   }
 
   normalize(rawEvent) {
-    const confidence = this.calculateConfidence(rawEvent, 0.9);
-    
-    return {
+    return this.finalize(rawEvent, {
       event_id: rawEvent.id || rawEvent.deployment_id || uuidv4(),
       source: 'vercel',
       type: this.mapVercelType(rawEvent.type),
@@ -105,10 +118,8 @@ class VercelAdapter extends BaseAdapter {
         region: rawEvent.region,
         ...rawEvent
       },
-      timestamp: rawEvent.createdAt || new Date().toISOString(),
-      confidence: confidence,
-      adapter_version: 'v2'
-    };
+      timestamp: rawEvent.createdAt || new Date().toISOString()
+    });
   }
 
   mapVercelType(vercelType) {
@@ -130,9 +141,7 @@ class LocalAdapter extends BaseAdapter {
   }
 
   normalize(rawEvent) {
-    const confidence = this.calculateConfidence(rawEvent, 0.85);
-    
-    return {
+    return this.finalize(rawEvent, {
       event_id: rawEvent.id || uuidv4(),
       source: 'local',
       type: rawEvent.level || 'info',
@@ -144,10 +153,8 @@ class LocalAdapter extends BaseAdapter {
         memory_usage: rawEvent.memoryUsage,
         ...rawEvent.data
       },
-      timestamp: rawEvent.timestamp || new Date().toISOString(),
-      confidence: confidence,
-      adapter_version: 'v2'
-    };
+      timestamp: rawEvent.timestamp || new Date().toISOString()
+    });
   }
 }
 
@@ -157,9 +164,7 @@ class SupabaseAdapter extends BaseAdapter {
   }
 
   normalize(rawEvent) {
-    const confidence = this.calculateConfidence(rawEvent, 0.95);
-    
-    return {
+    return this.finalize(rawEvent, {
       event_id: rawEvent.id || uuidv4(),
       source: 'supabase',
       type: this.mapSupabaseType(rawEvent.type),
@@ -171,10 +176,8 @@ class SupabaseAdapter extends BaseAdapter {
         user_id: rawEvent.user_id,
         ...rawEvent
       },
-      timestamp: rawEvent.timestamp || new Date().toISOString(),
-      confidence: confidence,
-      adapter_version: 'v2'
-    };
+      timestamp: rawEvent.timestamp || new Date().toISOString()
+    });
   }
 
   mapSupabaseType(supabaseType) {
@@ -196,9 +199,7 @@ class UserAdapter extends BaseAdapter {
   }
 
   normalize(rawEvent) {
-    const confidence = this.calculateConfidence(rawEvent, 0.7);
-    
-    return {
+    return this.finalize(rawEvent, {
       event_id: rawEvent.id || uuidv4(),
       source: 'user',
       type: 'request', // All user events are requests
@@ -211,10 +212,8 @@ class UserAdapter extends BaseAdapter {
         user_agent: rawEvent.userAgent,
         ...rawEvent.data
       },
-      timestamp: rawEvent.timestamp || new Date().toISOString(),
-      confidence: confidence,
-      adapter_version: 'v2'
-    };
+      timestamp: rawEvent.timestamp || new Date().toISOString()
+    });
   }
 }
 
@@ -224,9 +223,7 @@ class SystemAdapter extends BaseAdapter {
   }
 
   normalize(rawEvent) {
-    const confidence = this.calculateConfidence(rawEvent, 1.0);
-    
-    return {
+    return this.finalize(rawEvent, {
       event_id: rawEvent.id || uuidv4(),
       source: 'system',
       type: rawEvent.type || 'heartbeat',
@@ -238,10 +235,8 @@ class SystemAdapter extends BaseAdapter {
         unit: rawEvent.unit,
         ...rawEvent.data
       },
-      timestamp: rawEvent.timestamp || new Date().toISOString(),
-      confidence: confidence,
-      adapter_version: 'v2'
-    };
+      timestamp: rawEvent.timestamp || new Date().toISOString()
+    });
   }
 }
 
