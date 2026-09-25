@@ -6,6 +6,8 @@ const assert = require('node:assert');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+// Isolate the dedup log so tests never pollute the real submission record.
+process.env.BPR_SUBMISSIONS_LOG = path.join(os.tmpdir(), `bpr-test-${process.pid}.jsonl`);
 const bpr = require('../../lib/human-action/browser-post-reply');
 
 const baseSpec = {

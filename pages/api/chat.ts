@@ -752,7 +752,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
               // reported UNKNOWN, never claimed.
               const spec0 = p.payload.actionSpec as { opportunityId?: string; channel?: string; permalink?: string; message?: string };
               const actionId = `ha_${Date.now()}`;
-              const bpr = await import('../../lib/human-action/browser-post-reply') as { createAuthorization: (s: Record<string, unknown>, by: string) => unknown };
+              const bpr = await import('../../lib/human-action/browser-post-reply-auth') as { createAuthorization: (s: Record<string, unknown>, by: string) => unknown };
               const spec: Record<string, unknown> = { ...spec0, type: 'browser_post_reply', actionId, requestedAt: new Date().toISOString() };
               spec.authorization = bpr.createAuthorization(spec, 'operator');
               await sb.from('heidi_events').insert({
