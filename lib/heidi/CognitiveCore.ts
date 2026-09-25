@@ -1747,6 +1747,56 @@ export class CognitiveCore {
       };
     });
 
+    // Dev patch author — R2: turns a bounded finding into an executable
+    // proposal. HIGH confidence flows straight to ops.dev_patch; anything
+    // less becomes a human action with the proposal attached — never a
+    // silent auto-apply.
+    this.wireExecutor('ops.dev_author', async (params) => {
+      const { authorPatchProposal } = await import('./DevPatchPlanner');
+      const finding = {
+        problem: String(params?.problem ?? ''),
+        evidence: String(params?.evidence ?? ''),
+        targetFiles: Array.isArray(params?.targetFiles) ? params.targetFiles as string[] : [],
+        expectedBehavior: params?.expectedBehavior as string | undefined,
+        knownEdit: params?.knownEdit as Array<{ file: string; oldString: string; newString: string }> | undefined,
+        missionId: params?.missionId as string | undefined ?? params?.goalId as string | undefined,
+      };
+      if (!finding.problem || finding.targetFiles.length === 0) {
+        return this.failResult('ops.dev_author', 'Missing required params: problem, targetFiles');
+      }
+      const proposal = await authorPatchProposal(finding);
+      let execution: unknown = null;
+      if (proposal.confidence === 'HIGH') {
+        const { applyBoundedPatch } = await import('./DevPatchExecutor');
+        execution = await applyBoundedPatch({
+          missionId: proposal.missionId,
+          patches: proposal.patches,
+          commitMessage: `${finding.problem.slice(0, 80)}`,
+          verify: proposal.verifyCommands,
+        });
+      } else {
+        // Not safe to apply — escalate the proposal as a human action.
+        await this.pool.query(
+          `INSERT INTO human_intervention_requests (objective, status, context, created_at)
+           VALUES ($1, 'pending', $2, now())`,
+          [`Review dev proposal ${proposal.proposalId}: ${finding.problem.slice(0, 120)}`,
+          JSON.stringify({ proposal, kind: 'dev_patch_review' })],
+        ).catch(() => { });
+      }
+      return {
+        capabilityId: 'ops.dev_author',
+        executed: proposal.confidence === 'HIGH' && !!(execution as { ok?: boolean } | null)?.ok,
+        outcome: proposal.confidence === 'HIGH' ? (((execution as { ok?: boolean })?.ok) ? 'success' as const : 'failure' as const) : 'skipped' as const,
+        result: { proposalId: proposal.proposalId, confidence: proposal.confidence, author: proposal.author, patchHash: proposal.patchHash ?? null, execution },
+        error: proposal.reason ?? null,
+        evidence: [{ proposal }],
+        verified: proposal.confidence === 'HIGH' && !!(execution as { ok?: boolean } | null)?.ok,
+        verificationDetails: proposal.confidence === 'HIGH'
+          ? 'Patch prevalidated + applied + typechecked by DevPatchExecutor'
+          : `Not auto-applied — ${proposal.reason ?? proposal.confidence}`,
+      };
+    });
+
     // Agent supervisor pass — R0 observation/lifecycle control. Persists
     // stale/failed transitions, bounded-retries R0/R1 missions, escalates
     // terminal failures to the human queue, reconciles parent missions.
