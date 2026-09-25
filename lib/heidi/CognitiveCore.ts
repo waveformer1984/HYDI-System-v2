@@ -1722,6 +1722,31 @@ export class CognitiveCore {
       };
     });
 
+    // Bounded dev patch — R2 autonomous code change. The mission/proposal
+    // carries the exact patch; this executor applies verbatim, verifies
+    // typecheck, commits once, and persists evidence. Never pushes,
+    // never expands scope, never touches protected files.
+    this.wireExecutor('ops.dev_patch', async (params) => {
+      const { applyBoundedPatch } = await import('./DevPatchExecutor');
+      const mission = {
+        missionId: String(params?.missionId ?? params?.goalId ?? 'adhoc'),
+        patches: (params?.patches ?? []) as Array<{ file: string; oldString: string; newString: string }>,
+        commitMessage: String(params?.commitMessage ?? 'autonomous bounded change'),
+        verify: Array.isArray(params?.verify) ? params.verify as string[] : undefined,
+      };
+      const r = await applyBoundedPatch(mission);
+      return {
+        capabilityId: 'ops.dev_patch',
+        executed: r.ok,
+        outcome: r.ok ? 'success' as const : 'failure' as const,
+        result: { status: r.status, commitSha: r.commitSha ?? null, filesChanged: r.filesChanged },
+        error: r.reason ?? null,
+        evidence: r.evidence,
+        verified: r.ok,
+        verificationDetails: r.ok ? `committed ${r.commitSha}, tsc clean` : `not applied: ${r.reason}`,
+      };
+    });
+
     // Agent supervisor pass — R0 observation/lifecycle control. Persists
     // stale/failed transitions, bounded-retries R0/R1 missions, escalates
     // terminal failures to the human queue, reconciles parent missions.
