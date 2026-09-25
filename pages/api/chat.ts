@@ -272,6 +272,31 @@ async function deriveSelfImprovementProposal(
       }
     }
   }
+  // Evidence 5: the payment-spine edge is PRESENT_BUT_UNVERIFIED — zero
+  // jobs have ever reached paid. Heidi can now perform the hosted TEST
+  // checkout herself through the Human Action Executor (browser control,
+  // test card, real webhook) instead of asking J to click.
+  const { count: paidJobs } = await sb.from('customer_jobs')
+    .select('job_id', { count: 'exact', head: true })
+    .eq('payment_status', 'paid').ilike('stripe_payment_intent_id', 'pi_3%');
+  if ((paidJobs ?? 0) === 0) {
+    const { data: prior } = await sb.from('heidi_events').select('id')
+      .eq('event_type', 'companion_proposal')
+      .eq('payload->>improvementKey', 'verify_payment_spine_test').limit(1);
+    if (!prior?.length) {
+      const { data: prop } = await sb.from('heidi_events').insert({
+        event_type: 'companion_proposal', division: 'companion',
+        payload: {
+          status: 'pending', kind: 'human_action',
+          improvementKey: 'verify_payment_spine_test',
+          description: 'Perform the hosted Stripe TEST checkout end-to-end via browser automation',
+          reason: `Observed: 0 customer_jobs have ever reached 'paid' — the payment→webhook→job edge is PRESENT_BUT_UNVERIFIED. Change: I open the hosted test checkout in a real browser, enter the Stripe test card (4242…), submit, then verify webhook + job + ledger independently. This moves no real money. Risk: none beyond test-mode. Verify: job.payment_status=paid via the real webhook path, not by mutating state.`,
+          actionSpec: { type: 'stripe_test_checkout' },
+        },
+      }).select('id, payload').single();
+      if (prop) return prop;
+    }
+  }
   // Evidence 2: unresolved escalations whose premise is provably void —
   // the referenced opportunity row no longer exists, so "restore" is
   // impossible and dismissal is the only valid resolution. Bounded scan.
@@ -718,6 +743,53 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                   : `Approved, but execution FAILED verification — the note was written yet didn't appear in memory read-back. Marked as a failed evolution result; no retry without your approval.`;
               } else {
                 text = `BLOCKED — no bounded executor exists for improvement type '${spec?.type ?? 'none'}'. Your approval is recorded; execution refused rather than substituted.`;
+              }
+            } else if (p.payload.kind === 'human_action' && (p.payload.actionSpec as { type?: string } | undefined)?.type === 'stripe_test_checkout') {
+              // Human Action Executor — drives the real browser through the
+              // hosted TEST checkout. Verification is independent: the job
+              // must reach 'paid' via the actual webhook, never by mutation.
+              const actionId = `ha_${Date.now()}`;
+              await sb.from('heidi_events').insert({
+                event_type: 'human_action', division: 'companion',
+                payload: { actionId, type: 'stripe_test_checkout', status: 'AUTHORIZED', authorizedBy: 'operator', proposalId: p.id, at: new Date().toISOString() },
+              });
+              const jr = await (await fetch('http://localhost:3000/api/revenue/jobs', {
+                method: 'POST', headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({ customerEmail: 'heidi-test@localhost.dev', customerName: 'Heidi Human-Action Test', product: 'protoforge_model_prep', requestText: 'human-action acceptance test — simple box enclosure' }),
+              })).json() as { jobId?: string; checkoutUrl?: string | null; error?: string };
+              if (!jr.checkoutUrl || !jr.jobId) {
+                text = `BLOCKED — could not create a test checkout session (${jr.error ?? 'no checkoutUrl'}). The proposal stays authorized but unexecuted.`;
+              } else {
+                const { execFile } = await import('node:child_process');
+                const run = await new Promise<{ code: number | null; out: string }>((res) => {
+                  execFile('node', ['scripts/human-action-executor.js', '--spec', JSON.stringify({ type: 'stripe_test_checkout', checkoutUrl: jr.checkoutUrl, jobId: jr.jobId, actionId })],
+                    { cwd: process.cwd(), timeout: 180000 }, (err, stdout) => res({ code: err ? (err.code as number ?? 1) : 0, out: String(stdout) }));
+                });
+                let result: { ok?: boolean; status?: string; reason?: string; finalUrl?: string } = {};
+                try { result = JSON.parse(run.out.trim().split('\n').pop() ?? '{}'); } catch { /* malformed */ }
+                // Independent verification — poll the job row for the real
+                // webhook-confirmed transition; never mutate payment state.
+                let paid = false;
+                for (let i = 0; i < 12 && !paid; i++) {
+                  await new Promise((r) => setTimeout(r, 5000));
+                  const { data: job } = await sb.from('customer_jobs').select('payment_status, job_status').eq('job_id', jr.jobId).limit(1);
+                  paid = job?.[0]?.payment_status === 'paid';
+                }
+                const { data: wh } = await sb.from('webhook_events').select('id').ilike('payload->>type', 'checkout.session.completed').order('created_at', { ascending: false }).limit(1);
+                const verified = paid && !!wh?.length;
+                await sb.from('heidi_events').insert({
+                  event_type: 'human_action', division: 'companion',
+                  payload: {
+                    actionId, type: 'stripe_test_checkout', jobId: jr.jobId,
+                    status: verified ? 'COMPLETED' : 'FAILED',
+                    browserResult: result.status, finalUrl: result.finalUrl,
+                    webhookObserved: !!wh?.length, jobPaid: paid,
+                    finishedAt: new Date().toISOString(),
+                  },
+                });
+                text = verified
+                  ? `TEST PAYMENT VERIFIED — I opened the hosted checkout in a real browser, entered the Stripe test card, and submitted. The webhook confirmed the payment and job ${jr.jobId} is now 'paid'. Evidence: browser screenshots + webhook event + ledger, all durable. This is TEST evidence — verified revenue is still $0.`
+                  : `PAYMENT TEST INCOMPLETE — browser ${result.status ?? 'result unreadable'}${result.reason ? ` (${result.reason})` : ''}; webhook seen: ${!!wh?.length}; job paid: ${paid}. I did NOT mark anything paid manually — the state is exactly what Stripe's real flow produced.`;
               }
             } else if (p.payload.kind === 'model_prep_test') {
               // Labeled TEST harness — proves the internal deliverable

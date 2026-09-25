@@ -12,7 +12,7 @@
     "start": "next start",
     "lint": "eslint api pages components lib src apps/ursula-frontend/src tests/unit --ext .js,.jsx,.ts,.tsx",
     "lint:hydi-v3": "eslint src/hydi-v3 tests/unit/hydi-v3 scripts/performance-benchmark.js scripts/security-audit.js scripts/soak-test-v3.js",
-    "test": "jest",
+    "test": "cross-env PG_HOST=127.0.0.1 PG_PORT=59999 SUPABASE_URL=http://127.0.0.1:59999 NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:59999 OLLAMA_URL=http://127.0.0.1:59999 LOCAL_MODEL_URL=http://127.0.0.1:59999 OLLAMA_HOST=http://127.0.0.1:59999 jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "test:integration": "node tests/hdi-adversarial.test.js",
@@ -63,7 +63,12 @@
     "lint:migrations:ratchet": "node scripts/lint-migration-idempotency.js --ratchet",
     "lint:migrations:baseline": "node scripts/lint-migration-idempotency.js --generate-baseline",
     "scan:secrets": "node scripts/scan-live-secrets.js",
-    "build:capacitor-www": "node scripts/build-capacitor-www.js"
+    "build:capacitor-www": "node scripts/build-capacitor-www.js",
+    "test:qualification": "node scripts/run-qualification-suite.js",
+    "test:packages": "node --test protoforge/packages/*/tests/*.test.js",
+    "test:unit": "npm test",
+    "test:local": "jest --config jest.tier2.config.js",
+    "test:all": "npm run test:unit && npm run test:local"
   },
   "keywords": [
     "protoforge",
@@ -92,7 +97,7 @@
     "nodemailer": "^9.0.3",
     "ollama": "^0.6.3",
     "pg": "^8.22.0",
-    "puppeteer-core": "^25.10.0",
+    "puppeteer-core": "^25.12.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "sqlite3": "^6.0.1",
