@@ -22,8 +22,7 @@
           "DEPLOYMENT_MISMATCH:env_var_missing",
           "DEPLOYMENT_MISMATCH:version_mismatch",
           "DEPLOYMENT_MISMATCH:config_diff",
-          "DEPLOYMENT_MISMATCH:deployment_error",
-          "DEPLOYMENT_MISMATCH:build_failed"
+          "DEPLOYMENT_MISMATCH:deployment_error"
         ],
         "quarantine": false
       },
@@ -110,8 +109,7 @@
           "DATA_INTEGRITY_RISK:corruption_detected",
           "DATA_INTEGRITY_RISK:checksum_mismatch",
           "DATA_INTEGRITY_RISK:data_validation_failed",
-          "DATA_INTEGRITY_RISK:integrity_check_failed",
-          "DATA_INTEGRITY_RISK:data_loss"
+          "DATA_INTEGRITY_RISK:integrity_check_failed"
         ],
         "quarantine": false
       },
@@ -291,8 +289,7 @@
           "DEPLOYMENT_MISMATCH:env_var_missing",
           "DEPLOYMENT_MISMATCH:version_mismatch",
           "DEPLOYMENT_MISMATCH:config_diff",
-          "DEPLOYMENT_MISMATCH:deployment_error",
-          "DEPLOYMENT_MISMATCH:build_failed"
+          "DEPLOYMENT_MISMATCH:deployment_error"
         ],
         "quarantine": false
       },

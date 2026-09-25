@@ -13,6 +13,7 @@ class CascadeEventFingerprint {
     this.cleanupInterval = setInterval(() => {
       this.cleanupExpiredFingerprints();
     }, 5000); // Clean every 5 seconds
+    this.cleanupInterval.unref?.(); // housekeeping only; don't keep the process alive
     
     // Statistics
     this.stats = {

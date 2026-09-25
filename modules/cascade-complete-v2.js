@@ -108,6 +108,7 @@ class CascadeCompleteV2 extends EventEmitter {
     this.uptimeInterval = setInterval(() => {
       this.updateUptime();
     }, 1000);
+    this.uptimeInterval.unref?.(); // housekeeping only; don't keep the process alive
 
     this.emit('cascade_started', {
       timestamp: this.stats.start_time,

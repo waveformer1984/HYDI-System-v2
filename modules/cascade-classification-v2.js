@@ -31,9 +31,10 @@ class CascadeClassificationV2 {
     //     (V1: `(payload.route || payload.endpoint) && status_code >= 400`)
     // Every other indicator names a failure on its own and is its own group.
     //
-    // Field-level checks (exact / contains / exists / range) are unchanged:
-    // `exists` still means "present", so `build_failed: false` counts as a
-    // DEPLOYMENT_MISMATCH indicator exactly as it did before.
+    // Field-level checks (exact / contains / range) are unchanged. `exists`
+    // follows V1's truthiness (`payload.build_failed || ...`), so a flag that
+    // is present but false (`build_failed: false`) no longer counts as a
+    // failure indicator (ISSUES_FOUND.md #84).
     const P = (field, spec) => ({ field, ...spec });
     const one = (pattern) => [pattern];
     const ROUTE_CONTEXT = { anyOf: [P('route', { exists: true }), P('endpoint', { exists: true })] };
@@ -169,11 +170,11 @@ class CascadeClassificationV2 {
   checkPattern(payload, pattern) {
     const value = payload[pattern.field];
     
-    // Field must exist
+    // Field must be set, in V1's sense: truthy (false/null/0/'' don't count)
     if (pattern.exists !== undefined) {
       return {
         field: pattern.field,
-        matched: pattern.exists ? (value !== undefined) : (value === undefined),
+        matched: pattern.exists ? Boolean(value) : !value,
         expected: pattern.exists ? 'exists' : 'not exists',
         actual: value !== undefined ? 'exists' : 'not exists'
       };

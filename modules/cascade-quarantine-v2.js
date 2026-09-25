@@ -322,6 +322,7 @@ class CascadeQuarantineV2 extends EventEmitter {
     this.cleanupInterval = setInterval(() => {
       this.cleanupExpiredEvents();
     }, 60000); // Every minute
+    this.cleanupInterval.unref?.(); // housekeeping only; don't keep the process alive
   }
 
   // Clean up expired events
