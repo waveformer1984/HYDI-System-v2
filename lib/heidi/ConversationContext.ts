@@ -18,6 +18,7 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { classifyExecutiveQuestion } from './ExecutiveContext';
 
 export interface ProjectRow {
   id: string;
@@ -179,6 +180,7 @@ export type LifeIntent =
   | { kind: 'decline' }
   | { kind: 'roadmap' }
   | { kind: 'control_last'; action: 'stop' | 'retry' }
+  | { kind: 'executive_question'; category: string }
   | { kind: 'investigate'; target: string }
   | { kind: 'investigate_top' };
 
@@ -244,6 +246,10 @@ export function classifyLifeIntent(message: string): LifeIntent | null {
   if (/real picture|big picture|full briefing|catch me up|bring me up to speed|what'?s up|give me (the )?(rundown|briefing|summary)|what'?s? going on|look at everything|where do we stand|how'?s it going|status|health/i.test(m)) {
     return { kind: 'briefing' };
   }
+  // Executive-context questions — who am I, who is J, what business,
+  // what can I do, what needs approval, revenue truth, lessons, deferred.
+  const eq = classifyExecutiveQuestion(m);
+  if (eq) return { kind: 'executive_question', category: eq };
   // Forward-looking: "what should happen next", "what do we do now"
   if (/what should (happen|we do|i do|we work on|we focus on)|what should we work on|what'?s next|next steps?|what now/i.test(m)) {
     return { kind: 'next_steps' };

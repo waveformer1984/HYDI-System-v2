@@ -1042,6 +1042,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             'Current gaps I know about: local conversational model is RAM-limited, the web process dies under memory pressure, I handle one intent per message, and the business path is still UNSELECTED (your call).',
             'Actual changes to my machinery go through you — via Devin or your own commits.',
           ].join('\n');
+        } else if (lifeIntent.kind === 'executive_question') {
+          // Durable executive context — seeded into memories(kind='context'),
+          // answered from those records + live state (live wins).
+          const { seedExecutiveContext, answerExecutiveQuestion } = await import('../../lib/heidi/ExecutiveContext');
+          await seedExecutiveContext(sb, user_id);
+          text = await answerExecutiveQuestion(sb, user_id, lifeIntent.category);
         } else if (lifeIntent.kind === 'focus') {
           const { project, created } = await setFocus(sb, user_id, lifeIntent.project, session_id);
           text = `Focus set: ${project.name}${created ? ' (new project — recorded)' : ''}.`;
