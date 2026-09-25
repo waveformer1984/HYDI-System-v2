@@ -157,7 +157,7 @@ export async function collectCooState(deps: CooDeps): Promise<CooState> {
       `SELECT run_at, status FROM protoforge_mission_runs ORDER BY run_at DESC LIMIT 1`,
     );
     const opps = await deps.pool.query(
-      `SELECT count(*) FILTER (WHERE approval_status = 'pending') AS pending,
+      `SELECT count(*) FILTER (WHERE status = 'needs_review') AS pending,
               count(*) FILTER (WHERE approval_status = 'approved') AS approved,
               count(*) AS total
        FROM protoforge_opportunities`,

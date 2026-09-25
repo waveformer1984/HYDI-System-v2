@@ -93,7 +93,7 @@ export function classifyExecutiveQuestion(m: string): string | null {
   if (/what (can|do) you (actually )?(do|handle)|what'?s within your (power|scope)|your (authority|permissions)/i.test(m)) return 'capability';
   if (/what (needs|requires) (my|j'?s|your) (approval|authorization|decision)|what can'?t you do|your limits|your boundaries/i.test(m)) return 'authority';
   if (/verified revenue|real revenue|how much (have we|did we) (made|earned|sold)/i.test(m)) return 'revenue';
-  if (/what have (we|you) learned|lessons|what did we learn/i.test(m)) return 'lessons';
+  if (/what have (we|you) learned|lessons|what did (we|you) learn/i.test(m)) return 'lessons';
   if (/deferred|put off|postponed|parked/i.test(m)) return 'deferred';
   if (/what (counts|shouldn'?t) (be treated )?as evidence|what'?s not evidence|don'?t trust/i.test(m)) return 'evidence';
   if (/rezonate/i.test(m)) return 'rezonate';

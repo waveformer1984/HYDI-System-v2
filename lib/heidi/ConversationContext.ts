@@ -318,6 +318,8 @@ export function classifyLifeIntent(message: string): LifeIntent | null {
   // user-visible anyway); a scoped filter would pretend precision we
   // don't have.
   if (/what do you remember/i.test(m)) return { kind: 'recall' };
+  // Bare "inspect" — inspect the most recent governed action result.
+  if (/^inspect\b/i.test(m)) return { kind: 'last_action' };
   return null;
 }
 
