@@ -35,23 +35,45 @@ async function stripeTestCheckout(spec) {
   try {
     const page = await browser.newPage();
     await page.setViewport({ width: 1280, height: 900 });
-    await page.goto(checkoutUrl, { waitUntil: 'networkidle2', timeout: 45000 });
+    await page.goto(checkoutUrl, { waitUntil: 'domcontentloaded', timeout: 45000 });
     out.steps.push('loaded hosted checkout');
 
-    // Stripe hosted Checkout renders card inputs directly on the page.
-    await page.waitForSelector('#cardNumber', { timeout: 30000 });
-    const fill = async (sel, val) => {
-      await page.click(sel, { clickCount: 3 });
-      await page.type(sel, val, { delay: 25 });
+    // Stripe hosted Checkout (Elements): the card form sits behind a
+    // "Card" accordion; the fields themselves live inside js.stripe.com
+    // iframes (input[name=number|expiry|cvc]).
+    // Real trusted click on the Card option — a synthetic DOM click does
+    // not check the radio under React.
+    const cardSel = 'label[for="payment-method-accordion-item-title-card"], #payment-method-accordion-item-title-card';
+    const cardEl = await page.$(cardSel);
+    if (!cardEl) throw new Error('card payment option not found');
+    await cardEl.click();
+    out.steps.push('clicked card option');
+    await new Promise((r) => setTimeout(r, 4000));
+    // After the trusted click, card fields render directly in the main
+    // document (ids cardNumber/cardExpiry/cardCvc/billing*).
+    await page.waitForSelector('#cardNumber, input[name="cardNumber"]', { timeout: 30000 });
+    const ftype = async (sel, val) => {
+      const el = await page.$(sel) ?? await page.$(`input[name="${sel.replace('#', '')}"]`);
+      if (!el) throw new Error(`missing field ${sel}`);
+      await el.click({ clickCount: 3 });
+      await el.type(val, { delay: 20 });
       out.steps.push(`filled ${sel}`);
     };
-    const emailSel = '#email';
-    try { await page.waitForSelector(emailSel, { timeout: 3000 }); await fill(emailSel, 'heidi-test@localhost.dev'); } catch { /* optional */ }
-    await fill('#cardNumber', '4242424242424242');
-    await fill('#cardExpiry', '12/34');
-    await fill('#cardCvc', '123');
-    try { await page.waitForSelector('#billingName', { timeout: 3000 }); await fill('#billingName', 'Heidi Test'); } catch { /* optional */ }
-    try { await page.waitForSelector('#billingPostalCode', { timeout: 3000 }); await fill('#billingPostalCode', '55401'); } catch { /* optional */ }
+    await ftype('#cardNumber', '4242424242424242');
+    await ftype('#cardExpiry', '1234');
+    await ftype('#cardCvc', '123');
+    try { await ftype('#billingName', 'Heidi Test'); } catch { /* optional */ }
+    try { await ftype('#billingPostalCode', '55401'); } catch { /* optional */ }
+    // Uncheck "Save my information" (Stripe Link) — with it checked the
+    // phone field becomes required and blocks submission.
+    try {
+      const link = await page.$('input[name="enableStripePass"]');
+      if (link && await link.evaluate((e) => e.checked)) {
+        const lbl = await page.$('label[for="enableStripePass"]');
+        await (lbl ?? link).click();
+        out.steps.push('unchecked save-my-info (Link)');
+      }
+    } catch { /* optional */ }
 
     const shot1 = path.join(EVIDENCE_DIR, `${jobId}-filled.png`);
     await page.screenshot({ path: shot1 });
