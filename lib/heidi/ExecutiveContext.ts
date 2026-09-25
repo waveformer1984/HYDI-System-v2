@@ -63,13 +63,13 @@ export const EXEC_CONTEXT: ExecContextRecord[] = [
   },
 ];
 
-export async function seedExecutiveContext(sb: any, userId: string): Promise<void> {
+export async function seedExecutiveContext(sb: any, userId: string, sessionId: string): Promise<void> {
   for (const rec of EXEC_CONTEXT) {
     const { data: existing } = await sb.from('memories').select('id')
       .eq('user_id', userId).eq('kind', 'context').eq('metadata->>key', rec.key).limit(1);
     if (!existing?.length) {
       await sb.from('memories').insert({
-        user_id: userId, session_id: null, kind: 'context', content: rec.content,
+        user_id: userId, session_id: sessionId, kind: 'context', content: rec.content,
         metadata: { key: rec.key, category: rec.category, source: 'executive-context-seed', provenance: 'operator-defined' },
         tags: ['context', rec.category], importance_score: 0.9,
       });

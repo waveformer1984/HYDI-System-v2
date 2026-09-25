@@ -1046,7 +1046,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           // Durable executive context — seeded into memories(kind='context'),
           // answered from those records + live state (live wins).
           const { seedExecutiveContext, answerExecutiveQuestion } = await import('../../lib/heidi/ExecutiveContext');
-          await seedExecutiveContext(sb, user_id);
+          await seedExecutiveContext(sb, user_id, session_id);
           text = await answerExecutiveQuestion(sb, user_id, lifeIntent.category);
         } else if (lifeIntent.kind === 'focus') {
           const { project, created } = await setFocus(sb, user_id, lifeIntent.project, session_id);
