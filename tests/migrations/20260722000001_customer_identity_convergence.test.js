@@ -65,6 +65,17 @@ describe('20260722000001_customer_identity_convergence', () => {
     expect(sql).toContain('fk_hydi_schedules_customer');
   });
 
+  test('uses no ADD CONSTRAINT IF NOT EXISTS, which Postgres does not support', () => {
+    expect(sql).not.toMatch(/add constraint if not exists/);
+    expect(sql).toContain('pg_constraint where conname = fk.con');
+  });
+
+  test('only casts client_id to uuid when it looks like a uuid', () => {
+    // 20260424145921 seeds hydi_subscriptions.client_id = 'client_test_001'.
+    expect(sql).not.toMatch(/and hs\.client_id::uuid = c\.customer_id/);
+    expect(sql).toMatch(/when hs\.client_id ~\* '\^\[0-9a-f\]\{8\}/);
+  });
+
   test('enables rls and service_role policy', () => {
     expect(sql).toContain('enable row level security');
     expect(sql).toContain('service_role_all');
