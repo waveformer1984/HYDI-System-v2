@@ -63,6 +63,22 @@ class BaseAdapter {
     };
   }
 
+  // Fields of the raw event this adapter didn't map by name. vercel and
+  // supabase keep the whole raw event in the payload; system, local and user
+  // used to keep only their named fields plus `data`, which dropped the
+  // content of events such as protoforge-core's infrastructure alerts
+  // ({ layer, alert, zoneId }) and a top-level `error_code` before
+  // classification. Envelope fields stay out of the payload.
+  passthrough(rawEvent, consumed) {
+    const skip = new Set(['id', 'type', 'level', 'timestamp', 'data', 'payload', ...consumed]);
+    return Object.fromEntries(Object.entries(rawEvent).filter(([key]) => !skip.has(key)));
+  }
+
+  // Spreadable only when it is a plain object (a string would spread per character).
+  asObject(value) {
+    return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  }
+
   getSourceReliability() {
     const reliabilityMap = {
       'system': 1.0,    // Highest reliability
@@ -151,7 +167,9 @@ class LocalAdapter extends BaseAdapter {
         stack: rawEvent.stack,
         pid: rawEvent.pid,
         memory_usage: rawEvent.memoryUsage,
-        ...rawEvent.data
+        ...this.passthrough(rawEvent, ['module', 'error', 'stack', 'pid', 'memoryUsage']),
+        ...this.asObject(rawEvent.payload),
+        ...this.asObject(rawEvent.data)
       },
       timestamp: rawEvent.timestamp || new Date().toISOString()
     });
@@ -210,7 +228,9 @@ class UserAdapter extends BaseAdapter {
         session_id: rawEvent.session_id,
         ip_address: rawEvent.ipAddress,
         user_agent: rawEvent.userAgent,
-        ...rawEvent.data
+        ...this.passthrough(rawEvent, ['action', 'parameters', 'user_id', 'session_id', 'ipAddress', 'userAgent']),
+        ...this.asObject(rawEvent.payload),
+        ...this.asObject(rawEvent.data)
       },
       timestamp: rawEvent.timestamp || new Date().toISOString()
     });
@@ -233,7 +253,9 @@ class SystemAdapter extends BaseAdapter {
         value: rawEvent.value,
         threshold: rawEvent.threshold,
         unit: rawEvent.unit,
-        ...rawEvent.data
+        ...this.passthrough(rawEvent, ['component', 'metric', 'value', 'threshold', 'unit']),
+        ...this.asObject(rawEvent.payload),
+        ...this.asObject(rawEvent.data)
       },
       timestamp: rawEvent.timestamp || new Date().toISOString()
     });
