@@ -122,7 +122,7 @@ export async function executeJob(jobId: string): Promise<ExecutionResult> {
       await jobManager.approveForDelivery(jobId, 'auto-qa',
         `independent QA PASS — artifacts ${Object.keys(report.artifactHashes).join(', ')}, bounds ${JSON.stringify(report.boundsMm)}`);
     } else {
-      await jobManager.requestIntervention(jobId, `delivery_not_eligible:${elig.reason}`);
+      await jobManager.requestIntervention(jobId, 'delivery-' + jobId, 'delivery_not_eligible: ' + elig.reason);
     }
 
     return {
@@ -204,7 +204,7 @@ export async function recoverStaleJobs(): Promise<{ recovered: number; failed: n
         if (elig.eligible) {
           await jobManager.approveForDelivery(job.jobId, 'auto-qa', `independent QA PASS after restart recovery — ${JSON.stringify(report.boundsMm)}`);
         } else {
-          await jobManager.requestIntervention(job.jobId, `delivery_not_eligible:${elig.reason}`);
+          await jobManager.requestIntervention(job.jobId, 'delivery-' + job.jobId, 'delivery_not_eligible: ' + elig.reason);
         }
         recovered++;
       } else {

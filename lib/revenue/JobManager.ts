@@ -306,14 +306,14 @@ export class JobManager {
   /**
    * Request human intervention during execution.
    */
-  async requestIntervention(jobId: string, interventionId: string): Promise<CustomerJob> {
+  async requestIntervention(jobId: string, interventionId: string, reason?: string): Promise<CustomerJob> {
     await this.db.update('customer_jobs', {
       intervention_status: 'requested',
       intervention_id: interventionId,
       updated_at: new Date().toISOString(),
     }, 'job_id = $1', [jobId]);
 
-    await this.recordEvent(jobId, 'intervention_requested', 'heidi', null, null, { interventionId });
+    await this.recordEvent(jobId, 'intervention_requested', 'heidi', null, null, { interventionId, reason });
     return (await this.getJob(jobId))!;
   }
 
