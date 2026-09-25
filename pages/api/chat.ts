@@ -974,6 +974,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
               }
             }
             const lines: string[] = [`Since we last spoke (${Math.round((Date.now() - since.getTime()) / 60000)} min ago):`];
+            const { data: jobs } = await sb.from('customer_job_events')
+              .select('job_id, event_type')
+              .eq('event_type', 'execution_completed')
+              .gt('created_at', since.toISOString()).limit(5);
+            for (const j of (jobs ?? []) as Array<{ job_id: string }>) {
+              notable.push(`job ${j.job_id.slice(4, 19)} artifacts delivered — awaiting your review`);
+            }
             const uniq = [...new Set(notable)].slice(0, 5);
             if (uniq.length) lines.push(...uniq.map((n) => `• ${n}`));
             const cycles = counts.get('cognitive_cycle') ?? 0;

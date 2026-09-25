@@ -305,7 +305,7 @@ export function classifyLifeIntent(message: string): LifeIntent | null {
   }
   // Daily-loop questions — delta vs last contact, last governed
   // outcome, and honest capability boundaries.
-  if (/what'?s? (changed|new|happened) (since|while|overnight|today|lately)|catch me up|what did i miss|anything (change|new|happen)/i.test(m)) {
+  if (/what'?s? (changed|new|happened)( since| while| overnight| today| lately| now| now)?|catch me up|what did i miss|anything (change|new|happen)|what (have|did) we (accomplish|do|get done)|what'?s the (update|latest)/i.test(m)) {
     return { kind: 'whats_changed' };
   }
   if (/what happened (with|to|from) (the last|that|it)|what did you (do|find) last|last (thing|mission|task|investigation) you did|result of the last/i.test(m)) {
