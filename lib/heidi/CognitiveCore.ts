@@ -1747,6 +1747,46 @@ export class CognitiveCore {
       };
     });
 
+    // Dev investigation — R0 read-only. Counterexample-first: a finding is
+    // a hypothesis until the evidence survives attempts to disprove it.
+    // CONFIRMED_DEFECT creates a dev mission (ops.dev_author) as a goal;
+    // NOT_A_DEFECT / INSUFFICIENT stop honestly.
+    this.wireExecutor('ops.dev_investigate', async (params) => {
+      const { investigateFinding } = await import('./DevInvestigator');
+      const rec = await investigateFinding({
+        findingType: (params?.findingType as 'test_framework_mismatch' | 'escalation_asymmetry' | 'generic') ?? 'generic',
+        target: String(params?.target ?? ''),
+        question: String(params?.question ?? ''),
+        initialObservation: String(params?.initialObservation ?? ''),
+        suspectedFiles: Array.isArray(params?.suspectedFiles) ? params.suspectedFiles as string[] : [],
+        knownEdit: params?.knownEdit as Array<{ file: string; oldString: string; newString: string }> | undefined,
+        missionId: params?.missionId as string | undefined ?? params?.goalId as string | undefined,
+      });
+      let followup = null;
+      if (rec.conclusion === 'CONFIRMED_DEFECT') {
+        // Hand off as a real goal — dev_author runs under its own R2 gate.
+        try {
+          await this.pool.query(
+            `INSERT INTO heidi_goals (title, goal_type, description, status, priority, success_criteria, context, created_at, updated_at)
+             VALUES ($1, 'dev_fix', $1, 'active', 3, 'ops.dev_author executes and commits a verified patch', $2, now(), now())`,
+            [`Fix confirmed defect: ${rec.target.slice(0, 120)}`,
+            JSON.stringify({ capabilityId: 'ops.dev_author', problem: rec.question, evidence: String(params?.initialObservation ?? ''), targetFiles: params?.suspectedFiles ?? [], knownEdit: params?.knownEdit, missionId: rec.missionId, sourceInvestigation: rec.investigationId })],
+          );
+          followup = 'goal_created';
+        } catch (e) { followup = `goal_failed:${(e as Error).message.slice(0, 120)}`; }
+      }
+      return {
+        capabilityId: 'ops.dev_investigate',
+        executed: true,
+        outcome: 'success' as const,
+        result: { investigationId: rec.investigationId, conclusion: rec.conclusion, confidence: rec.confidence, followup, recommendedAction: rec.recommendedAction },
+        error: null,
+        evidence: [{ filesInspected: rec.filesInspected, commandsRun: rec.commandsRun, durationMs: rec.durationMs }],
+        verified: true,
+        verificationDetails: `${rec.conclusion} (${rec.confidence}) after ${rec.filesInspected.length} files, ${rec.commandsRun.length} commands`,
+      };
+    });
+
     // Dev patch author — R2: turns a bounded finding into an executable
     // proposal. HIGH confidence flows straight to ops.dev_patch; anything
     // less becomes a human action with the proposal attached — never a
