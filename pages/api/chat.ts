@@ -446,6 +446,38 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       || /\bwhat (needs|should) (we |i |be )?(do|work|fix)/i.test(lowerMsg);
     const wantsDevStatus = /\b(what (are you|you) working on|dev missions?|investigations?|what did you (fix|find|learn))\b/i.test(lowerMsg);
     const wantsFix = /^(fix it|fix that|fix the (defect|issue))\b/i.test(lowerMsg);
+    const wantsBusiness = /\b(business (context|state|model)|what products|product portfolio|what are we (building|selling|trying)|why are we|revenue truth|who is the customer)\b/i.test(lowerMsg);
+    if (wantsBusiness) {
+      try {
+        const pg = (await import('pg')).default;
+        const pool = new pg.Pool({ host: '127.0.0.1', port: 54322, database: 'postgres', user: 'postgres', password: 'postgres' });
+        try {
+          const { BusinessContext } = await import('../../lib/heidi/BusinessContext');
+          const bc = new BusinessContext(pool);
+          await bc.ensure();
+          await bc.refresh();
+          const facts = await bc.getFacts();
+          const groups = ['objective', 'authority', 'autonomy', 'revenue', 'product', 'loop', 'boundary'];
+          const lines = ['Business context (from the authoritative fact store):'];
+          for (const g of groups) {
+            const fs2 = facts.filter(f => f.kind === g);
+            if (!fs2.length) continue;
+            lines.push(`\n${g.toUpperCase()}:`);
+            for (const f of fs2.slice(0, g === 'product' ? 8 : 3)) {
+              lines.push(`  ${f.key}: ${f.value.slice(0, 140)} [${f.status ?? 'CURRENT'}]`);
+            }
+          }
+          sse(res, { type: 'metadata', model_used: 'business-context', latency: 0 });
+          sse(res, { type: 'content', content: lines.join('\n') });
+        } finally { await pool.end(); }
+        res.write('data: [DONE]\n\n');
+        return res.end();
+      } catch (e) {
+        sse(res, { type: 'content', content: `Business context unavailable — ${e instanceof Error ? e.message : 'unknown'}` });
+        res.write('data: [DONE]\n\n');
+        return res.end();
+      }
+    }
     if (wantsFindWork || wantsDevStatus || wantsFix) {
       try {
         const pg = (await import('pg')).default;

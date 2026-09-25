@@ -1748,6 +1748,27 @@ export class CognitiveCore {
       };
     });
 
+    // Business context — R0: seed + refresh + retrieve the authoritative
+    // business fact store. This is what makes briefings answer "why"
+    // instead of only "what".
+    this.wireExecutor('ops.business_context', async (params) => {
+      const { BusinessContext } = await import('./BusinessContext');
+      const bc = new BusinessContext(this.pool);
+      await bc.ensure();
+      await bc.refresh();
+      const facts = await bc.getFacts(params?.kind as never);
+      return {
+        capabilityId: 'ops.business_context',
+        executed: true,
+        outcome: 'success' as const,
+        result: { factCount: facts.length, kinds: [...new Set(facts.map(f => f.kind))], digest: await bc.digest() },
+        error: null,
+        evidence: [{ factCount: facts.length }],
+        verified: facts.length > 0,
+        verificationDetails: `${facts.length} business facts retrieved with provenance`,
+      };
+    });
+
     // Dev signal observer — R0 read-only. Deterministic scan for
     // development findings; each becomes an investigation goal (R0).
     this.wireExecutor('ops.dev_observe', async () => {
