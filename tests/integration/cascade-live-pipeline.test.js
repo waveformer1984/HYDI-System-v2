@@ -252,6 +252,31 @@ describe('live CASCADE entry point runs the six-layer pipeline', () => {
     expect(local.classification.classification).toBe('INFRA_FAILURE');
   });
 
+  it('classifies test-cascade-v2.js\'s "valid INFRA_FAILURE" local event, whose error_code was dropped', async () => {
+    const { cascade } = track(liveCascade(new RawLedgerAdapter({ client: fakeLedgerClient() })));
+    const result = await cascade.processEvent(
+      { id: randomUUID(), type: 'error', module: 'database', error_code: 'MODULE_NOT_FOUND', error: 'Cannot find module "pg"' }, 'local');
+    expect(result.status).toBe('processed');
+    expect(result.classification.classification).toBe('INFRA_FAILURE');
+    expect(result.trace.stages.kilo.status).toBe('ok');
+    expect(result.trace.stages.protoforge.status).toBe('ok');
+  });
+
+  it('keeps an infrastructure alert\'s content through to quarantine instead of arriving empty', async () => {
+    // The exact shape src/server.js's infrastructure_alert handler sends.
+    const { cascade } = track(liveCascade(new RawLedgerAdapter({ client: fakeLedgerClient() })));
+    const result = await cascade.processEvent({
+      id: randomUUID(), type: 'error', layer: 'power', alert: { severity: 'critical', message: 'UPS on battery' }, zoneId: 'z1',
+    }, 'system');
+    // CASCADE has no category for it, so it is an unknown anomaly (not low confidence), with its content kept.
+    expect(result).toMatchObject({ reason: 'unknown_anomaly', action: 'quarantine' });
+    const { events } = cascade.quarantine.getReport();
+    expect(events).toHaveLength(1);
+    const [held] = events;
+    expect(held.reason).toBe('unknown_anomaly');
+    expect(held.event.payload).toMatchObject({ layer: 'power', zoneId: 'z1', alert: { message: 'UPS on battery' } });
+  });
+
   it('still quarantines an event the adapter could extract nothing from', async () => {
     const { cascade } = track(liveCascade(new RawLedgerAdapter({ client: fakeLedgerClient() })));
     const result = await cascade.processEvent({ id: randomUUID(), type: 'error' }, 'system');
