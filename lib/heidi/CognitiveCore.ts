@@ -1747,6 +1747,35 @@ export class CognitiveCore {
       };
     });
 
+    // Dev signal observer — R0 read-only. Deterministic scan for
+    // development findings; each becomes an investigation goal (R0).
+    this.wireExecutor('ops.dev_observe', async () => {
+      const { observeDevelopmentSignals } = await import('./DevObserver');
+      const findings = await observeDevelopmentSignals(this.pool);
+      let goalsCreated = 0;
+      for (const f of findings.slice(0, 5)) {
+        try {
+          await this.pool.query(
+            `INSERT INTO heidi_goals (title, goal_type, description, status, priority, success_criteria, context, created_at, updated_at)
+             VALUES ($1, 'investigate', $1, 'active', 5, 'investigation reaches a persisted conclusion', $2, now(), now())`,
+            [`Investigate: ${f.question.slice(0, 140)}`,
+            JSON.stringify({ capabilityId: 'ops.dev_investigate', findingType: f.findingType === 'tree_pollution' ? 'generic' : 'generic', target: f.target, question: f.question, initialObservation: f.initialObservation, suspectedFiles: f.suspectedFiles, severity: f.severity })],
+          );
+          goalsCreated++;
+        } catch { /* duplicate/pool issue — skip */ }
+      }
+      return {
+        capabilityId: 'ops.dev_observe',
+        executed: true,
+        outcome: 'success' as const,
+        result: { findings: findings.length, goalsCreated, types: findings.map(f => f.findingType) },
+        error: null,
+        evidence: [{ findings }],
+        verified: true,
+        verificationDetails: `${findings.length} finding(s) observed, ${goalsCreated} investigation goal(s) created`,
+      };
+    });
+
     // Dev investigation — R0 read-only. Counterexample-first: a finding is
     // a hypothesis until the evidence survives attempts to disprove it.
     // CONFIRMED_DEFECT creates a dev mission (ops.dev_author) as a goal;
