@@ -121,7 +121,7 @@ export async function executeJob(jobId: string): Promise<ExecutionResult> {
     if (elig.eligible) {
       await jobManager.approveForDelivery(jobId, 'auto-qa',
         `independent QA PASS — artifacts ${Object.keys(report.artifactHashes).join(', ')}, bounds ${JSON.stringify(report.boundsMm)}`);
-    } else {
+    } else if (completed.paymentStatus === 'paid') {
       await jobManager.requestIntervention(jobId, 'delivery-' + jobId, 'delivery_not_eligible: ' + elig.reason);
     }
 
