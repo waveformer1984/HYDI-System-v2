@@ -135,8 +135,8 @@
     "supabase\\migrations\\20260715122000_hydi_subsystem_status.sql:CREATE POLICY without IF NOT EXISTS or DO $$ exception guard:35",
     "supabase\\migrations\\20260715122000_hydi_subsystem_status.sql:CREATE POLICY without IF NOT EXISTS or DO $$ exception guard:35",
     "supabase\\migrations\\20260715122000_hydi_subsystem_status.sql:CREATE POLICY without IF NOT EXISTS or DO $$ exception guard:35",
-    "supabase\\migrations\\20260715123000_notifications.sql:CREATE POLICY without IF NOT EXISTS or DO $$ exception guard:36",
-    "supabase\\migrations\\20260715123000_notifications.sql:CREATE POLICY without IF NOT EXISTS or DO $$ exception guard:36",
+    "supabase\\migrations\\20260715123000_notifications.sql:CREATE POLICY without IF NOT EXISTS or DO $$ exception guard:49",
+    "supabase\\migrations\\20260715123000_notifications.sql:CREATE POLICY without IF NOT EXISTS or DO $$ exception guard:49",
     "supabase\\migrations\\20260715124000_memory_intelligence_foundation.sql:CREATE POLICY without IF NOT EXISTS or DO $$ exception guard:43",
     "supabase\\migrations\\20260722000001_customer_identity_convergence.sql:INSERT without ON CONFLICT or DO $$ exception guard:21"
   ]
