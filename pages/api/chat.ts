@@ -437,6 +437,95 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
     }
 
+    // ── Autopilot intents — expose the dev loop through chat ─────────
+    // Read-only observations answer inline; anything that mutates goes
+    // through heidi_goals (daemon executes, contract-verifies). Chat
+    // never claims work happened — it reports what was requested/found.
+    const lowerMsg = message.toLowerCase().trim();
+    const wantsFindWork = /\b(find|look for|scan).*(work|useful|improve|defect|something)/i.test(lowerMsg)
+      || /\bwhat (needs|should) (we |i |be )?(do|work|fix)/i.test(lowerMsg);
+    const wantsDevStatus = /\b(what (are you|you) working on|dev missions?|investigations?|what did you (fix|find|learn))\b/i.test(lowerMsg);
+    const wantsFix = /^(fix it|fix that|fix the (defect|issue))\b/i.test(lowerMsg);
+    if (wantsFindWork || wantsDevStatus || wantsFix) {
+      try {
+        const pg = (await import('pg')).default;
+        const pool = new pg.Pool({ host: '127.0.0.1', port: 54322, database: 'postgres', user: 'postgres', password: 'postgres' });
+        try {
+          if (wantsFindWork) {
+            const { observeDevelopmentSignals } = await import('../../lib/heidi/DevObserver');
+            const findings = await observeDevelopmentSignals(pool);
+            if (!findings.length) {
+              sse(res, { type: 'metadata', model_used: 'dev-observe', latency: 0 });
+              sse(res, { type: 'content', content: 'Scanned durable state — no development findings right now. NO_ACTION_REQUIRED: repeated failures, unresolved escalations, stale goals, and tree pollution are all quiet.' });
+            } else {
+              let created = 0;
+              for (const f of findings.slice(0, 5)) {
+                const { error } = await getCooSupabase().from('heidi_goals').insert({
+                  goal_type: 'task', title: `Investigate: ${f.question.slice(0, 140)}`, description: f.initialObservation,
+                  priority: 5, status: 'active',
+                  context: { capabilityId: 'ops.dev_investigate', findingType: f.findingType, target: f.target, question: f.question, initialObservation: f.initialObservation, suspectedFiles: f.suspectedFiles, producerKey: `chat:find-work:${Date.now()}` },
+                });
+                if (!error) created++;
+              }
+              const lines = [`Scanned durable state — ${findings.length} finding(s):`,
+              ...findings.map((f, i) => `${i + 1}. [${f.severity}] ${f.question.slice(0, 120)}`),
+              `${created} investigation goal(s) queued — the daemon picks them up on its next cycle. "What did you find" in a few minutes for verdicts.`];
+              sse(res, { type: 'metadata', model_used: 'dev-observe', latency: 0 });
+              sse(res, { type: 'content', content: lines.join('\n') });
+            }
+          } else if (wantsDevStatus) {
+            const fs = await import('fs');
+            const invLog = '.hydi-operational/dev-investigations.jsonl';
+            const invs = fs.existsSync(invLog)
+              ? fs.readFileSync(invLog, 'utf8').trim().split('\n').slice(-6).map(l => JSON.parse(l))
+              : [];
+            const { data: goals } = await getCooSupabase().from('heidi_goals')
+              .select('title, status, created_at')
+              .or('title.ilike.Investigate:%,title.ilike.Fix confirmed defect:%')
+              .order('created_at', { ascending: false }).limit(8);
+            const lines = [
+              `Recent investigations:`,
+              ...(invs.length ? invs.map((r: { conclusion: string; target: string; confidence: string }) => `  ${r.conclusion} (${r.confidence}) — ${r.target}`) : ['  none yet']),
+              `Dev goals:`,
+              ...((goals ?? []).map((g: { title: string; status: string }) => `  [${g.status}] ${g.title.slice(0, 100)}`)),
+            ];
+            sse(res, { type: 'metadata', model_used: 'dev-status', latency: 0 });
+            sse(res, { type: 'content', content: lines.join('\n') });
+          } else {
+            // "fix it" — only from a CONFIRMED_DEFECT investigation
+            const fs = await import('fs');
+            const invLog = '.hydi-operational/dev-investigations.jsonl';
+            const invs = fs.existsSync(invLog)
+              ? fs.readFileSync(invLog, 'utf8').trim().split('\n').map(l => JSON.parse(l))
+              : [];
+            const confirmed = [...invs].reverse().find((r: { conclusion: string }) => r.conclusion === 'CONFIRMED_DEFECT');
+            if (!confirmed) {
+              sse(res, { type: 'metadata', model_used: 'dev-fix', latency: 0 });
+              sse(res, { type: 'content', content: 'No confirmed defect to fix — investigations so far are NOT_A_DEFECT / INSUFFICIENT. Say "find something useful to work on" to scan for new findings.' });
+            } else {
+              const { error } = await getCooSupabase().from('heidi_goals').insert({
+                goal_type: 'task', title: `Fix confirmed defect: ${confirmed.target.slice(0, 120)}`,
+                description: confirmed.recommendedAction, priority: 3, status: 'active',
+                context: { capabilityId: 'ops.dev_author', problem: confirmed.question, evidence: JSON.stringify(confirmed.evidence).slice(0, 4000), targetFiles: confirmed.filesInspected, missionId: confirmed.missionId, sourceInvestigation: confirmed.investigationId, producerKey: `chat:fix:${confirmed.investigationId}` },
+              });
+              sse(res, { type: 'metadata', model_used: 'dev-fix', latency: 0 });
+              sse(res, {
+                type: 'content', content: error
+                  ? `Couldn't create the fix goal — ${error.message}`
+                  : `Queued a bounded fix for the confirmed defect on ${confirmed.target} (${confirmed.recommendedAction.slice(0, 120)}). ops.dev_author runs it under R2 policy — result lands in the audit trail.`
+              });
+            }
+          }
+        } finally { await pool.end(); }
+        res.write('data: [DONE]\n\n');
+        return res.end();
+      } catch (e) {
+        sse(res, { type: 'content', content: `Autopilot command failed — ${e instanceof Error ? e.message : 'unknown error'}` });
+        res.write('data: [DONE]\n\n');
+        return res.end();
+      }
+    }
+
     // Operational questions resolve against the persisted COO state first
     // Life-context intents — the world model layer. Focus switching,
     // remembering, recall, and the bounded 'investigate <target>'
