@@ -6,7 +6,6 @@ const ursulaSSE = require('../modules/ursula-sse-manager');
 const HydiContextualConscience = require('../modules/hydi-contextual-conscience');
 const ProtoForgeInfrastructure = require('../modules/protoforge-infrastructure');
 const cascade = require('../modules/cascade-complete-v2');
-const { metricsHandler: pipelineMetricsHandler } = require('../lib/pipeline/metrics');
 const ChatWebSocketServer = require('../modules/chat-websocket-server');
 const { v4: uuidv4 } = require('uuid');
 const path = require('path');
@@ -1100,12 +1099,6 @@ app.get('/cascade/emissions', (req, res) => {
   }
 });
 
-// Per-stage latency of the six-layer pipeline (lib/pipeline) that
-// POST /cascade/event runs in this process. heidi-web's /api/mobile-status
-// reads this, since it runs in a different process. Counts and timings
-// only -- no event data.
-app.get('/pipeline/metrics', pipelineMetricsHandler());
-
 // Get schema lock info
 app.get('/cascade/schema', (req, res) => {
   try {
@@ -1602,14 +1595,6 @@ server.listen(PORT, async () => {
     console.log(`[CASCADE V2] Event dead-lettered: ${deadLetter.event_id} - Reason: ${deadLetter.dead_letter_reason}`);
   });
   
-  // Emission layer [6] of the pipeline: forward each run's outcome to
-  // Ursula's SSE subscribers.
-  cascade.on('pipeline_trace', (traceEvent) => {
-    if (ursulaSSE && ursulaSSE.getSubscriberCount() > 0) {
-      ursulaSSE.broadcast({ type: 'pipeline_trace', ...traceEvent, timestamp: new Date().toISOString() });
-    }
-  });
-
   cascade.on('schema_violation', (violation) => {
     console.log(`[CASCADE V2] Schema violation: ${violation.event.event_id} - Errors: ${violation.violations.length}`);
   });
