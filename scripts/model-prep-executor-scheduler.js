@@ -18,7 +18,7 @@
 require('./babel-register');
 require('dotenv').config({ path: '.env.local' });
 
-const { processNextJob, recoverStaleJobs } = require('../lib/revenue/JobExecutor');
+const { processNextJob, recoverStaleJobs, sweepAwaitingReview } = require('../lib/revenue/JobExecutor');
 
 const INTERVAL_MS = parseInt(process.env.MODEL_PREP_INTERVAL_MS || '30000', 10);
 const ONCE = process.argv.includes('--once');
@@ -35,6 +35,18 @@ async function cycle() {
     }
   } catch (e) {
     console.error('[model-prep-executor] recovery error:', e instanceof Error ? e.message : e);
+  }
+
+  // Deliver pending-review jobs that already satisfy autonomous QA —
+  // covers jobs paid before the gate existed or whose delivery pass
+  // was interrupted by a restart.
+  try {
+    const s = await sweepAwaitingReview();
+    if (s.delivered || s.escalated) {
+      console.log(`[model-prep-executor] delivery sweep: ${s.delivered} delivered, ${s.escalated} escalated`);
+    }
+  } catch (e) {
+    console.error('[model-prep-executor] sweep error:', e instanceof Error ? e.message : e);
   }
 
   const result = await processNextJob();

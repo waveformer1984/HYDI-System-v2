@@ -24,6 +24,7 @@
 
 import { getJobManager, JobManager, CustomerJob } from './JobManager';
 import { generateModelPackage, verifyArtifacts, ArtifactResult } from './ModelArtifactGenerator';
+import { verifyDeliverableArtifacts, deliveryEligibility } from './DeliveryVerifier';
 import fs from 'fs';
 import path from 'path';
 
@@ -31,6 +32,8 @@ export interface ExecutionResult {
   jobId: string;
   success: boolean;
   artifacts: ArtifactResult[];
+  delivered?: boolean;
+  deliveryReason?: string;
   error?: string;
   durationMs: number;
 }
@@ -96,7 +99,7 @@ export async function executeJob(jobId: string): Promise<ExecutionResult> {
     }
 
     // Complete execution — job moves to 'awaiting_review'
-    await jobManager.completeExecution(jobId, generationResult.artifacts.map(a => ({
+    const completed = await jobManager.completeExecution(jobId, generationResult.artifacts.map(a => ({
       path: a.path,
       metadata: {
         filename: a.filename,
@@ -106,10 +109,28 @@ export async function executeJob(jobId: string): Promise<ExecutionResult> {
       },
     })));
 
+    // Autonomous delivery gate — independent QA decides whether the
+    // routine human review is needed at all. PASS → deliver; anything
+    // else stays awaiting_review with an escalated human reason.
+    const jobDir = path.join(jobManager.getArtifactsDir(), jobId);
+    const report = verifyDeliverableArtifacts(jobDir);
+    const elig = deliveryEligibility(
+      { jobStatus: completed.jobStatus, paymentStatus: completed.paymentStatus, deliveryStatus: completed.deliveryStatus, artifactPaths: completed.artifactPaths },
+      report,
+    );
+    if (elig.eligible) {
+      await jobManager.approveForDelivery(jobId, 'auto-qa',
+        `independent QA PASS — artifacts ${Object.keys(report.artifactHashes).join(', ')}, bounds ${JSON.stringify(report.boundsMm)}`);
+    } else {
+      await jobManager.requestIntervention(jobId, `delivery_not_eligible:${elig.reason}`);
+    }
+
     return {
       jobId,
       success: true,
       artifacts: generationResult.artifacts,
+      delivered: elig.eligible,
+      deliveryReason: elig.reason,
       durationMs: Date.now() - start,
     };
   } catch (error) {
@@ -173,7 +194,18 @@ export async function recoverStaleJobs(): Promise<{ recovered: number; failed: n
           const stat = fs.statSync(fullPath);
           return { path: fullPath, metadata: { filename: f, sizeBytes: stat.size } };
         });
-        await jobManager.completeExecution(job.jobId, artifacts);
+        const completedJob = await jobManager.completeExecution(job.jobId, artifacts);
+        // Same autonomous gate — recovery doesn't bypass delivery QA.
+        const report = verifyDeliverableArtifacts(jobDir);
+        const elig = deliveryEligibility(
+          { jobStatus: completedJob.jobStatus, paymentStatus: completedJob.paymentStatus, deliveryStatus: completedJob.deliveryStatus, artifactPaths: completedJob.artifactPaths },
+          report,
+        );
+        if (elig.eligible) {
+          await jobManager.approveForDelivery(job.jobId, 'auto-qa', `independent QA PASS after restart recovery — ${JSON.stringify(report.boundsMm)}`);
+        } else {
+          await jobManager.requestIntervention(job.jobId, `delivery_not_eligible:${elig.reason}`);
+        }
         recovered++;
       } else {
         // Partial artifacts — fail
@@ -188,6 +220,36 @@ export async function recoverStaleJobs(): Promise<{ recovered: number; failed: n
   }
 
   return { recovered, failed };
+}
+
+/**
+ * Sweep paid 'awaiting_review' jobs through the same autonomous gate —
+ * jobs that were queued before the gate existed, or whose delivery was
+ * interrupted, still qualify; exceptions stay put and escalate.
+ */
+export async function sweepAwaitingReview(): Promise<{ delivered: number; escalated: number }> {
+  const jobManager = getJobManager();
+  const jobs = await jobManager.getJobsByStatus('awaiting_review');
+  let delivered = 0;
+  let escalated = 0;
+  for (const job of jobs) {
+    const jobDir = path.join(jobManager.getArtifactsDir(), job.jobId);
+    const report = verifyDeliverableArtifacts(jobDir);
+    const elig = deliveryEligibility(
+      { jobStatus: job.jobStatus, paymentStatus: job.paymentStatus, deliveryStatus: job.deliveryStatus, artifactPaths: job.artifactPaths },
+      report,
+    );
+    if (elig.eligible) {
+      await jobManager.approveForDelivery(job.jobId, 'auto-qa', `independent QA PASS (sweep) — ${JSON.stringify(report.boundsMm)}`);
+      delivered++;
+    } else if (job.paymentStatus === 'paid' && report.verdict === 'FAIL' && job.interventionStatus !== 'requested') {
+      // A paid job with definitively failing QA is a human exception —
+      // flag it once, don't loop on it.
+      await jobManager.requestIntervention(job.jobId, `delivery_not_eligible:${elig.reason}`);
+      escalated++;
+    }
+  }
+  return { delivered, escalated };
 }
 
 /**
