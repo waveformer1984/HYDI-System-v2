@@ -1,0 +1,389 @@
+[
+  {
+    "label": "deployment mismatch on rezonate, revenue at stake",
+    "fingerprint": "215822fe371c9aff85c32dc23a9d24e0e9c26460ae279125dd9e5ae6b1bcd54b",
+    "outcome": "approve",
+    "stages": {
+      "ingestion": {
+        "status": "ok",
+        "event_type": "deployment.failed",
+        "source": "boot-agent"
+      },
+      "ledger": {
+        "status": "ok",
+        "fingerprint": "215822fe371c9aff85c32dc23a9d24e0e9c26460ae279125dd9e5ae6b1bcd54b",
+        "hash": "184a11aac60b2474aa3eb7ec42cee5a41d1b0868aa8532b3f766e176e3439b9f"
+      },
+      "cascade": {
+        "status": "ok",
+        "classification": "DEPLOYMENT_MISMATCH",
+        "confidence": 0.9,
+        "matched_rules": [
+          "DEPLOYMENT_MISMATCH:env_var_missing",
+          "DEPLOYMENT_MISMATCH:version_mismatch",
+          "DEPLOYMENT_MISMATCH:config_diff",
+          "DEPLOYMENT_MISMATCH:deployment_error",
+          "DEPLOYMENT_MISMATCH:build_failed"
+        ],
+        "quarantine": false
+      },
+      "kilo": {
+        "status": "ok",
+        "hypotheses_count": 1,
+        "confidence": 0.166,
+        "verified": true
+      },
+      "protoforge": {
+        "status": "ok",
+        "decision": "approve",
+        "matched_rule_id": "approve-high-value-low-risk"
+      },
+      "emission": {
+        "status": "ok"
+      }
+    }
+  },
+  {
+    "label": "stream break with every STREAM_BREAK field",
+    "fingerprint": "ca22f7bc5eb66a9de3faa9a6b9358a326e8ff887c5e0c0512609f91fc1021cff",
+    "outcome": "escalate",
+    "stages": {
+      "ingestion": {
+        "status": "ok",
+        "event_type": "stream.disconnected",
+        "source": "ursula"
+      },
+      "ledger": {
+        "status": "ok",
+        "fingerprint": "ca22f7bc5eb66a9de3faa9a6b9358a326e8ff887c5e0c0512609f91fc1021cff",
+        "hash": "0033918112191b32a289220f8dfbf1b1a68f8a849502d5a80d6671808e4d2881"
+      },
+      "cascade": {
+        "status": "ok",
+        "classification": "STREAM_BREAK",
+        "confidence": 0.9,
+        "matched_rules": [
+          "STREAM_BREAK:stream_disconnected",
+          "STREAM_BREAK:connection_lost",
+          "STREAM_BREAK:websocket_error",
+          "STREAM_BREAK:stream_error",
+          "STREAM_BREAK:disconnect"
+        ],
+        "quarantine": false
+      },
+      "kilo": {
+        "status": "ok",
+        "hypotheses_count": 1,
+        "confidence": 0.166,
+        "verified": true
+      },
+      "protoforge": {
+        "status": "ok",
+        "decision": "escalate",
+        "matched_rule_id": "escalate-stream-break"
+      },
+      "emission": {
+        "status": "ok"
+      }
+    }
+  },
+  {
+    "label": "data integrity risk",
+    "fingerprint": "f47bac1f2c66d8c4e7f264732251a1cf8c88fb30b7a5823ad71bbf06855c6916",
+    "outcome": "escalate",
+    "stages": {
+      "ingestion": {
+        "status": "ok",
+        "event_type": "ledger.checksum",
+        "source": "hydi-gateway"
+      },
+      "ledger": {
+        "status": "ok",
+        "fingerprint": "f47bac1f2c66d8c4e7f264732251a1cf8c88fb30b7a5823ad71bbf06855c6916",
+        "hash": "110d55ae57cf78067f31d635ec60af0f090ed5619640a3a0d5a76845285d498d"
+      },
+      "cascade": {
+        "status": "ok",
+        "classification": "DATA_INTEGRITY_RISK",
+        "confidence": 0.9,
+        "matched_rules": [
+          "DATA_INTEGRITY_RISK:corruption_detected",
+          "DATA_INTEGRITY_RISK:checksum_mismatch",
+          "DATA_INTEGRITY_RISK:data_validation_failed",
+          "DATA_INTEGRITY_RISK:integrity_check_failed",
+          "DATA_INTEGRITY_RISK:data_loss"
+        ],
+        "quarantine": false
+      },
+      "kilo": {
+        "status": "ok",
+        "hypotheses_count": 1,
+        "confidence": 0.166,
+        "verified": true
+      },
+      "protoforge": {
+        "status": "ok",
+        "decision": "escalate",
+        "matched_rule_id": "escalate-integrity"
+      },
+      "emission": {
+        "status": "ok"
+      }
+    }
+  },
+  {
+    "label": "infra failure (database down, ECONNREFUSED): INFRA_FAILURE since the #80 fix; was quarantined before",
+    "fingerprint": "a8e362c5b64c7b8f35b2489e480ceb2ba4714057c4d49751e1ebf09a18f5f183",
+    "outcome": "reject",
+    "stages": {
+      "ingestion": {
+        "status": "ok",
+        "event_type": "service.down",
+        "source": "watchdog"
+      },
+      "ledger": {
+        "status": "ok",
+        "fingerprint": "a8e362c5b64c7b8f35b2489e480ceb2ba4714057c4d49751e1ebf09a18f5f183",
+        "hash": "5b12a34c07cfa39db9bbb0cdafb080250ca5d7606767e72bdeeb7572e8f9c2ac"
+      },
+      "cascade": {
+        "status": "ok",
+        "classification": "INFRA_FAILURE",
+        "confidence": 0.9,
+        "matched_rules": [
+          "INFRA_FAILURE:error_code=ECONNREFUSED",
+          "INFRA_FAILURE:service=database+status=down",
+          "INFRA_FAILURE:error~Connection refused"
+        ],
+        "quarantine": false
+      },
+      "kilo": {
+        "status": "ok",
+        "hypotheses_count": 1,
+        "confidence": 0.166,
+        "verified": true
+      },
+      "protoforge": {
+        "status": "ok",
+        "decision": "reject",
+        "matched_rule_id": null
+      },
+      "emission": {
+        "status": "ok"
+      }
+    }
+  },
+  {
+    "label": "single-field stream disconnect: STREAM_BREAK since the #80 fix; was quarantined before",
+    "fingerprint": "1c42d3dc0f526654a62ece6cb2190a4162c60495c16281dd6795e7a4c869460e",
+    "outcome": "escalate",
+    "stages": {
+      "ingestion": {
+        "status": "ok",
+        "event_type": "stream.disconnected",
+        "source": "ursula"
+      },
+      "ledger": {
+        "status": "ok",
+        "fingerprint": "1c42d3dc0f526654a62ece6cb2190a4162c60495c16281dd6795e7a4c869460e",
+        "hash": "221f900b0d80c1f07d7a677c9d8346512f5f70b7565078a88f28a0cb2651a7fc"
+      },
+      "cascade": {
+        "status": "ok",
+        "classification": "STREAM_BREAK",
+        "confidence": 0.9,
+        "matched_rules": [
+          "STREAM_BREAK:stream_disconnected"
+        ],
+        "quarantine": false
+      },
+      "kilo": {
+        "status": "ok",
+        "hypotheses_count": 1,
+        "confidence": 0.166,
+        "verified": true
+      },
+      "protoforge": {
+        "status": "ok",
+        "decision": "escalate",
+        "matched_rule_id": "escalate-stream-break"
+      },
+      "emission": {
+        "status": "ok"
+      }
+    }
+  },
+  {
+    "label": "invalid envelope: no source",
+    "fingerprint": null,
+    "outcome": "invalid",
+    "stages": {
+      "ingestion": {
+        "status": "rejected",
+        "reason": "source is required and must be a string"
+      },
+      "ledger": {
+        "status": "skipped"
+      },
+      "cascade": {
+        "status": "skipped"
+      },
+      "kilo": {
+        "status": "skipped"
+      },
+      "protoforge": {
+        "status": "skipped"
+      },
+      "emission": {
+        "status": "ok"
+      }
+    }
+  },
+  {
+    "label": "duplicate of evt-stream-001",
+    "fingerprint": "ca22f7bc5eb66a9de3faa9a6b9358a326e8ff887c5e0c0512609f91fc1021cff",
+    "outcome": "duplicate",
+    "stages": {
+      "ingestion": {
+        "status": "ok",
+        "event_type": "stream.disconnected",
+        "source": "ursula"
+      },
+      "ledger": {
+        "status": "rejected",
+        "reason": "duplicate",
+        "fingerprint": "ca22f7bc5eb66a9de3faa9a6b9358a326e8ff887c5e0c0512609f91fc1021cff"
+      },
+      "cascade": {
+        "status": "skipped"
+      },
+      "kilo": {
+        "status": "skipped"
+      },
+      "protoforge": {
+        "status": "skipped"
+      },
+      "emission": {
+        "status": "ok"
+      }
+    }
+  },
+  {
+    "label": "repair manifest carrying deployment-mismatch fields",
+    "fingerprint": "4aea467da93ff2f13e5a9d643c82c19880e9d7332ebd6edf5788206cf693030b",
+    "outcome": "reject",
+    "stages": {
+      "ingestion": {
+        "status": "ok",
+        "event_type": "repair.manifest",
+        "source": "kilo"
+      },
+      "ledger": {
+        "status": "ok",
+        "fingerprint": "4aea467da93ff2f13e5a9d643c82c19880e9d7332ebd6edf5788206cf693030b",
+        "hash": "7f41e39dcd89f00ca277c550a64bd2ce6f7f4390556813928bd5a16843704b38"
+      },
+      "cascade": {
+        "status": "ok",
+        "classification": "DEPLOYMENT_MISMATCH",
+        "confidence": 0.9,
+        "matched_rules": [
+          "DEPLOYMENT_MISMATCH:env_var_missing",
+          "DEPLOYMENT_MISMATCH:version_mismatch",
+          "DEPLOYMENT_MISMATCH:config_diff",
+          "DEPLOYMENT_MISMATCH:deployment_error",
+          "DEPLOYMENT_MISMATCH:build_failed"
+        ],
+        "quarantine": false
+      },
+      "kilo": {
+        "status": "ok",
+        "hypotheses_count": 0,
+        "confidence": 0,
+        "verified": false
+      },
+      "protoforge": {
+        "status": "ok",
+        "decision": "reject",
+        "matched_rule_id": null
+      },
+      "emission": {
+        "status": "ok"
+      }
+    }
+  },
+  {
+    "label": "route failure: endpoint plus HTTP 502",
+    "fingerprint": "1c1fc44ae16af7e11997d748a74c842eb5d4de0000fb09f41730e8fcf9779eed",
+    "outcome": "reject",
+    "stages": {
+      "ingestion": {
+        "status": "ok",
+        "event_type": "http.error",
+        "source": "heidi-web"
+      },
+      "ledger": {
+        "status": "ok",
+        "fingerprint": "1c1fc44ae16af7e11997d748a74c842eb5d4de0000fb09f41730e8fcf9779eed",
+        "hash": "de22481a498bef255b9076e7d5b9a03ef698b3a0bbac796cb20dbbaacb53377e"
+      },
+      "cascade": {
+        "status": "ok",
+        "classification": "ROUTE_FAILURE",
+        "confidence": 0.9,
+        "matched_rules": [
+          "ROUTE_FAILURE:endpoint+status_code:400-599"
+        ],
+        "quarantine": false
+      },
+      "kilo": {
+        "status": "ok",
+        "hypotheses_count": 1,
+        "confidence": 0.166,
+        "verified": true
+      },
+      "protoforge": {
+        "status": "ok",
+        "decision": "reject",
+        "matched_rule_id": null
+      },
+      "emission": {
+        "status": "ok"
+      }
+    }
+  },
+  {
+    "label": "unknown anomaly: no CASCADE indicator, quarantined",
+    "fingerprint": "0e8ee0f71e657b70df21cc00d86fb0a90d8b06c02e483832e679551d93c82472",
+    "outcome": "quarantined",
+    "stages": {
+      "ingestion": {
+        "status": "ok",
+        "event_type": "sensor.reading",
+        "source": "hardware-controller"
+      },
+      "ledger": {
+        "status": "ok",
+        "fingerprint": "0e8ee0f71e657b70df21cc00d86fb0a90d8b06c02e483832e679551d93c82472",
+        "hash": "ebcfb661197ed16307afa826310902358a05ceb205c943eb7d2e9ce4453e4baf"
+      },
+      "cascade": {
+        "status": "rejected",
+        "classification": "UNKNOWN_ANOMALY",
+        "confidence": 0.3,
+        "matched_rules": [],
+        "quarantine": true,
+        "reason": "unknown_anomaly"
+      },
+      "kilo": {
+        "status": "skipped"
+      },
+      "protoforge": {
+        "status": "skipped"
+      },
+      "emission": {
+        "status": "ok"
+      }
+    }
+  }
+]

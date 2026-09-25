@@ -342,9 +342,41 @@ something executable.
   reasoning.
 
 ### Pipeline observability
-- Structured trace IDs flowing through all six layers end-to-end
-- Per-layer latency metrics surfaced in `api/mobile-status.js`
-- Replay Engine automated regression suite running on every PR
+**Done 2026-09-24**, with one step left:
+- ~~Structured trace IDs flowing through all six layers end-to-end~~ —
+  no code ran all six layers in sequence before this: the gateway wrote
+  the ledger but never classified, `protoforge-core`'s CASCADE never read
+  the ledger or called KILO, and the only KILO → ProtoForge chain was the
+  deprecated `lib/protoforge/replay-engine.ts`. `lib/pipeline/` now
+  composes the existing stage implementations into one run, and every run
+  returns a trace (one `trace_id`, per-stage status, duration and outputs,
+  linked to the ledger fingerprint and the policy decision id).
+- ~~Per-layer latency metrics surfaced in `api/mobile-status.js`~~ — its
+  response now has a `pipeline` field (n / errors / skipped / last, avg,
+  p95 ms per stage, plus outcome counts).
+- ~~Replay Engine automated regression suite running on every PR~~ —
+  `tests/unit/pipeline-replay.test.js` replays
+  `tests/fixtures/pipeline/recorded-events.json` through the real stages
+  and fails on any difference from `golden-traces.json`. It runs in
+  `npm test` / `unit-tests.yml` and `local-ci/unit-tests`.
+- ~~Route live traffic through it~~ **Done 2026-09-24.**
+  `CascadeCompleteV2.processEvent`, which protoforge-core's
+  `POST /cascade/event` and its infrastructure-alert handler both call, now
+  runs `lib/pipeline`. It is the single execution path: CASCADE's adapters
+  and schema lock are stage [1]'s normalization, its classifier instance is
+  stage [3]'s, and its 0.75 source-confidence gate is unchanged. Request
+  and response shapes are kept, plus `trace_id` and `trace`. Two deliberate
+  changes: duplicates are now decided by the RAW LEDGER fingerprint
+  (permanent) instead of the 15-second in-memory window, and `decision` is
+  now ProtoForge's policy decision instead of CASCADE's own action routing.
+  protoforge-core serves `GET /pipeline/metrics`, which `/api/mobile-status`
+  reads (`PROTOFORGE_CORE_URL`, default `http://127.0.0.1:3005`). This
+  depended on `ISSUES_FOUND.md` #80 (classifier rule, fixed) and uncovered
+  #81 (the live path rejected every event at the schema lock, fixed).
+  Remaining gaps: the default Supabase ledger adapter has no outbox, so a
+  failed append is a `ledger_error` rather than `queued`, and
+  `CascadeCompleteV2.processQuarantineRetries()` (never called) would now
+  see retried events as duplicates.
 
 ### PolicyEngine expansion
 - Additional DSL operators (`contains`, `startsWith`, `regex`)
