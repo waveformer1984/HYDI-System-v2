@@ -80,6 +80,7 @@ class CascadeHealthSnapshot extends EventEmitter {
     this.updateInterval = setInterval(() => {
       this.updateSnapshot();
     }, 10000);
+    this.updateInterval.unref?.(); // housekeeping only; don't keep the process alive
     
     // Initial update
     this.updateSnapshot();

@@ -123,11 +123,16 @@ describe('CascadeClassificationV2 — unchanged behaviour', () => {
     expect(result).toMatchObject({ classification: 'UNKNOWN_ANOMALY', confidence: 0.5, quarantine: true });
   });
 
-  it('keeps field-level `exists` semantics: a present-but-false flag still counts', () => {
-    // Characterization, not an endorsement: V1 used truthiness here. Left
-    // unchanged because #80 is about the category combination rule only;
-    // see ISSUES_FOUND.md #80's follow-up note.
-    expect(classify({ build_failed: false }).classification).toBe('DEPLOYMENT_MISMATCH');
+  it('treats `exists` indicators as V1 did, by truthiness: a false flag is not a failure (#84)', () => {
+    // V1 (modules/cascade-core.js): `payload.env_var_missing || ...`,
+    // `payload.stream_disconnected || ...`, `(payload.route || payload.endpoint)`.
+    expect(classify({ build_failed: false }).classification).toBe('UNKNOWN_ANOMALY');
+    expect(classify({ build_failed: true }).classification).toBe('DEPLOYMENT_MISMATCH');
+    expect(classify({ stream_disconnected: false, connection_lost: null }).classification).toBe('UNKNOWN_ANOMALY');
+    expect(classify({ stream_error: 'EPIPE' }).classification).toBe('STREAM_BREAK');
+    // A route context needs a truthy route/endpoint, as V1's `payload.route || payload.endpoint`.
+    expect(classify({ route: '', status_code: 500 }).classification).toBe('UNKNOWN_ANOMALY');
+    expect(classify({ route: '/api/x', status_code: 500 }).classification).toBe('ROUTE_FAILURE');
   });
 
   it('matches exact values exactly (no case folding)', () => {

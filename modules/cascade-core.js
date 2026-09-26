@@ -270,6 +270,7 @@ class CascadeCore extends EventEmitter {
       this.stats.lastHeartbeat = heartbeat.timestamp;
       this.emit('heartbeat', heartbeat);
     }, 20000); // Every 20 seconds
+    this.heartbeatInterval.unref?.(); // housekeeping only; don't keep the process alive
   }
 
   stopHeartbeat() {
