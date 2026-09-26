@@ -78,16 +78,36 @@ export async function authorizedExperiment(pool: Pool, opportunityId: string): P
  * finding. `hasPaidJob` is the only path to CONFIRMED, computed by the
  * caller from the real customer_jobs table — declarations never reach it.
  */
+const EVIDENCE_TYPES = ['direct_interview', 'waitlist_signup', 'demo_feedback', 'pricing_signal', 'paid_job', 'other'] as const;
+export type EvidenceType = typeof EVIDENCE_TYPES[number];
+export function evidenceType(s: string): EvidenceType {
+  return (EVIDENCE_TYPES as readonly string[]).includes(s) ? s as EvidenceType : 'other';
+}
+
 export async function recordEvidence(
   pool: Pool,
   opportunityId: string,
   evidence: { channel: string; summary: string; respondents?: number; declaredBy: string },
   hasPaidJob: boolean,
 ): Promise<{ eventId: string | null; verdict: string; findingId: string | null }> {
+  // Link the hypothesis + authorized experiment this evidence answers —
+  // the record must reconstruct what it was declared against.
+  const hyp = await pool.query(
+    `SELECT request_id FROM human_intervention_requests WHERE intervention_type='customer_validation_hypothesis'
+       AND objective LIKE $1 ORDER BY created_at DESC LIMIT 1`,
+    [`%${opportunityId}%`],
+  );
+  const exp = await authorizedExperiment(pool, opportunityId);
   const ev = await pool.query(
     `INSERT INTO heidi_events (event_type, payload, created_at)
      VALUES ('customer_evidence', $1, now()) RETURNING id`,
-    [JSON.stringify({ opportunityId, ...evidence, provenance: 'human_declared', verified: false })],
+    [JSON.stringify({
+      opportunityId, ...evidence,
+      evidence_type: evidenceType(evidence.channel),
+      hypothesis_id: hyp.rows[0]?.request_id ?? null,
+      experiment_id: exp?.eventId ?? null,
+      provenance: 'human_declared', verified: false,
+    })],
   ).catch(() => null);
   const eventId = ev?.rows[0]?.id as string ?? null;
 

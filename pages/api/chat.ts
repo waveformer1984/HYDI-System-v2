@@ -479,6 +479,43 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
     }
     const wantsBusiness = /\b(business (context|state|model)|what products|product portfolio|what are we (building|selling|trying)|why are we|revenue truth|who is the customer|most important business|business brief|how'?s business)\b/i.test(lowerMsg);
+    const wantsValidation = /\b(customer validation|what do i need to do|validation queue|what should i do next|customer proof)\b/i.test(lowerMsg);
+    if (wantsValidation) {
+      try {
+        const pg = (await import('pg')).default;
+        const pool = new pg.Pool({ host: '127.0.0.1', port: 54322, database: 'postgres', user: 'postgres', password: 'postgres' });
+        const { getValidationQueue } = await import('../../lib/heidi/ValidationQueue');
+        const queue = await getValidationQueue(pool);
+        await pool.end();
+        sse(res, { type: 'metadata', model_used: 'validation-queue', latency: 0 });
+        if (queue.length === 0) {
+          sse(res, { type: 'content', content: 'CUSTOMER VALIDATION\n\nNo opportunities have reached a business finding yet. INVESTIGATE an opportunity first — validation starts from evidence, not ideas.\n\nRevenue: $0.00 verified.' });
+        } else {
+          const top = queue[0];
+          const lines = [
+            'CUSTOMER VALIDATION',
+            '',
+            `Priority opportunity: ${top.opportunityTitle}`,
+            `Stage: ${top.stage}`,
+          ];
+          if (top.finding) lines.push(`Current finding: ${top.finding.verdict} (${top.finding.confidence}) — ${top.finding.limitations.slice(0, 120)}`);
+          if (top.falsification) lines.push(`Falsification: ${top.falsification.slice(0, 140)}`);
+          if (top.proposedExperiment) lines.push(`Experiment: ${top.proposedExperiment.slice(0, 140)}`);
+          if (top.evidenceRequired) lines.push(`Evidence required: ${top.evidenceRequired.slice(0, 140)}`);
+          lines.push(`Human action required: ${top.nextHumanAction}`);
+          if (top.blockedReason) lines.push(`Blocked: ${top.blockedReason}`);
+          if (top.evidence.length) lines.push(`Declared evidence: ${top.evidence.length} record(s) — all human_declared, verified=false`);
+          lines.push('', 'Validation status: NOT VERIFIED (declarations cannot verify)', 'Revenue: $0.00 verified');
+          if (queue.length > 1) lines.push(`(${queue.length - 1} more item(s) in the validation queue)`);
+          sse(res, { type: 'content', content: lines.join('\n') });
+        }
+        return res.end();
+      } catch (e) {
+        sse(res, { type: 'metadata', model_used: 'validation-queue', latency: 0 });
+        sse(res, { type: 'content', content: `Validation queue unavailable: ${e instanceof Error ? e.message : 'unknown'}` });
+        return res.end();
+      }
+    }
     if (wantsBusiness) {
       try {
         const pg = (await import('pg')).default;

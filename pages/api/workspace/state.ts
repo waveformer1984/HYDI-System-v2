@@ -8,6 +8,7 @@ import fs from 'fs';
 import path from 'path';
 import { execFileSync } from 'child_process';
 import pg from 'pg';
+import { getValidationQueue } from '../../../lib/heidi/ValidationQueue';
 
 const REPO = 'C:\\Users\\Owner\\HYDI-System-v2';
 const POOL = new pg.Pool({ host: '127.0.0.1', port: 54322, database: 'postgres', user: 'postgres', password: 'postgres' });
@@ -155,6 +156,28 @@ export default async function handler(_req: NextApiRequest, res: NextApiResponse
         events: (latestEvents.rows as Array<{ event_type: string; payload: Record<string, unknown>; created_at: string }>).slice(0, 8).map(e => ({ type: e.event_type, at: e.created_at, detail: JSON.stringify(e.payload).slice(0, 100) })),
       },
       opportunities: oppAgg.map(o => ({ status: o.status, count: o.c, topConfidence: o.mx })),
+      // Customer validation queue — folded from durable state by
+      // ValidationQueue; stages never collapse (AUTHORIZED ≠ EXECUTED,
+      // DECLARED ≠ VERIFIED).
+      validation: await (async () => {
+        try {
+          const q = await getValidationQueue(POOL);
+          return q.map(i => ({
+            opportunity: i.opportunityTitle,
+            stage: i.stage,
+            verdict: i.finding?.verdict ?? null,
+            confidence: i.finding?.confidence ?? null,
+            hypothesisId: i.hypothesisRequestId,
+            hypothesisStatus: i.hypothesisStatus,
+            authorized: i.stage === 'AUTHORIZED' || i.stage === 'EVIDENCE_DECLARED' || i.stage === 'VERIFIED',
+            experimentId: i.experimentId,
+            evidenceCount: i.evidence.length,
+            verified: i.verified,
+            nextHumanAction: i.nextHumanAction,
+            blockedReason: i.blockedReason,
+          }));
+        } catch { return []; }
+      })(),
       engineering: {
         head: gitHead, dirtyPaths: dirty,
         services: pm2, servicesOnline: pm2.filter(s => s.status === 'online').length, servicesTotal: pm2.length,
