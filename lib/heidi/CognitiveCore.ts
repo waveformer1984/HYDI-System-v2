@@ -1704,13 +1704,24 @@ export class CognitiveCore {
       }
       const res = await runInvestigateMission(this.pool, opportunityId, { pool: this.pool, repoDir: process.cwd() });
       const spawned = res.spawned.length > 0;
+      // Idempotent collapse returns missionEventId:null — the mission
+      // already exists. Resolve THAT row's event id so contract
+      // verification observes the durable record either way.
+      let missionEventId = res.missionEventId;
+      if (!missionEventId && res.parentMissionId) {
+        missionEventId = await this.pool.query(
+          `SELECT id FROM heidi_events WHERE event_type='agent_mission'
+             AND payload->>'missionId'=$1 ORDER BY created_at ASC LIMIT 1`,
+          [res.parentMissionId],
+        ).then(x => (x.rows[0]?.id as string) ?? null).catch(() => null);
+      }
       return {
         capabilityId: 'ops.agent_mission',
         executed: true,
         outcome: res.refused ? 'failure' as const : 'success' as const,
         result: {
           parentMissionId: res.parentMissionId,
-          missionEventId: res.missionEventId,
+          missionEventId,
           spawned: res.spawned,
           refused: res.refused ?? null,
         },

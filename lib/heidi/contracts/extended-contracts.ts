@@ -1034,7 +1034,10 @@ export const OPS_AGENT_MISSION = defineContract({
     conditions: [
       { field: 'found', operator: 'eq', expected: true },
       { field: 'event_type', operator: 'eq', expected: 'agent_mission' },
-      { field: 'payload.status', operator: 'eq', expected: 'PENDING' },
+      // Any legal mission status verifies — the contract confirms the
+      // durable record exists, not that the mission is still pending.
+      // Idempotent-collapse dispatches re-observe the original row.
+      { field: 'payload.status', operator: 'matches', expected: '^(PENDING|RUNNING|COMPLETED|FAILED|STOPPED|BLOCKED)$' },
     ],
     onFailure: 'escalate',
     maxRetries: 1,
