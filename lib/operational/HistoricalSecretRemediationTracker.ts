@@ -455,7 +455,7 @@ export class HistoricalSecretRemediationTracker {
   private checkInCurrentTree(filePath: string, pattern: string): boolean {
     try {
       // Use git grep to check if pattern exists in current tree
-      execSync(`git grep -l "${pattern}" HEAD -- "${filePath}" 2>NUL`, {
+      execSync(`git grep -l "${pattern}" HEAD -- "${filePath}"`, {
         encoding: 'utf-8',
         timeout: 5000,
         stdio: ['pipe', 'pipe', 'ignore'],

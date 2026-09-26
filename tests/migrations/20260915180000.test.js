@@ -180,10 +180,19 @@ describe('escalation: calculation separated from persistence', () => {
   });
 
   it('record_system_escalation is a writer and correctly refuses a READ ONLY transaction', async () => {
+    // It only writes when evaluate_system_escalation() calls for action, i.e.
+    // with 3+ CRITICAL runs among the latest 10. Create that condition inside
+    // the transaction instead of relying on the database's history, then make
+    // the transaction read-only; the ROLLBACK removes the rows either way.
     await expect(
       withClient(async (c) => {
-        await c.query('BEGIN READ ONLY');
+        await c.query('BEGIN');
         try {
+          await c.query(
+            "INSERT INTO system_health_runs (run_at, status) " +
+            "SELECT now() + interval '100 years' + (g || ' seconds')::interval, 'CRITICAL' FROM generate_series(1, 3) g"
+          );
+          await c.query('SET TRANSACTION READ ONLY');
           return await c.query('SELECT record_system_escalation()');
         } finally {
           await c.query('ROLLBACK').catch(() => {});
