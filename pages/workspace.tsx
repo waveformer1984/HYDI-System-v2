@@ -7,12 +7,18 @@ import { useEffect, useRef, useState } from 'react';
 
 type W = Record<string, any>;
 
-const NAV = ['overview', 'autopilot', 'missions', 'decisions', 'recommend', 'products', 'opportunities', 'engineering', 'revenue'];
+const NAV = ['overview', 'agents', 'missions', 'decisions', 'recommend', 'opportunities', 'engineering', 'revenue'];
+
+const AGENT_STATUS_COLOR: Record<string, string> = {
+  RUNNING: '#22c55e', STARTING: '#22c55e', IDLE: '#94a3b8', REGISTERED: '#94a3b8',
+  STALE: '#f59e0b', BLOCKED: '#f59e0b', NEEDS_HUMAN: '#f59e0b',
+  FAILED: '#ef4444', STOPPED: '#475569', COMPLETED: '#7dd3fc',
+};
 
 const C = { ok: '#22c55e', warn: '#f59e0b', bad: '#ef4444', dim: '#94a3b8', accent: '#7dd3fc' };
 const st = (c: string) => ({ color: c });
 
-function Card({ title, children, tone }: { title: string; children: React.ReactNode; tone?: string }) {
+function Card({ title, children, tone }: { title: React.ReactNode; children: React.ReactNode; tone?: string }) {
   return (
     <section style={{ border: '1px solid #1e293b', borderRadius: 8, padding: '12px 14px', background: '#0b1220', marginBottom: 10 }}>
       <h3 style={{ margin: '0 0 8px', fontSize: 11, letterSpacing: 1.5, color: tone ?? C.dim, textTransform: 'uppercase' }}>{title}</h3>
@@ -21,21 +27,24 @@ function Card({ title, children, tone }: { title: string; children: React.ReactN
   );
 }
 
-function Chat() {
+const AGENTS = ['heidi', 'team-coo', 'team-scout', 'team-builder', 'team-qa', 'team-revenue'];
+
+function Chat({ agent }: { agent: string }) {
   const [msgs, setMsgs] = useState<Array<{ role: string; text: string }>>([]);
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const label = agent === 'heidi' ? 'HEIDI' : agent.replace('team-', '').toUpperCase();
   const send = async () => {
     if (!input.trim() || busy) return;
     const m = input; setInput(''); setBusy(true);
-    setMsgs(v => [...v, { role: 'you', text: m }, { role: 'heidi', text: '…' }]);
+    setMsgs(v => [...v, { role: 'you', text: m }, { role: 'agent', text: '…' }]);
     try {
-      const r = await fetch('/api/chat', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ message: m, session_id: 'workspace', user_id: 'j' }) });
+      const r = await fetch('/api/chat', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ message: m, session_id: 'workspace', user_id: 'j', agent: agent === 'heidi' ? undefined : agent }) });
       const text = await r.text();
       const content = [...text.matchAll(/"content":"((?:[^"\\]|\\.)*)"/g)].map(x => JSON.parse(`"${x[1]}"`)).join('');
-      setMsgs(v => [...v.slice(0, -1), { role: 'heidi', text: content || '(no content)' }]);
-    } catch (e) { setMsgs(v => [...v.slice(0, -1), { role: 'heidi', text: `error: ${e}` }]); }
+      setMsgs(v => [...v.slice(0, -1), { role: 'agent', text: content || '(no content)' }]);
+    } catch (e) { setMsgs(v => [...v.slice(0, -1), { role: 'agent', text: `error: ${e}` }]); }
     setBusy(false);
   };
   useEffect(() => { ref.current?.scrollTo(0, ref.current.scrollHeight); }, [msgs]);
@@ -44,15 +53,15 @@ function Chat() {
       <div ref={ref} style={{ maxHeight: 180, overflowY: 'auto', fontSize: 13 }}>
         {msgs.map((m, i) => (
           <div key={i} style={{ marginBottom: 6 }}>
-            <span style={{ color: m.role === 'you' ? C.accent : C.ok, fontWeight: 600 }}>{m.role === 'you' ? 'J' : 'HEIDI'}</span>
+            <span style={{ color: m.role === 'you' ? C.accent : C.ok, fontWeight: 600 }}>{m.role === 'you' ? 'J' : label}</span>
             <span style={{ color: '#cbd5e1', whiteSpace: 'pre-wrap' }}> {m.text}</span>
           </div>
         ))}
-        {!msgs.length && <div style={{ color: '#475569' }}>Ask Heidi: "how's it going" · "find something useful" · "what are you working on" · "business context"</div>}
+        {!msgs.length && <div style={{ color: '#475569' }}>{agent === 'heidi' ? 'Ask Heidi: "how\'s it going" · "find something useful" · "what are you working on" · "inspect <agentId|missionId>"' : `Talking to ${label} — answers come from its durable state. Commands (stop/retry/inspect) still route through governance.`}</div>}
       </div>
       <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
         <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && send()}
-          placeholder="message Heidi…" disabled={busy}
+          placeholder={`message ${label.toLowerCase()}…`} disabled={busy}
           style={{ flex: 1, background: '#0f172a', border: '1px solid #1e293b', borderRadius: 6, color: '#e2e8f0', padding: '8px 10px', fontSize: 13 }} />
         <button onClick={send} disabled={busy} style={{ background: '#1e293b', color: '#e2e8f0', border: '1px solid #334155', borderRadius: 6, padding: '8px 16px', cursor: 'pointer' }}>send</button>
       </div>
@@ -86,6 +95,7 @@ function ActionButton({ label, kind, body, onDone, disabled }: { label: string; 
 export default function Workspace() {
   const [s, setS] = useState<W | null>(null);
   const [tab, setTab] = useState('overview');
+  const [chatAgent, setChatAgent] = useState('heidi');
   const [err, setErr] = useState<string | null>(null);
   const reload = () => fetch('/api/workspace/state').then(r => r.json()).then(setS).catch(e => setErr(String(e)));
   useEffect(() => {
@@ -120,6 +130,34 @@ export default function Workspace() {
         <main style={{ flex: 1, overflowY: 'auto', padding: 14 }}>
           {err && <Card title="error" tone={C.bad}>{err}</Card>}
           {!s ? <Card title="loading">reading live state…</Card> : <>
+            {tab === 'agents' && <>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(170px,1fr))', gap: 10 }}>
+                {s.agents.team.map((a: W) => (
+                  <Card key={a.agentId} title={<span>{a.role} <span onClick={() => setChatAgent(a.agentId)} style={{ cursor: 'pointer', color: C.accent }}>· chat</span></span>}
+                    tone={AGENT_STATUS_COLOR[a.status] ?? C.dim}>
+                    <span style={{ color: AGENT_STATUS_COLOR[a.status] ?? C.dim }}>● {a.status}</span><br />
+                    <small style={{ color: C.dim }}>heartbeat: {a.lastHeartbeat ? a.lastHeartbeat.slice(11, 19) + 'Z' : 'never'}</small><br />
+                    <small style={{ color: C.dim }}>mission: {a.currentMission ? a.currentMission.slice(0, 20) : 'none'}</small><br />
+                    <small style={{ color: C.dim }}>authority: {a.authority}</small>
+                  </Card>
+                ))}
+              </div>
+              <Card title="mission queue" tone={C.dim}>
+                running {s.agents.counts.running} · pending {s.agents.counts.pending} · needs-human {s.agents.counts.needsHuman} · stale {s.agents.counts.stale}
+                {s.agents.missions.map((m: W) => (
+                  <div key={m.missionId} style={{ marginTop: 4 }}>
+                    • <span style={{ color: AGENT_STATUS_COLOR[m.status] ?? C.dim }}>[{m.status}]</span> <b>{m.role}</b> {m.objective}
+                    <span style={{ color: '#475569' }}> · {m.missionId.slice(0, 20)} · p{m.priority} · attempt {m.attempt}{m.failure ? ` · ${String(m.failure).slice(0, 60)}` : ''}</span>
+                  </div>
+                ))}
+              </Card>
+              <Card title="live activity" tone={C.accent}>
+                {s.agents.activity.map((e: W, i: number) => (
+                  <div key={i}>• {e.type} <span style={{ color: '#475569' }}>{e.at?.slice(11, 19)}Z</span> — {e.detail}</div>
+                ))}
+              </Card>
+            </>}
+
             {tab === 'overview' && <>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 10 }}>
                 <Card title="system" tone={healthColor}>{s.system.health}{s.system.cooStale ? ' (stale snapshot)' : ''}</Card>
@@ -194,7 +232,17 @@ export default function Workspace() {
           </>}
         </main>
       </div>
-      <Chat />
+      <div style={{ borderTop: '1px solid #1e293b', padding: '4px 14px 0', background: '#0b1220', display: 'flex', gap: 10, alignItems: 'center' }}>
+        <span style={{ fontSize: 11, color: '#475569', letterSpacing: 1 }}>TALK TO</span>
+        {AGENTS.map(a => (
+          <button key={a} onClick={() => setChatAgent(a)} style={{
+            background: chatAgent === a ? '#1e293b' : 'transparent', border: '1px solid #334155',
+            borderRadius: 4, padding: '2px 10px', fontSize: 11, cursor: 'pointer',
+            color: chatAgent === a ? C.accent : '#94a3b8',
+          }}>{a === 'heidi' ? 'Heidi/COO' : a.replace('team-', '')}</button>
+        ))}
+      </div>
+      <Chat key={chatAgent} agent={chatAgent} />
     </div>
   );
 }

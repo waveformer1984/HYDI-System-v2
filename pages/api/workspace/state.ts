@@ -10,9 +10,12 @@ import { execFileSync } from 'child_process';
 import pg from 'pg';
 import { getValidationQueue } from '../../../lib/heidi/ValidationQueue';
 import { autonomousState } from '../../../lib/heidi/ActionController';
+import { collectAgentState } from '../../../lib/heidi/AgentControlPlane';
 
 const REPO = 'C:\\Users\\Owner\\HYDI-System-v2';
 const POOL = new pg.Pool({ host: '127.0.0.1', port: 54322, database: 'postgres', user: 'postgres', password: 'postgres' });
+
+const TEAM_MISSION_ROLES = new Set(['coo', 'scout', 'builder', 'qa', 'revenue', 'research', 'analyst', 'verifier', 'operations']);
 
 interface Recommendation {
   action: string; why: string; evidence: string; expectedValue: string;
@@ -187,6 +190,41 @@ export default async function handler(_req: NextApiRequest, res: NextApiResponse
       decisions,
       recommendations,
       autonomous: await autonomousState(POOL).catch(() => null),
+      // Command Center: the persistent agent team, live mission state,
+      // and recent agent activity — folded from the agents event ledger.
+      agents: await (async () => {
+        try {
+          const plane = await collectAgentState(POOL);
+          const team = plane.agents.filter(a => a.agentId.startsWith('team-')).map(a => ({
+            agentId: a.agentId, role: a.role, status: a.status,
+            lastHeartbeat: a.lastHeartbeatAt, lastStep: a.lastStep,
+            currentMission: plane.missions.find(m => m.agentId === a.agentId && (m.status === 'RUNNING' || m.status === 'PENDING'))?.missionId ?? null,
+            authority: a.authorizationLevel,
+          }));
+          const missions = plane.missions
+            .filter(m => m.role && (m.agentId?.startsWith('team-') || TEAM_MISSION_ROLES.has(m.role)))
+            .slice(-20).map(m => ({
+              missionId: m.missionId, role: m.role, agentId: m.agentId,
+              objective: m.objective.slice(0, 90), status: m.status,
+              priority: m.priority, attempt: m.attempt,
+              updatedAt: m.updatedAt, failure: m.failure,
+            })).reverse();
+          return {
+            team, missions,
+            counts: {
+              running: plane.missions.filter(m => m.status === 'RUNNING').length,
+              pending: plane.missions.filter(m => m.status === 'PENDING').length,
+              needsHuman: plane.missions.filter(m => m.status === 'NEEDS_HUMAN').length,
+              stale: plane.staleCount,
+            },
+            activity: (await POOL.query(
+              `select event_type, payload, created_at from heidi_events
+                 where division='agents' order by created_at desc limit 15`,
+            ).catch(() => ({ rows: [] as Array<{ event_type: string; payload: Record<string, unknown>; created_at: string }> }))).rows
+              .map(e => ({ type: e.event_type, at: e.created_at, detail: JSON.stringify(e.payload).slice(0, 130) })),
+          };
+        } catch { return { team: [], missions: [], counts: { running: 0, pending: 0, needsHuman: 0, stale: 0 }, activity: [] }; }
+      })(),
     });
   } catch (e) {
     res.status(500).json({ error: e instanceof Error ? e.message : 'workspace state failed' });

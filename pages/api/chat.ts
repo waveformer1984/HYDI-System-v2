@@ -340,15 +340,72 @@ async function deriveSelfImprovementProposal(
   return null;
 }
 
+/**
+ * Command Center agent chat — durable conversation + role-scoped
+ * answers from the standing agent's own durable state. Read-only:
+ * mutation intents fall through to the governed command path.
+ */
+async function answerAgentChat(
+  agentId: string,
+  message: string,
+): Promise<string | null> {
+  if (!agentId.startsWith('team-')) return null;
+  try {
+    const pg = (await import('pg')).default;
+    const pool = new pg.Pool({ host: '127.0.0.1', port: 54322, database: 'postgres', user: 'postgres', password: 'postgres' });
+    const { collectAgentState } = await import('../../lib/heidi/AgentControlPlane');
+    const plane = await collectAgentState(pool);
+    const agent = plane.agents.find(a => a.agentId === agentId);
+    await pool.end();
+    if (!agent) return `No standing agent '${agentId}'. The registered team: ${plane.agents.filter(a => a.agentId.startsWith('team-')).map(a => a.agentId).join(', ')}.`;
+    const owned = plane.missions.filter(m => m.agentId === agentId).slice(-6).reverse();
+    const role = agentId.replace('team-', '').toUpperCase();
+    const lines = [
+      `${role} — status ${agent.status}, last heartbeat ${agent.lastHeartbeatAt ? new Date(agent.lastHeartbeatAt).toISOString().slice(11, 19) + 'Z' : 'never'}.`,
+      owned.length ? `Recent missions:` : 'No missions assigned yet.',
+      ...owned.map(m => `  [${m.status}] ${m.missionId.slice(0, 20)} — ${m.objective.slice(0, 70)}`),
+    ];
+    const last = owned.find(m => m.status === 'COMPLETED' && m.result);
+    if (last) lines.push(`Last result: ${JSON.stringify(last.result).slice(0, 200)}`);
+    lines.push(`(Deterministic answer from durable state — not LLM-generated. To assign work, use a governed action: e.g. "create a ${role.toLowerCase()} mission" via the workspace actions or a team mission goal.)`);
+    return lines.join('\n');
+  } catch (e) {
+    return `Agent state unavailable — ${e instanceof Error ? e.message : 'unknown'}.`;
+  }
+}
+
+async function persistChatMessage(
+  agentId: string, userId: string, sessionId: string, role: string, content: string,
+): Promise<void> {
+  try {
+    const pg = (await import('pg')).default;
+    const pool = new pg.Pool({ host: '127.0.0.1', port: 54322, database: 'postgres', user: 'postgres', password: 'postgres' });
+    await pool.query(
+      `INSERT INTO heidi_events (event_type, division, payload, created_at)
+       VALUES ('chat_message','chat',$1,now())`,
+      [JSON.stringify({
+        conversationId: `${userId}:${agentId}`,
+        agentId, userId, sessionId, role,
+        content: content.slice(0, 4000),
+      })],
+    );
+    await pool.end();
+  } catch { /* persistence failure must not break chat */ }
+}
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
   const { message, session_id, user_id }: ChatRequest = req.body;
+  const agentId = typeof (req.body as Record<string, unknown>).agent === 'string'
+    ? String((req.body as Record<string, unknown>).agent) : null;
   if (!message || !session_id || !user_id) {
     return res.status(400).json({ error: 'Missing required fields: message, session_id, user_id' });
   }
+
+  void persistChatMessage(agentId ?? 'heidi', user_id, session_id, 'user', message);
 
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
@@ -435,6 +492,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         res.write('data: [DONE]\n\n');
         return res.end();
       }
+    }
+
+    // ── Agent-scoped chat (Command Center) — standing team agents answer
+    // from their own durable state. Mutation intents keep flowing through
+    // the governed command paths above; this is a read surface.
+    if (agentId) {
+      const reply = await answerAgentChat(agentId, message);
+      sse(res, { type: 'metadata', model_used: 'agent-deterministic', latency: 0 });
+      sse(res, { type: 'content', content: reply ?? `Unknown agent ${agentId}.` });
+      res.write('data: [DONE]\n\n');
+      void persistChatMessage(agentId, user_id, session_id, 'assistant', reply ?? 'unknown agent');
+      return res.end();
     }
 
     // ── Autopilot intents — expose the dev loop through chat ─────────
