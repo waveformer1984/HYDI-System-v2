@@ -131,31 +131,33 @@ export default function Workspace() {
           {err && <Card title="error" tone={C.bad}>{err}</Card>}
           {!s ? <Card title="loading">reading live state…</Card> : <>
             {tab === 'agents' && <>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(170px,1fr))', gap: 10 }}>
-                {s.agents.team.map((a: W) => (
-                  <Card key={a.agentId} title={<span>{a.role} <span onClick={() => setChatAgent(a.agentId)} style={{ cursor: 'pointer', color: C.accent }}>· chat</span></span>}
-                    tone={AGENT_STATUS_COLOR[a.status] ?? C.dim}>
-                    <span style={{ color: AGENT_STATUS_COLOR[a.status] ?? C.dim }}>● {a.status}</span><br />
-                    <small style={{ color: C.dim }}>heartbeat: {a.lastHeartbeat ? a.lastHeartbeat.slice(11, 19) + 'Z' : 'never'}</small><br />
-                    <small style={{ color: C.dim }}>mission: {a.currentMission ? a.currentMission.slice(0, 20) : 'none'}</small><br />
-                    <small style={{ color: C.dim }}>authority: {a.authority}</small>
-                  </Card>
-                ))}
-              </div>
-              <Card title="mission queue" tone={C.dim}>
-                running {s.agents.counts.running} · pending {s.agents.counts.pending} · needs-human {s.agents.counts.needsHuman} · stale {s.agents.counts.stale}
-                {s.agents.missions.map((m: W) => (
-                  <div key={m.missionId} style={{ marginTop: 4 }}>
-                    • <span style={{ color: AGENT_STATUS_COLOR[m.status] ?? C.dim }}>[{m.status}]</span> <b>{m.role}</b> {m.objective}
-                    <span style={{ color: '#475569' }}> · {m.missionId.slice(0, 20)} · p{m.priority} · attempt {m.attempt}{m.failure ? ` · ${String(m.failure).slice(0, 60)}` : ''}</span>
-                  </div>
-                ))}
-              </Card>
-              <Card title="live activity" tone={C.accent}>
-                {s.agents.activity.map((e: W, i: number) => (
-                  <div key={i}>• {e.type} <span style={{ color: '#475569' }}>{e.at?.slice(11, 19)}Z</span> — {e.detail}</div>
-                ))}
-              </Card>
+              {!s.agents ? <Card title="agents" tone={C.dim}>agent state not present in this build — rebuild or use the dev surface</Card> : <>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(170px,1fr))', gap: 10 }}>
+                  {(s.agents.team ?? []).map((a: W) => (
+                    <Card key={a.agentId} title={<span>{a.role} <span onClick={() => setChatAgent(a.agentId)} style={{ cursor: 'pointer', color: C.accent }}>· chat</span></span>}
+                      tone={AGENT_STATUS_COLOR[a.status] ?? C.dim}>
+                      <span style={{ color: AGENT_STATUS_COLOR[a.status] ?? C.dim }}>● {a.status}</span><br />
+                      <small style={{ color: C.dim }}>heartbeat: {a.lastHeartbeat ? a.lastHeartbeat.slice(11, 19) + 'Z' : 'never'}</small><br />
+                      <small style={{ color: C.dim }}>mission: {a.currentMission ? a.currentMission.slice(0, 20) : 'none'}</small><br />
+                      <small style={{ color: C.dim }}>authority: {a.authority}</small>
+                    </Card>
+                  ))}
+                </div>
+                <Card title="mission queue" tone={C.dim}>
+                  running {s.agents.counts.running} · pending {s.agents.counts.pending} · needs-human {s.agents.counts.needsHuman} · stale {s.agents.counts.stale}
+                  {(s.agents.missions ?? []).map((m: W) => (
+                    <div key={m.missionId} style={{ marginTop: 4 }}>
+                      • <span style={{ color: AGENT_STATUS_COLOR[m.status] ?? C.dim }}>[{m.status}]</span> <b>{m.role}</b> {m.objective}
+                      <span style={{ color: '#475569' }}> · {m.missionId.slice(0, 20)} · p{m.priority} · attempt {m.attempt}{m.failure ? ` · ${String(m.failure).slice(0, 60)}` : ''}</span>
+                    </div>
+                  ))}
+                </Card>
+                <Card title="live activity" tone={C.accent}>
+                  {(s.agents.activity ?? []).map((e: W, i: number) => (
+                    <div key={i}>• {e.type} <span style={{ color: '#475569' }}>{e.at?.slice(11, 19)}Z</span> — {e.detail}</div>
+                  ))}
+                </Card>
+              </>}
             </>}
 
             {tab === 'overview' && <>
