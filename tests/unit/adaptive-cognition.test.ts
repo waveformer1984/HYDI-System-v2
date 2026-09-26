@@ -75,3 +75,9 @@ describe('lesson directives — authority boundary', () => {
     expect(steps[0].status).not.toBe('executable');
   });
 });
+
+describe('builder live patch', () => {
+  test('condition gate accepts the verdict grammar', () => {
+    expect(validateCondition({ type: 'business_finding_verdict', opportunityId: 'x', equals: 'PARTIALLY_SUPPORTED' })).not.toBeNull();
+  });
+});
