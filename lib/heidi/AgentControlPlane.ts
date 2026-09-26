@@ -29,12 +29,21 @@ import { collectReconciliation, type ReconcileDeps } from './DeploymentReconcili
 
 // ── Types ───────────────────────────────────────────────────────────────
 
-export type AgentRole = 'research' | 'verifier' | 'analyst' | 'operations';
+// Mission-scoped roles spawned per investigation, plus the five standing
+// ProtoForge roles that form the persistent team.
+export type AgentRole =
+  | 'research' | 'verifier' | 'analyst' | 'operations'
+  | 'coo' | 'scout' | 'builder' | 'qa' | 'revenue';
 
 export type AgentStatus =
-  | 'REGISTERED' | 'STARTING' | 'RUNNING' | 'WAITING' | 'BLOCKED'
+  | 'REGISTERED' | 'STARTING' | 'RUNNING' | 'WAITING' | 'BLOCKED' | 'IDLE'
   | 'NEEDS_HUMAN' | 'COMPLETING' | 'COMPLETED' | 'FAILED' | 'STOPPED'
   | 'STALE' | 'EXPIRED';
+
+/** Standing team roles — persistent identities that claim role-matched
+ *  missions each supervision pass. */
+export const TEAM_ROLES: readonly AgentRole[] = ['coo', 'scout', 'builder', 'qa', 'revenue'];
+export const teamAgentId = (role: AgentRole) => `team-${role}`;
 
 export type MissionStatus = 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'NEEDS_HUMAN' | 'ESCALATED' | 'STOPPED';
 
@@ -323,6 +332,8 @@ export async function collectAgentState(
 
 // ── Runner ─────────────────────────────────────────────────────────────
 
+export type RoleHandlers = Partial<Record<AgentRole, RoleHandler>>;
+
 type RoleHandler = (ctx: {
   pool: Pick<Pool, 'query'>;
   mission: MissionView;
@@ -351,7 +362,7 @@ async function setStatus(
 export async function runAgent(
   pool: Pick<Pool, 'query'>,
   missionId: string,
-  handlers: Record<AgentRole, RoleHandler>,
+  handlers: RoleHandlers,
   reconcileDeps?: ReconcileDeps,
 ): Promise<void> {
   const state = await collectAgentState(pool);
@@ -389,7 +400,7 @@ export async function runAgent(
 
 // ── Role handlers (real, local, evidence-producing) ────────────────────
 
-export const ROLE_HANDLERS: Record<AgentRole, RoleHandler> = {
+export const ROLE_HANDLERS: RoleHandlers = {
 
   // Research: read the ProtoForge opportunity row, gather live HN Algolia
   // sources for the title terms, return evidence. Real outbound fetch —
@@ -688,7 +699,7 @@ export async function retryMission(pool: Pick<Pool, 'query'>, missionId: string,
   if (mission.status !== 'FAILED' && mission.status !== 'NEEDS_HUMAN' && mission.status !== 'STOPPED') {
     return { ok: false, outcome: 'not_terminal', detail: `mission is ${mission.status} — retry applies to terminal states` };
   }
-  void runAgent(pool, missionId, ROLE_HANDLERS, reconcileDeps);
+  void runAgent(pool, missionId, { ...ROLE_HANDLERS, ...TEAM_HANDLERS }, reconcileDeps);
   await postMessage(pool, { from: 'heidi', to: 'supervisor', missionId, type: 'STATUS', content: `manual retry initiated by ${actor}` });
   return { ok: true, outcome: 'retried', detail: `mission ${missionId} retried by ${actor}` };
 }
@@ -752,6 +763,7 @@ export interface SupervisionReport {
   escalations: string[];
   escalationErrors: string[];
   parentsReconciled: string[];
+  teamTick?: { heartbeats: string[]; dispatched: string[] };
 }
 
 const RETRYABLE_LEVELS = new Set(['R0', 'R1']);
@@ -803,7 +815,7 @@ export async function superviseAgents(
     // the number of retries permitted beyond the first attempt.
     if (m.status === 'FAILED' && m.attempt <= m.maxRetries && RETRYABLE_LEVELS.has(m.authorizationLevel)) {
       report.retries.push(m.missionId);
-      void runAgent(pool, m.missionId, ROLE_HANDLERS, reconcileDeps); // emits RUNNING attempt+1 — next pass sees it running
+      void runAgent(pool, m.missionId, { ...ROLE_HANDLERS, ...TEAM_HANDLERS }, reconcileDeps); // emits RUNNING attempt+1 — next pass sees it running
     } else {
       // Terminal: ensure the durable escalation exists (dedup on
       // unresolved rows keyed by metadata.missionId).
@@ -865,7 +877,15 @@ export async function superviseAgents(
     }
   }
 
-  // 5. Durable audit record of this pass.
+  // 5. Persistent team tick — standing agents heartbeat + claim work.
+  try {
+    report.teamTick = await tickPersistentTeam(pool, reconcileDeps);
+  } catch (e) {
+    report.teamTick = { heartbeats: [], dispatched: [] };
+    report.escalationErrors.push(`teamTick: ${e instanceof Error ? e.message : 'unknown'}`);
+  }
+
+  // 6. Durable audit record of this pass.
   report.supervisionEventId = await emit(pool, 'agent_supervision', {
     agentsChecked: report.agentsChecked,
     transitions: report.transitions,
@@ -873,7 +893,251 @@ export async function superviseAgents(
     escalations: report.escalations,
     escalationErrors: report.escalationErrors,
     parentsReconciled: report.parentsReconciled,
+    teamTick: report.teamTick,
     supervisedAt: new Date().toISOString(),
   });
   return report;
+}
+
+// ── Persistent team (Phase E) ──────────────────────────────────────────
+
+/**
+ * Standing ProtoForge team. Five durable agent identities that survive
+ * restart — registration is an event, idempotent by a check on prior
+ * events, so repeated ticks never double-register.
+ */
+export async function ensurePersistentTeam(
+  pool: Pick<Pool, 'query'>,
+): Promise<{ registered: string[]; total: number }> {
+  const existing = await pool.query(
+    `SELECT payload->>'agentId' id FROM heidi_events
+       WHERE event_type = 'agent_registered' AND payload->>'agentId' LIKE 'team-%'`,
+  ).catch(() => ({ rows: [] as Array<{ id: string }> }));
+  const have = new Set(existing.rows.map(r => r.id));
+  const registered: string[] = [];
+  for (const role of TEAM_ROLES) {
+    const agentId = teamAgentId(role);
+    if (have.has(agentId)) continue;
+    await emit(pool, 'agent_registered', {
+      agentId, name: `ProtoForge ${role}`, role, missionId: 'standing',
+      authorizationLevel: 'R2', parentAgentId: null, status: 'IDLE',
+      persistent: true,
+    });
+    await emit(pool, 'agent_status', {
+      agentId, missionId: 'standing', status: 'IDLE', pid: process.pid,
+      runtimeIdentity: `${agentId}@pid${process.pid}`,
+    });
+    registered.push(agentId);
+  }
+  return { registered, total: TEAM_ROLES.length };
+}
+
+/**
+ * Create a mission owned by a standing team agent rather than a
+ * mission-scoped agent — the agentId is the team identity, so the
+ * standing agent IS the task owner. Same idempotent mission identity.
+ */
+export async function createTeamMission(
+  pool: Pick<Pool, 'query'>,
+  spec: MissionSpec & { assignedTo?: string },
+): Promise<{ missionId: string; created: boolean; missionEventId: string | null }> {
+  const missionId = missionIdFor(spec.role, spec.objective, spec.targetKey);
+  const existing = await pool.query(
+    `SELECT payload FROM heidi_events
+     WHERE event_type = 'agent_mission' AND payload->>'missionId' = $1
+     ORDER BY created_at DESC LIMIT 1`,
+    [missionId],
+  );
+  if (existing.rows.length > 0) return { missionId, created: false, missionEventId: null };
+  const agentId = spec.assignedTo ?? teamAgentId(spec.role);
+  const missionEventId = await emit(pool, 'agent_mission', {
+    missionId, parentMissionId: spec.parentMissionId ?? null, agentId,
+    role: spec.role, objective: spec.objective, scope: spec.scope,
+    targetKey: spec.targetKey, params: spec.params ?? {},
+    authorizationLevel: spec.authorizationLevel ?? 'R1',
+    maxRuntimeMs: spec.maxRuntimeMs ?? DEFAULT_MAX_RUNTIME_MS,
+    maxRetries: spec.maxRetries ?? 0, status: 'PENDING', attempt: 0,
+    teamOwned: true,
+  });
+  return { missionId, created: true, missionEventId };
+}
+
+// ── Standing-role handlers ─────────────────────────────────────────────
+// Each does real governed work — reads durable state, produces evidence,
+// posts handoffs. None authorize, spend, contact, or push.
+
+export const TEAM_HANDLERS: RoleHandlers = {
+
+  // COO — read the full plane state, compose an honest operating brief,
+  // flag stalled/blocked work, hand off actionable findings.
+  coo: async ({ pool, mission, heartbeat, post }) => {
+    await heartbeat('collecting state');
+    const state = await collectAgentState(pool);
+    const goals = await pool.query(
+      `SELECT status, count(*)::int n FROM heidi_goals
+         WHERE status IN ('active','pending','blocked','failed')
+         GROUP BY status`,
+    ).catch(() => ({ rows: [] as Array<{ status: string; n: number }> }));
+    const escal = await pool.query(
+      `SELECT count(*)::int n FROM operator_escalations WHERE resolved = false`,
+    ).catch(() => ({ rows: [{ n: 0 }] }));
+    const byStatus = Object.fromEntries(goals.rows.map(g => [g.status, g.n]));
+    const brief = {
+      generatedAt: new Date().toISOString(),
+      agents: {
+        active: state.agents.filter(a => a.status === 'RUNNING').length,
+        stale: state.staleCount,
+        total: state.agents.length,
+      },
+      missions: {
+        running: state.missions.filter(m => m.status === 'RUNNING').length,
+        pending: state.missions.filter(m => m.status === 'PENDING').length,
+        needsHuman: state.missions.filter(m => m.status === 'NEEDS_HUMAN').length,
+      },
+      goals: byStatus,
+      humanActionsRequired: escal.rows[0]?.n ?? 0,
+    };
+    await post('heidi', 'RESULT', `operating brief: ${brief.agents.active} active agents, ${brief.missions.running} running missions, ${brief.humanActionsRequired} human actions`, brief);
+    return { result: brief, evidence: [{ brief }] };
+  },
+
+  // Scout — find the highest-confidence unreviewed opportunity and
+  // delegate a governed investigation to the research role. Real
+  // delegation: the mission it creates is executed by a real agent.
+  scout: async ({ pool, mission, heartbeat, post }) => {
+    await heartbeat('scanning opportunities');
+    const opp = (await pool.query(
+      `SELECT id::text, title, confidence FROM protoforge_opportunities
+         WHERE status = 'needs_review'
+           AND NOT EXISTS (
+             SELECT 1 FROM heidi_events e
+             WHERE e.event_type = 'agent_mission'
+               AND e.payload->>'targetKey' = 'parent:' || protoforge_opportunities.id::text
+           )
+         ORDER BY confidence DESC NULLS LAST LIMIT 1`,
+    )).rows[0];
+    if (!opp) {
+      await post('heidi', 'RESULT', 'no unreviewed opportunities — market scan complete');
+      return { result: { scanned: true, delegated: null }, evidence: [] };
+    }
+    const inv = await runInvestigateMission(pool, opp.id);
+    await post('heidi', 'HANDOFF', `delegated investigation of "${String(opp.title).slice(0, 60)}" → research agents`, { parentMissionId: inv.parentMissionId, spawned: inv.spawned });
+    await emit(pool, 'agent_handoff', {
+      fromAgent: teamAgentId('scout'), toAgent: 'research',
+      missionId: mission.missionId, reason: `unreviewed opportunity: ${String(opp.title).slice(0, 80)}`,
+      evidence: { opportunityId: opp.id, confidence: opp.confidence },
+      requiredAction: 'investigate', targetMissionId: inv.parentMissionId,
+    });
+    return {
+      result: { scanned: true, delegatedTo: inv.parentMissionId, opportunity: String(opp.title).slice(0, 80) },
+      evidence: [{ opportunity: opp }, { delegatedMissionId: inv.parentMissionId }],
+    };
+  },
+
+  // Builder — run the real dev-signal observer; findings become evidence.
+  // Does not patch code itself — bounded inspection only (R2 work
+  // items are created for the governed patch executor).
+  builder: async ({ pool, mission, heartbeat }) => {
+    await heartbeat('observing dev signals');
+    const { observeDevelopmentSignals } = await import('./DevObserver');
+    const findings = await observeDevelopmentSignals(pool as Pool);
+    return {
+      result: { findingsCount: findings.length, findings: findings.slice(0, 5).map(f => ({ target: f.target, question: f.question.slice(0, 80) })) },
+      evidence: [{ findings: findings.slice(0, 5) }],
+    };
+  },
+
+  // QA — verify the most recent COMPLETED mission's evidence actually
+  // contains a non-null result and non-empty evidence. Disagrees loudly.
+  qa: async ({ pool, mission, heartbeat, post }) => {
+    await heartbeat('selecting verification target');
+    const target = (await pool.query(
+      `SELECT payload->>'missionId' mid, payload FROM heidi_events
+         WHERE event_type = 'agent_status' AND payload->>'status' = 'COMPLETED'
+           AND payload->>'missionId' NOT LIKE 'mission-verif%'
+         ORDER BY created_at DESC LIMIT 1`,
+    )).rows[0];
+    if (!target) throw new Error('no completed mission to verify');
+    const p = target.payload as Record<string, unknown>;
+    const ev = Array.isArray(p.evidence) ? p.evidence : [];
+    const verdict = p.result != null && ev.length > 0 ? 'CONFIRMED' : 'DISAGREE';
+    await post('heidi', 'EVIDENCE', `QA verification of ${target.mid}: ${verdict} (${ev.length} evidence items)`, { evidenceCount: ev.length });
+    return {
+      result: { verifiedMissionId: target.mid, verdict, evidenceCount: ev.length },
+      evidence: [{ checkedStatus: p.status, evidenceCount: ev.length }],
+    };
+  },
+
+  // Revenue — reconcile the authoritative revenue/evidence state.
+  // Reads business findings + paid-job ledger; reports verified revenue
+  // honestly ($0.00 unless durable payment evidence exists).
+  revenue: async ({ pool, mission, heartbeat, post }) => {
+    await heartbeat('reconciling revenue state');
+    const findings = await pool.query(
+      `SELECT payload->>'verdict' v, count(*)::int n FROM heidi_events
+         WHERE event_type = 'business_finding' GROUP BY 1`,
+    ).catch(() => ({ rows: [] as Array<{ v: string; n: number }> }));
+    const paid = await pool.query(
+      `SELECT count(*)::int n, coalesce(sum(amount),0)::float total FROM customer_jobs WHERE stripe_checkout_session_id LIKE 'cs_live_%'`,
+    ).catch(() => ({ rows: [{ n: 0, total: 0 }] }));
+    const verdicts = Object.fromEntries(findings.rows.map(f => [f.v, f.n]));
+    const state = {
+      findingVerdicts: verdicts,
+      verifiedRevenue: paid.rows[0]?.total ?? 0,
+      paidJobs: paid.rows[0]?.n ?? 0,
+    };
+    await post('heidi', 'RESULT', `revenue reconciliation: $${state.verifiedRevenue.toFixed(2)} verified, ${JSON.stringify(verdicts)}`, state);
+    return { result: state, evidence: [{ findings: verdicts }, { verifiedRevenue: state.verifiedRevenue }] };
+  },
+};
+
+const TEAM_HEARTBEAT_MIN_MS = 45_000;
+const TEAM_DISPATCH_BUDGET_PER_TICK = 2;
+
+/**
+ * One persistent-team pass — runs inside superviseAgents so it shares
+ * the supervision cycle's cadence. Deterministic:
+ *   1. Register the five standing agents (idempotent).
+ *   2. Heartbeat each standing agent (rate-limited — no event storm).
+ *   3. Dispatch PENDING missions to their owning standing agent,
+ *      bounded by the shared concurrency budget and a per-tick cap.
+ *      Ownership is the mission's assigned agentId — two agents cannot
+ *      claim one task because the mission names its owner.
+ */
+export async function tickPersistentTeam(
+  pool: Pick<Pool, 'query'>,
+  reconcileDeps?: ReconcileDeps,
+): Promise<{ heartbeats: string[]; dispatched: string[] }> {
+  const out = { heartbeats: [] as string[], dispatched: [] as string[] };
+  await ensurePersistentTeam(pool);
+  const state = await collectAgentState(pool);
+  const now = Date.now();
+
+  for (const role of TEAM_ROLES) {
+    const agent = state.agents.find(a => a.agentId === teamAgentId(role));
+    if (!agent) continue;
+    const last = agent.lastHeartbeatAt ? Date.parse(agent.lastHeartbeatAt) : 0;
+    if (now - last >= TEAM_HEARTBEAT_MIN_MS && agent.status !== 'RUNNING') {
+      await emit(pool, 'agent_heartbeat', {
+        agentId: agent.agentId, missionId: 'standing',
+        step: agent.persistedStatus === 'IDLE' ? 'idle' : 'tick',
+        pid: process.pid, runtimeIdentity: `${agent.agentId}@pid${process.pid}`,
+      });
+      out.heartbeats.push(agent.agentId);
+    }
+  }
+
+  const pending = state.missions.filter(m =>
+    m.status === 'PENDING' && TEAM_ROLES.includes(m.role) && m.agentId?.startsWith('team-'));
+  let dispatched = 0;
+  for (const m of pending) {
+    if (dispatched >= TEAM_DISPATCH_BUDGET_PER_TICK) break;
+    const owner = state.agents.find(a => a.agentId === m.agentId);
+    if (!owner || owner.status === 'RUNNING' || owner.status === 'STARTING') continue;
+    if (state.activeCount + dispatched >= maxActiveAgents() + TEAM_ROLES.length) break;
+    void runAgent(pool, m.missionId, TEAM_HANDLERS, reconcileDeps);
+    out.dispatched.push(m.missionId);
+    dispatched++;
+  }
+  return out;
 }
