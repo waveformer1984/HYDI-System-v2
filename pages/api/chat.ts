@@ -9,6 +9,7 @@
 
 import { NextApiRequest, NextApiResponse } from 'next';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import pg from 'pg';
 import { isClaudeAvailable } from '../../lib/claude';
 import { runHeidiAgentStream } from '../../lib/heidi-agent';
 import { HeidiOrchestrator } from '../../lib/orchestrator';
@@ -345,29 +346,53 @@ async function deriveSelfImprovementProposal(
  * answers from the standing agent's own durable state. Read-only:
  * mutation intents fall through to the governed command path.
  */
+// Direct pg pool for the Command Center paths — the Supabase REST
+// client (getCooSupabase) hangs ~60s when PostgREST is down; the
+// workspace state endpoint proves the direct :54322 pool stays fast.
+const CHAT_POOL = new pg.Pool({ host: '127.0.0.1', port: 54322, database: 'postgres', user: 'postgres', password: 'postgres', max: 4 });
+
 async function answerAgentChat(
   agentId: string,
   message: string,
 ): Promise<string | null> {
   if (!agentId.startsWith('team-')) return null;
   try {
-    const pg = (await import('pg')).default;
-    const pool = new pg.Pool({ host: '127.0.0.1', port: 54322, database: 'postgres', user: 'postgres', password: 'postgres' });
-    const { collectAgentState } = await import('../../lib/heidi/AgentControlPlane');
-    const plane = await collectAgentState(pool);
-    const agent = plane.agents.find(a => a.agentId === agentId);
-    await pool.end();
-    if (!agent) return `No standing agent '${agentId}'. The registered team: ${plane.agents.filter(a => a.agentId.startsWith('team-')).map(a => a.agentId).join(', ')}.`;
-    const owned = plane.missions.filter(m => m.agentId === agentId).slice(-6).reverse();
+    const [statusEv, missionEv, resultsEv] = await Promise.all([
+      CHAT_POOL.query(
+        `select payload, created_at from heidi_events
+         where event_type='agent_status' and payload->>'agentId'=$1
+         order by created_at desc limit 1`, [agentId]),
+      CHAT_POOL.query(
+        `select payload, created_at from heidi_events
+         where event_type='agent_mission' and payload->>'agentId'=$1
+         order by created_at desc limit 6`, [agentId]),
+      CHAT_POOL.query(
+        `select payload, created_at from heidi_events
+         where event_type='agent_status' and payload->>'agentId'=$1
+         order by created_at desc limit 60`, [agentId]),
+    ]);
+    // Latest status per missionId — mission events store creation-time
+    // status, so display must come from the status ledger, not the row.
+    const statusByMission = new Map<string, string>();
+    for (const r of resultsEv.rows) {
+      const p = r.payload as Record<string, unknown>;
+      const mid = String(p.missionId ?? '');
+      if (mid && !statusByMission.has(mid)) statusByMission.set(mid, String(p.status));
+    }
+    const agent = statusEv.rows[0]?.payload as Record<string, unknown> | undefined;
+    const missions = missionEv.rows.map(r => ({ ...(r.payload as Record<string, unknown>), at: r.created_at })) as Array<Record<string, unknown> & { at: unknown }>;
+    if (!agent && missions.length === 0) {
+      return `No standing agent '${agentId}'.`;
+    }
     const role = agentId.replace('team-', '').toUpperCase();
     const lines = [
-      `${role} — status ${agent.status}, last heartbeat ${agent.lastHeartbeatAt ? new Date(agent.lastHeartbeatAt).toISOString().slice(11, 19) + 'Z' : 'never'}.`,
-      owned.length ? `Recent missions:` : 'No missions assigned yet.',
-      ...owned.map(m => `  [${m.status}] ${m.missionId.slice(0, 20)} — ${m.objective.slice(0, 70)}`),
+      `${role} — status ${agent?.status ?? 'REGISTERED'}, last status change ${(statusEv.rows[0]?.created_at as Date | undefined)?.toISOString().slice(11, 19) ?? 'never'}Z.`,
+      missions.length ? `Recent missions:` : 'No missions assigned yet.',
+      ...missions.map(m => `  [${statusByMission.get(String(m.missionId ?? '')) ?? m.status ?? 'PENDING'}] ${String(m.missionId ?? '').slice(0, 20)} — ${String(m.objective ?? '').slice(0, 70)}`),
     ];
-    const last = owned.find(m => m.status === 'COMPLETED' && m.result);
-    if (last) lines.push(`Last result: ${JSON.stringify(last.result).slice(0, 200)}`);
-    lines.push(`(Deterministic answer from durable state — not LLM-generated. To assign work, use a governed action: e.g. "create a ${role.toLowerCase()} mission" via the workspace actions or a team mission goal.)`);
+    const last = resultsEv.rows.map(r => r.payload as Record<string, unknown>).find(p => p.status === 'COMPLETED');
+    if (last) lines.push(`Last result: ${JSON.stringify(last.result ?? last).slice(0, 200)}`);
+    lines.push(`(Deterministic answer from durable state — not LLM-generated. To assign work, use a governed action.)`);
     return lines.join('\n');
   } catch (e) {
     return `Agent state unavailable — ${e instanceof Error ? e.message : 'unknown'}.`;
@@ -378,9 +403,7 @@ async function persistChatMessage(
   agentId: string, userId: string, sessionId: string, role: string, content: string,
 ): Promise<void> {
   try {
-    const pg = (await import('pg')).default;
-    const pool = new pg.Pool({ host: '127.0.0.1', port: 54322, database: 'postgres', user: 'postgres', password: 'postgres' });
-    await pool.query(
+    await CHAT_POOL.query(
       `INSERT INTO heidi_events (event_type, division, payload, created_at)
        VALUES ('chat_message','chat',$1,now())`,
       [JSON.stringify({
@@ -389,7 +412,6 @@ async function persistChatMessage(
         content: content.slice(0, 4000),
       })],
     );
-    await pool.end();
   } catch { /* persistence failure must not break chat */ }
 }
 
