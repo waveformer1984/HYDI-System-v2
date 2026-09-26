@@ -1779,7 +1779,7 @@ export class CognitiveCore {
         try {
           await this.pool.query(
             `INSERT INTO heidi_goals (title, goal_type, description, status, priority, success_criteria, context, created_at, updated_at)
-             VALUES ($1, 'task', $1, 'active', 5, 'investigation reaches a persisted conclusion', $2, now(), now())`,
+             VALUES ($1, 'task', $1, 'active', 5, '["investigation reaches a persisted conclusion"]'::jsonb, $2, now(), now())`,
             [`Investigate: ${f.question.slice(0, 140)}`,
             JSON.stringify({ capabilityId: 'ops.dev_investigate', findingType: f.findingType, target: f.target, question: f.question, initialObservation: f.initialObservation, suspectedFiles: f.suspectedFiles, severity: f.severity })],
           );
@@ -1819,7 +1819,7 @@ export class CognitiveCore {
         try {
           await this.pool.query(
             `INSERT INTO heidi_goals (title, goal_type, description, status, priority, success_criteria, context, created_at, updated_at)
-             VALUES ($1, 'task', $1, 'active', 3, 'ops.dev_author executes and commits a verified patch', $2, now(), now())`,
+             VALUES ($1, 'task', $1, 'active', 3, '["ops.dev_author executes and commits a verified patch"]'::jsonb, $2, now(), now())`,
             [`Fix confirmed defect: ${rec.target.slice(0, 120)}`,
             JSON.stringify({ capabilityId: 'ops.dev_author', problem: rec.question, evidence: String(params?.initialObservation ?? ''), targetFiles: params?.suspectedFiles ?? [], knownEdit: params?.knownEdit, missionId: rec.missionId, sourceInvestigation: rec.investigationId })],
           );

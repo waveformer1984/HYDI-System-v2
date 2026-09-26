@@ -113,11 +113,15 @@ export default async function handler(_req: NextApiRequest, res: NextApiResponse
     }
     const topOpp = oppAgg.find(o => o.status === 'needs_review');
     if (topOpp && Number(topOpp.c) > 0) {
+      const { rows: oppRows } = await POOL.query(
+        `select id, title, confidence from protoforge_opportunities
+         where status='needs_review' order by confidence desc nulls last limit 1`).catch(() => ({ rows: [] }));
+      const opp = oppRows[0];
       recommendations.push({
-        action: `Review ${topOpp.c} pending ProtoForge opportunities (top confidence ${topOpp.mx ?? '?'})`,
-        why: 'Opportunity intake produces no value until triaged',
+        action: `Investigate top pending opportunity: ${opp ? String(opp.title).slice(0, 80) : `${topOpp.c} pending`}`,
+        why: `${topOpp.c} opportunities sit in needs_review — intake produces no value until triaged`,
         evidence: 'protoforge_opportunities.needs_review', expectedValue: 'surface revenue-adjacent demand',
-        effort: 'bounded R1 review', risk: 'none', authorization: 'R1', kind: 'opportunity',
+        effort: 'bounded R1 review', risk: 'none', authorization: 'R1', kind: 'opportunity', ref: opp?.id,
       });
     }
 

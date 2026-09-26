@@ -60,10 +60,34 @@ function Chat() {
   );
 }
 
+function ActionButton({ label, kind, body, onDone, disabled }: { label: string; kind: string; body: Record<string, unknown>; onDone: () => void; disabled?: boolean }) {
+  const [st2, setSt2] = useState<'idle' | 'working' | 'done' | 'failed' | 'refused'>('idle');
+  const [msg, setMsg] = useState('');
+  const go = async () => {
+    setSt2('working');
+    try {
+      const r = await fetch('/api/workspace/action', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ kind, ...body }) });
+      const j = await r.json();
+      if (r.ok && j.ok) { setSt2('done'); setMsg(`goal ${String(j.goalId).slice(0, 8)} → ${j.capabilityId}`); onDone(); }
+      else { setSt2(r.status === 409 ? 'refused' : 'failed'); setMsg(j.error ?? 'failed'); }
+    } catch (e) { setSt2('failed'); setMsg(String(e)); }
+  };
+  return (
+    <span style={{ marginRight: 8 }}>
+      <button onClick={go} disabled={disabled || st2 === 'working' || st2 === 'done'} style={{
+        background: st2 === 'done' ? '#14532d' : st2 === 'failed' || st2 === 'refused' ? '#450a0a' : '#1e293b',
+        color: '#e2e8f0', border: '1px solid #334155', borderRadius: 4, padding: '3px 10px', fontSize: 11, cursor: 'pointer',
+      }}>{st2 === 'working' ? '…' : label}</button>
+      {msg && <span style={{ fontSize: 10, color: st2 === 'done' ? C.ok : C.bad }}> {msg}</span>}
+    </span>
+  );
+}
+
 export default function Workspace() {
   const [s, setS] = useState<W | null>(null);
   const [tab, setTab] = useState('overview');
   const [err, setErr] = useState<string | null>(null);
+  const reload = () => fetch('/api/workspace/state').then(r => r.json()).then(setS).catch(e => setErr(String(e)));
   useEffect(() => {
     const load = () => fetch('/api/workspace/state').then(r => r.json()).then(setS).catch(e => setErr(String(e)));
     load();
@@ -122,14 +146,29 @@ export default function Workspace() {
 
             {tab === 'decisions' && <>
               <Card title="human decision queue" tone={s.decisions.length ? C.warn : C.ok}>
-                {s.decisions.length ? s.decisions.map((d: W) => <div key={d.id} style={{ marginBottom: 8 }}>• <b>{d.title}</b> <span style={{ color: '#475569' }}>({d.kind})</span><br /><small style={{ color: C.dim }}>authority: J · evidence: {d.id}</small></div>) : 'nothing requires J right now'}
+                {s.decisions.length ? s.decisions.map((d: W) => (
+                  <div key={d.id} style={{ marginBottom: 8 }}>• <b>{d.title}</b> <span style={{ color: '#475569' }}>({d.kind})</span><br />
+                    {d.kind === 'intervention'
+                      ? <>
+                        <ActionButton label="approve" kind="resolve" body={{ queueItemId: d.id, decision: 'approve' }} onDone={reload} />
+                        <ActionButton label="reject" kind="resolve" body={{ queueItemId: d.id, decision: 'reject' }} onDone={reload} />
+                      </>
+                      : <small style={{ color: '#475569' }}>ACTION UNAVAILABLE — no governed capability for this class; review evidence manually</small>}
+                    <small style={{ color: C.dim }}> authority: J · evidence: {d.id}</small>
+                  </div>
+                )) : 'nothing requires J right now'}
               </Card>
             </>}
 
             {tab === 'recommend' && <>
               {s.recommendations.length ? s.recommendations.map((r: W, i: number) => (
                 <Card key={i} title={`${r.authorization} · ${r.kind}`} tone={r.authorization.startsWith('R3') ? C.warn : C.accent}>
-                  <b>{r.action}</b><br />why: {r.why}<br />evidence: {r.evidence}<br />value: {r.expectedValue} · effort: {r.effort} · risk: {r.risk}
+                  <b>{r.action}</b><br />why: {r.why}<br />evidence: {r.evidence}<br />value: {r.expectedValue} · effort: {r.effort} · risk: {r.risk}<br />
+                  <span style={{ marginTop: 6, display: 'inline-block' }}>
+                    {r.kind === 'dev_fix' && r.ref && <ActionButton label="start fix" kind="fix" body={{ investigationId: r.ref }} onDone={reload} />}
+                    {r.kind === 'opportunity' && <ActionButton label="investigate" kind="investigate_opportunity" body={{ opportunityId: r.ref }} disabled={!r.ref} onDone={reload} />}
+                    {r.kind === 'human_decision' && <small style={{ color: C.warn }}>requires J — see decisions tab</small>}
+                  </span>
                 </Card>
               )) : <Card title="recommendations">no justified action — NO_ACTION_REQUIRED</Card>}
             </>}
