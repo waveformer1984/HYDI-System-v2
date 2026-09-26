@@ -1784,6 +1784,39 @@ export class CognitiveCore {
       };
     });
 
+    // Opportunity verdict — R0: folds durable mission evidence into a
+    // typed business finding. A pending mission returns skipped so the
+    // goal stays open and retries on the next cycle; anything else
+    // persists a business_finding event the contract can re-read.
+    this.wireExecutor('ops.opp_verdict', async (params) => {
+      const opportunityId = String(params?.opportunityId ?? '');
+      if (!opportunityId) return this.failResult('ops.opp_verdict', 'capabilityParams.opportunityId required');
+      const { verdictForOpportunity } = await import('./OpportunityVerdict');
+      const v = await verdictForOpportunity(this.pool, opportunityId);
+      if (!v || v.verdict === 'MISSION_PENDING') {
+        return {
+          capabilityId: 'ops.opp_verdict', executed: true, outcome: 'skipped' as const,
+          result: { verdict: v?.verdict ?? 'NO_MISSION' }, error: null, evidence: [],
+          verified: false,
+          verificationDetails: v ? `mission ${v.evidence.missionStatus ?? 'in flight'} — verdict waits` : 'no investigate mission for this opportunity',
+        };
+      }
+      const eventId = await this.pool.query(
+        `INSERT INTO heidi_events (event_type, payload, created_at) VALUES ('business_finding', $1, now()) RETURNING id`,
+        [JSON.stringify({ opportunityId, ...v })],
+      ).then(x => x.rows[0].id as string).catch(() => null);
+      return {
+        capabilityId: 'ops.opp_verdict',
+        executed: true,
+        outcome: 'success' as const,
+        result: { verdict: v.verdict, confidence: v.confidence, recommendedAction: v.recommendedAction, eventId },
+        error: null,
+        evidence: [v.evidence],
+        verified: true,
+        verificationDetails: `${v.verdict} (${v.confidence}) — ${v.limitations.slice(0, 80)}`,
+      };
+    });
+
     // Dev signal observer — R0 read-only. Deterministic scan for
     // development findings; each becomes an investigation goal (R0).
     this.wireExecutor('ops.dev_observe', async () => {

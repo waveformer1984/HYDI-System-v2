@@ -184,6 +184,26 @@ export const OPS_DEV_PATCH = defineContract({
   },
 });
 
+export const OPS_OPP_VERDICT = defineContract({
+  identity: {
+    id: 'ops.opp_verdict', version: '1.0.0', owner: OWNER, provider: 'cognitive_core',
+    description: 'Typed business verdict on a completed investigate mission',
+  },
+  effects: [dbEffect('heidi_events', 'create')],
+  reversibility: { kind: 'none', windowMs: 0, caveat: 'Append-only business_finding; a negative verdict is a valid outcome.' },
+  cost: { estimatedMs: 10_000, timeoutMs: 30_000 },
+  verification: {
+    description: 'The business_finding row exists with a legal verdict — INSUFFICIENT verifies, never promotes.',
+    observation: dbObservation('sql:heidi_events:id={eventId}', ['id', 'event_type', 'payload']),
+    conditions: [
+      { field: 'found', operator: 'eq', expected: true },
+      { field: 'event_type', operator: 'eq', expected: 'business_finding' },
+      { field: 'payload.verdict', operator: 'matches', expected: '^(CONFIRMED|PARTIALLY_SUPPORTED|NOT_SUPPORTED|INSUFFICIENT)$' },
+    ],
+    onFailure: 'retry', maxRetries: 1, requiresHumanConfirmation: false,
+  },
+});
+
 export const OPS_BUSINESS_CONTEXT = defineContract({
   identity: {
     id: 'ops.business_context', version: '1.0.0', owner: OWNER, provider: 'cognitive_core',
@@ -1345,6 +1365,7 @@ export const EXTENDED_CONTRACTS: CapabilityContract[] = [
   OPS_DEV_INVESTIGATE,
   OPS_DEV_AUTHOR,
   OPS_DEV_PATCH,
+  OPS_OPP_VERDICT,
   OPS_BUSINESS_CONTEXT,
   // external / system-affecting
   TOOL_SEND_EMAIL,

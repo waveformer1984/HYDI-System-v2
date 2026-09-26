@@ -99,6 +99,24 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         [goal.capabilityId, String(dupKey)],
       );
       if (dup.rows.length > 0) {
+        // Still ensure the verdict stage exists even when the mission
+        // goal was created before chaining shipped.
+        if (kind === 'investigate_opportunity') {
+          const vd = await pool.query(
+            `SELECT id FROM heidi_goals WHERE status IN ('pending','active','in_progress','blocked')
+               AND context->>'capabilityId'='ops.opp_verdict'
+               AND context->'capabilityParams'->>'opportunityId'=$1 LIMIT 1`,
+            [String(dupKey)],
+          );
+          if (vd.rows.length === 0) {
+            await pool.query(
+              `INSERT INTO heidi_goals (parent_id, title, goal_type, description, status, priority, success_criteria, context, created_at, updated_at)
+               VALUES ($1, $2, 'task', $2, 'active', 4, '["business_finding persisted with legal verdict"]'::jsonb, $3, now(), now())`,
+              [dup.rows[0].id, `Verdict: business finding for opportunity ${String(dupKey).slice(0, 8)}`,
+              JSON.stringify({ capabilityId: 'ops.opp_verdict', capabilityParams: { opportunityId: dupKey }, completeOnVerify: true, producedBy: 'workspace-ui', producerKey: `ws:verdict:${String(dupKey)}` })],
+            ).catch(() => { });
+          }
+        }
         return res.status(200).json({ ok: true, deduped: true, goalId: dup.rows[0].id, capabilityId: goal.capabilityId, message: `already in flight as goal ${String(dup.rows[0].id).slice(0, 8)} — no duplicate dispatched` });
       }
     }
@@ -113,6 +131,26 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       `INSERT INTO heidi_events (event_type, division, payload, created_at) VALUES ('workspace_action','workspace',$1,now())`,
       [JSON.stringify({ goalId, kind, capabilityId: goal.capabilityId, params: goal.params, actor: 'workspace-operator' })],
     ).catch(() => { });
+
+    // Business loop: investigation is stage 1 — chain the deterministic
+    // verdict stage so an investigated opportunity always produces a
+    // typed business finding, not just agent activity.
+    if (kind === 'investigate_opportunity') {
+      const dup = await pool.query(
+        `SELECT id FROM heidi_goals WHERE status IN ('pending','active','in_progress','blocked')
+           AND context->>'capabilityId'='ops.opp_verdict'
+           AND context->'capabilityParams'->>'opportunityId'=$1 LIMIT 1`,
+        [String(goal.params.opportunityId)],
+      );
+      if (dup.rows.length === 0) {
+        await pool.query(
+          `INSERT INTO heidi_goals (parent_id, title, goal_type, description, status, priority, success_criteria, context, created_at, updated_at)
+           VALUES ($1, $2, 'task', $2, 'active', 4, '["business_finding persisted with legal verdict"]'::jsonb, $3, now(), now())`,
+          [goalId, `Verdict: business finding for opportunity ${String(goal.params.opportunityId).slice(0, 8)}`,
+            JSON.stringify({ capabilityId: 'ops.opp_verdict', capabilityParams: { opportunityId: goal.params.opportunityId }, completeOnVerify: true, producedBy: 'workspace-ui', producerKey: `ws:verdict:${String(goal.params.opportunityId)}` })],
+        ).catch(() => { });
+      }
+    }
     return res.status(200).json({ ok: true, goalId, capabilityId: goal.capabilityId, message: `submitted as governed goal ${goalId.slice(0, 8)} — the daemon executes under existing policy` });
   } catch (e) {
     return res.status(500).json({ error: e instanceof Error ? e.message : 'goal insert failed' });

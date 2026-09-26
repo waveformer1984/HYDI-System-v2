@@ -446,7 +446,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       || /\bwhat (needs|should) (we |i |be )?(do|work|fix)/i.test(lowerMsg);
     const wantsDevStatus = /\b(what (are you|you) working on|dev missions?|investigations?|what did you (fix|find|learn))\b/i.test(lowerMsg);
     const wantsFix = /^(fix it|fix that|fix the (defect|issue))\b/i.test(lowerMsg);
-    const wantsBusiness = /\b(business (context|state|model)|what products|product portfolio|what are we (building|selling|trying)|why are we|revenue truth|who is the customer)\b/i.test(lowerMsg);
+    const wantsBusiness = /\b(business (context|state|model)|what products|product portfolio|what are we (building|selling|trying)|why are we|revenue truth|who is the customer|most important business|business brief|how'?s business)\b/i.test(lowerMsg);
     if (wantsBusiness) {
       try {
         const pg = (await import('pg')).default;
@@ -459,6 +459,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           const facts = await bc.getFacts();
           const groups = ['objective', 'authority', 'autonomy', 'revenue', 'product', 'loop', 'boundary'];
           const lines = ['Business context (from the authoritative fact store):'];
+          // Business loop state — the latest typed finding if one exists.
+          const finding = await pool.query(
+            `SELECT payload, created_at FROM heidi_events WHERE event_type='business_finding'
+             ORDER BY created_at DESC LIMIT 1`).catch(() => ({ rows: [] }));
+          if (finding.rows[0]) {
+            const f = finding.rows[0].payload as { verdict?: string; confidence?: string; recommendedAction?: string; opportunityId?: string; limitations?: string };
+            lines.push(`\nLATEST BUSINESS FINDING [${f.verdict} / ${f.confidence}]:`,
+              `  opportunity: ${String(f.opportunityId ?? '?').slice(0, 8)}`,
+              `  next: ${f.recommendedAction ?? 'none'}`,
+              `  honest limit: ${String(f.limitations ?? '').slice(0, 120)}`);
+          }
           for (const g of groups) {
             const fs2 = facts.filter(f => f.kind === g);
             if (!fs2.length) continue;
