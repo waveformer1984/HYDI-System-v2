@@ -118,8 +118,17 @@ export async function proposePlan(model: GoalModel, lessons: string[] = []): Pro
 
 /** Persist a plan event and materialize executable steps as child goals. */
 export async function materializePlan(
-  pool: Pool, planId: string, parentGoalId: string, model: GoalModel, steps: PlanStep[], aiStatus: Plan['aiStatus'],
+  pool: Pool, planId: string, goalModelId: string, model: GoalModel, steps: PlanStep[], aiStatus: Plan['aiStatus'],
 ): Promise<{ planEventId: string | null; childGoalIds: string[] }> {
+  // Parent is the ops.plan goal row itself, not the goal_model event —
+  // parent_id references heidi_goals.
+  const parentRow = await pool.query(
+    `SELECT id FROM heidi_goals WHERE context->>'capabilityId'='ops.plan'
+       AND context->'capabilityParams'->>'goalModelId'=$1
+       ORDER BY created_at DESC LIMIT 1`,
+    [goalModelId],
+  ).catch(() => ({ rows: [] as Array<{ id: string }> }));
+  const parentGoalId: string | null = parentRow.rows[0]?.id ?? null;
   const ev = await pool.query(
     `INSERT INTO heidi_events (event_type, payload, created_at) VALUES ('plan', $1, now()) RETURNING id`,
     [JSON.stringify({ planId, goalModelId: planId, objective: model.objective, aiStatus, steps })],
@@ -127,19 +136,31 @@ export async function materializePlan(
   const planEventId = ev?.rows[0]?.id ?? null;
 
   const childGoalIds: string[] = [];
+  const materializeErrors: string[] = [];
   for (const s of steps) {
     if (s.status !== 'executable') {
       // Human-required / rejected steps are durable in the plan event —
       // they never silently become runnable goals.
       continue;
     }
-    const g = await pool.query(
-      `INSERT INTO heidi_goals (parent_id, title, goal_type, description, status, priority, success_criteria, context, created_at, updated_at)
-       VALUES ($1, $2, 'task', $2, 'active', 5, '["contract-verified capability execution"]'::jsonb, $3, now(), now()) RETURNING id`,
-      [parentGoalId, `Plan step ${s.stepId}: ${s.objective.slice(0, 100)}`,
-        JSON.stringify({ capabilityId: s.capabilityId, capabilityParams: s.params, completeOnVerify: true, producedBy: 'planner', producerKey: `plan:${planId}:${s.stepId}` })],
-    ).catch(() => null);
-    if (g?.rows[0]?.id) childGoalIds.push(g.rows[0].id);
+    try {
+      const g = await pool.query(
+        `INSERT INTO heidi_goals (parent_id, title, goal_type, description, status, priority, success_criteria, context, created_at, updated_at)
+         VALUES ($1, $2, 'task', $2, 'active', 5, '["contract-verified capability execution"]'::jsonb, $3, now(), now()) RETURNING id`,
+        [parentGoalId, `Plan step ${s.stepId}: ${s.objective.slice(0, 100)}`,
+          JSON.stringify({ capabilityId: s.capabilityId, capabilityParams: s.params, completeOnVerify: true, producedBy: 'planner', producerKey: `plan:${planId}:${s.stepId}` })],
+      );
+      if (g.rows[0]?.id) childGoalIds.push(g.rows[0].id);
+    } catch (e) {
+      // Never silently swallow materialization — the plan event records it.
+      materializeErrors.push(`${s.stepId}: ${e instanceof Error ? e.message.slice(0, 80) : 'insert failed'}`);
+    }
+  }
+  if (materializeErrors.length && planEventId) {
+    await pool.query(
+      `UPDATE heidi_events SET payload = payload || $2::jsonb WHERE id=$1`,
+      [planEventId, JSON.stringify({ materializeErrors })],
+    ).catch(() => { });
   }
   return { planEventId, childGoalIds };
 }

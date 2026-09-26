@@ -9,6 +9,7 @@ import path from 'path';
 import { execFileSync } from 'child_process';
 import pg from 'pg';
 import { getValidationQueue } from '../../../lib/heidi/ValidationQueue';
+import { autonomousState } from '../../../lib/heidi/ActionController';
 
 const REPO = 'C:\\Users\\Owner\\HYDI-System-v2';
 const POOL = new pg.Pool({ host: '127.0.0.1', port: 54322, database: 'postgres', user: 'postgres', password: 'postgres' });
@@ -185,6 +186,7 @@ export default async function handler(_req: NextApiRequest, res: NextApiResponse
       },
       decisions,
       recommendations,
+      autonomous: await autonomousState(POOL).catch(() => null),
     });
   } catch (e) {
     res.status(500).json({ error: e instanceof Error ? e.message : 'workspace state failed' });

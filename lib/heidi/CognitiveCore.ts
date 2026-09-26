@@ -1772,11 +1772,17 @@ export class CognitiveCore {
       await bc.ensure();
       await bc.refresh();
       const facts = await bc.getFacts(params?.kind as never);
+      // Durable read receipt — the contract re-reads the row rather than
+      // trusting the executor's return value.
+      const ev = await this.pool.query(
+        `INSERT INTO heidi_events (event_type, payload, created_at) VALUES ('business_context_read', $1, now()) RETURNING id`,
+        [JSON.stringify({ factCount: facts.length, kinds: [...new Set(facts.map(f => f.kind))] })],
+      ).catch(() => null);
       return {
         capabilityId: 'ops.business_context',
         executed: true,
         outcome: 'success' as const,
-        result: { factCount: facts.length, kinds: [...new Set(facts.map(f => f.kind))], digest: await bc.digest() },
+        result: { eventId: ev?.rows[0]?.id ?? null, factCount: facts.length, kinds: [...new Set(facts.map(f => f.kind))], digest: await bc.digest() },
         error: null,
         evidence: [{ factCount: facts.length }],
         verified: facts.length > 0,
@@ -3211,6 +3217,43 @@ export class CognitiveCore {
             status: 'failed',
             result: state.executionResult.details || 'capability refused or failed',
           });
+
+          // Bounded autonomous replanning: a plan-step goal that failed
+          // for a TRANSIENT reason gets exactly one replacement child
+          // goal (durable replanOf marker prevents loops). Refusals and
+          // authority problems are NOT retried — they persist as
+          // plan_step_failed evidence.
+          try {
+            const key = String(goal.context?.producerKey ?? '');
+            const planMatch = /^plan:([^:]+):([^:]+)$/.exec(key);
+            if (planMatch) {
+              const reason = String(state.executionResult.details ?? '').toLowerCase();
+              const transient = /timeout|unavailable|unreachable|econn|eai_again|resource/.test(reason);
+              const alreadyReplanned = await this.pool.query(
+                `SELECT 1 FROM heidi_goals WHERE context->>'replanOf'=$1 LIMIT 1`,
+                [goal.goalId],
+              );
+              if (transient && alreadyReplanned.rows.length === 0) {
+                const replanGoal = await this.pool.query(
+                  `INSERT INTO heidi_goals (parent_id, title, goal_type, description, status, priority, success_criteria, context, created_at, updated_at)
+                   VALUES ($1, $2, 'task', $2, 'active', 5, '["contract-verified capability execution"]'::jsonb, $3, now(), now()) RETURNING id`,
+                  [goal.parentId ?? null, `Replan ${planMatch[2]}: ${String(goal.title).slice(0, 80)}`,
+                  JSON.stringify({ ...(goal.context ?? {}), replanOf: goal.goalId, replanReason: reason.slice(0, 140) })],
+                );
+                await this.pool.query(
+                  `INSERT INTO heidi_events (event_type, payload, created_at) VALUES ('replan', $1, now())`,
+                  [JSON.stringify({ planId: planMatch[1], failedGoalId: goal.goalId, classification: 'transient', newGoalId: replanGoal.rows[0]?.id, reason: reason.slice(0, 160) })],
+                ).catch(() => { });
+              } else if (!transient) {
+                await this.pool.query(
+                  `INSERT INTO heidi_events (event_type, payload, created_at) VALUES ('plan_step_failed', $1, now())`,
+                  [JSON.stringify({ planId: planMatch[1], goalId: goal.goalId, classification: 'non_transient', reason: reason.slice(0, 160), policy: 'no_retry_without_new_evidence' })],
+                ).catch(() => { });
+              }
+            }
+          } catch {
+            // Replan bookkeeping is not fatal to the cycle
+          }
         }
       } catch {
         // Failure bookkeeping is not fatal to the cycle

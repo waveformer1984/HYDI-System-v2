@@ -482,6 +482,34 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const wantsValidation = /\b(customer validation|what do i need to do|validation queue|what should i do next|customer proof)\b/i.test(lowerMsg);
     // General goal → governed interpret→plan chain. The local model
     // structures the goal; the daemon plans and executes under policy.
+    const wantsAutonomy = /\b(what are you doing|autonomous state|autonomy state|current goal|what'?s running|why did you|action journal)\b/i.test(lowerMsg);
+    if (wantsAutonomy) {
+      try {
+        const pg = (await import('pg')).default;
+        const pool = new pg.Pool({ host: '127.0.0.1', port: 54322, database: 'postgres', user: 'postgres', password: 'postgres' });
+        const { autonomousState } = await import('../../lib/heidi/ActionController');
+        const s = await autonomousState(pool);
+        await pool.end();
+        sse(res, { type: 'metadata', model_used: 'autonomous-state', latency: 0 });
+        sse(res, {
+          type: 'content',
+          content: [
+            'AUTONOMOUS STATE', '',
+            `Mode: ${s.mode}`,
+            s.currentGoal ? `Current goal: ${s.currentGoal.title} [${s.currentGoal.capability ?? 'goal.advance'}]` : 'Current goal: none',
+            `Reason: ${s.reason}`,
+            `Queue: ${s.queueDepth} open | Human blockers: ${s.humanBlockers} | Plans (24h): ${s.openPlans} | Replans: ${s.replans}`,
+            `Local models: ${s.resources.models.length ? s.resources.models.join(', ') : 'unknown'}`,
+            `Next action: ${s.nextAction}`,
+          ].join('\n'),
+        });
+        return res.end();
+      } catch (e) {
+        sse(res, { type: 'metadata', model_used: 'autonomous-state', latency: 0 });
+        sse(res, { type: 'content', content: `Autonomous state unavailable: ${e instanceof Error ? e.message : 'unknown'}` });
+        return res.end();
+      }
+    }
     const wantsPlan = /^(plan|make a plan|interpret goal|goal:|work on)\s*[:\-–]?\s+/i.test(lowerMsg) || /^plan\s/i.test(lowerMsg);
     if (wantsPlan) {
       const goalText = message.replace(/^(plan|make a plan( for)?|interpret goal|goal:|work on)\s*[:\-–]?\s*/i, '').trim();

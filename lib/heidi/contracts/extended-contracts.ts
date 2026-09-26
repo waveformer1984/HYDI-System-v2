@@ -310,11 +310,11 @@ export const OPS_BUSINESS_CONTEXT = defineContract({
   reversibility: { kind: 'none', windowMs: 0, caveat: 'Idempotent seed/refresh; derived facts recompute from live tables.' },
   cost: { estimatedMs: 5_000, timeoutMs: 30_000 },
   verification: {
-    description: 'Retrieval returned a non-empty fact set — the store exists and is seeded.',
-    observation: responseObservation(),
+    description: 'A durable business_context_read event exists with a positive fact count — independent of the executor claim.',
+    observation: dbObservation('sql:heidi_events:id={eventId}', ['id', 'event_type', 'payload']),
     conditions: [
-      { field: 'executed', operator: 'eq', expected: true },
-      { field: 'result.factCount', operator: 'gt', expected: 0 },
+      { field: 'found', operator: 'eq', expected: true },
+      { field: 'event_type', operator: 'eq', expected: 'business_context_read' },
     ],
     onFailure: 'retry', maxRetries: 1, requiresHumanConfirmation: false,
   },
