@@ -86,6 +86,7 @@ export interface MissionView {
   params: Record<string, unknown>;
   targetKey: string;
   authorizationLevel: string;
+  priority: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -146,6 +147,8 @@ export interface MissionSpec {
   maxRuntimeMs?: number;
   maxRetries?: number;
   authorizationLevel?: string;
+  /** Deterministic dispatch priority — higher runs first. */
+  priority?: number;
 }
 
 export const DEFAULT_MAX_ACTIVE_AGENTS = 3;
@@ -284,6 +287,7 @@ export async function collectAgentState(
           params: (p.params as Record<string, unknown>) ?? {},
           targetKey: String(p.targetKey ?? ''),
           authorizationLevel: String(p.authorizationLevel ?? 'R1'),
+          priority: Number(p.priority ?? 0),
           createdAt: at, updatedAt: at,
         });
         break;
@@ -380,7 +384,47 @@ export async function runAgent(
     });
   };
 
-  await setStatus(pool, agentId, missionId, 'RUNNING', { attempt: mission.attempt + 1 });
+  // Atomic claim: pg_advisory_xact_lock serializes concurrent claimants
+  // on this missionId; the first to commit a RUNNING status owns the
+  // mission. A second claimant blocks, sees the committed RUNNING row,
+  // and aborts — same task cannot execute twice.
+  const client = typeof (pool as Pool).connect === 'function' ? await (pool as Pool).connect().catch(() => null) : null;
+  let claimed = false;
+  if (client) {
+    try {
+      await client.query('BEGIN');
+      await client.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [missionId]);
+      const st = await client.query(
+        `SELECT payload->>'status' s FROM heidi_events
+           WHERE event_type='agent_status' AND payload->>'missionId'=$1
+           ORDER BY created_at DESC LIMIT 1`,
+        [missionId],
+      );
+      const last = st.rows[0]?.s;
+      if (last === 'RUNNING' || last === 'COMPLETED' || last === 'NEEDS_HUMAN' || last === 'STOPPED') {
+        await client.query('ROLLBACK');
+      } else {
+        await client.query(
+          `INSERT INTO heidi_events (event_type, division, payload, verdict, created_at)
+             VALUES ('agent_status','agents',$1,'RECORDED',now())`,
+          [JSON.stringify({
+            agentId, missionId, status: 'RUNNING', pid: process.pid,
+            runtimeIdentity: `${agentId}@pid${process.pid}`,
+            attempt: mission.attempt + 1, claim: 'advisory-xact',
+          })],
+        );
+        await client.query('COMMIT');
+        claimed = true;
+      }
+    } catch {
+      await client.query('ROLLBACK').catch(() => { });
+    } finally {
+      client.release();
+    }
+    if (!claimed) return; // already owned or terminal — no duplicate run
+  } else {
+    await setStatus(pool, agentId, missionId, 'RUNNING', { attempt: mission.attempt + 1 });
+  }
   await heartbeat('started');
 
   try {
@@ -675,7 +719,11 @@ export async function stopAgent(pool: Pick<Pool, 'query'>, agentId: string, acto
   const state = await collectAgentState(pool);
   const agent = state.agents.find((a) => a.agentId === agentId);
   if (!agent) return { ok: false, outcome: 'not_found', detail: `no agent '${agentId}'` };
-  if (agent.status === 'COMPLETED' || agent.status === 'FAILED' || agent.status === 'STOPPED') {
+  // A standing agent's status mirrors its last task — COMPLETED means
+  // the task ended, not the agent. Only mission-scoped agents become
+  // truly terminal; standing agents can always be stopped.
+  if (agent.missionId !== 'standing'
+    && (agent.status === 'COMPLETED' || agent.status === 'FAILED' || agent.status === 'STOPPED')) {
     return { ok: false, outcome: 'already_terminal', detail: `agent is ${agent.status}` };
   }
   await setStatus(pool, agentId, agent.missionId, 'STOPPED', { stoppedBy: actor });
@@ -789,6 +837,7 @@ export async function superviseAgents(
   reconcileDeps?: ReconcileDeps,
 ): Promise<SupervisionReport> {
   const state = await collectAgentState(pool);
+  const now = Date.now();
   const report: SupervisionReport = {
     supervisionEventId: null, agentsChecked: state.agents.length,
     transitions: [], retries: [], escalations: [], escalationErrors: [], parentsReconciled: [],
@@ -803,6 +852,26 @@ export async function superviseAgents(
         lastHeartbeatAt: a.lastHeartbeatAt,
       });
       report.transitions.push({ agentId: a.agentId, to: a.status });
+    }
+  }
+
+  // 1b. Mission-level stall detection: a mission marked RUNNING whose
+  // owner has stopped heartbeating is dead work, not running work —
+  // classify it FAILED so the retry/escalation path below can act.
+  // (Found live: a daemon restart mid-run left missions RUNNING forever
+  // because the fold only classified agents.)
+  for (const m of state.missions) {
+    if (m.status !== 'RUNNING') continue;
+    const owner = state.agents.find(a => a.agentId === m.agentId);
+    const ownerAlive = owner && (owner.status === 'RUNNING' || owner.status === 'STARTING');
+    const last = owner?.lastHeartbeatAt ? Date.parse(owner.lastHeartbeatAt) : Date.parse(m.updatedAt);
+    if (!ownerAlive && now - last > m.maxRuntimeMs) {
+      await setStatus(pool, m.agentId ?? `agent-${m.role}-${m.missionId.slice(8)}`, m.missionId, 'FAILED', {
+        failure: `owner ${m.agentId} ${owner?.status ?? 'missing'} — heartbeat gap ${Math.round((now - last) / 1000)}s exceeds maxRuntimeMs`,
+        classifiedBy: 'supervisor',
+      });
+      m.status = 'FAILED';
+      report.transitions.push({ agentId: m.agentId ?? '?', to: 'FAILED' });
     }
   }
 
@@ -958,6 +1027,7 @@ export async function createTeamMission(
     maxRuntimeMs: spec.maxRuntimeMs ?? DEFAULT_MAX_RUNTIME_MS,
     maxRetries: spec.maxRetries ?? 0, status: 'PENDING', attempt: 0,
     teamOwned: true,
+    priority: spec.priority ?? 0,
   });
   return { missionId, created: true, missionEventId };
 }
@@ -1034,10 +1104,25 @@ export const TEAM_HANDLERS: RoleHandlers = {
     };
   },
 
-  // Builder — run the real dev-signal observer; findings become evidence.
-  // Does not patch code itself — bounded inspection only (R2 work
-  // items are created for the governed patch executor).
-  builder: async ({ pool, mission, heartbeat }) => {
+  // Builder — two real modes: a bounded patch mission (params.patches)
+  // executed through the governed DevPatchExecutor (bounds-checked,
+  // typecheck-verified, rollback on failure, single commit, no push),
+  // or the default dev-signal observation scan.
+  builder: async ({ pool, mission, heartbeat, post }) => {
+    const patches = mission.params?.patches as Array<{ file: string; oldString: string; newString: string }> | undefined;
+    if (Array.isArray(patches) && patches.length) {
+      await heartbeat('applying bounded patch');
+      const { applyBoundedPatch } = await import('./DevPatchExecutor');
+      const res = await applyBoundedPatch({
+        missionId: mission.missionId,
+        patches,
+        commitMessage: String(mission.params?.commitMessage ?? `builder: ${mission.objective.slice(0, 60)}`),
+        verify: Array.isArray(mission.params?.verify) ? mission.params.verify as string[] : [],
+      });
+      await post('heidi', res.ok ? 'RESULT' : 'FAILURE', `patch ${res.status}: ${res.reason ?? res.commitSha ?? ''}`, res);
+      if (!res.ok) throw new Error(`patch ${res.status}: ${res.reason ?? 'failed'}`);
+      return { result: { patchStatus: res.status, commitSha: res.commitSha, filesChanged: res.filesChanged }, evidence: res.evidence.map(e => ({ step: e })) };
+    }
     await heartbeat('observing dev signals');
     const { observeDevelopmentSignals } = await import('./DevObserver');
     const findings = await observeDevelopmentSignals(pool as Pool);
@@ -1047,24 +1132,77 @@ export const TEAM_HANDLERS: RoleHandlers = {
     };
   },
 
-  // QA — verify the most recent COMPLETED mission's evidence actually
-  // contains a non-null result and non-empty evidence. Disagrees loudly.
+  // QA — verify a mission's claimed result. Two checks: (1) the
+  // completion record carries a non-null result AND non-empty evidence;
+  // (2) an optional allowlisted verification command (npx jest/tsc only)
+  // must pass. On failure: durable DISAGREE + builder follow-up mission
+  // + HANDOFF — QA rejects, the failure stays in the journal.
   qa: async ({ pool, mission, heartbeat, post }) => {
+    const verifyMissionId = typeof mission.params?.verifyMissionId === 'string' ? mission.params.verifyMissionId : null;
+    const verifyCommand = typeof mission.params?.verifyCommand === 'string' ? mission.params.verifyCommand : null;
+    const followupPatches = mission.params?.followupPatches;
     await heartbeat('selecting verification target');
-    const target = (await pool.query(
-      `SELECT payload->>'missionId' mid, payload FROM heidi_events
-         WHERE event_type = 'agent_status' AND payload->>'status' = 'COMPLETED'
-           AND payload->>'missionId' NOT LIKE 'mission-verif%'
-         ORDER BY created_at DESC LIMIT 1`,
-    )).rows[0];
-    if (!target) throw new Error('no completed mission to verify');
+    const target = verifyMissionId
+      ? (await pool.query(
+        `SELECT payload->>'missionId' mid, payload FROM heidi_events
+           WHERE event_type='agent_status' AND payload->>'missionId'=$1
+           ORDER BY created_at DESC LIMIT 1`, [verifyMissionId])).rows[0]
+      : (await pool.query(
+        `SELECT payload->>'missionId' mid, payload FROM heidi_events
+           WHERE event_type = 'agent_status' AND payload->>'status' = 'COMPLETED'
+           ORDER BY created_at DESC LIMIT 1`)).rows[0];
+    if (!target) throw new Error('no mission to verify');
     const p = target.payload as Record<string, unknown>;
     const ev = Array.isArray(p.evidence) ? p.evidence : [];
-    const verdict = p.result != null && ev.length > 0 ? 'CONFIRMED' : 'DISAGREE';
-    await post('heidi', 'EVIDENCE', `QA verification of ${target.mid}: ${verdict} (${ev.length} evidence items)`, { evidenceCount: ev.length });
+    let verdict = p.status === 'COMPLETED' && p.result != null && ev.length > 0 ? 'CONFIRMED' : 'DISAGREE';
+    let verifyOut: string | null = null;
+    if (verdict === 'CONFIRMED' && verifyCommand) {
+      if (!/^npx (jest|tsc)\b/.test(verifyCommand)) {
+        verdict = 'DISAGREE';
+        verifyOut = `verify command not allowlisted: ${verifyCommand}`;
+      } else {
+        // Async exec + heartbeat so a long verification can't stall the
+        // daemon loop or misflag this agent as dead while it works.
+        const { execFile } = await import('child_process');
+        const hb = setInterval(() => { void heartbeat('verifying'); }, 20_000);
+        try {
+          verifyOut = await new Promise<string>((resolve, reject) => {
+            execFile('cmd', ['/c', verifyCommand], { cwd: process.cwd(), timeout: 300000 },
+              (err, stdout) => err ? reject(err) : resolve((stdout ?? '').toString().slice(-400)));
+          });
+        } catch (e) {
+          verdict = 'DISAGREE';
+          verifyOut = `verify command failed: ${(e as Error).message.slice(0, 200)}`;
+        } finally {
+          clearInterval(hb);
+        }
+      }
+    }
+    await post('heidi', 'EVIDENCE', `QA verification of ${target.mid}: ${verdict}`, { evidenceCount: ev.length, verifyOut });
+    let followupMissionId: string | null = null;
+    if (verdict === 'DISAGREE' && Array.isArray(followupPatches)) {
+      // QA rejection produces a governed follow-up — Builder owns the fix.
+      const f = await createTeamMission(pool, {
+        role: 'builder',
+        objective: `fix QA-rejected work on ${target.mid}`,
+        scope: 'protoforge-build',
+        targetKey: `followup:${target.mid}`,
+        params: { patches: followupPatches, commitMessage: `builder: QA follow-up for ${target.mid}`, verify: mission.params?.verify },
+        authorizationLevel: 'R2',
+        priority: 9,
+      });
+      followupMissionId = f.missionId;
+      await post('heidi', 'HANDOFF', `DISAGREE on ${target.mid} → builder follow-up ${f.missionId}`, { reason: verifyOut });
+      await emit(pool, 'agent_handoff', {
+        fromAgent: teamAgentId('qa'), toAgent: teamAgentId('builder'),
+        missionId: mission.missionId, reason: `verification failed on ${target.mid}`,
+        evidence: { verifyOut, evidenceCount: ev.length },
+        requiredAction: 'fix and re-verify', targetMissionId: f.missionId,
+      });
+    }
     return {
-      result: { verifiedMissionId: target.mid, verdict, evidenceCount: ev.length },
-      evidence: [{ checkedStatus: p.status, evidenceCount: ev.length }],
+      result: { verifiedMissionId: target.mid, verdict, evidenceCount: ev.length, verifyCommandRan: !!verifyCommand, followupMissionId },
+      evidence: [{ checkedStatus: p.status, evidenceCount: ev.length, verifyOut }],
     };
   },
 
@@ -1116,6 +1254,23 @@ export async function tickPersistentTeam(
   for (const role of TEAM_ROLES) {
     const agent = state.agents.find(a => a.agentId === teamAgentId(role));
     if (!agent) continue;
+    // Agent recovery: a standing agent whose missions are all terminal
+    // (the failed task is durably recorded; the agent itself is not the
+    // failure) returns to IDLE — bounded, no work is redone, the failed
+    // mission keeps its FAILED record.
+    if ((agent.status === 'FAILED' || agent.status === 'NEEDS_HUMAN' || agent.status === 'COMPLETED')
+      && agent.persistedStatus !== 'IDLE') {
+      // Recover when nothing is in-flight for this agent. PENDING work
+      // does NOT block recovery — a dead agent must be revived so the
+      // pending work (often the follow-up to its own failure) can run.
+      const owned = state.missions.filter(m => m.agentId === agent.agentId);
+      const inFlight = owned.some(m => m.status === 'RUNNING');
+      if (!inFlight) {
+        await setStatus(pool, agent.agentId, 'standing', 'IDLE', { recoveredBy: 'supervisor', previousStatus: agent.status });
+        agent.status = 'IDLE';
+        agent.persistedStatus = 'IDLE';
+      }
+    }
     const last = agent.lastHeartbeatAt ? Date.parse(agent.lastHeartbeatAt) : 0;
     if (now - last >= TEAM_HEARTBEAT_MIN_MS && agent.status !== 'RUNNING') {
       await emit(pool, 'agent_heartbeat', {
@@ -1127,13 +1282,31 @@ export async function tickPersistentTeam(
     }
   }
 
-  const pending = state.missions.filter(m =>
-    m.status === 'PENDING' && TEAM_ROLES.includes(m.role) && m.agentId?.startsWith('team-'));
+  const pending = state.missions
+    .filter(m => m.status === 'PENDING' && TEAM_ROLES.includes(m.role) && m.agentId?.startsWith('team-'))
+    .sort((a, b) => b.priority - a.priority || a.createdAt.localeCompare(b.createdAt));
   let dispatched = 0;
   for (const m of pending) {
     if (dispatched >= TEAM_DISPATCH_BUDGET_PER_TICK) break;
     const owner = state.agents.find(a => a.agentId === m.agentId);
     if (!owner || owner.status === 'RUNNING' || owner.status === 'STARTING') continue;
+    // Dead/disabled owner: a STOPPED, FAILED, or STALE standing agent
+    // cannot take work — the mission stays PENDING for recovery, it
+    // is never dispatched to a dead agent.
+    if (owner.status === 'STOPPED' || owner.status === 'FAILED' || owner.status === 'STALE' || owner.status === 'EXPIRED') continue;
+    // R3+ missions hit the human gate — convert to NEEDS_HUMAN once,
+    // never dispatched, never retried autonomously.
+    if (/^R[3-5]$/.test(m.authorizationLevel)) {
+      await setStatus(pool, m.agentId!, m.missionId, 'NEEDS_HUMAN', {
+        reason: `mission requires ${m.authorizationLevel} — beyond standing R2 boundary`,
+      });
+      await postMessage(pool, {
+        from: 'supervisor', to: 'heidi', missionId: m.missionId,
+        type: 'HUMAN_REQUIRED', content: `team mission ${m.missionId} (${m.role}) requires ${m.authorizationLevel}`,
+        evidence: { objective: m.objective },
+      });
+      continue;
+    }
     if (state.activeCount + dispatched >= maxActiveAgents() + TEAM_ROLES.length) break;
     void runAgent(pool, m.missionId, TEAM_HANDLERS, reconcileDeps);
     out.dispatched.push(m.missionId);
