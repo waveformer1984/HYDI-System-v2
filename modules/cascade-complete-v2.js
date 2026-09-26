@@ -427,29 +427,6 @@ class CascadeCompleteV2 extends EventEmitter {
     this.emit('config_updated', { maxQuarantineSize: size });
   }
 
-  // Process quarantine retries
-  async processQuarantineRetries() {
-    const readyEvents = this.quarantine.getEventsReadyForRetry();
-    
-    for (const record of readyEvents) {
-      try {
-        const result = await this.quarantine.attemptRelease(record.event_id);
-        
-        if (result.status === 'retrying') {
-          // Since processEvent runs through the RAW LEDGER, a retried event
-          // whose fingerprint is already there comes back as a duplicate.
-          // Nothing calls this method today.
-          // Re-process the event
-          await this.processEvent(record.event, record.event.source);
-        }
-      } catch (error) {
-        this.emit('retry_error', {
-          event_id: record.event_id,
-          error: error.message
-        });
-      }
-    }
-  }
 }
 
 // Export singleton instance
