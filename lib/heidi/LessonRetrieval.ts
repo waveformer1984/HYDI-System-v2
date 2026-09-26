@@ -25,6 +25,67 @@ export interface RetrievedLesson {
 
 const SIMILARITY_THRESHOLD = 0.35; // zero-padded nomic embeddings; measured baseline
 
+/**
+ * Persist a lesson durably AND embed it into the semantic layer.
+ * Deduped by lessonKey so repeated identical failures don't produce an
+ * embedding storm. Embedding failure is recorded — never silently
+ * downgraded into claimed semantic availability.
+ */
+export async function persistLesson(
+  pool: Pool,
+  lesson: {
+    lesson: string; whyItMatters: string; evidence: string[]; scope: string;
+    confidence: string; applicability: string;
+    directives?: RetrievedLesson['directives'];
+  },
+): Promise<{ lessonEventId: string | null; memoryId: string | null; embedding: 'embedded' | 'deduplicated' | 'EMBEDDING_UNAVAILABLE' }> {
+  const lessonKey = lesson.lesson.toLowerCase().replace(/\s+/g, ' ').trim().slice(0, 200);
+  const evt = await pool.query(
+    `INSERT INTO heidi_events (event_type, payload, created_at) VALUES ('lesson', $1, now()) RETURNING id`,
+    [JSON.stringify({ ...lesson, lessonKey })],
+  ).catch(() => null);
+  const lessonEventId = evt?.rows[0]?.id ?? null;
+
+  // Dedupe: an identical lesson already embedded — don't re-embed.
+  const existing = await pool.query(
+    `SELECT id FROM memories WHERE kind='episodic' AND metadata->>'lessonKey'=$1 AND embedding IS NOT NULL LIMIT 1`,
+    [lessonKey],
+  ).catch(() => ({ rows: [] as Array<{ id: string }> }));
+  if (existing.rows[0]) {
+    return { lessonEventId, memoryId: existing.rows[0].id, embedding: 'deduplicated' };
+  }
+
+  let embedding: number[] | null = null;
+  let embeddingError: string | null = null;
+  try {
+    const v = await generateEmbedding(`Lesson: ${lesson.lesson} — ${lesson.whyItMatters}`);
+    embedding = Array.isArray(v) ? v : parseVector(v as unknown as string);
+  } catch (e) {
+    embeddingError = e instanceof Error ? e.message.slice(0, 100) : 'embed failed';
+  }
+
+  if (!embedding) {
+    // Honest state: the lesson event persists; the memory row records
+    // the embedding failure so retrieval knows this lesson is not
+    // semantically reachable yet.
+    const mem = await pool.query(
+      `INSERT INTO memories (user_id, session_id, content, kind, metadata, created_at)
+         VALUES ('heidi', 'lessons', $1, 'episodic', $2, now()) RETURNING id`,
+      [lesson.lesson,
+      JSON.stringify({ ...lesson, lessonKey, lessonEventId, embeddingStatus: 'EMBEDDING_UNAVAILABLE', embeddingError })],
+    ).catch(() => null);
+    return { lessonEventId, memoryId: mem?.rows[0]?.id ?? null, embedding: 'EMBEDDING_UNAVAILABLE' };
+  }
+
+  const mem = await pool.query(
+    `INSERT INTO memories (user_id, session_id, content, embedding, kind, metadata, created_at)
+       VALUES ('heidi', 'lessons', $1, $2::vector, 'episodic', $3, now()) RETURNING id`,
+    [lesson.lesson, `[${embedding.join(',')}]`,
+    JSON.stringify({ ...lesson, lessonKey, lessonEventId, embeddingStatus: 'embedded' })],
+  ).catch(() => null);
+  return { lessonEventId, memoryId: mem?.rows[0]?.id ?? null, embedding: 'embedded' };
+}
+
 interface LessonRow {
   id: string; content: string; created_at: string;
   metadata?: { lesson?: string; directives?: RetrievedLesson['directives'] };

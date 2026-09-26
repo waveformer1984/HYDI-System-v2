@@ -2,7 +2,7 @@
  * Adaptive cognition — deterministic boundaries around retrieval,
  * directives, branching, and model routing.
  */
-import { validateSteps, selectModel } from '../../lib/heidi/Planner';
+import { validateSteps, selectModel, validateCondition } from '../../lib/heidi/Planner';
 
 describe('Planner — branch conditions survive validation', () => {
   test('a conditional step keeps its condition through registry validation', () => {
@@ -19,6 +19,29 @@ describe('Planner — branch conditions survive validation', () => {
   test('an unknown capability stays rejected even with a condition', () => {
     const steps = validateSteps([{ objective: 'x', capability: 'ops.magic', params: {}, condition: { type: 'business_finding_verdict', opportunityId: 'a', equals: 'X' } }]);
     expect(steps[0].status).toBe('rejected');
+  });
+});
+
+describe('validateCondition — declarative grammar gate', () => {
+  test('the allowlisted verdict condition passes', () => {
+    expect(validateCondition({ type: 'business_finding_verdict', opportunityId: 'a', equals: 'PARTIALLY_SUPPORTED' })).not.toBeNull();
+  });
+
+  test('absent condition is allowed (undefined, not invalid)', () => {
+    expect(validateCondition(undefined)).toBeUndefined();
+  });
+
+  test('arbitrary / executable conditions are rejected', () => {
+    expect(validateCondition({ type: 'eval', code: 'process.exit(1)' })).toBeNull();
+    expect(validateCondition('verdict == X')).toBeNull();
+    expect(validateCondition({ type: 'business_finding_verdict', opportunityId: 'a', equals: "x'); DROP TABLE" })).toBeNull();
+    expect(validateCondition({ field: 'x', operator: 'eq' })).toBeNull();
+  });
+
+  test('an invalid condition on an LLM step → rejected step, never dispatched', () => {
+    const steps = validateSteps([{ objective: 'x', capability: 'ops.world_assert', params: {}, condition: { type: 'evil' } }]);
+    expect(steps[0].status).toBe('rejected');
+    expect(steps[0].reason).toMatch(/invalid condition/);
   });
 });
 

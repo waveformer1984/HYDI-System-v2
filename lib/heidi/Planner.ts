@@ -44,18 +44,38 @@ export interface Plan {
 }
 
 /** Steps the model proposed, validated against the real registry. */
+/** Allowlisted declarative condition grammar — the ONLY conditional
+ *  form an LLM step may carry. Anything else is an explicit planning
+ *  failure, never executable code. */
+export function validateCondition(c: unknown): PlanStep['condition'] | null {
+  if (c === undefined || c === null) return undefined;
+  if (typeof c !== 'object' || Array.isArray(c)) return null;
+  const o = c as Record<string, unknown>;
+  if (o.type === 'business_finding_verdict'
+    && typeof o.opportunityId === 'string'
+    && typeof o.equals === 'string'
+    && /^[A-Z_]{2,40}$/.test(o.equals)) {
+    return { type: 'business_finding_verdict', opportunityId: o.opportunityId, equals: o.equals };
+  }
+  return null;
+}
+
 export function validateSteps(
-  proposed: Array<{ objective?: string; capability?: string; params?: Record<string, unknown>; condition?: PlanStep['condition'] }>,
+  proposed: Array<{ objective?: string; capability?: string; params?: Record<string, unknown>; condition?: unknown }>,
 ): PlanStep[] {
   const registry = getCapabilityRegistry().listAll();
   const byId = new Map(registry.map(c => [c.capabilityId, c]));
   return proposed.slice(0, 8).map((p, i) => {
-    const cap = p.capability && byId.get(p.capability);
-    if (!cap) return { stepId: `s${i + 1}`, objective: String(p.objective ?? ''), capabilityId: String(p.capability ?? ''), params: p.params ?? {}, status: 'rejected' as const, reason: `capability '${p.capability}' is not in the registry`, condition: p.condition };
-    if (cap.autonomyRequirement > MAX_AUTONOMY) {
-      return { stepId: `s${i + 1}`, objective: String(p.objective ?? ''), capabilityId: cap.capabilityId, params: p.params ?? {}, status: 'human_required' as const, reason: `requires autonomy R${cap.autonomyRequirement} — above standing R${MAX_AUTONOMY}`, condition: p.condition };
+    const condition = validateCondition(p.condition);
+    if (condition === null) {
+      return { stepId: `s${i + 1}`, objective: String(p.objective ?? ''), capabilityId: String(p.capability ?? ''), params: {}, status: 'rejected' as const, reason: `invalid condition — only the declared grammar is admissible` };
     }
-    return { stepId: `s${i + 1}`, objective: String(p.objective ?? ''), capabilityId: cap.capabilityId, params: p.params ?? {}, status: 'executable' as const, reason: `registered, R${cap.autonomyRequirement}`, condition: p.condition };
+    const cap = p.capability && byId.get(p.capability);
+    if (!cap) return { stepId: `s${i + 1}`, objective: String(p.objective ?? ''), capabilityId: String(p.capability ?? ''), params: p.params ?? {}, status: 'rejected' as const, reason: `capability '${p.capability}' is not in the registry`, condition };
+    if (cap.autonomyRequirement > MAX_AUTONOMY) {
+      return { stepId: `s${i + 1}`, objective: String(p.objective ?? ''), capabilityId: cap.capabilityId, params: p.params ?? {}, status: 'human_required' as const, reason: `requires autonomy R${cap.autonomyRequirement} — above standing R${MAX_AUTONOMY}`, condition };
+    }
+    return { stepId: `s${i + 1}`, objective: String(p.objective ?? ''), capabilityId: cap.capabilityId, params: p.params ?? {}, status: 'executable' as const, reason: `registered, R${cap.autonomyRequirement}`, condition };
   });
 }
 
@@ -167,6 +187,8 @@ export async function proposePlan(model: GoalModel, lessons: string[] = []): Pro
     catalog,
     'Output ONLY a JSON array: [{"objective":string,"capability":"id","params":{}}]',
     'Use only ids from the list. Prefer fewest steps. Include opportunityId params when a uuid appears in the goal.',
+    'A step may include an optional conditional gate — ONLY this exact form: "condition":{"type":"business_finding_verdict","opportunityId":"<uuid>","equals":"<UPPER_CASE_VERDICT>"}',
+    'Use a condition only when a step should run solely if the opportunity\'s latest business_finding verdict equals the value. Omit condition otherwise.',
   ].join('\n');
   try {
     const res = await fetch(`${OLLAMA_URL}/api/generate`, {

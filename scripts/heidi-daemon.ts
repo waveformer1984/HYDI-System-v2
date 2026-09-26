@@ -643,6 +643,26 @@ async function main(): Promise<void> {
     gracefulShutdown('IPC_DISCONNECT');
   });
 
+  // Belt-and-suspenders orphan guard: 'disconnect' alone is not
+  // sufficient on Windows — observed 2026-09-26: daemon pid survived a
+  // full PM2 launcher restart and kept running stale code for hours,
+  // still holding the lock so every new child exited immediately.
+  // Poll the parent pid each interval; if the launcher is gone and no
+  // shutdown is already underway, shut down. ppid===0/absent under
+  // double-fork or detached contexts is treated as "unknown", not death.
+  const launcherPid = process.ppid;
+  if (launcherPid > 1) {
+    const parentCheck = setInterval(() => {
+      if (shuttingDown) { clearInterval(parentCheck); return; }
+      if (!isProcessAlive(launcherPid)) {
+        console.error(`[daemon] Launcher (pid ${launcherPid}) is gone — shutting down as orphan at ${new Date().toISOString()}`);
+        gracefulShutdown('PARENT_GONE');
+        clearInterval(parentCheck);
+      }
+    }, Math.max(30000, config.intervalMs));
+    parentCheck.unref();
+  }
+
   // 4. Run initial self-sufficiency observation
   console.log('[daemon] Running initial capability health check...');
   const initialResult = await runSelfSufficiencyCycle(core);

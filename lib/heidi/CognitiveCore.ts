@@ -3292,7 +3292,13 @@ export class CognitiveCore {
                 `SELECT 1 FROM heidi_goals WHERE context->>'replanOf'=$1 LIMIT 1`,
                 [goal.goalId],
               );
-              if (transient && alreadyReplanned.rows.length === 0) {
+              // One replan per chain: a goal that is itself a replan
+              // (context.replanOf set) may not spawn another replan —
+              // observed live 2026-09-26: three chained replans while
+              // Ollama stayed down. Without this guard the chain is
+              // per-failure-bounded but unbounded in total.
+              const isReplan = Boolean((goal.context as Record<string, unknown> | undefined)?.replanOf);
+              if (transient && !isReplan && alreadyReplanned.rows.length === 0) {
                 const replanGoal = await this.pool.query(
                   `INSERT INTO heidi_goals (parent_id, title, goal_type, description, status, priority, success_criteria, context, created_at, updated_at)
                    VALUES ($1, $2, 'task', $2, 'active', 5, '["contract-verified capability execution"]'::jsonb, $3, now(), now()) RETURNING id`,
@@ -3308,19 +3314,18 @@ export class CognitiveCore {
                   `INSERT INTO heidi_events (event_type, payload, created_at) VALUES ('plan_step_failed', $1, now())`,
                   [JSON.stringify({ planId: planMatch[1], goalId: goal.goalId, classification: 'non_transient', reason: reason.slice(0, 160), policy: 'no_retry_without_new_evidence' })],
                 ).catch(() => { });
-                // Lesson candidate — structured, evidence-linked, marked
-                // candidate confidence until reused.
+                // Lesson candidate — structured, evidence-linked, then
+                // bridged into semantic memory (deduped; an embedding
+                // failure is recorded, never hidden).
                 const cap = String(goal.context?.capabilityId ?? '');
-                await this.pool.query(
-                  `INSERT INTO heidi_events (event_type, payload, created_at) VALUES ('lesson', $1, now())`,
-                  [JSON.stringify({
-                    lesson: `capability ${cap} fails when: ${reason.slice(0, 120)}`,
-                    whyItMatters: 'plan steps that will predictably fail should be pruned before dispatch',
-                    evidence: [goal.goalId], scope: 'planning',
-                    confidence: 'candidate',
-                    applicability: `goals that would dispatch ${cap}`,
-                  })],
-                ).catch(() => { });
+                const { persistLesson } = await import('./LessonRetrieval');
+                await persistLesson(this.pool, {
+                  lesson: `capability ${cap} fails when: ${reason.slice(0, 120)}`,
+                  whyItMatters: 'plan steps that will predictably fail should be pruned before dispatch',
+                  evidence: [goal.goalId], scope: 'planning',
+                  confidence: 'candidate',
+                  applicability: `goals that would dispatch ${cap}`,
+                }).catch(() => { });
               }
             }
           } catch {
