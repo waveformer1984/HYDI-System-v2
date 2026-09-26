@@ -114,7 +114,7 @@ export class StripeCliSessionManager {
 
     // Step 1: Locate Stripe CLI
     try {
-      cliPath = execSync('where stripe 2>NUL', { encoding: 'utf8', timeout: 5000, stdio: ['pipe', 'pipe', 'ignore'] }).trim().split('\n')[0].trim();
+      cliPath = execSync('where stripe', { encoding: 'utf8', timeout: 5000, stdio: ['pipe', 'pipe', 'ignore'] }).trim().split('\n')[0].trim();
       if (!cliPath) throw new Error('not found');
     } catch {
       state = 'NOT_INSTALLED';
@@ -137,7 +137,7 @@ export class StripeCliSessionManager {
 
     // Step 2: Get CLI version
     try {
-      cliVersion = execSync('stripe version 2>NUL', { encoding: 'utf8', timeout: 5000, stdio: ['pipe', 'pipe', 'ignore'] }).trim();
+      cliVersion = execSync('stripe version', { encoding: 'utf8', timeout: 5000, stdio: ['pipe', 'pipe', 'ignore'] }).trim();
     } catch {
       cliVersion = 'unknown';
     }
@@ -145,7 +145,7 @@ export class StripeCliSessionManager {
     // Step 3: Check session state
     try {
       // Try to get config info — this checks if we have a valid session
-      const configOutput = execSync('stripe config --list 2>NUL', { encoding: 'utf8', timeout: 10000, stdio: ['pipe', 'pipe', 'ignore'] }).trim();
+      const configOutput = execSync('stripe config --list', { encoding: 'utf8', timeout: 10000, stdio: ['pipe', 'pipe', 'ignore'] }).trim();
 
       // Parse for account ID and mode
       const lines = configOutput.split('\n');
@@ -163,7 +163,7 @@ export class StripeCliSessionManager {
 
       // Try a simple API call to verify the session is valid
       try {
-        const testResult = execSync('stripe get /v1/balance 2>NUL', { encoding: 'utf8', timeout: 15000, stdio: ['pipe', 'pipe', 'ignore'] }).trim();
+        const testResult = execSync('stripe get /v1/balance', { encoding: 'utf8', timeout: 15000, stdio: ['pipe', 'pipe', 'ignore'] }).trim();
         if (testResult.includes('available') || testResult.includes('livemode')) {
           state = 'AUTHENTICATED';
           evidence = `Stripe CLI authenticated — account: ${accountId || 'unknown'}, mode: ${accountMode}`;

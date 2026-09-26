@@ -262,19 +262,39 @@ describe('live CASCADE entry point runs the six-layer pipeline', () => {
     expect(result.trace.stages.protoforge.status).toBe('ok');
   });
 
-  it('keeps an infrastructure alert\'s content through to quarantine instead of arriving empty', async () => {
+  it('classifies protoforge-core\'s infrastructure alerts as INFRA_FAILURE and runs them through KILO and ProtoForge', async () => {
     // The exact shape src/server.js's infrastructure_alert handler sends.
-    const { cascade } = track(liveCascade(new RawLedgerAdapter({ client: fakeLedgerClient() })));
+    const client = fakeLedgerClient();
+    const { cascade } = track(liveCascade(new RawLedgerAdapter({ client })));
     const result = await cascade.processEvent({
       id: randomUUID(), type: 'error', layer: 'power', alert: { severity: 'critical', message: 'UPS on battery' }, zoneId: 'z1',
     }, 'system');
-    // CASCADE has no category for it, so it is an unknown anomaly (not low confidence), with its content kept.
+    expect(result.status).toBe('processed');
+    expect(result.classification.classification).toBe('INFRA_FAILURE');
+    expect(result.classification.matched_rules).toEqual(['INFRA_FAILURE:layer=power+alert']);
+    expect(result.trace.stages.kilo.status).toBe('ok');
+    expect(result.trace.stages.protoforge.status).toBe('ok');
+    // The alert's content is what the ledger stored.
+    const [row] = [...client.rows.values()];
+    expect(JSON.stringify(row)).toContain('UPS on battery');
+  });
+
+  it('holds quarantined events for manual review: no automatic retry path, release does not reprocess (#86)', async () => {
+    const client = fakeLedgerClient();
+    const { cascade, emitted } = track(liveCascade(new RawLedgerAdapter({ client })));
+    const result = await cascade.processEvent(systemEvent({ weird_signal: true }), 'system');
     expect(result).toMatchObject({ reason: 'unknown_anomaly', action: 'quarantine' });
-    const { events } = cascade.quarantine.getReport();
-    expect(events).toHaveLength(1);
-    const [held] = events;
-    expect(held.reason).toBe('unknown_anomaly');
-    expect(held.event.payload).toMatchObject({ layer: 'power', zoneId: 'z1', alert: { message: 'UPS on battery' } });
+
+    // The retry path that could only re-ingest a duplicate is gone.
+    expect(cascade.processQuarantineRetries).toBeUndefined();
+    expect(cascade.quarantine.attemptRelease).toBeUndefined();
+
+    const [held] = cascade.quarantine.getReport().events;
+    const released = cascade.manualReleaseFromQuarantine(held.event_id, 'operator');
+    expect(released.status).toBe('released');
+    expect(client.rows.size).toBe(1);
+    expect(emitted).toHaveLength(1);
+    expect(cascade.getDeadLetterReport().count).toBe(0);
   });
 
   it('still quarantines an event the adapter could extract nothing from', async () => {

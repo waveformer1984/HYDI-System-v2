@@ -13,6 +13,16 @@
  * machine with a real heidi-web dev server listening on port 3000).
  */
 
+// RecoveryEngine records a recovery lease (scripts/recovery-lease.js, required
+// lazily at recovery time). Point it at a temp dir so the tests never leave a
+// .recovery-leases/ directory in the repo.
+const ORIGINAL_LEASE_DIR = process.env.RECOVERY_LEASE_DIR;
+process.env.RECOVERY_LEASE_DIR = require('fs').mkdtempSync(require('path').join(require('os').tmpdir(), 'hydi-bridge-leases-'));
+afterAll(() => {
+  if (ORIGINAL_LEASE_DIR === undefined) delete process.env.RECOVERY_LEASE_DIR;
+  else process.env.RECOVERY_LEASE_DIR = ORIGINAL_LEASE_DIR;
+});
+
 jest.mock('child_process', () => ({
   execSync: jest.fn(),
   spawn: jest.fn(),

@@ -363,7 +363,7 @@ Use `SUPABASE_SERVICE_ROLE_KEY` server-side only. Never expose it to the client.
 | Workflow | Trigger | What it does |
 |----------|---------|---------------|
 | `unit-tests.yml` | push to `clean-main`, all PRs | `npm run lint`, `npm test -- --coverage --forceExit`, uploads to Codecov |
-| `integration-tests.yml` | push to `clean-main`, all PRs | `npm run typecheck:hydi-v3`, `npm run lint:hydi-v3`, `npm run test:integration:jest` — the full hermetic operational integration suite (13 suites / 78 tests, ~25s), no credentials or local environment state required |
+| `integration-tests.yml` | push to `clean-main`, all PRs | `npm run typecheck:hydi-v3`, `npm run lint:hydi-v3`, `npm run test:integration:jest` — the full hermetic operational integration suite (13 suites / 79 tests, ~25s), no credentials or local environment state required |
 | `hdi-governance-gate.yml` | PRs touching `supabase/migrations/**` | 7-gate schema review: change detection, transformer tests, state machine approval, adversarial tests, replay fidelity, performance regression, blueprint sync |
 | `health-monitor.yml` | Scheduled | Pings health endpoint |
 | `codeql.yml` | Scheduled | Static security analysis |
@@ -410,7 +410,7 @@ tests/
 
 **Unit tests** (`tests/unit/**`, `tests/migrations/**`, `__tests__/**`): fast, hermetic, run automatically by `npm test` locally and by `unit-tests.yml` in CI on every push/PR to `clean-main`.
 
-**Integration tests** (`tests/integration/**`, 13 suites / 78 tests as of 2026-09-25): real `OperatorSession`/`HYDIContinuousRuntime` instances exercising the full executive stack end-to-end (temp data directories, no mocked internals). Deliberately excluded from `jest.config.js`'s `testMatch` so they never silently inflate `npm test`'s runtime — run them explicitly:
+**Integration tests** (`tests/integration/**`, 13 suites / 79 tests as of 2026-09-26): real `OperatorSession`/`HYDIContinuousRuntime` instances exercising the full executive stack end-to-end (temp data directories, no mocked internals). Deliberately excluded from `jest.config.js`'s `testMatch` so they never silently inflate `npm test`'s runtime — run them explicitly:
 ```bash
 npm run test:integration:jest      # the full suite (what CI runs)
 npx jest tests/integration/<file>  --testMatch="**/*.test.js" --runInBand --forceExit  # a single file
