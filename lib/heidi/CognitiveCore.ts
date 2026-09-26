@@ -1863,6 +1863,126 @@ export class CognitiveCore {
       };
     });
 
+    // ── Cognitive layer — reasoning/planning, all R0. Thought is not
+    // authority: interpret/plan produce durable models and governed child
+    // goals; the existing daemon executes each under standing policy.
+
+    // ops.goal_interpret — free-text goal → typed goal model (facts,
+    // assumptions, hypotheses, unknowns). Ollama proposes; the
+    // deterministic envelope demotes model 'facts' without durable
+    // provenance. Unreachable model → AI_UNAVAILABLE, never fabricated.
+    this.wireExecutor('ops.goal_interpret', async (params) => {
+      const goalText = String(params?.goal ?? '');
+      if (!goalText) return this.failResult('ops.goal_interpret', 'capabilityParams.goal required');
+      const { interpretGoal, persistGoalModel } = await import('./GoalInterpreter');
+      const model = await interpretGoal(goalText, typeof params?.domainHint === 'string' ? params.domainHint : undefined);
+      const goalModelId = await persistGoalModel(this.pool, goalText, model, 'governed-goal');
+      // Chain the plan stage — a model without a plan isn't a result.
+      let planGoalId: string | null = null;
+      // Chain a plan even when the model is unavailable — the deterministic
+      // composer can still decompose the raw objective; the plan event
+      // labels it DETERMINISTIC_ONLY instead of hiding the AI outage.
+      if (goalModelId) {
+        const g = await this.pool.query(
+          `INSERT INTO heidi_goals (title, goal_type, description, status, priority, success_criteria, context, created_at, updated_at)
+           VALUES ($1,'task',$1,'active',5,'["plan event persisted with validated steps"]'::jsonb,$2,now(),now()) RETURNING id`,
+          [`Plan: ${model.objective.slice(0, 90)}`,
+          JSON.stringify({ capabilityId: 'ops.plan', capabilityParams: { goalModelId }, completeOnVerify: true, producedBy: 'goal_interpret' })],
+        ).catch(() => null);
+        planGoalId = g?.rows[0]?.id ?? null;
+      }
+      return {
+        capabilityId: 'ops.goal_interpret', executed: true,
+        outcome: 'success' as const,
+        result: { goalModelId, planGoalId, aiStatus: model.aiStatus, objective: model.objective, kinds: model.knowledge.map(k => k.kind) },
+        error: null, evidence: [model], verified: true,
+        verificationDetails: model.aiStatus === 'ok' ? `goal model persisted (${model.knowledge.length} typed statements)` : 'AI_UNAVAILABLE — goal model persisted as unknown, no fabrication',
+      };
+    });
+
+    // ops.plan — goal model → validated ordered steps → governed child
+    // goals. Validator rejects unknown capabilities and marks anything
+    // above R2 human_required — a step the model invents never executes.
+    this.wireExecutor('ops.plan', async (params) => {
+      const goalModelId = String(params?.goalModelId ?? '');
+      if (!goalModelId) return this.failResult('ops.plan', 'capabilityParams.goalModelId required');
+      const { proposePlan, validateSteps, deterministicPlan, materializePlan, relevantLessons } = await import('./Planner');
+      const mRow = await this.pool.query(
+        `SELECT payload FROM heidi_events WHERE id=$1 AND event_type='goal_model'`,
+        [goalModelId]).catch(() => ({ rows: [] as Array<{ payload: unknown }> }));
+      if (!mRow.rows[0]) return this.failResult('ops.plan', `goal model ${goalModelId} not found`);
+      const model = mRow.rows[0].payload as import('./GoalInterpreter').GoalModel & { goal?: string };
+      const lessons = await relevantLessons(this.pool, model.objective);
+      const proposed = await proposePlan(model, lessons);
+      const aiStatus = proposed ? 'ok' as const : 'DETERMINISTIC_ONLY' as const;
+      const steps = validateSteps(proposed ?? deterministicPlan(model));
+      const planId = `plan-${goalModelId.slice(0, 8)}-${Date.now().toString(36)}`;
+      const { planEventId, childGoalIds } = await materializePlan(this.pool, planId, goalModelId, model, steps, aiStatus);
+      return {
+        capabilityId: 'ops.plan', executed: true, outcome: 'success' as const,
+        result: {
+          planEventId, childGoalIds, lessonsUsed: lessons.length,
+          executable: steps.filter(s => s.status === 'executable').length,
+          humanRequired: steps.filter(s => s.status === 'human_required').length,
+          rejected: steps.filter(s => s.status === 'rejected').length,
+        },
+        error: null, evidence: [steps], verified: true,
+        verificationDetails: `plan persisted: ${childGoalIds.length} executable child goal(s), ${steps.filter(s => s.status !== 'executable').length} gated`,
+      };
+    });
+
+    // ops.world_assert — typed world-model assertion; contradiction
+    // produces belief_revision, never silent overwrite.
+    this.wireExecutor('ops.world_assert', async (params) => {
+      const subject = String(params?.subject ?? '');
+      const predicate = String(params?.predicate ?? '');
+      const value = String(params?.value ?? '');
+      if (!subject || !predicate || !value) {
+        return this.failResult('ops.world_assert', 'capabilityParams require {subject, predicate, value}');
+      }
+      const { assertWorld, worldState, reviseBelief } = await import('./WorldAssertions');
+      const prior = await worldState(this.pool, subject);
+      const conflict = prior.find(a => a.predicate === predicate && a.value !== value);
+      const assertionId = await assertWorld(this.pool, {
+        kind: (['fact', 'belief', 'hypothesis', 'unknown'] as const).includes(params?.kind as 'fact') ? params.kind as 'fact' | 'belief' | 'hypothesis' | 'unknown' : 'unknown',
+        subject, predicate, value,
+        provenance: String(params?.provenance ?? 'human:operator'),
+        confidence: typeof params?.confidence === 'number' ? params.confidence : undefined,
+        falsification: typeof params?.falsification === 'string' ? params.falsification : undefined,
+        reason: typeof params?.reason === 'string' ? params.reason : undefined,
+      });
+      let revisionId: string | null = null;
+      if (conflict && assertionId) {
+        revisionId = await reviseBelief(this.pool, conflict.id, 'refuted', assertionId, `contradicted by new assertion ${assertionId.slice(0, 8)}`);
+      }
+      return {
+        capabilityId: 'ops.world_assert', executed: true, outcome: 'success' as const,
+        result: { assertionId, revisionId, contradicted: !!conflict },
+        error: null, evidence: [{ subject, predicate }], verified: true,
+        verificationDetails: conflict ? `assertion persisted + prior ${conflict.id.slice(0, 8)} marked refuted — both survive` : 'assertion persisted',
+      };
+    });
+
+    // ops.model_catalog — discover local Ollama models, persist catalog.
+    this.wireExecutor('ops.model_catalog', async () => {
+      const res = await fetch(`${process.env.OLLAMA_URL || 'http://localhost:11434'}/api/tags`, { signal: AbortSignal.timeout(10000) }).catch(() => null);
+      if (!res || !res.ok) {
+        return { capabilityId: 'ops.model_catalog', executed: false, outcome: 'failure' as const, result: null, error: 'AI_UNAVAILABLE: ollama unreachable', evidence: [], verified: false, verificationDetails: 'catalog not persisted — no local model list' };
+      }
+      const data = await res.json() as { models?: Array<{ name: string; size: number; details?: { family?: string; parameter_size?: string } }> };
+      const models = (data.models ?? []).map(m => ({ name: m.name, sizeBytes: m.size, params: m.details?.parameter_size ?? null, family: m.details?.family ?? null }));
+      const ev = await this.pool.query(
+        `INSERT INTO heidi_events (event_type, payload, created_at) VALUES ('model_catalog', $1, now()) RETURNING id`,
+        [JSON.stringify({ models, at: new Date().toISOString() })],
+      ).catch(() => null);
+      return {
+        capabilityId: 'ops.model_catalog', executed: true, outcome: 'success' as const,
+        result: { eventId: ev?.rows[0]?.id ?? null, count: models.length, names: models.map(m => m.name) },
+        error: null, evidence: models, verified: true,
+        verificationDetails: `${models.length} local model(s) cataloged`,
+      };
+    });
+
     // Dev signal observer — R0 read-only. Deterministic scan for
     // development findings; each becomes an investigation goal (R0).
     this.wireExecutor('ops.dev_observe', async () => {

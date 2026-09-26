@@ -287,6 +287,60 @@ export class CapabilityRegistry {
 // Executors are wired by CognitiveCore during initialization.
 
 export const DEFAULT_CAPABILITIES: Array<Omit<CapabilityDescriptor, 'status' | 'healthNote'>> = [
+  // Cognitive layer — reasoning/planning capabilities are R0/R1: they
+  // structure thought and queue governed work, never execute above R2.
+  {
+    capabilityId: 'ops.goal_interpret',
+    capabilityName: 'Interpret Goal',
+    description: 'Decompose a free-text goal into a typed goal model (facts/assumptions/hypotheses/unknowns) via the local model, persist it durably',
+    provider: 'cognitive_core',
+    riskLevel: 'R0',
+    autonomyRequirement: 0,
+    dependencies: [],
+    verificationStrategy: 'goal_model event persisted and re-readable',
+    reversible: true,
+    timeoutMs: 90000,
+    metadata: {},
+  },
+  {
+    capabilityId: 'ops.plan',
+    capabilityName: 'Plan',
+    description: 'Compose an ordered executable plan from a goal model using existing capability contracts; steps above R2 become human_required, never executable',
+    provider: 'cognitive_core',
+    riskLevel: 'R0',
+    autonomyRequirement: 0,
+    dependencies: ['ops.goal_interpret'],
+    verificationStrategy: 'plan event persisted with validated steps and child goals',
+    reversible: true,
+    timeoutMs: 120000,
+    metadata: {},
+  },
+  {
+    capabilityId: 'ops.world_assert',
+    capabilityName: 'World Assertion',
+    description: 'Persist a typed world-model assertion (fact/belief/hypothesis/unknown) with provenance; contradiction produces a belief_revision, never silent overwrite',
+    provider: 'cognitive_core',
+    riskLevel: 'R0',
+    autonomyRequirement: 0,
+    dependencies: [],
+    verificationStrategy: 'world_assertion event persisted',
+    reversible: true,
+    timeoutMs: 10000,
+    metadata: {},
+  },
+  {
+    capabilityId: 'ops.model_catalog',
+    capabilityName: 'Model Catalog',
+    description: 'Discover available local Ollama models and persist a capability catalog (no paid inference)',
+    provider: 'cognitive_core',
+    riskLevel: 'R0',
+    autonomyRequirement: 0,
+    dependencies: [],
+    verificationStrategy: 'model_catalog event persisted',
+    reversible: true,
+    timeoutMs: 15000,
+    metadata: {},
+  },
   // ActionExecutor capabilities
   {
     capabilityId: 'tool.create_task',

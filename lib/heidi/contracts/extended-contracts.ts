@@ -224,6 +224,83 @@ export const OPS_OPP_EVIDENCE = defineContract({
   },
 });
 
+export const OPS_GOAL_INTERPRET = defineContract({
+  identity: {
+    id: 'ops.goal_interpret', version: '1.0.0', owner: OWNER, provider: 'cognitive_core',
+    description: 'Decompose a free-text goal into a typed, durable goal model',
+  },
+  effects: [dbEffect('heidi_events', 'create')],
+  reversibility: { kind: 'none', windowMs: 0, caveat: 'Append-only goal_model; AI_UNAVAILABLE is a valid verified outcome.' },
+  cost: { estimatedMs: 30_000, timeoutMs: 90_000 },
+  verification: {
+    description: 'The goal_model row exists with typed knowledge and honest aiStatus.',
+    observation: dbObservation('sql:heidi_events:id={goalModelId}', ['id', 'event_type', 'payload']),
+    conditions: [
+      { field: 'found', operator: 'eq', expected: true },
+      { field: 'event_type', operator: 'eq', expected: 'goal_model' },
+      { field: 'payload.aiStatus', operator: 'matches', expected: '^(ok|AI_UNAVAILABLE)$' },
+    ],
+    onFailure: 'retry', maxRetries: 1, requiresHumanConfirmation: false,
+  },
+});
+
+export const OPS_PLAN = defineContract({
+  identity: {
+    id: 'ops.plan', version: '1.0.0', owner: OWNER, provider: 'cognitive_core',
+    description: 'Compose a validated ordered plan over existing capabilities; gated steps never execute',
+  },
+  effects: [dbEffect('heidi_events', 'create'), dbEffect('heidi_goals', 'create')],
+  reversibility: { kind: 'none', windowMs: 0, caveat: 'Append-only plan event; child goals are governed goals, cancellable by policy.' },
+  cost: { estimatedMs: 30_000, timeoutMs: 120_000 },
+  verification: {
+    description: 'The plan event exists with only executable steps dispatched as child goals.',
+    observation: dbObservation('sql:heidi_events:id={planEventId}', ['id', 'event_type', 'payload']),
+    conditions: [
+      { field: 'found', operator: 'eq', expected: true },
+      { field: 'event_type', operator: 'eq', expected: 'plan' },
+    ],
+    onFailure: 'retry', maxRetries: 1, requiresHumanConfirmation: false,
+  },
+});
+
+export const OPS_WORLD_ASSERT = defineContract({
+  identity: {
+    id: 'ops.world_assert', version: '1.0.0', owner: OWNER, provider: 'cognitive_core',
+    description: 'Persist a typed world-model assertion with provenance',
+  },
+  effects: [dbEffect('heidi_events', 'create')],
+  reversibility: { kind: 'none', windowMs: 0, caveat: 'Append-only assertions; contradiction revises, never erases.' },
+  cost: { estimatedMs: 5_000, timeoutMs: 15_000 },
+  verification: {
+    description: 'The world_assertion row exists.',
+    observation: dbObservation('sql:heidi_events:id={assertionId}', ['id', 'event_type', 'payload']),
+    conditions: [
+      { field: 'found', operator: 'eq', expected: true },
+      { field: 'event_type', operator: 'eq', expected: 'world_assertion' },
+    ],
+    onFailure: 'retry', maxRetries: 1, requiresHumanConfirmation: false,
+  },
+});
+
+export const OPS_MODEL_CATALOG = defineContract({
+  identity: {
+    id: 'ops.model_catalog', version: '1.0.0', owner: OWNER, provider: 'cognitive_core',
+    description: 'Discover and persist the local Ollama model catalog',
+  },
+  effects: [dbEffect('heidi_events', 'create')],
+  reversibility: { kind: 'none', windowMs: 0, caveat: 'Append-only catalog; empty or unreachable is an honest failure.' },
+  cost: { estimatedMs: 5_000, timeoutMs: 15_000 },
+  verification: {
+    description: 'The model_catalog row exists.',
+    observation: dbObservation('sql:heidi_events:id={eventId}', ['id', 'event_type', 'payload']),
+    conditions: [
+      { field: 'found', operator: 'eq', expected: true },
+      { field: 'event_type', operator: 'eq', expected: 'model_catalog' },
+    ],
+    onFailure: 'retry', maxRetries: 1, requiresHumanConfirmation: false,
+  },
+});
+
 export const OPS_BUSINESS_CONTEXT = defineContract({
   identity: {
     id: 'ops.business_context', version: '1.0.0', owner: OWNER, provider: 'cognitive_core',
@@ -1388,6 +1465,10 @@ export const EXTENDED_CONTRACTS: CapabilityContract[] = [
   OPS_OPP_VERDICT,
   OPS_OPP_EVIDENCE,
   OPS_BUSINESS_CONTEXT,
+  OPS_GOAL_INTERPRET,
+  OPS_PLAN,
+  OPS_WORLD_ASSERT,
+  OPS_MODEL_CATALOG,
   // external / system-affecting
   TOOL_SEND_EMAIL,
   SELF_RUN_SELF_REPAIR,

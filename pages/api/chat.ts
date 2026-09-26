@@ -480,6 +480,35 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
     const wantsBusiness = /\b(business (context|state|model)|what products|product portfolio|what are we (building|selling|trying)|why are we|revenue truth|who is the customer|most important business|business brief|how'?s business)\b/i.test(lowerMsg);
     const wantsValidation = /\b(customer validation|what do i need to do|validation queue|what should i do next|customer proof)\b/i.test(lowerMsg);
+    // General goal → governed interpret→plan chain. The local model
+    // structures the goal; the daemon plans and executes under policy.
+    const wantsPlan = /^(plan|make a plan|interpret goal|goal:|work on)\s*[:\-–]?\s+/i.test(lowerMsg) || /^plan\s/i.test(lowerMsg);
+    if (wantsPlan) {
+      const goalText = message.replace(/^(plan|make a plan( for)?|interpret goal|goal:|work on)\s*[:\-–]?\s*/i, '').trim();
+      if (goalText.length < 8) {
+        sse(res, { type: 'metadata', model_used: 'cognitive-goals', latency: 0 });
+        sse(res, { type: 'content', content: 'Give me a concrete goal to interpret — e.g. "plan: investigate the MiniMax opportunity and produce a verdict".' });
+        return res.end();
+      }
+      try {
+        const pg = (await import('pg')).default;
+        const pool = new pg.Pool({ host: '127.0.0.1', port: 54322, database: 'postgres', user: 'postgres', password: 'postgres' });
+        const r = await pool.query(
+          `INSERT INTO heidi_goals (title, goal_type, description, status, priority, success_criteria, context, created_at, updated_at)
+           VALUES ($1,'task',$1,'active',5,'["goal_model persisted with typed knowledge"]'::jsonb,$2,now(),now()) RETURNING id`,
+          [`Interpret goal: ${goalText.slice(0, 90)}`,
+          JSON.stringify({ capabilityId: 'ops.goal_interpret', capabilityParams: { goal: goalText }, completeOnVerify: true, producedBy: 'chat' })],
+        );
+        await pool.end();
+        sse(res, { type: 'metadata', model_used: 'cognitive-goals', latency: 0 });
+        sse(res, { type: 'content', content: `Submitted as governed goal ${String(r.rows[0].id).slice(0, 8)} — the daemon interprets it (typed facts/assumptions/unknowns), plans over real capabilities, and executes each step under contract verification. Nothing runs above R2 without you.` });
+        return res.end();
+      } catch (e) {
+        sse(res, { type: 'metadata', model_used: 'cognitive-goals', latency: 0 });
+        sse(res, { type: 'content', content: `Goal submission failed: ${e instanceof Error ? e.message : 'unknown'}` });
+        return res.end();
+      }
+    }
     if (wantsValidation) {
       try {
         const pg = (await import('pg')).default;
