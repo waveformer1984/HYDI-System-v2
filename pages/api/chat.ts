@@ -446,6 +446,38 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       || /\bwhat (needs|should) (we |i |be )?(do|work|fix)/i.test(lowerMsg);
     const wantsDevStatus = /\b(what (are you|you) working on|dev missions?|investigations?|what did you (fix|find|learn))\b/i.test(lowerMsg);
     const wantsFix = /^(fix it|fix that|fix the (defect|issue))\b/i.test(lowerMsg);
+    // "record validation evidence for <opp> via <channel>: <what happened>"
+    // — declared evidence only; CONFIRMED still requires a real paid job.
+    const evidenceMatch = message.match(/(?:validation|customer) evidence for ([a-f0-9-]{4,})(?: via ([a-z _-]+?))?[:\s]+(.+)/i);
+    if (evidenceMatch) {
+      try {
+        const pg = (await import('pg')).default;
+        const pool = new pg.Pool({ host: '127.0.0.1', port: 54322, database: 'postgres', user: 'postgres', password: 'postgres' });
+        const opp = await pool.query(
+          `SELECT id FROM protoforge_opportunities WHERE id::text ILIKE $1 LIMIT 1`,
+          [`${evidenceMatch[1]}%`]);
+        if (opp.rows.length === 0) {
+          await pool.end();
+          sse(res, { type: 'metadata', model_used: 'governed-evidence', latency: 0 });
+          sse(res, { type: 'content', content: `No opportunity matching "${evidenceMatch[1]}". Check the id prefix.` });
+          return res.end();
+        }
+        const respondents = message.match(/(\d+)\s*(?:people|respondents|conversations?|customers?)/i);
+        const g = await pool.query(
+          `INSERT INTO heidi_goals (title, goal_type, description, status, priority, success_criteria, context, created_at, updated_at)
+           VALUES ($1,'task',$1,'active',4,'["customer_evidence row persisted"]'::jsonb,$2,now(),now()) RETURNING id`,
+          [`Record declared customer evidence for opportunity ${evidenceMatch[1]}`,
+          JSON.stringify({ capabilityId: 'ops.opp_evidence', capabilityParams: { opportunityId: opp.rows[0].id, channel: (evidenceMatch[2] || 'declared').trim(), summary: evidenceMatch[3].trim(), respondents: respondents ? Number(respondents[1]) : undefined, declaredBy: 'human_owner via chat' }, completeOnVerify: true })]);
+        await pool.end();
+        sse(res, { type: 'metadata', model_used: 'governed-evidence', latency: 0 });
+        sse(res, { type: 'content', content: `Submitted as governed goal ${String(g.rows[0].id).slice(0, 8)} — recorded as HUMAN-DECLARED evidence (unverified). It only becomes CONFIRMED if a real paid customer job exists. The daemon records it + updates the business finding.` });
+        return res.end();
+      } catch (e) {
+        sse(res, { type: 'metadata', model_used: 'governed-evidence', latency: 0 });
+        sse(res, { type: 'content', content: `Evidence submission failed: ${e instanceof Error ? e.message : 'unknown'}` });
+        return res.end();
+      }
+    }
     const wantsBusiness = /\b(business (context|state|model)|what products|product portfolio|what are we (building|selling|trying)|why are we|revenue truth|who is the customer|most important business|business brief|how'?s business)\b/i.test(lowerMsg);
     if (wantsBusiness) {
       try {

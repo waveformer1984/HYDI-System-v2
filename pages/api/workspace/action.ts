@@ -111,7 +111,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           if (vd.rows.length === 0) {
             await pool.query(
               `INSERT INTO heidi_goals (parent_id, title, goal_type, description, status, priority, success_criteria, context, created_at, updated_at)
-               VALUES ($1, $2, 'task', $2, 'active', 4, '["business_finding persisted with legal verdict"]'::jsonb, $3, now(), now())`,
+               VALUES ($1, $2, 'task', $2, 'active', 5, '["business_finding persisted with legal verdict"]'::jsonb, $3, now(), now())`,
               [dup.rows[0].id, `Verdict: business finding for opportunity ${String(dupKey).slice(0, 8)}`,
               JSON.stringify({ capabilityId: 'ops.opp_verdict', capabilityParams: { opportunityId: dupKey }, completeOnVerify: true, producedBy: 'workspace-ui', producerKey: `ws:verdict:${String(dupKey)}` })],
             ).catch(() => { });
@@ -145,7 +145,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (dup.rows.length === 0) {
         await pool.query(
           `INSERT INTO heidi_goals (parent_id, title, goal_type, description, status, priority, success_criteria, context, created_at, updated_at)
-           VALUES ($1, $2, 'task', $2, 'active', 4, '["business_finding persisted with legal verdict"]'::jsonb, $3, now(), now())`,
+           VALUES ($1, $2, 'task', $2, 'active', 5, '["business_finding persisted with legal verdict"]'::jsonb, $3, now(), now())`,
           [goalId, `Verdict: business finding for opportunity ${String(goal.params.opportunityId).slice(0, 8)}`,
             JSON.stringify({ capabilityId: 'ops.opp_verdict', capabilityParams: { opportunityId: goal.params.opportunityId }, completeOnVerify: true, producedBy: 'workspace-ui', producerKey: `ws:verdict:${String(goal.params.opportunityId)}` })],
         ).catch(() => { });

@@ -204,6 +204,26 @@ export const OPS_OPP_VERDICT = defineContract({
   },
 });
 
+export const OPS_OPP_EVIDENCE = defineContract({
+  identity: {
+    id: 'ops.opp_evidence', version: '1.0.0', owner: OWNER, provider: 'cognitive_core',
+    description: 'Record human-declared customer evidence → updated business_finding',
+  },
+  effects: [dbEffect('heidi_events', 'create')],
+  reversibility: { kind: 'none', windowMs: 0, caveat: 'Append-only evidence + finding rows; findings can supersede, never erase.' },
+  cost: { estimatedMs: 10_000, timeoutMs: 30_000 },
+  verification: {
+    description: 'The customer_evidence row exists carrying human_declared provenance.',
+    observation: dbObservation('sql:heidi_events:id={eventId}', ['id', 'event_type', 'payload']),
+    conditions: [
+      { field: 'found', operator: 'eq', expected: true },
+      { field: 'event_type', operator: 'eq', expected: 'customer_evidence' },
+      { field: 'payload.provenance', operator: 'eq', expected: 'human_declared' },
+    ],
+    onFailure: 'retry', maxRetries: 1, requiresHumanConfirmation: false,
+  },
+});
+
 export const OPS_BUSINESS_CONTEXT = defineContract({
   identity: {
     id: 'ops.business_context', version: '1.0.0', owner: OWNER, provider: 'cognitive_core',
@@ -1366,6 +1386,7 @@ export const EXTENDED_CONTRACTS: CapabilityContract[] = [
   OPS_DEV_AUTHOR,
   OPS_DEV_PATCH,
   OPS_OPP_VERDICT,
+  OPS_OPP_EVIDENCE,
   OPS_BUSINESS_CONTEXT,
   // external / system-affecting
   TOOL_SEND_EMAIL,

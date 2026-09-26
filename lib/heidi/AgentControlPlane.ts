@@ -424,9 +424,30 @@ export const ROLE_HANDLERS: Record<AgentRole, RoleHandler> = {
         { signal: AbortSignal.timeout(10000) },
       );
       const data = await r.json() as { hits?: Array<{ title: string; url?: string; points?: number }> };
-      sources = (data.hits ?? []).map((h) => ({ title: h.title, url: h.url ?? null, points: h.points ?? 0 }));
+      sources = (data.hits ?? []).map((h) => ({ title: h.title, url: h.url ?? null, points: h.points ?? 0, source: 'hn' }));
     } catch (e) {
       sources = [{ error: e instanceof Error ? e.message : 'fetch failed' }];
+    }
+    // Topic missions only: Reddit's public JSON listing (no auth) covers
+    // demand surfaces HN doesn't — maker communities, request threads.
+    if (topicParam) {
+      try {
+        const r = await fetch(
+          `https://www.reddit.com/search.json?q=${encodeURIComponent(terms)}&limit=5&sort=relevance`,
+          { signal: AbortSignal.timeout(10000), headers: { 'User-Agent': 'hydi-research/1.0' } },
+        );
+        const data = await r.json() as { data?: { children?: Array<{ data: { title: string; permalink?: string; subreddit?: string; score?: number } }> } };
+        const hits = (data.data?.children ?? []).map((c) => ({
+          title: c.data.title,
+          url: c.data.permalink ? `https://reddit.com${c.data.permalink}` : null,
+          subreddit: c.data.subreddit ?? null,
+          points: c.data.score ?? 0,
+          source: 'reddit',
+        }));
+        sources = sources.concat(hits);
+      } catch (e) {
+        sources.push({ error: `reddit: ${e instanceof Error ? e.message : 'fetch failed'}` });
+      }
     }
     await post('heidi', 'EVIDENCE', `${sources.length} sources gathered for "${subjectTitle.slice(0, 60)}"`, sources);
     return {
@@ -710,9 +731,9 @@ export async function resolveHumanAction(
   if (queueItemId.startsWith('intervention:')) {
     const reqId = queueItemId.slice('intervention:'.length);
     const r = await pool.query(
-      `UPDATE human_intervention_requests SET status = $2, updated_at = now()
+      `UPDATE human_intervention_requests SET status = $2, resolution_note = $3, updated_at = now()
        WHERE request_id = $1 AND status = 'pending' RETURNING id`,
-      [reqId, decision === 'approve' ? 'approved' : 'rejected'],
+      [reqId, decision === 'approve' ? 'resolved' : 'cancelled', decision],
     );
     if (r.rowCount === 0) return { ok: false, outcome: 'not_found', detail: 'no pending intervention with that id' };
     const eid = await emit(pool, 'human_action_resolution', { queueItemId, decision, actor, resolvedInterventionId: r.rows[0].id }, 'RESOLVED');

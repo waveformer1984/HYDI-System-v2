@@ -1805,6 +1805,14 @@ export class CognitiveCore {
         `INSERT INTO heidi_events (event_type, payload, created_at) VALUES ('business_finding', $1, now()) RETURNING id`,
         [JSON.stringify({ opportunityId, ...v })],
       ).then(x => x.rows[0].id as string).catch(() => null);
+      // Customer-validation bridge: a real finding structures a human
+      // decision — never executes contact. The hypothesis lands in the
+      // existing human queue; J's approve produces an authorized
+      // experiment record, and only real evidence upgrades the finding.
+      if (v.verdict === 'PARTIALLY_SUPPORTED' || v.verdict === 'CONFIRMED') {
+        const { hypothesisFor, createHypothesisRecord } = await import('./CustomerValidation');
+        await createHypothesisRecord(this.pool, opportunityId, hypothesisFor({ analystSummary: v.evidence.analystSummary, sourceCount: v.evidence.sourceCount, limitations: v.limitations })).catch(() => { });
+      }
       return {
         capabilityId: 'ops.opp_verdict',
         executed: true,
@@ -1814,6 +1822,44 @@ export class CognitiveCore {
         evidence: [v.evidence],
         verified: true,
         verificationDetails: `${v.verdict} (${v.confidence}) — ${v.limitations.slice(0, 80)}`,
+      };
+    });
+
+    // Customer evidence intake — R0: records HUMAN-DECLARED evidence
+    // only, requires an authorized experiment, and emits an updated
+    // business_finding. CONFIRMED requires a real paid customer job —
+    // declarations never reach it.
+    this.wireExecutor('ops.opp_evidence', async (params) => {
+      const opportunityId = String(params?.opportunityId ?? '');
+      const channel = String(params?.channel ?? '');
+      const summary = String(params?.summary ?? '');
+      if (!opportunityId || !channel || !summary) {
+        return this.failResult('ops.opp_evidence', 'capabilityParams require {opportunityId, channel, summary}');
+      }
+      const { authorizedExperiment, recordEvidence, hasRealPaidJob } = await import('./CustomerValidation');
+      const exp = await authorizedExperiment(this.pool, opportunityId);
+      if (!exp) {
+        return {
+          capabilityId: 'ops.opp_evidence', executed: false, outcome: 'failure' as const,
+          result: null, error: 'no authorized validation experiment for this opportunity — human approval required first',
+          evidence: [], verified: false,
+          verificationDetails: 'Refused: customer evidence requires an approved hypothesis',
+        };
+      }
+      const paid = await hasRealPaidJob(this.pool);
+      const r = await recordEvidence(this.pool, opportunityId, {
+        channel, summary, respondents: typeof params?.respondents === 'number' ? params.respondents : undefined,
+        declaredBy: String(params?.declaredBy ?? 'human_operator'),
+      }, paid);
+      return {
+        capabilityId: 'ops.opp_evidence',
+        executed: true,
+        outcome: 'success' as const,
+        result: { eventId: r.eventId, verdict: r.verdict, findingId: r.findingId },
+        error: null,
+        evidence: [{ channel, paid }],
+        verified: true,
+        verificationDetails: `declared evidence recorded → ${r.verdict}${paid ? ' (real paid job)' : ' (declared, unverified)'}`,
       };
     });
 
@@ -2028,6 +2074,29 @@ export class CognitiveCore {
         };
       }
       const res = await resolveHumanAction(this.pool, queueItemId, decision, actor);
+      // An approved customer-validation hypothesis becomes an authorized
+      // experiment record — authorization, not execution. Contact stays
+      // human until evidence arrives through the declared-evidence path.
+      if (res.ok && decision === 'approve') {
+        try {
+          const item = queueItemId.startsWith('intervention:')
+            ? await this.pool.query(
+              `SELECT intervention_type, objective, why_required, required_action FROM human_intervention_requests WHERE request_id=$1`,
+              [queueItemId.slice('intervention:'.length)])
+            : await this.pool.query(
+              `SELECT intervention_type, objective, why_required, required_action FROM human_intervention_requests WHERE id=$1`,
+              [queueItemId]);
+          const row = item.rows[0];
+          if (row?.intervention_type === 'customer_validation_hypothesis') {
+            const meta = (() => { try { return JSON.parse(row.why_required as string) as Record<string, unknown>; } catch { return {}; } })();
+            await this.pool.query(
+              `INSERT INTO heidi_events (event_type, payload, created_at)
+               VALUES ('validation_experiment', $1, now())`,
+              [JSON.stringify({ ...meta, proposedExperiment: row.required_action, status: 'AUTHORIZED', authorizedBy: actor, queueItemId })],
+            );
+          }
+        } catch { /* experiment record failure is not fatal to the resolution */ }
+      }
       return {
         capabilityId: 'ops.resolve_human_action', executed: res.ok,
         outcome: res.ok ? 'success' as const : 'failure' as const,
