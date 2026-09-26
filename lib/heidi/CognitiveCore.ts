@@ -1912,22 +1912,50 @@ export class CognitiveCore {
     this.wireExecutor('ops.plan', async (params) => {
       const goalModelId = String(params?.goalModelId ?? '');
       if (!goalModelId) return this.failResult('ops.plan', 'capabilityParams.goalModelId required');
-      const { proposePlan, validateSteps, deterministicPlan, materializePlan, relevantLessons } = await import('./Planner');
+      const { proposePlan, validateSteps, deterministicPlan, materializePlan, applyLessonDirectives, selectModel } = await import('./Planner');
+      const { recallLessons } = await import('./LessonRetrieval');
       const mRow = await this.pool.query(
         `SELECT payload FROM heidi_events WHERE id=$1 AND event_type='goal_model'`,
         [goalModelId]).catch(() => ({ rows: [] as Array<{ payload: unknown }> }));
       if (!mRow.rows[0]) return this.failResult('ops.plan', `goal model ${goalModelId} not found`);
       const model = mRow.rows[0].payload as import('./GoalInterpreter').GoalModel & { goal?: string };
-      const lessons = await relevantLessons(this.pool, model.objective);
-      const proposed = await proposePlan(model, lessons);
+
+      // Semantic lesson recall — durable lessons retrieved by local
+      // embedding similarity (or honestly-labeled lexical fallback).
+      const recall = await recallLessons(this.pool, model.objective);
+      const lessonTexts = recall.lessons.map(l => l.lesson);
+      const route = selectModel(
+        ((await this.pool.query(`SELECT payload->'models' m FROM heidi_events WHERE event_type='model_catalog' ORDER BY created_at DESC LIMIT 1`).catch(() => ({ rows: [] as Array<{ m: unknown }> }))).rows[0]?.m as Array<{ name: string }> | undefined) ?? [],
+        'reasoning',
+      );
+      const proposed = await proposePlan(model, lessonTexts);
       const aiStatus = proposed ? 'ok' as const : 'DETERMINISTIC_ONLY' as const;
       const steps = validateSteps(proposed ?? deterministicPlan(model));
+      // Lesson-driven strategy change — directives from retrieved lessons
+      // alter which steps are executable; the change is recorded.
+      const lessonEffects = await applyLessonDirectives(this.pool, steps, recall.lessons);
       const planId = `plan-${goalModelId.slice(0, 8)}-${Date.now().toString(36)}`;
       const { planEventId, childGoalIds } = await materializePlan(this.pool, planId, goalModelId, model, steps, aiStatus);
+      if (planEventId) {
+        await this.pool.query(
+          `UPDATE heidi_events SET payload = payload || $2::jsonb WHERE id=$1`,
+          [planEventId, JSON.stringify({
+            retrievalMethod: recall.method,
+            embeddingModel: recall.embeddingModel,
+            lessonsUsed: recall.lessons.map(l => ({ id: l.id, similarity: l.similarity, why: l.whySelected })),
+            lessonEffects,
+            modelRoute: route.model ?? route.reason,
+          })],
+        ).catch(() => { });
+      }
       return {
         capabilityId: 'ops.plan', executed: true, outcome: 'success' as const,
         result: {
-          planEventId, childGoalIds, lessonsUsed: lessons.length,
+          planEventId, childGoalIds,
+          lessonsUsed: recall.lessons.length,
+          retrievalMethod: recall.method,
+          lessonEffects,
+          modelRoute: route.model,
           executable: steps.filter(s => s.status === 'executable').length,
           humanRequired: steps.filter(s => s.status === 'human_required').length,
           rejected: steps.filter(s => s.status === 'rejected').length,
@@ -2430,6 +2458,10 @@ export class CognitiveCore {
         state.authorizationResult.escalationRecordId = `esc-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
         await this.recordEscalation(state);
       }
+
+      // Bounded refusals are handled at the ACT phase (outcome 'skipped'
+      // increments the goal's durable skipCount; past the bound the goal
+      // is marked 'blocked' instead of pinning the queue head forever).
     } catch (e) {
       errors.push(`authorize: ${e instanceof Error ? e.message : 'unknown'}`);
     }
@@ -2449,6 +2481,33 @@ export class CognitiveCore {
           rawResult: null,
         };
       }
+      // Bounded skip accounting — unconditional: whatever made the action
+      // skip (refusal, dedupe no-op, executor skip), a goal that keeps
+      // being re-selected with no durable effect must not pin the queue
+      // head forever. skipCount lives in the goal's context; past the
+      // bound it becomes 'blocked' — explicit, inspectable.
+      if (state.selectedAction?.targetGoalId && state.executionResult?.outcome === 'skipped') {
+        try {
+          const g = state.pendingWork.find(w => w.goalId === state.selectedAction!.targetGoalId);
+          if (g && (g.status === 'active' || g.status === 'pending')) {
+            const skips = Number((g.context as Record<string, unknown> | undefined)?.skipCount ?? 0) + 1;
+            if (skips >= 6) {
+              await this.goals.updateGoal(g.goalId, {
+                status: 'blocked',
+                result: `skipped ${skips}× — no durable effect; blocked until state changes`,
+              });
+            } else {
+              await this.pool.query(
+                `UPDATE heidi_goals SET context = context || $2::jsonb, updated_at = now() WHERE id = $1`,
+                [g.goalId, JSON.stringify({ skipCount: skips })],
+              );
+            }
+          }
+        } catch {
+          // Skip bookkeeping is not fatal to the cycle
+        }
+      }
+
       state.phase = 'verify';
     } catch (e) {
       errors.push(`act: ${e instanceof Error ? e.message : 'unknown'}`);
@@ -3248,6 +3307,19 @@ export class CognitiveCore {
                 await this.pool.query(
                   `INSERT INTO heidi_events (event_type, payload, created_at) VALUES ('plan_step_failed', $1, now())`,
                   [JSON.stringify({ planId: planMatch[1], goalId: goal.goalId, classification: 'non_transient', reason: reason.slice(0, 160), policy: 'no_retry_without_new_evidence' })],
+                ).catch(() => { });
+                // Lesson candidate — structured, evidence-linked, marked
+                // candidate confidence until reused.
+                const cap = String(goal.context?.capabilityId ?? '');
+                await this.pool.query(
+                  `INSERT INTO heidi_events (event_type, payload, created_at) VALUES ('lesson', $1, now())`,
+                  [JSON.stringify({
+                    lesson: `capability ${cap} fails when: ${reason.slice(0, 120)}`,
+                    whyItMatters: 'plan steps that will predictably fail should be pruned before dispatch',
+                    evidence: [goal.goalId], scope: 'planning',
+                    confidence: 'candidate',
+                    applicability: `goals that would dispatch ${cap}`,
+                  })],
                 ).catch(() => { });
               }
             }

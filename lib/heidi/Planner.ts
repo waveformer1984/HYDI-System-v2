@@ -26,8 +26,14 @@ export interface PlanStep {
   objective: string;
   capabilityId: string;
   params: Record<string, unknown>;
-  status: 'executable' | 'human_required' | 'rejected';
+  status: 'executable' | 'human_required' | 'rejected' | 'skipped_branch';
   reason: string;
+  /** Deterministic branch gate — evaluated against durable state at
+   *  materialization; the LLM never decides the branch taken. */
+  condition?: { type: 'business_finding_verdict'; opportunityId: string; equals: string };
+  /** The durable lesson that altered this step — strategy change is
+   *  visible in the plan, not just in the prompt. */
+  lessonApplied?: string;
 }
 
 export interface Plan {
@@ -39,30 +45,41 @@ export interface Plan {
 
 /** Steps the model proposed, validated against the real registry. */
 export function validateSteps(
-  proposed: Array<{ objective?: string; capability?: string; params?: Record<string, unknown> }>,
+  proposed: Array<{ objective?: string; capability?: string; params?: Record<string, unknown>; condition?: PlanStep['condition'] }>,
 ): PlanStep[] {
   const registry = getCapabilityRegistry().listAll();
   const byId = new Map(registry.map(c => [c.capabilityId, c]));
   return proposed.slice(0, 8).map((p, i) => {
     const cap = p.capability && byId.get(p.capability);
-    if (!cap) return { stepId: `s${i + 1}`, objective: String(p.objective ?? ''), capabilityId: String(p.capability ?? ''), params: p.params ?? {}, status: 'rejected' as const, reason: `capability '${p.capability}' is not in the registry` };
+    if (!cap) return { stepId: `s${i + 1}`, objective: String(p.objective ?? ''), capabilityId: String(p.capability ?? ''), params: p.params ?? {}, status: 'rejected' as const, reason: `capability '${p.capability}' is not in the registry`, condition: p.condition };
     if (cap.autonomyRequirement > MAX_AUTONOMY) {
-      return { stepId: `s${i + 1}`, objective: String(p.objective ?? ''), capabilityId: cap.capabilityId, params: p.params ?? {}, status: 'human_required' as const, reason: `requires autonomy R${cap.autonomyRequirement} — above standing R${MAX_AUTONOMY}` };
+      return { stepId: `s${i + 1}`, objective: String(p.objective ?? ''), capabilityId: cap.capabilityId, params: p.params ?? {}, status: 'human_required' as const, reason: `requires autonomy R${cap.autonomyRequirement} — above standing R${MAX_AUTONOMY}`, condition: p.condition };
     }
-    return { stepId: `s${i + 1}`, objective: String(p.objective ?? ''), capabilityId: cap.capabilityId, params: p.params ?? {}, status: 'executable' as const, reason: `registered, R${cap.autonomyRequirement}` };
+    return { stepId: `s${i + 1}`, objective: String(p.objective ?? ''), capabilityId: cap.capabilityId, params: p.params ?? {}, status: 'executable' as const, reason: `registered, R${cap.autonomyRequirement}`, condition: p.condition };
   });
 }
 
 /** Deterministic fallback composition from the goal model's own declared needs. */
-export function deterministicPlan(model: GoalModel): Array<{ objective: string; capability: string; params: Record<string, unknown> }> {
+export function deterministicPlan(model: GoalModel): Array<{ objective: string; capability: string; params: Record<string, unknown>; condition?: PlanStep['condition'] }> {
   const text = model.objective.toLowerCase();
-  const steps: Array<{ objective: string; capability: string; params: Record<string, unknown> }> = [];
+  const steps: Array<{ objective: string; capability: string; params: Record<string, unknown>; condition?: PlanStep['condition'] }> = [];
   const opp = /\b([0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})/.exec(model.objective)?.[1];
   if (opp && /investigat|research|look/.test(text)) {
     steps.push({ objective: 'investigate the opportunity', capability: 'ops.agent_mission', params: { opportunityId: opp } });
     steps.push({ objective: 'produce a business finding', capability: 'ops.opp_verdict', params: { opportunityId: opp } });
   } else if (opp) {
     steps.push({ objective: 'evaluate the opportunity evidence', capability: 'ops.opp_verdict', params: { opportunityId: opp } });
+  }
+  // Conditional evidence intake — the observed verdict selects the
+  // branch: a partially supported opportunity opens a hypothesis
+  // assertion; anything else yields the no-signal observation path.
+  if (opp && /validat|verdict|evaluat/.test(text)) {
+    steps.push({ objective: 'assert open customer-demand hypothesis', capability: 'ops.world_assert', params: { kind: 'hypothesis', subject: `opp:${opp.slice(0, 8)}`, predicate: 'customer_demand', value: 'open — awaiting declared evidence', provenance: 'event:business_finding', falsification: 'paid-job absent after interviews' }, condition: { type: 'business_finding_verdict', opportunityId: opp, equals: 'PARTIALLY_SUPPORTED' } });
+  }
+  // Evidence intake step — admitted here, but gated downstream by the
+  // authorized-experiment requirement and lesson directives.
+  if (opp && /evidence|interview|declar/.test(text)) {
+    steps.push({ objective: 'record declared customer evidence', capability: 'ops.opp_evidence', params: { opportunityId: opp, channel: 'direct_interview', summary: 'declared via planning intake', declaredBy: 'planner' } });
   }
   if (/health|state|status|block/.test(text)) steps.push({ objective: 'read executive system state', capability: 'ops.coo_state', params: {} });
   if (/scan|observe|detect|watch/.test(text)) steps.push({ objective: 'observe the development environment', capability: 'ops.dev_observe', params: {} });
@@ -71,20 +88,70 @@ export function deterministicPlan(model: GoalModel): Array<{ objective: string; 
   return steps;
 }
 
-/** Lessons from prior outcomes are injected into planning — the learning
- *  loop only counts if later work demonstrably reuses it. */
-export async function relevantLessons(pool: Pool, text: string): Promise<string[]> {
-  const words = text.toLowerCase().split(/[^a-z0-9]+/).filter(w => w.length > 4).slice(0, 6);
-  if (!words.length) return [];
-  const { rows } = await pool.query(
-    `SELECT payload FROM heidi_events WHERE event_type IN ('lesson','experience','memory_write')
-       ORDER BY created_at DESC LIMIT 40`,
-  ).catch(() => ({ rows: [] }));
-  const hits = (rows as Array<{ payload: Record<string, unknown> }>)
-    .map(r => r.payload)
-    .map(p => String(p.lesson ?? p.summary ?? p.text ?? JSON.stringify(p)).slice(0, 160))
-    .filter(s => words.some(w => s.toLowerCase().includes(w)));
-  return [...new Set(hits)].slice(0, 4);
+/** Deterministic model routing — catalog-driven, never model-selected
+ *  by the model itself. Coding → coder model; reasoning → largest
+ *  available reasoning model; none → honest unavailable. */
+export function selectModel(
+  catalog: Array<{ name: string }>,
+  task: 'reasoning' | 'coding' | 'embedding',
+): { model: string | null; reason: string } {
+  const names = catalog.map(m => m.name);
+  const find = (pat: RegExp) => names.find(n => pat.test(n)) ?? null;
+  if (task === 'embedding') {
+    const m = find(/embed/i);
+    return m ? { model: m, reason: 'embedding model from catalog' } : { model: null, reason: 'NO_ELIGIBLE_MODEL: no embedding model in catalog' };
+  }
+  if (task === 'coding') {
+    const m = find(/coder|code/i);
+    return m ? { model: m, reason: 'coding task → coder model' } : { model: null, reason: 'NO_ELIGIBLE_MODEL: no coder model' };
+  }
+  const m = find(/qwen2\.5:7b/) ?? find(/llama3\.2/) ?? names[0] ?? null;
+  return m ? { model: m, reason: 'reasoning task → best available local model' } : { model: null, reason: 'NO_ELIGIBLE_MODEL' };
+}
+
+/** Evaluate a step's branch condition against durable state — observed
+ *  state selects the branch, not the model. */
+export async function evaluateCondition(
+  pool: Pool, c: NonNullable<PlanStep['condition']>,
+): Promise<{ pass: boolean; observed: string }> {
+  if (c.type === 'business_finding_verdict') {
+    const { rows } = await pool.query(
+      `SELECT payload->>'verdict' v FROM heidi_events WHERE event_type='business_finding'
+         AND payload->>'opportunityId'=$1 ORDER BY created_at DESC LIMIT 1`,
+      [c.opportunityId],
+    );
+    const observed = String(rows[0]?.v ?? 'NONE');
+    return { pass: observed === c.equals, observed };
+  }
+  return { pass: false, observed: 'unknown_condition_type' };
+}
+
+/** Apply lesson directives — a retrieved lesson measurably changes the
+ *  plan when it blocks or reorders a step the baseline would have run. */
+export async function applyLessonDirectives(
+  pool: Pool, steps: PlanStep[], lessons: Array<{ id: string; lesson: string; directives: Array<{ avoidCapability?: string; unlessPredicate?: string }> }>,
+): Promise<string[]> {
+  const applied: string[] = [];
+  for (const lesson of lessons) {
+    for (const d of lesson.directives ?? []) {
+      if (!d.avoidCapability) continue;
+      for (const s of steps) {
+        if (s.capabilityId !== d.avoidCapability || s.status !== 'executable') continue;
+        let unless = true; // 'unless' predicate satisfied means KEEP the step
+        if (d.unlessPredicate === 'authorized_experiment' && typeof s.params.opportunityId === 'string') {
+          const { authorizedExperiment } = await import('./CustomerValidation');
+          unless = !!(await authorizedExperiment(pool, s.params.opportunityId));
+        }
+        if (!unless) {
+          s.status = 'rejected';
+          s.reason = `lesson ${lesson.id.slice(0, 12)}: ${lesson.lesson.slice(0, 80)}`;
+          s.lessonApplied = lesson.id;
+          applied.push(`${s.stepId}:${d.avoidCapability} blocked by lesson`);
+        }
+      }
+    }
+  }
+  return applied;
 }
 
 export async function proposePlan(model: GoalModel, lessons: string[] = []): Promise<Array<{ objective?: string; capability?: string; params?: Record<string, unknown> }> | null> {
@@ -137,11 +204,18 @@ export async function materializePlan(
 
   const childGoalIds: string[] = [];
   const materializeErrors: string[] = [];
+  const branchDecisions: Array<{ stepId: string; condition: string; observed: string; selected: boolean }> = [];
   for (const s of steps) {
-    if (s.status !== 'executable') {
-      // Human-required / rejected steps are durable in the plan event —
-      // they never silently become runnable goals.
-      continue;
+    if (s.status !== 'executable') continue;
+    // Branch gate — the observed durable state selects, not the model.
+    if (s.condition) {
+      const r = await evaluateCondition(pool, s.condition);
+      branchDecisions.push({ stepId: s.stepId, condition: JSON.stringify(s.condition), observed: r.observed, selected: r.pass });
+      if (!r.pass) {
+        s.status = 'skipped_branch';
+        s.reason = `condition not met — observed '${r.observed}'`;
+        continue;
+      }
     }
     try {
       const g = await pool.query(
@@ -156,10 +230,10 @@ export async function materializePlan(
       materializeErrors.push(`${s.stepId}: ${e instanceof Error ? e.message.slice(0, 80) : 'insert failed'}`);
     }
   }
-  if (materializeErrors.length && planEventId) {
+  if ((materializeErrors.length || branchDecisions.length) && planEventId) {
     await pool.query(
       `UPDATE heidi_events SET payload = payload || $2::jsonb WHERE id=$1`,
-      [planEventId, JSON.stringify({ materializeErrors })],
+      [planEventId, JSON.stringify({ materializeErrors, branchDecisions })],
     ).catch(() => { });
   }
   return { planEventId, childGoalIds };
