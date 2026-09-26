@@ -1736,11 +1736,15 @@ export class CognitiveCore {
         verify: Array.isArray(params?.verify) ? params.verify as string[] : undefined,
       };
       const r = await applyBoundedPatch(mission);
+      const eventId = await this.pool.query(
+        `INSERT INTO heidi_events (event_type, payload, created_at) VALUES ('dev_patch', $1, now()) RETURNING id`,
+        [JSON.stringify({ missionId: mission.missionId, status: r.status, commitSha: r.commitSha ?? null, filesChanged: r.filesChanged, reason: r.reason ?? null })],
+      ).then(x => x.rows[0].id as string).catch(() => null);
       return {
         capabilityId: 'ops.dev_patch',
         executed: r.ok,
         outcome: r.ok ? 'success' as const : 'failure' as const,
-        result: { status: r.status, commitSha: r.commitSha ?? null, filesChanged: r.filesChanged },
+        result: { status: r.status, commitSha: r.commitSha ?? null, filesChanged: r.filesChanged, eventId },
         error: r.reason ?? null,
         evidence: r.evidence,
         verified: r.ok,
@@ -1777,6 +1781,15 @@ export class CognitiveCore {
       let goalsCreated = 0;
       for (const f of findings.slice(0, 5)) {
         try {
+          // Dedupe: an open investigation goal for the same target+question
+          // already carries the work — recreating it every scan floods the queue.
+          const dup = await this.pool.query(
+            `SELECT id FROM heidi_goals WHERE status IN ('pending','active','in_progress','blocked')
+               AND context->>'capabilityId' = 'ops.dev_investigate'
+               AND context->>'target' = $1 AND context->>'question' = $2 LIMIT 1`,
+            [f.target, f.question],
+          );
+          if (dup.rows.length > 0) continue;
           await this.pool.query(
             `INSERT INTO heidi_goals (title, goal_type, description, status, priority, success_criteria, context, created_at, updated_at)
              VALUES ($1, 'task', $1, 'active', 5, '["investigation reaches a persisted conclusion"]'::jsonb, $2, now(), now())`,
@@ -1786,11 +1799,15 @@ export class CognitiveCore {
           goalsCreated++;
         } catch { /* duplicate/pool issue — skip */ }
       }
+      const eventId = await this.pool.query(
+        `INSERT INTO heidi_events (event_type, payload, created_at) VALUES ('dev_observation', $1, now()) RETURNING id`,
+        [JSON.stringify({ findings: findings.length, goalsCreated, types: findings.map(f => f.findingType) })],
+      ).then(x => x.rows[0].id as string).catch(() => null);
       return {
         capabilityId: 'ops.dev_observe',
         executed: true,
         outcome: 'success' as const,
-        result: { findings: findings.length, goalsCreated, types: findings.map(f => f.findingType) },
+        result: { findings: findings.length, goalsCreated, types: findings.map(f => f.findingType), eventId },
         error: null,
         evidence: [{ findings }],
         verified: true,
@@ -1826,11 +1843,15 @@ export class CognitiveCore {
           followup = 'goal_created';
         } catch (e) { followup = `goal_failed:${(e as Error).message.slice(0, 120)}`; }
       }
+      const eventId = await this.pool.query(
+        `INSERT INTO heidi_events (event_type, payload, created_at) VALUES ('dev_investigation', $1, now()) RETURNING id`,
+        [JSON.stringify({ investigationId: rec.investigationId, conclusion: rec.conclusion, confidence: rec.confidence, target: rec.target, followup, missionId: rec.missionId })],
+      ).then(x => x.rows[0].id as string).catch(() => null);
       return {
         capabilityId: 'ops.dev_investigate',
         executed: true,
         outcome: 'success' as const,
-        result: { investigationId: rec.investigationId, conclusion: rec.conclusion, confidence: rec.confidence, followup, recommendedAction: rec.recommendedAction },
+        result: { investigationId: rec.investigationId, conclusion: rec.conclusion, confidence: rec.confidence, followup, recommendedAction: rec.recommendedAction, eventId },
         error: null,
         evidence: [{ filesInspected: rec.filesInspected, commandsRun: rec.commandsRun, durationMs: rec.durationMs }],
         verified: true,
@@ -1874,11 +1895,15 @@ export class CognitiveCore {
           JSON.stringify({ proposal, kind: 'dev_patch_review' })],
         ).catch(() => { });
       }
+      const eventId = await this.pool.query(
+        `INSERT INTO heidi_events (event_type, payload, created_at) VALUES ('dev_author', $1, now()) RETURNING id`,
+        [JSON.stringify({ proposalId: proposal.proposalId, confidence: proposal.confidence, author: proposal.author, missionId: proposal.missionId, autoApplied: proposal.confidence === 'HIGH', execution })],
+      ).then(x => x.rows[0].id as string).catch(() => null);
       return {
         capabilityId: 'ops.dev_author',
         executed: proposal.confidence === 'HIGH' && !!(execution as { ok?: boolean } | null)?.ok,
         outcome: proposal.confidence === 'HIGH' ? (((execution as { ok?: boolean })?.ok) ? 'success' as const : 'failure' as const) : 'skipped' as const,
-        result: { proposalId: proposal.proposalId, confidence: proposal.confidence, author: proposal.author, patchHash: proposal.patchHash ?? null, execution },
+        result: { proposalId: proposal.proposalId, confidence: proposal.confidence, author: proposal.author, patchHash: proposal.patchHash ?? null, execution, eventId },
         error: proposal.reason ?? null,
         evidence: [{ proposal }],
         verified: proposal.confidence === 'HIGH' && !!(execution as { ok?: boolean } | null)?.ok,

@@ -98,6 +98,111 @@ function readContract(input: {
 // Reads — tools, ops, communication
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Dev-autonomy chain — every stage writes a durable heidi_events row; the
+// contract re-reads that row by id. Without these, goal-bound executions
+// could never verify and re-ran the same goal forever.
+// ---------------------------------------------------------------------------
+
+export const OPS_DEV_OBSERVE = defineContract({
+  identity: {
+    id: 'ops.dev_observe', version: '1.0.0', owner: OWNER, provider: 'cognitive_core',
+    description: 'Deterministic scan for development findings → investigation goals',
+  },
+  effects: [dbEffect('heidi_events', 'create'), dbEffect('heidi_goals', 'create')],
+  reversibility: { kind: 'none', windowMs: 0, caveat: 'Append-only observation event; created goals are deduped.' },
+  cost: { estimatedMs: 10_000, timeoutMs: 60_000 },
+  verification: {
+    description: 'The dev_observation row exists in heidi_events carrying findings count.',
+    observation: dbObservation('sql:heidi_events:id={eventId}', ['id', 'event_type', 'payload']),
+    conditions: [
+      { field: 'found', operator: 'eq', expected: true },
+      { field: 'event_type', operator: 'eq', expected: 'dev_observation' },
+      { field: 'payload.findings', operator: 'exists', expected: null },
+    ],
+    onFailure: 'retry', maxRetries: 1, requiresHumanConfirmation: false,
+  },
+});
+
+export const OPS_DEV_INVESTIGATE = defineContract({
+  identity: {
+    id: 'ops.dev_investigate', version: '1.0.0', owner: OWNER, provider: 'cognitive_core',
+    description: 'Counterexample-first read-only investigation → persisted conclusion',
+  },
+  effects: [dbEffect('heidi_events', 'create'), dbEffect('heidi_goals', 'create')],
+  reversibility: { kind: 'none', windowMs: 0, caveat: 'Append-only investigation record; a negative conclusion is a valid outcome.' },
+  cost: { estimatedMs: 30_000, timeoutMs: 180_000 },
+  verification: {
+    description: 'The dev_investigation row exists with a legal three-way conclusion.',
+    observation: dbObservation('sql:heidi_events:id={eventId}', ['id', 'event_type', 'payload']),
+    conditions: [
+      { field: 'found', operator: 'eq', expected: true },
+      { field: 'event_type', operator: 'eq', expected: 'dev_investigation' },
+      { field: 'payload.conclusion', operator: 'matches', expected: '^(CONFIRMED_DEFECT|NOT_A_DEFECT|INSUFFICIENT_EVIDENCE)$' },
+    ],
+    onFailure: 'retry', maxRetries: 1, requiresHumanConfirmation: false,
+  },
+});
+
+export const OPS_DEV_AUTHOR = defineContract({
+  identity: {
+    id: 'ops.dev_author', version: '1.0.0', owner: OWNER, provider: 'cognitive_core',
+    description: 'Bounded patch authoring — HIGH auto-applies through ops.dev_patch, else human action',
+  },
+  effects: [dbEffect('heidi_events', 'create'), dbEffect('human_intervention_requests', 'create')],
+  reversibility: { kind: 'self_healing', windowMs: Number.POSITIVE_INFINITY, caveat: 'Patch execution itself rolls back on verify failure; the proposal record is append-only.' },
+  cost: { estimatedMs: 30_000, timeoutMs: 300_000 },
+  verification: {
+    description: 'The dev_author row exists with a legal confidence class — UNKNOWN is a valid outcome.',
+    observation: dbObservation('sql:heidi_events:id={eventId}', ['id', 'event_type', 'payload']),
+    conditions: [
+      { field: 'found', operator: 'eq', expected: true },
+      { field: 'event_type', operator: 'eq', expected: 'dev_author' },
+      { field: 'payload.confidence', operator: 'matches', expected: '^(HIGH|MEDIUM|LOW|UNKNOWN)$' },
+    ],
+    onFailure: 'retry', maxRetries: 1, requiresHumanConfirmation: false,
+  },
+});
+
+export const OPS_DEV_PATCH = defineContract({
+  identity: {
+    id: 'ops.dev_patch', version: '1.0.0', owner: OWNER, provider: 'cognitive_core',
+    description: 'Bounded patch executor — apply, typecheck, verify, commit, rollback on failure',
+  },
+  effects: [dbEffect('heidi_events', 'create')],
+  reversibility: { kind: 'self_healing', windowMs: Number.POSITIVE_INFINITY, caveat: 'ROLLBACK restores the tree on any verification failure; only verified work commits.' },
+  cost: { estimatedMs: 120_000, timeoutMs: 600_000 },
+  verification: {
+    description: 'The dev_patch row exists with a terminal status — ROLLED_BACK/REJECTED are truthful failures.',
+    observation: dbObservation('sql:heidi_events:id={eventId}', ['id', 'event_type', 'payload']),
+    conditions: [
+      { field: 'found', operator: 'eq', expected: true },
+      { field: 'event_type', operator: 'eq', expected: 'dev_patch' },
+      { field: 'payload.status', operator: 'matches', expected: '^(APPLIED|COMMITTED|REJECTED|FAILED|ROLLED_BACK)$' },
+    ],
+    onFailure: 'escalate', maxRetries: 0, requiresHumanConfirmation: false,
+  },
+});
+
+export const OPS_BUSINESS_CONTEXT = defineContract({
+  identity: {
+    id: 'ops.business_context', version: '1.0.0', owner: OWNER, provider: 'cognitive_core',
+    description: 'Retrieve the seeded business fact store with provenance',
+  },
+  effects: [dbEffect('business_facts', 'create')],
+  reversibility: { kind: 'none', windowMs: 0, caveat: 'Idempotent seed/refresh; derived facts recompute from live tables.' },
+  cost: { estimatedMs: 5_000, timeoutMs: 30_000 },
+  verification: {
+    description: 'Retrieval returned a non-empty fact set — the store exists and is seeded.',
+    observation: responseObservation(),
+    conditions: [
+      { field: 'executed', operator: 'eq', expected: true },
+      { field: 'result.factCount', operator: 'gt', expected: 0 },
+    ],
+    onFailure: 'retry', maxRetries: 1, requiresHumanConfirmation: false,
+  },
+});
+
 export const TOOL_FETCH_DATA = readContract({
   id: 'tool.fetch_data',
   provider: 'action_executor',
@@ -1233,6 +1338,11 @@ export const EXTENDED_CONTRACTS: CapabilityContract[] = [
   OPS_AGENT_SUPERVISE,
   OPS_AGENT_CONTROL,
   OPS_RESOLVE_HUMAN_ACTION,
+  OPS_DEV_OBSERVE,
+  OPS_DEV_INVESTIGATE,
+  OPS_DEV_AUTHOR,
+  OPS_DEV_PATCH,
+  OPS_BUSINESS_CONTEXT,
   // external / system-affecting
   TOOL_SEND_EMAIL,
   SELF_RUN_SELF_REPAIR,

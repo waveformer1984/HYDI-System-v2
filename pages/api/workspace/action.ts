@@ -84,6 +84,24 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
+    // Dedupe: if an open goal for the same capability+target already
+    // carries this work, report it rather than flooding the queue.
+    const dupKey = goal.params.investigationId ?? goal.params.target ?? goal.params.opportunityId ?? goal.params.queueItemId ?? null;
+    if (dupKey) {
+      const dup = await pool.query(
+        `SELECT id FROM heidi_goals WHERE status IN ('pending','active','in_progress','blocked')
+           AND context->>'capabilityId' = $1
+           AND (context->'capabilityParams'->>'target' = $2
+                OR context->'capabilityParams'->>'investigationId' = $2
+                OR context->'capabilityParams'->>'opportunityId' = $2
+                OR context->'capabilityParams'->>'queueItemId' = $2)
+           LIMIT 1`,
+        [goal.capabilityId, String(dupKey)],
+      );
+      if (dup.rows.length > 0) {
+        return res.status(200).json({ ok: true, deduped: true, goalId: dup.rows[0].id, capabilityId: goal.capabilityId, message: `already in flight as goal ${String(dup.rows[0].id).slice(0, 8)} — no duplicate dispatched` });
+      }
+    }
     const r = await pool.query(
       `INSERT INTO heidi_goals (title, goal_type, description, status, priority, success_criteria, context, created_at, updated_at)
        VALUES ($1,'task',$2,'active',$3,'["governed capability executes and contract-verifies"]'::jsonb,$4,now(),now()) RETURNING id`,
