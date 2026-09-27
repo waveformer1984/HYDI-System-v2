@@ -123,6 +123,17 @@ describe('CascadeClassificationV2 — unchanged behaviour', () => {
     expect(result).toMatchObject({ classification: 'UNKNOWN_ANOMALY', confidence: 0.5, quarantine: true });
   });
 
+  it('classifies protoforge-core infrastructure alerts (power, plumbing) as INFRA_FAILURE', () => {
+    const power = classify({ layer: 'power', zoneId: 'z1', alert: { type: 'undervoltage', severity: 'critical' } });
+    expect(power.classification).toBe('INFRA_FAILURE');
+    expect(power.matched_rules).toEqual(['INFRA_FAILURE:layer=power+alert']);
+    expect(classify({ layer: 'plumbing', zoneId: 'z2', alert: { type: 'overheating', severity: 'warning' } }).classification)
+      .toBe('INFRA_FAILURE');
+    // Only that exact shape: another layer, or a layer with no alert, is not an infrastructure alert.
+    expect(classify({ layer: 'network', alert: { type: 'x' } }).classification).toBe('UNKNOWN_ANOMALY');
+    expect(classify({ layer: 'power' }).classification).toBe('UNKNOWN_ANOMALY');
+  });
+
   it('treats `exists` indicators as V1 did, by truthiness: a false flag is not a failure (#84)', () => {
     // V1 (modules/cascade-core.js): `payload.env_var_missing || ...`,
     // `payload.stream_disconnected || ...`, `(payload.route || payload.endpoint)`.

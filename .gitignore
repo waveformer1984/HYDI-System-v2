@@ -106,6 +106,9 @@ hydi.db
 # Machine-local runtime state — committing it would hand one machine's boot
 # identity to every other checkout.
 .hydi-boot.lock
+# Recovery leases (scripts/recovery-lease.js) — same kind of machine-local
+# runtime state; RecoveryEngine writes them here in production.
+.recovery-leases/
 .commit-msg-*.txt
 .endurance-report.json
 pm2-state.json

@@ -13,6 +13,16 @@
  * machine with a real heidi-web dev server listening on port 3000).
  */
 
+// RecoveryEngine records a recovery lease (scripts/recovery-lease.js, required
+// lazily at recovery time). Point it at a temp dir so the tests never leave a
+// .recovery-leases/ directory in the repo.
+const ORIGINAL_LEASE_DIR = process.env.RECOVERY_LEASE_DIR;
+process.env.RECOVERY_LEASE_DIR = require('fs').mkdtempSync(require('path').join(require('os').tmpdir(), 'hydi-bridge-leases-'));
+afterAll(() => {
+  if (ORIGINAL_LEASE_DIR === undefined) delete process.env.RECOVERY_LEASE_DIR;
+  else process.env.RECOVERY_LEASE_DIR = ORIGINAL_LEASE_DIR;
+});
+
 jest.mock('child_process', () => ({
   execSync: jest.fn(),
   spawn: jest.fn(),
@@ -155,17 +165,26 @@ describe('RecoveryEngine bridge recovery', () => {
   // Test E — successful recovery: heidi-web's own state is HEALTHY (the
   // failure is bridge-route-specific), so restartBridge performs the real
   // governed restart_process path for heidi-web end to end.
-  test('Test E: bridge recovery restarts heidi-web when heidi-web itself is healthy', async () => {
-    const { recoveryEngine, model } = createSystem();
-    model.updateState('heidi-web', 'HEALTHY', []);
+  // killProcessOnPort() frees heidi-web's port with netstat/taskkill on
+  // Windows and lsof/kill elsewhere, so both branches are pinned here
+  // regardless of the OS the suite runs on.
+  describe.each([
+    ['win32', ['netstat -ano', expect.objectContaining({ encoding: 'utf8' })]],
+    ['linux', [expect.stringMatching(/^lsof -ti :3000 \| xargs kill -9/), expect.anything()]],
+  ])('Test E (%s)', (platform, expectedCall) => {
+    const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform')!;
+    beforeEach(() => { Object.defineProperty(process, 'platform', { ...originalPlatform, value: platform }); });
+    afterEach(() => { Object.defineProperty(process, 'platform', originalPlatform); });
 
-    await (recoveryEngine as any).restartBridge('bridge');
+    test('Test E: bridge recovery restarts heidi-web when heidi-web itself is healthy', async () => {
+      const { recoveryEngine, model } = createSystem();
+      model.updateState('heidi-web', 'HEALTHY', []);
 
-    expect(mockExecSync).toHaveBeenCalledWith(
-      'netstat -ano',
-      expect.objectContaining({ encoding: 'utf8' }),
-    );
-    expect(mockSpawn).toHaveBeenCalledTimes(1);
+      await (recoveryEngine as any).restartBridge('bridge');
+
+      expect(mockExecSync).toHaveBeenCalledWith(...expectedCall);
+      expect(mockSpawn).toHaveBeenCalledTimes(1);
+    });
   });
 
   // Test F — failed verification / correct escalation: heidi-web itself is

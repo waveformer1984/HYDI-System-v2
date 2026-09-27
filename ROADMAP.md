@@ -374,9 +374,7 @@ something executable.
   depended on `ISSUES_FOUND.md` #80 (classifier rule, fixed) and uncovered
   #81 (the live path rejected every event at the schema lock, fixed).
   Remaining gaps: the default Supabase ledger adapter has no outbox, so a
-  failed append is a `ledger_error` rather than `queued`, and
-  `CascadeCompleteV2.processQuarantineRetries()` (never called) would now
-  see retried events as duplicates.
+  failed append is a `ledger_error` rather than `queued`.
 
 ### PolicyEngine expansion
 - Additional DSL operators (`contains`, `startsWith`, `regex`)

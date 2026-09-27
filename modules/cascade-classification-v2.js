@@ -55,7 +55,14 @@ class CascadeClassificationV2 {
         one(P('error', { contains: 'Cannot resolve module', exact: false })),
         [P('service', { value: 'database', exact: true }), P('status', { value: 'down', exact: true })],
         one(P('error', { contains: 'Connection refused', exact: false })),
-        one(P('error', { contains: 'Service unavailable', exact: false }))
+        one(P('error', { contains: 'Service unavailable', exact: false })),
+        // protoforge-core's infrastructure_alert (modules/protoforge-infrastructure.js
+        // via src/server.js): power (undervoltage) and plumbing (overheating) faults,
+        // sent as { layer, zoneId, alert }. Severity is left to ProtoForge policy.
+        [
+          { anyOf: [P('layer', { value: 'power', exact: true }), P('layer', { value: 'plumbing', exact: true })] },
+          P('alert', { exists: true })
+        ]
       ],
 
       [this.CLASSIFICATIONS.ROUTE_FAILURE]: [

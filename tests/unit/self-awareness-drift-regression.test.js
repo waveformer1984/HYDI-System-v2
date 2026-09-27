@@ -14,7 +14,11 @@ const path = require('path');
 describe('HeidiSelfAwareness drift detection regression', () => {
   let HeidiSelfAwareness;
 
+  // Keep reflections out of the tracked data/awareness/reflections.json.
+  let tmpDir;
+
   beforeAll(() => {
+    tmpDir = require('fs').mkdtempSync(path.join(require('os').tmpdir(), 'hydi-awareness-'));
     HeidiSelfAwareness = require('../../src/awareness/HeidiSelfAwareness');
   });
 
@@ -39,6 +43,7 @@ describe('HeidiSelfAwareness drift detection regression', () => {
 
   it('does not crash when calculateDrift is called twice (history field preserved)', async () => {
     const sa = new HeidiSelfAwareness({
+      awarenessPath: tmpDir,
       driftCheckInterval: 999999, // don't auto-start
       driftWindow: 20,
       driftThreshold: 0.5,
@@ -65,6 +70,7 @@ describe('HeidiSelfAwareness drift detection regression', () => {
 
   it('preserves history across multiple drift calculations with trend detection', async () => {
     const sa = new HeidiSelfAwareness({
+      awarenessPath: tmpDir,
       driftCheckInterval: 999999,
       driftWindow: 20,
       driftThreshold: 0.5,
@@ -86,6 +92,7 @@ describe('HeidiSelfAwareness drift detection regression', () => {
 
   it('history field survives reset()', async () => {
     const sa = new HeidiSelfAwareness({
+      awarenessPath: tmpDir,
       driftCheckInterval: 999999,
       driftWindow: 20,
     });

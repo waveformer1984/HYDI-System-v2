@@ -211,22 +211,36 @@ describe('HEIDI Continuous Cognitive-Loop Qualification', () => {
     expect(dbRepair.riskLevel).toBe('R1');
   }, 15000);
 
-  test('10. INJECT: missing credential is worked around, not repaired', async () => {
-    const chm = new CapabilityHealthManager();
-    chm.registerProbe(createCredentialProbe({
-      capabilityId: 'commercial.stripe',
-      description: 'Stripe',
-      provider: 'stripe',
-      credentialEnvVars: ['STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET'],
-    }));
+  // MISSING_EXTERNAL_CREDENTIAL resolves to ESCALATE_TO_HUMAN, not
+  // WORK_AROUND, since fix(false-autonomy); see
+  // heidi-blocker-classification-regression.test.ts and
+  // heidi-self-sufficiency-qualification.test.ts test 21. The Stripe keys are
+  // cleared for this test so the assertion runs whatever .env.local holds.
+  test('10. INJECT: missing credential is escalated, not repaired or worked around', async () => {
+    const keys = ['STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET'];
+    const saved = keys.map((k) => process.env[k]);
+    keys.forEach((k) => { delete process.env[k]; });
+    try {
+      const chm = new CapabilityHealthManager();
+      chm.registerProbe(createCredentialProbe({
+        capabilityId: 'commercial.stripe',
+        description: 'Stripe',
+        provider: 'stripe',
+        credentialEnvVars: keys,
+      }));
 
-    const summary = await chm.checkAll();
-    const sre = new SelfRepairEngine();
-    const result = await sre.runSelfRepair(summary as any) as any;
+      const summary = await chm.checkAll();
+      const sre = new SelfRepairEngine();
+      const result = await sre.runSelfRepair(summary as any) as any;
 
-    if (!process.env.STRIPE_SECRET_KEY) {
-      expect(result.workedAround).toBeGreaterThanOrEqual(1);
+      expect(result.escalated).toBe(1);
+      expect(result.workedAround).toBe(0);
       expect(result.repaired).toBe(0);
+    } finally {
+      keys.forEach((k, i) => {
+        if (saved[i] === undefined) delete process.env[k];
+        else process.env[k] = saved[i];
+      });
     }
   }, 10000);
 
