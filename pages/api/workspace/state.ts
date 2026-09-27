@@ -94,6 +94,34 @@ async function refreshPm2(): Promise<Telemetry<Array<{ name: string; status: str
   return telemetry;
 }
 
+// Recovery throttle snapshot — the watchdog's durable delegation state.
+// Read-only: missing/corrupt file means "no failures tracked", which is
+// honest (the throttle only writes on failure).
+function readRecoveryStates(): Record<string, unknown> {
+  try {
+    const p = path.join(REPO, '.hydi-operational', 'recovery-throttle.json');
+    if (!fs.existsSync(p)) return {};
+    const raw = JSON.parse(fs.readFileSync(p, 'utf8'));
+    const now = Date.now();
+    const out: Record<string, unknown> = {};
+    for (const [name, e] of Object.entries<any>(raw)) {
+      const nextAt = e.nextAttemptAt ? new Date(e.nextAttemptAt).getTime() : null;
+      out[name] = {
+        service: name,
+        state: e.state,
+        cycles: e.cycles ?? 0,
+        lastAttemptAt: e.lastAttemptAt ?? null,
+        nextAttemptAt: e.nextAttemptAt ?? null,
+        cooldownRemainingMs: nextAt && now < nextAt ? nextAt - now : 0,
+        lastFailure: e.lastFailure ?? null,
+        owner: 'watchdog',
+        blocking: e.state === 'OPEN',
+      };
+    }
+    return out;
+  } catch { return {}; }
+}
+
 interface Recommendation {
   action: string; why: string; evidence: string; expectedValue: string;
   effort: string; risk: string; authorization: string; kind: string; ref?: string;
@@ -284,6 +312,10 @@ export default async function handler(_req: NextApiRequest, res: NextApiResponse
         ollamaTelemetry: { observedAt: ollama.observedAt, ageMs: ollama.ageMs, status: ollama.status, ms: ollama.ms },
         supabaseRest: { ...supabaseRest.value, ms: supabaseRest.ms },
         supabaseRestTelemetry: { observedAt: supabaseRest.observedAt, ageMs: supabaseRest.ageMs, status: supabaseRest.status, ms: supabaseRest.ms },
+        // Recovery delegation throttle state — per-component backoff /
+        // cooldown / OPEN status. Read-only read of the durable file the
+        // watchdog writes; a missing file means no failures tracked.
+        recoveryStates: readRecoveryStates(),
       },
       decisions,
       recommendations,

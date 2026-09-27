@@ -100,6 +100,14 @@ const ONCE = process.argv.includes('--once');
 // (log + webhook). See SUPERVISION_MODEL.md for the full supervision model.
 const DELEGATE_RECOVERY = process.env.HYDI_DELEGATE_RECOVERY === 'true';
 
+// Delegation throttle — durable, cross-process governor in front of the
+// RecoveryEngine spawn. The engine's own per-attempt budget bounds one
+// cycle; this bounds the CYCLES. Without it a permanently-unrecoverable
+// service drew ~3 pm2 calls every ~7min forever (9,624 attempts on
+// protoforge-core — that churn is what congested the PM2 daemon).
+const { RecoveryThrottle } = require('../lib/operational/recovery-throttle');
+const recoveryThrottle = new RecoveryThrottle({ root: ROOT });
+
 // ---------------------------------------------------------------------------
 // Logging
 // ---------------------------------------------------------------------------
@@ -593,6 +601,12 @@ async function runCheck() {
   const failures = allResults.filter((r) => !r.ok);
   const allOk = failures.length === 0;
 
+  // A demonstrated-healthy endpoint clears its throttle entry — retry
+  // budget renews on observed health, never on elapsed time alone.
+  for (const r of allResults) {
+    if (r.ok) recoveryThrottle.recordHealthy(r.name);
+  }
+
   if (allOk) {
     // Phase II: log the verdict state, not the raw status code. "heidi-web:200"
     // was the shape that let a degraded service read as healthy at a glance.
@@ -667,9 +681,19 @@ async function runCheck() {
           continue;
         }
 
+        // Delegation throttle — exponential backoff across cycles +
+        // hard cap → OPEN. Denied delegations produce zero child
+        // processes and zero pm2 calls; the supervisor stays unloaded.
+        const throttle = recoveryThrottle.allow(f.name);
+        if (!throttle.allowed) {
+          log(`THROTTLE ${f.name} — ${throttle.state}: ${throttle.reason}`);
+          continue;
+        }
+
         log(`DELEGATE  calling RecoveryEngine for ${f.name} (hysteresis=FAILURE_CONFIRMED, classification=${assessment?.classification || 'N/A'})`);
         observationHysteresis.markRecovering(f.name);
         recordObservationEvent(f.name, assessment, hystState, true);
+        recoveryThrottle.markDelegated(f.name);
         recoveryPromises.push(new Promise((resolve) => {
           const child = exec(
             `node scripts/hydi-recover.js --governed --component=${f.name}`,
@@ -687,11 +711,13 @@ async function runCheck() {
                 if (errOut) log(`DELEGATE  ${f.name} stderr: ${errOut.slice(0, 2000)}`);
                 observationHysteresis.markRecovered(f.name, false);
                 observationMetrics.recordRecoveryAttempt(false);
+                recoveryThrottle.recordOutcome(f.name, false, err.message);
               } else {
                 log(`DELEGATE  RecoveryEngine completed for ${f.name}`);
                 if (out) log(`DELEGATE  ${f.name} stdout: ${out.slice(0, 2000)}`);
                 observationHysteresis.markRecovered(f.name, true);
                 observationMetrics.recordRecoveryAttempt(true);
+                recoveryThrottle.recordOutcome(f.name, true);
               }
               resolve();
             }
