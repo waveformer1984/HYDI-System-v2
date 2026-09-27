@@ -891,16 +891,28 @@ export function createStaleStateRepairHandler(options: {
  * The handler attempts to start Ollama via `ollama serve` and then
  * verifies the service is responding at the configured URL. If Ollama
  * is already running and healthy, the handler returns success without
- * restarting (idempotent).
+ * restarting (idempotent). If the `ollama` binary isn't on PATH it fails
+ * at once: `nohup ollama serve &` exits 0 even then, so the handler would
+ * otherwise wait out its 15s deadline for a server that cannot start.
  */
 export function createOllamaRepairHandler(options: {
   url: string;
   model?: string;
+  /** Whether the `ollama` binary is installed; defaults to a PATH lookup. */
+  isInstalled?: () => Promise<boolean>;
 }): (capabilityId: string, procedure: string) => Promise<{ success: boolean; evidence: string }> {
   return async (capabilityId: string, _procedure: string) => {
     const { exec } = await import('child_process');
     const { promisify } = await import('util');
     const execAsync = promisify(exec);
+    const isInstalled = options.isInstalled || (async () => {
+      try {
+        await execAsync(process.platform === 'win32' ? 'where ollama' : 'command -v ollama', { timeout: 5000 });
+        return true;
+      } catch {
+        return false;
+      }
+    });
 
     try {
       // Precondition: check if Ollama is already healthy
@@ -914,6 +926,13 @@ export function createOllamaRepairHandler(options: {
         }
       } catch {
         // Ollama not responding — proceed with restart
+      }
+
+      if (!(await isInstalled())) {
+        return {
+          success: false,
+          evidence: `Ollama is not installed (no \`ollama\` on PATH) — cannot start it; service not responding at ${options.url}`,
+        };
       }
 
       // Execute: start Ollama

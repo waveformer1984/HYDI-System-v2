@@ -408,7 +408,7 @@ tests/
   hdi-everything-wrong.test.js   # Same as above: Node script, not Jest-discovered
 ```
 
-**Unit tests** (`tests/unit/**`, `tests/migrations/**`, `__tests__/**`): fast, hermetic, run automatically by `npm test` locally and by `unit-tests.yml` in CI on every push/PR to `clean-main`.
+**Unit tests** (`tests/unit/**`, `tests/migrations/**`, `__tests__/**`): run automatically by `npm test` locally and by `unit-tests.yml` in CI on every push/PR to `clean-main`. Most are hermetic, but `tests/migrations/**` and the DB-backed unit suites (communication layer, revenue engine, cognitive core, the `*-qualification` suites) need a running local Supabase with all migrations applied (`npx supabase start`) and `SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` pointing at it. Without it, those ~25 suites fail with `ECONNREFUSED 127.0.0.1:54321/54322`. `unit-tests.yml` starts one before `npm test`.
 
 **Integration tests** (`tests/integration/**`, 13 suites / 79 tests as of 2026-09-26): real `OperatorSession`/`HYDIContinuousRuntime` instances exercising the full executive stack end-to-end (temp data directories, no mocked internals). Deliberately excluded from `jest.config.js`'s `testMatch` so they never silently inflate `npm test`'s runtime — run them explicitly:
 ```bash

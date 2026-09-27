@@ -85,8 +85,8 @@ describe('Real autonomous recovery with verification', () => {
     (global as any).fetch = jest.fn().mockRejectedValue(new Error('connection refused'));
 
     try {
-      const handler = createOllamaRepairHandler({ url: 'http://localhost:99999' });
-      // Use a short timeout to avoid waiting 15s
+      // Installed but never answers: the path that waits out the deadline.
+      const handler = createOllamaRepairHandler({ url: 'http://localhost:99999', isInstalled: async () => true });
       const result = await handler('system.local_model', 'Start Ollama');
 
       // The handler should report failure (service never came up)
@@ -97,6 +97,26 @@ describe('Real autonomous recovery with verification', () => {
       (global as any).fetch = originalFetch;
     }
   }, 30000);
+
+  test('2b. Ollama repair handler fails at once when Ollama is not installed', async () => {
+    const originalFetch = global.fetch;
+    const fetchMock = jest.fn().mockRejectedValue(new Error('connection refused'));
+    (global as any).fetch = fetchMock;
+
+    try {
+      const handler = createOllamaRepairHandler({ url: 'http://localhost:99999', isInstalled: async () => false });
+      const started = Date.now();
+      const result = await handler('system.local_model', 'Start Ollama');
+
+      expect(result.success).toBe(false);
+      expect(result.evidence).toContain('not installed');
+      // Only the precondition health check ran; no restart-wait polling.
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(Date.now() - started).toBeLessThan(2000);
+    } finally {
+      (global as any).fetch = originalFetch;
+    }
+  });
 
   test('3. Stale state repair handler performs real state clearing with verification', async () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'heidi-stale-'));
