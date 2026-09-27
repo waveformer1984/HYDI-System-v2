@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { createTimedClient } from '../../supabase-timed';
 import type { EnqueueOptions, Job, JobQueue, JobQuery, JobStatus } from '../types';
 
 function toJob(row: any): Job {
@@ -32,7 +33,7 @@ export class SupabaseJobQueue implements JobQueue {
       throw new Error('SupabaseJobQueue requires SUPABASE_URL and a service/anon key');
     }
 
-    this.client = client ?? createClient(url, key, { auth: { persistSession: false } });
+    this.client = client ?? createTimedClient(url, key, { auth: { persistSession: false } });
   }
 
   async enqueue(queueName: string, payload: unknown, options: EnqueueOptions = {}): Promise<string> {

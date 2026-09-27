@@ -12,6 +12,7 @@
 
 import type Anthropic from '@anthropic-ai/sdk';
 import { createClient } from '@supabase/supabase-js';
+import { createTimedClient } from './supabase-timed';
 import { getAnthropicClient, getAgentSystemPrompt } from './claude';
 import { ActionExecutor, ExecutorAction, ActionResult } from './action-executor';
 import { HEIDI_TOOLS } from './heidi-tools';
@@ -48,7 +49,7 @@ export interface RunHeidiAgentResult {
 export async function runHeidiAgentStream(params: RunHeidiAgentParams): Promise<RunHeidiAgentResult> {
   const { message, sessionId, userId, onText, onTool } = params;
 
-  const supabase = createClient(
+  const supabase = createTimedClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
   );

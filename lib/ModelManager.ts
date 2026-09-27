@@ -23,6 +23,7 @@
 import { randomUUID } from 'crypto';
 import os from 'os';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { createTimedClient } from './supabase-timed';
 import { getSessionState as getSharedSessionState, updateSessionState as updateSharedSessionState, SessionState } from './session-state';
 import { getMetricsService, type PartialInferenceMetric } from './metrics';
 
@@ -71,7 +72,7 @@ function getSupabase(): SupabaseClient {
     if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
       throw new Error('Supabase env vars not configured (NEXT_PUBLIC_SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY)');
     }
-    _supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+    _supabase = createTimedClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
   }
   return _supabase;
 }

@@ -13,6 +13,7 @@
  */
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { createTimedClient } from './supabase-timed';
 
 export interface PipelineOutput {
   classification: string;
@@ -64,7 +65,7 @@ export class ReplayEngine {
     const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
     const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
     if (url && key) {
-      this.supabase = createClient(url, key);
+      this.supabase = createTimedClient(url, key);
     }
   }
 

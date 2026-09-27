@@ -1,11 +1,20 @@
 import { createClient } from '@supabase/supabase-js';
+import { createTimedClient } from '../supabase-timed';
 import { updateSessionState } from '../session-state';
+import { verifyAuthorizationSignature, payloadDigest } from '../governance/approval-signing';
+import type { ActionAuthorization } from '../governance/ActionChokepoint';
 
 export interface DispatchAction {
   type: string;
   payload: Record<string, unknown>;
   risk: 'low' | 'medium' | 'high';
   reversible: boolean;
+  /**
+   * Verified approval, minted by the authorization path and bound to
+   * (action.type, sha256(payload)). Required — a bare `{ risk:'low' }` claim
+   * is not approval. See the gate note on executeApprovedActions.
+   */
+  authorization?: ActionAuthorization;
 }
 
 export interface DispatchResult {
@@ -16,7 +25,7 @@ export interface DispatchResult {
 }
 
 function getSupabase() {
-  return createClient(
+  return createTimedClient(
     process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
@@ -129,16 +138,41 @@ const DISPATCH_TABLE: Record<
   restart_service: dispatchRestartService,
 };
 
+/**
+ * ProtoForge dispatch — gated (R2, 2026-09-18).
+ *
+ * This module is currently dormant: nothing calls executeApprovedActions.
+ * Before the gate it would have executed `trigger_redeploy` (a real Vercel
+ * redeploy), `clear_queue` (mass delete) and `restart_service` purely on the
+ * caller-supplied `risk`/`reversible` fields on the action itself — the
+ * "approval" in the name was asserted, never verified.
+ *
+ * The gate: each action must carry an `authorization` whose signature verifies
+ * for (action.type, sha256(payload)) — i.e. a real approval minted by the
+ * verified-approval path, bound to this exact action. The caller's `risk` and
+ * `reversible` claims no longer decide anything. Until a dispatch path exists
+ * that mints such signatures, every action is refused — a dormant high-impact
+ * dispatcher failing closed is the correct posture, not a regression.
+ */
 export async function executeApprovedActions(actions: DispatchAction[]): Promise<DispatchResult[]> {
-  const safeActions = actions.filter((a) => a.risk !== 'high' || a.reversible);
   const results = await Promise.allSettled(
-    safeActions.map((action) => {
+    actions.map((action) => {
       const handler = DISPATCH_TABLE[action.type];
       if (!handler) {
         return Promise.resolve<DispatchResult>({
           type: action.type,
           success: false,
           error: `No dispatcher registered for action type: ${action.type}`,
+        });
+      }
+      // Verified approval bound to this exact action — not a self-asserted
+      // risk field. Dispatch isn't session-scoped, so the signature binds
+      // (approvedBy|approvalRef|grantedAt|type|<no-session>|payloadDigest).
+      if (!action.authorization || !verifyAuthorizationSignature(action.authorization, action.type, undefined, payloadDigest(action.payload))) {
+        return Promise.resolve<DispatchResult>({
+          type: action.type,
+          success: false,
+          error: `Action '${action.type}' is not authorized — dispatch requires a verified approval bound to this action`,
         });
       }
       return handler(action.payload);
@@ -148,6 +182,6 @@ export async function executeApprovedActions(actions: DispatchAction[]): Promise
   return results.map((r, i) =>
     r.status === 'fulfilled'
       ? r.value
-      : { type: safeActions[i].type, success: false, error: String(r.reason) }
+      : { type: actions[i].type, success: false, error: String(r.reason) }
   );
 }

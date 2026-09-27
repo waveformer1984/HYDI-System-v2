@@ -9,6 +9,7 @@
 
 import { NextApiRequest, NextApiResponse } from 'next';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { createTimedClient } from '../../lib/supabase-timed';
 import pg from 'pg';
 import { isClaudeAvailable } from '../../lib/claude';
 import { runHeidiAgentStream } from '../../lib/heidi-agent';
@@ -31,15 +32,16 @@ import {
 } from '../../lib/heidi/ConversationContext';
 import type { CooState } from '../../lib/heidi/CooState';
 
-// Lazy Supabase client — same pattern as lib/orchestrator.ts; a missing env
-// must degrade the COO path, not crash the route.
+// Lazy Supabase client — timed transport: without it, a degraded
+// PostgREST/Kong makes every call hang 60s+ (froze chat ~89s). Direct
+// pg for the hot Command Center paths lives in CHAT_POOL below.
 let _cooSupabase: SupabaseClient | null = null;
 function getCooSupabase(): SupabaseClient {
   if (!_cooSupabase) {
-    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
-      throw new Error('Supabase env vars not configured');
-    }
-    _cooSupabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+    _cooSupabase = createTimedClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL,
+      process.env.SUPABASE_SERVICE_ROLE_KEY,
+    );
   }
   return _cooSupabase;
 }

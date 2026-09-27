@@ -77,6 +77,19 @@ export default async function handler(_req: NextApiRequest, res: NextApiResponse
       ollama = { ok: true, models: (j.models ?? []).map(m => m.name) };
     } catch { /* offline */ }
 
+    // Supabase REST health — the failure mode that froze chat ~89s:
+    // PostgREST accepts connections but stalls. A 2s probe catches it.
+    let supabaseRest: { ok: boolean; ms: number | null; circuit?: string } = { ok: false, ms: null };
+    try {
+      const t0 = Date.now();
+      const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL;
+      if (url) {
+        const r = await fetch(`${url.replace(/\/$/, '')}/rest/v1/`, { signal: AbortSignal.timeout(2000) });
+        const { supabaseRestHealth } = await import('../../../lib/supabase-timed');
+        supabaseRest = { ok: r.ok, ms: Date.now() - t0, circuit: supabaseRestHealth().circuit };
+      }
+    } catch { supabaseRest = { ok: false, ms: null, circuit: 'open' }; }
+
     const autonomy = identity.rows[0]?.autonomy_level ?? 0;
     const coo = latestCoo.rows[0]?.payload ?? null;
     const cooStale = latestCoo.rows[0] ? Date.now() - new Date(latestCoo.rows[0].created_at).getTime() > 45 * 60 * 1000 : true;
@@ -186,6 +199,7 @@ export default async function handler(_req: NextApiRequest, res: NextApiResponse
         head: gitHead, dirtyPaths: dirty,
         services: pm2, servicesOnline: pm2.filter(s => s.status === 'online').length, servicesTotal: pm2.length,
         ollama,
+        supabaseRest,
       },
       decisions,
       recommendations,

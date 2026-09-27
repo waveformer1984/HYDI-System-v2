@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { createTimedClient } from '../../supabase-timed';
 import type { DatabaseHealth, HealthCollector, HealthSnapshot, HealthStatus } from '../types';
 
 export class DatabaseHealthCollector implements HealthCollector {
@@ -19,7 +20,7 @@ export class DatabaseHealthCollector implements HealthCollector {
       return null;
     }
 
-    this.client = createClient(url, key, {
+    this.client = createTimedClient(url, key, {
       auth: { persistSession: false },
     });
 

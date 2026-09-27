@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { createTimedClient } from '../../supabase-timed';
 import type { HealthCollector, HealthSnapshot, WorkerHealth } from '../types';
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -20,7 +21,7 @@ export class WorkerHealthCollector implements HealthCollector {
 
     if (!url || !key) return null;
 
-    this.client = createClient(url, key, { auth: { persistSession: false } });
+    this.client = createTimedClient(url, key, { auth: { persistSession: false } });
     return this.client;
   }
 

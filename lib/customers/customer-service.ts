@@ -1,4 +1,5 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { createTimedClient } from '../supabase-timed';
 
 export interface Customer {
   customer_id: string;
@@ -23,7 +24,7 @@ function getServiceClient(): SupabaseClient | null {
   const url = process.env.SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) return null;
-  return createClient(url, key);
+  return createTimedClient(url, key);
 }
 
 export async function createCustomer(

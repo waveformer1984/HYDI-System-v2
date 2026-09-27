@@ -1,5 +1,5 @@
-import { createClient } from '@supabase/supabase-js'
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { createTimedClient } from './supabase-timed'
 
 // Track initialization state
 let supabase: SupabaseClient | null = null
@@ -11,9 +11,9 @@ let pg: any = null
  */
 function validateEnvironment(): void {
   const requiredEnv = ['SUPABASE_URL', 'SUPABASE_ANON_KEY']
-  
+
   const missing = requiredEnv.filter((key) => !process.env[key])
-  
+
   if (missing.length > 0) {
     throw new Error(
       `Missing required environment variables: ${missing.join(', ')}\n` +
@@ -33,7 +33,7 @@ function initializeSupabase(): SupabaseClient {
 
   validateEnvironment()
 
-  supabase = createClient(
+  supabase = createTimedClient(
     process.env.SUPABASE_URL!,
     process.env.SUPABASE_ANON_KEY!
   )

@@ -45,6 +45,7 @@ import {
 } from './work-sessions';
 import { getDecisionStats, getMemoryRetrievalStats, getRetryStats, getTaskSuccessRates, getWorkSessionStats } from './agent-metrics';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { createTimedClient } from './supabase-timed';
 import { buildCognitiveCore } from './heidi/CognitiveCoreBuilder';
 import type { CognitiveCore, CognitiveState } from './heidi/CognitiveCore';
 import { getMetricsService, type PartialInferenceMetric } from './metrics';
@@ -60,7 +61,7 @@ function getSupabase(): SupabaseClient {
     if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
       throw new Error('Supabase env vars not configured (NEXT_PUBLIC_SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY)');
     }
-    _supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+    _supabase = createTimedClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
   }
   return _supabase;
 }
