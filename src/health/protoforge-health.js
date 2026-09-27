@@ -110,14 +110,65 @@ async function checkDatabase(supabase) {
 }
 
 /**
+ * Read the local-model heartbeat state (UrsulaModelHeartbeat singleton).
+ * Deliberately NOT part of `checks`: a flatlined model does not make the
+ * control plane unhealthy. Model capability is reported as its own
+ * axis -- `model` in the response -- so the supervisor can distinguish
+ *   service HEALTHY + model DEGRADED   (process alive, inference down)
+ * from
+ *   service UNAVAILABLE                (process actually dead).
+ */
+function checkModelHealthAxis(modelHeartbeat) {
+  const source = 'ursula-model-heartbeat.getStatus';
+  try {
+    if (!modelHeartbeat || typeof modelHeartbeat.getStatus !== 'function') {
+      return {
+        state: UNVERIFIED,
+        source,
+        evidence: 'model heartbeat singleton not available in this process',
+      };
+    }
+    const s = modelHeartbeat.getStatus();
+    if (!s.running) {
+      return {
+        state: 'UNAVAILABLE',
+        source,
+        lastCheckTime: s.lastCheckTime || null,
+        evidence: 'model heartbeat is not running in this process',
+      };
+    }
+    const failed = (s.failedModels || []).length;
+    const state = failed === 0 ? HEALTHY : 'DEGRADED';
+    return {
+      state,
+      source,
+      running: true,
+      failedModels: s.failedModels || [],
+      lastCheckTime: s.lastCheckTime || null,
+      evidence: failed === 0
+        ? 'all monitored local models healthy'
+        : `${failed} model(s) failing consecutive checks`,
+    };
+  } catch (error) {
+    return {
+      state: UNVERIFIED,
+      source,
+      evidence: `model heartbeat read threw: ${error.message}`,
+    };
+  }
+}
+
+/**
  * Build the /health body.
  *
  * `status` is derived from the checks -- it is never asserted. It is 'ok' only
- * when every check produced positive evidence.
+ * when every check produced positive evidence. Model state is reported under
+ * `model` and deliberately excluded from `status`.
  */
-async function buildProtoforgeHealth({ agentBus, supabase, now = () => new Date() }) {
+async function buildProtoforgeHealth({ agentBus, supabase, modelHeartbeat, now = () => new Date() }) {
   const moduleRegistry = checkModuleRegistry(agentBus);
   const database = await checkDatabase(supabase);
+  const model = checkModelHealthAxis(modelHeartbeat);
 
   const checks = { module_registry: moduleRegistry, database };
   const states = Object.values(checks).map((c) => c.state);
@@ -135,6 +186,8 @@ async function buildProtoforgeHealth({ agentBus, supabase, now = () => new Date(
     modules_state: moduleRegistry.state,
     events: database.count,
     checks,
+    // Model capability axis: separate from service status on purpose.
+    model,
     ...(degradedReasons.length ? { degraded_reasons: degradedReasons } : {}),
     timestamp: now().toISOString(),
   };
@@ -144,4 +197,5 @@ module.exports = {
   buildProtoforgeHealth,
   checkModuleRegistry,
   checkDatabase,
+  checkModelHealthAxis,
 };
