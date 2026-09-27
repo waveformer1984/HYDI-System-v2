@@ -30,6 +30,7 @@
  */
 
 const { spawn } = require('child_process');
+const { isExternallySupervised, supervisedAs } = require('./module-ownership');
 const http = require('http');
 const path = require('path');
 const fs = require('fs');
@@ -496,9 +497,27 @@ async function classifyOccupant(mod) {
     cursor = next;
   }
 
+  // Modules declared supervisor:'pm2' (e.g. heidi-web, owned by PM2 app
+  // heidi-web-standalone) are EXPECTED to trace to PM2's
+  // ProcessContainerFork, not to this boot-agent -- and their leaf cmdline
+  // legitimately doesn't contain the configured 'npm run dev'. Check PM2
+  // ancestry first: if the port occupant descends from PM2, that IS the
+  // declared owner.
+  const viaPm2 = chain.some((n) => /processcontainerfork|pm2/i.test(String(n.cmdline || n.name || '')));
+
   let identityMatched = false;
   for (const node of chain) {
     if (matchesFamily(node.cmdline)) { identityMatched = true; break; }
+  }
+
+  if (isExternallySupervised(mod) && viaPm2) {
+    // The declared PM2 supervisor owns this port. The service still had to
+    // pass its real health check to reach this point (portInUseAndHealthy),
+    // so 'pm2' here means: verified healthy + verified PM2 ancestry.
+    return {
+      ownership: 'pm2', pid, name: leaf.name, cmdline: leaf.cmdline,
+      supervisedAs: supervisedAs(mod),
+    };
   }
 
   if (!identityMatched) {
@@ -873,6 +892,30 @@ async function main() {
 
   banner('Booting');
   for (const mod of order) {
+    // Declared external supervision: PM2 (or another authority) owns the
+    // process. boot-agent must never spawn it -- a spawn here either
+    // EADDRINUSEs (occupant up) or silently duplicates a service PM2
+    // already autorestarts (occupant briefly down mid-restart). Verify
+    // health for evidence, then record it as externally owned.
+    if (isExternallySupervised(mod) && mod.type === 'process') {
+      const owner = supervisedAs(mod) || 'external';
+      if (mod.port && await portInUseAndHealthy(mod)) {
+        const occupant = await classifyOccupant(mod);
+        log(mod.id, c('32',
+          `port ${mod.port} healthy, supervised by ${owner}` +
+          ` (ownership: ${occupant.ownership}${occupant.pid ? `, PID ${occupant.pid}` : ''})`));
+        running.push({ mod, child: null, type: 'process', external: true, ownership: occupant.ownership, pid: occupant.pid });
+      } else {
+        // Down or unhealthy -- do NOT spawn. PM2/watchdog owns the restart;
+        // double-provisioning is the failure this boundary exists to prevent.
+        log(mod.id, c('31',
+          `supervised by ${owner} but port ${mod.port} not healthy -- not spawning (external supervisor owns lifecycle)`));
+        if (mod.required) {
+          log(mod.id, c('33', 'required module reported unavailable; boot continues -- external supervisor owns recovery'));
+        }
+      }
+      continue;
+    }
     if (mod.type === 'process' && mod.port && await portInUseAndHealthy(mod)) {
       const occupant = await classifyOccupant(mod);
 
@@ -918,9 +961,10 @@ async function main() {
   const lines = running.map((r) => {
     const port = r.mod.port ? `:${r.mod.port}` : '';
     const state = !r.external ? 'up'
-      : r.ownership === 'unsupervised' ? 'external(UNSUPERVISED)'
-        : r.ownership === 'recovered' ? 'external(RECOVERED)'
-          : 'external';
+      : r.ownership === 'pm2' ? 'external(PM2)'
+        : r.ownership === 'unsupervised' ? 'external(UNSUPERVISED)'
+          : r.ownership === 'recovered' ? 'external(RECOVERED)'
+            : 'external';
     return `  ${c('32', '●')} ${r.mod.id.padEnd(20)} ${state}${port}`;
   });
   console.log(lines.join('\n'));
