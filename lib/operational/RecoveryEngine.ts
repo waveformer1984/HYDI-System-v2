@@ -24,7 +24,9 @@
  */
 
 import { randomUUID } from 'crypto';
-import { spawn, execSync, execFileSync, ChildProcess } from 'child_process';
+import { spawn, execSync, execFile, execFileSync, ChildProcess } from 'child_process';
+import { promisify } from 'util';
+const execFileAsync = promisify(execFile);
 import path from 'path';
 import fs from 'fs';
 import type {
@@ -1340,6 +1342,30 @@ export class RecoveryEngine {
     // authorized, within budget, and not observer-confused. Only the mechanical
     // spawn moves to the process that owns the module. See
     // scripts/recovery-lease.js:22-34, which identified this fix and deferred it.
+    // PM2-supervised modules (e.g. heidi-web -> heidi-web-standalone, the
+    // real owner of port 3000) are not boot-agent children, so the
+    // boot-control channel can never ack their restart -- the observed ack
+    // was 'not owned by this boot agent'. Send them to PM2 directly.
+    const { pm2NameFor } = require('./DependencyAwareRestartExecutor');
+    const pm2Name = pm2NameFor(component);
+    if (pm2Name !== component) {
+      await execFileAsync('pm2', ['restart', pm2Name, '--update-env'], { timeout: 30000 });
+      const healthy = mod.port ? await this.portListening(mod.port) : true;
+      this.stateModel.logEvent({
+        id: randomUUID(),
+        timestamp: new Date().toISOString(),
+        type: 'recovery_step',
+        component,
+        action: 'process_restart_via_pm2',
+        actionResult: healthy ? 'success' : 'failure',
+        detail: { pm2Name, port: mod.port ?? null, portListening: healthy },
+      });
+      if (!healthy) {
+        throw new Error(`pm2 restart ${pm2Name} returned but port ${mod.port} not listening`);
+      }
+      return;
+    }
+
     const bootControl = require('../../scripts/boot-control');
     if (bootControl.isBootAuthorityAlive()) {
       // Deliberately no killProcessOnPort() here: boot-agent stops its own
@@ -1440,6 +1466,8 @@ export class RecoveryEngine {
     }
 
     // No boot authority is running -- the standalone `hydi:recover` CLI case.
+    // (PM2-supervised modules already returned above via pm2 restart, so
+    // anything reaching this line is genuinely unsupervised.)
     // A detached spawn is the only option here, and it is genuinely better than
     // leaving the service down, but the ownership cost is real and is recorded
     // explicitly below rather than reported as a clean restart.
