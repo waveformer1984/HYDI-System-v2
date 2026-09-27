@@ -601,6 +601,7 @@ export type OperationalEventType =
   | 'action_denied'             // Phase 4: an action was denied by policy
   | 'escalation_triggered'      // Phase 4: escalation was triggered
   | 'circuit_breaker_tripped'   // Phase 4: circuit breaker tripped
+  | 'circuit_breaker_released'  // breaker cooldown lapsed — retry permitted (audited)
   | 'recovery_lock_acquired'    // Phase 4: recovery lock acquired
   | 'recovery_lock_released'    // Phase 4: recovery lock released
   | 'budget_exhausted'          // Phase 4: recovery budget exhausted

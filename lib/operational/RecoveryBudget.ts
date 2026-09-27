@@ -290,9 +290,41 @@ export class RecoveryBudgetManager {
 
   /**
    * Check if the circuit breaker is tripped for a component.
+   *
+   * Must honor the cooldown, not just the flag: callers that read this
+   * accessor BEFORE canRecover() (ActionSelector) would otherwise keep a
+   * breaker tripped forever — canRecover() is the only path that resets
+   * it, and it is never reached when this says "still tripped". The
+   * reset is the same audited transition canRecover() applies.
    */
   isCircuitBreakerTripped(component: string): boolean {
-    return this.breakers.get(component)?.tripped ?? false;
+    const breaker = this.breakers.get(component);
+    if (!breaker?.tripped) return false;
+    const trippedAt = breaker.trippedAt ? new Date(breaker.trippedAt).getTime() : 0;
+    if (this.now() - trippedAt < this.config.circuitBreakerCooldownMs) {
+      return true;
+    }
+    // Cooldown lapsed — release the breaker, in memory and durable.
+    breaker.tripped = false;
+    breaker.trippedAt = null;
+    breaker.consecutiveFailures = 0;
+    if (this.durableStore) {
+      this.durableStore.updateState(component, {
+        circuitBreakerTripped: false,
+        circuitBreakerTrippedAt: null,
+        consecutiveFailures: 0,
+      });
+    }
+    this.stateModel.logEvent({
+      id: randomUUID(),
+      timestamp: new Date(this.now()).toISOString(),
+      type: 'circuit_breaker_released',
+      component,
+      action: 'circuit_breaker',
+      actionResult: 'success',
+      detail: { cooldownMs: this.config.circuitBreakerCooldownMs, reason: 'cooldown lapsed — retry permitted' },
+    });
+    return false;
   }
 
   /**
