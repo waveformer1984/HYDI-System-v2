@@ -6,7 +6,7 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import fs from 'fs';
 import path from 'path';
-import { execFileSync } from 'child_process';
+import { execFile } from 'child_process';
 import pg from 'pg';
 import { getValidationQueue } from '../../../lib/heidi/ValidationQueue';
 import { autonomousState } from '../../../lib/heidi/ActionController';
@@ -16,6 +16,83 @@ const REPO = 'C:\\Users\\Owner\\HYDI-System-v2';
 const POOL = new pg.Pool({ host: '127.0.0.1', port: 54322, database: 'postgres', user: 'postgres', password: 'postgres' });
 
 const TEAM_MISSION_ROLES = new Set(['coo', 'scout', 'builder', 'qa', 'revenue', 'research', 'analyst', 'verifier', 'operations']);
+
+// ── Telemetry freshness contract ────────────────────────────────────────────
+// Expensive operational probes (pm2, git, supabase REST) are bounded-async
+// and cached briefly. Callers always get an explicit freshness/status —
+// never a stale value presented as live.
+export type TelemetryStatus = 'HEALTHY' | 'DEGRADED' | 'TIMEOUT' | 'UNAVAILABLE' | 'STALE';
+export interface Telemetry<T> { value: T; observedAt: string; ageMs: number; status: TelemetryStatus; ms?: number }
+
+function run(cmd: string, args: string[], timeoutMs: number): Promise<{ ok: boolean; ms: number; stdout: string; status: TelemetryStatus }> {
+  const t0 = Date.now();
+  return new Promise(resolve => {
+    execFile(cmd, args, { cwd: REPO, timeout: timeoutMs, encoding: 'utf8' as BufferEncoding, windowsHide: true }, (err, stdout) => {
+      const ms = Date.now() - t0;
+      if (err) {
+        const killed = (err as NodeJS.ErrnoException & { killed?: boolean }).killed || /timed out/i.test(err.message);
+        resolve({ ok: false, ms, stdout: '', status: killed ? 'TIMEOUT' : 'UNAVAILABLE' });
+      } else {
+        resolve({ ok: true, ms, stdout: String(stdout), status: 'HEALTHY' });
+      }
+    });
+  });
+}
+
+// pm2 jlist on this host measured ~8s+ per call (up to ~196s observed
+// when the PM2 daemon is busy) — it can never ride the request path.
+// Policy: serve the last-known telemetry with honest ageMs/STALE
+// status and refresh in the background; only a cold cache pays the
+// bounded probe.
+const PM2_TTL_MS = 30_000;
+let pm2Cache: { at: number; telemetry: Telemetry<Array<{ name: string; status: string; uptime?: number; restarts?: number; memory?: number }>> } | null = null;
+let pm2RefreshInFlight = false;
+
+async function getPm2(): Promise<Telemetry<Array<{ name: string; status: string; uptime?: number; restarts?: number; memory?: number }>>> {
+  const cached = pm2Cache;
+  if (cached) {
+    const underlying = cached.telemetry.status;
+    const ageMs = Date.now() - cached.at;
+    if (ageMs >= PM2_TTL_MS && !pm2RefreshInFlight) {
+      pm2RefreshInFlight = true;
+      void refreshPm2().finally(() => { pm2RefreshInFlight = false; });
+    }
+    return {
+      ...cached.telemetry,
+      ageMs,
+      status: underlying === 'HEALTHY' ? 'STALE' : underlying,
+    };
+  }
+  // Cold cache: return UNAVAILABLE now, refresh in background. PM2 on
+  // this host is too slow (~8-196s) to ever ride a request path.
+  if (!pm2RefreshInFlight) {
+    pm2RefreshInFlight = true;
+    void refreshPm2().finally(() => { pm2RefreshInFlight = false; });
+  }
+  return { value: [], observedAt: new Date().toISOString(), ageMs: 0, status: 'UNAVAILABLE', ms: 0 };
+}
+
+async function refreshPm2(): Promise<Telemetry<Array<{ name: string; status: string; uptime?: number; restarts?: number; memory?: number }>>> {
+  // 25s — pm2's daemon on this host measured ~8s typical, ~196s
+  // pathological; runs only in the background, never blocking a request.
+  const r = await run('cmd', ['/c', 'C:\\Users\\Owner\\AppData\\Roaming\\npm\\pm2.cmd', 'jlist'], 25_000);
+  let telemetry: Telemetry<Array<{ name: string; status: string; uptime?: number; restarts?: number; memory?: number }>>;
+  if (r.ok) {
+    try {
+      const services = JSON.parse(r.stdout).map((p: { name: string; pm2_env: { status: string; pm_uptime?: number; restart_time?: number }; monit?: { memory?: number } }) => ({
+        name: p.name, status: p.pm2_env.status,
+        uptime: p.pm2_env.pm_uptime, restarts: p.pm2_env.restart_time, memory: p.monit?.memory,
+      }));
+      telemetry = { value: services, observedAt: new Date().toISOString(), ageMs: 0, status: 'HEALTHY', ms: r.ms };
+    } catch {
+      telemetry = { value: [], observedAt: new Date().toISOString(), ageMs: 0, status: 'UNAVAILABLE', ms: r.ms };
+    }
+  } else {
+    telemetry = { value: [], observedAt: new Date().toISOString(), ageMs: 0, status: r.status, ms: r.ms };
+  }
+  pm2Cache = { at: Date.now(), telemetry };
+  return telemetry;
+}
 
 interface Recommendation {
   action: string; why: string; evidence: string; expectedValue: string;
@@ -57,38 +134,42 @@ export default async function handler(_req: NextApiRequest, res: NextApiResponse
       ? JSON.parse(fs.readFileSync(path.join(REPO, '.hydi-operational', 'autopilot-status.json'), 'utf8'))
       : null;
 
-    // Engineering: git + pm2
-    const gitHead = execFileSync('git', ['rev-parse', '--short', 'HEAD'], { cwd: REPO }).toString().trim();
-    const dirty = execFileSync('git', ['status', '--porcelain'], { cwd: REPO }).toString().split('\n').filter(Boolean).length;
-    let pm2: Array<{ name: string; status: string; uptime?: number; restarts?: number; memory?: number }> = [];
-    try {
-      const raw = execFileSync('cmd', ['/c', 'C:\\Users\\Owner\\AppData\\Roaming\\npm\\pm2.cmd', 'jlist'], { cwd: REPO, timeout: 8000 }).toString();
-      pm2 = JSON.parse(raw).map((p: { name: string; pm2_env: { status: string; pm_uptime?: number; restart_time?: number }; monit?: { memory?: number } }) => ({
-        name: p.name, status: p.pm2_env.status,
-        uptime: p.pm2_env.pm_uptime, restarts: p.pm2_env.restart_time, memory: p.monit?.memory,
-      }));
-    } catch { /* pm2 unavailable */ }
-
-    // Ollama
-    let ollama: { ok: boolean; models: string[] } = { ok: false, models: [] };
-    try {
-      const r = await fetch('http://localhost:11434/api/tags', { signal: AbortSignal.timeout(4000) });
-      const j = await r.json() as { models?: Array<{ name: string }> };
-      ollama = { ok: true, models: (j.models ?? []).map(m => m.name) };
-    } catch { /* offline */ }
-
-    // Supabase REST health — the failure mode that froze chat ~89s:
-    // PostgREST accepts connections but stalls. A 2s probe catches it.
-    let supabaseRest: { ok: boolean; ms: number | null; circuit?: string } = { ok: false, ms: null };
-    try {
+    // Engineering probes — all bounded-async and concurrent. The old
+    // synchronous execFileSync block cost ~8-10s serial; the endpoint's
+    // tail latency was pm2 jlist alone. Now each has its own timeout
+    // and the worst case is max(budgets), not sum(budgets).
+    const gitHeadP = run('git', ['rev-parse', '--short', 'HEAD'], 3000);
+    const gitDirtyP = run('git', ['status', '--porcelain'], 5000);
+    const pm2P = getPm2();
+    const ollamaP = (async (): Promise<Telemetry<{ ok: boolean; models: string[] }>> => {
+      const t0 = Date.now();
+      try {
+        const r = await fetch('http://localhost:11434/api/tags', { signal: AbortSignal.timeout(4000) });
+        const j = await r.json() as { models?: Array<{ name: string }> };
+        return { value: { ok: true, models: (j.models ?? []).map(m => m.name) }, observedAt: new Date().toISOString(), ageMs: 0, status: 'HEALTHY', ms: Date.now() - t0 };
+      } catch (e) {
+        return { value: { ok: false, models: [] }, observedAt: new Date().toISOString(), ageMs: 0, status: 'UNAVAILABLE', ms: Date.now() - t0 };
+      }
+    })();
+    const restP = (async (): Promise<Telemetry<{ ok: boolean; circuit: string; failures: number }>> => {
       const t0 = Date.now();
       const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL;
-      if (url) {
+      try {
+        if (!url) return { value: { ok: false, circuit: 'unknown', failures: 0 }, observedAt: new Date().toISOString(), ageMs: 0, status: 'UNAVAILABLE', ms: 0 };
         const r = await fetch(`${url.replace(/\/$/, '')}/rest/v1/`, { signal: AbortSignal.timeout(2000) });
         const { supabaseRestHealth } = await import('../../../lib/supabase-timed');
-        supabaseRest = { ok: r.ok, ms: Date.now() - t0, circuit: supabaseRestHealth().circuit };
+        const health = supabaseRestHealth();
+        return { value: { ok: r.ok, circuit: health.circuit, failures: health.failures }, observedAt: new Date().toISOString(), ageMs: 0, status: r.ok ? 'HEALTHY' : 'DEGRADED', ms: Date.now() - t0 };
+      } catch {
+        const { supabaseRestHealth } = await import('../../../lib/supabase-timed').catch(() => ({ supabaseRestHealth: () => ({ circuit: 'open' as const, failures: 0 }) }));
+        const health = supabaseRestHealth();
+        return { value: { ok: false, circuit: health.circuit, failures: health.failures }, observedAt: new Date().toISOString(), ageMs: 0, status: 'TIMEOUT', ms: Date.now() - t0 };
       }
-    } catch { supabaseRest = { ok: false, ms: null, circuit: 'open' }; }
+    })();
+
+    const [gitHeadR, gitDirtyR, pm2, ollama, supabaseRest] = await Promise.all([gitHeadP, gitDirtyP, pm2P, ollamaP, restP]);
+    const gitHead = gitHeadR.ok ? gitHeadR.stdout.trim() : 'unknown';
+    const dirty = gitDirtyR.ok ? gitDirtyR.stdout.split('\n').filter(Boolean).length : -1;
 
     const autonomy = identity.rows[0]?.autonomy_level ?? 0;
     const coo = latestCoo.rows[0]?.payload ?? null;
@@ -197,9 +278,12 @@ export default async function handler(_req: NextApiRequest, res: NextApiResponse
       })(),
       engineering: {
         head: gitHead, dirtyPaths: dirty,
-        services: pm2, servicesOnline: pm2.filter(s => s.status === 'online').length, servicesTotal: pm2.length,
-        ollama,
-        supabaseRest,
+        services: pm2.value, servicesOnline: pm2.value.filter(s => s.status === 'online').length, servicesTotal: pm2.value.length,
+        servicesTelemetry: { observedAt: pm2.observedAt, ageMs: pm2.ageMs, status: pm2.status, ms: pm2.ms },
+        ollama: ollama.value,
+        ollamaTelemetry: { observedAt: ollama.observedAt, ageMs: ollama.ageMs, status: ollama.status, ms: ollama.ms },
+        supabaseRest: { ...supabaseRest.value, ms: supabaseRest.ms },
+        supabaseRestTelemetry: { observedAt: supabaseRest.observedAt, ageMs: supabaseRest.ageMs, status: supabaseRest.status, ms: supabaseRest.ms },
       },
       decisions,
       recommendations,

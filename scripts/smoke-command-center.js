@@ -18,10 +18,11 @@ const PORT = Number(process.argv.find(a => a.startsWith('--port'))?.split('=')[1
   ?? process.env.PORT ?? 3000);
 const BASE = `http://127.0.0.1:${PORT}`;
 const BUDGET_MS = Number(process.env.SMOKE_BUDGET_MS ?? 5000);
-// The Heidi path includes local-LLM inference (Ollama on CPU ~10-60s
-// honest work); the hard assertion is that it BOUNDS, not that it's
-// fast — Supabase degradation used to add minutes on top of that.
-const HEIDI_BUDGET_MS = Number(process.env.SMOKE_HEIDI_BUDGET_MS ?? 65000);
+// The Heidi path includes the local-LLM fallback chain (Ollama on CPU
+// ~50-70s when memory-pressured, plus a 60s model circuit breaker);
+// the hard assertion is that it BOUNDS — Supabase degradation used to
+// add minutes on top. LLM slowness must never read as infra failure.
+const HEIDI_BUDGET_MS = Number(process.env.SMOKE_HEIDI_BUDGET_MS ?? 90000);
 const STATE_BUDGET_MS = Number(process.env.SMOKE_STATE_BUDGET_MS ?? 15000);
 
 function timed(req) {
@@ -71,16 +72,23 @@ async function supabaseRestMs() {
   console.log(`smoke: command-center  base=${BASE}  budget=${BUDGET_MS}ms`);
   let failures = 0;
 
-  // 1. workspace state — must include the agents section (pg-backed)
+  // 1. workspace state — bounded + telemetry freshness contract
   const state = await get('/api/workspace/state', STATE_BUDGET_MS + 5000);
   let stateMs = state.ms;
   if (!state.ok) { console.log(`✗ /api/workspace/state → ${state.error ?? state.status} in ${stateMs}ms`); failures++; }
   else {
     const j = JSON.parse(state.body);
     const agents = Array.isArray(j.agents?.team) ? j.agents.team.length : -1;
-    const rest = j.engineering?.supabaseRest;
-    console.log(`${stateMs <= STATE_BUDGET_MS ? '✓' : '✗'} /api/workspace/state ${stateMs}ms — agents:${agents} rest:${rest ? `${rest.ok ? 'up' : 'down'} ${rest.ms}ms` : 'n/a'}`);
+    const eng = j.engineering ?? {};
+    const restT = eng.supabaseRestTelemetry ?? {};
+    const pm2T = eng.servicesTelemetry ?? {};
+    const STATUSES = ['HEALTHY', 'DEGRADED', 'TIMEOUT', 'UNAVAILABLE', 'STALE'];
+    const telemOk = STATUSES.includes(restT.status) && STATUSES.includes(pm2T.status)
+      && typeof pm2T.ageMs === 'number' && typeof restT.ageMs === 'number';
+    console.log(`${stateMs <= STATE_BUDGET_MS ? '✓' : '✗'} /api/workspace/state ${stateMs}ms — agents:${agents} rest:${eng.supabaseRest?.ok ? 'up' : 'down'} ${eng.supabaseRest?.ms}ms circuit:${eng.supabaseRest?.circuit} pm2:${pm2T.status}@${pm2T.ms}ms`);
     if (stateMs > STATE_BUDGET_MS || agents < 0) failures++;
+    if (!telemOk) { console.log(`✗ telemetry contract missing — services:${JSON.stringify(pm2T)} rest:${JSON.stringify(restT)}`); failures++; }
+    else console.log(`✓ telemetry contract — services:${pm2T.status}(${pm2T.ageMs}ms old) rest:${restT.status}(${restT.ageMs}ms old)`);
   }
 
   // 2. agent-scoped chat — must answer from durable state within budget
@@ -95,7 +103,7 @@ async function supabaseRestMs() {
 
   // 3. default Heidi path — bounded (LLM inference is legitimately
   // slow on CPU; the requirement is it never hangs past the budget)
-  const heidi = await post('/api/chat', { message: 'ping', session_id: 'smoke', user_id: 'smoke' }, HEIDI_BUDGET_MS + 5000);
+  const heidi = await post('/api/chat', { message: 'ping', session_id: 'smoke', user_id: 'smoke' }, HEIDI_BUDGET_MS + 10000);
   if (!heidi.ok || heidi.ms > HEIDI_BUDGET_MS) {
     console.log(`✗ /api/chat (heidi) → ${heidi.error ?? heidi.status} in ${heidi.ms}ms — exceeds ${HEIDI_BUDGET_MS}ms bound (REST degradation?)`);
     failures++;

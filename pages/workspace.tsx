@@ -223,7 +223,12 @@ export default function Workspace() {
 
             {tab === 'engineering' && <>
               <Card title="services">{s.engineering.servicesOnline}/{s.engineering.servicesTotal} online{s.engineering.services.map((v: W) => <div key={v.name}><span style={{ color: v.status === 'online' ? C.ok : C.bad }}>●</span> {v.name} <span style={{ color: '#475569' }}>{Math.round((v.memory ?? 0) / 1048576)}MB · {v.restarts ?? 0} restarts</span></div>)}</Card>
-              <Card title="runtime">HEAD {s.engineering.head} · {s.engineering.dirtyPaths} dirty paths · Ollama {s.engineering.ollama.ok ? `up (${s.engineering.ollama.models.length} models)` : 'down'}</Card>
+              <Card title="runtime">
+                HEAD {s.engineering.head} · {s.engineering.dirtyPaths} dirty paths
+                {' · '}Ollama {s.engineering.ollama.ok ? `up (${s.engineering.ollama.models.length} models)` : 'down'}
+                {' · '}<span style={{ color: ({ HEALTHY: C.ok, DEGRADED: C.warn, TIMEOUT: C.bad, UNAVAILABLE: C.bad, STALE: C.dim } as Record<string, string>)[s.engineering.supabaseRestTelemetry?.status ?? 'UNAVAILABLE'] }}>●</span> Supabase REST {s.engineering.supabaseRestTelemetry?.status ?? 'UNAVAILABLE'}{s.engineering.supabaseRest?.ms != null ? ` ${s.engineering.supabaseRest.ms}ms` : ''}{s.engineering.supabaseRest?.circuit === 'open' ? ' (circuit open)' : ''}
+                {' · '}<span style={{ color: ({ HEALTHY: C.ok, STALE: C.dim, TIMEOUT: C.bad, UNAVAILABLE: C.bad, DEGRADED: C.bad } as Record<string, string>)[s.engineering.servicesTelemetry?.status ?? 'UNAVAILABLE'] }}>●</span> PM2 {s.engineering.servicesTelemetry?.status ?? 'UNAVAILABLE'}{s.engineering.servicesTelemetry?.ageMs ? ` (${Math.round(s.engineering.servicesTelemetry.ageMs / 1000)}s old)` : ''}
+              </Card>
             </>}
 
             {tab === 'revenue' && <>
