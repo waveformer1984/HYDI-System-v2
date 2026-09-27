@@ -22,7 +22,7 @@ const BUDGET_MS = Number(process.env.SMOKE_BUDGET_MS ?? 5000);
 // ~50-70s when memory-pressured, plus a 60s model circuit breaker);
 // the hard assertion is that it BOUNDS — Supabase degradation used to
 // add minutes on top. LLM slowness must never read as infra failure.
-const HEIDI_BUDGET_MS = Number(process.env.SMOKE_HEIDI_BUDGET_MS ?? 90000);
+const HEIDI_BUDGET_MS = Number(process.env.SMOKE_HEIDI_BUDGET_MS ?? 120000);
 const STATE_BUDGET_MS = Number(process.env.SMOKE_STATE_BUDGET_MS ?? 15000);
 
 function timed(req) {

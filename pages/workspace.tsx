@@ -27,7 +27,31 @@ function Card({ title, children, tone }: { title: React.ReactNode; children: Rea
   );
 }
 
+import { buildTelemetryAlerts } from '../lib/workspace-telemetry';
+
 const AGENTS = ['heidi', 'team-coo', 'team-scout', 'team-builder', 'team-qa', 'team-revenue'];
+
+// Telemetry status → visual treatment. STALE is informational (dim),
+// TIMEOUT/UNAVAILABLE are hard failures (red), DEGRADED is amber.
+// Never render STALE as a failure and never render UNAVAILABLE as ok.
+const TELEM_COLOR: Record<string, string> = { HEALTHY: C.ok, DEGRADED: C.warn, TIMEOUT: C.bad, UNAVAILABLE: C.bad, STALE: C.dim };
+
+function TelemetryBanner({ eng }: { eng: W }) {
+  const alerts = buildTelemetryAlerts(eng);
+  if (!alerts.length) return null;
+  return (
+    <div style={{ borderBottom: '1px solid #7f1d1d', background: '#1c0a0a', padding: '6px 16px', display: 'flex', flexDirection: 'column', gap: 2 }}>
+      {alerts.map(p => (
+        <div key={p.service} style={{ display: 'flex', gap: 10, fontSize: 11, alignItems: 'baseline' }}>
+          <span style={{ color: C.dim, minWidth: 90 }}>{p.service}</span>
+          <span style={{ color: TELEM_COLOR[p.status] ?? C.bad, fontWeight: 700 }}>{p.status}</span>
+          <span style={{ color: '#cbd5e1' }}>{p.detail}</span>
+          <span style={{ color: '#64748b' }}>{p.blockingNote}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 function Chat({ agent }: { agent: string }) {
   const [msgs, setMsgs] = useState<Array<{ role: string; text: string }>>([]);
@@ -118,6 +142,7 @@ export default function Workspace() {
           <span style={st(C.dim)}>{s.engineering.head}</span>
         </>}
       </header>
+      {s && <TelemetryBanner eng={s.engineering} />}
       <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
         <nav style={{ width: 130, borderRight: '1px solid #1e293b', padding: 8 }}>
           {NAV.map(n => (
