@@ -103,6 +103,9 @@ export function createOperationalIntelligenceBridge(
     async checkHealth(): Promise<unknown> {
       return oi.checkHealth();
     },
+    getCachedOverallState(): string {
+      return oi.getCachedOverallState();
+    },
     async diagnose(jsonOutput?: boolean): Promise<string> {
       return oi.diagnose(jsonOutput);
     },

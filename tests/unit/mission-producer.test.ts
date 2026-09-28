@@ -239,6 +239,46 @@ describe('MissionProducer', () => {
     expect(result.skipped.every((s) => s.reason === 'open_cap:1')).toBe(true);
   });
 
+  test('blocked goals do not count toward the open cap — parked work cannot starve production', async () => {
+    // Regression: 2026-09-28 — 4 stale 'blocked' plan:* goals held
+    // openByKey.size=4 >= maxOpen=2, skipping every ops.* template with
+    // open_cap:2 for days. A blocked goal is parked (cannot execute until
+    // state changes) — it must not pin the queue head.
+    const blocked = [
+      makeGoal({ status: 'blocked', context: { producerKey: 'plan:x:s1' } }),
+      makeGoal({ status: 'blocked', context: { producerKey: 'plan:y:s1' } }),
+      makeGoal({ status: 'blocked', context: { producerKey: 'plan:z:s1' } }),
+    ];
+    const goals = makeGoals(blocked);
+    const registry = makeRegistry();
+    const producer = new MissionProducer({
+      goals: goals as unknown as GoalSystem,
+      registry: registry as unknown as CapabilityRegistry,
+      templates: [TEMPLATE_A],
+      maxOpen: 2,
+    });
+
+    const result = await producer.produce(goals.store, 2);
+    expect(result.created).toHaveLength(1);
+  });
+
+  test('heartbeat templates bypass the open cap — observation cadence never starves under load', async () => {
+    const busy = [
+      makeGoal({ status: 'active', context: { producerKey: 'other.a' } }),
+      makeGoal({ status: 'in_progress', context: { producerKey: 'other.b' } }),
+    ];
+    const goals = makeGoals(busy);
+    const registry = makeRegistry();
+    const producer = new MissionProducer({
+      goals: goals as unknown as GoalSystem,
+      registry: registry as unknown as CapabilityRegistry,
+      templates: [{ ...TEMPLATE_A, heartbeat: true }],
+      maxOpen: 2,
+    });
+    const result = await producer.produce(goals.store, 2);
+    expect(result.created).toHaveLength(1);
+  });
+
   test('default catalog includes the coo_state cadence template', async () => {
     const { DEFAULT_MISSION_TEMPLATES } = await import('../../lib/heidi/MissionProducer');
     const tpl = DEFAULT_MISSION_TEMPLATES.find((t) => t.producerKey === 'ops.coo_state');

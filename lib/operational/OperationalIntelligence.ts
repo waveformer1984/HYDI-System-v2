@@ -176,6 +176,16 @@ export class OperationalIntelligence {
   }
 
   /**
+   * Read the last sweep's overall state WITHOUT probing — the state model
+   * is updated by every checkAll() run (daemon ssf loop + bounded cycle
+   * probes), so this is a cheap cached read for callers inside a tight
+   * cycle budget.
+   */
+  getCachedOverallState(): ComponentState {
+    return this.stateModel.getOverallState();
+  }
+
+  /**
    * Produce a diagnostic snapshot.
    */
   async diagnose(jsonOutput = false): Promise<string> {

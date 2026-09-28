@@ -729,6 +729,7 @@ async function main(): Promise<void> {
 
   // 7. Self-sufficiency observation loop (runs alongside cognitive loop)
   let selfSufficiencyCycleCount = 0;
+  let lastEscalationSignature: string | null = null;
 
   async function runSelfSufficiencyInterval(): Promise<void> {
     if (shuttingDown) return;
@@ -769,7 +770,10 @@ async function main(): Promise<void> {
         durationMs,
       });
 
-      // Log significant events
+      // Log significant events. Escalation lines are deduped by
+      // signature — a still-blocked capability escalates every cycle
+      // (was: 4 identical lines/minute forever); log the first time and
+      // whenever the escalated set changes, then stay quiet.
       if (result.selfRepairResult && result.selfRepairResult.repaired > 0) {
         console.log(`[daemon] [${cycleId}] Repaired ${result.selfRepairResult.repaired} capability(s)`);
       }
@@ -779,11 +783,26 @@ async function main(): Promise<void> {
       if (result.acquisitionResult && result.acquisitionResult.resolved > 0) {
         console.log(`[daemon] [${cycleId}] Acquired ${result.acquisitionResult.resolved} capability(s) — now READY`);
       }
-      if (result.acquisitionResult && result.acquisitionResult.escalated > 0) {
-        console.log(`[daemon] [${cycleId}] Escalated ${result.acquisitionResult.escalated} capability acquisition(s) — require human action`);
-      }
-      if (result.selfRepairResult && result.selfRepairResult.escalated > 0) {
-        console.log(`[daemon] [${cycleId}] Escalated ${result.selfRepairResult.escalated} blocker(s) to human`);
+
+      const escalatedCaps = Object.entries(result.acquisitionResult?.states ?? {})
+        .filter(([, s]) => s === 'POLICY_BLOCKED' || s === 'BLOCKED')
+        .map(([id]) => id)
+        .sort()
+        .join(',');
+      const acqEscalated = result.acquisitionResult?.escalated ?? 0;
+      const repairEscalated = result.selfRepairResult?.escalated ?? 0;
+      const escalationSignature = `${acqEscalated}|${repairEscalated}|${escalatedCaps}`;
+      if (escalationSignature !== lastEscalationSignature) {
+        if (acqEscalated > 0) {
+          console.log(`[daemon] [${cycleId}] Escalated ${acqEscalated} capability acquisition(s) — require human action: ${escalatedCaps}`);
+        }
+        if (repairEscalated > 0) {
+          console.log(`[daemon] [${cycleId}] Escalated ${repairEscalated} blocker(s) to human`);
+        }
+        if (acqEscalated === 0 && repairEscalated === 0 && lastEscalationSignature !== null) {
+          console.log(`[daemon] [${cycleId}] All previous escalations cleared`);
+        }
+        lastEscalationSignature = escalationSignature;
       }
     } catch (error) {
       const durationMs = Date.now() - startTime;

@@ -293,6 +293,7 @@ export interface ExecutionBridge {
   operationalIntelligence?: {
     governedRecover: (component: string, cause: string) => Promise<string>;
     checkHealth: () => Promise<unknown>;
+    getCachedOverallState: () => string;
     diagnose: (jsonOutput?: boolean) => Promise<string>;
     autoRecover: () => Promise<string>;
   } | null;
@@ -462,6 +463,8 @@ export class CognitiveCore {
   private cooldownUntil: string | null = null;
   private lastError: string | null = null;
   private lastDevScanAt = 0;
+  private lastOiProbeAt = 0; // epoch ms — OI health sweep cache for perceive()
+  private inFlightWork: Promise<CognitiveState> | null = null; // the cycle promise that owns cycleInFlight
   private startedAt: number | null = null;
   private runtimeCommit: string | null | undefined; // undefined = not yet resolved
 
@@ -473,6 +476,16 @@ export class CognitiveCore {
       user: config?.user || process.env.PG_USER || 'postgres',
       password: config?.password || process.env.PG_PASSWORD || 'postgres',
       max: 3, idleTimeoutMillis: 30000,
+      // A query blocked on a lock (FOR UPDATE, an abandoned transaction)
+      // otherwise hangs forever — holds a pool connection, and at max=3
+      // a few hung queries permanently wedge every subsequent cycle:
+      // produce() is never reached, no ops.* goals are emitted, and the
+      // loop reports 'Cycle timed out' forever. Observed 2026-09-28:
+      // daemon cycled 5h, produced zero goals. statement_timeout makes
+      // the stall a bounded error the cycle records and moves past.
+      connectionTimeoutMillis: 5000,
+      statement_timeout: 25000,
+      idle_in_transaction_session_timeout: 30000,
     });
     this.identity = new HeidiIdentityModel(config);
     this.goals = new GoalSystem(config);
@@ -587,12 +600,13 @@ export class CognitiveCore {
     fallback: T,
     label: string,
     onTimeout?: (message: string) => void,
+    timeoutMs?: number,
   ): Promise<T> {
-    const timeoutMs = this.memoryTimeoutMs();
+    const effectiveTimeoutMs = timeoutMs ?? this.memoryTimeoutMs();
     let timer: NodeJS.Timeout | null = null;
 
     const timeout = new Promise<typeof TIMED_OUT>((resolve) => {
-      timer = setTimeout(() => resolve(TIMED_OUT), timeoutMs);
+      timer = setTimeout(() => resolve(TIMED_OUT), effectiveTimeoutMs);
     });
 
     try {
@@ -607,7 +621,7 @@ export class CognitiveCore {
         // Detach the abandoned promise so its eventual rejection is not an
         // unhandled rejection in a cycle that already gave up on it.
         void work.catch(() => undefined);
-        const message = `${label} exceeded ${timeoutMs}ms — continuing without it`;
+        const message = `${label} exceeded ${effectiveTimeoutMs}ms — continuing without it`;
         if (onTimeout) onTimeout(message);
         return fallback;
       }
@@ -2349,10 +2363,24 @@ export class CognitiveCore {
       durationMs: 0,
     };
 
-    // PHASE 1: PERCEIVE — load identity and observe the world
+    // Expose the in-flight cycle immediately: when runCycle times out,
+    // currentCycle.phase/errors identify the stalled phase in the
+    // timeout heartbeat — otherwise "30s timeout" never says WHERE.
+    this.currentCycle = state;
+
+    // PHASE 1: PERCEIVE — load identity and observe the world.
+    // Bounded: a hung identity/perception call (PostgREST stall, wedged
+    // local model) must not starve every later phase — without the
+    // deadline the promise never settles and goal production never runs.
     try {
-      state.identity = await this.identity.getIdentity();
-      state.perception = await this.perceive();
+      state.identity = await this.withDeadline(
+        this.identity.getIdentity(), null, 'identity.getIdentity',
+        (m) => errors.push(m),
+      );
+      state.perception = await this.withDeadline(
+        this.perceive(), null, 'perceive',
+        (m) => errors.push(m),
+      );
       state.phase = 'validate';
     } catch (e) {
       errors.push(`perceive: ${e instanceof Error ? e.message : 'unknown'}`);
@@ -2378,10 +2406,16 @@ export class CognitiveCore {
       errors.push(`understand: ${e instanceof Error ? e.message : 'unknown'}`);
     }
 
-    // PHASE 4: UPDATE WORLD MODEL — sync from runtime
+    // PHASE 4: UPDATE WORLD MODEL — sync from runtime (bounded)
     try {
-      await this.world.syncFromRuntime();
-      state.worldModelSummary = await this.world.getHealthSummary();
+      await this.withDeadline(
+        this.world.syncFromRuntime(), undefined, 'world.syncFromRuntime',
+        (m) => errors.push(m),
+      );
+      state.worldModelSummary = await this.withDeadline(
+        this.world.getHealthSummary(), null, 'world.getHealthSummary',
+        (m) => errors.push(m),
+      );
       state.phase = 'retrieve_memory';
     } catch (e) {
       errors.push(`update_world_model: ${e instanceof Error ? e.message : 'unknown'}`);
@@ -2389,15 +2423,24 @@ export class CognitiveCore {
 
     // PHASE 5: RETRIEVE MEMORY — retrieve relevant memories before reasoning
     try {
-      state.activeGoals = await this.goals.getActiveMissions();
-      state.pendingWork = await this.goals.getPendingWork();
+      state.activeGoals = await this.withDeadline(
+        this.goals.getActiveMissions(), [], 'goals.getActiveMissions',
+        (m) => errors.push(m),
+      );
+      state.pendingWork = await this.withDeadline(
+        this.goals.getPendingWork(), [], 'goals.getPendingWork',
+        (m) => errors.push(m),
+      );
       if (this.bridge.memory && state.pendingWork.length > 0) {
         const query = `cognitive cycle: ${state.pendingWork.map(g => g.title).join(', ')}`;
+        // Memory recall is enrichment, not core work — 8s bound so a
+        // stalled provider/store can't eat the cycle's production budget.
         state.retrievedMemory = await this.withDeadline<string | null>(
           this.bridge.memory.retrieve(query, 'heidi', this.sessionId),
           null,
           'retrieve_memory',
           (message) => errors.push(message),
+          8000,
         );
       }
       state.phase = 'identify_goals';
@@ -2411,14 +2454,25 @@ export class CognitiveCore {
     // reports as executable at the current autonomy level.
     try {
       state.producedMissions = this.missionProducer
-        ? await this.missionProducer.produce(
-          state.pendingWork,
-          state.identity?.autonomyLevel ?? 0,
+        ? await this.withDeadline(
+          this.missionProducer.produce(
+            state.pendingWork,
+            state.identity?.autonomyLevel ?? 0,
+          ),
+          null,
+          'missionProducer.produce',
+          (m) => errors.push(m),
         )
         : null;
       if (state.producedMissions && state.producedMissions.created.length > 0) {
-        state.pendingWork = await this.goals.getPendingWork();
-        state.activeGoals = await this.goals.getActiveMissions();
+        state.pendingWork = await this.withDeadline(
+          this.goals.getPendingWork(), state.pendingWork, 'goals.refreshPendingWork',
+          (m) => errors.push(m),
+        );
+        state.activeGoals = await this.withDeadline(
+          this.goals.getActiveMissions(), state.activeGoals, 'goals.refreshActive',
+          (m) => errors.push(m),
+        );
       }
       state.phase = 'plan';
     } catch (e) {
@@ -2582,16 +2636,40 @@ export class CognitiveCore {
     let oiHealthAvailable = false;
     if (this.bridge.operationalIntelligence) {
       try {
-        const healthResult = await this.bridge.operationalIntelligence.checkHealth();
-        // checkHealth() returns a ComponentState (overall) or a structured object
-        // with per-component states. We extract what we can.
-        const overallState = (typeof healthResult === 'string' ? healthResult : (healthResult as { state?: string })?.state) || 'UNKNOWN';
+        const oi = this.bridge.operationalIntelligence;
+        // checkAll() is a sequential sweep (DB, supabase_db, supabase_rest,
+        // Ollama, every boot module's port + process identity) that can
+        // exceed the 30s cycle budget on its own — observed 2026-09-28:
+        // perceive timed out at 20s every cycle, starving goal production.
+        // The daemon's self-sufficiency loop already runs a full probe
+        // every interval, so the cognitive cycle only needs the latest
+        // sweep — a fresh full probe is paid at most every 2 minutes and
+        // is itself bounded so it can't eat the whole budget.
+        // A full checkAll() sweep uses execSync for process identity /
+        // docker inspect / netstat — every sync spawn FREEZES the event
+        // loop for 1–15s, stalling every in-flight promise. That is the
+        // 2026-09-28 starvation: perceive ate ~20s+ of frozen loop every
+        // cycle, and even 'detached' it still froze everything else.
+        // The daemon's self-sufficiency loop already probes capability
+        // health every interval via async probes — OI's deep sweep is
+        // decoupled evidence, refreshed at most every 30min in the
+        // background; between sweeps we read the last stateModel state.
+        const OI_PROBE_INTERVAL_MS = 30 * 60 * 1000;
+        const cacheAge = Date.now() - this.lastOiProbeAt;
+        if (cacheAge >= OI_PROBE_INTERVAL_MS) {
+          this.lastOiProbeAt = Date.now();
+          void oi.checkHealth().catch(() => undefined); // refresh in background
+        }
+        const overallState = oi.getCachedOverallState() || 'UNKNOWN';
+        const evidence = cacheAge >= OI_PROBE_INTERVAL_MS
+          ? `HealthProvenanceChecker sweep refreshed in background — last known stateModel state: ${overallState}`
+          : `stateModel cache (probe ${Math.round(cacheAge / 1000)}s ago) → overall state: ${overallState}`;
         oiHealthAvailable = true;
         components.push({
           name: 'operational_intelligence',
           status: overallState.toLowerCase(),
           confidence: 1.0,
-          evidence: `HealthProvenanceChecker.checkAll() → overall state: ${overallState}`,
+          evidence,
         });
       } catch (e) {
         // Observer failure is recorded honestly — NOT as a component failure
@@ -3200,6 +3278,7 @@ export class CognitiveCore {
           null,
           'storeExperience',
           (message) => lessons.push(message),
+          8000,
         );
         memoryStored = memoryId !== null;
       } catch {
@@ -3435,6 +3514,10 @@ export class CognitiveCore {
           outcome: 'timeout',
           cycleTimeoutMs: this.loopConfig.cycleTimeoutMs,
           consecutiveFailures: this.consecutiveFailures,
+          // Which phase was in-flight when the budget ran out — turns a
+          // generic 'timed out' into a named stalled dependency.
+          stalledPhase: this.currentCycle?.phase ?? null,
+          phaseErrors: this.currentCycle?.errors ?? [],
         }),
       ],
     );
@@ -3802,9 +3885,40 @@ export class CognitiveCore {
     this.cycleInFlight = true;
     this.lastCycleAt = new Date().toISOString();
 
+    // The underlying cycle promise. cycleInFlight releases when THIS
+    // settles — not when the 30s timeout wrapper rejects. Previously a
+    // timed-out cycle freed the flag while runCycle kept running as a
+    // zombie; the next tick launched another, overlapping zombies held
+    // pg pool connections (max=3), and each starved the next — the loop
+    // timed out forever. Observed 2026-09-28.
+    const work = this.runCycle();
+    this.inFlightWork = work;
+    const release = () => {
+      if (this.inFlightWork === work) {
+        this.inFlightWork = null;
+        this.cycleInFlight = false;
+      }
+    };
+    work.then(release, release);
+
+    // Hard watchdog: if runCycle never settles despite per-phase
+    // deadlines (a promise that never resolves defeats try/catch),
+    // force-release after 4× the cycle budget so the loop cannot
+    // deadlock permanently.
+    const hardBoundMs = 4 * this.loopConfig.cycleTimeoutMs;
+    const watchdog = setTimeout(() => {
+      if (this.inFlightWork === work) {
+        this.inFlightWork = null;
+        this.cycleInFlight = false;
+        this.lastError = `cycle exceeded ${hardBoundMs}ms hard bound — force-released`;
+        this.recordTimeoutHeartbeat().catch(() => { });
+      }
+    }, hardBoundMs);
+    work.finally(() => clearTimeout(watchdog)).catch(() => { });
+
     try {
       // Run cycle with timeout
-      const cycleState = await this.runCycleWithTimeout(this.loopConfig.cycleTimeoutMs);
+      const cycleState = await this.runCycleWithTimeout(work, this.loopConfig.cycleTimeoutMs);
 
       // Classify the cycle outcome
       const outcome = this.classifyCycleOutcome(cycleState);
@@ -3878,17 +3992,19 @@ export class CognitiveCore {
         }, backoff);
       }
     } finally {
-      this.cycleInFlight = false;
+      // cycleInFlight is released by `work`'s release() when the
+      // underlying runCycle settles — NOT here. Releasing on the timeout
+      // path is what allowed zombie cycles to pile up on the pg pool.
     }
   }
 
-  private async runCycleWithTimeout(timeoutMs: number): Promise<CognitiveState> {
+  private async runCycleWithTimeout(work: Promise<CognitiveState>, timeoutMs: number): Promise<CognitiveState> {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         reject(new Error(`Cycle timed out after ${timeoutMs}ms`));
       }, timeoutMs);
 
-      this.runCycle()
+      work
         .then((state) => {
           clearTimeout(timer);
           resolve(state);

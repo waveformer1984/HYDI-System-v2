@@ -24,7 +24,12 @@ import type { Goal, GoalSystem } from './GoalSystem';
 import type { CapabilityRegistry } from './CapabilityRegistry';
 
 export const PRODUCER_ID = 'heidi-mission-producer';
-const OPEN_STATUSES = new Set(['pending', 'active', 'in_progress', 'blocked']);
+// 'blocked' is deliberately NOT open work for the producer: a blocked
+// goal is parked until state changes and cannot execute. Counting it
+// toward the open cap starves ALL production permanently — observed
+// 2026-09-28: 4 stale blocked plan:* goals held openByKey.size=4 ≥
+// maxOpen=2, so every ops.* template skipped with open_cap:2 for days.
+const OPEN_STATUSES = new Set(['pending', 'active', 'in_progress']);
 
 export interface MissionTemplate {
   /** Stable dedupe identity — stored in goal.context.producerKey. */
@@ -40,6 +45,14 @@ export interface MissionTemplate {
   minIntervalMs: number;
   /** Why this mission exists — persisted on the goal for audit. */
   reason: string;
+  /**
+   * Cadence heartbeat — exempt from the shared open-work cap. The cap
+   * exists to bound autonomous work; a supervision/COO heartbeat crowded
+   * out by unrelated open goals means the system silently stops
+   * observing itself. Still subject to per-key dedupe, cooldown,
+   * executability, and the R0/R1 risk ceiling.
+   */
+  heartbeat?: boolean;
 }
 
 export interface ProductionResult {
@@ -153,6 +166,7 @@ export const DEFAULT_MISSION_TEMPLATES: MissionTemplate[] = [
     capabilityId: 'ops.coo_state',
     priority: 5,
     minIntervalMs: 30 * 60 * 1000,
+    heartbeat: true,
     reason: 'The COO state is only an operating state if it is continuously refreshed; each snapshot also embeds a full deployment reconciliation, giving periodic drift detection for free.',
   },
   {
@@ -163,6 +177,7 @@ export const DEFAULT_MISSION_TEMPLATES: MissionTemplate[] = [
     capabilityId: 'ops.agent_supervise',
     priority: 5,
     minIntervalMs: 5 * 60 * 1000,
+    heartbeat: true,
     reason: 'Supervision is only real on a cadence; between passes a crashed worker is an undetected ghost.',
   },
 ];
@@ -197,7 +212,7 @@ export class MissionProducer {
     );
 
     for (const template of this.templates) {
-      if (openByKey.size >= this.maxOpen) {
+      if (openByKey.size >= this.maxOpen && !template.heartbeat) {
         result.skipped.push({ producerKey: template.producerKey, reason: `open_cap:${this.maxOpen}` });
         continue;
       }
