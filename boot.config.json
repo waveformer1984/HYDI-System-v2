@@ -60,6 +60,9 @@
         "PORT": "3000"
       },
       "port": 3000,
+      "liveness": {
+        "url": "http://127.0.0.1:3000/api/ping"
+      },
       "health": {
         "url": "http://127.0.0.1:3000/api/health",
         "graceMs": 300000,

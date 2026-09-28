@@ -80,6 +80,13 @@ function loadEndpointsFromBootConfig() {
       endpoints.push({
         name: mod.id,
         url: mod.health.url,
+        // Process-liveness probe: a dependency-free endpoint (e.g.
+        // /api/ping) that proves the HTTP server itself can execute a
+        // route. /api/health remains the dependency-health axis -- a
+        // stalled Supabase can make it time out, which must NOT look like
+        // a dead process. When liveness is declared, it alone drives the
+        // recovery decision; health stays informational.
+        livenessUrl: mod.liveness && mod.liveness.url ? mod.liveness.url : null,
         required: mod.required !== false,
         graceMs: mod.health.graceMs ?? config.defaultGraceMs,
       });
@@ -167,42 +174,80 @@ function classifyEndpointObservation(name, state) {
 // {"status":"degraded"} as healthy, and would have reported a 404 as healthy
 // too. See lib/operational/EndpointHealthContract.ts for the per-endpoint
 // contracts and the full rationale.
-function checkEndpoint(ep) {
+// A single bounded HTTP GET probe → raw observation. Shared by the health
+// and liveness probes so both honor the same 5s ceiling.
+function probeOnce(url) {
   return new Promise((resolve) => {
-    const url = new URL(ep.url);
     const lib = url.protocol === 'https:' ? https : http;
-
-    const settle = (observation) => {
-      const verdict = evaluateEndpointHealth(ep.name, observation);
-      const { assessment, hysteresisState } = classifyEndpointObservation(ep.name, verdict.state);
-      resolve({
-        name: ep.name,
-        url: ep.url,
-        required: ep.required,
-        ok: verdict.ok,
-        statusCode: observation.statusCode,
-        state: verdict.state,
-        reason: verdict.reason,
-        observerFailure: verdict.observerFailure,
-        body: (observation.transportError || observation.bodyText || '').slice(0, 200),
-        _assessment: assessment,
-        _hysteresisState: hysteresisState,
-      });
-    };
-
-    const req = lib.get(ep.url, { timeout: 5000 }, (res) => {
+    const req = lib.get(url, { timeout: 5000 }, (res) => {
       let body = '';
       res.on('data', (chunk) => { body += chunk; });
       res.on('end', () => {
-        settle({ statusCode: res.statusCode, bodyText: body });
+        resolve({ statusCode: res.statusCode, bodyText: body });
       });
     });
     req.on('timeout', () => {
       req.destroy();
-      settle({ statusCode: 0, bodyText: '', transportError: 'timeout' });
+      resolve({ statusCode: 0, bodyText: '', transportError: 'timeout' });
     });
     req.on('error', (e) => {
-      settle({ statusCode: 0, bodyText: '', transportError: e.message });
+      resolve({ statusCode: 0, bodyText: '', transportError: e.message });
+    });
+  });
+}
+
+// Liveness verdict: the dependency-free ping endpoint only proves the
+// process can execute a route. No contract on dependency state -- just
+// "did the HTTP server answer with the alive body."
+function evaluateLiveness(obs) {
+  if (obs.transportError) {
+    return { state: 'UNAVAILABLE', ok: false, reason: `no response: ${obs.transportError}`, observerFailure: false };
+  }
+  if (obs.statusCode !== 200) {
+    return { state: 'UNAVAILABLE', ok: false, reason: `ping returned HTTP ${obs.statusCode}`, observerFailure: false };
+  }
+  let body = {};
+  try { body = JSON.parse(obs.bodyText); } catch { /* fall through */ }
+  if (body.status === 'alive') {
+    return { state: 'HEALTHY', ok: true, reason: 'ping: process alive', observerFailure: false };
+  }
+  return { state: 'UNKNOWN', ok: false, reason: 'ping answered 200 but body had no status=\'alive\'', observerFailure: true };
+}
+
+function checkEndpoint(ep) {
+  return new Promise(async (resolve) => {
+    // Dependency health is always probed -- it is telemetry, not proof of
+    // process life.
+    const healthObs = await probeOnce(new URL(ep.url));
+    const healthVerdict = evaluateEndpointHealth(ep.name, healthObs);
+
+    let livenessVerdict = null;
+    if (ep.livenessUrl) {
+      livenessVerdict = evaluateLiveness(await probeOnce(new URL(ep.livenessUrl)));
+    }
+
+    // Recovery decision source: liveness probe when declared, otherwise the
+    // health probe (unchanged behavior for modules without a liveness
+    // endpoint). This is what prevents a Supabase stall from turning a live
+    // process into a recovery target.
+    const decisionVerdict = livenessVerdict || healthVerdict;
+    const { assessment, hysteresisState } = classifyEndpointObservation(ep.name, decisionVerdict.state);
+
+    resolve({
+      name: ep.name,
+      url: ep.url,
+      required: ep.required,
+      ok: decisionVerdict.ok,
+      statusCode: healthObs.statusCode,
+      state: healthVerdict.state,
+      livenessState: livenessVerdict ? livenessVerdict.state : null,
+      reason: livenessVerdict
+        ? `liveness=${livenessVerdict.state} (${livenessVerdict.reason}); health=${healthVerdict.state} (${healthVerdict.reason})`
+        : healthVerdict.reason,
+      observerFailure: livenessVerdict ? livenessVerdict.observerFailure : healthVerdict.observerFailure,
+      body: (healthObs.transportError || healthObs.bodyText || '').slice(0, 200),
+      _assessment: assessment,
+      _hysteresisState: hysteresisState,
     });
   });
 }
@@ -600,6 +645,15 @@ async function runCheck() {
   const allResults = [...endpointResults, ...infraResults];
   const failures = allResults.filter((r) => !r.ok);
   const allOk = failures.length === 0;
+
+  // Dependency-health axis: a liveness-alive endpoint whose /health reports
+  // DEGRADED/UNAVAILABLE is not a recovery target, but the dependency state
+  // must stay visible in the log rather than silently disappearing.
+  for (const r of endpointResults) {
+    if (r.ok && r.livenessState && r.state && r.state !== 'HEALTHY') {
+      log(`HEALTH-WARN  ${r.name} process alive (ping=HEALTHY) but dependency health=${r.state} — informational only, no recovery`);
+    }
+  }
 
   // A demonstrated-healthy endpoint clears its throttle entry — retry
   // budget renews on observed health, never on elapsed time alone.
