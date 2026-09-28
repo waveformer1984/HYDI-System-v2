@@ -37,8 +37,20 @@
 
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 
 const SIGNAL_EXIT_CODES = { SIGINT: 130, SIGTERM: 143, SIGBREAK: 149 };
+
+/**
+ * A durable identifier for THIS process incarnation. PID alone is not
+ * sufficient -- Windows reuses PIDs, so a forensic record naming only a
+ * PID could be confused with a later process wearing the same number.
+ * Format: <service>-<startupIsoTs>-pid<pid>-<random4hex>.
+ */
+function makeProcessInstanceId(service, now) {
+  const ts = new Date(now()).toISOString().replace(/[:.]/g, '-');
+  return `${service}-${ts}-pid${process.pid}-${crypto.randomBytes(4).toString('hex')}`;
+}
 
 function installProcessGuard(options = {}) {
   const log = options.log || ((line) => console.error(line));
@@ -51,8 +63,14 @@ function installProcessGuard(options = {}) {
   const heartbeatFile = options.heartbeatFile || path.join(forensicDir, 'protoforge-heartbeat.json');
   const heartbeatMs = options.heartbeatMs === undefined ? 15000 : options.heartbeatMs;
   const stateProvider = options.stateProvider || (() => ({}));
+  const processInstanceId = options.processInstanceId || makeProcessInstanceId(service, now);
 
   const rejectionTimes = [];
+  // Sticky context flag: once modelState reports failedModels > 0 we record
+  // flatlineObserved=true on subsequent events. This is CONTEXT ONLY --
+  // temporal correlation is not causation, and no record may assert
+  // causalRelationship !== 'UNKNOWN' from this flag alone.
+  let flatlineObserved = false;
   let record;
 
   try {
@@ -62,8 +80,10 @@ function installProcessGuard(options = {}) {
         fs.appendFileSync(forensicFile, JSON.stringify({
           ts: new Date(now()).toISOString(),
           service,
+          processInstanceId,
           pid: process.pid,
           ppid: process.ppid,
+          flatlineObserved,
           ...entry,
         }) + '\n');
       } catch (e) {
@@ -75,11 +95,18 @@ function installProcessGuard(options = {}) {
     record = () => { };
   }
 
-  record({ event: 'guard-installed', modelState: safeState() });
-
   function safeState() {
-    try { return stateProvider() || {}; } catch (e) { return { error: 'stateProvider threw' }; }
+    try {
+      const s = stateProvider() || {};
+      // Sticky: a flatline seen once stays visible as context on later
+      // records even if models recover before the exit/termination.
+      if (typeof s.failedModels === 'number' && s.failedModels > 0) flatlineObserved = true;
+      return s;
+    } catch (e) { return { error: 'stateProvider threw' }; }
   }
+
+  record({ event: 'guard-installed', modelState: safeState() });
+  log(`[PROCESS-GUARD] installed ${processInstanceId} (pid ${process.pid})`);
 
   const onUnhandledRejection = (reason) => {
     const t = now();
@@ -133,7 +160,13 @@ function installProcessGuard(options = {}) {
   const onExit = (code) => {
     record({
       event: 'process-exit',
+      // 'exit' proves the runtime wound down in-process (exit() call or
+      // natural end) -- for code != 0 that is an application-originated
+      // exit. It NEVER proves which caller invoked exit(), so when a
+      // flatline was observed the causal relationship stays UNKNOWN
+      // context, not attribution.
       classification: code === 0 ? 'NORMAL_EXIT' : 'APPLICATION_EXIT',
+      causalRelationship: 'UNKNOWN',
       exitCode: code,
       rejectionsPerMin: rejectionTimes.length,
       modelState: safeState(),
@@ -148,11 +181,13 @@ function installProcessGuard(options = {}) {
         fs.writeFileSync(heartbeatFile, JSON.stringify({
           ts: new Date(now()).toISOString(),
           service,
+          processInstanceId,
           pid: process.pid,
           ppid: process.ppid,
           uptimeSec: Math.floor(process.uptime()),
           rssBytes: process.memoryUsage().rss,
           rejectionsPerMin: rejectionTimes.length,
+          flatlineObserved,
           modelState: safeState(),
         }));
       } catch (e) { /* heartbeat is best-effort */ }
@@ -182,6 +217,7 @@ function installProcessGuard(options = {}) {
     _record: record,
     _forensicFile: forensicFile,
     _heartbeatFile: heartbeatFile,
+    _processInstanceId: processInstanceId,
   };
 }
 

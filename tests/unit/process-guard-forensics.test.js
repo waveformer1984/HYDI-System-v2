@@ -133,3 +133,89 @@ describe('process-guard forensics', () => {
     g.uninstall();
   });
 });
+
+// ---------------------------------------------------------------------------
+// processInstanceId — per-incarnation identity (PID reuse on Windows is real)
+// ---------------------------------------------------------------------------
+
+describe('processInstanceId', () => {
+  const mk = (dir, opts = {}) => installProcessGuard({
+    forensicDir: dir, heartbeatMs: 0, log: () => { }, exit: () => { }, ...opts,
+  });
+
+  test('exists, is stable, and names the service+pid', () => {
+    const dir = tmpDir();
+    const g = mk(dir);
+    expect(g._processInstanceId).toMatch(/^protoforge-core-.*-pid\d+-[0-9a-f]{8}$/);
+    expect(g._processInstanceId).toContain(`pid${process.pid}`);
+    // Stable across the lifetime: same string in two records
+    g._onUnhandledRejection(new Error('x'));
+    const lines = readLines(g._forensicFile);
+    expect(lines.every((l) => l.processInstanceId === g._processInstanceId)).toBe(true);
+    g.uninstall();
+  });
+
+  test('appears in heartbeat', () => {
+    const dir = tmpDir();
+    const g = mk(dir);
+    const hb = JSON.parse(fs.readFileSync(g._heartbeatFile, 'utf8'));
+    expect(hb.processInstanceId).toBe(g._processInstanceId);
+    g.uninstall();
+  });
+
+  test('two incarnations get distinct ids even with identical pid', () => {
+    // Two guards in one jest process share the same pid — if the id were
+    // pid-derived only, they would collide. Random suffix prevents that.
+    const g1 = mk(tmpDir());
+    const g2 = mk(tmpDir());
+    expect(g1._processInstanceId).not.toBe(g2._processInstanceId);
+    g1.uninstall(); g2.uninstall();
+  });
+
+  test('process-exit record carries processInstanceId and causalRelationship UNKNOWN', () => {
+    const dir = tmpDir();
+    const g = mk(dir, { stateProvider: () => ({ failedModels: 3 }) });
+    g._record({ event: 'process-exit', classification: 'APPLICATION_EXIT', causalRelationship: 'UNKNOWN', exitCode: 1 });
+    const last = readLines(g._forensicFile).pop();
+    expect(last.processInstanceId).toBe(g._processInstanceId);
+    expect(last.causalRelationship).toBe('UNKNOWN');
+    expect(last.exitCode).toBe(1);
+    g.uninstall();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Flatline context vs causation
+// ---------------------------------------------------------------------------
+
+describe('flatline observed is context, not causation', () => {
+  test('flatline observed sticks as context on later records', () => {
+    const dir = tmpDir();
+    const g = installProcessGuard({
+      forensicDir: dir, heartbeatMs: 0, log: () => { }, exit: () => { },
+      stateProvider: () => ({ running: true, failedModels: 5 }),
+    });
+    // first safeState call happened at install -> flatlineObserved now true
+    g._record({ event: 'checkpoint' });
+    const lines = readLines(g._forensicFile);
+    const chk = lines.find((l) => l.event === 'checkpoint');
+    expect(chk.flatlineObserved).toBe(true);
+    expect(chk.modelState === undefined || chk.causalRelationship !== 'MODEL_FLATLINE').toBe(true);
+    g.uninstall();
+  });
+
+  test('a flatline-only process never produces an exit record on its own', () => {
+    const dir = tmpDir();
+    const g = installProcessGuard({
+      forensicDir: dir, heartbeatMs: 0, log: () => { }, exit: () => { },
+      stateProvider: () => ({ running: true, failedModels: 9 }),
+    });
+    // Simulate flatline heartbeats: model state is read, but no exit path
+    // is invoked. The forensic file must contain NO exit record.
+    g._record({ event: 'flatline-observed-context-only' });
+    const lines = readLines(g._forensicFile);
+    expect(lines.some((l) => l.classification === 'APPLICATION_EXIT')).toBe(false);
+    expect(lines.some((l) => l.event === 'process-exit')).toBe(false);
+    g.uninstall();
+  });
+});

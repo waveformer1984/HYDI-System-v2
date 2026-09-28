@@ -32,8 +32,7 @@ describe('process guard — model failure isolation', () => {
     const { logs, exits, guard } = makeGuard();
     guard._onUnhandledRejection(new Error('Ollama ECONNREFUSED'));
     expect(exits).toEqual([]);                     // process stayed alive
-    expect(logs[0]).toMatch(/unhandledRejection/);
-    expect(logs[0]).toMatch(/Ollama/);
+    expect(logs.some((l) => /unhandledRejection/.test(l) && /Ollama/.test(l))).toBe(true);
     guard.uninstall();
   });
 
@@ -49,8 +48,7 @@ describe('process guard — model failure isolation', () => {
     const { logs, exits, guard } = makeGuard();
     guard._onUncaughtException(new Error('ENOENT: control plane state corrupt'));
     expect(exits).toEqual([1]);
-    expect(logs[0]).toMatch(/uncaughtException \(fatal\)/);
-    expect(logs[0]).toMatch(/ENOENT/);
+    expect(logs.some((l) => /uncaughtException \(fatal\)/.test(l) && /ENOENT/.test(l))).toBe(true);
     guard.uninstall();
   });
 });
