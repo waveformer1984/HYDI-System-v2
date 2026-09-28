@@ -1,7 +1,20 @@
 // Install FIRST — before any module whose promise could reject during
 // a model-flatline window. A failed model/Ollama request must never
 // take the ProtoForge control plane down. See src/process-guard.js.
-require('./process-guard').installProcessGuard();
+require('./process-guard').installProcessGuard({
+  service: 'protoforge-core',
+  // Model state is attached to every forensic record -- the difference
+  // between "exited during a flatline" and "exited BECAUSE of a flatline".
+  // Lazy require: the guard installs before ./models/heartbeat is loaded
+  // below, so it must not be required eagerly here.
+  stateProvider: () => {
+    try {
+      const hb = require('./models/heartbeat');
+      const s = hb.getStatus ? hb.getStatus() : null;
+      return s ? { running: s.running, failedModels: (s.failedModels || []).length } : {};
+    } catch (e) { return { error: 'heartbeat state unavailable' }; }
+  },
+});
 
 const express = require('express');
 const http = require('http');

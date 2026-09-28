@@ -21,6 +21,9 @@ describe('process guard — model failure isolation', () => {
         exit: (code) => exits.push(code),
         now: opts.now || (() => 1_000_000),
         maxRejectionsPerMinute: opts.maxRejectionsPerMinute ?? 3,
+        // Tests must never write into the real .hydi-operational forensics.
+        forensicDir: opts.forensicDir || require('fs').mkdtempSync(require('path').join(require('os').tmpdir(), 'pf-guard-test-')),
+        heartbeatMs: 0,
       }),
     };
   };
