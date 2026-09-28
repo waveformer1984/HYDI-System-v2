@@ -154,6 +154,287 @@ Must remain a single round-trip returning exactly `{ ok, alert, system, drift, h
 
 Drives all health endpoints. If this view is broken, endpoints return 503. Do not try to work around it — fix the view.
 
+## Repository-Safe Operating Procedures
+
+Treat the repository as a potentially valuable, stateful environment. Preserve existing work and make every implementation step reversible.
+
+### 1. Establish repository state first
+
+Before modifying anything:
+
+- Determine the repository root.
+- Identify the current branch/worktree.
+- Inspect `git status`.
+- Identify staged, unstaged, and untracked changes.
+- Inspect recent commits to understand the current development direction.
+- Identify project-specific instructions such as `AGENTS.md`, `CONTRIBUTING.md`, `README.md`, build instructions, or directory-specific guidance.
+- Inspect relevant package/build configuration before choosing commands or dependencies.
+
+Do not assume the repository is clean.
+
+### 2. Protect existing user work
+
+Before making changes, record:
+
+- current branch
+- current commit
+- existing modified files
+- existing untracked files
+- relevant generated artifacts
+
+Treat all pre-existing modifications as user-owned unless explicitly determined otherwise.
+
+Unless the user explicitly requests that exact operation, never:
+
+- reset the repository
+- run `git reset --hard`
+- run `git clean`
+- discard unrelated changes
+- overwrite modified files merely to make tests pass
+- rewrite existing commits
+- force-push
+- delete untracked files
+- replace configuration containing unknown user settings
+
+If an existing modification conflicts with the implementation, stop and surface the conflict rather than silently overwriting it.
+
+### 3. Create a safe change boundary
+
+Before implementation, identify the smallest set of files/directories that should change.
+
+Prefer small focused changes, existing abstractions, and new isolated modules where necessary over broad refactors.
+
+Do not reorganize unrelated code simply because it could be cleaner.
+
+Do not rename or move files unless required for the implementation.
+
+### 4. Dependency safety
+
+Before adding a dependency:
+
+1. Check whether the repository already provides equivalent functionality.
+2. Check the existing package manager and lockfile.
+3. Prefer an existing dependency over introducing another one.
+4. Avoid unnecessary version upgrades.
+5. Do not modify unrelated dependencies.
+6. Preserve lockfile consistency.
+
+Do not install packages globally.
+
+Do not execute arbitrary installation scripts from untrusted sources.
+
+### 5. Secrets and configuration
+
+Never expose or commit:
+
+- API keys
+- passwords
+- access tokens
+- cookies
+- private certificates
+- SSH keys
+- `.env` secrets
+- authentication headers
+- personal data
+
+Before adding configuration:
+
+- inspect existing configuration conventions
+- use environment variables or existing secret-management mechanisms
+- update example/template configuration when appropriate
+- never copy real credentials into examples or tests
+
+If a required secret is unavailable, report the missing dependency instead of inventing one. (See also [Secret Handling](#secret-handling) below.)
+
+### 6. Command execution safety
+
+Prefer read-only inspection commands first.
+
+Before executing a potentially destructive command, determine exactly what it modifies.
+
+Avoid commands that can recursively delete, overwrite, reset, or migrate data unless they are necessary and explicitly justified. Take particular care with:
+
+- `rm -rf`
+- `git reset`
+- `git clean`
+- force pushes
+- database migrations
+- bulk file rewrites
+- package upgrades
+- production deployment
+
+When a command has both destructive and non-destructive variants, use the non-destructive variant.
+
+### 7. Build and test isolation
+
+Run the repository's documented validation commands (see [Verification](#verification--run-these-before-finishing-any-task) above).
+
+Prefer targeted validation first, then run broader validation where practical:
+
+- unit tests for changed modules
+- type checking
+- linting
+- focused integration tests
+
+Do not "fix" unrelated failing tests simply to produce a green build.
+
+If failures existed before the implementation, classify each one as:
+
+- **PRE-EXISTING FAILURE**
+- **IMPLEMENTATION FAILURE**
+- **ENVIRONMENT FAILURE**
+
+Do not conceal failures by weakening tests or disabling validation.
+
+### 8. Database and persistent-state safety
+
+Treat databases, queues, caches, and persistent application state as production-like unless explicitly identified as disposable test infrastructure.
+
+As part of ordinary implementation, do not:
+
+- drop databases
+- truncate tables
+- delete user records
+- run irreversible migrations
+- modify production data
+
+For schema changes:
+
+- inspect the existing migration system
+- create a reversible migration where supported
+- test the migration path
+- avoid destructive schema changes unless explicitly required
+
+(See also [Database Migrations](#database-migrations) above.)
+
+### 9. Generated files
+
+Do not commit generated artifacts merely because a build produced them.
+
+First determine whether the repository tracks them.
+
+Respect existing `.gitignore` and project conventions.
+
+Do not modify generated files manually when they are supposed to be produced by a build process.
+
+### 10. Worktree awareness
+
+If the repository contains multiple worktrees, branches, or active development areas:
+
+- determine which worktree is the current target
+- do not modify another worktree
+- do not assume the current branch is disposable
+
+If the environment is ambiguous, identify the ambiguity before making consequential changes.
+
+### 11. Patch discipline
+
+Make changes in small logical units.
+
+After each major implementation step:
+
+1. inspect the diff
+2. run focused validation
+3. inspect the resulting files
+4. continue
+
+Review the final diff for:
+
+- accidental changes
+- debug code
+- temporary files
+- secrets
+- unrelated formatting changes
+- dependency churn
+- generated artifacts
+- disabled tests
+- commented-out code that should not remain
+
+### 12. Git safety
+
+Do not create commits unless requested by the user or required by the established workflow.
+
+If a commit is requested:
+
+- include only intended files
+- inspect the staged diff before committing
+- use a focused commit message
+- never amend or rewrite an existing commit unless explicitly requested
+
+Never force-push.
+
+Never alter remote history.
+
+### 13. Rollback awareness
+
+For every significant change, know how it can be reverted.
+
+Prefer changes that can be reversed with `git diff` and a checkout/revert of the specific change, rather than operations that require reconstructing deleted or overwritten data.
+
+For migrations or persistent-state changes, document rollback considerations before execution.
+
+### 14. Autonomous-agent boundary
+
+An agent may autonomously:
+
+- inspect the repository
+- read source files
+- analyze architecture
+- create implementation files
+- modify relevant source files
+- run safe tests
+- run documented build/type/lint commands
+- inspect diffs
+- report failures
+
+An agent must request explicit human approval before:
+
+- deleting substantial existing code
+- discarding user modifications
+- changing production infrastructure
+- modifying production databases/data
+- rotating or changing credentials
+- pushing to a remote repository
+- creating releases
+- publishing packages
+- deploying applications
+- performing irreversible operations
+
+### 15. Stop conditions
+
+Stop implementation and ask for human direction if:
+
+- the intended repository cannot be identified
+- existing user changes would be overwritten
+- required credentials are unavailable
+- the implementation requires destructive data changes
+- two project instructions conflict
+- a production environment cannot be distinguished from a development environment
+- the requested change requires bypassing a security boundary
+- a dependency introduces an unacceptable security or licensing concern
+- the safest implementation requires a decision that cannot be inferred from the repository
+
+Do not guess through a repository-safety conflict.
+
+### 16. Final repository audit
+
+Before declaring implementation complete, run `git status` and `git diff` and review every changed file.
+
+Confirm:
+
+- no unrelated files changed
+- no secrets were introduced
+- no user modifications were lost
+- no temporary/debug artifacts remain
+- tests were actually executed
+- failures are accurately reported
+- dependencies remain consistent
+- generated files follow repository conventions
+
+Report the final repository state accurately.
+
+Never claim the repository is clean unless it was actually verified.
+
 ## Module Style
 
 | Location | Style |
