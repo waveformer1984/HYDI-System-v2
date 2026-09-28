@@ -386,6 +386,51 @@ module.exports = {
       kill_timeout: 10000,
     },
     {
+      // Heidi Web Layer — the canonical 'heidi-web' service's runtime owner.
+      //
+      // Ownership contract (reconciled 2026-09-27):
+      //   boot.config.json:  heidi-web { supervisor: 'pm2', supervisedAs:
+      //                       'heidi-web-standalone' } -- metadata only,
+      //                       boot-agent never spawns it
+      //   ecosystem.config:  THIS entry -- the actual PM2 runtime owner
+      //   RecoveryEngine:    heidi-web -> heidi-web-standalone (pm2NameFor)
+      //   watchdog:          probes canonical service id 'heidi-web'
+      //
+      // Why this exists: heidi-web-standalone was previously created by an
+      // ad-hoc `pm2 start` + `pm2 save` and was never declared here -- a
+      // PM2 resurrect would have silently lost the port-3000 owner.
+      //
+      // The live process is PM2 forking the Next CLI binary directly in
+      // fork mode (script path next/dist/bin/next, cwd = repo root). This
+      // entry encodes the same authoritative startup as `npm run dev`
+      // (next dev --hostname 0.0.0.0 --port 3000) rather than copying the
+      // transient spawn artifact. Production uses `next start` via
+      // env_production args.
+      name: 'heidi-web-standalone',
+      script: 'node_modules/next/dist/bin/next',
+      args: 'dev --hostname 0.0.0.0 --port 3000',
+      cwd: __dirname,
+      instances: 1,
+      exec_mode: 'fork',
+      env: {
+        NODE_ENV: 'development',
+      },
+      env_production: {
+        NODE_ENV: 'production',
+      },
+      autorestart: true,
+      watch: false,
+      max_memory_restart: '1G',
+      min_uptime: '30s',       // Next dev needs time to compile the first route
+      max_restarts: 10,
+      restart_delay: 5000,
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+      error_file: './logs/pm2-heidi-web-standalone.err.log',
+      out_file: './logs/pm2-heidi-web-standalone.out.log',
+      merge_logs: true,
+      kill_timeout: 15000,     // Next dev needs time to close watchers/sockets
+    },
+    {
       // Model Prep Executor: drains customer_jobs 'queued' into the
       // artifact pipeline (generate -> verify -> awaiting_review).
       // Never touches payment, approval, or delivery — those remain
