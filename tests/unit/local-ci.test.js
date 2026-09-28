@@ -4,7 +4,7 @@
  * logic is exercised here -- above all, that fork PRs are never selected.
  */
 
-const { CHECKS, REPO, parseArgs, summarizeJest, describe: describeStatus, selectPullsToTest } = require('../../scripts/local-ci');
+const { CHECKS, REPO, parseArgs, summarizeJest, describe: describeStatus, selectPullsToTest, supabaseCheckEnv } = require('../../scripts/local-ci');
 
 function pr(number, sha, fullName = REPO) {
   return { number, head: { sha, ref: `branch-${number}`, repo: fullName ? { full_name: fullName } : null } };
@@ -75,5 +75,43 @@ describe('selectPullsToTest', () => {
 
   it('re-selects a head missing one of the checks', () => {
     expect(selectPullsToTest([pr(6, 'fff')], { fff: finalStatuses().slice(1) })).toHaveLength(1);
+  });
+});
+
+describe('supabaseCheckEnv', () => {
+  // Shape of `supabase status -o env` (placeholder values, not real keys).
+  const status = [
+    'ANON_KEY="anon-placeholder"',
+    'API_URL="http://127.0.0.1:54321"',
+    'DB_URL="postgresql://postgres:postgres@127.0.0.1:54322/postgres"',
+    'SERVICE_ROLE_KEY="service-placeholder"',
+    '',
+  ].join('\n');
+
+  it('exports the variables unit-tests.yml exports, from the running stack', () => {
+    expect(supabaseCheckEnv(status, {})).toEqual({
+      SUPABASE_URL: 'http://127.0.0.1:54321',
+      NEXT_PUBLIC_SUPABASE_URL: 'http://127.0.0.1:54321',
+      SUPABASE_SERVICE_ROLE_KEY: 'service-placeholder',
+      SUPABASE_ANON_KEY: 'anon-placeholder',
+    });
+  });
+
+  it('injects nothing when the operator already set SUPABASE_URL', () => {
+    expect(supabaseCheckEnv(status, { SUPABASE_URL: 'http://elsewhere:54321' })).toEqual({});
+  });
+
+  it('injects nothing when no stack is running or the output lacks the URL or service key', () => {
+    expect(supabaseCheckEnv(null, {})).toEqual({});
+    expect(supabaseCheckEnv('ANON_KEY="x"\n', {})).toEqual({});
+  });
+
+  it('accepts Windows line endings and unquoted values', () => {
+    expect(supabaseCheckEnv('API_URL=http://127.0.0.1:54321\r\nSERVICE_ROLE_KEY=k\r\n', {}))
+      .toMatchObject({ SUPABASE_URL: 'http://127.0.0.1:54321', SUPABASE_SERVICE_ROLE_KEY: 'k' });
+  });
+
+  it('marks only the unit-tests check as needing Supabase', () => {
+    expect(CHECKS.filter((c) => c.needsSupabase).map((c) => c.context)).toEqual(['local-ci/unit-tests']);
   });
 });

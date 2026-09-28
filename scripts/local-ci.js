@@ -46,6 +46,7 @@ const CHECKS = [
   {
     context: 'local-ci/unit-tests',
     mirrors: 'Jest Unit Tests',
+    needsSupabase: true,
     steps: [['npm', ['run', 'lint']], ['npm', ['test', '--', '--forceExit']]],
   },
   {
@@ -150,11 +151,48 @@ function git(args, cwd) {
   return execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
 }
 
+/**
+ * The DB-backed unit suites need SUPABASE_URL, NEXT_PUBLIC_SUPABASE_URL and
+ * SUPABASE_SERVICE_ROLE_KEY pointing at a running local Supabase, which
+ * unit-tests.yml exports from `supabase status`. The throwaway worktree has
+ * no .env.local, so derive the same variables from `supabase status -o env`
+ * output. An operator-set SUPABASE_URL wins: then nothing is injected.
+ */
+function supabaseCheckEnv(statusOutput, env = process.env) {
+  if (env.SUPABASE_URL || !statusOutput) return {};
+  const vars = {};
+  for (const line of statusOutput.split(/\r?\n/)) {
+    const m = line.match(/^([A-Z_]+)=(.*)$/);
+    if (m) vars[m[1]] = m[2].replace(/^"(.*)"$/, '$1');
+  }
+  if (!vars.API_URL || !vars.SERVICE_ROLE_KEY) return {};
+  return {
+    SUPABASE_URL: vars.API_URL,
+    NEXT_PUBLIC_SUPABASE_URL: vars.API_URL,
+    SUPABASE_SERVICE_ROLE_KEY: vars.SERVICE_ROLE_KEY,
+    ...(vars.ANON_KEY ? { SUPABASE_ANON_KEY: vars.ANON_KEY } : {}),
+  };
+}
+
+/**
+ * `supabase status -o env` for the stack already running on this machine, or
+ * null if none is. Never starts or stops it: on heidi-pc it is the live one.
+ */
+function readLocalSupabaseStatus(cwd) {
+  try {
+    return execFileSync('npx', ['supabase', 'status', '-o', 'env'], {
+      cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], shell: IS_WINDOWS, timeout: 120000,
+    });
+  } catch (_) {
+    return null;
+  }
+}
+
 /** Runs one command, streaming to the log file; resolves with exit code + output. */
-function run(cmd, args, cwd, logStream) {
+function run(cmd, args, cwd, logStream, extraEnv = {}) {
   return new Promise((resolve) => {
     logStream.write(`\n$ ${cmd} ${args.join(' ')}\n`);
-    const child = spawn(cmd, args, { cwd, shell: IS_WINDOWS, env: { ...process.env, CI: 'true' } });
+    const child = spawn(cmd, args, { cwd, shell: IS_WINDOWS, env: { ...process.env, ...extraEnv, CI: 'true' } });
     let output = '';
     const onData = (chunk) => {
       output += chunk;
@@ -192,12 +230,22 @@ async function testCommit(ctx, sha) {
       return results;
     }
 
+    const supabaseStatus = readLocalSupabaseStatus(workdir);
+    const supabaseEnv = supabaseCheckEnv(supabaseStatus);
+    const supabaseNote = process.env.SUPABASE_URL
+      ? 'local Supabase: using SUPABASE_URL from the environment'
+      : supabaseEnv.SUPABASE_URL
+        ? `local Supabase: using the running stack at ${supabaseEnv.SUPABASE_URL}`
+        : 'local Supabase: NOT running -- DB-backed unit suites will fail (npx supabase start)';
+    console.log(`[local-ci] ${short}: ${supabaseNote}`);
+
     for (const check of CHECKS) {
       const log = fs.createWriteStream(path.join(logDir, `${check.context.replace('/', '-')}.log`));
+      log.write(`${supabaseNote}\n`);
       let failed = null;
       let summary = null;
       for (const [cmd, args] of check.steps) {
-        const step = await run(cmd, args, workdir, log);
+        const step = await run(cmd, args, workdir, log, supabaseEnv);
         summary = summarizeJest(step.output) || summary;
         if (step.code !== 0) {
           failed = `${cmd} ${args.join(' ')}`;
@@ -205,8 +253,9 @@ async function testCommit(ctx, sha) {
         }
       }
       log.end();
+      const noSupabase = failed && check.needsSupabase && !process.env.SUPABASE_URL && !supabaseEnv.SUPABASE_URL;
       const description = failed
-        ? `Failed: ${failed}${summary ? ` (${summary})` : ''} on ${host}`
+        ? `Failed: ${failed}${summary ? ` (${summary})` : ''}${noSupabase ? ', local Supabase not running' : ''} on ${host}`
         : `Passed${summary ? `: ${summary}` : ''} on ${host}`;
       await postStatus(ctx, sha, check.context, failed ? 'failure' : 'success', description);
       results.push({ context: check.context, ok: !failed, description });
@@ -294,4 +343,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { CHECKS, REPO, parseArgs, summarizeJest, describe, selectPullsToTest };
+module.exports = { CHECKS, REPO, parseArgs, summarizeJest, describe, selectPullsToTest, supabaseCheckEnv };
