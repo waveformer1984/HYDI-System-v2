@@ -320,6 +320,29 @@ export default async function handler(_req: NextApiRequest, res: NextApiResponse
       decisions,
       recommendations,
       autonomous: await autonomousState(POOL).catch(() => null),
+      // Commercial bridge — durable offer records folded from
+      // heidi_events division='commercial'. Empty means no opportunity
+      // has been commercially qualified yet (honest, not an error).
+      commercial: await (async () => {
+        try {
+          const { collectOffers } = await import('../../../lib/heidi/CommercialBridge');
+          const offers = await collectOffers(POOL);
+          return {
+            offers: offers.map(o => ({
+              offerId: o.offerId, opportunityId: o.opportunityId.slice(0, 8),
+              title: o.opportunityTitle.slice(0, 80), product: o.product,
+              priceCents: o.priceCents, stage: o.stage, stageReason: o.stageReason,
+              updatedAt: o.updatedAt,
+            })),
+            counts: {
+              prepared: offers.filter(o => o.stage === 'OFFER_PREPARED').length,
+              checkoutReady: offers.filter(o => o.stage === 'CHECKOUT_READY').length,
+              blocked: offers.filter(o => o.stage === 'OFFER_BLOCKED').length,
+              authRequired: offers.filter(o => o.stage === 'AUTHORIZATION_REQUIRED').length,
+            },
+          };
+        } catch { return { offers: [], counts: { prepared: 0, checkoutReady: 0, blocked: 0, authRequired: 0 } }; }
+      })(),
       // Command Center: the persistent agent team, live mission state,
       // and recent agent activity — folded from the agents event ledger.
       agents: await (async () => {
