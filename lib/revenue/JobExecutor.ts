@@ -39,6 +39,15 @@ export interface ExecutionResult {
 }
 
 /**
+ * Products with a real artifact executor. Only protoforge_model_prep is
+ * wired end-to-end (generateModelPackage → OpenSCAD/STL/README). Other
+ * sellable offers (e.g. rezonate_song) have no executor — running the
+ * model package generator for them would deliver the WRONG product to a
+ * paying customer. Fail-closed: block the job and escalate instead.
+ */
+const EXECUTABLE_PRODUCTS = new Set(['protoforge_model_prep']);
+
+/**
  * Execute a single queued job end-to-end.
  */
 export async function executeJob(jobId: string): Promise<ExecutionResult> {
@@ -61,6 +70,24 @@ export async function executeJob(jobId: string): Promise<ExecutionResult> {
   }
 
   try {
+    // REVENUE_PATH_NOT_WIRED guard — check BEFORE generating anything.
+    // A product with no executor must never reach generateModelPackage:
+    // producing 3D-model artifacts for an audio/other-product order is
+    // a wrong-delivery, and could even auto-deliver via deliveryEligibility.
+    if (!EXECUTABLE_PRODUCTS.has(job.product)) {
+      await jobManager.requestIntervention(
+        jobId, `executor-${jobId}`,
+        `REVENUE_PATH_NOT_WIRED: product '${job.product}' has no artifact executor — blocked rather than delivering wrong artifacts`,
+      );
+      return {
+        jobId,
+        success: false,
+        artifacts: [],
+        error: `no executor for product '${job.product}'`,
+        durationMs: Date.now() - start,
+      };
+    }
+
     // Start execution (if not already running)
     if (job.jobStatus === 'queued') {
       await jobManager.startExecution(jobId);

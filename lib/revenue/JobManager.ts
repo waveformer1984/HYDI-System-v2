@@ -101,6 +101,7 @@ export const CLAIM_NEXT_QUEUED_JOB_SQL = `UPDATE customer_jobs
           SELECT job_id
             FROM customer_jobs
            WHERE job_status = 'queued'
+             AND intervention_status != 'requested'
            ORDER BY paid_at ASC
            LIMIT 1
            FOR UPDATE SKIP LOCKED
