@@ -60,6 +60,7 @@ import { collectReconciliation, resolveGitHead } from './DeploymentReconciliatio
 import { runR0Recovery } from './SelfRepairR0';
 import { collectCooState } from './CooState';
 import { acknowledgeHumanAction } from './HumanActionQueue';
+import { readKillSwitch, writeKillSwitch } from './KillSwitchState';
 import { runInvestigateMission, runTopicInvestigation, runTopOpportunityInvestigation, collectAgentState, superviseAgents, stopAgent, retryMission, resolveHumanAction } from './AgentControlPlane';
 
 export type CognitivePhase =
@@ -3622,6 +3623,17 @@ export class CognitiveCore {
     this.lastError = null;
     this.auditLoopTransition('starting');
 
+    // Restore a persisted kill switch — an operator halt survives restarts.
+    // ON → stay degraded with no cycling; OFF/absent → normal startup.
+    const persistedKill = readKillSwitch();
+    if (persistedKill?.active) {
+      this.killSwitchActive = true;
+      this.lastError = `Kill switch restored: ${persistedKill.reason ?? 'operator halt'}`;
+      this.loopState = 'degraded';
+      this.auditLoopTransition('degraded');
+      return;
+    }
+
     // Resume goals after restart
     try {
       await this.resumeAfterRestart();
@@ -3685,9 +3697,14 @@ export class CognitiveCore {
 
   /**
    * Activate the kill switch. Immediately halts all new cycles.
+   * Persisted to .hydi-operational/kill-switch.json — a daemon restart
+   * must not silently disarm an operator-set halt.
    */
   activateKillSwitch(reason: string): void {
     this.killSwitchActive = true;
+    try {
+      writeKillSwitch({ active: true, reason, setAt: new Date().toISOString(), setBy: 'heidi-daemon' });
+    } catch { /* persistence is best-effort; in-memory halt still applies */ }
     this.lastError = `Kill switch activated: ${reason}`;
     if (this.loopState === 'running') {
       this.loopState = 'degraded';
@@ -3705,6 +3722,9 @@ export class CognitiveCore {
    */
   deactivateKillSwitch(): void {
     this.killSwitchActive = false;
+    try {
+      writeKillSwitch({ active: false, reason: null, setAt: new Date().toISOString(), setBy: 'heidi-daemon' });
+    } catch { /* best-effort */ }
     this.lastError = null;
     if (this.loopState === 'degraded') {
       this.loopState = 'running';

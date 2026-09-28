@@ -145,9 +145,15 @@ export default function HeidiChat() {
     abortRef.current = new AbortController()
 
     try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+      if (serviceSecret) {
+        // Mutating intents (stop/approve/investigate/…) are gated by
+        // x-hydi-service-token — same scheme as /api/actions/:id.
+        headers['x-hydi-service-token'] = await mintServiceToken(serviceSecret)
+      }
       const res = await fetch('/api/chat', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           message: text.trim(),
           session_id: sessionId,

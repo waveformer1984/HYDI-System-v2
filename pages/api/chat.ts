@@ -30,7 +30,34 @@ import {
   recallAnswer,
   clearFocus,
 } from '../../lib/heidi/ConversationContext';
+import { verifyServiceToken } from '../../lib/auth/verifyServiceToken';
 import type { CooState } from '../../lib/heidi/CooState';
+
+/**
+ * Chat authorization boundary.
+ *
+ * /api/chat is reachable by anything that can reach port 3000. Read-only
+ * intents (status, COO brief, agent chat, findings, briefing) stay open —
+ * they only read durable state. Mutating intents — governed commands,
+ * goal/mission creation, evidence records, memory writes, approvals —
+ * require a valid x-hydi-service-token (same HMAC scheme as
+ * /api/actions/:id and api/chat/route.js). An unauthorized mutating
+ * request is refused with an explicit AUTHORIZATION_REQUIRED reply, not
+ * silently dropped: the operator sees the gate.
+ */
+function chatAuthorized(req: NextApiRequest): boolean {
+  return verifyServiceToken(req.headers['x-hydi-service-token'] as string | undefined, null as unknown as string).valid;
+}
+
+function refuseUnauthorized(res: NextApiResponse, what: string): void {
+  sse(res, { type: 'metadata', model_used: 'auth-gate', latency: 0 });
+  sse(res, {
+    type: 'content',
+    content: `AUTHORIZATION_REQUIRED — ${what} mutates governed state and needs your service token (⚙ settings). Nothing was executed.`,
+  });
+  res.write('data: [DONE]\n\n');
+  res.end();
+}
 
 // Lazy Supabase client — timed transport: without it, a degraded
 // PostgREST/Kong makes every call hang 60s+ (froze chat ~89s). Direct
@@ -477,6 +504,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           return res.end();
         }
 
+        // Mutating governed commands (stop/retry/approve/reject/acknowledge)
+        // create daemon-executed goals — require the service token.
+        if (!chatAuthorized(req)) return refuseUnauthorized(res, `'${verb} ${target}'`);
+
         const spec: Record<string, { capabilityId: string; params: Record<string, string>; label: string }> = {
           acknowledge: { capabilityId: 'ops.acknowledge_human_action', params: { queueItemId: target, actor: 'chat-operator' }, label: `Acknowledge ${target}` },
           stop: { capabilityId: 'ops.agent_control', params: { action: 'stop', target, actor: 'chat-operator' }, label: `Stop agent ${target}` },
@@ -543,6 +574,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // — declared evidence only; CONFIRMED still requires a real paid job.
     const evidenceMatch = message.match(/(?:validation|customer) evidence for ([a-f0-9-]{4,})(?: via ([a-z _-]+?))?[:\s]+(.+)/i);
     if (evidenceMatch) {
+      if (!chatAuthorized(req)) return refuseUnauthorized(res, 'recording customer evidence');
       try {
         const pg = (await import('pg')).default;
         const pool = new pg.Pool({ host: '127.0.0.1', port: 54322, database: 'postgres', user: 'postgres', password: 'postgres' });
@@ -611,6 +643,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         sse(res, { type: 'content', content: 'Give me a concrete goal to interpret — e.g. "plan: investigate the MiniMax opportunity and produce a verdict".' });
         return res.end();
       }
+      if (!chatAuthorized(req)) return refuseUnauthorized(res, 'creating a governed goal');
       try {
         const pg = (await import('pg')).default;
         const pool = new pg.Pool({ host: '127.0.0.1', port: 54322, database: 'postgres', user: 'postgres', password: 'postgres' });
@@ -713,6 +746,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         const pg = (await import('pg')).default;
         const pool = new pg.Pool({ host: '127.0.0.1', port: 54322, database: 'postgres', user: 'postgres', password: 'postgres' });
         try {
+          if (wantsFindWork || wantsFix) {
+            if (!chatAuthorized(req)) { await pool.end(); return refuseUnauthorized(res, wantsFix ? 'creating a fix mission' : 'queuing investigation goals'); }
+          }
           if (wantsFindWork) {
             const { observeDevelopmentSignals } = await import('../../lib/heidi/DevObserver');
             const findings = await observeDevelopmentSignals(pool);
@@ -788,6 +824,78 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
     }
 
+    // ── Commercial bridge intents — opportunity → offer → checkout ──
+    // Reads are open; offer preparation writes durable commercial state
+    // so it requires the service token like every other mutation.
+    const wantsRevenuePipeline = /continue (the )?(protoforge )?revenue pipeline|prepare (the )?(strongest )?(qualified )?offer|commercial (pipeline|path) (forward|next)/i.test(lowerMsg);
+    const wantsRevenueBlockers = /what is blocking revenue|revenue blockers?|blocking (the )?revenue|why no revenue/i.test(lowerMsg);
+    const wantsCommercialState = /(strongest|best|top) (revenue )?opportunit|opportunities ready|commercial (state|opportunities|offers)|pending customer actions|verified revenue|show me (the )?revenue/i.test(lowerMsg);
+    if (wantsRevenuePipeline || wantsRevenueBlockers || wantsCommercialState) {
+      try {
+        const pg2 = (await import('pg')).default;
+        const pool = new pg2.Pool({ host: '127.0.0.1', port: 54322, database: 'postgres', user: 'postgres', password: 'postgres' });
+        try {
+          const { collectOffers, prepareOffer } = await import('../../lib/heidi/CommercialBridge');
+          const offers = await collectOffers(pool);
+          const { rows: oppRows } = await pool.query(
+            `SELECT id, title, status, approval_status, confidence FROM protoforge_opportunities
+               WHERE status != 'rejected' ORDER BY confidence DESC NULLS LAST LIMIT 10`);
+          const opps = oppRows as Array<{ id: string; title: string; status: string; approval_status: string; confidence: number | null }>;
+
+          if (wantsRevenuePipeline) {
+            // Mutating: prepare an offer for the strongest qualified opp.
+            if (!chatAuthorized(req)) { await pool.end(); return refuseUnauthorized(res, 'preparing a commercial offer'); }
+            const qualified = opps.filter(o => o.approval_status === 'approved');
+            if (!qualified.length) {
+              sse(res, { type: 'metadata', model_used: 'commercial-bridge', latency: 0 });
+              sse(res, { type: 'content', content: `REVENUE PIPELINE\n\n${opps.length} open opportunities, 0 approved — qualification requires a human approve an opportunity or a positive business finding. Nothing was prepared; no offer was invented.\n\nNext action: review an opportunity in the workspace (or "approve <opp>" once validated).` });
+              return res.end();
+            }
+            const top = qualified[0];
+            const r = await prepareOffer(pool, { opportunityId: top.id, product: 'protoforge_model_prep', actor: 'operator via chat' });
+            const lines = ['REVENUE PIPELINE'];
+            if (r.ok) {
+              lines.push(`Offer ${r.offer.offerId} ${r.deduped ? '(existing — idempotent, no duplicate)' : '(prepared)'}`,
+                `  opportunity: ${r.offer.opportunityTitle.slice(0, 80)}`,
+                `  product: ${r.offer.product}  $${(r.offer.priceCents / 100).toFixed(2)} ${r.offer.currency}`,
+                `  stage: ${r.offer.stage}${r.offer.stageReason ? ` — ${r.offer.stageReason}` : ''}`,
+                `  evidence: ${r.offer.evidenceSummary ?? 'none'}`);
+            } else {
+              lines.push(`Not prepared: ${r.reason}`);
+            }
+            sse(res, { type: 'metadata', model_used: 'commercial-bridge', latency: 0 });
+            sse(res, { type: 'content', content: lines.join('\n') });
+            return res.end();
+          }
+
+          // Read-only pipeline state.
+          const lines = ['COMMERCIAL PIPELINE'];
+          lines.push(`Opportunities: ${opps.length} open (${opps.filter(o => o.approval_status === 'approved').length} approved)`);
+          for (const o of opps.slice(0, 5)) lines.push(`  ${o.id.slice(0, 8)} [${o.status}/${o.approval_status}] conf=${o.confidence ?? 'n/a'} — ${o.title.slice(0, 70)}`);
+          if (offers.length) {
+            lines.push(`Offers: ${offers.length}`);
+            for (const o of offers.slice(0, 5)) lines.push(`  ${o.offerId} [${o.stage}] ${o.product} $${(o.priceCents / 100).toFixed(2)}${o.stageReason ? ` — ${o.stageReason}` : ''}`);
+          } else {
+            lines.push('Offers: none — no opportunity has reached commercial qualification.');
+          }
+          const { rows: verifiedRows } = await pool.query(`SELECT key, value FROM business_facts WHERE key='verified_total'`).catch(() => ({ rows: [] as Array<{ key: string; value: string }> }));
+          lines.push(`Verified revenue: ${verifiedRows[0]?.value ?? '$0 (unverified)'}`);
+          if (wantsRevenueBlockers) {
+            const { rows: blockers } = await pool.query(
+              `SELECT count(*)::int c FROM human_intervention_requests WHERE status='pending'`).catch(() => ({ rows: [{ c: 0 }] }));
+            lines.push(`Blockers: ${offers.filter(o => o.stage === 'OFFER_BLOCKED').length} blocked offers, ${blockers[0].c} pending human intervention(s), live checkout requires live-transaction authorization`);
+          }
+          sse(res, { type: 'metadata', model_used: 'commercial-bridge', latency: 0 });
+          sse(res, { type: 'content', content: lines.join('\n') });
+          return res.end();
+        } finally { await pool.end(); }
+      } catch (e) {
+        sse(res, { type: 'content', content: `Commercial pipeline unavailable — ${e instanceof Error ? e.message : 'unknown'}` });
+        res.write('data: [DONE]\n\n');
+        return res.end();
+      }
+    }
+
     // Operational questions resolve against the persisted COO state first
     // Life-context intents — the world model layer. Focus switching,
     // remembering, recall, and the bounded 'investigate <target>'
@@ -795,6 +903,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // unrecognized falls through to COO/LLM paths and cannot act.
     const lifeIntent = classifyLifeIntent(message);
     if (lifeIntent) {
+      // Mutating life-intents require the service token: approve executes
+      // real proposals (incl. bounded Stripe checkout), investigate_*
+      // create agent missions, control_last stops/retries agents,
+      // business_decision records the commercial path. Read-only kinds
+      // (briefing, findings, plate, recall…) stay open.
+      const MUTATING_LIFE = new Set([
+        'approve', 'decline', 'investigate', 'investigate_top',
+        'control_last', 'business_decision',
+        'remember', 'remember_last', 'focus', 'topic', 'forget',
+      ]);
+      if (MUTATING_LIFE.has(lifeIntent.kind) && !chatAuthorized(req)) {
+        return refuseUnauthorized(res, `the '${lifeIntent.kind}' command`);
+      }
       try {
         const sb = getCooSupabase();
         let text: string;

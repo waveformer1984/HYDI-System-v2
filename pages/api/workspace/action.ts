@@ -15,12 +15,21 @@ import { NextApiRequest, NextApiResponse } from 'next';
 import fs from 'fs';
 import path from 'path';
 import pg from 'pg';
+import { verifyServiceToken } from '../../../lib/auth/verifyServiceToken';
 
 const REPO = 'C:\\Users\\Owner\\HYDI-System-v2';
 const pool = new pg.Pool({ host: '127.0.0.1', port: 54322, database: 'postgres', user: 'postgres', password: 'postgres' });
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
+
+  // Every kind below inserts a governed goal the daemon executes — this
+  // surface is mutating-only, so the service token is required up front.
+  const auth = verifyServiceToken(req.headers['x-hydi-service-token'] as string | undefined, null as unknown as string);
+  if (!auth.valid) {
+    return res.status(401).json({ error: 'AUTHORIZATION_REQUIRED', reason: auth.reason ?? 'invalid token' });
+  }
+
   const { kind } = req.body ?? {};
 
   let goal: { title: string; description: string; priority: number; capabilityId: string; params: Record<string, unknown> };

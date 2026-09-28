@@ -7,7 +7,21 @@ import { useEffect, useRef, useState } from 'react';
 
 type W = Record<string, any>;
 
-const NAV = ['overview', 'agents', 'missions', 'decisions', 'recommend', 'opportunities', 'engineering', 'revenue'];
+// Same localStorage key + HMAC scheme as pages/index.tsx and
+// /api/actions/:id — mutating chat intents are token-gated.
+const SERVICE_SECRET_KEY = 'hydi.serviceSecret';
+async function mintServiceToken(secret: string): Promise<string> {
+  const ts = Date.now().toString();
+  const requestId = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2);
+  const service = 'heidi-dashboard';
+  const payload = `${ts}:${requestId}:${service}`;
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const sigBuf = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(payload));
+  const sig = [...new Uint8Array(sigBuf)].map(b => b.toString(16).padStart(2, '0')).join('');
+  return `${ts}.${requestId}.${service}.${sig}`;
+}
+
+const NAV = ['overview', 'agents', 'missions', 'decisions', 'recommend', 'opportunities', 'validation', 'engineering', 'revenue'];
 
 const AGENT_STATUS_COLOR: Record<string, string> = {
   RUNNING: '#22c55e', STARTING: '#22c55e', IDLE: '#94a3b8', REGISTERED: '#94a3b8',
@@ -59,12 +73,22 @@ function Chat({ agent }: { agent: string }) {
   const [busy, setBusy] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const label = agent === 'heidi' ? 'HEIDI' : agent.replace('team-', '').toUpperCase();
+  // Reconstruct the conversation from durable chat events (was write-only).
+  useEffect(() => {
+    fetch(`/api/workspace/chat?agent=${encodeURIComponent(agent)}&user=j&limit=40`)
+      .then(r => r.ok ? r.json() : null)
+      .then(j => { if (j?.messages?.length) setMsgs(j.messages.map((m: { role: string; content: string }) => ({ role: m.role === 'user' ? 'you' : 'agent', text: m.content }))); })
+      .catch(() => { /* history is best-effort; live chat still works */ });
+  }, [agent]);
   const send = async () => {
     if (!input.trim() || busy) return;
     const m = input; setInput(''); setBusy(true);
     setMsgs(v => [...v, { role: 'you', text: m }, { role: 'agent', text: '…' }]);
     try {
-      const r = await fetch('/api/chat', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ message: m, session_id: 'workspace', user_id: 'j', agent: agent === 'heidi' ? undefined : agent }) });
+      const secret = localStorage.getItem(SERVICE_SECRET_KEY) || '';
+      const headers: Record<string, string> = { 'content-type': 'application/json' };
+      if (secret) headers['x-hydi-service-token'] = await mintServiceToken(secret);
+      const r = await fetch('/api/chat', { method: 'POST', headers, body: JSON.stringify({ message: m, session_id: 'workspace', user_id: 'j', agent: agent === 'heidi' ? undefined : agent }) });
       const text = await r.text();
       const content = [...text.matchAll(/"content":"((?:[^"\\]|\\.)*)"/g)].map(x => JSON.parse(`"${x[1]}"`)).join('');
       setMsgs(v => [...v.slice(0, -1), { role: 'agent', text: content || '(no content)' }]);
@@ -99,7 +123,10 @@ function ActionButton({ label, kind, body, onDone, disabled }: { label: string; 
   const go = async () => {
     setSt2('working');
     try {
-      const r = await fetch('/api/workspace/action', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ kind, ...body }) });
+      const secret = localStorage.getItem(SERVICE_SECRET_KEY) || '';
+      const headers: Record<string, string> = { 'content-type': 'application/json' };
+      if (secret) headers['x-hydi-service-token'] = await mintServiceToken(secret);
+      const r = await fetch('/api/workspace/action', { method: 'POST', headers, body: JSON.stringify({ kind, ...body }) });
       const j = await r.json();
       if (r.ok && j.ok) { setSt2('done'); setMsg(`goal ${String(j.goalId).slice(0, 8)} → ${j.capabilityId}`); onDone(); }
       else { setSt2(r.status === 409 ? 'refused' : 'failed'); setMsg(j.error ?? 'failed'); }
@@ -246,6 +273,21 @@ export default function Workspace() {
               <Card title="protoforge pipeline">{s.opportunities.map((o: W) => <div key={o.status}>{o.status}: {o.count} (top confidence {o.topConfidence ?? 'n/a'})</div>)}</Card>
             </>}
 
+            {tab === 'validation' && <>
+              <Card title="customer validation queue" tone={s.validation?.length ? C.accent : C.dim}>
+                {s.validation?.length ? s.validation.map((v: W, i: number) => (
+                  <div key={i} style={{ marginBottom: 8 }}>
+                    <b>{v.opportunity}</b><br />
+                    stage: <span style={{ color: C.accent }}>{v.stage}</span>
+                    {v.verdict ? ` · verdict ${v.verdict} (${v.confidence ?? 'n/a'})` : ''}
+                    {v.evidenceCount ? ` · ${v.evidenceCount} evidence record(s)` : ''}
+                    {v.blockedReason ? <><br /><span style={{ color: C.warn }}>blocked: {v.blockedReason}</span></> : null}
+                    {v.nextHumanAction ? <><br /><small style={{ color: C.dim }}>human action: {v.nextHumanAction}</small></> : null}
+                  </div>
+                )) : 'no opportunities in validation — investigate first; validation requires evidence, not ideas'}
+              </Card>
+            </>}
+
             {tab === 'engineering' && <>
               <Card title="services">{s.engineering.servicesOnline}/{s.engineering.servicesTotal} online{s.engineering.services.map((v: W) => <div key={v.name}><span style={{ color: v.status === 'online' ? C.ok : C.bad }}>●</span> {v.name} <span style={{ color: '#475569' }}>{Math.round((v.memory ?? 0) / 1048576)}MB · {v.restarts ?? 0} restarts</span></div>)}</Card>
               <Card title="runtime">
@@ -254,10 +296,28 @@ export default function Workspace() {
                 {' · '}<span style={{ color: ({ HEALTHY: C.ok, DEGRADED: C.warn, TIMEOUT: C.bad, UNAVAILABLE: C.bad, STALE: C.dim } as Record<string, string>)[s.engineering.supabaseRestTelemetry?.status ?? 'UNAVAILABLE'] }}>●</span> Supabase REST {s.engineering.supabaseRestTelemetry?.status ?? 'UNAVAILABLE'}{s.engineering.supabaseRest?.ms != null ? ` ${s.engineering.supabaseRest.ms}ms` : ''}{s.engineering.supabaseRest?.circuit === 'open' ? ' (circuit open)' : ''}
                 {' · '}<span style={{ color: ({ HEALTHY: C.ok, STALE: C.dim, TIMEOUT: C.bad, UNAVAILABLE: C.bad, DEGRADED: C.bad } as Record<string, string>)[s.engineering.servicesTelemetry?.status ?? 'UNAVAILABLE'] }}>●</span> PM2 {s.engineering.servicesTelemetry?.status ?? 'UNAVAILABLE'}{s.engineering.servicesTelemetry?.ageMs ? ` (${Math.round(s.engineering.servicesTelemetry.ageMs / 1000)}s old)` : ''}
               </Card>
+              <Card title="recovery throttle">
+                {Object.keys(s.engineering.recoveryStates ?? {}).length
+                  ? (Object.values(s.engineering.recoveryStates) as W[]).map((r: W) => (
+                    <div key={r.service}><span style={{ color: r.blocking ? C.bad : r.state === 'OPEN' ? C.warn : C.ok }}>●</span> {r.service} — {r.state} · {r.cycles} cycle(s){r.cooldownRemainingMs ? ` · cooldown ${Math.round(r.cooldownRemainingMs / 1000)}s` : ''}</div>
+                  ))
+                  : 'no failures tracked — recovery throttle idle'}
+              </Card>
             </>}
 
             {tab === 'revenue' && <>
               <Card title="verified revenue" tone={C.bad}><div style={{ fontSize: 20, fontWeight: 700 }}>{s.business.revenueVerified.split('—')[0]}</div></Card>
+              <Card title="commercial offers" tone={s.commercial?.counts?.blocked ? C.warn : C.dim}>
+                {s.commercial?.offers?.length ? s.commercial.offers.map((o: W) => (
+                  <div key={o.offerId} style={{ marginBottom: 6 }}>
+                    <b>{o.offerId}</b> — {o.product} ${(o.priceCents / 100).toFixed(2)} · <span style={{ color: o.stage === 'CHECKOUT_READY' ? C.ok : o.stage === 'OFFER_BLOCKED' ? C.warn : C.dim }}>{o.stage}</span><br />
+                    <small style={{ color: '#475569' }}>{o.title} · {o.stageReason ?? ''}</small>
+                  </div>
+                )) : 'no offers — opportunities require approval/qualification first'}
+                <div style={{ color: C.dim, fontSize: 11, marginTop: 6 }}>
+                  prepared {s.commercial?.counts?.prepared ?? 0} · checkout-ready {s.commercial?.counts?.checkoutReady ?? 0} · blocked {s.commercial?.counts?.blocked ?? 0} · needs authorization {s.commercial?.counts?.authRequired ?? 0}
+                </div>
+              </Card>
               <Card title="jobs">{s.missions.jobs.total} total · {s.missions.jobs.paidDelivered} delivered (TEST) · {s.missions.jobs.escalated} escalated</Card>
               <Card title="truth contract">Test payments and checkouts are not revenue. Only reconciled production transactions count.</Card>
             </>}
