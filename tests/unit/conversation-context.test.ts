@@ -78,6 +78,12 @@ describe('classifyLifeIntent', () => {
     expect(classifyLifeIntent('investigate whether there are worthwhile ProtoForge opportunities today')).toEqual({ kind: 'investigate_top' });
     expect(classifyLifeIntent('Heidi, investigate whether there are worthwhile ProtoForge opportunities today and bring me the ones with evidence')).toEqual({ kind: 'investigate_top' });
     expect(classifyLifeIntent('find the best protoforge opportunities')).toEqual({ kind: 'investigate_top' });
+    // Regression: bare "opportunit…" must match — t→i is not a word
+    // boundary, so a trailing \b on the alternation silently dropped the
+    // most natural phrasing ("investigate opportunities") into the COO
+    // status snapshot instead of creating a mission.
+    expect(classifyLifeIntent('investigate opportunities')).toEqual({ kind: 'investigate_top' });
+    expect(classifyLifeIntent('investigate the strongest unresolved opportunity')).toEqual({ kind: 'investigate_top' });
     // Questions are never actions
     expect(classifyLifeIntent('what opportunities did protoforge find')).toBeNull();
     expect(classifyLifeIntent('are there worthwhile opportunities')).toBeNull();

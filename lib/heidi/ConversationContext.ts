@@ -265,7 +265,9 @@ export function classifyLifeIntent(message: string): LifeIntent | null {
   // worthwhile opportunities", "find the best protoforge opportunities".
   // IMPERATIVE ONLY — the message must start with a verb; questions like
   // "what did protoforge find" are never turned into actions.
-  if (/^(?:investigate|research|find|look for|scout|dig into|check)\b.*\b(?:opportunit|protoforge|market)\b/i.test(m)) {
+  // NB: no trailing \b — "opportunit" must match "opportunities"
+  // (t→i is not a word boundary), same convention as CooBriefing.
+  if (/^(?:investigate|research|find|look for|scout|dig into|check)\b.*\b(?:opportunit|protoforge|market)/i.test(m)) {
     return { kind: 'investigate_top' };
   }
   // "Go investigate the most useful thing", "go ahead with the next
