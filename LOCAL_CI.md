@@ -1,8 +1,9 @@
 # Local CI (workaround for the GitHub Actions outage)
 
-GitHub-hosted runners have not been dispatched for this repo since
-2026-07-17 (`ROADMAP.md` P0 #2): every Actions job fails within seconds
-with `runner_id: 0`, so red Actions checks carry no information.
+GitHub will not start any Actions job for this repo: every job fails
+within seconds with `runner_id: 0` and the annotation *"The job was not
+started because your account is locked due to a billing issue"*
+(`ROADMAP.md` P0 #2e), so red Actions checks carry no information.
 `scripts/local-ci.js` gives pull requests a real signal without Actions. It
 runs the same checks on a machine you control and reports each result
 back to the commit as a **commit status**, shown on the PR next to the
@@ -43,6 +44,13 @@ pm2 save
 `supabase start`). 27 suites (`tests/migrations/**` and several
 `heidi-*-qualification` suites) connect to Postgres on `127.0.0.1:54322`.
 Without it they fail with `ECONNREFUSED`, and the status will be red.
+`local-ci` reads the running stack with `npx supabase status -o env` and
+passes the unit check the same variables `unit-tests.yml` exports
+(`SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`,
+`SUPABASE_ANON_KEY`). The throwaway worktree has no `.env.local`, so a
+watcher started under PM2 needs no extra configuration. It never starts or
+stops Supabase, since on heidi-pc that is the live stack, and it never
+logs the keys. A `SUPABASE_URL` you set yourself takes precedence.
 
 ## Token
 
@@ -72,12 +80,14 @@ Actions works again. Anyone with push access can post a status, so this
 gate is only as trustworthy as the machines and tokens allowed to post
 them.
 
-## Root cause (still open)
+## Root cause (confirmed 2026-09-27)
 
-Public repositories get GitHub-hosted runner minutes free, so a spending
-limit or used-up minutes can't explain the outage. Jobs that fail before
-any runner is assigned on a public repo usually mean the **account is
-locked**, typically by a failed payment or unpaid invoice. Check
-<https://github.com/settings/billing> for a payment-failure banner. Once
-Actions runs again, the Actions checks are the gate again, and this script
-remains a way to verify locally.
+GitHub's own check-run annotation on every failed job reads *"The job was
+not started because your account is locked due to a billing issue."* It
+goes back to the oldest run on record (2026-05-15). Dependabot jobs still
+run on GitHub's runners, so only this account's own workflows are refused.
+Clear the lock at <https://github.com/settings/billing> (payment method,
+failed or past-due invoice), or open a GitHub Support billing ticket if
+nothing shows as outstanding. See `ROADMAP.md` P0 #2e for the job IDs to
+quote. Once Actions runs again, the Actions checks are the gate again, and
+this script remains a way to verify locally.
