@@ -46,6 +46,8 @@ revenue-dashboard.html
 # Build outputs
 dist/
 build/
+# Jest coverage output (npm run test:coverage, unit-tests.yml)
+coverage/
 /generated/prisma
 
 # Archives

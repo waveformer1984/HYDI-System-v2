@@ -95,6 +95,27 @@ drop-everything, P1 is next up, P2 is scheduled but not urgent.
     commit statuses to PRs, so they get a real signal without Actions. A
     self-hosted Actions runner was rejected as the workaround: on a public
     repo it would run fork PRs' code on the host.
+2e. **2026-09-27: cause confirmed by GitHub: the account is billing-locked.**
+    Every failed job carries this check-run annotation, readable without
+    auth at `GET /repos/waveformer1984/HYDI-System-v2/check-runs/<job_id>/annotations`:
+    *"The job was not started because your account is locked due to a
+    billing issue."* It is on the #285 merge's Unit Tests, Integration
+    Tests and CodeQL jobs (108656992365, 108656992856, 108656992569) and on
+    every scheduled Health Monitor job since. It is also on the oldest Unit
+    Tests job on record (76212678414, 2026-05-15), so the lock predates the
+    2026-07-17 date above. No `.github/workflows/*` job has ever succeeded
+    on a GitHub-hosted runner here. The only success is Test Procedural
+    Memory on the self-hosted `protoforge-runner-wsl` (run 28531587308,
+    2026-07-01). Dependabot jobs still succeed on `ubuntu-latest` (e.g. run
+    35582344286, 2026-09-21), so the runners work and only this account's
+    own workflows are refused. **Fix (account owner):** clear the lock at
+    `github.com/settings/billing` (payment method, failed or past-due
+    invoice). If billing shows nothing outstanding, file a GitHub Support
+    billing ticket quoting the annotation and job IDs above. Then re-run the
+    #285 merge's Unit Tests (36332493723), Integration Tests (36332493810)
+    and CodeQL (36332493791) once each. Check that each job gets a non-zero
+    `runner_id` and that Unit Tests runs its "Start local Supabase" step.
+    That step has so far only been verified locally.
 
 **P1 — high impact/risk, not yet started:**
 3. Cryptographic identity verification to replace the `x-user-id`
