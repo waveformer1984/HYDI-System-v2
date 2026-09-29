@@ -1,4 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
+import { requireOpsAuth } from '../../../lib/api/requireOpsAuth';
 import { getKeyManagementService } from '../../../lib/operational/KeyManagementService';
 import { KeyHealthMonitor } from '../../../lib/operational/KeyHealthMonitor';
 import { SecretScanner } from '../../../lib/operational/SecretScanner';
@@ -7,6 +8,7 @@ import { SecretScanner } from '../../../lib/operational/SecretScanner';
  * GET /api/keys/health — Key health summary
  */
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  if (!requireOpsAuth(req, res)) return;
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' });
   }

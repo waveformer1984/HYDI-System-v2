@@ -12,6 +12,23 @@
  * Exit 0 = all checks pass, exit 1 = any check fails or times out.
  */
 const http = require('http');
+const { createHmac, randomUUID } = require('crypto');
+
+// /api/workspace/state is ops-gated (requireOpsAuth). When
+// HYDI_SERVICE_SECRET is available the smoke mints the same
+// {ts}.{requestId}.{service}.{sig} token the UI does; without the
+// secret the state check reports 401 — the gate itself is what a
+// failed auth looks like, not a latency regression.
+function mintServiceToken(secret) {
+  const ts = Date.now().toString();
+  const requestId = randomUUID();
+  const service = 'heidi-smoke';
+  const sig = createHmac('sha256', secret).update(`${ts}:${requestId}:${service}`).digest('hex');
+  return `${ts}.${requestId}.${service}.${sig}`;
+}
+const SVC_HEADERS = process.env.HYDI_SERVICE_SECRET
+  ? { 'x-hydi-service-token': mintServiceToken(process.env.HYDI_SERVICE_SECRET) }
+  : {};
 
 const PORT = Number(process.argv.find(a => a.startsWith('--port'))?.split('=')[1]
   ?? process.argv[process.argv.indexOf('--port') + 1]
@@ -31,9 +48,9 @@ function timed(req) {
     .catch(e => ({ ok: false, error: String(e), ms: Date.now() - t0 }));
 }
 
-function get(path, timeoutMs) {
+function get(path, timeoutMs, headers) {
   return timed(new Promise((resolve, reject) => {
-    const rq = http.get(`${BASE}${path}`, { timeout: timeoutMs }, (res) => {
+    const rq = http.get(`${BASE}${path}`, { timeout: timeoutMs, headers }, (res) => {
       let b = ''; res.on('data', c => b += c);
       res.on('end', () => resolve({ ok: res.statusCode === 200, status: res.statusCode, body: b }));
     });
@@ -73,7 +90,7 @@ async function supabaseRestMs() {
   let failures = 0;
 
   // 1. workspace state — bounded + telemetry freshness contract
-  const state = await get('/api/workspace/state', STATE_BUDGET_MS + 5000);
+  const state = await get('/api/workspace/state', STATE_BUDGET_MS + 5000, SVC_HEADERS);
   let stateMs = state.ms;
   if (!state.ok) { console.log(`✗ /api/workspace/state → ${state.error ?? state.status} in ${stateMs}ms`); failures++; }
   else {

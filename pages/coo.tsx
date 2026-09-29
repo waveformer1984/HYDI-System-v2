@@ -60,6 +60,20 @@ function ago(ts: string | null | undefined): string {
   return `${Math.round(s / 3600)}h ago`;
 }
 
+// Same localStorage key + HMAC scheme as pages/workspace.tsx —
+// /api/coo is ops-gated (requireOpsAuth).
+const SERVICE_SECRET_KEY = 'hydi.serviceSecret';
+async function mintServiceToken(secret: string): Promise<string> {
+  const ts = Date.now().toString();
+  const requestId = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2);
+  const service = 'heidi-dashboard';
+  const payload = `${ts}:${requestId}:${service}`;
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const sigBuf = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(payload));
+  const sig = [...new Uint8Array(sigBuf)].map(b => b.toString(16).padStart(2, '0')).join('');
+  return `${ts}.${requestId}.${service}.${sig}`;
+}
+
 const mono: React.CSSProperties = { fontFamily: 'Consolas, monospace', fontSize: 12 };
 const cell: React.CSSProperties = { padding: '3px 8px', borderBottom: '1px solid #21262d', verticalAlign: 'top' };
 const box: React.CSSProperties = { background: '#161b22', border: '1px solid #30363d', borderRadius: 6, padding: 10, marginBottom: 10 };
@@ -74,7 +88,10 @@ export default function CooCommandCenter() {
 
   const load = useCallback(async () => {
     try {
-      const r = await fetch('/api/coo');
+      const secret = typeof window !== 'undefined' ? localStorage.getItem(SERVICE_SECRET_KEY) : null;
+      const headers: Record<string, string> = {};
+      if (secret) headers['x-hydi-service-token'] = await mintServiceToken(secret);
+      const r = await fetch('/api/coo', { headers });
       setData(await r.json());
     } catch { /* keep last state — staleness is displayed, not hidden */ }
   }, []);

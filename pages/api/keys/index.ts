@@ -1,4 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
+import { requireOpsAuth } from '../../../lib/api/requireOpsAuth';
 import { getKeyManagementService } from '../../../lib/operational/KeyManagementService';
 import { getKeyAuditService } from '../../../lib/operational/KeyAuditService';
 import { SecretScanner } from '../../../lib/operational/SecretScanner';
@@ -12,6 +13,7 @@ import { KeyCompromiseResponse } from '../../../lib/operational/KeyCompromiseRes
  * Never returns secret values — only metadata, fingerprints, and lifecycle states.
  */
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  if (!requireOpsAuth(req, res)) return;
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' });
   }

@@ -1,4 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
+import { requireOpsAuth } from '../../../lib/api/requireOpsAuth';
 import { SecretScanner } from '../../../lib/operational/SecretScanner';
 
 /**
@@ -6,6 +7,7 @@ import { SecretScanner } from '../../../lib/operational/SecretScanner';
  * GET /api/keys/scan — Same (scan is read-only)
  */
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  if (!requireOpsAuth(req, res)) return;
   if (req.method !== 'POST' && req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' });
   }

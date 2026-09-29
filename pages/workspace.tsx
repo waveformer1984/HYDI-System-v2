@@ -75,8 +75,13 @@ function Chat({ agent }: { agent: string }) {
   const label = agent === 'heidi' ? 'HEIDI' : agent.replace('team-', '').toUpperCase();
   // Reconstruct the conversation from durable chat events (was write-only).
   useEffect(() => {
-    fetch(`/api/workspace/chat?agent=${encodeURIComponent(agent)}&user=j&limit=40`)
-      .then(r => r.ok ? r.json() : null)
+    (async () => {
+      const secret = localStorage.getItem(SERVICE_SECRET_KEY) || '';
+      const headers: Record<string, string> = {};
+      if (secret) headers['x-hydi-service-token'] = await mintServiceToken(secret);
+      return fetch(`/api/workspace/chat?agent=${encodeURIComponent(agent)}&user=j&limit=40`, { headers });
+    })()
+      .then(r => r && r.ok ? r.json() : null)
       .then(j => { if (j?.messages?.length) setMsgs(j.messages.map((m: { role: string; content: string }) => ({ role: m.role === 'user' ? 'you' : 'agent', text: m.content }))); })
       .catch(() => { /* history is best-effort; live chat still works */ });
   }, [agent]);
@@ -148,9 +153,14 @@ export default function Workspace() {
   const [tab, setTab] = useState('overview');
   const [chatAgent, setChatAgent] = useState('heidi');
   const [err, setErr] = useState<string | null>(null);
-  const reload = () => fetch('/api/workspace/state').then(r => r.json()).then(setS).catch(e => setErr(String(e)));
+  const load = async () => {
+    const secret = localStorage.getItem(SERVICE_SECRET_KEY) || '';
+    const headers: Record<string, string> = {};
+    if (secret) headers['x-hydi-service-token'] = await mintServiceToken(secret);
+    return fetch('/api/workspace/state', { headers }).then(r => r.json()).then(setS).catch(e => setErr(String(e)));
+  };
+  const reload = load;
   useEffect(() => {
-    const load = () => fetch('/api/workspace/state').then(r => r.json()).then(setS).catch(e => setErr(String(e)));
     load();
     const t = setInterval(load, 10000);
     return () => clearInterval(t);

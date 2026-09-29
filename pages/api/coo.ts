@@ -1,4 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
+import { requireOpsAuth } from '../../lib/api/requireOpsAuth';
 import { Pool } from 'pg';
 import { collectAgentState } from '../../lib/heidi/AgentControlPlane';
 import { collectHumanActionQueue } from '../../lib/heidi/HumanActionQueue';
@@ -23,6 +24,7 @@ function getPool(): Pool {
 const STALE_AFTER_MS = 10 * 60 * 1000;
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  if (!requireOpsAuth(req, res)) return;
   if (req.method !== 'GET') return res.status(405).end();
   const pool = getPool();
   try {

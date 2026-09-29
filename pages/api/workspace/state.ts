@@ -11,6 +11,7 @@ import pg from 'pg';
 import { getValidationQueue } from '../../../lib/heidi/ValidationQueue';
 import { autonomousState } from '../../../lib/heidi/ActionController';
 import { collectAgentState } from '../../../lib/heidi/AgentControlPlane';
+import { requireOpsAuth } from '../../../lib/api/requireOpsAuth';
 
 const REPO = 'C:\\Users\\Owner\\HYDI-System-v2';
 const POOL = new pg.Pool({ host: '127.0.0.1', port: 54322, database: 'postgres', user: 'postgres', password: 'postgres' });
@@ -127,7 +128,8 @@ interface Recommendation {
   effort: string; risk: string; authorization: string; kind: string; ref?: string;
 }
 
-export default async function handler(_req: NextApiRequest, res: NextApiResponse) {
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  if (!requireOpsAuth(req, res)) return;
   try {
     const [identity, goals, jobs, opps, invReqs, escs, latestCoo, latestEvents] = await Promise.all([
       POOL.query('select autonomy_level, current_environment from heidi_identity limit 1'),

@@ -1,4 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
+import { requireOpsAuth } from '../../../lib/api/requireOpsAuth';
 import { getWatchdogService } from '../../../lib/watchdog';
 
 const watchdog = getWatchdogService();
@@ -11,6 +12,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
+
+  if (!requireOpsAuth(req, res)) return;
 
   try {
     if (req.method === 'POST') {

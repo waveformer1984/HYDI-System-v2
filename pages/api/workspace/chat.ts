@@ -9,11 +9,13 @@
  * mutation surface here.
  */
 import { NextApiRequest, NextApiResponse } from 'next';
+import { requireOpsAuth } from '../../../lib/api/requireOpsAuth';
 import pg from 'pg';
 
 const pool = new pg.Pool({ host: '127.0.0.1', port: 54322, database: 'postgres', user: 'postgres', password: 'postgres' });
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  if (!requireOpsAuth(req, res)) return;
   if (req.method !== 'GET') return res.status(405).json({ error: 'GET only' });
   const agent = typeof req.query.agent === 'string' && req.query.agent.length ? req.query.agent : 'heidi';
   const userId = typeof req.query.user === 'string' && req.query.user.length ? req.query.user : 'j';
