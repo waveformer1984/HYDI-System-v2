@@ -14,6 +14,9 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { updateSessionState } from './session-state';
+import { evaluateAction, type ActionAuthorization } from './governance/ActionChokepoint';
+
+export type { ActionAuthorization } from './governance/ActionChokepoint';
 
 export interface ExecutorAction {
   type: string;
@@ -36,7 +39,13 @@ const READABLE_TABLES = new Set([
   'proposals',
   'system_dashboard',
 ]);
-const WRITABLE_TABLES = new Set(['sessions']);
+/**
+ * Exported because lib/governance/ActionChokepoint.ts classifies
+ * `update_database` as R1 *on the strength of this allowlist* being limited to
+ * bounded, reversible application state. A test asserts its contents so that
+ * widening it fails loudly rather than silently widening autonomous authority.
+ */
+export const WRITABLE_TABLES = new Set(['sessions']);
 
 export class ActionExecutor {
   private supabase: SupabaseClient;
@@ -45,7 +54,37 @@ export class ActionExecutor {
     this.supabase = supabase;
   }
 
-  async execute(action: ExecutorAction, sessionId: string): Promise<ActionResult> {
+  /**
+   * Execute an action, subject to the governance chokepoint.
+   *
+   * `authorization` is how a caller PROVES an action was approved. It is a
+   * record (who, which approval, when), not a boolean, so an approval is always
+   * attributable. Callers that cannot produce one simply cannot run R2+
+   * actions -- which, before Phase 3, included `send_email` sending real
+   * outbound mail with no check at all.
+   */
+  async execute(
+    action: ExecutorAction,
+    sessionId: string,
+    authorization?: ActionAuthorization,
+  ): Promise<ActionResult> {
+    const decision = evaluateAction({
+      type: action.type,
+      requester: sessionId ? `session:${sessionId}` : 'unknown',
+      target: typeof action.payload?.to === 'string' ? (action.payload.to as string) : undefined,
+      sessionId,
+      parameters: action.payload,
+      authorization,
+    });
+
+    if (!decision.allowed) {
+      // A refusal is a real outcome with a real reason, not a silent no-op.
+      return {
+        status: 'failed',
+        error: `[${decision.code}] ${decision.reason}`,
+      };
+    }
+
     try {
       switch (action.type) {
         case 'create_task':
@@ -68,7 +107,22 @@ export class ActionExecutor {
     }
   }
 
+  /**
+   * `protoforge_*` payload keys are reserved for rows the orchestrator itself
+   * parks after gating (escalation bookkeeping). A caller-controlled row that
+   * carries them can masquerade as a pending human-approval escalation —
+   * create_task is R1 autonomous, so without this guard the agent could plant
+   * a forged approval request. Reject rather than strip: a caller sending
+   * these keys is either malicious or buggy, and both deserve a loud failure.
+   */
+  private hasReservedKeys(payload: Record<string, unknown>): boolean {
+    return Object.keys(payload).some((k) => k.startsWith('protoforge_'));
+  }
+
   private async createTask(payload: Record<string, unknown>, sessionId: string): Promise<ActionResult> {
+    if (this.hasReservedKeys(payload)) {
+      return { status: 'failed', error: 'create_task payload must not contain reserved protoforge_* keys' };
+    }
     const taskName = (payload.task_name as string) || (payload.title as string) || 'untitled_task';
     const { data, error } = await this.supabase
       .from('actions')
@@ -190,6 +244,9 @@ export class ActionExecutor {
   }
 
   private async scheduleEvent(payload: Record<string, unknown>, sessionId: string): Promise<ActionResult> {
+    if (this.hasReservedKeys(payload)) {
+      return { status: 'failed', error: 'schedule_event payload must not contain reserved protoforge_* keys' };
+    }
     const scheduledFor = payload.scheduled_for as string | undefined;
     if (!scheduledFor || isNaN(Date.parse(scheduledFor))) {
       return { status: 'failed', error: 'schedule_event requires a valid ISO "scheduled_for" timestamp' };

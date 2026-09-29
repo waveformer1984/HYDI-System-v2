@@ -5,6 +5,7 @@
  */
 
 import { ActionExecutor } from '../../lib/action-executor';
+import { mintSignedAuthorization } from '../helpers/signTestAuth';
 
 type QueryResult = { data?: unknown; error?: { message: string } | null };
 
@@ -132,9 +133,19 @@ describe('lib/action-executor ActionExecutor', () => {
   it('send_email fails truthfully when credentials are not configured', async () => {
     const { supabase } = fakeSupabase({ error: null });
     const exec = new ActionExecutor(supabase);
+    // Phase 3: send_email is R3 and the chokepoint now refuses it before
+    // dispatch unless an approval record is produced. This test's intent is the
+    // credential behaviour -- that a missing key fails honestly rather than
+    // reporting a fake success -- so it supplies authorization to reach that
+    // check. tests/unit/action-executor-enforcement.test.ts covers the
+    // unauthorized case, including that no network request is made.
+    const payload = { to: 'a@b.com', subject: 's', body: 'b' };
     const res = await exec.execute(
-      { type: 'send_email', payload: { to: 'a@b.com', subject: 's', body: 'b' } },
+      { type: 'send_email', payload },
       'sess-1',
+      // Signed authorization bound to this exact action (type + session +
+      // payload) — a bare object is no longer enough.
+      mintSignedAuthorization({ type: 'send_email', sessionId: 'sess-1', payload }),
     );
     expect(res.status).toBe('failed');
     expect(res.error).toMatch(/Email not configured/);
@@ -145,6 +156,11 @@ describe('lib/action-executor ActionExecutor', () => {
     const exec = new ActionExecutor(supabase);
     const res = await exec.execute({ type: 'mine_bitcoin', payload: {} }, 'sess-1');
     expect(res.status).toBe('failed');
-    expect(res.error).toMatch(/Unsupported action type/);
+    // Phase 3: an unmodelled action is now stopped by the chokepoint at R5
+    // BEFORE dispatch, rather than falling through the switch to a generic
+    // "unsupported" message. Strictly stronger -- it is refused on risk
+    // grounds, not merely on the absence of a handler.
+    expect(res.error).toMatch(/UNKNOWN_ACTION/);
+    expect(res.error).toMatch(/R5/);
   });
 });
