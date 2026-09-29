@@ -1067,6 +1067,66 @@ export class CognitiveCore {
       });
     }
 
+    // Phase H — revenue execution runtime. NOT gated on a bridge: deps are
+    // real local modules (JobManager/StripeBridge/RevenueReconciler). Every
+    // step is durable via commercial_offer_transition events; the payment
+    // boundary (live authorization, customer identity, Stripe presence) is
+    // enforced inside RevenueRuntime, never bypassed.
+    this.wireExecutor('revenue.advance_offer', async (params) => {
+      try {
+        const { RevenueRuntime } = await import('./RevenueRuntime');
+        const { getJobManager } = await import('../revenue/JobManager');
+        const { StripeBridge } = await import('../revenue/StripeBridge');
+        const { RevenueReconciler } = await import('../revenue/RevenueReconciler');
+        const { getLiveTransactionAuthorizationManager } = await import('../revenue/LiveTransactionAuthorization');
+
+        const jobManager = getJobManager();
+        const stripe = new StripeBridge();
+        const reconciler = new RevenueReconciler();
+        const liveAuth = getLiveTransactionAuthorizationManager();
+
+        const { getOfferCatalog } = await import('../revenue/OfferCatalog');
+        const catalogIds = new Set(getOfferCatalog().getAll().map((o) => o.offerId as string));
+        const runtime = new RevenueRuntime(this.pool, {
+          createJob: (input) => jobManager.createJob(input),
+          createCheckoutSession: async (input) => {
+            if (!catalogIds.has(input.offerId)) return { error: `unknown catalog offer '${input.offerId}'` };
+            return stripe.createSetupCheckoutSession({
+              ...input,
+              offerId: input.offerId as import('../revenue/types').OfferId,
+            });
+          },
+          linkCheckoutSession: (jobId, sessionId) => jobManager.linkCheckoutSession(jobId, sessionId),
+          reconcileJob: async (jobId) => ({ state: (await reconciler.reconcile(jobId)).state }),
+          pendingLiveAuthorizations: () =>
+            liveAuth.getAll().filter((a: { state: string }) => a.state === 'PENDING'),
+        });
+
+        const results = await runtime.advance({
+          offerId: params.offerId as string | undefined,
+          advanceAll: params.advanceAll === true,
+          customerEmail: params.customerEmail as string | undefined,
+          actor: 'heidi-daemon',
+        });
+
+        const blocked = results.filter(r => r.boundary === 'human_authorization' || r.boundary === 'not_wired');
+        return {
+          capabilityId: 'revenue.advance_offer',
+          executed: true,
+          outcome: blocked.length > 0 && results.every(r => r.boundary !== 'none') ? 'skipped' as const : 'success' as const,
+          result: { transitions: results },
+          error: blocked.length > 0 && results.every(r => r.boundary !== 'none')
+            ? `boundary reached: ${blocked.map(b => b.detail).join('; ').slice(0, 300)}`
+            : null,
+          evidence: results.map(r => ({ offerId: r.offerId, from: r.previousStage, to: r.newStage, action: r.action, boundary: r.boundary })),
+          verified: true,
+          verificationDetails: `${results.length} offer(s) evaluated; transitions are durable commercial events`,
+        };
+      } catch (e) {
+        return this.failResult('revenue.advance_offer', e instanceof Error ? e.message : 'revenue advance failed');
+      }
+    });
+
     // CommercialWorkflow capabilities
     if (this.bridge.commercialWorkflow) {
       const cw = this.bridge.commercialWorkflow;

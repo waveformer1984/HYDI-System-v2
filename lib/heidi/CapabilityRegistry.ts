@@ -984,6 +984,19 @@ export const DEFAULT_CAPABILITIES: Array<Omit<CapabilityDescriptor, 'status' | '
     timeoutMs: 10000,
     metadata: { actionType: 'get_revenue_summary' },
   },
+  {
+    capabilityId: 'revenue.advance_offer',
+    capabilityName: 'Advance Commercial Offer',
+    description: 'Advance a durable commercial offer one governed step — checkout creation, payment observation, fulfillment tracking, reconciliation. Runs async via MissionRunner; stops at the human/live-payment boundary instead of crossing it.',
+    provider: 'revenue_ledger',
+    riskLevel: 'R2',
+    autonomyRequirement: 2,
+    dependencies: [],
+    verificationStrategy: 'Verify each returned transition is durable in heidi_events division=commercial',
+    reversible: true,
+    timeoutMs: 30000,
+    metadata: { actionType: 'revenue_advance_offer' },
+  },
 
   // Commercial workflow capabilities (CommercialWorkflow)
   {

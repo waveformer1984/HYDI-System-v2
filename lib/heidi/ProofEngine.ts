@@ -158,26 +158,98 @@ const CLAIMS: Record<string, ClaimEvaluator> = {
   },
 
   /**
+   * revenue_proven — the strongest claim the engine can make: a durable
+   * offer chain reached RECONCILED, the bound job was delivered, and a
+   * verified LIVE-mode ledger entry exists for it. All three must link
+   * by durable identifiers (offerId → job requirements.offerId → ledger
+   * metadata.jobId / stripe ids) — never inferred by amount or timing.
+   * Test-mode and synthetic records are excluded at the ID level.
+   */
+  revenue_proven: {
+    required: ['offer', 'payment', 'reconciliation'],
+    evaluate: async (pool) => {
+      const { getStripeMode } = await import('../revenue/stripe-mode');
+      const mode = getStripeMode();
+      if (mode.mode !== 'live') {
+        return { links: [], gap: `system is in ${mode.mode} mode — no live revenue can exist; test/simulated payments cannot be proven as revenue` };
+      }
+
+      // A RECONCILED commercial offer with a bound job.
+      const offerQ = await pool.query(
+        `SELECT payload->>'offerId' offer_id, payload->>'jobId' job_id, created_at
+           FROM heidi_events
+          WHERE division='commercial' AND event_type='commercial_offer_transition'
+            AND payload->>'newStage' IN ('RECONCILED','REVENUE_PROVEN')
+          ORDER BY created_at DESC LIMIT 1`);
+      const offerRow = offerQ.rows[0];
+      if (!offerRow) {
+        return { links: [], gap: 'no offer has reached RECONCILED — reconciliation evidence absent' };
+      }
+      const links: EvidenceLink[] = [{ kind: 'offer', ref: offerRow.offer_id, summary: 'offer reached RECONCILED', at: offerRow.created_at }];
+      const newestAt = offerRow.created_at;
+
+      // The bound job must exist, be delivered, and be paid.
+      let jobId: string | null = offerRow.job_id;
+      if (!jobId) {
+        const j = await pool.query(
+          `SELECT job_id FROM customer_jobs WHERE requirements->>'offerId' = $1 ORDER BY created_at DESC LIMIT 1`,
+          [offerRow.offer_id]);
+        jobId = j.rows[0]?.job_id ?? null;
+      }
+      if (!jobId) {
+        return { links, newestAt, gap: 'reconciled offer has no bound customer_job — chain breaks at fulfillment evidence' };
+      }
+      const jobQ = await pool.query(
+        `SELECT job_id, job_status, payment_status, delivery_status, stripe_checkout_session_id
+           FROM customer_jobs WHERE job_id = $1`, [jobId]);
+      const job = jobQ.rows[0];
+      if (!job || job.payment_status !== 'paid' || job.job_status !== 'delivered') {
+        return { links, newestAt, gap: `job ${jobId} is ${job ? `${job.job_status}/${job.payment_status}` : 'missing'} — payment+delivery not both proven` };
+      }
+      links.push({ kind: 'payment', ref: job.stripe_checkout_session_id ?? job.job_id, summary: `job ${job.job_id} paid+delivered`, at: newestAt });
+
+      // A verified ledger entry bound to this job — live IDs only.
+      const led = await pool.query(
+        `SELECT ledger_entry_id, amount_gross, currency, verified_at
+           FROM revenue_ledger
+          WHERE verified = true
+            AND (metadata->>'jobId' = $1 OR stripe_payment_intent_id IN (
+                   SELECT stripe_payment_intent_id FROM customer_jobs WHERE job_id = $1))
+            AND stripe_event_id NOT LIKE 'evt_test_%'
+            AND stripe_event_id NOT LIKE 'evt_processed_%'
+            AND stripe_event_id NOT LIKE 'evt_idempotent_%'
+          ORDER BY recorded_at DESC LIMIT 1`, [jobId]);
+      const row = led.rows[0];
+      if (!row) {
+        return { links, newestAt, gap: `no verified live ledger entry bound to job ${jobId}` };
+      }
+      links.push({ kind: 'reconciliation', ref: row.ledger_entry_id, summary: `ledger $${(row.amount_gross / 100).toFixed(2)} ${row.currency} verified`, at: row.verified_at });
+      return { links, newestAt };
+    },
+  },
+
+  /**
    * checkout_ready — an offer that has been authorized AND has a payment
    * route AND executor binding. Requires the offer event chain to exist.
    */
   checkout_ready: {
     required: ['offer', 'observation'],
     evaluate: async (pool) => {
-      const offer = await pool.query(
-        `SELECT id, payload FROM heidi_events
-         WHERE event_type IN ('commercial_offer','offer_created','offer_authorized')
-         ORDER BY created_at DESC LIMIT 1`);
-      const offerRow = offer.rows[0];
-      if (!offerRow) return { links: [], gap: 'no offer event exists' };
-      const links: EvidenceLink[] = [{ kind: 'offer', ref: offerRow.id, summary: 'offer event exists', at: offerRow.payload?.created_at }];
-      // Executor check: does the offer name a bound executor?
-      const exec = offerRow.payload?.executorId ?? offerRow.payload?.executor;
-      if (!exec) {
-        return { links, newestAt: offerRow.payload?.created_at, gap: 'offer has no bound executor' };
+      // Fold the commercial event stream — the latest stage wins.
+      const { collectOffers, EXECUTABLE_PRODUCTS } = await import('./CommercialBridge');
+      const offers = await collectOffers(pool);
+      const ready = offers.find(o => o.stage === 'CHECKOUT_READY' || o.stage === 'PAYMENT_PENDING');
+      if (!ready) {
+        return { links: [], gap: `no offer at CHECKOUT_READY or beyond (stages seen: ${offers.map(o => `${o.offerId.slice(0, 12)}=${o.stage}`).join(', ') || 'none'})` };
       }
-      links.push({ kind: 'observation', ref: 'executor_check', summary: `executor bound: ${exec}`, at: offerRow.payload?.created_at });
-      return { links, newestAt: offerRow.payload?.created_at };
+      const links: EvidenceLink[] = [{ kind: 'offer', ref: ready.offerId, summary: `offer ${ready.stage}`, at: ready.updatedAt }];
+      // Bound executor = the offer's product has a real artifact executor
+      // (structural check, same predicate CommercialBridge uses).
+      if (!EXECUTABLE_PRODUCTS.has(ready.product)) {
+        return { links, newestAt: ready.updatedAt, gap: `product '${ready.product}' has no executor — REVENUE_PATH_NOT_WIRED` };
+      }
+      links.push({ kind: 'observation', ref: ready.product, summary: `executor bound via product '${ready.product}'`, at: ready.updatedAt });
+      return { links, newestAt: ready.updatedAt };
     },
   },
 };
