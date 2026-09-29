@@ -68,6 +68,13 @@ describe('Real autonomous recovery with verification', () => {
       status: 200,
     });
 
+    // This path cannot reach a live action: fetch is mocked and returns
+    // ok, so the handler returns before the exec/poll block. Opt out of
+    // the live-action guard explicitly so the idempotent-healthy path is
+    // still exercised in Tier 1.
+    const savedLiveFlag = process.env.HYDI_DISABLE_LIVE_ACTIONS;
+    delete process.env.HYDI_DISABLE_LIVE_ACTIONS;
+
     try {
       const handler = createOllamaRepairHandler({ url: 'http://localhost:11434' });
       const result = await handler('system.local_model', 'Start Ollama');
@@ -76,46 +83,23 @@ describe('Real autonomous recovery with verification', () => {
       expect(result.evidence).toContain('already healthy');
     } finally {
       (global as any).fetch = originalFetch;
+      if (savedLiveFlag !== undefined) process.env.HYDI_DISABLE_LIVE_ACTIONS = savedLiveFlag;
     }
   });
 
-  test('2. Ollama repair handler reports failure when service does not come up', async () => {
-    // Mock fetch to always fail
-    const originalFetch = global.fetch;
-    (global as any).fetch = jest.fn().mockRejectedValue(new Error('connection refused'));
+  test('2. Ollama repair handler refuses when live actions are disabled (Tier 1)', async () => {
+    // The live path of this handler spawns a real `ollama serve` and polls
+    // for up to 15s — a live side effect that cannot run in a hermetic
+    // suite (and was the observed 15s hang). Under HYDI_DISABLE_LIVE_ACTIONS
+    // the handler must refuse BEFORE touching exec or the network. The
+    // live attempt-and-fail path is covered in Tier 2
+    // (tests/unit/heidi-ollama-repair-handler.test.ts).
+    expect(process.env.HYDI_DISABLE_LIVE_ACTIONS).toBe('1');
+    const handler = createOllamaRepairHandler({ url: 'http://localhost:99999' });
+    const result = await handler('system.local_model', 'Start Ollama');
 
-    try {
-      // Installed but never answers: the path that waits out the deadline.
-      const handler = createOllamaRepairHandler({ url: 'http://localhost:99999', isInstalled: async () => true });
-      const result = await handler('system.local_model', 'Start Ollama');
-
-      // The handler should report failure (service never came up)
-      // Note: this test may take ~15s due to the retry loop
-      expect(result.success).toBe(false);
-      expect(result.evidence).toContain('not responding');
-    } finally {
-      (global as any).fetch = originalFetch;
-    }
-  }, 30000);
-
-  test('2b. Ollama repair handler fails at once when Ollama is not installed', async () => {
-    const originalFetch = global.fetch;
-    const fetchMock = jest.fn().mockRejectedValue(new Error('connection refused'));
-    (global as any).fetch = fetchMock;
-
-    try {
-      const handler = createOllamaRepairHandler({ url: 'http://localhost:99999', isInstalled: async () => false });
-      const started = Date.now();
-      const result = await handler('system.local_model', 'Start Ollama');
-
-      expect(result.success).toBe(false);
-      expect(result.evidence).toContain('not installed');
-      // Only the precondition health check ran; no restart-wait polling.
-      expect(fetchMock).toHaveBeenCalledTimes(1);
-      expect(Date.now() - started).toBeLessThan(2000);
-    } finally {
-      (global as any).fetch = originalFetch;
-    }
+    expect(result.success).toBe(false);
+    expect(result.evidence).toMatch(/live actions disabled/i);
   });
 
   test('3. Stale state repair handler performs real state clearing with verification', async () => {

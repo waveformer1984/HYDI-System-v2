@@ -23,6 +23,8 @@
 
 jest.mock('child_process', () => ({
   execSync: jest.fn(),
+  execFile: jest.fn(),
+  execFileSync: jest.fn(),
   spawn: jest.fn(),
 }));
 

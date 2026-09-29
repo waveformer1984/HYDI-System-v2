@@ -22,7 +22,7 @@
  */
 
 import { createHash, randomUUID } from 'crypto';
-import { execSync } from 'child_process';
+import { execSync, execFileSync } from 'child_process';
 import { createEvidence, type EvidenceBlocker } from './EvidenceModel';
 
 // ─── Types ───────────────────────────────────────────────────────────────
@@ -147,12 +147,15 @@ export class HistoricalSecretRemediationTracker {
 
     for (const pattern of patterns) {
       try {
-        // Use git log -G to find commits where the pattern was added
-        const dateArg = sinceDate ? `--since="${sinceDate}"` : '';
-        const cmd = `git log -G "${pattern.regex}" --all --format="%H|%aI" -n ${maxCommits} ${dateArg} -- .`;
+        // Use git log -G to find commits where the pattern was added.
+        // argv form: the regex contains shell-hostile characters (quotes,
+        // backslashes) that double-quote interpolation would mangle.
+        const args = ['log', '-G', pattern.regex, '--all', '--format=%H|%aI', '-n', String(maxCommits)];
+        if (sinceDate) args.push(`--since=${sinceDate}`);
+        args.push('--', '.');
         let output: string;
         try {
-          output = execSync(cmd, { encoding: 'utf-8', timeout: 30000, maxBuffer: 1024 * 1024 }).trim();
+          output = execFileSync('git', args, { encoding: 'utf-8', timeout: 30000, maxBuffer: 1024 * 1024 }).trim();
         } catch {
           continue;
         }
@@ -167,7 +170,7 @@ export class HistoricalSecretRemediationTracker {
           // Find which files in this commit contain the pattern
           let filesOutput: string;
           try {
-            filesOutput = execSync(`git show --name-only --format="" ${commitSha}`, {
+            filesOutput = execFileSync('git', ['show', '--name-only', '--format=', commitSha], {
               encoding: 'utf-8',
               timeout: 10000,
               maxBuffer: 1024 * 1024,
@@ -181,7 +184,7 @@ export class HistoricalSecretRemediationTracker {
             // Check if the file in that commit contains the pattern
             let fileContent: string;
             try {
-              fileContent = execSync(`git show ${commitSha}:${filePath}`, {
+              fileContent = execFileSync('git', ['show', `${commitSha}:${filePath}`], {
                 encoding: 'utf-8',
                 timeout: 10000,
                 maxBuffer: 5 * 1024 * 1024,
@@ -454,8 +457,9 @@ export class HistoricalSecretRemediationTracker {
 
   private checkInCurrentTree(filePath: string, pattern: string): boolean {
     try {
-      // Use git grep to check if pattern exists in current tree
-      execSync(`git grep -l "${pattern}" HEAD -- "${filePath}"`, {
+      // Use git grep to check if pattern exists in current tree — argv form
+      // so the pattern/filePath cannot break out of quoting.
+      execFileSync('git', ['grep', '-l', pattern, 'HEAD', '--', filePath], {
         encoding: 'utf-8',
         timeout: 5000,
         stdio: ['pipe', 'pipe', 'ignore'],
