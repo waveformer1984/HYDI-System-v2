@@ -15,15 +15,15 @@
  */
 
 import type { NextApiRequest, NextApiResponse } from 'next';
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const { verifyServiceToken } = require('../auth/verifyServiceToken.js');
+import { verifyServiceToken } from '../auth/verifyServiceToken.js';
 
 export function requireOpsAuth(req: NextApiRequest, res: NextApiResponse): boolean {
-  const serviceToken = req.headers['x-hydi-service-token'];
+  const serviceTokenHeader = req.headers['x-hydi-service-token'];
+  const serviceToken = Array.isArray(serviceTokenHeader) ? serviceTokenHeader[0] : serviceTokenHeader;
   const deviceToken = req.headers['x-hydi-device-token'];
 
   if (serviceToken) {
-    const r = verifyServiceToken(serviceToken);
+    const r = verifyServiceToken(serviceToken, process.env.HYDI_SERVICE_SECRET ?? '');
     if (r.valid) return true;
     res.status(401).json({ error: 'Unauthorized', reason: r.reason });
     return false;
