@@ -9,6 +9,7 @@
 import { execFile as execFileCb } from 'child_process';
 import { promisify } from 'util';
 import path from 'path';
+import fs from 'fs';
 import { buildChildEnv } from './safe-child-env';
 import type {
   ActionAdapter,
@@ -91,14 +92,14 @@ export class DevelopmentAdapter implements ActionAdapter {
       resolved = path.resolve(raw);
       // realpath canonicalises the deepest existing ancestor so a symlink
       // cannot smuggle the cwd out of the repo.
-      if (require('fs').existsSync(resolved)) {
-        resolved = require('fs').realpathSync(resolved);
+      if (fs.existsSync(resolved)) {
+        resolved = fs.realpathSync(resolved);
       }
     } catch {
       throw new Error(`cwd is not a resolvable directory: ${String(raw)}`);
     }
-    const realRoot = require('fs').existsSync(this.repoRoot)
-      ? require('fs').realpathSync(this.repoRoot)
+    const realRoot = fs.existsSync(this.repoRoot)
+      ? fs.realpathSync(this.repoRoot)
       : this.repoRoot;
     const rel = path.relative(realRoot, resolved);
     if (rel === '..' || rel.startsWith('..' + path.sep) || path.isAbsolute(rel)) {
