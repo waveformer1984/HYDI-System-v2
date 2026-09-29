@@ -156,14 +156,21 @@ function lintFile(filePath) {
  *  We use file+message+line as the identity. If a violation moves lines
  *  within the same file, it's treated as a new violation (conservative). */
 function violationKey(v) {
-  return `${v.file}:${v.message}:${v.line}`;
+  return normalizeKey(`${v.file}:${v.message}:${v.line}`);
+}
+
+/** Keys use forward slashes on every OS. The baseline was generated on
+ *  Windows (`supabase\\migrations\\...`), so on the Linux CI runner no
+ *  baseline entry ever matched and every grandfathered violation failed. */
+function normalizeKey(key) {
+  return key.replace(/\\/g, '/');
 }
 
 function loadBaseline() {
   if (!fs.existsSync(BASELINE_FILE)) return null;
   try {
     const data = JSON.parse(fs.readFileSync(BASELINE_FILE, 'utf8'));
-    return new Set(data.violations || []);
+    return new Set((data.violations || []).map(normalizeKey));
   } catch (e) {
     console.error(`⚠ baseline file exists but is invalid: ${e.message}`);
     return null;

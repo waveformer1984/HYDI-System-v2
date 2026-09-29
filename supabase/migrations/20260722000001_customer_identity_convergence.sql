@@ -66,11 +66,17 @@ update clients set customer_id = client_id where customer_id is null;
 update payouts set customer_id = client_id where customer_id is null;
 
 -- Subscriptions that already match a project client by UUID text.
+-- client_id can hold non-UUID text (20260424145921 seeds 'client_test_001'),
+-- and Postgres may cast before other predicates filter the row, so the cast
+-- only happens inside the CASE, as step 5 below already allows for.
 update hydi_subscriptions hs
 set customer_id = c.customer_id
 from customers c
 where hs.customer_id is null
-  and hs.client_id::uuid = c.customer_id;
+  and (case
+         when hs.client_id ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+         then hs.client_id::uuid
+       end) = c.customer_id;
 
 -- Subscriptions that match by Stripe customer ID.
 update hydi_subscriptions hs
@@ -160,43 +166,53 @@ where h.customer_id is null
   and h.subscription_id = s.id;
 
 -- 7. Foreign keys: tables that are guaranteed to exist in this migration path.
-alter table clients add constraint if not exists fk_clients_customer
-    foreign key (customer_id) references customers(customer_id);
-alter table payouts add constraint if not exists fk_payouts_customer
-    foreign key (customer_id) references customers(customer_id);
-alter table hydi_subscriptions add constraint if not exists fk_hydi_subscriptions_customer
-    foreign key (customer_id) references customers(customer_id);
-alter table hydi_client_health_runs add constraint if not exists fk_hydi_health_customer
-    foreign key (customer_id) references customers(customer_id);
-alter table hydi_schedules add constraint if not exists fk_hydi_schedules_customer
-    foreign key (customer_id) references customers(customer_id);
+-- Postgres has no IF NOT EXISTS form for adding a constraint, so each one is added
+-- only when pg_constraint does not already have it.
+do $$
+declare
+    fk record;
+begin
+    for fk in
+        select * from (values
+            ('clients',                 'fk_clients_customer'),
+            ('payouts',                 'fk_payouts_customer'),
+            ('hydi_subscriptions',      'fk_hydi_subscriptions_customer'),
+            ('hydi_client_health_runs', 'fk_hydi_health_customer'),
+            ('hydi_schedules',          'fk_hydi_schedules_customer')
+        ) as t(tbl, con)
+    loop
+        if not exists (select 1 from pg_constraint where conname = fk.con) then
+            execute format(
+                'alter table public.%I add constraint %I foreign key (customer_id) references public.customers(customer_id)',
+                fk.tbl, fk.con);
+        end if;
+    end loop;
+end $$;
 
 -- Ledger is renamed in a later phase; keep customer_id nullable here so events can populate it.
 -- Do not add a FK until the financial ledger migration backfills or validates rows.
 
 -- 8. Foreign keys for project-motion tables, guarded by existence.
 do $$
+declare
+    fk record;
 begin
-    if to_regclass('public.leads') is not null then
-        alter table leads add constraint if not exists fk_leads_customer
-            foreign key (customer_id) references customers(customer_id);
-    end if;
-    if to_regclass('public.outreach') is not null then
-        alter table outreach add constraint if not exists fk_outreach_customer
-            foreign key (customer_id) references customers(customer_id);
-    end if;
-    if to_regclass('public.proposals') is not null then
-        alter table proposals add constraint if not exists fk_proposals_customer
-            foreign key (customer_id) references customers(customer_id);
-    end if;
-    if to_regclass('public.quotes') is not null then
-        alter table quotes add constraint if not exists fk_quotes_customer
-            foreign key (customer_id) references customers(customer_id);
-    end if;
-    if to_regclass('public.checkout_sessions') is not null then
-        alter table checkout_sessions add constraint if not exists fk_checkout_sessions_customer
-            foreign key (customer_id) references customers(customer_id);
-    end if;
+    for fk in
+        select * from (values
+            ('leads',             'fk_leads_customer'),
+            ('outreach',          'fk_outreach_customer'),
+            ('proposals',         'fk_proposals_customer'),
+            ('quotes',            'fk_quotes_customer'),
+            ('checkout_sessions', 'fk_checkout_sessions_customer')
+        ) as t(tbl, con)
+    loop
+        if to_regclass('public.' || fk.tbl) is not null
+           and not exists (select 1 from pg_constraint where conname = fk.con) then
+            execute format(
+                'alter table public.%I add constraint %I foreign key (customer_id) references public.customers(customer_id)',
+                fk.tbl, fk.con);
+        end if;
+    end loop;
 end $$;
 
 -- 9. Indexes on the new customer_id columns.

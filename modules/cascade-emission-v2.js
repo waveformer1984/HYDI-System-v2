@@ -253,7 +253,7 @@ class CascadeEmissionV2 extends EventEmitter {
     // Clean up old tracking records periodically
     setInterval(() => {
       this.cleanupOldTracking();
-    }, 60000); // Every minute
+    }, 60000).unref?.(); // Every minute; housekeeping only, don't keep the process alive
   }
 
   // Clean up old tracking records

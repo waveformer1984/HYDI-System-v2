@@ -1,0 +1,18 @@
+{
+  "description": "Fixed ProtoForge policy for the pipeline replay test, so the golden file doesn't depend on whatever policy is active in a real store.",
+  "policy": {
+    "id": "pipeline-replay-test-policy",
+    "name": "pipeline-replay-test",
+    "version": 1,
+    "stream": null,
+    "is_active": true,
+    "rules": {
+      "default": "reject",
+      "rules": [
+        { "id": "approve-high-value-low-risk", "priority": 1, "if": { "risk": { "lte": 0.1 }, "revenue_impact": { "gte": 100 } }, "then": "approve" },
+        { "id": "escalate-integrity", "priority": 2, "if": { "classification": { "eq": "DATA_INTEGRITY_RISK" } }, "then": "escalate" },
+        { "id": "escalate-stream-break", "priority": 3, "if": { "classification": { "in": ["STREAM_BREAK"] }, "risk": { "lte": 0.2 } }, "then": "escalate" }
+      ]
+    }
+  }
+}

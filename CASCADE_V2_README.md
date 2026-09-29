@@ -59,11 +59,13 @@ No self-deployment. No evolution. It reacts.
 - Per-event delivery state tracking
 - Failure logs and retry statistics
 
-### 7. Dead-Letter Finality
-- Events exceeding **5 retries** go to dead-letter storage
-- Permanent disk storage (`data/dead-letters.json`)
-- Excluded from retry loops
-- Manual review required
+### 7. Quarantine Is Final Until Reviewed
+- Quarantined events are **not retried automatically**. The pipeline is
+  deterministic and the RAW LEDGER rejects a repeat of an ingested event, so
+  a retry could only reproduce the same result (`ISSUES_FOUND.md` #86).
+- They leave quarantine by manual review (`POST /cascade/quarantine/:eventId/release`)
+- The dead-letter store (`data/dead-letters.json`, `GET /cascade/dead-letters`)
+  is kept for reading and clearing existing records; nothing adds to it now
 
 ## Architecture V2
 
@@ -76,7 +78,7 @@ INGEST EVENT
 → HARD CLASSIFICATION (enum only)
 → DECISION ROUTING
 → EMISSION (with ACK tracking)
-→ DEAD LETTER (after 5 retries)
+→ QUARANTINE (held for manual review; no automatic retries)
 ```
 
 ## API Endpoints V2
@@ -89,7 +91,7 @@ INGEST EVENT
 
 ### V2 Enhanced Endpoints
 - `GET /cascade/health` - Real-time health report
-- `GET /cascade/dead-letters` - View dead-lettered events
+- `GET /cascade/dead-letters` - View existing dead-letter records (nothing adds to them now)
 - `GET /cascade/emissions` - Emission tracking report
 - `GET /cascade/schema` - Schema lock information
 - `GET /cascade/fingerprint` - Fingerprint statistics
@@ -111,7 +113,6 @@ INGEST EVENT
 - **Duplicate fingerprint** → Immediate discard  
 - **Low confidence** → Quarantine
 - **Unknown anomaly** → Quarantine
-- **Max retries exceeded** → Dead letter
 
 ## Statistics V2
 
@@ -138,7 +139,7 @@ Demonstrates:
 - Hard classification boundaries
 - Health snapshot monitoring
 - Emission acknowledgment tracking
-- Dead letter finality
+- Quarantine held for manual review
 
 ## Key Rules V2 (All V1 Rules +)
 
@@ -147,7 +148,7 @@ Demonstrates:
 3. **CONFIDENCE GATING** - <0.75 = automatic quarantine
 4. **ENUM CLASSIFICATION** - Only 6 allowed categories
 5. **ACK REQUIREMENT** - All emissions must be acknowledged
-6. **DEAD LETTER FINALITY** - 5 retries = permanent storage
+6. **QUARANTINE FINALITY** - quarantined events wait for manual review; no automatic retries
 
 ## The Truth V2
 
@@ -158,7 +159,7 @@ But now it's:
 - **Smarter** - Confidence-based filtering
 - **Observable** - Real-time health metrics
 - **Reliable** - Acknowledgment tracking
-- **Final** - Dead letters prevent infinite loops
+- **Final** - Quarantine is never retried in a loop
 
 It still doesn't pretend to fix things.
 It just tells you more precisely when they're broken.

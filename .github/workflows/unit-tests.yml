@@ -18,7 +18,7 @@ jobs:
       - uses: actions/checkout@v7
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: '20'
           cache: 'npm'
@@ -28,6 +28,29 @@ jobs:
 
       - name: Run ESLint
         run: npm run lint
+
+      # tests/migrations/** and the DB-backed tests/unit suites (communication
+      # layer, revenue engine, cognitive core, *-qualification) run against a
+      # local Supabase: PostgREST on :54321, Postgres on :54322, with every
+      # migration and supabase/seed.sql applied. Start one with the CLI pinned
+      # in package.json and export its URL and keys, which are the CLI's fixed
+      # local-development defaults, not project secrets.
+      - name: Start local Supabase
+        run: |
+          npx supabase start -x studio,imgproxy,inbucket,edge-runtime,logflare,vector,supavisor
+          npx supabase status -o env > "$RUNNER_TEMP/supabase.env"
+          api_url=$(grep '^API_URL=' "$RUNNER_TEMP/supabase.env" | cut -d= -f2- | tr -d '"')
+          service_key=$(grep '^SERVICE_ROLE_KEY=' "$RUNNER_TEMP/supabase.env" | cut -d= -f2- | tr -d '"')
+          anon_key=$(grep '^ANON_KEY=' "$RUNNER_TEMP/supabase.env" | cut -d= -f2- | tr -d '"')
+          rm -f "$RUNNER_TEMP/supabase.env"
+          echo "::add-mask::$service_key"
+          echo "::add-mask::$anon_key"
+          {
+            echo "SUPABASE_URL=$api_url"
+            echo "NEXT_PUBLIC_SUPABASE_URL=$api_url"
+            echo "SUPABASE_SERVICE_ROLE_KEY=$service_key"
+            echo "SUPABASE_ANON_KEY=$anon_key"
+          } >> "$GITHUB_ENV"
 
       - name: Run unit tests with coverage
         run: npm test -- --coverage --forceExit

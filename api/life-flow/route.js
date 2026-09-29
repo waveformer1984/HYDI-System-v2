@@ -21,8 +21,14 @@ function getSupabase() {
 }
 const supabase = new Proxy({}, { get: (_, prop) => getSupabase()[prop] });
 
-// Initialize HYDI system with Deep Life Architect enabled
-const hydiSystem = new HYDISystem({
+// HYDISystem is created and started on the first authenticated request, not
+// at module load (ISSUES_FOUND.md #35). Constructing it starts the
+// control-plane feedback loop and creates data/life-flow, and start() runs
+// the core loop and autonomy manager, so importing this file (from a
+// pages/api bridge, a test or a build step) must not do either. The
+// hardware/software/analysis polling timers below only begin once a
+// life_flow start_session request arrives.
+const HYDI_CONFIG = Object.freeze({
   enableLifeFlowAnalysis: true,
   enableRevenueMode: false,
   enableSelfAwareness: true,
@@ -31,8 +37,20 @@ const hydiSystem = new HYDISystem({
   analysisInterval: 60000
 });
 
-// Start the system
-hydiSystem.start().catch(console.error);
+let _hydiSystem = null;
+let _startPromise = null;
+function getHydiSystem() {
+  // One instance for the life of the process: a failed start() is retried on
+  // the same instance, so a retry never leaves an orphaned feedback loop behind.
+  if (!_hydiSystem) _hydiSystem = new HYDISystem(HYDI_CONFIG);
+  if (!_startPromise) {
+    _startPromise = _hydiSystem.start().then(() => _hydiSystem, (error) => {
+      _startPromise = null;
+      throw error;
+    });
+  }
+  return _startPromise;
+}
 
 export default async function handler(req, res) {
   // Enable CORS
@@ -59,6 +77,7 @@ export default async function handler(req, res) {
     }
     
     // Process request through HYDI system
+    const hydiSystem = await getHydiSystem();
     const result = await hydiSystem.processRequest({
       type,
       subtype,

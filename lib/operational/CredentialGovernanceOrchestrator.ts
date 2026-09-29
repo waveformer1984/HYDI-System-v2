@@ -753,7 +753,7 @@ export class CredentialGovernanceOrchestrator {
         try {
           const { execSync } = require('child_process');
           // Get the configured key from the CLI
-          const configOutput = execSync('stripe config --list 2>NUL', {
+          const configOutput = execSync('stripe config --list', {
             encoding: 'utf8', timeout: 10000, stdio: ['pipe', 'pipe', 'ignore'],
           }).trim();
 

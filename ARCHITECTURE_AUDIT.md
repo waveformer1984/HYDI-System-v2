@@ -469,7 +469,7 @@ No existing projection is disposable/rebuildable from replay. This is the target
 |---|---|
 | `supabase/migrations/20260722000001_customer_identity_convergence.sql` | Creates `customers`, seeds it from `clients` and `hydi_subscriptions`, adds `customer_id` columns/FKs/indexes/RLS. |
 | `supabase/rollbacks/20260722000001_customer_identity_convergence_rollback.sql` | Removes `customers` and all `customer_id` columns (destructive — emergency use only). |
-| `tests/migrations/20260722000001.test.js` | Governance gate test for the migration. |
+| `tests/migrations/20260722000001_customer_identity_convergence.test.js` | Governance gate test for the migration. |
 | `lib/customers/customer-service.ts` | Canonical service for creating and resolving customers by id, email, or Stripe customer id. |
 | `tests/unit/customer-service.test.ts` | Unit tests for the customer service. |
 

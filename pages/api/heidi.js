@@ -2,9 +2,26 @@
  * Heidi API Endpoint - Contextual Conscience with Local Models
  * Serves POST /api/heidi from the Next.js pages router.
  * Handles chat requests, health integration, and local model switching.
+ *
+ * Requires a service or device credential with 'heidi:chat': this route
+ * forwards prompts to a model backend and can switch the active model, and
+ * was previously reachable with no auth or rate limit at all (ISSUES_FOUND.md
+ * #53 — the unbridged api/heidi/route.js copy was archived, but this live
+ * duplicate had been missed).
  */
 
+import { createClient } from '@supabase/supabase-js';
 import { HeidiLocalHandler } from '../../api/local-model';
+import { requireAuth } from '../../lib/auth/requireAuth';
+
+// Lazy client for requireAuth's device-token lookup and audit log.
+let _supabase = null;
+function getSupabase() {
+  if (!_supabase && process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    _supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+  }
+  return _supabase;
+}
 
 // Initialize Heidi handler
 const heidiHandler = new HeidiLocalHandler({
@@ -38,8 +55,11 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
+  const auth = await requireAuth(req, res, getSupabase(), { permission: 'heidi:chat', routeName: 'heidi-chat', rateMax: 30 });
+  if (!auth.ok) return;
+
   try {
-    const { message, context, model, action } = req.body;
+    const { message, context, model, action } = req.body || {};
 
     // Handle special actions
     if (action === 'status') {

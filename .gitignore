@@ -49,6 +49,8 @@ revenue-dashboard.html
 # Build outputs
 dist/
 build/
+# Jest coverage output (npm run test:coverage, unit-tests.yml)
+coverage/
 /generated/prisma
 
 # Archives
@@ -112,6 +114,9 @@ hydi.db
 # Restart request/ack queue between RecoveryEngine and boot-agent
 # (scripts/boot-control.js). In-flight machine-local orders, never history.
 .hydi-boot-control/
+# Recovery leases (scripts/recovery-lease.js) — same kind of machine-local
+# runtime state; RecoveryEngine writes them here in production.
+.recovery-leases/
 .commit-msg-*.txt
 .endurance-report.json
 pm2-state.json

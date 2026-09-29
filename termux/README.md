@@ -94,3 +94,54 @@ git pull --ff-only
 
 Re-running `setup-termux-vercel.sh` itself avoids this entirely — it already
 checks for an existing clone and pulls instead of cloning.
+
+## Verifying a host before exposing it: `hydi-production-connect.sh`
+
+Before pointing anything external (a Vercel-hosted portal, a phone, another
+machine) at a HYDI host, run the connectivity checker from the repo root on
+the machine that runs HYDI:
+
+```bash
+export HYDI_SERVICE_SECRET=...            # never pass it as an argument
+bash termux/hydi-production-connect.sh    # local only
+```
+
+Once a tunnel is up (`tailscale funnel 3000`, or
+`cloudflared tunnel --url http://127.0.0.1:3000`), re-run with the public
+hostname so the same probes run from outside, and add the portal when it is
+deployed:
+
+```bash
+bash termux/hydi-production-connect.sh \
+  --public-url https://<host>.<tailnet>.ts.net \
+  --heidi-url  https://<portal-host>
+```
+
+It starts nothing and changes nothing — it probes and reports, exiting
+non-zero if the host is not safe to expose. `HYDI_SERVICE_SECRET` is read
+from the environment only; tokens reach curl through a `0600` config file
+that is deleted on exit, so neither the secret nor a signed token ever
+appears in `ps`, stdout, or shell history. The only secret facts it prints
+are SET/UNSET and byte length.
+
+### Which chat endpoint to integrate against
+
+This trips people up, so the checker tests both:
+
+| Path | Handler | Auth | Body |
+|------|---------|------|------|
+| `POST /api/chat/route` | `api/chat/route.js` | **HMAC-gated** (`x-hydi-service-token`) | `{ message, system }` |
+| `POST /api/chat` | `pages/api/chat.ts` | **none** | `{ message, session_id, user_id }` → SSE |
+
+**A remote client must integrate against `/api/chat/route`.** `/api/chat` is
+Heidi's own single-agent streaming endpoint and performs no service-token
+check at all, so probing *it* to confirm authentication always "succeeds"
+regardless of the token — a false pass. The in-repo remote clients
+(`docs/index.html`, `public/hydi-chat.html`) already target `/api/chat/route`
+for this reason.
+
+The corollary matters more: because `/api/chat` is ungated, tunnelling port
+3000 publishes Heidi's orchestrator to the open internet. The checker reports
+this as a warning locally and as a **failure** when `--public-url` is given.
+Gate the path, block it at the tunnel, or keep the funnel down until it is
+resolved.

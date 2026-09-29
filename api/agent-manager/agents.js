@@ -20,7 +20,7 @@ const AGENT_REGISTRY = [
     role: 'Conversational Orchestrator',
     layer: 'CORE',
     capabilities: ['task_routing', 'context_management', 'model_switching', 'self_reflection'],
-    endpoint: '/api/heidi/route',
+    endpoint: '/api/chat',
   },
   {
     id: 'ursula',

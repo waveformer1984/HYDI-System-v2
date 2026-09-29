@@ -17,35 +17,66 @@ class BaseAdapter {
     };
   }
 
-  // Calculate confidence based on event completeness and source reliability
-  calculateConfidence(rawEvent, baseConfidence = 1.0) {
-    let confidence = baseConfidence;
-    
+  // Calculate confidence based on event completeness and source reliability.
+  //
+  // Completeness is judged on the event this adapter produced, not on raw
+  // field names: each adapter reads its content from a different place
+  // (system/local/user from `data` and named fields, vercel/supabase from
+  // top-level fields), so checking the raw event for `payload` scored
+  // well-formed events as empty and quarantined them. Source reliability is
+  // the starting value and is applied once; it used to be both the base and
+  // a multiplier, so a complete local event scored 0.85 * 0.85 = 0.72.
+  calculateConfidence(rawEvent, normalized) {
+    let confidence = this.getSourceReliability();
+
     // Deduct for missing fields
     const requiredFields = ['type', 'payload'];
-    const missingFields = requiredFields.filter(field => !rawEvent[field]);
+    const missingFields = requiredFields.filter(field => !normalized[field]);
     confidence -= missingFields.length * 0.2;
-    
-    // Deduct for empty payload
-    if (!rawEvent.payload || Object.keys(rawEvent.payload).length === 0) {
+
+    // Deduct for an empty payload: nothing the adapter could extract
+    const values = Object.values(normalized.payload || {});
+    if (!values.some(v => v !== undefined && v !== null && v !== '')) {
       confidence -= 0.3;
     }
-    
+
     // Deduct for malformed data
     if (rawEvent.timestamp && !this.isValidTimestamp(rawEvent.timestamp)) {
       confidence -= 0.2;
     }
-    
-    // Source-specific adjustments
-    confidence *= this.getSourceReliability();
-    
+
     // Ensure within bounds
     confidence = Math.max(0, Math.min(1, confidence));
-    
+
     // Track distribution
     this.trackConfidence(confidence);
-    
+
     return confidence;
+  }
+
+  // Attach adapter metadata and the confidence computed from the result.
+  finalize(rawEvent, normalized) {
+    return {
+      ...normalized,
+      confidence: this.calculateConfidence(rawEvent, normalized),
+      adapter_version: 'v2'
+    };
+  }
+
+  // Fields of the raw event this adapter didn't map by name. vercel and
+  // supabase keep the whole raw event in the payload; system, local and user
+  // used to keep only their named fields plus `data`, which dropped the
+  // content of events such as protoforge-core's infrastructure alerts
+  // ({ layer, alert, zoneId }) and a top-level `error_code` before
+  // classification. Envelope fields stay out of the payload.
+  passthrough(rawEvent, consumed) {
+    const skip = new Set(['id', 'type', 'level', 'timestamp', 'data', 'payload', ...consumed]);
+    return Object.fromEntries(Object.entries(rawEvent).filter(([key]) => !skip.has(key)));
+  }
+
+  // Spreadable only when it is a plain object (a string would spread per character).
+  asObject(value) {
+    return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
   }
 
   getSourceReliability() {
@@ -90,9 +121,7 @@ class VercelAdapter extends BaseAdapter {
   }
 
   normalize(rawEvent) {
-    const confidence = this.calculateConfidence(rawEvent, 0.9);
-    
-    return {
+    return this.finalize(rawEvent, {
       event_id: rawEvent.id || rawEvent.deployment_id || uuidv4(),
       source: 'vercel',
       type: this.mapVercelType(rawEvent.type),
@@ -105,10 +134,8 @@ class VercelAdapter extends BaseAdapter {
         region: rawEvent.region,
         ...rawEvent
       },
-      timestamp: rawEvent.createdAt || new Date().toISOString(),
-      confidence: confidence,
-      adapter_version: 'v2'
-    };
+      timestamp: rawEvent.createdAt || new Date().toISOString()
+    });
   }
 
   mapVercelType(vercelType) {
@@ -130,9 +157,7 @@ class LocalAdapter extends BaseAdapter {
   }
 
   normalize(rawEvent) {
-    const confidence = this.calculateConfidence(rawEvent, 0.85);
-    
-    return {
+    return this.finalize(rawEvent, {
       event_id: rawEvent.id || uuidv4(),
       source: 'local',
       type: rawEvent.level || 'info',
@@ -142,12 +167,12 @@ class LocalAdapter extends BaseAdapter {
         stack: rawEvent.stack,
         pid: rawEvent.pid,
         memory_usage: rawEvent.memoryUsage,
-        ...rawEvent.data
+        ...this.passthrough(rawEvent, ['module', 'error', 'stack', 'pid', 'memoryUsage']),
+        ...this.asObject(rawEvent.payload),
+        ...this.asObject(rawEvent.data)
       },
-      timestamp: rawEvent.timestamp || new Date().toISOString(),
-      confidence: confidence,
-      adapter_version: 'v2'
-    };
+      timestamp: rawEvent.timestamp || new Date().toISOString()
+    });
   }
 }
 
@@ -157,9 +182,7 @@ class SupabaseAdapter extends BaseAdapter {
   }
 
   normalize(rawEvent) {
-    const confidence = this.calculateConfidence(rawEvent, 0.95);
-    
-    return {
+    return this.finalize(rawEvent, {
       event_id: rawEvent.id || uuidv4(),
       source: 'supabase',
       type: this.mapSupabaseType(rawEvent.type),
@@ -171,10 +194,8 @@ class SupabaseAdapter extends BaseAdapter {
         user_id: rawEvent.user_id,
         ...rawEvent
       },
-      timestamp: rawEvent.timestamp || new Date().toISOString(),
-      confidence: confidence,
-      adapter_version: 'v2'
-    };
+      timestamp: rawEvent.timestamp || new Date().toISOString()
+    });
   }
 
   mapSupabaseType(supabaseType) {
@@ -196,9 +217,7 @@ class UserAdapter extends BaseAdapter {
   }
 
   normalize(rawEvent) {
-    const confidence = this.calculateConfidence(rawEvent, 0.7);
-    
-    return {
+    return this.finalize(rawEvent, {
       event_id: rawEvent.id || uuidv4(),
       source: 'user',
       type: 'request', // All user events are requests
@@ -209,12 +228,12 @@ class UserAdapter extends BaseAdapter {
         session_id: rawEvent.session_id,
         ip_address: rawEvent.ipAddress,
         user_agent: rawEvent.userAgent,
-        ...rawEvent.data
+        ...this.passthrough(rawEvent, ['action', 'parameters', 'user_id', 'session_id', 'ipAddress', 'userAgent']),
+        ...this.asObject(rawEvent.payload),
+        ...this.asObject(rawEvent.data)
       },
-      timestamp: rawEvent.timestamp || new Date().toISOString(),
-      confidence: confidence,
-      adapter_version: 'v2'
-    };
+      timestamp: rawEvent.timestamp || new Date().toISOString()
+    });
   }
 }
 
@@ -224,9 +243,7 @@ class SystemAdapter extends BaseAdapter {
   }
 
   normalize(rawEvent) {
-    const confidence = this.calculateConfidence(rawEvent, 1.0);
-    
-    return {
+    return this.finalize(rawEvent, {
       event_id: rawEvent.id || uuidv4(),
       source: 'system',
       type: rawEvent.type || 'heartbeat',
@@ -236,12 +253,12 @@ class SystemAdapter extends BaseAdapter {
         value: rawEvent.value,
         threshold: rawEvent.threshold,
         unit: rawEvent.unit,
-        ...rawEvent.data
+        ...this.passthrough(rawEvent, ['component', 'metric', 'value', 'threshold', 'unit']),
+        ...this.asObject(rawEvent.payload),
+        ...this.asObject(rawEvent.data)
       },
-      timestamp: rawEvent.timestamp || new Date().toISOString(),
-      confidence: confidence,
-      adapter_version: 'v2'
-    };
+      timestamp: rawEvent.timestamp || new Date().toISOString()
+    });
   }
 }
 

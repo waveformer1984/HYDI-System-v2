@@ -84,6 +84,39 @@ drop-everything, P1 is next up, P2 is scheduled but not urgent.
     green on these three checks currently carries no information at all.
     Still requires the same dashboard access as 2b/2c to actually fix.
 
+2d. **2026-09-24: the repo is public, which rules out the spending-limit
+    theory.** Public repositories get GitHub-hosted runner minutes free,
+    so neither exhausted minutes nor a $0 spending limit can cause 2b/2c.
+    Instant failure with no runner assigned on a public repo points at an
+    account-level lock, typically a failed payment or unpaid invoice.
+    Check `github.com/settings/billing` for a payment-failure banner.
+    **Workaround in place:** `npm run ci:local` (`scripts/local-ci.js`, see
+    `LOCAL_CI.md`) runs the CI checks on heidi-pc and posts `local-ci/*`
+    commit statuses to PRs, so they get a real signal without Actions. A
+    self-hosted Actions runner was rejected as the workaround: on a public
+    repo it would run fork PRs' code on the host.
+2e. **2026-09-27: cause confirmed by GitHub: the account is billing-locked.**
+    Every failed job carries this check-run annotation, readable without
+    auth at `GET /repos/waveformer1984/HYDI-System-v2/check-runs/<job_id>/annotations`:
+    *"The job was not started because your account is locked due to a
+    billing issue."* It is on the #285 merge's Unit Tests, Integration
+    Tests and CodeQL jobs (108656992365, 108656992856, 108656992569) and on
+    every scheduled Health Monitor job since. It is also on the oldest Unit
+    Tests job on record (76212678414, 2026-05-15), so the lock predates the
+    2026-07-17 date above. No `.github/workflows/*` job has ever succeeded
+    on a GitHub-hosted runner here. The only success is Test Procedural
+    Memory on the self-hosted `protoforge-runner-wsl` (run 28531587308,
+    2026-07-01). Dependabot jobs still succeed on `ubuntu-latest` (e.g. run
+    35582344286, 2026-09-21), so the runners work and only this account's
+    own workflows are refused. **Fix (account owner):** clear the lock at
+    `github.com/settings/billing` (payment method, failed or past-due
+    invoice). If billing shows nothing outstanding, file a GitHub Support
+    billing ticket quoting the annotation and job IDs above. Then re-run the
+    #285 merge's Unit Tests (36332493723), Integration Tests (36332493810)
+    and CodeQL (36332493791) once each. Check that each job gets a non-zero
+    `runner_id` and that Unit Tests runs its "Start local Supabase" step.
+    That step has so far only been verified locally.
+
 **P1 — high impact/risk, not yet started:**
 3. Cryptographic identity verification to replace the `x-user-id`
    header-trust model (unchanged top priority — see below). **Reviewed
@@ -330,9 +363,39 @@ something executable.
   reasoning.
 
 ### Pipeline observability
-- Structured trace IDs flowing through all six layers end-to-end
-- Per-layer latency metrics surfaced in `api/mobile-status.js`
-- Replay Engine automated regression suite running on every PR
+**Done 2026-09-24**, with one step left:
+- ~~Structured trace IDs flowing through all six layers end-to-end~~ —
+  no code ran all six layers in sequence before this: the gateway wrote
+  the ledger but never classified, `protoforge-core`'s CASCADE never read
+  the ledger or called KILO, and the only KILO → ProtoForge chain was the
+  deprecated `lib/protoforge/replay-engine.ts`. `lib/pipeline/` now
+  composes the existing stage implementations into one run, and every run
+  returns a trace (one `trace_id`, per-stage status, duration and outputs,
+  linked to the ledger fingerprint and the policy decision id).
+- ~~Per-layer latency metrics surfaced in `api/mobile-status.js`~~ — its
+  response now has a `pipeline` field (n / errors / skipped / last, avg,
+  p95 ms per stage, plus outcome counts).
+- ~~Replay Engine automated regression suite running on every PR~~ —
+  `tests/unit/pipeline-replay.test.js` replays
+  `tests/fixtures/pipeline/recorded-events.json` through the real stages
+  and fails on any difference from `golden-traces.json`. It runs in
+  `npm test` / `unit-tests.yml` and `local-ci/unit-tests`.
+- ~~Route live traffic through it~~ **Done 2026-09-24.**
+  `CascadeCompleteV2.processEvent`, which protoforge-core's
+  `POST /cascade/event` and its infrastructure-alert handler both call, now
+  runs `lib/pipeline`. It is the single execution path: CASCADE's adapters
+  and schema lock are stage [1]'s normalization, its classifier instance is
+  stage [3]'s, and its 0.75 source-confidence gate is unchanged. Request
+  and response shapes are kept, plus `trace_id` and `trace`. Two deliberate
+  changes: duplicates are now decided by the RAW LEDGER fingerprint
+  (permanent) instead of the 15-second in-memory window, and `decision` is
+  now ProtoForge's policy decision instead of CASCADE's own action routing.
+  protoforge-core serves `GET /pipeline/metrics`, which `/api/mobile-status`
+  reads (`PROTOFORGE_CORE_URL`, default `http://127.0.0.1:3005`). This
+  depended on `ISSUES_FOUND.md` #80 (classifier rule, fixed) and uncovered
+  #81 (the live path rejected every event at the schema lock, fixed).
+  Remaining gaps: the default Supabase ledger adapter has no outbox, so a
+  failed append is a `ledger_error` rather than `queued`.
 
 ### PolicyEngine expansion
 - Additional DSL operators (`contains`, `startsWith`, `regex`)

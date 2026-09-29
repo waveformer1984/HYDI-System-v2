@@ -422,6 +422,15 @@ END;
 $$ LANGUAGE plpgsql;
 ```
 
+### Fresh-apply corrections (2026-09-25)
+
+Two migrations stopped `supabase db start` on an empty database. They were corrected in place. Databases that already recorded these versions don't re-run them, and the end-state schema is unchanged:
+
+| Migration | Schema effect on a fresh database |
+|-----------|-----------------------------------|
+| `20260715123000_notifications` | `public.notifications` gains the July columns (`category`, `severity`, `title`, `body`, `device_id`, `read_at`, `delivered_at`) before `idx_notifications_unread` and `idx_notifications_category` are built. Previously `20260818120000_reconcile_notifications_schema` added them later. No RLS or transition changes. |
+| `20260722000001_customer_identity_convergence` | The same ten `fk_*_customer` foreign keys to `customers(customer_id)`, now added only when `pg_constraint` lacks them. The `hydi_subscriptions.customer_id` backfill skips non-UUID `client_id` values instead of failing. No RLS or transition changes. |
+
 ## 9. "Don't Sabotage Yourself" Rules (Enforced)
 
 | Rule | Enforcement |
