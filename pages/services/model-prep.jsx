@@ -176,11 +176,11 @@ export default function JobIntakePage() {
       <div style={{ marginTop: '32px', borderTop: '1px solid #ddd', paddingTop: '16px', fontSize: '13px', color: '#555' }}>
         <h2 style={{ fontSize: '15px', marginBottom: '8px' }}>Common questions</h2>
         <p><strong>What do I get?</strong> A print-ready STL file, the OpenSCAD source, and a spec sheet documenting dimensions and print settings.</p>
-        <p><strong>What can you make?</strong> One object, up to 100mm in any dimension — enclosures, brackets, stands, mounts, and similar mechanical parts. If your request is outside scope you'll be told before payment, not after.</p>
+        <p><strong>What can you make?</strong> One object, up to 100mm in any dimension — enclosures, brackets, stands, mounts, and similar mechanical parts. If your request is outside scope you&apos;ll be told before payment, not after.</p>
         <p><strong>How fast?</strong> Generation is automated and typically completes within minutes of payment. A human reviews the artifacts before delivery.</p>
         <p><strong>Revisions?</strong> One free revision is included. Reply with measurements if you want a fit adjustment.</p>
-        <p><strong>What if generation fails?</strong> You're refunded. A failed generation is never charged through silently.</p>
-        <p><strong>Where is my order?</strong> You'll get a status link after checkout — it shows live progress from payment through delivery.</p>
+        <p><strong>What if generation fails?</strong> You&apos;re refunded. A failed generation is never charged through silently.</p>
+        <p><strong>Where is my order?</strong> You&apos;ll get a status link after checkout — it shows live progress from payment through delivery.</p>
       </div>
 
       <p style={{ fontSize: '12px', color: '#999', marginTop: '16px' }}>

@@ -923,7 +923,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           // Completion awareness: consequential outcomes since the last
           // surfaced marker, once — then mark. Only greeting surfaces it
           // (briefing is on-demand inspection, not a welcome-back).
-          let unsurfacedLines: string[] = [];
+          const unsurfacedLines: string[] = [];
           if (lifeIntent.kind === 'greeting') {
             const { data: marker } = await sb.from('heidi_events')
               .select('payload')

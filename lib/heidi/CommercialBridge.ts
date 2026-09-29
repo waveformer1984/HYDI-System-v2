@@ -71,7 +71,7 @@ export function checkoutPrereqs(product: string): PrereqResult {
   return { ready: blockers.length === 0, blockers };
 }
 
-interface OfferRow extends CommercialOffer { }
+type OfferRow = CommercialOffer;
 
 /** Fold heidi_events division='commercial' into current offer state. */
 export async function collectOffers(pool: Pick<Pool, 'query'>): Promise<CommercialOffer[]> {

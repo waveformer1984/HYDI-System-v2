@@ -249,7 +249,7 @@ export default function CooCommandCenter() {
       <div style={box}>
         <b>CONVERSATION</b>
         <div ref={logRef} style={{ height: 180, overflowY: 'auto', marginTop: 6, padding: 6, background: '#0d1117', borderRadius: 4 }}>
-          {chat.length === 0 && <div style={{ color: '#8b949e' }}>Ask Heidi: "how's it going?" · "what needs my attention?" · commands: acknowledge|stop|retry|approve|reject|inspect &lt;id&gt;</div>}
+          {chat.length === 0 && <div style={{ color: '#8b949e' }}>Ask Heidi: &quot;how&apos;s it going?&quot; · &quot;what needs my attention?&quot; · commands: acknowledge|stop|retry|approve|reject|inspect &lt;id&gt;</div>}
           {chat.map((m, i) => (
             <div key={i} style={{ marginBottom: 6, whiteSpace: 'pre-wrap' }}>
               <b style={{ color: m.who === 'you' ? '#58a6ff' : '#3fb950' }}>{m.who}:</b> {m.text}
