@@ -54,6 +54,8 @@ import { ALL_CONTRACTS } from './contracts';
 import type { ProspectRecord, OpportunityRecord } from '../revenue/types';
 import { getOfferCatalog } from '../revenue/OfferCatalog';
 import { MissionProducer, type ProductionResult } from './MissionProducer';
+import { MissionRunner } from './MissionRunner';
+import { MissionLifecycle } from './MissionLifecycle';
 import { PriorityEngine } from './PriorityEngine';
 import { collectExecutiveDiagnostic } from './ExecutiveDiagnostic';
 import { collectDiagnosticFollowup, investigateDimension } from './DiagnosticFollowup';
@@ -446,6 +448,7 @@ export class CognitiveCore {
    */
   private contractAuthorityMode: 'advisory' | 'enforcing';
   private missionProducer: MissionProducer | null;
+  private missionRunner: MissionRunner | null = null;
   private priorityEngine = new PriorityEngine();
   private bridge: ExecutionBridge;
   private currentCycle: CognitiveState | null = null;
@@ -495,6 +498,12 @@ export class CognitiveCore {
     this.trust = new TrustModel(config);
     this.guardian = new GuardianModel(config);
     this.registry = getCapabilityRegistry();
+    this.missionRunner = new MissionRunner({
+      pool: this.pool,
+      goals: this.goals,
+      registry: this.registry,
+      lifecycle: new MissionLifecycle(this.pool, 'heidi-daemon'),
+    });
     this.bridge = bridge || {};
     this.sessionId = `cognitive-${Date.now()}`;
     this.contractAuthorityMode =
@@ -3138,6 +3147,42 @@ export class CognitiveCore {
         auditTrail: state.errors,
       };
 
+      // Mission dispatch (Phase G): a goal-bound capability is dispatched
+      // to the MissionRunner — the cycle does not wait for the mission.
+      // Execution latency is decoupled from decision latency: the runner
+      // writes DISPATCHED→RUNNING→SUCCEEDED|FAILED receipts durably, and
+      // the goal's in_progress status makes it invisible to the planner
+      // until it settles. The cycle's own outcome here is 'pending' —
+      // verified means "the dispatch happened", not "the mission worked".
+      if (action.targetGoalId && this.missionRunner) {
+        const dispatch = await this.missionRunner.dispatch(
+          action.targetGoalId,
+          action.capabilityId,
+          action.params,
+          ctx,
+        );
+        if (dispatch.dispatched) {
+          return {
+            executed: true,
+            actionType: action.actionType,
+            capabilityId: action.capabilityId,
+            outcome: 'pending',
+            details: `Mission ${action.targetGoalId.slice(0, 8)} dispatched to runner — executes async`,
+            evidence: [{ dispatch: true, goalId: action.targetGoalId, capabilityId: action.capabilityId }],
+            rawResult: dispatch,
+          };
+        }
+        return {
+          executed: false,
+          actionType: action.actionType,
+          capabilityId: action.capabilityId,
+          outcome: 'skipped',
+          details: `Mission dispatch refused: ${dispatch.reason}`,
+          evidence: [{ dispatch: false, reason: dispatch.reason }],
+          rawResult: dispatch,
+        };
+      }
+
       const capResult = await this.registry.execute(action.capabilityId, action.params, ctx);
 
       return {
@@ -3270,6 +3315,21 @@ export class CognitiveCore {
 
     const action = state.selectedAction;
 
+    // Phase G: a dispatched mission is verified at the dispatch boundary —
+    // the lifecycle receipt chain (DISPATCHED→RUNNING→…) is the proof that
+    // the action happened. The mission's OWN outcome lands asynchronously
+    // as receipts + goal status; asserting it now would be claiming an
+    // outcome we haven't observed.
+    if (state.executionResult.outcome === 'pending') {
+      return {
+        verified: true,
+        expectedState: 'mission dispatched to the async runner',
+        actualState: 'dispatched — mission outcome lands as lifecycle receipts, not this cycle',
+        verificationStrategy: 'dispatch_receipt',
+        evidence: [{ executorOutcome: 'pending', dispatched: true, goalId: action.targetGoalId }],
+      };
+    }
+
     if (action.capabilityId && this.contracts.get(action.capabilityId)) {
       return this.verifyThroughContract(action, state.executionResult, state);
     }
@@ -3370,7 +3430,12 @@ export class CognitiveCore {
     // and verified. A goal carrying context.capabilityId means "run this
     // capability"; doing so successfully IS the work — leaving it open
     // would re-run it forever and wedge the producer's open-goal dedupe.
-    if (goalUpdated && state.selectedAction) {
+    //
+    // Phase G: a dispatched goal (outcome 'pending') is owned by the
+    // MissionRunner — it completes/fails the row when the async work
+    // settles. Completing it here would double-settle and fabricate a
+    // success receipt before the mission has finished.
+    if (goalUpdated && state.selectedAction && state.executionResult?.outcome !== 'pending') {
       try {
         const goal =
           state.pendingWork.find((g) => g.goalId === state.selectedAction!.targetGoalId)
