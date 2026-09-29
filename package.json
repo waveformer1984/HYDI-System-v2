@@ -12,7 +12,7 @@
     "start": "next start",
     "lint": "eslint api pages components lib src apps/ursula-frontend/src tests/unit --ext .js,.jsx,.ts,.tsx",
     "lint:hydi-v3": "eslint src/hydi-v3 tests/unit/hydi-v3 scripts/performance-benchmark.js scripts/security-audit.js scripts/soak-test-v3.js",
-    "test": "cross-env PG_HOST=127.0.0.1 PG_PORT=59999 SUPABASE_URL=http://127.0.0.1:59999 NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:59999 OLLAMA_URL=http://127.0.0.1:59999 LOCAL_MODEL_URL=http://127.0.0.1:59999 OLLAMA_HOST=http://127.0.0.1:59999 jest",
+    "test": "jest",
     "ci:local": "node scripts/local-ci.js",
     "test:replay": "jest tests/unit/pipeline-replay.test.js",
     "test:watch": "jest --watch",
