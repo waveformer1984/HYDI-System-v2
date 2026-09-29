@@ -54,6 +54,7 @@ import { ALL_CONTRACTS } from './contracts';
 import type { ProspectRecord, OpportunityRecord } from '../revenue/types';
 import { getOfferCatalog } from '../revenue/OfferCatalog';
 import { MissionProducer, type ProductionResult } from './MissionProducer';
+import { PriorityEngine } from './PriorityEngine';
 import { collectExecutiveDiagnostic } from './ExecutiveDiagnostic';
 import { collectDiagnosticFollowup, investigateDimension } from './DiagnosticFollowup';
 import { collectReconciliation, resolveGitHead } from './DeploymentReconciliation';
@@ -445,6 +446,7 @@ export class CognitiveCore {
    */
   private contractAuthorityMode: 'advisory' | 'enforcing';
   private missionProducer: MissionProducer | null;
+  private priorityEngine = new PriorityEngine();
   private bridge: ExecutionBridge;
   private currentCycle: CognitiveState | null = null;
   private cycleCount = 0;
@@ -2816,19 +2818,50 @@ export class CognitiveCore {
       };
     }
 
-    // Sort by priority (highest first)
-    actionable.sort((a, b) => b.priority - a.priority);
+    // Rank by the deterministic PriorityEngine — impact × confidence ×
+    // urgency × autonomyFit ÷ effort — instead of raw `priority`. Each
+    // goal's assessment is derived from declared fields (goal priority,
+    // confidence, capability risk level, autonomy requirement, executor
+    // availability). Governance is honored structurally: a goal whose
+    // capability exceeds the current autonomy level is refused, not
+    // ranked; human_required goals are deferred, not picked.
+    const autonomy = state.identity?.autonomyLevel ?? 0;
+    const ranked = this.priorityEngine.prioritize(
+      actionable.map((g) => ({ item: g, assessment: this.goalAssessment(g) })),
+      autonomy,
+    );
 
     // Record alternatives
-    for (let i = 1; i < Math.min(actionable.length, 4); i++) {
+    for (const alt of ranked.ranked.slice(1, 4)) {
       alternatives.push({
-        action: `advance_goal: ${actionable[i].title}`,
-        reason: `Priority ${actionable[i].priority} — lower than selected`,
+        action: `advance_goal: ${alt.item.title}`,
+        reason: `priority score ${alt.score.toFixed(2)} — lower than selected`,
+        rejected: true,
+      });
+    }
+    for (const d of [...ranked.deferred, ...ranked.refused].slice(0, 3)) {
+      alternatives.push({
+        action: `advance_goal: ${d.item.title}`,
+        reason: d.deferred ? 'deferred — human required' : `refused — ${d.reason}`,
         rejected: true,
       });
     }
 
-    const target = actionable[0];
+    if (ranked.ranked.length === 0) {
+      return {
+        actionType: 'cognitive.observe',
+        capabilityId: 'cognitive.observe',
+        description: 'No executable work — all pending goals refused or human-deferred',
+        targetGoalId: null,
+        riskLevel: 'R0',
+        estimatedImpact: 'none',
+        reasoning: `PriorityEngine: ${ranked.refused.length} refused, ${ranked.deferred.length} deferred, 0 executable.`,
+        params: {},
+        alternatives,
+      };
+    }
+
+    const target = ranked.ranked[0].item;
 
     // Determine capability based on goal type
     let capabilityId = 'goal.advance';
@@ -2858,6 +2891,35 @@ export class CognitiveCore {
       reasoning: `Goal ${target.goalId} (${target.goalType}: ${target.title}) is highest priority pending work. Selected over ${alternatives.length} alternatives.`,
       params,
       alternatives,
+    };
+  }
+
+  /**
+   * Derive a deterministic ConditionAssessment for a pending goal. All
+   * inputs come from declared fields — goal priority/confidence/context
+   * plus the bound capability's risk level, autonomy requirement, and
+   * executor status — so the ranking is auditable, never an LLM opinion.
+   */
+  private goalAssessment(g: Goal): import('./PriorityEngine').ConditionAssessment {
+    const ctx = (g.context ?? {}) as Record<string, unknown>;
+    const capId = typeof ctx.capabilityId === 'string' ? ctx.capabilityId : null;
+    const cap = capId ? this.registry.get(capId) : null;
+
+    const RISK_REVERSIBILITY: Record<string, number> = { R0: 1.0, R1: 0.8, R2: 0.5, R3: 0.3, R4: 0.15, R5: 0.05 };
+
+    return {
+      impact: Math.min(10, Math.max(0, g.priority)),
+      urgency: Math.min(10, Math.max(0, g.priority)),
+      confidence: Math.min(1, Math.max(0, g.confidence ?? 0.5)),
+      reversibility: cap ? (RISK_REVERSIBILITY[cap.riskLevel] ?? 0.5) : 0.6,
+      autonomyLevel: cap ? (cap.autonomyRequirement ?? 0) : 0,
+      estimatedEffort: typeof ctx.estimatedEffort === 'number' ? ctx.estimatedEffort : 5,
+      // A bound capability whose executor is unavailable is half-executable.
+      dependencyHealth: cap ? (cap.status === 'available' ? 1 : 0.3) : 0.7,
+      revenueEffect: typeof ctx.revenueEffect === 'number' ? ctx.revenueEffect : 0,
+      humanRequired: ctx.humanRequired === true,
+      prohibited: ctx.prohibited === true,
+      prohibitionReason: typeof ctx.prohibitionReason === 'string' ? ctx.prohibitionReason : undefined,
     };
   }
 
