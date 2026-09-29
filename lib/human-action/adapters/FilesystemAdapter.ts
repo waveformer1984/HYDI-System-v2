@@ -13,6 +13,12 @@
 import fs from 'fs';
 import path from 'path';
 import { randomUUID } from 'crypto';
+import {
+  authorizeFilesystemTarget,
+  type FsAuthDecision,
+  type FsOperation,
+} from '../FilesystemAuthorization';
+import { SYSTEM_CAPABILITIES } from '../ActionCapabilityRegistry';
 import type {
   ActionAdapter,
   ActionExecutionContext,
@@ -35,9 +41,19 @@ export class FilesystemAdapter implements ActionAdapter {
   ];
 
   private backupDir: string;
+  private repoRoot: string;
+  /**
+   * When set, autonomous writes are confined to this directory as well as
+   * passing every other check. Phase 13 will set it to the development
+   * sandbox; until then it is null and confinement falls back to the
+   * repository root plus the protected set.
+   */
+  private sandboxRoot: string | null;
 
-  constructor(backupDir?: string) {
-    this.backupDir = backupDir || path.resolve(process.cwd(), '.hydi-operational', 'action-backups');
+  constructor(backupDir?: string, options?: { repoRoot?: string; sandboxRoot?: string | null }) {
+    this.repoRoot = options?.repoRoot || process.cwd();
+    this.sandboxRoot = options?.sandboxRoot ?? process.env.HYDI_SANDBOX_ROOT ?? null;
+    this.backupDir = backupDir || path.resolve(this.repoRoot, '.hydi-operational', 'action-backups');
   }
 
   async execute(
@@ -45,15 +61,55 @@ export class FilesystemAdapter implements ActionAdapter {
     _context: ActionExecutionContext,
   ): Promise<ActionExecutionResult> {
     const startTime = Date.now();
-    const preState = await this.observe(action.target, _context).catch(() => undefined);
+
+    // Authorization runs BEFORE observation and before any dispatch, so a
+    // denied target is never read, stat'ed or touched. This is the single
+    // enforcement point for every filesystem capability: adding a new one
+    // without a guard is not possible, because the guard is not per-operation.
+    //
+    // Until Phase 4 this check did not exist at all. `allowedTargets` was
+    // declared on every capability and read by nothing, so an R1 autonomous
+    // write could target lib/operational/**, the test suite, or the evidence
+    // ledger. See lib/human-action/FilesystemAuthorization.ts.
+    const authz = this.authorizeTargets(action);
+    if (authz.denial) {
+      return {
+        executed: false,
+        output: null,
+        error: authz.denial.reason,
+        evidence: [{
+          check: 'filesystem_authorization',
+          status: 'fail',
+          value: `${authz.denial.code}: ${authz.denial.reason}`,
+          checkedAt: new Date().toISOString(),
+        }],
+        durationMs: Date.now() - startTime,
+      };
+    }
+
+    // Pin every subsequent syscall to the RESOLVED path, not the caller's
+    // raw target (red-team 2026-09-18 TOCTOU): authorization resolved
+    // symlinks at check time, but the ops then used the raw string — a
+    // symlink swapped between check and use would redirect the write. The
+    // resolved path is what the authorization decision actually covered.
+    const resolvedAction: HumanAction = {
+      ...action,
+      target: authz.resolvedTarget ?? action.target,
+      parameters: {
+        ...action.parameters,
+        ...(authz.resolvedDestination ? { destination: authz.resolvedDestination } : {}),
+      },
+    };
+
+    const preState = await this.observe(resolvedAction.target, _context).catch(() => undefined);
 
     try {
       let output: unknown;
       const evidence: ActionExecutionResult['evidence'] = [];
 
-      switch (action.capability) {
+      switch (resolvedAction.capability) {
         case 'filesystem.read_file':
-          output = await this.readFile(action);
+          output = await this.readFile(resolvedAction);
           evidence.push({
             check: 'file_read',
             status: 'pass',
@@ -63,41 +119,41 @@ export class FilesystemAdapter implements ActionAdapter {
           break;
 
         case 'filesystem.write_file':
-          output = await this.writeFile(action);
+          output = await this.writeFile(resolvedAction);
           evidence.push({
             check: 'file_written',
             status: 'pass',
-            value: `Wrote to ${action.target}`,
+            value: `Wrote to ${resolvedAction.target}`,
             checkedAt: new Date().toISOString(),
           });
           break;
 
         case 'filesystem.create_directory':
-          output = await this.createDirectory(action);
+          output = await this.createDirectory(resolvedAction);
           evidence.push({
             check: 'directory_created',
             status: 'pass',
-            value: `Created ${action.target}`,
+            value: `Created ${resolvedAction.target}`,
             checkedAt: new Date().toISOString(),
           });
           break;
 
         case 'filesystem.move_file':
-          output = await this.moveFile(action);
+          output = await this.moveFile(resolvedAction);
           evidence.push({
             check: 'file_moved',
             status: 'pass',
-            value: `Moved to ${action.parameters.destination ?? action.target}`,
+            value: `Moved to ${resolvedAction.parameters.destination ?? resolvedAction.target}`,
             checkedAt: new Date().toISOString(),
           });
           break;
 
         case 'filesystem.delete_file':
-          output = await this.deleteFile(action);
+          output = await this.deleteFile(resolvedAction);
           evidence.push({
             check: 'file_deleted',
             status: 'pass',
-            value: `Deleted ${action.target}`,
+            value: `Deleted ${resolvedAction.target}`,
             checkedAt: new Date().toISOString(),
           });
           break;
@@ -112,7 +168,7 @@ export class FilesystemAdapter implements ActionAdapter {
           };
       }
 
-      const postState = await this.observe(action.target, _context).catch(() => undefined);
+      const postState = await this.observe(resolvedAction.target, _context).catch(() => undefined);
 
       return {
         executed: true,
@@ -249,6 +305,21 @@ export class FilesystemAdapter implements ActionAdapter {
     executionResult: ActionExecutionResult,
     _context: ActionExecutionContext,
   ): Promise<RollbackResult> {
+    // Re-authorize before touching the target (red-team 2026-09-18):
+    // rollback wrote/unlinked/renamed `action.target` and `destination`
+    // without re-checking — a path that is no longer permitted must not be
+    // restored either.
+    const authz = this.authorizeTargets(action);
+    if (authz.denial) {
+      return {
+        attempted: false,
+        succeeded: false,
+        evidence: 'Rollback target is not authorized',
+        error: authz.denial.reason,
+      };
+    }
+    const target = authz.resolvedTarget ?? action.target;
+    const resolvedDestination = authz.resolvedDestination ?? (action.parameters.destination as string);
     try {
       switch (action.capability) {
         case 'filesystem.write_file': {
@@ -256,7 +327,7 @@ export class FilesystemAdapter implements ActionAdapter {
           const backupPath = (executionResult.preExecutionState as ActionObservation)?.properties?.backupPath as string;
           if (backupPath && fs.existsSync(backupPath)) {
             const content = fs.readFileSync(backupPath);
-            fs.writeFileSync(action.target, content);
+            fs.writeFileSync(target, content);
             return {
               attempted: true,
               succeeded: true,
@@ -264,8 +335,8 @@ export class FilesystemAdapter implements ActionAdapter {
             };
           }
           // If no backup existed (file was new), delete the created file
-          if (fs.existsSync(action.target)) {
-            fs.unlinkSync(action.target);
+          if (fs.existsSync(target)) {
+            fs.unlinkSync(target);
             return {
               attempted: true,
               succeeded: true,
@@ -276,17 +347,17 @@ export class FilesystemAdapter implements ActionAdapter {
         }
 
         case 'filesystem.create_directory': {
-          if (fs.existsSync(action.target) && fs.statSync(action.target).isDirectory()) {
-            fs.rmdirSync(action.target);
+          if (fs.existsSync(target) && fs.statSync(target).isDirectory()) {
+            fs.rmdirSync(target);
             return { attempted: true, succeeded: true, evidence: 'Removed created directory' };
           }
           return { attempted: true, succeeded: true, evidence: 'Directory not present' };
         }
 
         case 'filesystem.move_file': {
-          const dest = action.parameters.destination as string ?? action.target;
+          const dest = resolvedDestination ?? target;
           if (fs.existsSync(dest)) {
-            fs.renameSync(dest, action.target);
+            fs.renameSync(dest, target);
             return { attempted: true, succeeded: true, evidence: 'Moved file back' };
           }
           return { attempted: true, succeeded: false, evidence: 'Destination file not found for rollback' };
@@ -297,7 +368,7 @@ export class FilesystemAdapter implements ActionAdapter {
           const backupPath = (executionResult.preExecutionState as ActionObservation)?.properties?.backupPath as string;
           if (backupPath && fs.existsSync(backupPath)) {
             const content = fs.readFileSync(backupPath);
-            fs.writeFileSync(action.target, content);
+            fs.writeFileSync(target, content);
             return { attempted: true, succeeded: true, evidence: `Restored from backup: ${backupPath}` };
           }
           return {
@@ -329,15 +400,35 @@ export class FilesystemAdapter implements ActionAdapter {
   }
 
   async observe(target: string, _context: ActionExecutionContext): Promise<ActionObservation> {
-    const exists = fs.existsSync(target);
+    // Read authorization (red-team 2026-09-18): observe() stat'ed and —
+    // worse — fs.copyFileSync'd ANY path into .hydi-operational/action-backups
+    // with no authorization call, so observe('.env') duplicated the secret
+    // file into a second location. Route the target through read-scope
+    // authorization first: confined to the repo, secrets/VCS refused.
+    const auth = authorizeFilesystemTarget(target, {
+      operation: 'read',
+      repoRoot: this.repoRoot,
+      allowedTargets: [{ type: 'glob', pattern: '**' }],
+    });
+    if (!auth.allowed || !auth.resolvedPath) {
+      return {
+        target,
+        exists: false,
+        state: `refused:${auth.code}`,
+        properties: {},
+        observedAt: new Date().toISOString(),
+      };
+    }
+    const resolved = auth.resolvedPath;
+    const exists = fs.existsSync(resolved);
     let state = 'not_found';
     const properties: Record<string, unknown> = {};
 
     if (exists) {
-      const stat = fs.statSync(target);
+      const stat = fs.statSync(resolved);
       if (stat.isDirectory()) {
         state = 'directory';
-        properties.entryCount = fs.readdirSync(target).length;
+        properties.entryCount = fs.readdirSync(resolved).length;
       } else {
         state = 'file';
         properties.size = stat.size;
@@ -348,9 +439,9 @@ export class FilesystemAdapter implements ActionAdapter {
           if (!fs.existsSync(this.backupDir)) {
             fs.mkdirSync(this.backupDir, { recursive: true });
           }
-          const backupName = `${path.basename(target)}.${randomUUID().slice(0, 8)}.bak`;
+          const backupName = `${path.basename(resolved)}.${randomUUID().slice(0, 8)}.bak`;
           const backupPath = path.resolve(this.backupDir, backupName);
-          fs.copyFileSync(target, backupPath);
+          fs.copyFileSync(resolved, backupPath);
           properties.backupPath = backupPath;
         }
       }
@@ -368,6 +459,49 @@ export class FilesystemAdapter implements ActionAdapter {
   // -----------------------------------------------------------------------
   // Private operation implementations
   // -----------------------------------------------------------------------
+
+  /**
+   * Authorize every path this action would touch. Returns a denial, or null
+   * when the action may proceed.
+   *
+   * move_file is checked on BOTH paths deliberately. Checking only the source
+   * would let a move write INTO a protected location; checking only the
+   * destination would let it move a protected file OUT of one. Either alone is
+   * a bypass.
+   */
+  private authorizeTargets(action: HumanAction): {
+    denial: FsAuthDecision | null;
+    resolvedTarget?: string;
+    resolvedDestination?: string;
+  } {
+    const operation: FsOperation = action.capability === 'filesystem.read_file' ? 'read' : 'write';
+    const allowedTargets = SYSTEM_CAPABILITIES.find((c) => c.capabilityId === action.capability)?.allowedTargets;
+
+    const opts = {
+      operation,
+      repoRoot: this.repoRoot,
+      sandboxRoot: this.sandboxRoot,
+      allowedTargets,
+    };
+
+    const primary = authorizeFilesystemTarget(action.target, opts);
+    if (!primary.allowed) return { denial: primary };
+
+    if (action.capability === 'filesystem.move_file') {
+      const destination = action.parameters.destination as string;
+      const dest = authorizeFilesystemTarget(destination, { ...opts, operation: 'write' });
+      if (!dest.allowed) {
+        return { denial: { ...dest, reason: `move_file destination rejected — ${dest.reason}` } };
+      }
+      return {
+        denial: null,
+        resolvedTarget: primary.resolvedPath ?? undefined,
+        resolvedDestination: dest.resolvedPath ?? undefined,
+      };
+    }
+
+    return { denial: null, resolvedTarget: primary.resolvedPath ?? undefined };
+  }
 
   private async readFile(action: HumanAction): Promise<string> {
     const target = action.target;

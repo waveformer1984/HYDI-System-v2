@@ -40,6 +40,12 @@ import type {
 import { ActionCapabilityRegistry } from './ActionCapabilityRegistry';
 import { AuthorityManager, type DelegatedAuthority } from './AuthorityManager';
 import { ActionJournal, redactParameters } from './ActionJournal';
+import {
+  signAuthorization,
+  verifyAuthorizationSignature,
+  payloadDigest,
+} from '../governance/approval-signing';
+import type { ActionAuthorization } from '../governance/ActionChokepoint';
 
 // ---------------------------------------------------------------------------
 // Risk mapping: R0-R5 → LOW/MEDIUM/HIGH/CRITICAL
@@ -254,14 +260,20 @@ export class HumanActionEngine {
       };
     }
 
-    // Check authority
+    // Check authority. The category is the AUTHORITATIVE one from the
+    // registered capability descriptor (cap.category), never the caller's
+    // claim (intent.category). ConfirmationPolicy keys on category -- e.g.
+    // DEVELOPMENT actions require confirmation -- so trusting intent.category
+    // let a caller label a dev command 'SYSTEM' and skip the confirmation the
+    // capability actually demands (red-team 2026-09-18: dev.run_tests with a
+    // lied SYSTEM category executed arbitrary commands with no approval).
     const authCheck = this.authorityManager.checkAuthorization(
       authId,
       cap.authorizationScope,
       cap.risk,
       cap.riskLabel,
       intent.target,
-      intent.category,
+      cap.category,
     );
 
     return {
@@ -289,6 +301,30 @@ export class HumanActionEngine {
   // -----------------------------------------------------------------------
 
   /**
+   * Verify a signed human-approval record is bound to THIS intent — the
+   * capability, the approval's own reference (the pending action id), and a
+   * digest of the target + parameters. Replaces the `forceAuthorize` boolean
+   * (red-team 2026-09-18): a caller-supplied flag let ANY caller skip both the
+   * policy denial and the human-approval gate for ANY capability, and
+   * resumeAction set it with no proof a human approved anything. The only way
+   * past the human gate now is a signature the human-approval channel minted
+   * for this exact action — attributable, bound, and non-replayable onto a
+   * different action.
+   */
+  private verifyHumanApproval(auth: ActionAuthorization | undefined, intent: HumanActionIntent): boolean {
+    if (!auth || typeof auth !== 'object') return false;
+    if (
+      typeof auth.approvedBy !== 'string' || auth.approvedBy.length === 0 ||
+      typeof auth.approvalRef !== 'string' || auth.approvalRef.length === 0 ||
+      typeof auth.grantedAt !== 'string' || auth.grantedAt.length === 0
+    ) {
+      return false;
+    }
+    const digest = payloadDigest({ target: intent.target, parameters: intent.parameters ?? {} });
+    return verifyAuthorizationSignature(auth, intent.capability, auth.approvalRef, digest);
+  }
+
+  /**
    * Execute a single action intent through the full governed lifecycle.
    *
    * Lifecycle:
@@ -306,7 +342,7 @@ export class HumanActionEngine {
   async executeAction(
     intent: HumanActionIntent,
     authorityId?: string,
-    options?: { dryRun?: boolean; forceAuthorize?: boolean },
+    options?: { dryRun?: boolean; humanAuthorization?: ActionAuthorization },
   ): Promise<HumanActionResult> {
     const authId = authorityId ?? this.defaultAuthorityId;
     const actionId = randomUUID();
@@ -315,6 +351,12 @@ export class HumanActionEngine {
     // Step 1: Evaluate intent
     const evaluation = this.evaluateIntent(intent, authId ?? undefined);
 
+    // A signed human-approval record bound to this intent satisfies the
+    // human-approval gate below. It does NOT bypass a policy denial — an
+    // unexecutable, unregistered, or unauthorized capability stays denied
+    // (a PENDING_HUMAN action necessarily passed that check already).
+    const humanApproved = this.verifyHumanApproval(options?.humanAuthorization, intent);
+
     // Build the HumanAction object
     const action: HumanAction = {
       actionId,
@@ -322,7 +364,11 @@ export class HumanActionEngine {
       goalId: intent.goalId,
       actor: intent.actor,
       authorizedBy: authId ?? 'none',
-      category: intent.category,
+      // Authoritative category from the capability registry, not the caller's
+      // claim -- the recorded action must reflect what the capability actually
+      // is, not what the intent asserted. `cap` is out of scope here (it lives
+      // inside evaluateIntent), so resolve it from the registry.
+      category: this.registry.get(intent.capability)?.category ?? intent.category,
       capability: intent.capability,
       operation: intent.operation,
       target: intent.target,
@@ -376,8 +422,9 @@ export class HumanActionEngine {
       return result;
     }
 
-    // Step 2: Check authorization
-    if (!evaluation.allowed && !options?.forceAuthorize) {
+    // Step 2: Check authorization. A signed human approval does NOT rescue a
+    // policy denial — a denied/unavailable capability stays denied.
+    if (!evaluation.allowed) {
       // Distinguish between "denied by policy" and "blocked because capability unavailable"
       const cap = this.registry.get(intent.capability);
       const isBlocked = cap && (cap.status === 'BLOCKED' || cap.status === 'UNSUPPORTED' || cap.status === 'DISABLED');
@@ -403,8 +450,9 @@ export class HumanActionEngine {
       return result;
     }
 
-    // Step 3: Check if human approval is required
-    if (evaluation.requiresHumanApproval && !options?.forceAuthorize) {
+    // Step 3: Check if human approval is required — satisfied only by a
+    // signed human-approval record bound to this intent, never a flag.
+    if (evaluation.requiresHumanApproval && !humanApproved) {
       action.state = 'PENDING_HUMAN';
       const intervention: HumanInterventionRequest = {
         requestId: randomUUID(),
@@ -714,9 +762,53 @@ export class HumanActionEngine {
   // -----------------------------------------------------------------------
 
   /**
-   * Resume an action that was paused for human intervention.
+   * Mint a signed human-approval record for a pending action — the record the
+   * human-approval channel passes to resumeAction. Bound to the pending
+   * action's capability, its action id (as approvalRef), and a digest of its
+   * target + parameters, so it cannot be replayed onto a different action.
+   * Returns null when the action isn't pending/ paused or no signing key is
+   * configured — a human approval that cannot be verified is not an approval.
    */
-  async resumeAction(actionId: string, authorityId?: string): Promise<HumanActionResult | null> {
+  issueHumanApproval(actionId: string, approvedBy: string): ActionAuthorization | null {
+    const entries = this.journal.getEntriesForAction(actionId);
+    if (entries.length === 0) return null;
+    const lastEntry = entries[entries.length - 1];
+    if (lastEntry.state !== 'PAUSED' && lastEntry.state !== 'PENDING_HUMAN') {
+      return null;
+    }
+    const originalEntry = entries[0];
+    const parameters = (originalEntry.parametersRedacted as Record<string, unknown>) ?? {};
+    const base = {
+      approvedBy,
+      approvalRef: actionId,
+      grantedAt: new Date().toISOString(),
+    };
+    const signature = signAuthorization(
+      base,
+      originalEntry.capability,
+      actionId,
+      payloadDigest({ target: originalEntry.target, parameters }),
+    );
+    if (!signature) return null;
+    return { ...base, signature };
+  }
+
+  /**
+   * Resume an action that was paused for human intervention.
+   *
+   * Requires a signed human-approval record (see issueHumanApproval) — the
+   * previous version re-executed any PENDING/PAUSED journal entry with
+   * `forceAuthorize: true` and no proof a human approved anything, which made
+   * the human-approval gate theater: submit an R3 action, get PENDING_HUMAN,
+   * call resumeAction, it executes (red-team 2026-09-18). Now the record must
+   * verify: approvalRef === this actionId and a signature over (capability |
+   * actionId | digest(target+parameters)) minted by the approval channel.
+   */
+  async resumeAction(
+    actionId: string,
+    humanAuthorization?: ActionAuthorization,
+    authorityId?: string,
+  ): Promise<HumanActionResult | null> {
     const entries = this.journal.getEntriesForAction(actionId);
     if (entries.length === 0) return null;
 
@@ -725,9 +817,39 @@ export class HumanActionEngine {
       return null;
     }
 
-    // Re-read the original action from the journal and re-execute
-    // with forceAuthorize since the human has now authorized it
     const originalEntry = entries[0];
+    const parameters = (originalEntry.parametersRedacted as Record<string, unknown>) ?? {};
+    const digest = payloadDigest({ target: originalEntry.target, parameters });
+
+    const auth = humanAuthorization;
+    if (
+      !auth ||
+      auth.approvalRef !== actionId ||
+      !verifyAuthorizationSignature(auth, originalEntry.capability, actionId, digest)
+    ) {
+      return {
+        actionId,
+        state: 'DENIED',
+        executed: false,
+        verified: false,
+        outcome: 'denied',
+        result: {
+          reason:
+            'resumeAction requires a signed human-approval record bound to this action ' +
+            '(issueHumanApproval). A missing, mismatched, or unverifiable record is refused.',
+        },
+        error: 'resumeAction: missing or invalid human authorization',
+        evidence: [{
+          check: 'human_authorization',
+          status: 'fail',
+          value: 'No valid signed human-approval record for this action',
+          checkedAt: new Date().toISOString(),
+        }],
+        durationMs: 0,
+        timestamp: new Date().toISOString(),
+      };
+    }
+
     const intent: HumanActionIntent = {
       intentId: originalEntry.entryId,
       goalId: originalEntry.goalId,
@@ -736,12 +858,12 @@ export class HumanActionEngine {
       capability: originalEntry.capability,
       operation: originalEntry.operation,
       target: originalEntry.target,
-      parameters: originalEntry.parametersRedacted as Record<string, unknown>,
+      parameters,
       reason: 'Resumed after human intervention',
       expectedResult: 'Action completes successfully',
     };
 
-    return this.executeAction(intent, authorityId, { forceAuthorize: true });
+    return this.executeAction(intent, authorityId, { humanAuthorization: auth });
   }
 
   // -----------------------------------------------------------------------

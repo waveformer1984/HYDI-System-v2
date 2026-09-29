@@ -1,0 +1,6529 @@
+{
+ "$schema": "hydi.test-inventory/v1",
+ "generatedAt": "2026-09-18T20:14:15.215Z",
+ "generatedBy": "AGENT D — TEST ARCHITECTURE (Phase 12 continuation)",
+ "method": "Per-file classification by ACTUAL BEHAVIOR: static signal scan (imports, client construction, ports, env reads, jest.mock/vi.mock) cross-checked against EXECUTION evidence — tests/TEST_TIERS.json (env-redirect + socket-guard runs) plus a fresh tier-1 `npx jest --json` run (355 suites: 353 pass, 2 fail) executed during this audit.",
+ "tierDefinitions": {
+  "1": "hermetic unit — no network, no real DB, no real model calls; mocks all externals",
+  "2": "local integration — touches local services (local postgres, local fs, spawned local processes) but no external network",
+  "3": "local service/system — requires running local services (the app itself, PM2, docker)",
+  "4": "qualification — tests/qualification/** population and similar end-to-end gates",
+  "5": "external/live — requires external systems (real Stripe, real cloud APIs, deployed services)"
+ },
+ "summary": {
+  "totalFiles": 664,
+  "byTier": {
+   "tier1": 452,
+   "tier3": 57,
+   "tier5": 105,
+   "tier2": 40,
+   "tier4": 10
+  },
+  "byRunner": {
+   "none": 185,
+   "vitest": 11,
+   "other": 19,
+   "node:test": 56,
+   "jest-root": 367,
+   "jest-tier2": 26
+  },
+  "byStatus": {
+   "hermetic": 424,
+   "external-dependency": 186,
+   "ambiguous": 51,
+   "pre-existing-failure": 3
+  }
+ },
+ "files": [
+  {
+   "file": ".claude/HYDI_System/HYDI_Core/test_governance.py",
+   "tier": 1,
+   "runner": "none",
+   "evidence": "signals: pytest",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "_diag/test-ai.bat",
+   "tier": 3,
+   "runner": "none",
+   "evidence": "signals: ollama, localport, fetchh",
+   "externalDeps": [
+    "ollama",
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "_diag/test-chat.bat",
+   "tier": 3,
+   "runner": "none",
+   "evidence": "signals: localport, fetchh",
+   "externalDeps": [
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "api/webhooks/stripe-test.js",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "NOT a test suite — a deployed Vercel API endpoint (export default handler) for manual Stripe webhook debugging; matches *-test.* naming only.",
+   "externalDeps": [
+    "stripe"
+   ],
+   "status": "ambiguous"
+  },
+  {
+   "file": "apps/ursula-frontend/src/components/starfield/Starfield.test.tsx",
+   "tier": 1,
+   "runner": "vitest",
+   "evidence": "signals: vitest",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "apps/ursula-frontend/src/hooks/useCheckpointEcho.test.tsx",
+   "tier": 1,
+   "runner": "vitest",
+   "evidence": "signals: vitest",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "apps/ursula-frontend/src/lib/api.orchestration.test.ts",
+   "tier": 1,
+   "runner": "vitest",
+   "evidence": "signals: vitest, localport",
+   "externalDeps": [
+    "http"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "apps/ursula-frontend/src/lib/healing/claude-healing.test.ts",
+   "tier": 1,
+   "runner": "vitest",
+   "evidence": "signals: vitest",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "apps/ursula-frontend/src/lib/phase1-authz.test.ts",
+   "tier": 1,
+   "runner": "vitest",
+   "evidence": "signals: vitest, jestmock, localport",
+   "externalDeps": [
+    "http"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "apps/ursula-frontend/src/lib/phase1-gates.test.ts",
+   "tier": 1,
+   "runner": "vitest",
+   "evidence": "signals: vitest, localport",
+   "externalDeps": [
+    "http"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "apps/ursula-frontend/src/lib/phase1-smoke.test.ts",
+   "tier": 1,
+   "runner": "vitest",
+   "evidence": "vitest; constructs NextRequest objects in-process; vi.stubEnv('URSULA_API_URL','http://localhost:3000') — no real server needed.",
+   "externalDeps": [
+    "http"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "apps/ursula-frontend/src/lib/queue/stream-consumer.test.ts",
+   "tier": 1,
+   "runner": "vitest",
+   "evidence": "vitest; vi.mock('@upstash/redis') hoisted mock; UPSTASH env stubbed via vi.stubEnv. Hermetic.",
+   "externalDeps": [
+    "redis"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "apps/ursula-frontend/src/lib/revenue-engine/engine.test.ts",
+   "tier": 1,
+   "runner": "vitest",
+   "evidence": "signals: vitest",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "apps/ursula-frontend/src/lib/swarm/task-decomposer.test.ts",
+   "tier": 1,
+   "runner": "vitest",
+   "evidence": "signals: vitest, liveurl",
+   "externalDeps": [
+    "http"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "apps/ursula-frontend/src/lib/vector-checkpoint.test.ts",
+   "tier": 1,
+   "runner": "vitest",
+   "evidence": "signals: vitest",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "apps/ursula-frontend/test-checkpoint-anchoring.ts",
+   "tier": 3,
+   "runner": "none",
+   "evidence": "no external-dependency signals detected in static scan",
+   "externalDeps": [],
+   "status": "ambiguous"
+  },
+  {
+   "file": "apps/ursula-frontend/test-event-replay.ts",
+   "tier": 3,
+   "runner": "none",
+   "evidence": "no external-dependency signals detected in static scan",
+   "externalDeps": [],
+   "status": "ambiguous"
+  },
+  {
+   "file": "apps/ursula-frontend/test-execution-confirmation.ts",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: liveurl",
+   "externalDeps": [
+    "http"
+   ],
+   "status": "ambiguous"
+  },
+  {
+   "file": "apps/ursula-frontend/test-final-proof.ts",
+   "tier": 3,
+   "runner": "none",
+   "evidence": "no external-dependency signals detected in static scan",
+   "externalDeps": [],
+   "status": "ambiguous"
+  },
+  {
+   "file": "apps/ursula-frontend/test-hardened-core.ts",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: liveurl",
+   "externalDeps": [
+    "http"
+   ],
+   "status": "ambiguous"
+  },
+  {
+   "file": "apps/ursula-frontend/test-live-revenue-pipeline.ts",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: liveurl",
+   "externalDeps": [
+    "http"
+   ],
+   "status": "ambiguous"
+  },
+  {
+   "file": "apps/ursula-frontend/test-proper-replay.ts",
+   "tier": 3,
+   "runner": "none",
+   "evidence": "no external-dependency signals detected in static scan",
+   "externalDeps": [],
+   "status": "ambiguous"
+  },
+  {
+   "file": "apps/ursula-frontend/test-reality-verification.ts",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: liveurl",
+   "externalDeps": [
+    "http",
+    "fs"
+   ],
+   "status": "ambiguous"
+  },
+  {
+   "file": "apps/ursula-frontend/test-replay-integrity.ts",
+   "tier": 3,
+   "runner": "none",
+   "evidence": "no external-dependency signals detected in static scan",
+   "externalDeps": [],
+   "status": "ambiguous"
+  },
+  {
+   "file": "apps/ursula-frontend/test-simple-checkpoint.ts",
+   "tier": 3,
+   "runner": "none",
+   "evidence": "no external-dependency signals detected in static scan",
+   "externalDeps": [],
+   "status": "ambiguous"
+  },
+  {
+   "file": "archive/heidi-v2-dormant-pipeline/test-fixes.js",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: liveurl",
+   "externalDeps": [
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "archive/heidi-v2-dormant-pipeline/test-heidi-v2.js",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: liveurl",
+   "externalDeps": [
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "archive/superseded-stripe-implementations/stripe-webhook.test.js",
+   "tier": 1,
+   "runner": "none",
+   "evidence": "Archived jest suite; all supabase+stripe calls mocked; unreachable (outside jest testMatch).",
+   "externalDeps": [
+    "stripe"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "broken_reality_injection_test.js",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: liveurl",
+   "externalDeps": [
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "controlled-test.js",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: stripe, localport, fetchh",
+   "externalDeps": [
+    "stripe",
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "core/test-router.js",
+   "tier": 1,
+   "runner": "none",
+   "evidence": "main() smoke program for capability registry + semantic router; in-process modules only (no net/db signals).",
+   "externalDeps": [],
+   "status": "ambiguous"
+  },
+  {
+   "file": "core/tests/test_permissions.py",
+   "tier": 1,
+   "runner": "other",
+   "evidence": "signals: pytest",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "core/tests/test_schemas.py",
+   "tier": 1,
+   "runner": "other",
+   "evidence": "signals: pytest",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "core/tests/test_task_engine.py",
+   "tier": 1,
+   "runner": "other",
+   "evidence": "signals: pytest",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "create-test-data.ps1",
+   "tier": 1,
+   "runner": "none",
+   "evidence": "no external-dependency signals detected in static scan",
+   "externalDeps": [],
+   "status": "ambiguous"
+  },
+  {
+   "file": "endurance_chaos_test.js",
+   "tier": 3,
+   "runner": "none",
+   "evidence": "signals: spawn",
+   "externalDeps": [
+    "process"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "fast_verification_test.js",
+   "tier": 1,
+   "runner": "none",
+   "evidence": "no external-dependency signals detected in static scan",
+   "externalDeps": [],
+   "status": "ambiguous"
+  },
+  {
+   "file": "fixed-webhook-test.js",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: supaco, stripe, fetchh, liveurl",
+   "externalDeps": [
+    "supabase",
+    "stripe",
+    "http",
+    "fs"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "focused_endurance_test.js",
+   "tier": 1,
+   "runner": "none",
+   "evidence": "no external-dependency signals detected in static scan",
+   "externalDeps": [],
+   "status": "ambiguous"
+  },
+  {
+   "file": "hardening_validation_test.js",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: liveurl",
+   "externalDeps": [
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "heidi-core/adversarial-test-harness.js",
+   "tier": 3,
+   "runner": "none",
+   "evidence": "requires ./HeidiSelfLaunchProtocol — exercises the launch protocol incl. failed-launch recovery; needs local runtime",
+   "externalDeps": [
+    "process"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "heidi-core/phase-5-stress-test.js",
+   "tier": 5,
+   "runner": "other",
+   "evidence": "signals: supaco",
+   "externalDeps": [
+    "supabase",
+    "fs"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "heidi-core/self-awareness/emergence-test.js",
+   "tier": 1,
+   "runner": "none",
+   "evidence": "no external-dependency signals detected in static scan",
+   "externalDeps": [],
+   "status": "ambiguous"
+  },
+  {
+   "file": "heidi-core/stress-test.bat",
+   "tier": 1,
+   "runner": "none",
+   "evidence": "no external-dependency signals detected in static scan",
+   "externalDeps": [],
+   "status": "ambiguous"
+  },
+  {
+   "file": "heidi-core/stress-test.js",
+   "tier": 3,
+   "runner": "none",
+   "evidence": "signals: ollama, localport, fetchh",
+   "externalDeps": [
+    "ollama",
+    "http",
+    "fs"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "heidi-core/test-heidi.bat",
+   "tier": 3,
+   "runner": "none",
+   "evidence": "signals: localport, fetchh",
+   "externalDeps": [
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "heidi-core/test-hslp.js",
+   "tier": 1,
+   "runner": "none",
+   "evidence": "no external-dependency signals detected in static scan",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "ambiguous"
+  },
+  {
+   "file": "heidi-core/test-integrity-first.js",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: liveurl",
+   "externalDeps": [
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "heidi-core/test-layer-a-agents.js",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: stripe, redis",
+   "externalDeps": [
+    "stripe",
+    "redis"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "heidi-core/test-quick.js",
+   "tier": 3,
+   "runner": "none",
+   "evidence": "signals: ollama",
+   "externalDeps": [
+    "ollama"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "heidi-core/test-supabase-integration.js",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: supaco, liveurl",
+   "externalDeps": [
+    "supabase",
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "heidi-core/test.js",
+   "tier": 3,
+   "runner": "none",
+   "evidence": "signals: localport, fetchh",
+   "externalDeps": [
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "pages/api/operations/test-push.js",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "NOT a test suite — deployed API endpoint POST /api/operations/test-push firing real VAPID web-push (supabase+vapid deps).",
+   "externalDeps": [
+    "supabase",
+    "postgres",
+    "http",
+    "vapid-push"
+   ],
+   "status": "ambiguous"
+  },
+  {
+   "file": "pages/test-simple.tsx",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "NOT a test suite — Next.js page with a manual test button that calls an API route; needs the running app.",
+   "externalDeps": [
+    "http"
+   ],
+   "status": "ambiguous"
+  },
+  {
+   "file": "production_test_suite.js",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: stripe, liveurl",
+   "externalDeps": [
+    "stripe",
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "protoforge-applications/proto-yi/tests/adapter.test.js",
+   "tier": 1,
+   "runner": "node:test",
+   "evidence": "signals: nodetest",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "protoforge-applications/proto-yi/tests/blueprint.test.js",
+   "tier": 2,
+   "runner": "node:test",
+   "evidence": "signals: nodetest, localport, fetchh, listen",
+   "externalDeps": [
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "protoforge-applications/proto-yi/tests/config.test.js",
+   "tier": 1,
+   "runner": "node:test",
+   "evidence": "signals: nodetest",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "protoforge-applications/proto-yi/tests/diagnostics.test.js",
+   "tier": 1,
+   "runner": "node:test",
+   "evidence": "signals: nodetest",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "protoforge-applications/proto-yi/tests/external-adapter.test.js",
+   "tier": 1,
+   "runner": "node:test",
+   "evidence": "signals: nodetest",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "protoforge-applications/proto-yi/tests/repository.test.js",
+   "tier": 1,
+   "runner": "node:test",
+   "evidence": "signals: nodetest",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "protoforge-applications/rezonate/tests/api.test.js",
+   "tier": 2,
+   "runner": "node:test",
+   "evidence": "signals: nodetest, localport, fetchh, listen",
+   "externalDeps": [
+    "http",
+    "fs"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "protoforge-applications/rezonate/tests/audio-asset.test.js",
+   "tier": 1,
+   "runner": "node:test",
+   "evidence": "signals: nodetest",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "protoforge-applications/rezonate/tests/diagnostics.test.js",
+   "tier": 1,
+   "runner": "node:test",
+   "evidence": "signals: nodetest",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "protoforge-applications/rezonate/tests/export.test.js",
+   "tier": 1,
+   "runner": "node:test",
+   "evidence": "signals: nodetest",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "protoforge-applications/rezonate/tests/generation-workflow.test.js",
+   "tier": 1,
+   "runner": "node:test",
+   "evidence": "signals: nodetest",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "protoforge-applications/rezonate/tests/hydi-gateway.test.js",
+   "tier": 1,
+   "runner": "node:test",
+   "evidence": "signals: nodetest, localport",
+   "externalDeps": [
+    "http"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "protoforge-applications/rezonate/tests/local-model-runtime.test.js",
+   "tier": 2,
+   "runner": "node:test",
+   "evidence": "signals: nodetest",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "protoforge-applications/rezonate/tests/ownership-adapter.test.js",
+   "tier": 1,
+   "runner": "node:test",
+   "evidence": "signals: nodetest",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "protoforge-applications/rezonate/tests/ownership-api.test.js",
+   "tier": 2,
+   "runner": "node:test",
+   "evidence": "signals: nodetest, localport, fetchh, listen",
+   "externalDeps": [
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "protoforge-applications/rezonate/tests/ownership-record.test.js",
+   "tier": 1,
+   "runner": "node:test",
+   "evidence": "signals: nodetest",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "protoforge-applications/rezonate/tests/processing-job.test.js",
+   "tier": 1,
+   "runner": "node:test",
+   "evidence": "signals: nodetest",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "protoforge-applications/rezonate/tests/providers.test.js",
+   "tier": 1,
+   "runner": "node:test",
+   "evidence": "signals: nodetest",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "protoforge-applications/rezonate/tests/resonate-engine-adapter.test.js",
+   "tier": 1,
+   "runner": "node:test",
+   "evidence": "signals: nodetest",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "protoforge-applications/rezonate/tests/rights.test.js",
+   "tier": 1,
+   "runner": "node:test",
+   "evidence": "signals: nodetest",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "protoforge-applications/rezonate/tests/sample-library.test.js",
+   "tier": 1,
+   "runner": "node:test",
+   "evidence": "signals: nodetest",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "protoforge-applications/rezonate/tests/storage-provider.test.js",
+   "tier": 2,
+   "runner": "node:test",
+   "evidence": "signals: nodetest, supaco",
+   "externalDeps": [
+    "supabase",
+    "fs"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "protoforge-applications/rezonate/tests/supabase-store.test.js",
+   "tier": 1,
+   "runner": "node:test",
+   "evidence": "signals: nodetest, supaco",
+   "externalDeps": [
+    "supabase"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "protoforge/blueprints/application/tests/blueprint.test.js",
+   "tier": 2,
+   "runner": "none",
+   "evidence": "node:test format, binds ephemeral app.listen(0) server + fetch loopback. UNREACHABLE: directory has no package.json and root `test:packages` glob covers only protoforge/packages/*.",
+   "externalDeps": [
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "protoforge/cascade/tests/cascade.test.js",
+   "tier": 2,
+   "runner": "node:test",
+   "evidence": "signals: nodetest, localport, fetchh, listen",
+   "externalDeps": [
+    "http",
+    "fs"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "protoforge/cascade/tests/lineage.test.js",
+   "tier": 1,
+   "runner": "node:test",
+   "evidence": "signals: nodetest",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "protoforge/cascade/tests/processor.test.js",
+   "tier": 1,
+   "runner": "node:test",
+   "evidence": "signals: nodetest",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "protoforge/examples/sample-app/tests/resonate.test.js",
+   "tier": 2,
+   "runner": "node:test",
+   "evidence": "signals: nodetest, localport, fetchh, listen",
+   "externalDeps": [
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "protoforge/hydi-gateway/tests/api.test.js",
+   "tier": 2,
+   "runner": "node:test",
+   "evidence": "signals: nodetest, localport, fetchh, listen",
+   "externalDeps": [
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "protoforge/hydi-gateway/tests/auth.test.js",
+   "tier": 1,
+   "runner": "node:test",
+   "evidence": "signals: nodetest",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "protoforge/hydi-gateway/tests/outbox.test.js",
+   "tier": 1,
+   "runner": "node:test",
+   "evidence": "signals: nodetest",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "protoforge/hydi-gateway/tests/raw-ledger-adapter.test.js",
+   "tier": 1,
+   "runner": "node:test",
+   "evidence": "signals: nodetest",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "protoforge/hydi-gateway/tests/retry-worker.test.js",
+   "tier": 1,
+   "runner": "node:test",
+   "evidence": "signals: nodetest",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "protoforge/hydi-gateway/tests/validate.test.js",
+   "tier": 1,
+   "runner": "node:test",
+   "evidence": "signals: nodetest",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "protoforge/packages/application-manifest/tests/lifecycle.test.js",
+   "tier": 1,
+   "runner": "node:test",
+   "evidence": "signals: nodetest",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "protoforge/packages/application-manifest/tests/manifest.test.js",
+   "tier": 1,
+   "runner": "node:test",
+   "evidence": "signals: nodetest",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "protoforge/packages/application-registry/tests/registry.test.js",
+   "tier": 1,
+   "runner": "node:test",
+   "evidence": "signals: nodetest",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "protoforge/packages/application-upgrades/tests/upgrades.test.js",
+   "tier": 1,
+   "runner": "node:test",
+   "evidence": "signals: nodetest",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "protoforge/packages/capability-policy/tests/policy.test.js",
+   "tier": 1,
+   "runner": "node:test",
+   "evidence": "signals: nodetest",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "protoforge/packages/capability-registry/tests/capability-registry.test.js",
+   "tier": 1,
+   "runner": "node:test",
+   "evidence": "signals: nodetest",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "protoforge/packages/certification/tests/certifier.test.js",
+   "tier": 1,
+   "runner": "node:test",
+   "evidence": "KNOWN PRE-EXISTING FAILURE (TEST_TIERS): line ~50 'certifies Resonate' — certify('rezonate') returns ok=false; real app-level drift between certifier and rezonate manifest, left red deliberately.",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "pre-existing-failure"
+  },
+  {
+   "file": "protoforge/packages/dependency-graph/tests/graph.test.js",
+   "tier": 1,
+   "runner": "node:test",
+   "evidence": "signals: nodetest",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "protoforge/packages/event-contracts/tests/event-contracts.test.js",
+   "tier": 1,
+   "runner": "node:test",
+   "evidence": "signals: nodetest",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "protoforge/packages/migrations/tests/migrations.test.js",
+   "tier": 1,
+   "runner": "node:test",
+   "evidence": "signals: nodetest",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "protoforge/tests/platform/platform-contracts.test.js",
+   "tier": 1,
+   "runner": "node:test",
+   "evidence": "signals: nodetest",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "protoforge/tests/platform/platform-flow.test.js",
+   "tier": 1,
+   "runner": "node:test",
+   "evidence": "node:test; L23,63: live-Supabase legs permanently describe.skip (requires raw_event_ledger); only local legs execute.",
+   "externalDeps": [
+    "supabase"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "protoforge/tests/platform/resonate-e2e.test.js",
+   "tier": 1,
+   "runner": "node:test",
+   "evidence": "node:test; L13,117: live-Supabase legs permanently describe.skip; only local legs execute.",
+   "externalDeps": [
+    "supabase"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "protoforge/tools/create-app/tests/generator.test.js",
+   "tier": 1,
+   "runner": "node:test",
+   "evidence": "signals: nodetest",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "protoforge/tools/validate-app/tests/validator.test.js",
+   "tier": 1,
+   "runner": "node:test",
+   "evidence": "signals: nodetest",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "run-e2e-test.js",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: supaco, stripe, localport, spawn, liveurl",
+   "externalDeps": [
+    "supabase",
+    "stripe",
+    "http",
+    "process"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "scripts/auto-persist-test.js",
+   "tier": 1,
+   "runner": "none",
+   "evidence": "no external-dependency signals detected in static scan",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "ambiguous"
+  },
+  {
+   "file": "scripts/endurance-test-cognitive-loop.ts",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: supaco, pg, localport, liveurl",
+   "externalDeps": [
+    "supabase",
+    "postgres",
+    "http",
+    "fs"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "scripts/failure-injection-tests.js",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: pg, stripe, localport, fetchh, liveurl",
+   "externalDeps": [
+    "postgres",
+    "stripe",
+    "http",
+    "fs"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "scripts/fix-csv-test.js",
+   "tier": 1,
+   "runner": "none",
+   "evidence": "no external-dependency signals detected in static scan",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "ambiguous"
+  },
+  {
+   "file": "scripts/phase36-stability-test.js",
+   "tier": 1,
+   "runner": "none",
+   "evidence": "no external-dependency signals detected in static scan",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "ambiguous"
+  },
+  {
+   "file": "scripts/smoke-test-production.ts",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: supaco, pg, stripe, localport, liveurl",
+   "externalDeps": [
+    "supabase",
+    "postgres",
+    "stripe",
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "scripts/smoke-test.mjs",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: fetchh, liveurl",
+   "externalDeps": [
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "scripts/soak-test-v3.js",
+   "tier": 3,
+   "runner": "other",
+   "evidence": "requires src/hydi-v3 HYDIAutonomyManager in-process for a long stability soak; npm run test:soak:hydi-v3",
+   "externalDeps": [
+    "process"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "scripts/soak-test.js",
+   "tier": 5,
+   "runner": "other",
+   "evidence": "signals: localport, fetchh, liveurl",
+   "externalDeps": [
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "scripts/survivability-test.js",
+   "tier": 1,
+   "runner": "none",
+   "evidence": "no external-dependency signals detected in static scan",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "ambiguous"
+  },
+  {
+   "file": "scripts/test-bounded-soak.ts",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: supaco",
+   "externalDeps": [
+    "supabase",
+    "fs"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "scripts/test-control-plane-e2e.ts",
+   "tier": 3,
+   "runner": "none",
+   "evidence": "signals: supaco, localport, spawn, fetchh, listen",
+   "externalDeps": [
+    "supabase",
+    "http",
+    "process",
+    "fs"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "scripts/test-control-plane-soak.ts",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: supaco",
+   "externalDeps": [
+    "supabase",
+    "fs"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "scripts/test-escalation-channel.ts",
+   "tier": 3,
+   "runner": "none",
+   "evidence": "signals: supaco, pg, localport",
+   "externalDeps": [
+    "supabase",
+    "postgres",
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "scripts/test-event-history.ts",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: supaco, stripe",
+   "externalDeps": [
+    "supabase",
+    "stripe"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "scripts/test-failure-injection.ts",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: supaco, ollama, stripe, liveurl",
+   "externalDeps": [
+    "supabase",
+    "ollama",
+    "stripe",
+    "http",
+    "fs"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "scripts/test-full-human-proxy-demo.ts",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: supaco, stripe, localport, spawn, fetchh, listen",
+   "externalDeps": [
+    "supabase",
+    "stripe",
+    "http",
+    "process",
+    "fs"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "scripts/test-intervention-lifecycle.ts",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: supaco",
+   "externalDeps": [
+    "supabase",
+    "fs"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "scripts/test-ipc-delivery-delay.js",
+   "tier": 3,
+   "runner": "none",
+   "evidence": "signals: spawn",
+   "externalDeps": [
+    "process",
+    "fs"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "scripts/test-kill-switch.ts",
+   "tier": 3,
+   "runner": "none",
+   "evidence": "signals: spawn",
+   "externalDeps": [
+    "process"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "scripts/test-live-checkpoint-persistence.ts",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: supaco",
+   "externalDeps": [
+    "supabase",
+    "fs"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "scripts/test-live-intervention-persistence.ts",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: supaco, pg, localport, liveurl",
+   "externalDeps": [
+    "supabase",
+    "postgres",
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "scripts/test-operational-safety.ts",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: supaco, stripe, localport, liveurl",
+   "externalDeps": [
+    "supabase",
+    "stripe",
+    "http",
+    "fs"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "scripts/test-pm2-restart.ts",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: supaco, spawn",
+   "externalDeps": [
+    "supabase",
+    "process"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "scripts/test-production-reality.ts",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: supaco, stripe, localport, spawn, fetchh, liveurl, listen",
+   "externalDeps": [
+    "supabase",
+    "stripe",
+    "http",
+    "process",
+    "fs"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "scripts/test-runtime-truth-audit.ts",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: supaco",
+   "externalDeps": [
+    "supabase",
+    "fs"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "scripts/test-secret-redaction-live.ts",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: supaco, stripe, spawn",
+   "externalDeps": [
+    "supabase",
+    "stripe",
+    "process",
+    "fs"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "scripts/test-sse-consistency.ts",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: supaco, stripe, localport, fetchh, listen",
+   "externalDeps": [
+    "supabase",
+    "stripe",
+    "http",
+    "fs"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "scripts/test-stripe-connect-flow.js",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: supaco, stripe",
+   "externalDeps": [
+    "supabase",
+    "stripe"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "scripts/test-web-app.ts",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: localport, liveurl, listen",
+   "externalDeps": [
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "simple_harness_test.js",
+   "tier": 1,
+   "runner": "none",
+   "evidence": "no external-dependency signals detected in static scan",
+   "externalDeps": [],
+   "status": "ambiguous"
+  },
+  {
+   "file": "stage3_adversarial_test.js",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: liveurl",
+   "externalDeps": [
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "stage4_validation_test.js",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: liveurl",
+   "externalDeps": [
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "stage5_broken_reality_test.js",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: liveurl",
+   "externalDeps": [
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "step-2-test-chat.js",
+   "tier": 1,
+   "runner": "none",
+   "evidence": "signals: fetchh",
+   "externalDeps": [
+    "http"
+   ],
+   "status": "ambiguous"
+  },
+  {
+   "file": "stress_test_validation.js",
+   "tier": 1,
+   "runner": "none",
+   "evidence": "no external-dependency signals detected in static scan",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "ambiguous"
+  },
+  {
+   "file": "strict_identity_validation_test.js",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: stripe",
+   "externalDeps": [
+    "stripe"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "supabase-integration-test.sql",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: stripe",
+   "externalDeps": [
+    "stripe"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "supabase-test-commands.sql",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: stripe",
+   "externalDeps": [
+    "stripe"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "supabase/functions/_shared/security.test.ts",
+   "tier": 1,
+   "runner": "other",
+   "evidence": "Deno.test suite; header says 'Run via `deno test`'; constructs Request objects in-process, sets Deno.env only. Invisible to jest (Edge Function, tsconfig-excluded).",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "switchboard/tests/api.test.js",
+   "tier": 2,
+   "runner": "node:test",
+   "evidence": "signals: nodetest, localport, fetchh, listen",
+   "externalDeps": [
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "switchboard/tests/availability.test.js",
+   "tier": 2,
+   "runner": "node:test",
+   "evidence": "signals: nodetest, localport, fetchh, listen",
+   "externalDeps": [
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "switchboard/tests/hardening.test.js",
+   "tier": 2,
+   "runner": "node:test",
+   "evidence": "signals: nodetest, localport, fetchh, liveurl, listen",
+   "externalDeps": [
+    "http",
+    "fs"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "switchboard/tests/hydi-adapter.test.js",
+   "tier": 1,
+   "runner": "node:test",
+   "evidence": "signals: nodetest, localport",
+   "externalDeps": [
+    "http"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "switchboard/tests/moderation.test.js",
+   "tier": 2,
+   "runner": "node:test",
+   "evidence": "signals: nodetest, localport, fetchh, listen",
+   "externalDeps": [
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "switchboard/tests/persistence.test.js",
+   "tier": 1,
+   "runner": "node:test",
+   "evidence": "signals: nodetest",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "switchboard/tests/scoring.test.js",
+   "tier": 1,
+   "runner": "node:test",
+   "evidence": "signals: nodetest",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "switchboard/tests/trust.test.js",
+   "tier": 2,
+   "runner": "node:test",
+   "evidence": "signals: nodetest, localport, fetchh, listen",
+   "externalDeps": [
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "task-1-appforge-tests.js",
+   "tier": 3,
+   "runner": "none",
+   "evidence": "signals: supaco, pg, localport",
+   "externalDeps": [
+    "supabase",
+    "postgres",
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "test-adaptive-system.js",
+   "tier": 1,
+   "runner": "none",
+   "evidence": "no external-dependency signals detected in static scan",
+   "externalDeps": [],
+   "status": "ambiguous"
+  },
+  {
+   "file": "test-advanced-self-awareness.js",
+   "tier": 3,
+   "runner": "none",
+   "evidence": "signals: localport, fetchh",
+   "externalDeps": [
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "test-anchor-after-fix.js",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: supaco, liveurl",
+   "externalDeps": [
+    "supabase",
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "test-anchor-function.js",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: supaco, liveurl",
+   "externalDeps": [
+    "supabase",
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "test-api-clean.ps1",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: supaco, stripe, liveurl",
+   "externalDeps": [
+    "supabase",
+    "stripe",
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "test-audit-system.js",
+   "tier": 1,
+   "runner": "none",
+   "evidence": "no external-dependency signals detected in static scan",
+   "externalDeps": [],
+   "status": "ambiguous"
+  },
+  {
+   "file": "test-auto-expiry.js",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: supaco, fetchh, liveurl",
+   "externalDeps": [
+    "supabase",
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "test-behavior-adaptive-system.js",
+   "tier": 3,
+   "runner": "none",
+   "evidence": "signals: localport, fetchh",
+   "externalDeps": [
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "test-break-glass-edge.js",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: supaco, fetchh, liveurl",
+   "externalDeps": [
+    "supabase",
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "test-break-glass-final.js",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: supaco, liveurl",
+   "externalDeps": [
+    "supabase",
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "test-break-glass-simple.js",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: supaco, liveurl",
+   "externalDeps": [
+    "supabase",
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "test-break-glass-working.js",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: supaco, liveurl",
+   "externalDeps": [
+    "supabase",
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "test-break-glass.sql",
+   "tier": 1,
+   "runner": "none",
+   "evidence": "no external-dependency signals detected in static scan",
+   "externalDeps": [],
+   "status": "ambiguous"
+  },
+  {
+   "file": "test-cascade-direct.js",
+   "tier": 1,
+   "runner": "none",
+   "evidence": "no external-dependency signals detected in static scan",
+   "externalDeps": [],
+   "status": "ambiguous"
+  },
+  {
+   "file": "test-cascade-system.js",
+   "tier": 1,
+   "runner": "none",
+   "evidence": "no external-dependency signals detected in static scan",
+   "externalDeps": [],
+   "status": "ambiguous"
+  },
+  {
+   "file": "test-cascade-v2.js",
+   "tier": 1,
+   "runner": "none",
+   "evidence": "no external-dependency signals detected in static scan",
+   "externalDeps": [],
+   "status": "ambiguous"
+  },
+  {
+   "file": "test-cascade-v3.js",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: liveurl",
+   "externalDeps": [
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "test-chat-question.js",
+   "tier": 1,
+   "runner": "none",
+   "evidence": "signals: fetchh",
+   "externalDeps": [
+    "http"
+   ],
+   "status": "ambiguous"
+  },
+  {
+   "file": "test-checkout.js",
+   "tier": 3,
+   "runner": "none",
+   "evidence": "signals: localport, fetchh",
+   "externalDeps": [
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "test-confidence-calibration.js",
+   "tier": 3,
+   "runner": "none",
+   "evidence": "signals: localport, fetchh",
+   "externalDeps": [
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "test-confidence-gate.js",
+   "tier": 1,
+   "runner": "none",
+   "evidence": "no external-dependency signals detected in static scan",
+   "externalDeps": [],
+   "status": "ambiguous"
+  },
+  {
+   "file": "test-connection-v6.js",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: supaco, pg",
+   "externalDeps": [
+    "supabase",
+    "postgres"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "test-connection.js",
+   "tier": 3,
+   "runner": "none",
+   "evidence": "signals: localport",
+   "externalDeps": [
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "test-control-plane.js",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: liveurl",
+   "externalDeps": [
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "test-critical-path.js",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: supaco",
+   "externalDeps": [
+    "supabase"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "test-decision-arbitration.js",
+   "tier": 3,
+   "runner": "none",
+   "evidence": "signals: localport, fetchh",
+   "externalDeps": [
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "test-direct-adaptation.js",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: supaco",
+   "externalDeps": [
+    "supabase"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "test-dm-module.js",
+   "tier": 3,
+   "runner": "none",
+   "evidence": "signals: localport",
+   "externalDeps": [
+    "http",
+    "fs"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "test-enterprise-tier.js",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: supaco",
+   "externalDeps": [
+    "supabase"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "test-execution-bias.js",
+   "tier": 3,
+   "runner": "none",
+   "evidence": "signals: localport, fetchh",
+   "externalDeps": [
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "test-external-calibration.js",
+   "tier": 3,
+   "runner": "none",
+   "evidence": "signals: localport, fetchh",
+   "externalDeps": [
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "test-feedback-loop.js",
+   "tier": 1,
+   "runner": "none",
+   "evidence": "no external-dependency signals detected in static scan",
+   "externalDeps": [],
+   "status": "ambiguous"
+  },
+  {
+   "file": "test-feedback-working.js",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: supaco, liveurl",
+   "externalDeps": [
+    "supabase",
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "test-final-break-glass.js",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: supaco, fetchh, liveurl",
+   "externalDeps": [
+    "supabase",
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "test-final-validation.js",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: supaco, fetchh, liveurl",
+   "externalDeps": [
+    "supabase",
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "test-financial-gate.js",
+   "tier": 3,
+   "runner": "none",
+   "evidence": "signals: supaco, pg, localport",
+   "externalDeps": [
+    "supabase",
+    "postgres",
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "test-galactic-bytes-payout.js",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: supaco, stripe, liveurl",
+   "externalDeps": [
+    "supabase",
+    "stripe",
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "test-global-constraints.js",
+   "tier": 1,
+   "runner": "none",
+   "evidence": "no external-dependency signals detected in static scan",
+   "externalDeps": [],
+   "status": "ambiguous"
+  },
+  {
+   "file": "test-global-drift.js",
+   "tier": 3,
+   "runner": "none",
+   "evidence": "signals: localport, fetchh",
+   "externalDeps": [
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "test-goal-execution.js",
+   "tier": 3,
+   "runner": "none",
+   "evidence": "signals: ollama, localport, fetchh",
+   "externalDeps": [
+    "ollama",
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "test-grounded-architecture.js",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: localport, liveurl",
+   "externalDeps": [
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "test-grounded-chat.js",
+   "tier": 1,
+   "runner": "none",
+   "evidence": "signals: fetchh",
+   "externalDeps": [
+    "http"
+   ],
+   "status": "ambiguous"
+  },
+  {
+   "file": "test-heidi-adaptation-rate.js",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: liveurl",
+   "externalDeps": [
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "test-heidi-integration.js",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: supaco",
+   "externalDeps": [
+    "supabase"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "test-heidi-self-awareness.js",
+   "tier": 3,
+   "runner": "none",
+   "evidence": "requires modules/hydi-contextual-conscience + dotenv .env — env-driven; transitive DB use unverified",
+   "externalDeps": [
+    "supabase"
+   ],
+   "status": "ambiguous"
+  },
+  {
+   "file": "test-iid-decoding.js",
+   "tier": 1,
+   "runner": "none",
+   "evidence": "no external-dependency signals detected in static scan",
+   "externalDeps": [],
+   "status": "ambiguous"
+  },
+  {
+   "file": "test-integrity-firewall.js",
+   "tier": 1,
+   "runner": "none",
+   "evidence": "no external-dependency signals detected in static scan",
+   "externalDeps": [],
+   "status": "ambiguous"
+  },
+  {
+   "file": "test-jwt-auth.js",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: supaco, fetchh, liveurl",
+   "externalDeps": [
+    "supabase",
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "test-memory-layer.js",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: supaco",
+   "externalDeps": [
+    "supabase"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "test-meta-calibrated.js",
+   "tier": 3,
+   "runner": "none",
+   "evidence": "signals: localport, fetchh",
+   "externalDeps": [
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "test-policy-override-system.js",
+   "tier": 3,
+   "runner": "none",
+   "evidence": "signals: localport, fetchh",
+   "externalDeps": [
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "test-production-token.ps1",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: liveurl",
+   "externalDeps": [
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "test-push-and-approve.js",
+   "tier": 3,
+   "runner": "none",
+   "evidence": "signals: supaco, pg, localport, fetchh",
+   "externalDeps": [
+    "supabase",
+    "postgres",
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "test-real-flows.js",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: supaco, stripe, fetchh, liveurl",
+   "externalDeps": [
+    "supabase",
+    "stripe",
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "test-reality-filter-simple.js",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: supaco",
+   "externalDeps": [
+    "supabase"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "test-reality-filter.js",
+   "tier": 1,
+   "runner": "none",
+   "evidence": "no external-dependency signals detected in static scan",
+   "externalDeps": [],
+   "status": "ambiguous"
+  },
+  {
+   "file": "test-resolver-governance.js",
+   "tier": 3,
+   "runner": "none",
+   "evidence": "signals: localport, fetchh",
+   "externalDeps": [
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "test-revenue-functions.js",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: supaco, fetchh, liveurl",
+   "externalDeps": [
+    "supabase",
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "test-rpc-smoke.js",
+   "tier": 3,
+   "runner": "none",
+   "evidence": "signals: supaco, localport",
+   "externalDeps": [
+    "supabase",
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "test-runtime-enforcement.js",
+   "tier": 3,
+   "runner": "none",
+   "evidence": "signals: spawn",
+   "externalDeps": [
+    "process"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "test-semantic-search.js",
+   "tier": 3,
+   "runner": "none",
+   "evidence": "signals: supaco, pg, ollama, localport, fetchh",
+   "externalDeps": [
+    "supabase",
+    "postgres",
+    "ollama",
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "test-simple-break-glass.js",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: supaco, fetchh, liveurl",
+   "externalDeps": [
+    "supabase",
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "test-simple-feedback.js",
+   "tier": 1,
+   "runner": "none",
+   "evidence": "no external-dependency signals detected in static scan",
+   "externalDeps": [],
+   "status": "ambiguous"
+  },
+  {
+   "file": "test-simple-persistence.js",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: supaco",
+   "externalDeps": [
+    "supabase"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "test-simple-token.js",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: supaco, fetchh, liveurl",
+   "externalDeps": [
+    "supabase",
+    "http",
+    "fs"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "test-simplified-auth.js",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: supaco, fetchh, liveurl",
+   "externalDeps": [
+    "supabase",
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "test-single-worker.js",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: supaco",
+   "externalDeps": [
+    "supabase"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "test-strategic-theme-fix.js",
+   "tier": 3,
+   "runner": "none",
+   "evidence": "signals: localport, fetchh",
+   "externalDeps": [
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "test-stripe-connect.js",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: supaco, stripe",
+   "externalDeps": [
+    "supabase",
+    "stripe"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "test-stripe-connection.js",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: stripe",
+   "externalDeps": [
+    "stripe"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "test-stripe-transfer.js",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: supaco, stripe, liveurl",
+   "externalDeps": [
+    "supabase",
+    "stripe",
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "test-stripe-webhook.ps1",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: stripe, liveurl",
+   "externalDeps": [
+    "stripe",
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "test-supabase-connection.js",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: supaco",
+   "externalDeps": [
+    "supabase"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "test-supabase-workers.js",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: supaco",
+   "externalDeps": [
+    "supabase"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "test-supabase.js",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: supaco",
+   "externalDeps": [
+    "supabase",
+    "fs"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "test-system-drift.js",
+   "tier": 3,
+   "runner": "none",
+   "evidence": "signals: localport, fetchh",
+   "externalDeps": [
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "test-system-enforcement.js",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: liveurl",
+   "externalDeps": [
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "test-system.js",
+   "tier": 1,
+   "runner": "none",
+   "evidence": "no external-dependency signals detected in static scan",
+   "externalDeps": [],
+   "status": "ambiguous"
+  },
+  {
+   "file": "test-tool-executor.sql",
+   "tier": 1,
+   "runner": "none",
+   "evidence": "no external-dependency signals detected in static scan",
+   "externalDeps": [],
+   "status": "ambiguous"
+  },
+  {
+   "file": "test-vercel-token.ps1",
+   "tier": 1,
+   "runner": "none",
+   "evidence": "no external-dependency signals detected in static scan",
+   "externalDeps": [],
+   "status": "ambiguous"
+  },
+  {
+   "file": "test-webhook-endpoint.js",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: supaco, stripe, fetchh, liveurl",
+   "externalDeps": [
+    "supabase",
+    "stripe",
+    "http",
+    "fs"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "test-with-service-role.js",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: supaco, fetchh, liveurl",
+   "externalDeps": [
+    "supabase",
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "test-worker-connection.js",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: supaco",
+   "externalDeps": [
+    "supabase"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "test-worker-orchestrator.js",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: supaco, stripe, fetchh",
+   "externalDeps": [
+    "supabase",
+    "stripe",
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "test-working-memory.js",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: supaco",
+   "externalDeps": [
+    "supabase"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "test_cascade_validation.js",
+   "tier": 1,
+   "runner": "none",
+   "evidence": "no external-dependency signals detected in static scan",
+   "externalDeps": [],
+   "status": "ambiguous"
+  },
+  {
+   "file": "test_circular_loop_fix.js",
+   "tier": 1,
+   "runner": "none",
+   "evidence": "no external-dependency signals detected in static scan",
+   "externalDeps": [],
+   "status": "ambiguous"
+  },
+  {
+   "file": "test_heidi_communication.js",
+   "tier": 1,
+   "runner": "none",
+   "evidence": "no external-dependency signals detected in static scan",
+   "externalDeps": [],
+   "status": "ambiguous"
+  },
+  {
+   "file": "test_heidi_contextual_conscience.js",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: liveurl",
+   "externalDeps": [
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "test_heidi_mirror.js",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: stripe",
+   "externalDeps": [
+    "stripe"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "test_identity_verification.js",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: stripe",
+   "externalDeps": [
+    "stripe"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "test_infrastructure.js",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "requires modules/protoforge-infrastructure which calls supabase via src/database (modules/protoforge-infrastructure.js:6) — env-driven live DB",
+   "externalDeps": [
+    "supabase"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "test_integration_final.js",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: stripe",
+   "externalDeps": [
+    "stripe",
+    "fs"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "test_integration_validation_gate.js",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: liveurl",
+   "externalDeps": [
+    "http",
+    "fs"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "test_load_500_requests.js",
+   "tier": 1,
+   "runner": "none",
+   "evidence": "no external-dependency signals detected in static scan",
+   "externalDeps": [],
+   "status": "ambiguous"
+  },
+  {
+   "file": "test_opportunity_detection.js",
+   "tier": 1,
+   "runner": "none",
+   "evidence": "no external-dependency signals detected in static scan",
+   "externalDeps": [],
+   "status": "ambiguous"
+  },
+  {
+   "file": "test_payout_flow.js",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: supaco, stripe",
+   "externalDeps": [
+    "supabase",
+    "stripe"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "test_service_bundle_stress.js",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: liveurl",
+   "externalDeps": [
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "test_soft_launch_validation.js",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: liveurl",
+   "externalDeps": [
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "test_universal_agent_bus.js",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "requires modules/universal-agent-bus which calls supabase via src/database (modules/universal-agent-bus.js:10) — env-driven live DB",
+   "externalDeps": [
+    "supabase"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "tests/hdi-adversarial.test.js",
+   "tier": 5,
+   "runner": "other",
+   "evidence": "L6-16: createClient(process.env.SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY); runs illegal-transition/replay-fidelity checks against live Supabase. npm run test:integration invokes `node` on it; also in jest.integration.config.js testMatch.",
+   "externalDeps": [
+    "supabase",
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "tests/hdi-everything-wrong.test.js",
+   "tier": 5,
+   "runner": "other",
+   "evidence": "L7-19: createClient(process.env.SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY); 50-run chaos suite (latency/duplicate/stall injection) against live Supabase.",
+   "externalDeps": [
+    "supabase"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "tests/integration/hydi-live-operation-failures.test.js",
+   "tier": 3,
+   "runner": "jest-root",
+   "evidence": "instantiates real src/hydi-v3 runtime objects (OperatorSession/HYDIContinuousRuntime) against os.tmpdir dirs; no network/pg/supabase signals",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/integration/hydi-live-recovery.test.js",
+   "tier": 3,
+   "runner": "jest-root",
+   "evidence": "instantiates real src/hydi-v3 runtime objects (OperatorSession/HYDIContinuousRuntime) against os.tmpdir dirs; no network/pg/supabase signals",
+   "externalDeps": [
+    "stripe",
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/integration/hydi-morning-executive-simulation.test.js",
+   "tier": 3,
+   "runner": "jest-root",
+   "evidence": "instantiates real src/hydi-v3 runtime objects (OperatorSession/HYDIContinuousRuntime) against os.tmpdir dirs; no network/pg/supabase signals",
+   "externalDeps": [
+    "http",
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/integration/hydi-operational-demo.test.js",
+   "tier": 3,
+   "runner": "jest-root",
+   "evidence": "instantiates real src/hydi-v3 runtime objects (OperatorSession/HYDIContinuousRuntime) against os.tmpdir dirs; no network/pg/supabase signals",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/integration/hydi-operational-failure-modes.test.js",
+   "tier": 3,
+   "runner": "jest-root",
+   "evidence": "instantiates real src/hydi-v3 runtime objects (OperatorSession/HYDIContinuousRuntime) against os.tmpdir dirs; no network/pg/supabase signals",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/integration/hydi-operator-approval-flow.test.js",
+   "tier": 3,
+   "runner": "jest-root",
+   "evidence": "instantiates real src/hydi-v3 runtime objects (OperatorSession/HYDIContinuousRuntime) against os.tmpdir dirs; no network/pg/supabase signals",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/integration/hydi-operator-mistakes.test.js",
+   "tier": 3,
+   "runner": "jest-root",
+   "evidence": "instantiates real src/hydi-v3 runtime objects (OperatorSession/HYDIContinuousRuntime) against os.tmpdir dirs; no network/pg/supabase signals",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/integration/hydi-production-failure-modes.test.js",
+   "tier": 3,
+   "runner": "jest-root",
+   "evidence": "instantiates real src/hydi-v3 runtime objects (OperatorSession/HYDIContinuousRuntime) against os.tmpdir dirs; no network/pg/supabase signals",
+   "externalDeps": [
+    "http",
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/integration/hydi-recovery.test.js",
+   "tier": 3,
+   "runner": "jest-root",
+   "evidence": "instantiates real src/hydi-v3 runtime objects (OperatorSession/HYDIContinuousRuntime) against os.tmpdir dirs; no network/pg/supabase signals",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/integration/hydi-trust-integrity.test.js",
+   "tier": 3,
+   "runner": "jest-root",
+   "evidence": "instantiates real src/hydi-v3 runtime objects (OperatorSession/HYDIContinuousRuntime) against os.tmpdir dirs; no network/pg/supabase signals",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/integration/hydi-v3-console-integration.test.js",
+   "tier": 3,
+   "runner": "jest-root",
+   "evidence": "instantiates real src/hydi-v3 runtime objects (OperatorSession/HYDIContinuousRuntime) against os.tmpdir dirs; no network/pg/supabase signals",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/integration/hydi-v3-integration.test.js",
+   "tier": 3,
+   "runner": "jest-root",
+   "evidence": "instantiates real src/hydi-v3 runtime objects (OperatorSession/HYDIContinuousRuntime) against os.tmpdir dirs; no network/pg/supabase signals",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/migrations/001_keymaker_core.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "reads supabase/migrations/*.sql text via helpers.readMigration and asserts on DDL content — no DB connection",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/migrations/002_keymaker_functions.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "reads supabase/migrations/*.sql text via helpers.readMigration and asserts on DDL content — no DB connection",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/migrations/20260424010000.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "reads supabase/migrations/*.sql text via helpers.readMigration and asserts on DDL content — no DB connection",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/migrations/20260424145243.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "reads supabase/migrations/*.sql text via helpers.readMigration and asserts on DDL content — no DB connection",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/migrations/20260424145921.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "reads supabase/migrations/*.sql text via helpers.readMigration and asserts on DDL content — no DB connection",
+   "externalDeps": [
+    "stripe"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/migrations/20260424152159.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "Attempts a blocked local connection but handles refusal gracefully — passes tier-1 socket-guard run (TEST_TIERS attemptedButHermetic).",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/migrations/20260424220000.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "reads supabase/migrations/*.sql text via helpers.readMigration and asserts on DDL content — no DB connection",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/migrations/20260425104500.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "reads supabase/migrations/*.sql text via helpers.readMigration and asserts on DDL content — no DB connection",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/migrations/20260425105500.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "reads supabase/migrations/*.sql text via helpers.readMigration and asserts on DDL content — no DB connection",
+   "externalDeps": [
+    "stripe"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/migrations/20260425110000.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "reads supabase/migrations/*.sql text via helpers.readMigration and asserts on DDL content — no DB connection",
+   "externalDeps": [
+    "stripe"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/migrations/20260425110500.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "reads supabase/migrations/*.sql text via helpers.readMigration and asserts on DDL content — no DB connection",
+   "externalDeps": [
+    "stripe"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/migrations/20260425111000.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "reads supabase/migrations/*.sql text via helpers.readMigration and asserts on DDL content — no DB connection",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/migrations/20260425111500.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "reads supabase/migrations/*.sql text via helpers.readMigration and asserts on DDL content — no DB connection",
+   "externalDeps": [
+    "stripe"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/migrations/20260425112000.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "Attempts a blocked local connection but handles refusal gracefully — passes tier-1 socket-guard run (TEST_TIERS attemptedButHermetic).",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/migrations/20260425161640.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "reads supabase/migrations/*.sql text via helpers.readMigration and asserts on DDL content — no DB connection",
+   "externalDeps": [
+    "stripe"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/migrations/20260426005000.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "Attempts a blocked local connection but handles refusal gracefully — passes tier-1 socket-guard run (TEST_TIERS attemptedButHermetic).",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/migrations/20260426013200.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "reads supabase/migrations/*.sql text via helpers.readMigration and asserts on DDL content — no DB connection",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/migrations/20260426121100.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "reads supabase/migrations/*.sql text via helpers.readMigration and asserts on DDL content — no DB connection",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/migrations/20260426121300.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "reads supabase/migrations/*.sql text via helpers.readMigration and asserts on DDL content — no DB connection",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/migrations/20260426121400.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "reads supabase/migrations/*.sql text via helpers.readMigration and asserts on DDL content — no DB connection",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/migrations/20260426122000.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "reads supabase/migrations/*.sql text via helpers.readMigration and asserts on DDL content — no DB connection",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/migrations/20260426122500.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "reads supabase/migrations/*.sql text via helpers.readMigration and asserts on DDL content — no DB connection",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/migrations/20260426123000.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "reads supabase/migrations/*.sql text via helpers.readMigration and asserts on DDL content — no DB connection",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/migrations/20260426123500.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "reads supabase/migrations/*.sql text via helpers.readMigration and asserts on DDL content — no DB connection",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/migrations/20260426140000.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "reads supabase/migrations/*.sql text via helpers.readMigration and asserts on DDL content — no DB connection",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/migrations/20260426140200.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "reads supabase/migrations/*.sql text via helpers.readMigration and asserts on DDL content — no DB connection",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/migrations/20260429150000.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "reads supabase/migrations/*.sql text via helpers.readMigration and asserts on DDL content — no DB connection",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/migrations/20260430010000.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "reads supabase/migrations/*.sql text via helpers.readMigration and asserts on DDL content — no DB connection",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/migrations/20260430160000.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "reads supabase/migrations/*.sql text via helpers.readMigration and asserts on DDL content — no DB connection",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/migrations/20260430182441.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "reads supabase/migrations/*.sql text via helpers.readMigration and asserts on DDL content — no DB connection",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/migrations/20260515000000.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "reads supabase/migrations/*.sql text via helpers.readMigration and asserts on DDL content — no DB connection",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/migrations/20260516000001.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "reads supabase/migrations/*.sql text via helpers.readMigration and asserts on DDL content — no DB connection",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/migrations/20260521000001.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "Attempts a blocked local connection but handles refusal gracefully — passes tier-1 socket-guard run (TEST_TIERS attemptedButHermetic).",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/migrations/20260522000001.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "reads supabase/migrations/*.sql text via helpers.readMigration and asserts on DDL content — no DB connection",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/migrations/20260527000001.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "reads supabase/migrations/*.sql text via helpers.readMigration and asserts on DDL content — no DB connection",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/migrations/20260528000001.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "reads supabase/migrations/*.sql text via helpers.readMigration and asserts on DDL content — no DB connection",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/migrations/20260528000002.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "reads supabase/migrations/*.sql text via helpers.readMigration and asserts on DDL content — no DB connection",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/migrations/20260528000003.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "reads supabase/migrations/*.sql text via helpers.readMigration and asserts on DDL content — no DB connection",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/migrations/20260528000004.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "reads supabase/migrations/*.sql text via helpers.readMigration and asserts on DDL content — no DB connection",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/migrations/20260613000001.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "reads supabase/migrations/*.sql text via helpers.readMigration and asserts on DDL content — no DB connection",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/migrations/20260617000001.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "reads supabase/migrations/*.sql text via helpers.readMigration and asserts on DDL content — no DB connection",
+   "externalDeps": [
+    "stripe"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/migrations/20260617000002.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "reads supabase/migrations/*.sql text via helpers.readMigration and asserts on DDL content — no DB connection",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/migrations/20260617000003.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "reads supabase/migrations/*.sql text via helpers.readMigration and asserts on DDL content — no DB connection",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/migrations/20260617000004.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "reads supabase/migrations/*.sql text via helpers.readMigration and asserts on DDL content — no DB connection",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/migrations/20260617000005.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "reads supabase/migrations/*.sql text via helpers.readMigration and asserts on DDL content — no DB connection",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/migrations/20260627000001.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "reads supabase/migrations/*.sql text via helpers.readMigration and asserts on DDL content — no DB connection",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/migrations/20260707151854.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "reads supabase/migrations/*.sql text via helpers.readMigration and asserts on DDL content — no DB connection",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/migrations/20260714075216_hdi_governance.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "reads supabase/migrations/*.sql text via helpers.readMigration and asserts on DDL content — no DB connection",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/migrations/20260714075634_hdi_governance_return_types.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "reads supabase/migrations/*.sql text via helpers.readMigration and asserts on DDL content — no DB connection",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/migrations/20260714075949_hdi_transition_idempotency.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "reads supabase/migrations/*.sql text via helpers.readMigration and asserts on DDL content — no DB connection",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/migrations/20260714120000.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "reads supabase/migrations/*.sql text via helpers.readMigration and asserts on DDL content — no DB connection",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/migrations/20260714130000.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "reads supabase/migrations/*.sql text via helpers.readMigration and asserts on DDL content — no DB connection",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/migrations/20260714140000.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "reads supabase/migrations/*.sql text via helpers.readMigration and asserts on DDL content — no DB connection",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/migrations/20260714150000.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "reads supabase/migrations/*.sql text via helpers.readMigration and asserts on DDL content — no DB connection",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/migrations/20260714160000.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "reads supabase/migrations/*.sql text via helpers.readMigration and asserts on DDL content — no DB connection",
+   "externalDeps": [
+    "stripe"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/migrations/20260715000000.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "reads supabase/migrations/*.sql text via helpers.readMigration and asserts on DDL content — no DB connection",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/migrations/20260715120000.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "reads supabase/migrations/*.sql text via helpers.readMigration and asserts on DDL content — no DB connection",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/migrations/20260715121000.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "reads supabase/migrations/*.sql text via helpers.readMigration and asserts on DDL content — no DB connection",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/migrations/20260715122000.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "reads supabase/migrations/*.sql text via helpers.readMigration and asserts on DDL content — no DB connection",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/migrations/20260715123000.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "reads supabase/migrations/*.sql text via helpers.readMigration and asserts on DDL content — no DB connection",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/migrations/20260715124000.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "reads supabase/migrations/*.sql text via helpers.readMigration and asserts on DDL content — no DB connection",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/migrations/20260715210000.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "reads supabase/migrations/*.sql text via helpers.readMigration and asserts on DDL content — no DB connection",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/migrations/20260722000001.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "reads supabase/migrations/*.sql text via helpers.readMigration and asserts on DDL content — no DB connection",
+   "externalDeps": [
+    "stripe"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/migrations/20260723000001.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "reads supabase/migrations/*.sql text via helpers.readMigration and asserts on DDL content — no DB connection",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/migrations/20260724000001.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "reads supabase/migrations/*.sql text via helpers.readMigration and asserts on DDL content — no DB connection",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/migrations/20260817120000.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "reads supabase/migrations/*.sql text via helpers.readMigration and asserts on DDL content — no DB connection",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/migrations/20260818120000.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "reads supabase/migrations/*.sql text via helpers.readMigration and asserts on DDL content — no DB connection",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/migrations/20260819140000_communication_layer_schema.test.js",
+   "tier": 2,
+   "runner": "jest-tier2",
+   "evidence": "reads supabase/migrations/*.sql text via helpers.readMigration and asserts on DDL content — no DB connection",
+   "externalDeps": [
+    "postgres",
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "tests/migrations/20260819190000.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "reads supabase/migrations/*.sql text via helpers.readMigration and asserts on DDL content — no DB connection",
+   "externalDeps": [
+    "stripe"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/migrations/20260819200000.test.js",
+   "tier": 2,
+   "runner": "jest-tier2",
+   "evidence": "reads supabase/migrations/*.sql text via helpers.readMigration and asserts on DDL content — no DB connection",
+   "externalDeps": [
+    "postgres",
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "tests/migrations/20260822150000.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "reads supabase/migrations/*.sql text via helpers.readMigration and asserts on DDL content — no DB connection",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/migrations/20260901120000.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "reads supabase/migrations/*.sql text via helpers.readMigration and asserts on DDL content — no DB connection",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/migrations/20260901130000.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "reads supabase/migrations/*.sql text via helpers.readMigration and asserts on DDL content — no DB connection",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/migrations/20260915120000.test.js",
+   "tier": 2,
+   "runner": "jest-tier2",
+   "evidence": "reads supabase/migrations/*.sql text via helpers.readMigration and asserts on DDL content — no DB connection",
+   "externalDeps": [
+    "supabase",
+    "postgres",
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "tests/migrations/20260915130000.test.js",
+   "tier": 2,
+   "runner": "jest-tier2",
+   "evidence": "reads supabase/migrations/*.sql text via helpers.readMigration and asserts on DDL content — no DB connection",
+   "externalDeps": [
+    "supabase",
+    "postgres",
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "tests/migrations/20260915140000.test.js",
+   "tier": 2,
+   "runner": "jest-tier2",
+   "evidence": "reads supabase/migrations/*.sql text via helpers.readMigration and asserts on DDL content — no DB connection",
+   "externalDeps": [
+    "supabase",
+    "postgres",
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "tests/migrations/20260915150000.test.js",
+   "tier": 2,
+   "runner": "jest-tier2",
+   "evidence": "reads supabase/migrations/*.sql text via helpers.readMigration and asserts on DDL content — no DB connection",
+   "externalDeps": [
+    "supabase",
+    "postgres",
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "tests/migrations/20260915160000.test.js",
+   "tier": 2,
+   "runner": "jest-tier2",
+   "evidence": "reads supabase/migrations/*.sql text via helpers.readMigration and asserts on DDL content — no DB connection",
+   "externalDeps": [
+    "supabase",
+    "postgres",
+    "stripe",
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "tests/migrations/20260915180000.test.js",
+   "tier": 2,
+   "runner": "jest-tier2",
+   "evidence": "reads supabase/migrations/*.sql text via helpers.readMigration and asserts on DDL content — no DB connection",
+   "externalDeps": [
+    "supabase",
+    "postgres",
+    "http",
+    "fs"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "tests/migrations/20260916000000.test.js",
+   "tier": 2,
+   "runner": "jest-tier2",
+   "evidence": "reads supabase/migrations/*.sql text via helpers.readMigration and asserts on DDL content — no DB connection",
+   "externalDeps": [
+    "supabase",
+    "postgres",
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "tests/migrations/20260916010000.test.js",
+   "tier": 2,
+   "runner": "jest-tier2",
+   "evidence": "reads supabase/migrations/*.sql text via helpers.readMigration and asserts on DDL content — no DB connection",
+   "externalDeps": [
+    "supabase",
+    "postgres",
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "tests/migrations/no-hardcoded-secrets.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "reads supabase/migrations/*.sql text via helpers.readMigration and asserts on DDL content — no DB connection",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/qualification/test-500-cycle-soak.ts",
+   "tier": 4,
+   "runner": "other",
+   "evidence": "main() program: supabase+spawn+env signals; 500-cycle soak, slow by design. Run via npx tsx through scripts/run-qualification-suite.js (npm run test:qualification).",
+   "externalDeps": [
+    "supabase",
+    "stripe",
+    "process",
+    "fs"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "tests/qualification/test-crash-restart-matrix.ts",
+   "tier": 4,
+   "runner": "other",
+   "evidence": "main() program: fetches local endpoints + spawns processes; crash/restart matrix.",
+   "externalDeps": [
+    "supabase",
+    "stripe",
+    "http",
+    "process",
+    "fs"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "tests/qualification/test-daemon-audit.ts",
+   "tier": 4,
+   "runner": "other",
+   "evidence": "main() program: supabase+spawn+env signals; audits running heidi daemon.",
+   "externalDeps": [
+    "supabase",
+    "stripe",
+    "process",
+    "fs"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "tests/qualification/test-dashboard-hardening.ts",
+   "tier": 4,
+   "runner": "other",
+   "evidence": "main() program: supabase+spawn+env signals; dashboard hardening checks.",
+   "externalDeps": [
+    "supabase",
+    "stripe",
+    "process",
+    "fs"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "tests/qualification/test-first-real-customer-readiness.ts",
+   "tier": 4,
+   "runner": "other",
+   "evidence": "main() program: stripe+fs signals; first-customer readiness gate.",
+   "externalDeps": [
+    "stripe",
+    "http",
+    "fs"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "tests/qualification/test-g14-ownership-policy.ts",
+   "tier": 4,
+   "runner": "other",
+   "evidence": "main() program: fs-only signals; G14 ownership policy checks.",
+   "externalDeps": [
+    "http",
+    "fs"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "tests/qualification/test-post-qualification-adversarial.ts",
+   "tier": 4,
+   "runner": "other",
+   "evidence": "main() program: supabase+env signals; post-qualification adversarial audit.",
+   "externalDeps": [
+    "supabase",
+    "http",
+    "fs"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "tests/qualification/test-revenue-proof.ts",
+   "tier": 4,
+   "runner": "other",
+   "evidence": "main() program: pg(5432x)+stripe signals; revenue proof needs DB+Stripe data.",
+   "externalDeps": [
+    "postgres",
+    "stripe",
+    "http",
+    "fs"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "tests/qualification/test-security-boundaries.ts",
+   "tier": 4,
+   "runner": "other",
+   "evidence": "main() program: supabase+spawn+stripe+env signals; security boundary checks.",
+   "externalDeps": [
+    "supabase",
+    "stripe",
+    "process",
+    "fs"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "tests/qualification/test-watchdog-qualification.ts",
+   "tier": 4,
+   "runner": "other",
+   "evidence": "main() program: ollama(11434)+spawn signals; qualifies the running watchdog + local model.",
+   "externalDeps": [
+    "ollama",
+    "http",
+    "process",
+    "fs"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "tests/soak-test-24h.js",
+   "tier": 3,
+   "runner": "none",
+   "evidence": "main() program; requires http+fs; polls localhost service health endpoints for up to 24h (DURATION_MS env). Not referenced by any npm script (npm run soak-test -> scripts/soak-test.js).",
+   "externalDeps": [
+    "flask",
+    "http",
+    "fs"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "tests/test-all-agents.js",
+   "tier": 3,
+   "runner": "none",
+   "evidence": "main() program requiring agents/*.js; agents call fetch(`http://localhost:${port}/health`) and SUPABASE REST endpoints transitively (agents/operations-agent.js). Not in any npm script.",
+   "externalDeps": [],
+   "status": "external-dependency"
+  },
+  {
+   "file": "tests/test-operations-agent.js",
+   "tier": 3,
+   "runner": "none",
+   "evidence": "main() program requiring agents/operations-agent.js which fetches localhost health ports and NEXT_PUBLIC_SUPABASE_URL. Not in any npm script.",
+   "externalDeps": [],
+   "status": "external-dependency"
+  },
+  {
+   "file": "tests/unit/action-chokepoint.test.ts",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/action-executor-enforcement.test.ts",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/action-executor.test.ts",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/actions-approval-auth.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "supabase"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/adaptation-vocabulary.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/adaptive-operator.test.ts",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "stripe",
+    "http",
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/agent-manager-control.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "supabase"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/agents.test.ts",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/apex-archive-acceptance.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/apex-phase3-lifecycle.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "jest suite; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "supabase",
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/apex-phase4-operational-acceptance.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "jest suite; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "supabase",
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/application-factory.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/auth.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/authorize-live-auth.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "supabase",
+    "stripe"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/autonomy-boundary.test.ts",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/autonomy-contract.test.ts",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/base-agent.test.ts",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/boot-agent-ownership.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "process",
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/boot-control-channel.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/boot-instance-lease.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/boot-partial-lease-guard.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "process",
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/boot-restart-handler.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/bounded-cognitive-loop.test.ts",
+   "tier": 2,
+   "runner": "jest-tier2",
+   "evidence": "PG+OLLAMA OFFENDER. L28-29: hardcoded pg config port:54322 database:postgres; header documents measured Ollama dependence. Tier2 measured.",
+   "externalDeps": [
+    "postgres",
+    "ollama",
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "tests/unit/broker.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "redis"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/capability-acquisition-engine.test.ts",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "6 tests exceed 30s timeout — real retry/backoff delays (~14s each) with mocked fetch; timing-sensitive/flaky under parallel workers",
+   "externalDeps": [
+    "stripe"
+   ],
+   "status": "pre-existing-failure"
+  },
+  {
+   "file": "tests/unit/capability-contract.test.ts",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "stripe",
+    "http",
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/cascade-ledger-local.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/chat-route-rezonate.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "supabase"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/checkout.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "stripe"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/cloud-bootstrap-state.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "stripe"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/cognitive-core-contracts.test.ts",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "jest suite; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "postgres"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/commercial-ingress-adapter.test.ts",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "stripe"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/communication-layer.test.ts",
+   "tier": 2,
+   "runner": "jest-tier2",
+   "evidence": "Transitive PG offender: imports ConversationStore (lib/communication/conversationStore.ts:84-89) which opens new Pool({port:54322}) at construction. Tier2 measured.",
+   "externalDeps": [
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "tests/unit/control-plane-convergence.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "http",
+    "process",
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/control-plane-integration.test.ts",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "stripe",
+    "http",
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/conversation-store-message-lookup.test.ts",
+   "tier": 2,
+   "runner": "jest-tier2",
+   "evidence": "L25: import { Pool } from 'pg'; L21 comment: 'These run against the real local Postgres because the defect was in the SQL'. Tier2 measured.",
+   "externalDeps": [
+    "postgres",
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "tests/unit/core-loop-outcome-contract.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "ollama",
+    "stripe"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/credential-governance-autonomy.test.ts",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "stripe",
+    "http",
+    "process"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/credential-governance-closed-loop.test.ts",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "stripe",
+    "http",
+    "process"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/credential-governance-no-false-green.test.ts",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "stripe"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/customer-projection.test.ts",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "stripe"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/customer-service.test.ts",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "stripe"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/delegated-operator.test.ts",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "ollama",
+    "stripe",
+    "http"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/deviceAuth.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/devices-api.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "supabase"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/durable-budget-store.test.ts",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/embeddings.test.ts",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "ollama",
+    "http"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/endpoint-health-contract.test.ts",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "jest suite; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "ollama",
+    "http",
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/episodic-memory.test.ts",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/event-bus-audit-replay.test.ts",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/event-bus-causality.test.ts",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/event-bus-events-adapter.test.ts",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/event-bus-request-response.test.ts",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/event-bus-stability.test.ts",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/event-bus-validation.test.ts",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "stripe"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/event-bus.test.ts",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/events-stream.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "supabase",
+    "http"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/failed-webhook-detector.test.ts",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "stripe"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/filesystem-adapter-enforcement.test.ts",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "http",
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/filesystem-authorization.test.ts",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/findings-to-goals.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/get-raw-body.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "stripe"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/goal-executor.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "http"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/health-local-first.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "jest suite; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "supabase",
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/health-observer.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "http",
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/health-provenance-process-identity.test.ts",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "http",
+    "process"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/health-service.test.ts",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "ollama",
+    "stripe",
+    "http"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/health-transport-contract.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "jest suite; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "supabase",
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/healthScore.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/heartbeat-api.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "supabase"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/heidi-action-layer.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "stripe",
+    "process"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/heidi-blocker-classification-regression.test.ts",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "stripe",
+    "http"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/heidi-campaign-loop-qualification.test.ts",
+   "tier": 2,
+   "runner": "jest-tier2",
+   "evidence": "L43,52-53: import { Pool } from 'pg'; port:54322 hardcoded. Tier2 measured.",
+   "externalDeps": [
+    "postgres",
+    "stripe",
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "tests/unit/heidi-cognitive-core-qualification.test.ts",
+   "tier": 2,
+   "runner": "jest-tier2",
+   "evidence": "L23 comment: 'run against the local Supabase Postgres (port 54322)'; L34 port:54322. Tier2 measured.",
+   "externalDeps": [
+    "postgres",
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "tests/unit/heidi-cognitive-core-real-qualification.test.ts",
+   "tier": 2,
+   "runner": "jest-tier2",
+   "evidence": "L16-18: requires 'Local Supabase running on 127.0.0.1:54322' + NEXT_PUBLIC_SUPABASE_URL + SERVICE_ROLE_KEY. Tier2 measured.",
+   "externalDeps": [
+    "supabase",
+    "postgres",
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "tests/unit/heidi-cognitive-core.test.ts",
+   "tier": 2,
+   "runner": "jest-tier2",
+   "evidence": "L7 comment: 'run against the local Supabase Postgres (port 54322)'; L23 port:54322. Tier2 measured.",
+   "externalDeps": [
+    "postgres",
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "tests/unit/heidi-cognitive-loop-qualification.test.ts",
+   "tier": 2,
+   "runner": "jest-tier2",
+   "evidence": "L14-15,25: createClient + Pool({port:54322}). tier1-hermetic-guard notes this file hardcodes 54322 and never reads env. Tier2 measured.",
+   "externalDeps": [
+    "supabase",
+    "postgres",
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "tests/unit/heidi-commercial-workflow-qualification.test.ts",
+   "tier": 2,
+   "runner": "jest-tier2",
+   "evidence": "L47,56-57: Pool({port:54322}). Tier2 measured.",
+   "externalDeps": [
+    "postgres",
+    "stripe",
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "tests/unit/heidi-continuous-loop-qualification.test.ts",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "L42-48 hardcodes DB_CONFIG 127.0.0.1:54322 BUT passes the socket-guard tier-1 run — CognitiveCoreBuilder/probes degrade gracefully on ECONNREFUSED. Hermetic-in-outcome; borderline file.",
+   "externalDeps": [
+    "postgres"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/heidi-control-plane-acceptance.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "jest suite; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "supabase",
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/heidi-core-action-executor.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "jest suite; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "http"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/heidi-core-fast-path.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "jest suite; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "ollama"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/heidi-core-loop.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/heidi-core-tool-registry.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "ollama"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/heidi-daemon-bugfix-regression.test.ts",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "stripe",
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/heidi-daemon-ipc-shutdown.test.ts",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "process",
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/heidi-heartbeat-alias-resolution.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/heidi-learning-record.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/heidi-memory-system.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/heidi-orchestrator.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "ollama"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/heidi-real-e2e-qualification.test.ts",
+   "tier": 2,
+   "runner": "jest-tier2",
+   "evidence": "L26,35-36: Pool({port:54322}). Tier2 measured.",
+   "externalDeps": [
+    "postgres",
+    "stripe",
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "tests/unit/heidi-recovery-verification.test.ts",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "ollama",
+    "http",
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/heidi-revenue-campaign-qualification.test.ts",
+   "tier": 2,
+   "runner": "jest-tier2",
+   "evidence": "L28-29,38: createClient + Pool({port:54322}). Tier2 measured.",
+   "externalDeps": [
+    "supabase",
+    "postgres",
+    "stripe",
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "tests/unit/heidi-rezonate-acceptance.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/heidi-self-repair-oscillation.test.ts",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/heidi-self-sufficiency-production-qualification.test.ts",
+   "tier": 2,
+   "runner": "jest-tier2",
+   "evidence": "L36-38: hardcoded pg 127.0.0.1:54322 postgres/postgres. Tier2 measured.",
+   "externalDeps": [
+    "supabase",
+    "postgres",
+    "ollama",
+    "stripe",
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "tests/unit/heidi-self-sufficiency-qualification.test.ts",
+   "tier": 2,
+   "runner": "jest-tier2",
+   "evidence": "OLLAMA+PG OFFENDER. L96-97: createOllamaProbe(process.env.LOCAL_MODEL_URL || 'http://localhost:11434') — real GET to Ollama; L36-38 pg 54322. Tier2 measured.",
+   "externalDeps": [
+    "supabase",
+    "postgres",
+    "ollama",
+    "stripe",
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "tests/unit/heidi-tools.test.ts",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/human-action-engine.test.ts",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "jest suite; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "stripe",
+    "http",
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/hybrid-model-stack.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "ollama",
+    "http"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/hydi-v3/ActionSnapshot.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "Attempts a blocked local connection but handles refusal gracefully — passes tier-1 socket-guard run (TEST_TIERS attemptedButHermetic).",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/hydi-v3/AgentWorkspace.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/hydi-v3/ApprovalCenter.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/hydi-v3/ArchitectureGuard.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/hydi-v3/ArchitectureInvariant.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/hydi-v3/AuditLedger.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/hydi-v3/AutonomyManager.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/hydi-v3/BriefingRenderer.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/hydi-v3/BusinessEventBus.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/hydi-v3/BusinessEventRegistry.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/hydi-v3/BusinessEvidenceEngine.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/hydi-v3/BusinessKPIRegistry.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/hydi-v3/BusinessMemory.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/hydi-v3/BusinessOutcomeEngine.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/hydi-v3/BusinessSignalInterpreter.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/hydi-v3/BusinessWorkflowEngine.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/hydi-v3/ChaosRunner.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/hydi-v3/ConfidenceCalibration.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/hydi-v3/ConsoleAPI.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/hydi-v3/ConsoleRenderer.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/hydi-v3/ConversationEngine.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/hydi-v3/CudaPoolManager.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "ollama",
+    "redis",
+    "process"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/hydi-v3/DataIntegrity.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/hydi-v3/DecisionIntelligence.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "http",
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/hydi-v3/DecisionOutcomeStore.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/hydi-v3/DistributedCompute.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "redis"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/hydi-v3/DistributedTaskManager.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/hydi-v3/EntryPointGuard.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "http",
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/hydi-v3/EquipmentSensor.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/hydi-v3/EvidenceCollector.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/hydi-v3/EvidenceMeasurementIntegrity.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "stripe",
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/hydi-v3/ExecutionFabric.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/hydi-v3/ExecutionGateway.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/hydi-v3/ExecutiveCockpit.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/hydi-v3/ExecutiveIntelligence.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/hydi-v3/ExecutiveOperatingSystem.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/hydi-v3/ExecutiveTimeline.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/hydi-v3/Federation.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/hydi-v3/FederationReplay.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/hydi-v3/FilesystemMonitor.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/hydi-v3/GitSensor.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "process",
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/hydi-v3/GracefulShutdown.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/hydi-v3/HardwareDiscovery.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "redis",
+    "process"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/hydi-v3/HeartbeatSystem.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/hydi-v3/LearningLoopIntegrity.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/hydi-v3/LearningMetrics.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/hydi-v3/ManufacturingSignalInterpreter.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/hydi-v3/MeasuredLearning.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/hydi-v3/MemoryIntegrity.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/hydi-v3/MissionPlanner.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/hydi-v3/ModelPlacement.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "jest suite; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "ollama"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/hydi-v3/NodeDiscovery.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/hydi-v3/NodeIdentity.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/hydi-v3/NodeMesh.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/hydi-v3/NodePolicy.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/hydi-v3/NodeScheduler.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/hydi-v3/NodeTransport.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/hydi-v3/ObservabilityDashboard.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/hydi-v3/OperatorMode.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/hydi-v3/OperatorRuntime.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/hydi-v3/OperatorSession.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/hydi-v3/OutcomeCorrelation.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/hydi-v3/OutcomeEvaluator.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/hydi-v3/PerformanceBenchmark.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/hydi-v3/Phase22RevenuePipeline.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/hydi-v3/Phase29ClosedLoop.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/hydi-v3/PrinterSensor.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/hydi-v3/ProductionReliability.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/hydi-v3/ProjectPlanner.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/hydi-v3/RC2Hardening.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/hydi-v3/RecommendationTracker.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/hydi-v3/ReflectionEngine.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/hydi-v3/SecurityAuditor.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "Attempts a blocked local connection but handles refusal gracefully — passes tier-1 socket-guard run (TEST_TIERS attemptedButHermetic).",
+   "externalDeps": [
+    "process",
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/hydi-v3/SelfHealingEngine.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "redis"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/hydi-v3/ServiceContract.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "Attempts a blocked local connection but handles refusal gracefully — passes tier-1 socket-guard run (TEST_TIERS attemptedButHermetic).",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/hydi-v3/SessionMemory.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/hydi-v3/SharedMemoryStore.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/hydi-v3/ShutdownRecovery.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/hydi-v3/SignalCoverage.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/hydi-v3/SoakTest.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/hydi-v3/StartupIntegrity.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/hydi-v3/StrategicObjectives.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/hydi-v3/TaskEngine.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/hydi-v3/TestingFramework.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/hydi-v3/TrustEngine.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/hydi-v3/WatchdogSupervisor.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/hydi-v3/localAccessGuard.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "jest suite; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "http"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/intentParser.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/job-executor-poller.test.ts",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "stripe"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/job-queue.test.ts",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/key-management-qualification.test.ts",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "stripe",
+    "http",
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/key-management.test.ts",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "stripe",
+    "http",
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/kilo-engine.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/legacy-checkout-boundary.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "http",
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/lifecycle-cleanup.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/live-transaction-safety.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "stripe",
+    "http",
+    "process",
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/local-event-store.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/local-model-adapter.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "ollama"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/local-state-backup.test.ts",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "1/9 assertions fail (manifest.schema) — untracked WIP suite; sibling lib/backup/ also untracked WIP — hermetic by design (tmpdir+injected pgDump); failure is app-code WIP, not non-hermeticity.",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "pre-existing-failure"
+  },
+  {
+   "file": "tests/unit/memory-search-api.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "supabase",
+    "ollama"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/metrics-service.test.ts",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/metrics.test.ts",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/mission-cli.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/mission-worker.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/mobile-status-api.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "supabase"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/no-hardcoded-secrets.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "stripe",
+    "http",
+    "process",
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/no-secret-regression.test.ts",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "stripe",
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/notifications-api.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "supabase"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/notify.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "vapid-push"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/observation-confidence.test.ts",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/one-click-authorize.test.ts",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "stripe",
+    "http",
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/operational-capability-auth.test.ts",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/operational-dependency-graph.test.ts",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "jest suite; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "ollama"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/operational-incident-correlator.test.ts",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/operational-learning.test.ts",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/operational-memory.test.ts",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "jest suite; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "ollama",
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/operational-no-false-greens.test.ts",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "ollama",
+    "http",
+    "process",
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/operational-phase4-action-budget.test.ts",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/operational-phase4-decisions.test.ts",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/operational-phase4-policy.test.ts",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/operational-phase4-security.test.ts",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/operational-phase5.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "jest suite; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "ollama",
+    "stripe",
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/operational-state-model.test.ts",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/pao-event-bus-leak.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/pdr-completeness.test.ts",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/persistence-guard.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "jest suite; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "supabase",
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/platform-diagnostics.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/process-identity.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "http",
+    "process"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/process-lifecycle.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/production-operations-control-plane.test.ts",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "jest suite; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "supabase",
+    "stripe",
+    "http",
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/projection-engine.test.ts",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/proto-yi-certification.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/proto-yi-diagnostics.test.js",
+   "tier": 2,
+   "runner": "jest-tier2",
+   "evidence": "FLASK OFFENDER. L51: http.get('http://localhost:5000/proto_iy/') — real GET against the Ursula/Proto-YI Flask service; L59 skips only if Flask already running. Measured non-hermetic (TEST_TIERS tier2).",
+   "externalDeps": [
+    "flask",
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "tests/unit/proto-yi.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/protoforge-action-gate.test.ts",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/protoforge-approval-boundary.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/protoforge-auto-gate.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/protoforge-briefing.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/protoforge-health-no-placeholder.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/protoforge-mission-run-lock.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/protoforge-mission-runner.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/protoforge-opportunity-analyzer.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/protoforge-opportunity-review.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/protoforge-opportunity-scheduler.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "supabase",
+    "process",
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/protoforge-opportunity-store.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/protoforge-policy-engine.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "supabase",
+    "http"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/protoforge-policy-local.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "jest suite; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "supabase",
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/protoforge-scouts.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/qualification-hardening.test.ts",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "stripe",
+    "http",
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/queue-manager-local.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "jest suite; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "supabase",
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/rate-limit.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/rbac.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/recovery-bridge.test.ts",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "Attempts a blocked local connection but handles refusal gracefully — passes tier-1 socket-guard run (TEST_TIERS attemptedButHermetic).",
+   "externalDeps": [
+    "http",
+    "process",
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/recovery-failure-intelligence.test.ts",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/recovery-lease.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/recovery-ownership.test.ts",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "process",
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/recovery-storm-protection.test.ts",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/recovery-strategy-model.test.ts",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/redis-stream-broker.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "redis"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/replay-engine.test.ts",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/requireAuth.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "http"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/restart-module.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "http",
+    "process"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/revenue-auth.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "supabase",
+    "stripe"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/revenue-engine.test.ts",
+   "tier": 2,
+   "runner": "jest-tier2",
+   "evidence": "L12 comment: 'direct PostgreSQL access (not PostgREST)'; requires local Supabase Postgres. Tier2 measured.",
+   "externalDeps": [
+    "stripe",
+    "http"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "tests/unit/revenue-governance.test.ts",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/revenue-projection.test.ts",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "stripe"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/revenue-reconciliation-detector.test.ts",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "stripe"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/revenue-safety-envelope.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "stripe",
+    "http",
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/rezonate.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "supabase",
+    "stripe",
+    "http",
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/rotate-secrets.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "jest suite; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "supabase",
+    "process",
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/safety-invariants.test.ts",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "jest suite; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "ollama",
+    "stripe",
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/security-identity-worker-fail-closed.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "jest suite; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "http"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/self-assessment.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/self-awareness-drift-regression.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/self-healing-service.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "http"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/service-bundle-checkout.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "stripe",
+    "http"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/simple-keymaker.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "stripe"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/status-system-api.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "supabase"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/stripe-connect-webhook.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "supabase",
+    "stripe",
+    "http"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/stripe-route-bridges.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "supabase",
+    "stripe",
+    "http",
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/structured-logger.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "stripe",
+    "http"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/stuck-job-detector.test.ts",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/subscription-manager.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "stripe"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/subscription-projection.test.ts",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/supervision-model.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/system-health-producer.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "http",
+    "process",
+    "fs"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/task-router.test.ts",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/traces-auth.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "supabase",
+    "stripe"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/true-system-health-eventflow.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "supabase",
+    "stripe",
+    "http"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/true-system-health-optional-integrations.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "supabase",
+    "stripe"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/ursula-service-bundle.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "stripe"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/ursula-status.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "supabase"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/voice-command-api.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "supabase"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/watchdog-hysteresis.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "jest suite; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "ollama",
+    "http"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/watchdog.test.ts",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "ollama",
+    "stripe",
+    "http"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/webhooks-stripe.test.js",
+   "tier": 2,
+   "runner": "jest-tier2",
+   "evidence": "Mocks @supabase/supabase-js/stripe via jest.mock (L13-32) but module-under-test api/webhooks/stripe.js:19 instantiates createClient at load and a transitive dep still dials a blocked port — failed under socket guard (TEST_TIERS socketGuardRun). Tier2 measured.",
+   "externalDeps": [
+    "supabase",
+    "stripe"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "tests/unit/work-sessions-api.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [
+    "supabase"
+   ],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/work-sessions.test.ts",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; jest.mock present; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "tests/unit/worker-orchestrator-control.test.js",
+   "tier": 1,
+   "runner": "jest-root",
+   "evidence": "no pg/supabase/port/fetch signals; passed 2026-09-18 tier-1 run (closed endpoints + socket guard)",
+   "externalDeps": [],
+   "status": "hermetic"
+  },
+  {
+   "file": "time_violence_test.js",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: spawn, liveurl",
+   "externalDeps": [
+    "http",
+    "process"
+   ],
+   "status": "external-dependency"
+  },
+  {
+   "file": "webhook-test.js",
+   "tier": 5,
+   "runner": "none",
+   "evidence": "signals: supaco, stripe, fetchh, liveurl",
+   "externalDeps": [
+    "supabase",
+    "stripe",
+    "http"
+   ],
+   "status": "external-dependency"
+  }
+ ]
+}

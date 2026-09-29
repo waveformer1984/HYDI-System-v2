@@ -351,33 +351,32 @@ class UrsulaModelHeartbeat extends EventEmitter {
    * @returns {Promise<Array>} Array of health check results
    */
   async checkAllModels() {
-    // All entries in modelsToMonitor that are of type 'llama'/'codellama' in
-    // LocalModelAdapter resolve, via runLlamaInference()'s single ollamaModel
-    // default, to the SAME real Ollama model (see local-model-adapter.js and
-    // CLAUDE.md's LOCAL_MODEL_NAME/OLLAMA_MODEL precedence) - there is
-    // currently no per-model override that makes them actually distinct.
-    // Checking each alias separately was firing N redundant real inference
-    // calls into the single-concurrency Ollama server (OLLAMA_NUM_PARALLEL=1)
-    // every 30s for zero additional signal, and was directly implicated in a
-    // live /api/chat request queuing behind heartbeat traffic and taking
-    // ~15 minutes to return. Dedupe: check each distinct real model once,
-    // apply that result to every alias backed by it.
-    const aliasesByRealModel = new Map();
+    // Llama and CodeLlama entries all use LocalModelAdapter's one configured
+    // Ollama model (LOCAL_MODEL_NAME / OLLAMA_MODEL). They are distinct adapter
+    // ids, but not distinct inference backends. Probe that shared backend once
+    // so the 30s heartbeat cannot queue several redundant generations ahead of
+    // real chat traffic on single-concurrency Ollama installs.
+    const aliasesByTarget = new Map();
     for (const modelId of this.config.modelsToMonitor) {
       const realModelId = this.resolveModelId(modelId);
-      if (!aliasesByRealModel.has(realModelId)) aliasesByRealModel.set(realModelId, []);
-      aliasesByRealModel.get(realModelId).push(modelId);
+      const modelConfig = this.adapter.modelConfigs?.[realModelId];
+      const usesSharedOllama = modelConfig && ['llama', 'codellama'].includes(modelConfig.type);
+      const target = usesSharedOllama
+        ? `ollama:${modelConfig.ollamaModel || process.env.LOCAL_MODEL_NAME || process.env.OLLAMA_MODEL || 'auto'}`
+        : `adapter:${realModelId}`;
+      if (!aliasesByTarget.has(target)) aliasesByTarget.set(target, { representative: realModelId, aliases: [] });
+      aliasesByTarget.get(target).aliases.push(modelId);
     }
 
-    const realModelIds = Array.from(aliasesByRealModel.keys());
+    const targets = Array.from(aliasesByTarget.values());
     const realResults = await Promise.all(
-      realModelIds.map(realModelId => this.checkSingleModelHealth(realModelId))
+      targets.map(({ representative }) => this.checkSingleModelHealth(representative))
     );
 
     const results = [];
-    realModelIds.forEach((realModelId, i) => {
+    targets.forEach(({ aliases }, i) => {
       const base = realResults[i];
-      for (const alias of aliasesByRealModel.get(realModelId)) {
+      for (const alias of aliases) {
         results.push({ ...base, modelId: alias });
       }
     });

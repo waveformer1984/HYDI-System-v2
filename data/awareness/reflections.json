@@ -1,8 +1,8 @@
 [
   {
-    "id": "reflection_1789320654161",
-    "timestamp": 1789320654169,
-    "duration": 0,
+    "id": "reflection_1790610989957",
+    "timestamp": 1790610989974,
+    "duration": 4,
     "whatWorked": {
       "totalSuccessful": 15,
       "successRate": 1,
@@ -21,6 +21,7 @@
         }
       },
       "insights": [
+        "High confidence strongly correlates with success",
         "Fast execution correlates with success"
       ]
     },
@@ -51,12 +52,64 @@
         "reason": "High success rate: 1.00"
       }
     ]
-  }
-]     "reason": "High success rate: 1.00"
-      }
-    ]
-  }
-] 0.67"
+  },
+  {
+    "id": "reflection_1790610990232",
+    "timestamp": 1790610990282,
+    "duration": 1,
+    "whatWorked": {
+      "totalSuccessful": 10,
+      "successRate": 0.6666666666666666,
+      "topPerformers": {
+        "model": {
+          "value": "test-model",
+          "count": 10
+        },
+        "strategy": {
+          "value": "unknown",
+          "count": 10
+        },
+        "type": {
+          "value": "test_action",
+          "count": 10
+        }
+      },
+      "insights": [
+        "Fast execution correlates with success"
+      ]
+    },
+    "whatFailed": {
+      "totalFailed": 5,
+      "failureRate": 0.3333333333333333,
+      "commonFailures": {
+        "models": {
+          "value": "test-model",
+          "count": 5
+        },
+        "strategies": {
+          "value": "unknown",
+          "count": 5
+        },
+        "types": {
+          "value": "test_action",
+          "count": 5
+        },
+        "reasons": {
+          "value": "unknown",
+          "count": 5
+        }
+      },
+      "insights": [
+        "Most common failure: unknown"
+      ]
+    },
+    "patterns": [],
+    "contradictions": [],
+    "recommendations": [
+      {
+        "priority": "high",
+        "action": "improve_success_rate",
+        "reason": "Success rate is 0.67"
       }
     ],
     "selfAssessment": {

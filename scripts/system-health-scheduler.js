@@ -24,11 +24,13 @@
  *
  * Why it spawns rather than imports
  * ---------------------------------
- * true-system-health.js executes on require (no require.main guard) and calls
- * process.exit() with 1 on CRITICAL. Requiring it would take this scheduler
- * down every time the system was unhealthy — the supervisor would treat a
- * correct health verdict as a crash. It runs as a child instead, so a CRITICAL
- * verdict is data, not a scheduler failure.
+ * true-system-health.js calls process.exit(1) on CRITICAL. It now has a
+ * `require.main === module` guard, so importing it would no longer exit this
+ * process — but spawning is still the correct design: the child's exit code is
+ * read as a verdict, and running it out-of-process means a CRITICAL result (or
+ * a crash inside the check itself) is data rather than a scheduler failure the
+ * supervisor would restart. Spawning also means code changes to
+ * true-system-health.js take effect on the next tick with no scheduler restart.
  *
  * Why it verifies the write
  * -------------------------

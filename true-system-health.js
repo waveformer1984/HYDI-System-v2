@@ -90,6 +90,101 @@ async function checkEventFlow(supabaseClient, now = new Date()) {
     };
 }
 
+/**
+ * Revenue is an OPTIONAL integration, not a core subsystem.
+ *
+ * 2026-09-18: this check previously set health.status='WARNING' whenever no
+ * payment had landed in 24h. With STRIPE_SECRET_KEY deliberately unset for
+ * local-first operation that condition is permanent, which pinned the whole
+ * system at WARNING in 20/20 runs, drove trend='degrading' and
+ * warning_escalation, made /api/health report 'degraded', and caused the
+ * watchdog to score 29 successful process restarts as 0 successful recoveries
+ * (recovery's postcondition requires postState==='HEALTHY'). An optional
+ * service that was never configured cannot be a system fault.
+ *
+ * Returns a status the caller records but MUST NOT fold into core health.
+ */
+async function checkRevenue(supabaseClient, env = process.env, now = new Date()) {
+    if (!env.STRIPE_SECRET_KEY) {
+        return {
+            status: 'OPTIONAL_SERVICE_UNAVAILABLE',
+            reason: 'stripe_not_configured',
+            configured: false,
+            payments24h: 0,
+            revenue24h: 0,
+        };
+    }
+
+    const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
+    let payments, payError;
+    try {
+        ({ data: payments, error: payError } = await supabaseClient
+            .from('webhook_events')
+            .select('created_at, payload->amount as amount')
+            .eq('type', 'invoice.payment_succeeded')
+            .gte('created_at', oneDayAgo));
+    } catch (err) {
+        return { status: 'UNKNOWN', reason: 'query_threw', configured: true, error: err.message };
+    }
+
+    if (payError) {
+        return { status: 'UNKNOWN', reason: 'query_failed', configured: true, error: payError.message };
+    }
+
+    const paymentCount = payments?.length || 0;
+    const totalRevenue = payments?.reduce((sum, p) => sum + (parseInt(p.amount || 0, 10) / 100), 0) || 0;
+
+    return {
+        // Zero payments on a configured provider is a business fact, not a defect.
+        status: paymentCount > 0 ? 'OK' : 'NO_ACTIVITY',
+        configured: true,
+        payments24h: paymentCount,
+        revenue24h: totalRevenue,
+    };
+}
+
+/**
+ * Entitlements is an OPTIONAL integration. The table does not exist in this
+ * deployment; the previous code caught that error, set status 'UNKNOWN', and
+ * pushed nothing to issues or warnings -- so the unknown was invisible, and
+ * entitlements_status was never even written to system_health_runs. A missing
+ * table is a knowable, reportable condition, distinct from a genuine unknown.
+ */
+async function checkEntitlements(supabaseClient) {
+    let rows, entError;
+    try {
+        ({ data: rows, error: entError } = await supabaseClient
+            .from('entitlements')
+            .select('status')
+            .limit(100));
+    } catch (err) {
+        return { status: 'UNKNOWN', reason: 'query_threw', error: err.message };
+    }
+
+    if (entError) {
+        const msg = entError.message || '';
+        const missing = entError.code === '42P01' || /does not exist|could not find the table/i.test(msg);
+        return missing
+            ? { status: 'OPTIONAL_SERVICE_UNAVAILABLE', reason: 'table_missing', error: msg }
+            : { status: 'UNKNOWN', reason: 'query_failed', error: msg };
+    }
+
+    const total = rows?.length || 0;
+    const active = rows?.filter((e) => e.status === 'active').length || 0;
+    return { status: total > 0 ? 'OK' : 'NO_ACTIVITY', active, total };
+}
+
+/**
+ * Surface an UNKNOWN so it stays visible in the payload. Never upgrades a
+ * status, never degrades core health -- an unknown optional integration is
+ * reported, not treated as a pass and not treated as a system failure.
+ */
+function recordUnknown(health, name, result) {
+    if (result && (result.status === 'UNKNOWN' || result.status === 'ERROR')) {
+        health.unknowns.push(`${name}: ${result.status}${result.reason ? ` (${result.reason})` : ''}`);
+    }
+}
+
 async function getSystemHealth() {
     if (!JSON_MODE) {
         console.log('🔍 TRUE SYSTEM HEALTH CHECK\n');
@@ -99,9 +194,17 @@ async function getSystemHealth() {
     const health = {
         timestamp: new Date().toISOString(),
         status: 'OK',
+        // CORE only: queue, eventFlow, automation. These alone may set `status`.
         components: {},
+        // Optional integrations (Stripe revenue, entitlements). Reported truthfully,
+        // but structurally incapable of degrading core status -- an absent optional
+        // service is not a system fault.
+        optionalIntegrations: {},
         issues: [],
         warnings: [],
+        // Anything we genuinely could not determine. UNKNOWN stays visible here
+        // rather than being swallowed; it is never upgraded to a pass.
+        unknowns: [],
         environment: process.env.NODE_ENV || 'production'
     };
     
@@ -214,74 +317,32 @@ async function getSystemHealth() {
         health.components.eventFlow = { status: 'ERROR', error: err.message };
     }
     
-    // ========== 3. REVENUE FLOW ==========
-    console.log('\n💰 REVENUE FLOW');
+    // ========== 3. REVENUE FLOW (OPTIONAL INTEGRATION) ==========
+    console.log('\n💰 REVENUE FLOW (optional integration)');
     console.log('-'.repeat(70));
-    try {
-        // Recent successful payments
-        const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-        const { data: payments, error: payError } = await supabase
-            .from('webhook_events')
-            .select('created_at, payload->amount as amount')
-            .eq('type', 'invoice.payment_succeeded')
-            .gte('created_at', oneDayAgo);
-            
-        if (!payError) {
-            const paymentCount = payments?.length || 0;
-            const totalRevenue = payments?.reduce((sum, p) => {
-                return sum + (parseInt(p.amount || 0) / 100);
-            }, 0) || 0;
-            
-            health.components.revenue = {
-                status: paymentCount > 0 ? 'OK' : 'WARNING',
-                payments24h: paymentCount,
-                revenue24h: totalRevenue
-            };
-            
-            console.log(`  Payments (24h): ${paymentCount}`);
-            console.log(`  Revenue (24h): $${totalRevenue.toFixed(2)}`);
-            
-            if (paymentCount === 0) {
-                health.warnings.push('WARNING: No revenue in last 24 hours');
-                if (health.status === 'OK') health.status = 'WARNING';
-            }
-        } else {
-            console.log('  ❌ Cannot read revenue data');
-            health.components.revenue = { status: 'UNKNOWN' };
+    health.optionalIntegrations.revenue = await checkRevenue(supabase);
+    {
+        const r = health.optionalIntegrations.revenue;
+        console.log(`  Status: ${r.status}${r.reason ? ` (${r.reason})` : ''}`);
+        if (r.configured) {
+            console.log(`  Payments (24h): ${r.payments24h}`);
+            console.log(`  Revenue (24h): $${(r.revenue24h || 0).toFixed(2)}`);
         }
-    } catch (err) {
-        console.log('  ❌ Revenue check error:', err.message);
-        health.components.revenue = { status: 'ERROR', error: err.message };
+        recordUnknown(health, 'revenue', r);
     }
-    
-    // ========== 4. ENTITLEMENTS ==========
-    console.log('\n🔑 ENTITLEMENTS');
+
+    // ========== 4. ENTITLEMENTS (OPTIONAL INTEGRATION) ==========
+    console.log('\n🔑 ENTITLEMENTS (optional integration)');
     console.log('-'.repeat(70));
-    try {
-        const { data: entitlements, error: entError } = await supabase
-            .from('entitlements')
-            .select('status')
-            .limit(100);
-            
-        if (!entError) {
-            const activeCount = entitlements?.filter(e => e.status === 'active').length || 0;
-            const totalCount = entitlements?.length || 0;
-            
-            health.components.entitlements = {
-                status: totalCount > 0 ? 'OK' : 'WARNING',
-                active: activeCount,
-                total: totalCount
-            };
-            
-            console.log(`  Active entitlements: ${activeCount}`);
-            console.log(`  Total entitlements: ${totalCount}`);
-        } else {
-            console.log('  ❌ Cannot read entitlements');
-            health.components.entitlements = { status: 'UNKNOWN' };
+    health.optionalIntegrations.entitlements = await checkEntitlements(supabase);
+    {
+        const e = health.optionalIntegrations.entitlements;
+        console.log(`  Status: ${e.status}${e.reason ? ` (${e.reason})` : ''}`);
+        if (e.status === 'OK' || e.status === 'NO_ACTIVITY') {
+            console.log(`  Active entitlements: ${e.active}`);
+            console.log(`  Total entitlements: ${e.total}`);
         }
-    } catch (err) {
-        console.log('  ❌ Entitlements check error:', err.message);
-        health.components.entitlements = { status: 'ERROR', error: err.message };
+        recordUnknown(health, 'entitlements', e);
     }
     
     // ========== 5. AUTOMATION STATUS ==========
@@ -374,8 +435,13 @@ async function getSystemHealth() {
             environment: health.environment,
             queue_status: health.components.queue?.status,
             event_flow_status: health.components.eventFlow?.status,
-            revenue_status: health.components.revenue?.status,
             automation_status: health.components.automation?.status,
+            // Optional integrations are recorded for observability but are not
+            // read by analyze_health_trends()/evaluate_system_escalation(),
+            // which aggregate `status` and details->components->queue only.
+            revenue_status: health.optionalIntegrations.revenue?.status,
+            // Previously omitted entirely, which is why the column was always NULL.
+            entitlements_status: health.optionalIntegrations.entitlements?.status,
             issues_count: health.issues.length,
             warnings_count: health.warnings.length,
             details: health
@@ -391,7 +457,7 @@ async function getSystemHealth() {
     return health;
 }
 
-module.exports = { getSystemHealth, checkEventFlow };
+module.exports = { getSystemHealth, checkEventFlow, checkRevenue, checkEntitlements };
 
 // Run the check only when invoked directly (node true-system-health.js), not
 // when required by a test -- matches scripts/system-health-scheduler.js's

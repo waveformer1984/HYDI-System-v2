@@ -7,7 +7,7 @@
  * Observations are stored in the WorldStateManager.
  */
 
-import { exec as execCb } from 'child_process';
+import { execFile as execFileCb } from 'child_process';
 import { promisify } from 'util';
 import fs from 'fs';
 import path from 'path';
@@ -15,6 +15,9 @@ import net from 'net';
 import http from 'http';
 import https from 'https';
 import { randomUUID } from 'crypto';
+import { lookup as dnsLookupCb } from 'dns';
+import { resolveHealthProbeTarget, PRIVATE_HOSTNAME } from '../human-action/adapters/HttpAdapter';
+import { authorizeFilesystemTarget } from '../human-action/FilesystemAuthorization';
 
 import type {
   Observation,
@@ -27,14 +30,22 @@ import type { WorldStateManager } from './WorldStateManager';
 import type { HumanActionEngine } from '../human-action/HumanActionEngine';
 import type { ActionCapabilityRegistry } from '../human-action/ActionCapabilityRegistry';
 
-const exec = promisify(execCb);
+const execFile = promisify(execFileCb);
+const dnsLookupAsync = promisify(dnsLookupCb);
+
+/**
+ * A process image/name token for tasklist/pgrep — anything that could break
+ * out of a single argument (spaces, quotes, metacharacters) is refused, so a
+ * caller-controlled process name can never inject a second command.
+ */
+const SAFE_PROCESS_NAME = /^[A-Za-z0-9._-]{1,128}$/;
 
 export class ObservationEngine {
   constructor(
     private worldStateManager: WorldStateManager,
     private registry: ActionCapabilityRegistry,
     private rootDir: string,
-  ) {}
+  ) { }
 
   /**
    * Observe the environment based on a request.
@@ -139,12 +150,16 @@ export class ObservationEngine {
 
   private async observeProcess(target: string, correlationId: string): Promise<Observation> {
     try {
-      // On Windows, use tasklist; on Linux, use ps
-      const isWindows = process.platform === 'win32';
-      const cmd = isWindows
-        ? `tasklist /FI "IMAGENAME eq ${target}*" /FO CSV /NH 2>nul`
-        : `ps aux | grep -i ${target} | grep -v grep`;
-      const { stdout } = await exec(cmd, { timeout: 5000 });
+      // On Windows, use tasklist; on Linux, use pgrep. The target is caller-
+      // influenced, so it goes through execFile as a literal argv entry (no
+      // shell) AND is restricted to a bare process-name token — a name like
+      // `x" & whoami` is refused rather than interpolated into a shell string.
+      if (!SAFE_PROCESS_NAME.test(target)) {
+        throw new Error(`Unsafe process name: ${target}`);
+      }
+      const { stdout } = process.platform === 'win32'
+        ? await execFile('tasklist', ['/FI', `IMAGENAME eq ${target}*`, '/FO', 'CSV', '/NH'], { timeout: 5000, windowsHide: true })
+        : await execFile('pgrep', ['-i', '-l', '-f', target], { timeout: 5000 });
       const lines = stdout.trim().split('\n').filter((l) => l.trim());
       const exists = lines.length > 0;
       return {
@@ -177,7 +192,7 @@ export class ObservationEngine {
 
   private async observePort(target: string, correlationId: string): Promise<Observation> {
     const port = parseInt(target, 10);
-    if (isNaN(port)) {
+    if (isNaN(port) || port < 1 || port > 65535) {
       throw new Error(`Invalid port: ${target}`);
     }
     return new Promise((resolve) => {
@@ -212,7 +227,32 @@ export class ObservationEngine {
 
   private async observeFile(target: string, correlationId: string): Promise<Observation> {
     try {
-      const stats = fs.statSync(target);
+      // Read authorization (red-team 2026-09-18): bare fs.statSync on any
+      // path was a protected-file existence/size oracle — stat `.env` or
+      // `.ssh/id_rsa` and learn exactly what the secret store contains.
+      // Route the target through the same filesystem authorization the
+      // write path uses (read scope): confined to the repo root, secrets and
+      // VCS internals refused.
+      const auth = authorizeFilesystemTarget(target, {
+        operation: 'read',
+        repoRoot: this.rootDir,
+        allowedTargets: [{ type: 'glob', pattern: '**' }],
+      });
+      if (!auth.allowed || !auth.resolvedPath) {
+        return {
+          observationId: randomUUID(),
+          timestamp: new Date().toISOString(),
+          source: 'filesystem',
+          confidence: 1.0,
+          freshness: 'current',
+          correlationId,
+          category: 'file',
+          key: `file:${target}`,
+          value: { exists: null, refused: true, code: auth.code },
+          summary: `File ${target}: observation refused (${auth.code})`,
+        };
+      }
+      const stats = fs.statSync(auth.resolvedPath);
       return {
         observationId: randomUUID(),
         timestamp: new Date().toISOString(),
@@ -269,11 +309,31 @@ export class ObservationEngine {
     };
   }
 
+  /**
+   * Confine an observation working directory to the engine's rootDir — a
+   * caller-controlled cwd would let the fixed git commands probe (and the
+   * adapter's commit path write into) an unrelated tree.
+   */
+  private resolveInsideRoot(target: string | undefined): string {
+    const raw = target ?? this.rootDir;
+    let resolved = path.resolve(raw);
+    try {
+      if (fs.existsSync(resolved)) resolved = fs.realpathSync(resolved);
+    } catch { /* keep unresolved form; boundary check below still applies */ }
+    const realRoot = fs.existsSync(this.rootDir) ? fs.realpathSync(this.rootDir) : this.rootDir;
+    const rel = path.relative(realRoot, resolved);
+    if (rel === '..' || rel.startsWith('..' + path.sep) || path.isAbsolute(rel)) {
+      throw new Error(`target escapes the observation root: ${resolved}`);
+    }
+    return resolved;
+  }
+
   private async observeGitState(target: string, correlationId: string): Promise<Observation> {
     try {
-      const { stdout: status } = await exec('git status --porcelain', { cwd: target, timeout: 5000 });
-      const { stdout: branch } = await exec('git rev-parse --abbrev-ref HEAD', { cwd: target, timeout: 5000 });
-      const { stdout: commit } = await exec('git rev-parse --short HEAD', { cwd: target, timeout: 5000 });
+      const cwd = this.resolveInsideRoot(target);
+      const { stdout: status } = await execFile('git', ['status', '--porcelain'], { cwd, timeout: 5000, windowsHide: true });
+      const { stdout: branch } = await execFile('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd, timeout: 5000, windowsHide: true });
+      const { stdout: commit } = await execFile('git', ['rev-parse', '--short', 'HEAD'], { cwd, timeout: 5000, windowsHide: true });
       const changedFiles = status.trim().split('\n').filter((l) => l.trim());
       return {
         observationId: randomUUID(),
@@ -311,34 +371,54 @@ export class ObservationEngine {
 
   private async observeApi(target: string, correlationId: string): Promise<Observation> {
     try {
-      const url = new URL(target);
-      const reqModule = url.protocol === 'https:' ? https : http;
-      return new Promise((resolve) => {
+      // Egress gate (red-team 2026-09-18): this path fetched ANY URL and
+      // returned a 500-char bodyPreview — full response-body exfiltration of
+      // cloud metadata/internal endpoints, bypassing the network.http_request
+      // SSRF floor entirely. Now: the destination must be loopback (the
+      // managed system itself — the legitimate health-check target) or pass
+      // the same private/metadata/internal refusal as http_request; the
+      // socket is pinned to the resolved IP; and the body is NEVER returned
+      // — only its length, so this cannot be turned into a read oracle.
+      const { urlObj, resolvedIp } = await resolveHealthProbeTarget(target);
+      const isHttps = urlObj.protocol === 'https:';
+      const reqModule = isHttps ? https : http;
+      const port = urlObj.port ? Number(urlObj.port) : (isHttps ? 443 : 80);
+      return await new Promise<Observation>((resolve) => {
         const start = Date.now();
-        const req = reqModule.get(target, { timeout: 10000 }, (res) => {
-          let body = '';
-          res.on('data', (chunk) => { body += chunk; });
-          res.on('end', () => {
-            resolve({
-              observationId: randomUUID(),
-              timestamp: new Date().toISOString(),
-              source: 'api',
-              confidence: 0.95,
-              freshness: 'current',
-              correlationId,
-              category: 'api',
-              key: `api:${target}`,
-              value: {
-                reachable: true,
-                statusCode: res.statusCode,
-                latencyMs: Date.now() - start,
-                bodyLength: body.length,
-                bodyPreview: body.slice(0, 500),
-              },
-              summary: `API ${target}: HTTP ${res.statusCode} (${Date.now() - start}ms)`,
+        const req = reqModule.request(
+          {
+            hostname: resolvedIp,
+            port,
+            path: `${urlObj.pathname}${urlObj.search}`,
+            method: 'GET',
+            headers: { Host: urlObj.host },
+            timeout: 10000,
+            ...(isHttps ? { servername: urlObj.hostname } : {}),
+          },
+          (res) => {
+            let bodyLength = 0;
+            res.on('data', (chunk) => { bodyLength += chunk.length; });
+            res.on('end', () => {
+              resolve({
+                observationId: randomUUID(),
+                timestamp: new Date().toISOString(),
+                source: 'api',
+                confidence: 0.95,
+                freshness: 'current',
+                correlationId,
+                category: 'api',
+                key: `api:${target}`,
+                value: {
+                  reachable: true,
+                  statusCode: res.statusCode,
+                  latencyMs: Date.now() - start,
+                  bodyLength,
+                },
+                summary: `API ${target}: HTTP ${res.statusCode} (${Date.now() - start}ms)`,
+              });
             });
-          });
-        });
+          },
+        );
         req.on('error', () => {
           resolve({
             observationId: randomUUID(),
@@ -368,8 +448,10 @@ export class ObservationEngine {
             summary: `API ${target}: timeout`,
           });
         });
+        req.end();
       });
-    } catch {
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Invalid URL';
       return {
         observationId: randomUUID(),
         timestamp: new Date().toISOString(),
@@ -379,8 +461,8 @@ export class ObservationEngine {
         correlationId,
         category: 'api',
         key: `api:${target}`,
-        value: { reachable: false, error: 'Invalid URL' },
-        summary: `API ${target}: invalid URL`,
+        value: { reachable: false, refused: true, error: message },
+        summary: `API ${target}: ${message}`,
       };
     }
   }
@@ -443,11 +525,25 @@ export class ObservationEngine {
   }
 
   private async observeNetwork(target: string, correlationId: string): Promise<Observation> {
+    // Internal-name floor: resolving `*.internal` / localhost-style names is
+    // internal recon, same refusal as network.dns_lookup.
+    if (!target || PRIVATE_HOSTNAME.test(target)) {
+      return {
+        observationId: randomUUID(),
+        timestamp: new Date().toISOString(),
+        source: 'network',
+        confidence: 0.9,
+        freshness: 'current',
+        correlationId,
+        category: 'network',
+        key: `network:${target}`,
+        value: { resolved: false, refused: true },
+        summary: `Network: ${target} refused (internal hostname)`,
+      };
+    }
     // DNS lookup
     try {
-      const { lookup } = await import('dns');
-      const lookupAsync = promisify(lookup);
-      const result = await lookupAsync(target);
+      const result = await dnsLookupAsync(target);
       return {
         observationId: randomUUID(),
         timestamp: new Date().toISOString(),

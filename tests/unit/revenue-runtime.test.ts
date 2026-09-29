@@ -85,7 +85,7 @@ describe('RevenueRuntime', () => {
   });
 
   it('CHECKOUT_READY + customer + test mode → PAYMENT_PENDING via real job+session', async () => {
-    process.env.STRIPE_SECRET_KEY = 'sk_test_4eC39HqLyjWDarjtT1zdp7dc';
+    process.env.STRIPE_SECRET_KEY = 'sk_test_fixture';
     const db = fakeDb([offerEvent('offer-x', 'CHECKOUT_READY')]);
     const rt = new RevenueRuntime(db.pool, DEPS);
     const [r] = await rt.advance({ offerId: 'offer-x', customerEmail: 'c@x.dev' });
@@ -95,7 +95,7 @@ describe('RevenueRuntime', () => {
   });
 
   it('idempotent: re-dispatch of a bound offer resumes, never duplicates the job', async () => {
-    process.env.STRIPE_SECRET_KEY = 'sk_test_4eC39HqLyjWDarjtT1zdp7dc';
+    process.env.STRIPE_SECRET_KEY = 'sk_test_fixture';
     const db = fakeDb(
       [offerEvent('offer-x', 'CHECKOUT_READY')],
       [{ job_id: 'job_test_1', payment_status: 'pending', job_status: 'queued', delivery_status: null, requirements: { offerId: 'offer-x' }, created_at: new Date().toISOString() }],
@@ -153,7 +153,7 @@ describe('RevenueRuntime', () => {
   });
 
   it('live mode without LiveTransactionAuthorization → AUTHORIZATION_REQUIRED, no checkout', async () => {
-    process.env.STRIPE_SECRET_KEY = 'sk_live_4eC39HqLyjWDarjtT1zdp7dc';
+    process.env.STRIPE_SECRET_KEY = 'sk_live_fixture';
     process.env.ALLOW_LIVE_STRIPE = 'true';
     const db = fakeDb([offerEvent('offer-x', 'CHECKOUT_READY')]);
     let checkoutCalled = 0;

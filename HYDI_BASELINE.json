@@ -1,0 +1,813 @@
+{
+  "schema": "hydi.baseline/v1",
+  "capturedAt": "2026-09-18T01:59:58.690Z",
+  "capturedBy": "Phase 0 read-only baseline (HYDI Master Execution Contract)",
+  "disclaimer": "This is an OBSERVED starting state. It is NOT a claim that the system is operational. Fields marked UNKNOWN were not verified and must not be read as passing.",
+  "identity": {
+    "repoRoot": "C:\\Users\\Owner\\HYDI-System-v2",
+    "branch": "clean-main",
+    "commit": "593ece9d5fc0b67134970842d680ba62b4ea5a85",
+    "commitShort": "593ece9d5fc0",
+    "commitDate": "2026-09-17T10:44:10-05:00",
+    "commitSubject": "docs: correct canonical-repo identity in CLAUDE.md and ACTIVE_TREE.md",
+    "versionFile": "4.0.0-cc",
+    "packageVersion": "0.9.0-rc.3",
+    "nodeVersion": "v24.11.1",
+    "workingTreeDirty": [
+      "M .gitignore",
+      "M data/awareness/reflections.json",
+      "?? .recovery-leases/",
+      "?? tools/verify.ps1"
+    ],
+    "evidence": "git rev-parse / git log / git status --porcelain"
+  },
+  "pm2": {
+    "appCount": 8,
+    "apps": [
+      {
+        "name": "hydi-boot",
+        "pid": 4832,
+        "status": "online",
+        "restarts": 3,
+        "uptimeMin": 2193,
+        "cwd": "C:\\Users\\Owner\\HYDI-System-v2",
+        "script": "C:\\Users\\Owner\\HYDI-System-v2\\scripts\\boot-agent.js"
+      },
+      {
+        "name": "hydi-watchdog",
+        "pid": 21812,
+        "status": "online",
+        "restarts": 1,
+        "uptimeMin": 3335,
+        "cwd": "C:\\Users\\Owner\\HYDI-System-v2",
+        "script": "C:\\Users\\Owner\\HYDI-System-v2\\scripts\\watchdog.js"
+      },
+      {
+        "name": "hydi-daemon",
+        "pid": 22192,
+        "status": "online",
+        "restarts": 0,
+        "uptimeMin": 6344,
+        "cwd": "C:\\Users\\Owner\\HYDI-System-v2",
+        "script": "C:\\Users\\Owner\\HYDI-System-v2\\scripts\\heidi-daemon-launcher.js"
+      },
+      {
+        "name": "hydi-system-health",
+        "pid": 22252,
+        "status": "online",
+        "restarts": 0,
+        "uptimeMin": 6344,
+        "cwd": "C:\\Users\\Owner\\HYDI-System-v2",
+        "script": "C:\\Users\\Owner\\HYDI-System-v2\\scripts\\system-health-scheduler.js"
+      },
+      {
+        "name": "hydi-protoforge-scout",
+        "pid": 22292,
+        "status": "online",
+        "restarts": 0,
+        "uptimeMin": 6344,
+        "cwd": "C:\\Users\\Owner\\HYDI-System-v2",
+        "script": "C:\\Users\\Owner\\HYDI-System-v2\\scripts\\protoforge-opportunity-scheduler.js"
+      },
+      {
+        "name": "hydi-stuck-job-scheduler",
+        "pid": 22320,
+        "status": "online",
+        "restarts": 0,
+        "uptimeMin": 6344,
+        "cwd": "C:\\Users\\Owner\\HYDI-System-v2",
+        "script": "C:\\Users\\Owner\\HYDI-System-v2\\scripts\\stuck-job-scheduler.js"
+      },
+      {
+        "name": "hydi-revenue-reconciliation",
+        "pid": 22352,
+        "status": "online",
+        "restarts": 0,
+        "uptimeMin": 6344,
+        "cwd": "C:\\Users\\Owner\\HYDI-System-v2",
+        "script": "C:\\Users\\Owner\\HYDI-System-v2\\scripts\\revenue-reconciliation-scheduler.js"
+      },
+      {
+        "name": "hydi-failed-webhook-retry",
+        "pid": 22392,
+        "status": "online",
+        "restarts": 0,
+        "uptimeMin": 6344,
+        "cwd": "C:\\Users\\Owner\\HYDI-System-v2",
+        "script": "C:\\Users\\Owner\\HYDI-System-v2\\scripts\\failed-webhook-scheduler.js"
+      }
+    ],
+    "evidence": "pm2 jlist"
+  },
+  "ports": {
+    "watched": [
+      3000,
+      3005,
+      3006,
+      5000,
+      5432,
+      11434,
+      54321,
+      54322,
+      54323,
+      54327
+    ],
+    "owners": {
+      "3000": {
+        "pid": 29100,
+        "image": "node.exe",
+        "startedAt": "/Date(1789612292945)/",
+        "ancestry": [
+          {
+            "pid": 29100,
+            "name": "node.exe"
+          },
+          {
+            "pid": 9804,
+            "name": "node.exe"
+          },
+          {
+            "pid": 14396,
+            "name": "cmd.exe"
+          },
+          {
+            "pid": 20752,
+            "name": "node.exe"
+          },
+          {
+            "pid": 30064,
+            "name": "cmd.exe"
+          },
+          {
+            "pid": 23980,
+            "name": "DEAD",
+            "dead": true
+          }
+        ]
+      },
+      "3005": {
+        "pid": 27392,
+        "image": "node.exe",
+        "startedAt": "/Date(1789575995942)/",
+        "ancestry": [
+          {
+            "pid": 27392,
+            "name": "node.exe"
+          },
+          {
+            "pid": 26840,
+            "name": "cmd.exe"
+          },
+          {
+            "pid": 11276,
+            "name": "DEAD",
+            "dead": true
+          }
+        ]
+      },
+      "3006": {
+        "pid": 31248,
+        "image": "node.exe",
+        "startedAt": "/Date(1789565219408)/",
+        "ancestry": [
+          {
+            "pid": 31248,
+            "name": "node.exe"
+          },
+          {
+            "pid": 30252,
+            "name": "cmd.exe"
+          },
+          {
+            "pid": 4832,
+            "name": "node.exe"
+          },
+          {
+            "pid": 20836,
+            "name": "node.exe"
+          },
+          {
+            "pid": 18368,
+            "name": "DEAD",
+            "dead": true
+          }
+        ]
+      },
+      "5000": {
+        "pid": 6224,
+        "image": "com.docker.backend.exe",
+        "startedAt": "/Date(1789316185307)/",
+        "ancestry": [
+          {
+            "pid": 6224,
+            "name": "com.docker.backend.exe"
+          },
+          {
+            "pid": 20740,
+            "name": "com.docker.backend.exe"
+          },
+          {
+            "pid": 6428,
+            "name": "Docker Desktop.exe"
+          },
+          {
+            "pid": 6396,
+            "name": "DEAD",
+            "dead": true
+          }
+        ]
+      },
+      "5432": {
+        "pid": 6224,
+        "image": "com.docker.backend.exe",
+        "startedAt": "/Date(1789316185307)/",
+        "ancestry": [
+          {
+            "pid": 6224,
+            "name": "com.docker.backend.exe"
+          },
+          {
+            "pid": 20740,
+            "name": "com.docker.backend.exe"
+          },
+          {
+            "pid": 6428,
+            "name": "Docker Desktop.exe"
+          },
+          {
+            "pid": 6396,
+            "name": "DEAD",
+            "dead": true
+          }
+        ]
+      },
+      "11434": {
+        "pid": 8812,
+        "image": "ollama.exe",
+        "startedAt": "/Date(1789316181105)/",
+        "ancestry": [
+          {
+            "pid": 8812,
+            "name": "ollama.exe"
+          },
+          {
+            "pid": 12512,
+            "name": "DEAD",
+            "dead": true
+          }
+        ]
+      },
+      "54321": {
+        "pid": 6224,
+        "image": "com.docker.backend.exe",
+        "startedAt": "/Date(1789316185307)/",
+        "ancestry": [
+          {
+            "pid": 6224,
+            "name": "com.docker.backend.exe"
+          },
+          {
+            "pid": 20740,
+            "name": "com.docker.backend.exe"
+          },
+          {
+            "pid": 6428,
+            "name": "Docker Desktop.exe"
+          },
+          {
+            "pid": 6396,
+            "name": "DEAD",
+            "dead": true
+          }
+        ]
+      },
+      "54322": {
+        "pid": 6224,
+        "image": "com.docker.backend.exe",
+        "startedAt": "/Date(1789316185307)/",
+        "ancestry": [
+          {
+            "pid": 6224,
+            "name": "com.docker.backend.exe"
+          },
+          {
+            "pid": 20740,
+            "name": "com.docker.backend.exe"
+          },
+          {
+            "pid": 6428,
+            "name": "Docker Desktop.exe"
+          },
+          {
+            "pid": 6396,
+            "name": "DEAD",
+            "dead": true
+          }
+        ]
+      },
+      "54323": {
+        "pid": 6224,
+        "image": "com.docker.backend.exe",
+        "startedAt": "/Date(1789316185307)/",
+        "ancestry": [
+          {
+            "pid": 6224,
+            "name": "com.docker.backend.exe"
+          },
+          {
+            "pid": 20740,
+            "name": "com.docker.backend.exe"
+          },
+          {
+            "pid": 6428,
+            "name": "Docker Desktop.exe"
+          },
+          {
+            "pid": 6396,
+            "name": "DEAD",
+            "dead": true
+          }
+        ]
+      },
+      "54327": {
+        "pid": 6224,
+        "image": "com.docker.backend.exe",
+        "startedAt": "/Date(1789316185307)/",
+        "ancestry": [
+          {
+            "pid": 6224,
+            "name": "com.docker.backend.exe"
+          },
+          {
+            "pid": 20740,
+            "name": "com.docker.backend.exe"
+          },
+          {
+            "pid": 6428,
+            "name": "Docker Desktop.exe"
+          },
+          {
+            "pid": 6396,
+            "name": "DEAD",
+            "dead": true
+          }
+        ]
+      }
+    },
+    "evidence": "netstat -ano -p TCP + Win32_Process ancestry walk"
+  },
+  "serviceOwnership": {
+    "bootAuthorityPid": 4832,
+    "services": {
+      "protoforge-core": {
+        "port": 3005,
+        "pid": 27392,
+        "startedAt": "/Date(1789575995942)/",
+        "ancestry": "27392(node.exe) <- 26840(cmd.exe) <- 11276(DEAD)",
+        "ownedByBootAuthority": false,
+        "hasDeadAncestor": true,
+        "verdict": "ORPHAN"
+      },
+      "heidi-web": {
+        "port": 3000,
+        "pid": 29100,
+        "startedAt": "/Date(1789612292945)/",
+        "ancestry": "29100(node.exe) <- 9804(node.exe) <- 14396(cmd.exe) <- 20752(node.exe) <- 30064(cmd.exe) <- 23980(DEAD)",
+        "ownedByBootAuthority": false,
+        "hasDeadAncestor": true,
+        "verdict": "ORPHAN"
+      },
+      "heidi-mobile-chat": {
+        "port": 3006,
+        "pid": 31248,
+        "startedAt": "/Date(1789565219408)/",
+        "ancestry": "31248(node.exe) <- 30252(cmd.exe) <- 4832(node.exe) <- 20836(node.exe) <- 18368(DEAD)",
+        "ownedByBootAuthority": true,
+        "hasDeadAncestor": true,
+        "verdict": "OWNED"
+      }
+    },
+    "evidence": "ancestry walk vs pm2 hydi-boot pid",
+    "note": "A process answering on a port is NOT proof of ownership. ORPHAN means no ancestry link to the boot authority."
+  },
+  "database": {
+    "engine": "local postgres (supabase docker)",
+    "host": "127.0.0.1:54322",
+    "restUrl": "http://127.0.0.1:54321",
+    "containerStatus": "running",
+    "reachable": true,
+    "tableCount": "129",
+    "heidiEventsTotal": "14708",
+    "heidiEventsLastHour": "51",
+    "heidiEventTypesLastHour": "cognitive_cycle=51",
+    "systemHealthRuns": "2116",
+    "entitlementsTableExists": "MISSING",
+    "evidence": "docker exec psql read-only queries"
+  },
+  "containers": {
+    "supabase_studio_HYDI-System-v2": {
+      "status": "running",
+      "restartCount": 0,
+      "exitCode": 0
+    },
+    "supabase_pg_meta_HYDI-System-v2": {
+      "status": "running",
+      "restartCount": 0,
+      "exitCode": 0
+    },
+    "supabase_edge_runtime_HYDI-System-v2": {
+      "status": "exited",
+      "restartCount": 0,
+      "exitCode": 255
+    },
+    "supabase_storage_HYDI-System-v2": {
+      "status": "running",
+      "restartCount": 0,
+      "exitCode": 0
+    },
+    "supabase_rest_HYDI-System-v2": {
+      "status": "running",
+      "restartCount": 0,
+      "exitCode": 0
+    },
+    "supabase_realtime_HYDI-System-v2": {
+      "status": "running",
+      "restartCount": 0,
+      "exitCode": 0
+    },
+    "supabase_inbucket_HYDI-System-v2": {
+      "status": "running",
+      "restartCount": 0,
+      "exitCode": 0
+    },
+    "supabase_auth_HYDI-System-v2": {
+      "status": "running",
+      "restartCount": 6,
+      "exitCode": 0
+    },
+    "supabase_kong_HYDI-System-v2": {
+      "status": "running",
+      "restartCount": 0,
+      "exitCode": 0
+    },
+    "supabase_vector_HYDI-System-v2": {
+      "status": "restarting",
+      "restartCount": 6165,
+      "exitCode": 0
+    },
+    "supabase_analytics_HYDI-System-v2": {
+      "status": "running",
+      "restartCount": 0,
+      "exitCode": 0
+    },
+    "supabase_db_HYDI-System-v2": {
+      "status": "running",
+      "restartCount": 0,
+      "exitCode": 0
+    },
+    "ursula-flask": {
+      "status": "running",
+      "restartCount": 0,
+      "exitCode": 0
+    },
+    "ursula-postgres": {
+      "status": "running",
+      "restartCount": 0,
+      "exitCode": 0
+    },
+    "ursula-redis": {
+      "status": "running",
+      "restartCount": 0,
+      "exitCode": 0
+    },
+    "__evidence": "docker inspect .State.Status/.RestartCount"
+  },
+  "health": {
+    "note": "HTTP 200 is NOT evidence of health. Bodies recorded verbatim.",
+    "heidi-web:3000/api/health": {
+      "httpStatus": 200,
+      "body": {
+        "status": "degraded",
+        "hydi_status": "WARNING",
+        "trend_status": "degrading",
+        "escalation_level": "WARNING",
+        "timestamp": "2026-09-18T02:00:14.700Z",
+        "last_check": "2026-09-18T01:58:00.424+00:00",
+        "version": "2.0.0-hydi",
+        "system": "protoforge-hydi",
+        "environment": "development",
+        "vercel": true,
+        "cloud": {
+          "available": true,
+          "source": "supabase",
+          "reason": "Supabase system_dashboard"
+        },
+        "metrics": {
+          "jobs_queued": 0,
+          "jobs_failed": 0,
+          "jobs_dead": 0,
+          "events_last_hour": 12,
+          "auto_heals_24h": 0,
+          "critical_pct": 0,
+          "warning_pct": 100,
+          "avg_queue_size": 0
+        },
+        "trend_reason": "WARNING in 100% of recent runs, avg queue: 0",
+        "escalation_action": "warning_escalation",
+        "escalation_reason": "WARNING persisting for 97 minutes"
+      }
+    },
+    "protoforge-core:3005/health": {
+      "httpStatus": 200,
+      "body": {
+        "status": "ok",
+        "modules": 13,
+        "modules_state": "HEALTHY",
+        "events": 14708,
+        "checks": {
+          "module_registry": {
+            "state": "HEALTHY",
+            "count": 13,
+            "source": "universal-agent-bus.modelHealth",
+            "evidence": "13 module(s) registered on the agent bus"
+          },
+          "database": {
+            "state": "HEALTHY",
+            "count": 14708,
+            "evidence": "heidi_events count=14708"
+          }
+        },
+        "timestamp": "2026-09-18T02:00:14.860Z"
+      }
+    },
+    "heidi-mobile:3006/api/health": {
+      "httpStatus": 200,
+      "body": {
+        "server": "ok",
+        "ollama": true,
+        "lmstudio": false,
+        "heidiCore": false,
+        "models": [
+          "nomic-embed-text:latest",
+          "qwen2.5:7b",
+          "llama3.2:3b",
+          "llama3:latest",
+          "llama3.2:latest",
+          "tinyllama:latest",
+          "qwen2.5-coder:1.5b"
+        ]
+      }
+    },
+    "ollama:11434/api/tags": {
+      "httpStatus": 200,
+      "modelCount": 7,
+      "models": [
+        "nomic-embed-text:latest",
+        "qwen2.5:7b",
+        "llama3.2:3b",
+        "llama3:latest",
+        "llama3.2:latest",
+        "tinyllama:latest",
+        "qwen2.5-coder:1.5b"
+      ]
+    },
+    "latestHealthRun": {
+      "run_at": "2026-09-18T01:58:00.424+00:00",
+      "status": "WARNING",
+      "queue": "OK",
+      "event_flow": "OK",
+      "revenue": "WARNING",
+      "automation": "OK",
+      "entitlements": "NULL",
+      "issues": 0,
+      "warnings": 1,
+      "warning_detail": [
+        "WARNING: No revenue in last 24 hours"
+      ]
+    },
+    "last20StatusDistribution": "WARNING=20"
+  },
+  "recovery": {
+    "metrics": {
+      "observations": 39975,
+      "observerFailures": 114,
+      "uncertain": 0,
+      "confirmed": 2345,
+      "falseRecoveriesPrevented": 114,
+      "recoveryAttempts": 29,
+      "successful": 0,
+      "failed": 29,
+      "escalations": 6623,
+      "exhaustions": 0,
+      "retries": 0,
+      "verificationFailures": 0,
+      "dependencyBlocked": 0,
+      "observerBlocked": 0,
+      "duplicatePrevented": 0,
+      "intelligentStops": 0,
+      "__rawLine": "05:00: 2026-09-18T02:00:12.369Z METRICS observations=39975 observerFailures=114 uncertain=0 confirmed=2345 falseRecoveriesPrevented=114 recoveryAttempts=29 successful=0 failed=29 escalations=6623 exhaustions=0 retries=0 verificationFailures=0 dependencyBlocked=0 observerBlocked=0 duplicatePrevented=0 intelligentStops=0"
+    },
+    "successRate": "0/29",
+    "evidence": "pm2 logs hydi-watchdog METRICS line"
+  },
+  "governance": {
+    "riskTiers": {
+      "source": "lib/operational/RiskClassifier.ts",
+      "tiers": [
+        "R0",
+        "R1",
+        "R2",
+        "R3",
+        "R4",
+        "R5"
+      ]
+    },
+    "unmappedCapabilityBehaviour": "FAIL_CLOSED (RiskClassifier returns R5; CapabilityAuthorizer default denies)",
+    "protectedModulesEntryCount": 0,
+    "protectedModulesVerdict": "EMPTY — no module is protected from auto-restart",
+    "actionExecutionPaths": [
+      {
+        "id": "A",
+        "path": "lib/operational/ActionSelector.ts -> RecoveryEngine.ts",
+        "governed": true,
+        "note": "canonical governed path"
+      },
+      {
+        "id": "B",
+        "path": "lib/human-action/HumanActionEngine.ts",
+        "governed": false,
+        "note": "parallel R0-R5 stack; does not import CapabilityAuthorizer/AutonomyPolicyModel/RiskClassifier"
+      },
+      {
+        "id": "C",
+        "path": "heidi-core/actions/action-executor.js",
+        "governed": false,
+        "note": "own allowlists; blocks git push/merge"
+      },
+      {
+        "id": "D",
+        "path": "lib/action-executor.ts",
+        "governed": false,
+        "note": "supabase writes + outbound email; no risk tier"
+      },
+      {
+        "id": "E",
+        "path": "lib/orchestrator.ts executeActions() <- pages/api/chat.ts",
+        "governed": "ADVISORY_ONLY",
+        "gate": "lib/protoforge/action-gate.ts gateActions()",
+        "enforcementFlag": "PROTOFORGE_ENFORCE_ACTIONS",
+        "enforcementFlagLiveValue": "undefined",
+        "isEnforcing": false,
+        "note": "KILO+ProtoForge verdicts are durably written to the decisions table, but both enforcement branches are guarded by if(enforcing && ...). With the flag unset a reject verdict falls through to execution at lib/orchestrator.ts:1168. Reachable actions include send_email (real outbound mail via Resend, lib/action-executor.ts:212) and update_database.",
+        "deliberate": true,
+        "deliberateReason": "action-gate.ts:27-33 documents that the seed policy would approve everything (revenue_impact<=100), so enforcement is intentionally held off until a real policy is promoted. This is a known incomplete state, not an oversight."
+      }
+    ],
+    "singleChokepointExists": false,
+    "evidence": "static read of lib/operational + lib/human-action + git grep for cross-imports",
+    "actionExecutionPathCount": 5
+  },
+  "filesystemAuthorization": {
+    "capability": "filesystem.write_file",
+    "declaredRisk": "R1",
+    "declaredAuthorizationMode": "autonomous",
+    "declaredRequiresHumanApproval": false,
+    "declaredAllowedTargets": "[{ type:'glob', pattern:'**/*' }]",
+    "allowedTargetsDeclarationSites": 45,
+    "allowedTargetsEnforcementSites": 0,
+    "enforced": false,
+    "verdict": "UNENFORCED — allowedTargets is declarative metadata only; no code reads it to validate a target",
+    "implementation": "lib/human-action/adapters/FilesystemAdapter.ts writeFile() -> fs.writeFileSync(target, content)",
+    "pathConfinement": "NONE OBSERVED (no sandboxRoot, no normalization, no traversal check, no symlink check)",
+    "evidence": "git grep allowedTargets; read of FilesystemAdapter.writeFile"
+  },
+  "localIndependence": {
+    "supabaseUrlHost": "127.0.0.1:54321",
+    "supabaseIsLocal": true,
+    "keysPresent": {
+      "SUPABASE_SERVICE_ROLE_KEY": true,
+      "ANTHROPIC_API_KEY": false,
+      "OPENAI_API_KEY": true,
+      "STRIPE_SECRET_KEY": false
+    },
+    "embeddings": {
+      "EMBEDDING_PROVIDER": "(unset)",
+      "ENABLE_LOCAL_MODEL": "(unset)",
+      "resolvedProvider": "openai",
+      "verdict": "CLOUD — embeddings currently route to OpenAI (lib/embeddings.ts:98)"
+    },
+    "inference": {
+      "LOCAL_MODEL_NAME": "llama3.2",
+      "resolution": "ModelManager.isLocalModelEnabled() falls through to probeLocalReachability(); Ollama is reachable, so local inference is used",
+      "verdict": "LOCAL"
+    },
+    "bootNetworkDependency": {
+      "check": "scripts/preflight.js checkSupabaseCli()",
+      "command": "npx supabase --version",
+      "blocking": true,
+      "verdict": "BLOCKING NETWORK-CAPABLE CHECK IN CORE BOOT PATH"
+    },
+    "cloudFallbackTraps": [
+      "heidi-core/hydi-supabase-bridge.js:15",
+      "keeper/boundary-hardening.js:7",
+      "apps/ursula-frontend/src/lib/api.ts:416"
+    ],
+    "evidence": "dotenv resolution + static read of lib/embeddings.ts, lib/ModelManager.ts, scripts/preflight.js"
+  },
+  "backup": {
+    "authoritativeStores": {
+      "local postgres :54322": {
+        "backedUp": false,
+        "mechanism": "NONE FOUND"
+      },
+      ".hydi-operational/": {
+        "exists": true,
+        "fileCount": 76,
+        "bytes": 173926057,
+        "backedUp": false
+      },
+      "heidi-core/data/heidi_memory.db": {
+        "exists": true,
+        "bytes": 3223552,
+        "backedUp": false
+      },
+      ".recovery-leases/": {
+        "exists": true,
+        "fileCount": 2,
+        "bytes": 437
+      }
+    },
+    "existingScripts": {
+      "scripts/local-backup.sh": {
+        "exists": true,
+        "covers": "git code only — not DB, not .hydi-operational"
+      },
+      "scripts/backup-critical.ps1": {
+        "exists": true,
+        "covers": "WRONG REPO — hardcoded to C:\\Users\\Owner\\HYDI_System"
+      }
+    },
+    "restoreEverTested": "NO EVIDENCE FOUND",
+    "verdict": "NO BACKUP COVERAGE for any authoritative store",
+    "evidence": "filesystem stat + read of scripts/local-backup.sh and scripts/backup-critical.ps1"
+  },
+  "tests": {
+    "tests/unit": 290,
+    "tests/migrations": 82,
+    "tests/integration": 12,
+    "tests/qualification": 10,
+    "runnableBy": {
+      "npm test": "tests/unit/** + tests/migrations/** + __tests__/**",
+      "npm run test:integration:jest": "tests/integration/**/*.test.js"
+    },
+    "unreachableNote": "tests/qualification/** uses no .test. suffix and is invisible to both jest configs",
+    "evidence": "filesystem walk + jest.config.js testMatch"
+  },
+  "selfDevelopment": {
+    "existingComponents": {
+      "evolution/self-evolve-cycle.js": true,
+      "evolution/findings-to-goals.js": true,
+      "evolution/goal-executor.js": true,
+      "evolution/self-assessment.js": true,
+      "evolution/heidi-goals.js": true,
+      "src/hydi-v3/EvolutionProposal.js": true,
+      "lib/heidi/CapabilityRegistry.ts": true,
+      "lib/capability-contract/ContractRegistry.ts": true,
+      "scripts/hydi-qualify.js": true,
+      "lib/operational/FailureInjector.ts": true,
+      "system-manifest.json": true,
+      "tools/verify.ps1": true
+    },
+    "sandboxExists": false,
+    "sandboxNote": "No physically separate development workspace found. Autonomous changes would land in the production tree.",
+    "manifestStaleness": {
+      "lastCommit": "2026-04-30T14:20:25-05:00",
+      "note": "system-manifest.json IS read by src/audit/* and src/enforcement/* — refresh rather than replace"
+    },
+    "evidence": "filesystem existence checks + git log"
+  },
+  "overall": {
+    "state": "BASELINE_RECORDED",
+    "operational": false,
+    "operationalClaimJustification": "NOT OPERATIONAL. No operational gate has run. Service ownership is severed, recovery has never succeeded, and autonomous filesystem writes are unconfined. Recording a baseline is not a health verdict.",
+    "blockingFindings": [
+      "serviceOwnership: services present on ports are not owned by the boot authority",
+      "filesystemAuthorization: allowedTargets declared but never enforced; no sandbox root",
+      "governance: four independent action execution paths, no single chokepoint",
+      "recovery: 0 successful recoveries across all attempts",
+      "backup: no coverage of any authoritative store",
+      "health: optional revenue configuration drives the core system verdict",
+      "localIndependence: embeddings resolve to cloud OpenAI; boot has a blocking network-capable check",
+      "governance: ProtoForge action gate is advisory only — reject verdicts are recorded but do not block execution (PROTOFORGE_ENFORCE_ACTIONS unset)"
+    ]
+  },
+  "amendments": [
+    {
+      "at": "2026-09-18T02:07:14.436Z",
+      "phase": "0",
+      "reason": "Fifth action execution path discovered after initial capture. Recorded as an amendment rather than a rewrite (Rule 2: preserve evidence).",
+      "field": "governance.actionExecutionPaths",
+      "change": "added path E"
+    }
+  ]
+}

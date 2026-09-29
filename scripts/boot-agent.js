@@ -818,6 +818,29 @@ const CONFIG = loadConfig();
 async function main() {
   banner('HYDI Boot Agent');
 
+  // A dry run is strictly observational: it must not acquire or supersede the
+  // canonical boot lease. Claiming it here would make the active runtime stand
+  // down even though this invocation exits without starting any modules.
+  if (flags.dryRun) {
+    const selected = selectModules(CONFIG.modules);
+    let order;
+    try {
+      order = topoSort(selected);
+    } catch (e) {
+      console.error(e.message);
+      process.exit(1);
+    }
+    if (!flags.json) {
+      console.log(`Mode: ${flags.prod ? 'production' : 'development'}   Modules: ${order.length}`);
+      order.forEach((m, i) => {
+        const dep = (m.dependsOn || []).length ? c('90', ` after [${m.dependsOn.join(', ')}]`) : '';
+        console.log(`  ${i + 1}. ${c('1', m.id)} -- ${m.label}${dep}`);
+      });
+      banner('Dry run -- nothing started');
+    }
+    process.exit(0);
+  }
+
   if (isPartialBoot) {
     // A partial boot never claims, replaces or releases the canonical lease.
     // If a canonical runtime is live, refuse outright rather than running
@@ -868,11 +891,6 @@ async function main() {
       const dep = (m.dependsOn || []).length ? c('90', ` after [${m.dependsOn.join(', ')}]`) : '';
       console.log(`  ${i + 1}. ${c('1', m.id)} -- ${m.label}${dep}`);
     });
-  }
-
-  if (flags.dryRun) {
-    banner('Dry run -- nothing started');
-    process.exit(0);
   }
 
   // External preflight: port zombies, Docker, Supabase CLI, env source,
