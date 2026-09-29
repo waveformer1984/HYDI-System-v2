@@ -378,6 +378,84 @@ export default async function handler(_req: NextApiRequest, res: NextApiResponse
           };
         } catch { return { team: [], missions: [], counts: { running: 0, pending: 0, needsHuman: 0, stale: 0 }, activity: [] }; }
       })(),
+
+      // ── Control Tower (HYDI 4: PriorityEngine + MissionLifecycle + ProofEngine) ──
+      // outcomes, not activity: what is claimed, what is proven, what is
+      // refused, what is next. Claims never present UNKNOWN as PROVEN.
+      controlTower: await (async () => {
+        try {
+          const { ProofEngine } = await import('../../../lib/heidi/ProofEngine');
+          const { PriorityEngine } = await import('../../../lib/heidi/PriorityEngine');
+          const engine = new ProofEngine(POOL);
+          const claims = await engine.evaluateAll();
+
+          // Rank open goals the same way the cognitive loop does — the
+          // API process has no CapabilityRegistry, so executor-bound
+          // fields (reversibility/dependencyHealth/autonomyRequirement)
+          // come from goal context when present, else safe defaults.
+          const pe = new PriorityEngine();
+          const prioritized = pe.prioritize(
+            (goals.rows as Array<Record<string, unknown>>).map((g) => {
+              const ctx = (g.context ?? {}) as Record<string, unknown>;
+              return {
+                item: g,
+                assessment: {
+                  impact: Math.min(10, Math.max(0, Number(g.priority) || 0)),
+                  urgency: Math.min(10, Math.max(0, Number(g.priority) || 0)),
+                  confidence: 0.7,
+                  reversibility: typeof ctx.reversibility === 'number' ? ctx.reversibility : 0.6,
+                  autonomyLevel: typeof ctx.autonomyLevel === 'number' ? ctx.autonomyLevel : 0,
+                  estimatedEffort: typeof ctx.estimatedEffort === 'number' ? ctx.estimatedEffort : 5,
+                  dependencyHealth: typeof ctx.dependencyHealth === 'number' ? ctx.dependencyHealth : 0.7,
+                  revenueEffect: typeof ctx.revenueEffect === 'number' ? ctx.revenueEffect : 0,
+                  humanRequired: ctx.humanRequired === true,
+                  prohibited: ctx.prohibited === true,
+                  prohibitionReason: typeof ctx.prohibitionReason === 'string' ? ctx.prohibitionReason : undefined,
+                },
+              };
+            }),
+            autonomy,
+          );
+
+          // Latest lifecycle transition per goal — the receipt chain tail.
+          const transitions = (await POOL.query(
+            `select payload, created_at from heidi_events
+               where event_type='mission_transition' order by created_at desc limit 20`,
+          ).catch(() => ({ rows: [] as Array<{ payload: Record<string, unknown>; created_at: string }> }))).rows;
+
+          return {
+            claims: claims.map(c => ({
+              claim: c.claim, verdict: c.verdict, confidence: c.confidence,
+              freshnessMs: c.freshnessMs, gap: c.gap ?? null,
+              provenance: c.provenance.map(l => ({ kind: l.kind, ref: String(l.ref).slice(0, 24), summary: l.summary.slice(0, 100), at: l.at })),
+            })),
+            priorities: {
+              ranked: prioritized.ranked.slice(0, 5).map(p => ({
+                goalId: String((p.item as Record<string, unknown>).id).slice(0, 8),
+                title: (p.item as Record<string, unknown>).title,
+                score: Math.round(p.score * 100) / 100,
+              })),
+              refused: prioritized.refused.slice(0, 5).map(p => ({
+                goalId: String((p.item as Record<string, unknown>).id).slice(0, 8),
+                title: (p.item as Record<string, unknown>).title,
+                reason: p.reason,
+              })),
+              deferred: prioritized.deferred.slice(0, 5).map(p => ({
+                goalId: String((p.item as Record<string, unknown>).id).slice(0, 8),
+                title: (p.item as Record<string, unknown>).title,
+              })),
+            },
+            lifecycle: transitions.map(t => ({
+              missionId: String((t.payload as { missionId?: string }).missionId ?? '').slice(0, 8),
+              toStage: (t.payload as { toStage?: string }).toStage,
+              failureClass: (t.payload as { failureClass?: string }).failureClass ?? null,
+              at: t.created_at,
+            })),
+          };
+        } catch (e) {
+          return { claims: [], priorities: null, lifecycle: [], error: e instanceof Error ? e.message : 'control tower failed' };
+        }
+      })(),
     });
   } catch (e) {
     res.status(500).json({ error: e instanceof Error ? e.message : 'workspace state failed' });
