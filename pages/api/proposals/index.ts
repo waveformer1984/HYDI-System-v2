@@ -40,6 +40,7 @@ function shape(r: {
   status: string; expires_at: string; decided_by: string | null;
   decided_at: string | null; goal_id: string | null; created_at: string;
   producer_key: string;
+  authorization_consumed_at?: string | null;
   mission_id?: string | null; mission_status?: string | null; mission_stage?: string | null;
 }) {
   return {
@@ -61,6 +62,7 @@ function shape(r: {
     decidedBy: r.decided_by,
     decidedAt: r.decided_at,
     goalId: r.goal_id,
+    authorizedAt: r.authorization_consumed_at ?? null,
     missionId: r.mission_id ?? null,
     missionStatus: r.mission_status ?? null,
     missionStage: r.mission_stage ?? null,

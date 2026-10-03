@@ -23,6 +23,10 @@ export type MissionStatusName =
 export interface ProposalLike {
   status: string;
   expiresAt?: string | null;
+  /** Set only when the daemon's authorization gate consumed the approval
+   *  (heidi_action_proposals.authorization_consumed_at). This is the ONLY
+   *  way 'AUTHORIZED' can appear — it is never inferred from approval. */
+  authorizedAt?: string | null;
   missionId?: string | null;
   missionStatus?: string | null;
   missionStage?: string | null;
@@ -31,6 +35,7 @@ export interface ProposalLike {
 export type UiActionState =
   | 'AWAITING_APPROVAL'
   | 'APPROVED_QUEUED'
+  | 'AUTHORIZED'
   | 'EXECUTING'
   | 'WAITING_HUMAN'
   | 'COMPLETED'
@@ -73,14 +78,21 @@ export function proposalUiState(p: ProposalLike, nowMs: number = Date.now()): Ui
   }
 
   // approved — the proposal minted a governed goal. What happened next is
-  // evidence from the mission row, never assumed.
+  // evidence from the durable consume marker + mission row, never assumed.
   if (!p.missionId) {
-    return {
-      state: 'APPROVED_QUEUED',
-      label: 'APPROVED — GOAL QUEUED',
-      note: 'durable approval recorded; authorization + execution still governed (R2 gate may hold it pending)',
-      resolvable: false,
-    };
+    return p.authorizedAt
+      ? {
+        state: 'AUTHORIZED',
+        label: 'AUTHORIZED',
+        note: 'approval consumed by the authorization gate — bound action authorized once; execution is a separate step',
+        resolvable: false,
+      }
+      : {
+        state: 'APPROVED_QUEUED',
+        label: 'APPROVED — GOAL QUEUED',
+        note: 'durable approval recorded; authorization + execution still governed (R2 gate may hold it pending)',
+        resolvable: false,
+      };
   }
   const ms = p.missionStatus as MissionStatusName | null;
   switch (ms) {

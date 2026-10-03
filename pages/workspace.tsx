@@ -56,7 +56,7 @@ async function serviceHeaders(extra: Record<string, string> = {}): Promise<Recor
 // backed by heidi_action_proposals + joined heidi_missions exist here —
 // 'AUTHORIZED', 'PROVEN' and 'REVENUE' are not producible on this surface.
 const UI_STATE_COLOR: Record<string, string> = {
-  AWAITING_APPROVAL: '#f59e0b', APPROVED_QUEUED: '#7dd3fc', EXECUTING: '#7dd3fc',
+  AWAITING_APPROVAL: '#f59e0b', APPROVED_QUEUED: '#7dd3fc', AUTHORIZED: '#a78bfa', EXECUTING: '#7dd3fc',
   WAITING_HUMAN: '#f59e0b', COMPLETED: '#22c55e', FAILED: '#ef4444',
   CANCELLED: '#94a3b8', REJECTED: '#94a3b8', EXPIRED: '#94a3b8',
   RETRACTED: '#94a3b8', UNPROVEN: '#f59e0b',

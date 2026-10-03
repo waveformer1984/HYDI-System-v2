@@ -64,10 +64,23 @@ describe('proposalUiState — durable-state mapping', () => {
     expect(proposalUiState(p({ status: 'mystery' })).state).toBe('UNPROVEN');
   });
 
-  it('AUTHORIZED / PROVEN / REVENUE are never producible on this surface', () => {
-    const forbidden = new Set(['AUTHORIZED', 'PROVEN', 'REVENUE']);
+  it('AUTHORIZED only from the durable consume marker — never inferred from approval', () => {
+    // authorization_consumed_at is the ONLY evidence that produces AUTHORIZED.
+    const authorized = proposalUiState(p({ status: 'approved', missionId: null, authorizedAt: new Date().toISOString() }));
+    expect(authorized.state).toBe('AUTHORIZED');
+    // Approval alone — no marker — stays APPROVED_QUEUED.
+    expect(proposalUiState(p({ status: 'approved', missionId: null })).state).toBe('APPROVED_QUEUED');
+    // A non-approved proposal can never show AUTHORIZED even with a stray marker.
+    expect(proposalUiState(p({ status: 'pending', authorizedAt: new Date().toISOString() })).state).toBe('AWAITING_APPROVAL');
+    // Once the goal is claimed by a mission, execution state supersedes the marker.
+    expect(proposalUiState(p({ status: 'approved', missionId: 'm', missionStatus: 'running', authorizedAt: new Date().toISOString() })).state).toBe('EXECUTING');
+  });
+
+  it('PROVEN / REVENUE remain never producible on this surface', () => {
+    const forbidden = new Set(['PROVEN', 'REVENUE']);
     const rows: ProposalLike[] = [
-      p({}), p({ status: 'approved' }), p({ status: 'rejected' }), p({ status: 'expired' }),
+      p({}), p({ status: 'approved' }), p({ status: 'approved', authorizedAt: new Date().toISOString() }),
+      p({ status: 'rejected' }), p({ status: 'expired' }),
       p({ status: 'retracted' }), p({ status: 'mystery' }),
       ...['planned', 'claimed', 'running', 'verifying', 'waiting_human', 'succeeded', 'failed', 'cancelled', 'timed_out']
         .map(ms => p({ status: 'approved', missionId: 'm', missionStatus: ms })),

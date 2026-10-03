@@ -412,6 +412,112 @@ export async function resolveProposal(
   }
 }
 
+/* ─── Approval → authorization bridge ───────────────────────────────
+ * The daemon's authorization gate calls this when a capability is refused
+ * human_required and the selected goal claims a proposal. Goal context
+ * only carries the HINT (proposalId); every binding is re-verified
+ * against the durable row — capability, exact params (hash recomputed
+ * from the action's params, never the context's approvedHash), and the
+ * goal the proposal itself minted. Consumption is a single conditional
+ * UPDATE, so concurrent attempts can never both succeed and an approval
+ * can never authorize twice.
+ *
+ * APPROVED ≠ AUTHORIZED: status stays 'approved'; authorization_consumed_at
+ * is the once-only authorization marker, with a heidi_events receipt.
+ */
+
+export type ProposalAuthorizationRefusal =
+  | 'not_found' | 'not_approved' | 'already_consumed'
+  | 'capability_mismatch' | 'params_mismatch' | 'goal_mismatch' | 'unavailable';
+
+export interface ProposalAuthorizationResult {
+  authorized: boolean;
+  reason: string;
+  proposalId: string;
+  refusal?: ProposalAuthorizationRefusal;
+  consumedAt?: string;
+  decidedBy?: string | null;
+}
+
+export async function consumeProposalAuthorization(
+  pool: Pool,
+  opts: { proposalId: string; capabilityId: string; params: Record<string, unknown>; goalId: string },
+): Promise<ProposalAuthorizationResult> {
+  // Recompute the binding from the ACTION's actual parameters — the
+  // durable params_hash is the approval contract, not a browser- or
+  // context-supplied value.
+  const paramsHash = proposalParamsHash(opts.capabilityId, opts.params);
+  let client: PoolClient;
+  try {
+    client = await pool.connect();
+  } catch (e) {
+    return { authorized: false, reason: `database unavailable: ${e instanceof Error ? e.message : 'unknown'}`, proposalId: opts.proposalId, refusal: 'unavailable' };
+  }
+  try {
+    await client.query('BEGIN');
+    // One atomic statement enforces every binding + consume-once.
+    const res = await client.query(
+      `UPDATE heidi_action_proposals
+         SET authorization_consumed_at = now()
+       WHERE id=$1 AND status='approved'
+         AND capability_id=$2 AND params_hash=$3 AND goal_id=$4
+         AND authorization_consumed_at IS NULL
+       RETURNING id, decided_by, authorization_consumed_at`,
+      [opts.proposalId, opts.capabilityId, paramsHash, opts.goalId],
+    );
+    if (!res.rows[0]) {
+      await client.query('ROLLBACK');
+      // Read-only classification of the refusal — honest reason, no guess.
+      const cur = await client.query(
+        `SELECT status, capability_id, params_hash, goal_id, authorization_consumed_at
+         FROM heidi_action_proposals WHERE id=$1`,
+        [opts.proposalId],
+      );
+      const row = cur.rows[0] as { status?: string; capability_id?: string; params_hash?: string; goal_id?: string; authorization_consumed_at?: string | null } | undefined;
+      let refusal: ProposalAuthorizationRefusal; let reason: string;
+      if (!row) {
+        refusal = 'not_found'; reason = 'proposal not found in durable store';
+      } else if (row.status !== 'approved') {
+        refusal = 'not_approved'; reason = `proposal status is '${row.status}' — only an approved proposal can authorize`;
+      } else if (row.authorization_consumed_at) {
+        refusal = 'already_consumed'; reason = 'approval already consumed — a proposal authorizes once';
+      } else if (row.capability_id !== opts.capabilityId) {
+        refusal = 'capability_mismatch'; reason = `proposal approved '${row.capability_id}', not '${opts.capabilityId}'`;
+      } else if (row.params_hash !== paramsHash) {
+        refusal = 'params_mismatch'; reason = 'requested parameters differ from the approved parameters';
+      } else {
+        refusal = 'goal_mismatch'; reason = 'proposal is bound to a different goal';
+      }
+      return { authorized: false, reason, proposalId: opts.proposalId, refusal };
+    }
+    const row = res.rows[0] as { id: string; decided_by: string | null; authorization_consumed_at: string };
+    await client.query(
+      `INSERT INTO heidi_events (event_type, division, payload, created_at)
+       VALUES ('action_proposal', 'missions', $1, now())`,
+      [JSON.stringify({
+        receiptId: randomUUID(), event: 'authorization_consumed',
+        proposalId: opts.proposalId, goalId: opts.goalId,
+        capabilityId: opts.capabilityId, paramsHash,
+        decidedBy: row.decided_by, authorizedAt: row.authorization_consumed_at,
+        at: new Date().toISOString(),
+      })],
+    );
+    await client.query('COMMIT');
+    return {
+      authorized: true,
+      reason: `human-authorized via durable proposal (approval consumed once)`,
+      proposalId: opts.proposalId,
+      consumedAt: row.authorization_consumed_at,
+      decidedBy: row.decided_by,
+    };
+  } catch (e) {
+    await client.query('ROLLBACK').catch(() => { });
+    return { authorized: false, reason: e instanceof Error ? e.message : 'unknown', proposalId: opts.proposalId, refusal: 'unavailable' };
+  } finally {
+    client.release();
+  }
+}
+
 /** Shared pool for the API surface — same env convention as
  *  lib/orchestrator.ts (PG_HOST/PG_PORT/PG_DATABASE/PG_USER/PG_PASSWORD,
  *  defaults to the local Supabase Postgres). */

@@ -63,6 +63,7 @@ import { collectReconciliation, resolveGitHead } from './DeploymentReconciliatio
 import { runR0Recovery } from './SelfRepairR0';
 import { collectCooState } from './CooState';
 import { acknowledgeHumanAction } from './HumanActionQueue';
+import { consumeProposalAuthorization } from './ActionProposals';
 import { readKillSwitch, writeKillSwitch } from './KillSwitchState';
 import { runInvestigateMission, runTopicInvestigation, runTopOpportunityInvestigation, collectAgentState, superviseAgents, stopAgent, retryMission, resolveHumanAction } from './AgentControlPlane';
 
@@ -223,11 +224,16 @@ export interface ExerciseRecord {
 
 export interface AuthorizationResult {
   authorized: boolean;
-  authorizationMode: 'autonomous' | 'policy_authorized' | 'human_required' | 'prohibited';
+  authorizationMode: 'autonomous' | 'policy_authorized' | 'human_required' | 'prohibited' | 'human_authorized';
   reason: string;
   policyEvaluated: string;
   capabilityId: string | null;
   escalationRecordId: string | null;
+  /**
+   * Set when authorization was minted by consuming a durable approved
+   * proposal (consume-once). Null for every other authorization path.
+   */
+  authorizationProposalId?: string | null;
   /**
    * The tier the capability contract derives for THIS invocation, from
    * (verb x target x blast radius x reversibility x state) — as opposed to
@@ -2576,7 +2582,7 @@ export class CognitiveCore {
 
     // PHASE 10: AUTHORIZE — check capability registry + autonomy policy
     try {
-      state.authorizationResult = this.authorizeAction(state.selectedAction, state.identity, state);
+      state.authorizationResult = await this.authorizeAction(state.selectedAction, state.identity, state);
       state.phase = 'act';
 
       // If not authorized, create escalation record
@@ -3102,51 +3108,114 @@ export class CognitiveCore {
    * result and the legacy decision still governs, so the disagreements can be
    * read off real cycles before anyone bets uptime on new metadata.
    */
-  private authorizeAction(
+  private async authorizeAction(
     action: SelectedAction | null,
     identity: HeidiIdentity | null,
     state?: CognitiveState | null,
-  ): AuthorizationResult {
+  ): Promise<AuthorizationResult> {
     const legacy = this.authorizeActionLegacy(action, identity);
 
     if (!action?.capabilityId) return legacy;
     const contract = this.contracts.get(action.capabilityId);
+
+    let result: AuthorizationResult;
     if (!contract) {
-      return { ...legacy, contractTier: null, contractRationale: null, contractDisagreement: null };
+      result = { ...legacy, contractTier: null, contractRationale: null, contractDisagreement: null };
+    } else {
+      // Registry-level, so cross-contract coherence (an undo may not be gated
+      // harder than the act it reverses) is applied.
+      const decision =
+        this.contracts.authorityFor(action.capabilityId, action.params, this.contractState(state)) ??
+        computeAuthority(contract, action.params, this.contractState(state));
+
+      // R3+ means a human has to say yes; the loop has nobody to ask.
+      const contractRefuses = decision.requiresApproval || decision.tier === 'R5';
+      const disagreement =
+        legacy.authorized && contractRefuses
+          ? `contract derives ${decision.tier} for this invocation (legacy risk level ${action.riskLevel}): ${decision.rationale}`
+          : null;
+
+      if (disagreement && this.contractAuthorityMode === 'enforcing') {
+        result = {
+          ...legacy,
+          authorized: false,
+          authorizationMode: decision.tier === 'R5' ? 'prohibited' : 'human_required',
+          reason: disagreement,
+          policyEvaluated: 'capability_contract',
+          contractTier: decision.tier,
+          contractRationale: decision.rationale,
+          contractDisagreement: disagreement,
+        };
+      } else {
+        result = {
+          ...legacy,
+          contractTier: decision.tier,
+          contractRationale: decision.rationale,
+          contractDisagreement: disagreement,
+        };
+      }
     }
 
-    // Registry-level, so cross-contract coherence (an undo may not be gated
-    // harder than the act it reverses) is applied.
-    const decision =
-      this.contracts.authorityFor(action.capabilityId, action.params, this.contractState(state)) ??
-      computeAuthority(contract, action.params, this.contractState(state));
+    // Approval → authorization bridge: when the standing policy refuses
+    // the action for lack of human authority — 'human_required' (R1/R3/R4,
+    // registry, contract-enforced) or a refused 'policy_authorized' (the
+    // R2 autonomy>=3 shortfall) — and the selected goal carries a proposal
+    // hint, verify the durable approval and consume it once. Goal context
+    // alone never authorizes; 'prohibited' (R5 / no action / no identity)
+    // is never bridged — a proposal cannot override a prohibition.
+    if (
+      !result.authorized &&
+      (result.authorizationMode === 'human_required' || result.authorizationMode === 'policy_authorized')
+    ) {
+      return this.bridgeProposalAuthorization(action, state ?? null, result);
+    }
+    return result;
+  }
 
-    // R3+ means a human has to say yes; the loop has nobody to ask.
-    const contractRefuses = decision.requiresApproval || decision.tier === 'R5';
-    const disagreement =
-      legacy.authorized && contractRefuses
-        ? `contract derives ${decision.tier} for this invocation (legacy risk level ${action.riskLevel}): ${decision.rationale}`
-        : null;
-
-    if (disagreement && this.contractAuthorityMode === 'enforcing') {
+  /**
+   * Verify + consume a durable approved proposal for a human_required
+   * action. The goal context only supplies the proposalId hint — the
+   * capability, exact params (recomputed hash), and the goal binding are
+   * all re-verified against heidi_action_proposals inside an atomic
+   * consume-once UPDATE. Consumption authorizes exactly once; a second
+   * attempt is refused.
+   */
+  private async bridgeProposalAuthorization(
+    action: SelectedAction,
+    state: CognitiveState | null,
+    refused: AuthorizationResult,
+  ): Promise<AuthorizationResult> {
+    const goal = state?.pendingWork?.find(g => g.goalId === action.targetGoalId);
+    const proposalId = (goal?.context as Record<string, unknown> | undefined)?.proposalId;
+    if (typeof proposalId !== 'string' || !proposalId || !action.capabilityId || !action.targetGoalId) {
+      return refused;
+    }
+    try {
+      const check = await consumeProposalAuthorization(this.pool, {
+        proposalId,
+        capabilityId: action.capabilityId,
+        params: action.params ?? {},
+        goalId: action.targetGoalId,
+      });
+      if (!check.authorized) {
+        return {
+          ...refused,
+          reason: `${refused.reason} — proposal authorization refused: ${check.reason}`,
+          authorizationProposalId: proposalId,
+        };
+      }
       return {
-        ...legacy,
-        authorized: false,
-        authorizationMode: decision.tier === 'R5' ? 'prohibited' : 'human_required',
-        reason: disagreement,
-        policyEvaluated: 'capability_contract',
-        contractTier: decision.tier,
-        contractRationale: decision.rationale,
-        contractDisagreement: disagreement,
+        ...refused,
+        authorized: true,
+        authorizationMode: 'human_authorized',
+        reason: `human-authorized via durable proposal ${proposalId.slice(0, 8)} — binding verified, approval consumed once`,
+        policyEvaluated: 'durable_proposal',
+        escalationRecordId: null,
+        authorizationProposalId: proposalId,
       };
+    } catch (e) {
+      return { ...refused, reason: `${refused.reason} — proposal bridge error: ${e instanceof Error ? e.message : 'unknown'}` };
     }
-
-    return {
-      ...legacy,
-      contractTier: decision.tier,
-      contractRationale: decision.rationale,
-      contractDisagreement: disagreement,
-    };
   }
 
   private authorizeActionLegacy(action: SelectedAction | null, identity: HeidiIdentity | null): AuthorizationResult {
