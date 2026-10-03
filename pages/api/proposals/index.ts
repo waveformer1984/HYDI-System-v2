@@ -39,12 +39,14 @@ function shape(r: {
   prerequisites: string | null; rollback: string | null; reversible: boolean;
   status: string; expires_at: string; decided_by: string | null;
   decided_at: string | null; goal_id: string | null; created_at: string;
+  producer_key: string;
   mission_id?: string | null; mission_status?: string | null; mission_stage?: string | null;
 }) {
   return {
     id: r.id,
     version: r.version,
     capabilityId: r.capability_id,
+    producerKey: r.producer_key,
     capabilityLabel: PROPOSAL_ALLOWLIST[r.capability_id]?.label ?? r.capability_id,
     params: r.params,
     title: r.title,

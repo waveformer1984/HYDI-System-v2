@@ -21,7 +21,7 @@ async function mintServiceToken(secret: string): Promise<string> {
   return `${ts}.${requestId}.${service}.${sig}`;
 }
 
-const NAV = ['overview', 'agents', 'missions', 'decisions', 'recommend', 'opportunities', 'validation', 'engineering', 'revenue'];
+const NAV = ['chat', 'actions', 'overview', 'agents', 'missions', 'decisions', 'recommend', 'opportunities', 'validation', 'engineering', 'revenue'];
 
 const AGENT_STATUS_COLOR: Record<string, string> = {
   RUNNING: '#22c55e', STARTING: '#22c55e', IDLE: '#94a3b8', REGISTERED: '#94a3b8',
@@ -42,6 +42,25 @@ function Card({ title, children, tone }: { title: React.ReactNode; children: Rea
 }
 
 import { buildTelemetryAlerts } from '../lib/workspace-telemetry';
+import { proposalUiState, classifyApiError, ProposalLike, UiError } from '../lib/console-state';
+
+// Shared by every console surface that calls a token-gated API.
+async function serviceHeaders(extra: Record<string, string> = {}): Promise<Record<string, string>> {
+  const secret = localStorage.getItem(SERVICE_SECRET_KEY) || '';
+  const headers: Record<string, string> = { ...extra };
+  if (secret) headers['x-hydi-service-token'] = await mintServiceToken(secret);
+  return headers;
+}
+
+// Durable proposal/mission evidence → honest display state. Only states
+// backed by heidi_action_proposals + joined heidi_missions exist here —
+// 'AUTHORIZED', 'PROVEN' and 'REVENUE' are not producible on this surface.
+const UI_STATE_COLOR: Record<string, string> = {
+  AWAITING_APPROVAL: '#f59e0b', APPROVED_QUEUED: '#7dd3fc', EXECUTING: '#7dd3fc',
+  WAITING_HUMAN: '#f59e0b', COMPLETED: '#22c55e', FAILED: '#ef4444',
+  CANCELLED: '#94a3b8', REJECTED: '#94a3b8', EXPIRED: '#94a3b8',
+  RETRACTED: '#94a3b8', UNPROVEN: '#f59e0b',
+};
 
 const AGENTS = ['heidi', 'team-coo', 'team-scout', 'team-builder', 'team-qa', 'team-revenue'];
 
@@ -82,7 +101,7 @@ function Chat({ agent }: { agent: string }) {
       return fetch(`/api/workspace/chat?agent=${encodeURIComponent(agent)}&user=j&limit=40`, { headers });
     })()
       .then(r => r && r.ok ? r.json() : null)
-      .then(j => { if (j?.messages?.length) setMsgs(j.messages.map((m: { role: string; content: string }) => ({ role: m.role === 'user' ? 'you' : 'agent', text: m.content }))); })
+      .then(j => { if (j?.messages?.length) setMsgs(j.messages.map((m: { role: string; content: string }) => ({ role: m.role === 'user' ? 'you' : m.role === 'system' ? 'system' : 'agent', text: m.content }))); })
       .catch(() => { /* history is best-effort; live chat still works */ });
   }, [agent]);
   const send = async () => {
@@ -106,7 +125,7 @@ function Chat({ agent }: { agent: string }) {
       <div ref={ref} style={{ maxHeight: 180, overflowY: 'auto', fontSize: 13 }}>
         {msgs.map((m, i) => (
           <div key={i} style={{ marginBottom: 6 }}>
-            <span style={{ color: m.role === 'you' ? C.accent : C.ok, fontWeight: 600 }}>{m.role === 'you' ? 'J' : label}</span>
+            <span style={{ color: m.role === 'you' ? C.accent : m.role === 'system' ? C.warn : C.ok, fontWeight: 600 }}>{m.role === 'you' ? 'YOU' : m.role === 'system' ? 'SYSTEM' : label}</span>
             <span style={{ color: '#cbd5e1', whiteSpace: 'pre-wrap' }}> {m.text}</span>
           </div>
         ))}
@@ -148,16 +167,194 @@ function ActionButton({ label, kind, body, onDone, disabled }: { label: string; 
   );
 }
 
+/* ─── Governed actions surface ─────────────────────────────────────────
+ * Reads and resolves REAL durable proposals via /api/proposals — the
+ * server re-validates the allowlist, params-hash binding, expiry and
+ * consume-once inside the transaction. The UI supplies only {decision};
+ * it can never supply humanApproved/approvedHash — decidedBy is derived
+ * server-side from the authenticated role. */
+
+interface DecideOutcome { ok: boolean; status?: string; goalId?: string | null; err?: UiError; working?: boolean }
+
+function ParamsBlock({ params }: { params: W }) {
+  const entries = Object.entries(params ?? {});
+  if (!entries.length) return <span style={{ color: '#475569' }}>no parameters</span>;
+  return <>{entries.map(([k, v]) => <div key={k}><span style={{ color: '#64748b' }}>{k}</span> <span style={{ color: '#cbd5e1' }}>{JSON.stringify(v)}</span></div>)}</>;
+}
+
+function ProposalCard({ p, expanded, onToggle, onDecide, outcome }: {
+  p: W; expanded: boolean; onToggle: () => void;
+  onDecide: (d: 'approve' | 'reject') => void; outcome?: DecideOutcome;
+}) {
+  const ui = proposalUiState(p as ProposalLike);
+  const col = UI_STATE_COLOR[ui.state] ?? C.dim;
+  const awaiting = ui.state === 'AWAITING_APPROVAL';
+  return (
+    <div style={{ border: `1px solid ${awaiting ? '#78350f' : '#1e293b'}`, borderRadius: 8, padding: '10px 14px', background: '#0b1220', marginBottom: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
+        <span style={{ color: col, fontWeight: 700, fontSize: 11, letterSpacing: 1 }}>{ui.label}</span>
+        <b style={{ fontSize: 13 }}>{p.title}</b>
+        <span style={{ color: '#475569', fontSize: 11 }}>{p.capabilityId} · {p.id.slice(0, 8)}</span>
+        <span style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+          <button onClick={onToggle} style={btnS()}>{expanded ? 'HIDE' : 'REVIEW'}</button>
+          {awaiting && <>
+            <button onClick={() => onDecide('approve')} disabled={outcome?.working} style={btnS('#14532d', '#22c55e')}>APPROVE</button>
+            <button onClick={() => onDecide('reject')} disabled={outcome?.working} style={btnS('#450a0a', '#ef4444')}>REJECT</button>
+          </>}
+        </span>
+      </div>
+      <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>
+        {ui.note}
+        {p.decidedBy ? ` · decided by ${p.decidedBy} ${p.decidedAt ? `at ${String(p.decidedAt).slice(0, 19)}Z` : ''}` : ''}
+        {p.missionId ? ` · mission ${String(p.missionId).slice(0, 8)}${p.missionStatus ? ` (${p.missionStatus}${p.missionStage ? `/${p.missionStage}` : ''})` : ''}` : ''}
+      </div>
+      {outcome && !outcome.working && (
+        <div style={{ marginTop: 6, fontSize: 11, color: outcome.ok ? C.ok : C.bad }}>
+          {outcome.ok
+            ? `${String(outcome.status).toUpperCase()} — durable decision recorded${outcome.goalId ? ` · governed goal ${String(outcome.goalId).slice(0, 8)} queued (execution remains gated)` : ''}`
+            : `${outcome.err?.code}: ${outcome.err?.message}`}
+        </div>
+      )}
+      {expanded && (
+        <div style={{ marginTop: 8, borderTop: '1px solid #1e293b', paddingTop: 8, fontSize: 12 }}>
+          <div style={{ marginBottom: 6 }}><span style={{ color: '#64748b' }}>reason:</span> {p.reason}</div>
+          {p.expectedEffects && <div style={{ marginBottom: 6 }}><span style={{ color: '#64748b' }}>expected:</span> {p.expectedEffects}</div>}
+          {p.risks && <div style={{ marginBottom: 6 }}><span style={{ color: '#64748b' }}>risks:</span> <span style={{ color: C.warn }}>{p.risks}</span></div>}
+          {p.prerequisites && <div style={{ marginBottom: 6 }}><span style={{ color: '#64748b' }}>prerequisites:</span> {p.prerequisites}</div>}
+          <div style={{ marginBottom: 6 }}><span style={{ color: '#64748b' }}>parameters:</span><ParamsBlock params={p.params} /></div>
+          <div style={{ color: '#475569', fontSize: 11 }}>
+            proposal {p.id} · created {String(p.createdAt).slice(0, 19)}Z · expires {String(p.expiresAt).slice(0, 19)}Z
+            {p.producerKey ? ` · requested by ${p.producerKey}` : ''}
+            {p.reversible ? ` · reversible${p.rollback ? ` (${p.rollback.slice(0, 80)})` : ''}` : ' · NOT reversible'}
+            {p.goalId ? ` · goal ${String(p.goalId).slice(0, 8)}` : ''}
+          </div>
+          {ui.state === 'APPROVED_QUEUED' && (
+            <div style={{ marginTop: 6, fontSize: 11, color: C.accent }}>
+              APPROVED ≠ AUTHORIZED — the R2/autonomy gate in the daemon still decides whether this executes.
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const btnS = (bg = '#1e293b', border = '#334155'): React.CSSProperties => ({
+  background: bg, color: '#e2e8f0', border: `1px solid ${border}`, borderRadius: 4,
+  padding: '3px 10px', fontSize: 11, cursor: 'pointer', letterSpacing: 0.5,
+});
+
+function ActionsTab({ proposals, error, reload, focusId }: {
+  proposals: { recommended: W[]; history: W[] } | null;
+  error: string | null; reload: () => void; focusId: string | null;
+}) {
+  const [expanded, setExpanded] = useState<Set<string>>(new Set(focusId ? [focusId] : []));
+  const [outcomes, setOutcomes] = useState<Record<string, DecideOutcome>>({});
+  useEffect(() => { if (focusId) setExpanded(e => new Set(e).add(focusId)); }, [focusId]);
+
+  const decide = async (p: W, decision: 'approve' | 'reject') => {
+    setOutcomes(o => ({ ...o, [p.id]: { ok: false, working: true } }));
+    try {
+      const r = await fetch(`/api/proposals/${p.id}`, {
+        method: 'POST', headers: await serviceHeaders({ 'content-type': 'application/json' }),
+        body: JSON.stringify({ decision }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (r.ok) setOutcomes(o => ({ ...o, [p.id]: { ok: true, status: j.status, goalId: j.goalId } }));
+      else setOutcomes(o => ({ ...o, [p.id]: { ok: false, err: classifyApiError(r.status, j.error) } }));
+    } catch {
+      setOutcomes(o => ({ ...o, [p.id]: { ok: false, err: classifyApiError(null) } }));
+    }
+    reload(); // durable backend state is authoritative — re-read, never assume
+  };
+
+  if (error) return <Card title="actions — backend error" tone={C.bad}>{error}</Card>;
+  if (!proposals) return <Card title="actions">loading durable proposals…</Card>;
+  return (
+    <>
+      <Card title={`awaiting approval — ${proposals.recommended.length}`} tone={proposals.recommended.length ? C.warn : C.dim}>
+        {proposals.recommended.length
+          ? proposals.recommended.map(p => (
+            <ProposalCard key={p.id} p={p} expanded={expanded.has(p.id)}
+              onToggle={() => setExpanded(e => { const n = new Set(e); n.has(p.id) ? n.delete(p.id) : n.add(p.id); return n; })}
+              onDecide={d => decide(p, d)} outcome={outcomes[p.id]} />
+          ))
+          : 'no proposals pending — Heidi surfaces governed work here when it needs your authority'}
+      </Card>
+      <Card title={`history — ${proposals.history.length}`} tone={C.dim}>
+        {proposals.history.length
+          ? proposals.history.map(p => (
+            <ProposalCard key={p.id} p={p} expanded={expanded.has(p.id)}
+              onToggle={() => setExpanded(e => { const n = new Set(e); n.has(p.id) ? n.delete(p.id) : n.add(p.id); return n; })}
+              onDecide={d => decide(p, d)} outcome={outcomes[p.id]} />
+          ))
+          : 'no resolved proposals yet'}
+      </Card>
+    </>
+  );
+}
+
+function ChatTab({ pending, chatAgent, setChatAgent, onReview }: {
+  pending: W[]; chatAgent: string; setChatAgent: (a: string) => void;
+  onReview: (id: string) => void;
+}) {
+  return (
+    <>
+      {pending.length > 0 && (
+        <Card title={`${pending.length} governed action${pending.length === 1 ? '' : 's'} awaiting your approval`} tone={C.warn}>
+          {pending.map(p => (
+            <div key={p.id} style={{ marginBottom: 8 }}>
+              <div style={{ display: 'flex', gap: 10, alignItems: 'baseline', flexWrap: 'wrap' }}>
+                <span style={{ color: C.warn, fontWeight: 700, fontSize: 11, letterSpacing: 1 }}>AWAITING HUMAN APPROVAL</span>
+                <b style={{ fontSize: 13, textTransform: 'uppercase' }}>{p.capabilityId}</b>
+                <button onClick={() => onReview(p.id)} style={btnS('#1e293b', '#f59e0b')}>REVIEW ACTION</button>
+              </div>
+              <div style={{ fontSize: 12, color: '#cbd5e1', marginTop: 2 }}>{p.title}</div>
+              <div style={{ fontSize: 11, color: '#64748b' }}>
+                proposal {p.id.slice(0, 8)}{p.params?.offerId ? ` · offer ${p.params.offerId}` : ''}
+                {p.params?.customerEmail ? ` · customer ${p.params.customerEmail}` : ''}
+                {p.risks ? ` · ${String(p.risks).slice(0, 100)}` : ''}
+              </div>
+            </div>
+          ))}
+        </Card>
+      )}
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
+        <span style={{ fontSize: 11, color: '#475569', letterSpacing: 1 }}>TALK TO</span>
+        {AGENTS.map(a => (
+          <button key={a} onClick={() => setChatAgent(a)} style={{
+            background: chatAgent === a ? '#1e293b' : 'transparent', border: '1px solid #334155',
+            borderRadius: 4, padding: '2px 10px', fontSize: 11, cursor: 'pointer',
+            color: chatAgent === a ? C.accent : '#94a3b8',
+          }}>{a === 'heidi' ? 'Heidi/COO' : a.replace('team-', '')}</button>
+        ))}
+      </div>
+      <Chat key={chatAgent} agent={chatAgent} />
+    </>
+  );
+}
+
 export default function Workspace() {
   const [s, setS] = useState<W | null>(null);
-  const [tab, setTab] = useState('overview');
+  const [tab, setTab] = useState('chat');
   const [chatAgent, setChatAgent] = useState('heidi');
+  const [proposals, setProposals] = useState<{ recommended: W[]; history: W[] } | null>(null);
+  const [proposalsError, setProposalsError] = useState<string | null>(null);
+  const [focusProposal, setFocusProposal] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const load = async () => {
-    const secret = localStorage.getItem(SERVICE_SECRET_KEY) || '';
-    const headers: Record<string, string> = {};
-    if (secret) headers['x-hydi-service-token'] = await mintServiceToken(secret);
-    return fetch('/api/workspace/state', { headers }).then(r => r.json()).then(setS).catch(e => setErr(String(e)));
+    const headers = await serviceHeaders();
+    const [stateR, propR] = await Promise.all([
+      fetch('/api/workspace/state', { headers }),
+      fetch('/api/proposals', { headers }).catch(() => null),
+    ]);
+    stateR.json().then(setS).catch(e => setErr(String(e)));
+    if (propR) {
+      propR.json().then(j => {
+        if (propR.ok) { setProposals(j); setProposalsError(null); }
+        else setProposalsError(j.error ?? `HTTP ${propR.status}`);
+      }).catch(() => setProposalsError(`HTTP ${propR.status}`));
+    }
   };
   const reload = load;
   useEffect(() => {
@@ -192,6 +389,16 @@ export default function Workspace() {
         <main style={{ flex: 1, overflowY: 'auto', padding: 14 }}>
           {err && <Card title="error" tone={C.bad}>{err}</Card>}
           {!s ? <Card title="loading">reading live state…</Card> : <>
+            {tab === 'chat' && (
+              <ChatTab
+                pending={proposals?.recommended ?? []}
+                chatAgent={chatAgent} setChatAgent={setChatAgent}
+                onReview={id => { setFocusProposal(id); setTab('actions'); }}
+              />
+            )}
+            {tab === 'actions' && (
+              <ActionsTab proposals={proposals} error={proposalsError} reload={reload} focusId={focusProposal} />
+            )}
             {tab === 'agents' && <>
               {!s.agents ? <Card title="agents" tone={C.dim}>agent state not present in this build — rebuild or use the dev surface</Card> : <>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(170px,1fr))', gap: 10 }}>
@@ -334,17 +541,6 @@ export default function Workspace() {
           </>}
         </main>
       </div>
-      <div style={{ borderTop: '1px solid #1e293b', padding: '4px 14px 0', background: '#0b1220', display: 'flex', gap: 10, alignItems: 'center' }}>
-        <span style={{ fontSize: 11, color: '#475569', letterSpacing: 1 }}>TALK TO</span>
-        {AGENTS.map(a => (
-          <button key={a} onClick={() => setChatAgent(a)} style={{
-            background: chatAgent === a ? '#1e293b' : 'transparent', border: '1px solid #334155',
-            borderRadius: 4, padding: '2px 10px', fontSize: 11, cursor: 'pointer',
-            color: chatAgent === a ? C.accent : '#94a3b8',
-          }}>{a === 'heidi' ? 'Heidi/COO' : a.replace('team-', '')}</button>
-        ))}
-      </div>
-      <Chat key={chatAgent} agent={chatAgent} />
     </div>
   );
 }
