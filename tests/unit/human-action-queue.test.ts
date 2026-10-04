@@ -12,6 +12,7 @@ interface Fixture {
   freshEsc?: Record<string, unknown>[];
   backlog?: Record<string, unknown>[];
   proposals?: Record<string, unknown>[];
+  commercial?: Record<string, unknown>[]; // heidi_events division='commercial' rows
   acks?: string[]; // queueItemIds already acknowledged
 }
 
@@ -32,6 +33,7 @@ function pool(f: Fixture, inserted: string[] = []) {
       if (/GROUP BY category/.test(sql)) return { rows: f.backlog ?? [] };
       if (/FROM operator_escalations/.test(sql)) return { rows: f.freshEsc ?? [] };
       if (/FROM heidi_action_proposals/.test(sql)) return { rows: f.proposals ?? [] };
+      if (/division='commercial'/.test(sql)) return { rows: f.commercial ?? [] };
       return { rows: [] };
     },
   };
@@ -163,6 +165,36 @@ describe('collectHumanActionQueue', () => {
     }) as any);
     expect(q.open).toBe(0);
     expect(q.items.find((i) => i.id === 'proposal:prop-old')!.status).toBe('EXPIRED');
+  });
+
+  test('boundary commercial offers surface as open payment-boundary items', async () => {
+    const q = await collectHumanActionQueue(pool({
+      commercial: [
+        {
+          event_type: 'commercial_offer', created_at: '2026-09-22T10:00:00Z', payload: {
+            offerId: 'offer-a1', opportunityId: 'opp-1', product: 'protoforge_model_prep',
+            priceCents: 2900, currency: 'usd', stage: 'AUTHORIZATION_REQUIRED',
+            stageReason: 'no customer identity'
+          }
+        },
+        {
+          event_type: 'commercial_offer', created_at: '2026-09-22T11:00:00Z', payload: {
+            offerId: 'offer-b2', opportunityId: 'opp-2', product: 'protoforge_model_prep',
+            priceCents: 2900, currency: 'usd', stage: 'CHECKOUT_READY'
+          }
+        },
+      ],
+    }) as any);
+    const item = q.items.find((i) => i.id === 'offer:offer-a1')!;
+    expect(item.source).toBe('commercial_offer');
+    expect(item.status).toBe('OPEN');
+    expect(item.category).toBe('payment_boundary');
+    expect(item.reason).toContain('AUTHORIZATION_REQUIRED');
+    expect(item.reason).toContain('no customer identity');
+    expect(item.requestedAction).toMatch(/governed revenue\.advance_offer/);
+    expect(q.open).toBe(1);
+    // CHECKOUT_READY is not a human boundary — not a queue item
+    expect(q.items.find((i) => i.id === 'offer:offer-b2')).toBeUndefined();
   });
 });
 

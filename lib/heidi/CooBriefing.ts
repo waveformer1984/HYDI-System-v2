@@ -39,7 +39,7 @@ export function classifyCooIntent(message: string): CooIntent | null {
   if (/\b(why|reason|justify|explain)\b/.test(m) && /\b(action|choose|chose|decision|that|next)\b/.test(m)) return 'why';
   if (/\bevidence\b|\bproof\b|\bprove\b/.test(m)) return 'evidence';
   if (/\bprotoforge\b|\bscout\b|\bopportunit/.test(m)) return 'protoforge';
-  if (/\brevenue\b|\bsales?\b|\bpayment|\bcustomer/.test(m)) return 'revenue';
+  if (/\brevenue\b|\bsales?\b|\bpayment|\bcustomer|\bsell\b|for sale|checkout.?ready|what can i (sell|offer)/.test(m)) return 'revenue';
   if (/\bfail|broke|broken|error|went wrong|incident/.test(m)) return 'failure';
   if (/\battention\b|\bneed(s)?\s+(my|from|me)\b|\bdo you need|\bapprove|approval|\bfor me\b/.test(m)) return 'attention';
   if (/\bwhat (are|did) you|\bdoing\b|\bworking on\b|\bnext\b|\bhappened|\bdid today|\bwatching\b/.test(m)) return 'activity';
@@ -86,10 +86,13 @@ function revenueLine(s: CooState): string {
   const stageSummary = offers && offers.total > 0
     ? Object.entries(offers.byStage).map(([st, n]) => `${n} ${st}`).join(', ')
     : 'no offers';
+  const ready = offers?.ready && offers.ready.length > 0
+    ? ` | ready: ${offers.ready.map((r) => `${r.offerId} ${r.product} $${(r.priceCents / 100).toFixed(2)} ${r.currency}`).join('; ')}`
+    : '';
   const boundary = offers && offers.boundary.length > 0
     ? ` | boundary: ${offers.boundary.map((b) => `${b.offerId} ${b.stage} (${b.reason ?? 'unspecified'})`).join('; ')}`
     : '';
-  return `${s.revenue.opportunitiesOpen} open opportunities · offers: ${stageSummary}${boundary} (read-only — no reconciled-revenue claim)`;
+  return `${s.revenue.opportunitiesOpen} open opportunities · offers: ${stageSummary}${ready}${boundary} (read-only — no reconciled-revenue claim)`;
 }
 
 /**

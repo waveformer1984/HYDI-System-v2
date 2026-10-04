@@ -19,12 +19,14 @@
 
 import type { Pool } from 'pg';
 import { getCapabilityRegistry } from './CapabilityRegistry';
+import { collectOffers } from './CommercialBridge';
 
 export type HumanActionStatus =
   | 'OPEN' | 'ACKNOWLEDGED' | 'APPROVED' | 'REJECTED' | 'COMPLETED' | 'EXPIRED' | 'BLOCKED';
 
 export type HumanActionSource =
-  | 'intervention' | 'authorization_escalation' | 'operator_escalation' | 'action_proposal';
+  | 'intervention' | 'authorization_escalation' | 'operator_escalation' | 'action_proposal'
+  | 'commercial_offer';
 
 export interface HumanAction {
   id: string;
@@ -276,6 +278,29 @@ export async function collectHumanActionQueue(
       backlog: false,
       createdAt: new Date(r.created_at as string).toISOString(),
       updatedAt: new Date((r.updated_at ?? r.created_at) as string).toISOString(),
+    });
+  }
+
+  // ── Commercial offers at a human boundary: AUTHORIZATION_REQUIRED
+  //    (e.g. missing customer identity) or OFFER_BLOCKED. Read-only —
+  //    resolution requires governed proposal/customer identity, never
+  //    this surface. ────────────────────────────────────────────────
+  const offers = await collectOffers(pool).catch(() => []);
+  for (const o of offers) {
+    if (o.stage !== 'AUTHORIZATION_REQUIRED' && o.stage !== 'OFFER_BLOCKED') continue;
+    items.push({
+      id: `offer:${o.offerId}`,
+      source: 'commercial_offer',
+      category: 'payment_boundary',
+      priority: 2,
+      status: 'OPEN',
+      reason: `${o.offerId} ${o.stage} — ${o.stageReason ?? 'no reason recorded'} ($${(o.priceCents / 100).toFixed(2)} ${o.currency})`,
+      requestedAction: 'provide customer identity and approve via a governed revenue.advance_offer proposal',
+      evidence: { offerId: o.offerId, stage: o.stage, stageReason: o.stageReason, priceCents: o.priceCents, currency: o.currency },
+      authorizationLevel: 'R2',
+      backlog: false,
+      createdAt: o.createdAt,
+      updatedAt: o.updatedAt,
     });
   }
 

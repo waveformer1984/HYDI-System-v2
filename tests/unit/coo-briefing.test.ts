@@ -44,6 +44,8 @@ describe('classifyCooIntent', () => {
     ['what broke overnight?', 'failure'],
     ['what is ProtoForge finding?', 'protoforge'],
     ['what is blocking revenue?', 'revenue'],
+    ['what can I sell?', 'revenue'],
+    ['show me checkout-ready offers', 'revenue'],
     ['show me the evidence', 'evidence'],
     ['why did you choose that next action?', 'why'],
   ])('"%s" → %s', (msg, expected) => {
@@ -142,6 +144,23 @@ describe('answerFromCooState', () => {
   test('snapshots without the offers field degrade gracefully', () => {
     const out = answerFromCooState(state(), 'revenue', false);
     expect(out).toContain('no offers');
+  });
+
+  test('revenue answer names sellable CHECKOUT_READY offers', () => {
+    const s = state({
+      revenue: {
+        opportunitiesOpen: 2,
+        offers: {
+          total: 1,
+          byStage: { CHECKOUT_READY: 1 },
+          boundary: [],
+          ready: [{ offerId: 'offer-a1', product: 'protoforge_model_prep', priceCents: 2900, currency: 'usd' }],
+        },
+      },
+    });
+    const out = answerFromCooState(s, 'revenue', false);
+    expect(out).toContain('ready: offer-a1 protoforge_model_prep $29.00 usd');
+    expect(out).toMatch(/no reconciled revenue/i);
   });
 
   test('attention flags pending proposals and points to the ACTIONS tab', () => {

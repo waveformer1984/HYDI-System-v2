@@ -72,6 +72,8 @@ export interface CooState {
       /** Offers parked at a human boundary (AUTHORIZATION_REQUIRED or
           OFFER_BLOCKED), each with its durable stage reason. */
       boundary: Array<{ offerId: string; stage: string; reason: string | null }>;
+      /** Sellable offers — CHECKOUT_READY with price identity. */
+      ready: Array<{ offerId: string; product: string; priceCents: number; currency: string }>;
     };
   };
   /** Multi-agent control plane (event-sourced, survives restart). */
@@ -198,6 +200,10 @@ export async function collectCooState(deps: CooDeps): Promise<CooState> {
       .filter((o) => o.stage === 'AUTHORIZATION_REQUIRED' || o.stage === 'OFFER_BLOCKED')
       .slice(0, 5)
       .map((o) => ({ offerId: o.offerId, stage: o.stage, reason: o.stageReason })),
+    ready: offers
+      .filter((o) => o.stage === 'CHECKOUT_READY')
+      .slice(0, 5)
+      .map((o) => ({ offerId: o.offerId, product: o.product, priceCents: o.priceCents, currency: o.currency })),
   };
 
   const events24h = await safe(async () => {

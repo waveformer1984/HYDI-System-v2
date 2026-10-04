@@ -306,6 +306,11 @@ describe('governed controls (Phase D)', () => {
     expect(prop.ok).toBe(false);
     expect(prop.outcome).toBe('refused');
     expect(prop.detail).toMatch(/proposals endpoint/);
+    // Offer boundaries refuse too — only governed proposals advance payment state.
+    const off = await resolveHumanAction(pool as any, 'offer:offer-a1', 'approve', 'op');
+    expect(off.ok).toBe(false);
+    expect(off.outcome).toBe('refused');
+    expect(off.detail).toMatch(/governed revenue\.advance_offer/);
     expect(events.filter((e) => e.event_type === 'human_action_resolution')).toHaveLength(1);
   });
 
