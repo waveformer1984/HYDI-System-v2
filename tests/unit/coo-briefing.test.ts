@@ -104,6 +104,76 @@ describe('answerFromCooState', () => {
     expect(out).toMatch(/no reconciled revenue/i);
   });
 
+  test('brief renders agents and recent missions from durable state', () => {
+    const s = state({
+      agents: {
+        active: 2, stale: 0,
+        missionsByStatus: { RUNNING: 1, COMPLETED: 2 },
+        recent: [
+          { missionId: 'mission-aaaa1111', role: 'ops', status: 'RUNNING', objective: 'sync world model' },
+          { missionId: 'mission-bbbb2222', role: 'scout', status: 'COMPLETED', objective: 'scan opportunities' },
+        ],
+      },
+    });
+    const out = formatCooBrief(s, false);
+    expect(out).toContain('AGENTS:      2 active · 0 stale · missions: 1 running, 2 completed');
+    expect(out).toMatch(/RECENT:.*\[COMPLETED\] mission-.*\[RUNNING\] mission-/s);
+    expect(out).toContain('scan opportunities');
+  });
+
+  test('revenue answer reports offer stages and the real boundary', () => {
+    const s = state({
+      revenue: {
+        opportunitiesOpen: 2,
+        offers: {
+          total: 2,
+          byStage: { AUTHORIZATION_REQUIRED: 1, RECONCILED: 1 },
+          boundary: [{ offerId: 'offer-abc', stage: 'AUTHORIZATION_REQUIRED', reason: 'no customer identity' }],
+        },
+      },
+    });
+    const out = answerFromCooState(s, 'revenue', false);
+    expect(out).toContain('1 AUTHORIZATION_REQUIRED');
+    expect(out).toContain('offer-abc');
+    expect(out).toContain('no customer identity');
+    expect(out).toMatch(/no reconciled revenue/i);
+  });
+
+  test('snapshots without the offers field degrade gracefully', () => {
+    const out = answerFromCooState(state(), 'revenue', false);
+    expect(out).toContain('no offers');
+  });
+
+  test('attention flags pending proposals and points to the ACTIONS tab', () => {
+    const s = state({
+      humanActions: {
+        open: 1, backlogRowCount: 0,
+        items: [{
+          id: 'proposal:p1', source: 'action_proposal', category: 'revenue.advance_offer',
+          priority: 1, status: 'OPEN', reason: 'Advance offer offer-x',
+          requestedAction: 'review and decide in the ACTIONS tab', evidence: {},
+          authorizationLevel: 'R2', backlog: false, createdAt: 't', updatedAt: 't',
+        }],
+      },
+    });
+    const out = answerFromCooState(s, 'attention', false);
+    expect(out).toContain('action_proposal');
+    expect(out).toContain('1 governed action proposal(s)');
+    expect(out).toContain('ACTIONS tab');
+  });
+
+  test('activity intent reports recent missions', () => {
+    const s = state({
+      agents: {
+        active: 1, stale: 0, missionsByStatus: { COMPLETED: 1 },
+        recent: [{ missionId: 'mission-x9', role: 'ops', status: 'COMPLETED', objective: 'world sync' }],
+      },
+    });
+    const out = answerFromCooState(s, 'activity', false);
+    expect(out).toContain('[COMPLETED]');
+    expect(out).toContain('world sync');
+  });
+
   test('protoforge answer keeps the intelligence≠demand distinction', () => {
     const out = answerFromCooState(state(), 'protoforge', false);
     expect(out).toMatch(/not validated demand/i);

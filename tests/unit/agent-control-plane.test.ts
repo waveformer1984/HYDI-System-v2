@@ -300,6 +300,13 @@ describe('governed controls (Phase D)', () => {
     expect(escRow.resolved).toBe(true);
     const nf = await resolveHumanAction(pool as any, 'escalation:esc-1', 'reject', 'op');
     expect(nf.outcome).toBe('not_found'); // already resolved
+    // Action proposals are refused — approval requires the governed
+    // proposals endpoint (consume-once, params-hash bound).
+    const prop = await resolveHumanAction(pool as any, 'proposal:prop-1', 'approve', 'op');
+    expect(prop.ok).toBe(false);
+    expect(prop.outcome).toBe('refused');
+    expect(prop.detail).toMatch(/proposals endpoint/);
+    expect(events.filter((e) => e.event_type === 'human_action_resolution')).toHaveLength(1);
   });
 
   test('agent→agent messages require mission scope', async () => {

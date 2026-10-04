@@ -11,6 +11,7 @@ interface Fixture {
   authz?: Record<string, unknown>[];
   freshEsc?: Record<string, unknown>[];
   backlog?: Record<string, unknown>[];
+  proposals?: Record<string, unknown>[];
   acks?: string[]; // queueItemIds already acknowledged
 }
 
@@ -30,6 +31,7 @@ function pool(f: Fixture, inserted: string[] = []) {
       if (/authorization_escalation/.test(sql)) return { rows: f.authz ?? [] };
       if (/GROUP BY category/.test(sql)) return { rows: f.backlog ?? [] };
       if (/FROM operator_escalations/.test(sql)) return { rows: f.freshEsc ?? [] };
+      if (/FROM heidi_action_proposals/.test(sql)) return { rows: f.proposals ?? [] };
       return { rows: [] };
     },
   };
@@ -128,6 +130,39 @@ describe('collectHumanActionQueue', () => {
       'authorizationLevel', 'backlog', 'category', 'createdAt', 'evidence',
       'id', 'priority', 'reason', 'requestedAction', 'source', 'status', 'updatedAt',
     ]);
+  });
+
+  test('pending action proposals surface as open queue items with governance pointer', async () => {
+    const future = new Date(Date.now() + 3600_000).toISOString();
+    const q = await collectHumanActionQueue(pool({
+      proposals: [{
+        id: 'prop-1', capability_id: 'revenue.advance_offer',
+        title: 'Advance offer offer-x', reason: 'escalation hook', status: 'pending',
+        expires_at: future, created_at: '2026-09-22T10:00:00Z', updated_at: '2026-09-22T10:00:00Z',
+        offer_id: 'offer-x',
+      }],
+    }) as any);
+    expect(q.open).toBe(1);
+    const item = q.items.find((i) => i.id === 'proposal:prop-1')!;
+    expect(item.source).toBe('action_proposal');
+    expect(item.status).toBe('OPEN');
+    expect(item.authorizationLevel).toBe('R2'); // from CapabilityRegistry
+    expect(item.requestedAction).toMatch(/ACTIONS/);
+    expect(item.evidence.proposalId).toBe('prop-1');
+    expect(item.evidence.offerId).toBe('offer-x');
+  });
+
+  test('past-expiry pending proposal reports EXPIRED and does not count open', async () => {
+    const past = new Date(Date.now() - 3600_000).toISOString();
+    const q = await collectHumanActionQueue(pool({
+      proposals: [{
+        id: 'prop-old', capability_id: 'world.sync', title: 'old sync',
+        status: 'pending', expires_at: past,
+        created_at: '2026-09-20T10:00:00Z', updated_at: '2026-09-20T10:00:00Z', offer_id: null,
+      }],
+    }) as any);
+    expect(q.open).toBe(0);
+    expect(q.items.find((i) => i.id === 'proposal:prop-old')!.status).toBe('EXPIRED');
   });
 });
 

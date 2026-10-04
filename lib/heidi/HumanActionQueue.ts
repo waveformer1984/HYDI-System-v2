@@ -18,12 +18,13 @@
  */
 
 import type { Pool } from 'pg';
+import { getCapabilityRegistry } from './CapabilityRegistry';
 
 export type HumanActionStatus =
   | 'OPEN' | 'ACKNOWLEDGED' | 'APPROVED' | 'REJECTED' | 'COMPLETED' | 'EXPIRED' | 'BLOCKED';
 
 export type HumanActionSource =
-  | 'intervention' | 'authorization_escalation' | 'operator_escalation';
+  | 'intervention' | 'authorization_escalation' | 'operator_escalation' | 'action_proposal';
 
 export interface HumanAction {
   id: string;
@@ -241,6 +242,40 @@ export async function collectHumanActionQueue(
       backlog: true,
       createdAt: new Date(r.oldest as string).toISOString(),
       updatedAt: new Date(r.newest as string).toISOString(),
+    });
+  }
+
+  // ── Action proposals: pending governed-action decisions. Read-only
+  //    here — approval/rejection happens only via the proposals
+  //    endpoint (consume-once, params-hash bound). This surface reports
+  //    them; it cannot resolve them. ─────────────────────────────────
+  const registry = getCapabilityRegistry();
+  for (const r of await q(pool, `
+    SELECT id, capability_id, title, reason, expires_at, status,
+           created_at, updated_at, params->>'offerId' AS offer_id
+    FROM heidi_action_proposals
+    WHERE status = 'pending'
+    ORDER BY created_at DESC LIMIT 50`)) {
+    const expired = new Date(r.expires_at as string).getTime() <= Date.now();
+    const cap = registry.get(String(r.capability_id));
+    items.push({
+      id: `proposal:${r.id}`,
+      source: 'action_proposal',
+      category: String(r.capability_id ?? 'unknown'),
+      priority: 1,
+      status: expired ? 'EXPIRED' : 'OPEN',
+      reason: String(r.title ?? 'action proposal awaiting decision'),
+      requestedAction: 'review and decide in the ACTIONS tab — approve or reject via the governed endpoint',
+      evidence: {
+        proposalId: r.id,
+        capabilityId: r.capability_id,
+        offerId: r.offer_id ?? null,
+        expiresAt: r.expires_at,
+      },
+      authorizationLevel: cap?.riskLevel ?? 'R2',
+      backlog: false,
+      createdAt: new Date(r.created_at as string).toISOString(),
+      updatedAt: new Date((r.updated_at ?? r.created_at) as string).toISOString(),
     });
   }
 

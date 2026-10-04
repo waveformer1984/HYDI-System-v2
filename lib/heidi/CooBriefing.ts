@@ -64,6 +64,34 @@ function protoLine(s: CooState): string {
   return `last run ${p.lastRunStatus ?? 'none'} ${p.lastRunAt ? `at ${p.lastRunAt}` : ''}; ${p.opportunitiesTotal} opportunities (${p.pendingReview} pending review, ${p.approved} approved)`;
 }
 
+function agentsLine(s: CooState): string {
+  const a = s.agents;
+  const missions = Object.entries(a.missionsByStatus)
+    .map(([st, n]) => `${n} ${st.toLowerCase()}`)
+    .join(', ') || 'none';
+  return `${a.active} active · ${a.stale} stale · missions: ${missions}`;
+}
+
+function recentLine(s: CooState): string {
+  if (s.agents.recent.length === 0) return 'no missions recorded';
+  return s.agents.recent
+    .slice(-3)
+    .reverse()
+    .map((m) => `[${m.status}] ${m.missionId.slice(0, 8)} ${m.role} — ${m.objective}`)
+    .join('\n             ');
+}
+
+function revenueLine(s: CooState): string {
+  const offers = s.revenue.offers;
+  const stageSummary = offers && offers.total > 0
+    ? Object.entries(offers.byStage).map(([st, n]) => `${n} ${st}`).join(', ')
+    : 'no offers';
+  const boundary = offers && offers.boundary.length > 0
+    ? ` | boundary: ${offers.boundary.map((b) => `${b.offerId} ${b.stage} (${b.reason ?? 'unspecified'})`).join('; ')}`
+    : '';
+  return `${s.revenue.opportunitiesOpen} open opportunities · offers: ${stageSummary}${boundary} (read-only — no reconciled-revenue claim)`;
+}
+
 /**
  * The standard executive briefing — §12 format. Every line is drawn from
  * the persisted snapshot; nothing is embellished.
@@ -78,11 +106,13 @@ export function formatCooBrief(s: CooState, stale: boolean): string {
     `STATUS:      deployment ${s.deployment.verdict} · health ${s.applicationHealth}`,
     `DEPLOYMENT:  commit ${s.deployment.actualCommit ?? 'unknown'} · pm2 ${s.deployment.pm2Pid ?? '?'} → daemon ${s.deployment.daemonPid ?? '?'}`,
     `WORK:        ${workLine(s)}`,
+    `AGENTS:      ${agentsLine(s)}`,
     `ATTENTION:   ${s.humanActions.open > 0
       ? `${s.humanActions.open} pending human action(s): ${s.humanActions.items.filter((i) => i.status === 'OPEN' && !i.backlog).slice(0, 3).map((i) => `[${i.source}] ${i.reason}`).join(' | ')}`
       : 'none pending'}`,
     `PROTOFORGE:  ${protoLine(s)}`,
-    `REVENUE:     ${s.revenue.opportunitiesOpen} open opportunities (read-only — no reconciled-revenue claim)`,
+    `REVENUE:     ${revenueLine(s)}`,
+    `RECENT:      ${recentLine(s)}`,
     `NEXT ACTION: ${fmtNextAction(s.nextAction)}`,
     `LAST VERIFIED: ${s.generatedAt}${staleNote}`,
   ].join('\n');
@@ -104,15 +134,19 @@ export function answerFromCooState(s: CooState, intent: CooIntent, stale: boolea
           .slice(0, 5)
           .map((i) => `  [${i.source}/${i.category}] ${i.reason} → ${i.requestedAction}`)
           .join('\n');
+        const proposalsOpen = open.filter((i) => i.source === 'action_proposal').length;
+        const proposalNote = proposalsOpen > 0
+          ? `\n  ${proposalsOpen} governed action proposal(s) — decide in the ACTIONS tab.`
+          : '';
         const backlogNote = s.humanActions.backlogRowCount > 0
           ? `\n  (${s.humanActions.backlogRowCount} historical backlog rows remain human-owned — not listed individually)`
           : '';
-        return `Needs your attention — ${open.length} pending human action(s):\n${list}${backlogNote}${staleness}`;
+        return `Needs your attention — ${open.length} pending human action(s):\n${list}${proposalNote}${backlogNote}${staleness}`;
       }
       return `Nothing needs your attention right now.${s.humanActions.backlogRowCount > 0 ? ` ${s.humanActions.backlogRowCount} historical backlog rows remain human-owned.` : ''}${staleness}`;
     }
     case 'activity':
-      return `Next action: ${fmtNextAction(s.nextAction)}. Work: ${workLine(s)}.${staleness}`;
+      return `Next action: ${fmtNextAction(s.nextAction)}. Work: ${workLine(s)}. Agents: ${agentsLine(s)}. Recent: ${recentLine(s)}.${staleness}`;
     case 'failure':
       return s.deployment.failures.length > 0
         ? `Deployment identity failures: ${s.deployment.failures.join(', ')}.${staleness}`
@@ -120,7 +154,7 @@ export function answerFromCooState(s: CooState, intent: CooIntent, stale: boolea
     case 'protoforge':
       return `ProtoForge: ${protoLine(s)}.${staleness} (Market intelligence — not validated demand, not revenue.)`;
     case 'revenue':
-      return `Revenue (read-only): ${s.revenue.opportunitiesOpen} open opportunities. No reconciled revenue is claimed by this snapshot.${staleness}`;
+      return `Revenue (read-only): ${revenueLine(s)}. No reconciled revenue is claimed by this snapshot.${staleness}`;
     case 'evidence':
       return `Evidence: latest coo_state snapshot generated ${s.generatedAt} — deployment ${s.deployment.verdict} (commit ${s.deployment.actualCommit}), identity ${s.deployment.identity}. Persisted in heidi_events; ask for 'status' for the full brief.${staleness}`;
     case 'why':

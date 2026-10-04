@@ -776,6 +776,9 @@ export async function resolveHumanAction(
   if (queueItemId.startsWith('authz:')) {
     return { ok: false, outcome: 'refused', detail: 'capability authorization cannot be granted via this surface — it requires the explicit authorization policy path' };
   }
+  if (queueItemId.startsWith('proposal:')) {
+    return { ok: false, outcome: 'refused', detail: 'action proposals are decided via the governed proposals endpoint (console ACTIONS) — consume-once, params-hash bound; this command cannot approve them' };
+  }
   if (queueItemId.startsWith('escalation:')) {
     const escId = queueItemId.slice('escalation:'.length);
     const r = await pool.query(

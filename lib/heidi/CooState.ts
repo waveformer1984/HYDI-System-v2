@@ -21,6 +21,7 @@ import type { Pool } from 'pg';
 import { collectReconciliation, type ReconcileDeps, type ReconciliationReport } from './DeploymentReconciliation';
 import { collectHumanActionQueue, type HumanActionQueue, type HumanAction } from './HumanActionQueue';
 import { collectAgentState, type MissionStatus } from './AgentControlPlane';
+import { collectOffers } from './CommercialBridge';
 
 export interface CooNextAction {
   kind: 'capability' | 'human' | 'none';
@@ -63,6 +64,15 @@ export interface CooState {
   };
   revenue: {
     opportunitiesOpen: number;
+    /** Commercial offers folded from heidi_events — the truthful revenue
+        boundary. Optional: absent in snapshots predating this field. */
+    offers?: {
+      total: number;
+      byStage: Record<string, number>;
+      /** Offers parked at a human boundary (AUTHORIZATION_REQUIRED or
+          OFFER_BLOCKED), each with its durable stage reason. */
+      boundary: Array<{ offerId: string; stage: string; reason: string | null }>;
+    };
   };
   /** Multi-agent control plane (event-sourced, survives restart). */
   agents: {
@@ -177,6 +187,19 @@ export async function collectCooState(deps: CooDeps): Promise<CooState> {
     0,
   );
 
+  const offers = await safe(() => collectOffers(deps.pool), []);
+  const offersSummary = {
+    total: offers.length,
+    byStage: offers.reduce<Record<string, number>>((acc, o) => {
+      acc[o.stage] = (acc[o.stage] ?? 0) + 1;
+      return acc;
+    }, {}),
+    boundary: offers
+      .filter((o) => o.stage === 'AUTHORIZATION_REQUIRED' || o.stage === 'OFFER_BLOCKED')
+      .slice(0, 5)
+      .map((o) => ({ offerId: o.offerId, stage: o.stage, reason: o.stageReason })),
+  };
+
   const events24h = await safe(async () => {
     const r = await deps.pool.query(
       `SELECT event_type, count(*) n FROM heidi_events
@@ -207,7 +230,7 @@ export async function collectCooState(deps: CooDeps): Promise<CooState> {
       items: queue.items.slice(0, 10),
     },
     protoforge: proto,
-    revenue: { opportunitiesOpen: revenueOpps },
+    revenue: { opportunitiesOpen: revenueOpps, offers: offersSummary },
     agents: {
       active: agentPlane.activeCount,
       stale: agentPlane.staleCount,
@@ -234,7 +257,7 @@ export async function collectCooState(deps: CooDeps): Promise<CooState> {
     `  Human queue: ${queue.open} pending action(s), ${queue.backlogRowCount} backlog row(s)`,
     `  Agents:      ${agentPlane.activeCount} active, ${agentPlane.staleCount} stale, ${agentPlane.missions.length} mission(s) total`,
     `  ProtoForge:  last run ${proto.lastRunStatus ?? 'none'} at ${proto.lastRunAt ?? 'never'}; ${proto.opportunitiesTotal} opportunities (${proto.pendingReview} pending review, ${proto.approved} approved)`,
-    `  Revenue:     ${revenueOpps} open opportunities (read-only; no reconciled-revenue claim)`,
+    `  Revenue:     ${revenueOpps} open opportunities; ${offersSummary.total} offer(s)${offersSummary.boundary.length > 0 ? ` — boundary: ${offersSummary.boundary.map((b) => `${b.offerId} ${b.stage} (${b.reason ?? 'no reason'})`).join(' | ')}` : ''} (read-only; no reconciled-revenue claim)`,
     `  Next:        ${nextAction.kind === 'capability' ? nextAction.capabilityId : nextAction.kind === 'human' ? 'HUMAN ACTION REQUIRED' : 'NO_ACTION_REQUIRED'} — ${nextAction.reason}`,
   ].join('\n');
 
