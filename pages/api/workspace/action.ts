@@ -10,12 +10,17 @@
  *   resolve      { queueItemId, decision:approve|reject } → ops.resolve_human_action
  *   fix          { investigationId }                      → ops.dev_author (CONFIRMED only)
  *   investigate  { findingType?, target, question, ... }  → ops.dev_investigate
+ *   sell_offer   { offerId, customerEmail }               → governed revenue.advance_offer
+ *                proposal the operator must still approve — supplies the
+ *                customer identity RevenueRuntime refuses to invent
  */
 import { NextApiRequest, NextApiResponse } from 'next';
 import fs from 'fs';
 import path from 'path';
 import pg from 'pg';
 import { verifyServiceToken } from '../../../lib/auth/verifyServiceToken';
+import { createActionProposal } from '../../../lib/heidi/ActionProposals';
+import { collectOffers } from '../../../lib/heidi/CommercialBridge';
 
 const REPO = 'C:\\Users\\Owner\\HYDI-System-v2';
 const pool = new pg.Pool({ host: '127.0.0.1', port: 54322, database: 'postgres', user: 'postgres', password: 'postgres' });
@@ -88,8 +93,55 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       capabilityId: 'ops.agent_mission',
       params: { opportunityId },
     };
+  } else if (kind === 'sell_offer') {
+    // Customer-identity intake for a CHECKOUT_READY offer. This endpoint
+    // never creates a job, a checkout, or a payment — it creates a governed
+    // heidi_action_proposals row bound to the exact offer, which the
+    // operator must still approve in ACTIONS (consume-once, params-hash
+    // bound). The customer email is durable evidence inside the proposal
+    // params, supplied explicitly by the operator.
+    const { offerId, customerEmail } = req.body ?? {};
+    if (typeof offerId !== 'string' || !/^[\w:-]{1,120}$/.test(offerId)) {
+      return res.status(400).json({ error: 'offerId must be a bounded identifier string' });
+    }
+    if (typeof customerEmail !== 'string' || customerEmail.length > 254
+      || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customerEmail)) {
+      return res.status(400).json({ error: 'customerEmail must be a syntactically valid email address' });
+    }
+    const offer = (await collectOffers(pool)).find(o => o.offerId === offerId);
+    if (!offer) return res.status(404).json({ error: `offer '${offerId}' not found in durable commercial state` });
+    if (offer.stage !== 'CHECKOUT_READY' && offer.stage !== 'AUTHORIZATION_REQUIRED') {
+      return res.status(409).json({ error: `refused: offer ${offerId} is ${offer.stage} — only CHECKOUT_READY/AUTHORIZATION_REQUIRED offers accept a customer identity` });
+    }
+    try {
+      const { id, existing } = await createActionProposal(pool, {
+        capabilityId: 'revenue.advance_offer',
+        params: { offerId, customerEmail },
+        title: `Sell ${offer.offerId}: ${offer.product} $${(offer.priceCents / 100).toFixed(2)} ${offer.currency} to ${customerEmail}`,
+        reason: `Operator supplied customer identity for ${offerId} (${offer.stage}). Approving binds ${customerEmail} to this exact offer — params-hash locked — and creates the checkout/job pair through the governed revenue runtime.`,
+        expectedEffects: 'Job created bound via requirements.offerId; hosted checkout session created and its URL persisted on the job record; offer advances to PAYMENT_PENDING.',
+        risks: 'R2 — commercial transaction boundary. The customer is charged only after they complete the hosted checkout; test mode produces no real charge.',
+        prerequisites: 'Offer is CHECKOUT_READY; Stripe test key configured; live mode additionally requires a matching LiveTransactionAuthorization.',
+        rollback: 'Checkout session expires unpaid; job row remains unpaid.',
+        reversible: true,
+        producerKey: `sell_offer:${offerId}`,
+        expiresInMs: 4 * 60 * 60 * 1000,
+      });
+      await pool.query(
+        `INSERT INTO heidi_events (event_type, division, payload, created_at) VALUES ('workspace_action','workspace',$1,now())`,
+        [JSON.stringify({ kind, offerId, proposalId: id, deduped: existing, actor: 'workspace-operator' })],
+      ).catch(() => { });
+      return res.status(200).json({
+        ok: true, proposalId: id, deduped: existing,
+        message: existing
+          ? `proposal ${id.slice(0, 8)} already pending for this exact offer+customer — approve it in ACTIONS`
+          : `governed proposal ${id.slice(0, 8)} created — approve it in ACTIONS to advance the offer`,
+      });
+    } catch (e) {
+      return res.status(400).json({ error: e instanceof Error ? e.message : 'proposal refused' });
+    }
   } else {
-    return res.status(400).json({ error: `unknown action kind '${kind}' — allowed: acknowledge, resolve, fix, investigate, investigate_opportunity` });
+    return res.status(400).json({ error: `unknown action kind '${kind}' — allowed: acknowledge, resolve, fix, investigate, investigate_opportunity, sell_offer` });
   }
 
   try {

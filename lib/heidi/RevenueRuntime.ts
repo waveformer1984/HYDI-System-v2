@@ -65,7 +65,7 @@ export interface RevenueRuntimeDeps {
     authorizationId?: string;
   }) => Promise<{ sessionId: string; url: string } | { error: string }>;
   /** Bind the checkout session to the job — the webhook resolves jobs by session id. */
-  linkCheckoutSession?: (jobId: string, sessionId: string) => Promise<void>;
+  linkCheckoutSession?: (jobId: string, sessionId: string, checkoutUrl?: string) => Promise<void>;
   /** Reconcile a job's full evidence chain. */
   reconcileJob?: (jobId: string) => Promise<{ state: string }>;
   /** Current pending live-transaction authorizations (live-mode gate). */
@@ -187,7 +187,7 @@ export class RevenueRuntime {
               cancelUrl: 'http://localhost:3000/checkout/cancel',
             });
             if (!('error' in session)) {
-              await this.deps.linkCheckoutSession(existing.job_id, session.sessionId);
+              await this.deps.linkCheckoutSession(existing.job_id, session.sessionId, session.url);
               return { ...base, newStage: offer.stage, action: 'idempotent_repair', boundary: 'none', detail: `job ${existing.job_id} existed unlinked — repaired: checkout session ${session.sessionId} bound (${mode.mode})`, jobId: existing.job_id };
             }
           }
@@ -217,7 +217,9 @@ export class RevenueRuntime {
         }
         // Bind session→job: api/webhooks/stripe.js resolves the job by
         // stripe_checkout_session_id — skipping this orphans the payment.
-        await this.deps.linkCheckoutSession?.(job.jobId, session.sessionId);
+        // The hosted checkout URL travels too — it is the payment link a
+        // real customer uses, and must be durably retrievable.
+        await this.deps.linkCheckoutSession?.(job.jobId, session.sessionId, session.url);
         await transitionOffer(this.pool, offer.offerId, 'PAYMENT_PENDING', actor,
           `job ${job.jobId} bound via requirements.offerId; checkout session ${session.sessionId} (${mode.mode} mode)`);
         return { ...base, newStage: 'PAYMENT_PENDING', action: 'checkout_created', boundary: 'none', detail: `${mode.mode}-mode checkout session ${session.sessionId}`, jobId: job.jobId };

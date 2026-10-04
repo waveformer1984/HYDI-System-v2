@@ -163,12 +163,23 @@ export class JobManager {
   /**
    * Link a Stripe checkout session to a job.
    * Called when checkout is created but payment not yet confirmed.
+   * The hosted checkout URL is persisted in the job's requirements so the
+   * payment link is durable and retrievable — a session ID alone cannot
+   * take a customer to a payment page.
    */
-  async linkCheckoutSession(jobId: string, sessionId: string): Promise<void> {
-    await this.db.update('customer_jobs',
-      { stripe_checkout_session_id: sessionId, payment_status: 'pending', updated_at: new Date().toISOString() },
-      'job_id = $1', [jobId]);
-    await this.recordEvent(jobId, 'checkout_session_created', 'system', 'created', 'created', { sessionId });
+  async linkCheckoutSession(jobId: string, sessionId: string, checkoutUrl?: string): Promise<void> {
+    if (checkoutUrl) {
+      const job = await this.getJob(jobId);
+      const requirements = { ...(job?.requirements ?? {}), checkoutUrl };
+      await this.db.update('customer_jobs',
+        { stripe_checkout_session_id: sessionId, payment_status: 'pending', requirements: JSON.stringify(requirements), updated_at: new Date().toISOString() },
+        'job_id = $1', [jobId]);
+    } else {
+      await this.db.update('customer_jobs',
+        { stripe_checkout_session_id: sessionId, payment_status: 'pending', updated_at: new Date().toISOString() },
+        'job_id = $1', [jobId]);
+    }
+    await this.recordEvent(jobId, 'checkout_session_created', 'system', 'created', 'created', { sessionId, checkoutUrl: checkoutUrl ?? null });
   }
 
   /**

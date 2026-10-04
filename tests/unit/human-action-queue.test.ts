@@ -192,9 +192,17 @@ describe('collectHumanActionQueue', () => {
     expect(item.reason).toContain('AUTHORIZATION_REQUIRED');
     expect(item.reason).toContain('no customer identity');
     expect(item.requestedAction).toMatch(/governed revenue\.advance_offer/);
-    expect(q.open).toBe(1);
-    // CHECKOUT_READY is not a human boundary — not a queue item
-    expect(q.items.find((i) => i.id === 'offer:offer-b2')).toBeUndefined();
+    // CHECKOUT_READY is also a human boundary: no customer identity has
+    // been supplied — the system cannot invent one. Surfaces as
+    // customer_required (priority above generic payment boundaries).
+    const ready = q.items.find((i) => i.id === 'offer:offer-b2')!;
+    expect(ready.status).toBe('OPEN');
+    expect(ready.category).toBe('customer_required');
+    expect(ready.priority).toBe(1);
+    expect(ready.reason).toContain('CHECKOUT_READY');
+    expect(ready.reason).toMatch(/no legitimate customer identity/i);
+    expect(ready.requestedAction).toMatch(/governed revenue\.advance_offer/);
+    expect(q.open).toBe(2);
   });
 });
 

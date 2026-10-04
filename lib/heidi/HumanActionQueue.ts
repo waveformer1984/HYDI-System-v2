@@ -287,14 +287,20 @@ export async function collectHumanActionQueue(
   //    this surface. ────────────────────────────────────────────────
   const offers = await collectOffers(pool).catch(() => []);
   for (const o of offers) {
-    if (o.stage !== 'AUTHORIZATION_REQUIRED' && o.stage !== 'OFFER_BLOCKED') continue;
+    // CHECKOUT_READY is also a human boundary: no customer identity has
+    // been supplied yet, and the system does not invent one. PAYMENT_PENDING
+    // and beyond are awaiting external payment, not operator input.
+    if (o.stage !== 'AUTHORIZATION_REQUIRED' && o.stage !== 'OFFER_BLOCKED' && o.stage !== 'CHECKOUT_READY') continue;
+    const needsCustomer = o.stage === 'CHECKOUT_READY';
     items.push({
       id: `offer:${o.offerId}`,
       source: 'commercial_offer',
-      category: 'payment_boundary',
-      priority: 2,
+      category: needsCustomer ? 'customer_required' : 'payment_boundary',
+      priority: needsCustomer ? 1 : 2,
       status: 'OPEN',
-      reason: `${o.offerId} ${o.stage} — ${o.stageReason ?? 'no reason recorded'} ($${(o.priceCents / 100).toFixed(2)} ${o.currency})`,
+      reason: needsCustomer
+        ? `${o.offerId} CHECKOUT_READY — cannot advance: no legitimate customer identity has been supplied ($${(o.priceCents / 100).toFixed(2)} ${o.currency})`
+        : `${o.offerId} ${o.stage} — ${o.stageReason ?? 'no reason recorded'} ($${(o.priceCents / 100).toFixed(2)} ${o.currency})`,
       requestedAction: 'provide customer identity and approve via a governed revenue.advance_offer proposal',
       evidence: { offerId: o.offerId, stage: o.stage, stageReason: o.stageReason, priceCents: o.priceCents, currency: o.currency },
       authorizationLevel: 'R2',

@@ -284,6 +284,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         events: (latestEvents.rows as Array<{ event_type: string; payload: Record<string, unknown>; created_at: string }>).slice(0, 8).map(e => ({ type: e.event_type, at: e.created_at, detail: JSON.stringify(e.payload).slice(0, 100) })),
       },
       opportunities: oppAgg.map(o => ({ status: o.status, count: o.c, topConfidence: o.mx })),
+      // Commercial offers from the persisted coo_state snapshot — the
+      // CHECKOUT_READY boundary the console must surface as customer-required.
+      offers: (() => {
+        const o = (coo?.revenue as { offers?: { total?: number; byStage?: Record<string, number>; ready?: Array<{ offerId: string; product: string; priceCents: number; currency: string }>; boundary?: Array<{ offerId: string; stage: string; reason?: string }> } } | null)?.offers;
+        if (!o) return null;
+        return { total: o.total ?? 0, byStage: o.byStage ?? {}, ready: o.ready ?? [], boundary: o.boundary ?? [] };
+      })(),
       // Customer validation queue — folded from durable state by
       // ValidationQueue; stages never collapse (AUTHORIZED ≠ EXECUTED,
       // DECLARED ≠ VERIFIED).

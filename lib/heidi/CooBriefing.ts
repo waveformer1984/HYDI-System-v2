@@ -156,8 +156,13 @@ export function answerFromCooState(s: CooState, intent: CooIntent, stale: boolea
         : `No current deployment failures. Deployment ${s.deployment.verdict}, health ${s.applicationHealth}.${staleness}`;
     case 'protoforge':
       return `ProtoForge: ${protoLine(s)}.${staleness} (Market intelligence — not validated demand, not revenue.)`;
-    case 'revenue':
-      return `Revenue (read-only): ${revenueLine(s)}. No reconciled revenue is claimed by this snapshot.${staleness}`;
+    case 'revenue': {
+      const readyCount = s.revenue.offers?.ready?.length ?? 0;
+      const sellPath = readyCount > 0
+        ? ' To sell one: supply the customer\'s email on the offer in the console (ACTIONS/attention item) — that creates a governed revenue.advance_offer proposal bound to the exact offer; approving it issues the checkout link and records it on the job. Nothing executes without that approval.'
+        : '';
+      return `Revenue (read-only): ${revenueLine(s)}. No reconciled revenue is claimed by this snapshot.${sellPath}${staleness}`;
+    }
     case 'evidence':
       return `Evidence: latest coo_state snapshot generated ${s.generatedAt} — deployment ${s.deployment.verdict} (commit ${s.deployment.actualCommit}), identity ${s.deployment.identity}. Persisted in heidi_events; ask for 'status' for the full brief.${staleness}`;
     case 'why':

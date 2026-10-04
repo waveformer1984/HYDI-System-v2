@@ -248,9 +248,47 @@ const btnS = (bg = '#1e293b', border = '#334155'): React.CSSProperties => ({
   padding: '3px 10px', fontSize: 11, cursor: 'pointer', letterSpacing: 0.5,
 });
 
-function ActionsTab({ proposals, error, reload, focusId }: {
+function SellOfferCard({ offer, reload }: { offer: W; reload: () => void }) {
+  const [email, setEmail] = useState('');
+  const [msg, setMsg] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const go = async () => {
+    setBusy(true); setMsg(null);
+    try {
+      const r = await fetch('/api/workspace/action', {
+        method: 'POST',
+        headers: await serviceHeaders({ 'content-type': 'application/json' }),
+        body: JSON.stringify({ kind: 'sell_offer', offerId: offer.offerId, customerEmail: email.trim() }),
+      });
+      const j = await r.json().catch(() => ({}));
+      setMsg(r.ok ? (j.message ?? 'proposal created') : `refused: ${j.error ?? `HTTP ${r.status}`}`);
+      if (r.ok) { setEmail(''); reload(); }
+    } catch (e) { setMsg(`error: ${e}`); }
+    setBusy(false);
+  };
+  return (
+    <div style={{ marginBottom: 10 }}>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'baseline', flexWrap: 'wrap' }}>
+        <span style={{ color: C.accent, fontWeight: 700, fontSize: 11, letterSpacing: 1 }}>CHECKOUT_READY · CUSTOMER REQUIRED</span>
+        <b style={{ fontSize: 13 }}>{offer.offerId}</b>
+        <span style={{ fontSize: 12, color: '#cbd5e1' }}>{offer.product} — ${(offer.priceCents / 100).toFixed(2)} {offer.currency}</span>
+      </div>
+      <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+        <input value={email} onChange={e => setEmail(e.target.value)} onKeyDown={e => e.key === 'Enter' && !busy && email.trim() && go()}
+          placeholder="customer email — real customer only"
+          style={{ flex: 1, maxWidth: 320, background: '#0f172a', border: '1px solid #334155', borderRadius: 6, color: '#e2e8f0', padding: '6px 10px', fontSize: 12 }} />
+        <button onClick={go} disabled={busy || !email.trim()} style={btnS('#1e293b', '#e2e8f0')}>{busy ? '…' : 'propose sale'}</button>
+      </div>
+      {msg && <div style={{ fontSize: 11, color: C.warn, marginTop: 4 }}>{msg}</div>}
+      <div style={{ fontSize: 11, color: '#475569', marginTop: 3 }}>creates a governed revenue.advance_offer proposal bound to this exact offer — human approval still required before anything executes</div>
+    </div>
+  );
+}
+
+function ActionsTab({ proposals, error, reload, focusId, offers }: {
   proposals: { recommended: W[]; history: W[] } | null;
   error: string | null; reload: () => void; focusId: string | null;
+  offers: { ready?: W[]; boundary?: W[]; total?: number; byStage?: Record<string, number> } | null;
 }) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set(focusId ? [focusId] : []));
   const [outcomes, setOutcomes] = useState<Record<string, DecideOutcome>>({});
@@ -276,6 +314,17 @@ function ActionsTab({ proposals, error, reload, focusId }: {
   if (!proposals) return <Card title="actions">loading durable proposals…</Card>;
   return (
     <>
+      {offers && (offers.ready?.length || offers.boundary?.length) ? (
+        <Card title={`commercial offers — ${offers.total ?? 0}`} tone={(offers.ready?.length ?? 0) > 0 ? C.accent : C.dim}>
+          {offers.byStage && <div style={{ fontSize: 11, color: '#64748b', marginBottom: 8 }}>{Object.entries(offers.byStage).map(([st, n]) => `${n} ${st}`).join(' · ')}</div>}
+          {(offers.ready ?? []).map((o: W) => <SellOfferCard key={o.offerId} offer={o} reload={reload} />)}
+          {(offers.boundary ?? []).map((o: W) => (
+            <div key={o.offerId} style={{ fontSize: 12, color: '#cbd5e1', marginBottom: 4 }}>
+              <b>{o.offerId}</b> <span style={{ color: C.warn }}>{o.stage}</span> — {o.reason ?? 'no reason recorded'}
+            </div>
+          ))}
+        </Card>
+      ) : null}
       <Card title={`awaiting approval — ${proposals.recommended.length}`} tone={proposals.recommended.length ? C.warn : C.dim}>
         {proposals.recommended.length
           ? proposals.recommended.map(p => (
@@ -432,7 +481,7 @@ export default function Workspace() {
               />
             )}
             {tab === 'actions' && (
-              <ActionsTab proposals={proposals} error={proposalsError} reload={reload} focusId={focusProposal} />
+              <ActionsTab proposals={proposals} error={proposalsError} reload={reload} focusId={focusProposal} offers={s?.offers ?? null} />
             )}
             {tab === 'agents' && <>
               {!s.agents ? <Card title="agents" tone={C.dim}>agent state not present in this build — rebuild or use the dev surface</Card> : <>

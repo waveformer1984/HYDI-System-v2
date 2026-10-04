@@ -156,6 +156,17 @@ describe('CHECKOUT_READY — live-mode payment authorization binding', () => {
     expect(created).toBe(1);
     expect(calls.jobWrites).toBe(0);
   });
+
+  it('the hosted checkout URL is bound to the job — a session id alone cannot take a customer to the payment page', async () => {
+    const { pool } = makeStore('CHECKOUT_READY', null);
+    const d = deps();
+    const links: Array<[string, string, string | undefined]> = [];
+    await new RevenueRuntime(pool, {
+      ...d,
+      linkCheckoutSession: async (jobId, sessionId, url) => { links.push([jobId, sessionId, url]); },
+    }).advance({ offerId: OFFER, customerEmail: 'customer-a@example.com' });
+    expect(links).toEqual([[JOB, 'cs_live_probe', 'http://x']]);
+  });
 });
 
 describe('job creation is offer-bound and idempotent', () => {

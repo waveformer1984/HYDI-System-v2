@@ -161,6 +161,18 @@ describe('answerFromCooState', () => {
     const out = answerFromCooState(s, 'revenue', false);
     expect(out).toContain('ready: offer-a1 protoforge_model_prep $29.00 usd');
     expect(out).toMatch(/no reconciled revenue/i);
+    // sellable offers → the governed sell path is explained, not just named
+    expect(out).toMatch(/customer's email/i);
+    expect(out).toMatch(/revenue\.advance_offer proposal/);
+    expect(out).toMatch(/approval/i);
+  });
+
+  test('revenue answer gives no sell-path instructions when nothing is sellable', () => {
+    const s = state({
+      revenue: { opportunitiesOpen: 2, offers: { total: 0, byStage: {}, boundary: [], ready: [] } },
+    });
+    const out = answerFromCooState(s, 'revenue', false);
+    expect(out).not.toMatch(/customer's email/i);
   });
 
   test('attention flags pending proposals and points to the ACTIONS tab', () => {
