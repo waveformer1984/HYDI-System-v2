@@ -966,6 +966,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             protoforge?: { opportunitiesTotal?: number; pendingReview?: number };
             nextAction?: { kind: string; reason?: string; capabilityId?: string };
             humanActions?: { items?: Array<{ status: string; reason: string; backlog?: boolean }> };
+            revenue?: { opportunitiesOpen?: number; offers?: { total?: number; byStage?: Record<string, number> } };
           } | null;
           const lines: string[] = lifeIntent.kind === 'greeting' ? ["Hey — good to see you. Here's where things stand:"] : [];
           if (life.focus) lines.push(`Focus: ${life.focus.project}.`);
@@ -973,6 +974,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             const stale = Date.now() - new Date(String(s.generatedAt)).getTime() > 45 * 60 * 1000;
             lines.push(`System: deployment ${s.deployment?.verdict ?? 'UNKNOWN'} · health ${s.applicationHealth} · commit ${s.deployment?.actualCommit ?? '?'}${stale ? ' (snapshot stale)' : ''}.`);
             lines.push(`Work: ${s.work?.goalsOpen ?? 0} open goals · ProtoForge: ${s.protoforge?.opportunitiesTotal ?? 0} opportunities (${s.protoforge?.pendingReview ?? 0} pending review).`);
+            const offerStages = s.revenue?.offers?.total
+              ? ' · offers: ' + Object.entries(s.revenue.offers.byStage ?? {}).map(([st, n]) => `${n} ${st}`).join(', ')
+              : '';
+            lines.push(`Revenue: ${s.revenue?.opportunitiesOpen ?? 0} open opportunities${offerStages} — read-only, no reconciled-revenue claim.`);
             const open = (s.humanActions?.items ?? []).filter((i) => i.status === 'OPEN' && !i.backlog);
             // Lifecycle-classified view — enabled only via approved
             // evolution flag; read-only, never resolves anything.
@@ -1595,6 +1600,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             protoforge?: { opportunitiesTotal?: number; pendingReview?: number };
             nextAction?: { kind: string; reason?: string; capabilityId?: string };
             humanActions?: { open?: number; items?: Array<{ id: string; status: string; reason: string; backlog?: boolean }> };
+            revenue?: { opportunitiesOpen?: number; offers?: { total?: number; byStage?: Record<string, number> } };
           } | null;
           const lines: string[] = [];
           if (life.focus) lines.push(`Focus: ${life.focus.project}.`);
@@ -1602,6 +1608,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             const stale = Date.now() - new Date(String(s.generatedAt)).getTime() > 45 * 60 * 1000;
             lines.push(`System: deployment ${s.deployment?.verdict ?? 'UNKNOWN'} · health ${s.applicationHealth} · commit ${s.deployment?.actualCommit ?? '?'}${stale ? ' (snapshot stale)' : ''}.`);
             lines.push(`Work: ${s.work?.goalsOpen ?? 0} open goals · ProtoForge: ${s.protoforge?.opportunitiesTotal ?? 0} opportunities (${s.protoforge?.pendingReview ?? 0} pending review).`);
+            const offerStages = s.revenue?.offers?.total
+              ? ' · offers: ' + Object.entries(s.revenue.offers.byStage ?? {}).map(([st, n]) => `${n} ${st}`).join(', ')
+              : '';
+            lines.push(`Revenue: ${s.revenue?.opportunitiesOpen ?? 0} open opportunities${offerStages} — read-only, no reconciled-revenue claim.`);
             const open = (s.humanActions?.items ?? []).filter((i) => i.status === 'OPEN' && !i.backlog);
             // Lifecycle-classified view — enabled only via approved
             // evolution flag; read-only, never resolves anything.
