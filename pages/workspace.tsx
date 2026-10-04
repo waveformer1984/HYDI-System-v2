@@ -115,7 +115,11 @@ function Chat({ agent }: { agent: string }) {
       const r = await fetch('/api/chat', { method: 'POST', headers, body: JSON.stringify({ message: m, session_id: 'workspace', user_id: 'j', agent: agent === 'heidi' ? undefined : agent }) });
       const text = await r.text();
       const content = [...text.matchAll(/"content":"((?:[^"\\]|\\.)*)"/g)].map(x => JSON.parse(`"${x[1]}"`)).join('');
-      setMsgs(v => [...v.slice(0, -1), { role: 'agent', text: content || '(no content)' }]);
+      let reply;
+      if (content) reply = content;
+      else if (!r.ok) { try { const j = JSON.parse(text); reply = `HTTP ${r.status} — ${j.error ?? text}`; } catch { reply = `HTTP ${r.status} — ${text || '(empty response)'}`; } }
+      else reply = '(no content)';
+      setMsgs(v => [...v.slice(0, -1), { role: 'agent', text: reply }]);
     } catch (e) { setMsgs(v => [...v.slice(0, -1), { role: 'agent', text: `error: ${e}` }]); }
     setBusy(false);
   };
@@ -342,19 +346,33 @@ export default function Workspace() {
   const [proposalsError, setProposalsError] = useState<string | null>(null);
   const [focusProposal, setFocusProposal] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [secretDraft, setSecretDraft] = useState('');
   const load = async () => {
     const headers = await serviceHeaders();
     const [stateR, propR] = await Promise.all([
       fetch('/api/workspace/state', { headers }),
       fetch('/api/proposals', { headers }).catch(() => null),
     ]);
-    stateR.json().then(setS).catch(e => setErr(String(e)));
+    if (stateR.ok) {
+      stateR.json().then(setS).catch(e => setErr(String(e)));
+      setErr(null);
+    } else {
+      const j = await stateR.json().catch(() => null);
+      setErr(j?.error ?? `HTTP ${stateR.status}`);
+    }
     if (propR) {
       propR.json().then(j => {
         if (propR.ok) { setProposals(j); setProposalsError(null); }
         else setProposalsError(j.error ?? `HTTP ${propR.status}`);
       }).catch(() => setProposalsError(`HTTP ${propR.status}`));
     }
+  };
+  const saveSecret = () => {
+    const v = secretDraft.trim();
+    if (!v) return;
+    localStorage.setItem(SERVICE_SECRET_KEY, v);
+    setSecretDraft('');
+    load();
   };
   const reload = load;
   useEffect(() => {
@@ -364,19 +382,20 @@ export default function Workspace() {
   }, []);
 
   const healthColor = s?.system?.health === 'HEALTHY' ? C.ok : s?.system?.health ? C.warn : C.dim;
+  const authFailed = !!err && /unauthorized|401/i.test(err);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: '#020617', color: '#e2e8f0', fontFamily: 'ui-monospace, Menlo, monospace' }}>
       <header style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '10px 16px', borderBottom: '1px solid #1e293b' }}>
         <strong style={{ fontSize: 14, letterSpacing: 2 }}>PROTOFORGE</strong>
         <span style={st(C.dim)}>heidi workspace</span>
-        {s && <>
+        {s?.system && <>
           <span style={{ marginLeft: 'auto', ...st(healthColor) }}>● {s.system.health}{s.system.cooStale ? ' (stale)' : ''}</span>
           <span style={st(C.accent)}>AUTONOMY {s.system.autonomyLevel} · {s.system.autonomyName}</span>
-          <span style={st(C.dim)}>{s.engineering.head}</span>
+          <span style={st(C.dim)}>{s.engineering?.head}</span>
         </>}
       </header>
-      {s && <TelemetryBanner eng={s.engineering} />}
+      {s?.engineering && <TelemetryBanner eng={s.engineering} />}
       <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
         <nav style={{ width: 130, borderRight: '1px solid #1e293b', padding: 8 }}>
           {NAV.map(n => (
@@ -387,8 +406,24 @@ export default function Workspace() {
           ))}
         </nav>
         <main style={{ flex: 1, overflowY: 'auto', padding: 14 }}>
-          {err && <Card title="error" tone={C.bad}>{err}</Card>}
-          {!s ? <Card title="loading">reading live state…</Card> : <>
+          {err && (
+            <Card title={authFailed ? 'authentication required' : 'error'} tone={authFailed ? C.warn : C.bad}>
+              {err}
+              {authFailed && (
+                <div style={{ marginTop: 8 }}>
+                  <input
+                    type="password" value={secretDraft} onChange={e => setSecretDraft(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && saveSecret()}
+                    placeholder="HYDI_SERVICE_SECRET"
+                    style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 6, color: '#e2e8f0', padding: '6px 10px', fontSize: 12, width: 280, marginRight: 8 }}
+                  />
+                  <button onClick={saveSecret} style={{ background: '#1e293b', color: '#e2e8f0', border: '1px solid #334155', borderRadius: 6, padding: '6px 14px', fontSize: 12, cursor: 'pointer' }}>set secret</button>
+                  <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>stored in localStorage as <code>hydi.serviceSecret</code> — mints the service token this console&apos;s governed endpoints require.</div>
+                </div>
+              )}
+            </Card>
+          )}
+          {!s ? <Card title="loading">{authFailed ? 'waiting for service secret…' : 'reading live state…'}</Card> : <>
             {tab === 'chat' && (
               <ChatTab
                 pending={proposals?.recommended ?? []}
