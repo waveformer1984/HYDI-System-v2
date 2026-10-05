@@ -26,7 +26,8 @@ export type CooIntent =
   | 'protoforge'   // "what is protoforge finding"
   | 'revenue'      // "what is blocking revenue"
   | 'evidence'     // "show me the evidence"
-  | 'why';         // "why did you choose that"
+  | 'why'          // "why did you choose that"
+  | 'needs';       // "what do you need to be better", "what's limiting you"
 
 /**
  * Classify an operational question. Returns null when the message is not
@@ -36,6 +37,9 @@ export type CooIntent =
 export function classifyCooIntent(message: string): CooIntent | null {
   const m = message.toLowerCase().trim();
 
+  // Self-assessment — what the system needs/lacks to be better. Must
+  // fire before 'attention' ("do you need") and 'why' catch-alls.
+  if (/\bneed to be better\b|\bmake (you|this|it|heidi) (better|stronger|smarter|more capable)\b|\b(what|how) (would|could|can|do) (you|i) (get )?(better|improve|more capable)\b|\b(your|my|its|heidi'?s) (biggest )?(limitations?|weakness(es)?|blockers?|constraints?|shortfalls?)\b|\bholding (you|me|it) back\b|\bmissing to\b|\bneed to (improve|get better|grow)\b/i.test(m)) return 'needs';
   if (/\b(why|reason|justify|explain)\b/.test(m) && /\b(action|choose|chose|decision|that|next)\b/.test(m)) return 'why';
   if (/\bevidence\b|\bproof\b|\bprove\b/.test(m)) return 'evidence';
   if (/\bprotoforge\b|\bscout\b|\bopportunit/.test(m)) return 'protoforge';
@@ -170,5 +174,32 @@ export function answerFromCooState(s: CooState, intent: CooIntent, stale: boolea
       return `Evidence: latest coo_state snapshot generated ${s.generatedAt} — deployment ${s.deployment.verdict} (commit ${s.deployment.actualCommit}), identity ${s.deployment.identity}. Persisted in heidi_events; ask for 'status' for the full brief.${staleness}`;
     case 'why':
       return `Next action selected: ${fmtNextAction(s.nextAction)}. Selection is deterministic — deployment truth first, then pending human gates, then fresh incidents, then routine work.${staleness}`;
+    case 'needs': {
+      // Honest self-assessment: everything listed is an open durable need,
+      // grouped by what the human must supply vs what I'm handling myself.
+      const open = s.humanActions.items.filter((i) => i.status === 'OPEN' && !i.backlog);
+      const fromYou: string[] = [];
+      const customers = open.filter((i) => i.category === 'customer_required');
+      if (customers.length > 0) {
+        fromYou.push(`a real customer email — ${customers.length} CHECKOUT_READY offer(s) (${customers.map((i) => String(i.evidence?.offerId ?? i.id)).join(', ')}) cannot sell without one`);
+      }
+      const caps = open.filter((i) => i.source === 'authorization_escalation');
+      if (caps.length > 0) {
+        fromYou.push(`${caps.length} capability authorization decision(s) — grant or dismiss (${caps.slice(0, 3).map((i) => i.reason).join('; ')}${caps.length > 3 ? `, +${caps.length - 3} more` : ''})`);
+      }
+      const decisions = open.filter((i) => !customers.includes(i) && !caps.includes(i));
+      if (decisions.length > 0) {
+        fromYou.push(`${decisions.length} other human decision(s): ${decisions.slice(0, 2).map((i) => i.reason).join('; ')}`);
+      }
+      const lines = ['What I need — answered from durable state, not self-assessment guesswork:'];
+      lines.push(fromYou.length > 0
+        ? `  From you:\n${fromYou.map((f) => `    - ${f}`).join('\n')}`
+        : '  From you: nothing pending right now.');
+      const selfBits: string[] = [];
+      if (s.nextAction.kind !== 'none') selfBits.push(`next self-directed step — ${fmtNextAction(s.nextAction)}`);
+      if (s.deployment.verdict !== 'QUALIFIED') selfBits.push(`deployment verdict is ${s.deployment.verdict}`);
+      if (selfBits.length > 0) lines.push(`  From me: ${selfBits.join('; ')}`);
+      return `${lines.join('\n')}${staleness}`;
+    }
   }
 }

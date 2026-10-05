@@ -48,6 +48,10 @@ describe('classifyCooIntent', () => {
     ['show me checkout-ready offers', 'revenue'],
     ['show me the evidence', 'evidence'],
     ['why did you choose that next action?', 'why'],
+    ['what do you need to be better?', 'needs'],
+    ['what would make you more capable?', 'needs'],
+    ['what are your biggest limitations right now?', 'needs'],
+    ["what's holding you back?", 'needs'],
   ])('"%s" → %s', (msg, expected) => {
     expect(classifyCooIntent(msg)).toBe(expected);
   });
@@ -99,6 +103,47 @@ describe('answerFromCooState', () => {
     const out = answerFromCooState(state(), 'status', true);
     expect(out).toContain('SNAPSHOT STALE');
     expect(out).toContain('2026-09-22T16:19:09Z');
+  });
+
+  test('needs answers from durable state — customer boundary, capability decisions, self-directed work', () => {
+    const s = state({
+      humanActions: {
+        open: 3,
+        backlogRowCount: 7222,
+        items: [
+          {
+            id: 'offer:o1', source: 'commercial_offer', category: 'customer_required', priority: 1,
+            status: 'OPEN', reason: 'offer-acf357e977ba CHECKOUT_READY — cannot advance: no legitimate customer identity',
+            requestedAction: 'provide customer identity', evidence: { offerId: 'offer-acf357e977ba' },
+            authorizationLevel: 'R2', backlog: false, createdAt: 't', updatedAt: 't'
+          },
+          {
+            id: 'auth:cap1', source: 'authorization_escalation', category: 'capability_authorization', priority: 1,
+            status: 'OPEN', reason: 'grant or dismiss authorization for ops.agent_supervise',
+            requestedAction: 'decide', evidence: {}, authorizationLevel: 'R3', backlog: false, createdAt: 't', updatedAt: 't'
+          },
+          {
+            id: 'int:1', source: 'intervention', category: 'customer_validation_hypothesis', priority: 1,
+            status: 'OPEN', reason: 'Customer contact requires explicit human approval',
+            requestedAction: 'run interviews', evidence: {}, authorizationLevel: 'R3', backlog: false, createdAt: 't', updatedAt: 't'
+          },
+        ],
+      },
+      nextAction: { kind: 'capability', capabilityId: 'ops.recover_daemon_r0', reason: 'deployment drift detected' },
+      deployment: { ...state().deployment, verdict: 'DEPLOYMENT_DRIFT' },
+    });
+    const out = answerFromCooState(s, 'needs', false);
+    expect(out).toContain('a real customer email');
+    expect(out).toContain('offer-acf357e977ba');
+    expect(out).toContain('1 capability authorization decision');
+    expect(out).toContain('1 other human decision');
+    expect(out).toContain('ops.recover_daemon_r0');
+    expect(out).toContain('DEPLOYMENT_DRIFT');
+  });
+
+  test('needs with a clean queue says nothing is needed', () => {
+    const out = answerFromCooState(state(), 'needs', false);
+    expect(out).toContain('nothing pending right now');
   });
 
   test('revenue answer never claims reconciled revenue', () => {

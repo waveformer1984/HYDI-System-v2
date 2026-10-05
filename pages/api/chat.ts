@@ -59,6 +59,13 @@ function refuseUnauthorized(res: NextApiResponse, what: string): void {
   res.end();
 }
 
+/** Clip at a word boundary so labels never cut mid-word ("no legit"). */
+function clip(s: string, n: number): string {
+  if (s.length <= n) return s;
+  const cut = s.lastIndexOf(' ', n);
+  return (cut > n * 0.5 ? s.slice(0, cut) : s.slice(0, n)).trimEnd() + '…';
+}
+
 // Lazy Supabase client — timed transport: without it, a degraded
 // PostgREST/Kong makes every call hang 60s+ (froze chat ~89s). Direct
 // pg for the hot Command Center paths lives in CHAT_POOL below.
@@ -781,11 +788,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
               .select('title, status, created_at')
               .or('title.ilike.Investigate:%,title.ilike.Fix confirmed defect:%')
               .order('created_at', { ascending: false }).limit(8);
+            const goalGroups = new Map<string, { status: string; n: number }>();
+            for (const g of goals ?? []) {
+              const e = goalGroups.get(g.title) ?? { status: g.status, n: 0 };
+              e.n++; goalGroups.set(g.title, e);
+            }
             const lines = [
               `Recent investigations:`,
-              ...(invs.length ? invs.map((r: { conclusion: string; target: string; confidence: string }) => `  ${r.conclusion} (${r.confidence}) — ${r.target}`) : ['  none yet']),
+              ...(invs.length ? invs.map((r: { conclusion: string; target?: string; question?: string; confidence: string }) =>
+                `  ${r.conclusion} (${r.confidence}) — ${clip(r.target || r.question || 'unspecified target', 80)}`) : ['  none yet']),
               `Dev goals:`,
-              ...((goals ?? []).map((g: { title: string; status: string }) => `  [${g.status}] ${g.title.slice(0, 100)}`)),
+              ...[...goalGroups.entries()].map(([title, e]) => `  [${e.status}] ${clip(title, 90)}${e.n > 1 ? ` (×${e.n})` : ''}`),
             ];
             sse(res, { type: 'metadata', model_used: 'dev-status', latency: 0 });
             sse(res, { type: 'content', content: lines.join('\n') });
@@ -994,11 +1007,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
               if (actionable.length + decisions.length === 0) {
                 lines.push(`Nothing actionable needs you${muted ? ` (${muted} standing-policy item(s) muted)` : ''}.`);
               } else {
-                lines.push(`Needs you: ${[...actionable, ...decisions].slice(0, 3).map((c) => c.item.reason.slice(0, 60)).join(' | ')}${muted ? `  (+${muted} standing-policy muted)` : ''}`);
+                lines.push(`Needs you: ${[...actionable, ...decisions].slice(0, 3).map((c) => clip(c.item.reason, 80)).join(' | ')}${muted ? `  (+${muted} standing-policy muted)` : ''}`);
               }
             } else {
               lines.push(open.length > 0
-                ? `Needs you: ${open.slice(0, 3).map((i) => i.reason.slice(0, 60)).join(' | ')}`
+                ? `Needs you: ${open.slice(0, 3).map((i) => clip(i.reason, 80)).join(' | ')}`
                 : 'Nothing currently needs your attention.');
             }
             const na = s.nextAction;
@@ -1377,7 +1390,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           const items = ((acts?.[0]?.payload as { items?: Array<{ status: string; reason: string; backlog?: boolean }> })?.items ?? [])
             .filter((i) => i.status === 'OPEN' && !i.backlog);
           lines.push(items.length > 0
-            ? `Waiting on you: ${items.slice(0, 2).map((i) => i.reason.slice(0, 60)).join(' | ')}`
+            ? `Waiting on you: ${items.slice(0, 2).map((i) => clip(i.reason, 80)).join(' | ')}`
             : 'Nothing is waiting on your approval.');
           if (life.notes.length > 0) lines.push(`Recent note: "${life.notes[0].slice(0, 80)}"`);
           text = lines.join('\n');
@@ -1630,11 +1643,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
               if (actionable.length + decisions.length === 0) {
                 lines.push(`Nothing actionable needs you${muted ? ` (${muted} standing-policy item(s) muted)` : ''}.`);
               } else {
-                lines.push(`Needs you: ${[...actionable, ...decisions].slice(0, 3).map((c) => c.item.reason.slice(0, 60)).join(' | ')}${muted ? `  (+${muted} standing-policy muted)` : ''}`);
+                lines.push(`Needs you: ${[...actionable, ...decisions].slice(0, 3).map((c) => clip(c.item.reason, 80)).join(' | ')}${muted ? `  (+${muted} standing-policy muted)` : ''}`);
               }
             } else {
               lines.push(open.length > 0
-                ? `Needs you: ${open.slice(0, 3).map((i) => i.reason.slice(0, 60)).join(' | ')}`
+                ? `Needs you: ${open.slice(0, 3).map((i) => clip(i.reason, 80)).join(' | ')}`
                 : 'Nothing currently needs your attention.');
             }
             const na = s.nextAction;
