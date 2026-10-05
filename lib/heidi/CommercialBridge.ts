@@ -103,8 +103,8 @@ export async function collectOffers(pool: Pick<Pool, 'query'>): Promise<Commerci
         stage: (p.stage as CommercialStage) ?? 'OFFER_PREPARED',
         stageReason: (p.stageReason as string) ?? null,
         evidenceSummary: (p.evidenceSummary as string) ?? null,
-        createdAt: existing?.createdAt ?? r.created_at,
-        updatedAt: r.created_at,
+        createdAt: existing?.createdAt ?? new Date(r.created_at).toISOString(),
+        updatedAt: new Date(r.created_at).toISOString(),
       });
     } else if (r.event_type === 'commercial_offer_transition') {
       const offerId = String(p.offerId);
@@ -112,7 +112,7 @@ export async function collectOffers(pool: Pick<Pool, 'query'>): Promise<Commerci
       if (o) {
         o.stage = p.newStage as CommercialStage;
         o.stageReason = (p.stageReason as string) ?? null;
-        o.updatedAt = r.created_at;
+        o.updatedAt = new Date(r.created_at).toISOString();
       }
     }
   }

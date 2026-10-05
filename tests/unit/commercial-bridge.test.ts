@@ -88,6 +88,23 @@ describe('CommercialBridge', () => {
     expect(offers[0].stage).toBe('AUTHORIZATION_REQUIRED');
   });
 
+  it('createdAt/updatedAt are ISO strings even when pg returns Date objects', async () => {
+    // Regression: the real pg driver returns created_at as Date, not string.
+    // With ≥2 same-priority queue items, HumanActionQueue's sort called
+    // .localeCompare on the Date and crashed collectCooState.
+    const events = [
+      { event_type: 'commercial_offer', payload: { offerId: 'offer-x', opportunityId: 'opp-x', product: 'protoforge_model_prep', priceCents: 2900, currency: 'usd', stage: 'CHECKOUT_READY' }, created_at: new Date('2026-10-05T00:00:00Z') },
+      { event_type: 'commercial_offer_transition', payload: { offerId: 'offer-x', newStage: 'AUTHORIZATION_REQUIRED' }, created_at: new Date('2026-10-05T01:00:00Z') },
+    ];
+    const pool = { query: async () => ({ rows: events }) };
+    const offers = await collectOffers(pool as any);
+    expect(typeof offers[0].createdAt).toBe('string');
+    expect(typeof offers[0].updatedAt).toBe('string');
+    expect(offers[0].createdAt).toBe('2026-10-05T00:00:00.000Z');
+    expect(offers[0].updatedAt).toBe('2026-10-05T01:00:00.000Z');
+    expect(offers[0].stage).toBe('AUTHORIZATION_REQUIRED');
+  });
+
   it('checkoutPrereqs fails closed for unknown products', () => {
     const p = checkoutPrereqs('nonexistent_product');
     expect(p.ready).toBe(false);

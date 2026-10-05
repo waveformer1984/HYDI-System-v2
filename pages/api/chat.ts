@@ -1647,22 +1647,76 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           }
           text = lines.join('\n');
         } else if (lifeIntent.kind === 'findings') {
-          // Read-only: summarize the latest agent RESULT messages.
-          const { data: rows } = await sb.from('heidi_events')
+          // Read-only: report the substantive evidence the agents actually
+          // persisted. agent_status COMPLETED rows carry the real result
+          // object (subjectTitle, sourceCount, agreement, siblingCount) —
+          // only fields present in durable records are rendered.
+          const { data: statusRows } = await sb.from('heidi_events')
             .select('payload, created_at')
-            .eq('event_type', 'agent_message')
-            .eq('payload->>type', 'RESULT')
+            .eq('event_type', 'agent_status')
+            .eq('payload->>status', 'COMPLETED')
             .order('created_at', { ascending: false })
-            .limit(8);
-          const results = (rows ?? []) as Array<{ payload: Record<string, unknown>; created_at: string }>;
-          if (results.length === 0) {
-            text = 'No agent results yet — ask me to investigate something first.';
-          } else {
-            const lines = results.map((r) => {
-              const p = r.payload as { from?: string; content?: string; evidence?: unknown };
-              return `  [${String(p.from ?? 'agent').replace(/^agent-/, '')}] ${String(p.content ?? '').slice(0, 110)}`;
+            .limit(12);
+          const done = (statusRows ?? []) as Array<{
+            payload: {
+              agentId?: string; missionId?: string;
+              result?: { subjectTitle?: string; sourceCount?: number | string; agreement?: boolean; siblingCount?: number; summary?: string; children?: string[] };
+              evidence?: Array<{ opportunity?: { id?: string; title?: string } }>;
+            }; created_at: string
+          }>;
+          // Cluster = one investigation. The coordinator's result.children
+          // lists its child mission IDs — the durable provenance link.
+          const childrenOf = (p: (typeof done)[number]['payload']) =>
+            (Array.isArray(p?.result?.children) ? p.result.children : []).map(String);
+          const newest = done[0]?.payload;
+          let members: Set<string> | null = null;
+          if (newest && childrenOf(newest).length > 0) {
+            members = new Set([...childrenOf(newest), String(newest.missionId)]);
+          } else if (newest?.missionId) {
+            const parent = done.find(r => childrenOf(r.payload).includes(String(newest.missionId)));
+            if (parent) members = new Set([...childrenOf(parent.payload), String(parent.payload.missionId)]);
+          }
+          const cluster = members
+            ? done.filter(r => members!.has(String(r.payload?.missionId)))
+            : done.filter(r => {
+              const s = r.payload?.result?.subjectTitle;
+              return Boolean(s) && s === newest?.result?.subjectTitle &&
+                Math.abs(new Date(done[0].created_at).getTime() - new Date(r.created_at).getTime()) < 15 * 60 * 1000;
             });
-            text = `Latest agent findings:\n${lines.join('\n')}\n(full evidence is on the /coo board — click an agent)`;
+          if (cluster.length === 0) {
+            // Fall back to raw RESULT messages when no completed-status
+            // evidence exists yet (e.g. older agent runs).
+            const { data: rows } = await sb.from('heidi_events')
+              .select('payload, created_at')
+              .eq('event_type', 'agent_message')
+              .eq('payload->>type', 'RESULT')
+              .order('created_at', { ascending: false })
+              .limit(8);
+            const results = (rows ?? []) as Array<{ payload: Record<string, unknown>; created_at: string }>;
+            text = results.length === 0
+              ? 'No agent results yet — ask me to investigate something first.'
+              : `Latest agent findings:\n${results.map((r) => {
+                const p = r.payload as { from?: string; content?: string };
+                return `  [${String(p.from ?? 'agent').replace(/^agent-/, '')}] ${String(p.content ?? '').slice(0, 110)}`;
+              }).join('\n')}\n(full evidence is on the /coo board — click an agent)`;
+          } else {
+            const opp = cluster.map(r => r.payload?.evidence?.find(e => e.opportunity?.id)?.opportunity)
+              .find(o => o?.id || o?.title);
+            const header = opp?.title
+              ? `Latest agent findings — investigation of "${opp.title}"${opp.id ? ` (${String(opp.id).slice(0, 8)})` : ''}:`
+              : 'Latest agent findings:';
+            const lines = cluster.map((r) => {
+              const p = r.payload;
+              const role = String(p.agentId ?? 'agent').replace(/^agent-/, '');
+              const parts: string[] = [];
+              if (p.result?.sourceCount != null) parts.push(`${p.result.sourceCount} sources`);
+              if (Array.isArray(p.result?.children) && p.result.children.length > 0) parts.push(`coordinated ${p.result.children.length} agents`);
+              if (p.result?.agreement != null) parts.push(`agreement=${p.result.agreement}${p.result.siblingCount != null ? ` across ${p.result.siblingCount} sibling result(s)` : ''}`);
+              if (parts.length === 0 && p.result?.summary) parts.push(p.result.summary);
+              return `  ${role}: ${parts.join(' · ') || 'completed'}${p.missionId ? ` [${p.missionId}]` : ''}`;
+            });
+            const missions = [...new Set(cluster.map(r => String(r.payload?.missionId)).filter(Boolean))];
+            text = `${header}\n${lines.join('\n')}\n  missions: ${missions.join(', ')}\n(full evidence is on the /coo board — click an agent)`;
           }
         } else if (lifeIntent.kind === 'topic') {
           await remember(sb, user_id, `Current topic: ${lifeIntent.topic}`, session_id);
