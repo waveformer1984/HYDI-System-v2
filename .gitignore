@@ -120,3 +120,8 @@ hydi.db
 .commit-msg-*.txt
 .endurance-report.json
 pm2-state.json
+
+# Rezonate pipeline outputs
+rezonate/swaps/
+rezonate/__pycache__/
+protoforge-applications/rezonate/generated/

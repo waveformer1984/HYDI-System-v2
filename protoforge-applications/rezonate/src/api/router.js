@@ -185,7 +185,8 @@ function createApi(repository, config = {}) {
       project_id: projectId,
       source_path: req.body.source_path,
       prompt: req.body.prompt,
-      clip: req.body.clip
+      clip: req.body.clip,
+      metadata: req.body.metadata
     });
     send(res, { job }, 201);
   }));
@@ -259,6 +260,44 @@ function createApi(repository, config = {}) {
       });
       repository.completeProcessingJob(req.params.id, { assetId: asset.id, bpm: result.bpm, key: result.key });
       return send(res, { job: repository.getProcessingJob(req.params.id), asset });
+    }
+
+    if (raw.type === 'segment_swap') {
+      const m = raw.metadata || {};
+      if (!m.stem || !m.bars) {
+        repository.failProcessingJob(req.params.id, 'metadata.stem and metadata.bars are required for segment_swap');
+        return res.status(400).json({ ok: false, error: 'metadata.stem and metadata.bars are required' });
+      }
+      repository.startProcessingJob(req.params.id);
+      try {
+        const result = await engine.segmentSwap({
+          input: m.input || raw.source_path, stemsDir: m.stemsDir,
+          stem: m.stem, bars: m.bars, segmentBars: m.segmentBars,
+          samples: m.samples, maxReplacements: m.maxReplacements, bpm: m.bpm,
+          plan: !!m.plan, projectId
+        });
+        if (!result.ok) {
+          repository.failProcessingJob(req.params.id, result.error);
+          return res.status(502).json({ ok: false, error: result.error, job: repository.getProcessingJob(req.params.id) });
+        }
+        if (m.plan) {
+          // Preview: segments + ranked samples, no audio rendered.
+          repository.completeProcessingJob(req.params.id, { plan: result });
+          return send(res, { job: repository.getProcessingJob(req.params.id), plan: result }, 200);
+        }
+        const asset = repository.registerAsset(projectId, {
+          type: 'remix', file_path: result.output,
+          metadata: {
+            source: 'segment-swap', manifest: result.manifest, swappedStem: result.swappedStem,
+            stem: m.stem, bars: m.bars, bpm: result.bpm, key: result.key
+          }
+        });
+        repository.completeProcessingJob(req.params.id, { output: result.output, manifest: result.manifest, assetId: asset.id });
+        return send(res, { job: repository.getProcessingJob(req.params.id), asset, result }, 200);
+      } catch (e) {
+        repository.failProcessingJob(req.params.id, e instanceof Error ? e.message : String(e));
+        throw e;
+      }
     }
 
     return res.status(400).json({ ok: false, error: 'unknown task_type' });

@@ -85,6 +85,23 @@ function generate(prompt, withStems) {
   spawnSync('python', args, { stdio: 'inherit' });
 }
 
+function swap(rest) {
+  // swap <stemsDir-or-song> <stem> <bars> [sample query...]
+  //   swap "stems\\Bad Decision Club" drums 4-8 dark drums
+  const parts = rest.match(/"[^"]+"|\S+/g) || [];
+  const [source, stem, bars, ...q] = parts.map(p => p.replace(/^"|"$/g, ''));
+  if (!source || !stem || !bars) {
+    console.log('  usage: swap "<stems folder or song>" <stem> <bars> [sample search]');
+    console.log('  e.g.   swap "stems\\Bad Decision Club" drums 4-8 dark drums');
+    return;
+  }
+  const args = [path.join(HERE, 'segment-swap.py'), '--stem', stem, '--bars', bars];
+  if (/\.(wav|mp3|flac|ogg|m4a)$/i.test(source)) args.push('--input', source); else args.push('--stems-dir', source);
+  if (q.length) args.push('--samples', q.join(' '));
+  console.log('  swapping ' + stem + ' bars ' + bars + '...\n');
+  spawnSync('python', args, { stdio: 'inherit' });
+}
+
 function scan(args) {
   console.log('  scanning your drives...\n');
   spawnSync('node', [path.join(HERE, 'scan-samples.js'), ...args], { stdio: 'inherit' });
@@ -99,6 +116,7 @@ function help() {
     '   song <description>  generate a track with Lyria 3 AND split it into stems',
     '   generate <descr>    just generate a track (no split)',
     '   stems [file]        split a track into stems (default: newest Downloads file)',
+    '   swap <src> <stem> <bars> [search]   replace bars with a matching library sample',
     '   scan [folders...]   re-scan drives and refresh the library',
     '   help                this',
     '   quit                exit',
@@ -113,6 +131,7 @@ function handle(line) {
   if (['quit', 'exit', 'q', 'bye'].includes(first)) { console.log('  later.'); process.exit(0); }
   if (['help', '?', 'commands', 'tools'].includes(first)) return help();
   if (['stems', 'split', 'separate', 'stem'].includes(first)) return makeStems(rest);
+  if (['swap', 'remix', 'replace'].includes(first)) return swap(rest);
   if (['scan', 'rescan', 'reindex', 'refresh'].includes(first)) return scan(rest ? rest.split(/\s+/) : []);
   if (['song'].includes(first)) return generate(rest, true);              // generate + auto-split
   if (['generate', 'gen', 'compose'].includes(first)) return generate(rest, false);

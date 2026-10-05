@@ -102,7 +102,8 @@ class ResonateRepository {
       project_id: input.project_id,
       source_path: input.source_path,
       prompt: input.prompt,
-      clip: input.clip
+      clip: input.clip,
+      metadata: input.metadata
     }, this._pjDeps());
     this.store.create('processing_jobs', job.toJSON());
     this.eventBus.emit('processing.job.created', { entityId: job.id, newState: job.state, timestamp: job.createdAt, metadata: job.metadata });

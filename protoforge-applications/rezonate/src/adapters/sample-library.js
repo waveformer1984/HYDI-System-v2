@@ -1,14 +1,14 @@
 const fs = require('fs');
 const path = require('path');
 
-const defaultCatalogPath = path.join(__dirname, '..', '..', '..', 'rezonate', 'samples-catalog.json');
+const defaultCatalogPath = path.join(__dirname, '..', '..', '..', '..', 'rezonate', 'samples-catalog.json');
 
 class SampleLibraryAdapter {
   constructor(options = {}) {
     this.catalogPath = options.catalogPath || defaultCatalogPath;
     this._read = options.readFile || (p => fs.readFileSync(p, 'utf8'));
     this._catalog = options.catalog || null;
-    this._logger = options.logger || { warn: () => {} };
+    this._logger = options.logger || { warn: () => { } };
   }
 
   _load() {

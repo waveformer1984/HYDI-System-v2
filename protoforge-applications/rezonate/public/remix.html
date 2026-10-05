@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Resonate — Segment Swap</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="hero">
+    <h1>Resonate Remix</h1>
+    <p class="tagline">Replace a section of a track with your own samples — deterministic, bar-aligned.</p>
+  </header>
+
+  <main>
+    <section class="card">
+      <h2>Source</h2>
+      <form id="swap-form">
+        <label>Stems folder (or song path)
+          <input id="f-stems" type="text" required
+            value="C:\Users\Owner\HYDI-System-v2\rezonate\stems\Bad Decision Club" />
+        </label>
+        <div class="row">
+          <label>Target stem
+            <select id="f-stem">
+              <option>drums</option><option>bass</option><option>vocals</option><option>other</option>
+            </select>
+          </label>
+          <label>Bars (e.g. 4-8)
+            <input id="f-bars" type="text" required value="4-8" pattern="\d+(-\d+)?" />
+          </label>
+          <label>Segment size (bars)
+            <input id="f-segbars" type="number" min="1" max="8" value="1" />
+          </label>
+        </div>
+        <label>Sample search
+          <input id="f-samples" type="text" placeholder="e.g. drums, dark loop, rhodes" />
+        </label>
+        <div class="row">
+          <label>BPM (blank = detect)
+            <input id="f-bpm" type="number" min="40" max="240" placeholder="auto" />
+          </label>
+          <label>Max replacements
+            <input id="f-max" type="number" min="1" max="8" value="4" />
+          </label>
+        </div>
+        <div id="swap-error" class="error" hidden></div>
+        <button id="preview-btn" type="button">Preview matches</button>
+        <button id="swap-btn" type="submit">Swap &amp; render</button>
+      </form>
+    </section>
+
+    <section id="preview-card" class="card" hidden>
+      <h2>Matched samples</h2>
+      <div id="preview-body"></div>
+    </section>
+
+    <section id="result-card" class="card" hidden>
+      <h2>Result</h2>
+      <div id="result-body"></div>
+    </section>
+  </main>
+
+  <footer><small>Resonate Remix · deterministic segment-swap engine</small></footer>
+  <script src="remix.js"></script>
+</body>
+</html>
