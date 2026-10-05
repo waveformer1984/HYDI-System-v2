@@ -89,6 +89,14 @@ describe('classifyLifeIntent', () => {
     expect(classifyLifeIntent('are there worthwhile opportunities')).toBeNull();
   });
 
+  test('imperative "do something useful" dispatches governed investigation, never the LLM', () => {
+    expect(classifyLifeIntent('do something useful')).toEqual({ kind: 'investigate_top' });
+    expect(classifyLifeIntent('find something useful to work on')).toEqual({ kind: 'investigate_top' });
+    expect(classifyLifeIntent('Heidi, do something productive')).toEqual({ kind: 'investigate_top' });
+    // Questions/declarations are never actions
+    expect(classifyLifeIntent('did you do something useful?')).toBeNull();
+  });
+
   test('findings intent is read-only recall', () => {
     expect(classifyLifeIntent('what did the agents find')).toEqual({ kind: 'findings' });
     expect(classifyLifeIntent('do the agents agree')).toEqual({ kind: 'findings' });

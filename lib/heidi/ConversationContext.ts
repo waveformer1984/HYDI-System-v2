@@ -270,6 +270,16 @@ export function classifyLifeIntent(message: string): LifeIntent | null {
   if (/^(?:investigate|research|find|look for|scout|dig into|check)\b.*\b(?:opportunit|protoforge|market)/i.test(m)) {
     return { kind: 'investigate_top' };
   }
+  // Imperative work assignment without a target — "do something useful",
+  // "find something useful to work on" (the hint the dev-fix refusal
+  // already tells the operator to say). Dispatches the governed
+  // top-opportunity investigation rather than falling through to the
+  // conversational model, which invents a status apology for a
+  // deterministic system.
+  if (/^(?:(?:go )?(?:do|find|work on|get to work on|start|pick up)\s+(?:me )?(?:something|some(?:thing)?))\b.*\b(?:useful|productive|worthwhile|work)/i.test(m)
+    || /^do something\b/i.test(m)) {
+    return { kind: 'investigate_top' };
+  }
   // "Go investigate the most useful thing", "go ahead with the next
   // useful investigation" — imperative investigation where the target is
   // 'the useful thing' → governed top-opportunity selection.
