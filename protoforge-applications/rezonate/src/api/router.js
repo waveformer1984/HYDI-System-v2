@@ -368,6 +368,98 @@ function createApi(repository, config = {}) {
     send(res, { available, path: engine.enginePath });
   }));
 
+  // ── NFT commerce — real chain via chain adapter ───────────────────
+  // The DB never claims minted/listed/sold without a confirmed receipt;
+  // ownership answers always come from the chain. chain_mode is stamped
+  // on every record: mock | local | testnet | mainnet.
+  let nftService = config.nftService || null;
+  async function nft() {
+    if (!nftService) {
+      const { createChainAdapter } = require('../chain');
+      const { NftService } = require('../nft/service');
+      const chain = await createChainAdapter().init();
+      nftService = new NftService({
+        repository, chain,
+        baseUrl: config.baseUrl || `http://localhost:${config.port || 3001}`,
+        mintToken: process.env.REZONATE_MINT_TOKEN || null,
+        logger: repository ? repository.logger : undefined
+      });
+    }
+    return nftService;
+  }
+
+  app.get('/nft/status', h(async (req, res) => {
+    const s = await nft();
+    send(res, { chain: s.chain.contractAddresses(), blockNumber: await s.chain.blockNumber() });
+  }));
+
+  app.post('/nft/assets', h(async (req, res) => {
+    const s = await nft();
+    send(res, { nftAsset: s.createNftAsset(req.body || {}) }, 201);
+  }));
+
+  app.get('/nft/assets', h(async (req, res) => {
+    const s = await nft();
+    send(res, { nftAssets: s._all('nft_assets') });
+  }));
+
+  app.get('/nft/assets/:id/metadata.json', h(async (req, res) => {
+    const s = await nft();
+    res.json(s.getMetadata(req.params.id)); // raw ERC-721 document, not the {ok} envelope
+  }));
+
+  app.get('/nft/assets/:id', h(async (req, res) => {
+    const s = await nft();
+    const nftAsset = s._get('nft_assets', req.params.id);
+    if (!nftAsset) return res.status(404).json({ ok: false, error: 'NFT asset not found', requestId: req.requestId });
+    const mint = s._all('nft_mints').filter(m => m.asset_id === req.params.id).pop() || null;
+    const listings = s._all('nft_listings').filter(l => l.asset_id === req.params.id);
+    send(res, { nftAsset, mint, listings, metadata: s.getMetadata(req.params.id) });
+  }));
+
+  app.get('/nft/assets/:id/verify', h(async (req, res) => {
+    const s = await nft();
+    send(res, { verification: await s.verify(req.params.id) });
+  }));
+
+  app.post('/nft/assets/:id/mint', h(async (req, res) => {
+    const s = await nft();
+    const { nft: nftAsset, mint } = await s.mint(req.params.id, { wallet: req.body?.wallet, headers: req.headers });
+    send(res, { nftAsset, mint });
+  }));
+
+  app.post('/nft/listings', h(async (req, res) => {
+    const s = await nft();
+    const { nftAssetId, sellerWallet, priceEth } = req.body || {};
+    send(res, { listing: await s.createListing(nftAssetId, { sellerWallet, priceEth }) }, 201);
+  }));
+
+  app.get('/nft/listings', h(async (req, res) => {
+    const s = await nft();
+    send(res, { listings: s._all('nft_listings') });
+  }));
+
+  app.post('/nft/listings/:id/cancel', h(async (req, res) => {
+    const s = await nft();
+    send(res, { listing: await s.cancelListing(req.params.id, { wallet: req.body?.wallet }) });
+  }));
+
+  app.post('/nft/listings/:id/purchase', h(async (req, res) => {
+    const s = await nft();
+    const { sale, listing } = await s.purchase(req.params.id, { buyerWallet: req.body?.buyerWallet });
+    send(res, { sale, listing });
+  }));
+
+  app.get('/nft/sales', h(async (req, res) => {
+    const s = await nft();
+    send(res, { sales: s._all('nft_sales') });
+  }));
+
+  app.post('/nft/sales/:id/reconcile', h(async (req, res) => {
+    const s = await nft();
+    send(res, { sale: s.reconcile(req.params.id) });
+  }));
+
   app.use((err, req, res, next) => {
     const status = err.name === 'ValidationError' ? 400 : err.name === 'NotFoundError' ? 404 : err.name === 'ConflictError' ? 409 : 500;
     res.status(status).json({ ok: false, error: err.message, requestId: req.requestId });

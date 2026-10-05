@@ -19,6 +19,7 @@ import {
   getCapabilityState,
   listVerifiedCapabilities,
   listInoperableCapabilities,
+  getNftStatus,
 } from '../../lib/rezonate/rezonate-client.js';
 import { normalizeRezonateIntent } from '../../lib/rezonate/intent.js';
 import { HeidiController } from '../../pao-system/core/heidi.controller';
@@ -91,31 +92,31 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
-  
+
   try {
     const { message, system } = req.body;
-    
+
     if (!message || !system) {
       return res.status(400).json({
         error: 'Message and system are required'
       });
     }
-    
+
     const systemHandler = systemHandlers[system];
     if (!systemHandler) {
       return res.status(400).json({
         error: `Unknown system: ${system}`
       });
     }
-    
+
     const response = await systemHandler(message, req);
-    
+
     return res.status(200).json({
       response: response,
       system: system,
       timestamp: new Date().toISOString()
     });
-    
+
   } catch (error) {
     console.error('Chat router error:', error);
     return res.status(500).json({
@@ -128,11 +129,11 @@ export default async function handler(req, res) {
 
 async function handleUrsulaMessage(message, request) {
   const lowerMessage = message.toLowerCase();
-  
+
   if (lowerMessage.includes('system status') || lowerMessage.includes('status')) {
     try {
       const { data: heal } = await supabase.rpc('auto_heal_from_trends');
-      
+
       const { data: dash, error: dashError } = await supabase
         .from('system_dashboard')
         .select('*')
@@ -149,24 +150,24 @@ async function handleUrsulaMessage(message, request) {
 
       let response = `${EMOJI[dash.current_status] || '❓'} HYDI Status: ${dash.current_status}\n`;
       response += `${EMOJI[dash.trend_status] || ''} Trend: ${dash.trend_status} — ${dash.trend_reason}\n`;
-      
+
       if (dash.escalation_level !== 'OK') {
         response += `⚠️ Escalation: ${dash.escalation_action} — ${dash.escalation_reason}\n`;
       }
-      
+
       if (heal && heal.healed > 0) {
         response += `🔧 Auto-healed: ${heal.healed} action(s) taken\n`;
       }
-      
+
       response += `📊 Queue: ${dash.jobs_queued} queued | ${dash.jobs_failed} failed | ${dash.events_last_hour} events/hr`;
-      
+
       return response;
     } catch (error) {
       console.error('Ursula status query error:', error);
       return `❓ Ursula: I'm unable to check system status right now. Error: ${error.message}`;
     }
   }
-  
+
   return {
     text: `[Ursula] Processing: "${message}"`,
     actions: []
@@ -175,11 +176,11 @@ async function handleUrsulaMessage(message, request) {
 
 async function handleHeidiMessage(message, request) {
   const lowerMessage = message.toLowerCase();
-  
+
   if (lowerMessage.includes('analyze')) {
     return `🧠 Heidi: Analysis complete. Context integrity: ${await getContextIntegrity()}`;
   }
-  
+
   return {
     text: `[Heidi] Task received: "${message}"`,
     taskId: `task_${Date.now()}`
@@ -189,7 +190,7 @@ async function handleHeidiMessage(message, request) {
 /** @deprecated Chat stub. Replace with call to protoforge/cascade/ or compatibility/cascade-legacy.js. */
 async function legacyHandleCascadeMessage(message, request) {
   const lowerMessage = message.toLowerCase();
-  
+
   if (lowerMessage.includes('process')) {
     const event = extractEventFromMessage(message);
     if (event) {
@@ -197,7 +198,7 @@ async function legacyHandleCascadeMessage(message, request) {
       return `⚡ CASCADE: Event processed - Classification: ${result.classification}, Confidence: ${result.confidence}`;
     }
   }
-  
+
   if (lowerMessage.includes('status')) {
     return `⚡ CASCADE: ${await getCascadeStatus()}`;
   }
@@ -205,14 +206,14 @@ async function legacyHandleCascadeMessage(message, request) {
   if (lowerMessage.includes('quarantine')) {
     return `⚡ CASCADE: Quarantine status - ${await getQuarantineStatus()}`;
   }
-  
+
   return `⚡ CASCADE: Event processing system. Try 'process <event>', 'status', or 'quarantine'.`;
 }
 
 /** @deprecated Chat stub. Replace with call to kilo/index.js. */
 async function legacyHandleKiloMessage(message, request) {
   const lowerMessage = message.toLowerCase();
-  
+
   if (lowerMessage.includes('hypothesis') || lowerMessage.includes('repair')) {
     return `🔧 KILO: Generating repair hypothesis based on current system state... ${await generateHypothesis()}`;
   }
@@ -224,7 +225,7 @@ async function legacyHandleKiloMessage(message, request) {
   if (lowerMessage.includes('manifest')) {
     return `🔧 KILO: Repair manifest ready - ${await getRepairManifest()}`;
   }
-  
+
   return `🔧 KILO: Repair hypothesis engine. Ask about 'hypothesis', 'validate', or 'manifest'.`;
 }
 
@@ -267,11 +268,11 @@ async function legacyHandleProtoForgeMessage(message, request) {
 
 async function handleHyveMessage(message, request) {
   const lowerMessage = message.toLowerCase();
-  
+
   if (lowerMessage.includes('opportunity')) {
     return `🐝 Hyve: Current opportunities - ${await getOpportunities()}`;
   }
-  
+
   if (lowerMessage.includes('collective')) {
     return `🐝 Hyve: Collective status - ${await getCollectiveStatus()}`;
   }
@@ -279,7 +280,7 @@ async function handleHyveMessage(message, request) {
   if (lowerMessage.includes('swarm')) {
     return `🐝 Hyve: Swarm intelligence active - ${await getSwarmStatus()}`;
   }
-  
+
   return `🐝 Hyve: Opportunity collective. Ask about 'opportunity', 'collective', or 'swarm'.`;
 }
 
@@ -289,6 +290,38 @@ async function handleRezonateMessage(message, request) {
   // ── Explicit Rezonate intent normalization (PHASE 4) ──────────────────────────
   const intent = normalizeRezonateIntent(message);
   if (intent.ok) {
+    // Read-only NFT commerce status — answered from the durable store directly,
+    // never routed to an LLM or through the mutating controller path.
+    if (intent.taskType === 'REZONATE_NFT_STATUS') {
+      try {
+        const s = await getNftStatus();
+        const kind = intent.parameters.kind;
+        const minted = s.mints.filter((m) => m.status === 'minted');
+        const listed = s.listings.filter((l) => l.status === 'listed');
+        const sold = s.sales.filter((x) => x.revenue_status === 'SALE_CONFIRMED' || x.revenue_status === 'RECONCILED');
+        const dep = s.deployments[`${s.chainMode}:31337`] || Object.values(s.deployments)[0] || {};
+        const tag = `chain mode: ${s.chainMode}${s.chainMode === 'local' ? ' (local EVM proving chain — not a public testnet)' : ''}`;
+        if (kind === 'minted' || kind === 'verify' || kind === 'status') {
+          if (!minted.length) return `🎵 Rezonate NFT (${tag}): nothing minted yet.`;
+          return `🎵 Rezonate NFT (${tag}): ${minted.length} minted — ` + minted.map((m) =>
+            `token ${m.token_id} on ${m.contract_address} (tx ${m.transaction_hash}, owner ${m.wallet_address}, verified ${m.verified_at ? 'yes' : 'no'})`).join('; ');
+        }
+        if (kind === 'listed') {
+          if (!listed.length) return `🎵 Rezonate NFT (${tag}): nothing currently listed.`;
+          return `🎵 Rezonate NFT (${tag}): ${listed.length} listed — ` + listed.map((l) =>
+            `token ${l.token_id} @ ${l.price_eth} ETH (listing tx ${l.listing_tx})`).join('; ');
+        }
+        if (kind === 'sold') {
+          if (!sold.length) return `🎵 Rezonate NFT (${tag}): no confirmed sales yet.`;
+          const total = sold.reduce((a, x) => a + Number(x.price_eth || 0), 0);
+          return `🎵 Rezonate NFT (${tag}): ${sold.length} sale(s), ${total} ETH gross — ` +
+            sold.map((x) => `${x.price_eth} ETH, tx ${x.transaction_hash}, ${x.revenue_status}`).join('; ') +
+            `. Note: ${s.chainMode} chain — not fiat revenue.`;
+        }
+      } catch (e) {
+        return `🎵 Rezonate NFT: VERIFICATION_BLOCKED — could not read durable state (${e.message})`;
+      }
+    }
     try {
       const result = await getHeidiController().processUserEvent(intent.taskType, intent.parameters, 'owner');
       if (result?.ok) {
@@ -522,18 +555,18 @@ async function handleInfrastructureMessage(message, request) {
     if (lowerMessage.includes('health')) {
       const statusEmoji = { OK: '✅', WARNING: '⚠️', CRITICAL: '🔴' }[dash.current_status] ?? '❓'
       return `🏗️ Infrastructure Health: ${statusEmoji} ${dash.current_status}\n` +
-             `Trend: ${dash.trend_status} (${dash.trend_reason})\n` +
-             `Queue: ${dash.jobs_queued} queued, ${dash.jobs_failed} failed, ${dash.jobs_dead} dead\n` +
-             `Events (1h): ${dash.events_last_hour} | Auto-heals (24h): ${dash.auto_heals_24h}`
+        `Trend: ${dash.trend_status} (${dash.trend_reason})\n` +
+        `Queue: ${dash.jobs_queued} queued, ${dash.jobs_failed} failed, ${dash.jobs_dead} dead\n` +
+        `Events (1h): ${dash.events_last_hour} | Auto-heals (24h): ${dash.auto_heals_24h}`
     }
 
     if (lowerMessage.includes('resources') || lowerMessage.includes('queue')) {
       return `🏗️ Resource Usage:\n` +
-             `• Jobs queued: ${dash.jobs_queued}\n` +
-             `• Jobs failed: ${dash.jobs_failed}\n` +
-             `• Jobs dead: ${dash.jobs_dead}\n` +
-             `• Avg queue size: ${dash.avg_queue_size}\n` +
-             `• Critical: ${dash.critical_pct}% | Warning: ${dash.warning_pct}%`
+        `• Jobs queued: ${dash.jobs_queued}\n` +
+        `• Jobs failed: ${dash.jobs_failed}\n` +
+        `• Jobs dead: ${dash.jobs_dead}\n` +
+        `• Avg queue size: ${dash.avg_queue_size}\n` +
+        `• Critical: ${dash.critical_pct}% | Warning: ${dash.warning_pct}%`
     }
 
     if (lowerMessage.includes('alerts') || lowerMessage.includes('escalation')) {
@@ -541,8 +574,8 @@ async function handleInfrastructureMessage(message, request) {
         return `🏗️ Alerts: No active escalations. System is stable.`
       }
       return `🏗️ ALERT: ${dash.escalation_level} escalation active!\n` +
-             `Action: ${dash.escalation_action}\n` +
-             `Reason: ${dash.escalation_reason}`
+        `Action: ${dash.escalation_action}\n` +
+        `Reason: ${dash.escalation_reason}`
     }
   } catch (err) {
     return `🏗️ Infrastructure Error: ${err.message}`

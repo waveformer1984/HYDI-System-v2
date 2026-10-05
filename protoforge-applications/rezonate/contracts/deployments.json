@@ -1,0 +1,11 @@
+{
+  "local:31337": {
+    "nft": "0xd95790e919DE01C89C4c1d5719814D370f6154d1",
+    "market": "0x71138f686bc920fEEA6D9711DFd6a269eCC864e2",
+    "deployer": "0x8B8cEbB933c0283E38705CaF3FEb5a4dF471fdA3",
+    "feeBps": 250,
+    "deployedAt": "2026-10-05T23:22:22.960Z",
+    "mode": "local",
+    "chainId": 31337
+  }
+}

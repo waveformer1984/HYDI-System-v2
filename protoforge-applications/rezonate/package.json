@@ -8,13 +8,21 @@
     "dev": "node --watch src/index.js",
     "test": "node --test tests/**/*.test.js"
   },
-  "keywords": ["protoforge", "rezonate", "resonate", "audio"],
+  "keywords": [
+    "protoforge",
+    "rezonate",
+    "resonate",
+    "audio"
+  ],
   "author": "",
   "license": "UNLICENSED",
   "dependencies": {
+    "@openzeppelin/contracts": "^5.1.0",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
-    "express": "^4.19.2"
-  },
-  "devDependencies": {}
+    "ethers": "^6.13.4",
+    "express": "^4.19.2",
+    "ganache": "^7.9.2",
+    "solc": "^0.8.26"
+  }
 }

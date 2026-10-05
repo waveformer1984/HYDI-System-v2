@@ -159,6 +159,21 @@
       "notes": "Reuses cached stems — Demucs runs only when a song lacks them. plan=true previews ranked samples without rendering. Unknown BPM/key is refused or recorded as unknown, never guessed."
     },
     {
+      "id": "nft_commerce",
+      "name": "NFT Commerce (mint → list → sale → verified ownership)",
+      "category": "Commerce",
+      "state": "VERIFIED",
+      "module_path": "protoforge-applications/rezonate/src/nft/service.js + src/chain/evm-chain-adapter.js + contracts/RezonateNFT.sol + contracts/RezonateMarket.sol",
+      "evidence": "Real EVM proof 2026-10-05: contract deploy, mint (token 1, tx 0xb4dc92f9…), escrowed fixed-price listing, purchase (tx 0xd2aa770f…), on-chain ownership transfer independently verified, sale reconciled (2.5% platform fee). Executed on a real local EVM (ganache, chainId 31337) — genuine chain state, not simulated.",
+      "last_verified": "2026-10-05",
+      "verified_by": "devin-nft-commerce-mission",
+      "consumers": [
+        "protoforge-applications/rezonate/src/api/router.js",
+        "protoforge-applications/rezonate/public/market.html"
+      ],
+      "notes": "BOUNDARY: proven on a local real EVM only. Public testnet needs REZONATE_CHAIN_RPC + funded REZONATE_DEPLOYER_KEY; mainnet additionally requires ALLOW_LIVE_CHAIN=true. Chat may REPORT NFT state (REZONATE_NFT_STATUS) but minting/selling via chat stays FORBIDDEN — consequential on-chain actions belong to the authorized API surface."
+    },
+    {
       "id": "midi_note_mapping",
       "name": "MIDI Note Mapping",
       "category": "MIDI",
