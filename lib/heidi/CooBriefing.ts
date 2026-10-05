@@ -92,7 +92,10 @@ function revenueLine(s: CooState): string {
   const boundary = offers && offers.boundary.length > 0
     ? ` | boundary: ${offers.boundary.map((b) => `${b.offerId} ${b.stage} (${b.reason ?? 'unspecified'})`).join('; ')}`
     : '';
-  return `${s.revenue.opportunitiesOpen} open opportunities · offers: ${stageSummary}${ready}${boundary} (read-only — no reconciled-revenue claim)`;
+  const fixtures = offers && (offers.testOffers ?? 0) > 0
+    ? ` · ${offers.testOffers} test fixture(s) excluded — not sellable inventory`
+    : '';
+  return `${s.revenue.opportunitiesOpen} open opportunities · offers: ${stageSummary}${ready}${boundary}${fixtures} (read-only — no reconciled-revenue claim)`;
 }
 
 /**

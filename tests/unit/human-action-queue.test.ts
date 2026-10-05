@@ -204,6 +204,23 @@ describe('collectHumanActionQueue', () => {
     expect(ready.requestedAction).toMatch(/governed revenue\.advance_offer/);
     expect(q.open).toBe(2);
   });
+
+  test('test-fixture offers never become a customer boundary', async () => {
+    const q = await collectHumanActionQueue(pool({
+      commercial: [
+        {
+          event_type: 'commercial_offer', created_at: '2026-09-22T10:00:00Z', payload: {
+            offerId: 'offer-fx1', opportunityId: 'test-fixture-opp-001',
+            opportunityTitle: 'TEST FIXTURE — lifecycle proof (not a real customer)',
+            product: 'protoforge_model_prep', actor: 'test-fixture',
+            priceCents: 2900, currency: 'usd', stage: 'CHECKOUT_READY'
+          }
+        },
+      ],
+    }) as any);
+    expect(q.items.find((i) => i.id === 'offer:offer-fx1')).toBeUndefined();
+    expect(q.open).toBe(0);
+  });
 });
 
 describe('acknowledgeHumanAction — governed write', () => {

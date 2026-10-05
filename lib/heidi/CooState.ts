@@ -72,8 +72,12 @@ export interface CooState {
       /** Offers parked at a human boundary (AUTHORIZATION_REQUIRED or
           OFFER_BLOCKED), each with its durable stage reason. */
       boundary: Array<{ offerId: string; stage: string; reason: string | null }>;
-      /** Sellable offers — CHECKOUT_READY with price identity. */
+      /** Sellable offers — CHECKOUT_READY with price identity. Test
+          fixtures are excluded: they are evidence, not inventory. */
       ready: Array<{ offerId: string; product: string; priceCents: number; currency: string }>;
+      /** Durable offers minted by test/qualification fixtures — kept out
+          of every sellable surface. Optional: absent in older snapshots. */
+      testOffers?: number;
     };
   };
   /** Multi-agent control plane (event-sourced, survives restart). */
@@ -190,20 +194,22 @@ export async function collectCooState(deps: CooDeps): Promise<CooState> {
   );
 
   const offers = await safe(() => collectOffers(deps.pool), []);
+  const real = offers.filter((o) => !o.isTest);
   const offersSummary = {
-    total: offers.length,
-    byStage: offers.reduce<Record<string, number>>((acc, o) => {
+    total: real.length,
+    byStage: real.reduce<Record<string, number>>((acc, o) => {
       acc[o.stage] = (acc[o.stage] ?? 0) + 1;
       return acc;
     }, {}),
-    boundary: offers
+    boundary: real
       .filter((o) => o.stage === 'AUTHORIZATION_REQUIRED' || o.stage === 'OFFER_BLOCKED')
       .slice(0, 5)
       .map((o) => ({ offerId: o.offerId, stage: o.stage, reason: o.stageReason })),
-    ready: offers
+    ready: real
       .filter((o) => o.stage === 'CHECKOUT_READY')
       .slice(0, 5)
       .map((o) => ({ offerId: o.offerId, product: o.product, priceCents: o.priceCents, currency: o.currency })),
+    testOffers: offers.filter((o) => o.isTest).length,
   };
 
   const events24h = await safe(async () => {

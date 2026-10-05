@@ -341,13 +341,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
               offerId: o.offerId, opportunityId: o.opportunityId.slice(0, 8),
               title: o.opportunityTitle.slice(0, 80), product: o.product,
               priceCents: o.priceCents, stage: o.stage, stageReason: o.stageReason,
+              isTest: o.isTest,
               updatedAt: o.updatedAt,
             })),
             counts: {
-              prepared: offers.filter(o => o.stage === 'OFFER_PREPARED').length,
-              checkoutReady: offers.filter(o => o.stage === 'CHECKOUT_READY').length,
-              blocked: offers.filter(o => o.stage === 'OFFER_BLOCKED').length,
-              authRequired: offers.filter(o => o.stage === 'AUTHORIZATION_REQUIRED').length,
+              prepared: offers.filter(o => o.stage === 'OFFER_PREPARED' && !o.isTest).length,
+              checkoutReady: offers.filter(o => o.stage === 'CHECKOUT_READY' && !o.isTest).length,
+              blocked: offers.filter(o => o.stage === 'OFFER_BLOCKED' && !o.isTest).length,
+              authRequired: offers.filter(o => o.stage === 'AUTHORIZATION_REQUIRED' && !o.isTest).length,
+              testFixtures: offers.filter(o => o.isTest).length,
             },
           };
         } catch { return { offers: [], counts: { prepared: 0, checkoutReady: 0, blocked: 0, authRequired: 0 } }; }

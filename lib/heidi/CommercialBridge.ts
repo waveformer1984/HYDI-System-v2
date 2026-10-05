@@ -39,6 +39,10 @@ export interface CommercialOffer {
   stage: CommercialStage;
   stageReason: string | null;
   evidenceSummary: string | null;
+  /** True when the offer was minted by a test/qualification fixture —
+      durable evidence, never sellable inventory. A real customer can
+      never be bound to it. */
+  isTest: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -90,6 +94,9 @@ export async function collectOffers(pool: Pick<Pool, 'query'>): Promise<Commerci
         offerId,
         opportunityId: String(p.opportunityId),
         opportunityTitle: String(p.opportunityTitle ?? ''),
+        isTest: String(p.actor ?? '') === 'test-fixture'
+          || String(p.opportunityId ?? '').startsWith('test-fixture')
+          || /test[\s_-]?fixture/i.test(String(p.opportunityTitle ?? '')),
         product: String(p.product),
         priceCents: Number(p.priceCents ?? 0),
         currency: String(p.currency ?? 'usd'),
@@ -202,7 +209,7 @@ export async function prepareOffer(
     deduped: false,
     offer: {
       offerId, opportunityId: input.opportunityId, opportunityTitle: String(opp.title),
-      product: input.product, priceCents: 2900, currency: 'usd',
+      product: input.product, priceCents: 2900, currency: 'usd', isTest: false,
       stage, stageReason, evidenceSummary,
       createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
     },

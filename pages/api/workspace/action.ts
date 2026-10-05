@@ -110,6 +110,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
     const offer = (await collectOffers(pool)).find(o => o.offerId === offerId);
     if (!offer) return res.status(404).json({ error: `offer '${offerId}' not found in durable commercial state` });
+    if (offer.isTest) return res.status(409).json({ error: `refused: offer ${offerId} is a test fixture — durable evidence, not sellable inventory; a real customer can never be bound to it` });
     if (offer.stage !== 'CHECKOUT_READY' && offer.stage !== 'AUTHORIZATION_REQUIRED') {
       return res.status(409).json({ error: `refused: offer ${offerId} is ${offer.stage} — only CHECKOUT_READY/AUTHORIZATION_REQUIRED offers accept a customer identity` });
     }

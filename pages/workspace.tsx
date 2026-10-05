@@ -611,12 +611,12 @@ export default function Workspace() {
               <Card title="commercial offers" tone={s.commercial?.counts?.blocked ? C.warn : C.dim}>
                 {s.commercial?.offers?.length ? s.commercial.offers.map((o: W) => (
                   <div key={o.offerId} style={{ marginBottom: 6 }}>
-                    <b>{o.offerId}</b> — {o.product} ${(o.priceCents / 100).toFixed(2)} · <span style={{ color: o.stage === 'CHECKOUT_READY' ? C.ok : o.stage === 'OFFER_BLOCKED' ? C.warn : C.dim }}>{o.stage}</span><br />
-                    <small style={{ color: '#475569' }}>{o.title} · {o.stageReason ?? ''}</small>
+                    <b>{o.offerId}</b> — {o.product} ${(o.priceCents / 100).toFixed(2)} · <span style={{ color: o.isTest ? '#475569' : o.stage === 'CHECKOUT_READY' ? C.ok : o.stage === 'OFFER_BLOCKED' ? C.warn : C.dim }}>{o.isTest ? 'TEST FIXTURE' : o.stage}</span><br />
+                    <small style={{ color: '#475569' }}>{o.title} · {o.isTest ? 'test/qualification evidence — not sellable inventory' : (o.stageReason ?? '')}</small>
                   </div>
                 )) : 'no offers — opportunities require approval/qualification first'}
                 <div style={{ color: C.dim, fontSize: 11, marginTop: 6 }}>
-                  prepared {s.commercial?.counts?.prepared ?? 0} · checkout-ready {s.commercial?.counts?.checkoutReady ?? 0} · blocked {s.commercial?.counts?.blocked ?? 0} · needs authorization {s.commercial?.counts?.authRequired ?? 0}
+                  prepared {s.commercial?.counts?.prepared ?? 0} · checkout-ready {s.commercial?.counts?.checkoutReady ?? 0} · blocked {s.commercial?.counts?.blocked ?? 0} · needs authorization {s.commercial?.counts?.authRequired ?? 0}{(s.commercial?.counts?.testFixtures ?? 0) > 0 ? ` · ${s.commercial!.counts.testFixtures} test fixture(s)` : ''}
                 </div>
               </Card>
               <Card title="jobs">{s.missions.jobs.total} total · {s.missions.jobs.paidDelivered} delivered (TEST) · {s.missions.jobs.escalated} escalated</Card>

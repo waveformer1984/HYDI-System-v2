@@ -287,6 +287,9 @@ export async function collectHumanActionQueue(
   //    this surface. ────────────────────────────────────────────────
   const offers = await collectOffers(pool).catch(() => []);
   for (const o of offers) {
+    // Test-fixture offers are durable evidence, not sellable inventory —
+    // they never become a human customer boundary.
+    if (o.isTest) continue;
     // CHECKOUT_READY is also a human boundary: no customer identity has
     // been supplied yet, and the system does not invent one. PAYMENT_PENDING
     // and beyond are awaiting external payment, not operator input.

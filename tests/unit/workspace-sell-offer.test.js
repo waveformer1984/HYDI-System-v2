@@ -43,7 +43,7 @@ function makeReq(body, token = 'tok') {
 
 const OFFER = {
   offerId: 'offer-a2af7d584a91', opportunityId: 'opp-1', opportunityTitle: 'regression',
-  product: 'protoforge_model_prep', priceCents: 2900, currency: 'usd',
+  product: 'protoforge_model_prep', priceCents: 2900, currency: 'usd', isTest: false,
   stage: 'CHECKOUT_READY', stageReason: null, evidenceSummary: null,
   createdAt: '2026-10-01T00:00:00Z', updatedAt: '2026-10-01T00:00:00Z',
 };
@@ -124,6 +124,15 @@ describe('sell_offer — governed customer intake', () => {
     await handler(makeReq({ kind: 'sell_offer', offerId: OFFER.offerId, customerEmail: 'b@c.co' }), res);
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.body.deduped).toBe(true);
+  });
+
+  test('test-fixture offer → 409 refused — not sellable inventory', async () => {
+    mockCollectOffers.mockResolvedValue([{ ...OFFER, isTest: true }]);
+    const res = makeRes();
+    await handler(makeReq({ kind: 'sell_offer', offerId: OFFER.offerId, customerEmail: 'real.customer@example.org' }), res);
+    expect(res.status).toHaveBeenCalledWith(409);
+    expect(res.body.error).toMatch(/test fixture/);
+    expect(mockCreateProposal).not.toHaveBeenCalled();
   });
 
   test('spec-invalid params refused closed by the proposal layer → 400', async () => {

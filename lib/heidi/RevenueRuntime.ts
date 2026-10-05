@@ -137,6 +137,13 @@ export class RevenueRuntime {
   private async step(offer: CommercialOffer, params: { customerEmail?: string }, actor: string): Promise<AdvanceResult> {
     const base = { offerId: offer.offerId, previousStage: offer.stage, action: 'noop' };
 
+    // Test-fixture offers are durable evidence, never sellable inventory.
+    // A governed proposal referencing one must not cross the commercial
+    // boundary — refuse before any stage transition.
+    if (offer.isTest) {
+      return { ...base, newStage: offer.stage, action: 'refused', boundary: 'governance', detail: 'test fixture — not sellable inventory; no customer may be bound to it' };
+    }
+
     switch (offer.stage) {
       // ── Qualification gate already passed at prepareOffer; move to ready ──
       case 'OFFER_PREPARED': {

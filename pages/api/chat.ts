@@ -977,7 +977,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             const offerStages = s.revenue?.offers?.total
               ? ' · offers: ' + Object.entries(s.revenue.offers.byStage ?? {}).map(([st, n]) => `${n} ${st}`).join(', ')
               : '';
-            lines.push(`Revenue: ${s.revenue?.opportunitiesOpen ?? 0} open opportunities${offerStages} — read-only, no reconciled-revenue claim.`);
+            const testOffers = (s.revenue?.offers as { testOffers?: number } | undefined)?.testOffers ?? 0;
+            const fixtureNote = testOffers > 0 ? ` (${testOffers} test fixture(s) excluded — not sellable)` : '';
+            lines.push(`Revenue: ${s.revenue?.opportunitiesOpen ?? 0} open opportunities${offerStages}${fixtureNote} — read-only, no reconciled-revenue claim.`);
             const open = (s.humanActions?.items ?? []).filter((i) => i.status === 'OPEN' && !i.backlog);
             // Lifecycle-classified view — enabled only via approved
             // evolution flag; read-only, never resolves anything.
@@ -1611,7 +1613,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             const offerStages = s.revenue?.offers?.total
               ? ' · offers: ' + Object.entries(s.revenue.offers.byStage ?? {}).map(([st, n]) => `${n} ${st}`).join(', ')
               : '';
-            lines.push(`Revenue: ${s.revenue?.opportunitiesOpen ?? 0} open opportunities${offerStages} — read-only, no reconciled-revenue claim.`);
+            const testOffers = (s.revenue?.offers as { testOffers?: number } | undefined)?.testOffers ?? 0;
+            const fixtureNote = testOffers > 0 ? ` (${testOffers} test fixture(s) excluded — not sellable)` : '';
+            lines.push(`Revenue: ${s.revenue?.opportunitiesOpen ?? 0} open opportunities${offerStages}${fixtureNote} — read-only, no reconciled-revenue claim.`);
             const open = (s.humanActions?.items ?? []).filter((i) => i.status === 'OPEN' && !i.backlog);
             // Lifecycle-classified view — enabled only via approved
             // evolution flag; read-only, never resolves anything.
