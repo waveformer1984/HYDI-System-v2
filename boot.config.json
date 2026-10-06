@@ -129,6 +129,22 @@
       ]
     },
     {
+      "id": "revenue-autopilot-tick",
+      "label": "Revenue Autopilot Tick (resumes durable revenue mission after satisfied human prerequisites)",
+      "type": "process",
+      "enabled": true,
+      "required": false,
+      "command": "npx",
+      "args": [
+        "tsx",
+        "scripts/revenue-autopilot-tick.ts"
+      ],
+      "livenessMs": 5000,
+      "dependsOn": [
+        "protoforge-core"
+      ]
+    },
+    {
       "id": "hardware-agent",
       "label": "Hardware/HID Safety Orchestrator (Python)",
       "type": "process",

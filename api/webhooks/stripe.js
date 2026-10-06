@@ -208,6 +208,23 @@ async function handleStripeWebhook(req, res) {
       if (jobResult.processed) {
         jobBridgeProcessed = true;
         console.log(`[📦 JOB BRIDGE] Job ${jobResult.jobId} ${jobResult.idempotent ? '(idempotent skip)' : 'activated'} for event ${event.id}`);
+
+        // Revenue autopilot fast-path: a confirmed payment is a satisfied
+        // human prerequisite — resume the durable mission now rather than
+        // waiting for the next tick/chat. Fire-and-forget: the webhook must
+        // ack promptly; the periodic tick is the catch-up safety net.
+        setImmediate(async () => {
+          try {
+            const { resumeForPayment } = require('../../lib/revenue/revenue-autopilot.js');
+            const { getGoalSystem } = require('../../lib/heidi/GoalSystem.ts');
+            const report = await resumeForPayment(getGoalSystem(), jobResult.jobId);
+            if (report && report.stage) {
+              console.log(`[REVENUE AUTOPILOT] post-payment resume → ${report.stage}${report.outcome ? ` (${report.outcome})` : ''}`);
+            }
+          } catch (e) {
+            console.error('[REVENUE AUTOPILOT] post-payment resume failed:', e instanceof Error ? e.message : e);
+          }
+        });
       }
 
       // LIVE MODE: Consume the authorization now that payment is confirmed.

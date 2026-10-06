@@ -15,7 +15,7 @@ process.env.HYDI_HUMAN_ACTIONS_FILE = tmpFile;
 
 const { HumanActionService } = require('../../lib/human-actions/service');
 const { runVerifier } = require('../../lib/human-actions/verifiers');
-const { advance, brief, offerForOpportunity } = require('../../lib/revenue/revenue-autopilot');
+const { advance, brief, resumeForPayment, offerForOpportunity } = require('../../lib/revenue/revenue-autopilot');
 const { getOfferCatalog } = require('../../lib/revenue/OfferCatalog');
 
 /** In-memory GoalSystem stand-in incl. createGoal. */
@@ -356,5 +356,29 @@ describe('revenue autopilot', () => {
     const deps = depsFor(fakeStore([]));
     const report = await advance(deps);
     expect(report.stage).toBe('awaiting_opportunity');
+  });
+
+  test('resumeForPayment resumes only the mission parked on that job', async () => {
+    const store = fakeStore([PHILIPS]);
+    const rt = fakeRuntime();
+    const deps = depsFor(store, ALL_ENV, rt);
+
+    // No objective goal → nothing to resume, returns null, creates nothing.
+    expect(await resumeForPayment(deps.goals, 'job_x', deps)).toBeNull();
+    expect((await deps.goals.listGoals()).length).toBe(0);
+
+    // Park at payment.
+    const r1 = await advance(deps);
+    const ap = (await deps.goals.getGoal(r1.goalId)).context.autopilot;
+
+    // A payment for a DIFFERENT job never disturbs the mission.
+    expect(await resumeForPayment(deps.goals, 'job_unrelated', deps)).toBeNull();
+
+    // The webhook lands for the mission's own job → resume to proof.
+    rt.jobs.get(ap.jobId).paymentStatus = 'paid';
+    rt.jobs.get(ap.jobId).paymentIntentId = 'pi_test_1';
+    rt.jobs.get(ap.jobId).jobStatus = 'queued';
+    const report = await resumeForPayment(deps.goals, ap.jobId, deps);
+    expect(report.stage).toBe('TEST_PIPELINE_PROVEN');
   });
 });
