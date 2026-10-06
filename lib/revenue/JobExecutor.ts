@@ -39,13 +39,47 @@ export interface ExecutionResult {
 }
 
 /**
- * Products with a real artifact executor. Only protoforge_model_prep is
- * wired end-to-end (generateModelPackage → OpenSCAD/STL/README). Other
+ * Products with a real artifact executor. protoforge_model_prep is wired
+ * end-to-end (generateModelPackage → OpenSCAD/STL/README) and
+ * checkpoint_audit via the Ursula engine (analyze → audit report). Other
  * sellable offers (e.g. rezonate_song) have no executor — running the
  * model package generator for them would deliver the WRONG product to a
  * paying customer. Fail-closed: block the job and escalate instead.
  */
-const EXECUTABLE_PRODUCTS = new Set(['protoforge_model_prep']);
+const EXECUTABLE_PRODUCTS = new Set(['protoforge_model_prep', 'checkpoint_audit']);
+
+/** Product → generator. The paid product determines the artifacts. */
+async function generateForProduct(job: CustomerJob, outputDir: string): Promise<{ artifacts: ArtifactResult[] }> {
+  const requirements = job.requirements as Record<string, unknown>;
+  if (job.product === 'checkpoint_audit') {
+    const { generateCheckpointAudit } = await import('./CheckpointAuditGenerator');
+    return generateCheckpointAudit({
+      jobId: job.jobId,
+      requestText: job.requestText,
+      requirements: {
+        steps: requirements.steps as Array<Record<string, unknown> | string> | undefined,
+        workflowName: requirements.workflowName as string | undefined,
+        category: requirements.category as string | undefined,
+        projectId: requirements.projectId as number | undefined,
+      },
+      outputDir,
+    });
+  }
+  return generateModelPackage({
+    jobId: job.jobId,
+    requestText: job.requestText,
+    requirements: {
+      objectType: requirements.objectType as string | undefined,
+      width: requirements.width as number | undefined,
+      height: requirements.height as number | undefined,
+      depth: requirements.depth as number | undefined,
+      thickness: requirements.thickness as number | undefined,
+      material: requirements.material as string | undefined,
+      rushOrder: requirements.rushOrder as boolean | undefined,
+    },
+    outputDir,
+  });
+}
 
 /**
  * Execute a single queued job end-to-end.
@@ -93,24 +127,10 @@ export async function executeJob(jobId: string): Promise<ExecutionResult> {
       await jobManager.startExecution(jobId);
     }
 
-    // Generate artifacts
+    // Generate artifacts — the generator is per-product; the paid product
+    // determines what "deliverable" means.
     const outputDir = jobManager.ensureJobArtifactDir(jobId);
-    const requirements = job.requirements as Record<string, unknown>;
-
-    const generationResult = generateModelPackage({
-      jobId,
-      requestText: job.requestText,
-      requirements: {
-        objectType: requirements.objectType as string | undefined,
-        width: requirements.width as number | undefined,
-        height: requirements.height as number | undefined,
-        depth: requirements.depth as number | undefined,
-        thickness: requirements.thickness as number | undefined,
-        material: requirements.material as string | undefined,
-        rushOrder: requirements.rushOrder as boolean | undefined,
-      },
-      outputDir,
-    });
+    const generationResult = await generateForProduct(job, outputDir);
 
     // Verify artifacts
     const verification = verifyArtifacts(generationResult.artifacts);
@@ -140,7 +160,7 @@ export async function executeJob(jobId: string): Promise<ExecutionResult> {
     // routine human review is needed at all. PASS → deliver; anything
     // else stays awaiting_review with an escalated human reason.
     const jobDir = path.join(jobManager.getArtifactsDir(), jobId);
-    const report = verifyDeliverableArtifacts(jobDir);
+    const report = verifyDeliverableArtifacts(jobDir, { product: job.product });
     const elig = deliveryEligibility(
       { jobStatus: completed.jobStatus, paymentStatus: completed.paymentStatus, deliveryStatus: completed.deliveryStatus, artifactPaths: completed.artifactPaths },
       report,
@@ -207,14 +227,15 @@ export async function recoverStaleJobs(): Promise<{ recovered: number; failed: n
   for (const job of staleJobs) {
     const jobDir = path.join(jobManager.getArtifactsDir(), job.jobId);
 
-    // Check if artifacts were produced before the crash
+    // Check if artifacts were produced before the crash — the expected
+    // set is per-product (audit jobs don't produce .stl files).
     if (fs.existsSync(jobDir)) {
       const files = fs.readdirSync(jobDir);
-      const hasScad = files.some(f => f.endsWith('.scad'));
-      const hasStl = files.some(f => f.endsWith('.stl'));
-      const hasReadme = files.includes('README.md');
+      const complete = job.product === 'checkpoint_audit'
+        ? files.includes('checkpoint-audit.md') && files.includes('audit-data.json')
+        : files.some(f => f.endsWith('.scad')) && files.some(f => f.endsWith('.stl')) && files.includes('README.md');
 
-      if (hasScad && hasStl && hasReadme) {
+      if (complete) {
         // Artifacts exist — complete the job
         const artifacts = files.map(f => {
           const fullPath = path.join(jobDir, f);
@@ -223,7 +244,7 @@ export async function recoverStaleJobs(): Promise<{ recovered: number; failed: n
         });
         const completedJob = await jobManager.completeExecution(job.jobId, artifacts);
         // Same autonomous gate — recovery doesn't bypass delivery QA.
-        const report = verifyDeliverableArtifacts(jobDir);
+        const report = verifyDeliverableArtifacts(jobDir, { product: job.product });
         const elig = deliveryEligibility(
           { jobStatus: completedJob.jobStatus, paymentStatus: completedJob.paymentStatus, deliveryStatus: completedJob.deliveryStatus, artifactPaths: completedJob.artifactPaths },
           report,
@@ -261,7 +282,7 @@ export async function sweepAwaitingReview(): Promise<{ delivered: number; escala
   let escalated = 0;
   for (const job of jobs) {
     const jobDir = path.join(jobManager.getArtifactsDir(), job.jobId);
-    const report = verifyDeliverableArtifacts(jobDir);
+    const report = verifyDeliverableArtifacts(jobDir, { product: job.product });
     const elig = deliveryEligibility(
       { jobStatus: job.jobStatus, paymentStatus: job.paymentStatus, deliveryStatus: job.deliveryStatus, artifactPaths: job.artifactPaths },
       report,

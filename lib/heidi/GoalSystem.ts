@@ -252,10 +252,16 @@ export class GoalSystem {
   }
 
   async getPendingWork(): Promise<Goal[]> {
-    // Get all goals that are pending or in_progress, ordered by priority
+    // Get all goals that are pending or in_progress, ordered by priority.
+    // Ownership invariant: a managed goal has exactly one execution owner.
+    // context.managedBy set to a specialized runner ('app-realization',
+    // 'revenue-autopilot', ...) makes the goal invisible to this generic
+    // queue — its owner drives every transition. Goals without a marker
+    // are generic-planner work.
     const rows = await this.pool.query<QueryResultRow>(
       `SELECT * FROM heidi_goals
        WHERE status IN ('pending', 'active', 'in_progress', 'blocked')
+         AND COALESCE(NULLIF(context->>'managedBy', ''), 'generic-planner') = 'generic-planner'
        ORDER BY priority DESC, created_at ASC
        LIMIT 100`,
     );

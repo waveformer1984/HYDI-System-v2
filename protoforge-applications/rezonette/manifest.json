@@ -34,10 +34,42 @@
     "engineProbe": {
       "method": "POST",
       "url": "http://localhost:5000/rezonette/music",
-      "body": { "creator_id": "heidi", "title": "HYDI-REALIZATION-PROBE", "genre": "audit" },
+      "body": {
+        "creator_id": "heidi",
+        "title": "HYDI-REALIZATION-PROBE",
+        "genre": "audit"
+      },
       "expectJsonField": "project_id"
     },
     "offerId": "rezonette_track"
   },
-  "deprecated": false
+  "deprecated": false,
+  "commercial": {
+    "offerId": "rezonette_track",
+    "offerName": "Rezonette Track Project",
+    "customerProblem": "A creator wants a music project scaffolded and tracked without manual setup.",
+    "deliverable": "A created Rezonette music project with metadata and a collaboration session.",
+    "targetCustomer": "music hobbyists / collaborators",
+    "category": "ursula_service",
+    "recommendedPriceCents": 1900,
+    "priceBasis": "Adjacent to rezonate_song ($29) but narrower — project setup, not a finished track.",
+    "unitEconomics": "one engine project-creation call — near-zero marginal cost",
+    "marketEvidence": "none recorded",
+    "confidencePct": 40,
+    "revenuePath": "offer -> checkout -> payment -> job -> engine project creation -> verify -> reconcile",
+    "fulfillment": {
+      "engine": "ursula-engine",
+      "create": "POST /rezonette/music",
+      "artifacts": [
+        "project-record.json"
+      ],
+      "customerInput": "track title + genre"
+    },
+    "implementationRequirements": [
+      "track_title",
+      "genre"
+    ],
+    "marginTarget": 0.85,
+    "cancellationBehavior": "Full refund if project creation fails."
+  }
 }

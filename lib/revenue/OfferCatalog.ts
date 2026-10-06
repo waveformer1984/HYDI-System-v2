@@ -10,13 +10,15 @@
  * Engine 3: Productized Web + AI Deployment
  */
 
+import fs from 'fs';
+import path from 'path';
 import type { CommercialOffer, OfferId } from './types';
 
 // ---------------------------------------------------------------------------
 // Default Offers — configurable via OfferCatalog.configure()
 // ---------------------------------------------------------------------------
 
-const DEFAULT_OFFERS: Record<OfferId, CommercialOffer> = {
+const DEFAULT_OFFERS: Record<string, CommercialOffer> = {
   // Engine 1: AI Operations Service
   ai_operations_setup: {
     offerId: 'ai_operations_setup',
@@ -259,15 +261,59 @@ const DEFAULT_OFFERS: Record<OfferId, CommercialOffer> = {
 };
 
 // ---------------------------------------------------------------------------
+// Approved-offer overlay — governed commercial path.
+//
+// New offers are NEVER added to DEFAULT_OFFERS silently. The governed flow:
+//   Heidi proposes (commercial review) → human approves via the recorded
+//   decision endpoint → the approved offer is persisted to this overlay →
+//   catalog.get() sees it → downstream (checkout, jobs, reconciliation) is
+//   autonomous. The overlay file is the durable approval artifact.
+// ---------------------------------------------------------------------------
+
+function approvedOffersPath(): string {
+  return process.env.HYDI_APPROVED_OFFERS_PATH
+    || path.join(process.cwd(), '.hydi-operational', 'approved-offers.json');
+}
+
+function readOverlay(p: string): Record<string, CommercialOffer> {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(p, 'utf8'));
+    return parsed && typeof parsed === 'object' ? parsed as Record<string, CommercialOffer> : {};
+  } catch {
+    return {};
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Offer Catalog
 // ---------------------------------------------------------------------------
 
 export class OfferCatalog {
   private offers: Map<OfferId, CommercialOffer> = new Map();
+  private overlayPath: string;
+  private overlayMtimeMs = 0;
 
   constructor() {
     for (const [id, offer] of Object.entries(DEFAULT_OFFERS)) {
       this.offers.set(id as OfferId, { ...offer });
+    }
+    this.overlayPath = approvedOffersPath();
+    this.reloadOverlay();
+  }
+
+  /** Merge the durable approved-offer overlay over the defaults. Called at
+   *  construction and lazily inside get() so a second process sees newly
+   *  approved offers without a restart. */
+  private reloadOverlay(): void {
+    try {
+      const stat = fs.statSync(this.overlayPath);
+      if (stat.mtimeMs === this.overlayMtimeMs) return;
+      this.overlayMtimeMs = stat.mtimeMs;
+      for (const [id, offer] of Object.entries(readOverlay(this.overlayPath))) {
+        this.offers.set(id as OfferId, { ...offer, offerId: id as OfferId });
+      }
+    } catch {
+      // No overlay yet — nothing to merge.
     }
   }
 
@@ -275,8 +321,22 @@ export class OfferCatalog {
    * Get an offer by ID.
    */
   get(offerId: OfferId): CommercialOffer | null {
+    this.reloadOverlay();
     const offer = this.offers.get(offerId);
     return offer ? { ...offer } : null;
+  }
+
+  /**
+   * Persist a human-approved offer into the overlay. Called only after a
+   * recorded commercial approval — never autonomously. Idempotent.
+   */
+  registerApproved(offer: CommercialOffer): void {
+    const overlay = readOverlay(this.overlayPath);
+    overlay[offer.offerId] = { ...offer, active: true };
+    fs.mkdirSync(path.dirname(this.overlayPath), { recursive: true });
+    fs.writeFileSync(this.overlayPath, JSON.stringify(overlay, null, 2) + '\n');
+    this.overlayMtimeMs = 0; // force reload so the write is visible now
+    this.reloadOverlay();
   }
 
   /**
@@ -342,7 +402,8 @@ export class OfferCatalog {
     }
 
     // Default: AI Operations
-    if (budget && budget < DEFAULT_OFFERS.ai_operations_setup.setupPrice) {
+    const opsSetup = this.get('ai_operations_setup');
+    if (budget && opsSetup && budget < opsSetup.setupPrice) {
       // If budget is tight, still recommend setup but note the constraint
       return {
         recommended: 'ai_operations_setup',

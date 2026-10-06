@@ -83,8 +83,72 @@ function stlBounds(buf: Buffer): { x: number; y: number; z: number; triangles: n
 /**
  * Independently verify the artifact directory for a job.
  * Reads the files itself — does not trust generation metadata.
+ *
+ * Product-aware: model-prep jobs need SCAD+STL+spec; checkpoint_audit
+ * jobs need the audit report + data. The product the customer paid for
+ * determines what "deliverable" means — verifying the wrong artifact
+ * set is a wrong-delivery, not a pass.
  */
-export function verifyDeliverableArtifacts(jobDir: string, opts?: { maxDimMm?: number }): VerificationReport {
+export function verifyDeliverableArtifacts(jobDir: string, opts?: { maxDimMm?: number; product?: string }): VerificationReport {
+  if (opts?.product === 'checkpoint_audit') {
+    return verifyAuditArtifacts(jobDir);
+  }
+  return verifyModelPrepArtifacts(jobDir, opts);
+}
+
+/**
+ * checkpoint_audit deliverable: checkpoint-audit.md (the customer-facing
+ * report) + audit-data.json (engine workflow_id + risk_level + steps —
+ * proof the engine actually analyzed, not just that a file exists).
+ */
+function verifyAuditArtifacts(jobDir: string): VerificationReport {
+  const checks: CheckResult[] = [];
+  const artifactHashes: Record<string, string> = {};
+  const verifiedAt = new Date().toISOString();
+  const fail = (name: string, detail: string) => checks.push({ name, result: 'FAIL', detail });
+  const pass = (name: string, detail: string) => checks.push({ name, result: 'PASS', detail });
+
+  if (!fs.existsSync(jobDir)) {
+    fail('artifact_dir', `directory missing: ${jobDir}`);
+    return { verdict: 'FAIL', checks, artifactHashes, verifiedAt };
+  }
+  const files = fs.readdirSync(jobDir);
+
+  const report = files.find(f => f === 'checkpoint-audit.md');
+  if (!report) fail('audit_report_present', 'no checkpoint-audit.md');
+  else {
+    const buf = fs.readFileSync(path.join(jobDir, report));
+    artifactHashes[report] = sha256(buf);
+    const text = buf.toString('utf8');
+    if (buf.length < 200) fail('audit_report_thin', 'audit report suspiciously thin');
+    else if (!/risk/i.test(text) || !/workflow/i.test(text)) fail('audit_report_structure', 'report lacks risk/workflow content');
+    else pass('audit_report', `${report} (${buf.length}B, sha256 ${artifactHashes[report].slice(0, 12)}…)`);
+  }
+
+  const data = files.find(f => f === 'audit-data.json');
+  if (!data) fail('audit_data_present', 'no audit-data.json');
+  else {
+    const buf = fs.readFileSync(path.join(jobDir, data));
+    artifactHashes[data] = sha256(buf);
+    try {
+      const parsed = JSON.parse(buf.toString('utf8'));
+      const wid = parsed?.analyzeResult?.workflow_id ?? parsed?.report?.workflow_id ?? parsed?.report?.id;
+      const rl = parsed?.report?.risk_level;
+      const stepCount = Array.isArray(parsed?.report?.steps) ? parsed.report.steps.length : 0;
+      if (!Number.isInteger(wid)) fail('audit_data_workflow', 'no workflow_id — engine analysis unproven');
+      else if (!['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'].includes(rl)) fail('audit_data_risk', `risk_level '${rl}' not in engine enum`);
+      else if (stepCount === 0) fail('audit_data_steps', 'report contains no analyzed steps');
+      else pass('audit_data', `workflow ${wid}, risk ${rl}, ${stepCount} steps`);
+    } catch {
+      fail('audit_data_parse', 'audit-data.json is not valid JSON');
+    }
+  }
+
+  const anyFail = checks.some(c => c.result === 'FAIL');
+  return { verdict: anyFail ? 'FAIL' : 'PASS', checks, artifactHashes, verifiedAt, boundsMm: null };
+}
+
+function verifyModelPrepArtifacts(jobDir: string, opts?: { maxDimMm?: number }): VerificationReport {
   const maxDim = opts?.maxDimMm ?? MAX_DIM_MM;
   const checks: CheckResult[] = [];
   const artifactHashes: Record<string, string> = {};

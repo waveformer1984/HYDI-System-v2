@@ -65,5 +65,35 @@
     },
     "offerId": "proto_yi_project"
   },
-  "deprecated": false
+  "deprecated": false,
+  "commercial": {
+    "offerId": "proto_iy_project",
+    "offerName": "Proto IY Project Scaffold",
+    "customerProblem": "A maker/inventor has a product idea but no structured project scaffold or timeline to move toward a manufacturable prototype.",
+    "deliverable": "A created Proto IY project record plus an initial generated timeline — the structured starting point for design-to-prototype work.",
+    "targetCustomer": "makers, hardware hobbyists, early-stage product inventors",
+    "category": "ursula_service",
+    "recommendedPriceCents": 2900,
+    "priceBasis": "Sibling of protoforge_model_prep ($29) — same price band for a comparable productized scaffold.",
+    "unitEconomics": "engine project + timeline creation calls — near-zero marginal cost; deploy boundary still open (service unregistered on :3010)",
+    "marketEvidence": "none recorded",
+    "confidencePct": 45,
+    "revenuePath": "offer -> checkout -> payment -> job -> engine project+timeline -> verify -> reconcile",
+    "fulfillment": {
+      "engine": "ursula-engine",
+      "project": "POST /proto_iy/project",
+      "timeline": "POST /proto_iy/timeline",
+      "artifacts": [
+        "project-record.json",
+        "timeline.json"
+      ],
+      "customerInput": "project description"
+    },
+    "implementationRequirements": [
+      "service_deployed_3010",
+      "project_description"
+    ],
+    "marginTarget": 0.85,
+    "cancellationBehavior": "Full refund if scaffold creation fails."
+  }
 }

@@ -65,6 +65,17 @@ describe('revenue-autopilot-tick: runOnce', () => {
     expect(mockAdvance).toHaveBeenCalledWith(expect.objectContaining({ goals }));
     expect(MockService).not.toHaveBeenCalled();
   });
+
+  it('sweeps open app-realization goals through their managed advance', async () => {
+    const appGoal = { goalId: 'g_app', status: 'escalated', context: { appRealization: { appId: 'checkpoint' } } };
+    const doneGoal = { goalId: 'g_done', status: 'completed', context: { appRealization: { appId: 'old-app' } } };
+    const otherGoal = { goalId: 'g_other', status: 'pending', context: {} };
+    const goals = { listGoals: async () => [appGoal, doneGoal, otherGoal] };
+    const advanceApp = jest.fn(async () => ({ stage: 'WAITING_ON_HUMAN' }));
+    await runOnce({ goals, service: {}, realization: { advance: advanceApp } });
+    expect(advanceApp).toHaveBeenCalledTimes(1);
+    expect(advanceApp).toHaveBeenCalledWith(expect.objectContaining({ appId: 'checkpoint', goals }));
+  });
 });
 
 describe('revenue-autopilot-tick: mainLoop', () => {

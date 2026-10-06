@@ -68,6 +68,42 @@ const FULFILLMENT_TEMPLATES: Record<OfferId, { stepId: string; name: string }[]>
     { stepId: 'asset_registered', name: 'Audio asset registered' },
     { stepId: 'download_ready', name: 'Download link available to customer' },
   ],
+  // Ursula portfolio services — engine-executed deliverables.
+  checkpoint_audit: [
+    { stepId: 'job_queued', name: 'Job queued for HEIDI execution' },
+    { stepId: 'workflow_analysis', name: 'Workflow analysis via Checkpoint engine' },
+    { stepId: 'report_generation', name: 'Audit report generation' },
+    { stepId: 'qa_verification', name: 'Independent delivery QA' },
+    { stepId: 'delivery', name: 'Audit package delivery to customer' },
+  ],
+  rezonette_track: [
+    { stepId: 'job_queued', name: 'Job queued for HEIDI execution' },
+    { stepId: 'project_creation', name: 'Rezonette music project creation' },
+    { stepId: 'collab_session', name: 'Collaboration session initialized' },
+    { stepId: 'verification', name: 'Project verification' },
+    { stepId: 'delivery', name: 'Project handoff to customer' },
+  ],
+  porch_wise_assessment: [
+    { stepId: 'job_queued', name: 'Job queued for HEIDI execution' },
+    { stepId: 'member_setup', name: 'Household member provisioning' },
+    { stepId: 'chore_setup', name: 'Initial chore/project assignments' },
+    { stepId: 'verification', name: 'Workspace verification' },
+    { stepId: 'delivery', name: 'Workspace handoff to customer' },
+  ],
+  blame_games_session: [
+    { stepId: 'job_queued', name: 'Job queued for HEIDI execution' },
+    { stepId: 'challenge_creation', name: 'Blame Games challenge creation' },
+    { stepId: 'bet_placement', name: 'Opening bet placement' },
+    { stepId: 'verification', name: 'Session verification' },
+    { stepId: 'delivery', name: 'Session handoff to customer' },
+  ],
+  proto_iy_project: [
+    { stepId: 'job_queued', name: 'Job queued for HEIDI execution' },
+    { stepId: 'project_scaffold', name: 'Proto IY project scaffolding' },
+    { stepId: 'timeline_generation', name: 'Initial timeline generation' },
+    { stepId: 'verification', name: 'Project verification' },
+    { stepId: 'delivery', name: 'Scaffold handoff to customer' },
+  ],
 };
 
 export class CustomerLifecycle {

@@ -27,6 +27,9 @@ import { getGoalSystem } from '../lib/heidi/GoalSystem';
 import { JobManager } from '../lib/revenue/JobManager';
 import { HumanActionService, syncHumanActions } from '../lib/human-actions';
 import { advance } from '../lib/revenue/revenue-autopilot';
+// CJS module — imported via interop, same convention as the autopilot.
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const appRealization = require('../lib/realization/app-realization.js');
 
 const TICK_INTERVAL_MS = Number(process.env.REVENUE_AUTOPILOT_TICK_MS) || 60000;
 const ERROR_BACKOFF_MS = Number(process.env.REVENUE_AUTOPILOT_BACKOFF_MS) || 120000;
@@ -48,7 +51,7 @@ let lastStage: string | null = null;
  * One tick: sync human actions (verify + resume satisfied goals), then
  * advance the mission. Exported for unit testing with injected deps.
  */
-export async function runOnce(deps: { goals?: any; service?: any } = {}): Promise<{ stage: string | null }> {
+export async function runOnce(deps: { goals?: any; service?: any; realization?: any } = {}): Promise<{ stage: string | null }> {
   const goals = deps.goals || getGoalSystem();
   const service =
     deps.service ||
@@ -56,6 +59,26 @@ export async function runOnce(deps: { goals?: any; service?: any } = {}): Promis
 
   await syncHumanActions(service, goals);
   const report = await advance({ goals, actor: 'revenue-autopilot-tick' });
+
+  // Managed realization missions use the same boundary/resume machinery —
+  // sweep each open appRealization goal through one idempotent pass so a
+  // satisfied boundary (offer materialized, engine repaired, deploy
+  // registered) resumes without waiting for a chat or API call.
+  const realization = deps.realization || appRealization;
+  const all = typeof goals.listGoals === 'function'
+    ? await goals.listGoals({ limit: 300 }).catch(() => [])
+    : [];
+  const openApps = (all || []).filter(
+    (g: any) => g.context?.appRealization?.appId && !['completed', 'cancelled'].includes(g.status),
+  );
+  for (const g of openApps) {
+    try {
+      const r = await realization.advance({ goals, appId: g.context.appRealization.appId, actor: 'revenue-autopilot-tick' });
+      if (r?.stage === 'APP_REALIZED') log(`app-realization ${g.context.appRealization.appId} -> APP_REALIZED`);
+    } catch (err) {
+      log(`app-realization ${g.context.appRealization.appId} error: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
 
   const stage = report && report.stage ? report.stage : null;
   if (stage !== lastStage) {

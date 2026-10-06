@@ -152,11 +152,12 @@ describe('app realization', () => {
     expect(r.waiting.prerequisites.find((p) => p.blockerKey === `app:${APP}:engine`).status).toBe('RESOLVED');
     expect(r.waiting.prerequisites.some((p) => p.blockerKey === `app:${APP}:deploy`)).toBe(true);
 
-    // Human deploys the service → advance resumes to the offer boundary.
+    // Human deploys the service → advance resumes to the offer boundary,
+    // surfaced as the commercial-review action (decision-ready proposal).
     world.deployCode = 200;
     r = await advance({ ...deps, appId: APP });
     expect(r.stage).toBe('WAITING_ON_HUMAN');
-    expect(r.waiting.prerequisites.some((p) => p.blockerKey === `app:${APP}:offer`)).toBe(true);
+    expect(r.waiting.prerequisites.some((p) => p.blockerKey === `app:${APP}:commercial`)).toBe(true);
 
     // Human approves the offer → mission completes with durable proof.
     world.offer = { offerId: 'testapp_project', priceCents: 4900, currency: 'usd' };
@@ -206,7 +207,7 @@ describe('app realization', () => {
     const stages = r.steps.map((s) => s.stage);
     expect(stages).toEqual(['audit', 'spec', 'test', 'wire', 'deploy', 'revenue']);
     const open = r.waiting.prerequisites.filter((p) => p.status !== 'RESOLVED');
-    expect(open.map((p) => p.blockerKey)).toEqual(['app:hosted-app:offer']);
+    expect(open.map((p) => p.blockerKey)).toEqual(['app:hosted-app:commercial']);
 
     // Offer approved → APP_REALIZED with hostedBy recorded in the proof.
     world.offer = { offerId: 'hosted_thing', priceCents: 900, currency: 'usd' };
