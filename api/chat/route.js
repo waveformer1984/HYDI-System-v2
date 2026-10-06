@@ -19,9 +19,10 @@ import {
   getCapabilityState,
   listVerifiedCapabilities,
   listInoperableCapabilities,
-  getNftStatus,
 } from '../../lib/rezonate/rezonate-client.js';
 import { normalizeRezonateIntent } from '../../lib/rezonate/intent.js';
+import { tryNftStatusAnswer } from '../../lib/rezonate/nft-status-answer.js';
+import { syncRezonateNftRevenue } from '../../lib/commercial/rezonate-nft-bridge';
 import { HeidiController } from '../../pao-system/core/heidi.controller';
 
 // Lazy client: a missing SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY must surface
@@ -293,34 +294,8 @@ async function handleRezonateMessage(message, request) {
     // Read-only NFT commerce status — answered from the durable store directly,
     // never routed to an LLM or through the mutating controller path.
     if (intent.taskType === 'REZONATE_NFT_STATUS') {
-      try {
-        const s = await getNftStatus();
-        const kind = intent.parameters.kind;
-        const minted = s.mints.filter((m) => m.status === 'minted');
-        const listed = s.listings.filter((l) => l.status === 'listed');
-        const sold = s.sales.filter((x) => x.revenue_status === 'SALE_CONFIRMED' || x.revenue_status === 'RECONCILED');
-        const dep = s.deployments[`${s.chainMode}:31337`] || Object.values(s.deployments)[0] || {};
-        const tag = `chain mode: ${s.chainMode}${s.chainMode === 'local' ? ' (local EVM proving chain — not a public testnet)' : ''}`;
-        if (kind === 'minted' || kind === 'verify' || kind === 'status') {
-          if (!minted.length) return `🎵 Rezonate NFT (${tag}): nothing minted yet.`;
-          return `🎵 Rezonate NFT (${tag}): ${minted.length} minted — ` + minted.map((m) =>
-            `token ${m.token_id} on ${m.contract_address} (tx ${m.transaction_hash}, owner ${m.wallet_address}, verified ${m.verified_at ? 'yes' : 'no'})`).join('; ');
-        }
-        if (kind === 'listed') {
-          if (!listed.length) return `🎵 Rezonate NFT (${tag}): nothing currently listed.`;
-          return `🎵 Rezonate NFT (${tag}): ${listed.length} listed — ` + listed.map((l) =>
-            `token ${l.token_id} @ ${l.price_eth} ETH (listing tx ${l.listing_tx})`).join('; ');
-        }
-        if (kind === 'sold') {
-          if (!sold.length) return `🎵 Rezonate NFT (${tag}): no confirmed sales yet.`;
-          const total = sold.reduce((a, x) => a + Number(x.price_eth || 0), 0);
-          return `🎵 Rezonate NFT (${tag}): ${sold.length} sale(s), ${total} ETH gross — ` +
-            sold.map((x) => `${x.price_eth} ETH, tx ${x.transaction_hash}, ${x.revenue_status}`).join('; ') +
-            `. Note: ${s.chainMode} chain — not fiat revenue.`;
-        }
-      } catch (e) {
-        return `🎵 Rezonate NFT: VERIFICATION_BLOCKED — could not read durable state (${e.message})`;
-      }
+      const answer = await tryNftStatusAnswer(message, { sync: syncRezonateNftRevenue });
+      if (answer) return answer.text;
     }
     try {
       const result = await getHeidiController().processUserEvent(intent.taskType, intent.parameters, 'owner');

@@ -6,6 +6,7 @@ const { collectDiagnostics } = require('../diagnostics');
 const { SampleLibraryAdapter } = require('../adapters/sample-library');
 const { packageStems } = require('../export/packaging');
 const { ResonateEngineAdapter, createDefaultStemRunner } = require('../adapters/resonate-engine');
+const { ValidationError } = require('../errors');
 const cors = require('cors');
 
 function createApi(repository, config = {}) {
@@ -453,6 +454,18 @@ function createApi(repository, config = {}) {
   app.get('/nft/sales', h(async (req, res) => {
     const s = await nft();
     send(res, { sales: s._all('nft_sales') });
+  }));
+
+  app.post('/nft/sales/:id/commercial-event', h(async (req, res) => {
+    const s = await nft();
+    const eventId = req.body && req.body.event_id;
+    if (!eventId || typeof eventId !== 'string') throw new ValidationError('event_id required');
+    send(res, { sale: s.markCommercialEvent(req.params.id, { eventId, eventType: req.body.event_type }) });
+  }));
+
+  app.post('/nft/sales/:id/revenue-recorded', h(async (req, res) => {
+    const s = await nft();
+    send(res, { sale: s.markRevenueRecorded(req.params.id) });
   }));
 
   app.post('/nft/sales/:id/reconcile', h(async (req, res) => {

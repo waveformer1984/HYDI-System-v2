@@ -211,14 +211,14 @@ class NftService {
       id: id(), listing_id: listing.id, asset_id: listing.asset_id,
       buyer_wallet: buyer, seller_wallet: listing.seller_wallet,
       price_wei: listing.price_wei, price_eth: listing.price_eth, currency: 'ETH',
-      transaction_hash: null, status: 'purchase_pending', revenue_status: 'PURCHASE_PENDING',
+      transaction_hash: null, status: 'purchase_pending', revenue_status: 'SALE_DETECTED',
       verified_at: null, created_at: now(), chain_mode: this.chain.mode
     };
     this._put('nft_sales', sale);
     this._emit('nft.purchase.pending', { sale });
 
     try {
-      sale.status = 'sale_submitted'; sale.revenue_status = 'SALE_SUBMITTED';
+      sale.status = 'sale_submitted';
       this._update('nft_sales', sale);
       const res = await this.chain.buyListing({ listingId: listing.chain_listing_id, buyer });
       sale.transaction_hash = res.txHash;
@@ -230,7 +230,7 @@ class NftService {
       const receipt = await this.chain.getTxReceipt(res.txHash);
       if (!receipt || receipt.status !== 1) throw new Error('buy transaction not confirmed');
       const feeWei = (BigInt(listing.price_wei) * BigInt(this.chain.feeBps || 250) / 10000n).toString();
-      sale.status = 'sale_confirmed'; sale.revenue_status = 'SALE_CONFIRMED';
+      sale.status = 'sale_confirmed'; sale.revenue_status = 'CHAIN_VERIFIED';
       sale.platform_fee_wei = feeWei; sale.creator_proceeds_wei = (BigInt(listing.price_wei) - BigInt(feeWei)).toString();
       sale.verified_at = now(); sale.new_owner = owner;
       listing.status = 'closed';
@@ -260,11 +260,57 @@ class NftService {
     return listing;
   }
 
-  /** Mark a confirmed sale as reconciled into durable revenue state. */
+  /**
+   * Record the ProtoForge commercial event bridging this sale onto the
+   * main-app event fabric. Idempotent: re-marking with the SAME event id
+   * is a no-op (replay-safe); a DIFFERENT event id means double-report —
+   * refused. 'SALE_CONFIRMED' is accepted as the legacy name for
+   * CHAIN_VERIFIED (pre-V1.1 records).
+   */
+  markCommercialEvent(saleId, { eventId, eventType = 'rezonate.nft_sale' }) {
+    const sale = this._get('nft_sales', saleId);
+    if (!sale) throw new NotFoundError('Sale not found');
+    if (sale.commercial_event_id) {
+      if (sale.commercial_event_id === eventId) return sale;
+      throw new ValidationError(`sale already bridged by event ${sale.commercial_event_id}`);
+    }
+    // REVENUE_RECORDED/RECONCILED sales may still lack linkage (pre-V1.1
+    // records) — attaching the event id is audit-trail only, no downgrade.
+    if (!['CHAIN_VERIFIED', 'SALE_CONFIRMED', 'REVENUE_RECORDED', 'RECONCILED'].includes(sale.revenue_status)) {
+      throw new ValidationError(`sale is ${sale.revenue_status}, cannot bridge — chain verification required`);
+    }
+    if (!sale.transaction_hash) throw new ValidationError('sale has no transaction hash');
+    sale.commercial_event_id = eventId; sale.commercial_event_type = eventType;
+    sale.commercial_event_at = now();
+    if (['CHAIN_VERIFIED', 'SALE_CONFIRMED'].includes(sale.revenue_status)) {
+      sale.revenue_status = 'COMMERCIAL_EVENT_CREATED';
+    }
+    this._update('nft_sales', sale);
+    this._emit('nft.sale.commercial_event', { sale, eventId });
+    return sale;
+  }
+
+  /** Confirm the commercial event was folded into revenue — REVENUE_RECORDED. */
+  markRevenueRecorded(saleId) {
+    const sale = this._get('nft_sales', saleId);
+    if (!sale) throw new NotFoundError('Sale not found');
+    if (sale.revenue_status === 'REVENUE_RECORDED' || sale.revenue_status === 'RECONCILED') return sale;
+    if (sale.revenue_status !== 'COMMERCIAL_EVENT_CREATED') {
+      throw new ValidationError(`sale is ${sale.revenue_status}, cannot mark revenue recorded`);
+    }
+    sale.revenue_status = 'REVENUE_RECORDED'; sale.revenue_recorded_at = now();
+    this._update('nft_sales', sale);
+    this._emit('nft.sale.revenue_recorded', { sale });
+    return sale;
+  }
+
+  /** Reconcile a revenue-recorded sale into durable revenue state. */
   reconcile(saleId) {
     const sale = this._get('nft_sales', saleId);
     if (!sale) throw new NotFoundError('Sale not found');
-    if (sale.revenue_status !== 'SALE_CONFIRMED') throw new ValidationError(`sale is ${sale.revenue_status}, cannot reconcile`);
+    if (sale.revenue_status !== 'REVENUE_RECORDED') {
+      throw new ValidationError(`sale is ${sale.revenue_status}, cannot reconcile — commercial event + revenue record required first`);
+    }
     sale.revenue_status = 'RECONCILED'; sale.reconciled_at = now();
     this._update('nft_sales', sale);
     this._emit('nft.sale.reconciled', { sale });

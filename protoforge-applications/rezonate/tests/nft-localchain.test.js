@@ -52,6 +52,8 @@ test('local EVM: deploy → mint → verify → list → buy → ownership trans
 
     const v2 = await service.verify(nft.id);
     assert.strictEqual(v2.owner.toLowerCase(), buyer.toLowerCase()); // transfer independently verified
+    service.markCommercialEvent(sale.id, { eventId: 'test-evt-1' });
+    service.markRevenueRecorded(sale.id);
     assert.strictEqual(service.reconcile(sale.id).revenue_status, 'RECONCILED');
 
     // seller balance actually increased (real value moved)

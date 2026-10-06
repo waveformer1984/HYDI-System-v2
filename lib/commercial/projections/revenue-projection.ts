@@ -7,6 +7,7 @@ export const REVENUE_STREAMS = [
   'lipi_v2',
   'protogrance_aromatics',
   'rezonate',
+  'rezonate_nft',
   'waveformer_studio',
 ];
 
@@ -22,11 +23,14 @@ export interface RevenueStreamSummary {
   refundCount: number;
   paidOut: number;
   pendingPayout: number;
+  currency: string;
   lastUpdated: string;
 }
 
 export interface RevenueProjectionState {
   streams: Record<string, RevenueStreamSummary>;
+  /** tx_hash → event id. Chain-verified NFT sales must never double-count. */
+  nftSaleTxHashes?: Record<string, string>;
 }
 
 const FEE_STRUCTURE = {
@@ -72,6 +76,7 @@ function getOrCreateStream(state: RevenueProjectionState, stream: string): Reven
       refundCount: 0,
       paidOut: 0,
       pendingPayout: 0,
+      currency: 'USD',
       lastUpdated: new Date(0).toISOString(),
     };
   }
@@ -171,6 +176,41 @@ function handlePayoutPaid(state: RevenueProjectionState, event: BusEvent): Reven
   return state;
 }
 
+/**
+ * Chain-verified Rezonate NFT sale. Unlike Stripe payments the fee math is
+ * already exact on-chain — record the real amounts, never computeNet().
+ * Denominated in ETH (never mixed into the USD 'rezonate' stream).
+ * Dedupe by transaction_hash — the immutable external correlation key.
+ */
+function handleRezonateNftSale(state: RevenueProjectionState, event: BusEvent): RevenueProjectionState {
+  const payload = event.payload as {
+    transaction_hash?: string;
+    gross_amount?: number;
+    platform_fee?: number;
+    creator_proceeds?: number;
+    currency?: string;
+  };
+  const txHash = payload.transaction_hash;
+  if (!txHash) return state;
+  state.nftSaleTxHashes = state.nftSaleTxHashes ?? {};
+  if (state.nftSaleTxHashes[txHash]) return state; // replay — already counted
+  state.nftSaleTxHashes[txHash] = event.id;
+
+  const summary = getOrCreateStream(state, 'rezonate_nft');
+  summary.currency = payload.currency ?? 'ETH';
+  const num = (v: unknown) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
+  const gross = num(payload.gross_amount);
+  const fee = num(payload.platform_fee);
+  const proceeds = num(payload.creator_proceeds);
+  summary.gross = round(summary.gross + gross);
+  summary.platformFees = round(summary.platformFees + fee);
+  summary.fees = round(summary.fees + fee);
+  summary.net = round(summary.net + proceeds);
+  summary.paymentCount += 1;
+  summary.lastUpdated = event.timestamp;
+  return state;
+}
+
 export interface RevenueSummaryView {
   revenueStream: string;
   gross: number;
@@ -180,6 +220,7 @@ export interface RevenueSummaryView {
   pendingPayout: number;
   paidOut: number;
   heldForDisputes: number;
+  currency: string;
   lastUpdated: string;
 }
 
@@ -194,6 +235,7 @@ export function toRevenueSummary(summary: RevenueStreamSummary): RevenueSummaryV
     pendingPayout: summary.pendingPayout,
     paidOut: summary.paidOut,
     heldForDisputes: 0,
+    currency: summary.currency,
     lastUpdated: summary.lastUpdated,
   };
 }
@@ -205,6 +247,7 @@ export function createRevenueProjection(): Projection<RevenueProjectionState> {
     state: { streams: {} },
     handlers: {
       'payment.received': handlePaymentReceived,
+      'rezonate.nft_sale': handleRezonateNftSale,
       'refund.completed': handleRefundCompleted,
       'payout.created': handlePayoutCreated,
       'payout.paid': handlePayoutPaid,

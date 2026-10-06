@@ -23,6 +23,7 @@ export type CommercialEventType =
   | 'financial_ledger.entry_recorded'
   | 'marketplace.purchase'
   | 'forgefinder.job.completed'
+  | 'rezonate.nft_sale'
   | 'manual.adjustment';
 
 export interface IngressAdapterOptions {
@@ -103,6 +104,83 @@ export interface StripePayoutPayload {
   amount: number;
   currency: string;
   status: 'created' | 'paid';
+}
+
+export interface RezonateNftSalePayload {
+  rezonate_sale_id: string;
+  source_asset_id: string;
+  listing_id: string;
+  chain: 'evm';
+  network: string;
+  chain_id: number;
+  contract_address: string;
+  token_id: string;
+  transaction_hash: string;
+  seller_wallet: string;
+  buyer_wallet: string;
+  gross_amount: number;
+  currency: string;
+  platform_fee: number;
+  creator_proceeds: number;
+  revenue_stream: 'rezonate_nft';
+  chain_mode: 'local' | 'testnet' | 'mainnet' | 'mock';
+  verified_at: string;
+}
+
+/**
+ * Adapts a chain-verified Rezonate NFT sale into a commercial event.
+ * The transaction hash is the immutable external correlation key —
+ * replaying the same tx must never produce a second revenue record.
+ * Only call this for sales whose receipt and ownership transfer were
+ * independently confirmed on-chain (revenue_status CHAIN_VERIFIED).
+ */
+export function adaptRezonateNftSale(sale: {
+  id: string;
+  asset_id: string;
+  listing_id: string;
+  transaction_hash: string;
+  seller_wallet: string;
+  buyer_wallet: string;
+  price_eth: number;
+  platform_fee_wei: string;
+  creator_proceeds_wei: string;
+  verified_at: string;
+  chain_mode?: string;
+}, chain: { chainId: number; contractAddress: string; tokenId: string; mode: string }
+): { type: CommercialEventType; payload: RezonateNftSalePayload; source: string; correlationId: string } {
+  const weiToEth = (wei: string) => Number(BigInt(wei)) / 1e18;
+  if (!/^0x[0-9a-fA-F]{64}$/.test(sale.transaction_hash)) {
+    throw new Error('refusing to bridge sale without a real transaction hash');
+  }
+  const mode = sale.chain_mode ?? chain.mode;
+  if (mode !== 'local' && mode !== 'testnet' && mode !== 'mainnet' && mode !== 'mock') {
+    throw new Error(`unknown chain mode '${mode}'`);
+  }
+  return {
+    type: 'rezonate.nft_sale',
+    source: 'rezonate-nft-bridge',
+    correlationId: sale.transaction_hash,
+    payload: {
+      rezonate_sale_id: sale.id,
+      source_asset_id: sale.asset_id,
+      listing_id: sale.listing_id,
+      chain: 'evm',
+      network: chain.mode,
+      chain_id: chain.chainId,
+      contract_address: chain.contractAddress,
+      token_id: chain.tokenId,
+      transaction_hash: sale.transaction_hash,
+      seller_wallet: sale.seller_wallet,
+      buyer_wallet: sale.buyer_wallet,
+      gross_amount: Number(sale.price_eth),
+      currency: 'ETH',
+      platform_fee: weiToEth(sale.platform_fee_wei),
+      creator_proceeds: weiToEth(sale.creator_proceeds_wei),
+      revenue_stream: 'rezonate_nft',
+      chain_mode: mode,
+      verified_at: sale.verified_at,
+    },
+  };
 }
 
 export function adaptStripeConnectEvent(stripeEvent: {

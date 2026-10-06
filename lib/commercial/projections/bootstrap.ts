@@ -72,6 +72,7 @@ function zeroSummary(stream: string): RevenueSummaryView {
     pendingPayout: 0,
     paidOut: 0,
     heldForDisputes: 0,
+    currency: stream === 'rezonate_nft' ? 'ETH' : 'USD',
     lastUpdated: new Date().toISOString(),
   };
 }

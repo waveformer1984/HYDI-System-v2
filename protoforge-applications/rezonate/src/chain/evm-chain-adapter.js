@@ -126,9 +126,23 @@ class EvmChainAdapter {
     return dep;
   }
 
+  /** Public block explorer for the connected chain; null when none exists (local/mock). */
+  explorerBase() {
+    const EXPLORERS = {
+      1: 'https://etherscan.io',
+      11155111: 'https://sepolia.etherscan.io',
+      8453: 'https://basescan.org',
+      84532: 'https://sepolia.basescan.org',
+      137: 'https://polygonscan.com',
+      80002: 'https://amoy.polygonscan.com',
+    };
+    if (this.mode === 'local') return null;
+    return EXPLORERS[this.chainId] || null;
+  }
+
   contractAddresses() {
     const dep = loadDeployments()[this.deploymentKey] || {};
-    return { nft: dep.nft || null, market: dep.market || null, mode: this.mode, chainId: this.chainId };
+    return { nft: dep.nft || null, market: dep.market || null, mode: this.mode, chainId: this.chainId, explorer: this.explorerBase() };
   }
 
   async mintToken({ to, tokenUri, contentHash }) {

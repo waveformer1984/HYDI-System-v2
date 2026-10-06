@@ -31,6 +31,8 @@ import {
   clearFocus,
 } from '../../lib/heidi/ConversationContext';
 import { verifyServiceToken } from '../../lib/auth/verifyServiceToken';
+import { tryNftStatusAnswer } from '../../lib/rezonate/nft-status-answer';
+import { syncRezonateNftRevenue } from '../../lib/commercial/rezonate-nft-bridge';
 import type { CooState } from '../../lib/heidi/CooState';
 
 /**
@@ -1803,6 +1805,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return res.end();
       }
     }
+
+    // Deterministic Rezonate NFT-commerce reads — durable chain-verified
+    // state answers before the COO snapshot or any LLM can guess. NFT
+    // mutations stay refused (they belong to the market UI/API surface).
+    try {
+      const nftAnswer = await tryNftStatusAnswer(message, { sync: syncRezonateNftRevenue });
+      if (nftAnswer) {
+        sse(res, { type: 'metadata', model_used: 'rezonate-nft-durable', latency: 0 });
+        sse(res, { type: 'content', content: nftAnswer.text });
+        res.write('data: [DONE]\n\n');
+        return res.end();
+      }
+    } catch { /* NFT reads are best-effort; fall through */ }
 
     // (the daemon's authoritative snapshot). Non-operational or unreadable
     // falls through to the existing runtime-state + LLM paths.

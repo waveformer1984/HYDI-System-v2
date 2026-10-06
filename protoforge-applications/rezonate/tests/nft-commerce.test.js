@@ -112,7 +112,7 @@ test('purchase: happy path → sale_confirmed, ownership moved, fee math', async
   const listing = await service.createListing(nft.id, { sellerWallet: SELLER, priceEth: '1.0' });
   const { sale } = await service.purchase(listing.id, { buyerWallet: BUYER });
   assert.strictEqual(sale.status, 'sale_confirmed');
-  assert.strictEqual(sale.revenue_status, 'SALE_CONFIRMED');
+  assert.strictEqual(sale.revenue_status, 'CHAIN_VERIFIED');
   assert.strictEqual(sale.new_owner, BUYER);
   assert.strictEqual(BigInt(sale.platform_fee_wei), 1000000000000000000n * 250n / 10000n);
   const v = await service.verify(nft.id);
@@ -151,12 +151,42 @@ test('cancel: seller-only, token returns to seller', async () => {
   assert.strictEqual((await service.verify(nft.id)).owner, SELLER);
 });
 
-test('reconcile: state machine LISTED→…→RECONCILED, bad transitions refused', async () => {
+test('revenue progression: CHAIN_VERIFIED → COMMERCIAL_EVENT_CREATED → REVENUE_RECORDED → RECONCILED', async () => {
   const { service, asset } = await setup();
   const nft = service.createNftAsset({ sourceAssetId: asset.id, creatorWallet: SELLER });
   await service.mint(nft.id, {});
   const listing = await service.createListing(nft.id, { sellerWallet: SELLER, priceEth: '0.5' });
   const { sale } = await service.purchase(listing.id, { buyerWallet: BUYER });
+  assert.strictEqual(sale.revenue_status, 'CHAIN_VERIFIED');
+
+  // commercial event cannot be skipped — reconcile refuses before revenue record
+  assert.throws(() => service.reconcile(sale.id), /cannot reconcile/);
+  assert.throws(() => service.markRevenueRecorded(sale.id), /cannot mark revenue recorded/);
+
+  service.markCommercialEvent(sale.id, { eventId: 'evt-1' });
+  assert.strictEqual(service._get('nft_sales', sale.id).revenue_status, 'COMMERCIAL_EVENT_CREATED');
+  // idempotent: same event id is a no-op, different id is a double-report refusal
+  service.markCommercialEvent(sale.id, { eventId: 'evt-1' });
+  assert.throws(() => service.markCommercialEvent(sale.id, { eventId: 'evt-2' }), /already bridged/);
+
+  service.markRevenueRecorded(sale.id);
+  assert.strictEqual(service._get('nft_sales', sale.id).revenue_status, 'REVENUE_RECORDED');
+  service.markRevenueRecorded(sale.id); // idempotent
+
   assert.strictEqual(service.reconcile(sale.id).revenue_status, 'RECONCILED');
   assert.throws(() => service.reconcile(sale.id), /cannot reconcile/);
+});
+
+test('chain gates: mainnet refused without ALLOW_LIVE_CHAIN; testnet requires RPC', async () => {
+  const { EvmChainAdapter } = require('../src/chain/evm-chain-adapter');
+  const saved = process.env.ALLOW_LIVE_CHAIN;
+  delete process.env.ALLOW_LIVE_CHAIN;
+  assert.throws(() => new EvmChainAdapter({ mode: 'mainnet' }), /ALLOW_LIVE_CHAIN/);
+  if (saved !== undefined) process.env.ALLOW_LIVE_CHAIN = saved;
+  // testnet mode constructs but refuses at init without REZONATE_CHAIN_RPC
+  const savedRpc = process.env.REZONATE_CHAIN_RPC;
+  delete process.env.REZONATE_CHAIN_RPC;
+  const adapter = new EvmChainAdapter({ mode: 'testnet' });
+  await assert.rejects(() => adapter.init(), /REZONATE_CHAIN_RPC/);
+  if (savedRpc !== undefined) process.env.REZONATE_CHAIN_RPC = savedRpc;
 });
