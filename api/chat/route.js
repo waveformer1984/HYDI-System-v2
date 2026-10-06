@@ -23,6 +23,7 @@ import {
 import { normalizeRezonateIntent } from '../../lib/rezonate/intent.js';
 import { tryNftStatusAnswer } from '../../lib/rezonate/nft-status-answer.js';
 import { tryHumanActionAnswer } from '../../lib/human-actions/heidi-answer.js';
+import { getGoalSystem } from '../../lib/heidi/GoalSystem';
 import { syncRezonateNftRevenue } from '../../lib/commercial/rezonate-nft-bridge';
 import { HeidiController } from '../../pao-system/core/heidi.controller';
 
@@ -106,9 +107,9 @@ export default async function handler(req, res) {
 
     // Human-action questions are system-agnostic — "what do you need from
     // me" is answered from durable task state regardless of which surface
-    // the operator typed it into.
+    // the operator typed it into. goals enables verify→resume linkage.
     try {
-      const humanAnswer = await tryHumanActionAnswer(message, {});
+      const humanAnswer = await tryHumanActionAnswer(message, { goals: getGoalSystem() });
       if (humanAnswer) {
         return res.status(200).json({ response: humanAnswer.text, system, timestamp: new Date().toISOString() });
       }

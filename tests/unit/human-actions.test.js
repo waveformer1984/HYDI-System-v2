@@ -1,8 +1,9 @@
 'use strict';
 
 /**
- * Human Action system tests — service lifecycle, dedupe, verifiers,
- * detector seeding, and the deterministic Heidi answer surface.
+ * Human Action system tests — canonical v2 contract: lifecycle, dedupe,
+ * verifiers, detector seeding, expiry, audit trail, mission/goal linkage,
+ * resume semantics, and the deterministic Heidi answer surface.
  * An isolated store file is used per run (HYDI_HUMAN_ACTIONS_FILE).
  */
 
@@ -15,24 +16,52 @@ process.env.HYDI_HUMAN_ACTIONS_FILE = tmpFile;
 
 const { HumanActionService } = require('../../lib/human-actions/service');
 const { runVerifier, envNamePresent } = require('../../lib/human-actions/verifiers');
-const { detectKnownBlockers } = require('../../lib/human-actions/detector');
+const { detectKnownBlockers, syncHumanActions } = require('../../lib/human-actions/detector');
+const { attachBlockerToGoal, resumeSatisfiedGoals, scanEscalatedGoals } = require('../../lib/human-actions/mission-link');
 const { tryHumanActionAnswer } = require('../../lib/human-actions/heidi-answer');
+const { load, save } = require('../../lib/human-actions/store');
 
-describe('HumanActionService', () => {
+/** In-memory GoalSystem stand-in: same {getGoal, updateGoal, listGoals} surface. */
+function fakeGoals(seed = []) {
+  const store = new Map(seed.map((g) => [g.goalId, { evidence: [], ...g }]));
+  return {
+    store,
+    async getGoal(id) { return store.get(id) || null; },
+    async updateGoal(id, u) {
+      const g = store.get(id);
+      if (!g) return null;
+      if (u.status) g.status = u.status;
+      if (u.context) g.context = u.context;
+      if (u.evidence) g.evidence = [...(g.evidence || []), ...u.evidence];
+      return g;
+    },
+    async listGoals(f = {}) { return [...store.values()].filter((g) => !f.status || g.status === f.status); },
+  };
+}
+
+describe('HumanActionService (v2 contract)', () => {
   const svc = () => new HumanActionService({});
 
-  test('request creates a durable open action with instructions + verifier', () => {
+  test('request creates a durable OPEN action with canonical fields', () => {
     const { action, created } = svc().request({
-      blockerKey: 'test:thing', title: 'Do the thing', kind: 'credential',
-      instructions: ['step one'], verification: { verifier: 'env-vars', spec: { envNames: ['HA_TEST_VAR'] } },
+      blockerKey: 'test:thing', title: 'Do the thing', type: 'credential',
+      description: 'why this exists',
+      instructions: ['step one'],
+      verifier: { name: 'env-vars', spec: { envNames: ['HA_TEST_VAR'] } },
+      sourceMissionId: 'm-1', sourceGoalId: 'g-1', sourceAgentId: 'a-1',
+      priority: 'high',
     });
     expect(created).toBe(true);
     expect(action.id).toMatch(/^ha_/);
-    expect(action.status).toBe('open');
+    expect(action.status).toBe('OPEN');
+    expect(action.sourceMissionId).toBe('m-1');
+    expect(action.sourceGoalId).toBe('g-1');
+    expect(action.verifier.name).toBe('env-vars');
+    expect(action.transitions[0].type).toBe('CREATED');
     expect(svc().get(action.id).title).toBe('Do the thing');
   });
 
-  test('dedupe: same blocker_key returns the same open action', () => {
+  test('dedupe: same blockerKey returns the same open action', () => {
     const s = svc();
     const a = s.request({ blockerKey: 'test:dedupe', title: 'X' }).action;
     const b = s.request({ blockerKey: 'test:dedupe', title: 'X again' });
@@ -40,65 +69,116 @@ describe('HumanActionService', () => {
     expect(b.action.id).toBe(a.id);
   });
 
-  test('claim → verify → auto_verified resolution; attestation cannot bypass a failing check', async () => {
+  test('claim → verify → auto_verified RESOLVED; attestation cannot bypass a failing check', async () => {
     const s = svc();
     const { action } = s.request({
       blockerKey: 'test:env', title: 'Set HA_TEST_VAR',
-      verification: { verifier: 'env-vars', spec: { envNames: ['HA_TEST_VAR'] } },
+      verifier: { name: 'env-vars', spec: { envNames: ['HA_TEST_VAR'] } },
     });
-    s.claim(action.id);
-    expect(s.get(action.id).status).toBe('claimed');
+    s.claim(action.id, 'tester');
+    expect(s.get(action.id).status).toBe('CLAIMED');
 
-    // fails while the env var is genuinely absent
-    const bad = await s.verify(action.id);
-    expect(bad.result.ok).toBe(false);
-    expect(s.get(action.id).status).toBe('claimed');
-    expect(() => s.resolve(action.id)).toThrow(/verify/);
+    // fails while the env var is genuinely absent → BLOCKED with evidence
+    const bad = await s.verify(action.id, 'tester');
+    expect(bad.result.passed).toBe(false);
+    const a1 = s.get(action.id);
+    expect(a1.status).toBe('BLOCKED');
+    expect(a1.verification.verificationId).toMatch(/^ver_/);
+    expect(a1.verification.checks.length).toBe(1);
+    expect(a1.attempts).toBe(1);
+    expect(() => s.resolve(action.id)).toThrow(/verify|attestation/i);
 
     process.env.HA_TEST_VAR = 'set-in-test';
-    const good = await s.verify(action.id);
+    const good = await s.verify(action.id, 'tester');
     delete process.env.HA_TEST_VAR;
-    expect(good.result.ok).toBe(true);
-    expect(s.get(action.id).status).toBe('resolved');
-    expect(s.get(action.id).resolution).toBe('auto_verified');
+    expect(good.result.passed).toBe(true);
+    const a2 = s.get(action.id);
+    expect(a2.status).toBe('RESOLVED');
+    expect(a2.resolution).toBe('auto_verified');
+    // audit trail: CREATED CLAIMED VERIFY_REQUESTED FAILED_VERIFICATION VERIFY_REQUESTED VERIFIED RESOLVED
+    const types = a2.transitions.map((t) => t.type);
+    expect(types).toEqual(['CREATED', 'CLAIMED', 'VERIFY_REQUESTED', 'FAILED_VERIFICATION', 'VERIFY_REQUESTED', 'VERIFIED', 'RESOLVED']);
   });
 
   test('manual actions resolve by human attestation only', () => {
     const s = svc();
-    const { action } = s.request({ blockerKey: 'test:manual', title: 'Physical step', verification: { verifier: 'manual', spec: {} } });
-    expect(() => s.resolve(action.id, { note: 'done' })).not.toThrow();
+    const { action } = s.request({ blockerKey: 'test:manual', title: 'Physical step', verifier: { name: 'manual', spec: {} } });
+    expect(() => s.resolve(action.id, { note: 'done', actor: 'j' })).not.toThrow();
     const a = s.get(action.id);
-    expect(a.status).toBe('resolved');
+    expect(a.status).toBe('RESOLVED');
     expect(a.resolution).toBe('human_attested');
+    expect(a.verification.passed).toBe(true);
   });
 
-  test('reject closes the action and records the reason', () => {
+  test('reject and cancel close the action deterministically', () => {
     const s = svc();
-    const { action } = s.request({ blockerKey: 'test:rej', title: 'Nope' });
-    s.reject(action.id, { reason: 'not needed' });
-    expect(s.get(action.id).status).toBe('rejected');
+    const a = s.request({ blockerKey: 'test:rej', title: 'Nope' }).action;
+    s.reject(a.id, { reason: 'not needed' });
+    expect(s.get(a.id).status).toBe('REJECTED');
+
+    const b = s.request({ blockerKey: 'test:cxl', title: 'Later' }).action;
+    s.cancel(b.id, { reason: 'superseded' });
+    expect(s.get(b.id).status).toBe('CANCELLED');
   });
 
-  test('resolved action is not re-verified', async () => {
+  test('expiresAt drives lazy EXPIRY — no timer needed', () => {
     const s = svc();
-    const { action } = s.request({ blockerKey: 'test:done', title: 'D', verification: { verifier: 'manual', spec: {} } });
+    const { action } = s.request({
+      blockerKey: 'test:exp', title: 'Expiring',
+      expiresAt: new Date(Date.now() - 1000).toISOString(),
+    });
+    expect(s.get(action.id).status).toBe('EXPIRED');
+    expect(s.get(action.id).transitions.some((t) => t.type === 'EXPIRED')).toBe(true);
+  });
+
+  test('resolved action is not re-verified; terminal actions refuse ops', async () => {
+    const s = svc();
+    const { action } = s.request({ blockerKey: 'test:done', title: 'D', verifier: { name: 'manual', spec: {} } });
     s.resolve(action.id);
     const r = await s.verify(action.id);
-    expect(r.checked).toBe(false);
+    expect(r.checked).toBe(false); // RESOLVED short-circuits, no re-verify
+    const rej = s.request({ blockerKey: 'test:term', title: 'T' }).action;
+    s.reject(rej.id);
+    await expect(s.verify(rej.id)).rejects.toThrow(/terminal/);
+  });
+
+  test('v1 records migrate on load', () => {
+    const db = load();
+    db.actions.push({
+      id: 'ha_legacy1', blocker_key: 'old:key', title: 'Legacy', kind: 'credential',
+      instructions: ['x'], status: 'open', created_at: '2026-01-01T00:00:00Z',
+      claimed_at: null, resolved_at: null, resolution: null, verify_result: null,
+      verification: { verifier: 'env-vars', spec: { envNames: ['X'] } },
+    });
+    save({ version: 1, actions: db.actions });
+    const migrated = load().actions.find((a) => a.id === 'ha_legacy1');
+    expect(migrated.status).toBe('OPEN');
+    expect(migrated.blockerKey).toBe('old:key');
+    expect(migrated.verifier.name).toBe('env-vars');
+    expect(migrated.schema).toBe(2);
   });
 });
 
-describe('verifiers', () => {
-  test('env-vars: reports missing names without values', async () => {
+describe('verifiers (durable evidence shape)', () => {
+  test('env-vars: reports missing names without values, checks[] rows', async () => {
     const r = await runVerifier('env-vars', { envNames: ['DEFINITELY_MISSING_VAR_XYZ'] });
-    expect(r.ok).toBe(false);
-    expect(r.evidence.env_present.DEFINITELY_MISSING_VAR_XYZ).toBe(false);
+    expect(r.passed).toBe(false);
+    expect(r.verifier).toBe('env-vars');
+    expect(r.verificationId).toMatch(/^ver_/);
+    expect(r.checks[0].name).toContain('DEFINITELY_MISSING_VAR_XYZ');
+    expect(r.checks[0].passed).toBe(false);
     expect(JSON.stringify(r)).not.toContain('sk_');
   });
 
-  test('unknown verifier refused', async () => {
-    const r = await runVerifier('nope', {});
-    expect(r.ok).toBe(false);
+  test('unknown verifier fails closed — never dynamic execution', async () => {
+    const r = await runVerifier('nope; rm -rf /', {});
+    expect(r.passed).toBe(false);
+    expect(r.failureReason).toContain('unknown verifier');
+  });
+
+  test('verifier throw → failed result, not an exception', async () => {
+    const r = await runVerifier('http-reachable', { url: 'http://127.0.0.1:1/definitely-closed' });
+    expect(r.passed).toBe(false);
   });
 
   test('rezonate-testnet verifier refuses with absent env and lists missing names', async () => {
@@ -108,9 +188,9 @@ describe('verifiers', () => {
       rpcEnv: 'REZONATE_CHAIN_RPC', deployerKeyEnv: 'REZONATE_DEPLOYER_KEY', buyerKeyEnv: 'REZONATE_BUYER_KEY', expectedChainId: 11155111,
     });
     for (const n of Object.keys(saved)) if (saved[n] !== undefined) process.env[n] = saved[n];
-    // env files may genuinely contain the names — ok only matters that it fails or passes honestly
-    expect(typeof r.ok).toBe('boolean');
-    if (!r.ok) expect(r.reason).toBeTruthy();
+    expect(typeof r.passed).toBe('boolean');
+    if (!r.passed) expect(r.safeSummary || r.failureReason).toBeTruthy();
+    expect(Array.isArray(r.checks)).toBe(true);
   });
 });
 
@@ -125,8 +205,77 @@ describe('detector', () => {
     if (r1.requested.length) {
       expect(r2.requested.length).toBe(0);
       expect(r2.alreadyOpen).toEqual(r1.requested);
+      const seeded = s.get(r1.requested[0]);
+      expect(seeded.sourceMissionId).toBe('rezonate-v1.3-public-testnet');
     }
     expect(r1.checked).toBeGreaterThan(0);
+  });
+});
+
+describe('mission linkage', () => {
+  test('goal escalates to WAITING_ON_HUMAN and resumes only when ALL linked actions resolve', async () => {
+    const s = new HumanActionService({});
+    const goals = fakeGoals([{ goalId: 'g1', title: 'Rezonate public deploy', status: 'in_progress', context: {} }]);
+
+    // Two prerequisites on the same goal (multi-blocker)
+    const a = await attachBlockerToGoal(s, goals, {
+      goalId: 'g1', blockerKey: 'test:env-a',
+      spec: { title: 'Set HA_G_A', verifier: { name: 'env-vars', spec: { envNames: ['HA_G_A'] } } },
+    });
+    await attachBlockerToGoal(s, goals, {
+      goalId: 'g1', blockerKey: 'test:env-b',
+      spec: { title: 'Set HA_G_B', verifier: { name: 'env-vars', spec: { envNames: ['HA_G_B'] } } },
+    });
+    const g1 = await goals.getGoal('g1');
+    expect(g1.status).toBe('escalated');
+    expect(g1.context.waitingOnHuman).toBe(true);
+    expect(g1.context.humanActions.length).toBe(2);
+
+    // Resolving ONE of two does not resume the goal
+    process.env.HA_G_A = '1';
+    await s.verify(a.action.id);
+    let r = await resumeSatisfiedGoals(s, goals, { actor: 'test' });
+    expect(r.resumed.length).toBe(0);
+    expect(r.stillWaiting[0].satisfiedCount).toBe(1);
+    expect(r.stillWaiting[0].totalLinked).toBe(2);
+
+    // Both satisfied → goal flips back to pending with resume evidence
+    process.env.HA_G_B = '1';
+    const linked = s.forGoal('g1');
+    await s.verify(linked.find((x) => x.blockerKey === 'test:env-b').id);
+    r = await resumeSatisfiedGoals(s, goals, { actor: 'test' });
+    delete process.env.HA_G_A; delete process.env.HA_G_B;
+    expect(r.resumed.length).toBe(1);
+    const g2 = await goals.getGoal('g1');
+    expect(g2.status).toBe('pending');
+    expect(g2.context.waitingOnHuman).toBe(false);
+    const ev = g2.evidence.find((e) => e.type === 'HUMAN_PREREQUISITE_SATISFIED');
+    expect(ev.resolvedActionIds.length).toBe(2);
+    expect(ev.verificationIds.length).toBe(2);
+  });
+
+  test('scanEscalatedGoals links unlinked escalations without duplicating', async () => {
+    const s = new HumanActionService({});
+    const goals = fakeGoals([
+      { goalId: 'g-esc', title: 'Deploy needs credential for external API', status: 'escalated', context: {} },
+      { goalId: 'g-ok', title: 'Normal work', status: 'pending', context: {} },
+    ]);
+    const r1 = await scanEscalatedGoals(s, goals);
+    expect(r1.linked.length).toBe(1);
+    const r2 = await scanEscalatedGoals(s, goals);
+    expect(r2.linked.length).toBe(0); // dedupe — no second action
+    const linked = s.forGoal('g-esc');
+    expect(linked.length).toBe(1);
+    expect(linked[0].verifier.name).toBe('manual');
+  });
+
+  test('syncHumanActions detects + links + resumes in one pass', async () => {
+    const s = new HumanActionService({});
+    const goals = fakeGoals([]);
+    const r = await syncHumanActions(s, goals);
+    expect(r.detection.checked).toBeGreaterThan(0);
+    expect(r.goalScan).toBeTruthy();
+    expect(r.resume).toBeTruthy();
   });
 });
 
@@ -136,18 +285,39 @@ describe('heidi answer', () => {
     expect(await tryHumanActionAnswer('hello there')).toBeNull();
   });
 
-  test('"what do you need from me" lists open actions with instructions', async () => {
+  test('"what do you need from me" lists open actions with instructions + verifier + links', async () => {
     const s = new HumanActionService({});
-    s.request({ blockerKey: 'test:qa', title: 'QA action', instructions: ['do A', 'do B'], verification: { verifier: 'manual', spec: {} } });
+    s.request({
+      blockerKey: 'test:qa', title: 'QA action', instructions: ['do A', 'do B'],
+      verifier: { name: 'manual', spec: {} }, sourceMissionId: 'm-x', priority: 'high',
+    });
     const a = await tryHumanActionAnswer('what do you need from me', { service: s });
     expect(a.text).toContain('QA action');
     expect(a.text).toContain('do A');
+    expect(a.text).toContain('mission: m-x');
+    expect(a.text).toContain('human attestation');
+  });
+
+  test('"what is blocking rezonate" filters to the domain', async () => {
+    const s = new HumanActionService({});
+    s.request({ blockerKey: 'test:rez', title: 'Rezonate creds', verifier: { name: 'manual', spec: {} }, sourceMissionId: 'rezonate-v1.3' });
+    s.request({ blockerKey: 'test:other', title: 'Unrelated thing', verifier: { name: 'manual', spec: {} } });
+    const a = await tryHumanActionAnswer('what is blocking rezonate', { service: s });
+    expect(a.text).toContain('Rezonate creds');
+    expect(a.text).not.toContain('Unrelated thing');
   });
 
   test('"I did it" re-runs verifiers instead of trusting the claim', async () => {
     const s = new HumanActionService({});
-    s.request({ blockerKey: 'test:claim', title: 'Set thing', verification: { verifier: 'env-vars', spec: { envNames: ['HA_NEVER_SET_XYZ'] } } });
+    s.request({ blockerKey: 'test:claim', title: 'Set thing', verifier: { name: 'env-vars', spec: { envNames: ['HA_NEVER_SET_XYZ'] } } });
     const a = await tryHumanActionAnswer('i did it', { service: s });
     expect(a.text).toMatch(/still failing|manual-attestation/);
+  });
+
+  test('"check again" verifies and reports check rows', async () => {
+    const s = new HumanActionService({});
+    s.request({ blockerKey: 'test:again', title: 'Set HA_AGAIN', verifier: { name: 'env-vars', spec: { envNames: ['HA_AGAIN_XYZ'] } } });
+    const a = await tryHumanActionAnswer('check again', { service: s });
+    expect(a.text).toMatch(/still failing|Verification re-run/);
   });
 });

@@ -12,7 +12,8 @@
 
 import { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@supabase/supabase-js';
-import { HumanActionService, detectKnownBlockers } from '../../../lib/human-actions/index.js';
+import { HumanActionService, syncHumanActions } from '../../../lib/human-actions/index.js';
+import { getGoalSystem } from '../../../lib/heidi/GoalSystem';
 import { requireAuth } from '../../../lib/auth/requireAuth.js';
 import { verifyServiceToken } from '../../../lib/auth/verifyServiceToken.js';
 
@@ -39,10 +40,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (req.method === 'GET') {
     const auth = await authed(req, res, 'actions:view');
     if (!auth.ok) return;
-    if (req.query.scan === '1') detectKnownBlockers(svc);
+    // Detection is the read-path cadence: every surface that lists actions
+    // refreshes the known-blocker picture first. Idempotent — blockerKey
+    // dedupe makes repeat scans free.
+    await syncHumanActions(svc, getGoalSystem()).catch(() => null);
     const status = typeof req.query.status === 'string' ? req.query.status : undefined;
+    const goalId = typeof req.query.goalId === 'string' ? req.query.goalId : undefined;
+    const includeTerminal = req.query.all === '1';
     res.setHeader('Cache-Control', 'no-store');
-    return res.status(200).json({ actions: svc.list({ status }) });
+    return res.status(200).json({ actions: svc.list({ status, sourceGoalId: goalId, includeTerminal }) });
   }
 
   if (req.method === 'POST') {
@@ -52,10 +58,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     try {
       const { action, created } = svc.request({
         blockerKey: body.blockerKey as string | undefined,
+        type: body.type as string | undefined,
         title: body.title as string,
-        kind: body.kind as string | undefined,
+        description: body.description as string | undefined,
         instructions: Array.isArray(body.instructions) ? body.instructions : [],
-        verification: body.verification as { verifier: string; spec: Record<string, unknown> } | undefined,
+        verifier: body.verifier as { name: string; spec: Record<string, unknown> } | undefined,
+        source: 'api',
+        sourceMissionId: body.sourceMissionId as string | undefined,
+        sourceGoalId: body.sourceGoalId as string | undefined,
+        sourceAgentId: body.sourceAgentId as string | undefined,
+        expiresAt: body.expiresAt as string | undefined,
+        resumePolicy: body.resumePolicy as 'auto' | 'none' | undefined,
         context: body.context as Record<string, unknown> | undefined,
         priority: body.priority as string | undefined,
       });

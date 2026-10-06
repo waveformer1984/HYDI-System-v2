@@ -171,6 +171,40 @@ function ActionButton({ label, kind, body, onDone, disabled }: { label: string; 
   );
 }
 
+/** Durable Human Action controls — POSTs an op to the authenticated
+ *  /api/human-actions route. 'verify' re-runs the machine check; there is
+ *  deliberately no "mark complete" button for verifier-backed actions. */
+function HumanActionButton({ label, actionId, op, onDone }: { label: string; actionId: string; op: 'claim' | 'verify' | 'resolve' | 'reject'; onDone: () => void }) {
+  const [st2, setSt2] = useState<'idle' | 'working' | 'done' | 'failed' | 'refused'>('idle');
+  const [msg, setMsg] = useState('');
+  const go = async () => {
+    setSt2('working');
+    try {
+      const headers = await serviceHeaders({ 'content-type': 'application/json' });
+      const body: Record<string, unknown> = { op };
+      if (op === 'resolve') body.note = 'attested via workspace';
+      if (op === 'reject') body.reason = 'rejected via workspace';
+      const r = await fetch(`/api/human-actions/${encodeURIComponent(actionId)}`, { method: 'POST', headers, body: JSON.stringify(body) });
+      const j = await r.json();
+      if (r.ok && j.ok) {
+        setSt2('done');
+        const st = j.action?.status ?? '';
+        setMsg(st === 'RESOLVED' ? 'VERIFIED — resolved' : st === 'BLOCKED' ? `still failing: ${j.action?.verification?.safeSummary ?? j.action?.lastError ?? 'check failed'}` : st.toLowerCase());
+        onDone();
+      } else { setSt2(r.status === 409 ? 'refused' : 'failed'); setMsg(j.error ?? 'failed'); }
+    } catch (e) { setSt2('failed'); setMsg(String(e)); }
+  };
+  return (
+    <span style={{ marginRight: 8 }}>
+      <button onClick={go} disabled={st2 === 'working'} style={{
+        background: st2 === 'done' ? '#14532d' : st2 === 'failed' || st2 === 'refused' ? '#450a0a' : '#1e293b',
+        color: '#e2e8f0', border: '1px solid #334155', borderRadius: 4, padding: '3px 10px', fontSize: 11, cursor: 'pointer',
+      }}>{st2 === 'working' ? '…' : label}</button>
+      {msg && <span style={{ fontSize: 10, color: st2 === 'done' ? C.ok : C.bad }}> {msg}</span>}
+    </span>
+  );
+}
+
 /* ─── Governed actions surface ─────────────────────────────────────────
  * Reads and resolves REAL durable proposals via /api/proposals — the
  * server re-validates the allowlist, params-hash binding, expiry and
@@ -546,10 +580,38 @@ export default function Workspace() {
                         <ActionButton label="approve" kind="resolve" body={{ queueItemId: d.id, decision: 'approve' }} onDone={reload} />
                         <ActionButton label="reject" kind="resolve" body={{ queueItemId: d.id, decision: 'reject' }} onDone={reload} />
                       </>
-                      : <small style={{ color: '#475569' }}>ACTION UNAVAILABLE — no governed capability for this class; review evidence manually</small>}
+                      : d.kind === 'human_action'
+                        ? <>
+                          <HumanActionButton label="verify" actionId={d.id} op="verify" onDone={reload} />
+                          <small style={{ color: C.dim }}> verifier-gated — resolves only when the check passes · see prerequisites below</small>
+                        </>
+                        : <small style={{ color: '#475569' }}>ACTION UNAVAILABLE — no governed capability for this class; review evidence manually</small>}
                     <small style={{ color: C.dim }}> authority: J · evidence: {d.id}</small>
                   </div>
                 )) : 'nothing requires J right now'}
+              </Card>
+              <Card title="human actions — verifier-gated prerequisites" tone={(s.humanActions ?? []).some((a: W) => a.status === 'OPEN' || a.status === 'BLOCKED') ? C.warn : C.ok}>
+                {(s.humanActions ?? []).length ? (s.humanActions as W[]).map((a: W) => (
+                  <div key={a.id} style={{ marginBottom: 10, borderBottom: '1px solid #1e293b', paddingBottom: 8 }}>
+                    <b>{a.title}</b>{' '}
+                    <span style={{ color: a.status === 'RESOLVED' ? C.ok : a.status === 'BLOCKED' ? C.bad : a.status === 'OPEN' ? C.warn : C.dim }}>[{a.status}]</span>{' '}
+                    <span style={{ color: '#475569' }}>{a.priority} · {a.type}{a.sourceMissionId ? ` · mission ${a.sourceMissionId}` : ''}{a.sourceGoalId ? ` · goal ${String(a.sourceGoalId).slice(0, 8)}` : ''}</span><br />
+                    {a.status !== 'RESOLVED' && (a.instructions ?? []).length > 0 && (
+                      <ol style={{ margin: '4px 0', paddingLeft: 18, fontSize: 11, color: C.dim }}>
+                        {a.instructions.map((step: string, i: number) => <li key={i}>{step}</li>)}
+                      </ol>
+                    )}
+                    {(a.stillFailing ?? []).length > 0 && <small style={{ color: C.bad }}>failing: {a.stillFailing.join(' · ')}</small>}
+                    {a.lastCheck && <small style={{ color: '#475569' }}> last check {a.lastCheck.slice(0, 19)}Z · attempts {a.attempts}</small>}
+                    <div style={{ marginTop: 4 }}>
+                      {a.claimable && <HumanActionButton label="claim" actionId={a.id} op="claim" onDone={reload} />}
+                      {a.verifiable && a.status !== 'RESOLVED' && <HumanActionButton label="verify" actionId={a.id} op="verify" onDone={reload} />}
+                      {a.attestationOnly && a.status !== 'RESOLVED' && <HumanActionButton label="attest done" actionId={a.id} op="resolve" onDone={reload} />}
+                      {a.status !== 'RESOLVED' && <HumanActionButton label="reject" actionId={a.id} op="reject" onDone={reload} />}
+                      {a.status === 'RESOLVED' && <small style={{ color: C.ok }}>resolved — linked goals released back to runnable</small>}
+                    </div>
+                  </div>
+                )) : 'no durable human actions — all known external prerequisites are satisfied'}
               </Card>
             </>}
 

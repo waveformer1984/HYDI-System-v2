@@ -49,10 +49,25 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const { op, note, reason } = (req.body || {}) as { op?: string; note?: string; reason?: string };
     try {
       switch (op) {
-        case 'claim': return res.status(200).json({ ok: true, ...svc.claim(id) });
-        case 'verify': return res.status(200).json({ ok: true, ...(await svc.verify(id)) });
-        case 'resolve': return res.status(200).json({ ok: true, ...svc.resolve(id, { note }) });
-        case 'reject': return res.status(200).json({ ok: true, ...svc.reject(id, { reason }) });
+        case 'claim': return res.status(200).json({ ok: true, ...svc.claim(id, 'api') });
+        case 'verify': {
+          const r = await svc.verify(id, 'api');
+          // A verified prerequisite releases its linked goals — resume is
+          // immediate, not deferred to a polling cycle.
+          const { resumeSatisfiedGoals } = await import('../../../lib/human-actions/index.js');
+          const { getGoalSystem } = await import('../../../lib/heidi/GoalSystem');
+          const resume = await resumeSatisfiedGoals(svc, getGoalSystem(), { actor: 'api' }).catch(() => null);
+          return res.status(200).json({ ok: true, ...r, resume });
+        }
+        case 'resolve': {
+          const r = svc.resolve(id, { note, actor: 'api' });
+          const { resumeSatisfiedGoals } = await import('../../../lib/human-actions/index.js');
+          const { getGoalSystem } = await import('../../../lib/heidi/GoalSystem');
+          const resume = await resumeSatisfiedGoals(svc, getGoalSystem(), { actor: 'api' }).catch(() => null);
+          return res.status(200).json({ ok: true, ...r, resume });
+        }
+        case 'reject': return res.status(200).json({ ok: true, ...svc.reject(id, { reason, actor: 'api' }) });
+        case 'cancel': return res.status(200).json({ ok: true, ...svc.cancel(id, { reason, actor: 'api' }) });
         default: return res.status(400).json({ ok: false, error: `unknown op '${op}'` });
       }
     } catch (e) {

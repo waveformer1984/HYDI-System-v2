@@ -8,6 +8,12 @@
  *     aggregated per capabilityId+reason (a pending authorization DECISION)
  *   - operator_escalations unresolved → rows <24h itemized (fresh incidents);
  *     older rows aggregated per category as backlog entries
+ *   - lib/human-actions durable store → verifier-gated external
+ *     prerequisites (credentials, funding, public endpoints). These are
+ *     the only queue items whose resolution is machine-checkable: they
+ *     carry their verifier identity + last-check evidence so the COO can
+ *     distinguish "waiting on you to click approve" from "waiting on the
+ *     external world to change".
  *
  * EscalationManager (in-memory, superseded by EscalationNotifier) is
  * deliberately excluded: it persists nothing, so nothing can be read.
@@ -20,13 +26,27 @@
 import type { Pool } from 'pg';
 import { getCapabilityRegistry } from './CapabilityRegistry';
 import { collectOffers } from './CommercialBridge';
+import { load as loadHaStore } from '../human-actions/store';
+
+/** Durable human-action records (schema v2). A read failure contributes
+ *  zero items — the queue never fabricates pending human work. */
+function loadHumanActionStore(): Array<Record<string, any>> {
+  try {
+    const db = loadHaStore();
+    return Array.isArray(db?.actions) ? db.actions.filter(
+      (a: Record<string, any>) => !['RESOLVED', 'REJECTED', 'CANCELLED'].includes(a.status),
+    ) : [];
+  } catch {
+    return [];
+  }
+}
 
 export type HumanActionStatus =
   | 'OPEN' | 'ACKNOWLEDGED' | 'APPROVED' | 'REJECTED' | 'COMPLETED' | 'EXPIRED' | 'BLOCKED';
 
 export type HumanActionSource =
   | 'intervention' | 'authorization_escalation' | 'operator_escalation' | 'action_proposal'
-  | 'commercial_offer';
+  | 'commercial_offer' | 'human_action';
 
 export interface HumanAction {
   id: string;
@@ -278,6 +298,49 @@ export async function collectHumanActionQueue(
       backlog: false,
       createdAt: new Date(r.created_at as string).toISOString(),
       updatedAt: new Date((r.updated_at ?? r.created_at) as string).toISOString(),
+    });
+  }
+
+  // ── Durable Human Actions (lib/human-actions) — verifier-gated
+  //    external prerequisites. File-backed store; a read failure means
+  //    the store contributes nothing (never fabricates items).
+  //    VERIFYING/CLAIMED/OPEN map to OPEN — still waiting on the human.
+  //    Terminal states are omitted: RESOLVED/REJECTED/CANCELLED items no
+  //    longer need a human; EXPIRED stays visible as EXPIRED. ────────
+  for (const a of loadHumanActionStore()) {
+    const status: HumanActionStatus =
+      a.status === 'EXPIRED' ? 'EXPIRED'
+        : a.status === 'BLOCKED' ? 'BLOCKED'
+          : 'OPEN'; // OPEN | CLAIMED | VERIFYING — all still need the human
+    const failedChecks = (a.verification?.checks ?? []).filter((c: { passed?: boolean }) => !c.passed).map((c: { name?: string }) => c.name);
+    items.push({
+      id: `human-action:${a.id}`,
+      source: 'human_action',
+      category: String(a.type ?? 'general'),
+      priority: a.priority === 'high' ? 1 : a.priority === 'low' ? 4 : 2,
+      status,
+      reason: String(a.title ?? 'human action'),
+      requestedAction: Array.isArray(a.instructions) && a.instructions.length
+        ? String(a.instructions[0])
+        : 'complete the documented prerequisite, then request verification',
+      evidence: {
+        actionId: a.id,
+        blockerKey: a.blockerKey ?? null,
+        verifier: a.verifier?.name ?? null,
+        instructions: a.instructions ?? [],
+        lastCheck: a.verification?.checkedAt ?? null,
+        lastCheckPassed: a.verification?.passed ?? null,
+        stillFailing: failedChecks,
+        linkedMissionId: a.sourceMissionId ?? null,
+        linkedGoalId: a.sourceGoalId ?? null,
+        attempts: a.attempts ?? 0,
+        claimable: a.status === 'OPEN' || a.status === 'BLOCKED',
+        verifiable: (a.verifier?.name ?? 'manual') !== 'manual',
+      },
+      authorizationLevel: 'R3',
+      backlog: false,
+      createdAt: a.createdAt,
+      updatedAt: a.updatedAt,
     });
   }
 

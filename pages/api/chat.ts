@@ -33,6 +33,7 @@ import {
 import { verifyServiceToken } from '../../lib/auth/verifyServiceToken';
 import { tryNftStatusAnswer } from '../../lib/rezonate/nft-status-answer';
 import { tryHumanActionAnswer } from '../../lib/human-actions/heidi-answer';
+import { getGoalSystem } from '../../lib/heidi/GoalSystem';
 import { syncRezonateNftRevenue } from '../../lib/commercial/rezonate-nft-bridge';
 import type { CooState } from '../../lib/heidi/CooState';
 
@@ -1821,9 +1822,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     } catch { /* NFT reads are best-effort; fall through */ }
 
     // Deterministic Human Action reads — pending operator tasks are durable
-    // state, not something an LLM should invent or forget.
+    // state, not something an LLM should invent or forget. goals enables
+    // the verify→resume path: a passing prerequisite releases its mission.
     try {
-      const haAnswer = await tryHumanActionAnswer(message, {});
+      const haAnswer = await tryHumanActionAnswer(message, { goals: getGoalSystem() });
       if (haAnswer) {
         sse(res, { type: 'metadata', model_used: 'human-actions-durable', latency: 0 });
         sse(res, { type: 'content', content: haAnswer.text });

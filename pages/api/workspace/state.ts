@@ -210,6 +210,38 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const escalated = jobAgg.filter(j => j.intervention_status === 'requested').reduce((s, j) => s + j.c, 0);
     const oppAgg = opps.rows as Array<{ status: string; c: number; mx: number | null }>;
 
+    // Durable Human Actions — verifier-gated external prerequisites from
+    // lib/human-actions (file store, independent of pg). Resolution is
+    // never a click: verify re-runs the machine check against the world.
+    const humanActions = await (async () => {
+      try {
+        const { HumanActionService, syncHumanActions } = await import('../../../lib/human-actions/index.js');
+        const svc = new HumanActionService({});
+        await syncHumanActions(svc).catch(() => null);
+        return svc.list({ includeTerminal: true }).slice(0, 20).map((a: Record<string, any>) => ({
+          id: a.id,
+          title: a.title,
+          status: a.status,
+          priority: a.priority,
+          type: a.type,
+          blockerKey: a.blockerKey,
+          verifier: a.verifier?.name ?? 'manual',
+          instructions: a.instructions ?? [],
+          lastCheck: a.verification?.checkedAt ?? null,
+          lastCheckPassed: a.verification?.passed ?? null,
+          stillFailing: (a.verification?.checks ?? []).filter((c: { passed?: boolean }) => !c.passed).map((c: { name?: string }) => c.name),
+          lastError: a.lastError ?? null,
+          sourceMissionId: a.sourceMissionId ?? null,
+          sourceGoalId: a.sourceGoalId ?? null,
+          attempts: a.attempts ?? 0,
+          created: a.createdAt,
+          claimable: a.status === 'OPEN' || a.status === 'BLOCKED',
+          verifiable: (a.verifier?.name ?? 'manual') !== 'manual',
+          attestationOnly: (a.verifier?.name ?? 'manual') === 'manual',
+        }));
+      } catch { return []; }
+    })();
+
     // Decisions queue — human items only
     const decisions = [
       ...(escs.rows as Array<{ id: number; title: string; created_at: string }>).map(e => ({
@@ -217,6 +249,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       })),
       ...(invReqs.rows as Array<{ request_id: string; objective: string; created_at: string }>).map(r => ({
         id: r.request_id, title: r.objective, kind: 'intervention', created: r.created_at,
+      })),
+      ...humanActions.filter((a: Record<string, any>) => a.status === 'OPEN' || a.status === 'BLOCKED' || a.status === 'CLAIMED').map((a: Record<string, any>) => ({
+        id: a.id, title: a.title, kind: 'human_action', created: a.created,
       })),
       ...(escalated > 0 ? [{ id: 'qa-escalations', title: `${escalated} paid Model Prep jobs failed QA — review artifacts`, kind: 'delivery_qa', created: null }] : []),
     ];
@@ -327,6 +362,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         recoveryStates: readRecoveryStates(),
       },
       decisions,
+      humanActions,
       recommendations,
       autonomous: await autonomousState(POOL).catch(() => null),
       // Commercial bridge — durable offer records folded from

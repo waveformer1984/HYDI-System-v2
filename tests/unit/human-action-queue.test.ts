@@ -4,6 +4,14 @@
  * actionable items, and produce a truthful empty state.
  */
 
+// Isolate the durable human-actions store — the queue now folds those
+// records in as a source, and the developer's real data/human-actions.json
+// must not leak into fixture assertions.
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
+process.env.HYDI_HUMAN_ACTIONS_FILE = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'haq-')), 'human-actions.json');
+
 import { collectHumanActionQueue, acknowledgeHumanAction } from '../../lib/heidi/HumanActionQueue';
 
 interface Fixture {

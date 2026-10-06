@@ -3,6 +3,8 @@ import { requireOpsAuth } from '../../lib/api/requireOpsAuth';
 import { Pool } from 'pg';
 import { collectAgentState } from '../../lib/heidi/AgentControlPlane';
 import { collectHumanActionQueue } from '../../lib/heidi/HumanActionQueue';
+import { HumanActionService, syncHumanActions } from '../../lib/human-actions/index.js';
+import { getGoalSystem } from '../../lib/heidi/GoalSystem';
 
 // Read-only COO projection for the command-center UI. Every value comes
 // from durable state — the API never fabricates; it labels staleness.
@@ -34,6 +36,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     );
     const coo = cooRow.rows[0] ?? null;
     const cooAgeMs = coo ? Date.now() - new Date(coo.created_at).getTime() : null;
+
+    // Human-action cadence: the COO read is the existing lifecycle hook —
+    // every dashboard/operator poll re-detects known blockers, links
+    // escalated goals, and resumes satisfied ones. Idempotent by
+    // blockerKey dedupe; failures never break the COO read.
+    await syncHumanActions(new HumanActionService({}), getGoalSystem()).catch(() => null);
 
     const [agents, queue] = await Promise.all([
       collectAgentState(pool),
