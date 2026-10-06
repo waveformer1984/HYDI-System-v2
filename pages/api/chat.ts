@@ -34,6 +34,7 @@ import { verifyServiceToken } from '../../lib/auth/verifyServiceToken';
 import { tryNftStatusAnswer } from '../../lib/rezonate/nft-status-answer';
 import { tryHumanActionAnswer } from '../../lib/human-actions/heidi-answer';
 import { tryAutopilotAnswer } from '../../lib/revenue/autopilot-answer';
+import { tryPaymentAnswer } from '../../lib/revenue/payment-answer';
 import { getGoalSystem } from '../../lib/heidi/GoalSystem';
 import { syncRezonateNftRevenue } from '../../lib/commercial/rezonate-nft-bridge';
 import type { CooState } from '../../lib/heidi/CooState';
@@ -1834,6 +1835,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return res.end();
       }
     } catch { /* human-action reads are best-effort; fall through */ }
+
+    // Deterministic payment answers — "did we get paid", "what's this
+    // $X payment", "unreconciled payments" are evidence questions. The
+    // lookup path records the asked-about payment as a durable signal and
+    // creates its verification Human Action when the boundary needs one.
+    try {
+      const payAnswer = await tryPaymentAnswer(message, { goals: getGoalSystem() });
+      if (payAnswer) {
+        sse(res, { type: 'metadata', model_used: 'payment-signals-durable', latency: 0 });
+        sse(res, { type: 'content', content: payAnswer.text });
+        res.write('data: [DONE]\n\n');
+        return res.end();
+      }
+    } catch { /* payment reads are best-effort; fall through */ }
 
     // Revenue autopilot — "next best action" advances the durable
     // objective one idempotent pass and reports from goal state.

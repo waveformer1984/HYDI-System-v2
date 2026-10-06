@@ -58,6 +58,19 @@ export async function runOnce(deps: { goals?: any; service?: any; realization?: 
     new HumanActionService({ verifierDeps: { jobManager: new JobManager() } });
 
   await syncHumanActions(service, goals);
+
+  // Payment signals: re-check open claims against internal records — a
+  // webhook that landed since the last tick may now attribute them.
+  // Terminal attributions resolve; the linked Human Action verifies on
+  // the next syncHumanActions pass.
+  try {
+    const signalBridge = require('../lib/revenue/payment-signal-bridge.js');
+    const sweep = await signalBridge.reconcileOpenSignals();
+    if (sweep.resolved > 0) log(`payment-signals: ${sweep.resolved}/${sweep.checked} resolved`);
+  } catch (err) {
+    log(`payment-signal sweep error: ${err instanceof Error ? err.message : String(err)}`);
+  }
+
   const report = await advance({ goals, actor: 'revenue-autopilot-tick' });
 
   // Managed realization missions use the same boundary/resume machinery —

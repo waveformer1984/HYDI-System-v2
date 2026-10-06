@@ -24,6 +24,7 @@ import { normalizeRezonateIntent } from '../../lib/rezonate/intent.js';
 import { tryNftStatusAnswer } from '../../lib/rezonate/nft-status-answer.js';
 import { tryHumanActionAnswer } from '../../lib/human-actions/heidi-answer.js';
 import { tryAutopilotAnswer } from '../../lib/revenue/autopilot-answer.js';
+import { tryPaymentAnswer } from '../../lib/revenue/payment-answer.js';
 import { getGoalSystem } from '../../lib/heidi/GoalSystem';
 import { syncRezonateNftRevenue } from '../../lib/commercial/rezonate-nft-bridge';
 import { HeidiController } from '../../pao-system/core/heidi.controller';
@@ -115,6 +116,16 @@ export default async function handler(req, res) {
         return res.status(200).json({ response: humanAnswer.text, system, timestamp: new Date().toISOString() });
       }
     } catch { /* human-action reads are best-effort; fall through */ }
+
+    // Deterministic payment answers — "did we get paid", "what's this
+    // $X payment" are evidence questions answered from durable state.
+    // The lookup path also records the signal + its verification action.
+    try {
+      const payAnswer = await tryPaymentAnswer(message, { goals: getGoalSystem() });
+      if (payAnswer) {
+        return res.status(200).json({ response: payAnswer.text, system, timestamp: new Date().toISOString() });
+      }
+    } catch { /* payment reads are best-effort; fall through */ }
 
     // Revenue autopilot — "next best action" advances the durable
     // objective one idempotent pass and reports from goal state.

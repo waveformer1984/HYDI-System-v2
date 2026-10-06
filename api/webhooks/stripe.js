@@ -260,6 +260,22 @@ async function handleStripeWebhook(req, res) {
     }
   }
 
+  // Payment-signal reconciliation: a verified payment event may now
+  // attribute a previously-unmatched signal (e.g. a phone notification
+  // reported before this webhook landed). Fire-and-forget — the webhook
+  // must ack promptly; the periodic tick is the catch-up safety net.
+  if (event.type === 'checkout.session.completed' || event.type === 'payment_intent.succeeded' || event.type === 'charge.succeeded') {
+    setImmediate(async () => {
+      try {
+        const { reconcileOpenSignals } = require('../../lib/revenue/payment-signal-bridge.js');
+        const sweep = await reconcileOpenSignals();
+        if (sweep.resolved > 0) console.log(`[PAYMENT SIGNALS] ${sweep.resolved}/${sweep.checked} open signal(s) attributed by event ${event.id}`);
+      } catch (e) {
+        console.error('[PAYMENT SIGNALS] reconcile sweep failed:', e instanceof Error ? e.message : e);
+      }
+    });
+  }
+
   // If the job bridge handled this event, skip the async queue entirely.
   // The synchronous bridge is the single owner of job/ledger state for
   // checkout.session.completed. The async workers handle the old
