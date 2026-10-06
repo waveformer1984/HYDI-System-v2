@@ -32,6 +32,7 @@ import {
 } from '../../lib/heidi/ConversationContext';
 import { verifyServiceToken } from '../../lib/auth/verifyServiceToken';
 import { tryNftStatusAnswer } from '../../lib/rezonate/nft-status-answer';
+import { tryHumanActionAnswer } from '../../lib/human-actions/heidi-answer';
 import { syncRezonateNftRevenue } from '../../lib/commercial/rezonate-nft-bridge';
 import type { CooState } from '../../lib/heidi/CooState';
 
@@ -1818,6 +1819,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return res.end();
       }
     } catch { /* NFT reads are best-effort; fall through */ }
+
+    // Deterministic Human Action reads — pending operator tasks are durable
+    // state, not something an LLM should invent or forget.
+    try {
+      const haAnswer = await tryHumanActionAnswer(message, {});
+      if (haAnswer) {
+        sse(res, { type: 'metadata', model_used: 'human-actions-durable', latency: 0 });
+        sse(res, { type: 'content', content: haAnswer.text });
+        res.write('data: [DONE]\n\n');
+        return res.end();
+      }
+    } catch { /* human-action reads are best-effort; fall through */ }
 
     // (the daemon's authoritative snapshot). Non-operational or unreadable
     // falls through to the existing runtime-state + LLM paths.

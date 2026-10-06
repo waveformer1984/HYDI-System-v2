@@ -22,6 +22,7 @@ import {
 } from '../../lib/rezonate/rezonate-client.js';
 import { normalizeRezonateIntent } from '../../lib/rezonate/intent.js';
 import { tryNftStatusAnswer } from '../../lib/rezonate/nft-status-answer.js';
+import { tryHumanActionAnswer } from '../../lib/human-actions/heidi-answer.js';
 import { syncRezonateNftRevenue } from '../../lib/commercial/rezonate-nft-bridge';
 import { HeidiController } from '../../pao-system/core/heidi.controller';
 
@@ -102,6 +103,16 @@ export default async function handler(req, res) {
         error: 'Message and system are required'
       });
     }
+
+    // Human-action questions are system-agnostic — "what do you need from
+    // me" is answered from durable task state regardless of which surface
+    // the operator typed it into.
+    try {
+      const humanAnswer = await tryHumanActionAnswer(message, {});
+      if (humanAnswer) {
+        return res.status(200).json({ response: humanAnswer.text, system, timestamp: new Date().toISOString() });
+      }
+    } catch { /* human-action reads are best-effort; fall through */ }
 
     const systemHandler = systemHandlers[system];
     if (!systemHandler) {
