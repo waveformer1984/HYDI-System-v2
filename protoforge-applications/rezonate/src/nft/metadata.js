@@ -44,7 +44,7 @@ function buildNftMetadata({ nftAsset, asset, baseUrl }) {
       creator: nftAsset.creator_id,
       source_asset_id: asset.id,
       content_hash: nftAsset.content_hash,
-      provenance_manifest: nftAsset.provenance_manifest || null,
+      provenance_manifest_url: nftAsset.provenance_manifest ? `${baseUrl}/nft/assets/${nftAsset.id}/provenance` : null,
       provenance_manifest_hash: nftAsset.provenance_manifest_hash || null,
       engine_version: nftAsset.audio?.engine_version || null
     }

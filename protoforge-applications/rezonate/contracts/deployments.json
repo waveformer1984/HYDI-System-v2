@@ -1,10 +1,15 @@
 {
   "local:31337": {
-    "nft": "0x1e8252E8caf7406a86A181932a19593138c53889",
-    "market": "0x661F320C264450B9cB3a88D0D3669B9f04dd583c",
-    "deployer": "0x3c57c423029C5b98c694FD0496d58CeEdc657B3B",
+    "nft": "0x01541c04BbD7b6753a9C9202b9cef81be7d738EF",
+    "market": "0x7c560dA734512cD6495E04941227f9b8BeE3432E",
+    "deployer": "0x3794ADE6816d584f9Aa314cbCc15bc17aeC217CB",
     "feeBps": 250,
-    "deployedAt": "2026-10-05T23:42:02.146Z",
+    "nftDeployTx": "0x4d6675ae88bdc922fc27c05d3c3c32e9297f8487c5342f37b410787cf1603c82",
+    "nftDeployBlock": 1,
+    "marketDeployTx": "0x800a581390327905ec5e4aa0778b687fdf5ef6d36b60beba5a02941ce62c4cfa",
+    "marketDeployBlock": 2,
+    "artifactVersion": "8ee85ab306fc6365",
+    "deployedAt": "2026-10-06T15:58:28.182Z",
     "mode": "local",
     "chainId": 31337
   }

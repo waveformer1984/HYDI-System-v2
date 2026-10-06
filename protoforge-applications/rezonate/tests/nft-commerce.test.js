@@ -190,3 +190,27 @@ test('chain gates: mainnet refused without ALLOW_LIVE_CHAIN; testnet requires RP
   await assert.rejects(() => adapter.init(), /REZONATE_CHAIN_RPC/);
   if (savedRpc !== undefined) process.env.REZONATE_CHAIN_RPC = savedRpc;
 });
+
+test('testnet wallet keys: REZONATE_BUYER_KEY derives address; malformed JSON refused', () => {
+  const { walletKeysFromEnv } = require('../src/chain');
+  const { ethers } = require('ethers');
+  const savedKeys = process.env.REZONATE_WALLET_KEYS, savedBuyer = process.env.REZONATE_BUYER_KEY;
+  try {
+    delete process.env.REZONATE_WALLET_KEYS;
+    // well-known hardhat account #1 — a test key, not a secret
+    process.env.REZONATE_BUYER_KEY = '0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d';
+    const keys = walletKeysFromEnv();
+    const expected = new ethers.Wallet(process.env.REZONATE_BUYER_KEY).address.toLowerCase();
+    assert.ok(keys[expected]);
+    // JSON map path
+    process.env.REZONATE_WALLET_KEYS = '{"0xAbC0000000000000000000000000000000000001":"0xkey"}';
+    delete process.env.REZONATE_BUYER_KEY;
+    assert.ok(walletKeysFromEnv()['0xabc0000000000000000000000000000000000001']);
+    // malformed config is refused loudly, never silently ignored
+    process.env.REZONATE_WALLET_KEYS = 'not-json';
+    assert.throws(() => walletKeysFromEnv(), /REZONATE_WALLET_KEYS/);
+  } finally {
+    if (savedKeys !== undefined) process.env.REZONATE_WALLET_KEYS = savedKeys; else delete process.env.REZONATE_WALLET_KEYS;
+    if (savedBuyer !== undefined) process.env.REZONATE_BUYER_KEY = savedBuyer; else delete process.env.REZONATE_BUYER_KEY;
+  }
+});

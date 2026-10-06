@@ -18,7 +18,10 @@ class MockChainAdapter {
   }
 
   async init() { return this; }
-  contractAddresses() { return { nft: '0xMOCKNFT', market: '0xMOCKMKT', mode: 'mock', chainId: 0 }; }
+  contractAddresses() { return { nft: '0xMOCKNFT', market: '0xMOCKMKT', mode: 'mock', chainId: 0, explorer: null }; }
+  deploymentRecord() { return null; }
+  async verifyDeployment() { return { verified: false, reason: 'mock adapter — unit tests only' }; }
+  explorerTx() { return null; } explorerAddress() { return null; } explorerToken() { return null; }
   registerWallet(a) { this.wallets.add(a.toLowerCase()); }
   async defaultWallet() { return '0xMOCKCREATOR'; }
   async signerFor(address) {
@@ -83,7 +86,7 @@ class MockChainAdapter {
 
   async getTxReceipt(h) { return { status: 1, transactionHash: h }; }
   async blockNumber() { return this._token; }
-  async close() {}
+  async close() { }
 }
 
 module.exports = { MockChainAdapter };

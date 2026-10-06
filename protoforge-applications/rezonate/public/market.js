@@ -16,6 +16,11 @@
     ? `<a href="${EXPLORER}/address/${addr}" target="_blank" rel="noopener">${addr.slice(0, 10)}…</a>`
     : `<code>${addr || '—'}</code>`;
 
+  let NFT_ADDR = null;
+  const tokenLink = (tokenId) => tokenId != null && EXPLORER && NFT_ADDR
+    ? `<a href="${EXPLORER}/nft/${NFT_ADDR}/${tokenId}" target="_blank" rel="noopener">token ${tokenId}</a>`
+    : `token ${tokenId ?? '—'}`;
+
   const REV_LABEL = {
     SALE_DETECTED: 'sale detected', CHAIN_VERIFIED: 'chain verified',
     COMMERCIAL_EVENT_CREATED: 'commercial event', REVENUE_RECORDED: 'revenue recorded',
@@ -25,10 +30,16 @@
   async function refresh() {
     const st = await api('/nft/status');
     EXPLORER = st.chain.explorer || null;
+    NFT_ADDR = st.chain.nft || null;
     const modeTag = st.chain.mode === 'local' ? 'local EVM proving chain' : st.chain.mode;
+    const depOk = st.verification && st.verification.verified;
+    const depTag = st.verification
+      ? (depOk ? ' · <b style="color:#4caf50">contracts verified on-chain</b>' : ` · <b style="color:#e57373">deployment verification FAILED (${st.verification.reason || 'check contract state'})</b>`)
+      : '';
     $('chain-tag').innerHTML =
       `chain: <b>${modeTag}</b> (id ${st.chain.chainId}) · nft ${addrLink(st.chain.nft)} · market ${addrLink(st.chain.market)}` +
-      ` · block ${st.blockNumber}` + (EXPLORER ? ` · <a href="${EXPLORER}" target="_blank" rel="noopener">explorer</a>` : ' · no public explorer');
+      ` · block ${st.blockNumber}` + depTag +
+      (EXPLORER ? ` · <a href="${EXPLORER}" target="_blank" rel="noopener">explorer</a>` : ' · no public explorer');
 
     const [assets, listings, sales] = await Promise.all([
       api('/nft/assets'), api('/nft/listings'), api('/nft/sales')
@@ -38,7 +49,7 @@
     $('market-list').innerHTML = (assets.nftAssets || []).map(a => {
       const l = (listings.listings || []).find(x => x.asset_id === a.id && x.status === 'listed');
       return `<div class="row" style="justify-content:space-between">
-        <div><b>${a.title}</b><br><small>${a.status} · token ${a.token_id ?? '—'} · <a href="/nft/assets/${a.id}/metadata.json">metadata</a> · <a href="/nft/assets/${a.id}/verify">verify</a></small></div>
+        <div><b>${a.title}</b><br><small>${a.status} · ${tokenLink(a.token_id)} · <a href="/nft/assets/${a.id}/metadata.json">metadata &amp; provenance</a> · <a href="/nft/assets/${a.id}/verify">verify</a></small></div>
         <div>${l ? `<span>${l.price_eth} ETH</span> <button data-buy="${l.id}">Buy</button> <button data-cancel="${l.id}">Cancel</button>`
           : a.status === 'minted' ? `<button data-list="${a.id}">List for sale</button>` : ''}</div>
       </div>`;
@@ -51,22 +62,26 @@
       `</small></div></div>`).join('')
       || '<p class="note">No sales yet.</p>';
 
+    const fail = (r) => { if (!r.ok) alert(r.error || 'request failed'); return r.ok; };
     document.querySelectorAll('[data-buy]').forEach(b => b.onclick = async () => {
-      const w = prompt('Buyer wallet (0x…)'); if (!w) return;
+      const w = prompt('Buyer wallet (0x…)\nOn testnet this wallet must be funded and its key configured server-side (REZONATE_BUYER_KEY).'); if (!w) return;
       const r = await api(`/nft/listings/${b.dataset.buy}/purchase`, 'POST', { buyerWallet: w });
-      if (!r.ok) alert(r.error); refresh();
+      // purchase() only returns after the chain re-verifies ownerOf == buyer
+      if (fail(r)) alert(`Purchase verified on-chain.\nNew owner: ${r.sale.buyer_wallet}\nTx: ${r.sale.transaction_hash}`);
+      refresh();
     });
     document.querySelectorAll('[data-cancel]').forEach(b => b.onclick = async () => {
       const w = prompt('Seller wallet (0x…)'); if (!w) return;
       const r = await api(`/nft/listings/${b.dataset.cancel}/cancel`, 'POST', { wallet: w });
-      if (!r.ok) alert(r.error); refresh();
+      if (fail(r)) alert(`Listing cancelled on-chain.\nTx: ${r.listing.cancel_tx || '—'}`);
+      refresh();
     });
     document.querySelectorAll('[data-list]').forEach(b => b.onclick = async () => {
       const a = byId[b.dataset.list];
-      const w = prompt('Seller wallet (0x…)', a ? a.creator_id : ''); if (!w) return;
+      const w = prompt('Seller wallet (0x…) — must be the on-chain token owner', a ? a.creator_id : ''); if (!w) return;
       const p = prompt('Price in ETH', '0.1'); if (!p) return;
       const r = await api('/nft/listings', 'POST', { nftAssetId: b.dataset.list, sellerWallet: w, priceEth: p });
-      if (!r.ok) alert(r.error); refresh();
+      fail(r); refresh();
     });
   }
 
@@ -85,7 +100,7 @@
     const v = await api(`/nft/assets/${created.nftAsset.id}/verify`);
     const ok = v.verification && v.verification.verified;
     $('mint-result').innerHTML = ok
-      ? `<p>✓ CHAIN-VERIFIED — token ${minted.mint.token_id} · tx ${txLink(minted.mint.transaction_hash)} · owner ${v.verification.owner}</p>`
+      ? `<p>✓ CHAIN-VERIFIED — ${tokenLink(minted.mint.token_id)} · tx ${txLink(minted.mint.transaction_hash)} · owner ${addrLink(v.verification.owner)}</p>`
       : `<p class="error">mint submitted (tx ${txLink(minted.mint.transaction_hash)}) but verification ${v.verification ? 'did not confirm' : 'unavailable'}</p>`;
     refresh();
   });

@@ -5,6 +5,10 @@ const { ethers } = require('ethers');
 const ARTIFACTS = path.join(__dirname, '..', '..', 'contracts', 'artifacts');
 const DEPLOYMENTS_FILE = path.join(__dirname, '..', '..', 'contracts', 'deployments.json');
 
+// Resolved lazily so REZONATE_DEPLOYMENTS_FILE can isolate deployment records
+// per environment (e.g. a test chain must not overwrite the live record).
+function deploymentsFile() { return process.env.REZONATE_DEPLOYMENTS_FILE || DEPLOYMENTS_FILE; }
+
 const MODES = ['local', 'testnet', 'mainnet'];
 
 function loadArtifact(name) {
@@ -12,13 +16,13 @@ function loadArtifact(name) {
 }
 
 function loadDeployments() {
-  try { return JSON.parse(fs.readFileSync(DEPLOYMENTS_FILE, 'utf8')); } catch { return {}; }
+  try { return JSON.parse(fs.readFileSync(deploymentsFile(), 'utf8')); } catch { return {}; }
 }
 
 function saveDeployment(key, value) {
   const all = loadDeployments();
   all[key] = value;
-  fs.writeFileSync(DEPLOYMENTS_FILE, JSON.stringify(all, null, 2));
+  fs.writeFileSync(deploymentsFile(), JSON.stringify(all, null, 2));
 }
 
 /**
@@ -59,9 +63,11 @@ class EvmChainAdapter {
     if (!network && this.mode === 'local') {
       // Real local EVM — not simulated state; a genuine JSON-RPC chain.
       // Attach to an already-running node if possible; spawn only when absent.
+      // When an explicit rpcUrl was given, spawn on ITS port, not the env port.
       const ganache = require('ganache');
+      const listenPort = this.rpcUrl ? Number(new URL(this.rpcUrl).port || port) : port;
       this._ganache = ganache.server({ chain: { chainId: 31337 }, wallet: { totalAccounts: 6, defaultBalance: 100 }, logging: { quiet: true } });
-      await this._ganache.listen(port);
+      await this._ganache.listen(listenPort);
       this.provider = new ethers.JsonRpcProvider(this.rpcUrl);
       network = await this.provider.getNetwork();
     }
@@ -109,15 +115,18 @@ class EvmChainAdapter {
     const signer = await this._deployerSigner();
     const nftArt = loadArtifact('RezonateNFT');
     const nft = await new ethers.ContractFactory(nftArt.abi, nftArt.bytecode, signer).deploy();
-    await nft.waitForDeployment();
+    const nftReceipt = await nft.deploymentTransaction().wait(this.confirmations);
     const feeRecipient = await signer.getAddress();
     const marketArt = loadArtifact('RezonateMarket');
     const market = await new ethers.ContractFactory(marketArt.abi, marketArt.bytecode, signer)
       .deploy(this.feeBps, feeRecipient);
-    await market.waitForDeployment();
+    const marketReceipt = await market.deploymentTransaction().wait(this.confirmations);
     const dep = {
       nft: await nft.getAddress(), market: await market.getAddress(),
       deployer: feeRecipient, feeBps: this.feeBps,
+      nftDeployTx: nft.deploymentTransaction().hash, nftDeployBlock: nftReceipt.blockNumber,
+      marketDeployTx: market.deploymentTransaction().hash, marketDeployBlock: marketReceipt.blockNumber,
+      artifactVersion: this._artifactDigest(nftArt, marketArt),
       deployedAt: new Date().toISOString(), mode: this.mode, chainId: this.chainId
     };
     saveDeployment(this.deploymentKey, dep);
@@ -140,9 +149,50 @@ class EvmChainAdapter {
     return EXPLORERS[this.chainId] || null;
   }
 
+  _artifactDigest(...arts) {
+    const crypto = require('crypto');
+    const h = crypto.createHash('sha256');
+    for (const a of arts) h.update(a.bytecode);
+    return h.digest('hex').slice(0, 16);
+  }
+
   contractAddresses() {
     const dep = loadDeployments()[this.deploymentKey] || {};
     return { nft: dep.nft || null, market: dep.market || null, mode: this.mode, chainId: this.chainId, explorer: this.explorerBase() };
+  }
+
+  /** Full deployment record incl. deploy txs/blocks — evidence, never claimed without verifyDeployment(). */
+  deploymentRecord() {
+    const dep = loadDeployments()[this.deploymentKey] || null;
+    return dep ? { ...dep, explorer: this.explorerBase() } : null;
+  }
+
+  /**
+   * Independent verification: bytecode must actually exist at the recorded
+   * addresses and contract state must match the recorded configuration.
+   * A deployments.json entry alone is never treated as proof.
+   */
+  async verifyDeployment() {
+    const dep = loadDeployments()[this.deploymentKey];
+    if (!dep) return { verified: false, reason: 'no deployment recorded for this chain' };
+    const checks = {};
+    const codeAt = async (a) => this.provider.getCode(a).catch(() => '0x');
+    checks.nftBytecode = (await codeAt(dep.nft)) !== '0x';
+    checks.marketBytecode = (await codeAt(dep.market)) !== '0x';
+    const nftRead = new ethers.Contract(dep.nft, loadArtifact('RezonateNFT').abi, this.provider);
+    const marketRead = new ethers.Contract(dep.market, loadArtifact('RezonateMarket').abi, this.provider);
+    checks.nftOwner = (await nftRead.owner().catch(() => null)) === dep.deployer;
+    checks.marketFeeBps = Number(await marketRead.platformFeeBps().catch(() => -1)) === dep.feeBps;
+    checks.marketFeeRecipient = (await marketRead.feeRecipient().catch(() => null)) === dep.deployer;
+    checks.chainId = Number((await this.provider.getNetwork()).chainId) === dep.chainId;
+    return { verified: Object.values(checks).every(Boolean), checks, deployment: { ...dep, explorer: this.explorerBase() } };
+  }
+
+  explorerTx(txHash) { const b = this.explorerBase(); return b && txHash ? `${b}/tx/${txHash}` : null; }
+  explorerAddress(addr) { const b = this.explorerBase(); return b && addr ? `${b}/address/${addr}` : null; }
+  explorerToken(tokenId) {
+    const b = this.explorerBase(); const dep = loadDeployments()[this.deploymentKey] || {};
+    return b && dep.nft && tokenId != null ? `${b}/nft/${dep.nft}/${tokenId}` : null;
   }
 
   async mintToken({ to, tokenUri, contentHash }) {

@@ -381,7 +381,7 @@ function createApi(repository, config = {}) {
       const chain = await createChainAdapter().init();
       nftService = new NftService({
         repository, chain,
-        baseUrl: config.baseUrl || `http://localhost:${config.port || 3001}`,
+        baseUrl: config.baseUrl || config.publicUrl || `http://localhost:${config.port || 3001}`,
         mintToken: process.env.REZONATE_MINT_TOKEN || null,
         logger: repository ? repository.logger : undefined
       });
@@ -391,7 +391,8 @@ function createApi(repository, config = {}) {
 
   app.get('/nft/status', h(async (req, res) => {
     const s = await nft();
-    send(res, { chain: s.chain.contractAddresses(), blockNumber: await s.chain.blockNumber() });
+    const verification = s.chain.verifyDeployment ? await s.chain.verifyDeployment() : null;
+    send(res, { chain: s.chain.contractAddresses(), blockNumber: await s.chain.blockNumber(), verification });
   }));
 
   app.post('/nft/assets', h(async (req, res) => {
@@ -407,6 +408,25 @@ function createApi(repository, config = {}) {
   app.get('/nft/assets/:id/metadata.json', h(async (req, res) => {
     const s = await nft();
     res.json(s.getMetadata(req.params.id)); // raw ERC-721 document, not the {ok} envelope
+  }));
+
+  // Provenance manifest — the buyer-facing evidence document: which stems
+  // were separated, which bars were replaced, with which samples (hashes,
+  // scores). Served from the recorded manifest path; hash-verifiable.
+  app.get('/nft/assets/:id/provenance', h(async (req, res) => {
+    const s = await nft();
+    const nftAsset = s._get('nft_assets', req.params.id);
+    if (!nftAsset) return res.status(404).json({ ok: false, error: 'NFT asset not found', requestId: req.requestId });
+    const manifestPath = nftAsset.provenance_manifest;
+    const fsn = require('fs');
+    if (!manifestPath || !fsn.existsSync(manifestPath)) {
+      return res.status(404).json({ ok: false, error: 'no provenance manifest for this asset', requestId: req.requestId });
+    }
+    const body = fsn.readFileSync(manifestPath, 'utf8');
+    const liveHash = require('crypto').createHash('sha256').update(body).digest('hex');
+    res.set('x-provenance-hash', nftAsset.provenance_manifest_hash || '')
+      .set('x-provenance-hash-match', String(liveHash === nftAsset.provenance_manifest_hash))
+      .set('content-type', 'application/json').send(body);
   }));
 
   app.get('/nft/assets/:id', h(async (req, res) => {
