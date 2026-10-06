@@ -1,0 +1,44 @@
+{
+  "name": "Blame Games",
+  "version": "0.1.0",
+  "owner": "ursula-suite",
+  "hostedBy": "ursula-engine",
+  "governance": {
+    "domain": "entertainment",
+    "tier": "external-engine",
+    "externalSource": "C:\\ProtoForge_Ecosystem\\Ursula_Suite\\apps\\blame_games"
+  },
+  "capabilities": [
+    "challenge-creation",
+    "bet-placement",
+    "family-competition"
+  ],
+  "eventsProduced": [
+    "challenge.created",
+    "bet.placed"
+  ],
+  "eventsConsumed": [],
+  "providers": [
+    "ursula-engine"
+  ],
+  "dependencies": {
+    "services": [
+      "ursula-engine"
+    ]
+  },
+  "healthRequirements": [
+    "ursula-engine"
+  ],
+  "realization": {
+    "hosted": "ursula-engine",
+    "engineHealthUrl": "http://localhost:5000/health",
+    "engineProbe": {
+      "method": "POST",
+      "url": "http://localhost:5000/blame_games/challenge",
+      "body": { "creator_id": "heidi", "title": "HYDI-REALIZATION-PROBE", "description": "realization-audit", "bet_type": "yes_no" },
+      "expectJsonField": "challenge_id"
+    },
+    "offerId": "blame_games_session"
+  },
+  "deprecated": false
+}

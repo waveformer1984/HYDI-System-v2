@@ -1,0 +1,36 @@
+{
+  "name": "Rezonette",
+  "version": "0.1.0",
+  "generatedBy": "app-realization",
+  "generatedAt": "2026-10-06T21:37:05.909Z",
+  "capabilities": [
+    "music-project-creation",
+    "collaboration-sessions"
+  ],
+  "eventsProduced": [
+    "music.project.created",
+    "collab.session.added"
+  ],
+  "eventsConsumed": [],
+  "providers": [
+    "ursula-engine"
+  ],
+  "healthRequirements": [
+    "ursula-engine"
+  ],
+  "realization": {
+    "hosted": "ursula-engine",
+    "engineHealthUrl": "http://localhost:5000/health",
+    "engineProbe": {
+      "method": "POST",
+      "url": "http://localhost:5000/rezonette/music",
+      "body": {
+        "creator_id": "heidi",
+        "title": "HYDI-REALIZATION-PROBE",
+        "genre": "audit"
+      },
+      "expectJsonField": "project_id"
+    },
+    "offerId": "rezonette_track"
+  }
+}

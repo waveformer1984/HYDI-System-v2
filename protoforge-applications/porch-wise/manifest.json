@@ -1,0 +1,44 @@
+{
+  "name": "Porchwise",
+  "version": "0.1.0",
+  "owner": "ursula-suite",
+  "hostedBy": "ursula-engine",
+  "governance": {
+    "domain": "home-project-planning",
+    "tier": "external-engine",
+    "externalSource": "C:\\ProtoForge_Ecosystem\\Ursula_Suite\\apps\\porch_wise"
+  },
+  "capabilities": [
+    "family-management",
+    "chore-assignment",
+    "home-project-planning"
+  ],
+  "eventsProduced": [
+    "member.added",
+    "chore.assigned"
+  ],
+  "eventsConsumed": [],
+  "providers": [
+    "ursula-engine"
+  ],
+  "dependencies": {
+    "services": [
+      "ursula-engine"
+    ]
+  },
+  "healthRequirements": [
+    "ursula-engine"
+  ],
+  "realization": {
+    "hosted": "ursula-engine",
+    "engineHealthUrl": "http://localhost:5000/health",
+    "engineProbe": {
+      "method": "POST",
+      "url": "http://localhost:5000/porch_wise/member",
+      "body": { "family_id": "hydi-realization-probe", "name": "PROBE", "age": 30, "role": "audit" },
+      "expectJsonField": "member_id"
+    },
+    "offerId": "porch_wise_assessment"
+  },
+  "deprecated": false
+}

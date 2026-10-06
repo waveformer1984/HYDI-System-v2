@@ -186,6 +186,35 @@ describe('app realization', () => {
     expect(linked.length).toBe(0);
   });
 
+  test('engine-hosted app: no local suite defers to wire, deploy = engine up', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'app-hosted-'));
+    fs.writeFileSync(path.join(dir, 'manifest.json'), JSON.stringify({
+      name: 'HostedApp', version: '0.1.0',
+      realization: {
+        hosted: 'ursula-engine',
+        engineHealthUrl: 'http://engine.test/health',
+        engineProbe: { method: 'POST', url: 'http://engine.test/svc/thing', body: {}, expectJsonField: 'project_id' },
+        offerId: 'hosted_thing',
+      },
+    }));
+    const world = makeWorld(dir, { tests: 0, engine: 200, health: 503, offer: null });
+    const deps = depsFor(dir, world);
+
+    // Wire + hosted deploy pass; parks only at the offer boundary.
+    const r = await advance({ ...deps, appId: 'hosted-app' });
+    expect(r.stage).toBe('WAITING_ON_HUMAN');
+    const stages = r.steps.map((s) => s.stage);
+    expect(stages).toEqual(['audit', 'spec', 'test', 'wire', 'deploy', 'revenue']);
+    const open = r.waiting.prerequisites.filter((p) => p.status !== 'RESOLVED');
+    expect(open.map((p) => p.blockerKey)).toEqual(['app:hosted-app:offer']);
+
+    // Offer approved → APP_REALIZED with hostedBy recorded in the proof.
+    world.offer = { offerId: 'hosted_thing', priceCents: 900, currency: 'usd' };
+    const r2 = await advance({ ...deps, appId: 'hosted-app' });
+    expect(r2.stage).toBe('APP_REALIZED');
+    expect(r2.proof.hostedBy).toBe('ursula-engine');
+  });
+
   test('brief() renders durable state without advancing', async () => {
     const dir = fakeAppDir();
     const world = makeWorld(dir, { tests: 0, engine: 500 });

@@ -1,0 +1,45 @@
+{
+  "name": "Checkpoint",
+  "version": "0.1.0",
+  "owner": "ursula-suite",
+  "hostedBy": "ursula-engine",
+  "governance": {
+    "domain": "workflow-risk-analysis",
+    "tier": "external-engine",
+    "externalSource": "C:\\ProtoForge_Ecosystem\\Ursula_Suite\\apps\\checkpoint"
+  },
+  "capabilities": [
+    "workflow-analysis",
+    "risk-assessment",
+    "failure-point-detection"
+  ],
+  "eventsProduced": [
+    "workflow.analyzed",
+    "risk.scored"
+  ],
+  "eventsConsumed": [],
+  "providers": [
+    "ursula-engine"
+  ],
+  "dependencies": {
+    "services": [
+      "ursula-engine"
+    ]
+  },
+  "healthRequirements": [
+    "ursula-engine"
+  ],
+  "realization": {
+    "hosted": "ursula-engine",
+    "engineHealthUrl": "http://localhost:5000/checkpoint/health",
+    "engineProbe": {
+      "method": "POST",
+      "url": "http://localhost:5000/checkpoint/workflow/analyze",
+      "body": { "name": "HYDI-REALIZATION-PROBE", "category": "general", "steps": [{ "name": "intake" }, { "name": "process" }, { "name": "deliver" }] },
+      "expectStatus": 201,
+      "expectJsonField": "workflow_id"
+    },
+    "offerId": "checkpoint_audit"
+  },
+  "deprecated": false
+}
