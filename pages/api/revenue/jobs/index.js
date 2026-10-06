@@ -208,8 +208,8 @@ export default async function handler(req, res) {
       }
     }
 
-    // Link the checkout session to the job
-    await jobManager.linkCheckoutSession(job.jobId, checkoutResult.sessionId);
+    // Link the checkout session to the job (URL persisted for human retry)
+    await jobManager.linkCheckoutSession(job.jobId, checkoutResult.sessionId, checkoutResult.url);
 
     return res.status(201).json({
       jobId: job.jobId,

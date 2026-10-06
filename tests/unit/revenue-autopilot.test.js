@@ -59,11 +59,65 @@ const PENDING_OPP = {
   confidence: 48, approval_status: 'pending', status: 'needs_review', scoring_detail: {},
 };
 
-function depsFor(store, envPresent = () => false) {
-  const goals = fakeGoals();
-  const service = new HumanActionService({ verifierDeps: { opportunityStore: store } });
-  return { goals, service, opportunityStore: store, catalog: getOfferCatalog(), envNamePresent: envPresent, actor: 'test' };
+/** Fake revenue-runtime seam — the same shape JobManager/StripeBridge expose. */
+function fakeRuntime({ paid = false, delivered = true, execOk = true, reconState = 'CONSISTENT' } = {}) {
+  const jobs = new Map();
+  let jobSeq = 0;
+  const jobManager = {
+    async createJob(input) {
+      const job = {
+        jobId: `job_test_${++jobSeq}`, customerEmail: input.customerEmail, customerName: input.customerName,
+        product: input.product, requestText: input.requestText, requirements: input.requirements,
+        priceCents: input.priceCents, currency: input.currency,
+        jobStatus: 'created', paymentStatus: 'unpaid', deliveryStatus: 'pending',
+        stripeCheckoutSessionId: null, paymentIntentId: null, artifactPaths: [],
+      };
+      jobs.set(job.jobId, job);
+      return job;
+    },
+    async linkCheckoutSession(jobId, sessionId, url) {
+      const j = jobs.get(jobId); j.stripeCheckoutSessionId = sessionId; j.paymentStatus = 'pending'; j.checkoutUrl = url;
+    },
+    async getJob(id) { return jobs.get(id) || null; },
+  };
+  const stripeBridge = {
+    isConfigured: () => true,
+    async createSetupCheckoutSession(input) {
+      return { sessionId: 'cs_test_fake_' + jobSeq, url: 'https://checkout.stripe.test/' + jobSeq };
+    },
+  };
+  const executeJob = async (jobId) => {
+    const j = jobs.get(jobId);
+    if (!execOk) { j.jobStatus = 'failed'; return { success: false, error: 'artifact verification failed', delivered: false }; }
+    j.jobStatus = 'awaiting_review';
+    j.artifactPaths = ['artifacts/' + jobId + '/part.stl'];
+    if (delivered) { j.deliveryStatus = 'delivered'; j.jobStatus = 'delivered'; }
+    return { success: true, artifacts: j.artifactPaths, delivered };
+  };
+  const reconciler = {
+    async reconcile(jobId) {
+      const j = jobs.get(jobId);
+      return {
+        state: reconState, jobId, summary: reconState + ' — fake',
+        correlation: { jobId, checkoutSessionId: j?.stripeCheckoutSessionId || null, paymentIntentId: j?.paymentIntentId || null, ledgerEntryId: j?.paymentStatus === 'paid' ? 'le_test_1' : null, stripeEventId: j?.paymentStatus === 'paid' ? 'evt_test_1' : null },
+        violations: reconState === 'CONSISTENT' ? [] : ['fake violation'],
+      };
+    },
+  };
+  return { jobs, jobManager, stripeBridge, executeJob, reconciler };
 }
+
+function depsFor(store, envPresent = () => false, runtime = null) {
+  const goals = fakeGoals();
+  const service = new HumanActionService({ verifierDeps: { opportunityStore: store, jobManager: runtime?.jobManager, envNamePresent: envPresent } });
+  return {
+    goals, service, opportunityStore: store, catalog: getOfferCatalog(),
+    envNamePresent: envPresent, actor: 'test', stripeMode: 'test',
+    customerEmail: 'buyer@test', ...(runtime || {}),
+  };
+}
+
+const ALL_ENV = (n) => ['STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET_01', 'LIVE_QUALIFICATION_CUSTOMER_EMAIL'].includes(n);
 
 describe('offerForOpportunity', () => {
   const catalog = getOfferCatalog();
@@ -111,7 +165,7 @@ describe('verifiers', () => {
 });
 
 describe('revenue autopilot', () => {
-  test('selects approved opportunity, prepares offer, parks on prerequisites', async () => {
+  test('selects approved opportunity, prepares offer, parks on prerequisites (test mode)', async () => {
     const store = fakeStore([PENDING_OPP, PHILIPS]);
     const deps = depsFor(store, () => false); // no env at all
     const report = await advance(deps);
@@ -122,16 +176,16 @@ describe('revenue autopilot', () => {
     const goal = await deps.goals.getGoal(report.goalId);
     expect(goal.status).toBe('escalated');
     expect(goal.context.waitingOnHuman).toBe(true);
-    // STRIPE_WEBHOOK_SECRET + live-auth — approval is already satisfied
+    // test mode: secret-key + webhook-secret + qualification-customer —
+    // live-auth is NOT a test-path prerequisite
     const linked = deps.service.list({ includeTerminal: true }).filter((a) => a.sourceGoalId === goal.goalId);
-    expect(linked.length).toBe(2);
     const keys = linked.map((a) => a.blockerKey).sort();
-    expect(keys).toEqual(['stripe:live-transaction-authorization', 'stripe:webhook-secret']);
+    expect(keys).toEqual(['revenue:qualification-customer', 'stripe:secret-key', 'stripe:webhook-secret']);
 
     // idempotent — a second pass does not duplicate
     const again = await advance(deps);
     expect(again.stage).toBe('WAITING_ON_HUMAN');
-    expect(deps.service.list({ includeTerminal: true }).filter((a) => a.sourceGoalId === goal.goalId).length).toBe(2);
+    expect(deps.service.list({ includeTerminal: true }).filter((a) => a.sourceGoalId === goal.goalId).length).toBe(3);
   });
 
   test('pending opportunity parks on the approval boundary', async () => {
@@ -144,44 +198,130 @@ describe('revenue autopilot', () => {
     expect(actions.some((a) => a.blockerKey === 'opportunity:opp_pending:approval')).toBe(true);
   });
 
-  test('verify → resume → payable: the full loop on real checks', async () => {
+  test('live mode gates on live-auth; autopilot cannot self-issue', async () => {
     const store = fakeStore([PHILIPS]);
-    // STRIPE_WEBHOOK_SECRET present from the start → only live-auth parks
-    const deps = depsFor(store, (n) => n === 'STRIPE_WEBHOOK_SECRET');
-    const r1 = await advance(deps);
-    expect(r1.stage).toBe('WAITING_ON_HUMAN');
+    const deps = depsFor(store, ALL_ENV);
+    deps.stripeMode = 'live';
+    const report = await advance(deps);
+    expect(report.stage).toBe('WAITING_ON_HUMAN');
     const authAction = deps.service.list({ includeTerminal: true }).find((a) => a.blockerKey === 'stripe:live-transaction-authorization');
     expect(authAction).toBeTruthy();
+    // No job may be created before authorization — the checkout seam refuses.
+  });
 
-    // Simulate the human issuing a fresh authorization — the verifier
-    // reads the real store file (spec default path is overridable only in
-    // spec; here we write the default location in-process via a temp cwd
-    // — so instead we verify through the spec path used by the action).
-    const ltaDir = path.join(process.cwd(), '.hydi-operational');
-    const ltaPath = path.join(ltaDir, 'live-transaction-authorization.json');
-    const hadFile = fs.existsSync(ltaPath);
-    const prior = hadFile ? fs.readFileSync(ltaPath, 'utf8') : null;
-    try {
-      if (!fs.existsSync(ltaDir)) fs.mkdirSync(ltaDir, { recursive: true });
-      fs.writeFileSync(ltaPath, JSON.stringify({
-        live1: { authorizationId: 'live1', state: 'PENDING', scope: 's', expiresAt: new Date(Date.now() + 60000).toISOString(), authorizedBy: 'test' },
-      }));
-      const v = await deps.service.verify(authAction.id, 'test');
-      expect(v.action.status).toBe('RESOLVED');
+  test('full test pipeline: gate → checkout → payment park → pay → execute → deliver → reconcile → TEST_PIPELINE_PROVEN', async () => {
+    const store = fakeStore([PHILIPS]);
+    const rt = fakeRuntime();
+    const deps = depsFor(store, ALL_ENV, rt);
 
-      const r2 = await advance(deps);
-      expect(r2.stage).toBe('payable_ready');
-      const goal = await deps.goals.getGoal(r2.goalId);
-      expect(goal.status).toBe('pending'); // runnable, NOT completed
-      expect(goal.context.waitingOnHuman).toBeFalsy();
-      expect(goal.context.autopilot.payableReady).toBe(true);
-      const ev = (goal.evidence || []).find((e) => e.type === 'PAYABLE_OFFER_READY');
-      expect(ev).toBeTruthy();
-      expect(ev.priceCents).toBe(2900);
-    } finally {
-      if (prior !== null) fs.writeFileSync(ltaPath, prior);
-      else if (fs.existsSync(ltaPath)) fs.unlinkSync(ltaPath);
-    }
+    // Pass 1: gates clear (env present, approved, customer via dep) →
+    // checkout created → parked on the payment boundary.
+    const r1 = await advance(deps);
+    expect(r1.stage).toBe('WAITING_ON_HUMAN');
+    const goal = await deps.goals.getGoal(r1.goalId);
+    const ap = goal.context.autopilot;
+    expect(ap.jobId).toMatch(/^job_test_/);
+    expect(ap.checkoutSessionId).toMatch(/^cs_test_/);
+    expect(ap.checkoutUrl).toMatch(/^https:\/\/checkout\.stripe\.test/);
+    const paymentAction = deps.service.list({ includeTerminal: true }).find((a) => a.blockerKey === `revenue:payment:${ap.jobId}`);
+    expect(paymentAction).toBeTruthy();
+    expect(paymentAction.verifier.name).toBe('job-payment-status');
+
+    // Unpaid cannot proceed — verifier fails honestly.
+    const unpaid = await deps.service.verify(paymentAction.id, 'test');
+    expect(unpaid.action.status).not.toBe('RESOLVED');
+
+    // Pass 2 while unpaid: still parked, no duplicate job/session.
+    const r2 = await advance(deps);
+    expect(r2.stage).toBe('WAITING_ON_HUMAN');
+    expect(rt.jobs.size).toBe(1);
+
+    // Human pays — simulate the verified webhook landing.
+    rt.jobs.get(ap.jobId).paymentStatus = 'paid';
+    rt.jobs.get(ap.jobId).paymentIntentId = 'pi_test_1';
+    rt.jobs.get(ap.jobId).jobStatus = 'queued';
+
+    // Pass 3: verifier resolves the action, sweep releases the goal,
+    // executor runs, delivery auto-approves, reconcile CONSISTENT → proven.
+    const r3 = await advance(deps);
+    expect(r3.stage).toBe('TEST_PIPELINE_PROVEN');
+    expect(r3.proof.type).toBe('TEST_PIPELINE_PROVEN');
+    expect(r3.proof.jobId).toBe(ap.jobId);
+    expect(r3.proof.checkoutSessionId).toBe(ap.checkoutSessionId);
+    expect(r3.proof.paymentIntentId).toBe('pi_test_1');
+    expect(r3.proof.ledgerEntryId).toBe('le_test_1');
+    expect(r3.proof.amountCents).toBe(2900);
+
+    const done = await deps.goals.getGoal(r1.goalId);
+    expect(done.status).toBe('completed');
+    expect(done.context.autopilot.proof.type).toBe('TEST_PIPELINE_PROVEN');
+    const resolved = deps.service.get(paymentAction.id);
+    expect(resolved.status).toBe('RESOLVED');
+  });
+
+  test('delivery boundary: job needing human approval parks on job-delivered', async () => {
+    const store = fakeStore([PHILIPS]);
+    const rt = fakeRuntime({ delivered: false }); // QA doesn't auto-approve
+    const deps = depsFor(store, ALL_ENV, rt);
+    const r1 = await advance(deps);
+    const ap = (await deps.goals.getGoal(r1.goalId)).context.autopilot;
+    rt.jobs.get(ap.jobId).paymentStatus = 'paid';
+    rt.jobs.get(ap.jobId).jobStatus = 'queued';
+    const r2 = await advance(deps);
+    expect(r2.stage).toBe('WAITING_ON_HUMAN');
+    const deliveryAction = deps.service.list({ includeTerminal: true }).find((a) => a.blockerKey === `revenue:delivery:${ap.jobId}`);
+    expect(deliveryAction).toBeTruthy();
+    expect(deliveryAction.verifier.name).toBe('job-delivered');
+    // Human approves → delivered → next pass proves.
+    rt.jobs.get(ap.jobId).deliveryStatus = 'delivered';
+    const r3 = await advance(deps);
+    expect(r3.stage).toBe('TEST_PIPELINE_PROVEN');
+  });
+
+  test('reconciliation MISMATCH fails honestly — never proven', async () => {
+    const store = fakeStore([PHILIPS]);
+    const rt = fakeRuntime({ reconState: 'MISMATCH' });
+    const deps = depsFor(store, ALL_ENV, rt);
+    const r1 = await advance(deps);
+    const ap = (await deps.goals.getGoal(r1.goalId)).context.autopilot;
+    rt.jobs.get(ap.jobId).paymentStatus = 'paid';
+    rt.jobs.get(ap.jobId).jobStatus = 'queued';
+    const r2 = await advance(deps);
+    expect(r2.stage).toBe('reconciliation_failed');
+    const goal = await deps.goals.getGoal(r1.goalId);
+    expect(goal.status).toBe('escalated');
+    expect((goal.evidence || []).some((e) => e.type === 'RECONCILIATION_FAILED')).toBe(true);
+  });
+
+  test('reconciliation INCOMPLETE retries without proof', async () => {
+    const store = fakeStore([PHILIPS]);
+    const rt = fakeRuntime({ reconState: 'INCOMPLETE' });
+    const deps = depsFor(store, ALL_ENV, rt);
+    const r1 = await advance(deps);
+    const ap = (await deps.goals.getGoal(r1.goalId)).context.autopilot;
+    rt.jobs.get(ap.jobId).paymentStatus = 'paid';
+    rt.jobs.get(ap.jobId).jobStatus = 'queued';
+    const r2 = await advance(deps);
+    expect(r2.stage).toBe('reconciling');
+    const goal = await deps.goals.getGoal(r1.goalId);
+    expect(goal.status).not.toBe('completed');
+    expect(goal.context.autopilot.proof).toBeUndefined();
+  });
+
+  test('next mission cycle: proven opportunity is excluded, new goal created', async () => {
+    const store = fakeStore([PHILIPS]);
+    const rt = fakeRuntime();
+    const deps = depsFor(store, ALL_ENV, rt);
+    const r1 = await advance(deps);
+    const ap = (await deps.goals.getGoal(r1.goalId)).context.autopilot;
+    rt.jobs.get(ap.jobId).paymentStatus = 'paid';
+    rt.jobs.get(ap.jobId).jobStatus = 'queued';
+    const proven = await advance(deps);
+    expect(proven.stage).toBe('TEST_PIPELINE_PROVEN');
+    // Next advance → new mission instance, no eligible opportunities left.
+    const r3 = await advance(deps);
+    expect(r3.goalId).not.toBe(proven.goalId);
+    expect(r3.stage).toBe('awaiting_opportunity');
   });
 
   test('brief() renders NEXT BEST ACTION with waiting prerequisites', async () => {
@@ -193,6 +333,23 @@ describe('revenue autopilot', () => {
     expect(text).toMatch(/protoforge_model_prep|3D-Printable Model Preparation/);
     expect(text).toMatch(/WAITING ON HUMAN/);
     expect(text).toMatch(/STRIPE_WEBHOOK_SECRET/);
+  });
+
+  test('brief() surfaces TEST PIPELINE PROVEN evidence after completion', async () => {
+    const store = fakeStore([PHILIPS]);
+    const rt = fakeRuntime();
+    const deps = depsFor(store, ALL_ENV, rt);
+    const r1 = await advance(deps);
+    const ap = (await deps.goals.getGoal(r1.goalId)).context.autopilot;
+    rt.jobs.get(ap.jobId).paymentStatus = 'paid';
+    rt.jobs.get(ap.jobId).paymentIntentId = 'pi_test_1';
+    rt.jobs.get(ap.jobId).jobStatus = 'queued';
+    await advance(deps);
+    const { text } = await brief(deps);
+    expect(text).toMatch(/TEST PIPELINE PROVEN/);
+    expect(text).toMatch(/2900¢ usd/);
+    expect(text).toMatch(/pi_test_1/);
+    expect(text).toMatch(/test-mode/);
   });
 
   test('empty queue → awaiting_opportunity, no fabricated work', async () => {
