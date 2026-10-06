@@ -158,7 +158,7 @@ export async function collectCooState(deps: CooDeps): Promise<CooState> {
     reconcile(), collectHumanActionQueue(deps.pool), collectAgentState(deps.pool),
   ]);
 
-  const [goalsOpen, goalsInProgress, goalsWaitingHuman, escalationsOpen, escalationsNew24h, interventionsPending, authEscalations24h] =
+  const [goalsOpen, goalsInProgress, goalsWaitingHuman, autopilotStage, escalationsOpen, escalationsNew24h, interventionsPending, authEscalations24h] =
     await Promise.all([
       safe(() => one(deps.pool, `SELECT count(*) n FROM heidi_goals WHERE status IN ('pending','active','blocked','escalated')`), 0),
       safe(() => one(deps.pool, `SELECT count(*) n FROM heidi_goals WHERE status = 'in_progress'`), 0),
@@ -166,6 +166,19 @@ export async function collectCooState(deps: CooDeps): Promise<CooState> {
       // link. Distinct from generic 'blocked': these resume on verified
       // human prerequisites, not on software repair.
       safe(() => one(deps.pool, `SELECT count(*) n FROM heidi_goals WHERE status = 'escalated' AND context->>'waitingOnHuman' = 'true'`), 0),
+      // Revenue autopilot — the durable objective's current stage +
+      // parked-on-human marker, read from its goal context.
+      safe(async () => {
+        const r = await deps.pool.query(
+          `SELECT status, context->'autopilot'->>'stage' AS stage,
+                  context->'autopilot'->>'offerName' AS offer,
+                  context->'autopilot'->>'priceCents' AS price_cents,
+                  context->>'waitingOnHuman' AS waiting
+           FROM heidi_goals WHERE context->>'autopilotObjective' = 'true' ORDER BY created_at DESC LIMIT 1`,
+        );
+        const row = r.rows[0];
+        return row ? { stage: row.stage ?? null, offer: row.offer ?? null, priceCents: row.price_cents ?? null, waiting: row.waiting === 'true', status: row.status } : null;
+      }, null),
       safe(() => one(deps.pool, `SELECT count(*) n FROM operator_escalations WHERE resolved = false`), 0),
       safe(() => one(deps.pool, `SELECT count(*) n FROM operator_escalations WHERE resolved = false AND created_at > now() - interval '24 hours'`), 0),
       safe(() => one(deps.pool, `SELECT count(*) n FROM human_intervention_requests WHERE status = 'pending'`), 0),
@@ -274,6 +287,7 @@ export async function collectCooState(deps: CooDeps): Promise<CooState> {
     `  Agents:      ${agentPlane.activeCount} active, ${agentPlane.staleCount} stale, ${agentPlane.missions.length} mission(s) total`,
     `  ProtoForge:  last run ${proto.lastRunStatus ?? 'none'} at ${proto.lastRunAt ?? 'never'}; ${proto.opportunitiesTotal} opportunities (${proto.pendingReview} pending review, ${proto.approved} approved)`,
     `  Revenue:     ${revenueOpps} open opportunities; ${offersSummary.total} offer(s)${offersSummary.boundary.length > 0 ? ` — boundary: ${offersSummary.boundary.map((b) => `${b.offerId} ${b.stage} (${b.reason ?? 'no reason'})`).join(' | ')}` : ''} (read-only; no reconciled-revenue claim)`,
+    `  Autopilot:   ${autopilotStage ? `${autopilotStage.stage ?? '—'}${autopilotStage.offer ? ` — ${autopilotStage.offer} @ ${autopilotStage.priceCents}¢` : ''}${autopilotStage.waiting ? ' — WAITING ON HUMAN' : ''}` : 'no objective yet'}`,
     `  Next:        ${nextAction.kind === 'capability' ? nextAction.capabilityId : nextAction.kind === 'human' ? 'HUMAN ACTION REQUIRED' : 'NO_ACTION_REQUIRED'} — ${nextAction.reason}`,
   ].join('\n');
 

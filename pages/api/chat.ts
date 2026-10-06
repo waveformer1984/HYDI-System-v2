@@ -33,6 +33,7 @@ import {
 import { verifyServiceToken } from '../../lib/auth/verifyServiceToken';
 import { tryNftStatusAnswer } from '../../lib/rezonate/nft-status-answer';
 import { tryHumanActionAnswer } from '../../lib/human-actions/heidi-answer';
+import { tryAutopilotAnswer } from '../../lib/revenue/autopilot-answer';
 import { getGoalSystem } from '../../lib/heidi/GoalSystem';
 import { syncRezonateNftRevenue } from '../../lib/commercial/rezonate-nft-bridge';
 import type { CooState } from '../../lib/heidi/CooState';
@@ -1833,6 +1834,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return res.end();
       }
     } catch { /* human-action reads are best-effort; fall through */ }
+
+    // Revenue autopilot — "next best action" advances the durable
+    // objective one idempotent pass and reports from goal state.
+    try {
+      const autoAnswer = await tryAutopilotAnswer(message, { goals: getGoalSystem() });
+      if (autoAnswer) {
+        sse(res, { type: 'metadata', model_used: 'revenue-autopilot', latency: 0 });
+        sse(res, { type: 'content', content: autoAnswer.text });
+        res.write('data: [DONE]\n\n');
+        return res.end();
+      }
+    } catch { /* autopilot advance is best-effort; fall through */ }
 
     // (the daemon's authoritative snapshot). Non-operational or unreadable
     // falls through to the existing runtime-state + LLM paths.

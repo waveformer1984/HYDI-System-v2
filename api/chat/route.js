@@ -23,6 +23,7 @@ import {
 import { normalizeRezonateIntent } from '../../lib/rezonate/intent.js';
 import { tryNftStatusAnswer } from '../../lib/rezonate/nft-status-answer.js';
 import { tryHumanActionAnswer } from '../../lib/human-actions/heidi-answer.js';
+import { tryAutopilotAnswer } from '../../lib/revenue/autopilot-answer.js';
 import { getGoalSystem } from '../../lib/heidi/GoalSystem';
 import { syncRezonateNftRevenue } from '../../lib/commercial/rezonate-nft-bridge';
 import { HeidiController } from '../../pao-system/core/heidi.controller';
@@ -114,6 +115,15 @@ export default async function handler(req, res) {
         return res.status(200).json({ response: humanAnswer.text, system, timestamp: new Date().toISOString() });
       }
     } catch { /* human-action reads are best-effort; fall through */ }
+
+    // Revenue autopilot — "next best action" advances the durable
+    // objective one idempotent pass and reports from goal state.
+    try {
+      const autoAnswer = await tryAutopilotAnswer(message, { goals: getGoalSystem() });
+      if (autoAnswer) {
+        return res.status(200).json({ response: autoAnswer.text, system, timestamp: new Date().toISOString() });
+      }
+    } catch { /* autopilot advance is best-effort; fall through */ }
 
     const systemHandler = systemHandlers[system];
     if (!systemHandler) {
