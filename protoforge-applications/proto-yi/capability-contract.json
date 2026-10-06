@@ -1,12 +1,8 @@
 {
   "name": "Proto YI",
   "version": "0.1.0",
-  "owner": "protoforge-factory",
-  "governance": {
-    "domain": "project-management",
-    "tier": "generated",
-    "approvedAt": "2026-08-01T00:00:00.000Z"
-  },
+  "generatedBy": "app-realization",
+  "generatedAt": "2026-10-06T21:26:24.822Z",
   "capabilities": [
     "builder",
     "planner",
@@ -33,16 +29,6 @@
     "memory-store",
     "protoiy-engine"
   ],
-  "dependencies": {
-    "services": [
-      "supabase",
-      "hydi-gateway"
-    ],
-    "packages": [
-      "@protoforge/event-contracts",
-      "@protoforge/application-manifest"
-    ]
-  },
   "healthRequirements": [
     "protoiy-engine",
     "hydi-gateway"
@@ -64,6 +50,5 @@
       "expectJsonField": "project_id"
     },
     "offerId": "proto_yi_project"
-  },
-  "deprecated": false
+  }
 }
