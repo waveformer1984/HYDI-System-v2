@@ -18,22 +18,26 @@ jest.mock('../../lib/revenue/revenue-autopilot', () => ({
   advance: jest.fn(),
 }));
 jest.mock('../../lib/revenue/JobManager', () => ({ JobManager: jest.fn() }));
+jest.mock('../../lib/revenue/JobExecutor', () => ({ sweepAwaitingReview: jest.fn() }));
 jest.mock('../../lib/heidi/GoalSystem', () => ({
   getGoalSystem: jest.fn(() => ({ __goals: true })),
 }));
 
 import { HumanActionService, syncHumanActions } from '../../lib/human-actions';
 import { advance } from '../../lib/revenue/revenue-autopilot';
+import { sweepAwaitingReview } from '../../lib/revenue/JobExecutor';
 import { runOnce, mainLoop } from '../../scripts/revenue-autopilot-tick';
 
 const mockSync = syncHumanActions as jest.Mock;
 const mockAdvance = advance as jest.Mock;
+const mockSweep = sweepAwaitingReview as jest.Mock;
 const MockService = HumanActionService as unknown as jest.Mock;
 
 describe('revenue-autopilot-tick: runOnce', () => {
   beforeEach(() => {
     mockSync.mockReset().mockResolvedValue(undefined);
     mockAdvance.mockReset().mockResolvedValue({ stage: 'payment', outcome: null });
+    mockSweep.mockReset().mockResolvedValue({ delivered: 0, escalated: 0 });
     MockService.mockClear();
   });
 
@@ -75,6 +79,17 @@ describe('revenue-autopilot-tick: runOnce', () => {
     await runOnce({ goals, service: {}, realization: { advance: advanceApp } });
     expect(advanceApp).toHaveBeenCalledTimes(1);
     expect(advanceApp).toHaveBeenCalledWith(expect.objectContaining({ appId: 'checkpoint', goals }));
+  });
+
+  it('sweeps paid awaiting_review jobs through the QA gate every tick', async () => {
+    await runOnce();
+    expect(mockSweep).toHaveBeenCalledTimes(1);
+  });
+
+  it('a failing awaiting_review sweep never breaks the tick', async () => {
+    mockSweep.mockRejectedValue(new Error('db down'));
+    const result = await runOnce();
+    expect(result.stage).toBe('payment');
   });
 });
 

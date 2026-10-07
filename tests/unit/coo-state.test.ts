@@ -6,6 +6,14 @@
  * It must never manufacture work.
  */
 
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
+
+// The durable human-action store is real on this machine — isolate it so
+// live operational records can never leak into the COO queue assertions.
+process.env.HYDI_HUMAN_ACTIONS_FILE = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'ha-coo-')), 'human-actions.json');
+
 import { collectCooState, selectNextAction, type CooState } from '../../lib/heidi/CooState';
 import type { ReconciliationReport } from '../../lib/heidi/DeploymentReconciliation';
 
@@ -35,6 +43,8 @@ interface Counts {
   protoRun?: { run_at: Date; status: string } | null;
   protoOpps?: { pending: number; approved: number; total: number };
   revenueOpps?: number;
+  commercialJobs?: Record<string, string>;
+  ledger?: Record<string, string>;
   events?: Array<{ event_type: string; n: string }>;
 }
 
@@ -62,6 +72,8 @@ function makePool(c: Counts) {
       if (/protoforge_mission_runs/.test(sql)) return { rows: c.protoRun ? [c.protoRun] : [] };
       if (/protoforge_opportunities/.test(sql)) return { rows: [c.protoOpps ?? { pending: 0, approved: 0, total: 0 }] };
       if (/revenue_opportunities/.test(sql)) return { rows: [{ n: c.revenueOpps ?? 0 }] };
+      if (/FROM customer_jobs/.test(sql)) return { rows: [c.commercialJobs ?? { awaiting_payment: '0', in_flight: '0', awaiting_review: '0', delivered: '0', test_paid_cents: '0', live_paid_cents: '0' }] };
+      if (/FROM revenue_ledger/.test(sql)) return { rows: [c.ledger ?? { entries: '0', gross_cents: '0' }] };
       if (/GROUP BY event_type/.test(sql)) return { rows: c.events ?? [] };
       return { rows: [] };
     },
@@ -152,6 +164,32 @@ describe('ops.coo_state collection + selection', () => {
     expect(s.protoforge.pendingReview).toBe(30);
     expect(s.revenue.opportunitiesOpen).toBe(2);
     expect(s.briefing).toContain('pending review');
+  });
+
+  test('commercial lifecycle block reads customer_jobs + verified ledger, mode-separated', async () => {
+    const s = await collect({
+      commercialJobs: {
+        awaiting_payment: '2', in_flight: '1', awaiting_review: '3', delivered: '5',
+        test_paid_cents: '5800', live_paid_cents: '0',
+      },
+      ledger: { entries: '4', gross_cents: '5800' },
+    });
+    const c = s.revenue.commercial!;
+    expect(c.awaitingPayment).toBe(2);
+    expect(c.inFlight).toBe(1);
+    expect(c.awaitingReview).toBe(3);
+    expect(c.delivered).toBe(5);
+    expect(c.testPaidCents).toBe(5800);
+    expect(c.livePaidCents).toBe(0);
+    expect(c.verifiedLedgerEntries).toBe(4);
+    expect(s.briefing).toContain('Commercial:');
+    expect(s.briefing).toContain('5800¢ test paid');
+  });
+
+  test('commercial block degrades to zeros when tables are unreadable', async () => {
+    const s = await collect({});
+    expect(s.revenue.commercial).toBeTruthy();
+    expect(s.revenue.commercial!.verifiedLedgerEntries).toBe(0);
   });
 
   test('selectNextAction is pure and deterministic', () => {

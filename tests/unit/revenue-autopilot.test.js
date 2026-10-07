@@ -15,7 +15,8 @@ process.env.HYDI_HUMAN_ACTIONS_FILE = tmpFile;
 
 const { HumanActionService } = require('../../lib/human-actions/service');
 const { runVerifier } = require('../../lib/human-actions/verifiers');
-const { advance, brief, resumeForPayment, offerForOpportunity } = require('../../lib/revenue/revenue-autopilot');
+const { advance, brief, status, resumeForPayment, offerForOpportunity } = require('../../lib/revenue/revenue-autopilot');
+const { tryAutopilotAnswer, looksLikeStatusQuestion } = require('../../lib/revenue/autopilot-answer');
 const { getOfferCatalog } = require('../../lib/revenue/OfferCatalog');
 
 /** In-memory GoalSystem stand-in incl. createGoal. */
@@ -358,6 +359,86 @@ describe('revenue autopilot', () => {
     expect(report.stage).toBe('awaiting_opportunity');
   });
 
+  test('selection records durable rationale — why this opportunity over the others', async () => {
+    const store = fakeStore([PENDING_OPP, PHILIPS]);
+    const deps = depsFor(store, () => false);
+    const report = await advance(deps);
+    const ap = (await deps.goals.getGoal(report.goalId)).context.autopilot;
+    expect(ap.selection).toBeTruthy();
+    expect(ap.selection.chosenId).toBe('opp_philips');
+    expect(ap.selection.reason).toMatch(/highest confidence|approved/);
+    expect(ap.selection.considered.length).toBe(2);
+    expect(ap.selection.considered.map((c) => c.id)).toContain('opp_pending');
+    expect(ap.selection.poolSize).toBe(2);
+  });
+
+  test('status() is read-only — no goal created, no advance, durable truth only', async () => {
+    const store = fakeStore([PHILIPS]);
+    const deps = depsFor(store, ALL_ENV, fakeRuntime());
+    // Empty system: a status question must not create the objective goal.
+    const empty = await status(deps);
+    expect(empty.text).toMatch(/No commercial objective|no active/i);
+    expect((await deps.goals.listGoals()).length).toBe(0);
+
+    // After a real run, status reports the durable stage without advancing.
+    const r1 = await advance(deps);
+    const goalBefore = await deps.goals.getGoal(r1.goalId);
+    const stepsBefore = (goalBefore.context.autopilot.steps || []).length;
+    const s = await status(deps);
+    expect(s.stage).toBe('WAITING_ON_HUMAN');
+    expect(s.text).toMatch(/COMMERCIAL STATUS/);
+    expect(s.text).toMatch(/Philips Fixables/);
+    expect(s.text).toMatch(/Why this one:/);
+    expect(s.text).toMatch(/Waiting on human/);
+    const goalAfter = await deps.goals.getGoal(r1.goalId);
+    expect((goalAfter.context.autopilot.steps || []).length).toBe(stepsBefore); // nothing appended
+  });
+
+  test('status() shows job lifecycle once the mission owns a job', async () => {
+    const store = fakeStore([PHILIPS]);
+    const rt = fakeRuntime();
+    const deps = depsFor(store, ALL_ENV, rt);
+    const r1 = await advance(deps);
+    const ap = (await deps.goals.getGoal(r1.goalId)).context.autopilot;
+    const s = await status(deps);
+    expect(s.job.jobId).toBe(ap.jobId);
+    expect(s.text).toMatch(new RegExp(`Job ${ap.jobId}: payment=pending`));
+  });
+});
+
+describe('autopilot-answer — commercial status routing', () => {
+  test('status questions answer read-only; advance questions still advance', async () => {
+    const store = fakeStore([PHILIPS]);
+    const deps = depsFor(store, ALL_ENV, fakeRuntime());
+
+    // Read-only: "what are we working on" must not create the goal.
+    const a = await tryAutopilotAnswer('what are we working on', deps);
+    expect(a.text).toMatch(/COMMERCIAL STATUS/);
+    expect((await deps.goals.listGoals()).length).toBe(0);
+
+    // "why this opportunity" after a run — rationale from durable state.
+    await advance(deps);
+    const b = await tryAutopilotAnswer('why this opportunity', deps);
+    expect(b.text).toMatch(/Why this one:/);
+
+    // Advance intent still mutates via brief().
+    const c = await tryAutopilotAnswer('next best action', deps);
+    expect(c.text).toMatch(/NEXT BEST ACTION/);
+
+    // Non-commercial → null (falls through to other answerers).
+    expect(await tryAutopilotAnswer('what time is it', deps)).toBeNull();
+  });
+
+  test('status pattern matching is precise', () => {
+    expect(looksLikeStatusQuestion('what is waiting for payment')).toBe(true);
+    expect(looksLikeStatusQuestion('why are we working on this')).toBe(true);
+    expect(looksLikeStatusQuestion('what jobs are executing')).toBe(true);
+    expect(looksLikeStatusQuestion('what has been delivered')).toBe(true);
+    expect(looksLikeStatusQuestion('hello')).toBe(false);
+  });
+});
+
+describe('resume', () => {
   test('resumeForPayment resumes only the mission parked on that job', async () => {
     const store = fakeStore([PHILIPS]);
     const rt = fakeRuntime();

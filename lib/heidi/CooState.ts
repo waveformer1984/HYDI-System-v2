@@ -79,6 +79,20 @@ export interface CooState {
           of every sellable surface. Optional: absent in older snapshots. */
       testOffers?: number;
     };
+    /** Closed-loop commercial lifecycle — durable job/ledger truth.
+        Mode split comes from the checkout-session prefix; 'live' paid
+        counts are the only figures that could ever represent real
+        revenue, and they are still reported read-only. */
+    commercial?: {
+      awaitingPayment: number;
+      inFlight: number;          // paid + queued/executing
+      awaitingReview: number;
+      delivered: number;
+      testPaidCents: number;
+      livePaidCents: number;
+      verifiedLedgerEntries: number;
+      verifiedLedgerGrossCents: number;
+    };
   };
   /** Multi-agent control plane (event-sourced, survives restart). */
   agents: {
@@ -210,6 +224,42 @@ export async function collectCooState(deps: CooDeps): Promise<CooState> {
     0,
   );
 
+  // Closed-loop commercial lifecycle — the customer_jobs + revenue_ledger
+  // read side of the autopilot pipeline. Mode split via the checkout
+  // session prefix; live cents are the only figures that could ever be
+  // real revenue. Read-only — COO reports durable truth, never asserts it.
+  const commercial = await safe(async () => {
+    const j = await deps.pool.query(
+      `SELECT
+         count(*) FILTER (WHERE payment_status = 'pending') AS awaiting_payment,
+         count(*) FILTER (WHERE payment_status = 'paid' AND job_status IN ('queued','executing')) AS in_flight,
+         count(*) FILTER (WHERE job_status = 'awaiting_review') AS awaiting_review,
+         count(*) FILTER (WHERE delivery_status = 'delivered' OR job_status = 'delivered') AS delivered,
+         coalesce(sum(price_cents) FILTER (WHERE payment_status = 'paid' AND stripe_checkout_session_id LIKE 'cs_test_%'), 0) AS test_paid_cents,
+         coalesce(sum(price_cents) FILTER (WHERE payment_status = 'paid' AND stripe_checkout_session_id LIKE 'cs_live_%'), 0) AS live_paid_cents
+       FROM customer_jobs`,
+    );
+    const l = await deps.pool.query(
+      `SELECT count(*) AS entries, coalesce(sum(amount_gross), 0) AS gross_cents
+       FROM revenue_ledger WHERE verified = true`,
+    );
+    const jr = j.rows[0] ?? {};
+    const lr = l.rows[0] ?? {};
+    return {
+      awaitingPayment: parseInt(jr.awaiting_payment ?? '0', 10) || 0,
+      inFlight: parseInt(jr.in_flight ?? '0', 10) || 0,
+      awaitingReview: parseInt(jr.awaiting_review ?? '0', 10) || 0,
+      delivered: parseInt(jr.delivered ?? '0', 10) || 0,
+      testPaidCents: parseInt(jr.test_paid_cents ?? '0', 10) || 0,
+      livePaidCents: parseInt(jr.live_paid_cents ?? '0', 10) || 0,
+      verifiedLedgerEntries: parseInt(lr.entries ?? '0', 10) || 0,
+      verifiedLedgerGrossCents: parseInt(lr.gross_cents ?? '0', 10) || 0,
+    };
+  }, {
+    awaitingPayment: 0, inFlight: 0, awaitingReview: 0, delivered: 0,
+    testPaidCents: 0, livePaidCents: 0, verifiedLedgerEntries: 0, verifiedLedgerGrossCents: 0,
+  });
+
   const offers = await safe(() => collectOffers(deps.pool), []);
   const real = offers.filter((o) => !o.isTest);
   const offersSummary = {
@@ -259,7 +309,7 @@ export async function collectCooState(deps: CooDeps): Promise<CooState> {
       items: queue.items.slice(0, 10),
     },
     protoforge: proto,
-    revenue: { opportunitiesOpen: revenueOpps, offers: offersSummary },
+    revenue: { opportunitiesOpen: revenueOpps, offers: offersSummary, commercial },
     agents: {
       active: agentPlane.activeCount,
       stale: agentPlane.staleCount,
@@ -287,6 +337,7 @@ export async function collectCooState(deps: CooDeps): Promise<CooState> {
     `  Agents:      ${agentPlane.activeCount} active, ${agentPlane.staleCount} stale, ${agentPlane.missions.length} mission(s) total`,
     `  ProtoForge:  last run ${proto.lastRunStatus ?? 'none'} at ${proto.lastRunAt ?? 'never'}; ${proto.opportunitiesTotal} opportunities (${proto.pendingReview} pending review, ${proto.approved} approved)`,
     `  Revenue:     ${revenueOpps} open opportunities; ${offersSummary.total} offer(s)${offersSummary.boundary.length > 0 ? ` — boundary: ${offersSummary.boundary.map((b) => `${b.offerId} ${b.stage} (${b.reason ?? 'no reason'})`).join(' | ')}` : ''} (read-only; no reconciled-revenue claim)`,
+    `  Commercial:  ${commercial.awaitingPayment} awaiting payment · ${commercial.inFlight} in flight · ${commercial.awaitingReview} awaiting review · ${commercial.delivered} delivered · verified ledger ${commercial.verifiedLedgerEntries} entries (${commercial.livePaidCents}¢ live / ${commercial.testPaidCents}¢ test paid)`,
     `  Autopilot:   ${autopilotStage ? `${autopilotStage.stage ?? '—'}${autopilotStage.offer ? ` — ${autopilotStage.offer} @ ${autopilotStage.priceCents}¢` : ''}${autopilotStage.waiting ? ' — WAITING ON HUMAN' : ''}` : 'no objective yet'}`,
     `  Next:        ${nextAction.kind === 'capability' ? nextAction.capabilityId : nextAction.kind === 'human' ? 'HUMAN ACTION REQUIRED' : 'NO_ACTION_REQUIRED'} — ${nextAction.reason}`,
   ].join('\n');

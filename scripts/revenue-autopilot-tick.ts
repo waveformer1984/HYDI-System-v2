@@ -73,6 +73,20 @@ export async function runOnce(deps: { goals?: any; service?: any; realization?: 
 
   const report = await advance({ goals, actor: 'revenue-autopilot-tick' });
 
+  // Paid jobs parked in 'awaiting_review' — including jobs that did not
+  // come through this mission — get one pass through the independent QA
+  // gate each tick. Eligible jobs deliver; failing paid jobs escalate
+  // once as interventions. Idempotent: eligibility re-checks are free.
+  try {
+    const { sweepAwaitingReview } = await import('../lib/revenue/JobExecutor');
+    const sweep = await sweepAwaitingReview();
+    if (sweep.delivered > 0 || sweep.escalated > 0) {
+      log(`awaiting_review sweep: ${sweep.delivered} delivered, ${sweep.escalated} escalated`);
+    }
+  } catch (err) {
+    log(`awaiting_review sweep error: ${err instanceof Error ? err.message : String(err)}`);
+  }
+
   // Managed realization missions use the same boundary/resume machinery —
   // sweep each open appRealization goal through one idempotent pass so a
   // satisfied boundary (offer materialized, engine repaired, deploy
