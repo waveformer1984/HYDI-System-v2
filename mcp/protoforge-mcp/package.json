@@ -1,0 +1,19 @@
+{
+  "name": "protoforge-mcp",
+  "version": "0.1.0",
+  "description": "ProtoForge MCP server — one tool surface over HYDI/Heidi, Supabase and Stripe so any agent (Claude mobile, Heidi, scheduled tasks) can act on ProtoForge. Read-only in v0.1.",
+  "private": true,
+  "type": "module",
+  "bin": { "protoforge-mcp": "src/server.js" },
+  "scripts": {
+    "start": "node src/server.js",
+    "start:http": "node src/server.js --http",
+    "test": "node --test test/tools.test.js test/http.test.js"
+  },
+  "engines": { "node": ">=20" },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "dotenv": "^16.4.5",
+    "zod": "^3.25.0"
+  }
+}
