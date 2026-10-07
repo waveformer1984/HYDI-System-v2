@@ -114,15 +114,32 @@ describe('BootInstanceLease.inspect() — is a canonical runtime holding the lea
   });
 });
 
-describe('canonical boot claims the lease', () => {
-  it('a boot with no --only/--skip claims it', () => {
+// A full (non-partial) dry run used to claim the canonical lease before it
+// checked --dry-run, so `npm run boot:plan` on a live machine stood the
+// PM2-supervised runtime down (exit 75, not respawned). The claim itself is
+// covered by tests/unit/boot-instance-lease.test.js (claim semantics, and the
+// wiring check that boot-agent calls lease.claim()).
+describe('a full --dry-run never claims the canonical lease', () => {
+  it('prints the plan and leaves no lease behind when none is held', () => {
+    expect(fs.existsSync(leasePath)).toBe(false);
     const res = runBootAgent([]);
+
     expect(res.status).toBe(0);
-    expect(res.stdout).toMatch(/boot lease claimed/);
-    expect(fs.existsSync(leasePath)).toBe(true);
-    const rec = JSON.parse(fs.readFileSync(leasePath, 'utf8'));
-    expect(typeof rec.bootId).toBe('string');
-    expect(rec.bootId.length).toBeGreaterThan(0);
+    expect(res.stdout).toMatch(/Dry run -- nothing started/);
+    expect(res.stdout).toMatch(/dry run -- NOT claiming the canonical lease/);
+    expect(res.stdout).not.toMatch(/boot lease claimed/);
+    expect(fs.existsSync(leasePath)).toBe(false);
+  });
+
+  it('leaves a live canonical lease untouched, so the supervised runtime keeps running', () => {
+    const before = writeLiveLease();
+    const res = runBootAgent([]);
+
+    expect(res.status).toBe(0);
+    expect(res.stdout).not.toMatch(/boot lease claimed/);
+    expect(res.stdout).not.toMatch(/superseding previous boot runtime/);
+    // The decisive assertion: the canonical lease is unchanged byte for byte.
+    expect(fs.readFileSync(leasePath, 'utf8')).toBe(before);
   });
 });
 

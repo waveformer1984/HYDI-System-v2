@@ -27,10 +27,11 @@ heidi-web calls are signed with an `x-hydi-service-token` minted from
 so they authenticate as `owner`. Env comes from the repo root's `.env.local`
 then `.env`, exactly like `scripts/health-check.js` — no second secret store.
 
-> `boot_plan` deliberately does **not** run `boot-agent.js --dry-run`. That
-> command claims the canonical boot lease before it checks `--dry-run`, which
-> makes the PM2-supervised runtime stand down (exit 75, not respawned). The
-> tool orders `boot.config.json` itself with the same Kahn sort instead.
+> `boot_plan` orders `boot.config.json` itself with the same Kahn sort rather
+> than spawning `boot-agent.js --dry-run`. Older boot agents claimed the
+> canonical boot lease before checking `--dry-run`, which stood the
+> PM2-supervised runtime down (exit 75, not respawned); that is fixed, but
+> reading the config keeps the tool side-effect free on any version.
 
 ## Run on Frank
 
