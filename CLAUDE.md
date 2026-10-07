@@ -449,6 +449,14 @@ vercel env ls | grep SECRET_NAME
 }
 ```
 
+`.mcp.json` also registers `protoforge` (stdio), the repo's own MCP server in
+`mcp/protoforge-mcp/` — one tool surface over heidi-web, protoforge-core,
+Supabase and Stripe for any agent. v0.1 is read-only; every tool declares a
+risk tier and only `read` is exposed. Run `npm install` in that folder once
+before Claude Code can start it. It is a self-contained ESM package with its
+own `node --test` suite (`cd mcp/protoforge-mcp && npm test`), outside the
+root Jest/ESLint/tsc scope. See `mcp/protoforge-mcp/README.md`.
+
 ## Local-First Architecture (decision made 2026-07-10)
 
 J's explicit direction: minimize reliance on external platforms, run Hydi as
