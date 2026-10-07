@@ -16,7 +16,8 @@ process.env.HYDI_HUMAN_ACTIONS_FILE = tmpFile;
 
 const { HumanActionService } = require('../../lib/human-actions/service');
 const { runVerifier, envNamePresent } = require('../../lib/human-actions/verifiers');
-const { detectKnownBlockers, syncHumanActions } = require('../../lib/human-actions/detector');
+const { detectKnownBlockers, syncHumanActions, verifyEligibleActions } = require('../../lib/human-actions/detector');
+const { CATEGORIES, boundaryKey, normalizeBoundary } = require('../../lib/human-actions/boundary');
 const { attachBlockerToGoal, resumeSatisfiedGoals, scanEscalatedGoals } = require('../../lib/human-actions/mission-link');
 const { tryHumanActionAnswer } = require('../../lib/human-actions/heidi-answer');
 const { load, save } = require('../../lib/human-actions/store');
@@ -319,5 +320,195 @@ describe('heidi answer', () => {
     s.request({ blockerKey: 'test:again', title: 'Set HA_AGAIN', verifier: { name: 'env-vars', spec: { envNames: ['HA_AGAIN_XYZ'] } } });
     const a = await tryHumanActionAnswer('check again', { service: s });
     expect(a.text).toMatch(/still failing|Verification re-run/);
+  });
+
+  test('"why is this still blocked" reports last verifier result + next step, read-only', async () => {
+    const s = new HumanActionService({});
+    const { action } = s.request({
+      blockerKey: 'test:why', title: 'Set HA_WHY', instructions: ['set HA_WHY=1'],
+      verifier: { name: 'env-vars', spec: { envNames: ['HA_WHY_MISSING'] } },
+    });
+    const a = await tryHumanActionAnswer('why is this still blocked', { service: s });
+    expect(a.text).toContain('Still blocked');
+    expect(a.text).toContain('Set HA_WHY');
+    expect(a.text).toMatch(/last check:/);
+    expect(s.get(action.id).status).not.toBe('RESOLVED'); // read-only: never resolves
+  });
+
+  test('"did my action work" reports durable verification state without re-running', async () => {
+    const s = new HumanActionService({});
+    const { action } = s.request({
+      blockerKey: 'test:worked', title: 'Set HA_WORKED',
+      verifier: { name: 'env-vars', spec: { envNames: ['HA_WORKED_MISSING'] } },
+    });
+    const a = await tryHumanActionAnswer('did my action work', { service: s });
+    expect(a.text).toContain('not checked yet');
+    expect(a.text).toContain('check again');
+    // after a failed verify, it answers with the durable failure
+    await s.verify(action.id, 'tester');
+    const b = await tryHumanActionAnswer('did that work', { service: s });
+    expect(b.text).toMatch(/not yet|FAILED/i);
+  });
+
+  test('"what happens after" explains the resume path', async () => {
+    const s = new HumanActionService({});
+    s.request({
+      blockerKey: 'test:after', title: 'Set HA_AFTER', resumeCapability: 'the deploy mission resumes',
+      verifier: { name: 'env-vars', spec: { envNames: ['HA_AFTER_MISSING'] } },
+    });
+    const a = await tryHumanActionAnswer('what happens after I do this', { service: s });
+    expect(a.text).toContain('the deploy mission resumes');
+    expect(a.text).toContain('env-vars');
+    expect(a.text).toMatch(/independently confirms/);
+  });
+});
+
+describe('boundary contract (universal boundary protocol)', () => {
+  test('the vocabulary is the canonical 12 categories', () => {
+    expect(CATEGORIES).toEqual([
+      'PAYMENT', 'CREDENTIAL', 'AUTHORIZATION', 'EXTERNAL_SERVICE', 'ACCOUNT_SETUP',
+      'DOMAIN', 'DEPLOYMENT', 'FUNDING', 'CUSTOMER_ACTION', 'PHYSICAL_ACTION',
+      'COMPLIANCE', 'OTHER',
+    ]);
+  });
+
+  test('boundaryKey is deterministic and never derives from a title', () => {
+    expect(boundaryKey('PAYMENT', 'pi_123')).toBe('payment:pi_123');
+    expect(boundaryKey('credential', 'Rezonate-Chain')).toBe('credential:rezonate-chain');
+    expect(() => boundaryKey('PAYMENT', '')).toThrow(/discriminator/);
+    expect(() => boundaryKey('NOPE', 'x')).toThrow(/unknown boundary category/);
+  });
+
+  test('request stores a normalized boundary; explicit category wins over type', () => {
+    const s = new HumanActionService({});
+    const { action } = s.request({
+      blockerKey: 'test:boundary', title: 'Fund the wallet', type: 'general',
+      boundary: { category: 'FUNDING', externalSystem: 'sepolia', capability: 'wallet.fund' },
+      expectedOutcome: 'wallet balance above threshold',
+      resumeCapability: 'deploy resumes',
+      verifier: { name: 'manual', spec: {} },
+    });
+    expect(action.boundary).toEqual({ category: 'FUNDING', capability: 'wallet.fund', externalSystem: 'sepolia', externalObjectId: null });
+    expect(action.expectedOutcome).toBe('wallet balance above threshold');
+    expect(action.resumeCapability).toBe('deploy resumes');
+  });
+
+  test('legacy type maps to category; explicit invalid category throws', () => {
+    const s = new HumanActionService({});
+    const { action } = s.request({ blockerKey: 'test:legacy-type', title: 'X', type: 'credential' });
+    expect(action.boundary.category).toBe('CREDENTIAL');
+    expect(() => s.request({ blockerKey: 'test:bad-cat', title: 'X', boundary: { category: 'WHATEVER' } })).toThrow(/unknown boundary category/);
+  });
+
+  test('legacy v1 records without boundary still load — category derived from type', () => {
+    save({
+      version: 1, actions: [{
+        id: 'ha_noboundary', blocker_key: 'old:noboundary', title: 'Legacy no boundary',
+        kind: 'credential', status: 'open', created_at: '2026-01-01T00:00:00Z', resolved_at: null,
+        verification: { verifier: 'manual', spec: {} },
+      }]
+    });
+    const rec = new HumanActionService({}).get('ha_noboundary');
+    expect(rec).toBeTruthy();
+    expect(rec.status).toBe('OPEN');
+    expect(rec.boundary.category).toBe('CREDENTIAL'); // derived at migration
+  });
+});
+
+describe('verifier formal status contract', () => {
+  test('VERIFIED / FAILED / UNAVAILABLE + resumeEligible', async () => {
+    process.env.HA_STATUS_VAR = 'x';
+    const pass = await runVerifier('env-vars', { envNames: ['HA_STATUS_VAR'] });
+    delete process.env.HA_STATUS_VAR;
+    expect(pass.status).toBe('VERIFIED');
+    expect(pass.resumeEligible).toBe(true);
+    expect(pass.passed).toBe(true); // backward compat
+
+    const fail = await runVerifier('env-vars', { envNames: ['HA_NEVER_THERE_XYZ'] });
+    expect(fail.status).toBe('FAILED');
+    expect(fail.resumeEligible).toBe(false);
+    expect(fail.passed).toBe(false);
+
+    const unknown = await runVerifier('no-such-verifier', {});
+    expect(unknown.status).toBe('UNAVAILABLE');
+    expect(unknown.resumeEligible).toBe(false);
+  });
+});
+
+describe('periodic verification sweep', () => {
+  test('resolves a machine-checkable action when the world changed — no human needed', async () => {
+    const s = new HumanActionService({});
+    const { action } = s.request({
+      blockerKey: 'test:sweep', title: 'Set HA_SWEEP',
+      verifier: { name: 'env-vars', spec: { envNames: ['HA_SWEEP_VAR'] } },
+    });
+    process.env.HA_SWEEP_VAR = '1';
+    const r = await verifyEligibleActions(s, { throttleMs: 0 });
+    delete process.env.HA_SWEEP_VAR;
+    expect(r.checked).toBeGreaterThanOrEqual(1); // shared store may hold other eligible actions
+    expect(r.resolved.map((x) => x.actionId)).toContain(action.id);
+    expect(s.get(action.id).status).toBe('RESOLVED');
+    expect(s.get(action.id).resolution).toBe('auto_verified');
+  });
+
+  test('skips manual actions and throttles recently checked ones', async () => {
+    const s = new HumanActionService({});
+    const manual = s.request({ blockerKey: 'test:sweep-manual', title: 'Physical', verifier: { name: 'manual', spec: {} } }).action;
+    const checked = s.request({ blockerKey: 'test:sweep-throttle', title: 'X', verifier: { name: 'env-vars', spec: { envNames: ['HA_THROTTLE_MISS'] } } }).action;
+    await s.verify(checked.id); // just checked → inside throttle window
+    const r = await verifyEligibleActions(s, { throttleMs: 60 * 60 * 1000 });
+    expect(r.checked).toBe(0);                    // everything eligible was checked recently → throttled
+    expect(r.throttled).toBeGreaterThanOrEqual(1); // the just-verified action is inside the window
+    expect(s.get(checked.id).attempts).toBe(1);   // not re-checked
+    expect(s.get(manual.id).status).toBe('OPEN'); // untouched — manual never auto-checks
+    expect(s.get(manual.id).attempts).toBe(0);
+  });
+
+  test('failed sweep keeps action BLOCKED with durable evidence', async () => {
+    const s = new HumanActionService({});
+    const { action } = s.request({
+      blockerKey: 'test:sweep-fail', title: 'X',
+      verifier: { name: 'env-vars', spec: { envNames: ['HA_SWEEP_MISS'] } },
+    });
+    const r = await verifyEligibleActions(s, { throttleMs: 0 });
+    expect(r.stillBlocked.map((x) => x.actionId)).toContain(action.id);
+    const a = s.get(action.id);
+    expect(a.status).toBe('BLOCKED');
+    expect(a.verification.status).toBe('FAILED');
+    expect(a.attempts).toBe(1);
+  });
+
+  test('sweep + resume: a cleared boundary releases the parked goal', async () => {
+    const s = new HumanActionService({});
+    const goals = fakeGoals([{ goalId: 'g-sweep', title: 'deploy', status: 'in_progress', context: {} }]);
+    await attachBlockerToGoal(s, goals, {
+      goalId: 'g-sweep', blockerKey: 'test:sweep-goal',
+      spec: { title: 'Set HA_SWEEP_GOAL', verifier: { name: 'env-vars', spec: { envNames: ['HA_SWEEP_GOAL_VAR'] } } },
+    });
+    expect((await goals.getGoal('g-sweep')).status).toBe('escalated');
+    process.env.HA_SWEEP_GOAL_VAR = '1';
+    const r = await syncHumanActions(s, goals, { verify: { throttleMs: 0 } });
+    delete process.env.HA_SWEEP_GOAL_VAR;
+    expect(r.verify.resolved.length).toBe(1);
+    expect(r.resume.resumed.length).toBe(1);
+    expect((await goals.getGoal('g-sweep')).status).toBe('pending');
+  });
+
+  test('restart persistence: action + verification state survive a fresh service instance', async () => {
+    const s1 = new HumanActionService({});
+    const { action } = s1.request({
+      blockerKey: 'test:restart', title: 'Persist me',
+      verifier: { name: 'env-vars', spec: { envNames: ['HA_RESTART_MISS'] } },
+    });
+    await s1.verify(action.id);
+    const s2 = new HumanActionService({}); // new instance — same durable store
+    const rec = s2.get(action.id);
+    expect(rec.status).toBe('BLOCKED');
+    expect(rec.verification.status).toBe('FAILED');
+    expect(rec.attempts).toBe(1);
+    // a second sync does not create a duplicate
+    const again = s2.request({ blockerKey: 'test:restart', title: 'Persist me' });
+    expect(again.created).toBe(false);
+    expect(again.action.id).toBe(action.id);
   });
 });

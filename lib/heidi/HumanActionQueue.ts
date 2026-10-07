@@ -326,7 +326,13 @@ export async function collectHumanActionQueue(
       evidence: {
         actionId: a.id,
         blockerKey: a.blockerKey ?? null,
+        // Canonical boundary contract (boundary.js) — small vocabulary,
+        // derived from type on legacy records.
+        boundaryCategory: a.boundary?.category ?? null,
+        externalSystem: a.boundary?.externalSystem ?? null,
         verifier: a.verifier?.name ?? null,
+        verifierStatus: a.verification?.status ?? (a.verification ? (a.verification.passed ? 'VERIFIED' : 'FAILED') : null),
+        resumeCapability: a.resumeCapability ?? null,
         instructions: a.instructions ?? [],
         lastCheck: a.verification?.checkedAt ?? null,
         lastCheckPassed: a.verification?.passed ?? null,

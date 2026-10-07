@@ -69,6 +69,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         sourceAgentId: body.sourceAgentId as string | undefined,
         expiresAt: body.expiresAt as string | undefined,
         resumePolicy: body.resumePolicy as 'auto' | 'none' | undefined,
+        boundary: body.boundary as { category?: string; capability?: string; externalSystem?: string; externalObjectId?: string } | undefined,
+        expectedOutcome: body.expectedOutcome as string | undefined,
+        resumeCapability: body.resumeCapability as string | undefined,
         context: body.context as Record<string, unknown> | undefined,
         priority: body.priority as string | undefined,
       });
