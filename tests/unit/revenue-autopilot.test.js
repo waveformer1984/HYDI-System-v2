@@ -463,3 +463,66 @@ describe('resume', () => {
     expect(report.stage).toBe('TEST_PIPELINE_PROVEN');
   });
 });
+
+describe('production readiness (status surface)', () => {
+  // Isolated store per test — production boundary actions are durable and
+  // must not leak between cases.
+  let savedFile;
+  beforeEach(() => {
+    savedFile = process.env.HYDI_HUMAN_ACTIONS_FILE;
+    process.env.HYDI_HUMAN_ACTIONS_FILE = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'ha-raprod-')), 'human-actions.json');
+  });
+  afterEach(() => { process.env.HYDI_HUMAN_ACTIONS_FILE = savedFile; });
+
+  test('status() reports production blockers from durable actions — read-only', async () => {
+    const store = fakeStore([PHILIPS]);
+    const deps = depsFor(store, ALL_ENV, fakeRuntime());
+    deps.stripeMode = 'test';
+    // Materialize a production boundary the way the detector does.
+    deps.service.request({
+      blockerKey: 'stripe:live-credential',
+      title: 'Provide a live Stripe credential for production revenue',
+      type: 'credential',
+      boundary: { category: 'CREDENTIAL', externalSystem: 'stripe', capability: 'revenue.production' },
+      verifier: { name: 'stripe-live-credential', spec: {} },
+    });
+    const s = await status(deps);
+    expect(s.production).toBeTruthy();
+    expect(s.production.ready).toBe(false);
+    expect(s.production.mode).toBe('test');
+    expect(s.production.blockers.map((b) => b.blockerKey)).toContain('stripe:live-credential');
+    expect(s.production.blockers[0].verifier).toBe('stripe-live-credential');
+    expect(s.text).toMatch(/NOT READY/);
+    expect(s.text).toMatch(/stripe mode: test/);
+    // read-only: no goal created, no advance
+    expect((await deps.goals.listGoals()).length).toBe(0);
+  });
+
+  test('status() reports READY only in live mode with zero open production boundaries', async () => {
+    const store = fakeStore([PHILIPS]);
+    const deps = depsFor(store, ALL_ENV, fakeRuntime());
+    deps.stripeMode = 'live';
+    const s = await status(deps);
+    expect(s.production.ready).toBe(true);
+    expect(s.text).toMatch(/READY/);
+    // an open production boundary kills readiness even in live mode
+    deps.service.request({
+      blockerKey: 'stripe:live-webhook-endpoint',
+      title: 'Configure the live Stripe webhook endpoint',
+      type: 'credential',
+      verifier: { name: 'stripe-live-webhook-endpoint', spec: {} },
+    });
+    const s2 = await status(deps);
+    expect(s2.production.ready).toBe(false);
+    expect(s2.production.blockers[0].blockerKey).toBe('stripe:live-webhook-endpoint');
+  });
+
+  test('implicit blocker: test mode with no materialized actions still reports NOT READY', async () => {
+    const store = fakeStore([PHILIPS]);
+    const deps = depsFor(store, ALL_ENV, fakeRuntime());
+    deps.stripeMode = 'test';
+    const s = await status(deps);
+    expect(s.production.ready).toBe(false);
+    expect(s.production.implicitBlocker).toMatch(/test mode/);
+  });
+});

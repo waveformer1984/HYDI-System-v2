@@ -512,3 +512,188 @@ describe('periodic verification sweep', () => {
     expect(again.action.id).toBe(action.id);
   });
 });
+
+// ─── Production revenue boundaries ─────────────────────────────────────
+// The detector's standing production rules + the three verifiers that
+// prove them. Every check reads derived facts (key prefix, host, endpoint
+// URL) — never secret values.
+
+describe('production Stripe boundary verifiers', () => {
+  test('stripe-live-credential: test key fails honestly, prefix only in evidence', async () => {
+    const r = await runVerifier('stripe-live-credential', {}, { envValue: (n) => n === 'STRIPE_SECRET_KEY' ? 'sk_test_FAKEforTESTING' : null });
+    expect(r.status).toBe('FAILED');
+    expect(r.resumeEligible).toBe(false);
+    expect(r.failureReason).toMatch(/test mode|live/i);
+    expect(r.evidence.keyPrefix).toBe('sk_test_');
+    expect(JSON.stringify(r.evidence)).not.toContain('FAKEforTESTING');
+  });
+
+  test('stripe-live-credential: live key verifies (sk_live_ and rk_live_)', async () => {
+    for (const k of ['sk_live_FAKEforTESTING', 'rk_live_FAKEforTESTING']) {
+      const r = await runVerifier('stripe-live-credential', {}, { envValue: (n) => n === 'STRIPE_SECRET_KEY' ? k : null });
+      expect(r.status).toBe('VERIFIED');
+      expect(r.resumeEligible).toBe(true);
+      expect(JSON.stringify(r.evidence)).not.toContain('FAKEforTESTING');
+    }
+  });
+
+  test('stripe-live-credential: missing key fails closed', async () => {
+    const r = await runVerifier('stripe-live-credential', {}, { envValue: () => null });
+    expect(r.status).toBe('FAILED');
+    expect(r.failureReason).toMatch(/missing/);
+  });
+
+  test('public-base-url: localhost and http fail; public https verifies', async () => {
+    const cases = [
+      [null, 'FAILED'],
+      ['http://localhost:3000', 'FAILED'],
+      ['https://localhost:3000', 'FAILED'],
+      ['http://shop.example.com', 'FAILED'],
+      ['https://shop.example.com', 'VERIFIED'],
+      ['https://heidi.example.org/', 'VERIFIED'],
+    ];
+    for (const [url, want] of cases) {
+      const r = await runVerifier('public-base-url', {}, { envValue: (n) => n === 'NEXT_PUBLIC_APP_URL' ? url : null });
+      expect(`${url} → ${r.status}`).toBe(`${url} → ${want}`);
+    }
+  });
+
+  test('stripe-live-webhook-endpoint: fails fast without live credential (no API call)', async () => {
+    let apiCalled = false;
+    const stripe = { webhookEndpoints: { list: async () => { apiCalled = true; return { data: [] }; } } };
+    const r = await runVerifier('stripe-live-webhook-endpoint', {}, {
+      stripe, envValue: () => 'sk_test_FAKEforTESTING', envNamePresent: () => true,
+    });
+    expect(r.status).toBe('FAILED');
+    expect(r.failureReason).toMatch(/live credential/i);
+    expect(apiCalled).toBe(false);
+  });
+
+  test('stripe-live-webhook-endpoint: verifies a real endpoint + signing secret', async () => {
+    const stripe = {
+      webhookEndpoints: {
+        list: async () => ({
+          data: [
+            { id: 'we_1', status: 'enabled', url: 'https://heidi.example.com/api/webhooks/stripe', enabled_events: ['checkout.session.completed', 'charge.refunded'] },
+            { id: 'we_2', status: 'disabled', url: 'https://old.example.com/api/webhooks/stripe', enabled_events: ['*'] },
+          ]
+        })
+      }
+    };
+    const r = await runVerifier('stripe-live-webhook-endpoint', { path: '/api/webhooks/stripe', requiredEvents: ['checkout.session.completed'] }, {
+      stripe,
+      envValue: (n) => n === 'STRIPE_SECRET_KEY' ? 'sk_live_FAKEforTESTING' : 'whsec_FAKE',
+      envNamePresent: (n) => n === 'STRIPE_WEBHOOK_SECRET_01',
+    });
+    expect(r.status).toBe('VERIFIED');
+    expect(r.resumeEligible).toBe(true);
+    expect(r.evidence.endpointId).toBe('we_1');
+  });
+
+  test('stripe-live-webhook-endpoint: endpoint without required event fails', async () => {
+    const stripe = {
+      webhookEndpoints: {
+        list: async () => ({
+          data: [
+            { id: 'we_3', status: 'enabled', url: 'https://heidi.example.com/api/webhooks/stripe', enabled_events: ['invoice.paid'] },
+          ]
+        })
+      }
+    };
+    const r = await runVerifier('stripe-live-webhook-endpoint', {}, {
+      stripe,
+      envValue: (n) => n === 'STRIPE_SECRET_KEY' ? 'sk_live_FAKEforTESTING' : 'whsec_FAKE',
+      envNamePresent: () => true,
+    });
+    expect(r.status).toBe('FAILED');
+    expect(r.failureReason).toMatch(/checkout\.session\.completed|no enabled/);
+  });
+
+  test('stripe-live-webhook-endpoint: API error reports PENDING not FAILED', async () => {
+    const stripe = { webhookEndpoints: { list: async () => { throw new Error('network down'); } } };
+    const r = await runVerifier('stripe-live-webhook-endpoint', {}, {
+      stripe,
+      envValue: (n) => n === 'STRIPE_SECRET_KEY' ? 'sk_live_FAKEforTESTING' : 'whsec_FAKE',
+      envNamePresent: () => true,
+    });
+    expect(r.status).toBe('PENDING');
+    expect(r.resumeEligible).toBe(false);
+  });
+});
+
+describe('production boundary detection (detector rules)', () => {
+  // These tests create real durable actions — isolate each in its own
+  // store file so earlier suites' records can't pollute the assertions.
+  let savedFile;
+  beforeEach(() => {
+    savedFile = process.env.HYDI_HUMAN_ACTIONS_FILE;
+    process.env.HYDI_HUMAN_ACTIONS_FILE = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'ha-prod-')), 'human-actions.json');
+  });
+  afterEach(() => { process.env.HYDI_HUMAN_ACTIONS_FILE = savedFile; });
+
+  const testEnv = {
+    envNamePresent: () => false,
+    envValue: (n) => ({ STRIPE_SECRET_KEY: 'sk_test_FAKE', WEBHOOK_PROCESSING_ENABLED: 'true' })[n] || null,
+  };
+
+  test('test-mode environment creates production credential + base-url actions, not the webhook-endpoint one', () => {
+    const s = new HumanActionService({});
+    const out = detectKnownBlockers(s, testEnv);
+    const keys = s.list().map((a) => a.blockerKey);
+    expect(keys).toContain('stripe:live-credential');
+    expect(keys).toContain('protoforge:public-base-url');
+    // no live credential yet — the endpoint question is not yet meaningful
+    expect(keys).not.toContain('stripe:live-webhook-endpoint');
+    expect(out.requested.length).toBeGreaterThanOrEqual(2);
+    // re-run must dedupe, never duplicate
+    const again = detectKnownBlockers(s, testEnv);
+    expect(again.requested).toEqual([]);
+    expect(again.alreadyOpen.length).toBeGreaterThanOrEqual(2);
+  });
+
+  test('live-credential action carries boundary metadata + verifier', () => {
+    const s = new HumanActionService({});
+    detectKnownBlockers(s, testEnv);
+    const a = s.list().find((x) => x.blockerKey === 'stripe:live-credential');
+    expect(a.boundary.category).toBe('CREDENTIAL');
+    expect(a.boundary.externalSystem).toBe('stripe');
+    expect(a.verifier.name).toBe('stripe-live-credential');
+    expect(a.instructions.join(' ')).toMatch(/rk_live_|sk_live_/);
+  });
+
+  test('live environment activates the webhook-endpoint rule; RESOLVED record silences it', async () => {
+    const stripe = {
+      webhookEndpoints: {
+        list: async () => ({
+          data: [
+            { id: 'we_ok', status: 'enabled', url: 'https://heidi.example.com/api/webhooks/stripe', enabled_events: ['checkout.session.completed'] },
+          ]
+        })
+      }
+    };
+    const liveEnv = {
+      envNamePresent: (n) => n === 'STRIPE_WEBHOOK_SECRET_01',
+      envValue: (n) => ({
+        STRIPE_SECRET_KEY: 'sk_live_FAKE',
+        WEBHOOK_PROCESSING_ENABLED: 'true',
+        NEXT_PUBLIC_APP_URL: 'https://heidi.example.com',
+      })[n] || null,
+    };
+    const s = new HumanActionService({ verifierDeps: { stripe, envValue: liveEnv.envValue, envNamePresent: liveEnv.envNamePresent } });
+    const out = detectKnownBlockers(s, liveEnv);
+    const ep = s.list().find((a) => a.blockerKey === 'stripe:live-webhook-endpoint');
+    expect(ep).toBeTruthy();
+    // credential/base-url rules are clear in a live environment
+    expect(out.requested).not.toContain(expect.objectContaining?.({}));
+    const keys = s.list().map((a) => a.blockerKey);
+    expect(keys).not.toContain('stripe:live-credential');
+    expect(keys).not.toContain('protoforge:public-base-url');
+    // sweep verifies it for real → RESOLVED
+    const v = await s.verify(ep.id);
+    expect(v.action.status).toBe('RESOLVED');
+    // the resolved record silences the rule — re-detection must not mint a duplicate
+    const again = detectKnownBlockers(s, liveEnv);
+    expect(again.requested).toEqual([]);
+    expect(s.list({ includeTerminal: true }).filter((a) => a.blockerKey === 'stripe:live-webhook-endpoint').length).toBe(1);
+  });
+});
