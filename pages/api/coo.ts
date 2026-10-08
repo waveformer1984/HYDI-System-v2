@@ -38,10 +38,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const cooAgeMs = coo ? Date.now() - new Date(coo.created_at).getTime() : null;
 
     // Human-action cadence: the COO read is the existing lifecycle hook —
-    // every dashboard/operator poll re-detects known blockers, links
-    // escalated goals, and resumes satisfied ones. Idempotent by
-    // blockerKey dedupe; failures never break the COO read.
-    await syncHumanActions(new HumanActionService({}), getGoalSystem()).catch(() => null);
+    // every dashboard/operator poll re-detects known blockers, classifies
+    // and deploys authorized resolvers through the agent plane (pool
+    // present → durable missions), links escalated goals, and resumes
+    // satisfied ones. Idempotent by blockerKey + deterministic missionId
+    // dedupe; failures never break the COO read.
+    await syncHumanActions(new HumanActionService({}), getGoalSystem(), { pool }).catch(() => null);
 
     const [agents, queue] = await Promise.all([
       collectAgentState(pool),

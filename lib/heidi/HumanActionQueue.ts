@@ -342,8 +342,15 @@ export async function collectHumanActionQueue(
         attempts: a.attempts ?? 0,
         claimable: a.status === 'OPEN' || a.status === 'BLOCKED',
         verifiable: (a.verifier?.name ?? 'manual') !== 'manual',
+        // Autonomous-resolution contract (resolver-policy.js): which
+        // resolver may close this, or why only a human can.
+        resolutionClass: a.resolver?.resolutionClass ?? null,
+        resolverId: a.resolver?.resolverId ?? null,
+        resolverCapability: a.resolver?.capability ?? null,
+        resolverLastOutcome: a.resolver?.lastOutcome ?? null,
+        resolverReason: a.resolver?.reason ?? null,
       },
-      authorizationLevel: 'R3',
+      authorizationLevel: a.resolver?.resolutionClass ?? 'R3',
       backlog: false,
       createdAt: a.createdAt,
       updatedAt: a.updatedAt,
