@@ -32,7 +32,7 @@ import { collectReconciliation, type ReconcileDeps } from './DeploymentReconcili
 // Mission-scoped roles spawned per investigation, plus the five standing
 // ProtoForge roles that form the persistent team.
 export type AgentRole =
-  | 'research' | 'verifier' | 'analyst' | 'operations'
+  | 'research' | 'verifier' | 'analyst' | 'operations' | 'resolver'
   | 'coo' | 'scout' | 'builder' | 'qa' | 'revenue';
 
 export type AgentStatus =

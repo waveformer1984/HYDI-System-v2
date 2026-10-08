@@ -3,7 +3,7 @@ import { requireOpsAuth } from '../../lib/api/requireOpsAuth';
 import { Pool } from 'pg';
 import { collectAgentState } from '../../lib/heidi/AgentControlPlane';
 import { collectHumanActionQueue } from '../../lib/heidi/HumanActionQueue';
-import { HumanActionService, syncHumanActions } from '../../lib/human-actions/index.js';
+import { HumanActionService, runHumanActionResolverAgent } from '../../lib/human-actions/index.js';
 import { getGoalSystem } from '../../lib/heidi/GoalSystem';
 
 // Read-only COO projection for the command-center UI. Every value comes
@@ -37,13 +37,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const coo = cooRow.rows[0] ?? null;
     const cooAgeMs = coo ? Date.now() - new Date(coo.created_at).getTime() : null;
 
-    // Human-action cadence: the COO read is the existing lifecycle hook —
-    // every dashboard/operator poll re-detects known blockers, classifies
-    // and deploys authorized resolvers through the agent plane (pool
-    // present → durable missions), links escalated goals, and resumes
-    // satisfied ones. Idempotent by blockerKey + deterministic missionId
-    // dedupe; failures never break the COO read.
-    await syncHumanActions(new HumanActionService({}), getGoalSystem(), { pool }).catch(() => null);
+    // Human-action cadence: the COO read runs the standing resolution
+    // agent — re-detects blockers, classifies, deploys authorized
+    // resolvers as governed 'resolver' missions (pool present → durable
+    // agent record + deterministic missionId dedupe), links escalated
+    // goals, and resumes satisfied ones. Failures never break the read.
+    await runHumanActionResolverAgent({
+      service: new HumanActionService({}), goals: getGoalSystem(), pool,
+    }).catch(() => null);
 
     const [agents, queue] = await Promise.all([
       collectAgentState(pool),
