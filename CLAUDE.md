@@ -457,6 +457,13 @@ before Claude Code can start it. It is a self-contained ESM package with its
 own `node --test` suite (`cd mcp/protoforge-mcp && npm test`), outside the
 root Jest/ESLint/tsc scope. See `mcp/protoforge-mcp/README.md`.
 
+**Cursor:** `.cursor/mcp.json` registers the same `protoforge` server for
+Cursor (path via `${workspaceFolder}`, so it works from any clone location).
+It deliberately contains only `protoforge` — keep Supabase in `.mcp.json` and
+never put tokens or secrets in `.cursor/mcp.json`. Cursor's cloud agents run
+off-machine and cannot reach Frank's local services, so these tools are only
+meaningful in Cursor running on Frank.
+
 ## Local-First Architecture (decision made 2026-07-10)
 
 J's explicit direction: minimize reliance on external platforms, run Hydi as
