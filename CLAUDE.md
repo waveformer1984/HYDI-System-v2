@@ -464,6 +464,11 @@ never put tokens or secrets in `.cursor/mcp.json`. Cursor's cloud agents run
 off-machine and cannot reach Frank's local services, so these tools are only
 meaningful in Cursor running on Frank.
 
+**Tailnet access:** `docs/TAILSCALE.md` covers serving the MCP server on the
+tailnet (`scripts/tailscale/serve-mcp.ps1`, port 8470, tailnet-only, never
+Funnel), the tailnet policy that scopes cloud agents (`tag:agent`) to that one
+port, and joining ephemeral agent VMs (`scripts/tailscale/agent-join.sh`).
+
 ## Local-First Architecture (decision made 2026-07-10)
 
 J's explicit direction: minimize reliance on external platforms, run Hydi as
