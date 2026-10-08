@@ -11,8 +11,12 @@
 # automatically after the VM goes away.
 #
 # Mode is picked automatically:
-#   kernel     - root with /dev/net/tun: normal networking, any client works.
-#   userspace  - otherwise: tailscaled exposes a SOCKS5 proxy on
+#   existing   - a tailscaled is already running (e.g. started by the
+#                official installer): reuse it.
+#   kernel     - root with a usable /dev/net/tun: normal networking, any
+#                client works.
+#   userspace  - otherwise, or if kernel mode fails to create the tunnel
+#                (common in containers): tailscaled exposes a SOCKS5 proxy on
 #                localhost:1055 and an HTTP proxy on localhost:1056; only
 #                clients that use a proxy can reach tailnet hosts (curl
 #                --socks5-hostname, or HTTPS_PROXY for clients that honor it).
@@ -29,22 +33,48 @@ if ! command -v tailscale >/dev/null || ! command -v tailscaled >/dev/null; then
 fi
 
 SOCK="$STATE_DIR/tailscaled.sock"
-if [ "$(id -u)" = "0" ] && [ -c /dev/net/tun ]; then
-  MODE=kernel
-  tailscaled --state=mem: --socket="$SOCK" >"$STATE_DIR/tailscaled.log" 2>&1 &
+LOG="$STATE_DIR/tailscaled.log"
+
+# Start a daemon and wait for its socket. Fails (returns 1) if the daemon dies
+# first, e.g. kernel mode in a container that has /dev/net/tun but lacks the
+# capability to create the tunnel interface.
+start_daemon() {
+  : >"$LOG"
+  tailscaled --state=mem: --socket="$SOCK" "$@" >>"$LOG" 2>&1 &
+  local pid=$!
+  for _ in $(seq 1 30); do
+    [ -S "$SOCK" ] && return 0
+    kill -0 "$pid" 2>/dev/null || return 1
+    sleep 0.5
+  done
+  kill "$pid" 2>/dev/null || true
+  return 1
+}
+
+if pgrep -x tailscaled >/dev/null 2>&1; then
+  # A daemon is already running (the official installer starts one via
+  # systemd). Reuse it instead of starting a second one that would fight
+  # it for the tunnel interface.
+  MODE=existing
+  SOCK_ARGS=()
 else
-  MODE=userspace
-  tailscaled --tun=userspace-networking --state=mem: --socket="$SOCK" \
-    --socks5-server=localhost:1055 --outbound-http-proxy-listen=localhost:1056 \
-    >"$STATE_DIR/tailscaled.log" 2>&1 &
+  MODE=""
+  if [ "$(id -u)" = "0" ] && [ -c /dev/net/tun ] && start_daemon; then
+    MODE=kernel
+  elif start_daemon --tun=userspace-networking \
+         --socks5-server=localhost:1055 --outbound-http-proxy-listen=localhost:1056; then
+    MODE=userspace
+  else
+    echo "tailscaled did not start in kernel or userspace mode; see $LOG" >&2
+    exit 1
+  fi
+  SOCK_ARGS=(--socket="$SOCK")
 fi
 
-for _ in $(seq 1 30); do [ -S "$SOCK" ] && break; sleep 0.5; done
-[ -S "$SOCK" ] || { echo "tailscaled did not start; see $STATE_DIR/tailscaled.log" >&2; exit 1; }
-
-# Auth key goes in via env-expanded flag; it is never echoed.
-tailscale --socket="$SOCK" up --authkey="$TS_AUTHKEY" --hostname="$HOSTNAME_TAG" \
-  --advertise-tags=tag:agent --accept-dns=false >/dev/null
+# Auth key goes in via env-expanded flag; it is never echoed. MagicDNS stays
+# on so the documented *.ts.net hostname resolves in kernel/existing mode.
+tailscale ${SOCK_ARGS[@]+"${SOCK_ARGS[@]}"} up --authkey="$TS_AUTHKEY" --hostname="$HOSTNAME_TAG" \
+  --advertise-tags=tag:agent >/dev/null
 
 echo "joined tailnet as $HOSTNAME_TAG (tag:agent, mode=$MODE)"
 if [ "$MODE" = userspace ]; then

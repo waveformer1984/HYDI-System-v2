@@ -91,7 +91,12 @@ if (-not $listening) {
 }
 
 # 4. Tailnet-only HTTPS serve on 8470 (443 stays heidi-web).
-& tailscale serve --bg --https=$ServePort "http://127.0.0.1:$LocalPort" | Out-Null
+$serveOut = & tailscale serve --bg --https=$ServePort "http://127.0.0.1:$LocalPort" 2>&1
+if ($LASTEXITCODE -ne 0) {
+    # Native-command failures don't trip $ErrorActionPreference; check explicitly
+    # so a healthy local server can't mask a missing tailnet endpoint.
+    throw "tailscale serve failed (exit $LASTEXITCODE): $($serveOut -join ' ')"
+}
 
 # 5. Verify locally.
 $ok = $true

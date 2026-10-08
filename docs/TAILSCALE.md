@@ -73,10 +73,13 @@ or any other port on heidi-pc.
    curl -fsSL https://tailscale.com/install.sh | sh   # if not preinstalled
    scripts/tailscale/agent-join.sh
    ```
-   Root with `/dev/net/tun` gets normal networking. Otherwise the script runs
-   **userspace** mode, where tailnet hosts are reachable only through the proxies
-   it starts (SOCKS5 `localhost:1055`, HTTP `localhost:1056`). Clients that
-   don't use a proxy, including many MCP clients, won't connect in that mode.
+   If a `tailscaled` is already running (the installer starts one), the script
+   reuses it. Otherwise, root with a usable `/dev/net/tun` gets normal
+   networking and MagicDNS. If the tunnel can't be created (common in
+   containers), the script falls back to **userspace** mode, where tailnet hosts
+   are reachable only through the proxies it starts (SOCKS5 `localhost:1055`,
+   HTTP `localhost:1056`). Clients that don't use a proxy, including many MCP
+   clients, won't connect in that mode.
 4. Give the agent `PROTOFORGE_MCP_TOKEN` as a separate secret if it should call
    the MCP tools.
 
