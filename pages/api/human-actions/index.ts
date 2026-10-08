@@ -42,8 +42,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!auth.ok) return;
     // Detection is the read-path cadence: every surface that lists actions
     // refreshes the known-blocker picture first. Idempotent — blockerKey
-    // dedupe makes repeat scans free.
-    await syncHumanActions(svc, getGoalSystem()).catch(() => null);
+    // dedupe makes repeat scans free. Resolver execution is disabled on
+    // this read path: a GET must never trigger an external mutation.
+    await syncHumanActions(svc, getGoalSystem(), { resolve: { disabled: true } }).catch(() => null);
     const status = typeof req.query.status === 'string' ? req.query.status : undefined;
     const goalId = typeof req.query.goalId === 'string' ? req.query.goalId : undefined;
     const includeTerminal = req.query.all === '1';

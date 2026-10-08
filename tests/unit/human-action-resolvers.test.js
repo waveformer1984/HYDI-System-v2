@@ -306,6 +306,46 @@ describe('resolution sweep invariants', () => {
     expect(out.detection.clear).toContain('stripe:webhook-processing');
   });
 
+  test('resolve disabled → classification + execution are both suppressed (read-path safety)', async () => {
+    const svc = new HumanActionService();
+    const setCalls = [];
+    const fakePlane = { canAutoModify: () => true, set: (...a) => { setCalls.push(a); return { success: true, verified: true }; } };
+    const a = svc.request({
+      blockerKey: 'stripe:webhook-processing', type: 'config', title: 't',
+      boundary: { category: 'EXTERNAL_SERVICE' },
+      verifier: { name: 'env-vars', spec: { envNames: ['__RESOLVER_TEST_NEVER_SET__'] } },
+    }).action;
+    const out = await resolveEligibleActions(svc, {
+      env: mkEnv(), throttleMs: 0, disabled: true, deps: { configPlane: fakePlane },
+    });
+    expect(out.skipped).toBe('disabled');
+    expect(setCalls.length).toBe(0);
+    expect(svc.get(a.id).resolver).toBeNull(); // a GET never even writes classification
+  });
+
+  test('hung inline resolver is bounded — timeout fails durably, never stalls the sweep', async () => {
+    process.env.HYDI_RESOLVER_TIMEOUT_MS = '50';
+    try {
+      const svc = new HumanActionService();
+      const fakePlane = { canAutoModify: () => true, set: () => new Promise(() => { }) }; // never returns
+      const a = svc.request({
+        blockerKey: 'stripe:webhook-processing', type: 'config', title: 't',
+        boundary: { category: 'EXTERNAL_SERVICE' },
+        verifier: { name: 'env-vars', spec: { envNames: ['__RESOLVER_TEST_NEVER_SET__'] } },
+      }).action;
+      const out = await resolveEligibleActions(svc, {
+        env: mkEnv(), throttleMs: 0, deps: { configPlane: fakePlane },
+      });
+      const got = svc.get(a.id);
+      expect(out.failed.length).toBe(1);
+      expect(got.resolver.lastOutcome).toBe('failed');
+      expect(got.resolver.lastAttemptAt).toBeTruthy(); // durable evidence of the timeout
+      expect(got.status).not.toBe('RESOLVED');
+    } finally {
+      delete process.env.HYDI_RESOLVER_TIMEOUT_MS;
+    }
+  });
+
   test('RESOLVED action is never re-attempted — resolver sweep skips terminal', async () => {
     const svc = new HumanActionService();
     const a = svc.request({

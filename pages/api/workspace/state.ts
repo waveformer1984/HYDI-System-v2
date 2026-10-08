@@ -217,7 +217,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       try {
         const { HumanActionService, syncHumanActions } = await import('../../../lib/human-actions/index.js');
         const svc = new HumanActionService({});
-        await syncHumanActions(svc).catch(() => null);
+        // Read surface: detection/verification refresh, but resolvers are
+        // disabled — a GET must never trigger an external mutation.
+        await syncHumanActions(svc, null, { resolve: { disabled: true } }).catch(() => null);
         return svc.list({ includeTerminal: true }).slice(0, 20).map((a: Record<string, any>) => ({
           id: a.id,
           title: a.title,
