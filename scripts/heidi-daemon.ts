@@ -850,7 +850,7 @@ async function main(): Promise<void> {
       })
       .then((r) => {
         const s = r?.summary;
-        console.log(`[daemon] resolver-sweep via=${r?.via} mission=${r?.missionId ?? 'none'} open=${s?.detected ? s.detected.requested + s.detected.alreadyOpen : '?'} human=${s?.resolve?.human ?? '?'} attempted=${s?.resolve?.attempted ?? '?'} resolved=${s?.verify?.resolved ?? '?'} resumed=${s?.resumed ?? '?'}`);
+        console.log(`[daemon] resolver-sweep via=${r?.via} mission=${r?.missionId ?? 'none'} open=${s?.detected ? s.detected.requested + s.detected.alreadyOpen : '?'} human=${s?.resolve?.human ?? '?'} attempted=${s?.resolve?.attempted ?? '?'} resolved=${s?.verify?.resolved ?? '?'} resumed=${s?.resumed ?? '?'} stale=${s?.staleBaseUrl ? s.staleBaseUrl.stale : 'n/a'}`);
       })
       .catch(() => { })
       .finally(() => { resolverInFlight = false; });
