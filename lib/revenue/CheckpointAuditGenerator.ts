@@ -97,23 +97,41 @@ function renderAuditMarkdown(jobId: string, requestText: string, report: Record<
   for (const s of steps) {
     lines.push(`${String(s.number ?? '?')}. **${String(s.name ?? 'step')}** — risk ${String(s.risk ?? '?')}/10`);
   }
+  const stepNameById = new Map<number, string>();
+  for (const s of steps) {
+    if (typeof s.id === 'number') stepNameById.set(s.id, `step ${String(s.number ?? '?')} (${String(s.name ?? 'step')})`);
+  }
   lines.push('', '## Failure Points', '');
   const fps = (report.failure_point_details && Array.isArray(report.failure_point_details))
     ? report.failure_point_details as Array<Record<string, unknown>>
-    : checkpoints;
+    : [];
   if (fps.length === 0) {
     lines.push('No discrete failure points detected above the engine threshold.');
   }
   for (const f of fps) {
-    lines.push(`- ${String(f.description ?? f.message ?? f.name ?? JSON.stringify(f))}`);
+    const at = typeof f.step_id === 'number' ? ` before ${stepNameById.get(f.step_id) ?? `step_id ${f.step_id}`}` : '';
+    const pnr = f.point_of_no_return ? ' — **point of no return**' : '';
+    lines.push(
+      `- **${String(f.type ?? 'failure')}** (${String(f.severity ?? 'unrated')})${at}${pnr}`,
+      `  - Impact: ${String(f.impact ?? 'unspecified')}`,
+      `  - Mitigation: ${String(f.mitigation ?? 'none recorded')}`,
+    );
+  }
+  lines.push('', '## Recommendations', '');
+  if (checkpoints.length === 0) {
+    lines.push('- No mandatory checkpoints; review steps scoring ≥ 6/10 for manual review points.');
+  }
+  for (const c of checkpoints) {
+    const at = typeof c.required_before_step === 'number'
+      ? ` — required before ${stepNameById.get(c.required_before_step) ?? `step_id ${c.required_before_step}`}`
+      : '';
+    lines.push(`- **${String(c.name ?? c.type ?? 'checkpoint')}**${at}`);
+    try {
+      const criteria = JSON.parse(String(c.validation_criteria ?? '{}')) as Record<string, string>;
+      for (const [k, v] of Object.entries(criteria)) lines.push(`  - ${k.replace(/_/g, ' ')}: ${v}`);
+    } catch { /* criteria is opaque — header line above already carries the checkpoint */ }
   }
   lines.push(
-    '',
-    '## Recommendations',
-    '',
-    checkpoints.length === 0
-      ? '- No mandatory checkpoints; review steps scoring ≥ 6/10 for manual review points.'
-      : checkpoints.map((c) => `- ${String(c.description ?? c.mitigation ?? JSON.stringify(c))}`).join('\n'),
     '',
     '---',
     `Produced by Checkpoint (Ursula engine) workflow ${String(report.workflow_id ?? report.id ?? 'n/a')} — findings are engine-derived, not LLM-generated.`,
