@@ -27,6 +27,7 @@ import fs from 'fs';
 import path from 'path';
 import { execSync } from 'child_process';
 import dotenv from 'dotenv';
+import { Pool } from 'pg';
 
 dotenv.config({ path: path.resolve(__dirname, '../.env.local') });
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
@@ -825,6 +826,36 @@ async function main(): Promise<void> {
   // Run self-sufficiency on the same interval as the cognitive loop
   const ssfInterval = setInterval(runSelfSufficiencyInterval, config.intervalMs);
 
+  // Human Action Resolution cadence — the standing 'resolver' agent's
+  // sweep (detect → classify → resolver-or-human-path → verify → resume).
+  // Bounded interval (HYDI_RESOLVER_SWEEP_MS, default 60s), in-flight
+  // guard prevents overlap in this process; the hourly coordinator
+  // mission + advisory-lock claim dedupe concurrent invocations across
+  // restarts/processes. The sweep reports via the daemon log; failures
+  // are recorded in durable sweep/attempt evidence, never thrown.
+  const resolverPool = new Pool({ ...DB_CONFIG, max: 1 });
+  const RESOLVER_SWEEP_MS = Math.max(15000, parseInt(process.env.HYDI_RESOLVER_SWEEP_MS || '60000', 10) || 60000);
+  let resolverInFlight = false;
+  const runResolverSweep = () => {
+    if (shuttingDown || resolverInFlight) return;
+    resolverInFlight = true;
+    import('../lib/human-actions/resolver-agent.js')
+      .then((m) => {
+        const run = (m as { runHumanActionResolverAgent?: Function; default?: { runHumanActionResolverAgent?: Function } }).runHumanActionResolverAgent
+          ?? (m as { default?: { runHumanActionResolverAgent?: Function } }).default?.runHumanActionResolverAgent;
+        if (!run) throw new Error('resolver-agent export missing');
+        return run({ pool: resolverPool });
+      })
+      .then((r) => {
+        const s = r?.summary;
+        console.log(`[daemon] resolver-sweep via=${r?.via} mission=${r?.missionId ?? 'none'} open=${s?.detected ? s.detected.requested + s.detected.alreadyOpen : '?'} human=${s?.resolve?.human ?? '?'} attempted=${s?.resolve?.attempted ?? '?'} resolved=${s?.verify?.resolved ?? '?'}`);
+      })
+      .catch(() => { })
+      .finally(() => { resolverInFlight = false; });
+  };
+  const resolverInterval = setInterval(runResolverSweep, RESOLVER_SWEEP_MS);
+  const resolverKick = setTimeout(runResolverSweep, 15000); // first pass after startup settles
+
   // 8. Status reporting
   const statusInterval = setInterval(() => {
     if (shuttingDown) return;
@@ -843,6 +874,9 @@ async function main(): Promise<void> {
       if (shuttingDown) {
         clearInterval(checkInterval);
         clearInterval(ssfInterval);
+        clearInterval(resolverInterval);
+        clearTimeout(resolverKick);
+        resolverPool.end().catch(() => { });
         clearInterval(statusInterval);
         resolve();
       }
