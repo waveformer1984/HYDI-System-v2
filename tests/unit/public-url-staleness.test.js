@@ -55,6 +55,25 @@ describe('detectStaleBaseUrl', () => {
     expect(s.listOpen().filter((a) => a.blockerKey === 'protoforge:public-base-url-stale').length).toBe(1);
   });
 
+  test('transient failure then success → not stale (hysteresis)', async () => {
+    const s = new HumanActionService({});
+    let calls = 0;
+    const fetch = async () => (++calls === 1 ? (() => { throw new Error('blip'); })() : { ok: true, status: 200 });
+    const r = await detectStaleBaseUrl(s, envWith({ NEXT_PUBLIC_APP_URL: 'https://flaky.example.dev' }), { fetch, retryDelayMs: 1 });
+    expect(r.stale).toBe(false);
+    expect(calls).toBe(3); // probe×2 (1 blip + 1 ok) + ngrok identity check
+    expect(s.listOpen().filter((a) => a.blockerKey === 'protoforge:public-base-url-stale').length).toBe(0);
+  });
+
+  test('persistent failure across all attempts → stale', async () => {
+    const s = new HumanActionService({});
+    let calls = 0;
+    const fetch = async () => { calls++; throw new Error('still down'); };
+    const r = await detectStaleBaseUrl(s, envWith({ NEXT_PUBLIC_APP_URL: 'https://dead.example.dev' }), { fetch, retryDelayMs: 1 });
+    expect(r.stale).toBe(true);
+    expect(calls).toBe(2);
+  });
+
   test('live tunnel API exposes a different host → stale (replaced URL)', async () => {
     const s = new HumanActionService({});
     const fetch = async (u) => {
