@@ -34,6 +34,7 @@ dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
 import { buildCognitiveCore } from '../lib/heidi/CognitiveCoreBuilder';
 import type { CognitiveCore, LoopStatus } from '../lib/heidi/CognitiveCore';
+import { getGoalSystem } from '../lib/heidi/GoalSystem';
 
 // ─── Configuration ───────────────────────────────────────────────────────
 
@@ -834,6 +835,7 @@ async function main(): Promise<void> {
   // restarts/processes. The sweep reports via the daemon log; failures
   // are recorded in durable sweep/attempt evidence, never thrown.
   const resolverPool = new Pool({ ...DB_CONFIG, max: 1 });
+  const resolverGoals = getGoalSystem(DB_CONFIG); // parked goals can only resume if the sweep sees them
   const RESOLVER_SWEEP_MS = Math.max(15000, parseInt(process.env.HYDI_RESOLVER_SWEEP_MS || '60000', 10) || 60000);
   let resolverInFlight = false;
   const runResolverSweep = () => {
@@ -844,11 +846,11 @@ async function main(): Promise<void> {
         const run = (m as { runHumanActionResolverAgent?: Function; default?: { runHumanActionResolverAgent?: Function } }).runHumanActionResolverAgent
           ?? (m as { default?: { runHumanActionResolverAgent?: Function } }).default?.runHumanActionResolverAgent;
         if (!run) throw new Error('resolver-agent export missing');
-        return run({ pool: resolverPool });
+        return run({ pool: resolverPool, goals: resolverGoals });
       })
       .then((r) => {
         const s = r?.summary;
-        console.log(`[daemon] resolver-sweep via=${r?.via} mission=${r?.missionId ?? 'none'} open=${s?.detected ? s.detected.requested + s.detected.alreadyOpen : '?'} human=${s?.resolve?.human ?? '?'} attempted=${s?.resolve?.attempted ?? '?'} resolved=${s?.verify?.resolved ?? '?'}`);
+        console.log(`[daemon] resolver-sweep via=${r?.via} mission=${r?.missionId ?? 'none'} open=${s?.detected ? s.detected.requested + s.detected.alreadyOpen : '?'} human=${s?.resolve?.human ?? '?'} attempted=${s?.resolve?.attempted ?? '?'} resolved=${s?.verify?.resolved ?? '?'} resumed=${s?.resumed ?? '?'}`);
       })
       .catch(() => { })
       .finally(() => { resolverInFlight = false; });
