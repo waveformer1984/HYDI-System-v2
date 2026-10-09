@@ -132,8 +132,17 @@ export async function executeJob(jobId: string): Promise<ExecutionResult> {
     const outputDir = jobManager.ensureJobArtifactDir(jobId);
     const generationResult = await generateForProduct(job, outputDir);
 
-    // Verify artifacts
-    const verification = verifyArtifacts(generationResult.artifacts);
+    // Verify artifacts — the contract is per-product; the deep property
+    // checks live in verifyDeliverableArtifacts at the delivery gate.
+    const verification = job.product === 'checkpoint_audit'
+      ? (() => {
+        const a = generationResult.artifacts;
+        const ok = a.some(x => x.filename === 'checkpoint-audit.md') && a.some(x => x.filename === 'audit-data.json');
+        return ok
+          ? { verified: true, details: 'audit artifacts present' }
+          : { verified: false, details: 'Missing checkpoint-audit.md or audit-data.json' };
+      })()
+      : verifyArtifacts(generationResult.artifacts);
     if (!verification.verified) {
       await jobManager.failExecution(jobId, `Artifact verification failed: ${verification.details}`);
       return {
@@ -216,15 +225,32 @@ export async function processNextJob(): Promise<ExecutionResult | null> {
  * Recover stale 'executing' jobs after a restart.
  * If artifacts exist on disk, complete the job.
  * If not, fail it.
+ *
+ * A job whose execution started within staleAfterMs is still in flight
+ * under a live poller — it is NOT an orphan. Pollers that run recovery
+ * every cycle must never kill a job mid-execution, so the age guard
+ * lives here, not in the caller.
  */
-export async function recoverStaleJobs(): Promise<{ recovered: number; failed: number }> {
-  const jobManager = getJobManager();
+export const STALE_EXECUTION_MS = 10 * 60 * 1000;
+
+export async function recoverStaleJobs(
+  opts: { jobManager?: JobManager; staleAfterMs?: number; now?: number } = {},
+): Promise<{ recovered: number; failed: number; skipped: number }> {
+  const jobManager = opts.jobManager ?? getJobManager();
+  const staleAfterMs = opts.staleAfterMs ?? STALE_EXECUTION_MS;
+  const now = opts.now ?? Date.now();
   const staleJobs = await jobManager.getJobsByStatus('executing');
 
   let recovered = 0;
   let failed = 0;
+  let skipped = 0;
 
   for (const job of staleJobs) {
+    const startedAt = Date.parse(job.executionStartedAt || job.updatedAt || '');
+    if (Number.isFinite(startedAt) && now - startedAt < staleAfterMs) {
+      skipped++;
+      continue;
+    }
     const jobDir = path.join(jobManager.getArtifactsDir(), job.jobId);
 
     // Check if artifacts were produced before the crash — the expected
@@ -267,7 +293,7 @@ export async function recoverStaleJobs(): Promise<{ recovered: number; failed: n
     }
   }
 
-  return { recovered, failed };
+  return { recovered, failed, skipped };
 }
 
 /**
