@@ -198,11 +198,10 @@ describe('verifiers (durable evidence shape)', () => {
 describe('detector', () => {
   test('seeds the rezonate credential action exactly once when env is absent', () => {
     const s = new HumanActionService({});
-    const saved = {};
-    for (const n of ['REZONATE_CHAIN_RPC', 'REZONATE_DEPLOYER_KEY', 'REZONATE_BUYER_KEY', 'REZONATE_PUBLIC_URL']) { saved[n] = process.env[n]; delete process.env[n]; }
-    const r1 = detectKnownBlockers(s);
-    const r2 = detectKnownBlockers(s);
-    for (const n of Object.keys(saved)) if (saved[n] !== undefined) process.env[n] = saved[n];
+    // Hermetic env — reports nothing configured regardless of real .env.local.
+    const absentEnv = { envNamePresent: () => false, envValue: () => null };
+    const r1 = detectKnownBlockers(s, absentEnv);
+    const r2 = detectKnownBlockers(s, absentEnv);
     if (r1.requested.length) {
       expect(r2.requested.length).toBe(0);
       expect(r2.alreadyOpen).toEqual(r1.requested);
