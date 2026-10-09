@@ -261,14 +261,21 @@ export class JobManager {
       }
     }
 
-    await this.db.update('customer_jobs', {
+    // Guarded transition: only a job still in 'executing' may complete.
+    // A second executor racing in after delivery used to overwrite
+    // job_status 'delivered' back to 'awaiting_review' (lost update).
+    const updated = await this.db.update('customer_jobs', {
       job_status: 'awaiting_review',
       execution_status: 'completed',
       execution_completed_at: now,
       artifact_paths: paths,
       artifact_metadata: JSON.stringify(metadata),
       updated_at: now,
-    }, 'job_id = $1', [jobId]);
+    }, "job_id = $1 AND job_status = 'executing'", [jobId]);
+    if (!updated) {
+      const current = await this.getJob(jobId);
+      throw new Error(`Job ${jobId} cannot complete execution — status is '${current?.jobStatus}', expected 'executing'`);
+    }
 
     await this.recordEvent(jobId, 'execution_completed', 'heidi', 'executing', 'awaiting_review', { artifactCount: paths.length });
     return (await this.getJob(jobId))!;
@@ -279,13 +286,19 @@ export class JobManager {
    */
   async failExecution(jobId: string, error: string): Promise<CustomerJob> {
     const now = new Date().toISOString();
-    await this.db.update('customer_jobs', {
+    // Guarded transition: 'failed' is reachable only from 'executing' or
+    // 'awaiting_review'. A stale executor erroring after delivery must
+    // not rewrite a terminal state — return the current row unchanged.
+    const updated = await this.db.update('customer_jobs', {
       job_status: 'failed',
       execution_status: 'failed',
       execution_error: error,
       execution_completed_at: now,
       updated_at: now,
-    }, 'job_id = $1', [jobId]);
+    }, "job_id = $1 AND job_status IN ('executing', 'awaiting_review')", [jobId]);
+    if (!updated) {
+      return (await this.getJob(jobId))!;
+    }
 
     await this.recordEvent(jobId, 'execution_failed', 'heidi', null, 'failed', { error });
     return (await this.getJob(jobId))!;
@@ -301,7 +314,7 @@ export class JobManager {
 
     const deliveryToken = randomUUID().replace(/-/g, '');
     const now = new Date().toISOString();
-    await this.db.update('customer_jobs', {
+    const updated = await this.db.update('customer_jobs', {
       job_status: 'delivered',
       verification_status: 'verified',
       verification_notes: notes || 'Approved by human',
@@ -309,7 +322,8 @@ export class JobManager {
       delivered_at: now,
       delivery_token: deliveryToken,
       updated_at: now,
-    }, 'job_id = $1', [jobId]);
+    }, "job_id = $1 AND job_status = 'awaiting_review'", [jobId]);
+    if (!updated) throw new Error(`Job ${jobId} is not awaiting review`);
 
     await this.recordEvent(jobId, 'delivery_approved', approvedBy, 'awaiting_review', 'delivered', { notes, deliveryToken });
     return (await this.getJob(jobId))!;
@@ -334,10 +348,11 @@ export class JobManager {
    */
   async cancelJob(jobId: string, reason: string): Promise<CustomerJob> {
     const now = new Date().toISOString();
-    await this.db.update('customer_jobs', {
+    const updated = await this.db.update('customer_jobs', {
       job_status: 'cancelled',
       updated_at: now,
-    }, 'job_id = $1', [jobId]);
+    }, "job_id = $1 AND job_status NOT IN ('delivered', 'cancelled', 'refunded')", [jobId]);
+    if (!updated) throw new Error(`Job ${jobId} is in a terminal state and cannot be cancelled`);
 
     await this.recordEvent(jobId, 'job_cancelled', 'system', null, 'cancelled', { reason });
     return (await this.getJob(jobId))!;

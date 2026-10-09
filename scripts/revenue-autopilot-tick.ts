@@ -23,10 +23,13 @@
  * Environment is provided by the boot supervisor.
  */
 
+import path from 'path';
+import dotenv from 'dotenv';
 import { getGoalSystem } from '../lib/heidi/GoalSystem';
 import { JobManager } from '../lib/revenue/JobManager';
 import { HumanActionService, syncHumanActions } from '../lib/human-actions';
 import { advance } from '../lib/revenue/revenue-autopilot';
+import { acquireLock, releaseLock, lockPathFor } from './lib/process-lock';
 // CJS module — imported via interop, same convention as the autopilot.
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const appRealization = require('../lib/realization/app-realization.js');
@@ -146,8 +149,23 @@ export async function mainLoop(options: TickLoopOptions = {}) {
 
 const isDirectRun = process.argv[1] && process.argv[1].endsWith('revenue-autopilot-tick.ts');
 if (isDirectRun && ENABLED) {
-  process.on('SIGTERM', () => { shuttingDown = true; });
-  process.on('SIGINT', () => { shuttingDown = true; });
+  // When run outside boot-agent (e.g. directly under PM2), load the same
+  // env files the daemon uses so verifiers/JobManager see real config.
+  // Scoped to direct-run: importing runOnce in tests must not inject env.
+  dotenv.config({ path: path.resolve(__dirname, '../.env.local') });
+  dotenv.config({ path: path.resolve(__dirname, '../.env') });
+  // Singleton guard: the same tick may be spawned by PM2 and later by
+  // boot-agent once it reloads boot.config.json — a second instance must
+  // exit cleanly rather than race stage transitions.
+  const LOCK_FILE = lockPathFor('revenue-autopilot-tick');
+  if (!acquireLock(LOCK_FILE, 'revenue-autopilot-tick')) {
+    log('lock held by another instance — exiting');
+    process.exit(0);
+  }
+  const shutdown = () => { shuttingDown = true; };
+  process.on('SIGTERM', shutdown);
+  process.on('SIGINT', shutdown);
+  process.on('exit', () => releaseLock(LOCK_FILE));
   mainLoop().catch((err) => {
     log(`fatal: ${err instanceof Error ? err.message : String(err)}`);
     process.exit(1);

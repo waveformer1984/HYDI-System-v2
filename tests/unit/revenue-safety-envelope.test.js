@@ -87,6 +87,37 @@ describe('Revenue transaction safety envelope — regression protection', () => 
     });
   });
 
+  describe('Terminal-state protection (lost-update regression)', () => {
+    // Regression: a second executor's completeExecution ran AFTER delivery
+    // and overwrote job_status 'delivered' back to 'awaiting_review'.
+    // All status transitions must carry a conditional WHERE so a stale
+    // writer can never rewrite a terminal state.
+    test('completeExecution only transitions from executing', () => {
+      const src = readSrc('lib/revenue/JobManager.ts');
+      expect(src).toMatch(/job_id = \$1 AND job_status = 'executing'/);
+    });
+
+    test('completeExecution refuses when the guarded update matches nothing', () => {
+      const src = readSrc('lib/revenue/JobManager.ts');
+      expect(src).toMatch(/cannot complete execution/);
+    });
+
+    test('failExecution cannot rewrite delivered/cancelled jobs', () => {
+      const src = readSrc('lib/revenue/JobManager.ts');
+      expect(src).toMatch(/job_status IN \('executing', 'awaiting_review'\)/);
+    });
+
+    test('approveForDelivery guards its UPDATE on awaiting_review', () => {
+      const src = readSrc('lib/revenue/JobManager.ts');
+      expect(src).toMatch(/job_id = \$1 AND job_status = 'awaiting_review'/);
+    });
+
+    test('cancelJob cannot cancel terminal jobs', () => {
+      const src = readSrc('lib/revenue/JobManager.ts');
+      expect(src).toMatch(/NOT IN \('delivered', 'cancelled', 'refunded'\)/);
+    });
+  });
+
   describe('Authentication is enforced', () => {
     test('approve.js requires revenue:manage permission', () => {
       const src = readSrc('pages/api/revenue/jobs/[jobId]/approve.js');
