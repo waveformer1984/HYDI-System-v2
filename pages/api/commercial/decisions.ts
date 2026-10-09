@@ -22,7 +22,7 @@ import { createClient } from '@supabase/supabase-js';
 import { requireAuth } from '../../../lib/auth/requireAuth.js';
 import { verifyServiceToken } from '../../../lib/auth/verifyServiceToken.js';
 
-// eslint-disable-next-line @typescript-eslint/no-var-requires
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const { recordDecision, getDecision, readStore } = require('../../../lib/commercial/decision-store.js');
 
 function getSupabase() {

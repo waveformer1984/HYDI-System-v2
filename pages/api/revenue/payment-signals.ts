@@ -24,9 +24,9 @@ import { createClient } from '@supabase/supabase-js';
 import { requireAuth } from '../../../lib/auth/requireAuth.js';
 import { verifyServiceToken } from '../../../lib/auth/verifyServiceToken.js';
 
-// eslint-disable-next-line @typescript-eslint/no-var-requires
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const bridge = require('../../../lib/revenue/payment-signal-bridge.js');
-// eslint-disable-next-line @typescript-eslint/no-var-requires
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const { HumanActionService } = require('../../../lib/human-actions/service.js');
 
 function getSupabase() {
