@@ -79,6 +79,15 @@ interface StageCheck {
   detail: string;
 }
 
+// Expected deliverable count per paid product — the product's artifact
+// contract, not a global constant. checkpoint_audit ships report+data
+// (2); model_prep ships scad+stl+readme (3). Unknown products default
+// to the model-prep contract.
+function expectedArtifacts(product: string | null | undefined): number {
+  if (product === 'checkpoint_audit') return 2;
+  return 3;
+}
+
 export class RevenueReconciler {
   private db: RevenueDatabase;
 
@@ -186,10 +195,10 @@ export class RevenueReconciler {
       },
       artifactsProduced: {
         status: job.artifact_paths && job.artifact_paths.length > 0
-          ? (job.artifact_paths.length >= 3 ? 'PASS' : 'FAIL')
+          ? (job.artifact_paths.length >= expectedArtifacts(job.product) ? 'PASS' : 'FAIL')
           : (job.job_status === 'created' || job.job_status === 'queued' ? 'PENDING' : 'FAIL'),
         detail: job.artifact_paths && job.artifact_paths.length > 0
-          ? `${job.artifact_paths.length} artifacts`
+          ? `${job.artifact_paths.length} artifacts (expected ${expectedArtifacts(job.product)} for ${job.product})`
           : 'No artifacts produced yet',
       },
       artifactsVerified: {
@@ -296,8 +305,8 @@ export class RevenueReconciler {
 
     // Rule: Artifacts must exist if awaiting_review or beyond
     if (['awaiting_review', 'delivered'].includes(job.job_status)) {
-      if (!job.artifact_paths || job.artifact_paths.length < 3) {
-        violations.push(`SAFETY: Job is in ${job.job_status} state but has fewer than 3 artifacts`);
+      if (!job.artifact_paths || job.artifact_paths.length < expectedArtifacts(job.product)) {
+        violations.push(`SAFETY: Job is in ${job.job_status} state but has fewer than ${expectedArtifacts(job.product)} artifacts`);
       }
     }
 
