@@ -11,7 +11,10 @@ delete process.env.SUPABASE_SERVICE_ROLE_KEY;
 delete process.env.HYDI_SERVICE_SECRET;
 delete process.env.HYDI_UPSTREAM;
 
-const { createHandler, normalizeUpstream } = require('./hydi-chat-server.js');
+const { createHandler, normalizeUpstream, loadThinClientEnv } = require('./hydi-chat-server.js');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 
 const UP = 'https://heidi-pc.example.ts.net';
 let calls;
@@ -125,4 +128,29 @@ test('normalizeUpstream accepts only http(s) URLs and trims slashes', () => {
   assert.equal(normalizeUpstream('ftp://a'), '');
   assert.equal(normalizeUpstream('heidi-pc'), '');
   assert.equal(normalizeUpstream(''), '');
+});
+
+test('the bundled UI route /api/chat/route gets the same thin-client reply', async () => {
+  reset();
+  const r = await fetch(`${base}/api/chat/route`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message: 'status', system: 'ursula' }),
+  });
+  assert.equal(r.status, 200);
+  assert.match((await r.json()).response, /\/heidi/);
+});
+
+test('loadThinClientEnv fills unset vars only, so explicit exports win', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'thin-'));
+  const file = path.join(dir, 'thin-client.env');
+  fs.writeFileSync(file, '# c\nexport TC_A="https://pc.example"\nTC_B=from-file\n');
+  process.env.TC_B = 'from-env';
+  delete process.env.TC_A;
+  loadThinClientEnv(file);
+  assert.equal(process.env.TC_A, 'https://pc.example');
+  assert.equal(process.env.TC_B, 'from-env');
+  loadThinClientEnv(path.join(dir, 'missing.env')); // absent file is a no-op
+  delete process.env.TC_A; delete process.env.TC_B;
+  fs.rmSync(dir, { recursive: true, force: true });
 });

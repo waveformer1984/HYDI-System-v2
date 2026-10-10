@@ -26,6 +26,23 @@ const fs = require('fs');
 const path = require('path');
 const { createHmac, timingSafeEqual } = require('crypto');
 
+// Thin-client settings written by termux/setup-thin-client.sh. Fills only
+// variables that aren't already set, so an explicit export still wins and a
+// runit/boot start that doesn't source the file gets the same config.
+function loadThinClientEnv(file = path.join(require('os').homedir(), '.hydi', 'thin-client.env')) {
+  let text;
+  try { text = fs.readFileSync(file, 'utf8'); } catch (_) { return; }
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line || line.startsWith('#') || !line.includes('=')) continue;
+    let key = line.slice(0, line.indexOf('=')).trim();
+    if (key.startsWith('export ')) key = key.slice(7).trim();
+    const value = line.slice(line.indexOf('=') + 1).trim().replace(/^(['"])(.*)\1$/, '$2');
+    if (key && process.env[key] === undefined) process.env[key] = value;
+  }
+}
+loadThinClientEnv();
+
 const PORT = parseInt(process.env.PORT || '8787', 10);
 const SUPABASE_URL = (process.env.SUPABASE_URL || '').replace(/\/+$/, '');
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
@@ -365,7 +382,8 @@ function createHandler({ upstream = UPSTREAM, fetchImpl = fetch } = {}) {
         }
       }
 
-      if (url.pathname === '/api/chat') {
+      // /api/chat/route is what the bundled public/hydi-chat.html posts to.
+      if (url.pathname === '/api/chat' || url.pathname === '/api/chat/route') {
         if (req.method !== 'POST') return json(res, 405, { error: 'Method not allowed' });
 
         const { valid, reason } = checkServiceToken(req.headers['x-hydi-service-token']);
@@ -401,7 +419,7 @@ function createHandler({ upstream = UPSTREAM, fetchImpl = fetch } = {}) {
   };
 }
 
-module.exports = { createHandler, relayUpstream, normalizeUpstream };
+module.exports = { createHandler, relayUpstream, normalizeUpstream, loadThinClientEnv };
 
 if (require.main === module) {
   const server = http.createServer(createHandler());

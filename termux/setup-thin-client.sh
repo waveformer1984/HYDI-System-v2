@@ -24,7 +24,6 @@ DISABLE_LLM=0
 FORCE=0
 DRY=0
 OLD_IP="192.168.1.100"
-OLD_IP_RE="192\\.168\\.1\\.100"
 
 usage() { sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; }
 while [ $# -gt 0 ]; do
@@ -72,6 +71,18 @@ if [ "${ollama:-000}" != "200" ]; then
   say "  hydi.py falls back to Groq/scripted replies until then."
 fi
 
+# Host from a previous run, so a re-run with a different --pc also rewrites
+# the boot script (its FRANK_IP line would otherwise override the env file).
+PREV_HOST=""
+if [ -f "$ENV_FILE" ]; then
+  PREV_HOST="$(sed -n 's/^FRANK_IP=//p' "$ENV_FILE" | tail -1)"
+fi
+OLD_VALUES="$OLD_IP"
+if [ -n "$PREV_HOST" ] && [ "$PREV_HOST" != "$PC_HOST" ]; then
+  OLD_VALUES="$OLD_IP
+$PREV_HOST"
+fi
+
 # 2. Env file ------------------------------------------------------------------
 say "== Writing $ENV_FILE"
 if [ "$DRY" = 1 ]; then
@@ -97,7 +108,10 @@ if [ ! -f "$BOOT" ]; then
   say "  not present (Termux:Boot not set up) -- skipped"
 else
   needs_source=1; grep -qF "$MARK" "$BOOT" && needs_source=0
-  needs_ip=0; grep -qF "$OLD_IP" "$BOOT" && needs_ip=1
+  needs_ip=0
+  while IFS= read -r v; do
+    [ -n "$v" ] && grep -qF "$v" "$BOOT" && needs_ip=1
+  done <<< "$OLD_VALUES"
   if [ "$needs_source" = 0 ] && [ "$needs_ip" = 0 ]; then
     say "  already patched"
   else
@@ -110,17 +124,26 @@ else
     fi
     if [ "$DRY" = 0 ]; then
       tmp="$(mktemp "$(dirname "$BOOT")/.start_hydi.XXXXXX")"
-      awk -v mark="$MARK" -v src='[ -f "$HOME/.hydi/thin-client.env" ] && set -a && . "$HOME/.hydi/thin-client.env" && set +a' \
-          -v need="$needs_source" -v old="$OLD_IP_RE" -v host="$PC_HOST" '
-        NR == 1 && /^#!/ { print; if (need == 1) { print mark; print src }; done = 1; next }
-        NR == 1 && need == 1 { print mark; print src; done = 1 }
-        { gsub(old, host); print }
+      # Values go in through ENVIRON, not -v, so awk applies no escape
+      # processing; replacement is literal (index/substr), never a regex.
+      TC_MARK="$MARK" \
+      TC_SRC='[ -f "$HOME/.hydi/thin-client.env" ] && set -a && . "$HOME/.hydi/thin-client.env" && set +a' \
+      TC_NEED="$needs_source" TC_OLDS="$OLD_VALUES" TC_HOST="$PC_HOST" awk '
+        function lit(s, old, new,   out, i) {
+          out = ""
+          while (old != "" && (i = index(s, old)) > 0) { out = out substr(s, 1, i - 1) new; s = substr(s, i + length(old)) }
+          return out s
+        }
+        BEGIN { n = split(ENVIRON["TC_OLDS"], olds, "\n") }
+        NR == 1 && /^#!/ { print; if (ENVIRON["TC_NEED"] == 1) { print ENVIRON["TC_MARK"]; print ENVIRON["TC_SRC"] }; next }
+        NR == 1 && ENVIRON["TC_NEED"] == 1 { print ENVIRON["TC_MARK"]; print ENVIRON["TC_SRC"] }
+        { for (k = 1; k <= n; k++) $0 = lit($0, olds[k], ENVIRON["TC_HOST"]); print }
       ' "$BOOT" > "$tmp"
       chmod --reference="$BOOT" "$tmp" 2>/dev/null || chmod 700 "$tmp"
       mv -f "$tmp" "$BOOT"
-      say "  patched: loads thin-client.env; $OLD_IP -> $PC_HOST"
+      say "  patched: loads thin-client.env; $(printf '%s' "$OLD_VALUES" | tr '\n' ',' ) -> $PC_HOST"
     else
-      say "  [dry-run] would add env loading and replace $OLD_IP -> $PC_HOST"
+      say "  [dry-run] would add env loading and replace $(printf '%s' "$OLD_VALUES" | tr '\n' ',') -> $PC_HOST"
     fi
   fi
 fi
