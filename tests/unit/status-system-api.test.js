@@ -74,7 +74,37 @@ describe('api/status/system.js', () => {
     const payload = res.json.mock.calls[0][0];
     expect(payload.health_score).toBe(0);
     expect(payload.overall_status).toBe('offline');
-    expect(payload.offline_subsystems).toHaveLength(8);
+    expect(payload.offline_subsystems).toEqual(['hydi_core', 'database', 'memory']);
+  });
+
+  it('scores only tracked subsystems, so ones nothing runs (ursula, voice...) cannot pin it at 0', async () => {
+    const now = new Date().toISOString();
+    mockSubsystemRows = ['hydi_core', 'database', 'memory']
+      .map((subsystem) => ({ subsystem, status: 'healthy', last_heartbeat: now }));
+
+    const res = makeRes();
+    await handler({ method: 'GET', headers: { 'x-hydi-service-token': makeServiceToken() } }, res);
+
+    const payload = res.json.mock.calls[0][0];
+    expect(payload.health_score).toBe(100);
+    expect(payload.overall_status).toBe('healthy');
+    expect(Object.keys(payload.subsystems)).toEqual(['hydi_core', 'database', 'memory']);
+  });
+
+  it('HYDI_TRACKED_SUBSYSTEMS adds a subsystem back into the score', async () => {
+    const now = new Date().toISOString();
+    mockSubsystemRows = ['hydi_core', 'database', 'memory']
+      .map((subsystem) => ({ subsystem, status: 'healthy', last_heartbeat: now }));
+    process.env.HYDI_TRACKED_SUBSYSTEMS = 'hydi_core,database,memory,ursula';
+    try {
+      const res = makeRes();
+      await handler({ method: 'GET', headers: { 'x-hydi-service-token': makeServiceToken() } }, res);
+      const payload = res.json.mock.calls[0][0];
+      expect(payload.health_score).toBe(75);
+      expect(payload.offline_subsystems).toEqual(['ursula']);
+    } finally {
+      delete process.env.HYDI_TRACKED_SUBSYSTEMS;
+    }
   });
 
   it('computes a healthy overall status when every subsystem is fresh and healthy', async () => {

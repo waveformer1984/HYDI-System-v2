@@ -9,6 +9,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { requireAuth } from '../../lib/auth/requireAuth.js';
 import { computeSubsystemHealth, computeOverallHealth } from '../../lib/realtime/healthScore.js';
+import { trackedSubsystems } from '../../lib/realtime/subsystems.js';
 
 let _supabase = null;
 function getSupabase() {
@@ -21,11 +22,6 @@ function getSupabase() {
   return _supabase;
 }
 const supabase = new Proxy({}, { get: (_, prop) => getSupabase()[prop] });
-
-const SUBSYSTEMS = [
-  'hydi_core', 'ursula', 'rave_voice', 'botforge',
-  'worker_fleet', 'memory', 'database', 'deployment',
-];
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', process.env.MOBILE_CHAT_ORIGIN || '*');
@@ -48,8 +44,10 @@ export default async function handler(req, res) {
   const byName = {};
   for (const row of statusResult.data || []) byName[row.subsystem] = row;
 
+  // Only subsystems that run on this host count toward the score; see
+  // lib/realtime/subsystems.js.
   const subsystems = {};
-  for (const name of SUBSYSTEMS) {
+  for (const name of trackedSubsystems()) {
     subsystems[name] = computeSubsystemHealth(byName[name]);
     subsystems[name].last_heartbeat = byName[name] ? byName[name].last_heartbeat : null;
   }

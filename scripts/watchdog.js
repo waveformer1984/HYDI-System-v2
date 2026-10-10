@@ -47,6 +47,31 @@ const {
 
 const ROOT = path.resolve(__dirname, '..');
 
+// --- Subsystem heartbeats (lib/realtime/watchdogHeartbeats.js) ---
+// The watchdog is the one process that observes every core service, so it
+// reports hydi_core / database / memory heartbeats to heidi-web's
+// /api/heartbeat. Without them every subsystem reads "unknown" and the
+// phone's health score sits at 0 while this log says all is healthy.
+// Reposted every HEARTBEAT_MS from the latest cycle (the check interval can
+// be 2 min, longer than the 60 s "degraded" staleness window); a cycle older
+// than HEARTBEAT_MAX_AGE_MS is not reposted, so a stuck watchdog goes stale
+// and reads offline instead of reporting old health forever.
+// Disable with WATCHDOG_HEARTBEATS=off.
+// Only HYDI_SERVICE_SECRET is read from .env.local -- loading the whole file
+// would silently change the watchdog's other settings (recovery, webhook).
+if (!process.env.HYDI_SERVICE_SECRET) {
+  try {
+    const parsed = require('dotenv').parse(fs.readFileSync(path.join(ROOT, '.env.local')));
+    if (parsed.HYDI_SERVICE_SECRET) process.env.HYDI_SERVICE_SECRET = parsed.HYDI_SERVICE_SECRET;
+  } catch { /* no .env.local: heartbeats log one warning and stay off */ }
+}
+const { deriveHeartbeats, postHeartbeats } = require('../lib/realtime/watchdogHeartbeats');
+const HEARTBEATS_ON = (process.env.WATCHDOG_HEARTBEATS || 'on') !== 'off';
+const HEARTBEAT_MS = parseInt(process.env.WATCHDOG_HEARTBEAT_MS || '20000', 10);
+const HEARTBEAT_URL = process.env.HYDI_API_URL || 'http://127.0.0.1:3000';
+let lastCycle = null; // { results, at }
+let heartbeatWarned = false;
+
 // --- Observation confidence state (persists across watchdog cycles) ---
 const observationHysteresis = new ObservationHysteresis({
   consecutiveFailuresToConfirm: 2,  // need 2 consecutive confirmed failures to recover
@@ -633,6 +658,27 @@ function logObservationMetrics() {
 // ---------------------------------------------------------------------------
 // Main check
 // ---------------------------------------------------------------------------
+function heartbeatMaxAgeMs() {
+  return Math.max(3 * INTERVAL_MS, 90000);
+}
+
+/** Post heartbeats for the latest cycle. Never throws; logs only failures. */
+async function sendHeartbeats() {
+  if (!HEARTBEATS_ON || !lastCycle) return;
+  if (Date.now() - lastCycle.at > heartbeatMaxAgeMs()) return;
+  const beats = deriveHeartbeats(lastCycle.results);
+  if (!beats.length) return;
+  const outcomes = await postHeartbeats(beats, { baseUrl: HEARTBEAT_URL, secret: process.env.HYDI_SERVICE_SECRET });
+  const failed = outcomes.filter((o) => !o.ok);
+  if (failed.length && !heartbeatWarned) {
+    heartbeatWarned = true; // once per process; heidi-web being down is already logged above
+    log(`HEARTBEAT-WARN  ${failed.map((f) => `${f.subsystem}:${f.status || f.error}`).join('  ')}`);
+  } else if (!failed.length && heartbeatWarned) {
+    heartbeatWarned = false;
+    log(`HEARTBEAT-OK    ${beats.map((b) => `${b.subsystem}:${b.status}`).join('  ')}`);
+  }
+}
+
 async function runCheck() {
   // Check boot.config.json endpoints
   const endpointResults = await Promise.all(ENDPOINTS.map(checkEndpoint));
@@ -643,6 +689,8 @@ async function runCheck() {
   infraResults.push(ollamaResult);
 
   const allResults = [...endpointResults, ...infraResults];
+  lastCycle = { results: allResults, at: Date.now() };
+  const heartbeatPosted = sendHeartbeats();
   const failures = allResults.filter((r) => !r.ok);
   const allOk = failures.length === 0;
 
@@ -798,6 +846,7 @@ async function runCheck() {
     logObservationMetrics();
   }
   selfCheckCounter++;
+  await heartbeatPosted;
 
   return allOk;
 }
@@ -815,6 +864,7 @@ async function main() {
   // Continuous mode
   await runCheck();
   setInterval(runCheck, INTERVAL_MS);
+  if (HEARTBEATS_ON) setInterval(() => { sendHeartbeats(); }, HEARTBEAT_MS);
 
   // Keep the process alive
   process.on('SIGINT', () => { log('watchdog stopped'); process.exit(0); });
@@ -827,7 +877,7 @@ async function main() {
 // added to scripts/boot-agent.js earlier in this project's history for the
 // same reason: requiring this file unconditionally ran real HTTP checks,
 // real Docker calls, and real log writes.
-module.exports = { classifyEndpointObservation, checkEndpoint, checkOllama };
+module.exports = { classifyEndpointObservation, checkEndpoint, checkOllama, sendHeartbeats };
 
 if (require.main === module) {
   main().catch((e) => {
