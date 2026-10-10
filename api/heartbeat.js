@@ -9,6 +9,7 @@ import { createClient } from '@supabase/supabase-js';
 import { requireAuth } from '../lib/auth/requireAuth.js';
 import { computeSubsystemHealth } from '../lib/realtime/healthScore.js';
 import { publish } from '../lib/realtime/eventBus.js';
+import { KNOWN_SUBSYSTEMS as SUBSYSTEMS } from '../lib/realtime/subsystems.js';
 
 let _supabase = null;
 function getSupabase() {
@@ -21,11 +22,6 @@ function getSupabase() {
   return _supabase;
 }
 const supabase = new Proxy({}, { get: (_, prop) => getSupabase()[prop] });
-
-const SUBSYSTEMS = [
-  'hydi_core', 'ursula', 'rave_voice', 'botforge',
-  'worker_fleet', 'memory', 'database', 'deployment',
-];
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', process.env.MOBILE_CHAT_ORIGIN || '*');
