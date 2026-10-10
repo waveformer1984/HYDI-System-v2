@@ -319,15 +319,33 @@ export class CommunicationLayer {
       return this.denyOutbound(request, messageId, 'killed', `kill switch active: ${ksStatus}`);
     }
 
-    // 2. Policy evaluation
-    const hasExistingRelationship = !!(request.prospectId || request.customerId || request.opportunityId);
+    // 2. Policy evaluation — relationship and consent are VERIFIED against
+    // stored conversation history, never caller-attested (red-team
+    // 2026-09-18): `!!request.prospectId` let any caller self-attest both a
+    // relationship AND consent for every R1/R2 action by passing an arbitrary
+    // id — the consent/relationship gates were fully spoofable. A claimed
+    // entity now only counts if a real prior conversation exists for it (or
+    // the referenced conversationId resolves); an explicit opt-out marker on
+    // that history withdraws consent even when a relationship exists.
+    const relationship = await this.verifyRelationship(request);
+    const hasExistingRelationship = relationship.exists;
+    const hasConsent = relationship.exists && !relationship.optedOut;
+    // isAutonomous is ALWAYS true here. This layer is the autonomous-agent
+    // communication boundary: `request.actor` is a caller-supplied string and
+    // cannot authenticate a human. Before the fix, every R3/R4/R5 denial in
+    // evaluate() was gated on `isAutonomous`, so a caller claiming any
+    // non-heidi actor (or omitting it) was treated as a human and bypassed even
+    // the R5 prohibition — demonstrated red-team 2026-09-18. A human who needs
+    // to send a human_required/prohibited message uses a separate
+    // human-authenticated channel, not this one. `request.actor` is still
+    // recorded for audit; it just no longer downgrades the risk tier.
     const evaluation = communicationPolicyModel.evaluate(request.actionType, {
       actor: request.actor,
       recipientId: request.recipientId,
       conversationId: request.conversationId || 'none',
       hasExistingRelationship,
-      hasConsent: hasExistingRelationship, // assume consent for existing relationships
-      isAutonomous: request.actor === 'heidi' || request.actor === 'system',
+      hasConsent,
+      isAutonomous: true,
     });
 
     if (!evaluation.authorized) {
@@ -598,7 +616,11 @@ export class CommunicationLayer {
       conversationId: 'authorization_check',
       hasExistingRelationship: context.hasExistingRelationship,
       hasConsent: context.hasConsent,
-      isAutonomous: context.actor === 'heidi' || context.actor === 'system',
+      // Same boundary as sendMessage: this is the autonomous-agent policy, so
+      // the actor string cannot downgrade the risk tier. isAutonomous is always
+      // true — a caller claiming a human actor does not turn this into a
+      // human-authorized action.
+      isAutonomous: true,
     });
     return communicationPolicyModel.buildAuthorizationContext(actionType, context.actor, evaluation);
   }
@@ -668,6 +690,42 @@ export class CommunicationLayer {
   }
 
   // ─── Internal: Channel Execution ────────────────────────────────────
+
+  /**
+   * Verify a claimed relationship against stored conversation history. A
+   * caller-supplied prospectId/customerId/opportunityId only counts when a
+   * real prior conversation exists for it; the referenced conversationId also
+   * counts if it resolves. An explicit opt-out marker on that history
+   * (metadata.consent === false / metadata.opted_out) withdraws consent.
+   * Fail-closed: any store error yields no relationship.
+   */
+  private async verifyRelationship(request: OutboundMessageRequest): Promise<{ exists: boolean; optedOut: boolean }> {
+    const found: Array<{ metadata?: Record<string, unknown> }> = [];
+    try {
+      if (request.prospectId) {
+        found.push(...(await this.store.listConversations({ prospectId: request.prospectId, limit: 5 })));
+      }
+      if (request.customerId) {
+        found.push(...(await this.store.listConversations({ customerId: request.customerId, limit: 5 })));
+      }
+      if (request.opportunityId) {
+        // listConversations has no opportunity filter — match in-memory like
+        // revenueBridge.getConversationsForOpportunity does.
+        const all = await this.store.listConversations({ limit: 200 });
+        found.push(...all.filter((c) => c.opportunityId === request.opportunityId));
+      }
+      if (request.conversationId) {
+        const conv = await this.store.getConversation(request.conversationId);
+        if (conv) found.push(conv);
+      }
+    } catch {
+      return { exists: false, optedOut: false };
+    }
+    const optedOut = found.some(
+      (c) => c.metadata?.consent === false || c.metadata?.opted_out === true,
+    );
+    return { exists: found.length > 0, optedOut };
+  }
 
   private async executeViaChannel(request: OutboundMessageRequest): Promise<{
     success: boolean;

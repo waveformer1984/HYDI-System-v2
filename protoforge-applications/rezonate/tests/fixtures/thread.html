@@ -1,0 +1,22 @@
+<!doctype html>
+<html>
+
+<body>
+  <h1>Request: small electronics enclosure</h1>
+  <div class="thread">Posted by u/tester — looking for a small case for an ESP32 board. Need something about 60mm x 40mm
+    with a snap lid. Budget flexible, not urgent but sooner is better. Happy to share measurements of the board if that
+    helps.</div>
+  <div class="existing-comment">Someone else replied earlier with a suggestion.</div>
+  <textarea placeholder="Add a comment" name="comment"></textarea>
+  <button type="submit">Post</button>
+  <div id="posted"></div>
+  <script>
+    document.querySelector('button').addEventListener('click', () => {
+      const t = document.querySelector('textarea').value;
+      const d = document.createElement('div'); d.className = 'comment';
+      d.textContent = t; document.getElementById('posted').appendChild(d);
+    });
+  </script>
+</body>
+
+</html>

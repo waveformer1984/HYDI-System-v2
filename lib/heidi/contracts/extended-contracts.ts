@@ -98,6 +98,228 @@ function readContract(input: {
 // Reads — tools, ops, communication
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Dev-autonomy chain — every stage writes a durable heidi_events row; the
+// contract re-reads that row by id. Without these, goal-bound executions
+// could never verify and re-ran the same goal forever.
+// ---------------------------------------------------------------------------
+
+export const OPS_DEV_OBSERVE = defineContract({
+  identity: {
+    id: 'ops.dev_observe', version: '1.0.0', owner: OWNER, provider: 'cognitive_core',
+    description: 'Deterministic scan for development findings → investigation goals',
+  },
+  effects: [dbEffect('heidi_events', 'create'), dbEffect('heidi_goals', 'create')],
+  reversibility: { kind: 'none', windowMs: 0, caveat: 'Append-only observation event; created goals are deduped.' },
+  cost: { estimatedMs: 10_000, timeoutMs: 60_000 },
+  verification: {
+    description: 'The dev_observation row exists in heidi_events carrying findings count.',
+    observation: dbObservation('sql:heidi_events:id={eventId}', ['id', 'event_type', 'payload']),
+    conditions: [
+      { field: 'found', operator: 'eq', expected: true },
+      { field: 'event_type', operator: 'eq', expected: 'dev_observation' },
+      { field: 'payload.findings', operator: 'exists', expected: null },
+    ],
+    onFailure: 'retry', maxRetries: 1, requiresHumanConfirmation: false,
+  },
+});
+
+export const OPS_DEV_INVESTIGATE = defineContract({
+  identity: {
+    id: 'ops.dev_investigate', version: '1.0.0', owner: OWNER, provider: 'cognitive_core',
+    description: 'Counterexample-first read-only investigation → persisted conclusion',
+  },
+  effects: [dbEffect('heidi_events', 'create'), dbEffect('heidi_goals', 'create')],
+  reversibility: { kind: 'none', windowMs: 0, caveat: 'Append-only investigation record; a negative conclusion is a valid outcome.' },
+  cost: { estimatedMs: 30_000, timeoutMs: 180_000 },
+  verification: {
+    description: 'The dev_investigation row exists with a legal three-way conclusion.',
+    observation: dbObservation('sql:heidi_events:id={eventId}', ['id', 'event_type', 'payload']),
+    conditions: [
+      { field: 'found', operator: 'eq', expected: true },
+      { field: 'event_type', operator: 'eq', expected: 'dev_investigation' },
+      { field: 'payload.conclusion', operator: 'matches', expected: '^(CONFIRMED_DEFECT|NOT_A_DEFECT|INSUFFICIENT_EVIDENCE)$' },
+    ],
+    onFailure: 'retry', maxRetries: 1, requiresHumanConfirmation: false,
+  },
+});
+
+export const OPS_DEV_AUTHOR = defineContract({
+  identity: {
+    id: 'ops.dev_author', version: '1.0.0', owner: OWNER, provider: 'cognitive_core',
+    description: 'Bounded patch authoring — HIGH auto-applies through ops.dev_patch, else human action',
+  },
+  effects: [dbEffect('heidi_events', 'create'), dbEffect('human_intervention_requests', 'create')],
+  reversibility: { kind: 'self_healing', windowMs: Number.POSITIVE_INFINITY, caveat: 'Patch execution itself rolls back on verify failure; the proposal record is append-only.' },
+  cost: { estimatedMs: 30_000, timeoutMs: 300_000 },
+  verification: {
+    description: 'The dev_author row exists with a legal confidence class — UNKNOWN is a valid outcome.',
+    observation: dbObservation('sql:heidi_events:id={eventId}', ['id', 'event_type', 'payload']),
+    conditions: [
+      { field: 'found', operator: 'eq', expected: true },
+      { field: 'event_type', operator: 'eq', expected: 'dev_author' },
+      { field: 'payload.confidence', operator: 'matches', expected: '^(HIGH|MEDIUM|LOW|UNKNOWN)$' },
+    ],
+    onFailure: 'retry', maxRetries: 1, requiresHumanConfirmation: false,
+  },
+});
+
+export const OPS_DEV_PATCH = defineContract({
+  identity: {
+    id: 'ops.dev_patch', version: '1.0.0', owner: OWNER, provider: 'cognitive_core',
+    description: 'Bounded patch executor — apply, typecheck, verify, commit, rollback on failure',
+  },
+  effects: [dbEffect('heidi_events', 'create')],
+  reversibility: { kind: 'self_healing', windowMs: Number.POSITIVE_INFINITY, caveat: 'ROLLBACK restores the tree on any verification failure; only verified work commits.' },
+  cost: { estimatedMs: 120_000, timeoutMs: 600_000 },
+  verification: {
+    description: 'The dev_patch row exists with a terminal status — ROLLED_BACK/REJECTED are truthful failures.',
+    observation: dbObservation('sql:heidi_events:id={eventId}', ['id', 'event_type', 'payload']),
+    conditions: [
+      { field: 'found', operator: 'eq', expected: true },
+      { field: 'event_type', operator: 'eq', expected: 'dev_patch' },
+      { field: 'payload.status', operator: 'matches', expected: '^(APPLIED|COMMITTED|REJECTED|FAILED|ROLLED_BACK)$' },
+    ],
+    onFailure: 'escalate', maxRetries: 0, requiresHumanConfirmation: false,
+  },
+});
+
+export const OPS_OPP_VERDICT = defineContract({
+  identity: {
+    id: 'ops.opp_verdict', version: '1.0.0', owner: OWNER, provider: 'cognitive_core',
+    description: 'Typed business verdict on a completed investigate mission',
+  },
+  effects: [dbEffect('heidi_events', 'create')],
+  reversibility: { kind: 'none', windowMs: 0, caveat: 'Append-only business_finding; a negative verdict is a valid outcome.' },
+  cost: { estimatedMs: 10_000, timeoutMs: 30_000 },
+  verification: {
+    description: 'The business_finding row exists with a legal verdict — INSUFFICIENT verifies, never promotes.',
+    observation: dbObservation('sql:heidi_events:id={eventId}', ['id', 'event_type', 'payload']),
+    conditions: [
+      { field: 'found', operator: 'eq', expected: true },
+      { field: 'event_type', operator: 'eq', expected: 'business_finding' },
+      { field: 'payload.verdict', operator: 'matches', expected: '^(CONFIRMED|PARTIALLY_SUPPORTED|NOT_SUPPORTED|INSUFFICIENT)$' },
+    ],
+    onFailure: 'retry', maxRetries: 1, requiresHumanConfirmation: false,
+  },
+});
+
+export const OPS_OPP_EVIDENCE = defineContract({
+  identity: {
+    id: 'ops.opp_evidence', version: '1.0.0', owner: OWNER, provider: 'cognitive_core',
+    description: 'Record human-declared customer evidence → updated business_finding',
+  },
+  effects: [dbEffect('heidi_events', 'create')],
+  reversibility: { kind: 'none', windowMs: 0, caveat: 'Append-only evidence + finding rows; findings can supersede, never erase.' },
+  cost: { estimatedMs: 10_000, timeoutMs: 30_000 },
+  verification: {
+    description: 'The customer_evidence row exists carrying human_declared provenance.',
+    observation: dbObservation('sql:heidi_events:id={eventId}', ['id', 'event_type', 'payload']),
+    conditions: [
+      { field: 'found', operator: 'eq', expected: true },
+      { field: 'event_type', operator: 'eq', expected: 'customer_evidence' },
+      { field: 'payload.provenance', operator: 'eq', expected: 'human_declared' },
+    ],
+    onFailure: 'retry', maxRetries: 1, requiresHumanConfirmation: false,
+  },
+});
+
+export const OPS_GOAL_INTERPRET = defineContract({
+  identity: {
+    id: 'ops.goal_interpret', version: '1.0.0', owner: OWNER, provider: 'cognitive_core',
+    description: 'Decompose a free-text goal into a typed, durable goal model',
+  },
+  effects: [dbEffect('heidi_events', 'create')],
+  reversibility: { kind: 'none', windowMs: 0, caveat: 'Append-only goal_model; AI_UNAVAILABLE is a valid verified outcome.' },
+  cost: { estimatedMs: 30_000, timeoutMs: 90_000 },
+  verification: {
+    description: 'The goal_model row exists with typed knowledge and honest aiStatus.',
+    observation: dbObservation('sql:heidi_events:id={goalModelId}', ['id', 'event_type', 'payload']),
+    conditions: [
+      { field: 'found', operator: 'eq', expected: true },
+      { field: 'event_type', operator: 'eq', expected: 'goal_model' },
+      { field: 'payload.aiStatus', operator: 'matches', expected: '^(ok|AI_UNAVAILABLE)$' },
+    ],
+    onFailure: 'retry', maxRetries: 1, requiresHumanConfirmation: false,
+  },
+});
+
+export const OPS_PLAN = defineContract({
+  identity: {
+    id: 'ops.plan', version: '1.0.0', owner: OWNER, provider: 'cognitive_core',
+    description: 'Compose a validated ordered plan over existing capabilities; gated steps never execute',
+  },
+  effects: [dbEffect('heidi_events', 'create'), dbEffect('heidi_goals', 'create')],
+  reversibility: { kind: 'none', windowMs: 0, caveat: 'Append-only plan event; child goals are governed goals, cancellable by policy.' },
+  cost: { estimatedMs: 30_000, timeoutMs: 120_000 },
+  verification: {
+    description: 'The plan event exists with only executable steps dispatched as child goals.',
+    observation: dbObservation('sql:heidi_events:id={planEventId}', ['id', 'event_type', 'payload']),
+    conditions: [
+      { field: 'found', operator: 'eq', expected: true },
+      { field: 'event_type', operator: 'eq', expected: 'plan' },
+    ],
+    onFailure: 'retry', maxRetries: 1, requiresHumanConfirmation: false,
+  },
+});
+
+export const OPS_WORLD_ASSERT = defineContract({
+  identity: {
+    id: 'ops.world_assert', version: '1.0.0', owner: OWNER, provider: 'cognitive_core',
+    description: 'Persist a typed world-model assertion with provenance',
+  },
+  effects: [dbEffect('heidi_events', 'create')],
+  reversibility: { kind: 'none', windowMs: 0, caveat: 'Append-only assertions; contradiction revises, never erases.' },
+  cost: { estimatedMs: 5_000, timeoutMs: 15_000 },
+  verification: {
+    description: 'The world_assertion row exists.',
+    observation: dbObservation('sql:heidi_events:id={assertionId}', ['id', 'event_type', 'payload']),
+    conditions: [
+      { field: 'found', operator: 'eq', expected: true },
+      { field: 'event_type', operator: 'eq', expected: 'world_assertion' },
+    ],
+    onFailure: 'retry', maxRetries: 1, requiresHumanConfirmation: false,
+  },
+});
+
+export const OPS_MODEL_CATALOG = defineContract({
+  identity: {
+    id: 'ops.model_catalog', version: '1.0.0', owner: OWNER, provider: 'cognitive_core',
+    description: 'Discover and persist the local Ollama model catalog',
+  },
+  effects: [dbEffect('heidi_events', 'create')],
+  reversibility: { kind: 'none', windowMs: 0, caveat: 'Append-only catalog; empty or unreachable is an honest failure.' },
+  cost: { estimatedMs: 5_000, timeoutMs: 15_000 },
+  verification: {
+    description: 'The model_catalog row exists.',
+    observation: dbObservation('sql:heidi_events:id={eventId}', ['id', 'event_type', 'payload']),
+    conditions: [
+      { field: 'found', operator: 'eq', expected: true },
+      { field: 'event_type', operator: 'eq', expected: 'model_catalog' },
+    ],
+    onFailure: 'retry', maxRetries: 1, requiresHumanConfirmation: false,
+  },
+});
+
+export const OPS_BUSINESS_CONTEXT = defineContract({
+  identity: {
+    id: 'ops.business_context', version: '1.0.0', owner: OWNER, provider: 'cognitive_core',
+    description: 'Retrieve the seeded business fact store with provenance',
+  },
+  effects: [dbEffect('business_facts', 'create')],
+  reversibility: { kind: 'none', windowMs: 0, caveat: 'Idempotent seed/refresh; derived facts recompute from live tables.' },
+  cost: { estimatedMs: 5_000, timeoutMs: 30_000 },
+  verification: {
+    description: 'A durable business_context_read event exists with a positive fact count — independent of the executor claim.',
+    observation: dbObservation('sql:heidi_events:id={eventId}', ['id', 'event_type', 'payload']),
+    conditions: [
+      { field: 'found', operator: 'eq', expected: true },
+      { field: 'event_type', operator: 'eq', expected: 'business_context_read' },
+    ],
+    onFailure: 'retry', maxRetries: 1, requiresHumanConfirmation: false,
+  },
+});
+
 export const TOOL_FETCH_DATA = readContract({
   id: 'tool.fetch_data',
   provider: 'action_executor',
@@ -598,6 +820,376 @@ export const WORLD_SYNC = defineContract({
   },
 });
 
+export const OPS_EXECUTIVE_DIAGNOSTIC = defineContract({
+  identity: {
+    id: 'ops.executive_diagnostic',
+    version: '1.0.0',
+    owner: OWNER,
+    provider: 'cognitive_core',
+    description: 'Collect the multi-dimension self-diagnostic and persist it as an executive_diagnostic event',
+  },
+  effects: [dbEffect('heidi_events', 'create')],
+  reversibility: {
+    kind: 'none',
+    windowMs: 0,
+    caveat:
+      'The diagnostic row is an append-only ledger entry. The correct ' +
+      'retraction for a bad report is a later, truthful report — the record ' +
+      'itself must not be rewritten.',
+  },
+  cost: { estimatedMs: 8_000, timeoutMs: 45_000 },
+  verification: {
+    description:
+      'The diagnostic event row exists in heidi_events and carries a verdict. ' +
+      'The report contents are deliberately NOT trusted from the executor — ' +
+      'the row is re-read by id.',
+    observation: dbObservation('sql:heidi_events:id={reportId}', ['id', 'event_type', 'verdict']),
+    conditions: [
+      { field: 'found', operator: 'eq', expected: true },
+      { field: 'event_type', operator: 'eq', expected: 'executive_diagnostic' },
+      { field: 'verdict', operator: 'not_null', expected: null },
+    ],
+    onFailure: 'escalate',
+    maxRetries: 1,
+    requiresHumanConfirmation: false,
+  },
+});
+
+export const OPS_DIAGNOSTIC_FOLLOWUP = defineContract({
+  identity: {
+    id: 'ops.diagnostic_followup',
+    version: '1.0.0',
+    owner: OWNER,
+    provider: 'cognitive_core',
+    description: 'Investigate non-HEALTHY diagnostic dimensions and persist a findings report',
+  },
+  effects: [dbEffect('heidi_events', 'create')],
+  reversibility: {
+    kind: 'none',
+    windowMs: 0,
+    caveat:
+      'The findings row is an append-only ledger entry. A wrong finding is ' +
+      'corrected by a later truthful investigation, never by rewriting the ' +
+      'record.',
+  },
+  cost: { estimatedMs: 8_000, timeoutMs: 45_000 },
+  verification: {
+    description:
+      'The follow-up report row exists in heidi_events and carries a verdict ' +
+      'in the 5-state diagnostic vocabulary — re-read by id, not trusted from ' +
+      'the executor.',
+    observation: dbObservation('sql:heidi_events:id={reportId}', ['id', 'event_type', 'verdict']),
+    conditions: [
+      { field: 'found', operator: 'eq', expected: true },
+      { field: 'event_type', operator: 'eq', expected: 'diagnostic_followup' },
+      {
+        field: 'verdict',
+        operator: 'matches',
+        expected: '^(HEALTHY|DEGRADED|BLOCKED|FAILED|UNKNOWN)$',
+      },
+    ],
+    onFailure: 'escalate',
+    maxRetries: 1,
+    requiresHumanConfirmation: false,
+  },
+});
+
+export const OPS_INVESTIGATE_FINDING = defineContract({
+  identity: {
+    id: 'ops.investigate_finding',
+    version: '1.0.0',
+    owner: OWNER,
+    provider: 'cognitive_core',
+    description: 'Run a bounded investigation of one diagnostic dimension and persist the finding',
+  },
+  effects: [dbEffect('heidi_events', 'create')],
+  reversibility: {
+    kind: 'none',
+    windowMs: 0,
+    caveat:
+      'The investigation row is an append-only ledger entry. A wrong ' +
+      'investigation is corrected by a later truthful one, never by ' +
+      'rewriting the record.',
+  },
+  cost: { estimatedMs: 8_000, timeoutMs: 45_000 },
+  verification: {
+    description:
+      'The investigation row exists in heidi_events and carries a verdict ' +
+      'in the 5-state diagnostic vocabulary — re-read by id.',
+    observation: dbObservation('sql:heidi_events:id={reportId}', ['id', 'event_type', 'verdict']),
+    conditions: [
+      { field: 'found', operator: 'eq', expected: true },
+      { field: 'event_type', operator: 'eq', expected: 'investigation' },
+      {
+        field: 'verdict',
+        operator: 'matches',
+        expected: '^(HEALTHY|DEGRADED|BLOCKED|FAILED|UNKNOWN)$',
+      },
+    ],
+    onFailure: 'escalate',
+    maxRetries: 1,
+    requiresHumanConfirmation: false,
+  },
+});
+
+export const OPS_RECONCILE_DEPLOYMENT = defineContract({
+  identity: {
+    id: 'ops.reconcile_deployment',
+    version: '1.0.0',
+    owner: OWNER,
+    provider: 'cognitive_core',
+    description: 'Verify the PM2-believed daemon is the process actually executing cycles',
+  },
+  effects: [dbEffect('heidi_events', 'create')],
+  reversibility: {
+    kind: 'none',
+    windowMs: 0,
+    caveat: 'Append-only observation record; observational capability.',
+  },
+  cost: { estimatedMs: 10_000, timeoutMs: 45_000 },
+  verification: {
+    description:
+      'The reconciliation row exists in heidi_events with a 5-state ' +
+      'verdict and a deploymentIdentity field — re-read by id.',
+    observation: dbObservation('sql:heidi_events:id={reportId}', ['id', 'event_type', 'verdict', 'payload']),
+    conditions: [
+      { field: 'found', operator: 'eq', expected: true },
+      { field: 'event_type', operator: 'eq', expected: 'deployment_reconciliation' },
+      {
+        field: 'verdict',
+        operator: 'matches',
+        expected: '^(HEALTHY|DEGRADED|BLOCKED|FAILED|UNKNOWN)$',
+      },
+      {
+        field: 'payload.deploymentIdentity',
+        operator: 'matches',
+        expected: '^(VALID|INVALID|UNPROVEN)$',
+      },
+    ],
+    onFailure: 'escalate',
+    maxRetries: 1,
+    requiresHumanConfirmation: false,
+  },
+});
+
+export const OPS_RECOVER_DAEMON_R0 = defineContract({
+  identity: {
+    id: 'ops.recover_daemon_r0',
+    version: '1.0.0',
+    owner: OWNER,
+    provider: 'cognitive_core',
+    description: 'Bounded R0 self-repair: restart an unavailable daemon via PM2, then prove identity via reconciliation',
+  },
+  effects: [
+    dbEffect('heidi_events', 'create'),
+    {
+      verb: 'restart',
+      resourceKind: 'process',
+      resourcePatterns: ['pm2:hydi-daemon'],
+      worstCaseScope: 'single_resource',
+      crossesTrustBoundary: false,
+    },
+  ],
+  reversibility: {
+    kind: 'none',
+    windowMs: 0,
+    caveat:
+      'A restart is not undoable. The R0 class is limited to "daemon ' +
+      'unavailable" — restarting a dead runtime cannot damage a live one.',
+  },
+  cost: { estimatedMs: 60_000, timeoutMs: 120_000 },
+  verification: {
+    description:
+      'The recovery_attempt row exists in heidi_events carrying the ' +
+      'recovery state — re-read by id.',
+    observation: dbObservation('sql:heidi_events:id={reportId}', ['id', 'event_type', 'verdict', 'payload']),
+    conditions: [
+      { field: 'found', operator: 'eq', expected: true },
+      { field: 'event_type', operator: 'eq', expected: 'recovery_attempt' },
+      {
+        field: 'verdict',
+        operator: 'matches',
+        expected: '^(HEALTHY|DEGRADED|BLOCKED|FAILED|UNKNOWN)$',
+      },
+      {
+        field: 'payload.recoveryId',
+        operator: 'not_null',
+        expected: null,
+      },
+    ],
+    onFailure: 'escalate',
+    maxRetries: 1,
+    requiresHumanConfirmation: false,
+  },
+});
+
+export const OPS_COO_STATE = defineContract({
+  identity: {
+    id: 'ops.coo_state',
+    version: '1.0.0',
+    owner: OWNER,
+    provider: 'cognitive_core',
+    description: 'Collect the authoritative cross-domain COO state and derive the next authorized action',
+  },
+  effects: [dbEffect('heidi_events', 'create')],
+  reversibility: {
+    kind: 'none',
+    windowMs: 0,
+    caveat: 'Append-only state snapshot; observational capability.',
+  },
+  cost: { estimatedMs: 15_000, timeoutMs: 60_000 },
+  verification: {
+    description:
+      'The coo_state row exists in heidi_events carrying a 5-state ' +
+      'verdict and a nextAction — re-read by id.',
+    observation: dbObservation('sql:heidi_events:id={reportId}', ['id', 'event_type', 'verdict', 'payload']),
+    conditions: [
+      { field: 'found', operator: 'eq', expected: true },
+      { field: 'event_type', operator: 'eq', expected: 'coo_state' },
+      {
+        field: 'verdict',
+        operator: 'matches',
+        expected: '^(HEALTHY|DEGRADED|BLOCKED|FAILED|UNKNOWN)$',
+      },
+      { field: 'payload.nextAction.kind', operator: 'matches', expected: '^(capability|human|none)$' },
+      { field: 'payload.deployment.identity', operator: 'matches', expected: '^(VALID|INVALID|UNPROVEN)$' },
+    ],
+    onFailure: 'escalate',
+    maxRetries: 1,
+    requiresHumanConfirmation: false,
+  },
+});
+
+export const OPS_ACK_HUMAN_ACTION = defineContract({
+  identity: {
+    id: 'ops.acknowledge_human_action',
+    version: '1.0.0',
+    owner: OWNER,
+    provider: 'cognitive_core',
+    description: 'Durably record a human acknowledgement for one queue item — no execution, no authorization',
+  },
+  effects: [dbEffect('heidi_events', 'create')],
+  reversibility: {
+    kind: 'none',
+    windowMs: 0,
+    caveat: 'Append-only acknowledgement record; does not mutate the source item.',
+  },
+  cost: { estimatedMs: 5_000, timeoutMs: 30_000 },
+  verification: {
+    description:
+      'The human_action_ack row exists in heidi_events — re-read by id.',
+    observation: dbObservation('sql:heidi_events:id={acknowledgementId}', ['id', 'event_type', 'verdict', 'payload']),
+    conditions: [
+      { field: 'found', operator: 'eq', expected: true },
+      { field: 'event_type', operator: 'eq', expected: 'human_action_ack' },
+      { field: 'verdict', operator: 'eq', expected: 'ACKNOWLEDGED' },
+    ],
+    onFailure: 'escalate',
+    maxRetries: 1,
+    requiresHumanConfirmation: false,
+  },
+});
+
+export const OPS_AGENT_CONTROL = defineContract({
+  identity: {
+    id: 'ops.agent_control', version: '1.0.0', owner: OWNER, provider: 'cognitive_core',
+    description: 'Governed agent lifecycle control (stop/retry) with durable audit',
+  },
+  effects: [dbEffect('heidi_events', 'create')],
+  reversibility: { kind: 'none', windowMs: 0, caveat: 'Append-only audit record; stop is a durable flag, retry re-runs a bounded worker.' },
+  cost: { estimatedMs: 5_000, timeoutMs: 30_000 },
+  verification: {
+    description: 'The agent_control audit row exists — re-read by event id.',
+    observation: dbObservation('sql:heidi_events:id={controlEventId}', ['id', 'event_type', 'payload']),
+    conditions: [
+      { field: 'found', operator: 'eq', expected: true },
+      { field: 'event_type', operator: 'eq', expected: 'agent_control' },
+    ],
+    onFailure: 'escalate', maxRetries: 1, requiresHumanConfirmation: false,
+  },
+});
+
+export const OPS_RESOLVE_HUMAN_ACTION = defineContract({
+  identity: {
+    id: 'ops.resolve_human_action', version: '1.0.0', owner: OWNER, provider: 'cognitive_core',
+    description: 'Governed approve/reject of a queue item — durable resolution record',
+  },
+  effects: [dbEffect('heidi_events', 'create'), dbEffect('operator_escalations', 'update'), dbEffect('human_intervention_requests', 'update')],
+  reversibility: { kind: 'none', windowMs: 0, caveat: 'Resolution is durable and recorded; not a deletion.' },
+  cost: { estimatedMs: 5_000, timeoutMs: 30_000 },
+  verification: {
+    description: 'The human_action_resolution row exists — re-read by event id.',
+    observation: dbObservation('sql:heidi_events:id={resolutionEventId}', ['id', 'event_type', 'verdict']),
+    conditions: [
+      { field: 'found', operator: 'eq', expected: true },
+      { field: 'event_type', operator: 'eq', expected: 'human_action_resolution' },
+      { field: 'verdict', operator: 'eq', expected: 'RESOLVED' },
+    ],
+    onFailure: 'escalate', maxRetries: 1, requiresHumanConfirmation: false,
+  },
+});
+
+export const OPS_AGENT_MISSION = defineContract({
+  identity: {
+    id: 'ops.agent_mission',
+    version: '1.0.0',
+    owner: OWNER,
+    provider: 'cognitive_core',
+    description: 'Create a bounded multi-agent mission and spawn governed in-process workers',
+  },
+  effects: [dbEffect('heidi_events', 'create')],
+  reversibility: {
+    kind: 'none',
+    windowMs: 0,
+    caveat: 'Append-only mission/agent event records; agents run bounded in-process work.',
+  },
+  cost: { estimatedMs: 10_000, timeoutMs: 60_000 },
+  verification: {
+    description:
+      'The agent_mission row exists in heidi_events carrying the parent missionId — re-read by event id.',
+    observation: dbObservation('sql:heidi_events:id={missionEventId}', ['id', 'event_type', 'payload']),
+    conditions: [
+      { field: 'found', operator: 'eq', expected: true },
+      { field: 'event_type', operator: 'eq', expected: 'agent_mission' },
+      // Any legal mission status verifies — the contract confirms the
+      // durable record exists, not that the mission is still pending.
+      // Idempotent-collapse dispatches re-observe the original row.
+      { field: 'payload.status', operator: 'matches', expected: '^(PENDING|RUNNING|COMPLETED|FAILED|STOPPED|BLOCKED)$' },
+    ],
+    onFailure: 'escalate',
+    maxRetries: 1,
+    requiresHumanConfirmation: false,
+  },
+});
+
+export const OPS_AGENT_SUPERVISE = defineContract({
+  identity: {
+    id: 'ops.agent_supervise',
+    version: '1.0.0',
+    owner: OWNER,
+    provider: 'cognitive_core',
+    description: 'One bounded supervisor pass over the agent control plane — transitions, retries, escalation, reconciliation',
+  },
+  effects: [dbEffect('heidi_events', 'create'), dbEffect('operator_escalations', 'create')],
+  reversibility: {
+    kind: 'none',
+    windowMs: 0,
+    caveat: 'Append-only supervision record; escalations are human-queue items, not actions.',
+  },
+  cost: { estimatedMs: 10_000, timeoutMs: 60_000 },
+  verification: {
+    description: 'The agent_supervision summary row exists in heidi_events — re-read by event id.',
+    observation: dbObservation('sql:heidi_events:id={supervisionEventId}', ['id', 'event_type', 'payload']),
+    conditions: [
+      { field: 'found', operator: 'eq', expected: true },
+      { field: 'event_type', operator: 'eq', expected: 'agent_supervision' },
+    ],
+    onFailure: 'escalate',
+    maxRetries: 1,
+    requiresHumanConfirmation: false,
+  },
+});
+
 // ---------------------------------------------------------------------------
 // Writes reached only from inside revenue.run_cycle
 // ---------------------------------------------------------------------------
@@ -855,6 +1447,28 @@ export const EXTENDED_CONTRACTS: CapabilityContract[] = [
   REVENUE_START_PROVISIONING,
   REVENUE_UPDATE_HEALTH_STATUS,
   WORLD_SYNC,
+  OPS_EXECUTIVE_DIAGNOSTIC,
+  OPS_DIAGNOSTIC_FOLLOWUP,
+  OPS_INVESTIGATE_FINDING,
+  OPS_RECONCILE_DEPLOYMENT,
+  OPS_RECOVER_DAEMON_R0,
+  OPS_COO_STATE,
+  OPS_ACK_HUMAN_ACTION,
+  OPS_AGENT_MISSION,
+  OPS_AGENT_SUPERVISE,
+  OPS_AGENT_CONTROL,
+  OPS_RESOLVE_HUMAN_ACTION,
+  OPS_DEV_OBSERVE,
+  OPS_DEV_INVESTIGATE,
+  OPS_DEV_AUTHOR,
+  OPS_DEV_PATCH,
+  OPS_OPP_VERDICT,
+  OPS_OPP_EVIDENCE,
+  OPS_BUSINESS_CONTEXT,
+  OPS_GOAL_INTERPRET,
+  OPS_PLAN,
+  OPS_WORLD_ASSERT,
+  OPS_MODEL_CATALOG,
   // external / system-affecting
   TOOL_SEND_EMAIL,
   SELF_RUN_SELF_REPAIR,

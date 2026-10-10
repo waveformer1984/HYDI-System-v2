@@ -21,11 +21,20 @@ export type OfferId =
   | 'ai_website_monthly'
   | 'lead_gen_setup'
   | 'lead_gen_monthly'
-  | 'protoforge_model_prep';
+  | 'protoforge_model_prep'
+  | 'rezonate_song'
+  // Ursula portfolio services — exist in the catalog only after a
+  // recorded commercial approval materializes them (OfferCatalog
+  // overlay), never by silent default.
+  | 'checkpoint_audit'
+  | 'rezonette_track'
+  | 'porch_wise_assessment'
+  | 'blame_games_session'
+  | 'proto_iy_project';
 
 export type BillingInterval = 'one_time' | 'monthly' | 'annual';
 
-export type OfferCategory = 'ai_operations' | 'website_deployment' | 'lead_generation' | 'protoforge';
+export type OfferCategory = 'ai_operations' | 'website_deployment' | 'lead_generation' | 'protoforge' | 'rezonate' | 'service_audit' | 'ursula_service';
 
 export interface CommercialOffer {
   offerId: OfferId;

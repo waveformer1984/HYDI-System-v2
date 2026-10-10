@@ -91,6 +91,23 @@ interface ChatMessage {
 
 type Tab = 'status' | 'audit' | 'autonomy' | 'memory' | 'chat' | 'proxy'
 
+// Ops-gated routes (/api/audit, /api/credentials) require a service token —
+// same localStorage key + HMAC scheme as pages/workspace.tsx.
+const SERVICE_SECRET_KEY = 'hydi.serviceSecret';
+async function mintServiceToken(secret: string): Promise<string> {
+  const ts = Date.now().toString();
+  const requestId = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2);
+  const payload = `${ts}:${requestId}:heidi-dashboard`;
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const sigBuf = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(payload));
+  const sig = [...new Uint8Array(sigBuf)].map(b => b.toString(16).padStart(2, '0')).join('');
+  return `${ts}.${requestId}.heidi-dashboard.${sig}`;
+}
+async function opsHeaders(): Promise<Record<string, string>> {
+  const secret = typeof window !== 'undefined' ? localStorage.getItem(SERVICE_SECRET_KEY) : null;
+  return secret ? { 'x-hydi-service-token': await mintServiceToken(secret) } : {};
+}
+
 // ─── Page ───────────────────────────────────────────────────────────────
 
 export default function OpsPage() {
@@ -116,7 +133,7 @@ export default function OpsPage() {
 
   const fetchAudit = useCallback(async (source: 'heidi_events' | 'daemon') => {
     try {
-      const res = await fetch(`/api/audit?source=${source}&limit=30`)
+      const res = await fetch(`/api/audit?source=${source}&limit=30`, { headers: await opsHeaders() })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data = await res.json()
       setAuditEntries(data.entries || [])
@@ -514,7 +531,7 @@ function CredentialRunbooks() {
     let mounted = true
     const fetchCreds = async () => {
       try {
-        const res = await fetch('/api/credentials')
+        const res = await fetch('/api/credentials', { headers: await opsHeaders() })
         if (res.ok) {
           const data = await res.json()
           if (mounted) setCredentials(data.credentials || [])

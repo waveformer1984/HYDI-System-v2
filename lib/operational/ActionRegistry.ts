@@ -64,74 +64,98 @@ export const DEFAULT_ACTION_REGISTRY: ActionRegistryEntry[] = [
   // --- Process restart actions (R1, autonomous) ---
   entry('restart.protoforge-core', 'restart_process', 'protoforge-core',
     'Restart the ProtoForge core process from boot.config.json',
-    { riskLevel: 'R1', authorizationClass: 'autonomous', reversibility: 'reversible',
-      timeoutMs: 30000, expectedFrom: 'UNAVAILABLE', expectedTo: 'HEALTHY' }),
+    {
+      riskLevel: 'R1', authorizationClass: 'autonomous', reversibility: 'reversible',
+      timeoutMs: 30000, expectedFrom: 'UNAVAILABLE', expectedTo: 'HEALTHY'
+    }),
 
   entry('restart.heidi-web', 'restart_process', 'heidi-web',
     'Restart the Heidi Web (Next.js) process from boot.config.json',
-    { riskLevel: 'R1', authorizationClass: 'autonomous', reversibility: 'reversible',
-      timeoutMs: 60000, expectedFrom: 'UNAVAILABLE', expectedTo: 'HEALTHY' }),
+    {
+      riskLevel: 'R1', authorizationClass: 'autonomous', reversibility: 'reversible',
+      timeoutMs: 60000, expectedFrom: 'UNAVAILABLE', expectedTo: 'HEALTHY'
+    }),
 
   entry('restart.heidi-mobile-chat', 'restart_process', 'heidi-mobile-chat',
     'Restart the Heidi Mobile Chat process from boot.config.json',
-    { riskLevel: 'R1', authorizationClass: 'autonomous', reversibility: 'reversible',
-      timeoutMs: 30000, expectedFrom: 'UNAVAILABLE', expectedTo: 'HEALTHY' }),
+    {
+      riskLevel: 'R1', authorizationClass: 'autonomous', reversibility: 'reversible',
+      timeoutMs: 30000, expectedFrom: 'UNAVAILABLE', expectedTo: 'HEALTHY'
+    }),
 
   // --- Container restart actions (R2, policy_authorized) ---
   entry('restart.supabase_db', 'restart_container', 'supabase_db',
     'Restart the local Supabase PostgreSQL database container',
-    { riskLevel: 'R2', authorizationClass: 'policy_authorized', reversibility: 'reversible',
+    {
+      riskLevel: 'R2', authorizationClass: 'policy_authorized', reversibility: 'reversible',
       timeoutMs: 30000, expectedFrom: 'UNAVAILABLE', expectedTo: 'HEALTHY',
-      verificationStrategy: 'database write/read/delete proof + port 54322 listening' }),
+      verificationStrategy: 'database write/read/delete proof + port 54322 listening'
+    }),
 
   entry('restart.supabase_rest', 'restart_container', 'supabase_rest',
     'Restart the local Supabase REST API (PostgREST) container',
-    { riskLevel: 'R2', authorizationClass: 'policy_authorized', reversibility: 'reversible',
-      timeoutMs: 20000, expectedFrom: 'UNAVAILABLE', expectedTo: 'HEALTHY' }),
+    {
+      riskLevel: 'R2', authorizationClass: 'policy_authorized', reversibility: 'reversible',
+      timeoutMs: 20000, expectedFrom: 'UNAVAILABLE', expectedTo: 'HEALTHY'
+    }),
 
   entry('restart.supabase_auth', 'restart_container', 'supabase_auth',
     'Restart the local Supabase Auth (GoTrue) container',
-    { riskLevel: 'R2', authorizationClass: 'policy_authorized', reversibility: 'reversible',
-      timeoutMs: 20000, expectedFrom: 'UNAVAILABLE', expectedTo: 'HEALTHY' }),
+    {
+      riskLevel: 'R2', authorizationClass: 'policy_authorized', reversibility: 'reversible',
+      timeoutMs: 20000, expectedFrom: 'UNAVAILABLE', expectedTo: 'HEALTHY'
+    }),
 
   entry('restart.supabase_realtime', 'restart_container', 'supabase_realtime',
     'Restart the local Supabase Realtime container',
-    { riskLevel: 'R2', authorizationClass: 'policy_authorized', reversibility: 'reversible',
-      timeoutMs: 20000, expectedFrom: 'UNAVAILABLE', expectedTo: 'HEALTHY' }),
+    {
+      riskLevel: 'R2', authorizationClass: 'policy_authorized', reversibility: 'reversible',
+      timeoutMs: 20000, expectedFrom: 'UNAVAILABLE', expectedTo: 'HEALTHY'
+    }),
 
   entry('restart.supabase_kong', 'restart_container', 'supabase_kong',
     'Restart the local Supabase Kong API gateway container',
-    { riskLevel: 'R2', authorizationClass: 'policy_authorized', reversibility: 'reversible',
-      timeoutMs: 20000, expectedFrom: 'UNAVAILABLE', expectedTo: 'HEALTHY' }),
+    {
+      riskLevel: 'R2', authorizationClass: 'policy_authorized', reversibility: 'reversible',
+      timeoutMs: 20000, expectedFrom: 'UNAVAILABLE', expectedTo: 'HEALTHY'
+    }),
 
   // --- Ollama restart (R2, policy_authorized) ---
   entry('restart.ollama', 'restart_ollama', 'ollama',
     'Restart the local Ollama AI service',
-    { riskLevel: 'R2', authorizationClass: 'policy_authorized', reversibility: 'reversible',
+    {
+      riskLevel: 'R2', authorizationClass: 'policy_authorized', reversibility: 'reversible',
       timeoutMs: 15000, expectedFrom: 'UNAVAILABLE', expectedTo: 'HEALTHY',
-      verificationStrategy: 'Ollama /api/tags responds with model list' }),
+      verificationStrategy: 'Ollama /api/tags responds with model list'
+    }),
 
   // --- Database recovery (R2, policy_authorized) ---
   entry('recover.database', 'recover_database', 'database',
-    'Recover database connectivity by restarting local Supabase DB container',
-    { riskLevel: 'R2', authorizationClass: 'policy_authorized', reversibility: 'reversible',
+    'Recover database connectivity: restart Kong gateway first (the layer the health probe measures), then the DB container only if the gateway still cannot serve REST',
+    {
+      riskLevel: 'R2', authorizationClass: 'policy_authorized', reversibility: 'reversible',
       timeoutMs: 30000, expectedFrom: 'UNAVAILABLE', expectedTo: 'HEALTHY',
-      verificationStrategy: 'database write/read/delete proof' }),
+      verificationStrategy: 'database write/read/delete proof'
+    }),
 
   // --- Bridge restart (R1-R3 depending on bridge) ---
   entry('restart.bridge', 'restart_bridge', 'bridge',
     'Restart a bridge component (if it is a registered process module)',
-    { riskLevel: 'R2', authorizationClass: 'policy_authorized', reversibility: 'reversible',
+    {
+      riskLevel: 'R2', authorizationClass: 'policy_authorized', reversibility: 'reversible',
       timeoutMs: 30000, expectedFrom: 'UNAVAILABLE', expectedTo: 'HEALTHY',
-      verificationStrategy: 'bridge functional probe succeeds' }),
+      verificationStrategy: 'bridge functional probe succeeds'
+    }),
 
   // --- Escalation (R0, always available) ---
   entry('escalate.default', 'escalate', '*',
     'Escalate to human operator when recovery is exhausted or unsafe',
-    { riskLevel: 'R0', authorizationClass: 'autonomous', reversibility: 'reversible',
+    {
+      riskLevel: 'R0', authorizationClass: 'autonomous', reversibility: 'reversible',
       timeoutMs: 1000, maxAttempts: 1, cooldownMs: 0,
       expectedFrom: 'FAILED', expectedTo: 'ESCALATION_REQUIRED',
-      verificationStrategy: 'escalation package created with evidence and recommended action' }),
+      verificationStrategy: 'escalation package created with evidence and recommended action'
+    }),
 ];
 
 /**

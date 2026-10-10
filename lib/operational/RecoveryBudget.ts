@@ -26,6 +26,12 @@ const DEFAULT_BUDGET: BudgetConfig = {
   maxAffectedComponents: 10,
   circuitBreakerThreshold: 3,
   circuitBreakerCooldownMs: 300000, // 5 minutes
+  retryEpisodeMs: 3600000, // 1 hour — a quiet failure episode lapses and the
+  // retry budget renews. Without this the durable retry count was a lifetime
+  // budget: exhausted (e.g. 4/3) meant permanently refused, because the only
+  // reset path was a successful recovery that the count itself was blocking.
+  // Measured live 2026-09-20: protoforge-core could not recover after last
+  // night's storm burned its budget — refuse → no attempt → no reset → deadlock.
 };
 
 export class RecoveryBudgetManager {
@@ -33,13 +39,16 @@ export class RecoveryBudgetManager {
   private stateModel: SystemStateModel;
   private breakers = new Map<string, CircuitBreakerState>();
   private incidentActionCounts = new Map<string, number>(); // incidentId → count
-  private componentRetryCounts = new Map<string, number>(); // component → count (per incident)
+  private componentRetryCounts = new Map<string, number>(); // component → count (per episode)
+  private componentLastAttemptAt = new Map<string, number>(); // component → ms epoch of last attempt
   private durableStore: DurableBudgetStore | null;
+  private now: () => number;
 
-  constructor(stateModel: SystemStateModel, config?: Partial<BudgetConfig>, durableStore?: DurableBudgetStore) {
+  constructor(stateModel: SystemStateModel, config?: Partial<BudgetConfig>, durableStore?: DurableBudgetStore, now?: () => number) {
     this.stateModel = stateModel;
     this.config = { ...DEFAULT_BUDGET, ...config };
     this.durableStore = durableStore ?? null;
+    this.now = now ?? Date.now;
 
     // Phase 7 Fix: Restore circuit breaker state from durable storage on construction.
     // This prevents a watchdog restart from silently resetting the budget.
@@ -58,12 +67,57 @@ export class RecoveryBudgetManager {
             totalSuccesses: durable.totalSuccesses,
           });
         }
-        // Restore retry counts
+        // Restore retry counts — but only while the failure episode is still
+        // live. lastFailureAt older than retryEpisodeMs means the episode is
+        // over (quiet for a full window — the escalation was acted on or the
+        // fault cleared), so the budget renews via an audited expiry rather
+        // than deadlock. A positive count with NO timestamp cannot be proven
+        // expired and is restored as-is (fail closed).
         if (durable.retryCount > 0) {
-          this.componentRetryCounts.set(durable.component, durable.retryCount);
+          const lastAt = durable.lastFailureAt ? new Date(durable.lastFailureAt).getTime() : NaN;
+          if (Number.isFinite(lastAt)) {
+            if (this.now() - lastAt < this.config.retryEpisodeMs) {
+              this.componentRetryCounts.set(durable.component, durable.retryCount);
+              this.componentLastAttemptAt.set(durable.component, lastAt);
+            } else {
+              this.expireEpisode(durable.component, durable.retryCount, durable.lastFailureAt);
+            }
+          } else {
+            this.componentRetryCounts.set(durable.component, durable.retryCount);
+          }
         }
       }
     }
+  }
+
+  /**
+   * Expire a spent retry episode: the component has been quiet for a full
+   * retryEpisodeMs window, so the failure episode is over and the budget
+   * renews. This is an audited transition — a durable reset record is
+   * appended (the JSONL history is preserved, not rewritten) and a
+   * budget_episode_expired event records the prior count and anchor time.
+   */
+  private expireEpisode(component: string, previousCount: number, lastAttemptAt: string | null): void {
+    this.componentRetryCounts.delete(component);
+    this.componentLastAttemptAt.delete(component);
+    if (this.durableStore) {
+      this.durableStore.updateState(component, { retryCount: 0 });
+    }
+    this.stateModel.logEvent({
+      id: randomUUID(),
+      timestamp: new Date(this.now()).toISOString(),
+      type: 'budget_episode_expired',
+      component,
+      action: 'budget_window',
+      actionResult: 'success',
+      detail: {
+        previousRetryCount: previousCount,
+        lastAttemptAt,
+        expiredAt: new Date(this.now()).toISOString(),
+        retryEpisodeMs: this.config.retryEpisodeMs,
+        reason: 'retry episode lapsed — budget renewed after quiet window',
+      },
+    });
   }
 
   /**
@@ -90,7 +144,7 @@ export class RecoveryBudgetManager {
     // Check circuit breaker
     const breaker = this.breakers.get(component);
     if (breaker?.tripped) {
-      const now = Date.now();
+      const now = this.now();
       const trippedAt = breaker.trippedAt ? new Date(breaker.trippedAt).getTime() : 0;
       if (now - trippedAt < this.config.circuitBreakerCooldownMs) {
         return {
@@ -104,7 +158,16 @@ export class RecoveryBudgetManager {
       breaker.consecutiveFailures = 0;
     }
 
-    // Check per-component retry budget
+    // Check per-component retry budget — but first let a lapsed episode
+    // expire. This is the same transition the constructor applies at restore;
+    // here it covers long-running processes whose episode lapses mid-run.
+    const liveRetries = this.componentRetryCounts.get(component) ?? 0;
+    if (liveRetries > 0) {
+      const lastAt = this.componentLastAttemptAt.get(component);
+      if (lastAt !== undefined && this.now() - lastAt >= this.config.retryEpisodeMs) {
+        this.expireEpisode(component, liveRetries, new Date(lastAt).toISOString());
+      }
+    }
     const componentRetries = this.componentRetryCounts.get(component) ?? 0;
     if (componentRetries >= this.config.maxRetriesPerComponent) {
       return {
@@ -129,9 +192,12 @@ export class RecoveryBudgetManager {
    * Record a recovery attempt result.
    */
   recordAttempt(component: string, incidentId: string, success: boolean): void {
-    // Increment counters
+    // Increment counters — and stamp the attempt time. The episode window is
+    // measured from the last attempt, so a retried-then-quiet component still
+    // expires; a continuously flapping one never lapses.
     const componentRetries = this.componentRetryCounts.get(component) ?? 0;
     this.componentRetryCounts.set(component, componentRetries + 1);
+    this.componentLastAttemptAt.set(component, this.now());
 
     const incidentActions = this.incidentActionCounts.get(incidentId) ?? 0;
     this.incidentActionCounts.set(incidentId, incidentActions + 1);
@@ -157,12 +223,12 @@ export class RecoveryBudgetManager {
       breaker.totalSuccesses++;
     } else {
       breaker.consecutiveFailures++;
-      breaker.lastFailureAt = new Date().toISOString();
+      breaker.lastFailureAt = new Date(this.now()).toISOString();
 
       // Trip the circuit breaker if threshold reached
       if (breaker.consecutiveFailures >= this.config.circuitBreakerThreshold) {
         breaker.tripped = true;
-        breaker.trippedAt = new Date().toISOString();
+        breaker.trippedAt = new Date(this.now()).toISOString();
 
         this.stateModel.logEvent({
           id: randomUUID(),
@@ -224,9 +290,41 @@ export class RecoveryBudgetManager {
 
   /**
    * Check if the circuit breaker is tripped for a component.
+   *
+   * Must honor the cooldown, not just the flag: callers that read this
+   * accessor BEFORE canRecover() (ActionSelector) would otherwise keep a
+   * breaker tripped forever — canRecover() is the only path that resets
+   * it, and it is never reached when this says "still tripped". The
+   * reset is the same audited transition canRecover() applies.
    */
   isCircuitBreakerTripped(component: string): boolean {
-    return this.breakers.get(component)?.tripped ?? false;
+    const breaker = this.breakers.get(component);
+    if (!breaker?.tripped) return false;
+    const trippedAt = breaker.trippedAt ? new Date(breaker.trippedAt).getTime() : 0;
+    if (this.now() - trippedAt < this.config.circuitBreakerCooldownMs) {
+      return true;
+    }
+    // Cooldown lapsed — release the breaker, in memory and durable.
+    breaker.tripped = false;
+    breaker.trippedAt = null;
+    breaker.consecutiveFailures = 0;
+    if (this.durableStore) {
+      this.durableStore.updateState(component, {
+        circuitBreakerTripped: false,
+        circuitBreakerTrippedAt: null,
+        consecutiveFailures: 0,
+      });
+    }
+    this.stateModel.logEvent({
+      id: randomUUID(),
+      timestamp: new Date(this.now()).toISOString(),
+      type: 'circuit_breaker_released',
+      component,
+      action: 'circuit_breaker',
+      actionResult: 'success',
+      detail: { cooldownMs: this.config.circuitBreakerCooldownMs, reason: 'cooldown lapsed — retry permitted' },
+    });
+    return false;
   }
 
   /**
@@ -243,6 +341,7 @@ export class RecoveryBudgetManager {
    */
   resetComponentRetries(component: string): void {
     this.componentRetryCounts.delete(component);
+    this.componentLastAttemptAt.delete(component);
     const breaker = this.breakers.get(component);
     if (breaker) {
       breaker.consecutiveFailures = 0;

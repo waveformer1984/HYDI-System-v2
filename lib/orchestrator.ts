@@ -45,6 +45,7 @@ import {
 } from './work-sessions';
 import { getDecisionStats, getMemoryRetrievalStats, getRetryStats, getTaskSuccessRates, getWorkSessionStats } from './agent-metrics';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { createTimedClient } from './supabase-timed';
 import { buildCognitiveCore } from './heidi/CognitiveCoreBuilder';
 import type { CognitiveCore, CognitiveState } from './heidi/CognitiveCore';
 import { getMetricsService, type PartialInferenceMetric } from './metrics';
@@ -60,7 +61,7 @@ function getSupabase(): SupabaseClient {
     if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
       throw new Error('Supabase env vars not configured (NEXT_PUBLIC_SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY)');
     }
-    _supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+    _supabase = createTimedClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
   }
   return _supabase;
 }
@@ -574,7 +575,8 @@ export class HeidiOrchestrator {
     autonomyLevel: number;
     available: boolean;
     error: string | null;
-  }> {    try {
+  }> {
+    try {
       const stripeKey = process.env.STRIPE_SECRET_KEY;
       const emailKey = process.env.SENDGRID_API_KEY || process.env.SMTP_HOST;
       const smsKey = process.env.TWILIO_ACCOUNT_SID;
@@ -789,7 +791,7 @@ export class HeidiOrchestrator {
     let modelResponse: ModelResponse | undefined;
     let finalResponse: ParsedResponse | undefined;
     let parseRetry = false;
-    
+
     try {
       // 1. Retrieve memory context
       const memoryStart = Date.now();
@@ -800,18 +802,28 @@ export class HeidiOrchestrator {
       // 2. Build prompt with memory + live system context
       const liveContext = await this.gatherLiveSystemContext();
       const prompt = this.buildPrompt(request.message, memoryContext, liveContext);
-      
+
       // 3. Generate response via ModelManager (metrics recorded here by orchestrator later)
       modelResponse = await this.modelManager.generateResponse(prompt, request.session_id, {
         requestId,
         memoryLookupDurationMs,
         recordMetrics: false,
       });
-      
-      // 4. Parse and validate response
+
+      // 4. Parse and validate response. When the model itself failed
+      // (timeout, memory pressure, unreachable — all providers down), do
+      // NOT burn a second inference on a parse-retry of failure text, and
+      // do NOT emit the generic apology. Report the real failure class so
+      // the human knows conversation is degraded but operations still work.
       const parseResult = ActionParser.parseResponse(modelResponse.content);
-      
-      if (parseResult.success && parseResult.response) {
+
+      if (modelResponse.success === false) {
+        const cls = modelResponse.error || 'local inference unavailable';
+        finalResponse = {
+          response: `My conversational model is temporarily unavailable — ${cls}. Deterministic functions are still online: ask for the real picture, set focus, or launch an investigation and I'll handle it directly.`,
+          actions: [],
+        };
+      } else if (parseResult.success && parseResult.response) {
         finalResponse = parseResult.response;
       } else {
         // Self-correction loop - retry once
@@ -834,16 +846,16 @@ export class HeidiOrchestrator {
         }
         await this.recordRetry(request.session_id, 'chat_response', retryParse.success, parseResult.error);
       }
-      
+
       // 5. Validate actions
       const actionValidation = ActionParser.validateActions(finalResponse.actions, this.allowedActionTypes);
       if (!actionValidation.valid) {
         console.log('[Orchestrator] Invalid actions detected, filtering');
-        finalResponse.actions = finalResponse.actions.filter(action => 
+        finalResponse.actions = finalResponse.actions.filter(action =>
           this.allowedActionTypes.includes(action.type)
         );
       }
-      
+
       // 6. Execute actions
       const actionStart = Date.now();
       const actionResults = await this.executeActions(finalResponse.actions, request.session_id);
@@ -862,10 +874,10 @@ export class HeidiOrchestrator {
 
       // 7. Store conversation in memory
       await this.storeMemory(request.session_id, request.user_id, request.message, finalResponse.response);
-      
+
       // 8. Get updated session state
       const sessionState = await this.modelManager.getSessionState(request.session_id);
-      
+
       const totalLatency = Date.now() - startTime;
 
       // Record the comprehensive per-request metric
@@ -880,7 +892,7 @@ export class HeidiOrchestrator {
         actionExecutionDurationMs,
         parseRetry,
       });
-      
+
       return {
         response: finalResponse.response,
         actions: actionResults,
@@ -888,7 +900,7 @@ export class HeidiOrchestrator {
         latency: totalLatency,
         session_state: sessionState
       };
-      
+
     } catch (error) {
       console.error('[Orchestrator] Chat processing failed:', error);
       const totalLatency = Date.now() - startTime;
@@ -907,7 +919,7 @@ export class HeidiOrchestrator {
           errors: [error instanceof Error ? error.message : 'Unknown error'],
         });
       }
-      
+
       // Return safe fallback on any error
       return {
         response: "I apologize, but I'm experiencing technical difficulties. Please try again.",
@@ -1118,7 +1130,7 @@ Respond with JSON:`;
     const enforcing = isEnforcing();
     const results: Array<{ type: string; status: 'completed' | 'failed' | 'pending_approval'; error?: string; actionId?: string }> = [];
 
-    for (const { action, decision, confidence, hypotheses, reasoning, decisionId } of verdicts) {
+    for (const { action, decision, confidence, hypotheses, reasoning, decisionId, hypothesisId, planIndex } of verdicts) {
       const gateMeta = {
         protoforge_decision: decision,
         protoforge_confidence: confidence,
@@ -1153,6 +1165,12 @@ Respond with JSON:`;
               protoforge_action_type: action.type,
               protoforge_action_payload: action.payload,
               protoforge_decision_id: decisionId,
+              // Decision->action binding (red-team 2026-09-18): the hypothesis
+              // fingerprint + plan index let lib/action-approval.ts prove the
+              // referenced `decisions` row was produced for THIS action payload
+              // in THIS session — not borrowed from an unrelated escalation.
+              protoforge_hypothesis_id: hypothesisId,
+              protoforge_plan_index: planIndex,
             },
           })
           .select('id')

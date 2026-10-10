@@ -1,0 +1,54 @@
+{
+  "name": "Proto YI",
+  "version": "0.1.0",
+  "generatedBy": "app-realization",
+  "generatedAt": "2026-10-06T21:26:24.822Z",
+  "capabilities": [
+    "builder",
+    "planner",
+    "project-management",
+    "timeline-management"
+  ],
+  "eventsProduced": [
+    "project.created",
+    "project.updated",
+    "project.deleted",
+    "task.created",
+    "task.completed",
+    "timeline.created",
+    "milestone.scheduled",
+    "proto.yi.blueprint.created"
+  ],
+  "eventsConsumed": [
+    "protoforge.decision",
+    "protoforge.policy.approved",
+    "protoforge.policy.rejected"
+  ],
+  "providers": [
+    "json-store",
+    "memory-store",
+    "protoiy-engine"
+  ],
+  "healthRequirements": [
+    "protoiy-engine",
+    "hydi-gateway"
+  ],
+  "realization": {
+    "servicePort": 3010,
+    "startCommand": "node src/index.js",
+    "testCommand": "npm test",
+    "healthPath": "/health",
+    "engineHealthUrl": "http://localhost:5000/health",
+    "engineProbe": {
+      "method": "POST",
+      "url": "http://localhost:5000/proto_iy/project",
+      "body": {
+        "name": "HYDI-REALIZATION-PROBE",
+        "category": "realization-audit",
+        "owner_id": "heidi"
+      },
+      "expectJsonField": "project_id"
+    },
+    "offerId": "proto_yi_project"
+  }
+}

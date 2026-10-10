@@ -1,0 +1,48 @@
+{
+  "name": "Checkpoint",
+  "version": "0.1.0",
+  "generatedBy": "app-realization",
+  "generatedAt": "2026-10-06T21:37:06.606Z",
+  "capabilities": [
+    "workflow-analysis",
+    "risk-assessment",
+    "failure-point-detection"
+  ],
+  "eventsProduced": [
+    "workflow.analyzed",
+    "risk.scored"
+  ],
+  "eventsConsumed": [],
+  "providers": [
+    "ursula-engine"
+  ],
+  "healthRequirements": [
+    "ursula-engine"
+  ],
+  "realization": {
+    "hosted": "ursula-engine",
+    "engineHealthUrl": "http://localhost:5000/checkpoint/health",
+    "engineProbe": {
+      "method": "POST",
+      "url": "http://localhost:5000/checkpoint/workflow/analyze",
+      "body": {
+        "name": "HYDI-REALIZATION-PROBE",
+        "category": "general",
+        "steps": [
+          {
+            "name": "intake"
+          },
+          {
+            "name": "process"
+          },
+          {
+            "name": "deliver"
+          }
+        ]
+      },
+      "expectStatus": 201,
+      "expectJsonField": "workflow_id"
+    },
+    "offerId": "checkpoint_audit"
+  }
+}

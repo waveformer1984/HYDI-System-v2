@@ -56,7 +56,19 @@ export default function HeidiChat() {
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
-  const [sessionId] = useState(() => `s-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`)
+  // Session id persists across reloads so durable memory/session rows
+  // stay attached to the same conversation — companion continuity, not
+  // a new identity per refresh.
+  const [sessionId] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const existing = localStorage.getItem('heidi_session_id')
+      if (existing) return existing
+      const fresh = `s-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+      localStorage.setItem('heidi_session_id', fresh)
+      return fresh
+    }
+    return `s-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+  })
   const [model, setModel] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [connectionOk, setConnectionOk] = useState<boolean | null>(null)
@@ -132,13 +144,19 @@ export default function HeidiChat() {
     abortRef.current = new AbortController()
 
     try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+      if (serviceSecret) {
+        // Mutating intents (stop/approve/investigate/…) are gated by
+        // x-hydi-service-token — same scheme as /api/actions/:id.
+        headers['x-hydi-service-token'] = await mintServiceToken(serviceSecret)
+      }
       const res = await fetch('/api/chat', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           message: text.trim(),
           session_id: sessionId,
-          user_id: 'heidi-user',
+          user_id: 'operator',
         }),
         signal: abortRef.current.signal,
       })
@@ -219,10 +237,10 @@ export default function HeidiChat() {
         prev.map(m =>
           m.id === assistantId
             ? {
-                ...m,
-                content: m.content || 'Sorry, something went wrong.',
-                isStreaming: false,
-              }
+              ...m,
+              content: m.content || "I couldn't complete that response — the connection to my reasoning service failed. Your message wasn't treated as completed work.",
+              isStreaming: false,
+            }
             : m
         )
       )
@@ -258,18 +276,18 @@ export default function HeidiChat() {
       const nextError = res.ok
         ? data.error
         : res.status === 401 || res.status === 403
-        ? 'Not authorized to approve actions. Set your service secret in ⚙️ settings.'
-        : data.error || 'Failed to resolve action'
+          ? 'Not authorized to approve actions. Set your service secret in ⚙️ settings.'
+          : data.error || 'Failed to resolve action'
 
       setMessages(prev =>
         prev.map(m =>
           m.id === messageId
             ? {
-                ...m,
-                actions: m.actions?.map(a =>
-                  a.actionId === actionId ? { ...a, status: nextStatus, error: nextError, resolving: false } : a
-                ),
-              }
+              ...m,
+              actions: m.actions?.map(a =>
+                a.actionId === actionId ? { ...a, status: nextStatus, error: nextError, resolving: false } : a
+              ),
+            }
             : m
         )
       )
@@ -278,13 +296,13 @@ export default function HeidiChat() {
         prev.map(m =>
           m.id === messageId
             ? {
-                ...m,
-                actions: m.actions?.map(a =>
-                  a.actionId === actionId
-                    ? { ...a, status: 'failed', error: err instanceof Error ? err.message : 'Network error', resolving: false }
-                    : a
-                ),
-              }
+              ...m,
+              actions: m.actions?.map(a =>
+                a.actionId === actionId
+                  ? { ...a, status: 'failed', error: err instanceof Error ? err.message : 'Network error', resolving: false }
+                  : a
+              ),
+            }
             : m
         )
       )
@@ -320,9 +338,9 @@ export default function HeidiChat() {
             H
           </div>
           <div>
-            <h1 className="text-sm font-semibold tracking-tight">Heidi</h1>
+            <h1 className="text-sm font-semibold tracking-widest">HEIDI</h1>
             <p className="text-[11px] text-gray-500">
-              {model ? model : 'connecting...'}
+              {model ? model : 'HYDI companion'}
             </p>
           </div>
         </div>
@@ -330,18 +348,17 @@ export default function HeidiChat() {
           {connectionOk !== null && (
             <span className="flex items-center gap-1.5 text-[11px] text-gray-500">
               <span
-                className={`w-1.5 h-1.5 rounded-full ${
-                  connectionOk ? 'bg-emerald-400' : 'bg-red-400'
-                }`}
+                className={`w-1.5 h-1.5 rounded-full ${connectionOk ? 'bg-emerald-400' : 'bg-red-400'
+                  }`}
               />
               {connectionOk ? 'Online' : 'Offline'}
             </span>
           )}
           <Link
-            href="/funding"
-            className="text-[11px] text-gray-500 hover:text-gray-300 transition-colors"
+            href="/coo"
+            className="text-[11px] text-gray-500 hover:text-gray-300 transition-colors border border-white/[0.08] rounded-md px-2 py-1"
           >
-            Z-Labs
+            COO
           </Link>
           <button
             onClick={() => {
@@ -409,18 +426,19 @@ export default function HeidiChat() {
               </div>
               <div className="text-center">
                 <h2 className="text-lg font-medium text-gray-300">
-                  What can I help with?
+                  HEIDI
                 </h2>
                 <p className="text-sm text-gray-600 mt-1 max-w-md">
-                  Ask me about system status, run tasks, manage revenue streams, or just chat.
+                  Your companion for HYDI, ProtoForge, and the work around them.
+                  Talk naturally — I keep track of what we&apos;re doing.
                 </p>
               </div>
               <div className="flex flex-wrap gap-2 mt-4 justify-center">
                 {[
-                  'System status',
-                  'Show revenue streams',
-                  'Run health check',
-                  'What can you do?',
+                  'What are we working on?',
+                  "What's on my plate?",
+                  'Where were we?',
+                  'What did you find?',
                 ].map(q => (
                   <button
                     key={q}
@@ -588,13 +606,12 @@ function AssistantBubble({
             {actions.map((action, i) => (
               <div
                 key={action.actionId || i}
-                className={`text-[11px] rounded-lg px-2.5 py-2 border ${
-                  action.status === 'pending_approval'
-                    ? 'bg-amber-400/[0.06] border-amber-400/20'
-                    : action.status === 'failed'
+                className={`text-[11px] rounded-lg px-2.5 py-2 border ${action.status === 'pending_approval'
+                  ? 'bg-amber-400/[0.06] border-amber-400/20'
+                  : action.status === 'failed'
                     ? 'bg-red-400/[0.04] border-red-400/10'
                     : 'bg-white/[0.02] border-white/[0.04]'
-                }`}
+                  }`}
               >
                 <div className="flex items-center gap-2 text-gray-400">
                   <span
@@ -602,8 +619,8 @@ function AssistantBubble({
                       action.status === 'completed'
                         ? 'text-emerald-400/70'
                         : action.status === 'failed'
-                        ? 'text-red-400/70'
-                        : 'text-amber-400/70'
+                          ? 'text-red-400/70'
+                          : 'text-amber-400/70'
                     }
                   >
                     {action.status === 'completed' ? '\u2713' : action.status === 'failed' ? '\u2717' : '\u23F3'}
@@ -642,9 +659,8 @@ function AssistantBubble({
         {/* Content */}
         {content ? (
           <div
-            className={`text-sm text-gray-300 whitespace-pre-wrap leading-relaxed ${
-              isStreaming ? 'streaming-cursor' : ''
-            }`}
+            className={`text-sm text-gray-300 whitespace-pre-wrap leading-relaxed ${isStreaming ? 'streaming-cursor' : ''
+              }`}
           >
             {content}
           </div>

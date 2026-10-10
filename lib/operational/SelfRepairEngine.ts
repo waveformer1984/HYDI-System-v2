@@ -36,6 +36,7 @@
 import type { CapabilityHealthReport, CapabilityHealthSummary } from './CapabilityHealthManager';
 import type { BlockerResolution, BlockerResolutionResult } from './BlockerResolutionEngine';
 import { BlockerResolutionEngine } from './BlockerResolutionEngine';
+import { liveActionsDisabled } from './live-action-guard';
 
 // ─── Types ───────────────────────────────────────────────────────────────
 
@@ -342,6 +343,12 @@ export class SelfRepairEngine {
       // Execute repair
       if (resolution.resolutionAction === 'REPAIR_AUTONOMOUSLY') {
         const handler = this.repairHandlers.get(report.capabilityId);
+        // NOTE: the dispatch itself is not the live boundary — the handler
+        // is. Test/simulated handlers (in-memory state changes) must run so
+        // flapping/verification logic can be exercised hermetically; the REAL
+        // handler factories (createOllamaRepairHandler et al.) check
+        // liveActionsDisabled() internally before spawning processes or
+        // touching live infrastructure.
         if (handler) {
           const repairAction = await this.executeRepair(report, resolution, handler);
           repairs.push(repairAction);
@@ -439,9 +446,9 @@ export class SelfRepairEngine {
    */
   private isNonRepairAction(repair: RepairAction): boolean {
     return repair.plannedAction.startsWith('WORK_AROUND') ||
-           repair.plannedAction.startsWith('ESCALATE') ||
-           repair.plannedAction.startsWith('FLAPPING') ||
-           repair.plannedAction === 'REFUSE';
+      repair.plannedAction.startsWith('ESCALATE') ||
+      repair.plannedAction.startsWith('FLAPPING') ||
+      repair.plannedAction === 'REFUSE';
   }
 
   /**
@@ -451,8 +458,8 @@ export class SelfRepairEngine {
    */
   private isSameAction(a: RepairAction, b: RepairAction): boolean {
     return a.capabilityId === b.capabilityId &&
-           a.plannedAction === b.plannedAction &&
-           a.classification === b.classification;
+      a.plannedAction === b.plannedAction &&
+      a.classification === b.classification;
   }
 
   // ─── Flapping guardrail helpers ──────────────────────────────────
@@ -555,7 +562,7 @@ export class SelfRepairEngine {
   ): RepairRiskLevel {
     // R0: Safe, reversible, no external impact
     if (report.failureClassification === 'CONFIGURATION_BUG' ||
-        report.failureClassification === 'DATABASE_STATE_PROBLEM') {
+      report.failureClassification === 'DATABASE_STATE_PROBLEM') {
       return 'R0';
     }
 
@@ -566,13 +573,13 @@ export class SelfRepairEngine {
 
     // R2: Code changes, requires human authorization
     if (report.failureClassification === 'SOFTWARE_BUG' ||
-        report.failureClassification === 'MISSING_LOCAL_CAPABILITY') {
+      report.failureClassification === 'MISSING_LOCAL_CAPABILITY') {
       return 'R2';
     }
 
     // External credentials, human action required
     if (report.failureClassification === 'MISSING_EXTERNAL_CREDENTIAL' ||
-        report.failureClassification === 'HUMAN_AUTHORIZATION_REQUIRED') {
+      report.failureClassification === 'HUMAN_AUTHORIZATION_REQUIRED') {
       return 'R2';
     }
 
@@ -902,6 +909,15 @@ export function createOllamaRepairHandler(options: {
   isInstalled?: () => Promise<boolean>;
 }): (capabilityId: string, procedure: string) => Promise<{ success: boolean; evidence: string }> {
   return async (capabilityId: string, _procedure: string) => {
+    // This handler spawns a real `ollama serve` on the host. When the runtime
+    // forbids live mutation (Tier 1 hermetic tests) refuse before the exec —
+    // do not even check health, do not spawn, do not poll.
+    if (liveActionsDisabled()) {
+      return {
+        success: false,
+        evidence: `Ollama repair for ${capabilityId} refused — live actions disabled (HYDI_DISABLE_LIVE_ACTIONS)`,
+      };
+    }
     const { exec } = await import('child_process');
     const { promisify } = await import('util');
     const execAsync = promisify(exec);

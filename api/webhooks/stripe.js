@@ -208,6 +208,23 @@ async function handleStripeWebhook(req, res) {
       if (jobResult.processed) {
         jobBridgeProcessed = true;
         console.log(`[📦 JOB BRIDGE] Job ${jobResult.jobId} ${jobResult.idempotent ? '(idempotent skip)' : 'activated'} for event ${event.id}`);
+
+        // Revenue autopilot fast-path: a confirmed payment is a satisfied
+        // human prerequisite — resume the durable mission now rather than
+        // waiting for the next tick/chat. Fire-and-forget: the webhook must
+        // ack promptly; the periodic tick is the catch-up safety net.
+        setImmediate(async () => {
+          try {
+            const { resumeForPayment } = require('../../lib/revenue/revenue-autopilot.js');
+            const { getGoalSystem } = require('../../lib/heidi/GoalSystem.ts');
+            const report = await resumeForPayment(getGoalSystem(), jobResult.jobId);
+            if (report && report.stage) {
+              console.log(`[REVENUE AUTOPILOT] post-payment resume → ${report.stage}${report.outcome ? ` (${report.outcome})` : ''}`);
+            }
+          } catch (e) {
+            console.error('[REVENUE AUTOPILOT] post-payment resume failed:', e instanceof Error ? e.message : e);
+          }
+        });
       }
 
       // LIVE MODE: Consume the authorization now that payment is confirmed.
@@ -241,6 +258,22 @@ async function handleStripeWebhook(req, res) {
       // Log but don't fail the webhook — the async queue may still process it
       console.error('[📦 JOB BRIDGE] Error:', jobBridgeErr instanceof Error ? jobBridgeErr.message : jobBridgeErr);
     }
+  }
+
+  // Payment-signal reconciliation: a verified payment event may now
+  // attribute a previously-unmatched signal (e.g. a phone notification
+  // reported before this webhook landed). Fire-and-forget — the webhook
+  // must ack promptly; the periodic tick is the catch-up safety net.
+  if (event.type === 'checkout.session.completed' || event.type === 'payment_intent.succeeded' || event.type === 'charge.succeeded') {
+    setImmediate(async () => {
+      try {
+        const { reconcileOpenSignals } = require('../../lib/revenue/payment-signal-bridge.js');
+        const sweep = await reconcileOpenSignals();
+        if (sweep.resolved > 0) console.log(`[PAYMENT SIGNALS] ${sweep.resolved}/${sweep.checked} open signal(s) attributed by event ${event.id}`);
+      } catch (e) {
+        console.error('[PAYMENT SIGNALS] reconcile sweep failed:', e instanceof Error ? e.message : e);
+      }
+    });
   }
 
   // If the job bridge handled this event, skip the async queue entirely.

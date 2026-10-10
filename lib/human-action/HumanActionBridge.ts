@@ -11,6 +11,7 @@
 
 import type { HumanActionEngine } from './HumanActionEngine';
 import type { GoalDecomposer } from './GoalDecomposer';
+import type { ActionAuthorization } from '../governance/ActionChokepoint';
 import type {
   HumanGoal,
   HumanActionResult,
@@ -55,9 +56,16 @@ export interface HumanActionBridge {
   getPendingInterventions: () => HumanInterventionRequest[];
 
   /**
-   * Resume an action after human intervention.
+   * Mint a signed human-approval record for a pending action — what the human
+   * approval channel produces before calling resumeAction.
    */
-  resumeAction: (actionId: string, authorityId?: string) => Promise<HumanActionResult | null>;
+  issueHumanApproval: (actionId: string, approvedBy: string) => ActionAuthorization | null;
+
+  /**
+   * Resume an action after human intervention. Requires the signed
+   * human-approval record from issueHumanApproval — a bare call is refused.
+   */
+  resumeAction: (actionId: string, humanAuthorization?: ActionAuthorization, authorityId?: string) => Promise<HumanActionResult | null>;
 
   /**
    * Get the action journal entries for a goal.
@@ -144,13 +152,17 @@ export function createHumanActionBridge(
       return [...pendingInterventions];
     },
 
-    resumeAction: (actionId, authorityId) => {
+    issueHumanApproval: (actionId, approvedBy) => {
+      return engine.issueHumanApproval(actionId, approvedBy);
+    },
+
+    resumeAction: (actionId, humanAuthorization, authorityId) => {
       // Remove from pending if it was there
       const idx = pendingInterventions.findIndex((i) => i.actionId === actionId);
       if (idx >= 0) {
         pendingInterventions.splice(idx, 1);
       }
-      return engine.resumeAction(actionId, authorityId);
+      return engine.resumeAction(actionId, humanAuthorization, authorityId);
     },
 
     getGoalJournal: (goalId) => {

@@ -1,4 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
+import { requireOpsAuth } from '../../../lib/api/requireOpsAuth';
 import { getKeyAuditService } from '../../../lib/operational/KeyAuditService';
 
 /**
@@ -6,6 +7,7 @@ import { getKeyAuditService } from '../../../lib/operational/KeyAuditService';
  * Query params: ?limit=50&keyId=xxx&provider=xxx&operation=xxx
  */
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  if (!requireOpsAuth(req, res)) return;
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' });
   }

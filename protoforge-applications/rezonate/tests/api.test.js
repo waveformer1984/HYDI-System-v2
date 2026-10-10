@@ -39,7 +39,7 @@ describe('Resonate API', () => {
 
   function mockStemRunner() {
     return async (cmd, args) => {
-      if (args[0] === 'make-stems.py') {
+      if (String(args[0]).endsWith('make-stems.py')) {
         return { stdout: `Done.\n  bpm: 120 | key: C major\n  folder: C:\\\\audio\\\\stems`, stderr: '', exitCode: 0 };
       }
       return { stdout: '', stderr: '', exitCode: 0 };
@@ -50,7 +50,7 @@ describe('Resonate API', () => {
     return new ResonateEngineAdapter({
       audioProvider: mockAudioProvider(overrides),
       runner: mockStemRunner(),
-      logger: { info: () => {}, warn: () => {} }
+      logger: { info: () => { }, warn: () => { } }
     });
   }
 
@@ -161,7 +161,7 @@ describe('Resonate API', () => {
     const engine = new ResonateEngineAdapter({
       audioProvider: { async generate() { return { ok: false, error: 'No audio returned' }; }, async health() { return { available: true }; } },
       runner: mockStemRunner(),
-      logger: { info: () => {}, warn: () => {} }
+      logger: { info: () => { }, warn: () => { } }
     });
     const app = createApi(repo, { engine });
     const { server, port } = await listen(app);

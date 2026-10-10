@@ -219,12 +219,31 @@ describe('true-system-health.js — getSystemHealth() end-to-end isolation', () 
     expect(health.components.automation.status).toBe('OK');
   });
 
-  // Test 6 — revenue/entitlements checks unchanged.
-  test('Test 6: revenue WARNING with zero payments, entitlements OK with rows present (unchanged)', async () => {
+  // Test 6 — CHANGED 2026-09-18 by Phase 7 (optional-integration isolation).
+  //
+  // This assertion previously locked in `revenue.status === 'WARNING'` for zero
+  // payments, which was the correct description of the code at the time but
+  // encoded the defect itself: with STRIPE_SECRET_KEY unset for local-first
+  // operation, that WARNING was permanent and propagated into core status,
+  // trends, escalation and the watchdog's recovery scoring.
+  //
+  // The contract is now: revenue and entitlements are optional integrations,
+  // live under health.optionalIntegrations, and cannot reach core health.
+  // See tests/unit/true-system-health-optional-integrations.test.js.
+  test('Test 6: revenue/entitlements are optional integrations and do not touch core health', async () => {
     const { getSystemHealth } = load(healthyFixtures());
     const health = await getSystemHealth();
-    expect(health.components.revenue.status).toBe('WARNING'); // no payments in 24h, as before
-    expect(health.components.entitlements.status).toBe('OK');
+
+    // Stripe is not configured in this fixture -> absent, not failing.
+    expect(health.optionalIntegrations.revenue.status).toBe('OPTIONAL_SERVICE_UNAVAILABLE');
+    expect(health.optionalIntegrations.entitlements.status).toBe('OK');
+
+    // They are no longer core components at all.
+    expect(health.components.revenue).toBeUndefined();
+    expect(health.components.entitlements).toBeUndefined();
+
+    // And, the point of the change: no revenue warning reaches core health.
+    expect(health.warnings.filter((w) => /revenue/i.test(w))).toHaveLength(0);
   });
 
   // The real-world reproduction, end to end: overall status must not be

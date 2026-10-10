@@ -31,7 +31,11 @@ describe('SpecialistAgent (via TaskAgent)', () => {
 
     const outcome = await agent.execute(action, 'session-1');
 
-    expect(execute).toHaveBeenCalledWith(action, 'session-1');
+    // Phase 3: agents forward an optional authorization record as a third
+    // argument. An agent never mints authorization -- it only carries whatever
+    // it was given, which is `undefined` here. Asserting the third argument
+    // explicitly is what proves the agent does not fabricate one.
+    expect(execute).toHaveBeenCalledWith(action, 'session-1', undefined);
     expect(outcome).toEqual({ status: 'completed', result: { id: 1 } });
   });
 

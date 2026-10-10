@@ -1,3 +1,21 @@
+// Install FIRST — before any module whose promise could reject during
+// a model-flatline window. A failed model/Ollama request must never
+// take the ProtoForge control plane down. See src/process-guard.js.
+require('./process-guard').installProcessGuard({
+  service: 'protoforge-core',
+  // Model state is attached to every forensic record -- the difference
+  // between "exited during a flatline" and "exited BECAUSE of a flatline".
+  // Lazy require: the guard installs before ./models/heartbeat is loaded
+  // below, so it must not be required eagerly here.
+  stateProvider: () => {
+    try {
+      const hb = require('./models/heartbeat');
+      const s = hb.getStatus ? hb.getStatus() : null;
+      return s ? { running: s.running, failedModels: (s.failedModels || []).length } : {};
+    } catch (e) { return { error: 'heartbeat state unavailable' }; }
+  },
+});
+
 const express = require('express');
 const http = require('http');
 const protoforgeEventBus = require('../modules/protoforge-event-bus');
@@ -19,6 +37,7 @@ const pricingConfig = require('./api/services/pricing');
 const SubscriptionManager = require('./services/subscription-manager');
 const HeidiServiceAutomator = require('../modules/heidi-service-automator');
 const LocalModelAdapter = require('./models/local-model-adapter');
+const ursulaModelHeartbeat = require('./models/heartbeat');
 const AdaptationExecutor = require('../modules/adaptation-executor');
 
 // Universal Agent Bus — The Forge Messaging Backbone
@@ -38,7 +57,7 @@ app.use(express.json());
 app.use((err, req, res, _next) => {
   console.error('[GLOBAL ERROR]:', err.message);
   console.error('[GLOBAL ERROR STACK]:', err.stack);
-  res.status(400).json({ 
+  res.status(400).json({
     error: err.message,
     type: 'express_error',
     path: req.path,
@@ -184,7 +203,7 @@ localModelAdapter.on('model_flatlined', (event) => {
 heidi.on('high_violation_risk', (alert) => {
   console.log(`[HEIDI] HIGH VIOLATION RISK: ${(alert.risk * 100).toFixed(1)}%`);
   console.log(`[HEIDI] Recommendation: ${alert.recommendation.action}`);
-  
+
   // Could trigger Ursula to speak this
   if (ursulaSSE && ursulaSSE.getSubscriberCount() > 0) {
     ursulaSSE.broadcast({
@@ -216,11 +235,11 @@ app.post('/bare-test', (req, res) => {
   console.log('[BARE TEST] Request received');
   console.log('[BARE TEST] Body:', JSON.stringify(req.body));
   console.log('[BARE TEST] Headers:', Object.keys(req.headers));
-  
-  res.json({ 
-    ok: true, 
+
+  res.json({
+    ok: true,
     body: req.body,
-    timestamp: new Date().toISOString() 
+    timestamp: new Date().toISOString()
   });
 });
 
@@ -235,7 +254,7 @@ app.post('/test-loop', async (req, res) => {
   console.log('[TEST LOOP] Headers:', Object.keys(req.headers));
   console.log('[TEST LOOP] API Key:', req.headers['x-api-key']);
   console.log('[TEST LOOP] Body:', JSON.stringify(req.body));
-  
+
   // Check tier access
   if (!req.apiKey || !SimpleKeymaker.checkTierAccess('starter', req.apiKey.tier)) {
     console.log('[TEST LOOP] Access denied - tier:', req.apiKey?.tier || 'none');
@@ -245,7 +264,7 @@ app.post('/test-loop', async (req, res) => {
       current: req.apiKey?.tier || 'none'
     });
   }
-  
+
   try {
     // Simple processing - no complex modules
     const result = {
@@ -256,14 +275,14 @@ app.post('/test-loop', async (req, res) => {
       processing_time_ms: Date.now() - Date.parse(req.body.timestamp || new Date()),
       status: 'success'
     };
-    
+
     console.log(`[TEST LOOP] ${req.apiKey.tier} user processed event: ${req.body.event_id}`);
-    
+
     res.json({
       success: true,
       data: result
     });
-    
+
   } catch (error) {
     console.error('[TEST LOOP] Processing error:', error);
     res.status(500).json({
@@ -286,7 +305,7 @@ app.post('/test-loop', async (req, res) => {
 // belongs in the body, where lib/operational/EndpointHealthContract.ts reads it.
 app.get('/health', async (req, res) => {
   try {
-    const body = await buildProtoforgeHealth({ agentBus, supabase });
+    const body = await buildProtoforgeHealth({ agentBus, supabase, modelHeartbeat: ursulaModelHeartbeat });
     res.json(body);
   } catch (error) {
     console.error('Health check failed:', error);
@@ -304,7 +323,7 @@ app.get('/integrity', (req, res) => {
   try {
     const stats = protoforgeEventBus.getStats();
     const integrity = stats.system_integrity;
-    
+
     res.json({
       system_integrity_score: integrity.score,
       pipeline_health_report: integrity.pipeline_health,
@@ -327,7 +346,7 @@ app.get('/evolution', (req, res) => {
   try {
     const stats = protoforgeEventBus.getStats();
     const evolution = stats.evolution_protocol;
-    
+
     res.json({
       evolution_protocol: evolution.evolution_protocol,
       event_count: evolution.event_count,
@@ -355,7 +374,7 @@ app.get('/prime', (req, res) => {
   try {
     const stats = protoforgeEventBus.getStats();
     const primeDirective = stats.prime_directive;
-    
+
     res.json({
       prime_directive: primeDirective.prime_directive,
       integrity_score: primeDirective.integrity_score,
@@ -393,29 +412,29 @@ app.post('/process', async (req, res) => {
   }
   // Generate unique cycle ID for this request
   const cycleId = `process_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-  
+
   // TODO: Re-enable noSilentSuccessEnforcer when iconv-lite issue is fixed
   console.log(`[PROCESS] Starting cycle ${cycleId}`);
-  
+
   try {
     console.log(`[PROCESS] Cascade processing started for ${req.body.event_id}`);
-    
+
     const payload = req.body;
-    
+
     // Enforce event continuity through ProtoForge pipeline
     // event -> validate -> classify -> emit -> persist -> broadcast
     const result = await protoforgeEventBus.processEvent(payload);
-    
+
     // Record cascade processing completion
     console.log(`[PROCESS] Cascade completed: ${result.status} for ${payload.event_id}`);
     console.log(`[PROCESS] Validation: ${result.validation?.status}, Opportunity: ${!!result.opportunity}`);
-    
+
     // Update readiness gate metrics based on cascade processing
     readinessGate.updateCascadeMetrics(
       result.status === 'processed' ? 1 : 0,
       result.status === 'rejected' ? 1 : 0
     );
-    
+
     // Simple persistence - no retries, no abstraction
     if (result.status === 'processed') {
       try {
@@ -458,22 +477,22 @@ app.post('/process', async (req, res) => {
             console.error('Opportunity storage failed:', oppError.message);
           }
         }
-        
+
         result.persistence_status = 'STORED';
         result.persistence_error = null;
-        
+
       } catch (err) {
         console.error('Persistence failed:', {
           event_id: payload.event_id,
           stage: 'persistence',
           error: err.message
         });
-        
+
         result.persistence_status = 'FAILED';
         result.persistence_error = err.message;
       }
     }
-    
+
     // Check if KILO would be involved (if we had a repair manifest)
     // For now, we'll simulate this based on certain conditions
     let kiloInvolved = false;
@@ -484,17 +503,17 @@ app.post('/process', async (req, res) => {
         trigger: 'low_confidence_event',
         confidence: result.validation.confidence
       });
-      
+
       // Simulate KILO processing
       noSilentSuccessEnforcer.recordState(cycleId, 'kilo', 'manifest_generated', {
         issue_type: 'SIMULATED_ISSUE',
         confidence: result.validation.confidence * 0.9 // Slightly lower confidence for KILO
       });
-      
+
       // Update readiness gate KILO metrics
       readinessGate.updateKiloMetrics(result.validation.confidence * 0.9);
     }
-    
+
     // Determine final state for protoforge
     let protoforgeState = 'success';
     if (result.status === 'rejected') {
@@ -502,12 +521,12 @@ app.post('/process', async (req, res) => {
     } else if (result.status === 'processed' && result.validation && result.validation.confidence < 0.5) {
       protoforgeState = 'degraded';
     }
-    
+
     // Record protoforge state
     console.log(`[PROCESS] Protoforge state: ${protoforgeState}, KILO involved: ${kiloInvolved}`);
-    
+
     // TODO: Re-enable noSilentSuccessEnforcer when iconv-lite issue is fixed
-    
+
     // Return processing result - simple contract
     res.json({
       status: result.status,
@@ -521,18 +540,18 @@ app.post('/process', async (req, res) => {
       pipeline: 'protoforge_validation_gate',
       cycle_id: cycleId // For tracking
     });
-    
+
     // Explicitly emit state to prevent silent completion
     // In a real implementation, this would be done by the orchestrator
     // For now, we'll rely on the enforcer's timeout mechanism to detect silent failures
-    
+
   } catch (error) {
     // Record error state in cycle
     console.error(`[PROCESS] Error in cycle ${cycleId}:`, error.message);
-    
+
     // Mark protoforge as failed
     console.error(`[PROCESS] Protoforge failed for ${req.body.event_id}:`, error.message);
-    
+
     console.error('Process endpoint failed:', error);
     res.status(500).json({
       status: 'error',
@@ -577,7 +596,7 @@ app.get('/insight', async (req, res) => {
 app.post('/event', async (req, res) => {
   try {
     const eventData = req.body;
-    
+
     // Log system event
     const { data, error } = await supabase
       .from('heidi_events')
@@ -607,23 +626,23 @@ app.post('/event', async (req, res) => {
 app.get('/opportunities', async (req, res) => {
   try {
     const { type, limit = 20 } = req.query;
-    
+
     let query = supabase
       .from('heidi_events')
       .select('*')
       .eq('event_type', 'hyve_opportunity_detected')
       .order('created_at', { ascending: false });
-    
+
     if (type) {
       query = query.contains('payload', {
         opportunity_classification: { opportunity_type: type }
       });
     }
-    
+
     const { data, error } = await query.limit(limit);
-    
+
     if (error) throw error;
-    
+
     const opportunities = data.map(event => ({
       id: event.id,
       event_id: event.event_id,
@@ -634,7 +653,7 @@ app.get('/opportunities', async (req, res) => {
       detected_at: event.created_at,
       action_required: event.payload.action_required
     }));
-    
+
     res.json({
       opportunities: opportunities,
       count: opportunities.length
@@ -651,7 +670,7 @@ app.get('/opportunities', async (req, res) => {
 // Infrastructure event handlers - The Physical Body Speaks
 infrastructure.on('infrastructure_alert', (alert) => {
   console.log(`[INFRA] ${alert.layer.toUpperCase()} Alert: ${alert.alert.message}`);
-  
+
   // Process through CASCADE
   cascade.processEvent({
     id: `infra_${Date.now()}`,
@@ -660,7 +679,7 @@ infrastructure.on('infrastructure_alert', (alert) => {
     alert: alert.alert,
     zoneId: alert.zoneId
   }, 'system');
-  
+
   // Broadcast through Ursula
   if (ursulaSSE && ursulaSSE.getSubscriberCount() > 0) {
     ursulaSSE.broadcast({
@@ -671,14 +690,14 @@ infrastructure.on('infrastructure_alert', (alert) => {
       data: alert
     });
   }
-  
+
   // Track critical alerts with Heidi
   if (alert.alert.severity === 'critical') {
     heidi.logInteraction({
       type: 'system_alert',
       target: `${alert.layer}_${alert.zoneId}`,
       responseTime: 0,
-      context: { 
+      context: {
         severity: 'critical',
         alert_type: alert.alert.type,
         auto_response: 'logged_for_review'
@@ -710,11 +729,11 @@ infrastructure.on('health_update', async (health) => {
       .from('infrastructure_health')
       .upsert({
         id: 'singleton',
-        overall:    health.overall,
-        power:      health.power,
-        thermal:    health.thermal,
-        scaffold:   health.scaffold,
-        revenue:    health.revenue,
+        overall: health.overall,
+        power: health.power,
+        thermal: health.thermal,
+        scaffold: health.scaffold,
+        revenue: health.revenue,
         efficiency: health.efficiency,
         updated_at: new Date().toISOString(),
       }, { onConflict: 'id' });
@@ -756,10 +775,10 @@ app.get('/heidi/insights', (req, res) => {
 app.post('/heidi/interaction', (req, res) => {
   try {
     const interaction = req.body;
-    
+
     // Log the interaction
     heidi.logInteraction(interaction);
-    
+
     res.json({
       status: 'logged',
       interactionId: interaction.id || uuidv4()
@@ -775,10 +794,10 @@ app.post('/heidi/interaction', (req, res) => {
 app.post('/heidi/certify', async (req, res) => {
   try {
     const { artifact, productionData } = req.body;
-    
+
     // Create proof of work certification
     const certification = await heidi.createProofOfWork(artifact, productionData);
-    
+
     res.json({
       status: 'certified',
       certification
@@ -794,7 +813,7 @@ app.post('/heidi/certify', async (req, res) => {
 app.get('/heidi/value-leaks', (req, res) => {
   try {
     const valueLeaks = heidi.getValueLeaks();
-    
+
     res.json({
       status: 'ok',
       valueLeaks,
@@ -812,7 +831,7 @@ app.get('/heidi/value-leaks', (req, res) => {
 app.get('/heidi/resource-status', (req, res) => {
   try {
     const resourceStatus = heidi.getResourcePreservationStatus();
-    
+
     res.json({
       status: 'ok',
       ...resourceStatus,
@@ -830,7 +849,7 @@ app.get('/heidi/resource-status', (req, res) => {
 app.get('/heidi/self-awareness', (req, res) => {
   try {
     const selfAwarenessStatus = heidi.getSelfAwarenessStatus();
-    
+
     res.json({
       status: 'ok',
       self_awareness: selfAwarenessStatus,
@@ -847,16 +866,16 @@ app.get('/heidi/self-awareness', (req, res) => {
 app.post('/heidi/autonomous-action', async (req, res) => {
   try {
     const { action, context } = req.body;
-    
+
     if (!action) {
       return res.status(400).json({
         status: 'error',
         message: 'Missing action parameter'
       });
     }
-    
+
     const result = await heidi.performAutonomousAction(action, context);
-    
+
     res.json({
       status: 'ok',
       result,
@@ -875,7 +894,7 @@ app.get('/heidi/reflection-status', (req, res) => {
     const reflectionStatus = heidi.reflectionEngine.getCurrentReflection();
     const performanceMetrics = heidi.reflectionEngine.getPerformanceMetrics();
     const adaptivePatterns = heidi.reflectionEngine.getAdaptivePatterns();
-    
+
     res.json({
       status: 'ok',
       current_reflection: reflectionStatus,
@@ -895,7 +914,7 @@ app.get('/heidi/decision-stats', (req, res) => {
   try {
     const decisionStats = heidi.decisionEngine.getDecisionStats();
     const currentDecision = heidi.decisionEngine.getCurrentDecision();
-    
+
     res.json({
       status: 'ok',
       decision_stats: decisionStats,
@@ -920,12 +939,12 @@ app.get('/events/stream', (req, res) => {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'Cache-Control'
   });
-  
+
   console.log('[URSULA] New client connected to SSE stream');
-  
+
   // Add client to manager
   const clientId = ursulaSSE.addClient(res);
-  
+
   // Send initial connection event
   res.write('event: connected\n');
   res.write(`data: ${JSON.stringify({
@@ -933,13 +952,13 @@ app.get('/events/stream', (req, res) => {
     message: 'Connected to ProtoForge Central Nervous System',
     timestamp: new Date().toISOString()
   })}\n\n`);
-  
+
   // Handle client disconnect
   req.on('close', () => {
     console.log('[URSULA] Client disconnected from SSE stream');
     ursulaSSE.removeClient(clientId);
   });
-  
+
   // Send heartbeat every 30 seconds
   const heartbeat = setInterval(() => {
     if (ursulaSSE.clients.has(clientId)) {
@@ -974,16 +993,16 @@ app.get('/cascade/status', (req, res) => {
 app.post('/cascade/event', async (req, res) => {
   try {
     const { source, event } = req.body;
-    
+
     if (!source || !event) {
       return res.status(400).json({
         status: 'error',
         message: 'Missing source or event'
       });
     }
-    
+
     const result = await cascade.processEvent(event, source);
-    
+
     res.json({
       status: 'ok',
       result: result,
@@ -1001,7 +1020,7 @@ app.get('/cascade/quarantine', (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 50;
     const report = cascade.getQuarantineReport(limit);
-    
+
     res.json({
       status: 'ok',
       quarantine: report,
@@ -1019,16 +1038,16 @@ app.post('/cascade/quarantine/:eventId/release', (req, res) => {
   try {
     const { eventId } = req.params;
     const { approved_by } = req.body;
-    
+
     if (!approved_by) {
       return res.status(400).json({
         status: 'error',
         message: 'Missing approved_by field'
       });
     }
-    
+
     const result = cascade.manualReleaseFromQuarantine(eventId, approved_by);
-    
+
     res.json({
       status: 'ok',
       result: result,
@@ -1048,7 +1067,7 @@ app.post('/cascade/quarantine/:eventId/release', (req, res) => {
 app.get('/cascade/health', (req, res) => {
   try {
     const healthReport = cascade.getHealthReport();
-    
+
     res.json({
       status: 'ok',
       health: healthReport,
@@ -1067,7 +1086,7 @@ app.get('/cascade/dead-letters', (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 50;
     const deadLetters = cascade.getDeadLetterReport(limit);
-    
+
     res.json({
       status: 'ok',
       dead_letters: deadLetters,
@@ -1086,7 +1105,7 @@ app.get('/cascade/emissions', (req, res) => {
   try {
     const { event_id } = req.query;
     const tracking = cascade.getEmissionTracking(event_id);
-    
+
     res.json({
       status: 'ok',
       tracking: tracking,
@@ -1110,7 +1129,7 @@ app.get('/pipeline/metrics', pipelineMetricsHandler());
 app.get('/cascade/schema', (req, res) => {
   try {
     const status = cascade.getStatus();
-    
+
     res.json({
       status: 'ok',
       schema: status.schema_lock,
@@ -1128,7 +1147,7 @@ app.get('/cascade/schema', (req, res) => {
 app.get('/cascade/fingerprint', (req, res) => {
   try {
     const status = cascade.getStatus();
-    
+
     res.json({
       status: 'ok',
       fingerprint: status.fingerprint,
@@ -1184,7 +1203,7 @@ app.post('/infrastructure/scaffold/:pointId/calibrate', async (req, res) => {
   try {
     const { actualPosition } = req.body;
     const point = await infrastructure.calibratePoint(req.params.pointId, actualPosition);
-    
+
     res.json({
       status: 'calibrated',
       point
@@ -1232,9 +1251,9 @@ app.get('/infrastructure/thermal', (req, res) => {
 app.post('/infrastructure/revenue', (req, res) => {
   try {
     const { layer, amount, source, description } = req.body;
-    
+
     infrastructure.trackRevenue(layer, amount, source);
-    
+
     res.json({
       status: 'tracked',
       revenue: { layer, amount, source, description },
@@ -1267,9 +1286,9 @@ app.get('/infrastructure/revenue', (req, res) => {
 app.post('/infrastructure/maintenance/schedule', (req, res) => {
   try {
     const { layer, zoneId, task, estimatedCost } = req.body;
-    
+
     const maintenance = infrastructure.scheduleMaintenance(layer, zoneId, task, estimatedCost);
-    
+
     res.json({
       status: 'scheduled',
       maintenance
@@ -1336,19 +1355,19 @@ app.post('/keymaker/keys', async (req, res) => {
   try {
     const { userId, role, tier, durationHours, services, scopes } = req.body;
     const identity = req.keymaker?.identity;
-    
+
     // Only admins can issue keys for others
     if (identity?.role !== 'admin' && userId && userId !== identity?.userId) {
       return res.status(403).json({ error: 'Admin access required to issue keys for other users' });
     }
-    
+
     const result = await keymaker.issueKey(
       userId || identity?.userId,
       role || identity?.role || 'guest',
       tier || identity?.tier || 'starter',
       { durationHours: durationHours || 1, services, scopes }
     );
-    
+
     res.json({
       status: 'key_issued',
       key: result.key,
@@ -1368,7 +1387,7 @@ app.delete('/keymaker/keys/:keyHash', async (req, res) => {
     if (identity?.role !== 'admin') {
       return res.status(403).json({ error: 'Admin access required' });
     }
-    
+
     await keymaker.revokeKey(req.params.keyHash, req.body.reason || 'manual_revoke');
     res.json({ status: 'key_revoked', keyHash: req.params.keyHash });
   } catch (error) {
@@ -1383,7 +1402,7 @@ app.post('/keymaker/validate', async (req, res) => {
     if (!key) {
       return res.status(400).json({ error: 'Key required' });
     }
-    
+
     const validation = await keymaker.validateKey(key, req);
     res.json(validation);
   } catch (error) {
@@ -1398,15 +1417,15 @@ app.get('/keymaker/audit', async (req, res) => {
     if (identity?.role !== 'admin') {
       return res.status(403).json({ error: 'Admin access required' });
     }
-    
+
     const { data, error } = await supabase
       .from('keymaker_access_log')
       .select('*')
       .order('timestamp', { ascending: false })
       .limit(req.query.limit || 100);
-    
+
     if (error) throw error;
-    
+
     res.json({
       status: 'ok',
       logs: data,
@@ -1424,10 +1443,10 @@ app.post('/keymaker/admin/kill-switch', async (req, res) => {
     if (identity?.role !== 'admin') {
       return res.status(403).json({ error: 'Admin access required - Neo only' });
     }
-    
+
     const { enabled, reason } = req.body;
     await supabase.rpc('neo_kill_switch', { p_enabled: enabled, p_reason: reason });
-    
+
     res.json({
       status: 'kill_switch_triggered',
       enabled,
@@ -1446,14 +1465,14 @@ app.post('/keymaker/admin/break-glass', async (req, res) => {
     if (identity?.role !== 'admin') {
       return res.status(403).json({ error: 'Admin access required - Neo only' });
     }
-    
+
     const { userId, durationMinutes, reason } = req.body;
     const result = await supabase.rpc('neo_break_glass_access', {
       p_user_id: userId,
       p_duration_minutes: durationMinutes || 60,
       p_reason: reason
     });
-    
+
     res.json({
       status: 'break_glass_issued',
       keyHash: result.data,
@@ -1473,11 +1492,11 @@ async function initializeIntegrations() {
   try {
     // Ursula SSE stream is ready - The Voice of the Machine
     console.log('[URSULA] SSE stream ready - Central Nervous System active');
-    
+
     // Subscribe ProtoForge to relevant events - Ursula as the Broadcaster
     protoforgeEventBus.subscribe('hyve_opportunity_detected', (opportunityEvent) => {
       console.log(`[PROTOFORGE] Hyve opportunity: ${opportunityEvent.payload.opportunity_classification.opportunity_type}`);
-      
+
       // Broadcast to Ursula SSE - The Voice of the Machine
       const broadcastCount = ursulaSSE.broadcast({
         type: 'hyve_opportunity',
@@ -1486,7 +1505,7 @@ async function initializeIntegrations() {
       });
       console.log(`[URSULA] Broadcast to ${broadcastCount} subscribers`);
     });
-    
+
     protoforgeEventBus.subscribe('validation_complete', (validationEvent) => {
       ursulaSSE.broadcast({
         type: 'validation_complete',
@@ -1494,7 +1513,7 @@ async function initializeIntegrations() {
         data: validationEvent
       });
     });
-    
+
     protoforgeEventBus.subscribe('event_rejected', (rejectionEvent) => {
       ursulaSSE.broadcast({
         type: 'event_rejected',
@@ -1502,11 +1521,11 @@ async function initializeIntegrations() {
         data: rejectionEvent
       });
     });
-    
+
     protoforgeEventBus.subscribe('broadcast', (broadcastEvent) => {
       ursulaSSE.broadcast(broadcastEvent);
     });
-    
+
     // Heidi alerts through Ursula
     heidi.on('high_violation_risk', (alert) => {
       ursulaSSE.broadcast({
@@ -1516,7 +1535,7 @@ async function initializeIntegrations() {
         data: alert
       });
     });
-    
+
     heidi.on('proof_of_work_created', (certification) => {
       ursulaSSE.broadcast({
         type: 'proof_of_work',
@@ -1524,7 +1543,7 @@ async function initializeIntegrations() {
         data: certification
       });
     });
-    
+
     heidi.on('value_leak_detected', (leak) => {
       ursulaSSE.broadcast({
         type: 'value_opportunity',
@@ -1532,11 +1551,11 @@ async function initializeIntegrations() {
         data: leak
       });
     });
-    
+
     console.log('[PROTOFORGE] Event bus integrated with server');
     console.log('[URSULA] SSE stream ACTIVE - Broadcasting to all nodes');
     console.log('[SYSTEM] The Forge is ALIVE - All systems connected');
-    
+
   } catch (error) {
     console.error('Failed to initialize integrations:', error);
   }
@@ -1553,14 +1572,14 @@ server.listen(PORT, async () => {
   console.log('ProtoForge Validation Gate - Operational');
   console.log('[DATABASE] Single Supabase client initialized');
   console.log('[CHAT WS] WebSocket server initialized - Connect to ws://localhost:${PORT}/ws/<system>');
-  
+
   // Start CASCADE V2 system
   const cascadeStatus = cascade.start();
   console.log('[CASCADE V2]', cascadeStatus.status.toUpperCase(), '- Enhanced event processing active');
   console.log('[CASCADE V2] Version:', cascadeStatus.version);
-  
+
   await initializeIntegrations();
-  
+
   // Service Bundle event listeners — serviceBundle is temporarily disabled in
   // SubscriptionManager's constructor, so guard rather than assume it exists.
   if (subscriptionManager.serviceBundle) {
@@ -1584,24 +1603,24 @@ server.listen(PORT, async () => {
       });
     });
   }
-  
+
   // Setup CASCADE V2 event listeners
   cascade.on('heartbeat', (heartbeat) => {
     console.log(`[CASCADE V2] Heartbeat: ${heartbeat.status} - Active modules: ${heartbeat.active_modules.length}`);
   });
-  
+
   cascade.on('emission_success', (success) => {
     console.log(`[CASCADE V2] Emission successful: ${success.event_id} -> ${success.target_system} (ack: ${success.acknowledged})`);
   });
-  
+
   cascade.on('quarantine_resolved', (record) => {
     console.log(`[CASCADE V2] Quarantine resolved: ${record.event_id}`);
   });
-  
+
   cascade.on('event_dead_lettered', (deadLetter) => {
     console.log(`[CASCADE V2] Event dead-lettered: ${deadLetter.event_id} - Reason: ${deadLetter.dead_letter_reason}`);
   });
-  
+
   // Emission layer [6] of the pipeline: forward each run's outcome to
   // Ursula's SSE subscribers.
   cascade.on('pipeline_trace', (traceEvent) => {
@@ -1613,14 +1632,14 @@ server.listen(PORT, async () => {
   cascade.on('schema_violation', (violation) => {
     console.log(`[CASCADE V2] Schema violation: ${violation.event.event_id} - Errors: ${violation.violations.length}`);
   });
-  
+
   cascade.on('health_snapshot', (snapshot) => {
     // Log every 5th snapshot to avoid spam
     if (Math.random() < 0.2) {
       console.log(`[CASCADE V2] Health: ${snapshot.system_health} | Throughput: ${snapshot.event_throughput.current.toFixed(2)}/s | Error ratio: ${(snapshot.error_ratio.current * 100).toFixed(1)}%`);
     }
   });
-  
+
   // ── Universal Agent Bus Event Bridges ──
   // Bridge Service Bundle events onto the Agent Bus for unified telemetry
   // (guarded — serviceBundle is temporarily disabled, see block above)
@@ -1644,26 +1663,26 @@ server.listen(PORT, async () => {
       }, { priority: agentBus.priorities.PRO });
     });
   }
-  
+
   // Bridge local model health events to dashboard
   agentBus.on('model_flatlined', (event) => {
     console.log(`[AGENT BUS] ALERT: Model ${event.modelId} flatlined — redirecting to ${event.backupRoute || 'NONE'}`);
   });
-  
+
   agentBus.on('model_redirect', (event) => {
     console.log(`[AGENT BUS] Redirect: ${event.from} -> ${event.to} (${event.reason})`);
   });
-  
+
   agentBus.on('fail_event', (fail) => {
     console.log(`[AGENT BUS] FAIL EVENT: ${fail.action} for ${fail.customerId || 'system'} — ${fail.error}`);
   });
-  
+
   // Bridge Ursula heartbeat to the Agent Bus
   const ursulaHeartbeat = require('../modules/ursula-heartbeat');
   if (ursulaHeartbeat) {
     console.log('[AGENT BUS] Ursula heartbeat monitor bridged to bus telemetry');
   }
-  
+
   // cascadeStatus (from cascade.start(), above) is just { status, start_time,
   // version } — the summary below needs the live stats/system_health shape.
   const cascadeStats = cascade.getStatus();

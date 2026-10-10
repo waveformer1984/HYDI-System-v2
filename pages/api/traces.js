@@ -4,7 +4,10 @@
  * Powers the /trace-viewer page.
  */
 
-import { createClient } from '@supabase/supabase-js';
+import { createClient as _sbCreateClient } from '@supabase/supabase-js';
+// Hard transport timeout: degraded PostgREST hangs supabase-js for
+// minutes otherwise (froze /api/chat ~89s). Fails fast instead.
+const createClient = (u, k, o = {}) => _sbCreateClient(u, k, { ...o, global: { ...(o.global || {}), fetch: (url, init) => fetch(url, { ...init, signal: AbortSignal.timeout(Number(process.env.SUPABASE_REST_TIMEOUT_MS || 5000)) }) } });
 import { requireAuth } from '../../lib/auth/requireAuth.js';
 
 const PIPELINE_STAGES = [

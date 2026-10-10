@@ -6,12 +6,17 @@
  * text-embedding-3-small / ada-002 dimensionality.
  *
  * Two providers are supported:
- *  - `openai`  — hosted embeddings (default when OPENAI_API_KEY is set).
- *  - `ollama`  — local, zero-cost embeddings (e.g. nomic-embed-text). Local
- *    models emit fewer dimensions (768/1024); the vector is zero-padded to
- *    EMBEDDING_DIM. Zero-padding preserves cosine similarity (the extra zero
- *    components contribute nothing to the dot product or either norm), so it
- *    is safe for pgvector cosine search against 1536-dim rows.
+ *  - `ollama`  — local, zero-cost embeddings (e.g. nomic-embed-text). THE
+ *    DEFAULT. Local models emit fewer dimensions (768/1024); the vector is
+ *    zero-padded to EMBEDDING_DIM. Zero-padding preserves cosine similarity
+ *    (the extra zero components contribute nothing to the dot product or
+ *    either norm), so it is safe for pgvector cosine search against
+ *    1536-dim rows.
+ *  - `openai`  — hosted embeddings. Opt-in ONLY: it is selected when, and
+ *    only when, EMBEDDING_PROVIDER=openai is set explicitly. An ambient
+ *    OPENAI_API_KEY is never enough — that was the silent cloud fallback:
+ *    memory text was POSTed to api.openai.com merely because a key (even a
+ *    placeholder) existed in the environment.
  *
  * Returns `null` when no provider is configured or a call fails, so callers
  * degrade gracefully (store memory without an embedding and skip semantic
@@ -86,20 +91,29 @@ async function fetchWithDeadline(
 }
 
 /**
- * Resolve which embedding provider to use. An explicit EMBEDDING_PROVIDER wins;
- * otherwise prefer OpenAI when its key is present, then fall back to Ollama when
- * a local model is enabled.
+ * Resolve which embedding provider to use. An explicit EMBEDDING_PROVIDER wins.
+ * Otherwise the default is LOCAL-FIRST: Ollama.
+ *
+ * Why not "OPENAI_API_KEY present -> openai"? Presence of a credential is not
+ * consent to send data through it. Memory text is HYDI's internal state, and
+ * routing it to a cloud API must be a deliberate decision
+ * (EMBEDDING_PROVIDER=openai), never an ambient side-effect. That is the
+ * local-first contract: a cloud provider may exist only as an explicit
+ * adapter, and must never become the silent default.
+ *
+ * Defaulting to Ollama does not require probing it: generateEmbedding's fetch
+ * is deadline-bounded, and a missing server fails fast with ECONNREFUSED,
+ * degrading to the same `null` the caller already handles.
+ *
+ * EMBEDDING_PROVIDER=none disables embeddings explicitly.
  */
 export function getEmbeddingProvider(): EmbeddingProvider {
   const explicit = (process.env.EMBEDDING_PROVIDER || '').trim().toLowerCase();
   if (explicit === 'openai') return process.env.OPENAI_API_KEY ? 'openai' : null;
   if (explicit === 'ollama') return 'ollama';
+  if (explicit === 'none' || explicit === 'disabled' || explicit === 'off') return null;
 
-  if (process.env.OPENAI_API_KEY) return 'openai';
-  if (process.env.ENABLE_LOCAL_MODEL === 'true' || process.env.LOCAL_MODEL_URL || process.env.OLLAMA_URL) {
-    return 'ollama';
-  }
-  return null;
+  return 'ollama';
 }
 
 /**
@@ -166,6 +180,55 @@ async function generateOllamaEmbedding(input: string): Promise<number[] | null> 
   return toEmbeddingDim(embedding);
 }
 
+// ─── Circuit breaker ────────────────────────────────────────────────────
+// A dead/wedged provider must not cost the cognitive loop 15s per call
+// (retrieve + store every cycle ≈ the entire 30s cycle budget). After
+// CONSECUTIVE_FAILURE_THRESHOLD consecutive failures the circuit opens
+// and calls fail fast for CIRCUIT_COOLDOWN_MS; the first request after
+// cooldown is a half-open probe that either closes the circuit (success)
+// or re-opens it. Failure is still honest: callers already handle null.
+const CONSECUTIVE_FAILURE_THRESHOLD = 3;
+function circuitCooldownMs(): number {
+  const parsed = parseInt(process.env.EMBEDDING_CIRCUIT_COOLDOWN_MS || '', 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 5 * 60 * 1000;
+}
+
+interface CircuitState {
+  consecutiveFailures: number;
+  openUntil: number; // epoch ms; 0 = closed
+  halfOpenInFlight: boolean;
+}
+const circuit: CircuitState = { consecutiveFailures: 0, openUntil: 0, halfOpenInFlight: false };
+
+/** Test hook — reset the breaker between test cases. */
+export function _resetEmbeddingCircuit(): void {
+  circuit.consecutiveFailures = 0;
+  circuit.openUntil = 0;
+  circuit.halfOpenInFlight = false;
+}
+
+function circuitAllows(): boolean {
+  if (circuit.openUntil === 0) return true;                       // closed
+  if (Date.now() < circuit.openUntil) return false;              // open
+  if (circuit.halfOpenInFlight) return false;                    // probe already running
+  circuit.halfOpenInFlight = true;                               // half-open: one probe
+  return true;
+}
+
+function circuitRecord(success: boolean): void {
+  if (success) {
+    circuit.consecutiveFailures = 0;
+    circuit.openUntil = 0;
+  } else {
+    circuit.consecutiveFailures++;
+    if (circuit.consecutiveFailures >= CONSECUTIVE_FAILURE_THRESHOLD) {
+      circuit.openUntil = Date.now() + circuitCooldownMs();
+      console.error(`[Embeddings] Circuit open — ${circuit.consecutiveFailures} consecutive failures, failing fast for ${circuitCooldownMs() / 1000}s`);
+    }
+  }
+  circuit.halfOpenInFlight = false;
+}
+
 /**
  * Generate a real embedding for the given text.
  * @returns a 1536-dim vector, or null if embeddings are unavailable.
@@ -180,11 +243,16 @@ export async function generateEmbedding(text: string): Promise<number[] | null> 
   const input = (text || '').trim();
   if (!input) return null;
 
+  if (!circuitAllows()) return null; // circuit open — fail fast
+
   try {
-    return provider === 'ollama'
+    const out = provider === 'ollama'
       ? await generateOllamaEmbedding(input)
       : await generateOpenAIEmbedding(input);
+    circuitRecord(true);
+    return out;
   } catch (error) {
+    circuitRecord(false);
     console.error('[Embeddings] Generation failed:', error instanceof Error ? error.message : 'Unknown error');
     return null;
   }

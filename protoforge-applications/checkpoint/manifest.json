@@ -1,0 +1,88 @@
+{
+  "name": "Checkpoint",
+  "version": "0.1.0",
+  "owner": "ursula-suite",
+  "hostedBy": "ursula-engine",
+  "governance": {
+    "domain": "workflow-risk-analysis",
+    "tier": "external-engine",
+    "externalSource": "C:\\ProtoForge_Ecosystem\\Ursula_Suite\\apps\\checkpoint"
+  },
+  "capabilities": [
+    "workflow-analysis",
+    "risk-assessment",
+    "failure-point-detection"
+  ],
+  "eventsProduced": [
+    "workflow.analyzed",
+    "risk.scored"
+  ],
+  "eventsConsumed": [],
+  "providers": [
+    "ursula-engine"
+  ],
+  "dependencies": {
+    "services": [
+      "ursula-engine"
+    ]
+  },
+  "healthRequirements": [
+    "ursula-engine"
+  ],
+  "realization": {
+    "hosted": "ursula-engine",
+    "engineHealthUrl": "http://localhost:5000/checkpoint/health",
+    "engineProbe": {
+      "method": "POST",
+      "url": "http://localhost:5000/checkpoint/workflow/analyze",
+      "body": {
+        "name": "HYDI-REALIZATION-PROBE",
+        "category": "general",
+        "steps": [
+          {
+            "name": "intake"
+          },
+          {
+            "name": "process"
+          },
+          {
+            "name": "deliver"
+          }
+        ]
+      },
+      "expectStatus": 201,
+      "expectJsonField": "workflow_id"
+    },
+    "offerId": "checkpoint_audit"
+  },
+  "deprecated": false,
+  "commercial": {
+    "offerId": "checkpoint_audit",
+    "offerName": "Checkpoint Workflow Audit",
+    "customerProblem": "A team runs a workflow it cannot see clearly — failure points, control gaps, and risk concentration stay invisible until something breaks.",
+    "deliverable": "A workflow audit report: per-step risk scores, detected failure points, checkpoint recommendations, and a prioritized risk summary — produced by the verified engine analysis.",
+    "targetCustomer": "small ops/consulting teams running undocumented or drifting processes",
+    "category": "service_audit",
+    "recommendedPriceCents": 4900,
+    "priceBasis": "Introductory proof-of-machine pricing. Fulfillment is engine-verified compute plus automated delivery QA — near-zero marginal cost. Comparable human workflow audits bill in the hundreds; $49 makes the first transaction easy to approve.",
+    "unitEconomics": "one engine analyze call + report render + automated QA — near-zero marginal cost",
+    "marketEvidence": "none recorded — internal qualification only; no demand signals scanned",
+    "confidencePct": 55,
+    "revenuePath": "offer -> checkout -> payment -> job -> checkpoint analyze -> audit report -> delivery QA -> reconcile",
+    "fulfillment": {
+      "engine": "ursula-engine",
+      "analyze": "POST /checkpoint/workflow/analyze",
+      "report": "GET /checkpoint/workflow/<id>",
+      "artifacts": [
+        "checkpoint-audit.md",
+        "audit-data.json"
+      ],
+      "customerInput": "workflow description (steps)"
+    },
+    "implementationRequirements": [
+      "workflow_description"
+    ],
+    "marginTarget": 0.9,
+    "cancellationBehavior": "Full refund if the audit cannot be produced."
+  }
+}

@@ -12,6 +12,7 @@
  */
 
 import { Pool, QueryResultRow } from 'pg';
+import { MissionLifecycle } from './MissionLifecycle';
 
 export type GoalType = 'mission' | 'objective' | 'project' | 'task' | 'subtask' | 'action';
 export type GoalStatus = 'pending' | 'active' | 'in_progress' | 'blocked' | 'completed' | 'cancelled' | 'failed' | 'escalated';
@@ -76,6 +77,7 @@ const HIERARCHY: GoalType[] = ['mission', 'objective', 'project', 'task', 'subta
 
 export class GoalSystem {
   private pool: Pool;
+  private lifecycle: MissionLifecycle;
 
   constructor(config?: DBConfig) {
     this.pool = new Pool({
@@ -86,6 +88,7 @@ export class GoalSystem {
       password: config?.password || process.env.PG_PASSWORD || 'postgres',
       max: 5, idleTimeoutMillis: 30000,
     });
+    this.lifecycle = new MissionLifecycle(this.pool);
   }
 
   async createGoal(input: GoalCreateInput): Promise<Goal> {
@@ -94,7 +97,7 @@ export class GoalSystem {
       const parent = await this.getGoal(input.parentId);
       if (!parent) throw new Error(`Parent goal ${input.parentId} not found`);
       const parentIdx = HIERARCHY.indexOf(parent.goalType);
-    const childIdx = HIERARCHY.indexOf(input.goalType);
+      const childIdx = HIERARCHY.indexOf(input.goalType);
       if (childIdx <= parentIdx) {
         throw new Error(`Goal type ${input.goalType} cannot be child of ${parent.goalType} — must be lower in hierarchy`);
       }
@@ -125,7 +128,12 @@ export class GoalSystem {
       ],
     );
     if (!row) throw new Error('Goal insert returned no row');
-    return this.mapGoal(row);
+    const goal = this.mapGoal(row);
+    // Lifecycle receipt: creation is the DISCOVERED→PLANNED transition.
+    await this.lifecycle.recordStatusChange(goal.goalId, null, 'pending', {
+      evidence: { goalType: goal.goalType, producerKey: goal.context?.producerKey ?? null },
+    }).catch(() => { /* receipt write failure must not break creation */ });
+    return goal;
   }
 
   async getGoal(goalId: string): Promise<Goal | null> {
@@ -210,12 +218,29 @@ export class GoalSystem {
 
     if (sets.length === 0) return this.getGoal(goalId);
 
+    // Lifecycle: capture the pre-update status so the transition receipt
+    // records the real from→to pair (Phase C — every status change is a
+    // durable mission_transition event).
+    let priorStatus: GoalStatus | null = null;
+    if (updates.status !== undefined) {
+      const prior = await this.queryOne<QueryResultRow>(
+        `SELECT status FROM heidi_goals WHERE id = $1`, [goalId]);
+      priorStatus = (prior?.status as GoalStatus) ?? null;
+    }
+
     params.push(goalId);
     const row = await this.queryOne<QueryResultRow>(
       `UPDATE heidi_goals SET ${sets.join(', ')} WHERE id = $${idx} RETURNING *`,
       params,
     );
-    return row ? this.mapGoal(row) : null;
+    const updated = row ? this.mapGoal(row) : null;
+
+    if (updated && updates.status !== undefined && updates.status !== priorStatus) {
+      await this.lifecycle.recordStatusChange(goalId, priorStatus, updates.status, {
+        failureReason: updates.result ?? undefined,
+      }).catch(() => { /* receipt write failure must not break the update */ });
+    }
+    return updated;
   }
 
   async addEvidence(goalId: string, evidence: unknown): Promise<Goal | null> {
@@ -227,10 +252,16 @@ export class GoalSystem {
   }
 
   async getPendingWork(): Promise<Goal[]> {
-    // Get all goals that are pending or in_progress, ordered by priority
+    // Get all goals that are pending or in_progress, ordered by priority.
+    // Ownership invariant: a managed goal has exactly one execution owner.
+    // context.managedBy set to a specialized runner ('app-realization',
+    // 'revenue-autopilot', ...) makes the goal invisible to this generic
+    // queue — its owner drives every transition. Goals without a marker
+    // are generic-planner work.
     const rows = await this.pool.query<QueryResultRow>(
       `SELECT * FROM heidi_goals
        WHERE status IN ('pending', 'active', 'in_progress', 'blocked')
+         AND COALESCE(NULLIF(context->>'managedBy', ''), 'generic-planner') = 'generic-planner'
        ORDER BY priority DESC, created_at ASC
        LIMIT 100`,
     );
@@ -263,6 +294,22 @@ export class GoalSystem {
     }
 
     return { resumed, blocked };
+  }
+
+  /**
+   * Most recent goal carrying a given context key (e.g. a MissionProducer
+   * `producerKey`), regardless of status. Used for dedupe and cooldown —
+   * completed/failed goals still count toward the rate limit.
+   */
+  async getLatestByProducerKey(producerKey: string): Promise<Goal | null> {
+    const row = await this.queryOne<QueryResultRow>(
+      `SELECT * FROM heidi_goals
+       WHERE context->>'producerKey' = $1
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [producerKey],
+    );
+    return row ? this.mapGoal(row) : null;
   }
 
   async checkDependencies(goal: Goal): Promise<boolean> {

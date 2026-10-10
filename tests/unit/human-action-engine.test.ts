@@ -84,7 +84,7 @@ function createTestEngine(tmpDir: string): {
   });
 
   // Register adapters
-  engine.registerAdapter(new FilesystemAdapter(path.resolve(tmpDir, 'backups')));
+  engine.registerAdapter(new FilesystemAdapter(path.resolve(tmpDir, 'backups'), { repoRoot: tmpDir }));
   engine.registerAdapter(new ProcessAdapter());
   engine.registerAdapter(new HttpAdapter());
   engine.registerAdapter(new DevelopmentAdapter());
@@ -154,8 +154,11 @@ describe('Human Action Engine — Qualification Scenarios', () => {
     test('PLAN → AUTHORIZE → EXECUTE → VERIFY', async () => {
       const { engine, decomposer } = createTestEngine(tmpDir);
 
-      // Register goal
-      const goal = engine.registerGoal('Create a project directory and initialize it', 'user:owner', `${tmpDir}/new-project`);
+      // Register goal. The target lives inside the hydi-workspace writable
+      // zone: since Phase 4, autonomous filesystem writes are confined to
+      // explicit zones rather than '**/*', so a bare repo-root path would be
+      // correctly denied.
+      const goal = engine.registerGoal('Create a project directory and initialize it', 'user:owner', `${tmpDir}/hydi-workspace/new-project`);
 
       // Decompose
       const graph = decomposer.decompose(goal, { rootDir: tmpDir });
@@ -173,7 +176,7 @@ describe('Human Action Engine — Qualification Scenarios', () => {
       expect(dirResult!.verified).toBe(true);
 
       // Verify directory was actually created
-      expect(fs.existsSync(`${tmpDir}/new-project`)).toBe(true);
+      expect(fs.existsSync(`${tmpDir}/hydi-workspace/new-project`)).toBe(true);
     });
   });
 
@@ -425,7 +428,7 @@ describe('Human Action Engine — Qualification Scenarios', () => {
         registry: registry1, authorityManager: authMgr1, journal: journal1,
         defaultAuthorityId: auth1.authorityId,
       });
-      engine1.registerAdapter(new FilesystemAdapter(path.resolve(tmpDir, 'backups')));
+      engine1.registerAdapter(new FilesystemAdapter(path.resolve(tmpDir, 'backups'), { repoRoot: tmpDir }));
 
       const intent = makeIntent('persist-test', 'filesystem.write_file', 'write', `${tmpDir}/persist.txt`);
       intent.parameters = { content: 'persistent' };
@@ -542,7 +545,7 @@ describe('Human Action Engine — Qualification Scenarios', () => {
         registry, authorityManager: authMgr, journal,
         // No defaultAuthorityId
       });
-      engine.registerAdapter(new FilesystemAdapter(path.resolve(tmpDir, 'backups')));
+      engine.registerAdapter(new FilesystemAdapter(path.resolve(tmpDir, 'backups'), { repoRoot: tmpDir }));
 
       const intent = makeIntent('no-auth-test', 'filesystem.read_file', 'read', `${tmpDir}/test.txt`);
       const result = await engine.executeAction(intent);

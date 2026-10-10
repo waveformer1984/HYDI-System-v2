@@ -515,6 +515,8 @@ export interface RecoveryBudget {
   maxAffectedComponents: number;
   circuitBreakerThreshold: number;     // consecutive failures before tripping
   circuitBreakerCooldownMs: number;    // how long to stay tripped
+  retryEpisodeMs: number;              // a failure episode lapses after this much quiet —
+  // the retry budget then renews instead of deadlocking
 }
 
 /**
@@ -599,6 +601,7 @@ export type OperationalEventType =
   | 'action_denied'             // Phase 4: an action was denied by policy
   | 'escalation_triggered'      // Phase 4: escalation was triggered
   | 'circuit_breaker_tripped'   // Phase 4: circuit breaker tripped
+  | 'circuit_breaker_released'  // breaker cooldown lapsed — retry permitted (audited)
   | 'recovery_lock_acquired'    // Phase 4: recovery lock acquired
   | 'recovery_lock_released'    // Phase 4: recovery lock released
   | 'budget_exhausted'          // Phase 4: recovery budget exhausted
@@ -611,7 +614,8 @@ export type OperationalEventType =
   | 'observation_uncertain'     // Phase 6: observation confidence too low to act
   | 'false_recovery_prevented'  // Phase 6: recovery was correctly NOT triggered
   | 'recovery_stopped'          // Phase 7: recovery was intelligently stopped (non-retryable)
-  | 'incident_resolved';        // Phase 7 Fix: incident was resolved (recovery succeeded)
+  | 'incident_resolved'         // Phase 7 Fix: incident was resolved (recovery succeeded)
+  | 'budget_episode_expired';   // retry episode lapsed — durable budget renewed (audited)
 
 // ---------------------------------------------------------------------------
 // Phase 6: Observation Confidence & Corroboration

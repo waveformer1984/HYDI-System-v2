@@ -1,0 +1,157 @@
+{
+  "$schema": "hydi.test-tiers/v1",
+  "createdAt": "2026-09-18",
+  "createdBy": "Phase 12 — hermetic test architecture",
+  "method": {
+    "description": "Tier membership is derived from EXECUTION EVIDENCE, not from source inspection. The full 380-file default suite was run twice: once normally, once with every external endpoint redirected to closed port 59999. Suites that pass normally but fail with endpoints closed genuinely require those services.",
+    "redirectedEnvVars": [
+      "PG_HOST=127.0.0.1",
+      "PG_PORT=59999",
+      "SUPABASE_URL=http://127.0.0.1:59999",
+      "NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:59999",
+      "OLLAMA_URL=http://127.0.0.1:59999",
+      "LOCAL_MODEL_URL=http://127.0.0.1:59999",
+      "OLLAMA_HOST=http://127.0.0.1:59999"
+    ],
+    "liveSystemImpact": "NONE — process-local env overrides only. No service stopped, no config file edited, no database altered.",
+    "baseline": {
+      "suites": 380,
+      "passed": 378,
+      "failed": 2
+    },
+    "closedEndpoint": {
+      "suites": 380,
+      "passed": 366,
+      "failed": 14
+    },
+    "discardedHeuristic": "An earlier static scan estimated 69 non-hermetic files. Spot checks found 3 of 3 sampled were false positives (global.fetch stubbed, a match inside a comment, and jest.mock(http)). That estimate was discarded, NOT refined. The measured figure is 26, established by socket-level enforcement.",
+    "socketGuardRun": {
+      "suites": 366,
+      "passed": 354,
+      "failed": 12,
+      "note": "Third and definitive measurement. The env-redirect run (14) was an UNDERCOUNT because several suites hardcode 54322/54321/11434 and never read the redirected variables. tests/tier1-hermetic-guard.js enforces at the socket layer instead and found 12 more. 8 further suites ATTEMPT a blocked connection but still pass — they handle refusal gracefully and are hermetic in outcome, so they remain Tier 1."
+    },
+    "attemptedButHermetic": [
+      "tests/migrations/20260424152159.test.js",
+      "tests/migrations/20260425112000.test.js",
+      "tests/migrations/20260426005000.test.js",
+      "tests/migrations/20260521000001.test.js",
+      "tests/unit/hydi-v3/ActionSnapshot.test.js",
+      "tests/unit/hydi-v3/SecurityAuditor.test.js",
+      "tests/unit/hydi-v3/ServiceContract.test.js",
+      "tests/unit/recovery-bridge.test.ts"
+    ]
+  },
+  "tiers": {
+    "tier1_hermetic_unit": {
+      "description": "Runs with every external service unavailable. This is the fast development gate.",
+      "externalDependencies": [],
+      "enforcement": "The tier1 npm script itself redirects PG/Supabase/Ollama to a closed port, so a test that starts needing a service fails loudly instead of silently depending on a developer's running Docker.",
+      "command": "npm run test:unit",
+      "suiteCount": 354
+    },
+    "tier2_local_service": {
+      "description": "Requires local Postgres and/or the local Supabase REST stack. Measured, not assumed.",
+      "externalDependencies": [
+        "postgres@127.0.0.1:54322",
+        "supabase-rest@127.0.0.1:54321"
+      ],
+      "command": "npm run test:local",
+      "members": [
+        "tests/migrations/20260819140000_communication_layer_schema.test.js",
+        "tests/migrations/20260819200000.test.js",
+        "tests/migrations/20260915120000.test.js",
+        "tests/migrations/20260915130000.test.js",
+        "tests/migrations/20260915140000.test.js",
+        "tests/migrations/20260915150000.test.js",
+        "tests/migrations/20260915160000.test.js",
+        "tests/migrations/20260915180000.test.js",
+        "tests/migrations/20260916000000.test.js",
+        "tests/migrations/20260916010000.test.js",
+        "tests/unit/bounded-cognitive-loop.test.ts",
+        "tests/unit/communication-layer.test.ts",
+        "tests/unit/conversation-store-message-lookup.test.ts",
+        "tests/unit/goal-ownership.test.ts",
+        "tests/unit/heidi-autonomous-loop.test.ts",
+        "tests/unit/heidi-campaign-loop-qualification.test.ts",
+        "tests/unit/heidi-cognitive-core-qualification.test.ts",
+        "tests/unit/heidi-cognitive-core-real-qualification.test.ts",
+        "tests/unit/heidi-cognitive-core.test.ts",
+        "tests/unit/heidi-cognitive-loop-qualification.test.ts",
+        "tests/unit/heidi-commercial-workflow-qualification.test.ts",
+        "tests/unit/heidi-ollama-repair-handler.test.ts",
+        "tests/unit/heidi-real-e2e-qualification.test.ts",
+        "tests/unit/heidi-revenue-campaign-qualification.test.ts",
+        "tests/unit/heidi-self-sufficiency-production-qualification.test.ts",
+        "tests/unit/heidi-self-sufficiency-qualification.test.ts",
+        "tests/unit/proto-yi-diagnostics.test.js",
+        "tests/unit/revenue-engine.test.ts",
+        "tests/unit/webhooks-stripe.test.js"
+      ],
+      "note": "73 of the 83 migration tests are NOT here. They read migration SQL and assert on its contents, which needs no database. Only these 10 open a connection.",
+      "suiteCount": 26
+    },
+    "tier3_integration": {
+      "description": "Operational integration suite exercising real OperatorSession/HYDIContinuousRuntime instances against temp data directories.",
+      "externalDependencies": [
+        "local filesystem"
+      ],
+      "command": "npm run test:integration:jest",
+      "suiteCount": 12
+    },
+    "tier4_qualification": {
+      "description": "Standalone main()-style tsx programs. Slow by design (one is a 500-cycle soak); several expect a live local runtime.",
+      "externalDependencies": [
+        "live local HYDI runtime",
+        "postgres",
+        "ollama"
+      ],
+      "command": "npm run test:qualification",
+      "suiteCount": 10,
+      "note": "Named test-*.ts (prefix). That is correct for a main() program and was deliberately NOT renamed; what was missing was a command."
+    },
+    "tier5_external": {
+      "description": "Adversarial scripts requiring live SUPABASE_URL / SERVICE_ROLE_KEY. Not run by any gate.",
+      "externalDependencies": [
+        "live supabase credentials"
+      ],
+      "command": "npm run test:integration",
+      "suiteCount": 2
+    },
+    "packages_node_test": {
+      "description": "protoforge/packages/* — node:test format, no package.json, previously unreachable by any runner. NOT obsolete: api/platform/{applications,capabilities,dependencies,events}.js import this code.",
+      "externalDependencies": [],
+      "command": "npm run test:packages",
+      "suiteCount": 10,
+      "knownFailure": "protoforge/packages/certification/tests/certifier.test.js:50 'certifies Resonate' — certify('rezonate') returns ok=false. A real application-level drift between the certifier and the rezonate manifest, surfaced by giving these tests a runner. Left red deliberately rather than fixed inside a test-infrastructure phase."
+    },
+    "subproject_own_runner": {
+      "description": "Sub-projects with their own test runners. Reachable from their own directory, not from root.",
+      "command": "cd <subproject> && npm test",
+      "members": [
+        "protoforge-applications/rezonate (node --test, 17)",
+        "apps/ursula-frontend (vitest, 11)",
+        "switchboard (node --test, 8)",
+        "protoforge-applications/proto-yi (node --test, 6)",
+        "protoforge/hydi-gateway (node --test, 6)"
+      ],
+      "suiteCount": 48
+    }
+  },
+  "gateWiring": {
+    "before": {
+      ".githooks/pre-push": "npm test  (380 suites, required live Postgres/Supabase)",
+      "tools/verify.ps1": "npm test  (same)"
+    },
+    "after": {
+      ".githooks/pre-push": "npm test -> tier 1 only, endpoints closed",
+      "tools/verify.ps1": "npm test -> tier 1 only, endpoints closed",
+      "rationale": "A fast gate that silently requires Docker is a gate that lies. Tier 2 remains runnable and is where the database tests belong."
+    }
+  },
+  "coveragePreservation": {
+    "rule": "Every test file must be REACHABLE, EXPLICITLY RETIRED, or EXPLICITLY QUARANTINED. No silent orphaning.",
+    "retired": [],
+    "quarantined": []
+  }
+}

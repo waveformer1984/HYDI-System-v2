@@ -14,9 +14,8 @@ describe('Diagnostics', () => {
     assert.strictEqual(diag.engine.cloudDependency, false);
   });
 
-  it('reports model unavailable when not configured', async () => {
+  it('reports model available via the bundled tone-synth default', async () => {
     const diag = await collectDiagnostics();
-    assert.strictEqual(diag.engine.modelAvailable, false);
-    assert.ok(diag.engine.reason);
+    assert.strictEqual(diag.engine.modelAvailable, true);
   });
 });

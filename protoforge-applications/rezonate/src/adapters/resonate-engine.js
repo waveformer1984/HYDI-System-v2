@@ -4,7 +4,7 @@ const { execFile } = require('child_process');
 const { LocalAudioProvider } = require('../providers/local-audio-provider');
 const { LocalModelRuntime } = require('./local-model-runtime');
 
-const defaultEnginePath = path.join(__dirname, '..', '..', '..', 'rezonate');
+const defaultEnginePath = path.join(__dirname, '..', '..', '..', '..', 'rezonate');
 
 function createDefaultStemRunner() {
   return (command, args) => new Promise((resolve, reject) => {
@@ -16,11 +16,17 @@ function createDefaultStemRunner() {
 }
 
 function createDefaultAudioProvider(runner) {
+  // Default to the bundled deterministic tone-synth when no external model
+  // is configured — honest local-first generation, labeled 'tone-synth' in
+  // asset metadata. Override with AUDIO_MODEL_RUNTIME/AUDIO_MODEL_PATH.
+  const synthPath = require('path').join(__dirname, '..', '..', 'scripts', 'tone-synth.js');
   const runtime = new LocalModelRuntime({
+    command: process.env.AUDIO_MODEL_RUNTIME || 'node',
+    modelPath: process.env.AUDIO_MODEL_PATH || synthPath,
     outputDir: path.join(defaultEnginePath, 'generated'),
     runner
   });
-  return new LocalAudioProvider({ runtime, logger: { info: () => {}, warn: () => {} } });
+  return new LocalAudioProvider({ runtime, logger: { info: () => { }, warn: () => { } } });
 }
 
 class ResonateEngineAdapter {
@@ -28,7 +34,7 @@ class ResonateEngineAdapter {
     this.enginePath = options.enginePath || defaultEnginePath;
     this.stemRunner = options.stemRunner || options.runner || null;
     this.eventBus = options.eventBus || null;
-    this.logger = options.logger || { warn: () => {}, info: () => {}, debug: () => {} };
+    this.logger = options.logger || { warn: () => { }, info: () => { }, debug: () => { } };
     this.jobs = new Map();
     this.audioProvider = options.audioProvider || createDefaultAudioProvider(this.stemRunner);
   }
@@ -125,7 +131,7 @@ class ResonateEngineAdapter {
     this._emit('stem.processing.started', { jobId: id, sourcePath, projectId });
 
     try {
-      const result = await this._execStems('python', ['make-stems.py', sourcePath]);
+      const result = await this._execStems('python', [path.join(this.enginePath, 'make-stems.py'), sourcePath]);
       const folder = this._parseStemsFolder(result.stdout);
       job.status = 'completed';
       job.folder = folder;
@@ -156,7 +162,7 @@ class ResonateEngineAdapter {
     });
 
     try {
-      const result = await this._execStems('python', ['make-stems.py', sourcePath]);
+      const result = await this._execStems('python', [path.join(this.enginePath, 'make-stems.py'), sourcePath]);
       const meta = this._parseAnalysis(result.stdout || '');
       const folder = this._parseStemsFolder(result.stdout);
       job.status = 'completed';
@@ -188,6 +194,39 @@ class ResonateEngineAdapter {
     const bpm = (stdout.match(/bpm:\s*([\d.]+)/i) || [])[1];
     const key = (stdout.match(/key:\s*([^\n\r]+)/i) || [])[1];
     return { bpm: bpm ? Number(bpm) : null, key: key ? key.trim() : null };
+  }
+
+  /**
+   * Deterministic segment replacement — drives rezonate/segment-swap.py.
+   * Reuses cached stems; runs Demucs only when a song has no stems yet.
+   */
+  async segmentSwap({ input, stemsDir, stem, bars, segmentBars = 1, samples, maxReplacements = 4, bpm, plan = false, projectId = null } = {}) {
+    if (!stem) return { ok: false, error: 'stem is required' };
+    if (!bars || !/^\d+(-\d+)?$/.test(bars)) return { ok: false, error: 'bars must be N or N-M' };
+    if (!input && !stemsDir) return { ok: false, error: 'input or stemsDir is required' };
+    const id = this._jobId();
+    const job = this._register({ id, type: 'segment_swap', status: 'started', stem, bars, projectId, created_at: new Date().toISOString() });
+    const args = [path.join(this.enginePath, 'segment-swap.py'), '--stem', stem, '--bars', String(bars),
+      '--segment-bars', String(segmentBars), '--max-replacements', String(maxReplacements), '--json'];
+    if (input) args.push('--input', input);
+    if (stemsDir) args.push('--stems-dir', stemsDir);
+    if (samples) args.push('--samples', samples);
+    if (bpm) args.push('--bpm', String(bpm));
+    if (plan) args.push('--plan');
+    try {
+      const result = await this._execStems('python', args);
+      const line = result.stdout.trim().split('\n').filter(l => l.trim().startsWith('{')).pop();
+      const parsed = JSON.parse(line);
+      job.status = 'completed';
+      job.completed_at = new Date().toISOString();
+      this._emit('segment.swap.completed', { jobId: id, output: parsed.output, plan, projectId });
+      return { ok: true, jobId: id, ...parsed };
+    } catch (err) {
+      job.status = 'failed';
+      job.error = err.message;
+      this.logger.warn('adapter', 'segment.swap.failed', err.message, { jobId: id });
+      return { ok: false, error: err.message, jobId: id };
+    }
   }
 
   getProcessingStatus(id) {

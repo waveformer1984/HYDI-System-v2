@@ -123,10 +123,27 @@ export class DependencyGraphBuilder {
       id: 'database',
       category: 'database',
       criticality: 'critical',
-      dependencies: [],
+      // The 'database' health probe measures the Kong REST gateway
+      // (:54321/rest/v1), so the logical dependency runs through the
+      // gateway layer — wedged Kong = database down even when Postgres
+      // is healthy (live incident 2026-09-21).
+      dependencies: ['supabase_kong'],
       dependents: ['protoforge-core', 'heidi-web'],
       recoveryOrder: 0,
       recoveryPolicy: 'recover_database',
+    });
+
+    // Phase 7: Supabase Kong API gateway — serves :54321 (REST proxy to
+    // PostgREST). First-class component: a running-but-wedged Kong is a
+    // target failure, not an observer detail inside supabase_db.
+    nodes.set('supabase_kong', {
+      id: 'supabase_kong',
+      category: 'container',
+      criticality: 'critical',
+      dependencies: ['supabase_rest'],
+      dependents: ['database'],
+      recoveryOrder: 2,
+      recoveryPolicy: 'restart_container',
     });
 
     // Phase 6: Supabase DB container — separate from 'database' for

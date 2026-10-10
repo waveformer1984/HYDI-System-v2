@@ -1,4 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
+import { requireOpsAuth } from '../../lib/api/requireOpsAuth';
 
 /**
  * GET /api/acquisition
@@ -10,6 +11,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
  */
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  if (!requireOpsAuth(req, res)) return;
   if (req.method !== 'GET') {
     res.status(405).json({ error: 'Method not allowed' });
     return;

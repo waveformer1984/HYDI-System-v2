@@ -17,7 +17,7 @@
  * autonomous work sessions can build capacity-aware routing on top of.
  */
 
-import type { ActionExecutor, ActionResult, ExecutorAction } from '../action-executor';
+import type { ActionExecutor, ActionResult, ExecutorAction, ActionAuthorization } from '../action-executor';
 
 export interface AgentMetrics {
   tasksHandled: number;
@@ -44,11 +44,21 @@ export abstract class SpecialistAgent {
     return actionType === this.actionType;
   }
 
-  async execute(action: ExecutorAction, sessionId: string): Promise<ActionResult> {
+  /**
+   * `authorization` is forwarded, not consumed. An agent is a router, not an
+   * authority -- if it dropped the approval record here, a human-approved R2+
+   * action would be refused by the chokepoint and the approval flow would
+   * deadlock. Agents never mint authorization; they only carry it.
+   */
+  async execute(
+    action: ExecutorAction,
+    sessionId: string,
+    authorization?: ActionAuthorization,
+  ): Promise<ActionResult> {
     this.metrics.tasksHandled++;
     this.metrics.lastActiveAt = new Date().toISOString();
 
-    const result = await this.actionExecutor.execute(action, sessionId);
+    const result = await this.actionExecutor.execute(action, sessionId, authorization);
 
     if (result.status === 'completed') this.metrics.successCount++;
     else this.metrics.failureCount++;

@@ -100,28 +100,101 @@ export class EscalationNotifier {
     channels.push('console');
 
     // 2. Write to Supabase operator_escalations table (durable fallback)
+    // Idempotent per incident: a logical incident (category + incident key)
+    // produces ONE open escalation row. Repeated detections refresh it;
+    // a new incident (or re-incident after resolution) creates a new row.
+    // Without this, every scheduler cycle inserts a duplicate — observed
+    // live 2026-09-21: identical stuck_job rows accumulating every cycle.
     if (this.supabase) {
       try {
-        const { error } = await this.supabase
-          .from('operator_escalations')
-          .insert({
-            category: notification.category,
-            severity: notification.severity,
-            title: notification.title,
-            body: notification.body,
-            action_taken: notification.actionTaken || null,
-            action_required: notification.actionRequired || null,
-            metadata: notification.metadata || {},
-            created_at: new Date().toISOString(),
-            resolved: false,
-          });
-        if (error) {
-          lastError = `Supabase insert failed: ${error.message}`;
+        const incidentKey =
+          (notification.metadata?.dedupeKey as string | undefined) ??
+          (notification.metadata?.jobId as string | undefined) ??
+          (notification.metadata?.eventId as string | undefined) ??
+          null;
+
+        let existingId: string | null = null;
+        let lookupFailed = false;
+        if (incidentKey) {
+          // The identity may be stored under ANY of the incident-key field
+          // names — legacy webhook_retry rows carry metadata.eventId, stuck
+          // jobs carry jobId. Match all of them so a re-fired incident finds
+          // its canonical row regardless of which field the original
+          // detector used. (Census 2026-09-21: 439 webhook_retry rows used
+          // eventId and would have kept duplicating post-d9740f7.)
+          const { data: existing, error: lookupError } = await this.supabase
+            .from('operator_escalations')
+            .select('id')
+            .eq('category', notification.category)
+            .eq('resolved', false)
+            .or(
+              `metadata->>jobId.eq.${incidentKey},` +
+              `metadata->>dedupeKey.eq.${incidentKey},` +
+              `metadata->>eventId.eq.${incidentKey}`
+            )
+            .order('created_at', { ascending: false })
+            .limit(1);
+
+          if (lookupError) {
+            // FAIL CLOSED: a dedupe lookup that cannot run must not fall
+            // through to insert. Fail-open here is how a persistent
+            // PostgREST/filter error silently becomes a duplicate flood —
+            // the failure mode this table's 7,222-row backlog came from.
+            // The escalation is still logged to console + other channels;
+            // it is only the durable row that is withheld.
+            lookupFailed = true;
+            lastError = `Supabase dedupe lookup failed: ${lookupError.message}`;
+          } else {
+            existingId = existing?.[0]?.id ?? null;
+          }
+        }
+
+        if (lookupFailed) {
+          // identity could not be resolved — refuse to write a row we
+          // cannot deduplicate
+        } else if (existingId) {
+          const { error } = await this.supabase
+            .from('operator_escalations')
+            .update({
+              severity: notification.severity,
+              title: notification.title,
+              body: notification.body,
+              action_taken: notification.actionTaken || null,
+              action_required: notification.actionRequired || null,
+              metadata: {
+                ...(notification.metadata || {}),
+                last_seen_at: new Date().toISOString(),
+              },
+            })
+            .eq('id', existingId)
+            .eq('resolved', false); // never resurrect a resolved incident
+          if (error) {
+            lastError = `Supabase dedupe update failed: ${error.message}`;
+          } else {
+            channels.push('supabase');
+          }
         } else {
-          channels.push('supabase');
+          const { error } = await this.supabase
+            .from('operator_escalations')
+            .insert({
+              category: notification.category,
+              severity: notification.severity,
+              title: notification.title,
+              body: notification.body,
+              action_taken: notification.actionTaken || null,
+              action_required: notification.actionRequired || null,
+              metadata: notification.metadata || {},
+              created_at: new Date().toISOString(),
+              resolved: false,
+            });
+          if (error) {
+            lastError = `Supabase insert failed: ${error.message}`;
+          } else {
+            channels.push('supabase');
+          }
         }
       } catch (err) {
-        lastError = `Supabase insert threw: ${err instanceof Error ? err.message : 'Unknown error'}`;
+        lastError = `Supabase write threw: ${err instanceof Error ? err.message : 'Unknown error'}`;
       }
     }
 

@@ -1,10 +1,12 @@
 import { NextApiRequest, NextApiResponse } from 'next';
+import { requireOpsAuth } from '../../../lib/api/requireOpsAuth';
 import { getKeyManagementService } from '../../../lib/operational/KeyManagementService';
 
 /**
  * POST /api/keys/reconcile — Reconcile inventory with environment
  */
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  if (!requireOpsAuth(req, res)) return;
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }

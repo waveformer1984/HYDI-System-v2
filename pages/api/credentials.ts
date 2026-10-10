@@ -1,4 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
+import { requireOpsAuth } from '../../lib/api/requireOpsAuth';
 import { getCredentialRunbookRegistry } from '../../lib/operational/CredentialRunbookRegistry';
 
 /**
@@ -10,6 +11,7 @@ import { getCredentialRunbookRegistry } from '../../lib/operational/CredentialRu
  * Never returns credential values — only presence/absence and validity.
  */
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  if (!requireOpsAuth(req, res)) return;
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' });
   }

@@ -59,6 +59,8 @@ const ALLOWLIST = new Set([
   'docs/HYDI_CREDENTIAL_QUALIFICATION_FINAL_REPORT.md', // final qualification report
   'tests/unit/production-operations-control-plane.test.ts', // fake generic-placeholder secret fixtures testing safePrefix() redaction
   'tests/unit/stripe-connect-webhook.test.js', // fake key testing the live-mode guard refuses processing without ALLOW_LIVE_STRIPE
+  'tests/unit/human-actions.test.js', // fake secret-shaped fixtures (sk_live_FAKE..., rk_live_FAKE...) testing live-credential verifier prefix checks, not real keys
+  'tests/unit/human-action-resolvers.test.js', // fake rk_live_ fixture testing resolver authorization gating, not a real key
 ]);
 
 function listTrackedFiles() {

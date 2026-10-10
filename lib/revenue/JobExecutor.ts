@@ -24,6 +24,7 @@
 
 import { getJobManager, JobManager, CustomerJob } from './JobManager';
 import { generateModelPackage, verifyArtifacts, ArtifactResult } from './ModelArtifactGenerator';
+import { verifyDeliverableArtifacts, deliveryEligibility } from './DeliveryVerifier';
 import fs from 'fs';
 import path from 'path';
 
@@ -31,8 +32,53 @@ export interface ExecutionResult {
   jobId: string;
   success: boolean;
   artifacts: ArtifactResult[];
+  delivered?: boolean;
+  deliveryReason?: string;
   error?: string;
   durationMs: number;
+}
+
+/**
+ * Products with a real artifact executor. protoforge_model_prep is wired
+ * end-to-end (generateModelPackage → OpenSCAD/STL/README) and
+ * checkpoint_audit via the Ursula engine (analyze → audit report). Other
+ * sellable offers (e.g. rezonate_song) have no executor — running the
+ * model package generator for them would deliver the WRONG product to a
+ * paying customer. Fail-closed: block the job and escalate instead.
+ */
+const EXECUTABLE_PRODUCTS = new Set(['protoforge_model_prep', 'checkpoint_audit']);
+
+/** Product → generator. The paid product determines the artifacts. */
+async function generateForProduct(job: CustomerJob, outputDir: string): Promise<{ artifacts: ArtifactResult[] }> {
+  const requirements = job.requirements as Record<string, unknown>;
+  if (job.product === 'checkpoint_audit') {
+    const { generateCheckpointAudit } = await import('./CheckpointAuditGenerator');
+    return generateCheckpointAudit({
+      jobId: job.jobId,
+      requestText: job.requestText,
+      requirements: {
+        steps: requirements.steps as Array<Record<string, unknown> | string> | undefined,
+        workflowName: requirements.workflowName as string | undefined,
+        category: requirements.category as string | undefined,
+        projectId: requirements.projectId as number | undefined,
+      },
+      outputDir,
+    });
+  }
+  return generateModelPackage({
+    jobId: job.jobId,
+    requestText: job.requestText,
+    requirements: {
+      objectType: requirements.objectType as string | undefined,
+      width: requirements.width as number | undefined,
+      height: requirements.height as number | undefined,
+      depth: requirements.depth as number | undefined,
+      thickness: requirements.thickness as number | undefined,
+      material: requirements.material as string | undefined,
+      rushOrder: requirements.rushOrder as boolean | undefined,
+    },
+    outputDir,
+  });
 }
 
 /**
@@ -58,32 +104,45 @@ export async function executeJob(jobId: string): Promise<ExecutionResult> {
   }
 
   try {
+    // REVENUE_PATH_NOT_WIRED guard — check BEFORE generating anything.
+    // A product with no executor must never reach generateModelPackage:
+    // producing 3D-model artifacts for an audio/other-product order is
+    // a wrong-delivery, and could even auto-deliver via deliveryEligibility.
+    if (!EXECUTABLE_PRODUCTS.has(job.product)) {
+      await jobManager.requestIntervention(
+        jobId, `executor-${jobId}`,
+        `REVENUE_PATH_NOT_WIRED: product '${job.product}' has no artifact executor — blocked rather than delivering wrong artifacts`,
+      );
+      return {
+        jobId,
+        success: false,
+        artifacts: [],
+        error: `no executor for product '${job.product}'`,
+        durationMs: Date.now() - start,
+      };
+    }
+
     // Start execution (if not already running)
     if (job.jobStatus === 'queued') {
       await jobManager.startExecution(jobId);
     }
 
-    // Generate artifacts
+    // Generate artifacts — the generator is per-product; the paid product
+    // determines what "deliverable" means.
     const outputDir = jobManager.ensureJobArtifactDir(jobId);
-    const requirements = job.requirements as Record<string, unknown>;
+    const generationResult = await generateForProduct(job, outputDir);
 
-    const generationResult = generateModelPackage({
-      jobId,
-      requestText: job.requestText,
-      requirements: {
-        objectType: requirements.objectType as string | undefined,
-        width: requirements.width as number | undefined,
-        height: requirements.height as number | undefined,
-        depth: requirements.depth as number | undefined,
-        thickness: requirements.thickness as number | undefined,
-        material: requirements.material as string | undefined,
-        rushOrder: requirements.rushOrder as boolean | undefined,
-      },
-      outputDir,
-    });
-
-    // Verify artifacts
-    const verification = verifyArtifacts(generationResult.artifacts);
+    // Verify artifacts — the contract is per-product; the deep property
+    // checks live in verifyDeliverableArtifacts at the delivery gate.
+    const verification = job.product === 'checkpoint_audit'
+      ? (() => {
+        const a = generationResult.artifacts;
+        const ok = a.some(x => x.filename === 'checkpoint-audit.md') && a.some(x => x.filename === 'audit-data.json');
+        return ok
+          ? { verified: true, details: 'audit artifacts present' }
+          : { verified: false, details: 'Missing checkpoint-audit.md or audit-data.json' };
+      })()
+      : verifyArtifacts(generationResult.artifacts);
     if (!verification.verified) {
       await jobManager.failExecution(jobId, `Artifact verification failed: ${verification.details}`);
       return {
@@ -96,7 +155,7 @@ export async function executeJob(jobId: string): Promise<ExecutionResult> {
     }
 
     // Complete execution — job moves to 'awaiting_review'
-    await jobManager.completeExecution(jobId, generationResult.artifacts.map(a => ({
+    const completed = await jobManager.completeExecution(jobId, generationResult.artifacts.map(a => ({
       path: a.path,
       metadata: {
         filename: a.filename,
@@ -106,10 +165,28 @@ export async function executeJob(jobId: string): Promise<ExecutionResult> {
       },
     })));
 
+    // Autonomous delivery gate — independent QA decides whether the
+    // routine human review is needed at all. PASS → deliver; anything
+    // else stays awaiting_review with an escalated human reason.
+    const jobDir = path.join(jobManager.getArtifactsDir(), jobId);
+    const report = verifyDeliverableArtifacts(jobDir, { product: job.product });
+    const elig = deliveryEligibility(
+      { jobStatus: completed.jobStatus, paymentStatus: completed.paymentStatus, deliveryStatus: completed.deliveryStatus, artifactPaths: completed.artifactPaths },
+      report,
+    );
+    if (elig.eligible) {
+      await jobManager.approveForDelivery(jobId, 'auto-qa',
+        `independent QA PASS — artifacts ${Object.keys(report.artifactHashes).join(', ')}, bounds ${JSON.stringify(report.boundsMm)}`);
+    } else if (completed.paymentStatus === 'paid') {
+      await jobManager.requestIntervention(jobId, 'delivery-' + jobId, 'delivery_not_eligible: ' + elig.reason);
+    }
+
     return {
       jobId,
       success: true,
       artifacts: generationResult.artifacts,
+      delivered: elig.eligible,
+      deliveryReason: elig.reason,
       durationMs: Date.now() - start,
     };
   } catch (error) {
@@ -148,32 +225,61 @@ export async function processNextJob(): Promise<ExecutionResult | null> {
  * Recover stale 'executing' jobs after a restart.
  * If artifacts exist on disk, complete the job.
  * If not, fail it.
+ *
+ * A job whose execution started within staleAfterMs is still in flight
+ * under a live poller — it is NOT an orphan. Pollers that run recovery
+ * every cycle must never kill a job mid-execution, so the age guard
+ * lives here, not in the caller.
  */
-export async function recoverStaleJobs(): Promise<{ recovered: number; failed: number }> {
-  const jobManager = getJobManager();
+export const STALE_EXECUTION_MS = 10 * 60 * 1000;
+
+export async function recoverStaleJobs(
+  opts: { jobManager?: JobManager; staleAfterMs?: number; now?: number } = {},
+): Promise<{ recovered: number; failed: number; skipped: number }> {
+  const jobManager = opts.jobManager ?? getJobManager();
+  const staleAfterMs = opts.staleAfterMs ?? STALE_EXECUTION_MS;
+  const now = opts.now ?? Date.now();
   const staleJobs = await jobManager.getJobsByStatus('executing');
 
   let recovered = 0;
   let failed = 0;
+  let skipped = 0;
 
   for (const job of staleJobs) {
+    const startedAt = Date.parse(job.executionStartedAt || job.updatedAt || '');
+    if (Number.isFinite(startedAt) && now - startedAt < staleAfterMs) {
+      skipped++;
+      continue;
+    }
     const jobDir = path.join(jobManager.getArtifactsDir(), job.jobId);
 
-    // Check if artifacts were produced before the crash
+    // Check if artifacts were produced before the crash — the expected
+    // set is per-product (audit jobs don't produce .stl files).
     if (fs.existsSync(jobDir)) {
       const files = fs.readdirSync(jobDir);
-      const hasScad = files.some(f => f.endsWith('.scad'));
-      const hasStl = files.some(f => f.endsWith('.stl'));
-      const hasReadme = files.includes('README.md');
+      const complete = job.product === 'checkpoint_audit'
+        ? files.includes('checkpoint-audit.md') && files.includes('audit-data.json')
+        : files.some(f => f.endsWith('.scad')) && files.some(f => f.endsWith('.stl')) && files.includes('README.md');
 
-      if (hasScad && hasStl && hasReadme) {
+      if (complete) {
         // Artifacts exist — complete the job
         const artifacts = files.map(f => {
           const fullPath = path.join(jobDir, f);
           const stat = fs.statSync(fullPath);
           return { path: fullPath, metadata: { filename: f, sizeBytes: stat.size } };
         });
-        await jobManager.completeExecution(job.jobId, artifacts);
+        const completedJob = await jobManager.completeExecution(job.jobId, artifacts);
+        // Same autonomous gate — recovery doesn't bypass delivery QA.
+        const report = verifyDeliverableArtifacts(jobDir, { product: job.product });
+        const elig = deliveryEligibility(
+          { jobStatus: completedJob.jobStatus, paymentStatus: completedJob.paymentStatus, deliveryStatus: completedJob.deliveryStatus, artifactPaths: completedJob.artifactPaths },
+          report,
+        );
+        if (elig.eligible) {
+          await jobManager.approveForDelivery(job.jobId, 'auto-qa', `independent QA PASS after restart recovery — ${JSON.stringify(report.boundsMm)}`);
+        } else {
+          await jobManager.requestIntervention(job.jobId, 'delivery-' + job.jobId, 'delivery_not_eligible: ' + elig.reason);
+        }
         recovered++;
       } else {
         // Partial artifacts — fail
@@ -187,7 +293,37 @@ export async function recoverStaleJobs(): Promise<{ recovered: number; failed: n
     }
   }
 
-  return { recovered, failed };
+  return { recovered, failed, skipped };
+}
+
+/**
+ * Sweep paid 'awaiting_review' jobs through the same autonomous gate —
+ * jobs that were queued before the gate existed, or whose delivery was
+ * interrupted, still qualify; exceptions stay put and escalate.
+ */
+export async function sweepAwaitingReview(): Promise<{ delivered: number; escalated: number }> {
+  const jobManager = getJobManager();
+  const jobs = await jobManager.getJobsByStatus('awaiting_review');
+  let delivered = 0;
+  let escalated = 0;
+  for (const job of jobs) {
+    const jobDir = path.join(jobManager.getArtifactsDir(), job.jobId);
+    const report = verifyDeliverableArtifacts(jobDir, { product: job.product });
+    const elig = deliveryEligibility(
+      { jobStatus: job.jobStatus, paymentStatus: job.paymentStatus, deliveryStatus: job.deliveryStatus, artifactPaths: job.artifactPaths },
+      report,
+    );
+    if (elig.eligible) {
+      await jobManager.approveForDelivery(job.jobId, 'auto-qa', `independent QA PASS (sweep) — ${JSON.stringify(report.boundsMm)}`);
+      delivered++;
+    } else if (job.paymentStatus === 'paid' && report.verdict === 'FAIL' && job.interventionStatus !== 'requested') {
+      // A paid job with definitively failing QA is a human exception —
+      // flag it once, don't loop on it.
+      await jobManager.requestIntervention(job.jobId, `delivery_not_eligible:${elig.reason}`);
+      escalated++;
+    }
+  }
+  return { delivered, escalated };
 }
 
 /**

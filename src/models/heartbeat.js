@@ -21,7 +21,7 @@ class UrsulaModelHeartbeat extends EventEmitter {
     this._startupTimeout = null;
     this._startupResolve = null;
     this._startupReject = null;
-    
+
     // Configuration
     this.config = {
       checkInterval: 30000, // 30 seconds
@@ -92,7 +92,7 @@ class UrsulaModelHeartbeat extends EventEmitter {
     try {
       console.log('[HEARTBEAT] Initializing Local Model Adapter...');
       this.adapter = new LocalModelAdapter();
-      
+
       // Wait a bit for models to initialize
       await new Promise((resolve, reject) => {
         this._startupResolve = resolve;
@@ -104,20 +104,26 @@ class UrsulaModelHeartbeat extends EventEmitter {
           resolve();
         }, 5000);
       });
-      
+
       // stop() may have been called while we were waiting
       if (!this._starting) {
         return;
       }
-      
+
       console.log('[HEARTBEAT] Starting heartbeat monitoring...');
       this.heartbeatInterval = setInterval(() => {
-        this.checkModelHealth();
+        // checkModelHealth is async; without .catch an escaped rejection
+        // becomes unhandledRejection. Keep model-path failures contained —
+        // the control plane is not a function of local-model health.
+        this.checkModelHealth().catch((err) => {
+          console.error('[HEARTBEAT] ❌ Health check rejected:', err && err.message);
+          this.emit('heartbeat_error', { error: err && err.message });
+        });
       }, this.config.checkInterval);
-      
+
       // Do an immediate check
       await this.checkModelHealth();
-      
+
       this.emit('heartbeat_started');
       console.log('[HEARTBEAT] ✅ Heartbeat monitoring started');
     } catch (error) {
@@ -165,18 +171,18 @@ class UrsulaModelHeartbeat extends EventEmitter {
    */
   async checkModelHealth() {
     if (this.isChecking || !this.adapter || this._destroyed) return;
-    
+
     this.isChecking = true;
     this.lastCheckTime = new Date();
-    
+
     try {
       console.log(`[HEARTBEAT] 🔍 Checking model health at ${this.lastCheckTime.toISOString()}`);
       if (this._destroyed) return;
-      
+
       const results = await this.checkAllModels();
       if (this._destroyed) return;
       const failedModels = results.filter(r => !r.healthy);
-      
+
       // Update failed models tracking
       failedModels.forEach(result => {
         const modelKey = result.modelId;
@@ -187,12 +193,12 @@ class UrsulaModelHeartbeat extends EventEmitter {
           this.failedModels.set(modelKey, count);
         }
       });
-      
+
       // Remove models that are now healthy from failed tracking
       results
         .filter(r => r.healthy)
         .forEach(result => this.failedModels.delete(result.modelId));
-      
+
       // Handle models that have failed too many times
       const criticallyFailed = [];
       this.failedModels.forEach((count, modelId) => {
@@ -200,19 +206,19 @@ class UrsulaModelHeartbeat extends EventEmitter {
           criticallyFailed.push(modelId);
         }
       });
-      
+
       if (criticallyFailed.length > 0) {
         if (this._destroyed) return;
         console.log(`[HEARTBEAT] ⚠️  ${criticallyFailed.length} models have failed ${this.config.maxConsecutiveFailures}+ consecutive checks`);
         await this.recoverFailedModels(criticallyFailed);
       }
       if (this._destroyed) return;
-      
+
       // Log summary
       const healthyCount = results.filter(r => r.healthy).length;
       const totalCount = results.length;
       console.log(`[HEARTBEAT] 📊 Health Check: ${healthyCount}/${totalCount} models healthy`);
-      
+
       // Emit heartbeat event for monitoring systems
       this.emit('heartbeat_check', {
         timestamp: this.lastCheckTime,
@@ -221,7 +227,7 @@ class UrsulaModelHeartbeat extends EventEmitter {
         failedModels: failedModels.map(f => f.modelId),
         criticallyFailed: criticallyFailed
       });
-      
+
       if (this._destroyed) return;
       // Store metrics in database for dashboard
       await this.storeHeartbeatMetrics({
@@ -230,7 +236,7 @@ class UrsulaModelHeartbeat extends EventEmitter {
         failedModels: failedModels.map(f => f.modelId),
         criticallyFailed
       });
-      
+
     } catch (error) {
       console.error('[HEARTBEAT] ❌ Error during health check:', error.message);
       this.emit('heartbeat_error', { error: error.message });
@@ -271,9 +277,9 @@ class UrsulaModelHeartbeat extends EventEmitter {
 
       // Race between execution and timeout
       await Promise.race([resultPromise, timeoutPromise]);
-      
+
       const responseTime = Date.now() - startTime;
-      
+
       return {
         modelId,
         healthy: true,
@@ -286,7 +292,7 @@ class UrsulaModelHeartbeat extends EventEmitter {
       };
     } catch (error) {
       const responseTime = Date.now() - startTime;
-      
+
       return {
         modelId,
         healthy: false,
@@ -326,12 +332,12 @@ class UrsulaModelHeartbeat extends EventEmitter {
       'pricing-engine': { product: 'test-product', costs: 10, market: { demand: 'medium', competition: 'low' } },
       'rule-engine': { facts: { age: 25, income: 50000 }, rules: [] }
     };
-    
+
     // If we have a specific test input, use it
     if (testInputs[modelId]) {
       return testInputs[modelId];
     }
-    
+
     // Otherwise, try to map from service names or use a generic input
     const baseModel = this.resolveModelId(modelId);
     if (baseModel !== modelId) {
@@ -345,33 +351,32 @@ class UrsulaModelHeartbeat extends EventEmitter {
    * @returns {Promise<Array>} Array of health check results
    */
   async checkAllModels() {
-    // All entries in modelsToMonitor that are of type 'llama'/'codellama' in
-    // LocalModelAdapter resolve, via runLlamaInference()'s single ollamaModel
-    // default, to the SAME real Ollama model (see local-model-adapter.js and
-    // CLAUDE.md's LOCAL_MODEL_NAME/OLLAMA_MODEL precedence) - there is
-    // currently no per-model override that makes them actually distinct.
-    // Checking each alias separately was firing N redundant real inference
-    // calls into the single-concurrency Ollama server (OLLAMA_NUM_PARALLEL=1)
-    // every 30s for zero additional signal, and was directly implicated in a
-    // live /api/chat request queuing behind heartbeat traffic and taking
-    // ~15 minutes to return. Dedupe: check each distinct real model once,
-    // apply that result to every alias backed by it.
-    const aliasesByRealModel = new Map();
+    // Llama and CodeLlama entries all use LocalModelAdapter's one configured
+    // Ollama model (LOCAL_MODEL_NAME / OLLAMA_MODEL). They are distinct adapter
+    // ids, but not distinct inference backends. Probe that shared backend once
+    // so the 30s heartbeat cannot queue several redundant generations ahead of
+    // real chat traffic on single-concurrency Ollama installs.
+    const aliasesByTarget = new Map();
     for (const modelId of this.config.modelsToMonitor) {
       const realModelId = this.resolveModelId(modelId);
-      if (!aliasesByRealModel.has(realModelId)) aliasesByRealModel.set(realModelId, []);
-      aliasesByRealModel.get(realModelId).push(modelId);
+      const modelConfig = this.adapter.modelConfigs?.[realModelId];
+      const usesSharedOllama = modelConfig && ['llama', 'codellama'].includes(modelConfig.type);
+      const target = usesSharedOllama
+        ? `ollama:${modelConfig.ollamaModel || process.env.LOCAL_MODEL_NAME || process.env.OLLAMA_MODEL || 'auto'}`
+        : `adapter:${realModelId}`;
+      if (!aliasesByTarget.has(target)) aliasesByTarget.set(target, { representative: realModelId, aliases: [] });
+      aliasesByTarget.get(target).aliases.push(modelId);
     }
 
-    const realModelIds = Array.from(aliasesByRealModel.keys());
+    const targets = Array.from(aliasesByTarget.values());
     const realResults = await Promise.all(
-      realModelIds.map(realModelId => this.checkSingleModelHealth(realModelId))
+      targets.map(({ representative }) => this.checkSingleModelHealth(representative))
     );
 
     const results = [];
-    realModelIds.forEach((realModelId, i) => {
+    targets.forEach(({ aliases }, i) => {
       const base = realResults[i];
-      for (const alias of aliasesByRealModel.get(realModelId)) {
+      for (const alias of aliases) {
         results.push({ ...base, modelId: alias });
       }
     });
@@ -385,7 +390,7 @@ class UrsulaModelHeartbeat extends EventEmitter {
   async recoverFailedModels(modelIds) {
     if (this._destroyed) return;
     console.log(`[HEARTBEAT] 🔧 Attempting to recover ${modelIds.length} failed models...`);
-    
+
     for (const modelId of modelIds) {
       if (this._destroyed) return;
       try {
@@ -411,10 +416,10 @@ class UrsulaModelHeartbeat extends EventEmitter {
         if (modelConfig) {
           await this.adapter.loadModel(realModelId, modelConfig);
           console.log(`[HEARTBEAT] ✅ Model ${modelId} recovered successfully`);
-          
+
           // Reset failure count
           this.failedModels.delete(modelId);
-          
+
           this.emit('model_recovered_via_heartbeat', {
             modelId,
             timestamp: new Date(),
@@ -425,7 +430,7 @@ class UrsulaModelHeartbeat extends EventEmitter {
         }
       } catch (error) {
         console.error(`[HEARTBEAT] ❌ Failed to recover model ${modelId}:`, error.message);
-        
+
         this.emit('model_recovery_failed_via_heartbeat', {
           modelId,
           error: error.message,
@@ -483,14 +488,14 @@ if (require.main === module) {
   const startHeartbeat = async () => {
     try {
       await ursulaModelHeartbeat.start();
-      
+
       // Graceful shutdown
       process.on('SIGINT', async () => {
         console.log('\n[HEARTBEAT] 🛑 Received shutdown signal');
         ursulaModelHeartbeat.stop();
         process.exit(0);
       });
-      
+
       process.on('SIGTERM', async () => {
         console.log('\n[HEARTBEAT] 🛑 Received termination signal');
         ursulaModelHeartbeat.stop();
@@ -501,6 +506,6 @@ if (require.main === module) {
       process.exit(1);
     }
   };
-  
+
   startHeartbeat();
 }

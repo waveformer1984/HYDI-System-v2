@@ -24,7 +24,9 @@
  */
 
 import { randomUUID } from 'crypto';
-import { spawn, execSync, ChildProcess } from 'child_process';
+import { spawn, execSync, execFile, execFileSync, ChildProcess } from 'child_process';
+import { promisify } from 'util';
+const execFileAsync = promisify(execFile);
 import path from 'path';
 import fs from 'fs';
 import type {
@@ -935,6 +937,14 @@ export class RecoveryEngine {
     };
     const container = containerMap[containerName] || containerName;
 
+    // Red-team 2026-09-18: a component name NOT in containerMap fell back to
+    // the raw caller value and was interpolated into a shell string —
+    // `restartContainer('x; whoami')` was command injection. The name must be
+    // a valid Docker name token AND goes through execFileSync argv (no shell).
+    if (!/^[a-zA-Z0-9][a-zA-Z0-9_.\-]{0,127}$/.test(container)) {
+      throw new Error(`Invalid container name: '${containerName}' — refused`);
+    }
+
     // Resolve Docker CLI path deterministically (shared resolver)
     const dockerCmd = this.resolveDockerCmd();
 
@@ -942,7 +952,7 @@ export class RecoveryEngine {
       if (!dockerCmd) {
         throw new Error('Docker CLI not available — cannot restart container');
       }
-      execSync(`${dockerCmd} restart ${container}`, { timeout: 30000, stdio: 'pipe', windowsHide: true } as any);
+      execFileSync(dockerCmd, ['restart', container], { timeout: 30000, stdio: 'pipe', windowsHide: true } as any);
       this.stateModel.logEvent({
         id: randomUUID(),
         timestamp: new Date().toISOString(),
@@ -1052,17 +1062,48 @@ export class RecoveryEngine {
       detail: { strategy: 'local container restart' },
     });
 
-    // Try restarting the local Supabase DB container
+    // The 'database' health probe measures the Kong REST gateway on :54321
+    // (rest-reachable + service-role write/read/delete). A wedged Kong with a
+    // healthy Postgres previously produced a permanent deadlock: this function
+    // restarted supabase_db while the probe kept failing at the gateway —
+    // observed live 2026-09-21 (protoforge-core recovery stuck in
+    // RECOVERY_DEPENDENCY_BLOCKED until Kong was restarted manually).
+    // Remediate the layer the probe measures first, then Postgres only if
+    // the gateway is still unreachable.
+    const kongProbeOk = async () => {
+      try {
+        const res = await fetch('http://127.0.0.1:54321/rest/v1/', {
+          signal: AbortSignal.timeout(5000),
+        });
+        return res.status > 0; // Kong answered — any HTTP status means the gateway serves requests
+      } catch {
+        return false;
+      }
+    };
+
     try {
       const dockerCmd = this.resolveDockerCmd();
       if (!dockerCmd) {
         throw new Error('Docker CLI not available — cannot restart DB container');
       }
-      const containerName = 'supabase_db_HYDI-System-v2';
-      execSync(`${dockerCmd} restart ${containerName}`, { timeout: 30000, stdio: 'pipe', windowsHide: true } as any);
 
-      // Wait for the DB to accept connections (max 20s)
+      // 1. Gateway first — the probe's own layer.
+      execFileSync(dockerCmd, ['restart', 'supabase_kong_HYDI-System-v2'], { timeout: 30000, stdio: 'pipe', windowsHide: true } as any);
       await this.waitForService('http://127.0.0.1:54321', 20000);
+
+      // 2. Postgres only if the gateway still cannot serve the REST path.
+      if (!(await kongProbeOk())) {
+        this.stateModel.logEvent({
+          id: randomUUID(),
+          timestamp: new Date().toISOString(),
+          type: 'recovery_step',
+          component,
+          action: 'database_recovery_kong_insufficient',
+          detail: { strategy: 'escalating to db container restart' },
+        });
+        execFileSync(dockerCmd, ['restart', 'supabase_db_HYDI-System-v2'], { timeout: 30000, stdio: 'pipe', windowsHide: true } as any);
+        await this.waitForService('http://127.0.0.1:54321', 20000);
+      }
 
       this.stateModel.logEvent({
         id: randomUUID(),
@@ -1287,6 +1328,150 @@ export class RecoveryEngine {
       throw new Error(`Cannot restart ${component}: not a process module`);
     }
 
+    // Preferred path: delegate the spawn to the running boot authority so the
+    // restarted process stays a child of boot-agent.
+    //
+    // Doing the spawn here instead is what severed ownership: a detached,
+    // unref'd child is not boot-agent's, so boot-agent can no longer watch it
+    // for `exit` and the supervisor can no longer stop it. Measured 2026-09-18:
+    // protoforge-core and heidi-web were both ORPHAN with DEAD ancestry, while
+    // heidi-mobile-chat stayed owned only because it had never been recovered.
+    //
+    // This does NOT change SUPERVISION_MODEL.md's division of responsibility.
+    // RecoveryEngine still owns the policy decision -- whether a restart is
+    // authorized, within budget, and not observer-confused. Only the mechanical
+    // spawn moves to the process that owns the module. See
+    // scripts/recovery-lease.js:22-34, which identified this fix and deferred it.
+    // PM2-supervised modules (e.g. heidi-web -> heidi-web-standalone, the
+    // real owner of port 3000) are not boot-agent children, so the
+    // boot-control channel can never ack their restart -- the observed ack
+    // was 'not owned by this boot agent'. Send them to PM2 directly.
+    const { pm2NameFor } = require('./DependencyAwareRestartExecutor');
+    const pm2Name = pm2NameFor(component);
+    if (pm2Name !== component) {
+      await execFileAsync('pm2', ['restart', pm2Name, '--update-env'], { timeout: 30000 });
+      const healthy = mod.port ? await this.portListening(mod.port) : true;
+      this.stateModel.logEvent({
+        id: randomUUID(),
+        timestamp: new Date().toISOString(),
+        type: 'recovery_step',
+        component,
+        action: 'process_restart_via_pm2',
+        actionResult: healthy ? 'success' : 'failure',
+        detail: { pm2Name, port: mod.port ?? null, portListening: healthy },
+      });
+      if (!healthy) {
+        throw new Error(`pm2 restart ${pm2Name} returned but port ${mod.port} not listening`);
+      }
+      return;
+    }
+
+    const bootControl = require('../../scripts/boot-control');
+    if (bootControl.isBootAuthorityAlive()) {
+      // Deliberately no killProcessOnPort() here: boot-agent stops its own
+      // child as part of the restart. Killing the port from outside would fire
+      // boot-agent's unexpected-exit handler for a shutdown it was about to
+      // perform itself.
+      const req = bootControl.requestRestart(component, {
+        requestedBy: 'RecoveryEngine.restartProcess',
+        reason: 'governed recovery restart',
+      });
+
+      // Allow the module's own health grace period plus headroom for
+      // boot-agent to stop the old child and bind the port again.
+      const ack = await bootControl.waitForAck(req.id, {
+        timeoutMs: this.getGraceMs(component) + 30000,
+      });
+
+      if (ack.status === 'completed') {
+        // A completed ack is not proof by itself. The control directory is a
+        // filesystem queue any same-user process can write to, so a claimed
+        // "completed + pid + ownedBy" ack could be fabricated. Verify before
+        // recording an owned success (red-team 2026-09-18: a planted ack with a
+        // nonexistent pid was previously reported as owned:true).
+        //
+        // What is checked: the pid must be a live process, the ack must claim
+        // boot-agent ownership, and -- when the module has a port -- the port
+        // must actually be listening. These cannot all be faked without a real
+        // restarted process, which is what the ack is asserting exists.
+        const ackVerified =
+          bootControl.isPidAlive(ack.pid) &&
+          ack.ownedBy === 'boot-agent' &&
+          (mod.port ? await this.portListening(mod.port) : true);
+
+        if (!ackVerified) {
+          this.stateModel.logEvent({
+            id: randomUUID(),
+            timestamp: new Date().toISOString(),
+            type: 'recovery_step',
+            component,
+            action: 'process_restart_delegated',
+            actionResult: 'failure',
+            detail: {
+              requestId: req.id,
+              ackStatus: ack.status,
+              pid: ack.pid ?? null,
+              error:
+                `completed ack did not verify (pid alive: ${bootControl.isPidAlive(ack.pid)}, ` +
+                `ownedBy: ${ack.ownedBy ?? 'none'}${mod.port ? `, port ${mod.port} listening: ${await this.portListening(mod.port)}` : ''})`,
+            },
+          });
+          bootControl.clearRequest(req.id);
+          throw new Error(
+            `Delegated restart of ${component} reported completed but did not verify (dead or mismatched pid/port)`
+          );
+        }
+
+        this.stateModel.logEvent({
+          id: randomUUID(),
+          timestamp: new Date().toISOString(),
+          type: 'recovery_step',
+          component,
+          action: 'process_restart_delegated',
+          actionResult: 'success',
+          detail: {
+            pid: ack.pid,
+            ownedBy: ack.ownedBy || 'boot-agent',
+            requestId: req.id,
+            owned: true,
+            verified: true,
+          },
+        });
+        bootControl.clearRequest(req.id);
+        return;
+      }
+
+      this.stateModel.logEvent({
+        id: randomUUID(),
+        timestamp: new Date().toISOString(),
+        type: 'recovery_step',
+        component,
+        action: 'process_restart_delegated',
+        actionResult: 'failure',
+        detail: { requestId: req.id, ackStatus: ack.status, error: ack.error ?? null },
+      });
+      bootControl.clearRequest(req.id);
+
+      // Falling back to a detached spawn here would let recovery "succeed" by
+      // recreating the exact orphan this path exists to prevent. Fail honestly
+      // instead -- recover()'s own retry/escalation handles it from here.
+      if (ack.status === 'timeout') {
+        throw new Error(
+          `Boot authority did not acknowledge restart of ${component} within timeout`
+        );
+      }
+      throw new Error(
+        `Boot authority failed to restart ${component}: ${ack.error || 'restart failed'}`
+      );
+    }
+
+    // No boot authority is running -- the standalone `hydi:recover` CLI case.
+    // (PM2-supervised modules already returned above via pm2 restart, so
+    // anything reaching this line is genuinely unsupervised.)
+    // A detached spawn is the only option here, and it is genuinely better than
+    // leaving the service down, but the ownership cost is real and is recorded
+    // explicitly below rather than reported as a clean restart.
+
     // Kill existing process on the port if any
     if (mod.port) {
       await this.killProcessOnPort(mod.port);
@@ -1355,9 +1540,19 @@ export class RecoveryEngine {
       timestamp: new Date().toISOString(),
       type: 'recovery_step',
       component,
-      action: 'process_spawned',
+      action: 'process_spawned_unowned',
       actionResult: 'success',
-      detail: { pid: child.pid, detached: true, command: `${command} ${args.join(' ')}` },
+      detail: {
+        pid: child.pid,
+        detached: true,
+        owned: false,
+        ownershipWarning:
+          'Spawned detached because no boot authority was running: this process is ' +
+          'not a child of the boot authority and cannot be stopped by the supervisor. ' +
+          'A recovery lease records its identity so it is classified as "recovered" ' +
+          'rather than an unidentified stray.',
+        command: `${command} ${args.join(' ')}`,
+      },
     });
   }
 
@@ -1369,21 +1564,51 @@ export class RecoveryEngine {
       if (process.platform === 'win32') {
         const out = execSync('netstat -ano', { encoding: 'utf8', timeout: 5000, windowsHide: true } as any);
         for (const line of out.split('\n')) {
-          if (!line.includes(`:${port}`) || !/LISTENING/i.test(line)) continue;
+          if (!/LISTENING/i.test(line)) continue;
           const parts = line.trim().split(/\s+/);
+          // TCP LISTENING row: [Proto, LocalAddress, ForeignAddress, State, PID].
+          // Match the LOCAL-address port exactly — `line.includes(':'+port)`
+          // matched ':30050' and ':13005' while recovering :3005, which would
+          // taskkill an unrelated listener's PID (red-team 2026-09-18).
+          if (parts.length < 5 || !/^TCP$/i.test(parts[0])) continue;
+          const localAddr = parts[1];
+          const localPort = localAddr.slice(localAddr.lastIndexOf(':') + 1);
+          if (localPort !== String(port)) continue;
           const pid = parts[parts.length - 1];
           if (pid && /^\d+$/.test(pid)) {
             try {
-              execSync(`taskkill /PID ${pid} /F`, { timeout: 5000, windowsHide: true } as any);
+              execFileSync('taskkill', ['/PID', pid, '/F'], { timeout: 5000, windowsHide: true } as any);
             } catch { /* process may have already exited */ }
           }
         }
       } else {
         try {
-          execSync(`lsof -ti :${port} | xargs kill -9 2>/dev/null`, { timeout: 5000, windowsHide: true } as any);
+          const out = execFileSync('lsof', ['-ti', `:${port}`], { encoding: 'utf8', timeout: 5000, windowsHide: true } as any);
+          for (const pidStr of out.split('\n').map((s) => s.trim()).filter((s) => /^\d+$/.test(s))) {
+            try {
+              execFileSync('kill', ['-9', pidStr], { timeout: 5000, windowsHide: true } as any);
+            } catch { /* process may have already exited */ }
+          }
         } catch { /* no process on port */ }
       }
     } catch { /* ignore errors — best effort cleanup */ }
+  }
+
+  /**
+   * Is something actually accepting TCP connections on a port? Used to verify a
+   * delegated restart really bound its port — a "completed" ack is not trusted
+   * until the listener it claims to have created is observable.
+   */
+  private async portListening(port: number, timeoutMs = 3000): Promise<boolean> {
+    const net = await import('net');
+    return new Promise((resolve) => {
+      const sock = new net.Socket();
+      const done = (up: boolean) => { try { sock.destroy(); } catch { /* */ } resolve(up); };
+      const timer = setTimeout(() => done(false), timeoutMs);
+      sock.once('connect', () => { clearTimeout(timer); done(true); });
+      sock.once('error', () => { clearTimeout(timer); done(false); });
+      try { sock.connect(port, '127.0.0.1'); } catch { clearTimeout(timer); done(false); }
+    });
   }
 
   private getGraceMs(component: string): number {

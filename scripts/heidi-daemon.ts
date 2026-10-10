@@ -25,13 +25,16 @@
 
 import fs from 'fs';
 import path from 'path';
+import { execSync } from 'child_process';
 import dotenv from 'dotenv';
+import { Pool } from 'pg';
 
 dotenv.config({ path: path.resolve(__dirname, '../.env.local') });
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
 import { buildCognitiveCore } from '../lib/heidi/CognitiveCoreBuilder';
 import type { CognitiveCore, LoopStatus } from '../lib/heidi/CognitiveCore';
+import { getGoalSystem } from '../lib/heidi/GoalSystem';
 
 // ─── Configuration ───────────────────────────────────────────────────────
 
@@ -89,10 +92,31 @@ function parseArgs(): DaemonConfig {
  * alive. If it's stale (process died without releasing), we remove it and
  * retry the atomic create. If the process IS alive, we refuse to start.
  */
+/**
+ * Resolve the commit this daemon was launched from by inspecting the
+ * working tree — never an env var. Deployment reconciliation compares
+ * this against qualified-deployment.json; an orphan running old code
+ * will carry the OLD commit, making stale execution visible.
+ */
+function resolveRuntimeCommit(): string | null {
+  try {
+    const head = execSync('git rev-parse --short HEAD', {
+      cwd: path.resolve(__dirname, '..'),
+      timeout: 10000,
+      encoding: 'utf8',
+    }).trim();
+    return head || null;
+  } catch {
+    return null;
+  }
+}
+
 function acquireLock(): boolean {
   const lockData = JSON.stringify({
     pid: process.pid,
     startedAt: new Date().toISOString(),
+    cwd: process.cwd(),
+    commit: resolveRuntimeCommit(),
   });
 
   // First attempt: atomic exclusive create
@@ -168,9 +192,9 @@ function acquireLock(): boolean {
  */
 function isNodeError(error: unknown, code: string): boolean {
   return error !== null &&
-         typeof error === 'object' &&
-         'code' in error &&
-         (error as { code: string }).code === code;
+    typeof error === 'object' &&
+    'code' in error &&
+    (error as { code: string }).code === code;
 }
 
 function releaseLock(): void {
@@ -445,9 +469,22 @@ async function main(): Promise<void> {
   }
   console.log(`[daemon] Lock acquired: ${LOCK_FILE}`);
 
+  // 1b. Shared Supabase client — wires the memory bridge (episodic
+  //     experience storage with real row ids) and ActionExecutor in the
+  //     cognitive core, and is reused below for delegated-operator
+  //     persistence restore. Absent env vars leave those bridges unwired,
+  //     which the core reports honestly rather than failing.
+  let supabase: import('@supabase/supabase-js').SupabaseClient | undefined;
+  if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    const { createClient } = await import('@supabase/supabase-js');
+    supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+  } else {
+    console.warn('[daemon] Supabase not configured — memory/actionExecutor bridges unwired');
+  }
+
   // 2. Build production CognitiveCore with self-sufficiency wired
   console.log('[daemon] Building production CognitiveCore...');
-  const core = await buildCognitiveCore({ dbConfig: DB_CONFIG });
+  const core = await buildCognitiveCore({ dbConfig: DB_CONFIG, supabase });
   const bridge = core.getBridge();
 
   // Verify self-sufficiency services are wired
@@ -534,7 +571,7 @@ async function main(): Promise<void> {
     const waitStart = Date.now();
     let cognitiveInFlight = core.getLoopStatus().cycleInFlight;
     while ((cognitiveInFlight || ssfInFlight) &&
-           (Date.now() - waitStart) < SHUTDOWN_WAIT_TIMEOUT_MS) {
+      (Date.now() - waitStart) < SHUTDOWN_WAIT_TIMEOUT_MS) {
       console.log(`[daemon] Waiting for in-flight work to complete (cognitive=${cognitiveInFlight}, ssf=${ssfInFlight})... elapsed=${Date.now() - waitStart}ms`);
       await sleep(POLL_INTERVAL_MS);
       cognitiveInFlight = core.getLoopStatus().cycleInFlight;
@@ -596,6 +633,38 @@ async function main(): Promise<void> {
     }
   });
 
+  // Orphan guard: if the launcher dies without relaying a shutdown (PM2
+  // fell back to taskkill /F after kill_timeout, or the launcher itself
+  // crashed), the fork() IPC channel closes. Without this handler the
+  // daemon keeps running while holding .heidi-daemon.lock, and every PM2
+  // respawn fails 'another daemon is already running' forever — observed
+  // live 2026-09-21 (4 orphan lineages in one session, PM2 slot churning
+  // waiting_restart). IPC disconnect = launcher gone = shut down cleanly.
+  process.on('disconnect', () => {
+    console.log(`[daemon] IPC channel closed — launcher gone, shutting down as orphan at ${new Date().toISOString()}`);
+    gracefulShutdown('IPC_DISCONNECT');
+  });
+
+  // Belt-and-suspenders orphan guard: 'disconnect' alone is not
+  // sufficient on Windows — observed 2026-09-26: daemon pid survived a
+  // full PM2 launcher restart and kept running stale code for hours,
+  // still holding the lock so every new child exited immediately.
+  // Poll the parent pid each interval; if the launcher is gone and no
+  // shutdown is already underway, shut down. ppid===0/absent under
+  // double-fork or detached contexts is treated as "unknown", not death.
+  const launcherPid = process.ppid;
+  if (launcherPid > 1) {
+    const parentCheck = setInterval(() => {
+      if (shuttingDown) { clearInterval(parentCheck); return; }
+      if (!isProcessAlive(launcherPid)) {
+        console.error(`[daemon] Launcher (pid ${launcherPid}) is gone — shutting down as orphan at ${new Date().toISOString()}`);
+        gracefulShutdown('PARENT_GONE');
+        clearInterval(parentCheck);
+      }
+    }, Math.max(30000, config.intervalMs));
+    parentCheck.unref();
+  }
+
   // 4. Run initial self-sufficiency observation
   console.log('[daemon] Running initial capability health check...');
   const initialResult = await runSelfSufficiencyCycle(core);
@@ -611,9 +680,7 @@ async function main(): Promise<void> {
   //     from Supabase persistence so they survive daemon restart.
   try {
     const { initializePersistence, restoreFromPersistence } = await import('../lib/delegated-operator');
-    if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
-      const { createClient } = await import('@supabase/supabase-js');
-      const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+    if (supabase) {
       initializePersistence(supabase);
       const restored = await restoreFromPersistence();
       if (restored.interventionsRestored > 0) {
@@ -664,6 +731,7 @@ async function main(): Promise<void> {
 
   // 7. Self-sufficiency observation loop (runs alongside cognitive loop)
   let selfSufficiencyCycleCount = 0;
+  let lastEscalationSignature: string | null = null;
 
   async function runSelfSufficiencyInterval(): Promise<void> {
     if (shuttingDown) return;
@@ -704,7 +772,10 @@ async function main(): Promise<void> {
         durationMs,
       });
 
-      // Log significant events
+      // Log significant events. Escalation lines are deduped by
+      // signature — a still-blocked capability escalates every cycle
+      // (was: 4 identical lines/minute forever); log the first time and
+      // whenever the escalated set changes, then stay quiet.
       if (result.selfRepairResult && result.selfRepairResult.repaired > 0) {
         console.log(`[daemon] [${cycleId}] Repaired ${result.selfRepairResult.repaired} capability(s)`);
       }
@@ -714,11 +785,26 @@ async function main(): Promise<void> {
       if (result.acquisitionResult && result.acquisitionResult.resolved > 0) {
         console.log(`[daemon] [${cycleId}] Acquired ${result.acquisitionResult.resolved} capability(s) — now READY`);
       }
-      if (result.acquisitionResult && result.acquisitionResult.escalated > 0) {
-        console.log(`[daemon] [${cycleId}] Escalated ${result.acquisitionResult.escalated} capability acquisition(s) — require human action`);
-      }
-      if (result.selfRepairResult && result.selfRepairResult.escalated > 0) {
-        console.log(`[daemon] [${cycleId}] Escalated ${result.selfRepairResult.escalated} blocker(s) to human`);
+
+      const escalatedCaps = Object.entries(result.acquisitionResult?.states ?? {})
+        .filter(([, s]) => s === 'POLICY_BLOCKED' || s === 'BLOCKED')
+        .map(([id]) => id)
+        .sort()
+        .join(',');
+      const acqEscalated = result.acquisitionResult?.escalated ?? 0;
+      const repairEscalated = result.selfRepairResult?.escalated ?? 0;
+      const escalationSignature = `${acqEscalated}|${repairEscalated}|${escalatedCaps}`;
+      if (escalationSignature !== lastEscalationSignature) {
+        if (acqEscalated > 0) {
+          console.log(`[daemon] [${cycleId}] Escalated ${acqEscalated} capability acquisition(s) — require human action: ${escalatedCaps}`);
+        }
+        if (repairEscalated > 0) {
+          console.log(`[daemon] [${cycleId}] Escalated ${repairEscalated} blocker(s) to human`);
+        }
+        if (acqEscalated === 0 && repairEscalated === 0 && lastEscalationSignature !== null) {
+          console.log(`[daemon] [${cycleId}] All previous escalations cleared`);
+        }
+        lastEscalationSignature = escalationSignature;
       }
     } catch (error) {
       const durationMs = Date.now() - startTime;
@@ -741,6 +827,37 @@ async function main(): Promise<void> {
   // Run self-sufficiency on the same interval as the cognitive loop
   const ssfInterval = setInterval(runSelfSufficiencyInterval, config.intervalMs);
 
+  // Human Action Resolution cadence — the standing 'resolver' agent's
+  // sweep (detect → classify → resolver-or-human-path → verify → resume).
+  // Bounded interval (HYDI_RESOLVER_SWEEP_MS, default 60s), in-flight
+  // guard prevents overlap in this process; the hourly coordinator
+  // mission + advisory-lock claim dedupe concurrent invocations across
+  // restarts/processes. The sweep reports via the daemon log; failures
+  // are recorded in durable sweep/attempt evidence, never thrown.
+  const resolverPool = new Pool({ ...DB_CONFIG, max: 1 });
+  const resolverGoals = getGoalSystem(DB_CONFIG); // parked goals can only resume if the sweep sees them
+  const RESOLVER_SWEEP_MS = Math.max(15000, parseInt(process.env.HYDI_RESOLVER_SWEEP_MS || '60000', 10) || 60000);
+  let resolverInFlight = false;
+  const runResolverSweep = () => {
+    if (shuttingDown || resolverInFlight) return;
+    resolverInFlight = true;
+    import('../lib/human-actions/resolver-agent.js')
+      .then((m) => {
+        const run = (m as { runHumanActionResolverAgent?: Function; default?: { runHumanActionResolverAgent?: Function } }).runHumanActionResolverAgent
+          ?? (m as { default?: { runHumanActionResolverAgent?: Function } }).default?.runHumanActionResolverAgent;
+        if (!run) throw new Error('resolver-agent export missing');
+        return run({ pool: resolverPool, goals: resolverGoals });
+      })
+      .then((r) => {
+        const s = r?.summary;
+        console.log(`[daemon] resolver-sweep via=${r?.via} mission=${r?.missionId ?? 'none'} open=${s?.detected ? s.detected.requested + s.detected.alreadyOpen : '?'} human=${s?.resolve?.human ?? '?'} attempted=${s?.resolve?.attempted ?? '?'} resolved=${s?.verify?.resolved ?? '?'} resumed=${s?.resumed ?? '?'} stale=${s?.staleBaseUrl ? s.staleBaseUrl.stale : 'n/a'}`);
+      })
+      .catch(() => { })
+      .finally(() => { resolverInFlight = false; });
+  };
+  const resolverInterval = setInterval(runResolverSweep, RESOLVER_SWEEP_MS);
+  const resolverKick = setTimeout(runResolverSweep, 15000); // first pass after startup settles
+
   // 8. Status reporting
   const statusInterval = setInterval(() => {
     if (shuttingDown) return;
@@ -759,6 +876,9 @@ async function main(): Promise<void> {
       if (shuttingDown) {
         clearInterval(checkInterval);
         clearInterval(ssfInterval);
+        clearInterval(resolverInterval);
+        clearTimeout(resolverKick);
+        resolverPool.end().catch(() => { });
         clearInterval(statusInterval);
         resolve();
       }

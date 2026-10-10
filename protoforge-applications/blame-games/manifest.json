@@ -1,0 +1,77 @@
+{
+  "name": "Blame Games",
+  "version": "0.1.0",
+  "owner": "ursula-suite",
+  "hostedBy": "ursula-engine",
+  "governance": {
+    "domain": "entertainment",
+    "tier": "external-engine",
+    "externalSource": "C:\\ProtoForge_Ecosystem\\Ursula_Suite\\apps\\blame_games"
+  },
+  "capabilities": [
+    "challenge-creation",
+    "bet-placement",
+    "family-competition"
+  ],
+  "eventsProduced": [
+    "challenge.created",
+    "bet.placed"
+  ],
+  "eventsConsumed": [],
+  "providers": [
+    "ursula-engine"
+  ],
+  "dependencies": {
+    "services": [
+      "ursula-engine"
+    ]
+  },
+  "healthRequirements": [
+    "ursula-engine"
+  ],
+  "realization": {
+    "hosted": "ursula-engine",
+    "engineHealthUrl": "http://localhost:5000/health",
+    "engineProbe": {
+      "method": "POST",
+      "url": "http://localhost:5000/blame_games/challenge",
+      "body": {
+        "creator_id": "heidi",
+        "title": "HYDI-REALIZATION-PROBE",
+        "description": "realization-audit",
+        "bet_type": "yes_no"
+      },
+      "expectJsonField": "challenge_id"
+    },
+    "offerId": "blame_games_session"
+  },
+  "deprecated": false,
+  "commercial": {
+    "offerId": "blame_games_session",
+    "offerName": "Blame Games Session Setup",
+    "customerProblem": "A group wants a hosted challenge/bet session without building the structure themselves.",
+    "deliverable": "A created Blame Games challenge session with a placed starting bet.",
+    "targetCustomer": "families / friend groups / streamers",
+    "category": "ursula_service",
+    "recommendedPriceCents": 900,
+    "priceBasis": "Entertainment micro-transaction — deliberately low; volume play, not per-sale margin.",
+    "unitEconomics": "engine challenge+bet calls — near-zero marginal cost",
+    "marketEvidence": "none recorded",
+    "confidencePct": 30,
+    "revenuePath": "offer -> checkout -> payment -> job -> engine session creation -> verify -> reconcile",
+    "fulfillment": {
+      "engine": "ursula-engine",
+      "challenge": "POST /blame_games/challenge",
+      "bet": "POST /blame_games/bet",
+      "artifacts": [
+        "session-record.json"
+      ],
+      "customerInput": "challenge description + participants"
+    },
+    "implementationRequirements": [
+      "challenge_description"
+    ],
+    "marginTarget": 0.8,
+    "cancellationBehavior": "Full refund if session creation fails."
+  }
+}

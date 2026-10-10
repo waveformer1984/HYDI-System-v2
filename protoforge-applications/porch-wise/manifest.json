@@ -1,0 +1,78 @@
+{
+  "name": "Porchwise",
+  "version": "0.1.0",
+  "owner": "ursula-suite",
+  "hostedBy": "ursula-engine",
+  "governance": {
+    "domain": "home-project-planning",
+    "tier": "external-engine",
+    "externalSource": "C:\\ProtoForge_Ecosystem\\Ursula_Suite\\apps\\porch_wise"
+  },
+  "capabilities": [
+    "family-management",
+    "chore-assignment",
+    "home-project-planning"
+  ],
+  "eventsProduced": [
+    "member.added",
+    "chore.assigned"
+  ],
+  "eventsConsumed": [],
+  "providers": [
+    "ursula-engine"
+  ],
+  "dependencies": {
+    "services": [
+      "ursula-engine"
+    ]
+  },
+  "healthRequirements": [
+    "ursula-engine"
+  ],
+  "realization": {
+    "hosted": "ursula-engine",
+    "engineHealthUrl": "http://localhost:5000/health",
+    "engineProbe": {
+      "method": "POST",
+      "url": "http://localhost:5000/porch_wise/member",
+      "body": {
+        "family_id": "hydi-realization-probe",
+        "name": "PROBE",
+        "age": 30,
+        "role": "audit"
+      },
+      "expectJsonField": "member_id"
+    },
+    "offerId": "porch_wise_assessment"
+  },
+  "deprecated": false,
+  "commercial": {
+    "offerId": "porch_wise_assessment",
+    "offerName": "Porchwise Household Project Setup",
+    "customerProblem": "A household has a project/chore structure it wants organized and tracked.",
+    "deliverable": "A configured Porchwise workspace: member records and chore assignments.",
+    "targetCustomer": "households / small co-living groups",
+    "category": "ursula_service",
+    "recommendedPriceCents": 1900,
+    "priceBasis": "Setup-shaped service; comparable chore/planning apps charge $5-15/month. Introductory one-time setup.",
+    "unitEconomics": "engine member+chore provisioning calls — near-zero marginal cost",
+    "marketEvidence": "none recorded",
+    "confidencePct": 35,
+    "revenuePath": "offer -> checkout -> payment -> job -> engine provisioning -> verify -> reconcile",
+    "fulfillment": {
+      "engine": "ursula-engine",
+      "member": "POST /porch_wise/member",
+      "chore": "POST /porch_wise/chore",
+      "artifacts": [
+        "workspace-record.json"
+      ],
+      "customerInput": "member list + initial chores"
+    },
+    "implementationRequirements": [
+      "member_roster",
+      "initial_chores"
+    ],
+    "marginTarget": 0.85,
+    "cancellationBehavior": "Full refund if setup fails."
+  }
+}

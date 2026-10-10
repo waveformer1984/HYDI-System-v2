@@ -349,6 +349,11 @@ export class LocalSecureCredentialSource implements CredentialSource {
   private decrypt(encrypted: string): string {
     if (encrypted.startsWith('DPAPI:')) {
       const data = encrypted.substring(5);
+      // The store file supplies this string — it is interpolated into a
+      // PowerShell command below. Base64 cannot contain a quote, so this
+      // charset check is what keeps a tampered store file from turning a
+      // decrypt into PowerShell injection.
+      if (!/^[A-Za-z0-9+/=]+$/.test(data)) return '';
       try {
         const { execSync } = require('child_process');
         const result = execSync(

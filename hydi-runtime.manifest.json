@@ -1,0 +1,363 @@
+{
+  "$schema": "hydi.runtime-manifest/v1",
+  "description": "Canonical runtime authority for HYDI. Declares exactly one supervisor, one boot authority, and one owner per required service, and classifies every other runtime-capable implementation in the tree. This file is the answer to 'who is allowed to start, own, and stop HYDI services'. It is a DECLARATION; enforcement is Phase 2.",
+  "createdAt": "2026-09-18",
+  "createdBy": "Phase 1 — Establish Canonical Authority (HYDI Master Execution Contract)",
+  "baselineRef": "HYDI_BASELINE.json",
+  "relationshipToOtherManifests": {
+    "system-manifest.json": {
+      "status": "LEFT UNTOUCHED — INTENTIONALLY",
+      "reason": "It is read at runtime by src/enforcement/RuntimeEnforcer.js, src/enforcement/module-hook.js, src/audit/SystemAuditor.js, src/audit/PreFlightGate.js and scripts/enforce-build-compliance.js. Editing it changes live enforcement behaviour, which needs its own tested change. It is ~5 months stale (lastUpdated 2026-04-29).",
+      "reconciliationOwed": true,
+      "reconciliationPhase": "deferred — must be a standalone, tested change"
+    },
+    "boot.config.json": {
+      "status": "CANONICAL — module registry",
+      "role": "Declares WHICH modules the boot authority starts and in what dependency order. This manifest declares WHO is allowed to start them."
+    },
+    "CANONICAL.md": {
+      "status": "SUPPORTING",
+      "role": "Repo identity only. scripts/verify-canonical.js checks its existence, not its contents."
+    },
+    "ACTIVE_TREE.md": {
+      "status": "DOCUMENTATION",
+      "role": "Human-readable tree identity. No code reads it."
+    }
+  },
+  "identity": {
+    "repoRoot": "C:\\Users\\Owner\\HYDI-System-v2",
+    "branch": "clean-main",
+    "versionConflict": {
+      "state": "UNRESOLVED",
+      "VERSION": "4.0.0-cc",
+      "package.json": "0.9.0-rc.3",
+      "impact": "HYDI cannot currently answer 'what version am I?' (Phase 18 requirement). Resolution deferred to its own change — picking a winner arbitrarily would be a guess."
+    }
+  },
+  "canonicalAuthority": {
+    "supervisor": {
+      "id": "pm2",
+      "config": "ecosystem.config.js",
+      "role": "PROCESS SUPERVISOR OF RECORD. The only component permitted to supervise long-running HYDI processes across reboots.",
+      "appCount": 8,
+      "evidence": "pm2 jlist shows all 8 online; cwd=C:\\Users\\Owner\\HYDI-System-v2"
+    },
+    "bootAuthority": {
+      "id": "hydi-boot",
+      "script": "scripts/boot-agent.js",
+      "moduleRegistry": "boot.config.json",
+      "role": "SERVICE OWNER OF RECORD. The only component permitted to start, own and stop the modules declared in boot.config.json.",
+      "npmScript": "npm run boot",
+      "lease": ".hydi-boot.lock",
+      "leaseImpl": "scripts/boot-instance-lease.js",
+      "leaseSemantics": "newest-claim-wins; superseded instance exits 75 (pm2 stop_exit_codes)"
+    },
+    "rule": "Exactly one supervisor. Exactly one boot authority. Exactly one owner per required service. A process answering on a port is NOT proof of ownership."
+  },
+  "services": {
+    "protoforge-core": {
+      "class": "CANONICAL",
+      "entrypoint": "src/server.js",
+      "port": 3005,
+      "required": true,
+      "ownedBy": "hydi-boot",
+      "healthUrl": "http://127.0.0.1:3005/health",
+      "observedOwnership": "ORPHAN",
+      "observedEvidence": "27392(node.exe) <- 26840(cmd.exe) <- 11276(DEAD)",
+      "conforms": false
+    },
+    "heidi-web": {
+      "class": "CANONICAL",
+      "entrypoint": "next (npm run dev | npm run start)",
+      "port": 3000,
+      "required": true,
+      "ownedBy": "hydi-boot",
+      "healthUrl": "http://127.0.0.1:3000/api/health",
+      "observedOwnership": "ORPHAN",
+      "observedEvidence": "29100 <- 9804 <- 14396(cmd.exe) <- 20752 <- 30064(cmd.exe) <- 23980(DEAD)",
+      "conforms": false
+    },
+    "heidi-mobile-chat": {
+      "class": "CANONICAL",
+      "entrypoint": "launch-heidi-mobile.js",
+      "port": 3006,
+      "required": false,
+      "ownedBy": "hydi-boot",
+      "healthUrl": "http://127.0.0.1:3006/api/health",
+      "observedOwnership": "OWNED",
+      "observedEvidence": "31248 <- 30252(cmd.exe) <- 4832(hydi-boot)",
+      "conforms": true,
+      "note": "The only conforming service. It is conforming precisely because it has never been recovered."
+    },
+    "job-executor-poller": {
+      "class": "CANONICAL",
+      "entrypoint": "scripts/job-executor-poller.ts (npx tsx)",
+      "port": null,
+      "required": false,
+      "ownedBy": "hydi-boot",
+      "observedOwnership": "UNKNOWN",
+      "conforms": null,
+      "note": "Enabled 5th boot child. Has no health URL, only livenessMs — liveness is not health."
+    },
+    "hydi-orchestrator": {
+      "class": "CANONICAL-BUT-DISABLED",
+      "entrypoint": "src/HYDISystem.js (in-process module)",
+      "required": false,
+      "enabled": false,
+      "note": "The Observe->Decide->Act core loop. enabled:false and enableAutoActions:false in boot.config.json. The cognitive loop the contract targets is currently NOT running."
+    }
+  },
+  "supportingProcesses": {
+    "hydi-watchdog": {
+      "class": "SUPPORTING",
+      "script": "scripts/watchdog.js",
+      "role": "Observes service health and invokes RecoveryEngine.",
+      "ownershipAuthority": false,
+      "conflict": "CRITICAL — it invokes RecoveryEngine, which respawns services DETACHED (shell:true, detached:true, unref()). That severs hydi-boot's ownership. The watchdog is the mechanism producing the ORPHAN state above.",
+      "evidence": "lib/operational/RecoveryEngine.ts restartProcess() spawn options"
+    },
+    "hydi-daemon": {
+      "class": "SUPPORTING",
+      "script": "scripts/heidi-daemon-launcher.js",
+      "lease": ".heidi-daemon.lock",
+      "role": "Cognitive cycle heartbeat — sole writer of cognitive_cycle events."
+    },
+    "hydi-system-health": {
+      "class": "SUPPORTING",
+      "script": "scripts/system-health-scheduler.js",
+      "role": "Writes system_health_runs every 5 min."
+    },
+    "hydi-protoforge-scout": {
+      "class": "SUPPORTING",
+      "script": "scripts/protoforge-opportunity-scheduler.js",
+      "role": "External opportunity scouting (HN/Reddit). NOT a code-gap scout."
+    },
+    "hydi-stuck-job-scheduler": {
+      "class": "SUPPORTING",
+      "script": "scripts/stuck-job-scheduler.js"
+    },
+    "hydi-revenue-reconciliation": {
+      "class": "SUPPORTING",
+      "script": "scripts/revenue-reconciliation-scheduler.js"
+    },
+    "hydi-failed-webhook-retry": {
+      "class": "SUPPORTING",
+      "script": "scripts/failed-webhook-scheduler.js"
+    }
+  },
+  "competingAuthorities": {
+    "note": "Nothing here is deleted. Each is classified and each needs an explicit disposition before Phase 2 can declare ownership provable.",
+    "bootOrchestrators": [
+      {
+        "path": "scripts/start-hydi.js",
+        "class": "DUPLICATE-HAZARD",
+        "reachableVia": "npm run start:hydi",
+        "why": "Own port check + dependency wait + spawn + crash monitor. Reads .ports.json instead of boot.config.json — a second, divergent module registry.",
+        "hazard": "Launches 9 services including the LEGACY heidi-core stack (HEIDI Core :3459, HEIDI Agent :3461) and C:\\ProtoForge_Ecosystem\\heidi-bridge.py -- a path OUTSIDE this repo. Running it on a live box collides with the supervised tree on 3000/3005/3006.",
+        "verified": "scripts/start-hydi.js:106-110, :276"
+      },
+      {
+        "path": "scripts/heidi-start.js",
+        "class": "DUPLICATE",
+        "reachableVia": "npm run heidi:start",
+        "why": "Spawns the same daemon as pm2 hydi-daemon in the foreground; both contend for .heidi-daemon.lock."
+      },
+      {
+        "path": "scripts/hydi-boot.js",
+        "class": "EXPERIMENTAL",
+        "reachableVia": "none (no npm script, no pm2 entry)",
+        "why": "Drives src/hydi-v3/HYDIContinuousRuntime. Referenced only by tsconfig.typecheck.json."
+      },
+      {
+        "path": "scripts/boot-local.sh",
+        "class": "DUPLICATE",
+        "reachableVia": "manual",
+        "why": "Alternate boot path: supabase start then npm run boot."
+      }
+    ],
+    "restartKillAuthorities": [
+      {
+        "path": "lib/operational/RecoveryEngine.ts",
+        "class": "CANONICAL",
+        "mechanism": "taskkill /PID + detached respawn",
+        "note": "Canonical recovery, but its detached respawn is what breaks ownership."
+      },
+      {
+        "path": "lib/operational/DependencyAwareRestartExecutor.ts",
+        "class": "DUPLICATE",
+        "mechanism": "pm2 restart ${target} --update-env",
+        "defect": "protoforge-core and heidi-web are NOT pm2 apps — they are boot-agent children. This call cannot succeed for them."
+      },
+      {
+        "path": "lib/human-action/adapters/ProcessAdapter.ts",
+        "class": "DUPLICATE",
+        "mechanism": "taskkill /IM ${target} /F",
+        "note": "Kill by image name — can kill unrelated processes sharing an image name."
+      },
+      {
+        "path": "lib/operational/FailureInjector.ts",
+        "class": "TEST",
+        "mechanism": "taskkill /PID",
+        "note": "Qualification-only. Destructive if run unfiltered."
+      },
+      {
+        "path": "scripts/restart-module.js",
+        "class": "DUPLICATE",
+        "mechanism": "stopPid(pid) then spawnDetached(id) -- line 83",
+        "defect": "SECOND ORPHAN-MAKER. Stops the module then respawns boot-agent detached, producing the same severed ownership as RecoveryEngine.",
+        "reachableFrom": [
+          "heidi-core/missions/health-observer.js:44",
+          "heidi-core/tools/tool-registry.js:27",
+          "scripts/mission-cli.js run_script action"
+        ],
+        "note": "Reachable from execution path C (heidi-core), which is itself ungoverned."
+      }
+    ],
+    "portCollisions": {
+      "3000": [
+        "next (CANONICAL, owned)",
+        "server.js (LEGACY, root)",
+        "stripe-webhook-server.js (LEGACY, STRIPE_WEBHOOK_PORT default 3000)"
+      ],
+      "3001": [
+        "protoforge-mock.js (TEST)",
+        "simple-checkout.js (LEGACY)",
+        "keeper/server.js (LEGACY)"
+      ],
+      "3005": [
+        "src/server.js (CANONICAL, owned)",
+        "agents/ursula/ursula.js (LEGACY, URSULA_PORT default 3005)",
+        "scripts/demo-adaptive-operator.ts (TEST)"
+      ],
+      "3006": [
+        "launch-heidi-mobile.js (CANONICAL, owned)",
+        "hydi.py (LEGACY, ThreadingHTTPServer default 3006)"
+      ]
+    },
+    "lockMechanisms": [
+      {
+        "path": "scripts/boot-instance-lease.js",
+        "file": ".hydi-boot.lock",
+        "class": "CANONICAL"
+      },
+      {
+        "path": "scripts/recovery-lease.js",
+        "dir": ".recovery-leases/",
+        "class": "CANONICAL"
+      },
+      {
+        "path": "scripts/heidi-daemon.ts",
+        "file": ".heidi-daemon.lock",
+        "class": "SUPPORTING"
+      },
+      {
+        "path": "lib/operational/RecoveryLock.ts",
+        "class": "SUPPORTING"
+      },
+      {
+        "path": "scripts/mission-run-lock.js",
+        "class": "SUPPORTING"
+      }
+    ],
+    "scheduledTaskInstallers": {
+      "class": "DORMANT",
+      "registeredTasks": 0,
+      "evidence": "schtasks /query returns 0 HYDI matches",
+      "files": [
+        "scripts/install-boot-service.ps1",
+        "scripts/install-watchdog.ps1",
+        "setup-autostart.ps1",
+        "setup-monitoring-scheduler.ps1",
+        "setup-monitoring-fixed.ps1",
+        "heidi-core/install-heidi-autostart.ps1"
+      ],
+      "note": "Installers present but nothing registered. If ever run, install-watchdog.ps1 would duplicate pm2 hydi-watchdog."
+    }
+  },
+  "otherRuntimes": {
+    "heidi-core/": {
+      "class": "LEGACY",
+      "why": "Complete parallel stack (own package.json, server.js on 3459, heidi-agent.js on 3461, 3 index-clean variants, own autostart). DEPLOYMENT.md still documents it as pm2 app 'heidi' — that app does not exist in ecosystem.config.js.",
+      "caveat": "NOT inert: heidi-core/data/heidi_memory.db is a live authoritative store, and heidi-core/actions/action-executor.js is execution path C."
+    },
+    "src/hydi-v3/": {
+      "class": "EXPERIMENTAL",
+      "why": "HYDIContinuousRuntime reachable only via CLI drivers; not supervised."
+    },
+    "evolution/": {
+      "class": "EXPERIMENTAL",
+      "why": "Real self-development loop code (self-evolve-cycle, findings-to-goals, goal-executor). Not supervised. REUSE TARGET for Phase 15 — do not rebuild."
+    },
+    "workers/": {
+      "class": "LEGACY",
+      "why": "WorkerOrchestrator + 20 workers; no npm or pm2 reference."
+    },
+    "pao-system/": {
+      "class": "EXPERIMENTAL",
+      "why": "Inert scaffolding — risk.engine.ts is an unweighted float score with no tier mapping; task.router.ts has 6 hardcoded routes."
+    },
+    "keeper/": {
+      "class": "LEGACY"
+    },
+    "switchboard/": {
+      "class": "LEGACY"
+    },
+    "hyve_service/": {
+      "class": "LEGACY",
+      "why": "Python poller, no launcher."
+    },
+    "apps/ursula-frontend/": {
+      "class": "LEGACY",
+      "why": "Separate Next.js app; contains a cloud-supabase fallback trap at src/lib/api.ts:416."
+    },
+    "archive/": {
+      "class": "LEGACY",
+      "why": "Explicitly archived; .legacy extensions."
+    }
+  },
+  "ownershipContract": {
+    "required": {
+      "oneSupervisor": true,
+      "oneBootAuthority": true,
+      "oneOwnerPerService": true,
+      "oneLeasePerService": true,
+      "noUnexplainedOrphan": true,
+      "noCompetingWatchdogOwnership": true
+    },
+    "bootAuthorityMustKnowPerService": [
+      "service",
+      "pid",
+      "parent",
+      "owner",
+      "lease",
+      "startTime",
+      "version",
+      "state"
+    ],
+    "observedConformance": {
+      "oneSupervisor": "PASS — pm2 is the only registered supervisor; 0 scheduled tasks",
+      "oneBootAuthority": "PARTIAL — hydi-boot holds the lease, but npm run start:hydi and npm run heidi:start remain reachable alternate authorities",
+      "oneOwnerPerService": "FAIL — 2 of 3 required services are orphans",
+      "oneLeasePerService": "PARTIAL — .recovery-leases/ exists for heidi-web and protoforge-core but does not encode ownership",
+      "noUnexplainedOrphan": "FAIL — 2 orphans, cause identified (detached recovery respawn)",
+      "noCompetingWatchdogOwnership": "FAIL -- 5 independent restart/kill authorities (was 4; scripts/restart-module.js added)"
+    },
+    "verdict": "NON-CONFORMANT",
+    "blocksPhase": 2
+  },
+  "phase1Verdict": {
+    "status": "COMPLETE",
+    "canonicalRuntimeSelected": true,
+    "canonicalRuntime": "pm2(ecosystem.config.js) -> hydi-boot(scripts/boot-agent.js) -> boot.config.json modules",
+    "everythingClassified": true,
+    "nothingDeleted": true,
+    "ambiguousOwnershipRemains": true,
+    "note": "Phase 1 asked for a canonical selection and a classification, not for the conflicts to be resolved. Resolving them is Phase 2."
+  },
+  "amendments": [
+    {
+      "at": "2026-09-18T02:30:27.087Z",
+      "reason": "Independent second inventory pass corroborated classifications and surfaced two additional verified hazards."
+    }
+  ]
+}

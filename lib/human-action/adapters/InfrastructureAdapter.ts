@@ -5,10 +5,11 @@
  * Wraps the existing DependencyAwareRestartExecutor for service restarts.
  */
 
-import { exec as execCb } from 'child_process';
+import { execFile as execFileCb } from 'child_process';
 import { promisify } from 'util';
 import http from 'http';
 import https from 'https';
+import { resolveHealthProbeTarget } from './HttpAdapter';
 import type {
   ActionAdapter,
   ActionExecutionContext,
@@ -19,7 +20,16 @@ import type {
   RollbackResult,
 } from '../HumanActionTypes';
 
-const exec = promisify(execCb);
+const execFile = promisify(execFileCb);
+
+/**
+ * Docker container/name token charset. A container name is interpolated into a
+ * docker argv, so it is restricted to the characters Docker itself permits —
+ * this keeps shell metacharacters (`;`, `&`, `|`, spaces) out even though we
+ * run via execFile (no shell), defence-in-depth against any future caller
+ * that reintroduces string interpolation.
+ */
+const DOCKER_NAME = /^[a-zA-Z0-9][a-zA-Z0-9_.\-]*$/;
 
 export interface InfrastructureAdapterDeps {
   restartService?: (target: string, reason: string) => Promise<{ restarted: boolean; healthy: boolean; evidence: string }>;
@@ -34,7 +44,7 @@ export class InfrastructureAdapter implements ActionAdapter {
     'infra.health_check',
   ];
 
-  constructor(private deps: InfrastructureAdapterDeps = {}) {}
+  constructor(private deps: InfrastructureAdapterDeps = {}) { }
 
   async execute(
     action: HumanAction,
@@ -54,8 +64,14 @@ export class InfrastructureAdapter implements ActionAdapter {
           if (!allowedOps.includes(operation)) {
             throw new Error(`Docker operation '${operation}' not allowed. Allowed: [${allowedOps.join(', ')}]`);
           }
+          // Container name is caller-controlled — it becomes a literal execFile
+          // argv entry (no shell), and is restricted to Docker's name charset
+          // so it can never carry shell metacharacters.
+          if (container && operation !== 'ps' && !DOCKER_NAME.test(container)) {
+            throw new Error(`Invalid docker container name: '${container}'`);
+          }
           const args = container && operation !== 'ps' ? [operation, container] : [operation];
-          const { stdout } = await exec(`docker ${args.join(' ')}`, { timeout: 15000 });
+          const { stdout } = await execFile('docker', args, { timeout: 15000, windowsHide: true });
           output = { output: stdout.slice(0, 5000) };
           evidence.push({
             check: 'docker_operation',
@@ -217,23 +233,39 @@ export class InfrastructureAdapter implements ActionAdapter {
     latencyMs: number;
   }> {
     const start = Date.now();
+    // Egress gate (red-team 2026-09-18): `new URL(url)` + bare http.get was an
+    // ungated SSRF/port-scan oracle — the status code alone leaked whether
+    // cloud-metadata/internal endpoints were reachable. Same policy as
+    // ObservationEngine.observeApi: loopback (the managed system) allowed,
+    // private/metadata/internal refused, socket pinned to the resolved IP.
+    let target: { urlObj: URL; resolvedIp: string };
     try {
-      new URL(url);
+      target = await resolveHealthProbeTarget(url);
     } catch {
       return { healthy: false, statusCode: 0, latencyMs: Date.now() - start };
     }
     return new Promise((resolve) => {
       try {
-        const urlObj = new URL(url);
-        const reqModule = urlObj.protocol === 'https:' ? https : http;
-        const req = reqModule.get(url, { timeout: timeoutMs }, (res) => {
-          resolve({
-            healthy: res.statusCode !== undefined && res.statusCode < 400,
-            statusCode: res.statusCode ?? 0,
-            latencyMs: Date.now() - start,
+        const { urlObj, resolvedIp } = target;
+        const isHttps = urlObj.protocol === 'https:';
+        const reqModule = isHttps ? https : http;
+        const req = reqModule.get(
+          {
+            hostname: resolvedIp,
+            port: urlObj.port ? Number(urlObj.port) : (isHttps ? 443 : 80),
+            path: `${urlObj.pathname}${urlObj.search}`,
+            headers: { Host: urlObj.host },
+            timeout: timeoutMs,
+            ...(isHttps ? { servername: urlObj.hostname } : {}),
+          },
+          (res) => {
+            resolve({
+              healthy: res.statusCode !== undefined && res.statusCode < 400,
+              statusCode: res.statusCode ?? 0,
+              latencyMs: Date.now() - start,
+            });
+            res.resume();
           });
-          res.resume();
-        });
         req.on('error', () => {
           resolve({ healthy: false, statusCode: 0, latencyMs: Date.now() - start });
         });

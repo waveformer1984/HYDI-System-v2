@@ -17,14 +17,15 @@ import { requireAuth } from '../../lib/auth/requireAuth.js';
  * owner role. Create requires operator role. Read requires viewer role.
  */
 
-let _supabase: ReturnType<typeof import('@supabase/supabase-js').createClient> | null = null;
+import { createTimedClient, type SupabaseClient } from '../../lib/supabase-timed';
+
+let _supabase: SupabaseClient | null = null;
 function getSupabase() {
   if (!_supabase) {
-    const { createClient } = require('@supabase/supabase-js') as typeof import('@supabase/supabase-js');
     if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
       throw new Error('Supabase env vars not configured');
     }
-    _supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+    _supabase = createTimedClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
   }
   return _supabase;
 }

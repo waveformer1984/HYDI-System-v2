@@ -38,6 +38,7 @@
  */
 
 import * as crypto from 'crypto';
+import { canonicalJson } from '../governance/approval-signing';
 
 export interface GatedAction {
   type: string;
@@ -52,6 +53,16 @@ export interface ActionGateVerdict {
   reasoning?: string;
   /** ProtoForge `decisions` table row id, for recordOutcome() backfill. Absent when 'skipped'. */
   decisionId?: string;
+  /**
+   * The hypothesis fingerprint recorded as `decisions.hypothesis_id` for
+   * this action — sha256(session:planIndex:type:canonicalJson(payload)).
+   * Stored on the parked escalation row so lib/action-approval.ts can prove
+   * the referenced decision was genuinely produced for THIS action, not
+   * borrowed from an unrelated escalation.
+   */
+  hypothesisId?: string;
+  /** 0-based position of this action in the gated plan — part of the fingerprint preimage. */
+  planIndex?: number;
 }
 
 export function isEnforcing(): boolean {
@@ -97,9 +108,13 @@ export async function gateActions(actions: GatedAction[], sessionId: string): Pr
     // (see HYDI_KERNEL_ARCHITECTURE_ROADMAP.md Phase 2); it doesn't build a
     // planner, it just carries the sequence info that already exists here.
     const hypotheses = actions.map((action, i) => {
+      // canonicalJson (deep key-sort) rather than raw JSON.stringify: the
+      // payload is later read back from JSONB, which reorders keys. The
+      // fingerprint must be reproducible from the stored copy — see
+      // lib/action-approval.ts's decision-binding check.
       const fingerprint = crypto
         .createHash('sha256')
-        .update(`${sessionId}:${i}:${action.type}:${JSON.stringify(action.payload)}`)
+        .update(`${sessionId}:${i}:${action.type}:${canonicalJson(action.payload)}`)
         .digest('hex');
 
       const kiloResult = kilo.generateHypotheses({
@@ -142,6 +157,8 @@ export async function gateActions(actions: GatedAction[], sessionId: string): Pr
         hypotheses: kiloResult?.hypotheses ?? [],
         reasoning: decision?.reasoning as string | undefined,
         decisionId: decision?.decisionId as string | undefined,
+        hypothesisId: hyp.id as string,
+        planIndex: i,
       };
     });
   } catch (error) {

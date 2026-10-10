@@ -371,10 +371,11 @@ describe('create_task has a real undo', () => {
 
 describe('the remaining 28 are migrated', () => {
   it('leaves nothing on the legacy chain', () => {
-    // 45 = 14 first-wave + tool.cancel_task + 28 + the two operations that
-    // closing the run_cycle bypass revealed had no contract at all
-    // (revenue.start_provisioning, revenue.update_health_status).
-    expect(ALL_CONTRACTS).toHaveLength(45);
+    // 67 = 45 (14 first-wave + tool.cancel_task + 28 + the two operations
+    // closing the run_cycle bypass revealed had no contract at all —
+    // revenue.start_provisioning, revenue.update_health_status) plus the
+    // 22 contracts the upstream merge brought.
+    expect(ALL_CONTRACTS).toHaveLength(67);
     const ids0 = ALL_CONTRACTS.map((c) => c.identity.id);
     expect(ids0).toContain('revenue.start_provisioning');
     expect(ids0).toContain('revenue.update_health_status');

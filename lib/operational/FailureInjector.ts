@@ -14,7 +14,7 @@
  */
 
 import { randomUUID } from 'crypto';
-import { execSync } from 'child_process';
+import { execSync, execFileSync } from 'child_process';
 import path from 'path';
 import fs from 'fs';
 import type {
@@ -39,7 +39,7 @@ function findPidOnPort(port: number): number | null {
         if (!isNaN(pid)) return pid;
       }
     } else {
-      const out = execSync(`lsof -ti :${port}`, { encoding: 'utf8', timeout: 5000 });
+      const out = execFileSync('lsof', ['-ti', `:${port}`], { encoding: 'utf8', timeout: 5000 });
       const pid = parseInt(out.trim(), 10);
       if (!isNaN(pid)) return pid;
     }
@@ -53,9 +53,9 @@ function findPidOnPort(port: number): number | null {
 function killPid(pid: number): void {
   try {
     if (process.platform === 'win32') {
-      execSync(`taskkill /PID ${pid} /F`, { timeout: 5000 });
+      execFileSync('taskkill', ['/PID', String(pid), '/F'], { timeout: 5000 });
     } else {
-      execSync(`kill -9 ${pid}`, { timeout: 5000 });
+      execFileSync('kill', ['-9', String(pid)], { timeout: 5000 });
     }
   } catch { /* already dead */ }
 }
@@ -65,8 +65,9 @@ function killPid(pid: number): void {
  */
 function checkHealthEndpoint(url: string): { ok: boolean; statusCode: number; body: string } {
   try {
-    const out = execSync(
-      `curl -s -o - -w "\\n%{http_code}" --max-time 5 ${url}`,
+    const out = execFileSync(
+      'curl',
+      ['-s', '-o', '-', '-w', '\\n%{http_code}', '--max-time', '5', url],
       { encoding: 'utf8', timeout: 10000 },
     );
     const lines = out.trim().split('\n');

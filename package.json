@@ -65,7 +65,12 @@
     "lint:migrations:ratchet": "node scripts/lint-migration-idempotency.js --ratchet",
     "lint:migrations:baseline": "node scripts/lint-migration-idempotency.js --generate-baseline",
     "scan:secrets": "node scripts/scan-live-secrets.js",
-    "build:capacitor-www": "node scripts/build-capacitor-www.js"
+    "build:capacitor-www": "node scripts/build-capacitor-www.js",
+    "test:qualification": "node scripts/run-qualification-suite.js",
+    "test:packages": "node --test protoforge/packages/*/tests/*.test.js",
+    "test:unit": "npm test",
+    "test:local": "jest --config jest.tier2.config.js",
+    "test:all": "npm run test:unit && npm run test:local"
   },
   "keywords": [
     "protoforge",
@@ -94,7 +99,7 @@
     "nodemailer": "^10.0.9",
     "ollama": "^0.6.3",
     "pg": "^8.22.0",
-    "puppeteer-core": "^25.10.0",
+    "puppeteer-core": "^25.12.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "sqlite3": "^6.0.1",

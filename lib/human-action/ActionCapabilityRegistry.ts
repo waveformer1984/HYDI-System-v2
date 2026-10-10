@@ -18,6 +18,7 @@
  */
 
 import type { RiskLevel } from '../operational/types';
+import { FILESYSTEM_WRITABLE_ZONES } from './FilesystemAuthorization';
 import type {
   ActionCapabilityDescriptor,
   ActionCapabilityStatus,
@@ -373,7 +374,11 @@ export const SYSTEM_CAPABILITIES: CapabilityDefinition[] = [
     description: 'Write content to a file (creates or overwrites)',
     risk: 'R1', riskLabel: 'LOW', authorizationScope: 'LOCAL_WRITE',
     authorizationMode: 'autonomous', reversible: 'PARTIALLY_REVERSIBLE',
-    allowedTargets: [{ type: 'glob', pattern: '**/*', description: 'Any file path' }],
+    // Explicit writable zones, not '**/*': autonomous writes produce
+    // artifacts and artifacts have defined landing zones. Production source
+    // (src/, lib/ pipeline, api/, pages/, workers/) is reachable only via
+    // the promotion path. See FILESYSTEM_WRITABLE_ZONES.
+    allowedTargets: FILESYSTEM_WRITABLE_ZONES,
     requiresHumanApproval: false, verificationRequirements: 'File exists with expected content',
     timeoutMs: 10000, retryPolicy: DEFAULT_RETRY, rollbackStrategyTemplate: BACKUP_ROLLBACK,
     verificationStrategyTemplate: FILE_EXISTS_VERIFY, adapterId: 'filesystem',
@@ -386,7 +391,7 @@ export const SYSTEM_CAPABILITIES: CapabilityDefinition[] = [
     description: 'Create a new directory',
     risk: 'R0', riskLabel: 'LOW', authorizationScope: 'LOCAL_WRITE',
     authorizationMode: 'autonomous', reversible: 'REVERSIBLE',
-    allowedTargets: [{ type: 'glob', pattern: '**/*', description: 'Any directory path' }],
+    allowedTargets: FILESYSTEM_WRITABLE_ZONES,
     requiresHumanApproval: false, verificationRequirements: 'Directory exists',
     timeoutMs: 5000, retryPolicy: DEFAULT_RETRY, rollbackStrategyTemplate: UNDO_ROLLBACK,
     verificationStrategyTemplate: FILE_EXISTS_VERIFY, adapterId: 'filesystem',
@@ -399,7 +404,7 @@ export const SYSTEM_CAPABILITIES: CapabilityDefinition[] = [
     description: 'Move or rename a file',
     risk: 'R1', riskLabel: 'LOW', authorizationScope: 'LOCAL_WRITE',
     authorizationMode: 'autonomous', reversible: 'REVERSIBLE',
-    allowedTargets: [{ type: 'glob', pattern: '**/*', description: 'Any file path' }],
+    allowedTargets: FILESYSTEM_WRITABLE_ZONES,
     requiresHumanApproval: false, verificationRequirements: 'File exists at new path, not at old',
     timeoutMs: 5000, retryPolicy: DEFAULT_RETRY, rollbackStrategyTemplate: UNDO_ROLLBACK,
     verificationStrategyTemplate: FILE_EXISTS_VERIFY, adapterId: 'filesystem',
@@ -412,7 +417,7 @@ export const SYSTEM_CAPABILITIES: CapabilityDefinition[] = [
     description: 'Delete a file (DANGEROUS — backup created first)',
     risk: 'R3', riskLabel: 'HIGH', authorizationScope: 'DESTRUCTIVE',
     authorizationMode: 'human_required', reversible: 'PARTIALLY_REVERSIBLE',
-    allowedTargets: [{ type: 'glob', pattern: '**/*', description: 'Any file path' }],
+    allowedTargets: FILESYSTEM_WRITABLE_ZONES,
     requiresHumanApproval: true, verificationRequirements: 'File no longer exists',
     timeoutMs: 5000, retryPolicy: DEFAULT_RETRY, rollbackStrategyTemplate: BACKUP_ROLLBACK,
     verificationStrategyTemplate: STATE_CHECK_VERIFY, adapterId: 'filesystem',

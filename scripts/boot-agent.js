@@ -30,6 +30,7 @@
  */
 
 const { spawn } = require('child_process');
+const { isExternallySupervised, supervisedAs } = require('./module-ownership');
 const http = require('http');
 const path = require('path');
 const fs = require('fs');
@@ -244,6 +245,11 @@ function spawnProcess(mod) {
   child.stderr.on('data', (d) => log(mod.id, d.toString()));
   child.on('exit', (code, signal) => {
     if (shuttingDown) return;
+    // An intentional restart (RecoveryEngine -> boot-control -> restart
+    // handler) stops this child on purpose. Without this check that exit is
+    // logged as an unexpected crash and, outside DELEGATE_RECOVERY mode,
+    // triggers a full system shutdown mid-restart.
+    if (child.intentionalStop) return;
     child.exitedEarly = true;
     const how = signal ? `signal ${signal}` : `code ${code}`;
     log(mod.id, c('31', `process exited unexpectedly (${how})`));
@@ -445,30 +451,88 @@ async function classifyOccupant(mod) {
   }
 
   const pid = pids[0]; // dual-stack (IPv4+IPv6) processes can list twice; identity is the same either way.
-  const info = getProcessInfo(pid);
-  if (!info.name) {
+  const leaf = getProcessInfo(pid);
+  if (!leaf.name) {
     return { ownership: 'unsupervised', pid, name: null, cmdline: null };
   }
 
   const expectedCommand = String(mod.command || '').toLowerCase();
   const expectedArgs = (mod.args || []).map((a) => String(a).toLowerCase());
-  const cmdlineLower = String(info.cmdline || '').toLowerCase();
 
   // Identity requires BOTH the configured command and (when the module has
-  // args) at least one configured arg to appear in the occupant's command
-  // line. A bare command match is not enough when the configured command is
-  // itself generic (e.g. "node") -- see the identical fix in
+  // args) at least one configured arg to appear in a command line. A bare
+  // command match is not enough when the configured command is itself
+  // generic (e.g. "node") -- see the identical fix in
   // HealthProvenanceChecker.ts for the same loophole ("... || cmdline
   // contains 'node'", which any node process satisfies).
-  const commandMatches = Boolean(expectedCommand) && cmdlineLower.includes(expectedCommand);
-  const scriptMatches = expectedArgs.length === 0 || expectedArgs.some((a) => a && cmdlineLower.includes(a));
+  const matchesFamily = (cmdline) => {
+    const c = String(cmdline || '').toLowerCase();
+    return Boolean(expectedCommand) && c.includes(expectedCommand) &&
+      (expectedArgs.length === 0 || expectedArgs.some((a) => a && c.includes(a)));
+  };
 
-  if (!commandMatches || !scriptMatches) {
-    return { ownership: 'wrong-process', pid, name: info.name, cmdline: info.cmdline };
+  // The match may live on any ancestor, not just the leaf: a wrapped spawn
+  // (`npm run dev` -> cmd -> next dev -> start-server) leaves only the
+  // grandchild holding the port, and the leaf cmdline has no 'npm run dev'
+  // in it. Leaf-only matching misclassified exactly that legitimate shape
+  // as wrong-process (measured live 2026-09-19: pid 31696 on :3000).
+  //
+  // Walk the chain via the same single-query getProcessInfo records
+  // (ppid is already on each record). `complete` distinguishes the two ways
+  // the walk ends: true = ran out of ancestors cleanly (a fully-explored
+  // non-match is PROVEN foreign); false = a node could not be read at all
+  // (dead mid-walk, permission, probe error) — observer failure is never
+  // proof of foreignness.
+  const chain = [leaf];
+  const seenPids = new Set([String(pid)]);
+  let chainComplete = true;
+  let cursor = leaf;
+  while (chain.length <= 8) {
+    const ppid = cursor.ppid ? String(cursor.ppid) : null;
+    if (!ppid || ppid === '0' || ppid === String(cursor.pid) || seenPids.has(ppid)) break;
+    seenPids.add(ppid);
+    const next = getProcessInfo(ppid);
+    if (!next || (!next.name && !next.cmdline)) { chainComplete = false; break; }
+    chain.push(next);
+    cursor = next;
+  }
+
+  // Modules declared supervisor:'pm2' (e.g. heidi-web, owned by PM2 app
+  // heidi-web-standalone) are EXPECTED to trace to PM2's
+  // ProcessContainerFork, not to this boot-agent -- and their leaf cmdline
+  // legitimately doesn't contain the configured 'npm run dev'. Check PM2
+  // ancestry first: if the port occupant descends from PM2, that IS the
+  // declared owner.
+  const viaPm2 = chain.some((n) => /processcontainerfork|pm2/i.test(String(n.cmdline || n.name || '')));
+
+  let identityMatched = false;
+  for (const node of chain) {
+    if (matchesFamily(node.cmdline)) { identityMatched = true; break; }
+  }
+
+  if (isExternallySupervised(mod) && viaPm2) {
+    // The declared PM2 supervisor owns this port. The service still had to
+    // pass its real health check to reach this point (portInUseAndHealthy),
+    // so 'pm2' here means: verified healthy + verified PM2 ancestry.
+    return {
+      ownership: 'pm2', pid, name: leaf.name, cmdline: leaf.cmdline,
+      supervisedAs: supervisedAs(mod),
+    };
+  }
+
+  if (!identityMatched) {
+    if (!chainComplete) {
+      // The walk was truncated by an unreadable ancestor — the occupant is
+      // unproven, not proven foreign. Rejecting it would misclassify a
+      // legitimate service whose ancestors merely died early (the common
+      // orphan shape) and crash-loop boot on a required module.
+      return { ownership: 'unsupervised', pid, name: leaf.name, cmdline: leaf.cmdline };
+    }
+    return { ownership: 'wrong-process', pid, name: leaf.name, cmdline: leaf.cmdline };
   }
 
   if (isDescendantOf(pid, process.pid)) {
-    return { ownership: 'supervised', pid, name: info.name, cmdline: info.cmdline };
+    return { ownership: 'supervised', pid, name: leaf.name, cmdline: leaf.cmdline };
   }
 
   // Not our own child -- but before calling it a mystery, check whether
@@ -484,20 +548,153 @@ async function classifyOccupant(mod) {
   const lease = recoveryLease.getValidLease(mod.id);
   if (lease && (String(pid) === String(lease.pid) || isDescendantOf(pid, lease.pid))) {
     return {
-      ownership: 'recovered', pid, name: info.name, cmdline: info.cmdline,
+      ownership: 'recovered', pid, name: leaf.name, cmdline: leaf.cmdline,
       recoveredAt: lease.recoveredAt, recoveredBy: lease.recoveredBy, cause: lease.cause,
     };
   }
 
-  return { ownership: 'unsupervised', pid, name: info.name, cmdline: info.cmdline };
+  return { ownership: 'unsupervised', pid, name: leaf.name, cmdline: leaf.cmdline };
 }
 
 // ---------------------------------------------------------------------------
 // Shutdown
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// Restart control channel (Phase 2A).
+//
+// RecoveryEngine used to spawn replacements itself, detached and unref'd. The
+// replacement was therefore not this process's child, so boot-agent could not
+// watch it for `exit` and the supervisor could not stop it -- every recovery
+// converted a supervised module into an orphan (measured 2026-09-18:
+// protoforge-core and heidi-web were both ORPHAN with DEAD ancestry).
+//
+// RecoveryEngine still makes the policy decision; it now asks boot-agent to
+// perform the spawn, because boot-agent is what owns the process.
+// SUPERVISION_MODEL.md's division of responsibility is unchanged.
+// ---------------------------------------------------------------------------
+let controlInterval = null;
+let handlingControlRequest = false;
+
+/** Stop one owned child. Mirrors shutdown()'s Windows process-tree handling. */
+async function stopOwnedChild(entry) {
+  const { mod, child } = entry;
+  if (!child || child.exitCode !== null) return;
+  if (process.platform === 'win32' && child.pid) {
+    // shell:true creates an intermediate cmd.exe; SIGTERM would kill only that
+    // and leave the real server (e.g. `next dev`) bound to the port.
+    require('child_process').execSync(`taskkill /PID ${child.pid} /T /F`, { stdio: 'ignore' });
+    return;
+  }
+  child.kill('SIGTERM');
+  const exited = await Promise.race([
+    new Promise((r) => child.once('exit', () => r(true))),
+    sleep((CONFIG.settings.shutdownTimeoutMs) || 8000).then(() => false),
+  ]);
+  if (!exited) child.kill('SIGKILL');
+}
+
+// Per-component restart rate-limit. The control directory is a filesystem
+// queue that any same-user process can write to, so a forged request cannot be
+// cryptographically distinguished from a real one without an OS-level ACL on
+// .hydi-boot-control/ (a live-hardening action, not a code one). What code CAN
+// bound is the blast radius: a flood of forged requests must not be able to
+// restart a module faster than a legitimate recovery would. This cooldown is
+// the bound -- red-team 2026-09-18 demonstrated an unauthenticated restart/DoS
+// loop; this caps it at one restart per component per window.
+const RESTART_COOLDOWN_MS = parseInt(process.env.HYDI_RESTART_COOLDOWN_MS || '30000', 10);
+const lastRestartByComponent = new Map();
+
+async function pollControlRequests(settings) {
+  if (shuttingDown || handlingControlRequest) return;
+  let control;
+  let handler;
+  try {
+    control = require('./boot-control');
+    handler = require('./boot-restart-handler');
+  } catch (e) {
+    return; // channel unavailable -> recovery falls back to its own path
+  }
+
+  let pending;
+  try { pending = control.pendingRequests(); } catch (e) { return; }
+  if (!pending.length) return;
+
+  handlingControlRequest = true;
+  try {
+    for (const req of pending) {
+      if (shuttingDown) break;
+
+      // Rate-limit: refuse a restart for a component that was restarted within
+      // the cooldown, whether the request is forged or a legitimate retry. A
+      // real recovery engine already respects its own attempt budget/cooldown,
+      // so this only ever bites a channel abuser or a buggy loop.
+      const last = lastRestartByComponent.get(req.component) || 0;
+      const sinceLast = Date.now() - last;
+      if (sinceLast < RESTART_COOLDOWN_MS) {
+        const ack = {
+          status: 'failed',
+          error: `restart of ${req.component} rate-limited (${Math.round((RESTART_COOLDOWN_MS - sinceLast) / 1000)}s cooldown remaining)`,
+        };
+        try { control.ackRequest(req.id, ack); } catch (e) { /* requester will time out */ }
+        log(req.component, c('33', `restart request ${req.id} rate-limited (${Math.round((RESTART_COOLDOWN_MS - sinceLast) / 1000)}s cooldown)`));
+        continue;
+      }
+
+      const ack = await handler.handleRestartRequest(req, {
+        findEntry: (id) => running.find((r) => r.mod.id === id) || null,
+        stopChild: stopOwnedChild,
+        spawnProcess,
+        // Adoption-by-respawn gate: only a module with a FREE port may be
+        // adopted — a bound port means a foreign occupant may still be alive.
+        isPortFree: (mod) => new Promise((resolve) => {
+          if (!mod.port) return resolve(false);
+          const net = require('net');
+          const sock = new net.Socket();
+          const done = (free) => { try { sock.destroy(); } catch (_) { } resolve(free); };
+          const timer = setTimeout(() => done(false), 2000);
+          sock.once('connect', () => { clearTimeout(timer); done(false); });
+          sock.once('error', () => { clearTimeout(timer); done(true); });
+          try { sock.connect(mod.port, '127.0.0.1'); } catch (_) { clearTimeout(timer); done(true); }
+        }),
+        waitForHealth: (mod) => (mod.health ? waitForHealth(mod, settings, null) : Promise.resolve(true)),
+        verifyRestarted: (mod, child) => {
+          // A completed restart must prove itself: the new child is a live
+          // process and, if it owns a port, that port is listening. Modules
+          // with no health endpoint get verified here instead of vacuously.
+          if (!child || !Number.isInteger(child.pid)) return Promise.resolve(false);
+          try { process.kill(child.pid, 0); } catch (e) { return Promise.resolve(false); }
+          if (!mod.port) return Promise.resolve(true);
+          return new Promise((resolve) => {
+            const net = require('net');
+            const sock = new net.Socket();
+            const done = (up) => { try { sock.destroy(); } catch (_) { } resolve(up); };
+            const timer = setTimeout(() => done(false), 3000);
+            sock.once('connect', () => { clearTimeout(timer); done(true); });
+            sock.once('error', () => { clearTimeout(timer); done(false); });
+            try { sock.connect(mod.port, '127.0.0.1'); } catch (_) { clearTimeout(timer); done(false); }
+          });
+        },
+        log,
+      });
+      try { control.ackRequest(req.id, ack); } catch (e) { /* requester will time out */ }
+      // Only a verified completed restart consumes the cooldown slot. A failed
+      // restart must not rate-limit the next (possibly legitimate) attempt.
+      if (ack.status === 'completed') {
+        lastRestartByComponent.set(req.component, Date.now());
+      }
+      if (ack.status !== 'completed') {
+        log(req.component, c('31', `restart request ${req.id} failed: ${ack.error}`));
+      }
+    }
+  } finally {
+    handlingControlRequest = false;
+  }
+}
+
 async function shutdown(code = 0) {
   if (shuttingDown) return;
   shuttingDown = true;
+  if (controlInterval) { clearInterval(controlInterval); controlInterval = null; }
   banner('Shutdown');
   const timeout = (CONFIG.settings.shutdownTimeoutMs) || 8000;
 
@@ -681,6 +878,10 @@ async function main() {
     });
   }
 
+  // A dry run is strictly observational: the lease decision above already ran
+  // (dry runs inspect, never claim; partial dry runs still refuse a live
+  // canonical lease), so it is safe to print the plan and exit before the
+  // heavyweight preflight or any module spawn.
   if (flags.dryRun) {
     banner('Dry run -- nothing started');
     process.exit(0);
@@ -703,6 +904,30 @@ async function main() {
 
   banner('Booting');
   for (const mod of order) {
+    // Declared external supervision: PM2 (or another authority) owns the
+    // process. boot-agent must never spawn it -- a spawn here either
+    // EADDRINUSEs (occupant up) or silently duplicates a service PM2
+    // already autorestarts (occupant briefly down mid-restart). Verify
+    // health for evidence, then record it as externally owned.
+    if (isExternallySupervised(mod) && mod.type === 'process') {
+      const owner = supervisedAs(mod) || 'external';
+      if (mod.port && await portInUseAndHealthy(mod)) {
+        const occupant = await classifyOccupant(mod);
+        log(mod.id, c('32',
+          `port ${mod.port} healthy, supervised by ${owner}` +
+          ` (ownership: ${occupant.ownership}${occupant.pid ? `, PID ${occupant.pid}` : ''})`));
+        running.push({ mod, child: null, type: 'process', external: true, ownership: occupant.ownership, pid: occupant.pid });
+      } else {
+        // Down or unhealthy -- do NOT spawn. PM2/watchdog owns the restart;
+        // double-provisioning is the failure this boundary exists to prevent.
+        log(mod.id, c('31',
+          `supervised by ${owner} but port ${mod.port} not healthy -- not spawning (external supervisor owns lifecycle)`));
+        if (mod.required) {
+          log(mod.id, c('33', 'required module reported unavailable; boot continues -- external supervisor owns recovery'));
+        }
+      }
+      continue;
+    }
     if (mod.type === 'process' && mod.port && await portInUseAndHealthy(mod)) {
       const occupant = await classifyOccupant(mod);
 
@@ -748,9 +973,10 @@ async function main() {
   const lines = running.map((r) => {
     const port = r.mod.port ? `:${r.mod.port}` : '';
     const state = !r.external ? 'up'
-      : r.ownership === 'unsupervised' ? 'external(UNSUPERVISED)'
-      : r.ownership === 'recovered' ? 'external(RECOVERED)'
-      : 'external';
+      : r.ownership === 'pm2' ? 'external(PM2)'
+        : r.ownership === 'unsupervised' ? 'external(UNSUPERVISED)'
+          : r.ownership === 'recovered' ? 'external(RECOVERED)'
+            : 'external';
     return `  ${c('32', '●')} ${r.mod.id.padEnd(20)} ${state}${port}`;
   });
   console.log(lines.join('\n'));
@@ -758,6 +984,16 @@ async function main() {
   console.log(c('90', 'ProtoForge core:  http://127.0.0.1:3005/health'));
   console.log(c('90', 'Tailnet (HTTPS):  https://heidi-pc.tailc50af2.ts.net/'));
   console.log(c('1', '\nBoot agent supervising. Press Ctrl+C to shut everything down.\n'));
+
+  // Accept restart requests from RecoveryEngine so recovered processes stay
+  // this agent's children. 1s poll: a restart is already a multi-second
+  // operation, so finer granularity buys nothing and costs a directory read.
+  controlInterval = setInterval(() => {
+    pollControlRequests(CONFIG.settings).catch((e) =>
+      log('boot-agent', c('31', `control poll error: ${e.message}`))
+    );
+  }, 1000);
+  if (typeof controlInterval.unref === 'function') controlInterval.unref();
 }
 
 // Guarded so `require('./boot-agent')` (used by tests to reach

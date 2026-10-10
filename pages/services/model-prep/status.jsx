@@ -14,7 +14,7 @@ function getCustomerStatus(job) {
     created: { label: 'Awaiting Payment', color: '#f59e0b', description: 'Complete your payment to start processing.' },
     queued: { label: 'Job Accepted', color: '#3b82f6', description: 'Payment received. Your job is in the queue.' },
     executing: { label: 'HEIDI Processing', color: '#3b82f6', description: 'HEIDI is generating your 3D model package.' },
-    awaiting_review: { label: 'Human Review Required', color: '#f59e0b', description: 'Artifacts generated. A human operator is reviewing them.' },
+    awaiting_review: { label: 'Final Quality Check', color: '#f59e0b', description: 'Generated. Running final quality checks — most orders clear automatically within a minute.' },
     delivered: { label: 'Ready for Download', color: '#16a34a', description: 'Your files are ready! Click the delivery link below.' },
     failed: { label: 'Processing Failed', color: '#dc2626', description: 'Something went wrong. You will receive a refund if applicable.' },
     cancelled: { label: 'Cancelled', color: '#6b7280', description: 'This job was cancelled.' },

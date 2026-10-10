@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Resonate — NFT Market</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="hero">
+    <h1>Resonate Market</h1>
+    <p class="tagline" id="chain-tag">NFT commerce — loading chain status…</p>
+  </header>
+
+  <main>
+    <section class="card">
+      <h2>Mint a track</h2>
+      <form id="mint-form">
+        <label>Rezonate asset ID
+          <input id="m-asset" type="text" required placeholder="audio asset id (e.g. a remix)" />
+        </label>
+        <label>Your wallet
+          <input id="m-wallet" type="text" required placeholder="0x…" />
+        </label>
+        <label>Title <input id="m-title" type="text" /></label>
+        <div id="mint-err" class="error" hidden></div>
+        <button type="submit">Prepare &amp; mint NFT</button>
+      </form>
+      <div id="mint-result"></div>
+    </section>
+
+    <section class="card">
+      <h2>Marketplace</h2>
+      <div id="market-list"><p class="note">Loading…</p></div>
+    </section>
+
+    <section class="card">
+      <h2>Sales</h2>
+      <div id="sales-list"><p class="note">—</p></div>
+    </section>
+  </main>
+
+  <footer><small>Resonate Market · <a href="/">storefront</a> · <a href="/remix.html">remix</a></small></footer>
+  <script src="market.js"></script>
+</body>
+</html>

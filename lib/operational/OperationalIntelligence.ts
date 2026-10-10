@@ -94,6 +94,17 @@ export class OperationalIntelligence {
     this.riskClassifier = riskClassifier;
     this.policyModel = autonomyPolicyModel;
 
+    // Durable operational memory + event forwarding MUST be wired before the
+    // RecoveryBudgetManager is constructed: the manager's restore path can
+    // expire a stale retry episode and log budget_episode_expired during
+    // construction. If the forwarder is not yet wired, that audit event only
+    // reaches this process's in-memory log and is lost on exit — the durable
+    // budget record survives but the intended audit event does not.
+    // (Defect found live 2026-09-20: the 03:15Z delegate's restore-time expiry
+    // events never reached operational-events.jsonl.)
+    this.memory = new OperationalMemory(this.root);
+    this.wireEventLog();
+
     // Phase 4: Initialize recovery budget and lock managers
     // Phase 7 Fix: Use durable budget store so budget survives watchdog restarts
     const durableBudgetStore = new DurableBudgetStore(this.root);
@@ -130,12 +141,6 @@ export class OperationalIntelligence {
     // Initialize incident correlation
     this.correlator = new IncidentCorrelator(this.stateModel, this.graph);
 
-    // Initialize operational memory (durable event log)
-    this.memory = new OperationalMemory(this.root);
-
-    // Wire state model events to operational memory and incident correlator
-    this.wireEventLog();
-
     // Initialize diagnostic
     this.diagnostic = new DiagnosticSnapshot(
       this.root,
@@ -167,6 +172,16 @@ export class OperationalIntelligence {
    */
   async checkHealth(): Promise<ComponentState> {
     await this.healthChecker.checkAll();
+    return this.stateModel.getOverallState();
+  }
+
+  /**
+   * Read the last sweep's overall state WITHOUT probing — the state model
+   * is updated by every checkAll() run (daemon ssf loop + bounded cycle
+   * probes), so this is a cheap cached read for callers inside a tight
+   * cycle budget.
+   */
+  getCachedOverallState(): ComponentState {
     return this.stateModel.getOverallState();
   }
 
@@ -295,9 +310,9 @@ export class OperationalIntelligence {
     const targets = component
       ? [component]
       : this.stateModel
-          .getAllStates()
-          .filter((h) => h.state !== 'HEALTHY' && h.state !== 'UNKNOWN')
-          .map((h) => h.component);
+        .getAllStates()
+        .filter((h) => h.state !== 'HEALTHY' && h.state !== 'UNKNOWN')
+        .map((h) => h.component);
 
     if (targets.length === 0) {
       lines.push('All components are HEALTHY or UNKNOWN — no actions to evaluate.');

@@ -21,7 +21,9 @@
  */
 
 import { randomUUID } from 'crypto';
+import os from 'os';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { createTimedClient } from './supabase-timed';
 import { getSessionState as getSharedSessionState, updateSessionState as updateSharedSessionState, SessionState } from './session-state';
 import { getMetricsService, type PartialInferenceMetric } from './metrics';
 
@@ -70,7 +72,7 @@ function getSupabase(): SupabaseClient {
     if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
       throw new Error('Supabase env vars not configured (NEXT_PUBLIC_SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY)');
     }
-    _supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+    _supabase = createTimedClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
   }
   return _supabase;
 }
@@ -122,15 +124,137 @@ export class ModelManager {
   }
 
   /**
-   * Resolve the model name from env. LOCAL_MODEL_NAME wins, then OLLAMA_MODEL,
-   * then a safe default.
+   * Failure classes for the local path — stable tokens so callers and the
+   * metrics layer can distinguish load failure from inference failure from
+   * resource refusal. Never collapse these into a generic "AI failed".
    */
-  private getLocalModelName(): string {
-    return (
-      process.env.LOCAL_MODEL_NAME ||
-      process.env.OLLAMA_MODEL ||
-      'llama3.2:3b'
-    );
+  static readonly LLM_FAILURE = {
+    UNREACHABLE: 'LOCAL_UNREACHABLE',
+    MEMORY_PRESSURED: 'MEMORY_PRESSURED',
+    MODEL_LOAD_TIMEOUT: 'MODEL_LOAD_TIMEOUT',
+    INFERENCE_TIMEOUT: 'INFERENCE_TIMEOUT',
+    INFERENCE_ERROR: 'INFERENCE_ERROR',
+  } as const;
+
+  private static modelSelectionCache: {
+    at: number;
+    choice: { name: string; sizeBytes: number } | null;
+    reason: string;
+  } | null = null;
+  private static readonly MODEL_SELECTION_TTL_MS = 60000;
+
+  /**
+   * Load-phase budget — separate from the inference budget. A cold Ollama
+   * model load under memory pressure can take 30-45 s; giving it its own
+   * timeout lets us classify MODEL_LOAD_TIMEOUT distinctly instead of
+   * guessing which phase a single timer was in.
+   */
+  private getModelLoadTimeoutMs(): number {
+    const parsed = parseInt(process.env.LOCAL_MODEL_LOAD_TIMEOUT_MS || '', 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 45000;
+  }
+
+  /**
+   * Memory budget for local inference: free RAM minus a reserve for the OS,
+   * the database, and HYDI's own runtimes. A model counts as affordable when
+   * its on-disk size * 1.5 (runtime working-set estimate) fits in the budget.
+   * Live data point 2026-09-21: 15.7 GB box with ~1.4 GB free loaded the
+   * 0.59 GB tinyllama in 34.5 s of swap thrash — affordance must be checked
+   * BEFORE attempting a load, not discovered through repeated 30 s cancels.
+   */
+  private getModelMemoryBudgetBytes(): number {
+    const reserveMb = parseInt(process.env.LOCAL_MODEL_RESERVE_MB || '', 10);
+    const reserveBytes = (Number.isFinite(reserveMb) && reserveMb >= 0 ? reserveMb : 768) * 1024 * 1024;
+    return Math.max(0, os.freemem() - reserveBytes);
+  }
+
+  /**
+   * Resource-aware model selection. Env override (LOCAL_MODEL_NAME /
+   * OLLAMA_MODEL) wins only if the requested model actually fits the memory
+   * budget — otherwise we downgrade to the largest installed model that does
+   * fit. Returns null when nothing fits (MEMORY_PRESSURED — the truthful
+   * answer on a RAM-starved box, not another doomed load attempt).
+   */
+  private async selectLocalModel(): Promise<{
+    choice: { name: string; sizeBytes: number } | null;
+    reason: string;
+  }> {
+    const now = Date.now();
+    if (ModelManager.modelSelectionCache && now - ModelManager.modelSelectionCache.at < ModelManager.MODEL_SELECTION_TTL_MS) {
+      return { choice: ModelManager.modelSelectionCache.choice, reason: ModelManager.modelSelectionCache.reason };
+    }
+
+    const budget = this.getModelMemoryBudgetBytes();
+    const baseUrl = this.getLocalBaseURL();
+    let models: { name: string; size: number }[] = [];
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 3000);
+      const res = await fetch(`${baseUrl}/api/tags`, { signal: controller.signal });
+      clearTimeout(timer);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = (await res.json()) as { models?: { name: string; size: number }[] };
+      models = (data.models || []).filter((m) => typeof m.size === 'number' && m.size > 0);
+    } catch (e) {
+      const result = { choice: null, reason: `tags probe failed: ${e instanceof Error ? e.message : 'unknown'}` };
+      ModelManager.modelSelectionCache = { at: now, ...result };
+      return result;
+    }
+
+    // Exclude embedding-only models from the generative pool.
+    const generative = models.filter((m) => !/embed/i.test(m.name));
+    const requested = process.env.LOCAL_MODEL_NAME || process.env.OLLAMA_MODEL || null;
+    const requestedEntry = requested ? generative.find((m) => m.name === requested) : undefined;
+    const fits = (m: { size: number }) => m.size * 1.5 <= budget;
+
+    let result: { choice: { name: string; sizeBytes: number } | null; reason: string };
+    if (requestedEntry) {
+      if (fits(requestedEntry)) {
+        result = { choice: { name: requestedEntry.name, sizeBytes: requestedEntry.size }, reason: 'requested model fits budget' };
+      } else {
+        const smaller = generative.filter(fits).sort((a, b) => a.size - b.size)[0];
+        result = smaller
+          ? { choice: { name: smaller.name, sizeBytes: smaller.size }, reason: `requested ${requested} exceeds memory budget; downgraded to ${smaller.name}` }
+          : { choice: null, reason: `requested ${requested} exceeds memory budget and no smaller model fits` };
+      }
+    } else {
+      // Prefer the SMALLEST model that fits — on a RAM-constrained box the
+      // largest-fitting model leaves no headroom for inference's working
+      // set beyond the load estimate, so it thrashes into a timeout while
+      // a small model actually answers.
+      const best = generative.filter(fits).sort((a, b) => a.size - b.size)[0];
+      result = best
+        ? { choice: { name: best.name, sizeBytes: best.size }, reason: `smallest model fitting memory budget (headroom-first)` }
+        : { choice: null, reason: 'no installed generative model fits the memory budget' };
+    }
+
+    ModelManager.modelSelectionCache = { at: now, ...result };
+    return result;
+  }
+
+  /**
+   * Warm/load phase: an empty-prompt generate with keep_alive loads the model
+   * without running inference. Returns load telemetry for evidence.
+   */
+  private async warmModel(modelName: string): Promise<{ ok: boolean; loadDurationMs: number | null; error?: string }> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), this.getModelLoadTimeoutMs());
+    try {
+      const response = await fetch(`${this.getLocalBaseURL()}/api/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: modelName, keep_alive: '5m' }),
+        signal: controller.signal,
+      });
+      clearTimeout(timer);
+      if (!response.ok) return { ok: false, loadDurationMs: null, error: `HTTP ${response.status}` };
+      const data = (await response.json()) as { load_duration?: number };
+      return { ok: true, loadDurationMs: data.load_duration ? data.load_duration / 1e6 : null };
+    } catch (e) {
+      clearTimeout(timer);
+      const aborted = e instanceof Error && e.name === 'AbortError';
+      return { ok: false, loadDurationMs: null, error: aborted ? ModelManager.LLM_FAILURE.MODEL_LOAD_TIMEOUT : (e instanceof Error ? e.message : 'warm failed') };
+    }
   }
 
   /**
@@ -238,6 +362,12 @@ export class ModelManager {
     const totalLatency = Date.now() - startTime;
     response.latency = totalLatency;
 
+    // When the fallback also failed, the user-facing error should name the
+    // PRIMARY cause (why local inference failed — e.g. MEMORY_PRESSURED),
+    // not the secondary fallback failure ('no cloud API key'), which
+    // misleadingly implies a cloud dependency was expected.
+    if (!response.success && fallbackReason) response.error = fallbackReason;
+
     await this.updateSessionState(
       sessionId,
       response.model === 'local' ? 'local' : 'api',
@@ -278,6 +408,36 @@ export class ModelManager {
    * and keeps the model alive for 30 minutes to avoid repeated cold loads.
    */
   private async generateLocalResponse(prompt: string): Promise<LocalResponse> {
+    // Phase 0: resource-aware selection. A model that cannot fit the memory
+    // budget is never attempted — repeated doomed loads are worse than an
+    // honest MEMORY_PRESSURED refusal.
+    const selection = await this.selectLocalModel();
+    if (!selection.choice) {
+      const unreachable = selection.reason.startsWith('tags probe failed');
+      return {
+        content: '',
+        success: false,
+        error: unreachable ? ModelManager.LLM_FAILURE.UNREACHABLE : ModelManager.LLM_FAILURE.MEMORY_PRESSURED,
+        metadata: { provider: 'local', selectedModel: 'none', loadDurationMs: null },
+      };
+    }
+    const modelName = selection.choice.name;
+    if (selection.reason.includes('downgraded')) {
+      console.log(`[ModelManager] ${selection.reason}`);
+    }
+
+    // Phase 1: bounded load/warm. MODEL_LOAD_TIMEOUT is its own class.
+    const warm = await this.warmModel(modelName);
+    if (!warm.ok) {
+      return {
+        content: '',
+        success: false,
+        error: warm.error || ModelManager.LLM_FAILURE.MODEL_LOAD_TIMEOUT,
+        metadata: { provider: 'local', selectedModel: modelName, loadDurationMs: warm.loadDurationMs },
+      };
+    }
+
+    // Phase 2: bounded inference against the now-warm model.
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.getLocalTimeoutMs());
 
@@ -288,10 +448,10 @@ export class ModelManager {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: this.getLocalModelName(),
+          model: modelName,
           prompt,
           stream: false,
-          keep_alive: '30m',
+          keep_alive: '5m',
           format: 'json',
           options: {
             temperature: 0.1,
@@ -315,8 +475,7 @@ export class ModelManager {
         eval_count?: number;
       };
 
-      const modelName = this.getLocalModelName();
-      const loadDurationMs = data.load_duration ? data.load_duration / 1e6 : null;
+      const loadDurationMs = warm.loadDurationMs ?? (data.load_duration ? data.load_duration / 1e6 : null);
       const evalDurationMs = data.eval_duration ? data.eval_duration / 1e6 : null;
       const promptTokens = typeof data.prompt_eval_count === 'number' ? data.prompt_eval_count : null;
       const completionTokens = typeof data.eval_count === 'number' ? data.eval_count : null;
@@ -338,13 +497,39 @@ export class ModelManager {
       };
     } catch (error) {
       clearTimeout(timer);
-      const message = error instanceof Error ? error.message : 'Unknown error';
+      const aborted = error instanceof Error && error.name === 'AbortError';
+      const message = aborted
+        ? ModelManager.LLM_FAILURE.INFERENCE_TIMEOUT
+        : error instanceof Error ? error.message : 'Unknown error';
       console.error('[ModelManager] Local model error:', message);
+      // A timed-out or wedged inference can leave the model runner holding
+      // RAM while serving nothing. Ask Ollama to unload it (keep_alive: 0)
+      // so a failed request does not make the NEXT request less likely to
+      // succeed. Best-effort, bounded, no process killing.
+      void this.unloadLocalModel(modelName);
       return {
         content: '',
         success: false,
         error: message,
+        metadata: { provider: 'local', selectedModel: modelName, loadDurationMs: warm.loadDurationMs },
       };
+    }
+  }
+
+  /** Ask Ollama to unload a model after failure — frees the runner's RAM. */
+  private async unloadLocalModel(modelName: string): Promise<void> {
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 5000);
+      await fetch(`${this.getLocalBaseURL()}/api/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: modelName, prompt: '', keep_alive: 0, stream: false }),
+        signal: controller.signal,
+      });
+      clearTimeout(timer);
+    } catch {
+      // unload is best-effort — ignore
     }
   }
 

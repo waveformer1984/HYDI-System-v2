@@ -16,6 +16,9 @@ function createConfig(env = process.env) {
 
   return {
     port: intOr(env.PORT, defaults.port),
+    // Public base URL baked into NFT tokenURI/metadata — must be reachable
+    // from the public internet for testnet mints, else metadata is dead.
+    publicUrl: env.REZONATE_PUBLIC_URL || null,
     dataDir,
     dbPath,
     eventLogPath,

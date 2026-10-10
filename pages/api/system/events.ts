@@ -1,4 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
+import { requireOpsAuth } from '../../../lib/api/requireOpsAuth';
 import { getEventBus } from '../../../lib/event-bus';
 import type { EventHistoryQuery } from '../../../lib/event-bus';
 
@@ -10,6 +11,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
+
+  if (!requireOpsAuth(req, res)) return;
 
   try {
     const bus = getEventBus();

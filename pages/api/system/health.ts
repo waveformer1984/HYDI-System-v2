@@ -1,4 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
+import { requireOpsAuth } from '../../../lib/api/requireOpsAuth';
 import { createHealthService, HealthPoller } from '../../../lib/health';
 
 const POLL_INTERVAL_MS = 30000;
@@ -17,6 +18,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
+
+  if (!requireOpsAuth(req, res)) return;
 
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' });

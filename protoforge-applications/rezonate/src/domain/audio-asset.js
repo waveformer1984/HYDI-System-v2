@@ -1,7 +1,7 @@
 const crypto = require('crypto');
 const { ValidationError } = require('../errors');
 
-const ASSET_TYPES = ['stem', 'sample', 'vocal', 'instrument', 'mix', 'generated_song'];
+const ASSET_TYPES = ['stem', 'sample', 'vocal', 'instrument', 'mix', 'generated_song', 'remix'];
 const OWNERSHIP_STATUSES = ['draft', 'registered', 'minted', 'listed'];
 
 class AudioAsset {
@@ -18,7 +18,7 @@ class AudioAsset {
     this.createdAt = input.created_at || input.createdAt || new Date().toISOString();
     this.updatedAt = input.updated_at || input.updatedAt || this.createdAt;
     this._eventBus = deps.eventBus;
-    this._logger = deps.logger || { info: () => {} };
+    this._logger = deps.logger || { info: () => { } };
 
     this.validate();
   }

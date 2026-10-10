@@ -53,6 +53,19 @@ import { createHeidiVerificationRunner, heidiObservers } from './ContractVerific
 import { ALL_CONTRACTS } from './contracts';
 import type { ProspectRecord, OpportunityRecord } from '../revenue/types';
 import { getOfferCatalog } from '../revenue/OfferCatalog';
+import { MissionProducer, type ProductionResult } from './MissionProducer';
+import { MissionRunner } from './MissionRunner';
+import { MissionLifecycle } from './MissionLifecycle';
+import { PriorityEngine } from './PriorityEngine';
+import { collectExecutiveDiagnostic } from './ExecutiveDiagnostic';
+import { collectDiagnosticFollowup, investigateDimension } from './DiagnosticFollowup';
+import { collectReconciliation, resolveGitHead } from './DeploymentReconciliation';
+import { runR0Recovery } from './SelfRepairR0';
+import { collectCooState } from './CooState';
+import { acknowledgeHumanAction } from './HumanActionQueue';
+import { consumeProposalAuthorization } from './ActionProposals';
+import { readKillSwitch, writeKillSwitch } from './KillSwitchState';
+import { runInvestigateMission, runTopicInvestigation, runTopOpportunityInvestigation, collectAgentState, superviseAgents, stopAgent, retryMission, resolveHumanAction } from './AgentControlPlane';
 
 export type CognitivePhase =
   | 'perceive' | 'validate' | 'understand' | 'update_world_model'
@@ -117,6 +130,7 @@ export interface CognitiveState {
   worldModelSummary: { total: number; healthy: number; degraded: number; failed: number; unknown: number } | null;
   activeGoals: Goal[];
   pendingWork: Goal[];
+  producedMissions: ProductionResult | null;
   retrievedMemory: string | null;
   trustClassification: TrustClassification | null;
   threatAssessments: ThreatAssessment[];
@@ -210,11 +224,16 @@ export interface ExerciseRecord {
 
 export interface AuthorizationResult {
   authorized: boolean;
-  authorizationMode: 'autonomous' | 'policy_authorized' | 'human_required' | 'prohibited';
+  authorizationMode: 'autonomous' | 'policy_authorized' | 'human_required' | 'prohibited' | 'human_authorized';
   reason: string;
   policyEvaluated: string;
   capabilityId: string | null;
   escalationRecordId: string | null;
+  /**
+   * Set when authorization was minted by consuming a durable approved
+   * proposal (consume-once). Null for every other authorization path.
+   */
+  authorizationProposalId?: string | null;
   /**
    * The tier the capability contract derives for THIS invocation, from
    * (verb x target x blast radius x reversibility x state) — as opposed to
@@ -283,6 +302,7 @@ export interface ExecutionBridge {
   operationalIntelligence?: {
     governedRecover: (component: string, cause: string) => Promise<string>;
     checkHealth: () => Promise<unknown>;
+    getCachedOverallState: () => string;
     diagnose: (jsonOutput?: boolean) => Promise<string>;
     autoRecover: () => Promise<string>;
   } | null;
@@ -328,7 +348,7 @@ export interface ExecutionBridge {
   } | null;
   memory?: {
     retrieve: (query: string, userId: string, sessionId?: string) => Promise<string>;
-    storeExperience: (sessionId: string, userId: string, experience: { problem: string; actionsTaken: unknown[]; outcome: string; lesson: string }) => Promise<boolean>;
+    storeExperience: (sessionId: string, userId: string, experience: { problem: string; actionsTaken: unknown[]; outcome: string; lesson: string }) => Promise<string | null>;
   } | null;
   metaCognition?: {
     evaluate: (thinkResult: { query: string; thinkingProcess: unknown[]; response: string; confidence: number }) => Promise<{ overallQualityScore: number; qualityClassification: string; improvementAreas: string[] }>;
@@ -433,6 +453,9 @@ export class CognitiveCore {
    * disagreements, then flip HEIDI_CONTRACT_AUTHORITY=enforcing.
    */
   private contractAuthorityMode: 'advisory' | 'enforcing';
+  private missionProducer: MissionProducer | null;
+  private missionRunner: MissionRunner | null = null;
+  private priorityEngine = new PriorityEngine();
   private bridge: ExecutionBridge;
   private currentCycle: CognitiveState | null = null;
   private cycleCount = 0;
@@ -450,9 +473,13 @@ export class CognitiveCore {
   private lastFailureAt: string | null = null;
   private cooldownUntil: string | null = null;
   private lastError: string | null = null;
+  private lastDevScanAt = 0;
+  private lastOiProbeAt = 0; // epoch ms — OI health sweep cache for perceive()
+  private inFlightWork: Promise<CognitiveState> | null = null; // the cycle promise that owns cycleInFlight
   private startedAt: number | null = null;
+  private runtimeCommit: string | null | undefined; // undefined = not yet resolved
 
-  constructor(config?: DBConfig, bridge?: ExecutionBridge) {
+  constructor(config?: DBConfig, bridge?: ExecutionBridge, opts?: { missionProducer?: MissionProducer | null }) {
     this.pool = new Pool({
       host: config?.host || process.env.PG_HOST || '127.0.0.1',
       port: config?.port || parseInt(process.env.PG_PORT || '54322', 10),
@@ -460,6 +487,16 @@ export class CognitiveCore {
       user: config?.user || process.env.PG_USER || 'postgres',
       password: config?.password || process.env.PG_PASSWORD || 'postgres',
       max: 3, idleTimeoutMillis: 30000,
+      // A query blocked on a lock (FOR UPDATE, an abandoned transaction)
+      // otherwise hangs forever — holds a pool connection, and at max=3
+      // a few hung queries permanently wedge every subsequent cycle:
+      // produce() is never reached, no ops.* goals are emitted, and the
+      // loop reports 'Cycle timed out' forever. Observed 2026-09-28:
+      // daemon cycled 5h, produced zero goals. statement_timeout makes
+      // the stall a bounded error the cycle records and moves past.
+      connectionTimeoutMillis: 5000,
+      statement_timeout: 25000,
+      idle_in_transaction_session_timeout: 30000,
     });
     this.identity = new HeidiIdentityModel(config);
     this.goals = new GoalSystem(config);
@@ -467,6 +504,12 @@ export class CognitiveCore {
     this.trust = new TrustModel(config);
     this.guardian = new GuardianModel(config);
     this.registry = getCapabilityRegistry();
+    this.missionRunner = new MissionRunner({
+      pool: this.pool,
+      goals: this.goals,
+      registry: this.registry,
+      lifecycle: new MissionLifecycle(this.pool, 'heidi-daemon'),
+    });
     this.bridge = bridge || {};
     this.sessionId = `cognitive-${Date.now()}`;
     this.contractAuthorityMode =
@@ -497,6 +540,48 @@ export class CognitiveCore {
 
     // Wire capability executors if bridge components are available
     this.wireCapabilityExecutors();
+
+    // The governed goal producer. It runs inside the cycle's
+    // identify_goals phase and can only emit missions bound to
+    // capabilities the registry already reports as executable — it
+    // narrows the loop's work, never widens its authority. Injectable
+    // (and nullable) so tests can substitute a bounded catalog.
+    this.missionProducer = opts && 'missionProducer' in opts
+      ? (opts.missionProducer as MissionProducer)
+      : new MissionProducer({
+        goals: this.goals,
+        registry: this.registry,
+        findingSource: () => this.latestFindings(),
+      });
+  }
+
+  /**
+   * Read the persisted findings from the most recent diagnostic_followup
+   * event. Returns [] when none exists or the row is unreadable — the
+   * producer treats that as "no findings", never as an error.
+   */
+  private async latestFindings(): Promise<import('./MissionProducer').FindingRef[]> {
+    try {
+      const rows = await this.pool.query<QueryResultRow>(
+        `SELECT id, payload FROM heidi_events
+         WHERE event_type = 'diagnostic_followup' ORDER BY created_at DESC LIMIT 1`,
+      );
+      const row = rows.rows[0];
+      if (!row) return [];
+      const findings = (row.payload as { findings?: Array<Record<string, unknown>> })?.findings ?? [];
+      return findings
+        .filter((f) => f && typeof f === 'object')
+        .map((f) => ({
+          diagnosticEventId: row.id as string,
+          taskTemplate: f.taskTemplate as string,
+          dimension: f.dimension as string | undefined,
+          severity: f.severity as string | undefined,
+          summary: f.summary as string | undefined,
+          humanRequired: f.humanRequired === true,
+        }));
+    } catch {
+      return [];
+    }
   }
 
   // ─── Bounded external calls ───────────────────────────────────────────
@@ -532,12 +617,13 @@ export class CognitiveCore {
     fallback: T,
     label: string,
     onTimeout?: (message: string) => void,
+    timeoutMs?: number,
   ): Promise<T> {
-    const timeoutMs = this.memoryTimeoutMs();
+    const effectiveTimeoutMs = timeoutMs ?? this.memoryTimeoutMs();
     let timer: NodeJS.Timeout | null = null;
 
     const timeout = new Promise<typeof TIMED_OUT>((resolve) => {
-      timer = setTimeout(() => resolve(TIMED_OUT), timeoutMs);
+      timer = setTimeout(() => resolve(TIMED_OUT), effectiveTimeoutMs);
     });
 
     try {
@@ -552,7 +638,7 @@ export class CognitiveCore {
         // Detach the abandoned promise so its eventual rejection is not an
         // unhandled rejection in a cycle that already gave up on it.
         void work.catch(() => undefined);
-        const message = `${label} exceeded ${timeoutMs}ms — continuing without it`;
+        const message = `${label} exceeded ${effectiveTimeoutMs}ms — continuing without it`;
         if (onTimeout) onTimeout(message);
         return fallback;
       }
@@ -987,6 +1073,66 @@ export class CognitiveCore {
       });
     }
 
+    // Phase H — revenue execution runtime. NOT gated on a bridge: deps are
+    // real local modules (JobManager/StripeBridge/RevenueReconciler). Every
+    // step is durable via commercial_offer_transition events; the payment
+    // boundary (live authorization, customer identity, Stripe presence) is
+    // enforced inside RevenueRuntime, never bypassed.
+    this.wireExecutor('revenue.advance_offer', async (params) => {
+      try {
+        const { RevenueRuntime } = await import('./RevenueRuntime');
+        const { getJobManager } = await import('../revenue/JobManager');
+        const { StripeBridge } = await import('../revenue/StripeBridge');
+        const { RevenueReconciler } = await import('../revenue/RevenueReconciler');
+        const { getLiveTransactionAuthorizationManager } = await import('../revenue/LiveTransactionAuthorization');
+
+        const jobManager = getJobManager();
+        const stripe = new StripeBridge();
+        const reconciler = new RevenueReconciler();
+        const liveAuth = getLiveTransactionAuthorizationManager();
+
+        const { getOfferCatalog } = await import('../revenue/OfferCatalog');
+        const catalogIds = new Set(getOfferCatalog().getAll().map((o) => o.offerId as string));
+        const runtime = new RevenueRuntime(this.pool, {
+          createJob: (input) => jobManager.createJob(input),
+          createCheckoutSession: async (input) => {
+            if (!catalogIds.has(input.offerId)) return { error: `unknown catalog offer '${input.offerId}'` };
+            return stripe.createSetupCheckoutSession({
+              ...input,
+              offerId: input.offerId as import('../revenue/types').OfferId,
+            });
+          },
+          linkCheckoutSession: (jobId, sessionId) => jobManager.linkCheckoutSession(jobId, sessionId),
+          reconcileJob: async (jobId) => ({ state: (await reconciler.reconcile(jobId)).state }),
+          pendingLiveAuthorizations: () =>
+            liveAuth.getAll().filter((a: { state: string }) => a.state === 'PENDING'),
+        });
+
+        const results = await runtime.advance({
+          offerId: params.offerId as string | undefined,
+          advanceAll: params.advanceAll === true,
+          customerEmail: params.customerEmail as string | undefined,
+          actor: 'heidi-daemon',
+        });
+
+        const blocked = results.filter(r => r.boundary === 'human_authorization' || r.boundary === 'not_wired');
+        return {
+          capabilityId: 'revenue.advance_offer',
+          executed: true,
+          outcome: blocked.length > 0 && results.every(r => r.boundary !== 'none') ? 'skipped' as const : 'success' as const,
+          result: { transitions: results },
+          error: blocked.length > 0 && results.every(r => r.boundary !== 'none')
+            ? `boundary reached: ${blocked.map(b => b.detail).join('; ').slice(0, 300)}`
+            : null,
+          evidence: results.map(r => ({ offerId: r.offerId, from: r.previousStage, to: r.newStage, action: r.action, boundary: r.boundary })),
+          verified: true,
+          verificationDetails: `${results.length} offer(s) evaluated; transitions are durable commercial events`,
+        };
+      } catch (e) {
+        return this.failResult('revenue.advance_offer', e instanceof Error ? e.message : 'revenue advance failed');
+      }
+    });
+
     // CommercialWorkflow capabilities
     if (this.bridge.commercialWorkflow) {
       const cw = this.bridge.commercialWorkflow;
@@ -1352,6 +1498,861 @@ export class CognitiveCore {
         verificationDetails: 'Perception result contains system health',
       };
     });
+
+    // Executive self-diagnostic — always wired: it reads durable state via
+    // this.pool/goals/registry, so it works even when optional subsystems
+    // (OperationalIntelligence, comms) are absent.
+    this.wireExecutor('ops.executive_diagnostic', async () => {
+      const report = await collectExecutiveDiagnostic({
+        pool: this.pool,
+        goals: this.goals,
+        registry: this.registry,
+        repoDir: process.cwd(),
+      });
+      const inserted = await this.pool.query<{ id: string }>(
+        `INSERT INTO heidi_events (event_type, division, payload, verdict, created_at)
+         VALUES ($1, $2, $3, $4, now()) RETURNING id`,
+        ['executive_diagnostic', 'heidi', JSON.stringify(report), report.overall],
+      );
+      const reportId = inserted.rows[0]?.id ?? null;
+      return {
+        capabilityId: 'ops.executive_diagnostic',
+        executed: reportId !== null,
+        outcome: reportId !== null ? 'success' as const : 'failure' as const,
+        result: { reportId, overall: report.overall, dimensions: report.dimensions.length, generatedAt: report.generatedAt },
+        error: reportId === null ? 'heidi_events insert returned no id' : null,
+        evidence: [{ overall: report.overall, generatedAt: report.generatedAt }],
+        verified: false, // contract verification re-reads the row
+        verificationDetails: 'Pending contract verification of persisted diagnostic row',
+      };
+    });
+
+    // Diagnostic follow-up — investigates the findings the executive
+    // diagnostic surfaced. Investigates, never repairs.
+    this.wireExecutor('ops.diagnostic_followup', async () => {
+      const report = await collectDiagnosticFollowup({
+        pool: this.pool,
+        repoDir: process.cwd(),
+      });
+      const inserted = await this.pool.query<{ id: string }>(
+        `INSERT INTO heidi_events (event_type, division, payload, verdict, created_at)
+         VALUES ($1, $2, $3, $4, now()) RETURNING id`,
+        ['diagnostic_followup', 'heidi', JSON.stringify(report), report.verdict],
+      );
+      const reportId = inserted.rows[0]?.id ?? null;
+      return {
+        capabilityId: 'ops.diagnostic_followup',
+        executed: reportId !== null,
+        outcome: reportId !== null ? 'success' as const : 'failure' as const,
+        result: {
+          reportId,
+          verdict: report.verdict,
+          findings: report.findings.length,
+          humanRequired: report.findings.filter((f) => f.humanRequired).length,
+          diagnosticEventId: report.diagnosticEventId,
+        },
+        error: reportId === null ? 'heidi_events insert returned no id' : null,
+        evidence: [{ verdict: report.verdict, findingCount: report.findings.length }],
+        verified: false, // contract verification re-reads the row
+        verificationDetails: 'Pending contract verification of persisted follow-up row',
+      };
+    });
+
+    // Bounded investigation of one diagnostic dimension — the execution
+    // target for finding-generated missions. Investigates; never repairs.
+    this.wireExecutor('ops.investigate_finding', async (params) => {
+      const dimension = params.dimension as string | undefined;
+      const taskTemplate = params.taskTemplate as string | undefined;
+      if (!dimension || !taskTemplate) {
+        return this.failResult('ops.investigate_finding', 'Missing required param: dimension/taskTemplate');
+      }
+      const finding = await investigateDimension(
+        { pool: this.pool, repoDir: process.cwd() },
+        dimension,
+      );
+      const inserted = await this.pool.query<{ id: string }>(
+        `INSERT INTO heidi_events (event_type, division, payload, verdict, created_at)
+         VALUES ($1, $2, $3, $4, now()) RETURNING id`,
+        [
+          'investigation',
+          'heidi',
+          JSON.stringify({
+            dimension,
+            taskTemplate,
+            diagnosticEventId: params.diagnosticEventId ?? null,
+            investigationOnly: true,
+            noRepairAuthorized: true,
+            finding,
+          }),
+          finding.severity,
+        ],
+      );
+      const reportId = inserted.rows[0]?.id ?? null;
+      return {
+        capabilityId: 'ops.investigate_finding',
+        executed: reportId !== null,
+        outcome: reportId !== null ? 'success' as const : 'failure' as const,
+        result: {
+          reportId,
+          dimension,
+          severity: finding.severity,
+          suggestedFollowup: finding.suggestedFollowup,
+          humanRequired: finding.humanRequired,
+        },
+        error: reportId === null ? 'heidi_events insert returned no id' : null,
+        evidence: [{ dimension, severity: finding.severity }],
+        verified: false, // contract verification re-reads the row
+        verificationDetails: 'Pending contract verification of persisted investigation row',
+      };
+    });
+
+    // Deployment reconciliation — observational only. Proves whether the
+    // PM2-tracked process is the same process actually executing cycles.
+    // Never kills, never steals the lock, never writes qualified-deployment.
+    this.wireExecutor('ops.reconcile_deployment', async () => {
+      const report = await collectReconciliation({
+        pool: this.pool,
+        repoDir: process.cwd(),
+      });
+      const verdictMap: Record<string, string> = {
+        QUALIFIED: 'HEALTHY',
+        DEPLOYMENT_DRIFT: 'DEGRADED',
+        UNKNOWN: 'UNKNOWN',
+      };
+      const inserted = await this.pool.query<{ id: string }>(
+        `INSERT INTO heidi_events (event_type, division, payload, verdict, created_at)
+         VALUES ($1, $2, $3, $4, now()) RETURNING id`,
+        ['deployment_reconciliation', 'heidi', JSON.stringify(report), verdictMap[report.verdict] ?? 'UNKNOWN'],
+      );
+      const reportId = inserted.rows[0]?.id ?? null;
+      return {
+        capabilityId: 'ops.reconcile_deployment',
+        executed: reportId !== null,
+        outcome: reportId !== null ? 'success' as const : 'failure' as const,
+        result: {
+          reportId,
+          verdict: report.verdict,
+          deploymentIdentity: report.deploymentIdentity,
+          applicationHealth: report.applicationHealth,
+          failures: report.failures,
+        },
+        error: reportId === null ? 'heidi_events insert returned no id' : null,
+        evidence: [{ verdict: report.verdict, failures: report.failures }],
+        verified: false, // contract verification re-reads the row
+        verificationDetails: 'Pending contract verification of persisted reconciliation row',
+      };
+    });
+
+    // R0 self-repair: daemon-unavailable → canonical pm2 restart →
+    // post-recovery reconciliation. Observational refusals dominate:
+    // anything that is not a proven dead daemon is NO_ACTION or
+    // HUMAN_REQUIRED. Never kills, never steals the lock.
+    this.wireExecutor('ops.recover_daemon_r0', async () => {
+      const report = await runR0Recovery({ pool: this.pool, repoDir: process.cwd() });
+      return {
+        capabilityId: 'ops.recover_daemon_r0',
+        executed: report.attemptRowId !== null,
+        outcome: report.attemptRowId !== null ? 'success' as const : 'failure' as const,
+        result: {
+          reportId: report.attemptRowId,
+          recoveryId: report.recoveryId,
+          state: report.state,
+          failureClass: report.failureClass,
+          action: report.action,
+          detail: report.detail,
+        },
+        error: report.attemptRowId === null ? 'recovery attempt row not persisted' : null,
+        evidence: [{ state: report.state, detail: report.detail }],
+        verified: false, // contract verification re-reads the row
+        verificationDetails: 'Pending contract verification of persisted recovery attempt',
+      };
+    });
+
+    // COO state — the authoritative cross-domain snapshot. Read-only;
+    // derives the next authorized action deterministically from collected
+    // state. Never repairs, never approves, never manufactures work.
+    this.wireExecutor('ops.coo_state', async () => {
+      const state = await collectCooState({ pool: this.pool, repoDir: process.cwd() });
+      const verdict =
+        state.deployment.identity === 'VALID' && state.applicationHealth === 'HEALTHY' ? 'HEALTHY'
+          : state.deployment.identity === 'INVALID' ? 'DEGRADED'
+            : state.deployment.identity === 'UNPROVEN' ? 'UNKNOWN'
+              : 'DEGRADED';
+      const inserted = await this.pool.query<{ id: string }>(
+        `INSERT INTO heidi_events (event_type, division, payload, verdict, created_at)
+         VALUES ($1, $2, $3, $4, now()) RETURNING id`,
+        ['coo_state', 'heidi', JSON.stringify(state), verdict],
+      );
+      const reportId = inserted.rows[0]?.id ?? null;
+      return {
+        capabilityId: 'ops.coo_state',
+        executed: reportId !== null,
+        outcome: reportId !== null ? 'success' as const : 'failure' as const,
+        result: {
+          reportId,
+          verdict,
+          nextAction: state.nextAction,
+          briefing: state.briefing,
+        },
+        error: reportId === null ? 'heidi_events insert returned no id' : null,
+        evidence: [{ verdict, nextAction: state.nextAction }],
+        verified: false, // contract verification re-reads the row
+        verificationDetails: 'Pending contract verification of persisted coo_state row',
+      };
+    });
+
+    // Governed human-action acknowledgement — records a durable ack for
+    // one normalized queue item. Write of the ack record only: never
+    // executes, never authorizes, never mutates the underlying source.
+    // Idempotent on repeat; fail-closed on missing/expired items.
+    this.wireExecutor('ops.acknowledge_human_action', async (params) => {
+      const queueItemId = typeof params?.queueItemId === 'string' ? params.queueItemId : null;
+      const actor = typeof params?.actor === 'string' ? params.actor : 'operator';
+      if (!queueItemId) {
+        return {
+          capabilityId: 'ops.acknowledge_human_action',
+          executed: false,
+          outcome: 'failure' as const,
+          result: null,
+          error: 'capabilityParams.queueItemId required',
+          evidence: [],
+          verified: false,
+          verificationDetails: 'Missing queueItemId',
+        };
+      }
+      const res = await acknowledgeHumanAction(this.pool, queueItemId, actor);
+      return {
+        capabilityId: 'ops.acknowledge_human_action',
+        executed: res.ok,
+        outcome: res.ok ? 'success' as const : 'failure' as const,
+        result: {
+          acknowledgementId: res.acknowledgementId ?? null,
+          queueItemId: res.queueItemId ?? queueItemId,
+          outcome: res.outcome,
+          reason: res.reason ?? null,
+        },
+        error: res.ok ? null : (res.reason ?? 'acknowledgement refused'),
+        evidence: [{ outcome: res.outcome, queueItemId }],
+        verified: false,
+        verificationDetails: res.ok
+          ? 'Pending contract verification of persisted human_action_ack row'
+          : 'Refused before write — nothing to verify',
+      };
+    });
+
+    // Bounded multi-agent mission — currently one governed workload:
+    // protoforge.investigate (research A ∥ research B → analyst C).
+    // Agents are in-process bounded workers; all state is event-sourced.
+    this.wireExecutor('ops.agent_mission', async (params) => {
+      const opportunityId = typeof params?.opportunityId === 'string' ? params.opportunityId : null;
+      const topic = typeof params?.topic === 'string' && params.topic.trim() ? params.topic.trim() : null;
+      const selectTop = typeof params?.selectTop === 'number' && params.selectTop > 0 ? params.selectTop : null;
+      if (topic) {
+        // Free-form topic mission — the executive-loop path for
+        // "investigate X" where X isn't a scouted opportunity.
+        const res = await runTopicInvestigation(this.pool, topic, { pool: this.pool, repoDir: process.cwd() });
+        return {
+          capabilityId: 'ops.agent_mission',
+          executed: true,
+          outcome: res.refused ? 'failure' as const : 'success' as const,
+          result: { parentMissionId: res.parentMissionId, missionEventId: res.missionEventId, spawned: res.spawned, topic },
+          error: res.refused ?? null,
+          evidence: [{ parentMissionId: res.parentMissionId }],
+          verified: false,
+          verificationDetails: 'Pending contract verification of persisted agent_mission row',
+        };
+      }
+      if (selectTop !== null) {
+        // Natural-objective path: investigate the top-ranked unreviewed
+        // opportunities — deterministic selection, bounded count.
+        const r = await runTopOpportunityInvestigation(this.pool, selectTop, { pool: this.pool, repoDir: process.cwd() });
+        const last = r.parents[r.parents.length - 1];
+        return {
+          capabilityId: 'ops.agent_mission',
+          executed: true,
+          outcome: r.parents.length === 0 || r.parents.every((p) => p.refused) ? 'failure' as const : 'success' as const,
+          result: {
+            missionEventId: last?.missionEventId ?? null,
+            parents: r.parents.map((p) => ({ missionId: p.parentMissionId, opportunity: p.title.slice(0, 60), spawned: p.spawned.length, refused: p.refused ?? null })),
+            selected: r.selected,
+          },
+          error: r.parents.length === 0 ? 'no needs_review opportunities' : (r.parents.every((p) => p.refused) ? 'all investigations refused' : null),
+          evidence: [{ parents: r.parents.map((p) => p.parentMissionId) }],
+          verified: false,
+          verificationDetails: last?.missionEventId ? 'Pending contract verification of persisted agent_mission row' : 'Nothing new persisted',
+        };
+      }
+      if (!opportunityId) {
+        return {
+          capabilityId: 'ops.agent_mission',
+          executed: false,
+          outcome: 'failure' as const,
+          result: null,
+          error: 'capabilityParams.opportunityId or capabilityParams.selectTop required',
+          evidence: [],
+          verified: false,
+          verificationDetails: 'Missing opportunityId/selectTop',
+        };
+      }
+      const res = await runInvestigateMission(this.pool, opportunityId, { pool: this.pool, repoDir: process.cwd() });
+      const spawned = res.spawned.length > 0;
+      // Idempotent collapse returns missionEventId:null — the mission
+      // already exists. Resolve THAT row's event id so contract
+      // verification observes the durable record either way.
+      let missionEventId = res.missionEventId;
+      if (!missionEventId && res.parentMissionId) {
+        missionEventId = await this.pool.query(
+          `SELECT id FROM heidi_events WHERE event_type='agent_mission'
+             AND payload->>'missionId'=$1 ORDER BY created_at ASC LIMIT 1`,
+          [res.parentMissionId],
+        ).then(x => (x.rows[0]?.id as string) ?? null).catch(() => null);
+      }
+      return {
+        capabilityId: 'ops.agent_mission',
+        executed: true,
+        outcome: res.refused ? 'failure' as const : 'success' as const,
+        result: {
+          parentMissionId: res.parentMissionId,
+          missionEventId,
+          spawned: res.spawned,
+          refused: res.refused ?? null,
+        },
+        error: res.refused ?? null,
+        evidence: [{ parentMissionId: res.parentMissionId, spawned: res.spawned }],
+        verified: false,
+        verificationDetails: res.missionEventId
+          ? 'Pending contract verification of persisted agent_mission row'
+          : 'Mission already existed (idempotent collapse) — nothing new to verify',
+      };
+    });
+
+    // Bounded dev patch — R2 autonomous code change. The mission/proposal
+    // carries the exact patch; this executor applies verbatim, verifies
+    // typecheck, commits once, and persists evidence. Never pushes,
+    // never expands scope, never touches protected files.
+    this.wireExecutor('ops.dev_patch', async (params) => {
+      const { applyBoundedPatch } = await import('./DevPatchExecutor');
+      const mission = {
+        missionId: String(params?.missionId ?? params?.goalId ?? 'adhoc'),
+        patches: (params?.patches ?? []) as Array<{ file: string; oldString: string; newString: string }>,
+        commitMessage: String(params?.commitMessage ?? 'autonomous bounded change'),
+        verify: Array.isArray(params?.verify) ? params.verify as string[] : undefined,
+      };
+      const r = await applyBoundedPatch(mission);
+      const eventId = await this.pool.query(
+        `INSERT INTO heidi_events (event_type, payload, created_at) VALUES ('dev_patch', $1, now()) RETURNING id`,
+        [JSON.stringify({ missionId: mission.missionId, status: r.status, commitSha: r.commitSha ?? null, filesChanged: r.filesChanged, reason: r.reason ?? null })],
+      ).then(x => x.rows[0].id as string).catch(() => null);
+      return {
+        capabilityId: 'ops.dev_patch',
+        executed: r.ok,
+        outcome: r.ok ? 'success' as const : 'failure' as const,
+        result: { status: r.status, commitSha: r.commitSha ?? null, filesChanged: r.filesChanged, eventId },
+        error: r.reason ?? null,
+        evidence: r.evidence,
+        verified: r.ok,
+        verificationDetails: r.ok ? `committed ${r.commitSha}, tsc clean` : `not applied: ${r.reason}`,
+      };
+    });
+
+    // Business context — R0: seed + refresh + retrieve the authoritative
+    // business fact store. This is what makes briefings answer "why"
+    // instead of only "what".
+    this.wireExecutor('ops.business_context', async (params) => {
+      const { BusinessContext } = await import('./BusinessContext');
+      const bc = new BusinessContext(this.pool);
+      await bc.ensure();
+      await bc.refresh();
+      const facts = await bc.getFacts(params?.kind as never);
+      // Durable read receipt — the contract re-reads the row rather than
+      // trusting the executor's return value.
+      const ev = await this.pool.query(
+        `INSERT INTO heidi_events (event_type, payload, created_at) VALUES ('business_context_read', $1, now()) RETURNING id`,
+        [JSON.stringify({ factCount: facts.length, kinds: [...new Set(facts.map(f => f.kind))] })],
+      ).catch(() => null);
+      return {
+        capabilityId: 'ops.business_context',
+        executed: true,
+        outcome: 'success' as const,
+        result: { eventId: ev?.rows[0]?.id ?? null, factCount: facts.length, kinds: [...new Set(facts.map(f => f.kind))], digest: await bc.digest() },
+        error: null,
+        evidence: [{ factCount: facts.length }],
+        verified: facts.length > 0,
+        verificationDetails: `${facts.length} business facts retrieved with provenance`,
+      };
+    });
+
+    // Opportunity verdict — R0: folds durable mission evidence into a
+    // typed business finding. A pending mission returns skipped so the
+    // goal stays open and retries on the next cycle; anything else
+    // persists a business_finding event the contract can re-read.
+    this.wireExecutor('ops.opp_verdict', async (params) => {
+      const opportunityId = String(params?.opportunityId ?? '');
+      if (!opportunityId) return this.failResult('ops.opp_verdict', 'capabilityParams.opportunityId required');
+      const { verdictForOpportunity } = await import('./OpportunityVerdict');
+      const v = await verdictForOpportunity(this.pool, opportunityId);
+      if (!v || v.verdict === 'MISSION_PENDING') {
+        return {
+          capabilityId: 'ops.opp_verdict', executed: true, outcome: 'skipped' as const,
+          result: { verdict: v?.verdict ?? 'NO_MISSION' }, error: null, evidence: [],
+          verified: false,
+          verificationDetails: v ? `mission ${v.evidence.missionStatus ?? 'in flight'} — verdict waits` : 'no investigate mission for this opportunity',
+        };
+      }
+      const eventId = await this.pool.query(
+        `INSERT INTO heidi_events (event_type, payload, created_at) VALUES ('business_finding', $1, now()) RETURNING id`,
+        [JSON.stringify({ opportunityId, ...v })],
+      ).then(x => x.rows[0].id as string).catch(() => null);
+      // Customer-validation bridge: a real finding structures a human
+      // decision — never executes contact. The hypothesis lands in the
+      // existing human queue; J's approve produces an authorized
+      // experiment record, and only real evidence upgrades the finding.
+      if (v.verdict === 'PARTIALLY_SUPPORTED' || v.verdict === 'CONFIRMED') {
+        const { hypothesisFor, createHypothesisRecord } = await import('./CustomerValidation');
+        await createHypothesisRecord(this.pool, opportunityId, hypothesisFor({ analystSummary: v.evidence.analystSummary, sourceCount: v.evidence.sourceCount, limitations: v.limitations })).catch(() => { });
+      }
+      return {
+        capabilityId: 'ops.opp_verdict',
+        executed: true,
+        outcome: 'success' as const,
+        result: { verdict: v.verdict, confidence: v.confidence, recommendedAction: v.recommendedAction, eventId },
+        error: null,
+        evidence: [v.evidence],
+        verified: true,
+        verificationDetails: `${v.verdict} (${v.confidence}) — ${v.limitations.slice(0, 80)}`,
+      };
+    });
+
+    // Customer evidence intake — R0: records HUMAN-DECLARED evidence
+    // only, requires an authorized experiment, and emits an updated
+    // business_finding. CONFIRMED requires a real paid customer job —
+    // declarations never reach it.
+    this.wireExecutor('ops.opp_evidence', async (params) => {
+      const opportunityId = String(params?.opportunityId ?? '');
+      const channel = String(params?.channel ?? '');
+      const summary = String(params?.summary ?? '');
+      if (!opportunityId || !channel || !summary) {
+        return this.failResult('ops.opp_evidence', 'capabilityParams require {opportunityId, channel, summary}');
+      }
+      const { authorizedExperiment, recordEvidence, hasRealPaidJob } = await import('./CustomerValidation');
+      const exp = await authorizedExperiment(this.pool, opportunityId);
+      if (!exp) {
+        return {
+          capabilityId: 'ops.opp_evidence', executed: false, outcome: 'failure' as const,
+          result: null, error: 'no authorized validation experiment for this opportunity — human approval required first',
+          evidence: [], verified: false,
+          verificationDetails: 'Refused: customer evidence requires an approved hypothesis',
+        };
+      }
+      const paid = await hasRealPaidJob(this.pool);
+      const r = await recordEvidence(this.pool, opportunityId, {
+        channel, summary, respondents: typeof params?.respondents === 'number' ? params.respondents : undefined,
+        declaredBy: String(params?.declaredBy ?? 'human_operator'),
+      }, paid);
+      return {
+        capabilityId: 'ops.opp_evidence',
+        executed: true,
+        outcome: 'success' as const,
+        result: { eventId: r.eventId, verdict: r.verdict, findingId: r.findingId },
+        error: null,
+        evidence: [{ channel, paid }],
+        verified: true,
+        verificationDetails: `declared evidence recorded → ${r.verdict}${paid ? ' (real paid job)' : ' (declared, unverified)'}`,
+      };
+    });
+
+    // ── Cognitive layer — reasoning/planning, all R0. Thought is not
+    // authority: interpret/plan produce durable models and governed child
+    // goals; the existing daemon executes each under standing policy.
+
+    // ops.goal_interpret — free-text goal → typed goal model (facts,
+    // assumptions, hypotheses, unknowns). Ollama proposes; the
+    // deterministic envelope demotes model 'facts' without durable
+    // provenance. Unreachable model → AI_UNAVAILABLE, never fabricated.
+    this.wireExecutor('ops.goal_interpret', async (params) => {
+      const goalText = String(params?.goal ?? '');
+      if (!goalText) return this.failResult('ops.goal_interpret', 'capabilityParams.goal required');
+      const { interpretGoal, persistGoalModel } = await import('./GoalInterpreter');
+      const model = await interpretGoal(goalText, typeof params?.domainHint === 'string' ? params.domainHint : undefined);
+      const goalModelId = await persistGoalModel(this.pool, goalText, model, 'governed-goal');
+      // Chain the plan stage — a model without a plan isn't a result.
+      let planGoalId: string | null = null;
+      // Chain a plan even when the model is unavailable — the deterministic
+      // composer can still decompose the raw objective; the plan event
+      // labels it DETERMINISTIC_ONLY instead of hiding the AI outage.
+      if (goalModelId) {
+        const g = await this.pool.query(
+          `INSERT INTO heidi_goals (title, goal_type, description, status, priority, success_criteria, context, created_at, updated_at)
+           VALUES ($1,'task',$1,'active',5,'["plan event persisted with validated steps"]'::jsonb,$2,now(),now()) RETURNING id`,
+          [`Plan: ${model.objective.slice(0, 90)}`,
+          JSON.stringify({ capabilityId: 'ops.plan', capabilityParams: { goalModelId }, completeOnVerify: true, producedBy: 'goal_interpret' })],
+        ).catch(() => null);
+        planGoalId = g?.rows[0]?.id ?? null;
+      }
+      return {
+        capabilityId: 'ops.goal_interpret', executed: true,
+        outcome: 'success' as const,
+        result: { goalModelId, planGoalId, aiStatus: model.aiStatus, objective: model.objective, kinds: model.knowledge.map(k => k.kind) },
+        error: null, evidence: [model], verified: true,
+        verificationDetails: model.aiStatus === 'ok' ? `goal model persisted (${model.knowledge.length} typed statements)` : 'AI_UNAVAILABLE — goal model persisted as unknown, no fabrication',
+      };
+    });
+
+    // ops.plan — goal model → validated ordered steps → governed child
+    // goals. Validator rejects unknown capabilities and marks anything
+    // above R2 human_required — a step the model invents never executes.
+    this.wireExecutor('ops.plan', async (params) => {
+      const goalModelId = String(params?.goalModelId ?? '');
+      if (!goalModelId) return this.failResult('ops.plan', 'capabilityParams.goalModelId required');
+      const { proposePlan, validateSteps, deterministicPlan, materializePlan, applyLessonDirectives, selectModel } = await import('./Planner');
+      const { recallLessons } = await import('./LessonRetrieval');
+      const mRow = await this.pool.query(
+        `SELECT payload FROM heidi_events WHERE id=$1 AND event_type='goal_model'`,
+        [goalModelId]).catch(() => ({ rows: [] as Array<{ payload: unknown }> }));
+      if (!mRow.rows[0]) return this.failResult('ops.plan', `goal model ${goalModelId} not found`);
+      const model = mRow.rows[0].payload as import('./GoalInterpreter').GoalModel & { goal?: string };
+
+      // Semantic lesson recall — durable lessons retrieved by local
+      // embedding similarity (or honestly-labeled lexical fallback).
+      const recall = await recallLessons(this.pool, model.objective);
+      const lessonTexts = recall.lessons.map(l => l.lesson);
+      const route = selectModel(
+        ((await this.pool.query(`SELECT payload->'models' m FROM heidi_events WHERE event_type='model_catalog' ORDER BY created_at DESC LIMIT 1`).catch(() => ({ rows: [] as Array<{ m: unknown }> }))).rows[0]?.m as Array<{ name: string }> | undefined) ?? [],
+        'reasoning',
+      );
+      const proposed = await proposePlan(model, lessonTexts);
+      const aiStatus = proposed ? 'ok' as const : 'DETERMINISTIC_ONLY' as const;
+      const steps = validateSteps(proposed ?? deterministicPlan(model));
+      // Lesson-driven strategy change — directives from retrieved lessons
+      // alter which steps are executable; the change is recorded.
+      const lessonEffects = await applyLessonDirectives(this.pool, steps, recall.lessons);
+      const planId = `plan-${goalModelId.slice(0, 8)}-${Date.now().toString(36)}`;
+      const { planEventId, childGoalIds } = await materializePlan(this.pool, planId, goalModelId, model, steps, aiStatus);
+      if (planEventId) {
+        await this.pool.query(
+          `UPDATE heidi_events SET payload = payload || $2::jsonb WHERE id=$1`,
+          [planEventId, JSON.stringify({
+            retrievalMethod: recall.method,
+            embeddingModel: recall.embeddingModel,
+            lessonsUsed: recall.lessons.map(l => ({ id: l.id, similarity: l.similarity, why: l.whySelected })),
+            lessonEffects,
+            modelRoute: route.model ?? route.reason,
+          })],
+        ).catch(() => { });
+      }
+      return {
+        capabilityId: 'ops.plan', executed: true, outcome: 'success' as const,
+        result: {
+          planEventId, childGoalIds,
+          lessonsUsed: recall.lessons.length,
+          retrievalMethod: recall.method,
+          lessonEffects,
+          modelRoute: route.model,
+          executable: steps.filter(s => s.status === 'executable').length,
+          humanRequired: steps.filter(s => s.status === 'human_required').length,
+          rejected: steps.filter(s => s.status === 'rejected').length,
+        },
+        error: null, evidence: [steps], verified: true,
+        verificationDetails: `plan persisted: ${childGoalIds.length} executable child goal(s), ${steps.filter(s => s.status !== 'executable').length} gated`,
+      };
+    });
+
+    // ops.world_assert — typed world-model assertion; contradiction
+    // produces belief_revision, never silent overwrite.
+    this.wireExecutor('ops.world_assert', async (params) => {
+      const subject = String(params?.subject ?? '');
+      const predicate = String(params?.predicate ?? '');
+      const value = String(params?.value ?? '');
+      if (!subject || !predicate || !value) {
+        return this.failResult('ops.world_assert', 'capabilityParams require {subject, predicate, value}');
+      }
+      const { assertWorld, worldState, reviseBelief } = await import('./WorldAssertions');
+      const prior = await worldState(this.pool, subject);
+      const conflict = prior.find(a => a.predicate === predicate && a.value !== value);
+      const assertionId = await assertWorld(this.pool, {
+        kind: (['fact', 'belief', 'hypothesis', 'unknown'] as const).includes(params?.kind as 'fact') ? params.kind as 'fact' | 'belief' | 'hypothesis' | 'unknown' : 'unknown',
+        subject, predicate, value,
+        provenance: String(params?.provenance ?? 'human:operator'),
+        confidence: typeof params?.confidence === 'number' ? params.confidence : undefined,
+        falsification: typeof params?.falsification === 'string' ? params.falsification : undefined,
+        reason: typeof params?.reason === 'string' ? params.reason : undefined,
+      });
+      let revisionId: string | null = null;
+      if (conflict && assertionId) {
+        revisionId = await reviseBelief(this.pool, conflict.id, 'refuted', assertionId, `contradicted by new assertion ${assertionId.slice(0, 8)}`);
+      }
+      return {
+        capabilityId: 'ops.world_assert', executed: true, outcome: 'success' as const,
+        result: { assertionId, revisionId, contradicted: !!conflict },
+        error: null, evidence: [{ subject, predicate }], verified: true,
+        verificationDetails: conflict ? `assertion persisted + prior ${conflict.id.slice(0, 8)} marked refuted — both survive` : 'assertion persisted',
+      };
+    });
+
+    // ops.model_catalog — discover local Ollama models, persist catalog.
+    this.wireExecutor('ops.model_catalog', async () => {
+      const res = await fetch(`${process.env.OLLAMA_URL || 'http://localhost:11434'}/api/tags`, { signal: AbortSignal.timeout(10000) }).catch(() => null);
+      if (!res || !res.ok) {
+        return { capabilityId: 'ops.model_catalog', executed: false, outcome: 'failure' as const, result: null, error: 'AI_UNAVAILABLE: ollama unreachable', evidence: [], verified: false, verificationDetails: 'catalog not persisted — no local model list' };
+      }
+      const data = await res.json() as { models?: Array<{ name: string; size: number; details?: { family?: string; parameter_size?: string } }> };
+      const models = (data.models ?? []).map(m => ({ name: m.name, sizeBytes: m.size, params: m.details?.parameter_size ?? null, family: m.details?.family ?? null }));
+      const ev = await this.pool.query(
+        `INSERT INTO heidi_events (event_type, payload, created_at) VALUES ('model_catalog', $1, now()) RETURNING id`,
+        [JSON.stringify({ models, at: new Date().toISOString() })],
+      ).catch(() => null);
+      return {
+        capabilityId: 'ops.model_catalog', executed: true, outcome: 'success' as const,
+        result: { eventId: ev?.rows[0]?.id ?? null, count: models.length, names: models.map(m => m.name) },
+        error: null, evidence: models, verified: true,
+        verificationDetails: `${models.length} local model(s) cataloged`,
+      };
+    });
+
+    // Dev signal observer — R0 read-only. Deterministic scan for
+    // development findings; each becomes an investigation goal (R0).
+    this.wireExecutor('ops.dev_observe', async () => {
+      const { observeDevelopmentSignals } = await import('./DevObserver');
+      const findings = await observeDevelopmentSignals(this.pool);
+      let goalsCreated = 0;
+      for (const f of findings.slice(0, 5)) {
+        try {
+          // Dedupe: an open investigation goal for the same target+question
+          // already carries the work — recreating it every scan floods the queue.
+          const dup = await this.pool.query(
+            `SELECT id FROM heidi_goals WHERE status IN ('pending','active','in_progress','blocked')
+               AND context->>'capabilityId' = 'ops.dev_investigate'
+               AND context->>'target' = $1 AND context->>'question' = $2 LIMIT 1`,
+            [f.target, f.question],
+          );
+          if (dup.rows.length > 0) continue;
+          await this.pool.query(
+            `INSERT INTO heidi_goals (title, goal_type, description, status, priority, success_criteria, context, created_at, updated_at)
+             VALUES ($1, 'task', $1, 'active', 5, '["investigation reaches a persisted conclusion"]'::jsonb, $2, now(), now())`,
+            [`Investigate: ${f.question.slice(0, 140)}`,
+            JSON.stringify({ capabilityId: 'ops.dev_investigate', findingType: f.findingType, target: f.target, question: f.question, initialObservation: f.initialObservation, suspectedFiles: f.suspectedFiles, severity: f.severity })],
+          );
+          goalsCreated++;
+        } catch { /* duplicate/pool issue — skip */ }
+      }
+      const eventId = await this.pool.query(
+        `INSERT INTO heidi_events (event_type, payload, created_at) VALUES ('dev_observation', $1, now()) RETURNING id`,
+        [JSON.stringify({ findings: findings.length, goalsCreated, types: findings.map(f => f.findingType) })],
+      ).then(x => x.rows[0].id as string).catch(() => null);
+      return {
+        capabilityId: 'ops.dev_observe',
+        executed: true,
+        outcome: 'success' as const,
+        result: { findings: findings.length, goalsCreated, types: findings.map(f => f.findingType), eventId },
+        error: null,
+        evidence: [{ findings }],
+        verified: true,
+        verificationDetails: `${findings.length} finding(s) observed, ${goalsCreated} investigation goal(s) created`,
+      };
+    });
+
+    // Dev investigation — R0 read-only. Counterexample-first: a finding is
+    // a hypothesis until the evidence survives attempts to disprove it.
+    // CONFIRMED_DEFECT creates a dev mission (ops.dev_author) as a goal;
+    // NOT_A_DEFECT / INSUFFICIENT stop honestly.
+    this.wireExecutor('ops.dev_investigate', async (params) => {
+      const { investigateFinding } = await import('./DevInvestigator');
+      const rec = await investigateFinding({
+        findingType: (params?.findingType as 'test_framework_mismatch' | 'escalation_asymmetry' | 'generic') ?? 'generic',
+        target: String(params?.target ?? ''),
+        question: String(params?.question ?? ''),
+        initialObservation: String(params?.initialObservation ?? ''),
+        suspectedFiles: Array.isArray(params?.suspectedFiles) ? params.suspectedFiles as string[] : [],
+        knownEdit: params?.knownEdit as Array<{ file: string; oldString: string; newString: string }> | undefined,
+        missionId: params?.missionId as string | undefined ?? params?.goalId as string | undefined,
+      });
+      let followup = null;
+      if (rec.conclusion === 'CONFIRMED_DEFECT') {
+        // Hand off as a real goal — dev_author runs under its own R2 gate.
+        try {
+          await this.pool.query(
+            `INSERT INTO heidi_goals (title, goal_type, description, status, priority, success_criteria, context, created_at, updated_at)
+             VALUES ($1, 'task', $1, 'active', 3, '["ops.dev_author executes and commits a verified patch"]'::jsonb, $2, now(), now())`,
+            [`Fix confirmed defect: ${rec.target.slice(0, 120)}`,
+            JSON.stringify({ capabilityId: 'ops.dev_author', problem: rec.question, evidence: String(params?.initialObservation ?? ''), targetFiles: params?.suspectedFiles ?? [], knownEdit: params?.knownEdit, missionId: rec.missionId, sourceInvestigation: rec.investigationId })],
+          );
+          followup = 'goal_created';
+        } catch (e) { followup = `goal_failed:${(e as Error).message.slice(0, 120)}`; }
+      }
+      const eventId = await this.pool.query(
+        `INSERT INTO heidi_events (event_type, payload, created_at) VALUES ('dev_investigation', $1, now()) RETURNING id`,
+        [JSON.stringify({ investigationId: rec.investigationId, conclusion: rec.conclusion, confidence: rec.confidence, target: rec.target, followup, missionId: rec.missionId })],
+      ).then(x => x.rows[0].id as string).catch(() => null);
+      return {
+        capabilityId: 'ops.dev_investigate',
+        executed: true,
+        outcome: 'success' as const,
+        result: { investigationId: rec.investigationId, conclusion: rec.conclusion, confidence: rec.confidence, followup, recommendedAction: rec.recommendedAction, eventId },
+        error: null,
+        evidence: [{ filesInspected: rec.filesInspected, commandsRun: rec.commandsRun, durationMs: rec.durationMs }],
+        verified: true,
+        verificationDetails: `${rec.conclusion} (${rec.confidence}) after ${rec.filesInspected.length} files, ${rec.commandsRun.length} commands`,
+      };
+    });
+
+    // Dev patch author — R2: turns a bounded finding into an executable
+    // proposal. HIGH confidence flows straight to ops.dev_patch; anything
+    // less becomes a human action with the proposal attached — never a
+    // silent auto-apply.
+    this.wireExecutor('ops.dev_author', async (params) => {
+      const { authorPatchProposal } = await import('./DevPatchPlanner');
+      const finding = {
+        problem: String(params?.problem ?? ''),
+        evidence: String(params?.evidence ?? ''),
+        targetFiles: Array.isArray(params?.targetFiles) ? params.targetFiles as string[] : [],
+        expectedBehavior: params?.expectedBehavior as string | undefined,
+        knownEdit: params?.knownEdit as Array<{ file: string; oldString: string; newString: string }> | undefined,
+        missionId: params?.missionId as string | undefined ?? params?.goalId as string | undefined,
+      };
+      if (!finding.problem || finding.targetFiles.length === 0) {
+        return this.failResult('ops.dev_author', 'Missing required params: problem, targetFiles');
+      }
+      const proposal = await authorPatchProposal(finding);
+      let execution: unknown = null;
+      if (proposal.confidence === 'HIGH') {
+        const { applyBoundedPatch } = await import('./DevPatchExecutor');
+        execution = await applyBoundedPatch({
+          missionId: proposal.missionId,
+          patches: proposal.patches,
+          commitMessage: `${finding.problem.slice(0, 80)}`,
+          verify: proposal.verifyCommands,
+        });
+      } else {
+        // Not safe to apply — escalate the proposal as a human action.
+        await this.pool.query(
+          `INSERT INTO human_intervention_requests (objective, status, context, created_at)
+           VALUES ($1, 'pending', $2, now())`,
+          [`Review dev proposal ${proposal.proposalId}: ${finding.problem.slice(0, 120)}`,
+          JSON.stringify({ proposal, kind: 'dev_patch_review' })],
+        ).catch(() => { });
+      }
+      const eventId = await this.pool.query(
+        `INSERT INTO heidi_events (event_type, payload, created_at) VALUES ('dev_author', $1, now()) RETURNING id`,
+        [JSON.stringify({ proposalId: proposal.proposalId, confidence: proposal.confidence, author: proposal.author, missionId: proposal.missionId, autoApplied: proposal.confidence === 'HIGH', execution })],
+      ).then(x => x.rows[0].id as string).catch(() => null);
+      return {
+        capabilityId: 'ops.dev_author',
+        executed: proposal.confidence === 'HIGH' && !!(execution as { ok?: boolean } | null)?.ok,
+        outcome: proposal.confidence === 'HIGH' ? (((execution as { ok?: boolean })?.ok) ? 'success' as const : 'failure' as const) : 'skipped' as const,
+        result: { proposalId: proposal.proposalId, confidence: proposal.confidence, author: proposal.author, patchHash: proposal.patchHash ?? null, execution, eventId },
+        error: proposal.reason ?? null,
+        evidence: [{ proposal }],
+        verified: proposal.confidence === 'HIGH' && !!(execution as { ok?: boolean } | null)?.ok,
+        verificationDetails: proposal.confidence === 'HIGH'
+          ? 'Patch prevalidated + applied + typechecked by DevPatchExecutor'
+          : `Not auto-applied — ${proposal.reason ?? proposal.confidence}`,
+      };
+    });
+
+    // Agent supervisor pass — R0 observation/lifecycle control. Persists
+    // stale/failed transitions, bounded-retries R0/R1 missions, escalates
+    // terminal failures to the human queue, reconciles parent missions.
+    // Controls lifecycle; invents no authority.
+    this.wireExecutor('ops.agent_supervise', async () => {
+      const report = await superviseAgents(this.pool, { pool: this.pool, repoDir: process.cwd() });
+      return {
+        capabilityId: 'ops.agent_supervise',
+        executed: true,
+        outcome: 'success' as const,
+        result: {
+          supervisionEventId: report.supervisionEventId,
+          agentsChecked: report.agentsChecked,
+          transitions: report.transitions.length,
+          retries: report.retries,
+          escalations: report.escalations,
+          parentsReconciled: report.parentsReconciled,
+        },
+        error: null,
+        evidence: [report],
+        verified: false,
+        verificationDetails: 'Pending contract verification of persisted agent_supervision row',
+      };
+    });
+
+    // Governed agent lifecycle control: stop <agentId> | retry <missionId>.
+    // Emits a durable agent_control audit event; never grants authority.
+    this.wireExecutor('ops.agent_control', async (params) => {
+      const action = params?.action === 'stop' || params?.action === 'retry' ? params.action : null;
+      const target = typeof params?.target === 'string' ? params.target : null;
+      const actor = typeof params?.actor === 'string' ? params.actor : 'operator';
+      if (!action || !target) {
+        return {
+          capabilityId: 'ops.agent_control', executed: false, outcome: 'failure' as const,
+          result: null, error: "params require {action:'stop'|'retry', target}", evidence: [],
+          verified: false, verificationDetails: 'Missing action/target',
+        };
+      }
+      const res = action === 'stop'
+        ? await stopAgent(this.pool, target, actor)
+        : await retryMission(this.pool, target, actor, { pool: this.pool, repoDir: process.cwd() });
+      const controlEventId = await this.pool.query(
+        `INSERT INTO heidi_events (event_type, division, payload, verdict, created_at)
+         VALUES ('agent_control', 'agents', $1, $2, now()) RETURNING id`,
+        [JSON.stringify({ action, target, actor, outcome: res.outcome, detail: res.detail }), res.ok ? 'APPLIED' : 'REFUSED'],
+      ).then((r) => r.rows[0]?.id as string).catch(() => null);
+      return {
+        capabilityId: 'ops.agent_control', executed: res.ok,
+        outcome: res.ok ? 'success' as const : 'failure' as const,
+        result: { controlEventId, ...res },
+        error: res.ok ? null : (res.detail ?? 'control refused'),
+        evidence: [{ action, target, outcome: res.outcome }],
+        verified: false,
+        verificationDetails: res.ok ? 'Pending contract verification of persisted agent_control row' : 'Refused before effect — nothing to verify',
+      };
+    });
+
+    // Governed approve/reject of queue items — durable resolution. authz:*
+    // items are fail-closed (capability grants need the explicit policy path).
+    this.wireExecutor('ops.resolve_human_action', async (params) => {
+      const queueItemId = typeof params?.queueItemId === 'string' ? params.queueItemId : null;
+      const decision = params?.decision === 'approve' || params?.decision === 'reject' ? params.decision : null;
+      const actor = typeof params?.actor === 'string' ? params.actor : 'operator';
+      if (!queueItemId || !decision) {
+        return {
+          capabilityId: 'ops.resolve_human_action', executed: false, outcome: 'failure' as const,
+          result: null, error: "params require {queueItemId, decision:'approve'|'reject'}", evidence: [],
+          verified: false, verificationDetails: 'Missing queueItemId/decision',
+        };
+      }
+      const res = await resolveHumanAction(this.pool, queueItemId, decision, actor);
+      // An approved customer-validation hypothesis becomes an authorized
+      // experiment record — authorization, not execution. Contact stays
+      // human until evidence arrives through the declared-evidence path.
+      if (res.ok && decision === 'approve') {
+        try {
+          const item = queueItemId.startsWith('intervention:')
+            ? await this.pool.query(
+              `SELECT intervention_type, objective, why_required, required_action FROM human_intervention_requests WHERE request_id=$1`,
+              [queueItemId.slice('intervention:'.length)])
+            : await this.pool.query(
+              `SELECT intervention_type, objective, why_required, required_action FROM human_intervention_requests WHERE id=$1`,
+              [queueItemId]);
+          const row = item.rows[0];
+          if (row?.intervention_type === 'customer_validation_hypothesis') {
+            const meta = (() => { try { return JSON.parse(row.why_required as string) as Record<string, unknown>; } catch { return {}; } })();
+            await this.pool.query(
+              `INSERT INTO heidi_events (event_type, payload, created_at)
+               VALUES ('validation_experiment', $1, now())`,
+              [JSON.stringify({ ...meta, proposedExperiment: row.required_action, status: 'AUTHORIZED', authorizedBy: actor, queueItemId })],
+            );
+          }
+        } catch { /* experiment record failure is not fatal to the resolution */ }
+      }
+      return {
+        capabilityId: 'ops.resolve_human_action', executed: res.ok,
+        outcome: res.ok ? 'success' as const : 'failure' as const,
+        result: { resolutionEventId: res.resolutionEventId ?? null, outcome: res.outcome, detail: res.detail },
+        error: res.ok ? null : (res.detail ?? 'resolution refused'),
+        evidence: [{ queueItemId, decision, outcome: res.outcome }],
+        verified: false,
+        verificationDetails: res.ok ? 'Pending contract verification of persisted resolution row' : 'Refused before write — nothing to verify',
+      };
+    });
   }
 
   private wireExecutor(capabilityId: string, executor: CapabilityExecutor): void {
@@ -1423,6 +2424,7 @@ export class CognitiveCore {
       worldModelSummary: null,
       activeGoals: [],
       pendingWork: [],
+      producedMissions: null,
       retrievedMemory: null,
       trustClassification: null,
       threatAssessments: [],
@@ -1438,10 +2440,24 @@ export class CognitiveCore {
       durationMs: 0,
     };
 
-    // PHASE 1: PERCEIVE — load identity and observe the world
+    // Expose the in-flight cycle immediately: when runCycle times out,
+    // currentCycle.phase/errors identify the stalled phase in the
+    // timeout heartbeat — otherwise "30s timeout" never says WHERE.
+    this.currentCycle = state;
+
+    // PHASE 1: PERCEIVE — load identity and observe the world.
+    // Bounded: a hung identity/perception call (PostgREST stall, wedged
+    // local model) must not starve every later phase — without the
+    // deadline the promise never settles and goal production never runs.
     try {
-      state.identity = await this.identity.getIdentity();
-      state.perception = await this.perceive();
+      state.identity = await this.withDeadline(
+        this.identity.getIdentity(), null, 'identity.getIdentity',
+        (m) => errors.push(m),
+      );
+      state.perception = await this.withDeadline(
+        this.perceive(), null, 'perceive',
+        (m) => errors.push(m),
+      );
       state.phase = 'validate';
     } catch (e) {
       errors.push(`perceive: ${e instanceof Error ? e.message : 'unknown'}`);
@@ -1467,10 +2483,16 @@ export class CognitiveCore {
       errors.push(`understand: ${e instanceof Error ? e.message : 'unknown'}`);
     }
 
-    // PHASE 4: UPDATE WORLD MODEL — sync from runtime
+    // PHASE 4: UPDATE WORLD MODEL — sync from runtime (bounded)
     try {
-      await this.world.syncFromRuntime();
-      state.worldModelSummary = await this.world.getHealthSummary();
+      await this.withDeadline(
+        this.world.syncFromRuntime(), undefined, 'world.syncFromRuntime',
+        (m) => errors.push(m),
+      );
+      state.worldModelSummary = await this.withDeadline(
+        this.world.getHealthSummary(), null, 'world.getHealthSummary',
+        (m) => errors.push(m),
+      );
       state.phase = 'retrieve_memory';
     } catch (e) {
       errors.push(`update_world_model: ${e instanceof Error ? e.message : 'unknown'}`);
@@ -1478,15 +2500,24 @@ export class CognitiveCore {
 
     // PHASE 5: RETRIEVE MEMORY — retrieve relevant memories before reasoning
     try {
-      state.activeGoals = await this.goals.getActiveMissions();
-      state.pendingWork = await this.goals.getPendingWork();
+      state.activeGoals = await this.withDeadline(
+        this.goals.getActiveMissions(), [], 'goals.getActiveMissions',
+        (m) => errors.push(m),
+      );
+      state.pendingWork = await this.withDeadline(
+        this.goals.getPendingWork(), [], 'goals.getPendingWork',
+        (m) => errors.push(m),
+      );
       if (this.bridge.memory && state.pendingWork.length > 0) {
         const query = `cognitive cycle: ${state.pendingWork.map(g => g.title).join(', ')}`;
+        // Memory recall is enrichment, not core work — 8s bound so a
+        // stalled provider/store can't eat the cycle's production budget.
         state.retrievedMemory = await this.withDeadline<string | null>(
           this.bridge.memory.retrieve(query, 'heidi', this.sessionId),
           null,
           'retrieve_memory',
           (message) => errors.push(message),
+          8000,
         );
       }
       state.phase = 'identify_goals';
@@ -1494,8 +2525,32 @@ export class CognitiveCore {
       errors.push(`retrieve_memory: ${e instanceof Error ? e.message : 'unknown'}`);
     }
 
-    // PHASE 6: IDENTIFY GOALS — check for goals that need attention
+    // PHASE 6: IDENTIFY GOALS — produce governed missions, then plan over
+    // the refreshed work set. Production is bounded (open-goal cap, per-key
+    // dedupe, per-key cooldown) and can only emit capabilities the registry
+    // reports as executable at the current autonomy level.
     try {
+      state.producedMissions = this.missionProducer
+        ? await this.withDeadline(
+          this.missionProducer.produce(
+            state.pendingWork,
+            state.identity?.autonomyLevel ?? 0,
+          ),
+          null,
+          'missionProducer.produce',
+          (m) => errors.push(m),
+        )
+        : null;
+      if (state.producedMissions && state.producedMissions.created.length > 0) {
+        state.pendingWork = await this.withDeadline(
+          this.goals.getPendingWork(), state.pendingWork, 'goals.refreshPendingWork',
+          (m) => errors.push(m),
+        );
+        state.activeGoals = await this.withDeadline(
+          this.goals.getActiveMissions(), state.activeGoals, 'goals.refreshActive',
+          (m) => errors.push(m),
+        );
+      }
       state.phase = 'plan';
     } catch (e) {
       errors.push(`identify_goals: ${e instanceof Error ? e.message : 'unknown'}`);
@@ -1527,7 +2582,7 @@ export class CognitiveCore {
 
     // PHASE 10: AUTHORIZE — check capability registry + autonomy policy
     try {
-      state.authorizationResult = this.authorizeAction(state.selectedAction, state.identity, state);
+      state.authorizationResult = await this.authorizeAction(state.selectedAction, state.identity, state);
       state.phase = 'act';
 
       // If not authorized, create escalation record
@@ -1535,6 +2590,10 @@ export class CognitiveCore {
         state.authorizationResult.escalationRecordId = `esc-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
         await this.recordEscalation(state);
       }
+
+      // Bounded refusals are handled at the ACT phase (outcome 'skipped'
+      // increments the goal's durable skipCount; past the bound the goal
+      // is marked 'blocked' instead of pinning the queue head forever).
     } catch (e) {
       errors.push(`authorize: ${e instanceof Error ? e.message : 'unknown'}`);
     }
@@ -1554,6 +2613,33 @@ export class CognitiveCore {
           rawResult: null,
         };
       }
+      // Bounded skip accounting — unconditional: whatever made the action
+      // skip (refusal, dedupe no-op, executor skip), a goal that keeps
+      // being re-selected with no durable effect must not pin the queue
+      // head forever. skipCount lives in the goal's context; past the
+      // bound it becomes 'blocked' — explicit, inspectable.
+      if (state.selectedAction?.targetGoalId && state.executionResult?.outcome === 'skipped') {
+        try {
+          const g = state.pendingWork.find(w => w.goalId === state.selectedAction!.targetGoalId);
+          if (g && (g.status === 'active' || g.status === 'pending')) {
+            const skips = Number((g.context as Record<string, unknown> | undefined)?.skipCount ?? 0) + 1;
+            if (skips >= 6) {
+              await this.goals.updateGoal(g.goalId, {
+                status: 'blocked',
+                result: `skipped ${skips}× — no durable effect; blocked until state changes`,
+              });
+            } else {
+              await this.pool.query(
+                `UPDATE heidi_goals SET context = context || $2::jsonb, updated_at = now() WHERE id = $1`,
+                [g.goalId, JSON.stringify({ skipCount: skips })],
+              );
+            }
+          }
+        } catch {
+          // Skip bookkeeping is not fatal to the cycle
+        }
+      }
+
       state.phase = 'verify';
     } catch (e) {
       errors.push(`act: ${e instanceof Error ? e.message : 'unknown'}`);
@@ -1627,16 +2713,40 @@ export class CognitiveCore {
     let oiHealthAvailable = false;
     if (this.bridge.operationalIntelligence) {
       try {
-        const healthResult = await this.bridge.operationalIntelligence.checkHealth();
-        // checkHealth() returns a ComponentState (overall) or a structured object
-        // with per-component states. We extract what we can.
-        const overallState = (typeof healthResult === 'string' ? healthResult : (healthResult as { state?: string })?.state) || 'UNKNOWN';
+        const oi = this.bridge.operationalIntelligence;
+        // checkAll() is a sequential sweep (DB, supabase_db, supabase_rest,
+        // Ollama, every boot module's port + process identity) that can
+        // exceed the 30s cycle budget on its own — observed 2026-09-28:
+        // perceive timed out at 20s every cycle, starving goal production.
+        // The daemon's self-sufficiency loop already runs a full probe
+        // every interval, so the cognitive cycle only needs the latest
+        // sweep — a fresh full probe is paid at most every 2 minutes and
+        // is itself bounded so it can't eat the whole budget.
+        // A full checkAll() sweep uses execSync for process identity /
+        // docker inspect / netstat — every sync spawn FREEZES the event
+        // loop for 1–15s, stalling every in-flight promise. That is the
+        // 2026-09-28 starvation: perceive ate ~20s+ of frozen loop every
+        // cycle, and even 'detached' it still froze everything else.
+        // The daemon's self-sufficiency loop already probes capability
+        // health every interval via async probes — OI's deep sweep is
+        // decoupled evidence, refreshed at most every 30min in the
+        // background; between sweeps we read the last stateModel state.
+        const OI_PROBE_INTERVAL_MS = 30 * 60 * 1000;
+        const cacheAge = Date.now() - this.lastOiProbeAt;
+        if (cacheAge >= OI_PROBE_INTERVAL_MS) {
+          this.lastOiProbeAt = Date.now();
+          void oi.checkHealth().catch(() => undefined); // refresh in background
+        }
+        const overallState = oi.getCachedOverallState() || 'UNKNOWN';
+        const evidence = cacheAge >= OI_PROBE_INTERVAL_MS
+          ? `HealthProvenanceChecker sweep refreshed in background — last known stateModel state: ${overallState}`
+          : `stateModel cache (probe ${Math.round(cacheAge / 1000)}s ago) → overall state: ${overallState}`;
         oiHealthAvailable = true;
         components.push({
           name: 'operational_intelligence',
           status: overallState.toLowerCase(),
           confidence: 1.0,
-          evidence: `HealthProvenanceChecker.checkAll() → overall state: ${overallState}`,
+          evidence,
         });
       } catch (e) {
         // Observer failure is recorded honestly — NOT as a component failure
@@ -1783,19 +2893,50 @@ export class CognitiveCore {
       };
     }
 
-    // Sort by priority (highest first)
-    actionable.sort((a, b) => b.priority - a.priority);
+    // Rank by the deterministic PriorityEngine — impact × confidence ×
+    // urgency × autonomyFit ÷ effort — instead of raw `priority`. Each
+    // goal's assessment is derived from declared fields (goal priority,
+    // confidence, capability risk level, autonomy requirement, executor
+    // availability). Governance is honored structurally: a goal whose
+    // capability exceeds the current autonomy level is refused, not
+    // ranked; human_required goals are deferred, not picked.
+    const autonomy = state.identity?.autonomyLevel ?? 0;
+    const ranked = this.priorityEngine.prioritize(
+      actionable.map((g) => ({ item: g, assessment: this.goalAssessment(g) })),
+      autonomy,
+    );
 
     // Record alternatives
-    for (let i = 1; i < Math.min(actionable.length, 4); i++) {
+    for (const alt of ranked.ranked.slice(1, 4)) {
       alternatives.push({
-        action: `advance_goal: ${actionable[i].title}`,
-        reason: `Priority ${actionable[i].priority} — lower than selected`,
+        action: `advance_goal: ${alt.item.title}`,
+        reason: `priority score ${alt.score.toFixed(2)} — lower than selected`,
+        rejected: true,
+      });
+    }
+    for (const d of [...ranked.deferred, ...ranked.refused].slice(0, 3)) {
+      alternatives.push({
+        action: `advance_goal: ${d.item.title}`,
+        reason: d.deferred ? 'deferred — human required' : `refused — ${d.reason}`,
         rejected: true,
       });
     }
 
-    const target = actionable[0];
+    if (ranked.ranked.length === 0) {
+      return {
+        actionType: 'cognitive.observe',
+        capabilityId: 'cognitive.observe',
+        description: 'No executable work — all pending goals refused or human-deferred',
+        targetGoalId: null,
+        riskLevel: 'R0',
+        estimatedImpact: 'none',
+        reasoning: `PriorityEngine: ${ranked.refused.length} refused, ${ranked.deferred.length} deferred, 0 executable.`,
+        params: {},
+        alternatives,
+      };
+    }
+
+    const target = ranked.ranked[0].item;
 
     // Determine capability based on goal type
     let capabilityId = 'goal.advance';
@@ -1825,6 +2966,35 @@ export class CognitiveCore {
       reasoning: `Goal ${target.goalId} (${target.goalType}: ${target.title}) is highest priority pending work. Selected over ${alternatives.length} alternatives.`,
       params,
       alternatives,
+    };
+  }
+
+  /**
+   * Derive a deterministic ConditionAssessment for a pending goal. All
+   * inputs come from declared fields — goal priority/confidence/context
+   * plus the bound capability's risk level, autonomy requirement, and
+   * executor status — so the ranking is auditable, never an LLM opinion.
+   */
+  private goalAssessment(g: Goal): import('./PriorityEngine').ConditionAssessment {
+    const ctx = (g.context ?? {}) as Record<string, unknown>;
+    const capId = typeof ctx.capabilityId === 'string' ? ctx.capabilityId : null;
+    const cap = capId ? this.registry.get(capId) : null;
+
+    const RISK_REVERSIBILITY: Record<string, number> = { R0: 1.0, R1: 0.8, R2: 0.5, R3: 0.3, R4: 0.15, R5: 0.05 };
+
+    return {
+      impact: Math.min(10, Math.max(0, g.priority)),
+      urgency: Math.min(10, Math.max(0, g.priority)),
+      confidence: Math.min(1, Math.max(0, g.confidence ?? 0.5)),
+      reversibility: cap ? (RISK_REVERSIBILITY[cap.riskLevel] ?? 0.5) : 0.6,
+      autonomyLevel: cap ? (cap.autonomyRequirement ?? 0) : 0,
+      estimatedEffort: typeof ctx.estimatedEffort === 'number' ? ctx.estimatedEffort : 5,
+      // A bound capability whose executor is unavailable is half-executable.
+      dependencyHealth: cap ? (cap.status === 'available' ? 1 : 0.3) : 0.7,
+      revenueEffect: typeof ctx.revenueEffect === 'number' ? ctx.revenueEffect : 0,
+      humanRequired: ctx.humanRequired === true,
+      prohibited: ctx.prohibited === true,
+      prohibitionReason: typeof ctx.prohibitionReason === 'string' ? ctx.prohibitionReason : undefined,
     };
   }
 
@@ -1938,51 +3108,114 @@ export class CognitiveCore {
    * result and the legacy decision still governs, so the disagreements can be
    * read off real cycles before anyone bets uptime on new metadata.
    */
-  private authorizeAction(
+  private async authorizeAction(
     action: SelectedAction | null,
     identity: HeidiIdentity | null,
     state?: CognitiveState | null,
-  ): AuthorizationResult {
+  ): Promise<AuthorizationResult> {
     const legacy = this.authorizeActionLegacy(action, identity);
 
     if (!action?.capabilityId) return legacy;
     const contract = this.contracts.get(action.capabilityId);
+
+    let result: AuthorizationResult;
     if (!contract) {
-      return { ...legacy, contractTier: null, contractRationale: null, contractDisagreement: null };
+      result = { ...legacy, contractTier: null, contractRationale: null, contractDisagreement: null };
+    } else {
+      // Registry-level, so cross-contract coherence (an undo may not be gated
+      // harder than the act it reverses) is applied.
+      const decision =
+        this.contracts.authorityFor(action.capabilityId, action.params, this.contractState(state)) ??
+        computeAuthority(contract, action.params, this.contractState(state));
+
+      // R3+ means a human has to say yes; the loop has nobody to ask.
+      const contractRefuses = decision.requiresApproval || decision.tier === 'R5';
+      const disagreement =
+        legacy.authorized && contractRefuses
+          ? `contract derives ${decision.tier} for this invocation (legacy risk level ${action.riskLevel}): ${decision.rationale}`
+          : null;
+
+      if (disagreement && this.contractAuthorityMode === 'enforcing') {
+        result = {
+          ...legacy,
+          authorized: false,
+          authorizationMode: decision.tier === 'R5' ? 'prohibited' : 'human_required',
+          reason: disagreement,
+          policyEvaluated: 'capability_contract',
+          contractTier: decision.tier,
+          contractRationale: decision.rationale,
+          contractDisagreement: disagreement,
+        };
+      } else {
+        result = {
+          ...legacy,
+          contractTier: decision.tier,
+          contractRationale: decision.rationale,
+          contractDisagreement: disagreement,
+        };
+      }
     }
 
-    // Registry-level, so cross-contract coherence (an undo may not be gated
-    // harder than the act it reverses) is applied.
-    const decision =
-      this.contracts.authorityFor(action.capabilityId, action.params, this.contractState(state)) ??
-      computeAuthority(contract, action.params, this.contractState(state));
+    // Approval → authorization bridge: when the standing policy refuses
+    // the action for lack of human authority — 'human_required' (R1/R3/R4,
+    // registry, contract-enforced) or a refused 'policy_authorized' (the
+    // R2 autonomy>=3 shortfall) — and the selected goal carries a proposal
+    // hint, verify the durable approval and consume it once. Goal context
+    // alone never authorizes; 'prohibited' (R5 / no action / no identity)
+    // is never bridged — a proposal cannot override a prohibition.
+    if (
+      !result.authorized &&
+      (result.authorizationMode === 'human_required' || result.authorizationMode === 'policy_authorized')
+    ) {
+      return this.bridgeProposalAuthorization(action, state ?? null, result);
+    }
+    return result;
+  }
 
-    // R3+ means a human has to say yes; the loop has nobody to ask.
-    const contractRefuses = decision.requiresApproval || decision.tier === 'R5';
-    const disagreement =
-      legacy.authorized && contractRefuses
-        ? `contract derives ${decision.tier} for this invocation (legacy risk level ${action.riskLevel}): ${decision.rationale}`
-        : null;
-
-    if (disagreement && this.contractAuthorityMode === 'enforcing') {
+  /**
+   * Verify + consume a durable approved proposal for a human_required
+   * action. The goal context only supplies the proposalId hint — the
+   * capability, exact params (recomputed hash), and the goal binding are
+   * all re-verified against heidi_action_proposals inside an atomic
+   * consume-once UPDATE. Consumption authorizes exactly once; a second
+   * attempt is refused.
+   */
+  private async bridgeProposalAuthorization(
+    action: SelectedAction,
+    state: CognitiveState | null,
+    refused: AuthorizationResult,
+  ): Promise<AuthorizationResult> {
+    const goal = state?.pendingWork?.find(g => g.goalId === action.targetGoalId);
+    const proposalId = (goal?.context as Record<string, unknown> | undefined)?.proposalId;
+    if (typeof proposalId !== 'string' || !proposalId || !action.capabilityId || !action.targetGoalId) {
+      return refused;
+    }
+    try {
+      const check = await consumeProposalAuthorization(this.pool, {
+        proposalId,
+        capabilityId: action.capabilityId,
+        params: action.params ?? {},
+        goalId: action.targetGoalId,
+      });
+      if (!check.authorized) {
+        return {
+          ...refused,
+          reason: `${refused.reason} — proposal authorization refused: ${check.reason}`,
+          authorizationProposalId: proposalId,
+        };
+      }
       return {
-        ...legacy,
-        authorized: false,
-        authorizationMode: decision.tier === 'R5' ? 'prohibited' : 'human_required',
-        reason: disagreement,
-        policyEvaluated: 'capability_contract',
-        contractTier: decision.tier,
-        contractRationale: decision.rationale,
-        contractDisagreement: disagreement,
+        ...refused,
+        authorized: true,
+        authorizationMode: 'human_authorized',
+        reason: `human-authorized via durable proposal ${proposalId.slice(0, 8)} — binding verified, approval consumed once`,
+        policyEvaluated: 'durable_proposal',
+        escalationRecordId: null,
+        authorizationProposalId: proposalId,
       };
+    } catch (e) {
+      return { ...refused, reason: `${refused.reason} — proposal bridge error: ${e instanceof Error ? e.message : 'unknown'}` };
     }
-
-    return {
-      ...legacy,
-      contractTier: decision.tier,
-      contractRationale: decision.rationale,
-      contractDisagreement: disagreement,
-    };
   }
 
   private authorizeActionLegacy(action: SelectedAction | null, identity: HeidiIdentity | null): AuthorizationResult {
@@ -2042,6 +3275,42 @@ export class CognitiveCore {
         authorizationMode: state.authorizationResult?.authorizationMode || 'autonomous',
         auditTrail: state.errors,
       };
+
+      // Mission dispatch (Phase G): a goal-bound capability is dispatched
+      // to the MissionRunner — the cycle does not wait for the mission.
+      // Execution latency is decoupled from decision latency: the runner
+      // writes DISPATCHED→RUNNING→SUCCEEDED|FAILED receipts durably, and
+      // the goal's in_progress status makes it invisible to the planner
+      // until it settles. The cycle's own outcome here is 'pending' —
+      // verified means "the dispatch happened", not "the mission worked".
+      if (action.targetGoalId && this.missionRunner) {
+        const dispatch = await this.missionRunner.dispatch(
+          action.targetGoalId,
+          action.capabilityId,
+          action.params,
+          ctx,
+        );
+        if (dispatch.dispatched) {
+          return {
+            executed: true,
+            actionType: action.actionType,
+            capabilityId: action.capabilityId,
+            outcome: 'pending',
+            details: `Mission ${action.targetGoalId.slice(0, 8)} dispatched to runner — executes async`,
+            evidence: [{ dispatch: true, goalId: action.targetGoalId, capabilityId: action.capabilityId }],
+            rawResult: dispatch,
+          };
+        }
+        return {
+          executed: false,
+          actionType: action.actionType,
+          capabilityId: action.capabilityId,
+          outcome: 'skipped',
+          details: `Mission dispatch refused: ${dispatch.reason}`,
+          evidence: [{ dispatch: false, reason: dispatch.reason }],
+          rawResult: dispatch,
+        };
+      }
 
       const capResult = await this.registry.execute(action.capabilityId, action.params, ctx);
 
@@ -2175,6 +3444,21 @@ export class CognitiveCore {
 
     const action = state.selectedAction;
 
+    // Phase G: a dispatched mission is verified at the dispatch boundary —
+    // the lifecycle receipt chain (DISPATCHED→RUNNING→…) is the proof that
+    // the action happened. The mission's OWN outcome lands asynchronously
+    // as receipts + goal status; asserting it now would be claiming an
+    // outcome we haven't observed.
+    if (state.executionResult.outcome === 'pending') {
+      return {
+        verified: true,
+        expectedState: 'mission dispatched to the async runner',
+        actualState: 'dispatched — mission outcome lands as lifecycle receipts, not this cycle',
+        verificationStrategy: 'dispatch_receipt',
+        evidence: [{ executorOutcome: 'pending', dispatched: true, goalId: action.targetGoalId }],
+      };
+    }
+
     if (action.capabilityId && this.contracts.get(action.capabilityId)) {
       return this.verifyThroughContract(action, state.executionResult, state);
     }
@@ -2225,7 +3509,9 @@ export class CognitiveCore {
     let memoryStored = false;
     let memoryId: string | null = null;
 
-    // Store experience in episodic memory if bridge is available
+    // Store experience in episodic memory if bridge is available. The
+    // bridge returns the real `memories` row id — memoryStored means a
+    // row exists with that id, not that a call returned without throwing.
     if (this.bridge.memory && lesson && state.executionResult?.executed) {
       try {
         const experience = {
@@ -2238,15 +3524,14 @@ export class CognitiveCore {
           outcome: outcomeClassification,
           lesson,
         };
-        memoryStored = await this.withDeadline(
+        memoryId = await this.withDeadline(
           this.bridge.memory.storeExperience(this.sessionId, 'heidi', experience),
-          false,
+          null,
           'storeExperience',
           (message) => lessons.push(message),
+          8000,
         );
-        if (memoryStored) {
-          memoryId = `mem-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-        }
+        memoryStored = memoryId !== null;
       } catch {
         // Memory storage failure is not fatal
       }
@@ -2267,6 +3552,124 @@ export class CognitiveCore {
         goalUpdated = true;
       } catch {
         // Goal update failure is not fatal
+      }
+    }
+
+    // Complete a capability-bound goal once its bound capability executed
+    // and verified. A goal carrying context.capabilityId means "run this
+    // capability"; doing so successfully IS the work — leaving it open
+    // would re-run it forever and wedge the producer's open-goal dedupe.
+    //
+    // Phase G: a dispatched goal (outcome 'pending') is owned by the
+    // MissionRunner — it completes/fails the row when the async work
+    // settles. Completing it here would double-settle and fabricate a
+    // success receipt before the mission has finished.
+    if (goalUpdated && state.selectedAction && state.executionResult?.outcome !== 'pending') {
+      try {
+        const goal =
+          state.pendingWork.find((g) => g.goalId === state.selectedAction!.targetGoalId)
+          ?? await this.goals.getGoal(state.selectedAction.targetGoalId as string);
+        const boundCapability = goal?.context?.capabilityId;
+        if (
+          goal
+          && boundCapability === state.selectedAction.capabilityId
+          && goal.context?.completeOnVerify !== false
+          && goal.status !== 'completed'
+        ) {
+          const completed = await this.goals.updateGoal(goal.goalId, {
+            status: 'completed',
+            result: state.executionResult?.details || 'Capability executed and verified',
+            progress: 1.0,
+          });
+          if (completed && goal.parentId) {
+            await this.goals.propagateCompletion(goal.parentId);
+          }
+        }
+      } catch {
+        // Completion bookkeeping is not fatal to the cycle
+      }
+    }
+
+    // Terminal failure: a capability-bound goal whose capability executed
+    // and failed (or refused) must not re-pend — otherwise the same refusal
+    // replays every cycle and starves real work. Failure is evidence.
+    if (
+      state.selectedAction?.targetGoalId
+      && state.executionResult?.outcome === 'failure'
+      && !goalUpdated
+    ) {
+      try {
+        const goal =
+          state.pendingWork.find((g) => g.goalId === state.selectedAction!.targetGoalId)
+          ?? await this.goals.getGoal(state.selectedAction.targetGoalId as string);
+        if (
+          goal
+          && goal.context?.capabilityId === state.selectedAction.capabilityId
+          && goal.status !== 'completed'
+          && goal.status !== 'failed'
+        ) {
+          await this.goals.updateGoal(goal.goalId, {
+            status: 'failed',
+            result: state.executionResult.details || 'capability refused or failed',
+          });
+
+          // Bounded autonomous replanning: a plan-step goal that failed
+          // for a TRANSIENT reason gets exactly one replacement child
+          // goal (durable replanOf marker prevents loops). Refusals and
+          // authority problems are NOT retried — they persist as
+          // plan_step_failed evidence.
+          try {
+            const key = String(goal.context?.producerKey ?? '');
+            const planMatch = /^plan:([^:]+):([^:]+)$/.exec(key);
+            if (planMatch) {
+              const reason = String(state.executionResult.details ?? '').toLowerCase();
+              const transient = /timeout|unavailable|unreachable|econn|eai_again|resource/.test(reason);
+              const alreadyReplanned = await this.pool.query(
+                `SELECT 1 FROM heidi_goals WHERE context->>'replanOf'=$1 LIMIT 1`,
+                [goal.goalId],
+              );
+              // One replan per chain: a goal that is itself a replan
+              // (context.replanOf set) may not spawn another replan —
+              // observed live 2026-09-26: three chained replans while
+              // Ollama stayed down. Without this guard the chain is
+              // per-failure-bounded but unbounded in total.
+              const isReplan = Boolean((goal.context as Record<string, unknown> | undefined)?.replanOf);
+              if (transient && !isReplan && alreadyReplanned.rows.length === 0) {
+                const replanGoal = await this.pool.query(
+                  `INSERT INTO heidi_goals (parent_id, title, goal_type, description, status, priority, success_criteria, context, created_at, updated_at)
+                   VALUES ($1, $2, 'task', $2, 'active', 5, '["contract-verified capability execution"]'::jsonb, $3, now(), now()) RETURNING id`,
+                  [goal.parentId ?? null, `Replan ${planMatch[2]}: ${String(goal.title).slice(0, 80)}`,
+                  JSON.stringify({ ...(goal.context ?? {}), replanOf: goal.goalId, replanReason: reason.slice(0, 140) })],
+                );
+                await this.pool.query(
+                  `INSERT INTO heidi_events (event_type, payload, created_at) VALUES ('replan', $1, now())`,
+                  [JSON.stringify({ planId: planMatch[1], failedGoalId: goal.goalId, classification: 'transient', newGoalId: replanGoal.rows[0]?.id, reason: reason.slice(0, 160) })],
+                ).catch(() => { });
+              } else if (!transient) {
+                await this.pool.query(
+                  `INSERT INTO heidi_events (event_type, payload, created_at) VALUES ('plan_step_failed', $1, now())`,
+                  [JSON.stringify({ planId: planMatch[1], goalId: goal.goalId, classification: 'non_transient', reason: reason.slice(0, 160), policy: 'no_retry_without_new_evidence' })],
+                ).catch(() => { });
+                // Lesson candidate — structured, evidence-linked, then
+                // bridged into semantic memory (deduped; an embedding
+                // failure is recorded, never hidden).
+                const cap = String(goal.context?.capabilityId ?? '');
+                const { persistLesson } = await import('./LessonRetrieval');
+                await persistLesson(this.pool, {
+                  lesson: `capability ${cap} fails when: ${reason.slice(0, 120)}`,
+                  whyItMatters: 'plan steps that will predictably fail should be pruned before dispatch',
+                  evidence: [goal.goalId], scope: 'planning',
+                  confidence: 'candidate',
+                  applicability: `goals that would dispatch ${cap}`,
+                }).catch(() => { });
+              }
+            }
+          } catch {
+            // Replan bookkeeping is not fatal to the cycle
+          }
+        }
+      } catch {
+        // Failure bookkeeping is not fatal to the cycle
       }
     }
 
@@ -2348,6 +3751,50 @@ export class CognitiveCore {
 
   // ─── Recording ────────────────────────────────────────────────────────
 
+  /**
+   * Minimal heartbeat for a timed-out cycle. recordCycle() only runs when a
+   * cycle completes; this writes a single cognitive_cycle row marked
+   * outcome='timeout' so event-flow monitoring sees the truth (loop alive,
+   * cycle over budget) rather than silence. Bounded by its own short timeout
+   * so a dead pool cannot hang the scheduler's catch path.
+   */
+  private async recordTimeoutHeartbeat(): Promise<void> {
+    if (!this.pool) return;
+    const write = this.pool.query(
+      `INSERT INTO heidi_events (event_type, payload, created_at)
+       VALUES ($1, $2, now())`,
+      [
+        'cognitive_cycle',
+        JSON.stringify({
+          runtimeIdentity: this.runtimeIdentity(),
+          outcome: 'timeout',
+          cycleTimeoutMs: this.loopConfig.cycleTimeoutMs,
+          consecutiveFailures: this.consecutiveFailures,
+          // Which phase was in-flight when the budget ran out — turns a
+          // generic 'timed out' into a named stalled dependency.
+          stalledPhase: this.currentCycle?.phase ?? null,
+          phaseErrors: this.currentCycle?.errors ?? [],
+        }),
+      ],
+    );
+    await Promise.race([
+      write,
+      new Promise((_, reject) => setTimeout(() => reject(new Error('heartbeat write timeout')), 5000)),
+    ]);
+  }
+
+  /**
+   * The durable proof that the process writing this row is the one that
+   * executed the cycle — the anchor deployment reconciliation uses to
+   * distinguish "PM2 says online" from "this process actually executes".
+   */
+  private runtimeIdentity(): { pid: number; commit: string | null; cwd: string } {
+    if (this.runtimeCommit === undefined) {
+      this.runtimeCommit = resolveGitHead(process.cwd());
+    }
+    return { pid: process.pid, commit: this.runtimeCommit, cwd: process.cwd() };
+  }
+
   private async recordCycle(state: CognitiveState): Promise<void> {
     try {
       await this.pool.query(
@@ -2356,6 +3803,7 @@ export class CognitiveCore {
         [
           'cognitive_cycle',
           JSON.stringify({
+            runtimeIdentity: this.runtimeIdentity(),
             cycleId: state.cycleId,
             phase: state.phase,
             systemHealth: state.perception?.systemHealth,
@@ -2383,6 +3831,13 @@ export class CognitiveCore {
             verificationStrategy: state.verificationResult?.verificationStrategy,
             lessonLearned: state.learningResult?.lessonLearned,
             memoryStored: state.learningResult?.memoryStored,
+            memoryId: state.learningResult?.memoryId ?? null,
+            producedMissions: state.producedMissions
+              ? {
+                created: state.producedMissions.created.map((g) => g.goalId),
+                skipped: state.producedMissions.skipped,
+              }
+              : null,
             outcomeClassification: state.learningResult?.outcomeClassification,
             replanned: state.replanResult?.replanned,
             errors: state.errors,
@@ -2507,6 +3962,17 @@ export class CognitiveCore {
     this.lastError = null;
     this.auditLoopTransition('starting');
 
+    // Restore a persisted kill switch — an operator halt survives restarts.
+    // ON → stay degraded with no cycling; OFF/absent → normal startup.
+    const persistedKill = readKillSwitch();
+    if (persistedKill?.active) {
+      this.killSwitchActive = true;
+      this.lastError = `Kill switch restored: ${persistedKill.reason ?? 'operator halt'}`;
+      this.loopState = 'degraded';
+      this.auditLoopTransition('degraded');
+      return;
+    }
+
     // Resume goals after restart
     try {
       await this.resumeAfterRestart();
@@ -2570,9 +4036,14 @@ export class CognitiveCore {
 
   /**
    * Activate the kill switch. Immediately halts all new cycles.
+   * Persisted to .hydi-operational/kill-switch.json — a daemon restart
+   * must not silently disarm an operator-set halt.
    */
   activateKillSwitch(reason: string): void {
     this.killSwitchActive = true;
+    try {
+      writeKillSwitch({ active: true, reason, setAt: new Date().toISOString(), setBy: 'heidi-daemon' });
+    } catch { /* persistence is best-effort; in-memory halt still applies */ }
     this.lastError = `Kill switch activated: ${reason}`;
     if (this.loopState === 'running') {
       this.loopState = 'degraded';
@@ -2590,6 +4061,9 @@ export class CognitiveCore {
    */
   deactivateKillSwitch(): void {
     this.killSwitchActive = false;
+    try {
+      writeKillSwitch({ active: false, reason: null, setAt: new Date().toISOString(), setBy: 'heidi-daemon' });
+    } catch { /* best-effort */ }
     this.lastError = null;
     if (this.loopState === 'degraded') {
       this.loopState = 'running';
@@ -2667,9 +4141,40 @@ export class CognitiveCore {
     this.cycleInFlight = true;
     this.lastCycleAt = new Date().toISOString();
 
+    // The underlying cycle promise. cycleInFlight releases when THIS
+    // settles — not when the 30s timeout wrapper rejects. Previously a
+    // timed-out cycle freed the flag while runCycle kept running as a
+    // zombie; the next tick launched another, overlapping zombies held
+    // pg pool connections (max=3), and each starved the next — the loop
+    // timed out forever. Observed 2026-09-28.
+    const work = this.runCycle();
+    this.inFlightWork = work;
+    const release = () => {
+      if (this.inFlightWork === work) {
+        this.inFlightWork = null;
+        this.cycleInFlight = false;
+      }
+    };
+    work.then(release, release);
+
+    // Hard watchdog: if runCycle never settles despite per-phase
+    // deadlines (a promise that never resolves defeats try/catch),
+    // force-release after 4× the cycle budget so the loop cannot
+    // deadlock permanently.
+    const hardBoundMs = 4 * this.loopConfig.cycleTimeoutMs;
+    const watchdog = setTimeout(() => {
+      if (this.inFlightWork === work) {
+        this.inFlightWork = null;
+        this.cycleInFlight = false;
+        this.lastError = `cycle exceeded ${hardBoundMs}ms hard bound — force-released`;
+        this.recordTimeoutHeartbeat().catch(() => { });
+      }
+    }, hardBoundMs);
+    work.finally(() => clearTimeout(watchdog)).catch(() => { });
+
     try {
       // Run cycle with timeout
-      const cycleState = await this.runCycleWithTimeout(this.loopConfig.cycleTimeoutMs);
+      const cycleState = await this.runCycleWithTimeout(work, this.loopConfig.cycleTimeoutMs);
 
       // Classify the cycle outcome
       const outcome = this.classifyCycleOutcome(cycleState);
@@ -2693,6 +4198,16 @@ export class CognitiveCore {
         // Don't reset consecutiveFailures, but don't increment either
         // This prevents cooldown from triggering on recoverable errors
       }
+
+      // Autonomous dev-scan cadence — every 30 min, R0, never blocks the
+      // cycle. The observer emits findings as goals; the governed chain
+      // (investigate → author → patch) picks them up on future cycles.
+      if (Date.now() - this.lastDevScanAt > 30 * 60 * 1000) {
+        this.lastDevScanAt = Date.now();
+        try {
+          await this.registry.execute('ops.dev_observe', {}, { sessionId: this.sessionId } as CapabilityExecutionContext);
+        } catch { /* scan failure must not break the cycle */ }
+      }
       // HARD_FAILURE falls through to the catch block via re-throw
       if (outcome === 'HARD_FAILURE') {
         throw new Error(cycleState.errors[0] || 'Cycle completed with hard failure');
@@ -2701,6 +4216,17 @@ export class CognitiveCore {
       this.lastFailureAt = new Date().toISOString();
       this.lastError = e instanceof Error ? e.message : 'unknown';
       this.consecutiveFailures++;
+
+      // Event-flow starvation guard: recordCycle() runs at phase 14 of
+      // runCycle(); a timed-out cycle never reaches it, so heidi_events
+      // goes silent while the daemon is still alive — which the system
+      // health check reads as a CRITICAL event-flow failure. Record a
+      // minimal truthful timeout heartbeat instead of silence.
+      // (Observed live 2026-09-21: 13.5h of event starvation while the
+      // daemon kept cycling — every cycle timed out before phase 14.)
+      if (e instanceof Error && e.message.includes('timed out')) {
+        await this.recordTimeoutHeartbeat().catch(() => { });
+      }
 
       // Check if we need to enter cooldown
       if (this.consecutiveFailures >= this.loopConfig.maxConsecutiveFailures) {
@@ -2722,17 +4248,19 @@ export class CognitiveCore {
         }, backoff);
       }
     } finally {
-      this.cycleInFlight = false;
+      // cycleInFlight is released by `work`'s release() when the
+      // underlying runCycle settles — NOT here. Releasing on the timeout
+      // path is what allowed zombie cycles to pile up on the pg pool.
     }
   }
 
-  private async runCycleWithTimeout(timeoutMs: number): Promise<CognitiveState> {
+  private async runCycleWithTimeout(work: Promise<CognitiveState>, timeoutMs: number): Promise<CognitiveState> {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         reject(new Error(`Cycle timed out after ${timeoutMs}ms`));
       }, timeoutMs);
 
-      this.runCycle()
+      work
         .then((state) => {
           clearTimeout(timer);
           resolve(state);
