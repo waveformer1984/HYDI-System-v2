@@ -60,10 +60,28 @@ require('./babel-register');
 const fs = require('fs');
 const path = require('path');
 
+const ROOT = path.resolve(__dirname, '..');
+
+// Self-contained env: PM2 `pm2 start` does not load .env.local, and a bare
+// launch then reads as a silent env-misconfiguration. Same convention as
+// scripts/watchdog.js — parse the file directly and only take the keys this
+// process needs, so a stale unrelated var can't change behaviour.
+const ENV_KEYS = [
+  'SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY',
+  'PROTOFORGE_MCP_TOKEN', 'PROTOFORGE_MCP_URL',
+  'VAPID_PUBLIC_KEY', 'VAPID_PRIVATE_KEY', 'VAPID_SUBJECT',
+];
+try {
+  const parsed = require('dotenv').parse(fs.readFileSync(path.join(ROOT, '.env.local')));
+  for (const key of ENV_KEYS) {
+    if (!process.env[key] && parsed[key]) process.env[key] = parsed[key];
+  }
+} catch { /* no .env.local: whatever the launcher provided is all there is */ }
+
+
 const { callProtoforgeTool } = require('../lib/protoforge-mcp-client');
 const { createNotification } = require('../lib/notifications/notify');
 
-const ROOT = path.resolve(__dirname, '..');
 const LOG_FILE = path.join(ROOT, 'logs', 'heidi-daily-loop.log');
 const STATE_FILE = process.env.HEIDI_LOOP_STATE_FILE
   || path.join(ROOT, '.hydi-operational', 'daily-loop-state.json');
