@@ -21,6 +21,29 @@ from urllib.parse import urlparse
 from urllib.request import urlopen, Request
 from urllib.error import URLError
 
+# ── Thin-client config (termux/setup-thin-client.sh) ─────
+# KEY=VALUE lines from ~/.hydi/thin-client.env fill in env vars that are not
+# already set, so an explicit `export OLLAMA_URL=...` still wins. Holds only
+# non-secret settings (OLLAMA_URL, HYDI_UPSTREAM).
+def _load_thin_client_env(path=os.path.expanduser("~/.hydi/thin-client.env")):
+    try:
+        with open(path, encoding="utf-8") as fh:
+            for raw in fh:
+                line = raw.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, _, value = line.partition("=")
+                key = key.strip()
+                if key.startswith("export "):
+                    key = key[len("export "):].strip()
+                value = value.strip().strip('"').strip("'")
+                if key and key not in os.environ:
+                    os.environ[key] = value
+    except OSError:
+        pass
+
+_load_thin_client_env()
+
 # ── ProtoForge state ─────────────────────────────────────
 REVENUE_STREAMS = [
     "galactic_bytes", "detailer_bot", "lipi_v2",
@@ -135,16 +158,26 @@ PREFERRED_MODELS = [
     "qwen2.5", "qwen2", "deepseek-r1",
 ]
 
+# When Ollama is the HYDI PC (thin client over the tailnet), prefer the model
+# that host is tuned for; small local models stay the fallback order.
+REMOTE_PREFERRED_MODELS = ["qwen2.5:3b-instruct", "qwen2.5"]
+
+def ollama_is_remote(url=None):
+    host = (urlparse(url or OLLAMA_URL).hostname or "").lower()
+    return host not in ("localhost", "127.0.0.1", "::1", "")
+
 def detect_ollama():
     """Return the best available Ollama model name, or None."""
     global OLLAMA_MODEL
+    remote = ollama_is_remote()
     try:
-        with urlopen(f"{OLLAMA_URL}/api/tags", timeout=3) as r:
+        with urlopen(f"{OLLAMA_URL}/api/tags", timeout=8 if remote else 3) as r:
             data = json.loads(r.read())
         models = [m["name"] for m in data.get("models", [])]
         if not models:
             return None
-        for pref in PREFERRED_MODELS:
+        order = (REMOTE_PREFERRED_MODELS + PREFERRED_MODELS) if remote else PREFERRED_MODELS
+        for pref in order:
             for m in models:
                 if pref in m.lower():
                     OLLAMA_MODEL = m
@@ -843,7 +876,8 @@ def start_server(port=3006, host="0.0.0.0"):
     if GROQ_MODEL:
         print(f"  🤖 Groq AI : {GROQ_MODEL}  (cloud, fast)")
     elif OLLAMA_MODEL:
-        print(f"  🤖 Ollama  : {OLLAMA_MODEL}  (local)")
+        where = ("remote: " + OLLAMA_URL) if ollama_is_remote() else "local"
+        print(f"  🤖 Ollama  : {OLLAMA_MODEL}  ({where})")
     else:
         print("  📝 Scripted mode — no AI backend detected")
         print("     → Get a free Groq API key at console.groq.com")

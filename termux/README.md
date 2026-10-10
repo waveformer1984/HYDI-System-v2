@@ -8,7 +8,62 @@ answers the chat API by talking straight to Supabase.
 Phone browser ──► hydi-chat-server.js (Termux, :8787) ──► Supabase REST
 ```
 
-## Quick start
+## Thin client (recommended)
+
+Run the phone as a thin client of the HYDI PC over Tailscale, instead of
+running a local LLM (Android's phantom-process killer keeps stopping it) and
+holding the Supabase service-role key on the phone.
+
+```
+Phone ──Tailscale──► heidi-pc.tailc50af2.ts.net
+                      ├─ /heidi          Heidi app (paired device, use this for chat/tasks/approvals)
+                      ├─ /api/health     relayed by hydi-chat-server.js
+                      └─ :11434          PC's Ollama (hydi.py's model)
+```
+
+**Prerequisites**
+- The Tailscale app on the phone says **Connected**.
+- On the PC, Ollama is served tailnet-only (once; never use Funnel):
+  `tailscale serve --bg --https=11434 http://127.0.0.1:11434`
+
+**Set up (in Termux, from the repo):**
+```bash
+pkg install -y git curl
+cd ~/HYDI-System-v2 && git pull origin clean-main
+bash termux/setup-thin-client.sh --dry-run            # preview
+bash termux/setup-thin-client.sh --disable-local-llm  # apply
+sv restart hydi hydi-daemon 2>/dev/null || true
+```
+
+The script:
+1. Refuses to change anything if the PC isn't reachable (Tailscale off, PC
+   down). Pass `--force` to override.
+2. Writes `~/.hydi/thin-client.env` (`OLLAMA_URL`, `HYDI_UPSTREAM`,
+   `FRANK_IP`; no secrets, mode 600). `hydi.py` and `hydi-chat-server.js` read
+   it; an explicitly exported variable still wins.
+3. Patches `~/.termux/boot/start_hydi.sh` if it exists: backs it up to
+   `start_hydi.sh.bak-<timestamp>`, makes it load the env file, and replaces
+   the hardcoded `192.168.1.100` with the PC's MagicDNS name.
+4. With `--disable-local-llm`: `sv down` plus a `down` file for any runit
+   service that runs `llama-server` or `ollama serve`. Nothing is uninstalled.
+
+It prints exact rollback commands at the end. Re-running it is safe.
+
+**Optional: thin-client chat node.** With `HYDI_UPSTREAM` set,
+`hydi-chat-server.js` relays `/api/health` and `/api/mobile-status` to the PC
+and needs no Supabase key:
+```bash
+set -a; . ~/.hydi/thin-client.env; set +a
+unset SUPABASE_URL SUPABASE_SERVICE_ROLE_KEY
+node termux/hydi-chat-server.js
+```
+The relay never forwards the phone's credentials. Routes the PC protects
+(e.g. `/api/mobile-status`) come back 401 with a pointer to the Heidi app.
+That's intended: authenticate through the paired `/heidi` app, and don't put
+`HYDI_SERVICE_SECRET` or the service-role key on the phone. Once the thin
+client works, remove those from `.env.hydi`.
+
+## Quick start (standalone, direct Supabase)
 
 ```bash
 # In Termux, from the repo (or just copy the termux/ folder to your phone):

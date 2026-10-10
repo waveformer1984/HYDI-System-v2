@@ -12,6 +12,12 @@
  *   HYDI_SERVICE_SECRET        optional — if set, /api/chat requires the
  *                              HMAC token (same scheme as production);
  *                              if unset, only local requests are accepted
+ *   HYDI_UPSTREAM              optional — thin-client mode: base URL of the
+ *                              HYDI PC's heidi-web over the tailnet, e.g.
+ *                              https://heidi-pc.tailc50af2.ts.net. When set,
+ *                              /api/health and /api/mobile-status are relayed
+ *                              there and no Supabase key is needed on the phone.
+ *                              No credentials are ever forwarded upstream.
  *   PORT                       default 8787
  */
 
@@ -20,11 +26,34 @@ const fs = require('fs');
 const path = require('path');
 const { createHmac, timingSafeEqual } = require('crypto');
 
+// Thin-client settings written by termux/setup-thin-client.sh. Fills only
+// variables that aren't already set, so an explicit export still wins and a
+// runit/boot start that doesn't source the file gets the same config.
+function loadThinClientEnv(file = path.join(require('os').homedir(), '.hydi', 'thin-client.env')) {
+  let text;
+  try { text = fs.readFileSync(file, 'utf8'); } catch (_) { return; }
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line || line.startsWith('#') || !line.includes('=')) continue;
+    let key = line.slice(0, line.indexOf('=')).trim();
+    if (key.startsWith('export ')) key = key.slice(7).trim();
+    const value = line.slice(line.indexOf('=') + 1).trim().replace(/^(['"])(.*)\1$/, '$2');
+    if (key && process.env[key] === undefined) process.env[key] = value;
+  }
+}
+loadThinClientEnv();
+
 const PORT = parseInt(process.env.PORT || '8787', 10);
 const SUPABASE_URL = (process.env.SUPABASE_URL || '').replace(/\/+$/, '');
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 const SERVICE_SECRET = process.env.HYDI_SERVICE_SECRET || '';
 const TOKEN_WINDOW_MS = 5 * 60 * 1000;
+
+function normalizeUpstream(raw) {
+  const v = String(raw || '').trim().replace(/\/+$/, '');
+  return /^https?:\/\/[^/]/i.test(v) ? v : '';
+}
+const UPSTREAM = normalizeUpstream(process.env.HYDI_UPSTREAM);
 
 // ── Supabase REST helpers (PostgREST over fetch) ─────────────────────────────
 
@@ -275,85 +304,133 @@ function json(res, code, obj) {
   res.end(JSON.stringify(obj));
 }
 
-const server = http.createServer(async (req, res) => {
-  const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
-
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-hydi-service-token');
-  if (req.method === 'OPTIONS') { res.writeHead(204); return res.end(); }
-
+// Thin-client relay: GET a read-only route from the HYDI PC. Sends no headers
+// from the incoming request, so nothing the phone holds can leak upstream.
+async function relayUpstream(res, upstream, pathname, fetchImpl = fetch) {
+  let r;
   try {
-    if (url.pathname === '/' || url.pathname === '/hydi-chat.html' || url.pathname === '/index.html') {
-      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-      return res.end(loadUI());
-    }
-
-    if (url.pathname === '/api/health') {
-      if (!sbConfigured()) return json(res, 200, { status: 'offline-mode', supabase: false, node: 'termux' });
-      try {
-        const dash = await getDashboard();
-        return json(res, 200, {
-          status: dash && dash.current_status === 'OK' ? 'healthy' : 'degraded',
-          hydi_status: dash?.current_status ?? 'unknown',
-          node: 'termux',
-          timestamp: new Date().toISOString(),
-        });
-      } catch (err) {
-        return json(res, 503, { status: 'unavailable', error: err.message, node: 'termux' });
-      }
-    }
-
-    if (url.pathname === '/api/mobile-status') {
-      if (!sbConfigured()) return json(res, 200, { ok: true, system: 'OFFLINE', node: 'termux' });
-      try {
-        const dash = await getDashboard();
-        return json(res, 200, {
-          ok: dash?.escalation_level !== 'CRITICAL',
-          system: dash?.current_status ?? 'unknown',
-          drift: dash?.trend_status ?? 'unknown',
-          node: 'termux',
-          ts: new Date().toISOString(),
-        });
-      } catch (err) {
-        return json(res, 503, { ok: false, alert: err.message, node: 'termux' });
-      }
-    }
-
-    if (url.pathname === '/api/chat') {
-      if (req.method !== 'POST') return json(res, 405, { error: 'Method not allowed' });
-
-      const { valid, reason } = checkServiceToken(req.headers['x-hydi-service-token']);
-      if (!valid) return json(res, 401, { error: 'Unauthorized', reason });
-
-      let body = '';
-      for await (const chunk of req) body += chunk;
-      let parsed = {};
-      try { parsed = JSON.parse(body || '{}'); } catch (_) {
-        return json(res, 400, { error: 'Invalid JSON body' });
-      }
-      const { message, system } = parsed;
-      if (!message || !system) return json(res, 400, { error: 'Message and system are required' });
-
-      const handler = systemHandlers[system];
-      if (!handler) return json(res, 400, { error: `Unknown system: ${system}` });
-
-      const response = await handler(message);
-      return json(res, 200, { response, system, node: 'termux', timestamp: new Date().toISOString() });
-    }
-
-    json(res, 404, { error: 'Not found' });
+    r = await fetchImpl(`${upstream}${pathname}`, {
+      headers: { Accept: 'application/json' },
+      signal: AbortSignal.timeout(10000),
+    });
   } catch (err) {
-    json(res, 500, { error: err instanceof Error ? err.message : 'Unknown error' });
+    return json(res, 502, {
+      ok: false, node: 'termux', via: 'upstream',
+      error: `HYDI PC unreachable at ${upstream} (${err instanceof Error ? err.message : 'unknown error'})`,
+      hint: 'Is the Tailscale app on this phone connected, and is heidi-web up on the PC?',
+    });
   }
-});
+  const text = await r.text();
+  let body;
+  try { body = JSON.parse(text); } catch (_) { body = { raw: text.slice(0, 500) }; }
+  if (body === null || typeof body !== 'object' || Array.isArray(body)) body = { data: body };
+  const extra = { node: 'termux', via: 'upstream' };
+  if (r.status === 401 || r.status === 403) {
+    extra.hint = `This route needs a paired device. Use the Heidi app at ${upstream}/heidi instead of putting secrets on the phone.`;
+  }
+  return json(res, r.status, { ...body, ...extra });
+}
 
-server.listen(PORT, '0.0.0.0', () => {
-  console.log('');
-  console.log('  ⚡ HYDI Chat Server (Termux node)');
-  console.log(`  → Chat UI:  http://localhost:${PORT}/`);
-  console.log(`  → API:      http://localhost:${PORT}/api/chat`);
-  console.log(`  → Supabase: ${sbConfigured() ? 'connected (' + SUPABASE_URL + ')' : 'NOT configured — offline mode'}`);
-  console.log(`  → Auth:     ${SERVICE_SECRET ? 'HMAC service token required' : 'open (no HYDI_SERVICE_SECRET set — keep this node local)'}`);
-  console.log('');
-});
+function createHandler({ upstream = UPSTREAM, fetchImpl = fetch } = {}) {
+  return async (req, res) => {
+    const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-hydi-service-token');
+    if (req.method === 'OPTIONS') { res.writeHead(204); return res.end(); }
+
+    try {
+      if (url.pathname === '/' || url.pathname === '/hydi-chat.html' || url.pathname === '/index.html') {
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+        return res.end(loadUI());
+      }
+
+      if (upstream && (url.pathname === '/api/health' || url.pathname === '/api/mobile-status')) {
+        if (req.method !== 'GET') return json(res, 405, { error: 'Method not allowed' });
+        return relayUpstream(res, upstream, url.pathname, fetchImpl);
+      }
+
+      if (url.pathname === '/api/health') {
+        if (!sbConfigured()) return json(res, 200, { status: 'offline-mode', supabase: false, node: 'termux' });
+        try {
+          const dash = await getDashboard();
+          return json(res, 200, {
+            status: dash && dash.current_status === 'OK' ? 'healthy' : 'degraded',
+            hydi_status: dash?.current_status ?? 'unknown',
+            node: 'termux',
+            timestamp: new Date().toISOString(),
+          });
+        } catch (err) {
+          return json(res, 503, { status: 'unavailable', error: err.message, node: 'termux' });
+        }
+      }
+
+      if (url.pathname === '/api/mobile-status') {
+        if (!sbConfigured()) return json(res, 200, { ok: true, system: 'OFFLINE', node: 'termux' });
+        try {
+          const dash = await getDashboard();
+          return json(res, 200, {
+            ok: dash?.escalation_level !== 'CRITICAL',
+            system: dash?.current_status ?? 'unknown',
+            drift: dash?.trend_status ?? 'unknown',
+            node: 'termux',
+            ts: new Date().toISOString(),
+          });
+        } catch (err) {
+          return json(res, 503, { ok: false, alert: err.message, node: 'termux' });
+        }
+      }
+
+      // /api/chat/route is what the bundled public/hydi-chat.html posts to.
+      if (url.pathname === '/api/chat' || url.pathname === '/api/chat/route') {
+        if (req.method !== 'POST') return json(res, 405, { error: 'Method not allowed' });
+
+        const { valid, reason } = checkServiceToken(req.headers['x-hydi-service-token']);
+        if (!valid) return json(res, 401, { error: 'Unauthorized', reason });
+
+        let body = '';
+        for await (const chunk of req) body += chunk;
+        let parsed = {};
+        try { parsed = JSON.parse(body || '{}'); } catch (_) {
+          return json(res, 400, { error: 'Invalid JSON body' });
+        }
+        const { message, system } = parsed;
+        if (!message || !system) return json(res, 400, { error: 'Message and system are required' });
+
+        const handler = systemHandlers[system];
+        if (!handler) return json(res, 400, { error: `Unknown system: ${system}` });
+
+        if (upstream && !sbConfigured()) {
+          return json(res, 200, {
+            response: `This phone is a thin client. Chat with Heidi in the paired app: ${upstream}/heidi`,
+            system, node: 'termux', via: 'upstream', timestamp: new Date().toISOString(),
+          });
+        }
+
+        const response = await handler(message);
+        return json(res, 200, { response, system, node: 'termux', timestamp: new Date().toISOString() });
+      }
+
+      json(res, 404, { error: 'Not found' });
+    } catch (err) {
+      json(res, 500, { error: err instanceof Error ? err.message : 'Unknown error' });
+    }
+  };
+}
+
+module.exports = { createHandler, relayUpstream, normalizeUpstream, loadThinClientEnv };
+
+if (require.main === module) {
+  const server = http.createServer(createHandler());
+  server.listen(PORT, '0.0.0.0', () => {
+    console.log('');
+    console.log('  ⚡ HYDI Chat Server (Termux node)');
+    console.log(`  → Chat UI:  http://localhost:${PORT}/`);
+    console.log(`  → API:      http://localhost:${PORT}/api/chat`);
+    console.log(`  → Upstream: ${UPSTREAM ? UPSTREAM + ' (thin client: health/status relayed to the HYDI PC)' : 'none'}`);
+    console.log(`  → Supabase: ${sbConfigured() ? 'connected (' + SUPABASE_URL + ')' : UPSTREAM ? 'not needed in thin-client mode' : 'NOT configured — offline mode'}`);
+    console.log(`  → Auth:     ${SERVICE_SECRET ? 'HMAC service token required' : 'open (no HYDI_SERVICE_SECRET set — keep this node local)'}`);
+    console.log('');
+  });
+}
