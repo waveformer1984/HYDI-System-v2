@@ -67,10 +67,22 @@ function loadPortChecksFromBootConfig() {
 }
 const PORT_CHECKS = loadPortChecksFromBootConfig();
 
-// The Supabase CLI version the repo's migrations are currently validated
-// against.  Preflight verifies `npx supabase --version` matches exactly.
-// Update this when intentionally upgrading the CLI.
-const REQUIRED_SUPABASE_CLI_VERSION = '2.120.0';
+// The Supabase CLI version preflight requires is the version the repo
+// DECLARES in package.json — the manifest is the single source of truth.
+// A second literal pin here drifted behind dependabot's weekly bumps before
+// (pin 2.107.0 vs declared 2.120.0) and crash-looped hydi-boot; deriving it
+// makes that drift structurally impossible. The intentional-upgrade path is
+// unchanged: bump devDependencies.supabase and preflight follows.
+const FALLBACK_SUPABASE_CLI_VERSION = '2.120.0'; // only when the manifest is unreadable
+function requiredSupabaseCliVersion(declared) {
+  const source = declared !== undefined
+    ? declared
+    : (() => { try { return require('../package.json').devDependencies?.supabase; } catch (_) { return undefined; } })();
+  if (typeof source === 'string' && source.trim().length > 0) {
+    return source.trim().replace(/^[~^]/, ''); // a range declares intent on that version — check it exactly
+  }
+  return FALLBACK_SUPABASE_CLI_VERSION;
+}
 
 const DOCKER_START_TIMEOUT_MS = 90_000;
 const DOCKER_POLL_INTERVAL_MS = 3_000;
@@ -321,13 +333,14 @@ async function checkSupabaseCli() {
     fail('could not run `npx supabase --version` — is the Supabase CLI installed?');
     return false;
   }
-  if (version === REQUIRED_SUPABASE_CLI_VERSION) {
-    ok(`supabase CLI v${version} (matches pinned version)`);
+  const required = requiredSupabaseCliVersion();
+  if (version === required) {
+    ok(`supabase CLI v${version} (matches declared version)`);
     return true;
   }
-  fail(`supabase CLI version mismatch: found ${version}, expected ${REQUIRED_SUPABASE_CLI_VERSION}`);
-  info(`install the pinned version:  npm install -D supabase@${REQUIRED_SUPABASE_CLI_VERSION}`);
-  info(`or update REQUIRED_SUPABASE_CLI_VERSION in scripts/preflight.js if this is an intentional upgrade`);
+  fail(`supabase CLI version mismatch: found ${version}, expected ${required} (declared in package.json)`);
+  info(`install the declared version:  npm install`);
+  info(`or bump devDependencies.supabase in package.json if this is an intentional upgrade`);
   return false;
 }
 
@@ -436,7 +449,11 @@ async function main() {
   process.exit(0);
 }
 
-main().catch((e) => {
-  fail(`uncaught error: ${e.message}`);
-  process.exit(1);
-});
+if (require.main === module) {
+  main().catch((e) => {
+    fail(`uncaught error: ${e.message}`);
+    process.exit(1);
+  });
+}
+
+module.exports = { requiredSupabaseCliVersion, FALLBACK_SUPABASE_CLI_VERSION };
