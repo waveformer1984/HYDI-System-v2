@@ -13,6 +13,10 @@ const EXECUTOR_ACTION_TYPES = [
   'update_database',
   'schedule_event',
   'send_email',
+  'system_health',
+  'mobile_status',
+  'pending_approvals',
+  'decision_bounds',
 ];
 
 describe('lib/heidi-tools HEIDI_TOOLS', () => {

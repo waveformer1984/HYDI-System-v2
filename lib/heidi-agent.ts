@@ -59,7 +59,7 @@ export async function runHeidiAgentStream(params: RunHeidiAgentParams): Promise<
   const memoryContext = await retrieveMemory(supabase, message, userId, sessionId);
   const system = [
     getAgentSystemPrompt('heidi'),
-    'You can take real actions using the provided tools. Prefer tools over describing what you would do. Read data with fetch_data before answering data questions.',
+    'You can take real actions using the provided tools. Prefer tools over describing what you would do. For questions about system health, business/mobile status, pending approvals, or autonomy bounds, use the dedicated read tools (system_health, mobile_status, pending_approvals, decision_bounds) — they are the canonical read surface. For other data questions, read data with fetch_data before answering.',
     memoryContext,
   ]
     .filter(Boolean)

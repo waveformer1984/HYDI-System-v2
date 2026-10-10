@@ -15,6 +15,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { updateSessionState } from './session-state';
 import { evaluateAction, type ActionAuthorization } from './governance/ActionChokepoint';
+import { callProtoforgeTool } from './protoforge-mcp-client';
 
 export type { ActionAuthorization } from './governance/ActionChokepoint';
 
@@ -99,6 +100,11 @@ export class ActionExecutor {
           return await this.sendEmail(action.payload);
         case 'cancel_task':
           return await this.cancelTask(action.payload);
+        case 'system_health':
+        case 'mobile_status':
+        case 'pending_approvals':
+        case 'decision_bounds':
+          return await this.mcpRead(action.type, action.payload);
         default:
           return { status: 'failed', error: `Unsupported action type: ${action.type}` };
       }
@@ -189,6 +195,21 @@ export class ActionExecutor {
       status: 'completed',
       result: { task_id: taskId, task_name: existing.task_name, cancelled: true },
     };
+  }
+
+  /**
+   * Read-only delegations to the ProtoForge MCP server (mcp/protoforge-mcp).
+   * The canonical implementations of health probing, the mobile snapshot,
+   * pending-approval listing, and autonomy bounds live there — duplicating
+   * them here would drift. A dead or unconfigured MCP server is reported
+   * as a real failure, never as a fabricated status.
+   */
+  private async mcpRead(tool: string, payload: Record<string, unknown>): Promise<ActionResult> {
+    const result = await callProtoforgeTool(tool, payload);
+    if (!result.ok) {
+      return { status: 'failed', error: result.error ?? `MCP tool ${tool} failed` };
+    }
+    return { status: 'completed', result: result.data };
   }
 
   private async fetchData(payload: Record<string, unknown>): Promise<ActionResult> {

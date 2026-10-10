@@ -151,7 +151,11 @@ export class HeidiOrchestrator {
     'create_task',
     'update_database',
     'fetch_data',
-    'schedule_event'
+    'schedule_event',
+    'system_health',
+    'mobile_status',
+    'pending_approvals',
+    'decision_bounds'
   ];
 
   constructor() {
