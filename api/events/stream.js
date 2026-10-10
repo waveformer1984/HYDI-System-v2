@@ -56,7 +56,7 @@ function startOfflineSweep() {
           await supabase.from('hydi_status_events').insert({
             subsystem: row.subsystem, from_status: row.status, to_status: health.status, health_score: health.health_score,
             detail: { source: 'offline_sweep' },
-          }).catch(() => {});
+          }).then(undefined, () => {}); // query builders are thenables with no .catch
           bus.emit('event', { type: 'subsystem_status', subsystem: row.subsystem, status: health.status, health_score: health.health_score, timestamp: new Date().toISOString() });
         }
       }

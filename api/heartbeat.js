@@ -77,7 +77,7 @@ export default async function handler(req, res) {
       to_status: health.status,
       health_score: health.health_score,
       detail: metadata || {},
-    }).catch(() => {});
+    }).then(undefined, () => {}); // query builders are thenables with no .catch
   }
 
   publish('subsystem_status', { subsystem, status: health.status, health_score: health.health_score });

@@ -51,7 +51,7 @@ export default async function handler(req, res) {
     action: 'search',
     actor: auth.deviceId || auth.role,
     detail: { q: q || null, tags: tags || null, min_importance: minImportance || null, kind: kind || null, result_count: (data || []).length },
-  }).catch(() => {});
+  }).then(undefined, () => {}); // query builders are thenables with no .catch
 
   return res.status(200).json({ memories: data || [] });
 }
