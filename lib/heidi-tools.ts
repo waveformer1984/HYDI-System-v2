@@ -64,6 +64,30 @@ export const HEIDI_TOOLS: Anthropic.Tool[] = [
     },
   },
   {
+    name: 'system_health',
+    description:
+      'Live health probe of the core services (ProtoForge core, Heidi web, mobile chat) via the ProtoForge MCP server. Use when asked whether the system is up or degraded.',
+    input_schema: { type: 'object', properties: {} },
+  },
+  {
+    name: 'mobile_status',
+    description:
+      'The canonical Heidi Mobile business snapshot: system health, revenue per stream, and alerts in one read. Use for "how is business / the system doing" questions.',
+    input_schema: { type: 'object', properties: {} },
+  },
+  {
+    name: 'pending_approvals',
+    description:
+      'List actions awaiting a human decision (escalated ProtoForge actions). Use when asked what needs approval or what is waiting on the operator.',
+    input_schema: { type: 'object', properties: {} },
+  },
+  {
+    name: 'decision_bounds',
+    description:
+      'Read the configured autonomy bounds (auto-approve threshold, max auto-approve amount, exec/lease state). Read-only — never modifies or enables execution.',
+    input_schema: { type: 'object', properties: {} },
+  },
+  {
     name: 'send_email',
     description:
       'Send an email (requires RESEND_API_KEY + EMAIL_FROM to be configured; otherwise returns an explicit error).',

@@ -119,6 +119,10 @@ export interface ActionGateDecision {
  */
 export const ACTION_RISK: Record<string, RiskLevel> = {
   fetch_data: 'R0',
+  system_health: 'R0',
+  mobile_status: 'R0',
+  pending_approvals: 'R0',
+  decision_bounds: 'R0',
   create_task: 'R1',
   schedule_event: 'R1',
   cancel_task: 'R1',
