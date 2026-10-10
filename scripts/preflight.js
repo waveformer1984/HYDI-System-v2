@@ -70,7 +70,7 @@ const PORT_CHECKS = loadPortChecksFromBootConfig();
 // The Supabase CLI version the repo's migrations are currently validated
 // against.  Preflight verifies `npx supabase --version` matches exactly.
 // Update this when intentionally upgrading the CLI.
-const REQUIRED_SUPABASE_CLI_VERSION = '2.107.0';
+const REQUIRED_SUPABASE_CLI_VERSION = '2.120.0';
 
 const DOCKER_START_TIMEOUT_MS = 90_000;
 const DOCKER_POLL_INTERVAL_MS = 3_000;
