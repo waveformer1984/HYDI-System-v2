@@ -45,7 +45,7 @@ export default async function handler(req, res) {
     await supabase.from('auth_audit_log').insert({
       event_type: 'permission_denied', device_id: auth.deviceId, role: auth.role,
       reason: `voice command '${parsed.intent}' requires '${parsed.permission}'`, metadata: { transcript },
-    }).catch(() => {});
+    }).then(undefined, () => {}); // query builders are thenables with no .catch
     return res.status(403).json({ error: 'Forbidden', reason: `role '${auth.role}' cannot run '${parsed.intent}'` });
   }
 
