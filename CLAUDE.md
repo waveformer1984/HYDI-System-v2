@@ -449,6 +449,26 @@ vercel env ls | grep SECRET_NAME
 }
 ```
 
+`.mcp.json` also registers `protoforge` (stdio), the repo's own MCP server in
+`mcp/protoforge-mcp/` — one tool surface over heidi-web, protoforge-core,
+Supabase and Stripe for any agent. v0.1 is read-only; every tool declares a
+risk tier and only `read` is exposed. Run `npm install` in that folder once
+before Claude Code can start it. It is a self-contained ESM package with its
+own `node --test` suite (`cd mcp/protoforge-mcp && npm test`), outside the
+root Jest/ESLint/tsc scope. See `mcp/protoforge-mcp/README.md`.
+
+**Cursor:** `.cursor/mcp.json` registers the same `protoforge` server for
+Cursor (path via `${workspaceFolder}`, so it works from any clone location).
+It deliberately contains only `protoforge` — keep Supabase in `.mcp.json` and
+never put tokens or secrets in `.cursor/mcp.json`. Cursor's cloud agents run
+off-machine and cannot reach Frank's local services, so these tools are only
+meaningful in Cursor running on Frank.
+
+**Tailnet access:** `docs/TAILSCALE.md` covers serving the MCP server on the
+tailnet (`scripts/tailscale/serve-mcp.ps1`, port 8470, tailnet-only, never
+Funnel), the tailnet policy that scopes cloud agents (`tag:agent`) to that one
+port, and joining ephemeral agent VMs (`scripts/tailscale/agent-join.sh`).
+
 ## Local-First Architecture (decision made 2026-07-10)
 
 J's explicit direction: minimize reliance on external platforms, run Hydi as

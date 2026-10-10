@@ -818,29 +818,6 @@ const CONFIG = loadConfig();
 async function main() {
   banner('HYDI Boot Agent');
 
-  // A dry run is strictly observational: it must not acquire or supersede the
-  // canonical boot lease. Claiming it here would make the active runtime stand
-  // down even though this invocation exits without starting any modules.
-  if (flags.dryRun) {
-    const selected = selectModules(CONFIG.modules);
-    let order;
-    try {
-      order = topoSort(selected);
-    } catch (e) {
-      console.error(e.message);
-      process.exit(1);
-    }
-    if (!flags.json) {
-      console.log(`Mode: ${flags.prod ? 'production' : 'development'}   Modules: ${order.length}`);
-      order.forEach((m, i) => {
-        const dep = (m.dependsOn || []).length ? c('90', ` after [${m.dependsOn.join(', ')}]`) : '';
-        console.log(`  ${i + 1}. ${c('1', m.id)} -- ${m.label}${dep}`);
-      });
-      banner('Dry run -- nothing started');
-    }
-    process.exit(0);
-  }
-
   if (isPartialBoot) {
     // A partial boot never claims, replaces or releases the canonical lease.
     // If a canonical runtime is live, refuse outright rather than running
@@ -861,6 +838,14 @@ async function main() {
       `partial boot (${partialBootDescription()}) -- NOT claiming the canonical lease (${canonical.reason})`));
     // No claim, and therefore no lease supervision: this instance can neither be
     // superseded nor supersede anyone.
+  } else if (flags.dryRun) {
+    // A dry run only prints the plan, so it must never claim the canonical
+    // lease. It used to claim before checking --dry-run, so `npm run boot:plan`
+    // on a live machine made the PM2-supervised runtime see a newer bootId and
+    // stand down (exit 75, not respawned) -- the same failure the partial-boot
+    // guard above closes for --only/--skip. Read-only: inspect, never claim.
+    const canonical = lease.inspect();
+    log('boot-agent', `dry run -- NOT claiming the canonical lease (${canonical.reason})`);
   } else {
     // Canonical boot. Claim the single-instance lease before doing any work.
     // Newest claim wins: any older boot runtime notices within one poll interval
@@ -891,6 +876,15 @@ async function main() {
       const dep = (m.dependsOn || []).length ? c('90', ` after [${m.dependsOn.join(', ')}]`) : '';
       console.log(`  ${i + 1}. ${c('1', m.id)} -- ${m.label}${dep}`);
     });
+  }
+
+  // A dry run is strictly observational: the lease decision above already ran
+  // (dry runs inspect, never claim; partial dry runs still refuse a live
+  // canonical lease), so it is safe to print the plan and exit before the
+  // heavyweight preflight or any module spawn.
+  if (flags.dryRun) {
+    banner('Dry run -- nothing started');
+    process.exit(0);
   }
 
   // External preflight: port zombies, Docker, Supabase CLI, env source,
@@ -1006,10 +1000,10 @@ async function main() {
 // `classifyOccupant` in isolation) never auto-executes a real boot. Before
 // this guard existed, `require()`-ing this file for any reason ran the
 // entire boot sequence unconditionally, lease claim included — the same
-// class of hazard as the `--dry-run` lease-claim-before-check defect
-// documented on `classifyOccupant` and reported separately; this closes the
-// `require()` half of that hazard so tests can safely reach the pure
-// classification logic below without ever starting a real boot-agent.
+// class of hazard as the `--dry-run` lease-claim-before-check defect (since
+// fixed in main(): a dry run inspects the lease and never claims it); this
+// closes the `require()` half of that hazard so tests can safely reach the
+// pure classification logic below without ever starting a real boot-agent.
 module.exports = { classifyOccupant };
 
 if (require.main === module) {
