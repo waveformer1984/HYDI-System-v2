@@ -27,7 +27,9 @@ jest.mock('@supabase/supabase-js', () => ({
   createClient: jest.fn(() => ({
     from: jest.fn((table) => {
       if (table === 'auth_audit_log') {
-        return { insert: jest.fn(async () => ({ error: null })) };
+        // Like a real PostgREST builder: a thenable with no .catch(), so a
+        // handler calling .catch() on it throws (the 500 seen on pairing).
+        return { insert: jest.fn(() => ({ then: (ok, bad) => Promise.resolve({ error: null }).then(ok, bad) })) };
       }
       if (table === 'devices') {
         return {

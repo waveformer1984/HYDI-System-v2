@@ -117,7 +117,7 @@ export default async function handler(req, res) {
         device_id: auth.deviceId || null,
         role: auth.role,
         metadata: { task_id: id, action, new_status: newStatus },
-      }).catch(() => {});
+      }).then(undefined, () => {}); // query builders are thenables with no .catch
 
       return res.status(200).json({ ok: true, task: data });
     }

@@ -66,7 +66,7 @@ async function handleRegister(req, res) {
     device_id,
     role,
     metadata: { bootstrap_owner: bootstrapOwner },
-  }).catch(() => {});
+  }).then(undefined, () => {}); // query builders are thenables with no .catch
 
   // The raw secret is returned exactly once. The server never persists it —
   // only sha256(rawSecret) (secret_hash) is stored. Losing this response
@@ -94,7 +94,7 @@ async function handleApprove(req, res, auth) {
 
   await supabase.from('auth_audit_log').insert({
     event_type: 'device_approved', device_id, role: data.role, metadata: { approved_by: auth.deviceId || 'owner' },
-  }).catch(() => {});
+  }).then(undefined, () => {}); // query builders are thenables with no .catch
 
   return res.status(200).json({ device: data });
 }
@@ -114,7 +114,7 @@ async function handleRevoke(req, res, auth) {
 
   await supabase.from('auth_audit_log').insert({
     event_type: 'device_revoked', device_id, metadata: { reason: reason || null, revoked_by: auth.deviceId || 'owner' },
-  }).catch(() => {});
+  }).then(undefined, () => {}); // query builders are thenables with no .catch
 
   return res.status(200).json({ device: data });
 }
