@@ -20,12 +20,12 @@ const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ha-store-'));
 const tmpFile = path.join(tmpDir, 'human-actions.json');
 process.env.HYDI_HUMAN_ACTIONS_FILE = tmpFile;
 
-const { load, save } = require('../../lib/human-actions/store');
+const { load, save, acquireLock, releaseLock } = require('../../lib/human-actions/store');
 const { HumanActionService } = require('../../lib/human-actions/service');
 
 describe('human-actions store durability', () => {
   beforeEach(() => {
-    for (const f of fs.readdirSync(tmpDir)) fs.unlinkSync(path.join(tmpDir, f));
+    for (const f of fs.readdirSync(tmpDir)) fs.rmSync(path.join(tmpDir, f), { recursive: true, force: true });
   });
 
   test('load() returns an empty db when the store does not exist', () => {
@@ -58,10 +58,12 @@ describe('human-actions store durability', () => {
 
   test('save() preserves the previous file at <store>.bak', () => {
     save({ version: 2, actions: [{ id: 'ha_1', blockerKey: 'k1', status: 'OPEN', transitions: [] }] });
-    save({ version: 2, actions: [
-      { id: 'ha_1', blockerKey: 'k1', status: 'OPEN', transitions: [] },
-      { id: 'ha_2', blockerKey: 'k2', status: 'OPEN', transitions: [] },
-    ] });
+    save({
+      version: 2, actions: [
+        { id: 'ha_1', blockerKey: 'k1', status: 'OPEN', transitions: [] },
+        { id: 'ha_2', blockerKey: 'k2', status: 'OPEN', transitions: [] },
+      ]
+    });
 
     const bak = JSON.parse(fs.readFileSync(tmpFile + '.bak', 'utf8'));
     expect(bak.actions).toHaveLength(1);
@@ -81,5 +83,49 @@ describe('human-actions store durability', () => {
     process.env.HYDI_HUMAN_ACTIONS_FILE = dirAsFile;
     expect(() => load()).toThrow();
     process.env.HYDI_HUMAN_ACTIONS_FILE = tmpFile;
+  });
+
+  describe('cross-process write lock', () => {
+    test('a held lock fails a mutation within the bounded wait — it does not overwrite', () => {
+      save({ version: 2, actions: [] });
+      const lp = acquireLock();
+      const svc = new HumanActionService();
+      const t0 = Date.now();
+      expect(() => svc.request({
+        blockerKey: 'contended:blocker', type: 'deployment', title: 't',
+        description: 'd', instructions: ['i'], verifier: { name: 'manual', spec: {} },
+      })).toThrow(/store lock held/i);
+      expect(Date.now() - t0).toBeLessThan(10000);
+      releaseLock(lp);
+      // After release the same request proceeds and dedupes normally.
+      const r = svc.request({
+        blockerKey: 'contended:blocker', type: 'deployment', title: 't',
+        description: 'd', instructions: ['i'], verifier: { name: 'manual', spec: {} },
+      });
+      expect(r.created).toBe(true);
+      expect(load().actions.filter((x) => x.blockerKey === 'contended:blocker')).toHaveLength(1);
+    });
+
+    test('a stale lock is broken rather than wedging the store', () => {
+      const lp = acquireLock();
+      // Age the lockfile past the stale threshold.
+      const past = new Date(Date.now() - 120 * 1000);
+      fs.utimesSync(lp, past, past);
+      const svc = new HumanActionService();
+      const r = svc.request({
+        blockerKey: 'after:stale-lock', type: 'deployment', title: 't',
+        description: 'd', instructions: ['i'], verifier: { name: 'manual', spec: {} },
+      });
+      expect(r.created).toBe(true);
+    });
+
+    test('normal operations do not leave a lock file behind', () => {
+      const svc = new HumanActionService();
+      svc.request({
+        blockerKey: 'normal:op', type: 'deployment', title: 't',
+        description: 'd', instructions: ['i'], verifier: { name: 'manual', spec: {} },
+      });
+      expect(fs.existsSync(tmpFile + '.lock')).toBe(false);
+    });
   });
 });
