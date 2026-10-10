@@ -595,7 +595,10 @@ export default function Workspace() {
                   <div key={a.id} style={{ marginBottom: 10, borderBottom: '1px solid #1e293b', paddingBottom: 8 }}>
                     <b>{a.title}</b>{' '}
                     <span style={{ color: a.status === 'RESOLVED' ? C.ok : a.status === 'BLOCKED' ? C.bad : a.status === 'OPEN' ? C.warn : C.dim }}>[{a.status}]</span>{' '}
-                    <span style={{ color: '#475569' }}>{a.priority} · {a.type}{a.sourceMissionId ? ` · mission ${a.sourceMissionId}` : ''}{a.sourceGoalId ? ` · goal ${String(a.sourceGoalId).slice(0, 8)}` : ''}</span><br />
+                    <span style={{ color: '#475569' }}>{a.priority} · {a.type}{a.resolutionClass ? ` · ${a.resolutionClass}` : ''}{a.sourceMissionId ? ` · mission ${a.sourceMissionId}` : ''}{a.sourceGoalId ? ` · goal ${String(a.sourceGoalId).slice(0, 8)}` : ''}</span><br />
+                    {a.description && <div style={{ fontSize: 11, color: '#94a3b8', margin: '3px 0' }}>{a.description}</div>}
+                    {a.expectedOutcome && <div style={{ fontSize: 11, color: C.dim }}>completion requires: <span style={{ color: '#cbd5e1' }}>{a.expectedOutcome}</span></div>}
+                    {a.resumeCapability && a.status !== 'RESOLVED' && <div style={{ fontSize: 11, color: C.dim }}>resolves to: <span style={{ color: '#cbd5e1' }}>{a.resumeCapability}</span></div>}
                     {a.status !== 'RESOLVED' && (a.instructions ?? []).length > 0 && (
                       <ol style={{ margin: '4px 0', paddingLeft: 18, fontSize: 11, color: C.dim }}>
                         {a.instructions.map((step: string, i: number) => <li key={i}>{step}</li>)}
