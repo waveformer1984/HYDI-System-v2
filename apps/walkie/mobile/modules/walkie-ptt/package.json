@@ -1,0 +1,10 @@
+{
+  "name": "walkie-ptt",
+  "version": "0.1.0",
+  "private": true,
+  "description": "iOS PushToTalk framework bridge for Walkie (Milestone 3)",
+  "main": "src/index.ts",
+  "license": "MIT",
+  "author": "ProtoForge",
+  "homepage": "https://github.com/waveformer1984/HYDI-System-v2"
+}

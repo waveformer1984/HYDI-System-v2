@@ -11,7 +11,11 @@ cellular data:
 * Foreground MVP.
 * No offline, radio-frequency or emergency-service use.
 * No recording, transcription or AI processing.
-* Background and locked-screen operation are separate, **unverified** milestones.
+* Android background operation (Milestone 2) is implemented but **unverified on
+  devices**.
+* iOS lock-screen operation through Apple's PushToTalk framework
+  (Milestone 3): the server side is implemented and tested; the iOS code has
+  **never been compiled or run**.
 
 | Doc | |
 |---|---|
@@ -19,7 +23,7 @@ cellular data:
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Repo inventory (what was reused), design, API |
 | [docs/SECURITY_PRIVACY.md](docs/SECURITY_PRIVACY.md) | Auth, tokens, encryption (not E2EE), privacy, account deletion |
 | [docs/DEVICE_TEST_CHECKLIST.md](docs/DEVICE_TEST_CHECKLIST.md) | Physical two-phone acceptance tests + latency method |
-| [docs/BACKGROUND_MILESTONES.md](docs/BACKGROUND_MILESTONES.md) | Android FGS / iOS PushToTalk investigation |
+| [docs/BACKGROUND_MILESTONES.md](docs/BACKGROUND_MILESTONES.md) | Milestone 2 Android foreground service / Milestone 3 iOS PushToTalk |
 | [docs/COSTS.md](docs/COSTS.md) | Operating-cost estimates with assumptions |
 
 ## 1. Run the backend locally
@@ -99,6 +103,14 @@ Builds without it require `https`/`wss`.
 * A release keystore (`*.jks`, gitignored) is needed only for distribution. Keep
   it out of the repo.
 
+**Background (Milestone 2):**
+* The local module `modules/walkie-background` is autolinked into Android builds.
+* Its service can be compile-checked without an SDK:
+  `gradle -p native-checks/android-service compileKotlin`.
+* Run the B1–B17 checks in the device checklist.
+* Publishing on Google Play needs a foreground-service declaration for the
+  `microphone` and `mediaPlayback` types.
+
 **Not done here.** This APK was **not built** in the delivery environment: no
 Android SDK, and `dl.google.com` is blocked. See STATUS.md.
 
@@ -128,10 +140,22 @@ APP_VARIANT=development npx expo run:ios --device   # pick the connected iPhone;
 `NSAllowsLocalNetworking` so they can reach `http://`/`ws://` LAN addresses.
 Release builds require TLS.
 
-**Milestone 3 (background) will additionally need:**
-* The Push to Talk entitlement, requested from Apple
-* The `push-to-talk` background mode
-* An APNs auth key on the server
+**Lock-screen talk (Milestone 3):**
+1. Ask Apple for the **Push to Talk** entitlement for your team. Apple must
+   approve it, and the timeline is outside our control.
+2. Create an **APNs auth key** (`.p8`). Configure the backend with
+   `APNS_KEY_FILE`, `APNS_KEY_ID`, `APNS_TEAM_ID` and `APNS_BUNDLE_ID`
+   (see `server/.env.example`).
+3. Build:
+   `WALKIE_IOS_PTT=1 APP_VARIANT=development npx expo run:ios --device`.
+   * The flag adds the entitlement, `aps-environment` and the `push-to-talk`
+     background mode.
+   * Without it, the app builds and signs as before (foreground only).
+   * Development builds register tokens as APNs **sandbox**. Set
+     `WALKIE_APNS_ENV=production` for TestFlight and App Store builds.
+4. Run checklist P1–P14 in the device test checklist. The Swift in
+   `modules/walkie-ptt` has never been compiled, so expect small fixes on the
+   first build.
 
 **Cloud alternative.** EAS Build can build both platforms without local
 toolchains (`npx eas-cli build --profile development`). It needs an Expo account
@@ -153,7 +177,10 @@ Then run the full [device checklist](docs/DEVICE_TEST_CHECKLIST.md).
 ```
 server/   Fastify + zod + jose + livekit-server-sdk + pg; migrations/ ; test/
 mobile/   Expo SDK 57 app: App.tsx, src/ptt/machine.ts (pure PTT logic),
-          src/ptt/useChannelSession.ts (LiveKit + lease), src/screens/*
+          src/ptt/useChannelSession.ts (LiveKit + lease), src/screens/*,
+          src/ptt/useBackgroundService.ts + modules/walkie-background (Android FGS),
+          native-checks/android-service (SDK-free compile check),
+          src/ptt/useIosPtt.ts + modules/walkie-ptt (iOS PushToTalk)
 livekit/  livekit.dev.yaml (dev-only keys, webhook → backend)
 docs/     design, security, tests, costs, status, measured results
 ```

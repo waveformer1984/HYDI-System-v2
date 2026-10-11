@@ -38,6 +38,14 @@ export type RedeemResult =
   | { ok: true; channelId: string; alreadyMember: boolean }
   | { ok: false; reason: 'invalid' | 'expired' | 'exhausted' | 'blocked' | 'full' };
 
+export type ApnsEnvironment = 'sandbox' | 'production';
+
+export interface PttPushToken {
+  userId: string;
+  token: string;
+  environment: ApnsEnvironment;
+}
+
 export function leaseIsLive(l: Lease, now: number): boolean {
   return now < l.renewDeadline && now < l.hardDeadline;
 }
@@ -76,6 +84,13 @@ export interface Store {
   getFloor(channelId: string, now: number): Promise<Lease | null>;
   /** Delete and return every lease that is no longer live. */
   expireFloors(now: number): Promise<Lease[]>;
+
+  /** iOS PushToTalk tokens (Milestone 3). Removing a member or blocking them deletes theirs. */
+  setPttToken(channelId: string, userId: string, token: string, environment: ApnsEnvironment): Promise<void>;
+  deletePttToken(channelId: string, userId: string): Promise<void>;
+  /** Drop a token everywhere (APNs said it is no longer valid). */
+  deletePttTokenValue(token: string): Promise<void>;
+  listPttTokens(channelId: string): Promise<PttPushToken[]>;
 
   /** Remove every trace of the user. Returns the channels they owned (now deleted) and the channels they were a member of. */
   deleteUser(userId: string): Promise<{ ownedChannelIds: string[]; memberChannelIds: string[] }>;

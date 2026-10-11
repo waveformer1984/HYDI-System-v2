@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { z } from 'zod';
 
 /**
@@ -43,6 +44,16 @@ const Env = z.object({
   INVITE_TTL_HOURS: z.coerce.number().int().min(1).max(24 * 30).default(24),
   MAX_CHANNEL_MEMBERS: z.coerce.number().int().min(2).max(500).default(50),
 
+  // iOS PushToTalk (Milestone 3). All four of key, key id, team id and
+  // bundle id, or none (then PTT pushes are disabled).
+  APNS_KEY_P8: z.string().optional(),
+  APNS_KEY_FILE: z.string().optional(),
+  APNS_KEY_ID: z.string().optional(),
+  APNS_TEAM_ID: z.string().optional(),
+  APNS_BUNDLE_ID: z.string().optional(),
+  APNS_SANDBOX_ORIGIN: z.string().url().optional(),
+  APNS_PRODUCTION_ORIGIN: z.string().url().optional(),
+
   SWEEP_INTERVAL_MS: z.coerce.number().int().min(100).max(10_000).default(500),
   RECONCILE_INTERVAL_MS: z.coerce.number().int().min(1000).max(600_000).default(10_000),
 });
@@ -69,6 +80,7 @@ export type Config = {
   maxChannelMembers: number;
   sweepIntervalMs: number;
   reconcileIntervalMs: number;
+  apns?: { keyPem: string; keyId: string; teamId: string; bundleId: string; sandboxOrigin?: string; productionOrigin?: string };
 };
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
@@ -100,6 +112,23 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     throw new Error('LIVEKIT_URL must use wss:// in production (signalling would otherwise travel unencrypted).');
   }
 
+  let apns: Config['apns'];
+  const keyPem = e.APNS_KEY_P8 ? e.APNS_KEY_P8.replace(/\\n/g, '\n') : e.APNS_KEY_FILE ? readFileSync(e.APNS_KEY_FILE, 'utf8') : undefined;
+  const apnsParts = [keyPem, e.APNS_KEY_ID, e.APNS_TEAM_ID, e.APNS_BUNDLE_ID];
+  if (apnsParts.some(Boolean)) {
+    if (!apnsParts.every(Boolean)) {
+      throw new Error('APNs needs all of APNS_KEY_P8 (or APNS_KEY_FILE), APNS_KEY_ID, APNS_TEAM_ID and APNS_BUNDLE_ID, or none of them.');
+    }
+    apns = {
+      keyPem: keyPem!,
+      keyId: e.APNS_KEY_ID!,
+      teamId: e.APNS_TEAM_ID!,
+      bundleId: e.APNS_BUNDLE_ID!,
+      sandboxOrigin: e.APNS_SANDBOX_ORIGIN,
+      productionOrigin: e.APNS_PRODUCTION_ORIGIN,
+    };
+  }
+
   const apiUrl = e.LIVEKIT_API_URL ?? e.LIVEKIT_URL.replace(/^ws/, 'http');
 
   return {
@@ -122,5 +151,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     maxChannelMembers: e.MAX_CHANNEL_MEMBERS,
     sweepIntervalMs: e.SWEEP_INTERVAL_MS,
     reconcileIntervalMs: e.RECONCILE_INTERVAL_MS,
+    apns,
   };
 }

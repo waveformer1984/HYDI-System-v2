@@ -55,3 +55,55 @@ results were:
   is LiveKit's publish→subscribe path for a newly published track
 
 Phones will be slower. See `docs/results/`.
+
+# Milestone 2 checklist (Android background) — NOT yet executed
+
+Requirements: an Android development build that includes
+`modules/walkie-background`. Test on at least one Pixel (stock Android 14+)
+and one Samsung, and record model, OS version and battery setting
+("Unrestricted" / "Optimized") for each.
+
+| # | Test | Steps | Expected | Result |
+|---|---|---|---|---|
+| B1 | Service starts on join | Join a channel with the app open (Android 13+: allow notifications) | Ongoing "Walkie connection" notification: channel name, "Listening", buttons Talk + Disconnect | |
+| B2 | Mic denied → listen-only | Fresh install, deny mic, join | Notification shows "Listening (microphone off)", **no Talk button**; app does not crash | |
+| B3 | Mic granted later | In B2, allow mic via the on-screen prompt | Talk button appears (service restarted with microphone type) | |
+| B4 | Receive in background | Phone A joins, presses Home; B talks | A plays B's audio; A's notification shows "Receiving · B" | |
+| B5 | Receive with screen off | As B4, screen off for 10 min, B talks every minute | Every transmission audible on A; record any missed ones | |
+| B6 | Talk from notification | A backgrounded; tap Talk; speak; tap Stop talking | B hears A only between Talk and Stop; notification shows "Transmitting"; OS mic indicator on only during that window | |
+| B7 | Latched turn cap | Tap Talk and do not tap Stop | Transmission ends at the maximum talk time (default 30 s); notification returns to Listening | |
+| B8 | Busy from notification | B is talking while A is backgrounded | No Talk button while B talks (Receiving); after B releases, Talk reappears | |
+| B9 | On-screen press then Home | Hold the on-screen button, press Home while holding | Transmission stops | |
+| B10 | Connectivity loss in background | A latched-talking, airplane mode on A | B can talk within ≈5 s; A's notification shows Reconnecting, then recovers when back online | |
+| B11 | Disconnect action | Tap Disconnect | Notification gone; A no longer in channel (B sees A offline); A still a member | |
+| B12 | Toggle off | Turn "Stay connected in background" off, press Home | Notification gone; audio stops in background | |
+| B13 | Swipe app away | Remove Walkie from recents while connected | Record: service/notification behaviour and whether B sees A leave | |
+| B14 | Phone call | Incoming call while backgrounded and connected | Record audio behaviour during and after the call | |
+| B15 | Battery | 1 h connected in background, screen off, a few transmissions | Record battery % used vs. an idle baseline | |
+| B16 | Locked screen | Secure lock screen, check notification | Contents and actions hidden until unlock (privacy default); record actual behaviour | |
+| B17 | OEM kill | Samsung with default battery settings, 30 min background | Record whether Walkie stays connected | |
+
+# Milestone 3 checklist (iOS PushToTalk) — NOT yet executed
+
+Requirements:
+* An iOS build made with `WALKIE_IOS_PTT=1` by a team that Apple has granted
+  the Push to Talk entitlement.
+* The backend configured with an APNs key (`APNS_*`).
+* Two iPhones (iOS 17+ recommended), plus one Android phone for mixed tests.
+
+| # | Test | Steps | Expected | Result |
+|---|---|---|---|---|
+| P1 | First Xcode build | `WALKIE_IOS_PTT=1 APP_VARIANT=development npx expo run:ios --device` | Builds and signs; record every compile fix needed in `modules/walkie-ptt` | |
+| P2 | Foreground still works with PTT off | Use the app as in Milestone 1 without turning lock-screen talk on | Identical behaviour (LiveKit owns the audio session) | |
+| P3 | Turn on | Channel → Turn on lock-screen talk | System PTT UI appears; server stores a token (`GET` via DB or logs); status On | |
+| P4 | Receive while locked | Lock iPhone A; B talks | A wakes, system shows "B" speaking, audio plays. **Measure the delay from B's press to audible on A, and whether the first words are lost** | |
+| P5 | Talk from lock screen | Locked A taps Talk in the system UI | Server grants; B hears A; tapping again ends; max talk time ends it automatically | |
+| P6 | Busy from lock screen | B talking; A taps Talk | System refuses (half-duplex) or server says busy; no audio from A | |
+| P7 | On-screen press while joined | App open, hold the button | Mic opens only after the system activates audio; release stops both | |
+| P8 | App killed | Force-quit A, then B talks | iOS relaunches A in background, audio plays; opening A shows that channel | |
+| P9 | Reboot | Reboot A, unlock once, B talks | Channel restored by iOS; push wakes A | |
+| P10 | Removed by owner | Owner removes A | A receives leave push; system PTT UI disappears; token deleted | |
+| P11 | Turn off | Turn off lock-screen talk | System UI gone; token deleted; foreground audio back to normal | |
+| P12 | Switch channels | Lock-screen talk on for X, open channel Y | X is left (one channel at a time); Y works in foreground | |
+| P13 | Bluetooth / CarPlay / accessory button | Use a headset PTT/answer button | Record whether it begins/ends transmission | |
+| P14 | Battery | 1 h joined, locked, a few turns | Record battery % vs. baseline | |

@@ -39,6 +39,21 @@
 * LiveKit server logs contain connection metadata (identities, room names, IPs).
   They contain no media.
 
+## iOS PushToTalk (Milestone 3)
+
+* **Tokens:** PTT push tokens are stored server-side only (RLS on, no
+  policies). They are registered only by a member of that channel. They are
+  deleted on removal, block, channel deletion and account deletion, and when
+  APNs reports them dead.
+* **Push payloads** pass through Apple's push service and contain the speaker's
+  **display name, user id, channel id and lease id**. **No audio** and no
+  channel name. A leave push contains only `{leave: true, channelId}`.
+* **APNs key:** the `.p8` key is a server secret (env `APNS_KEY_P8` /
+  `APNS_KEY_FILE`). It never ships in the app.
+* **Microphone:** with lock-screen talk on, iOS's system UI can start a turn.
+  It is still server-arbitrated and capped at the maximum talk time. The mic
+  opens only after iOS activates the audio session.
+
 ## Transport encryption: what is and is not true
 
 * **Signalling** (phone ↔ LiveKit) uses WebSocket. In production it **must** be
@@ -61,6 +76,12 @@
   are configured. The backend has no endpoint that touches audio.
 * **Microphone:**
   * Off on join.
+  * **Android background (Milestone 2):** the notification's Talk button starts a
+    *latched* turn. It still needs the server's grant, is offered only when mic
+    permission is already granted, and ends on Stop talking, at the maximum talk
+    time, or on any loss of the turn. The foreground service itself never opens
+    the mic. On a secure lock screen the notification's contents and actions are
+    hidden until unlock (`VISIBILITY_PRIVATE`).
   * On only while the button is held and the server has granted the turn.
   * Released by unpublishing and stopping the capture track, so the OS mic
     indicator turns off.

@@ -1,4 +1,4 @@
-# Status report — 2026-10-11
+# Status report — 2026-10-11 (updated for Milestones 2 and 3)
 
 Status words are used strictly:
 * **Implemented**: code exists.
@@ -8,6 +8,26 @@ Status words are used strictly:
 
 **Milestone 1 is NOT complete.** Its acceptance criterion is two *physical*
 phones, and none were available.
+
+
+## Milestone 2 — Android background (started 2026-10-11)
+
+| Status | Item |
+|---|---|
+| **Implemented** | Foreground service (`microphone\|mediaPlayback`, listen-only fallback without mic permission), persistent notification with Talk / Stop talking / Disconnect, latched notification turns capped by the server's maximum talk time, "Stay connected in background" switch, notification-permission request, Settings explanation. See `BACKGROUND_MILESTONES.md`. |
+| **Tested here** | Service compiles against the Android 16 framework classes, warnings as errors (`native-checks/android-service`); the negative control fails as expected. Expo autolinking resolves the module. Notification content and background-release policy are unit-tested: mobile tests 23/23. Typecheck and Android/iOS bundles pass. |
+| **Blocked** | Building an APK and running it. No Android SDK here; `dl.google.com` and `maven.google.com` are blocked. The Expo bridge `WalkieBackgroundModule.kt` has not been compiled. |
+| **Unverified** | Everything on a device: the B1–B17 checklist in `DEVICE_TEST_CHECKLIST.md`, including screen-off receive, battery, OEM battery managers, and lock screen. |
+
+## Milestone 3 — iOS PushToTalk (started 2026-10-11)
+
+| Status | Item |
+|---|---|
+| **Implemented and tested (server)** | Per-channel PTT push tokens (migration 002), an APNs `pushtotalk` sender (ES256 provider token, HTTP/2), a push to the other members' iPhones on every new turn, leave pushes on remove/block/channel or account deletion, and cleanup of dead tokens. Server tests: 79/79 on memory and Postgres, including 15 new; real LiveKit 10/10. |
+| **Implemented, never compiled (iOS)** | `modules/walkie-ptt` (Swift: `PTChannelManager` owner, delegates, restoration), audio-session hand-off to PushToTalk, a mic gate on `didActivate`, "Turn on lock-screen talk", latched system-UI Talk, cold-start reopen. Policy logic is unit-tested (mobile 29/29). iOS prebuild produces the entitlement and background mode only with `WALKIE_IOS_PTT=1`. |
+| **Fixed along the way** | A latched turn (Android notification or iOS system UI) did not release when the server ended it, so the next Talk was ignored. Now released and tested. |
+| **Blocked** | Compiling and running on iPhone: needs macOS + Xcode, an Apple Developer team, Apple's Push to Talk entitlement and an APNs key. |
+| **Unverified / main risk** | WebRTC audio inside a PushToTalk-activated session; wake-up latency (first words likely lost while reconnecting). Checklist P1–P14. |
 
 ## Implemented and tested (automated, in this environment)
 
@@ -51,11 +71,10 @@ phones, and none were available.
 
 ## Planned
 
-* Milestone 2: Android background (microphone foreground service). Investigation
-  is in `BACKGROUND_MILESTONES.md`.
-* Milestone 3: iOS PushToTalk framework + APNs. Needs the Apple PTT entitlement.
-  The main risk is `@livekit/react-native`'s automatic iOS audio-session handling
-  versus PushToTalk owning activation.
+* Milestone 2 follow-ups: device verification (B1–B17), then possibly true
+  hold-to-talk from a headset button (`MediaSession`).
+* Milestone 3 follow-ups: first Xcode build and fixes, the device checklist
+  P1–P14, measuring wake-up latency.
 * Possible latency work: per-turn publish/subscribe costs ≈400 ms on loopback.
   Options are pre-warming the subscriber, or keeping a muted published track with
   server-side mute enforcement. Each is a security trade-off; measure on phones
@@ -64,4 +83,6 @@ phones, and none were available.
 
 ## Background and locked screen
 
-**Unverified. Not supported in the MVP.**
+**Android background:** implemented in Milestone 2, **unverified on devices**.
+**iOS background and locked screen:** implemented through PushToTalk in Milestone
+3. The server side is tested; the iOS side has **never been compiled or run**.

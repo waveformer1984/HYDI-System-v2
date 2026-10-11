@@ -48,6 +48,7 @@ export class FloorService {
   private readonly limiter: TalkRateLimiter;
   private readonly locks = new Map<string, Promise<unknown>>();
   private timers: NodeJS.Timeout[] = [];
+  private grantListeners: Array<(channelId: string, lease: Lease) => void> = [];
 
   constructor(
     private readonly store: Store,
@@ -57,6 +58,11 @@ export class FloorService {
     private readonly now: () => number = Date.now,
   ) {
     this.limiter = new TalkRateLimiter({ minIntervalMs: cfg.talk.minRequestIntervalMs, burst: cfg.talk.burst, windowMs: cfg.talk.burstWindowMs });
+  }
+
+  /** Called after a *new* turn is granted (not for a same-user re-request). Listeners must not throw or block. */
+  onGranted(fn: (channelId: string, lease: Lease) => void) {
+    this.grantListeners.push(fn);
   }
 
   private withChannel<T>(channelId: string, fn: () => Promise<T>): Promise<T> {
@@ -131,7 +137,16 @@ export class FloorService {
           : ({ kind: 'unavailable' } as const);
       }
 
-      if (!acq.reused) await this.announce(channelId, lease);
+      if (!acq.reused) {
+        await this.announce(channelId, lease);
+        for (const fn of this.grantListeners) {
+          try {
+            fn(channelId, lease);
+          } catch (err) {
+            this.log.error({ channelId, err: errMsg(err) }, 'grant listener failed');
+          }
+        }
+      }
       this.log.info({ channelId, userId, leaseId: lease.leaseId }, 'floor granted');
       return {
         kind: 'granted',

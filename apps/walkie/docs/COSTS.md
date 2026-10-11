@@ -41,6 +41,7 @@ hours for one pair of phones, so it is enough for Milestone 1 testing only.
 | TLS domain + certificate | ≈$10–15/yr domain; Let's Encrypt free | `wss://` is mandatory in production |
 | TURN (for restrictive networks) | Included with LiveKit (embedded TURN/TLS on 443) when self-hosting with a domain | Without TURN, some corporate/cellular networks will fail to connect |
 | Apple Developer Program | $99/yr | Required for any iPhone install outside a simulator, and for the PTT entitlement |
+| Apple Push Notification service (PushToTalk pushes, Milestone 3) | $0 (included with the Developer Program) | One push per other PTT member per turn |
 | Google Play Console | $25 one-time | Only for store distribution; dev APKs can be side-loaded |
 | Expo EAS Build (optional) | Free tier exists; paid plans for more builds | Optional: local builds work with Android Studio / Xcode |
 

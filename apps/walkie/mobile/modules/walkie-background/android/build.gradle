@@ -1,0 +1,17 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'com.protoforge.walkie'
+version = '0.1.0'
+
+android {
+  namespace "expo.modules.walkiebackground"
+  defaultConfig {
+    versionCode 1
+    versionName '0.1.0'
+  }
+}
+
+// No dependencies beyond the Android framework and expo-modules-core.

@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { AcquireResult, Channel, Lease, Member, Profile, RedeemResult, Role, Store } from './types.js';
+import type { AcquireResult, ApnsEnvironment, Channel, Lease, Member, Profile, PttPushToken, RedeemResult, Role, Store } from './types.js';
 import { leaseIsLive } from './types.js';
 
 /**
@@ -15,6 +15,7 @@ export class MemoryStore implements Store {
   private blocks = new Map<string, Map<string, { blockedBy: string; blockedAt: number }>>();
   private invites = new Map<string, { channelId: string; expiresAt: number; maxUses: number; uses: number }>();
   private floors = new Map<string, Lease>();
+  private pttTokens = new Map<string, Map<string, PttPushToken>>();
 
   async getProfile(userId: string) {
     return this.profiles.get(userId) ?? null;
@@ -43,6 +44,7 @@ export class MemoryStore implements Store {
     this.members.delete(channelId);
     this.blocks.delete(channelId);
     this.floors.delete(channelId);
+    this.pttTokens.delete(channelId);
     for (const [k, inv] of this.invites) if (inv.channelId === channelId) this.invites.delete(k);
   }
 
@@ -72,12 +74,14 @@ export class MemoryStore implements Store {
   }
 
   async removeMember(channelId: string, userId: string) {
+    this.pttTokens.get(channelId)?.delete(userId);
     return this.members.get(channelId)?.delete(userId) ?? false;
   }
 
   async block(channelId: string, userId: string, blockedBy: string) {
     this.blocks.get(channelId)?.set(userId, { blockedBy, blockedAt: Date.now() });
     this.members.get(channelId)?.delete(userId);
+    this.pttTokens.get(channelId)?.delete(userId);
   }
 
   async unblock(channelId: string, userId: string) {
@@ -163,6 +167,24 @@ export class MemoryStore implements Store {
     return out;
   }
 
+  async setPttToken(channelId: string, userId: string, token: string, environment: ApnsEnvironment) {
+    if (!this.channels.has(channelId)) return;
+    if (!this.pttTokens.has(channelId)) this.pttTokens.set(channelId, new Map());
+    this.pttTokens.get(channelId)!.set(userId, { userId, token, environment });
+  }
+
+  async deletePttToken(channelId: string, userId: string) {
+    this.pttTokens.get(channelId)?.delete(userId);
+  }
+
+  async deletePttTokenValue(token: string) {
+    for (const m of this.pttTokens.values()) for (const [u, t] of m) if (t.token === token) m.delete(u);
+  }
+
+  async listPttTokens(channelId: string) {
+    return [...(this.pttTokens.get(channelId)?.values() ?? [])].map((t) => ({ ...t }));
+  }
+
   async deleteUser(userId: string) {
     const ownedChannelIds: string[] = [];
     const memberChannelIds: string[] = [];
@@ -171,6 +193,7 @@ export class MemoryStore implements Store {
     for (const [cid, m] of this.members) if (m.delete(userId)) memberChannelIds.push(cid);
     for (const [cid, l] of this.floors) if (l.userId === userId) this.floors.delete(cid);
     for (const b of this.blocks.values()) b.delete(userId);
+    for (const m of this.pttTokens.values()) m.delete(userId);
     this.profiles.delete(userId);
     return { ownedChannelIds, memberChannelIds };
   }
