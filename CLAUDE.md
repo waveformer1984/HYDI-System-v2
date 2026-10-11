@@ -362,6 +362,13 @@ Key DB features: RLS enabled on all tables, `system_dashboard` view drives healt
 
 Use `SUPABASE_SERVICE_ROLE_KEY` server-side only. Never expose it to the client.
 
+**Public-ingress gate** (`proxy.ts` → `lib/security/ingressGate.js`): requests
+from the public internet (a tunnel such as ngrok, Funnel, a port forward) reach
+only the customer/Stripe allowlist; everything else answers 404 to the outside.
+Requests from this PC, the LAN and the tailnet are unaffected. A new route a
+customer or Stripe must reach has to be added to the allowlist there. See
+`docs/SECURITY_INGRESS.md` (`HYDI_PUBLIC_PATHS`, `HYDI_TRUSTED_HOSTS`).
+
 ## CI / Workflows
 
 | Workflow | Trigger | What it does |
