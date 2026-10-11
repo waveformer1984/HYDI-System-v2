@@ -52,6 +52,8 @@ describe('classifyCooIntent', () => {
     ['what would make you more capable?', 'needs'],
     ['what are your biggest limitations right now?', 'needs'],
     ["what's holding you back?", 'needs'],
+    ['if you could upgrade yourself in one way what would it be', 'needs'],
+    ["what's the most high impact action you can take for Proto Forge", 'protoforge'],
   ])('"%s" → %s', (msg, expected) => {
     expect(classifyCooIntent(msg)).toBe(expected);
   });

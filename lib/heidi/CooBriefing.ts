@@ -39,10 +39,10 @@ export function classifyCooIntent(message: string): CooIntent | null {
 
   // Self-assessment — what the system needs/lacks to be better. Must
   // fire before 'attention' ("do you need") and 'why' catch-alls.
-  if (/\bneed to be better\b|\bmake (you|this|it|heidi) (better|stronger|smarter|more capable)\b|\b(what|how) (would|could|can|do) (you|i) (get )?(better|improve|more capable)\b|\b(your|my|its|heidi'?s) (biggest )?(limitations?|weakness(es)?|blockers?|constraints?|shortfalls?)\b|\bholding (you|me|it) back\b|\bmissing to\b|\bneed to (improve|get better|grow)\b/i.test(m)) return 'needs';
+  if (/\bneed to be better\b|\bmake (you|this|it|heidi) (better|stronger|smarter|more capable)\b|\b(what|how) (would|could|can|do) (you|i) (get )?(better|improve|more capable)\b|\b(your|my|its|heidi'?s) (biggest )?(limitations?|weakness(es)?|blockers?|constraints?|shortfalls?)\b|\bholding (you|me|it) back\b|\bmissing to\b|\bneed to (improve|get better|grow)\b|\b(upgrade|improve) (yourself|you)\b|\bif you could (upgrade|improve|change)\b/i.test(m)) return 'needs';
   if (/\b(why|reason|justify|explain)\b/.test(m) && /\b(action|choose|chose|decision|that|next)\b/.test(m)) return 'why';
   if (/\bevidence\b|\bproof\b|\bprove\b/.test(m)) return 'evidence';
-  if (/\bprotoforge\b|\bscout\b|\bopportunit/.test(m)) return 'protoforge';
+  if (/\bproto\s?forge\b|\bscout\b|\bopportunit/.test(m)) return 'protoforge';
   if (/\brevenue\b|\bsales?\b|\bpayment|\bcustomer|\bsell\b|for sale|checkout.?ready|what can i (sell|offer)/.test(m)) return 'revenue';
   if (/\bfail|broke|broken|error|went wrong|incident/.test(m)) return 'failure';
   if (/\battention\b|\bneed(s)?\s+(my|from|me)\b|\bdo you need|\bapprove|approval|\bfor me\b/.test(m)) return 'attention';
