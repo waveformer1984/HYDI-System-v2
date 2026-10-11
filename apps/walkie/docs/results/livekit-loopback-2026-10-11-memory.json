@@ -1,0 +1,48 @@
+{
+  "store": "memory",
+  "livekit": "ws://127.0.0.1:7880",
+  "unauthorizedPublish": "no publish acknowledgement within 5 s",
+  "latencyLoopback": [
+    {
+      "pressToGrantMs": 65.8,
+      "grantToPublishedMs": 2.1,
+      "pressToFirstAudioMs": 449.7,
+      "releaseToSilenceMs": 9.6
+    },
+    {
+      "pressToGrantMs": 18.6,
+      "grantToPublishedMs": 2,
+      "pressToFirstAudioMs": 411.7,
+      "releaseToSilenceMs": 7.8
+    },
+    {
+      "pressToGrantMs": 16.5,
+      "grantToPublishedMs": 1.7,
+      "pressToFirstAudioMs": 414.7,
+      "releaseToSilenceMs": 8.2
+    },
+    {
+      "pressToGrantMs": 27,
+      "grantToPublishedMs": 6.1,
+      "pressToFirstAudioMs": 407.5,
+      "releaseToSilenceMs": 7.6
+    },
+    {
+      "pressToGrantMs": 15.2,
+      "grantToPublishedMs": 3.4,
+      "pressToFirstAudioMs": 424.6,
+      "releaseToSilenceMs": 9.5
+    }
+  ],
+  "wrongSourcePublish": "no publish acknowledgement within 5 s",
+  "simultaneousPresses": {
+    "rounds": 10,
+    "outcome": "one 200 and one 409 every round"
+  },
+  "renewTimeoutCutoffMs": 1684,
+  "renewTtlMs": 2000,
+  "maxDurationEnforcedAtMs": 6039,
+  "maxDurationConfiguredMs": 6000,
+  "disconnectReleaseMs": 58,
+  "kickedRejoin": "connected, then evicted by webhook/reconcile"
+}
