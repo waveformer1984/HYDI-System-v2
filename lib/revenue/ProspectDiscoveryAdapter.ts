@@ -51,7 +51,7 @@ export interface DiscoveryResult {
 }
 
 export interface DiscoveryProviderConfig {
-  provider: 'google_places' | 'clearbit' | 'manual_csv' | 'inbound_webhook';
+  provider: 'google_places' | 'clearbit' | 'manual_csv' | 'inbound_webhook' | 'openstreetmap';
   credentials: {
     apiKey?: string;
     apiSecret?: string;
@@ -86,8 +86,9 @@ export class ProspectDiscoveryAdapter {
     } else if (config.provider === 'inbound_webhook' && !config.credentials.webhookSecret) {
       this.available = false;
       this.blockerReason = 'inbound_webhook provider requires INBOUND_WEBHOOK_SECRET. Set this environment variable to enable inbound prospect discovery.';
-    } else if (config.provider === 'manual_csv') {
-      // manual_csv doesn't require external credentials — it's always available
+    } else if (config.provider === 'manual_csv' || config.provider === 'openstreetmap') {
+      // manual_csv imports operator lists; openstreetmap queries public
+      // business data — neither requires external credentials
       this.available = true;
       this.blockerReason = null;
     } else {
@@ -182,6 +183,30 @@ export class ProspectDiscoveryAdapter {
         provider: 'clearbit',
         query: `${query.industry || 'any'} in ${query.location || 'any'}`,
         totalFound: 0,
+      };
+    }
+
+    // openstreetmap provider: query the Overpass API for real businesses
+    // carrying a public website tag. Zero credentials, open data (ODbL).
+    // The query targets trades/field-service trades whose work is
+    // sequential physical workflow — the audit's documented best fit —
+    // with a hard result cap and conservative timeout. A provider outage
+    // or empty region returns an empty result honestly; nothing is
+    // fabricated to fill the count.
+    if (this.config.provider === 'openstreetmap') {
+      const limit = Math.min(query.maxResults ?? this.config.options.maxResults ?? 10, 25);
+      const fetchFn = (this.config.options as Record<string, unknown> & { fetch?: typeof fetch })?.fetch;
+      const { discoverFromOverpass } = require('./overpass-source.js');
+      const found = await discoverFromOverpass({ location: query.location, limit, fetchFn }).catch(() => []);
+      const queryLabel = `openstreetmap craft/shop businesses with websites in ${query.location || 'default regions'}`;
+      return {
+        discovered: found,
+        available: true,
+        blocked: false,
+        blockerReason: null,
+        provider: 'openstreetmap',
+        query: queryLabel,
+        totalFound: found.length,
       };
     }
 

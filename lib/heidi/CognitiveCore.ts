@@ -63,7 +63,7 @@ import { collectReconciliation, resolveGitHead } from './DeploymentReconciliatio
 import { runR0Recovery } from './SelfRepairR0';
 import { collectCooState } from './CooState';
 import { acknowledgeHumanAction } from './HumanActionQueue';
-import { consumeProposalAuthorization } from './ActionProposals';
+import { createActionProposal, consumeProposalAuthorization, PROPOSAL_ALLOWLIST } from './ActionProposals';
 import { readKillSwitch, writeKillSwitch } from './KillSwitchState';
 import { runInvestigateMission, runTopicInvestigation, runTopOpportunityInvestigation, collectAgentState, superviseAgents, stopAgent, retryMission, resolveHumanAction } from './AgentControlPlane';
 
@@ -98,6 +98,7 @@ export interface LoopStatus {
   currentIntervalMs: number;
   cycleInFlight: boolean;
   lastError: string | null;
+  lastErrorAt: string | null;
   lastCycleOutcome: CycleOutcome | null;
 }
 
@@ -473,6 +474,9 @@ export class CognitiveCore {
   private lastFailureAt: string | null = null;
   private cooldownUntil: string | null = null;
   private lastError: string | null = null;
+  // When lastError was last assigned. NOT cleared on later success — the
+  // timestamp is the historical evidence once lastError itself is cleared.
+  private lastErrorAt: string | null = null;
   private lastDevScanAt = 0;
   private lastOiProbeAt = 0; // epoch ms — OI health sweep cache for perceive()
   private inFlightWork: Promise<CognitiveState> | null = null; // the cycle promise that owns cycleInFlight
@@ -2090,8 +2094,22 @@ export class CognitiveCore {
     });
 
     // ops.model_catalog — discover local Ollama models, persist catalog.
+    // Loopback is enforced at execution time, not just by env convention:
+    // a proposal-approved run must never become a channel to a remote
+    // endpoint if OLLAMA_URL is ever misconfigured.
     this.wireExecutor('ops.model_catalog', async () => {
-      const res = await fetch(`${process.env.OLLAMA_URL || 'http://localhost:11434'}/api/tags`, { signal: AbortSignal.timeout(10000) }).catch(() => null);
+      const ollamaUrl = process.env.OLLAMA_URL || 'http://localhost:11434';
+      let host: string;
+      try {
+        host = new URL(ollamaUrl).hostname;
+      } catch {
+        return { capabilityId: 'ops.model_catalog', executed: false, outcome: 'failure' as const, result: null, error: 'AI_UNAVAILABLE: OLLAMA_URL is not a parseable URL', evidence: [], verified: false, verificationDetails: 'catalog not persisted — unparseable endpoint' };
+      }
+      const loopback = new Set(['localhost', '127.0.0.1', '::1', '[::1]']);
+      if (!loopback.has(host)) {
+        return { capabilityId: 'ops.model_catalog', executed: false, outcome: 'failure' as const, result: null, error: `AI_UNAVAILABLE: OLLAMA_URL points to non-loopback host '${host}' — refused`, evidence: [], verified: false, verificationDetails: 'catalog not persisted — non-local endpoint refused' };
+      }
+      const res = await fetch(`${ollamaUrl}/api/tags`, { signal: AbortSignal.timeout(10000) }).catch(() => null);
       if (!res || !res.ok) {
         return { capabilityId: 'ops.model_catalog', executed: false, outcome: 'failure' as const, result: null, error: 'AI_UNAVAILABLE: ollama unreachable', evidence: [], verified: false, verificationDetails: 'catalog not persisted — no local model list' };
       }
@@ -2674,6 +2692,10 @@ export class CognitiveCore {
 
     // PHASE 14: RECORD — persist the cognitive state
     try {
+      // Stamp duration BEFORE the write so the persisted row carries the real
+      // cycle cost — previously set only after recordCycle, so rows always
+      // recorded durationMs: 0.
+      state.durationMs = Date.now() - startTime;
       await this.recordCycle(state);
     } catch (e) {
       errors.push(`record: ${e instanceof Error ? e.message : 'unknown'}`);
@@ -3924,6 +3946,35 @@ export class CognitiveCore {
     } catch {
       // Non-fatal
     }
+
+    // Governed-proposal hook: when the cycle refuses an allowlisted
+    // capability as human_required, surface it as a chat-visible proposal
+    // the human can explicitly approve — rather than a silent skip.
+    // createActionProposal dedupes (producer_key+params_hash while
+    // pending), so repeated cycles do not pile up duplicates.
+    const capId = state.selectedAction?.capabilityId;
+    if (state.authorizationResult.authorizationMode === 'human_required'
+      && capId && PROPOSAL_ALLOWLIST[capId]) {
+      try {
+        await createActionProposal(this.pool, {
+          capabilityId: capId,
+          params: (state.selectedAction!.params ?? {}) as Record<string, unknown>,
+          title: PROPOSAL_ALLOWLIST[capId].label,
+          reason: `Heidi wanted to run ${capId} ("${state.selectedAction!.description}") but the policy gate refused: ${state.authorizationResult.reason}. Approve to run it once under explicit human authority.`,
+          expectedEffects: 'One bounded capability execution via the mission ledger; durable receipts record the outcome.',
+          risks: state.selectedAction!.riskLevel !== 'R0'
+            ? `Risk level ${state.selectedAction!.riskLevel} — review before approving.`
+            : 'None beyond normal runtime work; local-only.',
+          prerequisites: 'Daemon and local Supabase reachable.',
+          rollback: 'Read-only supervision/diagnostic work — nothing to roll back.',
+          reversible: true,
+          producerKey: `escalation:${capId}`,
+          expiresInMs: 4 * 60 * 60 * 1000,
+        });
+      } catch {
+        // Proposal creation is best-effort; never break the cycle for it.
+      }
+    }
   }
 
   // ─── Public API ───────────────────────────────────────────────────────
@@ -3960,6 +4011,7 @@ export class CognitiveCore {
     this.startedAt = Date.now();
     this.consecutiveFailures = 0;
     this.lastError = null;
+    this.lastErrorAt = null;
     this.auditLoopTransition('starting');
 
     // Restore a persisted kill switch — an operator halt survives restarts.
@@ -3968,6 +4020,7 @@ export class CognitiveCore {
     if (persistedKill?.active) {
       this.killSwitchActive = true;
       this.lastError = `Kill switch restored: ${persistedKill.reason ?? 'operator halt'}`;
+      this.lastErrorAt = new Date().toISOString();
       this.loopState = 'degraded';
       this.auditLoopTransition('degraded');
       return;
@@ -4042,9 +4095,12 @@ export class CognitiveCore {
   activateKillSwitch(reason: string): void {
     this.killSwitchActive = true;
     try {
-      writeKillSwitch({ active: true, reason, setAt: new Date().toISOString(), setBy: 'heidi-daemon' });
+      writeKillSwitch({
+        active: true, reason, setAt: new Date().toISOString(), setBy: 'heidi-daemon'
+      });
     } catch { /* persistence is best-effort; in-memory halt still applies */ }
     this.lastError = `Kill switch activated: ${reason}`;
+    this.lastErrorAt = new Date().toISOString();
     if (this.loopState === 'running') {
       this.loopState = 'degraded';
       this.auditLoopTransition('degraded');
@@ -4062,7 +4118,9 @@ export class CognitiveCore {
   deactivateKillSwitch(): void {
     this.killSwitchActive = false;
     try {
-      writeKillSwitch({ active: false, reason: null, setAt: new Date().toISOString(), setBy: 'heidi-daemon' });
+      writeKillSwitch({
+        active: false, reason: null, setAt: new Date().toISOString(), setBy: 'heidi-daemon'
+      });
     } catch { /* best-effort */ }
     this.lastError = null;
     if (this.loopState === 'degraded') {
@@ -4070,6 +4128,15 @@ export class CognitiveCore {
       this.auditLoopTransition('running');
       this.scheduleNextCycle();
     }
+  }
+
+  /**
+   * Stale-claim sweep — delegated to MissionRunner. Interrupts expired
+   * transitional claims whose recorded worker (host+pid) is confirmed
+   * dead; never replays work. Safe to invoke every daemon cycle.
+   */
+  async sweepStaleMissions(): Promise<void> {
+    if (this.missionRunner) await this.missionRunner.sweepStaleClaims();
   }
 
   /**
@@ -4089,6 +4156,7 @@ export class CognitiveCore {
       currentIntervalMs: this.loopConfig.intervalMs,
       cycleInFlight: this.cycleInFlight,
       lastError: this.lastError,
+      lastErrorAt: this.lastErrorAt,
       lastCycleOutcome: this.currentCycle?.outcome || null,
     };
   }
@@ -4126,6 +4194,7 @@ export class CognitiveCore {
     this.intervalHandle = setInterval(() => {
       this.runBoundedCycle().catch((e) => {
         this.lastError = e instanceof Error ? e.message : 'unknown';
+        this.lastErrorAt = new Date().toISOString();
       });
     }, this.loopConfig.intervalMs);
   }
@@ -4167,6 +4236,7 @@ export class CognitiveCore {
         this.inFlightWork = null;
         this.cycleInFlight = false;
         this.lastError = `cycle exceeded ${hardBoundMs}ms hard bound — force-released`;
+        this.lastErrorAt = new Date().toISOString();
         this.recordTimeoutHeartbeat().catch(() => { });
       }
     }, hardBoundMs);
@@ -4185,6 +4255,11 @@ export class CognitiveCore {
       if (outcome === 'SUCCESS' || outcome === 'EXPECTED_BLOCK') {
         this.lastSuccessfulCycleAt = new Date().toISOString();
         this.consecutiveFailures = 0;
+        // Clear lastError so the status line stops reporting a stale failure
+        // as current. lastErrorAt keeps the timestamp it last fired; the
+        // durable history stays in heidi_events (cycle rows + timeout
+        // heartbeats), so clearing this in-memory field loses no evidence.
+        this.lastError = null;
 
         // If we were in degraded state, return to running
         if (this.loopState === 'degraded') {
@@ -4215,6 +4290,7 @@ export class CognitiveCore {
     } catch (e) {
       this.lastFailureAt = new Date().toISOString();
       this.lastError = e instanceof Error ? e.message : 'unknown';
+      this.lastErrorAt = new Date().toISOString();
       this.consecutiveFailures++;
 
       // Event-flow starvation guard: recordCycle() runs at phase 14 of
