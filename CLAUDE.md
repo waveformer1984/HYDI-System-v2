@@ -256,6 +256,10 @@ Revenue pipeline module separate from the API layer:
 - `revenue-engine/schema.sql` / `revenue-engine/outcome-schema.sql` — local schema definitions
 - `revenue-engine/modules/` — sub-modules
 
+### Revenue Streams Module (`lib/billing/`)
+
+Subscription billing with server-enforced entitlements, separate from the legacy Stripe Connect/`financial_ledger` flow. Catalog (immutable versioned prices) → hosted checkout → signature-verified webhook stored in `billing_webhook_events` before processing → order-safe subscription projection → `billing_entitlements` (`access_until`) → atomic usage reservation (`billing_reserve_usage`, row lock) → provider cost records → revenue report with per-metric definitions. Provider behind an adapter (`lib/billing/providers/`). Routes under `pages/api/billing/**`; pages `/pricing`, `/billing`, `/billing-admin`; worker `scripts/billing-worker.js`. Customers authenticate with interim operator-issued tenant tokens (`BILLING_CUSTOMER_TOKEN_SECRET`). Acceptance scenarios run on both the memory store (Tier 1) and real Postgres (`acceptance.pg.test.js`, Tier 2). Design, policies and runbook: `docs/billing/REVENUE_STREAMS_MODULE.md`.
+
 ### KILO Module (`kilo/`)
 
 Standalone implementation of the KILO hypothesis generator:

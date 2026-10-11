@@ -68,6 +68,7 @@
         "tests/migrations/20260915180000.test.js",
         "tests/migrations/20260916000000.test.js",
         "tests/migrations/20260916010000.test.js",
+        "tests/unit/billing/acceptance.pg.test.js",
         "tests/unit/bounded-cognitive-loop.test.ts",
         "tests/unit/communication-layer.test.ts",
         "tests/unit/conversation-store-message-lookup.test.ts",
