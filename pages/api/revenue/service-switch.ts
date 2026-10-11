@@ -26,6 +26,7 @@ import { createClient } from '@supabase/supabase-js';
 import { requireAuth } from '../../../lib/auth/requireAuth.js';
 import { verifyServiceToken } from '../../../lib/auth/verifyServiceToken.js';
 
+// eslint-disable-next-line @typescript-eslint/no-require-imports -- CJS module shared with plain-node callers
 const { getServiceSwitch, setServiceSwitch, SWITCH_FIELDS } = require('../../../lib/revenue/revenue-service-switch.js');
 
 function getSupabase() {

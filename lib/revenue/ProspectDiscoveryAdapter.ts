@@ -196,6 +196,7 @@ export class ProspectDiscoveryAdapter {
     if (this.config.provider === 'openstreetmap') {
       const limit = Math.min(query.maxResults ?? this.config.options.maxResults ?? 10, 25);
       const fetchFn = (this.config.options as Record<string, unknown> & { fetch?: typeof fetch })?.fetch;
+      // eslint-disable-next-line @typescript-eslint/no-require-imports -- CJS module shared with plain-node callers
       const { discoverFromOverpass } = require('./overpass-source.js');
       const found = await discoverFromOverpass({ location: query.location, limit, fetchFn }).catch(() => []);
       const queryLabel = `openstreetmap craft/shop businesses with websites in ${query.location || 'default regions'}`;
