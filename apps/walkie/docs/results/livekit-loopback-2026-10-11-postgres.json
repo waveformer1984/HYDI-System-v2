@@ -1,0 +1,58 @@
+{
+  "store": "postgres",
+  "livekit": "ws://127.0.0.1:7880",
+  "unauthorizedPublish": "no publish acknowledgement within 5 s",
+  "latencyLoopback": [
+    {
+      "pressToGrantMs": 63,
+      "grantToPublishedMs": 2.6,
+      "pressToListenerSubscribedMs": 429.7,
+      "subscribedToFirstAudibleFrameMs": 19.7,
+      "pressToFirstAudioMs": 449.4,
+      "releaseToSilenceMs": 27.2
+    },
+    {
+      "pressToGrantMs": 23.4,
+      "grantToPublishedMs": 1.5,
+      "pressToListenerSubscribedMs": 381.9,
+      "subscribedToFirstAudibleFrameMs": 33.5,
+      "pressToFirstAudioMs": 415.3,
+      "releaseToSilenceMs": 11.8
+    },
+    {
+      "pressToGrantMs": 36.5,
+      "grantToPublishedMs": 2.1,
+      "pressToListenerSubscribedMs": 397.1,
+      "subscribedToFirstAudibleFrameMs": 13.6,
+      "pressToFirstAudioMs": 410.7,
+      "releaseToSilenceMs": 8.1
+    },
+    {
+      "pressToGrantMs": 24.7,
+      "grantToPublishedMs": 1.6,
+      "pressToListenerSubscribedMs": 394,
+      "subscribedToFirstAudibleFrameMs": 28.8,
+      "pressToFirstAudioMs": 422.8,
+      "releaseToSilenceMs": 9
+    },
+    {
+      "pressToGrantMs": 38.5,
+      "grantToPublishedMs": 1.9,
+      "pressToListenerSubscribedMs": 421.6,
+      "subscribedToFirstAudibleFrameMs": 18.1,
+      "pressToFirstAudioMs": 439.7,
+      "releaseToSilenceMs": 10
+    }
+  ],
+  "wrongSourcePublish": "no publish acknowledgement within 5 s",
+  "simultaneousPresses": {
+    "rounds": 10,
+    "outcome": "one 200 and one 409 every round"
+  },
+  "renewTimeoutCutoffMs": 1669,
+  "renewTtlMs": 2000,
+  "maxDurationEnforcedAtMs": 6065,
+  "maxDurationConfiguredMs": 6000,
+  "disconnectReleaseMs": 68,
+  "kickedRejoin": "connected, then evicted by webhook after 122 ms"
+}

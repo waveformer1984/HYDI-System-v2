@@ -1,0 +1,21 @@
+# Local development stack for ProtoForge Walkie: LiveKit + Postgres.
+# The backend itself runs on the host (`npm run dev` in server/) so the
+# LiveKit webhook in livekit/livekit.dev.yaml can reach it on 127.0.0.1:8787.
+#
+#   docker compose -f apps/walkie/docker-compose.yml up -d
+services:
+  livekit:
+    image: livekit/livekit-server:v1.13.9
+    command: --config /etc/livekit.yaml
+    network_mode: host # WebRTC needs the UDP port range reachable from phones
+    volumes:
+      - ./livekit/livekit.dev.yaml:/etc/livekit.yaml:ro
+    restart: unless-stopped
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_PASSWORD: walkie
+      POSTGRES_DB: walkie
+    ports:
+      - '55432:5432'
+    restart: unless-stopped

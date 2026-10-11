@@ -1,0 +1,74 @@
+name: Walkie
+
+on:
+  push:
+    branches: [clean-main]
+    paths: ['apps/walkie/**', '.github/workflows/walkie.yml']
+  pull_request:
+    paths: ['apps/walkie/**', '.github/workflows/walkie.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  server:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: walkie
+          POSTGRES_DB: walkie_test
+        ports: ['55432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 2s --health-timeout 2s --health-retries 20
+    defaults:
+      run:
+        working-directory: apps/walkie/server
+    env:
+      WALKIE_TEST_DATABASE_URL: postgres://postgres:walkie@127.0.0.1:55432/walkie_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/walkie/server/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - name: Start LiveKit
+        run: |
+          docker run -d --name walkie-livekit --network host \
+            -v "$PWD/../livekit/livekit.dev.yaml:/etc/livekit.yaml:ro" \
+            livekit/livekit-server:v1.13.9 --config /etc/livekit.yaml
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:7880/ && break; sleep 1; done
+      - name: Real-media integration (LiveKit + WebRTC clients)
+        run: npm run test:livekit
+      - if: failure()
+        run: docker logs walkie-livekit | tail -100
+
+  mobile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: apps/walkie/mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/walkie/mobile/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - name: Bundle JS for Android and iOS
+        env:
+          EXPO_OFFLINE: '1'
+          EXPO_PUBLIC_WALKIE_API_URL: https://walkie.invalid
+        run: |
+          npx expo export --platform android --output-dir /tmp/export-android
+          npx expo export --platform ios --output-dir /tmp/export-ios
