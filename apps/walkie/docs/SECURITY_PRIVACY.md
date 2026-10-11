@@ -39,6 +39,21 @@
 * LiveKit server logs contain connection metadata (identities, room names, IPs).
   They contain no media.
 
+## iOS PushToTalk (Milestone 3)
+
+* **Tokens:** PTT push tokens are stored server-side only (RLS on, no
+  policies). They are registered only by a member of that channel. They are
+  deleted on removal, block, channel deletion and account deletion, and when
+  APNs reports them dead.
+* **Push payloads** pass through Apple's push service and contain the speaker's
+  **display name, user id, channel id and lease id**. **No audio** and no
+  channel name. A leave push contains only `{leave: true, channelId}`.
+* **APNs key:** the `.p8` key is a server secret (env `APNS_KEY_P8` /
+  `APNS_KEY_FILE`). It never ships in the app.
+* **Microphone:** with lock-screen talk on, iOS's system UI can start a turn.
+  It is still server-arbitrated and capped at the maximum talk time. The mic
+  opens only after iOS activates the audio session.
+
 ## Transport encryption: what is and is not true
 
 * **Signalling** (phone ↔ LiveKit) uses WebSocket. In production it **must** be

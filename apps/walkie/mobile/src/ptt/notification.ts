@@ -53,3 +53,13 @@ export function releaseOnBackground(p: { pressed: boolean; keepAlive: boolean; l
   if (!p.pressed) return false;
   return !(p.keepAlive && p.latched);
 }
+
+/**
+ * A latched turn (started from Android's notification or iOS's system UI)
+ * has no finger to lift. Once its turn is no longer being requested or held
+ * (max duration, busy, loss, error), the latch must be released, or the
+ * machine would keep thinking a button is held and ignore the next Talk.
+ */
+export function latchedShouldRelease(s: { pressed: boolean; talk: { kind: string } }): boolean {
+  return s.pressed && s.talk.kind !== 'speaking' && s.talk.kind !== 'requesting';
+}

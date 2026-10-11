@@ -4,6 +4,7 @@ import { StatusBar } from 'expo-status-bar';
 import { ApiError, createApi, type ChannelSummary } from './src/api';
 import { getAccessToken, signOut } from './src/auth';
 import { configProblem } from './src/config';
+import { iosPtt } from './modules/walkie-ptt/src';
 import { ChannelScreen } from './src/screens/ChannelScreen';
 import { ChannelsScreen } from './src/screens/ChannelsScreen';
 import { ProfileScreen } from './src/screens/ProfileScreen';
@@ -24,7 +25,15 @@ export default function App() {
     try {
       const m = await api.me();
       setMe(m);
-      setRoute(m.displayName ? { name: 'channels' } : { name: 'profile' });
+      if (!m.displayName) return setRoute({ name: 'profile' });
+      // iOS PushToTalk: if iOS restored a joined channel (e.g. the app was
+      // launched by a PTT push), go straight back into it so audio can flow.
+      const pttChannel = iosPtt.activeChannelId();
+      if (pttChannel) {
+        const found = (await api.channels().catch(() => ({ channels: [] as ChannelSummary[] }))).channels.find((c) => c.id === pttChannel);
+        if (found) return setRoute({ name: 'channel', channel: found });
+      }
+      setRoute({ name: 'channels' });
     } catch (e) {
       if (e instanceof ApiError && e.status === 401) {
         await signOut();

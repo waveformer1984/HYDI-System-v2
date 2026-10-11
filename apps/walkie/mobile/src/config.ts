@@ -1,6 +1,6 @@
 import Constants from 'expo-constants';
 
-type Extra = { apiUrl?: string; authMode?: string; supabaseUrl?: string; supabaseAnonKey?: string };
+type Extra = { apiUrl?: string; authMode?: string; supabaseUrl?: string; supabaseAnonKey?: string; iosPtt?: boolean; apnsEnvironment?: string };
 const extra = (Constants.expoConfig?.extra ?? {}) as Extra;
 
 /**
@@ -12,6 +12,10 @@ export const config = {
   authMode: (extra.authMode === 'dev' ? 'dev' : 'supabase') as 'dev' | 'supabase',
   supabaseUrl: extra.supabaseUrl ?? '',
   supabaseAnonKey: extra.supabaseAnonKey ?? '',
+  /** Built with the PushToTalk entitlement (WALKIE_IOS_PTT=1). */
+  iosPtt: extra.iosPtt === true,
+  /** Which APNs environment this build's PTT tokens belong to. */
+  apnsEnvironment: (extra.apnsEnvironment === 'production' ? 'production' : 'sandbox') as 'sandbox' | 'production',
 };
 
 export function configProblem(): string | null {

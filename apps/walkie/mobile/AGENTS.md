@@ -15,3 +15,7 @@
   so `gradle -p native-checks/android-service compileKotlin` can compile-check
   it without an Android SDK. Notification wording/Talk availability come from
   the pure `src/ptt/notification.ts` — test changes there.
+- iOS PushToTalk (Milestone 3) lives in `modules/walkie-ptt` (Swift, never
+  compiled in CI — there is no macOS runner). Keep `incomingPushResult` and
+  channel restoration answered natively without JS or network. Event-to-action
+  rules are in the pure `src/ptt/ios-ptt-policy.ts` — test changes there.

@@ -174,6 +174,32 @@ for (const impl of impls) {
       assert.equal(await store.isBlocked(ch.id, u), false);
     });
 
+    test('PTT tokens: upsert per member, removed with membership, block, channel and by value', async () => {
+      const { owner, ch } = await newChannel();
+      const u = randomUUID();
+      const v = randomUUID();
+      await store.createInvite(ch.id, owner, `h-p-${ch.id}`, T0 + 1000, 5);
+      await store.redeemInvite(`h-p-${ch.id}`, u, T0, 50);
+      await store.redeemInvite(`h-p-${ch.id}`, v, T0, 50);
+      await store.setPttToken(ch.id, u, 'aa'.repeat(16), 'sandbox');
+      await store.setPttToken(ch.id, u, 'ab'.repeat(16), 'production');
+      await store.setPttToken(ch.id, v, 'bb'.repeat(16), 'sandbox');
+      await store.setPttToken(ch.id, owner, 'cc'.repeat(16), 'sandbox');
+      const byUser = Object.fromEntries((await store.listPttTokens(ch.id)).map((t) => [t.userId, t]));
+      assert.deepEqual(byUser[u], { userId: u, token: 'ab'.repeat(16), environment: 'production' });
+      await store.removeMember(ch.id, u);
+      await store.block(ch.id, v, owner);
+      assert.deepEqual((await store.listPttTokens(ch.id)).map((t) => t.userId), [owner]);
+      await store.deletePttTokenValue('cc'.repeat(16));
+      assert.deepEqual(await store.listPttTokens(ch.id), []);
+      await store.setPttToken(ch.id, owner, 'dd'.repeat(16), 'sandbox');
+      await store.deleteChannel(ch.id);
+      assert.deepEqual(await store.listPttTokens(ch.id), []);
+      // Writing a token for a channel that no longer exists is a no-op.
+      await store.setPttToken(ch.id, owner, 'ee'.repeat(16), 'sandbox');
+      assert.deepEqual(await store.listPttTokens(ch.id), []);
+    });
+
     test('deleteUser removes owned channels, memberships, leases and profile', async () => {
       const { owner: other, ch: theirs } = await newChannel();
       const u = randomUUID();

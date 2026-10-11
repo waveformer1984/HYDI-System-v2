@@ -52,3 +52,21 @@ test('a latched turn from the notification still ends at the maximum duration', 
   assert.equal(after.talk.kind, 'idle');
   assert.deepEqual(effs.map((e) => e.type).filter((t) => t !== 'haptic'), ['stopMic', 'stopRenewing', 'releaseTurn']);
 });
+
+test('a latched turn is released once it is no longer requested or held', async () => {
+  const { latchedShouldRelease } = await import('../src/ptt/notification');
+  const pressed = run(ready, { type: 'PRESS', now: 0 });
+  assert.equal(latchedShouldRelease(pressed), false); // requesting
+  const speaking = run(pressed, { type: 'GRANTED', leaseId: 'L', until: 30_000 });
+  assert.equal(latchedShouldRelease(speaking), false);
+  // Max talk time with no finger on a button: the latch must let go...
+  const capped = run(speaking, { type: 'TICK', now: 30_000 });
+  assert.equal(latchedShouldRelease(capped), true);
+  // ...so a later Talk tap from the notification starts a new request.
+  const freed = run(capped, { type: 'RELEASE' });
+  assert.equal(run(freed, { type: 'PRESS', now: 31_000 }).talk.kind, 'requesting');
+  // Busy and request errors release too.
+  assert.equal(latchedShouldRelease(run(pressed, { type: 'DENIED_BUSY', speakerId: 'x' })), true);
+  assert.equal(latchedShouldRelease(run(pressed, { type: 'DENIED_ERROR' })), true);
+  assert.equal(latchedShouldRelease(ready), false);
+});

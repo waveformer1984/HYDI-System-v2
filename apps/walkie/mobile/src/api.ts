@@ -68,6 +68,9 @@ export function createApi(getToken: TokenSource) {
     connection: (id: string) => call<Connection>('POST', `/v1/channels/${id}/connection`),
     requestTalk: (id: string) => call<TalkGrant>('POST', `/v1/channels/${id}/talk`, undefined, 5000),
     renewTalk: (id: string, leaseId: string) => call<{ renewDeadline: number }>('POST', `/v1/channels/${id}/talk/${leaseId}/renew`, undefined, 3000),
+    setPttToken: (id: string, token: string, environment: 'sandbox' | 'production') =>
+      call<{ stored: boolean; pushEnabled: boolean }>('PUT', `/v1/channels/${id}/ptt-token`, { token, environment }),
+    deletePttToken: (id: string) => call<{ deleted: boolean }>('DELETE', `/v1/channels/${id}/ptt-token`),
     releaseTalk: (id: string, leaseId: string) => call<{ released: boolean }>('DELETE', `/v1/channels/${id}/talk/${leaseId}`, undefined, 5000),
   };
 }

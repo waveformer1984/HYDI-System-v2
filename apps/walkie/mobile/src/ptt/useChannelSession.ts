@@ -4,7 +4,7 @@ import { AudioSession } from '@livekit/react-native';
 import { permissions } from '@livekit/react-native-webrtc';
 import { ConnectionState, DisconnectReason, Room, RoomEvent, Track, type Participant } from 'livekit-client';
 import { ApiError, type Api } from '../api';
-import { releaseOnBackground } from './notification';
+import { latchedShouldRelease, releaseOnBackground } from './notification';
 import { initialState, reduce, type Connection, type Effect, type PttEvent, type PttState } from './machine';
 
 export interface Presence {
@@ -46,6 +46,8 @@ export function useChannelSession(api: Api, channelId: string, selfId: string) {
   const latched = useRef(false);
   // True while the Android foreground service keeps this session alive.
   const keepAliveInBackground = useRef(false);
+  // iOS PushToTalk: the mic may open only after the system activates audio.
+  const micGate = useRef<(() => Promise<boolean>) | null>(null);
 
   const dispatch = useCallback((ev: PttEvent) => {
     const [next, effects] = reduce(stateRef.current, ev);
@@ -53,6 +55,10 @@ export function useChannelSession(api: Api, channelId: string, selfId: string) {
     if (!next.pressed) latched.current = false;
     setState(next);
     for (const e of effects) run(e);
+    if (latched.current && latchedShouldRelease(next)) {
+      latched.current = false;
+      dispatch({ type: 'RELEASE' });
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -106,6 +112,12 @@ export function useChannelSession(api: Api, channelId: string, selfId: string) {
       case 'startMic':
         micOp(async () => {
           if (!room) return;
+          if (micGate.current && !(await micGate.current())) {
+            dispatch({ type: 'TURN_LOST', reason: 'turn_ended' });
+            return;
+          }
+          // The turn may have ended while waiting for the gate.
+          if (stateRef.current.talk.kind !== 'speaking') return;
           try {
             await room.localParticipant.setMicrophoneEnabled(true);
             setTiming({ pressToGrantMs: grantAt.current - pressAt.current, grantToMicLiveMs: Date.now() - grantAt.current });
@@ -323,6 +335,9 @@ export function useChannelSession(api: Api, channelId: string, selfId: string) {
   const setKeepAliveInBackground = useCallback((on: boolean) => {
     keepAliveInBackground.current = on;
   }, []);
+  const setMicGate = useCallback((gate: (() => Promise<boolean>) | null) => {
+    micGate.current = gate;
+  }, []);
   const retryMicPermission = useCallback(() => {
     dispatch({ type: 'MIC_PERMISSION', state: 'unknown' });
   }, [dispatch]);
@@ -343,6 +358,7 @@ export function useChannelSession(api: Api, channelId: string, selfId: string) {
     release,
     pressLatched,
     setKeepAliveInBackground,
+    setMicGate,
     retryMicPermission,
     selfId,
   };

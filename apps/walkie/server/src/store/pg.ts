@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import pg from 'pg';
-import type { AcquireResult, Channel, Lease, Member, Profile, RedeemResult, Role, Store } from './types.js';
+import type { AcquireResult, ApnsEnvironment, Channel, Lease, Member, Profile, PttPushToken, RedeemResult, Role, Store } from './types.js';
 
 type Row = Record<string, unknown>;
 
@@ -104,8 +104,11 @@ export class PgStore implements Store {
   }
 
   async removeMember(channelId: string, userId: string) {
-    const { rowCount } = await this.pool.query('delete from walkie.members where channel_id = $1 and user_id = $2', [channelId, userId]);
-    return (rowCount ?? 0) > 0;
+    return this.tx(async (c) => {
+      await c.query('delete from walkie.ptt_push_tokens where channel_id = $1 and user_id = $2', [channelId, userId]);
+      const { rowCount } = await c.query('delete from walkie.members where channel_id = $1 and user_id = $2', [channelId, userId]);
+      return (rowCount ?? 0) > 0;
+    });
   }
 
   async block(channelId: string, userId: string, blockedBy: string) {
@@ -116,6 +119,7 @@ export class PgStore implements Store {
         [channelId, userId, blockedBy],
       );
       await c.query('delete from walkie.members where channel_id = $1 and user_id = $2', [channelId, userId]);
+      await c.query('delete from walkie.ptt_push_tokens where channel_id = $1 and user_id = $2', [channelId, userId]);
     });
   }
 
@@ -232,12 +236,35 @@ export class PgStore implements Store {
     return rows.map(toLease);
   }
 
+  async setPttToken(channelId: string, userId: string, token: string, environment: ApnsEnvironment) {
+    await this.pool.query(
+      `insert into walkie.ptt_push_tokens (channel_id, user_id, token, environment)
+       select $1, $2, $3, $4 where exists (select 1 from walkie.channels where id = $1)
+       on conflict (channel_id, user_id) do update set token = excluded.token, environment = excluded.environment, updated_at = now()`,
+      [channelId, userId, token, environment],
+    );
+  }
+
+  async deletePttToken(channelId: string, userId: string) {
+    await this.pool.query('delete from walkie.ptt_push_tokens where channel_id = $1 and user_id = $2', [channelId, userId]);
+  }
+
+  async deletePttTokenValue(token: string) {
+    await this.pool.query('delete from walkie.ptt_push_tokens where token = $1', [token]);
+  }
+
+  async listPttTokens(channelId: string): Promise<PttPushToken[]> {
+    const { rows } = await this.pool.query('select user_id, token, environment from walkie.ptt_push_tokens where channel_id = $1', [channelId]);
+    return rows.map((r) => ({ userId: r.user_id, token: r.token, environment: r.environment }));
+  }
+
   async deleteUser(userId: string) {
     return this.tx(async (c) => {
       const owned = await c.query('delete from walkie.channels where owner_id = $1 returning id', [userId]);
       const member = await c.query('delete from walkie.members where user_id = $1 returning channel_id', [userId]);
       await c.query('delete from walkie.floor_leases where user_id = $1', [userId]);
       await c.query('delete from walkie.blocks where user_id = $1', [userId]);
+      await c.query('delete from walkie.ptt_push_tokens where user_id = $1', [userId]);
       await c.query('delete from walkie.profiles where user_id = $1', [userId]);
       return {
         ownedChannelIds: owned.rows.map((r) => r.id as string),

@@ -82,3 +82,28 @@ and one Samsung, and record model, OS version and battery setting
 | B15 | Battery | 1 h connected in background, screen off, a few transmissions | Record battery % used vs. an idle baseline | |
 | B16 | Locked screen | Secure lock screen, check notification | Contents and actions hidden until unlock (privacy default); record actual behaviour | |
 | B17 | OEM kill | Samsung with default battery settings, 30 min background | Record whether Walkie stays connected | |
+
+# Milestone 3 checklist (iOS PushToTalk) — NOT yet executed
+
+Requirements:
+* An iOS build made with `WALKIE_IOS_PTT=1` by a team that Apple has granted
+  the Push to Talk entitlement.
+* The backend configured with an APNs key (`APNS_*`).
+* Two iPhones (iOS 17+ recommended), plus one Android phone for mixed tests.
+
+| # | Test | Steps | Expected | Result |
+|---|---|---|---|---|
+| P1 | First Xcode build | `WALKIE_IOS_PTT=1 APP_VARIANT=development npx expo run:ios --device` | Builds and signs; record every compile fix needed in `modules/walkie-ptt` | |
+| P2 | Foreground still works with PTT off | Use the app as in Milestone 1 without turning lock-screen talk on | Identical behaviour (LiveKit owns the audio session) | |
+| P3 | Turn on | Channel → Turn on lock-screen talk | System PTT UI appears; server stores a token (`GET` via DB or logs); status On | |
+| P4 | Receive while locked | Lock iPhone A; B talks | A wakes, system shows "B" speaking, audio plays. **Measure the delay from B's press to audible on A, and whether the first words are lost** | |
+| P5 | Talk from lock screen | Locked A taps Talk in the system UI | Server grants; B hears A; tapping again ends; max talk time ends it automatically | |
+| P6 | Busy from lock screen | B talking; A taps Talk | System refuses (half-duplex) or server says busy; no audio from A | |
+| P7 | On-screen press while joined | App open, hold the button | Mic opens only after the system activates audio; release stops both | |
+| P8 | App killed | Force-quit A, then B talks | iOS relaunches A in background, audio plays; opening A shows that channel | |
+| P9 | Reboot | Reboot A, unlock once, B talks | Channel restored by iOS; push wakes A | |
+| P10 | Removed by owner | Owner removes A | A receives leave push; system PTT UI disappears; token deleted | |
+| P11 | Turn off | Turn off lock-screen talk | System UI gone; token deleted; foreground audio back to normal | |
+| P12 | Switch channels | Lock-screen talk on for X, open channel Y | X is left (one channel at a time); Y works in foreground | |
+| P13 | Bluetooth / CarPlay / accessory button | Use a headset PTT/answer button | Record whether it begins/ends transmission | |
+| P14 | Battery | 1 h joined, locked, a few turns | Record battery % vs. baseline | |

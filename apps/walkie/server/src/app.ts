@@ -5,7 +5,9 @@ import { AuthError, DevVerifier, deleteSupabaseUser, type AuthUser, type AuthVer
 import type { Config } from './config.js';
 import { FloorService, errMsg } from './floor.js';
 import { roomNameFor, type MediaGateway } from './livekit.js';
-import type { Store } from './store/types.js';
+import { ApnsClient, type PushSender } from './apns.js';
+import { PttNotifier } from './ptt-notifier.js';
+import type { PttPushToken, Store } from './store/types.js';
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -21,6 +23,8 @@ export interface AppDeps {
   now?: () => number;
   /** Override for tests. */
   deleteAuthUser?: (userId: string) => Promise<boolean>;
+  /** iOS PushToTalk push sender; defaults to APNs when config.apns is set. */
+  push?: PushSender;
 }
 
 const Uuid = z.string().uuid();
@@ -37,6 +41,10 @@ const RedeemBody = z.object({ code: z.string().min(8).max(64) });
 const BlockBody = z.object({ userId: Uuid });
 const InviteBody = z.object({ maxUses: z.number().int().min(1).max(50).optional() }).optional();
 const DevSessionBody = z.object({ handle: z.string().regex(/^[a-z0-9_-]{2,32}$/i) });
+const PttTokenBody = z.object({
+  token: z.string().regex(/^[0-9a-fA-F]{16,512}$/).transform((t) => t.toLowerCase()),
+  environment: z.enum(['sandbox', 'production']),
+});
 
 const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTVWXYZ23456789'; // no 0/O, 1/I/L, U
 export function newInviteCode(): string {
@@ -71,6 +79,28 @@ export async function buildApp(deps: AppDeps): Promise<{ app: FastifyInstance; f
     trustProxy: true,
   });
   const floor = new FloorService(store, media, config, app.log, now);
+
+  // Milestone 3: wake PushToTalk iPhones when someone starts talking.
+  const push = deps.push ?? (config.apns ? new ApnsClient(config.apns) : undefined);
+  const ptt = push ? new PttNotifier(store, push, app.log) : undefined;
+  if (ptt) {
+    floor.onGranted((channelId, lease) => {
+      void (async () => {
+        const name = (await store.getProfile(lease.userId))?.displayName ?? 'Someone';
+        await ptt.speakerStarted(channelId, { userId: lease.userId, displayName: name }, lease.leaseId);
+      })().catch((err) => app.log.warn({ err: errMsg(err) }, 'ptt notify failed'));
+    });
+    app.addHook('onClose', async () => push!.close());
+  }
+  /** PTT tokens of the given members (all members when omitted), read before a membership change deletes them. */
+  const pttTokensOf = async (channelId: string, userIds?: string[]): Promise<PttPushToken[]> => {
+    if (!ptt) return [];
+    const all = await store.listPttTokens(channelId);
+    return userIds ? all.filter((t) => userIds.includes(t.userId)) : all;
+  };
+  const sendLeave = (channelId: string, tokens: PttPushToken[]) => {
+    if (ptt && tokens.length) void ptt.leave(channelId, tokens);
+  };
   const deleteAuthUser =
     deps.deleteAuthUser ?? ((userId: string) => deleteSupabaseUser(config.auth.supabaseUrl, config.auth.serviceRoleKey, userId));
 
@@ -153,7 +183,11 @@ export async function buildApp(deps: AppDeps): Promise<{ app: FastifyInstance; f
 
     api.delete('/v1/me', async (req) => {
       const { userId } = user(req);
+      const before = await store.listChannelsForUser(userId);
+      const leaveTokens = new Map<string, PttPushToken[]>();
+      for (const c of before) leaveTokens.set(c.id, await pttTokensOf(c.id, c.role === 'owner' ? undefined : [userId]));
       const { ownedChannelIds, memberChannelIds } = await store.deleteUser(userId);
+      for (const [cid, tokens] of leaveTokens) sendLeave(cid, tokens);
       // Owned channels are gone: empty their rooms. Elsewhere: kick this user.
       for (const cid of ownedChannelIds) {
         const ps = (await media.listParticipants(roomNameFor(cid)).catch(() => null)) ?? [];
@@ -198,7 +232,9 @@ export async function buildApp(deps: AppDeps): Promise<{ app: FastifyInstance; f
     api.delete<{ Params: { id: string } }>('/v1/channels/:id', async (req) => {
       await requireOwner(req.params.id, user(req).userId);
       const members = await store.listMembers(req.params.id);
+      const tokens = await pttTokensOf(req.params.id);
       await store.deleteChannel(req.params.id);
+      sendLeave(req.params.id, tokens);
       for (const m of members) await floor.dropUser(req.params.id, m.userId, { kick: true });
       return { deleted: true };
     });
@@ -236,7 +272,9 @@ export async function buildApp(deps: AppDeps): Promise<{ app: FastifyInstance; f
     api.delete<{ Params: { id: string; userId: string } }>('/v1/channels/:id/members/:userId', async (req) => {
       await requireOwner(req.params.id, user(req).userId);
       if (req.params.userId === user(req).userId) throw new HttpError(409, 'cannot_remove_self');
+      const tokens = await pttTokensOf(req.params.id, [req.params.userId]);
       if (!(await store.removeMember(req.params.id, req.params.userId))) throw new HttpError(404, 'not_a_member');
+      sendLeave(req.params.id, tokens);
       await floor.dropUser(req.params.id, req.params.userId, { kick: true });
       return { removed: true };
     });
@@ -250,9 +288,26 @@ export async function buildApp(deps: AppDeps): Promise<{ app: FastifyInstance; f
       await requireOwner(req.params.id, user(req).userId);
       const { userId } = BlockBody.parse(req.body);
       if (userId === user(req).userId) throw new HttpError(409, 'cannot_block_self');
+      const tokens = await pttTokensOf(req.params.id, [userId]);
       await store.block(req.params.id, userId, user(req).userId);
+      sendLeave(req.params.id, tokens);
       await floor.dropUser(req.params.id, userId, { kick: true });
       return { blocked: true };
+    });
+
+    // iOS PushToTalk: the ephemeral APNs token iOS issues when this device joins the channel.
+    api.put<{ Params: { id: string } }>('/v1/channels/:id/ptt-token', async (req) => {
+      await requireMember(req.params.id, user(req).userId);
+      const { token, environment } = PttTokenBody.parse(req.body);
+      await store.setPttToken(req.params.id, user(req).userId, token, environment);
+      return { stored: true, pushEnabled: Boolean(ptt) };
+    });
+
+    api.delete<{ Params: { id: string } }>('/v1/channels/:id/ptt-token', async (req) => {
+      if (!Uuid.safeParse(req.params.id).success) throw new HttpError(404, 'not_found');
+      // Allowed for non-members too, so a removed device can always clean up.
+      await store.deletePttToken(req.params.id, user(req).userId);
+      return { deleted: true };
     });
 
     api.delete<{ Params: { id: string; userId: string } }>('/v1/channels/:id/blocks/:userId', async (req) => {

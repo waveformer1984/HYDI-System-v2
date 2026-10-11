@@ -3,6 +3,11 @@ import type { ExpoConfig } from 'expo/config';
 // APP_VARIANT=development builds talk to a LAN backend over plain http/ws, so
 // they allow cleartext traffic. Every other variant requires https/wss.
 const DEV = process.env.APP_VARIANT === 'development';
+// Milestone 3: build with Apple's PushToTalk capability. Requires an Apple
+// Developer team that Apple has granted the Push to Talk entitlement;
+// signing fails without it, so it is opt-in.
+const IOS_PTT = process.env.WALKIE_IOS_PTT === '1';
+const APNS_ENV = process.env.WALKIE_APNS_ENV === 'production' || (!DEV && process.env.WALKIE_APNS_ENV !== 'sandbox') ? 'production' : 'sandbox';
 
 const MIC_EXPLANATION =
   'Walkie uses the microphone only during a speaking turn the channel has given you: while you hold the Talk button, ' +
@@ -24,9 +29,18 @@ const config: ExpoConfig = {
       NSMicrophoneUsageDescription: MIC_EXPLANATION,
       // Development builds reach a LAN backend over http/ws.
       ...(DEV ? { NSAppTransportSecurity: { NSAllowsLocalNetworking: true } } : {}),
-      // Foreground MVP: no background audio modes yet (Milestone 3 adds the
-      // PushToTalk framework and its entitlement).
+      // Milestone 3: background/lock-screen audio only through Apple's
+      // PushToTalk framework, and only in builds made with WALKIE_IOS_PTT=1.
+      ...(IOS_PTT ? { UIBackgroundModes: ['push-to-talk'] } : {}),
     },
+    ...(IOS_PTT
+      ? {
+          entitlements: {
+            'com.apple.developer.push-to-talk': true,
+            'aps-environment': APNS_ENV === 'production' ? 'production' : 'development',
+          },
+        }
+      : {}),
   },
   android: {
     package: DEV ? 'com.protoforge.walkie.dev' : 'com.protoforge.walkie',
@@ -59,6 +73,8 @@ const config: ExpoConfig = {
     supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL,
     // The anon (publishable) key is designed to ship in apps. No secret goes here.
     supabaseAnonKey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
+    iosPtt: IOS_PTT,
+    apnsEnvironment: APNS_ENV,
   },
 };
 
