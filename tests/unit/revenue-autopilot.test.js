@@ -16,7 +16,7 @@ process.env.HYDI_HUMAN_ACTIONS_FILE = tmpFile;
 const { HumanActionService } = require('../../lib/human-actions/service');
 const { runVerifier } = require('../../lib/human-actions/verifiers');
 const { advance, brief, status, resumeForPayment, offerForOpportunity } = require('../../lib/revenue/revenue-autopilot');
-const { tryAutopilotAnswer, looksLikeStatusQuestion } = require('../../lib/revenue/autopilot-answer');
+const { tryAutopilotAnswer, looksLikeStatusQuestion, looksLikeAutopilotQuestion } = require('../../lib/revenue/autopilot-answer');
 const { getOfferCatalog } = require('../../lib/revenue/OfferCatalog');
 
 /** In-memory GoalSystem stand-in incl. createGoal. */
@@ -435,6 +435,24 @@ describe('autopilot-answer — commercial status routing', () => {
     expect(looksLikeStatusQuestion('what jobs are executing')).toBe(true);
     expect(looksLikeStatusQuestion('what has been delivered')).toBe(true);
     expect(looksLikeStatusQuestion('hello')).toBe(false);
+  });
+
+  test('imperative revenue commands advance; revenue questions do not', async () => {
+    // Phone transcript: this command used to fall through to the
+    // read-only COO snapshot and repeat it verbatim.
+    const store = fakeStore([PHILIPS]);
+    const deps = depsFor(store, ALL_ENV, fakeRuntime());
+    await advance(deps);
+    const r = await tryAutopilotAnswer('go with the top priority and initiate Revenue', deps);
+    expect(r.text).toMatch(/NEXT BEST ACTION/);
+
+    for (const cmd of ['initiate revenue', 'ok, start revenue', 'kick off revenue now', 'go with your top priority']) {
+      expect(looksLikeAutopilotQuestion(cmd)).toBe(true);
+    }
+    // A question about revenue must not mutate commercial state.
+    expect(looksLikeAutopilotQuestion(
+      'what is the fastest path to get you to start generating Revenue',
+    )).toBe(false);
   });
 });
 
