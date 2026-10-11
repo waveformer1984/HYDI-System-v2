@@ -4,6 +4,7 @@ import { AudioSession } from '@livekit/react-native';
 import { permissions } from '@livekit/react-native-webrtc';
 import { ConnectionState, DisconnectReason, Room, RoomEvent, Track, type Participant } from 'livekit-client';
 import { ApiError, type Api } from '../api';
+import { releaseOnBackground } from './notification';
 import { initialState, reduce, type Connection, type Effect, type PttEvent, type PttState } from './machine';
 
 export interface Presence {
@@ -40,10 +41,16 @@ export function useChannelSession(api: Api, channelId: string, selfId: string) {
   const pressAt = useRef(0);
   const grantAt = useRef(0);
   const alive = useRef(true);
+  // Milestone 2: a turn started from the background notification has no
+  // finger on a button, so it is "latched" until Stop, max duration or loss.
+  const latched = useRef(false);
+  // True while the Android foreground service keeps this session alive.
+  const keepAliveInBackground = useRef(false);
 
   const dispatch = useCallback((ev: PttEvent) => {
     const [next, effects] = reduce(stateRef.current, ev);
     stateRef.current = next;
+    if (!next.pressed) latched.current = false;
     setState(next);
     for (const e of effects) run(e);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -279,10 +286,14 @@ export function useChannelSession(api: Api, channelId: string, selfId: string) {
       await connect();
     })();
 
-    // Foreground MVP: leaving the app ends any turn (background transmit is
-    // Milestones 2 and 3).
+    // Leaving the app ends an on-screen press. Only a turn latched from the
+    // background notification, with the foreground service running,
+    // survives backgrounding.
     const appState = AppState.addEventListener('change', (s) => {
-      if (s !== 'active' && stateRef.current.pressed) dispatch({ type: 'RELEASE' });
+      if (s === 'active') return;
+      if (releaseOnBackground({ pressed: stateRef.current.pressed, keepAlive: keepAliveInBackground.current, latched: latched.current })) {
+        dispatch({ type: 'RELEASE' });
+      }
     });
 
     return () => {
@@ -303,6 +314,15 @@ export function useChannelSession(api: Api, channelId: string, selfId: string) {
 
   const press = useCallback(() => dispatch({ type: 'PRESS', now: Date.now() }), [dispatch]);
   const release = useCallback(() => dispatch({ type: 'RELEASE' }), [dispatch]);
+  /** Talk from the background notification: latched until Stop, max duration or loss of the turn. */
+  const pressLatched = useCallback(() => {
+    if (stateRef.current.pressed) return;
+    latched.current = true;
+    dispatch({ type: 'PRESS', now: Date.now() });
+  }, [dispatch]);
+  const setKeepAliveInBackground = useCallback((on: boolean) => {
+    keepAliveInBackground.current = on;
+  }, []);
   const retryMicPermission = useCallback(() => {
     dispatch({ type: 'MIC_PERMISSION', state: 'unknown' });
   }, [dispatch]);
@@ -311,5 +331,19 @@ export function useChannelSession(api: Api, channelId: string, selfId: string) {
     else await AudioSession.selectAudioOutput(id);
   }, []);
 
-  return { state, presence, timing, ended, outputs, refreshOutputs, selectOutput, press, release, retryMicPermission, selfId };
+  return {
+    state,
+    presence,
+    timing,
+    ended,
+    outputs,
+    refreshOutputs,
+    selectOutput,
+    press,
+    release,
+    pressLatched,
+    setKeepAliveInBackground,
+    retryMicPermission,
+    selfId,
+  };
 }

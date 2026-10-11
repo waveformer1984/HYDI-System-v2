@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, Linking, Platform, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
+import { Alert, Linking, Platform, Pressable, ScrollView, Share, StyleSheet, Switch, Text, View } from 'react-native';
 import type { Api, ChannelDetail, ChannelSummary } from '../api';
 import { describeError } from '../errors';
 import { displayStatus, type DisplayStatus, type Notice } from '../ptt/machine';
+import { useBackgroundService, type BackgroundStatus } from '../ptt/useBackgroundService';
 import { useChannelSession } from '../ptt/useChannelSession';
 import { Body, Button, ErrorText, Screen, Title, colors } from '../ui/kit';
 
@@ -16,6 +17,14 @@ const STATUS: Record<DisplayStatus, { label: string; color: string }> = {
   reconnecting: { label: 'Reconnecting…', color: colors.busy },
   disconnected: { label: 'Disconnected', color: colors.danger },
   mic_denied: { label: 'Microphone access is off', color: colors.danger },
+};
+
+const BACKGROUND: Record<BackgroundStatus, string> = {
+  unavailable: '',
+  off: 'Off — leaving the app disconnects your audio.',
+  starting: 'Starting…',
+  on: 'On — a notification keeps Walkie connected. Use its Talk button to transmit without opening the app (stops automatically at the maximum talk time).',
+  failed: 'Android refused to start the background service. Reopen the channel with the app open.',
 };
 
 const NOTICE: Record<Notice, string> = {
@@ -34,6 +43,7 @@ export function ChannelScreen({ api, channel, selfId, onBack }: { api: Api; chan
   const { state, presence, timing, ended, outputs } = session;
   const [detail, setDetail] = useState<ChannelDetail | null>(null);
   const [error, setError] = useState('');
+  const [keepInBackground, setKeepInBackground] = useState(true);
 
   const loadDetail = useCallback(async () => {
     try {
@@ -55,6 +65,7 @@ export function ChannelScreen({ api, channel, selfId, onBack }: { api: Api; chan
   );
   const online = useMemo(() => new Set(presence.map((p) => p.identity)), [presence]);
   const speakerName = state.speaker && state.speaker.userId !== selfId ? nameOf(state.speaker.userId) : null;
+  const background = useBackgroundService(session, { enabled: keepInBackground && !ended, channelName: channel.name, speakerName, onLeave: onBack });
 
   if (ended) {
     return (
@@ -152,6 +163,19 @@ export function ChannelScreen({ api, channel, selfId, onBack }: { api: Api; chan
         {isOwner ? <Body muted>Long-press a member to remove or block them.</Body> : null}
         {isOwner ? <Button label="Invite someone" kind="secondary" onPress={invite} /> : null}
 
+        {background.status !== 'unavailable' ? (
+          <>
+            <View style={st.switchRow}>
+              <Text style={st.h}>Stay connected in background</Text>
+              <Switch value={keepInBackground} onValueChange={setKeepInBackground} accessibilityLabel="Stay connected in background" />
+            </View>
+            <Body muted>{BACKGROUND[background.status]}</Body>
+            {background.notificationsBlocked && background.status === 'on' ? (
+              <Body muted>Notifications are blocked for Walkie, so the background notification and its Talk button are hidden. Allow notifications in phone settings.</Body>
+            ) : null}
+          </>
+        ) : null}
+
         <Text style={st.h}>Audio output</Text>
         {Platform.OS === 'android' ? (
           <View style={st.chips}>
@@ -195,6 +219,7 @@ const st = StyleSheet.create({
   dot: { width: 12, height: 12, borderRadius: 6 },
   memberName: { color: colors.text, fontSize: 16, flex: 1 },
   memberMeta: { color: colors.muted, fontSize: 13 },
+  switchRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: { backgroundColor: colors.card, borderRadius: 16, paddingHorizontal: 14, paddingVertical: 8, borderWidth: 1, borderColor: colors.border },
   chipText: { color: colors.text, fontSize: 15 },

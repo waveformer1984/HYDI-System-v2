@@ -1,6 +1,6 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": { "types": ["node"], "noEmit": true },
-  "include": ["test", "src/ptt/machine.ts"],
+  "include": ["test", "src/ptt/machine.ts", "src/ptt/notification.ts"],
   "exclude": ["node_modules"]
 }

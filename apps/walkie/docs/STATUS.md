@@ -1,4 +1,4 @@
-# Status report — 2026-10-11
+# Status report — 2026-10-11 (updated for Milestone 2)
 
 Status words are used strictly:
 * **Implemented**: code exists.
@@ -8,6 +8,16 @@ Status words are used strictly:
 
 **Milestone 1 is NOT complete.** Its acceptance criterion is two *physical*
 phones, and none were available.
+
+
+## Milestone 2 — Android background (started 2026-10-11)
+
+| Status | Item |
+|---|---|
+| **Implemented** | Foreground service (`microphone\|mediaPlayback`, listen-only fallback without mic permission), persistent notification with Talk / Stop talking / Disconnect, latched notification turns capped by the server's maximum talk time, "Stay connected in background" switch, notification-permission request, Settings explanation. See `BACKGROUND_MILESTONES.md`. |
+| **Tested here** | Service compiles against the Android 16 framework classes, warnings as errors (`native-checks/android-service`); the negative control fails as expected. Expo autolinking resolves the module. Notification content and background-release policy are unit-tested: mobile tests 23/23. Typecheck and Android/iOS bundles pass. |
+| **Blocked** | Building an APK and running it. No Android SDK here; `dl.google.com` and `maven.google.com` are blocked. The Expo bridge `WalkieBackgroundModule.kt` has not been compiled. |
+| **Unverified** | Everything on a device: the B1–B17 checklist in `DEVICE_TEST_CHECKLIST.md`, including screen-off receive, battery, OEM battery managers, and lock screen. |
 
 ## Implemented and tested (automated, in this environment)
 
@@ -51,8 +61,8 @@ phones, and none were available.
 
 ## Planned
 
-* Milestone 2: Android background (microphone foreground service). Investigation
-  is in `BACKGROUND_MILESTONES.md`.
+* Milestone 2 follow-ups: device verification (B1–B17), then possibly true
+  hold-to-talk from a headset button (`MediaSession`).
 * Milestone 3: iOS PushToTalk framework + APNs. Needs the Apple PTT entitlement.
   The main risk is `@livekit/react-native`'s automatic iOS audio-session handling
   versus PushToTalk owning activation.
@@ -64,4 +74,5 @@ phones, and none were available.
 
 ## Background and locked screen
 
-**Unverified. Not supported in the MVP.**
+**Android background:** implemented in Milestone 2, **unverified on devices**.
+**iOS background and locked screen:** not implemented (Milestone 3).

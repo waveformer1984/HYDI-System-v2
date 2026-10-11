@@ -41,10 +41,15 @@ export function SettingsScreen({ api, onBack, onEditName, onSignedOut }: { api: 
       <ScrollView contentContainerStyle={{ gap: 12 }}>
         <Text style={st.h}>Microphone</Text>
         <Body>
-          Walkie turns the microphone on only while you hold the Talk button and the server has given you the turn. Joining a channel never turns it on. Letting go turns it off immediately.
+          Walkie turns the microphone on only during a speaking turn the server has given you: while you hold the Talk button, or (Android, in the background) after you tap Talk in the Walkie notification, until you tap Stop talking or the maximum talk time ends. Joining a channel never turns it on. Letting go turns it off immediately.
         </Body>
         <Body muted>If you denied microphone access, you can allow it in your phone's settings for this app.</Body>
         <Button label="Open phone settings" kind="secondary" onPress={() => Linking.openSettings()} />
+
+        <Text style={st.h}>Background (Android)</Text>
+        <Body>
+          With "Stay connected in background" on, Android shows a persistent Walkie notification while you are in a channel. It keeps you listening with the app closed or the screen off, and uses more battery. Turning it off, tapping Disconnect in the notification, or leaving the channel ends it.
+        </Body>
 
         <Text style={st.h}>Privacy</Text>
         <Body>

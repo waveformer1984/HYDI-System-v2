@@ -5,7 +5,8 @@ import type { ExpoConfig } from 'expo/config';
 const DEV = process.env.APP_VARIANT === 'development';
 
 const MIC_EXPLANATION =
-  'Walkie uses the microphone only while you hold the Talk button and the channel has given you the turn. ' +
+  'Walkie uses the microphone only during a speaking turn the channel has given you: while you hold the Talk button, ' +
+  'or after you tap Talk in the Walkie notification (until you tap Stop or the maximum talk time ends). ' +
   'Nothing is recorded or transcribed.';
 
 const config: ExpoConfig = {

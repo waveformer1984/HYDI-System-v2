@@ -55,3 +55,30 @@ results were:
   is LiveKit's publish→subscribe path for a newly published track
 
 Phones will be slower. See `docs/results/`.
+
+# Milestone 2 checklist (Android background) — NOT yet executed
+
+Requirements: an Android development build that includes
+`modules/walkie-background`. Test on at least one Pixel (stock Android 14+)
+and one Samsung, and record model, OS version and battery setting
+("Unrestricted" / "Optimized") for each.
+
+| # | Test | Steps | Expected | Result |
+|---|---|---|---|---|
+| B1 | Service starts on join | Join a channel with the app open (Android 13+: allow notifications) | Ongoing "Walkie connection" notification: channel name, "Listening", buttons Talk + Disconnect | |
+| B2 | Mic denied → listen-only | Fresh install, deny mic, join | Notification shows "Listening (microphone off)", **no Talk button**; app does not crash | |
+| B3 | Mic granted later | In B2, allow mic via the on-screen prompt | Talk button appears (service restarted with microphone type) | |
+| B4 | Receive in background | Phone A joins, presses Home; B talks | A plays B's audio; A's notification shows "Receiving · B" | |
+| B5 | Receive with screen off | As B4, screen off for 10 min, B talks every minute | Every transmission audible on A; record any missed ones | |
+| B6 | Talk from notification | A backgrounded; tap Talk; speak; tap Stop talking | B hears A only between Talk and Stop; notification shows "Transmitting"; OS mic indicator on only during that window | |
+| B7 | Latched turn cap | Tap Talk and do not tap Stop | Transmission ends at the maximum talk time (default 30 s); notification returns to Listening | |
+| B8 | Busy from notification | B is talking while A is backgrounded | No Talk button while B talks (Receiving); after B releases, Talk reappears | |
+| B9 | On-screen press then Home | Hold the on-screen button, press Home while holding | Transmission stops | |
+| B10 | Connectivity loss in background | A latched-talking, airplane mode on A | B can talk within ≈5 s; A's notification shows Reconnecting, then recovers when back online | |
+| B11 | Disconnect action | Tap Disconnect | Notification gone; A no longer in channel (B sees A offline); A still a member | |
+| B12 | Toggle off | Turn "Stay connected in background" off, press Home | Notification gone; audio stops in background | |
+| B13 | Swipe app away | Remove Walkie from recents while connected | Record: service/notification behaviour and whether B sees A leave | |
+| B14 | Phone call | Incoming call while backgrounded and connected | Record audio behaviour during and after the call | |
+| B15 | Battery | 1 h connected in background, screen off, a few transmissions | Record battery % used vs. an idle baseline | |
+| B16 | Locked screen | Secure lock screen, check notification | Contents and actions hidden until unlock (privacy default); record actual behaviour | |
+| B17 | OEM kill | Samsung with default battery settings, 30 min background | Record whether Walkie stays connected | |

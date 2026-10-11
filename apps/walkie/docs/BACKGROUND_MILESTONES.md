@@ -1,48 +1,110 @@
-# Milestones 2 & 3 — background and locked-screen operation (investigation, NOT implemented)
+# Milestones 2 & 3 — background and locked-screen operation
 
-**Status: planned. No background or locked-screen behaviour is implemented, and
-none has been verified on a device.** The MVP is foreground-only on purpose:
-when the app leaves the foreground it releases any turn.
+**Status:**
+* **Milestone 2 (Android):** code exists. It has **not been run on a phone**, so
+  background operation is still **unverified**. Details below.
+* **Milestone 3 (iOS):** investigation only, not implemented.
 
-Below is what was learned before committing to an approach. Sources: Apple's
-PushToTalk documentation and developer-forum threads, and Android's
-foreground-service documentation (links at the end). **Re-verify every item
-against current platform docs when the milestone starts.**
+Sources: Apple's PushToTalk documentation and developer-forum threads, and
+Android's foreground-service documentation (links at the end). **Re-verify
+platform rules against current docs before shipping.**
 
-## Milestone 2 — Android background
+## Milestone 2 — Android background (implemented, unverified)
 
-**Platform rules that shape the design:**
-* Since Android 14, every foreground service must declare a type and hold the
-  matching `FOREGROUND_SERVICE_*` permission. A PTT service needs
-  `foregroundServiceType="microphone"` and
-  `android.permission.FOREGROUND_SERVICE_MICROPHONE`. Playback-only would need
-  `mediaPlayback`.
+### Platform rules that shaped the design
+* Since Android 14 every foreground service declares a type and holds the
+  matching `FOREGROUND_SERVICE_*` permission. Calling `startForeground` with a
+  type whose runtime permission is missing throws `SecurityException`.
 * `RECORD_AUDIO` is a *while-in-use* permission. A microphone-type foreground
-  service **cannot be started while the app is in the background** (Android 12+),
-  apart from narrow exemptions. Android 15 tightened the overlay exemption, which
-  now requires a visible overlay window.
-  * **Consequence:** the service must start while the app is visible. The
-    natural moment is the user joining a channel. It then keeps running, with a
-    persistent notification (for example "Walkie: connected to Site crew"), until
-    the user leaves.
-* Holding a microphone-type service with the mic **closed** is allowed. The mic
-  is still opened only during a granted turn.
+  service **cannot be started from the background** (Android 12+). The narrow
+  exemptions don't apply to us, and Android 15 tightened the overlay one.
+* A microphone-type service may run with the microphone **closed**. Walkie opens
+  the mic only during a granted turn.
 
-**Implementation sketch:**
-1. Add a small Expo config plugin (or a local Expo module) that declares the
-   service, its type and its permissions.
-2. Start the service on join, stop it on leave.
-3. Add a notification action "Hold to talk" (or a hardware or headset button via
-   `MediaSession`) that calls the same request-turn path.
+### What was built
+* **Local Expo module `mobile/modules/walkie-background`** (Android only,
+  autolinked).
+  * **`WalkieForegroundService`** uses only platform APIs, with no AndroidX.
+    * Manifest type: `microphone|mediaPlayback`.
+    * It starts with `microphone|mediaPlayback` when `RECORD_AUDIO` is granted,
+      and with `mediaPlayback` only (listen-only) when it isn't, because Android
+      14+ would throw otherwise.
+    * It holds a bounded (8 h) partial wake lock so incoming audio is processed
+      with the screen off.
+    * `START_NOT_STICKY`: it never restarts on its own without the JS session
+      that owns it.
+    * A notification action that reaches it with no live session shuts it down.
+  * **`WalkieBackgroundModule`** is a thin Expo bridge:
+    * `start`, `update`, `stop`, `isRunning`, `hasMicrophoneType`
+    * an `onServiceEvent` event: `started`, `start_failed`, `stopped`, `talk`,
+      `stop_talk`, `leave`
+  * **Permissions declared by the module:**
+    * `FOREGROUND_SERVICE`
+    * `FOREGROUND_SERVICE_MICROPHONE`
+    * `FOREGROUND_SERVICE_MEDIA_PLAYBACK`
+    * `POST_NOTIFICATIONS`
+    * `WAKE_LOCK`
+* **`src/ptt/useBackgroundService.ts`:**
+  * Starts the service after the room connects, and only while the app is
+    visible. On Android 13+ it first asks for notification permission.
+  * Restarts it in the foreground to add the microphone type once mic permission
+    is granted.
+  * Keeps the notification in step with the session: Listening, Receiving ·
+    *name*, Transmitting, Busy, Reconnecting.
+  * Stops the service when the user leaves the screen or turns the option off.
+* **Notification actions** (the notification's text and when Talk appears come
+  from the pure `src/ptt/notification.ts`, which is unit-tested):
+  * **Talk** asks the server for a turn, exactly like the on-screen button. It
+    appears only when connected, mic already granted (a permission dialog can't
+    appear from a notification), nobody else talking, and not cooling down.
+    Because nobody can *hold* a notification button, this turn is **latched**: it
+    ends on **Stop talking**, at the server's maximum talk time (default 30 s,
+    enforced by the server and by the client timer), or on any loss of the turn.
+  * **Stop talking** ends the turn.
+  * **Disconnect** leaves the channel screen. It does not leave the channel's
+    membership.
+* **On-screen presses end when the app is backgrounded.** Only a latched
+  notification turn survives backgrounding (`releaseOnBackground`, unit-tested).
+* **UI:** a "Stay connected in background" switch on the channel screen (on by
+  default on Android) with an explanation, and a Background section in Settings.
+* **iOS:** the module is absent, everything is a no-op, and iOS behaviour is
+  unchanged (foreground only).
 
-**SDK compatibility to verify on devices:**
-* `@livekit/react-native` already runs a foreground service internally for
-  screen-share (`mediaProjection`). Check that a second service (ours,
-  `microphone`) coexists with it and with LiveKit's `AudioSwitch` audio-focus
-  handling.
-* The JS thread must stay alive in the background. With a foreground service
-  running it generally does, but OEM battery managers (Samsung, Xiaomi) can still
-  kill it. Test per vendor.
+### Verified here
+* The service compiles against the **Android 16 framework classes** (Robolectric
+  `android-all` from Maven Central, warnings as errors), via
+  `gradle -p apps/walkie/mobile/native-checks/android-service compileKotlin`.
+  * A negative control (a non-existent API call) fails as expected.
+  * CI job: `android-service` in `.github/workflows/walkie.yml`.
+* Expo autolinking resolves the module
+  (`expo.modules.walkiebackground.WalkieBackgroundModule`).
+* Typecheck clean, 23 mobile tests pass, and the JS bundles for Android and iOS.
+
+### NOT verified (needs a real build on a phone)
+* `WalkieBackgroundModule.kt` (the Expo bridge) has not been compiled. It needs
+  `expo-modules-core` and the Android toolchain, which this environment can't
+  download (`dl.google.com` is blocked).
+* That the manifest merges as intended, the service starts, the notification
+  shows, and its actions reach JS.
+* That audio keeps playing, and a latched turn can open the mic, with the app in
+  the background and with the screen off.
+* Coexistence with LiveKit's internal screen-share foreground service (unused
+  here) and with `AudioSwitch` audio focus. Behaviour when another app takes
+  audio focus.
+* OEM battery managers (Samsung, Xiaomi, OnePlus) killing the process. Doze /
+  App Standby with the screen off for long periods. Battery drain per hour.
+* Lock screen: by default the notification's contents and actions are hidden on
+  a secure lock screen (`VISIBILITY_PRIVATE`), so Talk from the lock screen
+  needs an unlock. That is deliberate for privacy and not yet tested.
+
+### Distribution note
+* **Google Play** requires a foreground-service declaration for each type
+  (`microphone`, `mediaPlayback`) in the Play Console, with a justification and
+  usually a video. Side-loaded development builds do not need it.
+
+### Possible next step (not started)
+* True hold-to-talk in the background via a Bluetooth/wired headset button
+  (`MediaSession` key down/up), instead of the latched notification button.
 
 ## Milestone 3 — iOS background / locked screen
 

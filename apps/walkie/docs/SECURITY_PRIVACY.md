@@ -61,6 +61,12 @@
   are configured. The backend has no endpoint that touches audio.
 * **Microphone:**
   * Off on join.
+  * **Android background (Milestone 2):** the notification's Talk button starts a
+    *latched* turn. It still needs the server's grant, is offered only when mic
+    permission is already granted, and ends on Stop talking, at the maximum talk
+    time, or on any loss of the turn. The foreground service itself never opens
+    the mic. On a secure lock screen the notification's contents and actions are
+    hidden until unlock (`VISIBILITY_PRIVATE`).
   * On only while the button is held and the server has granted the turn.
   * Released by unpublishing and stopping the capture track, so the OS mic
     indicator turns off.
