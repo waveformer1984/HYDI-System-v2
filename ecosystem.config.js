@@ -408,19 +408,22 @@ module.exports = {
       // env_production args.
       name: 'heidi-web-standalone',
       script: 'node_modules/next/dist/bin/next',
-      args: 'dev --hostname 0.0.0.0 --port 3000',
+      args: 'start --hostname 0.0.0.0 --port 3000',
       cwd: __dirname,
       instances: 1,
       exec_mode: 'fork',
       env: {
-        NODE_ENV: 'development',
+        NODE_ENV: 'production',
       },
       env_production: {
         NODE_ENV: 'production',
       },
       autorestart: true,
       watch: false,
-      max_memory_restart: '1G',
+      // Raised 1G→1.5G: base RSS ~50MB, but a local-model load + in-flight
+      // request spikes it past 1G and PM2 killed it mid-request. 1.5G still
+      // catches runaway leaks without firing on normal request bursts.
+      max_memory_restart: '1536M',
       min_uptime: '30s',       // Next dev needs time to compile the first route
       max_restarts: 10,
       restart_delay: 5000,

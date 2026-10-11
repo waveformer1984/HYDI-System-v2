@@ -827,6 +827,14 @@ async function main(): Promise<void> {
   // Run self-sufficiency on the same interval as the cognitive loop
   const ssfInterval = setInterval(runSelfSufficiencyInterval, config.intervalMs);
 
+  // Stale-mission sweep — bounded, idempotent, worker-verified. Reclaims
+  // expired claims whose recorded worker is confirmed dead; never
+  // replays capability work. Runs on the daemon cadence.
+  const sweepInterval = setInterval(() => {
+    if (shuttingDown) return;
+    core.sweepStaleMissions().catch(() => { });
+  }, config.intervalMs);
+
   // Human Action Resolution cadence — the standing 'resolver' agent's
   // sweep (detect → classify → resolver-or-human-path → verify → resume).
   // Bounded interval (HYDI_RESOLVER_SWEEP_MS, default 60s), in-flight
@@ -863,7 +871,7 @@ async function main(): Promise<void> {
     if (shuttingDown) return;
     const status = core.getLoopStatus();
     const memUsage = process.memoryUsage();
-    console.log(`[daemon] state=${status.state} cycles=${status.cycleCount} failures=${status.consecutiveFailures} outcome=${status.lastCycleOutcome || 'none'} mem=${Math.round(memUsage.rss / 1024 / 1024)}MB kill=${status.killSwitchActive}${status.lastError ? ' lastError=' + status.lastError : ''}`);
+    console.log(`[daemon] state=${status.state} cycles=${status.cycleCount} failures=${status.consecutiveFailures} outcome=${status.lastCycleOutcome || 'none'} mem=${Math.round(memUsage.rss / 1024 / 1024)}MB kill=${status.killSwitchActive}${status.lastError ? ' lastError=' + status.lastError : ''}${status.lastErrorAt ? ' lastErrorAt=' + status.lastErrorAt : ''}`);
   }, 30000);
 
   // 9. Wait for shutdown
@@ -876,6 +884,7 @@ async function main(): Promise<void> {
       if (shuttingDown) {
         clearInterval(checkInterval);
         clearInterval(ssfInterval);
+        clearInterval(sweepInterval);
         clearInterval(resolverInterval);
         clearTimeout(resolverKick);
         resolverPool.end().catch(() => { });

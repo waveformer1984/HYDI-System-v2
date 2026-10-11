@@ -255,39 +255,51 @@ class UrsulaModelHeartbeat extends EventEmitter {
     let timeoutId;
 
     try {
-      // Try to execute a simple inference to test responsiveness. modelId may be a
-      // service-name alias (e.g. 'document-summarizer') -- LocalModelAdapter only knows
-      // the real backing model id, so resolve before calling into it. The result below
-      // still reports the original `modelId` so failedModels/heartbeat_check stay keyed
-      // consistently by whatever name is in config.modelsToMonitor.
+      // modelId may be a service-name alias (e.g. 'document-summarizer') --
+      // LocalModelAdapter only knows the real backing model id, so resolve before
+      // consulting it. The result below still reports the original `modelId` so
+      // failedModels/heartbeat_check stay keyed consistently by whatever name is
+      // in config.modelsToMonitor.
       const realModelId = this.resolveModelId(modelId);
-      const testInput = this.getTestInputForModel(modelId);
+      const modelConfig = this.adapter.modelConfigs?.[realModelId];
       if (this._destroyed) throw new Error('Heartbeat stopped');
+      if (!modelConfig) throw new Error(`No configuration found for model: ${realModelId}`);
 
-      // Execute with a short timeout
-      const resultPromise = this.adapter.execute(realModelId, testInput, {
-        tier: 'starter', // Use lowest tier for health check
-        timeout: 5000 // 5 second timeout for health check
-      });
+      // NON-GENERATIVE PROBE: a health monitor must not load a model or queue an
+      // inference just to declare it healthy. Ollama-backed configs are checked
+      // against inventory endpoints (GET /api/tags for installed, GET /api/ps for
+      // resident); adapter-backed configs are checked against the adapter's
+      // loaded-model registry. This never calls POST /api/generate, so the
+      // heartbeat cannot evict Heidi's chat/embedding models or pin an extra
+      // model via keep_alive.
+      const isOllamaBacked = ['llama', 'codellama'].includes(modelConfig.type);
+      const probePromise = isOllamaBacked
+        ? this.probeOllamaModelHealth(modelConfig)
+        : this.probeAdapterModelHealth(realModelId);
 
       // Set up timeout
       const timeoutPromise = new Promise((_, reject) => {
         timeoutId = setTimeout(() => reject(new Error('Model health check timeout')), this.config.timeoutThreshold);
       });
 
-      // Race between execution and timeout
-      await Promise.race([resultPromise, timeoutPromise]);
+      // Race between probe and timeout
+      const probe = await Promise.race([probePromise, timeoutPromise]);
 
       const responseTime = Date.now() - startTime;
 
       return {
         modelId,
-        healthy: true,
+        healthy: probe.state !== 'unavailable',
         responseTime,
         timestamp: new Date(),
         details: {
           responseTimeMs: responseTime,
-          testSuccessful: true
+          testSuccessful: probe.state !== 'unavailable',
+          probe: 'non-generative',
+          backend: isOllamaBacked ? 'ollama' : 'local-adapter',
+          state: probe.state,
+          resolvedModel: probe.resolvedModel || null,
+          ...(probe.reason ? { reason: probe.reason } : {})
         }
       };
     } catch (error) {
@@ -308,6 +320,77 @@ class UrsulaModelHeartbeat extends EventEmitter {
     } finally {
       if (timeoutId) clearTimeout(timeoutId);
     }
+  }
+
+  /**
+   * Probe the shared Ollama backend without generating. Fetches the installed
+   * model inventory (/api/tags) and the resident set (/api/ps), resolves which
+   * concrete Ollama tag would actually serve this adapter config (mirroring
+   * OllamaClient.resolveModel()'s smallest-installed fallback), and reports:
+   *   'resident'                -- installed AND currently loaded in memory
+   *   'installed-not-resident'  -- installed but cold (Ollama loads on demand;
+   *                                still serviceable, so NOT a failure)
+   *   'installed'               -- installed, residency unknown (/api/ps failed)
+   *   'unavailable'             -- Ollama unreachable or no servable model
+   * Never calls /api/generate, /api/embeddings, or loads a model.
+   */
+  async probeOllamaModelHealth(modelConfig) {
+    const ollamaClient = this.adapter.ollamaClient;
+    if (!ollamaClient || !ollamaClient.client) {
+      return { state: 'unavailable', reason: 'ollama client not initialized' };
+    }
+
+    let installed;
+    try {
+      const tagsRes = await ollamaClient.client.get('/api/tags', { timeout: 5000 });
+      installed = tagsRes.data?.models || [];
+    } catch (error) {
+      return { state: 'unavailable', reason: `ollama unreachable: ${error.message}` };
+    }
+
+    let residentNames = null;
+    try {
+      const psRes = await ollamaClient.client.get('/api/ps', { timeout: 5000 });
+      residentNames = (psRes.data?.models || []).map(m => m.name);
+    } catch {
+      // Residency unknown -- do not treat a /api/ps failure as an outage.
+      residentNames = null;
+    }
+
+    const generative = installed.filter(m => m.size > 0 && !/embed/i.test(m.name));
+    const configured = modelConfig.ollamaModel
+      || process.env.LOCAL_MODEL_NAME
+      || process.env.OLLAMA_MODEL
+      || null;
+    const match = configured
+      ? generative.find(m => m.name === configured || m.name === `${configured}:latest`)
+      : null;
+    const resolved = match
+      || generative.slice().sort((a, b) => a.size - b.size)[0]
+      || null;
+
+    if (!resolved) {
+      return { state: 'unavailable', reason: 'no generative model installed' };
+    }
+    if (residentNames === null) {
+      return { state: 'installed', resolvedModel: resolved.name, reason: 'resident state unknown' };
+    }
+    return residentNames.includes(resolved.name)
+      ? { state: 'resident', resolvedModel: resolved.name }
+      : { state: 'installed-not-resident', resolvedModel: resolved.name };
+  }
+
+  /**
+   * Probe a non-Ollama adapter model (distilbert, tree-sitter, tesseract, etc.)
+   * without executing it. The adapter's `loaded` flag is the registration state
+   * these mock/simulated backends expose; executing them produces no real
+   * signal anyway.
+   */
+  probeAdapterModelHealth(realModelId) {
+    const entry = this.adapter.models?.get(realModelId);
+    return entry && entry.loaded
+      ? { state: 'resident', resolvedModel: realModelId }
+      : { state: 'unavailable', reason: `adapter model '${realModelId}' not loaded` };
   }
 
   /**
