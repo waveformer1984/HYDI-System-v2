@@ -87,6 +87,18 @@ their existing semantics. To kill all unattended resolver execution
 without a deploy: `UPDATE heidi_decision_bounds SET unattended_enabled
 = false;`
 
+#### Decision evidence (`heidi_events`)
+
+`heidi_events` is the governed-decision log. Completed cycles write
+`cognitive_cycle` rows (`CognitiveCore.recordCycle`) — selected action,
+authorization, execution, verification, outcome. ActionProposals writes
+proposal/decision/approval receipts. The negative leg is now durable too:
+every chokepoint refusal (`evaluateAction` in
+`lib/action-executor.ts`) writes an `action_refused` row with the gate
+code (`AUTHORIZATION_REQUIRED`, `INVALID_AUTHORIZATION`, `PROHIBITED`,
+`UNKNOWN_ACTION`) via `lib/heidi/DecisionEvidence.ts`. The write is
+fail-soft — a dead store can never change a refusal that already
+happened.
 #### Durable operator lease (`heidi_operator_lease`)
 
 `hydi-daemon` claims a single-row lease in Postgres at startup, heartbeats
