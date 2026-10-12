@@ -23,6 +23,8 @@
  *   node scripts/local-ci.js --watch        test every same-repo open PR head
  *                                           without a local-ci status; repeat
  *                                           every --interval minutes (default 10)
+ *   --include-main  with --watch: also test the head of clean-main once it
+ *                   has no local-ci status (i.e. after every merge)
  *   --no-post   run the checks but don't report to GitHub
  *   --once      with --watch: one pass, then exit
  *
@@ -36,6 +38,7 @@ const os = require('os');
 const path = require('path');
 
 const REPO = process.env.LOCAL_CI_REPO || 'waveformer1984/HYDI-System-v2';
+const MAIN_BRANCH = process.env.LOCAL_CI_MAIN_BRANCH || 'clean-main';
 const API = 'https://api.github.com';
 const IS_WINDOWS = process.platform === 'win32';
 
@@ -66,12 +69,13 @@ const CHECKS = [
 ];
 
 function parseArgs(argv) {
-  const opts = { target: 'HEAD', pr: null, watch: false, once: false, post: true, intervalMin: 10 };
+  const opts = { target: 'HEAD', pr: null, watch: false, once: false, includeMain: false, post: true, intervalMin: 10 };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--pr') opts.pr = Number(argv[++i]);
     else if (a === '--watch') opts.watch = true;
     else if (a === '--once') opts.once = true;
+    else if (a === '--include-main') opts.includeMain = true;
     else if (a === '--no-post') opts.post = false;
     else if (a === '--interval') opts.intervalMin = Number(argv[++i]);
     else if (a.startsWith('--')) throw new Error(`unknown option ${a}`);
@@ -79,6 +83,7 @@ function parseArgs(argv) {
   }
   if (opts.pr !== null && !(opts.pr > 0)) throw new Error('--pr needs a PR number');
   if (!(opts.intervalMin > 0)) throw new Error('--interval needs a positive number of minutes');
+  if (opts.includeMain && !opts.watch) throw new Error('--include-main only works with --watch');
   return opts;
 }
 
@@ -103,11 +108,15 @@ function describe(text) {
 function selectPullsToTest(pulls, statusesBySha) {
   return pulls.filter((pr) => {
     if (!pr.head || !pr.head.repo || pr.head.repo.full_name !== REPO) return false;
-    const statuses = statusesBySha[pr.head.sha] || [];
-    return CHECKS.some((check) => {
-      const latest = statuses.find((s) => s.context === check.context);
-      return !latest || latest.state === 'pending';
-    });
+    return needsRun(statusesBySha[pr.head.sha] || []);
+  });
+}
+
+/** True when some check has no final local-ci result among `statuses` (newest first). */
+function needsRun(statuses) {
+  return CHECKS.some((check) => {
+    const latest = statuses.find((s) => s.context === check.context);
+    return !latest || latest.state === 'pending';
   });
 }
 
@@ -273,6 +282,15 @@ async function testCommit(ctx, sha) {
 }
 
 async function watchOnce(ctx) {
+  if (ctx.includeMain) {
+    git(['fetch', 'origin', MAIN_BRANCH], ctx.repoRoot);
+    const sha = git(['rev-parse', '--verify', `origin/${MAIN_BRANCH}^{commit}`], ctx.repoRoot);
+    const statuses = await github(ctx.token, 'GET', `/repos/${REPO}/commits/${sha}/statuses?per_page=100`);
+    if (needsRun(statuses)) {
+      console.log(`[local-ci] ${MAIN_BRANCH} head ${sha.slice(0, 7)}`);
+      await testCommit(ctx, sha);
+    }
+  }
   const pulls = await github(ctx.token, 'GET', `/repos/${REPO}/pulls?state=open&per_page=50`);
   const statusesBySha = {};
   for (const pr of pulls) {
@@ -296,7 +314,7 @@ async function watchOnce(ctx) {
 async function main() {
   const opts = parseArgs(process.argv.slice(2));
   const repoRoot = git(['rev-parse', '--show-toplevel'], process.cwd());
-  const ctx = { repoRoot, post: opts.post, token: null };
+  const ctx = { repoRoot, post: opts.post, includeMain: opts.includeMain, token: null };
 
   const needsApi = opts.post || opts.watch || opts.pr !== null;
   if (needsApi) {
@@ -343,4 +361,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { CHECKS, REPO, parseArgs, summarizeJest, describe, selectPullsToTest, supabaseCheckEnv };
+module.exports = { CHECKS, REPO, MAIN_BRANCH, parseArgs, summarizeJest, describe, selectPullsToTest, needsRun, supabaseCheckEnv };
