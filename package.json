@@ -81,7 +81,7 @@
   "author": "ProtoForge Team",
   "license": "MIT",
   "engines": {
-    "node": ">=20.x"
+    "node": ">=22.x"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",
