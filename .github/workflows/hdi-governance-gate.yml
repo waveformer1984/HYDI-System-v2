@@ -170,8 +170,13 @@ jobs:
       - name: Verify Supabase Schema
         if: steps.schema-check.outputs.schema_changed == 'true'
         run: |
-          # Check that all core tables exist and have RLS enabled
-          CORE_TABLES="memories actions sessions ledger clients payouts webhook_events leads quotes proposals checkout_sessions"
+          # Check that all core tables exist and have RLS enabled.
+          # `ledger` was renamed to `financial_ledger` (20260723000001) — the
+          # `ledger` name is now a compatibility view, which can never carry
+          # relrowsecurity. Both queries pin table_schema/relnamespace to
+          # 'public' so Supabase platform tables (e.g. auth.sessions) cannot
+          # collide with same-named public tables.
+          CORE_TABLES="memories actions sessions financial_ledger clients payouts webhook_events leads quotes proposals checkout_sessions"
           FAIL=0
           for tbl in $CORE_TABLES; do
             EXISTS=$(PGPASSWORD=postgres psql -tA -h localhost -p 54322 -U postgres -d postgres -c "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_schema='public' AND table_name='$tbl')" 2>/dev/null)
@@ -179,7 +184,7 @@ jobs:
               echo "❌ Missing table: $tbl"
               FAIL=1
             else
-              RLS=$(PGPASSWORD=postgres psql -tA -h localhost -p 54322 -U postgres -d postgres -c "SELECT relrowsecurity FROM pg_class WHERE relname='$tbl'" 2>/dev/null)
+              RLS=$(PGPASSWORD=postgres psql -tA -h localhost -p 54322 -U postgres -d postgres -c "SELECT c.relrowsecurity FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname='public' AND c.relname='$tbl'" 2>/dev/null)
               if [ "$RLS" != "t" ]; then
                 echo "❌ RLS not enabled on: $tbl"
                 FAIL=1
