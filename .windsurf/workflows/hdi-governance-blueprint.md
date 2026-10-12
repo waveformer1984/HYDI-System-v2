@@ -431,6 +431,12 @@ Two migrations stopped `supabase db start` on an empty database. They were corre
 | `20260715123000_notifications` | `public.notifications` gains the July columns (`category`, `severity`, `title`, `body`, `device_id`, `read_at`, `delivered_at`) before `idx_notifications_unread` and `idx_notifications_category` are built. Previously `20260818120000_reconcile_notifications_schema` added them later. No RLS or transition changes. |
 | `20260722000001_customer_identity_convergence` | The same ten `fk_*_customer` foreign keys to `customers(customer_id)`, now added only when `pg_constraint` lacks them. The `hydi_subscriptions.customer_id` backfill skips non-UUID `client_id` values instead of failing. No RLS or transition changes. |
 
+### Evidence spine additions (2026-10-12)
+
+| Migration | Table / change | Governance effect |
+|-----------|----------------|-------------------|
+| `20261012173000_heidi_operator_lease` | New `heidi_operator_lease` — one row per operator (`holder`, `expires_at`, `released_at`, heartbeat fields); unique operator index, expiry index, service-role-only RLS policy. | The daemon's singleton claim is a durable, race-safe fact (atomic conditional upsert — no read-then-write). `released_at IS NULL AND expires_at < now()` marks a stale holder. No state machine or transition changes. |
+
 ## 9. "Don't Sabotage Yourself" Rules (Enforced)
 
 | Rule | Enforcement |
