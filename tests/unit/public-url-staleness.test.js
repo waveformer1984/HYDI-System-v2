@@ -41,7 +41,7 @@ describe('detectStaleBaseUrl', () => {
     expect(r.created).toBe(true);
     const a = s.get(r.actionId);
     expect(a.blockerKey).toBe('protoforge:public-base-url-stale');
-    expect(a.verifier).toEqual({ name: 'http-reachable', spec: { urlEnv: 'NEXT_PUBLIC_APP_URL' } });
+    expect(a.verifier).toEqual({ name: 'http-reachable', spec: { urlEnv: 'NEXT_PUBLIC_APP_URL', probePath: '/api/ping' } });
     expect(a.instructions.join(' ')).toMatch(/4040\/api\/tunnels/);
   });
 

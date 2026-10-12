@@ -265,7 +265,9 @@ describe('job catalog', () => {
       for (const s of steps) {
         expect(typeof s.cmd).toBe('string');
         expect(Array.isArray(s.args)).toBe(true);
-        expect(s.cwd.startsWith('/repo')).toBe(true);
+        // path.join emits backslashes on Windows hosts — normalize before
+        // asserting the step runs inside the repo dir.
+        expect(s.cwd.replace(/\\/g, '/').startsWith('/repo')).toBe(true);
       }
       expect(def.permission).toMatch(/^ops:/);
     }

@@ -18,7 +18,10 @@ import type { GoalModel } from './GoalInterpreter';
 
 const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434';
 const MODEL = process.env.PLAN_MODEL || 'llama3.2:3b';
-const LLM_TIMEOUT_MS = 60000;
+// See GoalInterpreter.ts — same cold-load / eviction failure mode on CPU-only
+// hardware; warm inference for this prompt class is ~35-40s.
+const LLM_TIMEOUT_MS = Number(process.env.PLAN_LLM_TIMEOUT_MS) || 60000;
+const KEEP_ALIVE = process.env.PLAN_LLM_KEEP_ALIVE || '30m';
 const MAX_AUTONOMY = 2; // standing R2 — planning never lifts it
 
 export interface PlanStep {
@@ -193,7 +196,7 @@ export async function proposePlan(model: GoalModel, lessons: string[] = []): Pro
   try {
     const res = await fetch(`${OLLAMA_URL}/api/generate`, {
       method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ model: MODEL, prompt, stream: false, options: { temperature: 0, num_predict: 800 } }),
+      body: JSON.stringify({ model: MODEL, prompt, stream: false, keep_alive: KEEP_ALIVE, options: { temperature: 0, num_predict: 800 } }),
       signal: AbortSignal.timeout(LLM_TIMEOUT_MS),
     });
     if (!res.ok) return null;

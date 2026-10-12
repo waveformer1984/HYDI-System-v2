@@ -180,7 +180,11 @@ describe('end-to-end orchestration proof', () => {
     // Nor can the resolver sweep close it. Since #321 outreach authorization
     // is R1 (outreach-prepare drafts everything except the channel grant), so
     // the sweep reports it unauthorized/human — never attempted, never closed.
-    const sweep2 = await resolveEligibleActions(s, { env: envFor(), throttleMs: 0, deps: { configPlane } });
+    // legitProspectsPresent is pinned false — the helper otherwise reads
+    // .hydi-operational/checkpoint-demand-experiment.json from the repo cwd,
+    // which legitimately exists on a production checkout and would authorize
+    // the R1 outreach-prepare resolver, moving the action to 'attempted'.
+    const sweep2 = await resolveEligibleActions(s, { env: envFor(), throttleMs: 0, deps: { configPlane, helpers: { legitProspectsPresent: false } } });
     const refused = [...sweep2.human, ...sweep2.unauthorized].map((h) => h.actionId);
     expect(refused).toContain(manualAction.id);
     expect(sweep2.attempted.some((a) => a.actionId === manualAction.id)).toBe(false);

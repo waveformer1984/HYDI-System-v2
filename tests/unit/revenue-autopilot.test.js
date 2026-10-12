@@ -86,6 +86,9 @@ function fakeRuntime({ paid = false, delivered = true, execOk = true, reconState
     async createSetupCheckoutSession(input) {
       return { sessionId: 'cs_test_fake_' + jobSeq, url: 'https://checkout.stripe.test/' + jobSeq };
     },
+    async getCheckoutSessionState(sessionId) {
+      return { status: 'open', paymentStatus: 'unpaid', expiresAt: Math.floor(Date.now() / 1000) + 3600 };
+    },
   };
   const executeJob = async (jobId) => {
     const j = jobs.get(jobId);
