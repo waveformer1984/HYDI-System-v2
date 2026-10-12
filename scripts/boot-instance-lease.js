@@ -212,7 +212,17 @@ class BootInstanceLease {
   _writeAtomic(record) {
     const tmp = `${this.lockPath}.${process.pid}.tmp`;
     fs.writeFileSync(tmp, JSON.stringify(record), 'utf8');
-    fs.renameSync(tmp, this.lockPath);
+    // Windows rename can hit a transient EPERM when a reader/AV holds the
+    // target (same failure mode the human-actions store handles) — retry,
+    // then fall back to a direct write rather than losing the lease record.
+    for (let i = 0; i < 3; i++) {
+      try { fs.renameSync(tmp, this.lockPath); return; }
+      catch (e) {
+        if (i === 2 || (e && e.code !== 'EPERM' && e.code !== 'EBUSY')) break;
+        const t = Date.now() + 15; while (Date.now() < t) { /* brief spin */ }
+      }
+    }
+    fs.writeFileSync(this.lockPath, JSON.stringify(record), 'utf8');
   }
 }
 
