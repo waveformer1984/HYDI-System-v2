@@ -484,8 +484,15 @@ async function main(): Promise<void> {
   //     which the core reports honestly rather than failing.
   let supabase: import('@supabase/supabase-js').SupabaseClient | undefined;
   if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    const { createClient } = await import('@supabase/supabase-js');
-    supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+    try {
+      const { createClient } = await import('@supabase/supabase-js');
+      supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+    } catch (err) {
+      // Fail-soft: @supabase/realtime-js requires native WebSocket (Node 22+)
+      // and its constructor throws on Node 20. Treat the same as missing
+      // config — bridges stay unwired rather than crashing the daemon.
+      console.warn(`[daemon] Supabase client init failed — memory/actionExecutor bridges unwired: ${err instanceof Error ? err.message : 'unknown'}`);
+    }
   } else {
     console.warn('[daemon] Supabase not configured — memory/actionExecutor bridges unwired');
   }
