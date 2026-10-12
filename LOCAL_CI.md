@@ -30,15 +30,66 @@ npm run ci:local -- --no-post         # test HEAD, don't report to GitHub
 npm run ci:local -- --watch           # test every open same-repo PR head that
                                       # has no final local-ci result yet, then
                                       # re-check every 10 min (--interval N)
+npm run ci:local -- --watch --include-main
+                                      # same, plus clean-main's head whenever it
+                                      # has no final local-ci result (i.e. after
+                                      # every merge)
 ```
 
-To keep the watcher running across reboots, run it under PM2 alongside the
-rest of the fleet:
+A head with a final result for all three checks (pass or fail) is not
+tested again. A head whose latest status is still `pending`, from an
+interrupted run, is tested again. Runs are sequential: one commit at a time,
+`clean-main` first.
 
-```bash
-pm2 start scripts/local-ci.js --name hydi-local-ci -- --watch
+## Keeping it running (PM2)
+
+On heidi-pc, run the watcher as its own PM2 app alongside the fleet. It is
+deliberately **not** in `ecosystem.config.js`, so `pm2 start
+ecosystem.config.js` and the boot agent never start CI runs on their own.
+
+**1. Prerequisites**, once, as the Windows user PM2 runs as (`Owner`):
+
+* Run `npm install` in the repo.
+* Run `gh auth login`. The watcher reads the token at run time via `gh auth
+  token`.
+* Docker Desktop up and `npx supabase start` (see the next section).
+
+**Do not** put `GITHUB_TOKEN`/`GH_TOKEN` in the user environment or the
+shell you start PM2 from. PM2 copies the daemon's whole environment into
+each app, and `pm2 save` writes it to `%USERPROFILE%\.pm2\dump.pm2` in
+plaintext (`docs/security/PM2_SECRET_EXPOSURE_REMEDIATION.md`). With `gh
+auth login` no token ever enters that environment.
+
+**2. Start it** from the repo root:
+
+```powershell
+pm2 start scripts/local-ci.js --name hydi-local-ci -- --watch --include-main --interval 10
 pm2 save
 ```
+
+`pm2 save` adds it to the process list that the `PM2Resurrect` scheduled
+task replays at logon, so the watcher comes back after a reboot. (On Linux
+or macOS, `pm2 startup` installs the equivalent boot service.)
+
+**3. Check it:**
+
+```powershell
+pm2 status hydi-local-ci
+pm2 logs hydi-local-ci --lines 50     # one [local-ci] line per commit tested and per check result
+```
+
+Full per-check logs are in `%TEMP%\hydi-local-ci\<short-sha>\`. Results show
+on each commit and PR as `local-ci/unit-tests`, `local-ci/integration-tests`
+and `local-ci/typecheck`.
+
+**Operating it:**
+
+* **Stop:** `pm2 stop hydi-local-ci`.
+* **Remove:** `pm2 delete hydi-local-ci && pm2 save`.
+* **After pulling a new `scripts/local-ci.js`:** run `pm2 restart
+  hydi-local-ci`, since PM2 keeps the old code loaded.
+* **Re-test a commit:** delete nothing. Run `npm run ci:local -- <sha>`
+  (or `--pr N`) by hand; the new statuses supersede the old ones.
 
 **`local-ci/unit-tests` needs local Supabase running** (Docker Desktop up,
 `supabase start`). 27 suites (`tests/migrations/**` and several
@@ -58,7 +109,8 @@ Reads `GITHUB_TOKEN` or `GH_TOKEN`, else `gh auth token`. The token needs
 **Commit statuses: write** on this repo (fine-grained token) or
 `repo:status` (classic). It is only sent to `api.github.com` and is never
 printed. Per `SECURITY_PROTOCOL.md`, set it without echoing it, e.g.
-`gh auth login` once and let the script pick it up.
+`gh auth login` once and let the script pick it up. Under PM2, always use
+`gh auth login` rather than an environment variable (see above).
 
 ## Why not a self-hosted Actions runner?
 

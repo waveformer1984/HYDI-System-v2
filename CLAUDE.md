@@ -379,7 +379,7 @@ customer or Stripe must reach has to be added to the allowlist there. See
 | `health-monitor.yml` | Scheduled | Pings health endpoint |
 | `codeql.yml` | Scheduled | Static security analysis |
 
-**Local CI** (`npm run ci:local`, `scripts/local-ci.js`): while GitHub-hosted runners are down (`ROADMAP.md` P0 #2), this runs the unit, integration and typecheck checks on a machine you control, in a clean worktree, and posts them to the commit as `local-ci/*` statuses. `--watch` covers open same-repo PRs and never runs fork code. See `LOCAL_CI.md`.
+**Local CI** (`npm run ci:local`, `scripts/local-ci.js`): while GitHub-hosted runners are down (`ROADMAP.md` P0 #2), this runs the unit, integration and typecheck checks on a machine you control, in a clean worktree, and posts them to the commit as `local-ci/*` statuses. `--watch` covers open same-repo PRs (plus `clean-main`'s head after each merge with `--include-main`) and never runs fork code. On heidi-pc it runs under PM2 as `hydi-local-ci`. See `LOCAL_CI.md`.
 
 **Governance gate rule**: every new `.sql` migration must have a corresponding test in `tests/migrations/<version>.test.js`. State machine changes (enums, allowed transitions) require `STATE_MACHINE_APPROVED` in the PR description.
 
