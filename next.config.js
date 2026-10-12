@@ -5,6 +5,9 @@ const nextConfig = {
   reactStrictMode: true,
   outputFileTracingRoot: path.join(__dirname),
   allowedDevOrigins: ['127.0.0.1', 'localhost'],
+  // Next 16's `next dev` otherwise appends its own rules block to AGENTS.md
+  // on every start, leaving the curated file dirty after each run.
+  agentRules: false,
   env: {
     NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
     NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
