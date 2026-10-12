@@ -15,6 +15,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { updateSessionState } from './session-state';
 import { evaluateAction, type ActionAuthorization } from './governance/ActionChokepoint';
+import { recordActionRefusal } from './heidi/DecisionEvidence';
 import { callProtoforgeTool } from './protoforge-mcp-client';
 
 export type { ActionAuthorization } from './governance/ActionChokepoint';
@@ -79,7 +80,11 @@ export class ActionExecutor {
     });
 
     if (!decision.allowed) {
-      // A refusal is a real outcome with a real reason, not a silent no-op.
+      // A refusal is a real governed outcome — persist it so heidi_events
+      // holds the negative leg of proposed → authorized/refused →
+      // attempted → verified. Fail-soft: the refusal stands whether or
+      // not the evidence write lands.
+      await recordActionRefusal(this.supabase, { decision, sessionId });
       return {
         status: 'failed',
         error: `[${decision.code}] ${decision.reason}`,
