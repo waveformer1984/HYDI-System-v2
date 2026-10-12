@@ -237,36 +237,9 @@ jobs:
           echo ""
           echo "All governance checks passed. Ready for merge."
 
-  # Post-merge: Update frozen contracts
-  update-contracts:
-    name: Update Frozen Contracts
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/clean-main'
-    needs: governance-check
-    
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-      
-      - name: Update Governance Contract
-        run: |
-          # Generate frozen contract snapshot
-          node scripts/generate-contract-snapshot.js \
-            --output .windsurf/workflows/hdi-governance-contract.json
-          
-          # Update schema hash
-          node scripts/update-schema-hash.js
-          
-          # Commit if changed
-          git config user.name "HYDI Governance Bot"
-          git config user.email "governance@protoforge.hydi"
-          
-          git add .windsurf/workflows/hdi-governance-contract.json
-          git add supabase/migrations/schema-hash.txt
-          
-          if git diff --cached --quiet; then
-            echo "No contract changes to commit"
-          else
-            git commit -m "chore(governance): Update frozen contract [skip ci]"
-            git push
-          fi
+  # NOTE: a post-merge "Update Frozen Contracts" job used to live here, but it
+  # invoked scripts/generate-contract-snapshot.js and scripts/update-schema-hash.js
+  # — neither ever existed, and hdi-governance-contract.json is an authored
+  # artifact (agent boundaries, SLOs, signatures) that cannot be regenerated
+  # from migrations. The dead job was removed rather than replaced with a
+  # generator that would clobber authored governance content.

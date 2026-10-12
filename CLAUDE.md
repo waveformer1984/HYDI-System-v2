@@ -72,6 +72,21 @@ pm2 start ecosystem.config.js --env production -- --prod
 pm2 save
 ```
 
+#### Live authority bounds (`heidi_decision_bounds`)
+
+The daemon's resolver cadence is the *unattended* path — and it now
+consults durable bounds before every R0/R1 attempt
+(`lib/heidi/AuthorityBounds.js`, consulted in `resolveEligibleActions`).
+Fail-closed in order: `HEIDI_ALLOW_EXEC=true` in the environment →
+bounds row readable → `unattended_enabled` true → resolverId /
+capability not in `denied_resolvers` / `denied_capabilities`. An
+unreachable or empty table refuses, never implies allow; refusals are
+recorded as durable `unauthorized` attempt evidence with the gate code.
+Pool-less inline sweeps (chat, tests) are attended contexts and keep
+their existing semantics. To kill all unattended resolver execution
+without a deploy: `UPDATE heidi_decision_bounds SET unattended_enabled
+= false;`
+
 #### Decision evidence (`heidi_events`)
 
 `heidi_events` is the governed-decision log. Completed cycles write
@@ -84,7 +99,6 @@ code (`AUTHORIZATION_REQUIRED`, `INVALID_AUTHORIZATION`, `PROHIBITED`,
 `UNKNOWN_ACTION`) via `lib/heidi/DecisionEvidence.ts`. The write is
 fail-soft — a dead store can never change a refusal that already
 happened.
-
 #### Durable operator lease (`heidi_operator_lease`)
 
 `hydi-daemon` claims a single-row lease in Postgres at startup, heartbeats
@@ -108,6 +122,7 @@ recording failure is a `DEGRADED`/`STALE` verdict in `/api/heidi-health`;
 `/api/health` embeds the same verdict and downgrades `status` only when a
 daemon exists and is failing. PM2 "online" is process liveness — the status
 file is what the loop actually did. Don't read PM2 alone as health.
+
 ### Build / test / lint
 
 ```bash
