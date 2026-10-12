@@ -115,8 +115,11 @@ platform rules against current docs before shipping.**
 
 ### Platform rules (from Apple's "Creating a Push to Talk app" and API reference, re-checked 2026-10-11)
 * **Capabilities:**
-  * the Push to Talk capability (entitlement `com.apple.developer.push-to-talk`,
-    which Apple must grant to the team);
+  * the Push to Talk capability: entitlement `com.apple.developer.push-to-talk`
+    (boolean, iOS 16+; key confirmed in Apple's entitlement reference
+    2026-10-12). Apple's guide enables it with Xcode → Add Capability → Push to
+    Talk and mentions no separate approval. Whether a given account offers it
+    is unverified;
   * Background Modes → Push to Talk (`UIBackgroundModes: push-to-talk`);
   * Push Notifications (`aps-environment`);
   * `NSMicrophoneUsageDescription`.
@@ -233,7 +236,8 @@ platform rules against current docs before shipping.**
 ### NOT verified (needs a Mac, Xcode, an Apple team with the entitlement, and iPhones)
 * **The Swift has never been compiled.** There is no Swift toolchain here.
   Expect small fixes on the first Xcode build.
-* Whether Apple grants the entitlement, and how long that takes.
+* Whether the team's Apple Developer account offers the Push to Talk
+  capability without a separate request (Apple's guide implies it does).
 * **The main technical risk:** LiveKit's WebRTC audio unit starting inside a
   PushToTalk-activated session through the CallKit-style hooks.
   * In foreground and background, and on a locked phone.

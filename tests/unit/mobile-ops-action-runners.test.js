@@ -16,7 +16,7 @@ describe('mobile-ops action runners', () => {
       json: async () => ({ status: 'healthy' }),
     }));
     const out = await runHealthCheck({ fetchImpl });
-    expect(out.probes).toHaveLength(3);
+    expect(out.probes.map((p) => p.name)).toEqual(['heidi-web', 'protoforge-core', 'ollama', 'ursula']);
     expect(out.ok).toBe(false);
   });
 

@@ -8,6 +8,7 @@ import type { Preferences } from '../../lib/heidi-mobile/client/cache';
 import type { Loadable } from './hooks';
 import type { StatusSnapshot, Worker } from './types';
 import { ConfirmSheet, Dot, toneForStatus } from './ui';
+import JobsPanel from './JobsPanel';
 
 type Command = 'start' | 'restart' | 'stop';
 
@@ -179,6 +180,11 @@ export default function ControlView(props: Props) {
       <section className={styles.section}>
         <h2 className={styles.sectionTitle}>Remote diagnostics</h2>
         <OpsDiagnostics online={online} onAuthError={props.onAuthError} />
+      </section>
+
+      <section className={styles.section}>
+        <h2 className={styles.sectionTitle}>Builds &amp; test jobs</h2>
+        <JobsPanel online={online} onAuthError={props.onAuthError} />
       </section>
 
       <section className={styles.section}>
