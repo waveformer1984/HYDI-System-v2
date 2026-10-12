@@ -40,6 +40,15 @@
 
 ZERO="0000000000000000000000000000000000000000"
 
+# Git exports plumbing vars (GIT_DIR, GIT_INDEX_FILE, ...) into hook
+# environments. Tests that spawn their own git commands — GitSensor's
+# temp-repo commits — inherit them and either fail ("this operation must
+# be run in a work tree") or worse, operate on the pushing repository.
+# The gates must run against the checkout, not git's hook plumbing.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY \
+      GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_COMMON_DIR GIT_PREFIX \
+      GIT_QUARANTINE_PATH GIT_CEILING_DIRECTORIES
+
 SKIP_TESTS=true
 SAW_DELETE=false
 SAW_REFCOPY=false
