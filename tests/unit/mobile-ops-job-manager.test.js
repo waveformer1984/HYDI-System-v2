@@ -265,7 +265,10 @@ describe('job catalog', () => {
       for (const s of steps) {
         expect(typeof s.cmd).toBe('string');
         expect(Array.isArray(s.args)).toBe(true);
-        expect(s.cwd.startsWith('/repo')).toBe(true);
+        // cwd is built with path.join — on Windows that yields '\repo\…'
+        // for the same '/repo' base. Normalize separators before asserting
+        // so the test checks intent (inside the repo root), not the host OS.
+        expect(s.cwd.replace(/\\/g, '/').startsWith('/repo')).toBe(true);
       }
       expect(def.permission).toMatch(/^ops:/);
     }
