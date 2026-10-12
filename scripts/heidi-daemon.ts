@@ -35,6 +35,7 @@ dotenv.config({ path: path.resolve(__dirname, '../.env') });
 import { buildCognitiveCore } from '../lib/heidi/CognitiveCoreBuilder';
 import type { CognitiveCore, LoopStatus } from '../lib/heidi/CognitiveCore';
 import { getGoalSystem } from '../lib/heidi/GoalSystem';
+import { OperatorLease } from '../lib/heidi/OperatorLease';
 
 // ─── Configuration ───────────────────────────────────────────────────────
 
@@ -515,6 +516,44 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
+  // Durable operator lease (heidi_operator_lease). The file lock guards
+  // same-host exclusivity; this row is the DB-visible claim — which
+  // instance owns the loop, heartbeating, expiring on schedule if it dies.
+  // Refusal is logged loudly, not fatal: the file lock is still the
+  // authoritative same-host guard and a refused daemon reporting itself
+  // beats a daemon that silently vanished.
+  let operatorLease: OperatorLease | null = null;
+  const leasePool = new Pool({ ...DB_CONFIG, max: 1 });
+  try {
+    const candidate = new OperatorLease(leasePool, { ttlMs: 120_000 });
+    const claim = await candidate.claim();
+    if (claim.held) {
+      operatorLease = candidate;
+      console.log(`[daemon] operator lease held (owner=${candidate.ownerId.slice(0, 8)}… expires=${claim.expiresAt})`);
+    } else {
+      console.error(`[daemon] operator lease REFUSED — live holder: ${JSON.stringify(claim.currentOwner)}`);
+    }
+  } catch (e) {
+    console.warn(`[daemon] operator lease unavailable (table missing or DB down): ${e instanceof Error ? e.message : 'unknown'}`);
+  }
+
+  let leaseHeartbeatInFlight = false;
+  const leaseInterval = setInterval(() => {
+    if (shuttingDown || !operatorLease || leaseHeartbeatInFlight) return;
+    leaseHeartbeatInFlight = true;
+    operatorLease.heartbeat()
+      .then((ok) => {
+        if (!ok) {
+          // A superseded holder's heartbeat touches 0 rows. We are no
+          // longer the recorded operator — say so, stop heartbeating.
+          console.error('[daemon] operator lease LOST — this process is no longer the recorded holder');
+          operatorLease = null;
+        }
+      })
+      .catch(() => { /* transient DB error — the TTL absorbs one miss */ })
+      .finally(() => { leaseHeartbeatInFlight = false; });
+  }, 30000);
+
   // 3. Set up graceful shutdown
   let shuttingDown = false;
   // Track whether the self-sufficiency interval callback is currently
@@ -606,6 +645,12 @@ async function main(): Promise<void> {
       loopState: 'stopped',
       cycleCount: core.getLoopStatus().cycleCount,
     });
+
+    // Release the durable operator lease before the file lock — a
+    // successor's claim should see a clean handoff, not a stale expiry.
+    if (operatorLease) {
+      await operatorLease.release().catch(() => { });
+    }
 
     // Release lock
     releaseLock();
@@ -909,6 +954,8 @@ async function main(): Promise<void> {
         clearInterval(resolverInterval);
         clearTimeout(resolverKick);
         resolverPool.end().catch(() => { });
+        clearInterval(leaseInterval);
+        leasePool.end().catch(() => { });
         clearInterval(statusInterval);
         resolve();
       }
