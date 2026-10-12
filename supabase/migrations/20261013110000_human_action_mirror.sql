@@ -51,5 +51,7 @@ ALTER TABLE human_action_mirror ENABLE ROW LEVEL SECURITY;
 -- Evidence is written and read by the service role only — same trust
 -- boundary as heidi_events and heidi_operator_lease.
 DROP POLICY IF EXISTS human_action_mirror_service_role ON human_action_mirror;
-CREATE POLICY human_action_mirror_service_role ON human_action_mirror
-  FOR ALL TO service_role USING (true) WITH CHECK (true);
+DO $$ BEGIN
+  CREATE POLICY human_action_mirror_service_role ON human_action_mirror
+    FOR ALL TO service_role USING (true) WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
