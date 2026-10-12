@@ -30,6 +30,7 @@ Phone (/heidi, PWA)                     Heidi server (Next.js, same origin)     
 | `GET/POST /api/heidi-mobile/tasks` | `/api/actions`, `/api/work-sessions`, `/api/agent-manager/control`; `POST /api/actions/:id` | Approve / reject |
 | `GET /api/heidi-mobile/activity` | `/api/notifications` | Briefing feed (no model summarisation) |
 | `POST /api/heidi-mobile/control` | `POST /api/agent-manager/control` | start / restart / stop only, `confirm: true` required |
+| `GET/POST /api/heidi-mobile/ops` | `GET/POST /api/mobile-ops/run` | Typed diagnostics (`health.check`, `service.status`, `git.inspect`, `tests.run`); allowlisted, RBAC + audit |
 | `POST /api/heidi-mobile/chat` | `POST /api/chat` (SSE) | Streams `delta/tool/meta/actions/error/done` |
 | `GET /api/heidi-mobile/events` | `/api/events/stream` (SSE) | Realtime relay, 5-min connection cap |
 

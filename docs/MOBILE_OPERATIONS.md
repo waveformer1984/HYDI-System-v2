@@ -158,6 +158,8 @@ All routes: CORS scoped to `MOBILE_CHAT_ORIGIN` (or `*` if unset), accept
 | `/api/memory/search` | GET | `memory:search` | Filtered read over `memories` (`q`, `tags`, `min_importance`, `kind`) |
 | `/api/work-sessions` | GET | `work_sessions:view` (or `_own`) | Active goal, current task, queue depth, history |
 | `/api/voice/command` | POST | baseline `status:view`, then per-intent | Transcript → validated intent → command queue |
+| `/api/mobile-ops/run` | GET | `status:view` | List typed ops actions available to the caller's role |
+| `/api/mobile-ops/run` | POST | per-action (`status:view`, `ops:diagnostics`, `ops:run_tests`) | Run one allowlisted diagnostic (`health.check`, `service.status`, `git.inspect`, `tests.run` with `confirm: true`) |
 
 Full request/response shapes are covered by each route's Jest test
 (`tests/unit/*-api.test.js`) — treat those as the executable spec.
