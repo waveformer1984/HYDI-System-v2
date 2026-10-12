@@ -346,16 +346,22 @@ function runExternalPreflight() {
 // ---------------------------------------------------------------------------
 // Preflight (internal — node version + env presence)
 // ---------------------------------------------------------------------------
+// >=22 matches package.json engines (#333): @supabase/supabase-js needs the
+// native WebSocket Node 22 provides. On Node 20 the daemon would boot and
+// silently run with its Supabase bridges unwired (fail-soft since #332).
+const MIN_NODE_MAJOR = 22;
+
+function nodeVersionSupported(version) {
+  const major = parseInt(String(version).replace(/^v/, '').split('.')[0], 10);
+  return Number.isInteger(major) && major >= MIN_NODE_MAJOR;
+}
+
 function preflight(settings) {
   banner('Preflight (internal)');
   let blocking = false;
 
-  const major = parseInt(process.versions.node.split('.')[0], 10);
-  // >=22 matches package.json engines (#333): @supabase/supabase-js needs the
-  // native WebSocket Node 22 provides. On Node 20 the daemon would boot and
-  // silently run with its Supabase bridges unwired (fail-soft since #332).
-  if (major >= 22) log('preflight', c('32', `node ${process.version} (>=22 ok)`));
-  else { log('preflight', c('31', `node ${process.version} -- requires >=22`)); blocking = true; }
+  if (nodeVersionSupported(process.versions.node)) log('preflight', c('32', `node ${process.version} (>=${MIN_NODE_MAJOR} ok)`));
+  else { log('preflight', c('31', `node ${process.version} -- requires >=${MIN_NODE_MAJOR}`)); blocking = true; }
 
   const envFile = ['.env', '.env.local'].map((f) => path.join(ROOT, f)).find(fs.existsSync);
   log('preflight', envFile ? c('32', `env file: ${path.basename(envFile)}`) : c('33', 'no .env/.env.local found'));
@@ -1007,7 +1013,7 @@ async function main() {
 // fixed in main(): a dry run inspects the lease and never claims it); this
 // closes the `require()` half of that hazard so tests can safely reach the
 // pure classification logic below without ever starting a real boot-agent.
-module.exports = { classifyOccupant };
+module.exports = { classifyOccupant, nodeVersionSupported, MIN_NODE_MAJOR };
 
 if (require.main === module) {
   main().catch((e) => { console.error(e); shutdown(1); });
