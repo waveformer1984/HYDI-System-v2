@@ -126,11 +126,13 @@ describe('REAL graceful shutdown via IPC (not source-text check)', () => {
     });
 
     // Wait for the daemon to initialize and run its initial cycle
-    // The daemon prints "[daemon] Daemon is running" when ready
+    // The daemon prints "[daemon] Daemon is running" when ready.
+    // Startup allocates DB pools and goal/resolver state before this
+    // line prints; on loaded CI runners that can exceed 30s.
     await waitForCondition(
       () => stdoutContent.includes('Daemon is running'),
-      30000,
-      'Daemon did not reach "running" state within 30s',
+      75000,
+      'Daemon did not reach "running" state within 75s',
     );
 
     // Wait for the initial self-sufficiency cycle to complete
@@ -186,7 +188,7 @@ describe('REAL graceful shutdown via IPC (not source-text check)', () => {
     console.log(`Stdout contains "shutting down gracefully": ${stdoutContent.includes('shutting down gracefully')}`);
     console.log(`Stdout contains "Shutdown complete":       ${stdoutContent.includes('Shutdown complete')}`);
     console.log('════════════════════════════════════════════════════════════════');
-  }, 90000); // 90s overall test timeout (40s exit wait + startup + buffer)
+  }, 180000); // 180s overall: 75s startup wait + settle + 40s exit wait + buffer
 
   test('launcher uses fork() not spawn() (IPC channel required for shutdown_with_message)', () => {
     const launcherPath = path.resolve(REPO_ROOT, 'scripts', 'heidi-daemon-launcher.js');
