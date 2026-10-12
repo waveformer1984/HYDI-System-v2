@@ -72,6 +72,18 @@ pm2 start ecosystem.config.js --env production -- --prod
 pm2 save
 ```
 
+#### Human-action DB mirror (`human_action_mirror`)
+
+`data/human-actions.json` stays the authoritative store and the offline
+fallback — every surface keeps working with Postgres down. The mirror
+table is the queryable evidence copy: `HumanActionService` upserts a
+row on every mutation when constructed with `mirrorPool`
+(`lib/human-actions/mirror.js`), and each pooled resolver sweep bulk
+refreshes all records via `mirrorAllActions`, so anything written while
+the DB was dead materializes on the next live pass. Mirror writes are
+fire-and-forget — they never gate the file store. Read the table as
+evidence, never as truth; `mirrored_at` shows how fresh each row is.
+
 ### Build / test / lint
 
 ```bash
