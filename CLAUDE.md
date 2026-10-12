@@ -84,6 +84,17 @@ the DB was dead materializes on the next live pass. Mirror writes are
 fire-and-forget — they never gate the file store. Read the table as
 evidence, never as truth; `mirrored_at` shows how fresh each row is.
 
+#### Durable operator lease (`heidi_operator_lease`)
+
+`hydi-daemon` claims a single-row lease in Postgres at startup, heartbeats
+it every 30s (TTL 120s), and releases it on graceful shutdown
+(`lib/heidi/OperatorLease.ts`). The claim is an atomic conditional upsert —
+a second claimant while a live lease exists is refused, not raced. A
+holder whose heartbeat touches 0 rows has lost the lease and says so in
+the log. `released_at IS NULL AND expires_at < now()` marks a stale
+holder — presumed dead, distinguishable from a clean handoff. The file
+lock remains the same-host guard; this row is the DB-visible truth.
+
 #### Daemon status surface (evidence, not liveness)
 
 `hydi-daemon` writes `.heidi-daemon-status.json` at the repo root every ~30s

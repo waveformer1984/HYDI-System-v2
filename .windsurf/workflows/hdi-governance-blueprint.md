@@ -436,6 +436,7 @@ Two migrations stopped `supabase db start` on an empty database. They were corre
 | Migration | Table / change | Governance effect |
 |-----------|----------------|-------------------|
 | `20261013110000_human_action_mirror` | New `human_action_mirror` — `id TEXT PRIMARY KEY` (the file-store action id), full record projection (`status`, `boundary`, `verifier`, `verification`, `resolver`, `transitions` JSONB), `mirrored_at`, status + blocker_key indexes, service-role-only RLS. | The file store stays authoritative; this is the queryable evidence copy, upserted per mutation and bulk-refreshed per sweep. No state machine or transition changes. |
+| `20261012173000_heidi_operator_lease` | New `heidi_operator_lease` — one row per operator (`holder`, `expires_at`, `released_at`, heartbeat fields); unique operator index, expiry index, service-role-only RLS policy. | The daemon's singleton claim is a durable, race-safe fact (atomic conditional upsert — no read-then-write). `released_at IS NULL AND expires_at < now()` marks a stale holder. No state machine or transition changes. |
 
 ## 9. "Don't Sabotage Yourself" Rules (Enforced)
 
