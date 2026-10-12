@@ -7,7 +7,6 @@
 // credentials -- the exact class of exposure this script exists to clean up
 // after. Secret values are now written only to a local, gitignored file
 // (mode 0600, matched by the `.env.*` rule in .gitignore) and never logged.
-const { createClient } = require('@supabase/supabase-js');
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
@@ -18,11 +17,21 @@ async function rotateSecrets() {
   console.log('⚠️  REAL TOKENS/KEYS WERE SHARED IN LOGS');
   console.log('');
 
-  const supabase = createClient(
-    'https://akbnfovjdcobifeupvbn.supabase.co',
-    process.env.SUPABASE_SERVICE_ROLE_KEY
-  );
-  void supabase; // Reserved for a future direct-rotation API call; not used yet (see MANUAL STEPS below).
+  // Reserved for a future direct-rotation API call; not used yet (see
+  // MANUAL STEPS below). Constructed lazily + fail-soft because
+  // @supabase/realtime-js requires native WebSocket (Node 22+) and would
+  // otherwise crash the script on Node 20 before any rotation work runs.
+  let supabase = null;
+  try {
+    const { createClient } = require('@supabase/supabase-js');
+    supabase = createClient(
+      'https://akbnfovjdcobifeupvbn.supabase.co',
+      process.env.SUPABASE_SERVICE_ROLE_KEY
+    );
+  } catch {
+    // Client creation is non-essential — rotation output does not depend on it.
+  }
+  void supabase;
 
   // Generate new secure tokens
   const newBreakGlassToken = crypto.randomBytes(32).toString('hex');

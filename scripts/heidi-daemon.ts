@@ -54,6 +54,11 @@ interface DaemonConfig {
   intervalMs: number;
   startupStabilizationMs: number;
   once: boolean;
+  // Skip the one-time initial self-sufficiency sweep at startup (probes +
+  // self-repair + acquisition). The periodic interval still runs afterwards.
+  // Intended for tests and cold environments where external-capability
+  // resolution would stall startup — mirroring --no-stabilization.
+  skipInitialSelfCheck: boolean;
 }
 
 function parseArgs(): DaemonConfig {
@@ -62,6 +67,7 @@ function parseArgs(): DaemonConfig {
     intervalMs: 60000,
     startupStabilizationMs: 120000,
     once: false,
+    skipInitialSelfCheck: false,
   };
 
   for (const arg of args) {
@@ -71,6 +77,8 @@ function parseArgs(): DaemonConfig {
       config.startupStabilizationMs = 0;
     } else if (arg === '--once') {
       config.once = true;
+    } else if (arg === '--skip-self-check') {
+      config.skipInitialSelfCheck = true;
     }
   }
 
@@ -476,8 +484,15 @@ async function main(): Promise<void> {
   //     which the core reports honestly rather than failing.
   let supabase: import('@supabase/supabase-js').SupabaseClient | undefined;
   if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    const { createClient } = await import('@supabase/supabase-js');
-    supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+    try {
+      const { createClient } = await import('@supabase/supabase-js');
+      supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+    } catch (err) {
+      // Fail-soft: @supabase/realtime-js requires native WebSocket (Node 22+)
+      // and its constructor throws on Node 20. Treat the same as missing
+      // config — bridges stay unwired rather than crashing the daemon.
+      console.warn(`[daemon] Supabase client init failed — memory/actionExecutor bridges unwired: ${err instanceof Error ? err.message : 'unknown'}`);
+    }
   } else {
     console.warn('[daemon] Supabase not configured — memory/actionExecutor bridges unwired');
   }
@@ -666,8 +681,14 @@ async function main(): Promise<void> {
   }
 
   // 4. Run initial self-sufficiency observation
-  console.log('[daemon] Running initial capability health check...');
-  const initialResult = await runSelfSufficiencyCycle(core);
+  let initialResult: Awaited<ReturnType<typeof runSelfSufficiencyCycle>>;
+  if (config.skipInitialSelfCheck) {
+    console.log('[daemon] Skipping initial capability health check (--skip-self-check)');
+    initialResult = { capabilityHealth: null, selfRepairResult: null, credentialWatchResult: null, acquisitionResult: null };
+  } else {
+    console.log('[daemon] Running initial capability health check...');
+    initialResult = await runSelfSufficiencyCycle(core);
+  }
   if (initialResult.capabilityHealth) {
     console.log(`[daemon] Capabilities: ${initialResult.capabilityHealth.total} total, ${initialResult.capabilityHealth.ready} READY, ${initialResult.capabilityHealth.blocked} BLOCKED, ${initialResult.capabilityHealth.unavailable} UNAVAILABLE`);
   }
