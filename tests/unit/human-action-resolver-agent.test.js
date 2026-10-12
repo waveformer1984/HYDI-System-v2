@@ -57,6 +57,11 @@ function makePool() {
     return { rows: last ? [{ s: last.payload.status }] : [] };
   };
   const query = async (sql, params = []) => {
+    if (/FROM heidi_decision_bounds/.test(sql)) {
+      // Live-authority gate read: an open, nothing-denied bounds row —
+      // the tests below exercise what happens AFTER authority passes.
+      return { rows: [{ unattended_enabled: true, auto_approve_threshold: 0.85, max_auto_approve_amount: 10000, denied_resolvers: [], denied_capabilities: [], updated_at: new Date().toISOString() }] };
+    }
     if (/INSERT INTO heidi_events/.test(sql)) {
       // claim path writes status with literal columns and $1=payload
       if (/VALUES \('agent_status','agents',\$1/.test(sql)) return push('agent_status', params[0]);
@@ -160,6 +165,10 @@ describe('resolver agent — governed deployment', () => {
 });
 
 describe('resolver mission deployment per action (pool path)', () => {
+  // The pooled cadence is the unattended path — it now requires the
+  // master switch alongside the live bounds row makePool serves.
+  beforeAll(() => { process.env.HEIDI_ALLOW_EXEC = 'true'; });
+  afterAll(() => { delete process.env.HEIDI_ALLOW_EXEC; });
   test('R0 resolver deploys as a deterministic resolver mission; repeat pass dedupes', async () => {
     const svc = new HumanActionService();
     const pool = makePool();

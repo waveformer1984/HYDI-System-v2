@@ -72,6 +72,21 @@ pm2 start ecosystem.config.js --env production -- --prod
 pm2 save
 ```
 
+#### Live authority bounds (`heidi_decision_bounds`)
+
+The daemon's resolver cadence is the *unattended* path — and it now
+consults durable bounds before every R0/R1 attempt
+(`lib/heidi/AuthorityBounds.js`, consulted in `resolveEligibleActions`).
+Fail-closed in order: `HEIDI_ALLOW_EXEC=true` in the environment →
+bounds row readable → `unattended_enabled` true → resolverId /
+capability not in `denied_resolvers` / `denied_capabilities`. An
+unreachable or empty table refuses, never implies allow; refusals are
+recorded as durable `unauthorized` attempt evidence with the gate code.
+Pool-less inline sweeps (chat, tests) are attended contexts and keep
+their existing semantics. To kill all unattended resolver execution
+without a deploy: `UPDATE heidi_decision_bounds SET unattended_enabled
+= false;`
+
 ### Build / test / lint
 
 ```bash
