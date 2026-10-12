@@ -51,5 +51,7 @@ COMMENT ON COLUMN public.heidi_operator_lease.released_at IS
 -- RLS: service_role only, matching the heidi_missions convention.
 ALTER TABLE public.heidi_operator_lease ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS heidi_operator_lease_service_role ON public.heidi_operator_lease;
-CREATE POLICY heidi_operator_lease_service_role ON public.heidi_operator_lease
-  TO service_role USING (true) WITH CHECK (true);
+DO $$ BEGIN
+  CREATE POLICY heidi_operator_lease_service_role ON public.heidi_operator_lease
+    TO service_role USING (true) WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
