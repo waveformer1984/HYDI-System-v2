@@ -32,35 +32,17 @@ const envOf = (vars = {}) => ({
   envNamePresent: (n) => !!(vars[n] ?? process.env[n]),
 });
 
-// ─── funnel resolver ─────────────────────────────────────────────────────
+// ─── public exposure is never autonomous ─────────────────────────────────
 
-describe('tailscale-funnel-url resolver', () => {
-  const action = { id: 'a1', blockerKey: 'protoforge:stable-public-url' };
-  const policy = { resolverId: 'tailscale-funnel-url', scope: { funnelTarget: 'http://127.0.0.1:3000', envVar: 'NEXT_PUBLIC_APP_URL' } };
-
-  it('reports unauthorized when the tailnet ACL denies funnel', async () => {
-    const execFile = async () => ({ err: null, stdout: 'Funnel is not enabled on your tailnet.\nTo enable, visit https://login.tailscale.com/f/funnel', stderr: '' });
-    const r = await getResolver('tailscale-funnel-url')({ action, policy, env: envOf(), deps: { execFile } });
-    expect(r.outcome).toBe('unauthorized');
-    expect(r.reason).toMatch(/tailnet admin/i);
+describe('public exposure', () => {
+  it('no resolver can enable Tailscale Funnel or any tunnel', () => {
+    expect(getResolver('tailscale-funnel-url')).toBeNull();
   });
 
-  it('enables funnel, persists the URL, and verifies gated endpoints stay gated', async () => {
-    const dir = tmpDir();
-    const envPath = path.join(dir, '.env.local');
-    const calls = [];
-    const execFile = async (cmd, args) => {
-      calls.push(args.join(' '));
-      if (args[0] === 'funnel' && args[1] === 'status') return { err: null, stdout: 'https://heidi-pc.tailc50af2.ts.net\n|-- / proxy http://127.0.0.1:3000', stderr: '' };
-      return { err: null, stdout: 'Available within your tailnet and on the public internet', stderr: '' };
-    };
-    const fetchFn = async (url) => ({ status: url.includes('first-sale-readiness') ? 401 : 200 });
-    const r = await getResolver('tailscale-funnel-url')({ action, policy, env: envOf(), deps: { execFile, fetch: fetchFn, envPath } });
-    expect(r.outcome).toBe('completed');
-    expect(r.evidence.publicUrl).toBe('https://heidi-pc.tailc50af2.ts.net');
-    expect(r.evidence.adminStillGated).toBe(true);
-    expect(fs.readFileSync(envPath, 'utf8')).toContain('NEXT_PUBLIC_APP_URL=https://heidi-pc.tailc50af2.ts.net');
-    delete process.env.NEXT_PUBLIC_APP_URL;
+  it('stable-public-url is an owner decision (R2), never executed', () => {
+    const c = classifyAction({ blockerKey: 'protoforge:stable-public-url', boundary: { category: 'OTHER' } });
+    expect(c.resolutionClass).toBe('R2');
+    expect(isAgentResolvable(c.resolutionClass)).toBe(false);
   });
 });
 
@@ -175,7 +157,7 @@ describe('resolution policy', () => {
   it('classifies the five blockers honestly', () => {
     const c = (k) => classifyAction({ blockerKey: k, boundary: { category: 'OTHER' } });
     expect(c('checkpoint:demand-prospects').resolutionClass).toBe('R0');
-    expect(isAgentResolvable(c('protoforge:stable-public-url').resolutionClass)).toBe(true);
+    expect(isAgentResolvable(c('protoforge:stable-public-url').resolutionClass)).toBe(false);
     expect(isAgentResolvable(c('stripe:live-credential').resolutionClass)).toBe(true);
     expect(isAgentResolvable(c('checkpoint:outreach-authorization').resolutionClass)).toBe(true);
     // live-transaction authorization stays a deliberate human gate

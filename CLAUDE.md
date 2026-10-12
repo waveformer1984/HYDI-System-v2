@@ -75,7 +75,7 @@ pm2 save
 ### Build / test / lint
 
 ```bash
-npm install          # Install dependencies (Node >= 20 required)
+npm install          # Install dependencies (Node >= 22 required)
 npm run build        # Production build
 npm start            # Start production server
 npm run typecheck    # TypeScript type-check (tsc --noEmit, no emit)
@@ -256,6 +256,10 @@ Revenue pipeline module separate from the API layer:
 - `revenue-engine/schema.sql` / `revenue-engine/outcome-schema.sql` — local schema definitions
 - `revenue-engine/modules/` — sub-modules
 
+### Revenue Streams Module (`lib/billing/`)
+
+Subscription billing with server-enforced entitlements, separate from the legacy Stripe Connect/`financial_ledger` flow. Catalog (immutable versioned prices) → hosted checkout → signature-verified webhook stored in `billing_webhook_events` before processing → order-safe subscription projection → `billing_entitlements` (`access_until`) → atomic usage reservation (`billing_reserve_usage`, row lock) → provider cost records → revenue report with per-metric definitions. Provider behind an adapter (`lib/billing/providers/`). Routes under `pages/api/billing/**`; pages `/pricing`, `/billing`, `/billing-admin`; worker `scripts/billing-worker.js`. Customers authenticate with interim operator-issued tenant tokens (`BILLING_CUSTOMER_TOKEN_SECRET`). Acceptance scenarios run on both the memory store (Tier 1) and real Postgres (`acceptance.pg.test.js`, Tier 2). Design, policies and runbook: `docs/billing/REVENUE_STREAMS_MODULE.md`.
+
 ### KILO Module (`kilo/`)
 
 Standalone implementation of the KILO hypothesis generator:
@@ -358,6 +362,13 @@ Key DB features: RLS enabled on all tables, `system_dashboard` view drives healt
 
 Use `SUPABASE_SERVICE_ROLE_KEY` server-side only. Never expose it to the client.
 
+**Public-ingress gate** (`proxy.ts` → `lib/security/ingressGate.js`): requests
+from the public internet (a tunnel such as ngrok, Funnel, a port forward) reach
+only the customer/Stripe allowlist; everything else answers 404 to the outside.
+Requests from this PC, the LAN and the tailnet are unaffected. A new route a
+customer or Stripe must reach has to be added to the allowlist there. See
+`docs/SECURITY_INGRESS.md` (`HYDI_PUBLIC_PATHS`, `HYDI_TRUSTED_HOSTS`).
+
 ## CI / Workflows
 
 | Workflow | Trigger | What it does |
@@ -368,7 +379,7 @@ Use `SUPABASE_SERVICE_ROLE_KEY` server-side only. Never expose it to the client.
 | `health-monitor.yml` | Scheduled | Pings health endpoint |
 | `codeql.yml` | Scheduled | Static security analysis |
 
-**Local CI** (`npm run ci:local`, `scripts/local-ci.js`): while GitHub-hosted runners are down (`ROADMAP.md` P0 #2), this runs the unit, integration and typecheck checks on a machine you control, in a clean worktree, and posts them to the commit as `local-ci/*` statuses. `--watch` covers open same-repo PRs and never runs fork code. See `LOCAL_CI.md`.
+**Local CI** (`npm run ci:local`, `scripts/local-ci.js`): while GitHub-hosted runners are down (`ROADMAP.md` P0 #2), this runs the unit, integration and typecheck checks on a machine you control, in a clean worktree, and posts them to the commit as `local-ci/*` statuses. `--watch` covers open same-repo PRs (plus `clean-main`'s head after each merge with `--include-main`) and never runs fork code. On heidi-pc it runs under PM2 as `hydi-local-ci`. See `LOCAL_CI.md`.
 
 **Governance gate rule**: every new `.sql` migration must have a corresponding test in `tests/migrations/<version>.test.js`. State machine changes (enums, allowed transitions) require `STATE_MACHINE_APPROVED` in the PR description.
 

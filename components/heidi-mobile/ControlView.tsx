@@ -8,6 +8,7 @@ import type { Preferences } from '../../lib/heidi-mobile/client/cache';
 import type { Loadable } from './hooks';
 import type { StatusSnapshot, Worker } from './types';
 import { ConfirmSheet, Dot, toneForStatus } from './ui';
+import JobsPanel from './JobsPanel';
 
 type Command = 'start' | 'restart' | 'stop';
 
@@ -24,6 +25,47 @@ interface Props {
   onUnpair: () => Promise<void>;
   onAuthError: (_error: ApiError) => void;
   onCommandQueued: () => void;
+}
+
+function OpsDiagnostics({ online, onAuthError }: { online: boolean; onAuthError: (_error: ApiError) => void }) {
+  const [busy, setBusy] = useState<string | null>(null);
+  const [report, setReport] = useState<string | null>(null);
+
+  const runAction = async (action: string, confirm = false) => {
+    setBusy(action);
+    setReport(null);
+    const result = await heidiRequest<{ ok?: boolean; correlation_id?: string; result?: unknown; error?: string; message?: string }>('/ops', {
+      method: 'POST',
+      body: { action, confirm: confirm || undefined },
+    });
+    setBusy(null);
+    if (result.ok) {
+      const id = result.data.correlation_id ? ` (${result.data.correlation_id})` : '';
+      setReport(`${action}${id}: ${JSON.stringify(result.data.result ?? result.data, null, 2).slice(0, 1200)}`);
+    } else {
+      setReport(`${action} failed: ${result.error.message}`);
+      if (['not_paired', 'unauthorized'].includes(result.error.kind)) onAuthError(result.error);
+    }
+  };
+
+  return (
+    <div className={styles.card}>
+      <p className={`${styles.muted} ${styles.small}`}>
+        Typed ops run on the HYDI host through an allowlisted gateway — not arbitrary shell. Read-only checks need no extra confirm.
+      </p>
+      <div className={styles.btnRow}>
+        <button type="button" className={styles.btn} disabled={!online || !!busy} onClick={() => void runAction('health.check')}>
+          Health check
+        </button>
+        <button type="button" className={styles.btn} disabled={!online || !!busy} onClick={() => void runAction('git.inspect')}>
+          Git inspect
+        </button>
+      </div>
+      {report && (
+        <pre className={styles.code} style={{ marginTop: 8, whiteSpace: 'pre-wrap', fontSize: 11 }}>{report}</pre>
+      )}
+    </div>
+  );
 }
 
 const COMMAND_TEXT: Record<Command, { label: string; body: string }> = {
@@ -133,6 +175,16 @@ export default function ControlView(props: Props) {
           Only controls HYDI already supports are shown. Commands go through HYDI’s authenticated queue and are
           audit-logged; your device’s role must allow worker control. There is no remote shutdown or restart of HYDI itself.
         </p>
+      </section>
+
+      <section className={styles.section}>
+        <h2 className={styles.sectionTitle}>Remote diagnostics</h2>
+        <OpsDiagnostics online={online} onAuthError={props.onAuthError} />
+      </section>
+
+      <section className={styles.section}>
+        <h2 className={styles.sectionTitle}>Builds &amp; test jobs</h2>
+        <JobsPanel online={online} onAuthError={props.onAuthError} />
       </section>
 
       <section className={styles.section}>

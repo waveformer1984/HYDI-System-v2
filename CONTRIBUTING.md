@@ -11,7 +11,7 @@ For larger changes, open a draft PR early (even with just a description) so the 
 - Read `CLAUDE.md` for architecture overview and module reference.
 - Read `AGENTS.md` for the constraint checklist every contributor must respect.
 - The primary branch is **`clean-main`** — not `main`. All PRs target `clean-main`.
-- Node >= 20 is required (`"engines": { "node": ">=20.x" }` in `package.json`).
+- Node >= 22 is required (`"engines": { "node": ">=22.x" }` in `package.json`): `@supabase/supabase-js` needs the native WebSocket that Node 22 added.
 
 ## Setup
 

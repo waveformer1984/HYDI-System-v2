@@ -1,7 +1,9 @@
 // browser_post_reply — authorization binding + fail-closed behavior.
 // The live fixture run uses a local thread page so no external message
 // is ever sent during tests.
-const { describe, it } = require('node:test');
+//
+// Runs under Jest (`npm test`, hence the pre-push hook): describe/it are Jest
+// globals. Node's assert module is kept for the assertions.
 const assert = require('node:assert');
 const path = require('path');
 const fs = require('fs');
@@ -68,8 +70,13 @@ describe('browser_post_reply page classification', () => {
   });
 });
 
+// The fixture run launches a real, headed Chrome (puppeteer-core + CHROME_PATH)
+// against a local file. Opt-in only (BPR_E2E=1) so the unit gate stays
+// hermetic and a pre-push never opens a browser window.
+const itE2E = process.env.BPR_E2E === '1' ? it : it.skip;
+
 describe('browser_post_reply end-to-end on a local fixture', () => {
-  it('composes, submits, and verifies on a real thread page', async () => {
+  itE2E('composes, submits, and verifies on a real thread page', async () => {
     const fixture = 'file:///' + path.join(__dirname, '..', '..', 'protoforge-applications', 'rezonate', 'tests', 'fixtures', 'thread.html').replace(/\\/g, '/');
     const spec = {
       ...baseSpec, actionId: 'bpr_test_1', permalink: fixture,
@@ -81,7 +88,7 @@ describe('browser_post_reply end-to-end on a local fixture', () => {
     assert.ok(['VERIFIED', 'UNKNOWN', 'FAILED'].includes(r.status), `unexpected status ${r.status}: ${r.reason}`);
     // On the fixture page the typed text appears after Post → VERIFIED expected
     if (r.status === 'VERIFIED') bpr.recordSubmission(spec, r);
-  });
+  }, 120000);
   it('refuses a second submission of the same action', () => {
     const spec = { ...baseSpec, message: 'I can produce a print-ready STL for that — $29, same day.' };
     spec.authorization = bpr.createAuthorization(spec);

@@ -1,0 +1,7 @@
+{
+  "name": "walkie-background",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Android foreground service that keeps a Walkie channel connected while the app is in the background",
+  "main": "src/index.ts"
+}

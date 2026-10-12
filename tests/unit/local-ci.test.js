@@ -4,7 +4,7 @@
  * logic is exercised here -- above all, that fork PRs are never selected.
  */
 
-const { CHECKS, REPO, parseArgs, summarizeJest, describe: describeStatus, selectPullsToTest, supabaseCheckEnv } = require('../../scripts/local-ci');
+const { CHECKS, REPO, parseArgs, summarizeJest, describe: describeStatus, selectPullsToTest, needsRun, supabaseCheckEnv } = require('../../scripts/local-ci');
 
 function pr(number, sha, fullName = REPO) {
   return { number, head: { sha, ref: `branch-${number}`, repo: fullName ? { full_name: fullName } : null } };
@@ -16,12 +16,17 @@ function finalStatuses(state = 'success') {
 
 describe('parseArgs', () => {
   it('defaults to testing HEAD and posting', () => {
-    expect(parseArgs([])).toEqual({ target: 'HEAD', pr: null, watch: false, once: false, post: true, intervalMin: 10 });
+    expect(parseArgs([])).toEqual({ target: 'HEAD', pr: null, watch: false, once: false, includeMain: false, post: true, intervalMin: 10 });
   });
 
   it('reads --pr, --watch, --once, --no-post and --interval', () => {
     expect(parseArgs(['--pr', '276', '--no-post'])).toMatchObject({ pr: 276, post: false });
     expect(parseArgs(['--watch', '--once', '--interval', '5'])).toMatchObject({ watch: true, once: true, intervalMin: 5 });
+  });
+
+  it('reads --include-main only together with --watch', () => {
+    expect(parseArgs(['--watch', '--include-main'])).toMatchObject({ watch: true, includeMain: true });
+    expect(() => parseArgs(['--include-main'])).toThrow('--include-main');
   });
 
   it('takes a positional ref', () => {
@@ -50,6 +55,21 @@ describe('describe', () => {
   it('truncates to GitHub\'s 140-character limit', () => {
     expect(describeStatus('x'.repeat(200))).toHaveLength(140);
     expect(describeStatus('short')).toBe('short');
+  });
+});
+
+describe('needsRun', () => {
+  it('is true for a commit with no local-ci statuses (e.g. a fresh merge)', () => {
+    expect(needsRun([])).toBe(true);
+  });
+
+  it('is false once every check has a final result, pass or fail', () => {
+    expect(needsRun(finalStatuses('success'))).toBe(false);
+    expect(needsRun(finalStatuses('error'))).toBe(false);
+  });
+
+  it('is true while the newest status for a check is pending', () => {
+    expect(needsRun([{ context: CHECKS[2].context, state: 'pending' }, ...finalStatuses()])).toBe(true);
   });
 });
 

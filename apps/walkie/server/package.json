@@ -1,0 +1,32 @@
+{
+  "name": "protoforge-walkie-server",
+  "version": "0.1.0",
+  "private": true,
+  "description": "ProtoForge Walkie backend: auth, channel membership, short-lived LiveKit tokens and server-authoritative speaker arbitration",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "node --import tsx src/index.ts",
+    "migrate": "tsx src/migrate.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test --test-concurrency=1 test/*.test.ts",
+    "test:livekit": "WALKIE_TEST_LIVEKIT=1 node --import tsx --test --test-concurrency=1 test/livekit.integration.test.ts"
+  },
+  "dependencies": {
+    "fastify": "^5.12.5",
+    "jose": "^6.2.12",
+    "livekit-server-sdk": "^2.19.1",
+    "pg": "^8.23.1",
+    "zod": "^4.6.6"
+  },
+  "devDependencies": {
+    "@livekit/rtc-node": "^1.1.0",
+    "@types/node": "^22.20.5",
+    "@types/pg": "^8.23.1",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3"
+  }
+}

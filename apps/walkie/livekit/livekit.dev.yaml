@@ -1,0 +1,23 @@
+# Local development LiveKit server for ProtoForge Walkie.
+# NOT for production: the API key/secret below are public placeholders.
+# Phones on the same Wi-Fi reach this via your computer's LAN IP; set
+# rtc.node_ip to that IP (or enable use_external_ip on a public host).
+port: 7880
+rtc:
+  tcp_port: 7881
+  port_range_start: 50000
+  port_range_end: 50200
+  use_external_ip: false
+  node_ip: 127.0.0.1
+keys:
+  # Must match LIVEKIT_API_KEY / LIVEKIT_API_SECRET in server/.env
+  walkie-dev-key: walkie-dev-secret-change-me-0123456789abcdef
+webhook:
+  api_key: walkie-dev-key
+  urls:
+    - http://127.0.0.1:8787/livekit/webhook
+room:
+  auto_create: false
+  empty_timeout: 120
+logging:
+  level: info

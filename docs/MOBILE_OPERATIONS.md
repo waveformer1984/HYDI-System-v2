@@ -158,6 +158,31 @@ All routes: CORS scoped to `MOBILE_CHAT_ORIGIN` (or `*` if unset), accept
 | `/api/memory/search` | GET | `memory:search` | Filtered read over `memories` (`q`, `tags`, `min_importance`, `kind`) |
 | `/api/work-sessions` | GET | `work_sessions:view` (or `_own`) | Active goal, current task, queue depth, history |
 | `/api/voice/command` | POST | baseline `status:view`, then per-intent | Transcript → validated intent → command queue |
+| `/api/mobile-ops/run` | GET | `status:view` | List typed ops actions available to the caller's role |
+| `/api/mobile-ops/run` | POST | per-action (`status:view`, `ops:diagnostics`, `ops:run_tests`) | Run one allowlisted diagnostic (`health.check` — heidi-web, protoforge-core, Ollama, Ursula — `service.status`, `git.inspect`, `tests.run` with `confirm: true`) |
+| `/api/mobile-ops/jobs` | GET | `status:view` | Job catalog for the caller's role + recent jobs; `?id=&since=N` returns state and log lines after cursor `N` |
+| `/api/mobile-ops/jobs` | POST `{kind, args?, confirm}` | per-job (`ops:run_tests`, `ops:build`) | Start an allowlisted long job: `tests.suite`, `walkie.tests`, `walkie.android.check`, `walkie.android.build` (202) |
+| `/api/mobile-ops/jobs` | POST `{id, cancel: true}` | the job's permission | Cancel; kills the process tree |
+
+**Jobs** (`lib/mobile-ops/job-catalog.js`, `job-manager.js`):
+* Commands are fixed argv arrays in the catalog. The only caller input is an
+  allowlisted enum (a test-suite key).
+* Each job has a timeout (10–45 min). Allowed concurrency: one running job per
+  kind, two overall.
+* Child processes get an environment stripped of credential-looking variables.
+* Output is redacted (tokens, JWTs, keys, DSN passwords) and capped at 256 KB
+  per job.
+* Each log line has a sequence number, so a phone that loses its connection
+  resumes from the last line it saw (`gap: true` if lines aged out).
+* Cancel and timeout kill the whole process group. Windows uses
+  `taskkill /T /F`.
+* Start and cancel are written to `auth_audit_log`.
+* State is in memory in heidi-web: restarting heidi-web forgets job history
+  and kills running jobs.
+* `walkie.android.build` needs the Android SDK and a JDK on the HYDI host, and
+  the new `ops:build` permission (owner and operator).
+* Heidi Mobile relays jobs through `/api/heidi-mobile/jobs`, which re-validates
+  every input. The Control tab → "Builds & test jobs" shows them.
 
 Full request/response shapes are covered by each route's Jest test
 (`tests/unit/*-api.test.js`) — treat those as the executable spec.
