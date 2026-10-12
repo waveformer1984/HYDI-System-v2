@@ -72,6 +72,19 @@ pm2 start ecosystem.config.js --env production -- --prod
 pm2 save
 ```
 
+#### Daemon status surface (evidence, not liveness)
+
+`hydi-daemon` writes `.heidi-daemon-status.json` at the repo root every ~30s
+and once at startup (atomic tmp+rename, via `lib/heidi/DaemonStatusSurface.ts`).
+The snapshot carries `getLoopStatus()` fields — `state`, `cycleCount`,
+`lastCycleOutcome`, `consecutiveFailures`, `lastError` — plus `persistence`,
+the result of an independent 4s probe of both Postgres (`PG_*`/`DB_CONFIG`)
+and Supabase REST (`SUPABASE_URL`). A stale file (>180s) or a snapshot
+recording failure is a `DEGRADED`/`STALE` verdict in `/api/heidi-health`;
+`/api/health` embeds the same verdict and downgrades `status` only when a
+daemon exists and is failing. PM2 "online" is process liveness — the status
+file is what the loop actually did. Don't read PM2 alone as health.
+
 ### Build / test / lint
 
 ```bash
@@ -190,7 +203,8 @@ All files under `api/` are **Vercel serverless functions** (Next.js API routes).
 | Route | Purpose |
 |-------|----------|
 | `api/chat/route.js` | Universal chat router — dispatches `{ message, system }` to the correct named agent |
-| `api/health.js` | Reads the `system_dashboard` Supabase view for live health metrics |
+| `api/health.js` | Reads the `system_dashboard` Supabase view for live health metrics; also embeds the daemon verdict from the status surface (below) |
+| `pages/api/heidi-health.ts` | Subsystem health — daemon liveness **plus** the daemon's own reported truth (cycle outcome, consecutive failures, persistence probe) |
 | `api/heidi/route.js` | Heidi-specific orchestration endpoint |
 | `api/hydi/sync.js` | HYDI state sync |
 | `api/ursula/status.js` | Ursula system status |
