@@ -117,7 +117,10 @@ jobs:
         if: steps.schema-check.outputs.schema_changed == 'true'
         run: |
           # Check if hydi_allowed_transitions or enums were modified
-          if git diff origin/clean-main...HEAD | grep -E "(hydi_phase|hydi_status|hydi_allowed_transitions)" > /dev/null; then
+          # Grep only migration SQL — a test asserting "no state-machine
+          # change" legitimately contains these strings and must not trip
+          # the approval requirement.
+          if git diff origin/clean-main...HEAD -- 'supabase/migrations/*.sql' | grep -E "(hydi_phase|hydi_status|hydi_allowed_transitions)" > /dev/null; then
             echo "🔒 State machine contract changes detected"
             
             # Require explicit approval in PR description
