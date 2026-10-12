@@ -64,7 +64,25 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (!recentActivity) daemonHealthy = false;
     }
 
-    checks.daemon = { healthy: daemonHealthy, state: daemonHealthy ? 'HEALTHY' : 'NOT_RUNNING', details: daemonDetails };
+    // Status surface: the daemon's own reported truth — last cycle outcome,
+    // consecutive failures, and the persistence probe verdict. PID liveness
+    // alone proved insufficient (2026-10-12: daemon ran 6h of failing cycles
+    // against a dead store while this check stayed green).
+    try {
+      const { assessDaemonHealth } = await import('../../lib/heidi/DaemonStatusSurface');
+      const verdict = assessDaemonHealth(process.cwd());
+      daemonDetails.statusSurface = { state: verdict.state, reasons: verdict.reasons, ...verdict.details };
+      if (!verdict.healthy) daemonHealthy = false;
+      checks.daemon = {
+        healthy: daemonHealthy,
+        state: daemonHealthy ? 'HEALTHY' : verdict.state === 'NOT_RUNNING' ? 'NOT_RUNNING' : verdict.state,
+        details: daemonDetails,
+      };
+    } catch {
+      // No status surface (older daemon or pre-startup) — fall back to the
+      // liveness-only verdict rather than fabricate health.
+      checks.daemon = { healthy: daemonHealthy, state: daemonHealthy ? 'HEALTHY' : 'NOT_RUNNING', details: daemonDetails };
+    }
   } catch (e) {
     checks.daemon = { healthy: false, state: 'CHECK_FAILED', details: { error: e instanceof Error ? e.message : 'unknown' } };
   }

@@ -45,9 +45,30 @@ async function fetchLocalDashboard() {
   return dashboard;
 }
 
-function buildResponse(dashboard, cloud) {
+async function daemonSection() {
+  try {
+    const { assessDaemonHealth } = await import('../lib/heidi/DaemonStatusSurface');
+    const verdict = assessDaemonHealth(process.cwd());
+    return {
+      state: verdict.state,
+      healthy: verdict.healthy,
+      reasons: verdict.reasons,
+      ...verdict.details,
+    };
+  } catch (e) {
+    return { state: 'UNAVAILABLE', healthy: false, reasons: [`status surface unreadable: ${e instanceof Error ? e.message : 'unknown'}`] };
+  }
+}
+
+function buildResponse(dashboard, cloud, daemon) {
+  // The dashboard verdict and the daemon verdict are both evidence. Only a
+  // present-and-failing daemon (DEGRADED/STALE/CORRUPT) can downgrade
+  // status — NOT_RUNNING means no daemon runs here (e.g. Vercel), which is
+  // information, not failure.
+  const daemonDegrading = daemon && ['DEGRADED', 'STALE', 'CORRUPT'].includes(daemon.state);
   const isHealthy = dashboard.current_status === 'OK' &&
-                    dashboard.escalation_level !== 'CRITICAL';
+    dashboard.escalation_level !== 'CRITICAL' &&
+    !daemonDegrading;
 
   // Transport status answers "did this handler run and produce a report?", not
   // "is the system well?". Those are different questions and conflating them
@@ -83,6 +104,7 @@ function buildResponse(dashboard, cloud) {
       environment: process.env.NODE_ENV || 'development',
       vercel: true,
       cloud,
+      daemon,
       metrics: {
         jobs_queued: dashboard.jobs_queued,
         jobs_failed: dashboard.jobs_failed,
@@ -124,7 +146,7 @@ export default async function handler(req, res) {
       dashboard = await fetchLocalDashboard();
     }
 
-    const { statusCode, body } = buildResponse(dashboard, cloud);
+    const { statusCode, body } = buildResponse(dashboard, cloud, await daemonSection());
     res.status(statusCode).json(body);
 
   } catch (error) {
@@ -138,6 +160,7 @@ export default async function handler(req, res) {
       environment: process.env.NODE_ENV || 'development',
       vercel: true,
       cloud: { available: false, source: 'none', reason: 'health source unavailable' },
+      daemon: await daemonSection(),
     });
   }
 }
