@@ -86,8 +86,8 @@ and one Samsung, and record model, OS version and battery setting
 # Milestone 3 checklist (iOS PushToTalk) — NOT yet executed
 
 Requirements:
-* An iOS build made with `WALKIE_IOS_PTT=1` by a team that Apple has granted
-  the Push to Talk entitlement.
+* An iOS build made with `WALKIE_IOS_PTT=1` by a team whose app ID has the
+  Push to Talk capability enabled.
 * The backend configured with an APNs key (`APNS_*`).
 * Two iPhones (iOS 17+ recommended), plus one Android phone for mixed tests.
 

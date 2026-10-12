@@ -141,8 +141,12 @@ APP_VARIANT=development npx expo run:ios --device   # pick the connected iPhone;
 Release builds require TLS.
 
 **Lock-screen talk (Milestone 3):**
-1. Ask Apple for the **Push to Talk** entitlement for your team. Apple must
-   approve it, and the timeline is outside our control.
+1. Enable the **Push to Talk** capability for the app ID in your Apple
+   Developer account (Xcode → Signing & Capabilities → + Capability → Push to
+   Talk, plus Background Modes → Push to Talk and Push Notifications). Apple's
+   guide shows it as a normal capability; if your account does not offer it,
+   request it through Apple Developer support. Not yet tried with a real
+   account.
 2. Create an **APNs auth key** (`.p8`). Configure the backend with
    `APNS_KEY_FILE`, `APNS_KEY_ID`, `APNS_TEAM_ID` and `APNS_BUNDLE_ID`
    (see `server/.env.example`).

@@ -48,7 +48,7 @@ function installFakeHydi() {
     calls.push({ path: u.pathname + u.search, method: init.method || 'GET', headers: init.headers, body: init.body, auth });
     const handler = routes[`${init.method || 'GET'} ${u.pathname}`];
     if (!handler) return json(404, { error: 'not found' });
-    return handler({ auth, body: init.body ? JSON.parse(init.body) : undefined, signal: init.signal, path: u.pathname });
+    return handler({ auth, body: init.body ? JSON.parse(init.body) : undefined, signal: init.signal, path: u.pathname, url: u });
   });
 }
 
@@ -77,6 +77,8 @@ function defaultRoutes() {
     'GET /api/notifications': requireDevice(() => json(200, { notifications: [{ id: 'n1', category: 'task_completed', severity: 'info', title: 'Done', created_at: new Date().toISOString() }] })),
     'GET /api/mobile-ops/run': requireDevice(() => json(200, { actions: [{ id: 'health.check', permission: 'status:view', confirm_required: false }] })),
     'POST /api/mobile-ops/run': requireDevice(({ body }) => json(200, { ok: true, correlation_id: 'abc', action: body.action, result: { probes: [] } })),
+    'GET /api/mobile-ops/jobs': requireDevice(({ url }) => json(200, url.searchParams.get('id') ? { ok: true, job: { id: url.searchParams.get('id'), state: 'running' }, lines: [], next_since: Number(url.searchParams.get('since')) } : { catalog: [], jobs: [] })),
+    'POST /api/mobile-ops/jobs': requireDevice(({ body }) => json(body.cancel ? 200 : 202, { ok: true, job: { id: body.id || '0123456789abcdef', kind: body.kind, state: body.cancel ? 'cancelled' : 'running' }, echo: body })),
     [`POST /api/actions/${ACTION_ID}`]: requireDevice(({ body }) => json(200, { ok: true, status: body.decision === 'approve' ? 'completed' : 'failed', result: { secret_payload: 'raw tool output' } })),
   };
 }
@@ -524,6 +526,38 @@ describe('heidi-mobile ops BFF', () => {
     const bad = await call('ops', { method: 'POST', body: { action: 'shell.exec' } });
     expect(bad.statusCode).toBe(400);
     expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ── Jobs relay ─────────────────────────────────────────────────────────
+describe('heidi-mobile jobs BFF', () => {
+  it('lists jobs and follows one by cursor', async () => {
+    const list = await call('jobs');
+    expect(list.statusCode).toBe(200);
+    expect(list.body.catalog).toEqual([]);
+    const one = await call('jobs', { query: { id: '0123456789abcdef', since: '7' } });
+    expect(one.statusCode).toBe(200);
+    expect(one.body.next_since).toBe(7);
+    expect(calls.every((c) => c.auth.valid)).toBe(true);
+  });
+
+  it('starts only known jobs, requires confirmation, and forwards only validated args', async () => {
+    expect((await call('jobs', { method: 'POST', body: { kind: 'shell.exec', confirm: true } })).statusCode).toBe(400);
+    expect((await call('jobs', { method: 'POST', body: { kind: 'walkie.tests' } })).statusCode).toBe(400);
+    expect((await call('jobs', { method: 'POST', body: { kind: 'tests.suite', confirm: true, args: { suite: '; rm -rf /' } } })).statusCode).toBe(400);
+    expect(global.fetch).toHaveBeenCalledTimes(0);
+    const ok = await call('jobs', { method: 'POST', body: { kind: 'tests.suite', confirm: true, args: { suite: 'mobile-ops', extra: 'x' } } });
+    expect(ok.statusCode).toBe(202);
+    expect(ok.body.echo).toEqual({ kind: 'tests.suite', args: { suite: 'mobile-ops' }, confirm: true });
+  });
+
+  it('cancels by id and rejects malformed ids before reaching HYDI', async () => {
+    expect((await call('jobs', { method: 'POST', body: { id: '../x', cancel: true } })).statusCode).toBe(400);
+    expect((await call('jobs', { query: { id: 'zzz' } })).statusCode).toBe(400);
+    expect(global.fetch).toHaveBeenCalledTimes(0);
+    const c = await call('jobs', { method: 'POST', body: { id: '0123456789abcdef', cancel: true } });
+    expect(c.statusCode).toBe(200);
+    expect(c.body.job.state).toBe('cancelled');
   });
 });
 

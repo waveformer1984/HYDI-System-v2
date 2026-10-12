@@ -53,6 +53,6 @@ describe('mobile-ops typed actions', () => {
     });
     expect(out.ok).toBe(true);
     expect(out.correlation_id).toMatch(/^[a-f0-9]{16}$/);
-    expect(out.result.probes.length).toBe(3);
+    expect(out.result.probes.map((p) => p.name)).toEqual(['heidi-web', 'protoforge-core', 'ollama', 'ursula']);
   });
 });

@@ -4,7 +4,7 @@ import type { ExpoConfig } from 'expo/config';
 // they allow cleartext traffic. Every other variant requires https/wss.
 const DEV = process.env.APP_VARIANT === 'development';
 // Milestone 3: build with Apple's PushToTalk capability. Requires an Apple
-// Developer team that Apple has granted the Push to Talk entitlement;
+// Developer team whose app ID has the Push to Talk capability enabled;
 // signing fails without it, so it is opt-in.
 const IOS_PTT = process.env.WALKIE_IOS_PTT === '1';
 const APNS_ENV = process.env.WALKIE_APNS_ENV === 'production' || (!DEV && process.env.WALKIE_APNS_ENV !== 'sandbox') ? 'production' : 'sandbox';
