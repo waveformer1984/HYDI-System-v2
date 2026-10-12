@@ -351,8 +351,11 @@ function preflight(settings) {
   let blocking = false;
 
   const major = parseInt(process.versions.node.split('.')[0], 10);
-  if (major >= 20) log('preflight', c('32', `node ${process.version} (>=20 ok)`));
-  else { log('preflight', c('31', `node ${process.version} -- requires >=20`)); blocking = true; }
+  // >=22 matches package.json engines (#333): @supabase/supabase-js needs the
+  // native WebSocket Node 22 provides. On Node 20 the daemon would boot and
+  // silently run with its Supabase bridges unwired (fail-soft since #332).
+  if (major >= 22) log('preflight', c('32', `node ${process.version} (>=22 ok)`));
+  else { log('preflight', c('31', `node ${process.version} -- requires >=22`)); blocking = true; }
 
   const envFile = ['.env', '.env.local'].map((f) => path.join(ROOT, f)).find(fs.existsSync);
   log('preflight', envFile ? c('32', `env file: ${path.basename(envFile)}`) : c('33', 'no .env/.env.local found'));
