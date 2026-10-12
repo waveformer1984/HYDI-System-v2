@@ -47,6 +47,17 @@ export default async function handler(req, res) {
     if (!offer) return res.status(400).json({ error: `Unknown product: ${product}` });
     if (offer.setupPrice === 0) return res.status(400).json({ error: 'Product has no setup price' });
 
+    // SERVICE SWITCH: when the service is OFF, refuse new commercial work.
+    // Fail-closed (unreadable config = OFF). Existing jobs, payments, and
+    // obligations are untouched — this gate only stops NEW intake.
+    const { isServiceEnabled } = require('../../../../lib/revenue/revenue-service-switch.js');
+    if (!isServiceEnabled(product)) {
+      return res.status(403).json({
+        error: `revenue service '${product}' is switched OFF — new commercial work is not being accepted`,
+        serviceSwitch: 'off',
+      });
+    }
+
     // Create the job record
     const jobManager = getJobManager();
     const job = await jobManager.createJob({

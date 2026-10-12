@@ -108,7 +108,7 @@ describe('REAL graceful shutdown via IPC (not source-text check)', () => {
 
     // Spawn the launcher via fork() — this is what PM2 does
     // Use a short interval so cycles run quickly
-    child = fork(LAUNCHER, ['--no-stabilization', `--interval=${TEST_INTERVAL_MS}`], {
+    child = fork(LAUNCHER, ['--no-stabilization', '--skip-self-check', `--interval=${TEST_INTERVAL_MS}`], {
       stdio: 'pipe', // Capture stdout for log analysis
       cwd: REPO_ROOT,
     });
@@ -129,11 +129,20 @@ describe('REAL graceful shutdown via IPC (not source-text check)', () => {
     // The daemon prints "[daemon] Daemon is running" when ready.
     // Startup allocates DB pools and goal/resolver state before this
     // line prints; on loaded CI runners that can exceed 30s.
-    await waitForCondition(
-      () => stdoutContent.includes('Daemon is running'),
-      75000,
-      'Daemon did not reach "running" state within 75s',
-    );
+    // --skip-self-check skips the initial probe/repair/acquisition sweep,
+    // which is environment-dependent (external credential resolution can
+    // stall startup on a clean CI box) and is not what this test asserts.
+    try {
+      await waitForCondition(
+        () => stdoutContent.includes('Daemon is running'),
+        75000,
+        'Daemon did not reach "running" state within 75s',
+      );
+    } catch (e) {
+      // Dump the daemon's captured output so CI logs show where startup stalled
+      console.error(`[test] Daemon stdout tail:\n${stdoutContent.slice(-4000)}`);
+      throw e;
+    }
 
     // Wait for the initial self-sufficiency cycle to complete
     // (the initial one runs immediately on startup)

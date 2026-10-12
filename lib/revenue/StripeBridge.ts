@@ -212,6 +212,26 @@ export class StripeBridge {
   }
 
   /**
+   * Read-only liveness check for an existing checkout session. The revenue
+   * autopilot uses this to detect an expired session before parking on a
+   * payment boundary that can never complete. Never mutates anything.
+   */
+  async getCheckoutSessionState(
+    sessionId: string,
+  ): Promise<{ status: string; paymentStatus: string; expiresAt: number | null } | { error: string }> {
+    if (!this.stripe) {
+      return { error: 'Stripe is not configured — set STRIPE_SECRET_KEY to enable checkout' };
+    }
+    try {
+      const s = await this.stripe.checkout.sessions.retrieve(sessionId);
+      return { status: s.status ?? 'unknown', paymentStatus: s.payment_status ?? 'unpaid', expiresAt: s.expires_at ?? null };
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Unknown error';
+      return { error: `Failed to retrieve checkout session: ${msg}` };
+    }
+  }
+
+  /**
    * Create a Checkout Session for a subscription offer.
    * Uses Checkout Sessions with subscription mode per Stripe best practices.
    *

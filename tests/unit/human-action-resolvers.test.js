@@ -49,7 +49,9 @@ describe('resolution classification', () => {
   test('registered blockers classify into their declared classes', () => {
     expect(classifyAction({ blockerKey: 'stripe:webhook-processing' }).resolutionClass).toBe('R0');
     expect(classifyAction({ blockerKey: 'stripe:live-webhook-endpoint' }).resolutionClass).toBe('R1');
-    expect(classifyAction({ blockerKey: 'stripe:live-credential' }).resolutionClass).toBe('R2');
+    // R1: a machine scan of approved sources (env, secure store) runs; it can
+    // never create a key, so absence still ends in the human path.
+    expect(classifyAction({ blockerKey: 'stripe:live-credential' }).resolutionClass).toBe('R1');
     expect(classifyAction({ blockerKey: 'protoforge:public-base-url' }).resolutionClass).toBe('R2');
     expect(classifyAction({ blockerKey: 'stripe:live-transaction-authorization' }).resolutionClass).toBe('R2');
   });
@@ -88,7 +90,7 @@ describe('resolution classification', () => {
 
   test('R2+ actions are never executed — classified and reported human-path', async () => {
     const svc = new HumanActionService();
-    const a = openAction(svc, { blockerKey: 'stripe:live-credential' });
+    const a = openAction(svc, { blockerKey: 'protoforge:public-base-url' });
     const out = await resolveEligibleActions(svc, { env: mkEnv(), throttleMs: 0 });
     expect(out.human.some((h) => h.actionId === a.id && h.class === 'R2')).toBe(true);
     expect(out.attempted.length).toBe(0);

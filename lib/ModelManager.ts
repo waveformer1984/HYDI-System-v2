@@ -169,6 +169,30 @@ export class ModelManager {
   }
 
   /**
+   * Minimum free RAM required to GENERATE tokens once a model is resident.
+   * Covers KV-cache (bounded by num_ctx), compute buffers, and OS breathing
+   * room. This is deliberately smaller than the load budget — loading needs
+   * ~1.5x model size, steady-state inference needs much less. Refusing when
+   * headroom is absent beats a swap-thrash timeout. Override with
+   * LOCAL_MODEL_HEADROOM_MB; default 384MB.
+   */
+  private getInferenceHeadroomBytes(): number {
+    const mb = parseInt(process.env.LOCAL_MODEL_HEADROOM_MB || '', 10);
+    return (Number.isFinite(mb) && mb >= 0 ? mb : 384) * 1024 * 1024;
+  }
+
+  /**
+   * Bound the context window for local inference. Ollama defaults to the
+   * model's trained context (e.g. 32k+ for qwen2.5), which allocates a KV
+   * cache far larger than this app's ~1-2k-token prompts need. Capping
+   * num_ctx is the biggest single lever on resident inference memory.
+   */
+  private getNumCtx(): number {
+    const parsed = parseInt(process.env.LOCAL_MODEL_NUM_CTX || '', 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 4096;
+  }
+
+  /**
    * Resource-aware model selection. Env override (LOCAL_MODEL_NAME /
    * OLLAMA_MODEL) wins only if the requested model actually fits the memory
    * budget — otherwise we downgrade to the largest installed model that does
@@ -207,15 +231,79 @@ export class ModelManager {
     const requestedEntry = requested ? generative.find((m) => m.name === requested) : undefined;
     const fits = (m: { size: number }) => m.size * 1.5 <= budget;
 
+    // Headroom floor for inference: resident weights are already committed
+    // RAM, but generation still needs KV-cache + working set on top.
+    // Refusing below this floor is more honest than thrashing into a timeout.
+    const headroomBytes = this.getInferenceHeadroomBytes();
+    const hasInferenceHeadroom = os.freemem() >= headroomBytes;
+
+    // Probe the runner for resident models. A resident model's RAM is already
+    // committed (not free), so:
+    //  - the REQUESTED model being resident is the best case: zero load cost,
+    //    just verify inference headroom remains;
+    //  - OTHER resident models are evictable on load, so their footprint can be
+    //    credited back when testing whether the requested model can be loaded;
+    //  - a NON-requested resident model is only a last-resort fallback — using
+    //    it silently swaps a weak foreign-loaded model (e.g. a health probe's
+    //    tinyllama) for the configured one, which produced the template-echo
+    //    "Your response" quality regression.
+    let residentNames: string[] = [];
+    let evictableBytes = 0;
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 3000);
+      const res = await fetch(`${baseUrl}/api/ps`, { signal: controller.signal });
+      clearTimeout(timer);
+      if (res.ok) {
+        const data = (await res.json()) as { models?: { name?: string; size?: number }[] };
+        const resident = (data.models || []).filter((m) => typeof m.name === 'string' && !/embed/i.test(m.name!));
+        residentNames = resident.map((m) => m.name!);
+        evictableBytes = resident
+          .filter((m) => m.name !== requested)
+          .reduce((sum, m) => sum + (typeof m.size === 'number' ? m.size : 0), 0);
+      }
+    } catch {
+      // /api/ps probe is best-effort — fall through with no residency info.
+    }
+
+    if (requested && residentNames.includes(requested)) {
+      if (hasInferenceHeadroom) {
+        const entry = generative.find((m) => m.name === requested);
+        const result = {
+          choice: { name: requested, sizeBytes: entry?.size ?? 0 },
+          reason: 'requested model already resident (load cost sunk)',
+        };
+        ModelManager.modelSelectionCache = { at: now, ...result };
+        return result;
+      }
+      const result = { choice: null, reason: `requested model resident but only ${Math.round(os.freemem() / 1e6)}MB free for inference headroom` };
+      ModelManager.modelSelectionCache = { at: now, ...result };
+      return result;
+    }
+
     let result: { choice: { name: string; sizeBytes: number } | null; reason: string };
     if (requestedEntry) {
-      if (fits(requestedEntry)) {
-        result = { choice: { name: requestedEntry.name, sizeBytes: requestedEntry.size }, reason: 'requested model fits budget' };
+      // Loading a non-resident model lets Ollama evict the current resident
+      // set, so credit evictable resident bytes toward the load budget.
+      const loadBudget = budget + evictableBytes;
+      const fitsForLoad = (m: { size: number }) => m.size * 1.5 <= loadBudget;
+      if (fitsForLoad(requestedEntry) && hasInferenceHeadroom) {
+        const evictNote = evictableBytes > 0 ? ` (evicting ${Math.round(evictableBytes / 1e6)}MB resident)` : '';
+        result = { choice: { name: requestedEntry.name, sizeBytes: requestedEntry.size }, reason: `requested model fits load budget${evictNote}` };
+      } else if (residentNames.length > 0 && hasInferenceHeadroom) {
+        // Last resort: use whatever is already resident rather than forcing
+        // an unaffordable load. Degraded, but honest and responsive.
+        const fallback = residentNames[0];
+        const entry = generative.find((m) => m.name === fallback);
+        result = {
+          choice: { name: fallback, sizeBytes: entry?.size ?? 0 },
+          reason: `requested ${requested} unaffordable; falling back to resident ${fallback}`,
+        };
       } else {
         const smaller = generative.filter(fits).sort((a, b) => a.size - b.size)[0];
-        result = smaller
+        result = smaller && hasInferenceHeadroom
           ? { choice: { name: smaller.name, sizeBytes: smaller.size }, reason: `requested ${requested} exceeds memory budget; downgraded to ${smaller.name}` }
-          : { choice: null, reason: `requested ${requested} exceeds memory budget and no smaller model fits` };
+          : { choice: null, reason: `requested ${requested} exceeds memory budget and no viable alternative` };
       }
     } else {
       // Prefer the SMALLEST model that fits — on a RAM-constrained box the
@@ -243,7 +331,7 @@ export class ModelManager {
       const response = await fetch(`${this.getLocalBaseURL()}/api/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: modelName, keep_alive: '5m' }),
+        body: JSON.stringify({ model: modelName, keep_alive: '5m', options: { num_ctx: this.getNumCtx() } }),
         signal: controller.signal,
       });
       clearTimeout(timer);
@@ -456,6 +544,7 @@ export class ModelManager {
           options: {
             temperature: 0.1,
             num_predict: 1000,
+            num_ctx: this.getNumCtx(),
           },
         }),
         signal: controller.signal,
@@ -730,7 +819,18 @@ export class ModelManager {
     if (!content || typeof content !== 'string') return false;
     try {
       const parsed = JSON.parse(content);
-      return Object.prototype.hasOwnProperty.call(parsed, 'response') && Array.isArray(parsed.actions);
+      if (!Object.prototype.hasOwnProperty.call(parsed, 'response') || !Array.isArray(parsed.actions)) {
+        return false;
+      }
+      // Template-echo guard: weak models parrot the prompt's example values
+      // ("your response" / "Your response") instead of generating content.
+      // Syntactically valid JSON but semantically a placeholder — count it as
+      // invalid so the retry/fallback path engages rather than displaying it.
+      const text = typeof parsed.response === 'string' ? parsed.response.trim().toLowerCase() : '';
+      if (!text || /^your (text )?response( here)?\.?$/.test(text)) {
+        return false;
+      }
+      return true;
     } catch {
       return false;
     }

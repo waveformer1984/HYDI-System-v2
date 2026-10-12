@@ -26,6 +26,30 @@ interface ActionEvent {
   resolving?: boolean
 }
 
+interface Proposal {
+  id: string
+  version: number
+  capabilityId: string
+  capabilityLabel: string
+  params: Record<string, unknown>
+  title: string
+  reason: string
+  expectedEffects: string | null
+  risks: string | null
+  prerequisites: string | null
+  rollback: string | null
+  reversible: boolean
+  status: 'pending' | 'approved' | 'rejected' | 'expired' | 'retracted'
+  expiresAt: string
+  decidedBy: string | null
+  decidedAt: string | null
+  goalId: string | null
+  missionId: string | null
+  missionStatus: string | null
+  missionStage: string | null
+  createdAt: string
+}
+
 // Same localStorage key and HMAC-signing scheme as docs/index.html (the
 // GitHub Pages mobile client) and api/chat/route.js's checkServiceToken().
 // Approving/rejecting a ProtoForge-escalated action requires the
@@ -75,6 +99,11 @@ export default function HeidiChat() {
   const [serviceSecret, setServiceSecret] = useState('')
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [secretDraft, setSecretDraft] = useState('')
+  const [actionsOpen, setActionsOpen] = useState(false)
+  const [actionsTab, setActionsTab] = useState<'recommended' | 'history'>('recommended')
+  const [proposals, setProposals] = useState<{ recommended: Proposal[]; history: Proposal[] }>({ recommended: [], history: [] })
+  const [proposalsErr, setProposalsErr] = useState<string | null>(null)
+  const [resolvingId, setResolvingId] = useState<string | null>(null)
 
   const scrollRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -93,6 +122,56 @@ export default function HeidiChat() {
     setServiceSecret(secretDraft)
     setSettingsOpen(false)
   }, [secretDraft])
+
+  const refreshProposals = useCallback(async (secret: string) => {
+    if (!secret) { setProposals({ recommended: [], history: [] }); return }
+    try {
+      const headers: Record<string, string> = { 'x-hydi-service-token': await mintServiceToken(secret) }
+      const res = await fetch('/api/proposals', { headers })
+      if (!res.ok) {
+        setProposalsErr(res.status === 401 || res.status === 403 ? 'auth' : `HTTP ${res.status}`)
+        return
+      }
+      setProposalsErr(null)
+      const data = await res.json()
+      setProposals({ recommended: data.recommended ?? [], history: data.history ?? [] })
+    } catch {
+      setProposalsErr('network')
+    }
+  }, [])
+
+  // Poll proposals while the panel is mounted (it stays mounted — cheap
+  // 30s poll so an approved proposal's mission outcome updates in view).
+  useEffect(() => {
+    if (!serviceSecret) return
+    refreshProposals(serviceSecret)
+    const t = setInterval(() => refreshProposals(serviceSecret), 30000)
+    return () => clearInterval(t)
+  }, [serviceSecret, refreshProposals])
+
+  const resolveProposal = useCallback(async (id: string, decision: 'approve' | 'reject') => {
+    if (!serviceSecret) {
+      setProposalsErr('auth')
+      return
+    }
+    setResolvingId(id)
+    try {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'x-hydi-service-token': await mintServiceToken(serviceSecret),
+      }
+      const res = await fetch(`/api/proposals/${id}`, {
+        method: 'POST', headers, body: JSON.stringify({ decision }),
+      })
+      const data = await res.json()
+      if (!res.ok) setProposalsErr(data.error || `HTTP ${res.status}`)
+      await refreshProposals(serviceSecret)
+    } catch (e) {
+      setProposalsErr(e instanceof Error ? e.message : 'Network error')
+    } finally {
+      setResolvingId(null)
+    }
+  }, [serviceSecret, refreshProposals])
 
   // Health check on mount. /api/heidi (pages/api/heidi.js) requires a
   // service/device credential -- see ISSUES_FOUND.md #53 -- so this badge
@@ -249,7 +328,7 @@ export default function HeidiChat() {
       abortRef.current = null
       inputRef.current?.focus()
     }
-  }, [isLoading, sessionId])
+  }, [isLoading, sessionId, serviceSecret])
 
   const resolveAction = useCallback(async (messageId: string, actionId: string, decision: 'approve' | 'reject') => {
     setMessages(prev =>
@@ -354,6 +433,18 @@ export default function HeidiChat() {
               {connectionOk ? 'Online' : 'Offline'}
             </span>
           )}
+          <button
+            onClick={() => setActionsOpen(true)}
+            className="relative text-[11px] text-gray-500 hover:text-gray-300 transition-colors border border-white/[0.08] rounded-md px-2 py-1"
+            title="Governed action proposals"
+          >
+            Actions
+            {proposals.recommended.length > 0 && (
+              <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-0.5 rounded-full bg-amber-500 text-[9px] font-bold text-black flex items-center justify-center">
+                {proposals.recommended.length}
+              </span>
+            )}
+          </button>
           <Link
             href="/coo"
             className="text-[11px] text-gray-500 hover:text-gray-300 transition-colors border border-white/[0.08] rounded-md px-2 py-1"
@@ -411,6 +502,58 @@ export default function HeidiChat() {
               >
                 Save
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Actions drawer — governed proposals */}
+      {actionsOpen && (
+        <div
+          className="fixed inset-0 z-40 flex justify-end bg-black/50"
+          onClick={() => setActionsOpen(false)}
+        >
+          <div
+            className="w-full max-w-md h-full bg-[#12121b] border-l border-white/[0.08] flex flex-col"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.08]">
+              <h2 className="text-sm font-semibold text-gray-200">Actions</h2>
+              <button onClick={() => setActionsOpen(false)} className="text-gray-500 hover:text-gray-300 text-lg leading-none">×</button>
+            </div>
+            <div className="flex border-b border-white/[0.08]">
+              {(['recommended', 'history'] as const).map(tab => (
+                <button
+                  key={tab}
+                  onClick={() => setActionsTab(tab)}
+                  className={`flex-1 px-4 py-2 text-xs capitalize transition-colors ${actionsTab === tab
+                    ? 'text-violet-300 border-b-2 border-violet-500'
+                    : 'text-gray-500 hover:text-gray-300'}`}
+                >
+                  {tab}{tab === 'recommended' && proposals.recommended.length > 0 ? ` (${proposals.recommended.length})` : ''}
+                </button>
+              ))}
+            </div>
+            {proposalsErr === 'auth' && (
+              <p className="px-4 py-3 text-[11px] text-amber-400/90 border-b border-white/[0.06]">
+                Set your service secret in ⚙ settings to view and approve proposals.
+              </p>
+            )}
+            <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
+              {actionsTab === 'recommended' && proposals.recommended.length === 0 && (
+                <p className="text-xs text-gray-600 pt-6 text-center">No proposals awaiting your decision.</p>
+              )}
+              {actionsTab === 'history' && proposals.history.length === 0 && (
+                <p className="text-xs text-gray-600 pt-6 text-center">No resolved proposals yet.</p>
+              )}
+              {(actionsTab === 'recommended' ? proposals.recommended : proposals.history).map(p => (
+                <ProposalCard
+                  key={p.id}
+                  p={p}
+                  resolving={resolvingId === p.id}
+                  onResolve={resolveProposal}
+                />
+              ))}
             </div>
           </div>
         </div>
@@ -699,5 +842,71 @@ function SettingsIcon() {
       <circle cx="12" cy="12" r="3" />
       <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
     </svg>
+  )
+}
+function ProposalCard({ p, resolving, onResolve }: {
+  p: Proposal
+  resolving: boolean
+  onResolve: (_id: string, _decision: "approve" | "reject") => void
+}) {
+  const expired = new Date(p.expiresAt).getTime() <= Date.now()
+  const pending = p.status === "pending" && !expired
+  const mins = Math.max(0, Math.round((new Date(p.expiresAt).getTime() - Date.now()) / 60000))
+  const outcome = p.status === "approved"
+    ? p.missionStatus === "succeeded"
+      ? { text: "completed — verified via mission ledger", cls: "text-emerald-400" }
+      : p.missionStatus === "failed" || p.missionStatus === "timed_out" || p.missionStatus === "cancelled"
+        ? { text: `mission ${p.missionStatus}`, cls: "text-red-400" }
+        : p.missionId
+          ? { text: `executing — ${p.missionStage ?? "claimed"}`, cls: "text-amber-300" }
+          : { text: "approved — awaiting daemon dispatch", cls: "text-amber-300" }
+    : null
+  return (
+    <div className="border border-white/[0.08] rounded-xl p-3 bg-white/[0.02]">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-gray-200">{p.title}</p>
+          <p className="text-[10px] text-gray-500 mt-0.5">{p.capabilityLabel} · v{p.version}</p>
+        </div>
+        <span className={`shrink-0 text-[10px] px-1.5 py-0.5 rounded-full border ${p.reversible ? "text-emerald-400 border-emerald-500/30" : "text-amber-400 border-amber-500/30"}`}>
+          {p.reversible ? "reversible" : "one-way"}
+        </span>
+      </div>
+      <p className="text-xs text-gray-400 mt-2 leading-relaxed">{p.reason}</p>
+      <dl className="mt-2 space-y-1 text-[11px]">
+        {Object.keys(p.params).length > 0 && (
+          <div><dt className="inline text-gray-600">Parameters: </dt><dd className="inline text-gray-300 font-mono break-all">{JSON.stringify(p.params)}</dd></div>
+        )}
+        {p.expectedEffects && <div><dt className="inline text-gray-600">Expected: </dt><dd className="inline text-gray-300">{p.expectedEffects}</dd></div>}
+        {p.risks && <div><dt className="inline text-gray-600">Risks: </dt><dd className="inline text-gray-300">{p.risks}</dd></div>}
+        {p.prerequisites && <div><dt className="inline text-gray-600">Needs: </dt><dd className="inline text-gray-300">{p.prerequisites}</dd></div>}
+        {p.rollback && <div><dt className="inline text-gray-600">Rollback: </dt><dd className="inline text-gray-300">{p.rollback}</dd></div>}
+      </dl>
+      {outcome && (
+        <p className={`text-[11px] mt-2 ${outcome.cls}`}>
+          {outcome.text}
+          {p.missionId && <span className="text-gray-600"> · mission {p.missionId.slice(0, 8)}</span>}
+        </p>
+      )}
+      {p.status === "rejected" && (
+        <p className="text-[11px] mt-2 text-gray-500">rejected{p.decidedBy ? ` by ${p.decidedBy}` : ""}</p>
+      )}
+      {p.status === "expired" && <p className="text-[11px] mt-2 text-gray-500">expired without a decision</p>}
+      {pending ? (
+        <>
+          <div className="flex gap-2 mt-3">
+            <button onClick={() => onResolve(p.id, "approve")} disabled={resolving} className="flex-1 px-3 py-1.5 text-xs rounded-lg bg-violet-600 hover:bg-violet-500 disabled:opacity-40 text-white transition-colors">
+              {resolving ? "Working…" : "Approve & run"}
+            </button>
+            <button onClick={() => onResolve(p.id, "reject")} disabled={resolving} className="px-3 py-1.5 text-xs rounded-lg bg-white/[0.05] hover:bg-white/[0.1] disabled:opacity-40 text-gray-300 transition-colors">
+              Reject
+            </button>
+          </div>
+          <p className="text-[10px] text-gray-600 mt-1.5">expires in {mins}m · approval applies only to this exact proposal</p>
+        </>
+      ) : p.status === "pending" && expired ? (
+        <p className="text-[11px] mt-2 text-gray-500">expired — awaiting next refresh</p>
+      ) : null}
+    </div>
   )
 }
