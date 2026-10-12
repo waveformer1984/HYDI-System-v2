@@ -401,11 +401,9 @@ module.exports = {
       // PM2 resurrect would have silently lost the port-3000 owner.
       //
       // The live process is PM2 forking the Next CLI binary directly in
-      // fork mode (script path next/dist/bin/next, cwd = repo root). This
-      // entry encodes the same authoritative startup as `npm run dev`
-      // (next dev --hostname 0.0.0.0 --port 3000) rather than copying the
-      // transient spawn artifact. Production uses `next start` via
-      // env_production args.
+      // fork mode (script path next/dist/bin/next, cwd = repo root). Since
+      // #321 it runs the production build (`next start --hostname 0.0.0.0
+      // --port 3000`, requires a prior `next build`) rather than `next dev`.
       name: 'heidi-web-standalone',
       script: 'node_modules/next/dist/bin/next',
       args: 'start --hostname 0.0.0.0 --port 3000',

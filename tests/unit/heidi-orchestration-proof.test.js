@@ -80,14 +80,17 @@ describe('end-to-end orchestration proof', () => {
     expect(svc().listOpen().map((a) => a.id)).toContain(webhookAction.id);
 
     // A genuine human boundary alongside it — never machine-executable.
+    // (stripe:live-credential used to play this role, but #321 made it R1:
+    // a governed credential-store scan may resolve it. The public base URL is
+    // still an operator decision with no resolver — R2.)
     const { action: credAction } = s.request({
-      blockerKey: 'stripe:live-credential',
-      type: 'credential',
-      boundary: { category: 'CREDENTIAL', externalSystem: 'stripe', capability: 'revenue.production' },
-      title: 'Provide a live Stripe credential',
-      description: 'Only sk_test_ present.',
-      instructions: ['create restricted live key in Stripe dashboard'],
-      verifier: { name: 'stripe-live-credential', spec: {} },
+      blockerKey: 'protoforge:public-base-url',
+      type: 'deployment',
+      boundary: { category: 'DEPLOYMENT', externalSystem: 'dns/https', capability: 'revenue.production' },
+      title: 'Configure the public customer-facing base URL',
+      description: 'NEXT_PUBLIC_APP_URL is unset.',
+      instructions: ['deploy heidi-web to a public https domain and set NEXT_PUBLIC_APP_URL'],
+      verifier: { name: 'public-base-url', spec: {} },
       sourceMissionId: 'orch-proof',
     });
 
@@ -174,9 +177,14 @@ describe('end-to-end orchestration proof', () => {
     // A verifier sweep cannot resolve a manual action — it stays open.
     await verifyEligibleActions(s, { throttleMs: 0 });
     expect(s.get(manualAction.id).status).not.toBe('RESOLVED');
-    // Nor can the resolver sweep — AUTHORIZATION classifies R2/human.
+    // Nor can the resolver sweep close it. Since #321 outreach authorization
+    // is R1 (outreach-prepare drafts everything except the channel grant), so
+    // the sweep reports it unauthorized/human — never attempted, never closed.
     const sweep2 = await resolveEligibleActions(s, { env: envFor(), throttleMs: 0, deps: { configPlane } });
-    expect(sweep2.human.some((h) => h.actionId === manualAction.id)).toBe(true);
+    const refused = [...sweep2.human, ...sweep2.unauthorized].map((h) => h.actionId);
+    expect(refused).toContain(manualAction.id);
+    expect(sweep2.attempted.some((a) => a.actionId === manualAction.id)).toBe(false);
+    expect(s.get(manualAction.id).status).not.toBe('RESOLVED');
     expect(world.configWrites).toHaveLength(1); // no second write
     // Only governed attestation closes it.
     s.resolve(manualAction.id, { actor: 'operator', note: 'email channel authorized, max 5 contacts' });

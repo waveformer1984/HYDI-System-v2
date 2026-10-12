@@ -49,9 +49,12 @@ describe('ecosystem heidi-web-standalone declaration', () => {
     expect(ids).not.toContain('heidi-web-standalone');
   });
 
-  test('the declared script is the authoritative Next.js dev path', () => {
+  test('the declared script is the authoritative Next.js CLI on port 3000', () => {
+    // heidi-web runs in production mode (`next start`) since #321; `next dev`
+    // is still an acceptable declaration for a dev box. Either way it must be
+    // the Next CLI binding the canonical port, not a transient spawn artifact.
     expect(entry.script).toContain('next');
-    expect(String(entry.args)).toMatch(/dev/);
+    expect(String(entry.args)).toMatch(/^(start|dev)\b/);
     expect(String(entry.args)).toMatch(/3000/);
   });
 

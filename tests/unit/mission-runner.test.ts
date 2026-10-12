@@ -42,6 +42,23 @@ function fakeRegistry(result: { executed: boolean; outcome: string; error?: stri
   return fake;
 }
 
+
+// MissionRunner fails closed without a durable claim (MissionLedger, #321).
+// These tests prove dispatch semantics, not the ledger, so they inject an
+// in-memory ledger that always grants the claim and accepts transitions.
+// (MissionLedger's own contract is covered by its own suites.)
+function fakeLedger() {
+  let gen = 0;
+  return {
+    claim: async (input: { goalId: string }) => ({
+      claimed: true, missionId: `m-${input.goalId}`, claimGeneration: ++gen, attempt: 1,
+    }),
+    transition: async () => ({ ok: true }),
+    finalize: async () => ({ ok: true }),
+    reconcileExpiredClaims: async () => ({ examined: 0, interrupted: 0 }),
+  } as never;
+}
+
 const CTX = { sessionId: 's', actorId: 'heidi', actorTrustLevel: 'trusted_system', authorizationMode: 'autonomous', auditTrail: [] } as never;
 
 describe('MissionRunner', () => {
@@ -49,7 +66,7 @@ describe('MissionRunner', () => {
     const pool = fakePool();
     const goals = fakeGoals();
     const registry = fakeRegistry({ executed: true, outcome: 'success' }, 200);
-    const runner = new MissionRunner({ pool, goals: goals as never, registry: registry as never, lifecycle: new MissionLifecycle(pool) });
+    const runner = new MissionRunner({ pool, goals: goals as never, registry: registry as never, lifecycle: new MissionLifecycle(pool), ledger: fakeLedger() });
 
     const t0 = Date.now();
     const d = await runner.dispatch('g1', 'ops.test', {}, CTX);
@@ -66,7 +83,7 @@ describe('MissionRunner', () => {
     const pool = fakePool();
     const goals = fakeGoals();
     const registry = fakeRegistry({ executed: true, outcome: 'success' }, 300);
-    const runner = new MissionRunner({ pool, goals: goals as never, registry: registry as never, lifecycle: new MissionLifecycle(pool) });
+    const runner = new MissionRunner({ pool, goals: goals as never, registry: registry as never, lifecycle: new MissionLifecycle(pool), ledger: fakeLedger() });
 
     const d1 = await runner.dispatch('g1', 'ops.test', {}, CTX);
     const d2 = await runner.dispatch('g1', 'ops.test', {}, CTX);
@@ -81,7 +98,7 @@ describe('MissionRunner', () => {
     const pool = fakePool();
     const goals = fakeGoals();
     const registry = fakeRegistry({ executed: true, outcome: 'success' }, 300);
-    const runner = new MissionRunner({ pool, goals: goals as never, registry: registry as never, lifecycle: new MissionLifecycle(pool), maxConcurrent: 2 });
+    const runner = new MissionRunner({ pool, goals: goals as never, registry: registry as never, lifecycle: new MissionLifecycle(pool), ledger: fakeLedger(), maxConcurrent: 2 });
 
     await runner.dispatch('a', 'ops.t', {}, CTX);
     await runner.dispatch('b', 'ops.t', {}, CTX);
@@ -95,7 +112,7 @@ describe('MissionRunner', () => {
     const pool = fakePool();
     const goals = fakeGoals();
     const registry = fakeRegistry({ executed: true, outcome: 'failure', error: 'connection timed out' });
-    const runner = new MissionRunner({ pool, goals: goals as never, registry: registry as never, lifecycle: new MissionLifecycle(pool), maxAttempts: 2 });
+    const runner = new MissionRunner({ pool, goals: goals as never, registry: registry as never, lifecycle: new MissionLifecycle(pool), ledger: fakeLedger(), maxAttempts: 2 });
 
     await runner.dispatch('g1', 'ops.t', {}, CTX);
     await new Promise(r => setTimeout(r, 100));
@@ -107,7 +124,7 @@ describe('MissionRunner', () => {
     const pool = fakePool();
     const goals = fakeGoals();
     const registry = fakeRegistry({ executed: false, outcome: 'failure', error: 'not authorized: policy' });
-    const runner = new MissionRunner({ pool, goals: goals as never, registry: registry as never, lifecycle: new MissionLifecycle(pool) });
+    const runner = new MissionRunner({ pool, goals: goals as never, registry: registry as never, lifecycle: new MissionLifecycle(pool), ledger: fakeLedger() });
 
     await runner.dispatch('g1', 'ops.t', {}, CTX);
     await new Promise(r => setTimeout(r, 100));

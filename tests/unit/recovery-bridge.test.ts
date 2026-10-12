@@ -24,13 +24,14 @@ afterAll(() => {
 });
 
 jest.mock('child_process', () => ({
+  exec: jest.fn(),
   execSync: jest.fn(),
   execFile: jest.fn(),
   execFileSync: jest.fn(),
   spawn: jest.fn(),
 }));
 
-import { execSync, spawn } from 'child_process';
+import { execFile, execSync, spawn } from 'child_process';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
@@ -50,6 +51,8 @@ import type { ComponentHealth, DependencyGraph } from '../../lib/operational/typ
 
 const mockExecSync = execSync as jest.Mock;
 const mockSpawn = spawn as jest.Mock;
+const mockExecFile = execFile as unknown as jest.Mock;
+const PM2_RESTART = ['pm2', ['restart', 'heidi-web-standalone', '--update-env'], expect.anything(), expect.any(Function)];
 
 function fakeChild(pid = 4242) {
   return {
@@ -102,22 +105,34 @@ describe('RecoveryEngine bridge recovery', () => {
     jest.clearAllMocks();
     mockExecSync.mockReturnValue(''); // netstat -ano finds nothing to kill
     mockSpawn.mockReturnValue(fakeChild());
+    // pm2 restart succeeds (callback-style, as promisify expects)
+    mockExecFile.mockImplementation((...a: any[]) => {
+      const cb = a[a.length - 1];
+      if (typeof cb === 'function') cb(null, '', '');
+    });
   });
+
+  // heidi-web is PM2-owned (heidi-web-standalone, ecosystem.config.js), so the
+  // restart goes through `pm2 restart`, then checks the port. Stub the port
+  // probe so these tests never depend on a real listener on :3000.
+  function stubPort(recoveryEngine: any, listening = true) {
+    jest.spyOn(recoveryEngine, 'portListening').mockResolvedValue(listening);
+  }
 
   // Test A — correct bridge identification: restarting bridge targets
   // exactly the heidi-web process module, never a fabricated 'bridge' one.
   test('Test A: restartBridge restarts heidi-web, the process that actually serves it', async () => {
     const { recoveryEngine, model } = createSystem();
     model.updateState('heidi-web', 'HEALTHY', []);
+    stubPort(recoveryEngine);
 
     await (recoveryEngine as any).restartBridge('bridge');
 
-    expect(mockSpawn).toHaveBeenCalledTimes(1);
-    const [command, args, opts] = mockSpawn.mock.calls[0];
-    // boot.config.json's heidi-web module: command "npm", args ["run","dev"]
-    expect(command).toBe('npm');
-    expect(args).toEqual(['run', 'dev']);
-    expect(opts.env.PORT).toBe('3000');
+    // Exactly heidi-web's PM2 owner is restarted -- never a fabricated
+    // 'bridge' process, and never a detached `npm run dev` orphan.
+    expect(mockExecFile).toHaveBeenCalledTimes(1);
+    expect(mockExecFile).toHaveBeenCalledWith(...PM2_RESTART);
+    expect(mockSpawn).not.toHaveBeenCalled();
   });
 
   // Test B — wrong process is rejected: there is no boot.config.json module
@@ -166,14 +181,10 @@ describe('RecoveryEngine bridge recovery', () => {
 
   // Test E — successful recovery: heidi-web's own state is HEALTHY (the
   // failure is bridge-route-specific), so restartBridge performs the real
-  // governed restart_process path for heidi-web end to end.
-  // killProcessOnPort() frees heidi-web's port with netstat/taskkill on
-  // Windows and lsof/kill elsewhere, so both branches are pinned here
-  // regardless of the OS the suite runs on.
-  describe.each([
-    ['win32', ['netstat -ano', expect.objectContaining({ encoding: 'utf8' })]],
-    ['linux', [expect.stringMatching(/^lsof -ti :3000 \| xargs kill -9/), expect.anything()]],
-  ])('Test E (%s)', (platform, expectedCall) => {
+  // governed restart for heidi-web end to end. PM2 stops and restarts its own
+  // process, so nothing kills the port from outside (that would race PM2) --
+  // pinned on both platforms.
+  describe.each(['win32', 'linux'])('Test E (%s)', (platform) => {
     const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform')!;
     beforeEach(() => { Object.defineProperty(process, 'platform', { ...originalPlatform, value: platform }); });
     afterEach(() => { Object.defineProperty(process, 'platform', originalPlatform); });
@@ -181,12 +192,24 @@ describe('RecoveryEngine bridge recovery', () => {
     test('Test E: bridge recovery restarts heidi-web when heidi-web itself is healthy', async () => {
       const { recoveryEngine, model } = createSystem();
       model.updateState('heidi-web', 'HEALTHY', []);
+      stubPort(recoveryEngine);
 
       await (recoveryEngine as any).restartBridge('bridge');
 
-      expect(mockExecSync).toHaveBeenCalledWith(...expectedCall);
-      expect(mockSpawn).toHaveBeenCalledTimes(1);
+      expect(mockExecFile).toHaveBeenCalledWith(...PM2_RESTART);
+      expect(mockExecSync).not.toHaveBeenCalled();
+      expect(mockSpawn).not.toHaveBeenCalled();
     });
+  });
+
+  // Test E2 — a pm2 restart that returns but never rebinds the port is a
+  // failure, not a success.
+  test('Test E2: pm2 restart without the port listening afterwards throws', async () => {
+    const { recoveryEngine, model } = createSystem();
+    model.updateState('heidi-web', 'HEALTHY', []);
+    stubPort(recoveryEngine, false);
+
+    await expect((recoveryEngine as any).restartBridge('bridge')).rejects.toThrow(/not listening/i);
   });
 
   // Test F — failed verification / correct escalation: heidi-web itself is
@@ -199,6 +222,7 @@ describe('RecoveryEngine bridge recovery', () => {
 
     await expect((recoveryEngine as any).restartBridge('bridge')).rejects.toThrow(/heidi-web/i);
     expect(mockSpawn).not.toHaveBeenCalled();
+    expect(mockExecFile).not.toHaveBeenCalled();
   });
 
   test('Test F2: bridge recovery also refuses to act when heidi-web is only BLOCKED', async () => {
@@ -218,9 +242,10 @@ describe('RecoveryEngine bridge recovery', () => {
     const { recoveryEngine, model, healthChecker } = createSystem();
     model.updateState('heidi-web', 'HEALTHY', []);
     model.updateState('bridge', 'UNAVAILABLE', []);
+    stubPort(recoveryEngine);
 
     // Force the post-restart functional probe to still fail, simulating a
-    // spawn that "succeeded" (process exists) but never became healthy.
+    // restart that "succeeded" (process exists) but never became healthy.
     const checkAllSpy = jest.spyOn(healthChecker, 'checkAll').mockImplementation(async () => {
       model.updateState('bridge', 'UNAVAILABLE', [{ check: 'bridge-endpoint', status: 'fail', value: 'still down', checkedAt: new Date().toISOString() }]);
       return model.getAllStates();

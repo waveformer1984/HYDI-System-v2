@@ -92,6 +92,13 @@ export class HealthProvenanceChecker {
     const supabaseRestResult = await this.checkSupabaseContainer('supabase_rest', 'supabase_rest_HYDI-System-v2');
     this.stateModel.updateState(supabaseRestResult.component, supabaseRestResult.state, supabaseRestResult.evidence, supabaseRestResult.dependencies, supabaseRestResult.error);
 
+    // Phase 7: supabase_kong is a first-class graph node (DependencyGraphBuilder)
+    // with its own restart_container recovery policy. Without a probe it sat at
+    // UNKNOWN with no evidence forever, so that policy could never fire. The
+    // REST probe here goes through :54321, which Kong itself serves.
+    const supabaseKongResult = await this.checkSupabaseContainer('supabase_kong', 'supabase_kong_HYDI-System-v2');
+    this.stateModel.updateState(supabaseKongResult.component, supabaseKongResult.state, supabaseKongResult.evidence, supabaseKongResult.dependencies, supabaseKongResult.error);
+
     const ollamaResult = await this.checkOllama();
     this.stateModel.updateState(ollamaResult.component, ollamaResult.state, ollamaResult.evidence, ollamaResult.dependencies, ollamaResult.error);
 
@@ -424,7 +431,8 @@ export class HealthProvenanceChecker {
   }
 
   /**
-   * Phase 6: Check a Supabase container (supabase_db or supabase_rest) as a
+   * Phase 6: Check a Supabase container (supabase_db, supabase_rest or
+   * supabase_kong) as a
    * separate component. Uses docker inspect + REST probe as independent sources.
    * This is required for the governed recovery path — policies target
    * 'supabase_db' and 'supabase_rest' specifically.

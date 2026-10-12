@@ -317,9 +317,13 @@ export function authorizeFilesystemTarget(target: unknown, options: FsAuthOption
   }
 
   // --- 2. Resolve to an absolute real path (defeats `..` and symlinks together).
+  // Backslash is a separator on every platform here, not just win32: a
+  // Windows-style `lib\..\..\escape.txt` must be judged as the traversal it
+  // is even when this runs on POSIX (Termux, Linux CI), where path.resolve
+  // would otherwise treat it as one literal filename inside the repo.
   let resolved: string;
   try {
-    resolved = realResolve(path.resolve(repoRoot, target));
+    resolved = realResolve(path.resolve(repoRoot, target.replace(/\\/g, '/')));
   } catch (e) {
     return deny('INVALID_TARGET', `Target could not be resolved: ${(e as Error).message}`, null);
   }
