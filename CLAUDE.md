@@ -75,7 +75,7 @@ pm2 save
 ### Build / test / lint
 
 ```bash
-npm install          # Install dependencies (Node >= 20 required)
+npm install          # Install dependencies (Node >= 22 required)
 npm run build        # Production build
 npm start            # Start production server
 npm run typecheck    # TypeScript type-check (tsc --noEmit, no emit)

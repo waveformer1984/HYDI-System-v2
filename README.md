@@ -26,7 +26,7 @@ The six active revenue streams routed through Stripe Connect: `galactic_bytes`, 
 ## Quick Start
 
 ```bash
-# Requires Node >= 20
+# Requires Node >= 22
 npm install
 cp .env.example .env   # fill in SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, STRIPE_SECRET_KEY
 

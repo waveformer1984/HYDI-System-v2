@@ -9,7 +9,7 @@ HYDI System v2 is a Next.js + Supabase AI orchestration platform. Events flow th
 ## Setup
 
 ```bash
-npm install          # Node >= 20 required
+npm install          # Node >= 22 required
 # Environment variables — no .env.example; see CLAUDE.md "Environment Variables" section
 # Required: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, STRIPE_SECRET_KEY, NODE_ENV
 ```

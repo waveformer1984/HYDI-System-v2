@@ -29,7 +29,7 @@ HYDI System v2 ("Heidi" / "ProtoForge → Kilo Node") is a monetizable AI orches
 
 ## Technology Stack
 
-- **Runtime**: Node >= 20, Next.js 14+ (pages router for API routes)
+- **Runtime**: Node >= 22, Next.js 14+ (pages router for API routes)
 - **Edge Functions**: Deno (pure ESM — no CommonJS, no `require`)
 - **Database**: Supabase (PostgreSQL + pgvector 1536-dim + RLS on all tables)
 - **Payments**: Stripe Connect (6 sub-accounts: `galactic_bytes`, `detailer_bot`, `lipi_v2`, `protogrance_aromatics`, `rezonate`, `waveformer_studio`)
