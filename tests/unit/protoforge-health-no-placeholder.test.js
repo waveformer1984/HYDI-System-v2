@@ -140,7 +140,9 @@ describe('protoforge /health — observed values, never placeholders', () => {
     it('the /health route delegates to the observed-evidence builder', () => {
       const src = serverSrc();
       expect(src).toContain("require('./health/protoforge-health')");
-      expect(src).toContain('buildProtoforgeHealth({ agentBus, supabase })');
+      // The builder may receive extra observed inputs (e.g. modelHeartbeat, #321);
+      // what matters is that the route delegates with the real agentBus + supabase.
+      expect(src).toMatch(/buildProtoforgeHealth\(\{\s*agentBus,\s*supabase\b/);
     });
 
     it("status is never 'ok' while any check is unverified or unavailable", async () => {

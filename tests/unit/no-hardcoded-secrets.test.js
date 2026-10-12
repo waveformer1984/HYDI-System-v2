@@ -61,6 +61,8 @@ const ALLOWLIST = new Set([
   'tests/unit/stripe-connect-webhook.test.js', // fake key testing the live-mode guard refuses processing without ALLOW_LIVE_STRIPE
   'tests/unit/human-actions.test.js', // fake secret-shaped fixtures (sk_live_FAKE..., rk_live_FAKE...) testing live-credential verifier prefix checks, not real keys
   'tests/unit/human-action-resolvers.test.js', // fake rk_live_ fixture testing resolver authorization gating, not a real key
+  'tests/unit/public-url-staleness.test.js', // fake webhook-secret fixtures testing `stripe listen` output parsing, not a real secret
+  'apps/walkie/server/test/ptt.test.ts', // PEM block with body "abc" testing APNs config loading, not a real key
 ]);
 
 function listTrackedFiles() {

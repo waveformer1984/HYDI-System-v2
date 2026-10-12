@@ -75,6 +75,10 @@ describe('HealthProvenanceChecker.checkModule: process-identity loophole', () =>
     // configured script — exactly what `|| cmdline.includes('node')` used
     // to accept.
     checker.getProcessInfo = jest.fn().mockReturnValue({ name: 'node.exe', cmdline: 'node scripts/some-unrelated-tool.js' });
+    // Hermetic: the occupant's ancestry ends here. Without this stub the real
+    // `ps`/CIM probe runs against PID 9999 on the host, and the verdict depends
+    // on whether such a process happens to exist (missing => 'error' => UNKNOWN).
+    checker.getParentPid = jest.fn().mockReturnValue(null);
     checker.httpGet = jest.fn().mockResolvedValue({ ok: true, statusCode: 200, body: '{"status":"ok"}' });
 
     const result = await checker.checkModule(PROTOFORGE_CORE);

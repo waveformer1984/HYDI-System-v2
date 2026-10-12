@@ -22,6 +22,7 @@
  */
 
 jest.mock('child_process', () => ({
+  exec: jest.fn(),
   execSync: jest.fn(),
   execFile: jest.fn(),
   execFileSync: jest.fn(),
@@ -40,7 +41,7 @@ jest.mock('../../scripts/recovery-lease', () => ({
   record: jest.fn(),
 }));
 
-import { execSync, spawn } from 'child_process';
+import { execFile, execSync, spawn } from 'child_process';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
@@ -125,14 +126,14 @@ describe('RecoveryEngine.restartProcess — process ownership', () => {
 
   test('O2: a delegated restart is logged as owned, with the owning pid', async () => {
     bootControl.isBootAuthorityAlive.mockReturnValue(true);
-    bootControl.requestRestart.mockReturnValue({ id: 'req-2', component: 'heidi-web' });
+    bootControl.requestRestart.mockReturnValue({ id: 'req-2', component: 'heidi-mobile-chat' });
     bootControl.waitForAck.mockResolvedValue({ id: 'req-2', status: 'completed', pid: 888, ownedBy: 'boot-agent' });
 
     const { model, recoveryEngine } = createEngine();
     trustVerification(recoveryEngine);
-    await (recoveryEngine as any).restartProcess('heidi-web');
+    await (recoveryEngine as any).restartProcess('heidi-mobile-chat');
 
-    const events = model.getEventLog().filter((e: any) => e.component === 'heidi-web');
+    const events = model.getEventLog().filter((e: any) => e.component === 'heidi-mobile-chat');
     const delegated = events.find((e: any) => e.action === 'process_restart_delegated');
     expect(delegated).toBeDefined();
     expect(delegated!.actionResult).toBe('success');
@@ -155,11 +156,11 @@ describe('RecoveryEngine.restartProcess — process ownership', () => {
 
   test('O4: a delegated restart that TIMES OUT throws — silence is not success', async () => {
     bootControl.isBootAuthorityAlive.mockReturnValue(true);
-    bootControl.requestRestart.mockReturnValue({ id: 'req-4', component: 'heidi-web' });
+    bootControl.requestRestart.mockReturnValue({ id: 'req-4', component: 'heidi-mobile-chat' });
     bootControl.waitForAck.mockResolvedValue({ id: 'req-4', status: 'timeout' });
 
     const { recoveryEngine } = createEngine();
-    await expect((recoveryEngine as any).restartProcess('heidi-web')).rejects.toThrow(/timeout|did not acknowledge/i);
+    await expect((recoveryEngine as any).restartProcess('heidi-mobile-chat')).rejects.toThrow(/timeout|did not acknowledge/i);
     expect(mockSpawn).not.toHaveBeenCalled();
   });
 
@@ -206,5 +207,26 @@ describe('RecoveryEngine.restartProcess — process ownership', () => {
     expect(spawned).toBeDefined();
     expect((spawned!.detail as any).owned).toBe(false);
     expect((spawned!.detail as any).ownershipWarning).toMatch(/not a child of the boot authority/i);
+  });
+
+  // heidi-web is not a boot-agent child: PM2 owns it as heidi-web-standalone
+  // (ecosystem.config.js). boot-control can never ack its restart, so recovery
+  // must hand it to PM2 -- no boot-control request, no orphan spawn.
+  test('O7: a PM2-owned module (heidi-web) restarts via pm2, never boot-control or a detached spawn', async () => {
+    bootControl.isBootAuthorityAlive.mockReturnValue(true);
+    (execFile as unknown as jest.Mock).mockImplementation((...a: any[]) => {
+      const cb = a[a.length - 1];
+      if (typeof cb === 'function') cb(null, '', '');
+    });
+
+    const { model, recoveryEngine } = createEngine();
+    trustVerification(recoveryEngine);
+    await (recoveryEngine as any).restartProcess('heidi-web');
+
+    expect(execFile).toHaveBeenCalledWith('pm2', ['restart', 'heidi-web-standalone', '--update-env'], expect.anything(), expect.any(Function));
+    expect(bootControl.requestRestart).not.toHaveBeenCalled();
+    expect(mockSpawn).not.toHaveBeenCalled();
+    const ev = model.getEventLog().find((e: any) => e.component === 'heidi-web' && e.action === 'process_restart_via_pm2');
+    expect(ev?.actionResult).toBe('success');
   });
 });
