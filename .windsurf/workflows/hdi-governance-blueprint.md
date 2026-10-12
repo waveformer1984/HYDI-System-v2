@@ -431,6 +431,12 @@ Two migrations stopped `supabase db start` on an empty database. They were corre
 | `20260715123000_notifications` | `public.notifications` gains the July columns (`category`, `severity`, `title`, `body`, `device_id`, `read_at`, `delivered_at`) before `idx_notifications_unread` and `idx_notifications_category` are built. Previously `20260818120000_reconcile_notifications_schema` added them later. No RLS or transition changes. |
 | `20260722000001_customer_identity_convergence` | The same ten `fk_*_customer` foreign keys to `customers(customer_id)`, now added only when `pg_constraint` lacks them. The `hydi_subscriptions.customer_id` backfill skips non-UUID `client_id` values instead of failing. No RLS or transition changes. |
 
+### Evidence spine additions (2026-10-12)
+
+| Migration | Table / change | Governance effect |
+|-----------|----------------|-------------------|
+| `20261013100000_heidi_decision_bounds_live` | `heidi_decision_bounds` gains `unattended_enabled BOOLEAN NOT NULL DEFAULT true`, `denied_resolvers TEXT[] NOT NULL DEFAULT '{}'`, `denied_capabilities TEXT[] NOT NULL DEFAULT '{}'`, plus a `search_path`-pinned `updated_at` trigger. | The table becomes the live, owner-revocable bound for unattended resolver execution — the pooled daemon sweep consults it before every R0/R1 attempt and fails closed on unreachable/absent/disabled bounds. Additive only; no state machine or transition changes. |
+
 ## 9. "Don't Sabotage Yourself" Rules (Enforced)
 
 | Rule | Enforcement |
