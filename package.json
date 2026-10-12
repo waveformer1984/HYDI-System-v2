@@ -5,10 +5,10 @@
   "private": true,
   "scripts": {
     "postinstall": "git config core.hooksPath .githooks || true",
-    "dev": "next dev --hostname 0.0.0.0 --port 3000",
+    "dev": "next dev --webpack --hostname 0.0.0.0 --port 3000",
     "server": "node src/server.js",
     "prebuild": "echo 'Prebuild complete'",
-    "build": "next build",
+    "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint api pages components lib src apps/ursula-frontend/src tests/unit --ext .js,.jsx,.ts,.tsx",
     "lint:hydi-v3": "eslint src/hydi-v3 tests/unit/hydi-v3 scripts/performance-benchmark.js scripts/security-audit.js scripts/soak-test-v3.js",
