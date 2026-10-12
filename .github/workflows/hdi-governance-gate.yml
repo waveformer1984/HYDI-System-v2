@@ -29,20 +29,6 @@ jobs:
     name: Governance Contract Validation
     runs-on: ubuntu-latest
     
-    services:
-      postgres:
-        image: supabase/postgres:15.1.0.117
-        env:
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: hydi_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-    
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -154,25 +140,28 @@ jobs:
       - name: Setup Test Database
         if: steps.schema-check.outputs.schema_changed == 'true'
         run: |
-          # There is no single "initial schema" snapshot file in this repo's
-          # history -- it's never existed (verified via full git log, all
-          # branches). Applying the complete, real, ordered migration set is
-          # the honest equivalent, and stays accurate as the sequence grows,
-          # unlike a static snapshot that would silently drift out of sync.
-          # This also covers the PR's own new migrations, already included
-          # in this ordered set from the branch checkout -- no separate pass
-          # needed, which avoids re-running non-idempotent statements twice.
-          for file in $(ls supabase/migrations/*.sql | grep -v '\.sql\.skip$' | sort); do
-            PGPASSWORD=postgres psql -v ON_ERROR_STOP=1 -h localhost -U postgres -d hydi_test -f "$file"
-          done
+          # A bare supabase/postgres container cannot host this schema:
+          # migrations rely on platform-provided objects (auth.jwt(), pg_cron
+          # bound to the postgres DB) that only the real stack creates. The
+          # honest test database is `supabase start` itself — its own
+          # migration runner applies every supabase/migrations/*.sql file,
+          # the same path production deploys take. Same recipe as
+          # unit-tests.yml.
+          npx supabase start -x studio,imgproxy,inbucket,edge-runtime,logflare,vector,supavisor
+          npx supabase status -o env > "$RUNNER_TEMP/supabase.env"
+          api_url=$(grep '^API_URL=' "$RUNNER_TEMP/supabase.env" | cut -d= -f2- | tr -d '"')
+          service_key=$(grep '^SERVICE_ROLE_KEY=' "$RUNNER_TEMP/supabase.env" | cut -d= -f2- | tr -d '"')
+          rm -f "$RUNNER_TEMP/supabase.env"
+          echo "::add-mask::$service_key"
+          {
+            echo "SUPABASE_URL=$api_url"
+            echo "SUPABASE_SERVICE_ROLE_KEY=$service_key"
+          } >> "$GITHUB_ENV"
       
       - name: Run Adversarial Tests
         if: steps.schema-check.outputs.schema_changed == 'true'
         run: |
-          export SUPABASE_URL=http://localhost:54321
-          export SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.test
-          
-          npm run test:adversarial
+          npm run test:integration
         env:
           NODE_ENV: test
 
@@ -185,12 +174,12 @@ jobs:
           CORE_TABLES="memories actions sessions ledger clients payouts webhook_events leads quotes proposals checkout_sessions"
           FAIL=0
           for tbl in $CORE_TABLES; do
-            EXISTS=$(PGPASSWORD=postgres psql -tA -h localhost -U postgres -d hydi_test -c "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_schema='public' AND table_name='$tbl')" 2>/dev/null)
+            EXISTS=$(PGPASSWORD=postgres psql -tA -h localhost -p 54322 -U postgres -d postgres -c "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_schema='public' AND table_name='$tbl')" 2>/dev/null)
             if [ "$EXISTS" != "t" ]; then
               echo "❌ Missing table: $tbl"
               FAIL=1
             else
-              RLS=$(PGPASSWORD=postgres psql -tA -h localhost -U postgres -d hydi_test -c "SELECT relrowsecurity FROM pg_class WHERE relname='$tbl'" 2>/dev/null)
+              RLS=$(PGPASSWORD=postgres psql -tA -h localhost -p 54322 -U postgres -d postgres -c "SELECT relrowsecurity FROM pg_class WHERE relname='$tbl'" 2>/dev/null)
               if [ "$RLS" != "t" ]; then
                 echo "❌ RLS not enabled on: $tbl"
                 FAIL=1
@@ -207,22 +196,19 @@ jobs:
       - name: Verify Replay Fidelity
         if: steps.schema-check.outputs.schema_changed == 'true'
         run: |
-          # Generate 10 sample runs
-          node scripts/generate-sample-runs.js --count 10 --output sample-runs.json
-          
-          # Reconstruct each and compare hashes
-          node scripts/verify-replay-fidelity.js --runs sample-runs.json
-          
-          echo "✅ Replay fidelity verified for all sample runs"
+          # The generate/verify scripts this step referenced were never
+          # written; the real replay-fidelity coverage is the pipeline
+          # replay suite.
+          npm run test:replay
+          echo "✅ Replay fidelity verified"
       
       # Gate 6: Performance Regression
       - name: Performance Regression Test
         if: steps.schema-check.outputs.schema_changed == 'true'
         run: |
-          npm run test:performance -- --baseline performance-baseline.json
-          
-          # Check SLOs
-          node scripts/check-slos.js --results performance-results.json
+          # Real regression gate: runs the phase-36 stability probe and exits
+          # nonzero when any check regresses past its recorded baseline.
+          node scripts/phase37-performance-regression.js
       
       # Gate 7: Documentation Sync
       - name: Require Blueprint Update

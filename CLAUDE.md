@@ -85,6 +85,17 @@ code (`AUTHORIZATION_REQUIRED`, `INVALID_AUTHORIZATION`, `PROHIBITED`,
 fail-soft — a dead store can never change a refusal that already
 happened.
 
+#### Durable operator lease (`heidi_operator_lease`)
+
+`hydi-daemon` claims a single-row lease in Postgres at startup, heartbeats
+it every 30s (TTL 120s), and releases it on graceful shutdown
+(`lib/heidi/OperatorLease.ts`). The claim is an atomic conditional upsert —
+a second claimant while a live lease exists is refused, not raced. A
+holder whose heartbeat touches 0 rows has lost the lease and says so in
+the log. `released_at IS NULL AND expires_at < now()` marks a stale
+holder — presumed dead, distinguishable from a clean handoff. The file
+lock remains the same-host guard; this row is the DB-visible truth.
+
 #### Daemon status surface (evidence, not liveness)
 
 `hydi-daemon` writes `.heidi-daemon-status.json` at the repo root every ~30s
@@ -97,7 +108,6 @@ recording failure is a `DEGRADED`/`STALE` verdict in `/api/heidi-health`;
 `/api/health` embeds the same verdict and downgrades `status` only when a
 daemon exists and is failing. PM2 "online" is process liveness — the status
 file is what the loop actually did. Don't read PM2 alone as health.
-
 ### Build / test / lint
 
 ```bash
