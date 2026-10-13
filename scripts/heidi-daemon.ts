@@ -35,6 +35,9 @@ dotenv.config({ path: path.resolve(__dirname, '../.env') });
 import { buildCognitiveCore } from '../lib/heidi/CognitiveCoreBuilder';
 import type { CognitiveCore, LoopStatus } from '../lib/heidi/CognitiveCore';
 import { getGoalSystem } from '../lib/heidi/GoalSystem';
+import { OperatorLease } from '../lib/heidi/OperatorLease';
+import { writeDaemonStatus } from '../lib/heidi/DaemonStatusSurface';
+import type { PersistenceTruth } from '../lib/heidi/DaemonStatusSurface';
 
 // ─── Configuration ───────────────────────────────────────────────────────
 
@@ -49,6 +52,65 @@ const DB_CONFIG = {
 const LOCK_FILE = path.resolve(__dirname, '..', '.heidi-daemon.lock');
 const AUDIT_FILE = path.resolve(__dirname, '..', '.heidi-daemon-audit.jsonl');
 const AUDIT_FILE_MAX_BYTES = 10 * 1024 * 1024; // 10 MB — rotate when exceeded
+const STATUS_ROOT = path.resolve(__dirname, '..');
+
+/**
+ * Persistence truth the snapshot reports. 'unknown' until the first probe
+ * lands — a probe that never ran is not evidence either way.
+ */
+let persistenceTruth: PersistenceTruth = { pg: 'unknown', rest: 'unknown', checkedAt: '' };
+
+/**
+ * Probe the two persistence paths the daemon depends on, independently:
+ * the PG pool target (DB_CONFIG — goals, missions, cycle evidence) and the
+ * Supabase REST gateway (bridges — memory, action executor, checkpoints).
+ * Both bounded at 4s; a probe failure is a verdict, never a thrown error.
+ * 2026-10-12: both were dead for ~6h while PM2 showed green — this probe is
+ * what turns that into a visible DEGRADED instead of silent failure.
+ */
+async function probePersistence(): Promise<PersistenceTruth> {
+  const checkedAt = new Date().toISOString();
+  let pg: PersistenceTruth['pg'] = 'down';
+  try {
+    const probe = new Pool({ ...DB_CONFIG, max: 1, connectionTimeoutMillis: 4000, statement_timeout: 4000 });
+    try {
+      await probe.query('select 1');
+      pg = 'ok';
+    } finally {
+      await probe.end().catch(() => { });
+    }
+  } catch { /* down */ }
+
+  let rest: PersistenceTruth['rest'] = 'down';
+  const restUrl = process.env.SUPABASE_URL;
+  if (restUrl) {
+    try {
+      // Any HTTP status — including 401/404 — proves Kong is reachable.
+      await fetch(`${restUrl}/rest/v1/`, { signal: AbortSignal.timeout(4000) });
+      rest = 'ok';
+    } catch { /* down */ }
+  } else {
+    rest = 'unknown';
+  }
+
+  return { pg, rest, checkedAt };
+}
+
+function writeStatusSnapshot(status: LoopStatus): void {
+  writeDaemonStatus(STATUS_ROOT, {
+    pid: process.pid,
+    state: status.state,
+    cycleCount: status.cycleCount,
+    lastCycleAt: status.lastCycleAt,
+    lastSuccessfulCycleAt: status.lastSuccessfulCycleAt,
+    lastCycleOutcome: status.lastCycleOutcome,
+    consecutiveFailures: status.consecutiveFailures,
+    lastError: status.lastError,
+    lastErrorAt: status.lastErrorAt,
+    persistence: persistenceTruth,
+    updatedAt: new Date().toISOString(),
+  });
+}
 
 interface DaemonConfig {
   intervalMs: number;
@@ -497,7 +559,14 @@ async function main(): Promise<void> {
     console.warn('[daemon] Supabase not configured — memory/actionExecutor bridges unwired');
   }
 
-  // 2. Build production CognitiveCore with self-sufficiency wired
+  // 2. Probe persistence truth before the loop starts. The daemon still
+  // runs when persistence is down — its cycles degrade honestly — but the
+  // verdict is now recorded on the status surface instead of buried in
+  // cycle outcomes.
+  persistenceTruth = await probePersistence();
+  console.log(`[daemon] persistence pg=${persistenceTruth.pg} rest=${persistenceTruth.rest}`);
+
+  // 3. Build production CognitiveCore with self-sufficiency wired
   console.log('[daemon] Building production CognitiveCore...');
   const core = await buildCognitiveCore({ dbConfig: DB_CONFIG, supabase });
   const bridge = core.getBridge();
@@ -514,6 +583,44 @@ async function main(): Promise<void> {
     releaseLock();
     process.exit(1);
   }
+
+  // Durable operator lease (heidi_operator_lease). The file lock guards
+  // same-host exclusivity; this row is the DB-visible claim — which
+  // instance owns the loop, heartbeating, expiring on schedule if it dies.
+  // Refusal is logged loudly, not fatal: the file lock is still the
+  // authoritative same-host guard and a refused daemon reporting itself
+  // beats a daemon that silently vanished.
+  let operatorLease: OperatorLease | null = null;
+  const leasePool = new Pool({ ...DB_CONFIG, max: 1 });
+  try {
+    const candidate = new OperatorLease(leasePool, { ttlMs: 120_000 });
+    const claim = await candidate.claim();
+    if (claim.held) {
+      operatorLease = candidate;
+      console.log(`[daemon] operator lease held (owner=${candidate.ownerId.slice(0, 8)}… expires=${claim.expiresAt})`);
+    } else {
+      console.error(`[daemon] operator lease REFUSED — live holder: ${JSON.stringify(claim.currentOwner)}`);
+    }
+  } catch (e) {
+    console.warn(`[daemon] operator lease unavailable (table missing or DB down): ${e instanceof Error ? e.message : 'unknown'}`);
+  }
+
+  let leaseHeartbeatInFlight = false;
+  const leaseInterval = setInterval(() => {
+    if (shuttingDown || !operatorLease || leaseHeartbeatInFlight) return;
+    leaseHeartbeatInFlight = true;
+    operatorLease.heartbeat()
+      .then((ok) => {
+        if (!ok) {
+          // A superseded holder's heartbeat touches 0 rows. We are no
+          // longer the recorded operator — say so, stop heartbeating.
+          console.error('[daemon] operator lease LOST — this process is no longer the recorded holder');
+          operatorLease = null;
+        }
+      })
+      .catch(() => { /* transient DB error — the TTL absorbs one miss */ })
+      .finally(() => { leaseHeartbeatInFlight = false; });
+  }, 30000);
 
   // 3. Set up graceful shutdown
   let shuttingDown = false;
@@ -606,6 +713,12 @@ async function main(): Promise<void> {
       loopState: 'stopped',
       cycleCount: core.getLoopStatus().cycleCount,
     });
+
+    // Release the durable operator lease before the file lock — a
+    // successor's claim should see a clean handoff, not a stale expiry.
+    if (operatorLease) {
+      await operatorLease.release().catch(() => { });
+    }
 
     // Release lock
     releaseLock();
@@ -887,17 +1000,33 @@ async function main(): Promise<void> {
   const resolverInterval = setInterval(runResolverSweep, RESOLVER_SWEEP_MS);
   const resolverKick = setTimeout(runResolverSweep, 15000); // first pass after startup settles
 
-  // 8. Status reporting
+  // 8. Status reporting — console line for the log, snapshot file for the
+  // health surface. The probe re-runs each tick so a restored (or newly
+  // dead) persistence layer changes the verdict within one interval.
+  let statusProbeInFlight = false;
   const statusInterval = setInterval(() => {
-    if (shuttingDown) return;
+    if (shuttingDown || statusProbeInFlight) return;
+    statusProbeInFlight = true;
     const status = core.getLoopStatus();
     const memUsage = process.memoryUsage();
     console.log(`[daemon] state=${status.state} cycles=${status.cycleCount} failures=${status.consecutiveFailures} outcome=${status.lastCycleOutcome || 'none'} mem=${Math.round(memUsage.rss / 1024 / 1024)}MB kill=${status.killSwitchActive}${status.lastError ? ' lastError=' + status.lastError : ''}${status.lastErrorAt ? ' lastErrorAt=' + status.lastErrorAt : ''}`);
+    probePersistence()
+      .then((truth) => {
+        const changed = truth.pg !== persistenceTruth.pg || truth.rest !== persistenceTruth.rest;
+        persistenceTruth = truth;
+        if (changed) console.log(`[daemon] persistence changed: pg=${truth.pg} rest=${truth.rest}`);
+      })
+      .catch(() => { /* probe is fail-soft; keep last known truth */ })
+      .finally(() => {
+        writeStatusSnapshot(core.getLoopStatus());
+        statusProbeInFlight = false;
+      });
   }, 30000);
 
   // 9. Wait for shutdown
   console.log('[daemon] Daemon is running. Press Ctrl+C to stop.');
   console.log('');
+  writeStatusSnapshot(core.getLoopStatus());
 
   // Keep the process alive
   await new Promise<void>((resolve) => {
@@ -909,6 +1038,8 @@ async function main(): Promise<void> {
         clearInterval(resolverInterval);
         clearTimeout(resolverKick);
         resolverPool.end().catch(() => { });
+        clearInterval(leaseInterval);
+        leasePool.end().catch(() => { });
         clearInterval(statusInterval);
         resolve();
       }

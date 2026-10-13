@@ -72,6 +72,69 @@ pm2 start ecosystem.config.js --env production -- --prod
 pm2 save
 ```
 
+#### Human-action DB mirror (`human_action_mirror`)
+
+`data/human-actions.json` stays the authoritative store and the offline
+fallback — every surface keeps working with Postgres down. The mirror
+table is the queryable evidence copy: `HumanActionService` upserts a
+row on every mutation when constructed with `mirrorPool`
+(`lib/human-actions/mirror.js`), and each pooled resolver sweep bulk
+refreshes all records via `mirrorAllActions`, so anything written while
+the DB was dead materializes on the next live pass. Mirror writes are
+fire-and-forget — they never gate the file store. Read the table as
+evidence, never as truth; `mirrored_at` shows how fresh each row is.
+
+#### Live authority bounds (`heidi_decision_bounds`)
+
+The daemon's resolver cadence is the *unattended* path — and it now
+consults durable bounds before every R0/R1 attempt
+(`lib/heidi/AuthorityBounds.js`, consulted in `resolveEligibleActions`).
+Fail-closed in order: `HEIDI_ALLOW_EXEC=true` in the environment →
+bounds row readable → `unattended_enabled` true → resolverId /
+capability not in `denied_resolvers` / `denied_capabilities`. An
+unreachable or empty table refuses, never implies allow; refusals are
+recorded as durable `unauthorized` attempt evidence with the gate code.
+Pool-less inline sweeps (chat, tests) are attended contexts and keep
+their existing semantics. To kill all unattended resolver execution
+without a deploy: `UPDATE heidi_decision_bounds SET unattended_enabled
+= false;`
+
+#### Decision evidence (`heidi_events`)
+
+`heidi_events` is the governed-decision log. Completed cycles write
+`cognitive_cycle` rows (`CognitiveCore.recordCycle`) — selected action,
+authorization, execution, verification, outcome. ActionProposals writes
+proposal/decision/approval receipts. The negative leg is now durable too:
+every chokepoint refusal (`evaluateAction` in
+`lib/action-executor.ts`) writes an `action_refused` row with the gate
+code (`AUTHORIZATION_REQUIRED`, `INVALID_AUTHORIZATION`, `PROHIBITED`,
+`UNKNOWN_ACTION`) via `lib/heidi/DecisionEvidence.ts`. The write is
+fail-soft — a dead store can never change a refusal that already
+happened.
+#### Durable operator lease (`heidi_operator_lease`)
+
+`hydi-daemon` claims a single-row lease in Postgres at startup, heartbeats
+it every 30s (TTL 120s), and releases it on graceful shutdown
+(`lib/heidi/OperatorLease.ts`). The claim is an atomic conditional upsert —
+a second claimant while a live lease exists is refused, not raced. A
+holder whose heartbeat touches 0 rows has lost the lease and says so in
+the log. `released_at IS NULL AND expires_at < now()` marks a stale
+holder — presumed dead, distinguishable from a clean handoff. The file
+lock remains the same-host guard; this row is the DB-visible truth.
+
+#### Daemon status surface (evidence, not liveness)
+
+`hydi-daemon` writes `.heidi-daemon-status.json` at the repo root every ~30s
+and once at startup (atomic tmp+rename, via `lib/heidi/DaemonStatusSurface.ts`).
+The snapshot carries `getLoopStatus()` fields — `state`, `cycleCount`,
+`lastCycleOutcome`, `consecutiveFailures`, `lastError` — plus `persistence`,
+the result of an independent 4s probe of both Postgres (`PG_*`/`DB_CONFIG`)
+and Supabase REST (`SUPABASE_URL`). A stale file (>180s) or a snapshot
+recording failure is a `DEGRADED`/`STALE` verdict in `/api/heidi-health`;
+`/api/health` embeds the same verdict and downgrades `status` only when a
+daemon exists and is failing. PM2 "online" is process liveness — the status
+file is what the loop actually did. Don't read PM2 alone as health.
+
 ### Build / test / lint
 
 ```bash
@@ -190,7 +253,8 @@ All files under `api/` are **Vercel serverless functions** (Next.js API routes).
 | Route | Purpose |
 |-------|----------|
 | `api/chat/route.js` | Universal chat router — dispatches `{ message, system }` to the correct named agent |
-| `api/health.js` | Reads the `system_dashboard` Supabase view for live health metrics |
+| `api/health.js` | Reads the `system_dashboard` Supabase view for live health metrics; also embeds the daemon verdict from the status surface (below) |
+| `pages/api/heidi-health.ts` | Subsystem health — daemon liveness **plus** the daemon's own reported truth (cycle outcome, consecutive failures, persistence probe) |
 | `api/heidi/route.js` | Heidi-specific orchestration endpoint |
 | `api/hydi/sync.js` | HYDI state sync |
 | `api/ursula/status.js` | Ursula system status |
