@@ -64,6 +64,13 @@ module.exports = {
       min_uptime: '30s',       // must stay up 30s before counted as "up"
       max_restarts: 10,        // don't loop forever on a persistent crash
       restart_delay: 5000,     // 5s between restarts to avoid hammering
+      // Exponential restart backoff (1s, 1.5s, 2.25s, ~15s cap) replaces
+      // the flat delay: a dependency outage becomes a slow self-healing
+      // retry instead of a restart storm that exhausts max_restarts and
+      // leaves the app errored forever — nothing comes back when the
+      // dependency does. Takes effect on `pm2 start/reload`, not on an
+      // already-running entry whose PM2 settings have drifted from git.
+      exp_backoff_restart_delay: 1000,
       log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
       error_file: './logs/pm2-hydi-boot.err.log',
       out_file: './logs/pm2-hydi-boot.out.log',
@@ -121,6 +128,7 @@ module.exports = {
       min_uptime: '10s',
       max_restarts: 10,
       restart_delay: 5000,
+      exp_backoff_restart_delay: 1000,
       log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
       error_file: './logs/pm2-hydi-watchdog.err.log',
       out_file: './logs/pm2-hydi-watchdog.out.log',
@@ -161,6 +169,7 @@ module.exports = {
       min_uptime: '30s',
       max_restarts: 10,
       restart_delay: 5000,
+      exp_backoff_restart_delay: 1000,
       log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
       error_file: './logs/pm2-hydi-daemon.err.log',
       out_file: './logs/pm2-hydi-daemon.out.log',
@@ -232,6 +241,7 @@ module.exports = {
       min_uptime: '10s',
       max_restarts: 10,
       restart_delay: 5000,
+      exp_backoff_restart_delay: 1000,
       log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
       error_file: './logs/pm2-system-health.err.log',
       out_file: './logs/pm2-system-health.out.log',
@@ -274,6 +284,7 @@ module.exports = {
       min_uptime: '10s',
       max_restarts: 10,
       restart_delay: 5000,
+      exp_backoff_restart_delay: 1000,
       log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
       error_file: './logs/pm2-protoforge-scout.err.log',
       out_file: './logs/pm2-protoforge-scout.out.log',
@@ -311,6 +322,7 @@ module.exports = {
       min_uptime: '10s',
       max_restarts: 10,
       restart_delay: 5000,
+      exp_backoff_restart_delay: 1000,
       log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
       error_file: './logs/pm2-stuck-job-scheduler.err.log',
       out_file: './logs/pm2-stuck-job-scheduler.out.log',
@@ -344,6 +356,7 @@ module.exports = {
       min_uptime: '10s',
       max_restarts: 10,
       restart_delay: 5000,
+      exp_backoff_restart_delay: 1000,
       log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
       error_file: './logs/pm2-revenue-reconciliation.err.log',
       out_file: './logs/pm2-revenue-reconciliation.out.log',
@@ -379,6 +392,7 @@ module.exports = {
       min_uptime: '10s',
       max_restarts: 10,
       restart_delay: 5000,
+      exp_backoff_restart_delay: 1000,
       log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
       error_file: './logs/pm2-failed-webhook-retry.err.log',
       out_file: './logs/pm2-failed-webhook-retry.out.log',
@@ -425,6 +439,7 @@ module.exports = {
       min_uptime: '30s',       // Next dev needs time to compile the first route
       max_restarts: 10,
       restart_delay: 5000,
+      exp_backoff_restart_delay: 1000,
       log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
       error_file: './logs/pm2-heidi-web-standalone.err.log',
       out_file: './logs/pm2-heidi-web-standalone.out.log',
@@ -457,6 +472,7 @@ module.exports = {
       min_uptime: '10s',
       max_restarts: 10,
       restart_delay: 5000,
+      exp_backoff_restart_delay: 1000,
       log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
       error_file: './logs/pm2-model-prep-executor.err.log',
       out_file: './logs/pm2-model-prep-executor.out.log',
