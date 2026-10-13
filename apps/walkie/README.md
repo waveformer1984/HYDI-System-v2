@@ -25,6 +25,7 @@ cellular data:
 | [docs/DEVICE_TEST_CHECKLIST.md](docs/DEVICE_TEST_CHECKLIST.md) | Physical two-phone acceptance tests + latency method |
 | [docs/BACKGROUND_MILESTONES.md](docs/BACKGROUND_MILESTONES.md) | Milestone 2 Android foreground service / Milestone 3 iOS PushToTalk |
 | [docs/COSTS.md](docs/COSTS.md) | Operating-cost estimates with assumptions |
+| [docs/QR_JOIN.md](docs/QR_JOIN.md) | **Join by QR code**: browser walkie for guests, owner sign-in QR, public hosting via Tailscale Funnel + LiveKit Cloud |
 
 ## 1. Run the backend locally
 
