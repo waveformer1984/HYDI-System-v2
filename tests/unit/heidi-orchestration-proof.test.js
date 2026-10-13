@@ -119,9 +119,12 @@ describe('end-to-end orchestration proof', () => {
         return { success: true, verified: true };
       },
     };
+    // Pin the filesystem-backed authorization probes — they read
+    // process.cwd()/.hydi-operational state, which differs per checkout.
+    const sweepDeps = { configPlane, helpers: { legitProspectsPresent: false } };
     const sweep1 = await resolveEligibleActions(s, {
       env: envFor(), throttleMs: 0, actor: 'orch-proof',
-      deps: { configPlane },
+      deps: sweepDeps,
     });
     // Classification recorded durably on both actions.
     const cred = s.get(credAction.id);
@@ -180,7 +183,7 @@ describe('end-to-end orchestration proof', () => {
     // Nor can the resolver sweep close it. Since #321 outreach authorization
     // is R1 (outreach-prepare drafts everything except the channel grant), so
     // the sweep reports it unauthorized/human — never attempted, never closed.
-    const sweep2 = await resolveEligibleActions(s, { env: envFor(), throttleMs: 0, deps: { configPlane } });
+    const sweep2 = await resolveEligibleActions(s, { env: envFor(), throttleMs: 0, deps: sweepDeps });
     const refused = [...sweep2.human, ...sweep2.unauthorized].map((h) => h.actionId);
     expect(refused).toContain(manualAction.id);
     expect(sweep2.attempted.some((a) => a.actionId === manualAction.id)).toBe(false);
@@ -193,7 +196,7 @@ describe('end-to-end orchestration proof', () => {
 
     // ── 7. Replay: no duplicate actions, no duplicate effects ─────────
     const before = load().actions.length;
-    const replay = await resolveEligibleActions(s, { env: envFor(), throttleMs: 0, deps: { configPlane } });
+    const replay = await resolveEligibleActions(s, { env: envFor(), throttleMs: 0, deps: sweepDeps });
     const v2 = await verifyEligibleActions(s, { throttleMs: 0 });
     // Detector replay mints nothing — the blocker condition is genuinely
     // gone (env now 'true'), so its rule is inactive. A recurring blocker
