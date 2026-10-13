@@ -14,6 +14,19 @@ npm install          # Node >= 22 required
 # Required: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, STRIPE_SECRET_KEY, NODE_ENV
 ```
 
+### Cursor Cloud Agents
+
+Phone-triggered cloud agents use `.cursor/environment.json` to run `npm ci`, start
+local Supabase (same exclusions as `unit-tests.yml`), and optionally join the
+tailnet when `TS_AUTHKEY` is set. After boot:
+
+```bash
+set -a && source .cursor/cloud-agent-env.sh && set +a
+```
+
+See [docs/CURSOR_CLOUD_AGENT.md](docs/CURSOR_CLOUD_AGENT.md) for MCP secrets
+(`PROTOFORGE_MCP_TOKEN`) and heidi-pc read-only tools.
+
 ## Verification — Run These Before Finishing Any Task
 
 ```bash
