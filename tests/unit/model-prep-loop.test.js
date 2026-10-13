@@ -57,6 +57,9 @@ describe('model-prep supervised loop', () => {
 
     await runSchedulerLoop({ cycle, ...h });
 
+    // The first write is 'starting' — evidence the loop is alive but has
+    // not yet completed a cycle, never an unearned 'ok'.
+    expect(h.writes[0].state).toBe('starting');
     // The loop survived the unguarded-first-cycle bug: it ran more cycles
     // after the throw instead of propagating to a fatal exit.
     expect(cycle).toHaveBeenCalledTimes(3);
@@ -66,6 +69,24 @@ describe('model-prep supervised loop', () => {
     expect(degraded.lastError).toMatch(/ECONNREFUSED/);
     // ...and it recovered to 'ok' once a cycle passed.
     expect(h.writes[h.writes.length - 1].state).toBe('ok');
+  });
+
+  test('a first cycle that never resolves reports starting, not ok — no false green', async () => {
+    const h = harness();
+    const cycle = jest.fn(() => new Promise(() => { })); // hangs forever
+
+    // The loop stays pending on the first cycle; what matters is the verdict
+    // a health surface would read during that hang.
+    const loop = runSchedulerLoop({ cycle, ...h });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(h.writes).toHaveLength(1);
+    expect(h.writes[0].state).toBe('starting');
+    expect(h.writes[0].lastSuccessAt).toBeNull();
+    expect(h.writes[0].consecutiveFailures).toBe(0);
+    // Keep the dangling loop referenced so nothing GC-complains mid-test.
+    expect(loop).toBeInstanceOf(Promise);
   });
 
   test('consecutive failures back off exponentially and cap at 5 minutes', async () => {
