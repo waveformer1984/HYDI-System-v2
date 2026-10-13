@@ -151,6 +151,21 @@ for (const impl of impls) {
       assert.deepEqual(await store.redeemInvite('h-multi', carol, T0, 2), { ok: false, reason: 'full' });
     });
 
+    test('peekInvite shows only invites that could still be redeemed', async () => {
+      const { owner, ch } = await newChannel();
+      const h = `h-peek-${ch.id}`;
+      await store.createInvite(ch.id, owner, h, T0 + 1000, 1);
+      assert.deepEqual(await store.peekInvite(h, T0), { channelId: ch.id, channelName: 'Ops', ownerName: 'Owner', expiresAt: T0 + 1000 });
+      assert.equal(await store.peekInvite(h, T0 + 1000), null, 'expired');
+      assert.equal(await store.peekInvite('nope', T0), null, 'unknown');
+      await store.redeemInvite(h, randomUUID(), T0, 50);
+      assert.equal(await store.peekInvite(h, T0), null, 'used up');
+      const h2 = `h-peek2-${ch.id}`;
+      await store.createInvite(ch.id, owner, h2, T0 + 1000, 1);
+      await store.deleteChannel(ch.id);
+      assert.equal(await store.peekInvite(h2, T0), null, 'channel deleted');
+    });
+
     test('concurrent redemption of a single-use invite admits one user', async () => {
       const { owner, ch } = await newChannel();
       await store.createInvite(ch.id, owner, `h-race-${ch.id}`, T0 + 10_000, 1);

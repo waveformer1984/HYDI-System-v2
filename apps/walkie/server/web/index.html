@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="referrer" content="no-referrer">
+<meta name="theme-color" content="#0B1220">
+<link rel="icon" href="data:,">
+<title>ProtoForge Walkie</title>
+<style>
+  :root {
+    --bg: #0B1220; --panel: #111a2e; --line: #22304d; --text: #e8edf7; --muted: #8fa0bf;
+    --accent: #4f8cff; --speaking: #e5484d; --receiving: #30a46c; --busy: #f5a524; --danger: #e5484d;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  body { min-height: 100dvh; display: flex; justify-content: center; }
+  main { width: 100%; max-width: 480px; padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 14px; }
+  h1 { font-size: 22px; margin: 4px 0 0; }
+  h2 { font-size: 17px; margin: 8px 0 0; color: var(--muted); font-weight: 600; }
+  p { margin: 0; }
+  .muted { color: var(--muted); }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+  input { width: 100%; font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
+  button, .button { font: inherit; font-weight: 600; border: 0; border-radius: 12px; padding: 13px 16px; cursor: pointer; background: var(--accent); color: #fff; text-align: center; text-decoration: none; display: block; width: 100%; }
+  button.secondary, .button.secondary { background: transparent; color: var(--accent); border: 1px solid var(--line); }
+  button.link { background: none; color: var(--muted); padding: 6px; font-weight: 400; width: auto; }
+  button:disabled { opacity: .5; cursor: default; }
+  .row { display: flex; gap: 10px; align-items: center; }
+  .row > * { flex: 1; }
+  .channel { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+  .channel button { width: auto; }
+  .status { font-size: 18px; font-weight: 700; text-align: center; min-height: 26px; }
+  .notice { text-align: center; color: var(--busy); min-height: 22px; }
+  #talk { width: min(72vw, 300px); height: min(72vw, 300px); margin: 8px auto; border-radius: 50%; font-size: 22px; background: var(--panel); border: 3px solid var(--line); color: var(--text);
+          touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+  #talk.pressed { border-color: var(--accent); }
+  #talk.speaking { background: var(--speaking); border-color: var(--speaking); color: #fff; }
+  #talk.receiving { border-color: var(--receiving); }
+  .people { display: flex; flex-wrap: wrap; gap: 6px; }
+  .person { padding: 4px 10px; border-radius: 99px; border: 1px solid var(--line); color: var(--muted); font-size: 14px; }
+  .person.on { color: var(--text); }
+  .person.speaking { border-color: var(--receiving); color: var(--receiving); }
+  .qr { background: #fff; border-radius: 12px; padding: 12px; align-self: center; width: min(80vw, 300px); }
+  .qr img { width: 100%; display: block; image-rendering: pixelated; }
+  .code { font-family: ui-monospace, Menlo, monospace; text-align: center; letter-spacing: .5px; }
+  .error { color: var(--danger); }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+<main id="app"><p class="muted">Loading…</p></main>
+<noscript><p style="padding:16px">Walkie needs JavaScript.</p></noscript>
+<script src="/web/app.js"></script>
+</body>
+</html>

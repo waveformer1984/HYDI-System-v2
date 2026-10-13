@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { AcquireResult, ApnsEnvironment, Channel, Lease, Member, Profile, PttPushToken, RedeemResult, Role, Store } from './types.js';
+import type { AcquireResult, ApnsEnvironment, Channel, InvitePreview, Lease, Member, Profile, PttPushToken, RedeemResult, Role, Store } from './types.js';
 import { leaseIsLive } from './types.js';
 
 /**
@@ -114,6 +114,13 @@ export class MemoryStore implements Store {
     inv.uses += 1;
     members.set(userId, { role: 'member', joinedAt: now });
     return { ok: true, channelId: inv.channelId, alreadyMember: false };
+  }
+
+  async peekInvite(codeHash: string, now: number): Promise<InvitePreview | null> {
+    const inv = this.invites.get(codeHash);
+    const ch = inv && this.channels.get(inv.channelId);
+    if (!inv || !ch || now >= inv.expiresAt || inv.uses >= inv.maxUses) return null;
+    return { channelId: ch.id, channelName: ch.name, ownerName: this.profiles.get(ch.ownerId)?.displayName ?? null, expiresAt: inv.expiresAt };
   }
 
   async acquireFloor({ channelId, userId, leaseId, now, renewTtlMs, maxMs }: { channelId: string; userId: string; leaseId: string; now: number; renewTtlMs: number; maxMs: number }): Promise<AcquireResult> {

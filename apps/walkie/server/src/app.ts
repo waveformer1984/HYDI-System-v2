@@ -1,13 +1,15 @@
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import { AuthError, DevVerifier, deleteSupabaseUser, type AuthUser, type AuthVerifier } from './auth.js';
+import { AuthError, CompositeVerifier, DevVerifier, deleteSupabaseUser, type AuthUser, type AuthVerifier, type SessionIssuer } from './auth.js';
 import type { Config } from './config.js';
 import { FloorService, errMsg } from './floor.js';
 import { roomNameFor, type MediaGateway } from './livekit.js';
 import { ApnsClient, type PushSender } from './apns.js';
 import { PttNotifier } from './ptt-notifier.js';
+import { TalkRateLimiter } from './rate-limit.js';
 import type { PttPushToken, Store } from './store/types.js';
+import { registerWebClient } from './web.js';
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -25,6 +27,8 @@ export interface AppDeps {
   deleteAuthUser?: (userId: string) => Promise<boolean>;
   /** iOS PushToTalk push sender; defaults to APNs when config.apns is set. */
   push?: PushSender;
+  /** Server-signed guest/owner sessions; enabled when config.sessions is set. */
+  sessions?: SessionIssuer;
 }
 
 const Uuid = z.string().uuid();
@@ -41,6 +45,9 @@ const RedeemBody = z.object({ code: z.string().min(8).max(64) });
 const BlockBody = z.object({ userId: Uuid });
 const InviteBody = z.object({ maxUses: z.number().int().min(1).max(50).optional() }).optional();
 const DevSessionBody = z.object({ handle: z.string().regex(/^[a-z0-9_-]{2,32}$/i) });
+const InviteCodeParam = z.string().regex(/^[A-Za-z0-9-]{20,32}$/);
+const JoinBody = z.object({ code: InviteCodeParam, displayName: cleanText(40) });
+const ExchangeBody = z.object({ ticket: z.string().min(20).max(2048) });
 const PttTokenBody = z.object({
   token: z.string().regex(/^[0-9a-fA-F]{16,512}$/).transform((t) => t.toLowerCase()),
   environment: z.enum(['sandbox', 'production']),
@@ -67,7 +74,7 @@ class HttpError extends Error {
 }
 
 export async function buildApp(deps: AppDeps): Promise<{ app: FastifyInstance; floor: FloorService }> {
-  const { config, store, media, verifier } = deps;
+  const { config, store, media, verifier, sessions } = deps;
   const now = deps.now ?? Date.now;
 
   const app = Fastify({
@@ -148,12 +155,102 @@ export async function buildApp(deps: AppDeps): Promise<{ app: FastifyInstance; f
   app.get('/healthz', async () => ({ ok: true }));
 
   // ---- Dev-only sign-in (config refuses AUTH_MODE=dev in production) ----
-  if (verifier instanceof DevVerifier) {
+  const devVerifier = verifier instanceof CompositeVerifier ? verifier.primary : verifier;
+  if (devVerifier instanceof DevVerifier) {
     app.post('/v1/dev/session', async (req) => {
       const { handle } = DevSessionBody.parse(req.body);
-      return verifier.issue(handle);
+      return devVerifier.issue(handle);
     });
   }
+
+  // ---- Public, unauthenticated routes: invite preview, QR join, owner login ----
+  // Each IP gets a small budget; invite codes carry ~98 bits, so this is
+  // about abuse (profile spam), not about guessing codes.
+  const publicLimiter = new TalkRateLimiter({ minIntervalMs: 0, burst: config.publicRatePerMin, windowMs: 60_000 });
+  let publicCalls = 0;
+  const limitPublic = (req: FastifyRequest, reply: FastifyReply) => {
+    if (++publicCalls % 200 === 0) publicLimiter.prune(now());
+    const wait = publicLimiter.check(req.ip, now());
+    if (wait > 0) {
+      reply.header('retry-after', Math.ceil(wait / 1000));
+      throw new HttpError(429, 'rate_limited', { retryAfterMs: wait });
+    }
+  };
+  const optionalUser = async (req: FastifyRequest): Promise<AuthUser | null> => {
+    const h = req.headers.authorization;
+    if (!h || !h.startsWith('Bearer ')) return null;
+    try {
+      return await verifier.verify(h.slice(7));
+    } catch (err) {
+      if (err instanceof AuthError) return null; // expired/foreign: treat as signed out
+      throw err;
+    }
+  };
+  const redeemOrThrow = async (codeHash: string, userId: string) => {
+    const r = await store.redeemInvite(codeHash, userId, now(), config.maxChannelMembers);
+    if (!r.ok) {
+      // A blocked user learns only that the invite does not work.
+      const status = r.reason === 'full' ? 409 : 404;
+      throw new HttpError(status, r.reason === 'full' ? 'channel_full' : 'invite_invalid');
+    }
+    const ch = (await store.getChannel(r.channelId))!;
+    return { id: ch.id, name: ch.name, role: await store.getRole(ch.id, userId), ownerId: ch.ownerId };
+  };
+
+  app.get<{ Params: { code: string } }>('/v1/invites/:code/preview', async (req, reply) => {
+    limitPublic(req, reply);
+    const code = InviteCodeParam.safeParse(req.params.code);
+    const p = code.success ? await store.peekInvite(hashInviteCode(code.data), now()) : null;
+    if (!p) throw new HttpError(404, 'invite_invalid');
+    return { channelName: p.channelName, ownerName: p.ownerName, expiresAt: p.expiresAt, guestJoin: Boolean(sessions) };
+  });
+
+  // Join through an invite QR. Signed-in callers (any kind) just join; anyone
+  // else becomes a guest who can use this channel and nothing more.
+  app.post('/v1/join', async (req, reply) => {
+    limitPublic(req, reply);
+    const { code, displayName } = JoinBody.parse(req.body);
+    const codeHash = hashInviteCode(code);
+    const existing = await optionalUser(req);
+    if (existing) {
+      if (!(await store.getProfile(existing.userId))) await store.upsertProfile(existing.userId, displayName);
+      const channel = await redeemOrThrow(codeHash, existing.userId);
+      return { userId: existing.userId, channel, session: null };
+    }
+    if (!sessions || !config.sessions) throw new HttpError(401, 'unauthenticated');
+    // Check first so a dead link does not leave a profile behind.
+    if (!(await store.peekInvite(codeHash, now()))) throw new HttpError(404, 'invite_invalid');
+    const userId = randomUUID();
+    await store.upsertProfile(userId, displayName);
+    let channel;
+    try {
+      channel = await redeemOrThrow(codeHash, userId);
+    } catch (err) {
+      await store.deleteUser(userId).catch(() => undefined);
+      throw err;
+    }
+    const session = await sessions.issueSession(userId, 'guest', config.sessions.guestTtlS);
+    return reply.status(201).send({ userId, channel, session });
+  });
+
+  // Owner sign-in: swaps a one-time ticket from `npm run owner-login` for a session.
+  app.post('/v1/session/exchange', async (req, reply) => {
+    limitPublic(req, reply);
+    if (!sessions || !config.sessions) throw new HttpError(404, 'not_found');
+    const { ticket } = ExchangeBody.parse(req.body);
+    let who;
+    try {
+      who = await sessions.redeemLoginTicket(ticket, now());
+    } catch (err) {
+      if (err instanceof AuthError) throw new HttpError(401, 'invalid_ticket');
+      throw err;
+    }
+    const profile = (await store.getProfile(who.userId)) ?? (await store.upsertProfile(who.userId, who.name.slice(0, 40) || 'Owner'));
+    const session = await sessions.issueSession(who.userId, 'owner', config.sessions.ownerTtlS);
+    return { userId: who.userId, displayName: profile.displayName, session };
+  });
+
+  registerWebClient(app, config);
 
   // ---- Livekit webhooks (signature-verified) ----
   app.post('/livekit/webhook', async (req, reply) => {
@@ -173,7 +270,7 @@ export async function buildApp(deps: AppDeps): Promise<{ app: FastifyInstance; f
 
     api.get('/v1/me', async (req) => {
       const p = await store.getProfile(user(req).userId);
-      return { userId: user(req).userId, displayName: p?.displayName ?? null };
+      return { userId: user(req).userId, displayName: p?.displayName ?? null, guest: Boolean(user(req).guest) };
     });
 
     api.put('/v1/me', async (req) => {
@@ -196,7 +293,8 @@ export async function buildApp(deps: AppDeps): Promise<{ app: FastifyInstance; f
       for (const cid of memberChannelIds) await floor.dropUser(cid, userId, { kick: true });
       let authUserDeleted = false;
       try {
-        authUserDeleted = await deleteAuthUser(userId);
+        // Server-signed sessions have no Supabase account behind them.
+        authUserDeleted = user(req).serverSession ? true : await deleteAuthUser(userId);
       } catch (err) {
         req.log.error({ err: errMsg(err) }, 'auth user deletion failed');
       }
@@ -209,6 +307,7 @@ export async function buildApp(deps: AppDeps): Promise<{ app: FastifyInstance; f
     });
 
     api.post('/v1/channels', async (req, reply) => {
+      if (user(req).guest) throw new HttpError(403, 'guest_not_allowed');
       const { name } = ChannelBody.parse(req.body);
       await requireProfile(user(req).userId);
       const ch = await store.createChannel(user(req).userId, name);
@@ -245,20 +344,17 @@ export async function buildApp(deps: AppDeps): Promise<{ app: FastifyInstance; f
       const code = newInviteCode();
       const expiresAt = now() + config.inviteTtlHours * 3600_000;
       await store.createInvite(req.params.id, user(req).userId, hashInviteCode(code), expiresAt, body?.maxUses ?? 1);
-      return reply.status(201).send({ code, expiresAt, maxUses: body?.maxUses ?? 1 });
+      // What the QR encodes: the web join page when this server is public,
+      // otherwise the app's own link (works only where the app is installed).
+      const appUrl = `protoforgewalkie://join/${code}`;
+      const joinUrl = config.publicBaseUrl ? `${config.publicBaseUrl}/j/${code}` : null;
+      return reply.status(201).send({ code, expiresAt, maxUses: body?.maxUses ?? 1, joinUrl, appUrl, qrUrl: joinUrl ?? appUrl });
     });
 
     api.post('/v1/invites/redeem', async (req) => {
       const { code } = RedeemBody.parse(req.body);
       await requireProfile(user(req).userId);
-      const r = await store.redeemInvite(hashInviteCode(code), user(req).userId, now(), config.maxChannelMembers);
-      if (!r.ok) {
-        // A blocked user learns only that the invite does not work.
-        const status = r.reason === 'full' ? 409 : 404;
-        throw new HttpError(status, r.reason === 'full' ? 'channel_full' : 'invite_invalid');
-      }
-      const ch = (await store.getChannel(r.channelId))!;
-      return { id: ch.id, name: ch.name, role: await store.getRole(ch.id, user(req).userId), ownerId: ch.ownerId };
+      return redeemOrThrow(hashInviteCode(code), user(req).userId);
     });
 
     api.post<{ Params: { id: string } }>('/v1/channels/:id/leave', async (req) => {

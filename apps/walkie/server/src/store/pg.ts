@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import pg from 'pg';
-import type { AcquireResult, ApnsEnvironment, Channel, Lease, Member, Profile, PttPushToken, RedeemResult, Role, Store } from './types.js';
+import type { AcquireResult, ApnsEnvironment, Channel, InvitePreview, Lease, Member, Profile, PttPushToken, RedeemResult, Role, Store } from './types.js';
 
 type Row = Record<string, unknown>;
 
@@ -168,6 +168,19 @@ export class PgStore implements Store {
       await c.query(`insert into walkie.members (channel_id, user_id, role) values ($1, $2, 'member')`, [channelId, userId]);
       return { ok: true, channelId, alreadyMember: false } as const;
     });
+  }
+
+  async peekInvite(codeHash: string, now: number): Promise<InvitePreview | null> {
+    const { rows } = await this.pool.query(
+      `select c.id, c.name, p.display_name, (extract(epoch from i.expires_at) * 1000)::bigint as expires_ms
+         from walkie.invites i
+         join walkie.channels c on c.id = i.channel_id
+         left join walkie.profiles p on p.user_id = c.owner_id
+        where i.code_hash = $1 and i.uses < i.max_uses and i.expires_at > to_timestamp($2 / 1000.0)`,
+      [codeHash, now],
+    );
+    const r = rows[0];
+    return r ? { channelId: r.id, channelName: r.name, ownerName: r.display_name ?? null, expiresAt: Number(r.expires_ms) } : null;
   }
 
   async acquireFloor({ channelId, userId, leaseId, now, renewTtlMs, maxMs }: { channelId: string; userId: string; leaseId: string; now: number; renewTtlMs: number; maxMs: number }): Promise<AcquireResult> {

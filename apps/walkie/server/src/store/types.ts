@@ -38,6 +38,14 @@ export type RedeemResult =
   | { ok: true; channelId: string; alreadyMember: boolean }
   | { ok: false; reason: 'invalid' | 'expired' | 'exhausted' | 'blocked' | 'full' };
 
+/** A usable invite: not expired, not used up, channel still exists. */
+export interface InvitePreview {
+  channelId: string;
+  channelName: string;
+  ownerName: string | null;
+  expiresAt: number;
+}
+
 export type ApnsEnvironment = 'sandbox' | 'production';
 
 export interface PttPushToken {
@@ -76,6 +84,8 @@ export interface Store {
 
   createInvite(channelId: string, createdBy: string, codeHash: string, expiresAt: number, maxUses: number): Promise<void>;
   redeemInvite(codeHash: string, userId: string, now: number, maxMembers: number): Promise<RedeemResult>;
+  /** Read-only look at an invite, for the join page. Null unless it could still be redeemed. */
+  peekInvite(codeHash: string, now: number): Promise<InvitePreview | null>;
 
   acquireFloor(args: { channelId: string; userId: string; leaseId: string; now: number; renewTtlMs: number; maxMs: number }): Promise<AcquireResult>;
   renewFloor(args: { channelId: string; leaseId: string; userId: string; now: number; renewTtlMs: number }): Promise<Lease | null>;

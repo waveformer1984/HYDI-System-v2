@@ -1,4 +1,5 @@
-import { createVerifier } from './auth.js';
+import './env.js';
+import { SessionIssuer, createVerifier } from './auth.js';
 import { loadConfig } from './config.js';
 import { LiveKitGateway } from './livekit.js';
 import { migrate } from './migrate.js';
@@ -18,7 +19,8 @@ if (config.databaseUrl) {
   store = new MemoryStore();
 }
 
-const { app, floor } = await buildApp({ config, store, media: new LiveKitGateway(config.livekit), verifier: createVerifier(config) });
+const sessions = config.sessions ? new SessionIssuer(config.sessions.secret) : undefined;
+const { app, floor } = await buildApp({ config, store, media: new LiveKitGateway(config.livekit), verifier: createVerifier(config, sessions), sessions });
 floor.start();
 
 const shutdown = async () => {
@@ -31,4 +33,7 @@ process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
 
 await app.listen({ host: config.host, port: config.port });
-app.log.info({ auth: config.auth.mode, store: config.databaseUrl ? 'postgres' : 'memory' }, 'walkie server listening');
+app.log.info(
+  { auth: config.auth.mode, store: config.databaseUrl ? 'postgres' : 'memory', qrGuests: Boolean(sessions), publicBaseUrl: config.publicBaseUrl ?? null },
+  'walkie server listening',
+);
