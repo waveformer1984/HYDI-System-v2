@@ -4,7 +4,22 @@ import type { Api, ChannelSummary } from '../api';
 import { describeError } from '../errors';
 import { Body, Button, ErrorText, Field, Screen, Title, colors } from '../ui/kit';
 
-export function ChannelsScreen({ api, displayName, onOpen, onSettings }: { api: Api; displayName: string; onOpen: (c: ChannelSummary) => void; onSettings: () => void }) {
+export function ChannelsScreen({
+  api,
+  displayName,
+  guest = false,
+  notice = '',
+  onOpen,
+  onSettings,
+}: {
+  api: Api;
+  displayName: string;
+  /** Joined via an invite QR: can use invited channels but not create them. */
+  guest?: boolean;
+  notice?: string;
+  onOpen: (c: ChannelSummary) => void;
+  onSettings: () => void;
+}) {
   const [channels, setChannels] = useState<ChannelSummary[]>([]);
   const [loading, setLoading] = useState(false);
   const [name, setName] = useState('');
@@ -65,11 +80,17 @@ export function ChannelsScreen({ api, displayName, onOpen, onSettings }: { api: 
           </Pressable>
         )}
       />
-      <Field value={name} onChangeText={setName} placeholder="New private channel name" maxLength={60} />
-      <Button label="Create channel" busy={busy === 'create'} disabled={!name.trim()} onPress={() => act('create', () => api.createChannel(name.trim()))} />
+      {guest ? (
+        <Body muted>You joined as a guest. To join another channel, scan its invite QR code with your camera.</Body>
+      ) : (
+        <>
+          <Field value={name} onChangeText={setName} placeholder="New private channel name" maxLength={60} />
+          <Button label="Create channel" busy={busy === 'create'} disabled={!name.trim()} onPress={() => act('create', () => api.createChannel(name.trim()))} />
+        </>
+      )}
       <Field value={code} onChangeText={setCode} placeholder="Invite code (XXXXX-XXXXX-XXXXX-XXXXX)" autoCapitalize="characters" autoCorrect={false} />
       <Button label="Join with code" kind="secondary" busy={busy === 'join'} disabled={code.replace(/[^A-Za-z0-9]/g, '').length < 20} onPress={() => act('join', () => api.redeemInvite(code.trim()))} />
-      <ErrorText>{error}</ErrorText>
+      <ErrorText>{error || notice}</ErrorText>
     </Screen>
   );
 }

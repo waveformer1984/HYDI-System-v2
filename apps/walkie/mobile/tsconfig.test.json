@@ -1,6 +1,19 @@
 {
   "extends": "./tsconfig.json",
-  "compilerOptions": { "types": ["node"], "noEmit": true },
-  "include": ["test", "src/ptt/machine.ts", "src/ptt/notification.ts", "src/ptt/ios-ptt-policy.ts"],
-  "exclude": ["node_modules"]
+  "compilerOptions": {
+    "types": [
+      "node"
+    ],
+    "noEmit": true
+  },
+  "include": [
+    "test",
+    "src/ptt/machine.ts",
+    "src/ptt/notification.ts",
+    "src/ptt/ios-ptt-policy.ts",
+    "src/deeplink.ts"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
 }
